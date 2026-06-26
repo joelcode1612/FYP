@@ -1,0 +1,18 @@
+# Node.js / React / Vue
+node_modules/
+dist/
+build/
+
+# Python
+venv/
+.venv/
+__pycache__/
+*.pyc
+
+# Environmental variables (Security)
+.env
+
+# Large media / OS specific
+.DS_Store
+*.mp4
+*.zip
