@@ -16,3 +16,9 @@ __pycache__/
 .DS_Store
 *.mp4
 *.zip
+
+# Dart / Flutter pub workspace
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+
