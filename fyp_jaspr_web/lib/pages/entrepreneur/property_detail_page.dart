@@ -60,7 +60,8 @@ class _PropertyDetailPageState extends State<PropertyDetailPage> {
               role: AppRole.entrepreneur,
               currentRoute: '/entrepreneur/property-detail',
               title: 'Property detail',
-              subtitle: AppRole.entrepreneur.label,
+              subtitle:
+                  'Rental, floor area, facilities and the location intelligence for this site.',
               child: component.id.isEmpty
                   ? const _NotFound()
                   : FutureBuilder<CommercialProperty?>(
@@ -69,17 +70,13 @@ class _PropertyDetailPageState extends State<PropertyDetailPage> {
                         if (!snap.hasData) return const _Loading();
                         final p = snap.data!;
                         final saved = appCubit.isSaved(p.id);
-                        return div(
-                          attributes: const {'style': 'gap:16px'},
-                          classes: 'row row--top',
-                          [
-                            div(classes: 'grow', [_Header(property: p)]),
-                            div(classes: 'w-35 stack', [
-                              _actions(appCubit, p.id, saved),
-                              _Analysis(vm: vm),
-                            ]),
-                          ],
-                        );
+                        return div(classes: 'row row--top row--md', [
+                          div(classes: 'grow', [_Header(property: p)]),
+                          div(classes: 'w-35 stack', [
+                            _actions(appCubit, p.id, saved),
+                            _Analysis(vm: vm),
+                          ]),
+                        ]);
                       },
                     ),
             );
@@ -142,17 +139,13 @@ class _Header extends StatelessComponent {
   @override
   Component build(BuildContext context) {
     return div(classes: 'card stack', [
-      div(
-        attributes: const {'style': 'gap:8px'},
-        classes: 'row',
-        [
-          h1(classes: 'title grow', [Component.text(property.title)]),
-          Pill(
-            property.verification.label,
-            tone: toneForVerification(property.verification),
-          ),
-        ],
-      ),
+      div(classes: 'row row--sm', [
+        h1(classes: 'title grow', [Component.text(property.title)]),
+        Pill(
+          property.verification.label,
+          tone: toneForVerification(property.verification),
+        ),
+      ]),
       p(classes: 'body', [
         Component.text(
           '${property.address}, ${property.postcode} ${property.city}',
@@ -221,24 +214,20 @@ class _EvidenceScore extends StatelessComponent {
 
   @override
   Component build(BuildContext context) {
-    return div(
-      attributes: const {'style': 'gap:12px'},
-      classes: 'row row--top',
-      [
-        div(classes: 'metric $_toneClass', [
-          Component.text(score.toStringAsFixed(0)),
+    return div(classes: 'row row--top row--sm', [
+      div(classes: 'metric $_toneClass', [
+        Component.text(score.toStringAsFixed(0)),
+      ]),
+      div(classes: 'grow stack', [
+        span(classes: 'title', [Component.text('Suitability')]),
+        p(classes: 'small', [
+          Component.text(
+            'Evidence-weighted score from foot traffic, competition, '
+            'accessibility and rental efficiency.',
+          ),
         ]),
-        div(classes: 'grow stack', [
-          span(classes: 'title', [Component.text('Suitability')]),
-          p(classes: 'small', [
-            Component.text(
-              'Evidence-weighted score from foot traffic, competition, '
-              'accessibility and rental efficiency.',
-            ),
-          ]),
-        ]),
-      ],
-    );
+      ]),
+    ]);
   }
 }
 
@@ -255,14 +244,10 @@ class _FactorRow extends StatelessComponent {
     };
     final bucket = (((factor.score / 5).round()).clamp(1, 20)) * 5;
     return div(classes: 'stack', [
-      div(
-        attributes: const {'style': 'gap:8px'},
-        classes: 'row',
-        [
-          span(classes: 'small grow', [Component.text(factor.name)]),
-          Pill(factor.impact, tone: tone),
-        ],
-      ),
+      div(classes: 'row row--sm', [
+        span(classes: 'small grow', [Component.text(factor.name)]),
+        Pill(factor.impact, tone: tone),
+      ]),
       span(classes: 'weights__track', [
         span(classes: 'weights__fill w-$bucket', []),
       ]),

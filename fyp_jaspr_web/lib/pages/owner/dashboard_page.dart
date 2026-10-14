@@ -51,7 +51,8 @@ class _DashboardPageState extends State<DashboardPage> {
           role: AppRole.owner,
           currentRoute: '/owner',
           title: 'Home',
-          subtitle: AppRole.owner.label,
+          subtitle:
+              'How your listings are performing and what needs your attention.',
           child: vm.loading
               ? const _Loading()
               : div(classes: 'stack', [

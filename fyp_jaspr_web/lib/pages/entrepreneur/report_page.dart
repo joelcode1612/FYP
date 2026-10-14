@@ -25,7 +25,8 @@ class ReportPage extends StatelessComponent {
       role: AppRole.entrepreneur,
       currentRoute: '/entrepreneur/report',
       title: 'Evaluation report',
-      subtitle: AppRole.entrepreneur.label,
+      subtitle:
+          'The full location evaluation for this site — footfall, competition, accessibility and demographics.',
       child: div(
         attributes: const {'style': 'max-width:900px'},
         classes: 'stack',
@@ -111,24 +112,20 @@ class _EvidenceScore extends StatelessComponent {
 
   @override
   Component build(BuildContext context) {
-    return div(
-      attributes: const {'style': 'gap:12px'},
-      classes: 'row row--top',
-      [
-        div(classes: 'metric $_toneClass', [
-          Component.text(score.toStringAsFixed(0)),
+    return div(classes: 'row row--top row--sm', [
+      div(classes: 'metric $_toneClass', [
+        Component.text(score.toStringAsFixed(0)),
+      ]),
+      div(classes: 'grow stack', [
+        span(classes: 'title', [Component.text('Suitability')]),
+        p(classes: 'small', [
+          Component.text(
+            'Evidence-weighted score from foot traffic, competition, '
+            'accessibility and rental efficiency.',
+          ),
         ]),
-        div(classes: 'grow stack', [
-          span(classes: 'title', [Component.text('Suitability')]),
-          p(classes: 'small', [
-            Component.text(
-              'Evidence-weighted score from foot traffic, competition, '
-              'accessibility and rental efficiency.',
-            ),
-          ]),
-        ]),
-      ],
-    );
+      ]),
+    ]);
   }
 }
 
@@ -145,14 +142,10 @@ class _FactorRow extends StatelessComponent {
     };
     final bucket = (((factor.score / 5).round()).clamp(1, 20)) * 5;
     return div(classes: 'stack', [
-      div(
-        attributes: const {'style': 'gap:8px'},
-        classes: 'row',
-        [
-          span(classes: 'small grow', [Component.text(factor.name)]),
-          Pill(factor.impact, tone: tone),
-        ],
-      ),
+      div(classes: 'row row--sm', [
+        span(classes: 'small grow', [Component.text(factor.name)]),
+        Pill(factor.impact, tone: tone),
+      ]),
       span(classes: 'weights__track', [
         span(classes: 'weights__fill w-$bucket', []),
       ]),

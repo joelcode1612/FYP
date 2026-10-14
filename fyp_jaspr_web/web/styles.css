@@ -62,8 +62,18 @@
 
   /* --- Layout --- */
   --content-max: 1180px;
-  --sidebar-w: 236px;
   --topbar-h: 72px;
+
+  /* --- Elevation and the modal scrim (DESIGN.md §5) ---
+     These three were previously inline literals inside `.overlay`, `.dialog`
+     and `.menu`, which is exactly the "untokenised values in component rules"
+     problem (audit C-08) — they could not be audited or changed centrally.
+     The scrim also had no token at all, which is why the drawer introduced by
+     the W-05 fix needed one. Shadows are otherwise absent by design: cards,
+     buttons, app bars and nav are all `elevation: 0`. */
+  --scrim: rgba(15, 23, 42, 0.45);
+  --dialog-shadow: 0 24px 64px rgba(15, 23, 42, 0.25);
+  --menu-shadow: 0 16px 48px rgba(15, 23, 42, 0.22);
 }
 
 /* ==========================================================================
@@ -246,6 +256,9 @@ button {
 .row {
   display: flex;
   align-items: center;
+  /* Gap is opt-in via `--sm`/`--md`/… below; the neutral default keeps the
+     many tight rows that deliberately have no gap unchanged. */
+  gap: 0;
 }
 
 .row--top {
@@ -836,18 +849,86 @@ button {
    App shell (authenticated area)
    ========================================================================== */
 
+/* --- App shell -------------------------------------------------------------
+   There is no left navigation rail. Navigation is a single sticky pill at the
+   top (brand + destination links + account controls), which is the structure of
+   the uploaded dashboard mockup. The sidebar below is a **mobile-only drawer**;
+   the ≤900px query turns it on, and nothing above 900px ever shows it.       */
+
 .app-shell {
-  display: flex;
   min-height: 100vh;
 }
 
-.sidebar {
-  width: var(--sidebar-w);
-  flex: none;
-  background: var(--surface);
-  border-right: 1px solid var(--border);
+/* The nav pill. Sticky at the top with a small offset, mirroring the mockup's
+   `sticky top-4`. Caps at the documented content width so it aligns with the
+   page beneath it rather than spanning the full viewport. */
+.app-pill {
+  position: sticky;
+  top: 16px;
+  z-index: 40;
+  max-width: var(--content-max);
+  margin: 0 auto 24px;
+  padding: 8px 10px 8px 16px;
   display: flex;
-  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+}
+
+/* Inner pill that carries the links — the mockup's `bg-slate-50 rounded-full`
+   container. Scrolls horizontally rather than wrapping when a role has ten
+   destinations, so the pill never grows a second row. */
+.app-pill__nav {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  background: var(--alt-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  overflow-x: auto;
+  scrollbar-width: none;
+  min-width: 0;
+}
+
+.app-pill__nav::-webkit-scrollbar {
+  display: none;
+}
+
+.app-pill__link {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 12px;
+  border-radius: var(--radius-pill);
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.app-pill__link:hover {
+  color: var(--ink);
+}
+
+.app-pill__link--active {
+  background: var(--surface);
+  color: var(--action);
+  font-weight: 600;
+}
+
+.app-pill__right {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Mobile drawer only. Hidden at every width until the ≤900px query below. */
+.sidebar {
+  display: none;
 }
 
 .sidebar__head {
@@ -901,59 +982,30 @@ button {
   color: var(--muted);
 }
 
+/* Column flex so the pill and the page stack. `flex: 1` was for the old
+   flex-row shell and does nothing now that `.app-shell` is a block. */
 .app-main {
-  flex: 1;
   min-width: 0;
   display: flex;
   flex-direction: column;
 }
 
-.topbar {
-  height: var(--topbar-h);
-  flex: none;
-  background: var(--surface);
-  border-bottom: 1px solid var(--border);
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  padding: 0 24px;
-}
-
-.topbar__titles {
-  min-width: 0;
-}
-
-.topbar__title {
-  font-family: var(--font-display);
-  font-size: 20px;
-  font-weight: 800;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.topbar__subtitle {
-  font-size: 12px;
-  color: var(--muted);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.topbar__actions {
-  margin-left: auto;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
+/* `.topbar`, `.topbar__titles`, `.topbar__title`, `.topbar__subtitle` and
+   `.topbar__actions` were removed with the shell change: the page title moved
+   into `.page-head` in the content area, and actions moved with it, so the nav
+   pill carries only brand + links + account controls. `.topbar__burger`,
+   `.topbar__controls` and the overlay rules are still in use. */
 
 .app-content {
   flex: 1;
-  overflow-y: auto;
+  min-width: 0;
 }
 
 .app-content__inner {
-  max-width: 1080px;
+  /* Was a hardcoded 1080px, which bypassed `--content-max` (1180px) and made
+     every authenticated page 100px narrower than the public site's `.container`.
+     The pill above uses the same cap, so the two stay aligned. */
+  max-width: var(--content-max);
   margin: 0 auto;
   padding: 24px;
 }
@@ -1063,7 +1115,7 @@ button {
   position: fixed;
   inset: 0;
   z-index: 60;
-  background: rgba(15, 23, 42, 0.45);
+  background: var(--scrim);
   display: flex;
   align-items: flex-start;
   justify-content: center;
@@ -1080,7 +1132,7 @@ button {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 16px;
-  box-shadow: 0 24px 64px rgba(15, 23, 42, 0.25);
+  box-shadow: var(--dialog-shadow);
   width: 100%;
   max-width: 420px;
   max-height: 60vh;
@@ -1154,7 +1206,7 @@ button {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 14px;
-  box-shadow: 0 16px 48px rgba(15, 23, 42, 0.22);
+  box-shadow: var(--menu-shadow);
   min-width: 240px;
   padding: 8px;
   display: flex;
@@ -1484,12 +1536,11 @@ button {
   padding-top: 12px;
 }
 
+/* Two rules for the same selector were split across adjacent blocks, which
+   meant the colour lived in one and the layout in another. Merged. */
 .filter__count--error,
 .filter__error {
   color: var(--danger);
-}
-
-.filter__error {
   display: flex;
   align-items: center;
   gap: 6px;
@@ -1824,6 +1875,627 @@ button {
 }
 
 /* ==========================================================================
+   Entrepreneur dashboard — mockup layout, design-system styling
+   --------------------------------------------------------------------------
+   The reference mockup's structure (hero + overlapping metrics + analytics
+   row + sticky listing board) with tokens from this sheet: Sora headings,
+   IBM Plex Sans body, `1px --border` at elevation 0, the existing
+   `visual--map` gradient instead of photographs, Material Symbols instead of
+   FontAwesome, and no backdrop blur.
+   ========================================================================== */
+
+.dash {
+  display: grid;
+  grid-template-columns: 1fr 360px;
+  gap: 16px;
+  align-items: start;
+}
+
+.dash__main {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  min-width: 0;
+}
+
+/* --- Hero ---------------------------------------------------------------- */
+
+.dash__hero {
+  position: relative;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  overflow: hidden;
+}
+
+.dash__hero-body {
+  position: relative;
+  z-index: 1;
+  padding: 32px;
+  max-width: 620px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.dash__hero-title {
+  font-family: var(--font-display);
+  font-size: 34px;
+  font-weight: 800;
+  letter-spacing: -1px;
+  line-height: 1.12;
+  color: var(--ink);
+}
+
+.dash__hero-lead {
+  font-size: 15px;
+  line-height: 1.65;
+  color: var(--muted);
+}
+
+/* Map wash behind the copy — the existing visual, not a photo. */
+.dash__hero-art {
+  position: absolute;
+  inset: 0;
+  border: 0;
+  border-radius: 0;
+}
+
+/* --- Metric cards, overlapping the hero ---------------------------------- */
+
+.dash__metrics {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+  /* The mockup's overlap. Pulled up only far enough to read as a stack. */
+  margin-top: -28px;
+  padding: 0 16px;
+  position: relative;
+  z-index: 2;
+}
+
+.dash__metric {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.dash__metric--cta {
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.dash__metric--cta:hover {
+  border-color: var(--action);
+}
+
+.dash__metric-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.9px;
+  text-transform: uppercase;
+  color: var(--overline-text);
+}
+
+.dash__metric-value {
+  font-family: var(--font-display);
+  font-size: 26px;
+  font-weight: 800;
+  line-height: 1;
+  color: var(--ink);
+}
+
+.dash__metric-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.dash__rule {
+  border-top: 1px solid var(--border);
+}
+
+/* --- Analytics row ------------------------------------------------------- */
+
+.dash__analytics {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.dash__mini-col {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* --- Listing board ------------------------------------------------------- */
+
+.dash__board {
+  position: sticky;
+  top: 88px; /* 72px topbar + room, matching the documented anchor offset */
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-height: calc(100vh - 120px);
+}
+
+.dash__board-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+.dash__board-body {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* --- Listing card -------------------------------------------------------- */
+
+.dash__card {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  overflow: hidden;
+}
+
+.dash__card:hover {
+  border-color: var(--action);
+}
+
+.dash__card-media {
+  position: relative;
+  height: 132px;
+  display: grid;
+  place-items: center;
+  color: var(--action);
+  border-bottom: 1px solid var(--border);
+}
+
+.dash__badge {
+  position: absolute;
+  top: 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+}
+
+.dash__badge--ok {
+  left: 8px;
+  color: var(--success-text);
+}
+
+.dash__badge--dark {
+  right: 8px;
+  color: var(--ink);
+}
+
+.dash__card-body {
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.dash__price {
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--action);
+}
+
+.dash__card-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.dash__card-loc {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+.dash__match {
+  padding: 3px 10px;
+  border-radius: var(--radius-pill);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.dash__match--ok {
+  background: var(--success-wash);
+  color: var(--success-text);
+}
+
+.dash__match--action {
+  background: var(--geo-wash);
+  color: var(--action);
+}
+
+.dash__match--muted {
+  background: var(--neutral-wash);
+  color: var(--muted);
+}
+
+/* --- Dashboard responsive ------------------------------------------------ */
+
+@media (max-width: 1100px) {
+  .dash {
+    grid-template-columns: 1fr;
+  }
+  .dash__board {
+    position: static;
+    max-height: none;
+  }
+  .dash__analytics {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 900px) {
+  .dash__metrics {
+    grid-template-columns: 1fr;
+    margin-top: -16px;
+    padding: 0;
+  }
+  .dash__hero-body {
+    padding: 24px;
+  }
+  .dash__hero-title {
+    font-size: 28px;
+  }
+}
+
+/* ==========================================================================
+   Layout utilities — gap variants
+   --------------------------------------------------------------------------
+   `.stack` and `.row` previously carried **no gap at all**, so every page
+   compensated with an inline `style="gap:16px"` (audit W-03). These variants
+   move those gaps into the stylesheet, keyed to the documented spacing scale.
+   ========================================================================== */
+
+.stack--xs { gap: var(--xs); }
+.stack--sm { gap: var(--sm); }
+.stack--md { gap: var(--md); }
+.stack--lg { gap: var(--lg); }
+.row--xs { gap: var(--xs); }
+.row--sm { gap: var(--sm); }
+.row--md { gap: var(--md); }
+.row--lg { gap: var(--lg); }
+
+/* Vertical rhythm between page sections, replacing ad-hoc margins. */
+.stack--sections {
+  gap: var(--xl);
+}
+
+/* ==========================================================================
+   Page header
+   --------------------------------------------------------------------------
+   Previously every page hand-rolled its own title block (or had none at all
+   and relied solely on the topbar), so the same hierarchy rendered ten
+   different ways. `.page-head` is the single register.
+   ========================================================================== */
+
+.page-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--md);
+  flex-wrap: wrap;
+  margin-bottom: var(--lg);
+}
+
+.page-head__main {
+  display: flex;
+  flex-direction: column;
+  gap: var(--xs);
+  min-width: 0;
+}
+
+.page-head__title {
+  font-family: var(--font-display);
+  font-size: 26px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+  color: var(--ink);
+}
+
+.page-head__desc {
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--muted);
+  max-width: 62ch;
+}
+
+.page-head__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--sm);
+  flex-wrap: wrap;
+}
+
+/* ==========================================================================
+   Section card — a titled panel
+   ========================================================================== */
+
+.section-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+
+.section-card__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--md);
+  padding: var(--md) 20px;
+  border-bottom: 1px solid var(--border);
+}
+
+.section-card__title {
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+}
+
+.section-card__body {
+  padding: 20px;
+}
+
+.section-card__body--flush {
+  padding: 0;
+}
+
+/* ==========================================================================
+   Empty state
+   --------------------------------------------------------------------------
+   Was duplicated as `h2.title-lg + p.body` in at least ten pages, each with
+   slightly different wording and spacing.
+   ========================================================================== */
+
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--sm);
+  padding: 48px var(--lg);
+  text-align: center;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--alt-surface);
+}
+
+.empty__icon {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--muted);
+}
+
+.empty__title {
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.empty__body {
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: var(--muted);
+  max-width: 48ch;
+}
+
+.empty__action {
+  margin-top: var(--xs);
+}
+
+/* ==========================================================================
+   Skeleton — loading placeholder
+   --------------------------------------------------------------------------
+   Replaces the `card > p.body('Loading…')` pattern, which showed raw text
+   and then reflowed the whole page once data arrived.
+   ========================================================================== */
+
+.skeleton {
+  border-radius: var(--radius);
+  background: linear-gradient(
+    90deg,
+    var(--neutral-wash) 0%,
+    #e9ecf2 50%,
+    var(--neutral-wash) 100%
+  );
+  background-size: 200% 100%;
+  animation: skeleton-shift 1.4s ease-in-out infinite;
+}
+
+@keyframes skeleton-shift {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+.skeleton--text {
+  height: 12px;
+  border-radius: var(--radius-pill);
+}
+
+.skeleton--title {
+  height: 16px;
+  width: 40%;
+  border-radius: var(--radius-pill);
+}
+
+.skeleton--row {
+  height: 40px;
+  border-radius: var(--radius);
+}
+
+.skeleton--block {
+  height: 72px;
+  border-radius: var(--radius);
+}
+
+/* Stack of placeholder rows, matching `.stack--sm` rhythm. */
+.skeleton-stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--md);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton {
+    animation: none;
+  }
+}
+
+/* ==========================================================================
+   Form field — label + control + hint/error
+   --------------------------------------------------------------------------
+   Audit W-10: several controls were unlabelled. `.field` makes the label the
+   structural parent so the association holds without repeating ids.
+   ========================================================================== */
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.field__label {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.field__hint {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.field__error {
+  font-size: 11px;
+  color: var(--danger);
+}
+
+.field__error-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Two-up field row that collapses on narrow screens. */
+.field-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--md);
+}
+
+@media (max-width: 640px) {
+  .field-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ==========================================================================
+   Search input with a leading icon
+   ========================================================================== */
+
+.search {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex: 1;
+  min-width: 0;
+}
+
+.search__icon {
+  position: absolute;
+  left: 12px;
+  color: var(--muted);
+  pointer-events: none;
+  line-height: 1;
+}
+
+.search .input {
+  padding-left: 36px;
+  width: 100%;
+}
+
+/* ==========================================================================
+   Breadcrumbs
+   ========================================================================== */
+
+.crumbs {
+  display: flex;
+  align-items: center;
+  gap: var(--sm);
+  flex-wrap: wrap;
+  margin-bottom: var(--sm);
+}
+
+.crumbs__item {
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+.crumbs__link {
+  color: var(--muted);
+}
+
+.crumbs__link:hover {
+  color: var(--action);
+}
+
+.crumbs__sep {
+  color: var(--border);
+  font-size: 14px;
+  line-height: 1;
+}
+
+.crumbs__item--current {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+/* ==========================================================================
    Responsive
    ========================================================================== */
 
@@ -1842,6 +2514,12 @@ button {
   }
 }
 
+/* Burger trigger. Hidden by default — the ≤900px media query below turns it on,
+   which is why the desktop rail is unaffected. */
+.topbar__burger {
+  display: none;
+}
+
 @media (max-width: 900px) {
   .masthead__nav {
     display: none;
@@ -1849,8 +2527,75 @@ button {
   .footer-grid {
     grid-template-columns: 1fr;
   }
-  .sidebar {
+
+  /* --- Pill nav gives way to the burger drawer ---------------------------
+     The inline link row is dropped at ≤900px (a ten-item pill row cannot be
+     read at that width) and the burger takes over, opening the drawer below.
+     The same destination list renders both, so there is nothing to sync. */
+  .app-pill__nav {
     display: none;
+  }
+  .app-pill {
+    top: 8px;
+    margin-bottom: 16px;
+    padding: 6px 8px 6px 12px;
+    gap: 8px;
+  }
+  .app-pill__label {
+    display: none;
+  }
+
+  /* --- W-05: the sidebar becomes an off-canvas drawer --------------------
+     This rule used to be `display: none`, which removed primary navigation
+     entirely at ≤900px and left every authenticated route reachable only by
+     editing the URL. The sidebar now slides in over the page, driven by the
+     burger in the pill nav and dismissed by the scrim.
+
+     The destination list is the *same* markup as desktop — rendered once in
+     `AppLayout` — so there is no second list to keep in sync. */
+  .sidebar {
+    position: fixed;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    width: min(300px, 84vw);
+    flex: none;
+    z-index: 70;
+    transform: translateX(-100%);
+    transition: transform 0.16s ease;
+    border-right: 1px solid var(--border);
+    /* Overlay elevation: the documented `.menu` shadow, the one sanctioned
+       case for depth in this system (DESIGN.md §5). */
+    box-shadow: var(--menu);
+  }
+
+  .sidebar--open {
+    transform: translateX(0);
+  }
+
+  /* Dismissal surface. Opaque scrim — no blur, per DESIGN.md §5 and §8.5 */
+  .scrim {
+    position: fixed;
+    inset: 0;
+    z-index: 60;
+    background: var(--scrim);
+  }
+
+  .topbar__burger {
+    display: grid;
+    place-items: center;
+    width: 40px;
+    height: 40px;
+    margin-right: 4px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--surface);
+    color: var(--ink);
+  }
+
+  .topbar__burger:hover {
+    background: var(--background);
+    color: var(--action);
   }
 }
 
@@ -1872,5 +2617,29 @@ button {
   }
   .cta-box {
     padding: 36px 24px;
+  }
+  /* Page header stacks below 640px: the title shrinks and the action row
+     drops to its own line so buttons keep a 44px touch target instead of
+     being squeezed beside the title. */
+  .page-head {
+    gap: var(--sm);
+  }
+  .page-head__title {
+    font-size: 22px;
+  }
+  .page-head__actions {
+    width: 100%;
+  }
+  .page-head__actions .btn {
+    flex: 1;
+  }
+  .section-card__head {
+    padding: var(--md);
+  }
+  .section-card__body {
+    padding: var(--md);
+  }
+  .empty {
+    padding: 32px var(--md);
   }
 }

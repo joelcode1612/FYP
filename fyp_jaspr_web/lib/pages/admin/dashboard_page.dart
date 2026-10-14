@@ -49,7 +49,8 @@ class _DashboardPageState extends State<DashboardPage> {
           role: AppRole.admin,
           currentRoute: '/admin',
           title: 'Admin Dashboard',
-          subtitle: AppRole.admin.label,
+          subtitle:
+              'Platform-wide signal: how many listings and accounts are active, and what is waiting for review.',
           child: vm.loading
               ? _loading()
               : vm.error != null

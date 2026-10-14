@@ -6,6 +6,7 @@ import 'package:shared_logic/shared_logic.dart';
 
 import '../../components/bloc.dart';
 import '../../components/property_card.dart';
+import '../../components/ui.dart';
 import '../../data/app_locator.dart';
 import '../../layouts/app_layout.dart';
 
@@ -39,6 +40,9 @@ class _ListingsPageState extends State<ListingsPage> {
     super.dispose();
   }
 
+  /// Clears the search box — the escape hatch named by the empty state.
+  void _clearQuery() => setState(() => query = '');
+
   @override
   Component build(BuildContext context) {
     return CubitBuilder<AdminCubit, AdminState>(
@@ -53,42 +57,59 @@ class _ListingsPageState extends State<ListingsPage> {
                   ),
             )
             .toList();
+
         return AppLayout(
           role: AppRole.admin,
           currentRoute: '/admin/listings',
+          // The page header is rendered by `AppLayout`; a page must not render
+          // its own `PageHead` or the title appears twice.
           title: 'Listings',
-          subtitle: AppRole.admin.label,
-          child: div(classes: 'stack', [
-            div(classes: 'row', [
-              input(
-                type: InputType.search,
-                classes: 'input',
-                attributes: {
-                  'placeholder': 'Search listings…',
-                  'aria-label': 'Search listings',
-                },
-                events: events<String>(
-                  onInput: (value) => setState(() => query = value),
-                ),
-              ),
-            ]),
-            vm.loading
-                ? div(classes: 'card', [
-                    p(classes: 'body muted', [Component.text('Loading…')]),
-                  ])
-                : items.isEmpty
-                ? div(classes: 'card', [
-                    p(classes: 'body', [
-                      Component.text('No listings match your search.'),
-                    ]),
-                  ])
-                : div(classes: 'card-grid', [
-                    for (final property in items)
-                      PropertyCard(
-                        property: property,
-                        href: '/admin/listing-detail?id=${property.id}',
+          subtitle:
+              'Every commercial property on the platform, across all owners. '
+              'Open a listing to review its details or decide whether it '
+              'should be verified.',
+          child: div(classes: 'stack stack--sections', [
+            SearchInput(
+              label: 'Search listings',
+              placeholder: 'Search by title or city…',
+              ariaLabel: 'Search listings by title or city',
+              onInput: (value) => setState(() => query = value),
+            ),
+
+            if (vm.loading)
+              // Placeholders keep the grid's height while the request is in
+              // flight, instead of swapping text for content and reflowing.
+              div(classes: 'card-grid', [
+                const Skeleton(variant: 'block', count: 6),
+              ])
+            else if (items.isEmpty)
+              EmptyState(
+                icon: query.isEmpty ? 'apartment' : 'search_off',
+                title: query.isEmpty
+                    ? 'No listings on the platform'
+                    : 'No listings match that search',
+                body: query.isEmpty
+                    ? 'Listings submitted by property owners will appear here '
+                          'once they are published.'
+                    : 'Nothing matched "$query". Try a different title or '
+                          'city, or clear the search to see all listings.',
+                action: query.isEmpty
+                    ? null
+                    : ActionButton(
+                        'Clear search',
+                        icon: 'close',
+                        variant: 'secondary',
+                        onClick: _clearQuery,
                       ),
-                  ]),
+              )
+            else
+              div(classes: 'card-grid', [
+                for (final property in items)
+                  PropertyCard(
+                    property: property,
+                    href: '/admin/listing-detail?id=${property.id}',
+                  ),
+              ]),
           ]),
         );
       },

@@ -114,7 +114,8 @@ class _ExplorePageState extends State<ExplorePage> {
               role: AppRole.entrepreneur,
               currentRoute: '/entrepreneur/explore',
               title: 'Explore',
-              subtitle: AppRole.entrepreneur.label,
+              subtitle:
+                  'Search and filter every listing, then read the detail beside the map.',
               child: div(classes: 'explore', [
                 _topBar(),
                 if (vm.loading) const _Loading() else _body(appCubit),

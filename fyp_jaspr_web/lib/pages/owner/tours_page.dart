@@ -70,35 +70,19 @@ class _ToursPageState extends State<ToursPage> {
           role: AppRole.owner,
           currentRoute: '/owner/tours',
           title: '360° Tours',
-          subtitle: AppRole.owner.label,
-          child: div(classes: 'stack', [
-            div(classes: 'row row--top', [
-              div(classes: 'grow stack', [
-                h2(classes: 'title-lg', [
-                  Component.text('Capture → arrange → preview → publish'),
-                ]),
-                p(classes: 'small', [
-                  Component.text(
-                    'Capture a 360° tour for a listing to help entrepreneurs '
-                    'explore remotely.',
-                  ),
-                ]),
-              ]),
-              const ActionButton(
-                'Capture new tour (AR)',
-                onClick: null,
-                icon: 'camera_alt',
-              ),
-              span(classes: 'small muted', [
-                Component.text('Capture runs in the mobile app'),
-              ]),
-            ]),
+          eyebrow: 'Capture → arrange → preview → publish',
+          subtitle:
+              'Capture a 360° tour for a listing to help entrepreneurs explore '
+              'remotely.',
+          child: div(classes: 'stack stack--sections', [
+            const _CaptureNotice(),
+
             if (_notice != null)
               div(classes: 'card', [
                 p(classes: 'body text-success', [Component.text(_notice!)]),
               ]),
             if (vm.loading)
-              const _Loading()
+              const Skeleton(variant: 'block', count: 4)
             else if (vm.tours.isEmpty)
               const _EmptyTours()
             else
@@ -141,10 +125,15 @@ class _TourCard extends StatelessComponent {
     return div(classes: 'card stack', [
       div(classes: 'row', [
         h3(classes: 'title grow', [Component.text(tour.title)]),
-        Pill(_statusLabel(status), tone: _statusTone(status)),
+        // Replaces the page-local `_statusLabel` / `_statusTone` pair, which
+        // duplicated the shared badge's mapping.
+        StatusBadge.forTour(status),
       ]),
       p(classes: 'small', [
-        Component.text('${tour.sceneCount} scenes · ${_statusLabel(status)}'),
+        Component.text(
+          '${tour.sceneCount} scenes · '
+          '${StatusBadge.tourLabel(status)}',
+        ),
       ]),
       // The Flutter page embeds `WebTourViewer` (Panorama + scene list) here.
       // Panorama rendering is Flutter-plugin-bound, so this is a labelled
@@ -176,32 +165,25 @@ class _TourCard extends StatelessComponent {
   }
 }
 
-/// Shared status vocabulary, matching the Flutter tours page's
-/// `_statusLabel` / `_statusPill` mappings exactly.
-String _statusLabel(VirtualTourStatus status) => switch (status) {
-  VirtualTourStatus.draft => 'Draft',
-  VirtualTourStatus.processing => 'Processing…',
-  VirtualTourStatus.ready => 'Ready',
-  VirtualTourStatus.pendingVerification => 'Pending verification',
-  VirtualTourStatus.approved => 'Approved',
-  VirtualTourStatus.rejected => 'Rejected',
-};
-
-String _statusTone(VirtualTourStatus status) => switch (status) {
-  VirtualTourStatus.approved => 'success',
-  VirtualTourStatus.pendingVerification ||
-  VirtualTourStatus.processing => 'warning',
-  VirtualTourStatus.rejected => 'danger',
-  VirtualTourStatus.draft || VirtualTourStatus.ready => 'action',
-};
-
-class _Loading extends StatelessComponent {
-  const _Loading();
+/// Explains why the AR capture button is inert: capture is a camera-bound
+/// feature that only exists in the Flutter app. Kept as a labelled notice
+/// rather than a disabled button, which would be a control that does nothing.
+class _CaptureNotice extends StatelessComponent {
+  const _CaptureNotice();
 
   @override
   Component build(BuildContext context) {
-    return div(classes: 'card', [
-      p(classes: 'body muted', [Component.text('Loading…')]),
+    return div(classes: 'card card--flat row row--sm', [
+      Icon('smartphone', size: 'sm'),
+      span(classes: 'small muted grow', [
+        Component.text('Capture runs in the mobile app.'),
+      ]),
+      const ActionLink(
+        'Preview a captured tour',
+        href: '/owner/tour-preview',
+        variant: 'secondary',
+        icon: 'threesixty',
+      ),
     ]);
   }
 }
@@ -211,18 +193,27 @@ class _EmptyTours extends StatelessComponent {
 
   @override
   Component build(BuildContext context) {
-    return div(classes: 'card stack', [
-      span(classes: 'icon-tile', [Icon('threesixty', size: 'lg')]),
-      h3(classes: 'title', [Component.text('No tours yet')]),
-      p(classes: 'body', [
-        Component.text(
+    return EmptyState(
+      icon: 'threesixty',
+      title: 'No tours yet',
+      body:
           'Capture a 360° tour for a listing to help entrepreneurs explore '
           'remotely.',
-        ),
-      ]),
-      p(classes: 'small muted', [
-        Component.text('Capture runs in the mobile app'),
-      ]),
+      action: const _CaptureHint(),
+    );
+  }
+}
+
+/// Reused by the empty state and the capture notice, so the "this is a
+/// mobile-only feature" explanation lives in one place.
+class _CaptureHint extends StatelessComponent {
+  const _CaptureHint();
+
+  @override
+  Component build(BuildContext context) {
+    return span(classes: 'small muted row row--xs', [
+      Icon('smartphone', size: 'sm'),
+      span([Component.text('Capture runs in the mobile app')]),
     ]);
   }
 }

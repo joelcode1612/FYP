@@ -40,7 +40,8 @@ class _PropertyDetailPageState extends State<PropertyDetailPage> {
       role: AppRole.owner,
       currentRoute: '/owner/property-detail',
       title: 'Property detail',
-      subtitle: AppRole.owner.label,
+      subtitle:
+          'The full record for this listing, including its verification state.',
       child: _submitted
           ? _SubmittedCard()
           : component.id.isEmpty

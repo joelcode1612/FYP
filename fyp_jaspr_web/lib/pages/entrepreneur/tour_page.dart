@@ -27,7 +27,7 @@ class TourPage extends StatelessComponent {
       role: AppRole.entrepreneur,
       currentRoute: '/entrepreneur/tour',
       title: '360° tour',
-      subtitle: AppRole.entrepreneur.label,
+      subtitle: 'Walk the site in 360° and jump between stations.',
       child: id.isEmpty
           ? const _NotFound()
           : FutureBuilder<VirtualTour?>(
@@ -101,26 +101,22 @@ class _PropertySummary extends StatelessComponent {
       future: AppLocator.properties.detail(propertyId),
       builder: (c, psnap) {
         if (!psnap.hasData || psnap.data == null)
-          return div(classes: 'stack', []);
+          return div(classes: 'stack stack--sm', []);
         final p = psnap.data!;
-        return div(
-          attributes: const {'style': 'gap:12px'},
-          classes: 'card row row--top',
-          [
-            div(classes: 'grow stack', [
-              span(classes: 'title', [Component.text(p.title)]),
-              span(classes: 'small', [
-                Component.text(
-                  '${p.address}, ${p.city} · RM${p.rentalRm.toStringAsFixed(0)} · '
-                  '${p.sizeSqft.toStringAsFixed(0)} sq ft',
-                ),
-              ]),
+        return div(classes: 'card row row--top', [
+          div(classes: 'grow stack', [
+            span(classes: 'title', [Component.text(p.title)]),
+            span(classes: 'small', [
+              Component.text(
+                '${p.address}, ${p.city} · RM${p.rentalRm.toStringAsFixed(0)} · '
+                '${p.sizeSqft.toStringAsFixed(0)} sq ft',
+              ),
             ]),
-            span(classes: 'metric', [
-              Component.text(p.suitabilityScore.toStringAsFixed(0)),
-            ]),
-          ],
-        );
+          ]),
+          span(classes: 'metric', [
+            Component.text(p.suitabilityScore.toStringAsFixed(0)),
+          ]),
+        ]);
       },
     );
   }
@@ -135,36 +131,32 @@ class _TourViewerPlaceholder extends StatelessComponent {
 
   @override
   Component build(BuildContext context) {
-    return div(
-      attributes: const {'style': 'gap:12px'},
-      classes: 'row row--top',
-      [
-        div(classes: 'grow', [
-          div(classes: 'card--dark stack', [
-            Icon('threesixty', size: 'lg', label: '360 degree tour'),
-            span(classes: 'title', [Component.text(tour.title)]),
-            span(classes: 'small muted-on-dark', [
-              Component.text('Scene 1 of ${tour.sceneCount}'),
-            ]),
-            span(classes: 'small muted-on-dark', [
-              Component.text(
-                '360° viewer — the interactive panorama requires the mobile '
-                'app. This is a static preview of the tour.',
-              ),
-            ]),
+    return div(classes: 'row row--top row--sm', [
+      div(classes: 'grow', [
+        div(classes: 'card--dark stack', [
+          Icon('threesixty', size: 'lg', label: '360 degree tour'),
+          span(classes: 'title', [Component.text(tour.title)]),
+          span(classes: 'small muted-on-dark', [
+            Component.text('Scene 1 of ${tour.sceneCount}'),
+          ]),
+          span(classes: 'small muted-on-dark', [
+            Component.text(
+              '360° viewer — the interactive panorama requires the mobile '
+              'app. This is a static preview of the tour.',
+            ),
           ]),
         ]),
-        div(classes: 'w-20', [
-          div(classes: 'card stack', [
-            span(classes: 'overline', [Component.text('Scenes')]),
-            ul(classes: 'stack', [
-              for (var i = 0; i < tour.sceneCount; i++)
-                li([Component.text('Scene ${i + 1}')]),
-            ]),
+      ]),
+      div(classes: 'w-20', [
+        div(classes: 'card stack', [
+          span(classes: 'overline', [Component.text('Scenes')]),
+          ul(classes: 'stack', [
+            for (var i = 0; i < tour.sceneCount; i++)
+              li([Component.text('Scene ${i + 1}')]),
           ]),
         ]),
-      ],
-    );
+      ]),
+    ]);
   }
 }
 

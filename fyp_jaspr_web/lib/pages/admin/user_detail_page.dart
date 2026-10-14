@@ -24,7 +24,8 @@ class UserDetailPage extends StatelessComponent {
       role: AppRole.admin,
       currentRoute: '/admin/users',
       title: 'User detail',
-      subtitle: AppRole.admin.label,
+      subtitle:
+          'One account in full — role, status, join date and recent activity.',
       child: id.isEmpty
           ? _notFound()
           : FutureBuilder<SitewiseUser?>(
@@ -42,46 +43,46 @@ class UserDetailPage extends StatelessComponent {
   }
 
   Component _loading() {
-    return div(classes: 'card', [
-      p(classes: 'body muted', [Component.text('Loading…')]),
-    ]);
+    return const Skeleton(variant: 'row', count: 6);
   }
 
   Component _notFound() {
-    return div(classes: 'card stack', [
-      span(classes: 'title', [Component.text('Record not found')]),
-      p(classes: 'body', [
-        Component.text('No user matches this id. It may have been removed.'),
-      ]),
-      const ActionLink(
+    return EmptyState(
+      icon: 'person_off',
+      title: 'Record not found',
+      body: 'No user matches this id. It may have been removed.',
+      action: const ActionLink(
         'Back to users',
         href: '/admin/users',
         variant: 'secondary',
       ),
-    ]);
+    );
   }
 
   Component _body(SitewiseUser user) {
-    return div(classes: 'grid-2', [
-      div(classes: 'card', [
-        div(classes: 'row', [
-          span(classes: 'avatar', [Component.text(user.name[0])]),
-          div(classes: 'grow stack', [
-            span(classes: 'title', [Component.text(user.name)]),
-            span(classes: 'body', [Component.text(user.email)]),
-            span(classes: 'small muted', [
-              Component.text('${user.role.label} · ${user.status}'),
+    return div(classes: 'stack stack--md', [
+      const Breadcrumbs(['Users']),
+      div(classes: 'grid-2', [
+        div(classes: 'card', [
+          div(classes: 'row', [
+            span(classes: 'avatar', [Component.text(user.name[0])]),
+            div(classes: 'grow stack', [
+              span(classes: 'title', [Component.text(user.name)]),
+              span(classes: 'body', [Component.text(user.email)]),
+              span(classes: 'small muted', [
+                Component.text('${user.role.label} · ${user.status}'),
+              ]),
             ]),
           ]),
         ]),
-      ]),
-      div(classes: 'card stack', [
-        span(classes: 'title', [Component.text('Account')]),
-        _row('Location', user.location),
-        _row(
-          'Joined',
-          '${user.joinedAt.day}/${user.joinedAt.month}/${user.joinedAt.year}',
-        ),
+        div(classes: 'card stack', [
+          span(classes: 'title', [Component.text('Account')]),
+          _row('Location', user.location),
+          _row(
+            'Joined',
+            '${user.joinedAt.day}/${user.joinedAt.month}/${user.joinedAt.year}',
+          ),
+        ]),
       ]),
     ]);
   }

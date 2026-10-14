@@ -28,7 +28,8 @@ class ComparePage extends StatelessComponent {
           role: AppRole.entrepreneur,
           currentRoute: '/entrepreneur/compare',
           title: 'Compare',
-          subtitle: AppRole.entrepreneur.label,
+          subtitle:
+              'The properties you have shortlisted for comparison, side by side.',
           child: compared.isEmpty
               ? _EmptyCompare()
               : FutureBuilder<List<CommercialProperty>>(

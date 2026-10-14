@@ -58,7 +58,8 @@ class _VerificationDetailPageState extends State<VerificationDetailPage> {
       role: AppRole.admin,
       currentRoute: '/admin/verification',
       title: 'Verification detail',
-      subtitle: AppRole.admin.label,
+      subtitle:
+          'The evidence available for this submission, and the decision you are about to record.',
       child: component.id.isEmpty
           ? _notFound()
           : FutureBuilder<CommercialProperty?>(

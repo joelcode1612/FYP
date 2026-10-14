@@ -28,7 +28,7 @@ class _ProfilePageState extends State<ProfilePage> {
       role: AppRole.admin,
       currentRoute: '/admin/profile',
       title: 'Profile',
-      subtitle: AppRole.admin.label,
+      subtitle: 'Your administrator account details and sign-in information.',
       child: div(classes: 'w-60', [
         div(classes: 'card stack', [
           span(classes: 'avatar', [Component.text('A')]),

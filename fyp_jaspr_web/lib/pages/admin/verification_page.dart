@@ -59,7 +59,8 @@ class _VerificationPageState extends State<VerificationPage> {
           role: AppRole.admin,
           currentRoute: '/admin/verification',
           title: 'Verification queue',
-          subtitle: AppRole.admin.label,
+          subtitle:
+              'Submissions waiting on a decision. Each one shows what was submitted and by whom.',
           child: div(classes: 'stack', [
             div(classes: 'stack', [
               h2(classes: 'title', [Component.text('Awaiting review')]),

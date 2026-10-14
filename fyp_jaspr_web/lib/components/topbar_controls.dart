@@ -71,7 +71,12 @@ class SearchControlState extends State<SearchControl> {
     return div([
       button(
         classes: 'icon-btn',
-        attributes: {'type': 'button', 'aria-label': 'Search listings'},
+        attributes: const {
+          'type': 'button',
+          'aria-label': 'Search listings',
+          // W-01: tell assistive tech this opens a dialog, and whether it is open.
+          'aria-haspopup': 'dialog',
+        },
         events: events(onClick: () => setState(() => _open = true)),
         [Icon('search')],
       ),
@@ -81,9 +86,24 @@ class SearchControlState extends State<SearchControl> {
           events: events(onClick: () => setState(() => _open = false)),
           [
             // Stop clicks inside the dialog from closing the overlay.
+            // W-01: role/aria-modal make it an actual modal dialog; the Escape
+            // handler on the container is what lets a keyboard user leave it.
             div(
               classes: 'dialog dialog--wide',
-              events: events(onClick: () {}),
+              attributes: const {
+                'role': 'dialog',
+                'aria-modal': 'true',
+                'aria-label': 'Search listings',
+              },
+              events: {
+                ...events(onClick: () {}),
+                'keydown': (event) {
+                  final key = (event as dynamic).key;
+                  if (key == 'Escape' || key == 'Esc') {
+                    setState(() => _open = false);
+                  }
+                },
+              },
               [
                 div(classes: 'dialog__head', [
                   input(
@@ -91,6 +111,10 @@ class SearchControlState extends State<SearchControl> {
                     classes: 'input',
                     attributes: {
                       'placeholder': 'Search locations, areas, listings…',
+                      // Move focus into the panel on open — the W-01 defect was
+                      // that focus stayed on the trigger and Tab walked behind
+                      // the overlay.
+                      'autofocus': '',
                     },
                     events: events<String>(
                       onInput: (value) => setState(() => _query = value),
@@ -241,7 +265,11 @@ class NotificationControlState extends State<NotificationControl> {
     return div([
       button(
         classes: 'icon-btn',
-        attributes: {'type': 'button', 'aria-label': _panelTitle},
+        attributes: {
+          'type': 'button',
+          'aria-label': _panelTitle,
+          'aria-haspopup': 'dialog',
+        },
         events: events(onClick: () => setState(() => _open = true)),
         [Icon('notifications')],
       ),
@@ -250,10 +278,27 @@ class NotificationControlState extends State<NotificationControl> {
           classes: 'overlay',
           events: events(onClick: () => setState(() => _open = false)),
           [
-            div(classes: 'dialog', events: events(onClick: () {}), [
-              div(classes: 'dialog__title', [Component.text(_panelTitle)]),
-              _NotificationList(future: _items(), role: component.role),
-            ]),
+            div(
+              classes: 'dialog',
+              attributes: {
+                'role': 'dialog',
+                'aria-modal': 'true',
+                'aria-label': _panelTitle,
+              },
+              events: {
+                ...events(onClick: () {}),
+                'keydown': (event) {
+                  final key = (event as dynamic).key;
+                  if (key == 'Escape' || key == 'Esc') {
+                    setState(() => _open = false);
+                  }
+                },
+              },
+              [
+                div(classes: 'dialog__title', [Component.text(_panelTitle)]),
+                _NotificationList(future: _items(), role: component.role),
+              ],
+            ),
           ],
         ),
     ]);
@@ -345,30 +390,51 @@ class AvatarMenuState extends State<AvatarMenu> {
           classes: 'overlay overlay--menu',
           events: events(onClick: () => setState(() => _open = false)),
           [
-            div(classes: 'menu', events: events(onClick: () {}), [
-              div(classes: 'menu__head', [
-                div(classes: 'menu__name', [Component.text(profile.name)]),
-                div(classes: 'small muted', [
-                  Component.text('${profile.email} · ${component.role.label}'),
-                ]),
-              ]),
-              div(classes: 'menu__divider', []),
-              a(href: profileRouteFor(component.role), classes: 'menu__item', [
-                Component.text('View profile'),
-              ]),
-              div(classes: 'menu__divider', []),
-              for (final role in AppRole.values)
-                a(
-                  href: role.homeRoute,
-                  classes:
-                      'menu__item${role == component.role ? ' menu__item--current' : ''}',
-                  [
+            div(
+              classes: 'menu',
+              attributes: const {
+                'role': 'dialog',
+                'aria-modal': 'true',
+                'aria-label': 'Account menu',
+              },
+              events: {
+                ...events(onClick: () {}),
+                'keydown': (event) {
+                  final key = (event as dynamic).key;
+                  if (key == 'Escape' || key == 'Esc') {
+                    setState(() => _open = false);
+                  }
+                },
+              },
+              [
+                div(classes: 'menu__head', [
+                  div(classes: 'menu__name', [Component.text(profile.name)]),
+                  div(classes: 'small muted', [
                     Component.text(
-                      '${role.label}${role == component.role ? ' ✓' : ''}',
+                      '${profile.email} · ${component.role.label}',
                     ),
-                  ],
+                  ]),
+                ]),
+                div(classes: 'menu__divider', []),
+                a(
+                  href: profileRouteFor(component.role),
+                  classes: 'menu__item',
+                  [Component.text('View profile')],
                 ),
-            ]),
+                div(classes: 'menu__divider', []),
+                for (final role in AppRole.values)
+                  a(
+                    href: role.homeRoute,
+                    classes:
+                        'menu__item${role == component.role ? ' menu__item--current' : ''}',
+                    [
+                      Component.text(
+                        '${role.label}${role == component.role ? ' ✓' : ''}',
+                      ),
+                    ],
+                  ),
+              ],
+            ),
           ],
         ),
     ]);

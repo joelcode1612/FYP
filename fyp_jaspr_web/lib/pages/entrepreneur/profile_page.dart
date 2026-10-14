@@ -27,7 +27,8 @@ class _ProfilePageState extends State<ProfilePage> {
       role: AppRole.entrepreneur,
       currentRoute: '/entrepreneur/profile',
       title: 'Profile',
-      subtitle: AppRole.entrepreneur.label,
+      subtitle:
+          'Your account details and the preferences feeding your recommendations.',
       child: div(
         attributes: const {'style': 'max-width:640px'},
         classes: 'stack',

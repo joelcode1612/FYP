@@ -103,7 +103,8 @@ class _TourPreviewPageState extends State<TourPreviewPage> {
       role: AppRole.owner,
       currentRoute: '/owner/tour-preview',
       title: 'Tour preview',
-      subtitle: AppRole.owner.label,
+      subtitle:
+          'Preview the 360° tour captured for this listing and manage its scenes.',
       child: _deleted
           ? _DeletedCard()
           : component.id.isEmpty

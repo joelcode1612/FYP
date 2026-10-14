@@ -5,21 +5,34 @@ import 'package:jaspr/jaspr.dart';
 import 'package:shared_logic/shared_logic.dart';
 
 import '../../components/bloc.dart';
-import '../../components/property_card.dart';
 import '../../components/ui.dart';
 import '../../data/app_locator.dart';
 import '../../layouts/app_layout.dart';
 
-/// Web entrepreneur dashboard: spacious location-decision workspace with
-/// summary cards, a desktop recommendation grid and a map preview.
+/// Web entrepreneur dashboard, restructured to the reference mockup's layout:
 ///
-/// Ported from `entrepreneur_dashboard_web_page.dart` in the Flutter web tree.
-/// The Flutter version rebuilds on `AppCubit` + `EntrepreneurViewModel` and
-/// reads listings through `ServiceLocator`; this version rebuilds on the
-/// shared `AppLocator.appCubit` and a per-page `EntrepreneurCubit` via
-/// [CubitBuilder]. Recommendation links travel as `?id=` query params instead
-/// of `settings.arguments`, and the stylised map panel is a static placeholder
-/// whose pins are plain links.
+///   ┌────────────────────────────────┬──────────────┐
+///   │ hero + 3 overlapping metrics   │ Listing      │
+///   │ analytics: factor chart +      │ Board        │
+///   │ 2 mini cards                   │ (sticky)     │
+///   └────────────────────────────────┴──────────────┘
+///
+/// **Layout comes from the mockup; every visual property comes from
+/// `DESIGN.md`.** The mockup is a Tailwind + Inter + FontAwesome + Unsplash
+/// + soft-shadow design, so it is used as a *structural* reference only:
+///
+/// | Mockup | Here |
+/// |---|---|
+/// | Unsplash photos | the existing gradient/shopfront placeholder |
+/// | `shadow-soft` / `shadow-float` | `1px --border`, `elevation: 0` |
+/// | `backdrop-blur-md` chips | opaque `surface` + border |
+/// | Inter / extrapolated sizes | Sora headings, IBM Plex Sans body |
+/// | FontAwesome | Material Symbols (same set as mobile) |
+/// | weekday footfall bars | real `LocationFactor` scores |
+/// | "-2% vs last month" | dropped — no historical data exists |
+///
+/// Nothing is fabricated: every figure is either a live count, the loaded
+/// recommendation set, or the `LocationAnalysis` for the top pick.
 class DashboardPage extends StatefulComponent {
   const DashboardPage({super.key});
 
@@ -34,13 +47,39 @@ class _DashboardPageState extends State<DashboardPage> {
   void initState() {
     super.initState();
     vm = AppLocator.newEntrepreneurCubit();
-    unawaited(vm.loadRecommendations());
+    unawaited(_load());
+  }
+
+  /// Loads the ranked recommendations, then the location analysis for the
+  /// **top** pick. The analysis is what feeds the intelligence chart and the
+  /// competitor count; both are optional, so a failure there must not blank the
+  /// page.
+  Future<void> _load() async {
+    try {
+      await vm.loadRecommendations();
+    } catch (_) {
+      return;
+    }
+    if (vm.recommendations.isEmpty) return;
+    final topId = vm.recommendations.first.property.id;
+    try {
+      await vm.loadAnalysis(topId);
+    } catch (_) {
+      // No analysis available — the chart and competitor cards fall back to a
+      // plain message rather than inventing numbers.
+    }
   }
 
   @override
   void dispose() {
     unawaited(vm.close());
     super.dispose();
+  }
+
+  double get _avgScore {
+    final scores = vm.recommendations.map((r) => r.score).toList();
+    if (scores.isEmpty) return 0;
+    return scores.reduce((a, b) => a + b) / scores.length;
   }
 
   @override
@@ -56,119 +95,15 @@ class _DashboardPageState extends State<DashboardPage> {
               role: AppRole.entrepreneur,
               currentRoute: '/entrepreneur',
               title: 'Home',
-              subtitle: AppRole.entrepreneur.label,
-              child: div(classes: 'stack', [
-                div(classes: 'card stack', [
-                  h1(classes: 'title-lg', [
-                    Component.text('Find your next F&B site'),
-                  ]),
-                  p(classes: 'body', [
-                    Component.text(
-                      'Tell Sitewise your concept and budget — we rank Klang '
-                      'Valley shoplots by evidence, not gut feel.',
-                    ),
-                  ]),
-                  div(classes: 'btn-row', [
-                    const ActionLink(
-                      'Set business preferences',
-                      href: '/entrepreneur/preferences',
-                      variant: 'secondary',
-                    ),
-                    const ActionLink(
-                      'Explore properties',
-                      href: '/entrepreneur/explore',
-                      variant: 'secondary',
-                    ),
-                  ]),
+              subtitle:
+                  'Your top recommended sites, the location intelligence behind them, and how many you have shortlisted.',
+              child: div(classes: 'dash', [
+                div(classes: 'dash__main', [
+                  _hero(),
+                  _metrics(appCubit),
+                  _analytics(),
                 ]),
-                div(
-                  attributes: const {'style': 'gap:12px'},
-                  classes: 'row',
-                  [
-                    div(classes: 'grow', [
-                      StatCard(
-                        label: 'Recommended',
-                        value: '${vm.recommendations.length}',
-                        icon: 'auto_awesome',
-                      ),
-                    ]),
-                    div(classes: 'grow', [
-                      StatCard(
-                        label: 'Saved',
-                        value: '${appCubit.saved.length}',
-                        icon: 'bookmark_border',
-                      ),
-                    ]),
-                    div(classes: 'grow', [
-                      StatCard(
-                        label: 'Compared',
-                        value: '${appCubit.compared.length}/3',
-                        icon: 'compare_arrows',
-                      ),
-                    ]),
-                  ],
-                ),
-                div(
-                  attributes: const {'style': 'gap:8px'},
-                  classes: 'row',
-                  [
-                    div(classes: 'grow stack', [
-                      h2(classes: 'title', [
-                        Component.text('Top picks for you'),
-                      ]),
-                      p(classes: 'small', [
-                        Component.text(
-                          'Based on ${vm.prefs.businessType} · up to '
-                          'RM${vm.prefs.maxBudgetRm.toStringAsFixed(0)}',
-                        ),
-                      ]),
-                    ]),
-                    const ActionLink(
-                      'See all',
-                      href: '/entrepreneur/recommendations',
-                      variant: 'ghost',
-                    ),
-                  ],
-                ),
-                if (vm.loading)
-                  const _Loading()
-                else
-                  div(classes: 'card-grid', [
-                    for (final r in vm.recommendations.take(3))
-                      PropertyCard(
-                        property: r.property,
-                        href:
-                            '/entrepreneur/property-detail?id=${r.property.id}',
-                        rankBanner: r.reason,
-                        saved: appCubit.isSaved(r.property.id),
-                        compared: appCubit.isCompared(r.property.id),
-                        onToggleSaved: () =>
-                            appCubit.toggleSaved(r.property.id),
-                        onToggleCompared: () =>
-                            appCubit.toggleCompared(r.property.id),
-                      ),
-                  ]),
-                div(classes: 'stack', [
-                  h2(classes: 'title', [
-                    Component.text('Location intelligence'),
-                  ]),
-                  p(classes: 'small', [
-                    Component.text(
-                      'Where your top picks sit in the Klang Valley.',
-                    ),
-                  ]),
-                ]),
-                _MapPanel(
-                  pins: [
-                    for (final r in vm.recommendations.take(3))
-                      _MapPin(
-                        id: r.property.id,
-                        label: r.property.title,
-                        latitude: r.property.latitude,
-                        longitude: r.property.longitude,
-                      ),
-                  ],
-                ),
+                _board(appCubit),
               ]),
             );
           },
@@ -176,78 +111,275 @@ class _DashboardPageState extends State<DashboardPage> {
       },
     );
   }
+
+  // -------------------------------------------------------------------- hero
+
+  Component _hero() => div(classes: 'dash__hero', [
+    div(classes: 'dash__hero-body', [
+      span(classes: 'overline', [Component.text('Sitewise')]),
+      h1(classes: 'dash__hero-title', [
+        Component.text('Discover your next flagship F&B site.'),
+      ]),
+      p(classes: 'dash__hero-lead', [
+        Component.text(
+          'We analyse footfall, competitors and cadastre data across the '
+          'Klang Valley to rank properties by evidence, not gut feel.',
+        ),
+      ]),
+    ]),
+    div(classes: 'visual visual--map dash__hero-art', [
+      div(classes: 'visual__grid', []),
+    ]),
+  ]);
+
+  // ------------------------------------------------- three metric cards
+
+  Component _metrics(AppCubit appCubit) {
+    final recs = vm.recommendations.length;
+    final compared = appCubit.compared.length;
+    return div(classes: 'dash__metrics', [
+      _MetricCard(
+        label: 'Recommended sites',
+        value: '$recs',
+        icon: 'auto_awesome',
+        barLabel: 'High match',
+        pct: (recs * 100 / 3).clamp(0, 100).toInt(),
+        tone: 'action',
+      ),
+      _MetricCard(
+        label: 'Compared properties',
+        value: '$compared / 3',
+        icon: 'compare_arrows',
+        barLabel: compared == 0 ? 'Slots open' : '$compared selected',
+        pct: (compared * 100 / 3).clamp(0, 100).toInt(),
+        tone: 'neutral',
+      ),
+      // A real link, not a decorative card: it goes to the preferences page.
+      a(
+        href: '/entrepreneur/preferences',
+        classes: 'dash__metric dash__metric--cta',
+        [
+          span(classes: 'icon-tile', [Icon('tune', size: 'lg')]),
+          span(classes: 'dash__metric-title', [
+            Component.text('Refine preferences'),
+          ]),
+          span(classes: 'small', [Component.text('Adjust budget & footprint')]),
+        ],
+      ),
+    ]);
+  }
+
+  // -------------------------------------------------------------- analytics
+
+  Component _analytics() => div(classes: 'dash__analytics', [
+    div(classes: 'card stack', [
+      div(classes: 'row', [
+        div(classes: 'grow stack', [
+          h2(classes: 'title', [Component.text('Location intelligence')]),
+          p(classes: 'small', [
+            Component.text(
+              vm.analysis == null
+                  ? 'Evidence factors for your top pick'
+                  : 'Evidence factors for ${vm.analysis!.propertyId}',
+            ),
+          ]),
+        ]),
+      ]),
+      if (vm.analysis == null || vm.analysis!.factors.isEmpty)
+        p(classes: 'body', [
+          Component.text(
+            'Load a property to see its evidence factors — population, '
+            'accessibility, competition and demand.',
+          ),
+        ])
+      else
+        for (final f in vm.analysis!.factors)
+          WeightBar(label: f.name, pct: f.score.round()),
+    ]),
+
+    div(classes: 'dash__mini-col', [
+      // Competitors is a real count from the loaded analysis. The mockup's
+      // "-2% vs last month" delta is deliberately absent: there is no
+      // historical series anywhere in the data layer.
+      div(classes: 'card stack', [
+        span(classes: 'overline', [Component.text('Competition')]),
+        span(classes: 'metric', [
+          Component.text(
+            vm.analysis == null ? '—' : '${vm.analysis!.competitorCount}',
+          ),
+        ]),
+        p(classes: 'small', [
+          Component.text(
+            vm.analysis == null
+                ? 'Competitor count appears once a property is analysed.'
+                : 'Competing F&B outlets near the selected site.',
+          ),
+        ]),
+      ]),
+      div(classes: 'card stack', [
+        span(classes: 'overline', [Component.text('Suitability')]),
+        span(classes: 'metric text-action', [
+          Component.text('${_avgScore.toStringAsFixed(0)} / 100'),
+        ]),
+        p(classes: 'small', [
+          Component.text(
+            'Mean suitability across your ${vm.recommendations.length} '
+            'ranked picks.',
+          ),
+        ]),
+      ]),
+    ]),
+  ]);
+
+  // ------------------------------------------------------------------- board
+
+  Component _board(AppCubit appCubit) {
+    final recs = vm.recommendations;
+    return div(classes: 'dash__board', [
+      div(classes: 'dash__board-head', [
+        div(classes: 'grow stack', [
+          h2(classes: 'title-lg', [Component.text('Listing Board')]),
+          span(classes: 'small', [
+            Component.text('Top AI-ranked sites for your concept'),
+          ]),
+        ]),
+        const ActionLink(
+          'See all',
+          href: '/entrepreneur/recommendations',
+          variant: 'ghost',
+        ),
+      ]),
+      div(classes: 'dash__board-body', [
+        if (vm.loading)
+          const _Loading()
+        else if (recs.isEmpty)
+          const _Empty()
+        else
+          for (final r in recs) _boardCard(appCubit, r),
+      ]),
+    ]);
+  }
+
+  Component _boardCard(AppCubit appCubit, PropertyRecommendation r) {
+    final p = r.property;
+    final verified = p.verification == VerificationStatus.verified;
+    return a(
+      href: '/entrepreneur/property-detail?id=${p.id}',
+      classes: 'dash__card',
+      [
+        // Placeholder media, same treatment as property_card.dart — the
+        // `visual--map` gradient, never a photograph.
+        div(classes: 'visual visual--map dash__card-media', [
+          Icon('storefront', size: 'lg', label: p.title),
+          if (verified)
+            span(classes: 'dash__badge dash__badge--ok', [
+              Icon('verified', size: 'sm'),
+              Component.text('Verified'),
+            ]),
+          if (p.hasTour)
+            span(classes: 'dash__badge dash__badge--dark', [
+              Icon('threesixty', size: 'sm'),
+              Component.text('360°'),
+            ]),
+        ]),
+        div(classes: 'dash__card-body', [
+          span(classes: 'dash__price', [
+            Component.text(p.rentalDisplay),
+            span(classes: 'tiny', [Component.text(' / month')]),
+          ]),
+          span(classes: 'dash__card-title', [Component.text(p.title)]),
+          span(classes: 'dash__card-loc', [
+            Icon('place', size: 'sm'),
+            Component.text('${p.city}, ${p.state}'),
+          ]),
+          const DividerClass(),
+          div(classes: 'row', [
+            span(classes: 'small grow', [
+              Component.text('${p.sizeSqft.toStringAsFixed(0)} sq ft'),
+            ]),
+            span(classes: _scoreBadge(r.score), [
+              Component.text('${r.score.toStringAsFixed(0)} match'),
+            ]),
+          ]),
+        ]),
+      ],
+    );
+  }
+
+  /// The documented score ramp, as a pill tone.
+  static String _scoreBadge(double score) {
+    if (score >= 75) return 'dash__match dash__match--ok';
+    if (score >= 55) return 'dash__match dash__match--action';
+    return 'dash__match dash__match--muted';
+  }
 }
+
+// ===========================================================================
+// Supporting components
+// ===========================================================================
 
 class _Loading extends StatelessComponent {
   const _Loading();
 
   @override
-  Component build(BuildContext context) {
-    return div(classes: 'card', [
-      p(classes: 'body muted', [Component.text('Loading…')]),
-    ]);
-  }
+  Component build(BuildContext context) =>
+      p(classes: 'body muted', [Component.text('Loading…')]);
 }
 
-/// One pin on the stylised map panel, positioned with the same lat/lng
-/// proportions as the Flutter `SitewiseMapPanel`.
-class _MapPin {
-  final String id;
+class _Empty extends StatelessComponent {
+  const _Empty();
+
+  @override
+  Component build(BuildContext context) => div(classes: 'card stack', [
+    span(classes: 'overline', [Component.text('Listing board')]),
+    h3(classes: 'title', [Component.text('No matches yet')]),
+    p(classes: 'body', [
+      Component.text(
+        'Loosen your budget or size filters to see more shoplots.',
+      ),
+    ]),
+  ]);
+}
+
+/// One of the three overlapping metric cards.
+class _MetricCard extends StatelessComponent {
   final String label;
-  final double latitude;
-  final double longitude;
+  final String value;
+  final String icon;
+  final String barLabel;
+  final int pct;
+  final String tone;
 
-  const _MapPin({
-    required this.id,
+  const _MetricCard({
     required this.label,
-    required this.latitude,
-    required this.longitude,
+    required this.value,
+    required this.icon,
+    required this.barLabel,
+    required this.pct,
+    required this.tone,
   });
-
-  double get _x => ((longitude - 100.3) / 3.5).clamp(-0.9, 0.9).toDouble();
-
-  double get _y => -((latitude - 1.5) / 4.0).clamp(-0.9, 0.9).toDouble();
-
-  String get position =>
-      'position:absolute;left:${((_x + 1) / 2 * 100).toStringAsFixed(1)}%;'
-      'top:${((1 - _y) / 2 * 100).toStringAsFixed(1)}%;';
-}
-
-/// Stylised Klang Valley map placeholder. Interactive map tiles are not
-/// available in the web prototype, so each pin is a link to its property and
-/// the same pins are listed underneath as text links.
-class _MapPanel extends StatelessComponent {
-  final List<_MapPin> pins;
-  const _MapPanel({required this.pins});
 
   @override
   Component build(BuildContext context) {
-    return div(classes: 'card stack', [
-      div(classes: 'visual visual--map', [
-        div(classes: 'visual__grid', []),
-        for (final pin in pins)
-          a(
-            href: '/entrepreneur/property-detail?id=${pin.id}',
-            attributes: {'style': pin.position, 'title': pin.label},
-            [Icon('place', label: pin.label)],
-          ),
+    return div(classes: 'dash__metric', [
+      div(classes: 'row', [
+        div(classes: 'grow stack', [
+          span(classes: 'dash__metric-label', [Component.text(label)]),
+          span(classes: 'dash__metric-value', [Component.text(value)]),
+        ]),
+        span(classes: 'icon-tile', [Icon(icon, size: 'lg')]),
       ]),
-      p(classes: 'small', [
-        Component.text(
-          'Stylised Klang Valley map — interactive map tiles require the '
-          'mobile app. Each pin links to its property page.',
-        ),
-      ]),
-      ul(classes: 'stack', [
-        for (final pin in pins)
-          li([
-            a(
-              href: '/entrepreneur/property-detail?id=${pin.id}',
-              classes: 'text-action',
-              [Component.text(pin.label)],
-            ),
-          ]),
-      ]),
+      const DividerClass(),
+      WeightBar(label: barLabel, pct: pct),
     ]);
   }
+}
+
+/// Thin separator. Jaspr has no `hr` styling hook in this tree, so it is an
+/// empty styled div carrying the design system's hairline class.
+class DividerClass extends StatelessComponent {
+  const DividerClass();
+
+  @override
+  Component build(BuildContext context) => div(classes: 'dash__rule', []);
 }

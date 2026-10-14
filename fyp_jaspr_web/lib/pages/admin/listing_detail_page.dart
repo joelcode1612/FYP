@@ -24,7 +24,8 @@ class ListingDetailPage extends StatelessComponent {
       role: AppRole.admin,
       currentRoute: '/admin/listings',
       title: 'Listing detail',
-      subtitle: AppRole.admin.label,
+      subtitle:
+          'A single listing as submitted, with the details you need to decide whether it should be verified.',
       child: id.isEmpty
           ? _notFound()
           : FutureBuilder<CommercialProperty?>(

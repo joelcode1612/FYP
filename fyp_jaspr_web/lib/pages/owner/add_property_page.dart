@@ -168,7 +168,7 @@ class _AddPropertyPageState extends State<AddPropertyPage> {
       role: AppRole.owner,
       currentRoute: '/owner/add-property',
       title: editingId == null ? 'Add Property' : 'Edit Property',
-      subtitle: AppRole.owner.label,
+      subtitle: 'Add a commercial space, or edit one you have already listed.',
       child: body,
     );
   }

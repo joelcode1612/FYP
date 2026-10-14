@@ -52,32 +52,29 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
               role: AppRole.entrepreneur,
               currentRoute: '/entrepreneur/recommendations',
               title: 'Recommendations',
-              subtitle: AppRole.entrepreneur.label,
-              child: div(classes: 'stack', [
-                div(
-                  attributes: const {'style': 'gap:8px'},
-                  classes: 'row row--top',
-                  [
-                    div(classes: 'grow stack', [
-                      h2(classes: 'title', [
-                        Component.text('Ranked for your concept'),
-                      ]),
-                      p(classes: 'small', [
-                        Component.text(
-                          '${vm.prefs.businessType} · up to '
-                          'RM${vm.prefs.maxBudgetRm.toStringAsFixed(0)} · '
-                          'min ${vm.prefs.minSizeSqft.toStringAsFixed(0)} '
-                          'sq ft',
-                        ),
-                      ]),
+              subtitle:
+                  'Ranked sites with the reasoning behind each one, so you can see why a location was suggested.',
+              child: div(classes: 'stack stack--sm', [
+                div(classes: 'row row--top', [
+                  div(classes: 'grow stack', [
+                    h2(classes: 'title', [
+                      Component.text('Ranked for your concept'),
                     ]),
-                    const ActionLink(
-                      'Edit preferences',
-                      href: '/entrepreneur/preferences',
-                      variant: 'ghost',
-                    ),
-                  ],
-                ),
+                    p(classes: 'small', [
+                      Component.text(
+                        '${vm.prefs.businessType} · up to '
+                        'RM${vm.prefs.maxBudgetRm.toStringAsFixed(0)} · '
+                        'min ${vm.prefs.minSizeSqft.toStringAsFixed(0)} '
+                        'sq ft',
+                      ),
+                    ]),
+                  ]),
+                  const ActionLink(
+                    'Edit preferences',
+                    href: '/entrepreneur/preferences',
+                    variant: 'ghost',
+                  ),
+                ]),
                 if (vm.loading)
                   const _Loading()
                 else if (vm.recommendations.isEmpty)

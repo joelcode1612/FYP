@@ -1,7 +1,7 @@
 # Sitewise — Frontend UI/UX Audit
 
-**Scope:** `fyp_mobile_app` (Flutter, Material 3) + `fyp_jaspr_web` (Jaspr, SSR web) + `shared_logic`
-**Design authority:** [`DESIGN.md`](DESIGN.md) (token contract)
+**Scope:** `fyp_mobile_app` (Flutter, Material 3) + `fyp_jaspr_web` (Jaspr, SSR web) + `shared_logic`  
+**Design authority:** [`DESIGN.md`](DESIGN.md) (token contract)  
 **Audit type:** Source-derived static review. **No application was run, built, or served; no screenshots were captured; no automated tests were executed.**
 
 ---
@@ -10,13 +10,13 @@
 
 Read this before acting on any finding.
 
-| Claim type | How it was established |
-|---|---|
-| Code structure, line references, token usage | Direct file reads and `grep` over the working tree — **verified** |
-| Counts (hardcoded colours, magic spacing, `Semantics` usage) | `grep` result counts — **verified at time of scan** |
-| Rendered layout, overflow, overlap, tap behaviour | **Not observed.** No emulator, simulator, or browser session was run. Findings of this class are inferred from CSS/Widget code and are labelled **Unverified — needs runtime confirmation**. |
-| Contrast ratios | Taken from the explanatory comment in `styles.css`. Not independently measured. |
-| Test results | **None executed.** No claim of passing tests is made anywhere in this document. |
+| Claim type                                                   | How it was established                                                                                                                                                                       |
+| ------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Code structure, line references, token usage                 | Direct file reads and `grep` over the working tree — **verified**                                                                                                                            |
+| Counts (hardcoded colours, magic spacing, `Semantics` usage) | `grep` result counts — **verified at time of scan**                                                                                                                                          |
+| Rendered layout, overflow, overlap, tap behaviour            | **Not observed.** No emulator, simulator, or browser session was run. Findings of this class are inferred from CSS/Widget code and are labelled **Unverified — needs runtime confirmation**. |
+| Contrast ratios                                              | Taken from the explanatory comment in `styles.css`. Not independently measured.                                                                                                              |
+| Test results                                                 | **None executed.** No claim of passing tests is made anywhere in this document.                                                                                                              |
 
 **Important timing caveat:** `fyp_jaspr_web/web/styles.css` was **1358 lines** when the design-system extraction was performed earlier in this project; it is now **1876 lines** (`Get-Content | Measure-Object`), having gained the `explore__*` panel/map/zoom rules (lines ~1519–1690). All web line numbers below refer to the **current 1876-line file**. The `DESIGN.md` §4/§7 sections describing `styles.css` therefore predate those additions and should be re-synced.
 
@@ -29,6 +29,7 @@ Read this before acting on any finding.
 The frontend is **architecturally disciplined but not accessibility-complete**.
 
 What is genuinely good, and should be protected:
+
 - A real, documented token contract (`DESIGN.md`) with a two-family type system (Sora/IBM Plex Sans) and a deliberate **flat, border-and-tint** visual language at `elevation: 0`.
 - The Jaspr web tree contains **zero hardcoded hex values in Dart** — every colour goes through `styles.css`. Its own comments state the rule and the code honours it.
 - Web navigation is `<a href>`-based with `?id=` query params, so it is crawlable, middle-clickable, and functional without JavaScript.
@@ -52,11 +53,11 @@ The remediation is mostly **targeted and additive** — ARIA attributes, a focus
 
 **Repository shape.** Three packages:
 
-| Path | Role |
-|---|---|
+| Path              | Role                                                                                                                                                                                   |
+| ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `fyp_mobile_app/` | Flutter client (mobile tree only). Entry: `lib/main.dart`. Routes: `lib/core/routing/app_routes.dart` (35 routes, one `onGenerateRoute`). Theme: `lib/core/theme/sitewise_theme.dart`. |
-| `fyp_jaspr_web/` | Jaspr SSR web client. Entry: `lib/main.server.dart` (`Document` + font `<link>`s). Routes: `lib/app.dart` (27 `Route` entries). Design system: `web/styles.css`. |
-| `shared_logic/` | Domain + data + application layer shared by both (entities, repositories, use cases, Cubits). |
+| `fyp_jaspr_web/`  | Jaspr SSR web client. Entry: `lib/main.server.dart` (`Document` + font `<link>`s). Routes: `lib/app.dart` (27 `Route` entries). Design system: `web/styles.css`.                       |
+| `shared_logic/`   | Domain + data + application layer shared by both (entities, repositories, use cases, Cubits).                                                                                          |
 
 **How mobile and web relate.** This is **not a responsive-layout project and not a component-sharing project**. It is *two hand-maintained presentation trees over one shared domain layer*:
 
@@ -66,7 +67,8 @@ The remediation is mostly **targeted and additive** — ARIA attributes, a focus
 - **`parentShellRoute` is duplicated verbatim** in `app_routes.dart:48–61` and `navigation.dart:98–112` — the same route-to-parent map maintained twice, with the web copy already drifting (the web map carries `/owner/tour-preview` while the mobile map does not, so a detail route highlights differently on each platform).
 
 **Roles and workflows.**
-- **F&B Entrepreneur** — dashboard, preferences, explore (list + map), property detail, 360° tour, recommendations, compare (max 3), saved, suitability report, profile.
+
+- **F\&B Entrepreneur** — dashboard, preferences, explore (list + map), property detail, 360° tour, recommendations, compare (max 3), saved, suitability report, profile.
 - **Property Owner** — dashboard, properties list, add/edit property (validated form, stepper on mobile), tours, tour preview, 360° capture (mobile-only, `PanoramaCapturePage`), profile.
 - **Administrator** — dashboard, users, user detail, verification queue, verification detail, listings, listing detail, profile.
 - **Public** — landing (marketing), login/role picker. Mobile additionally has an onboarding flow and an `AppStartGate` splash that branches onboarding → auth → role home.
@@ -80,6 +82,7 @@ The remediation is mostly **targeted and additive** — ARIA attributes, a focus
 **Summary.** The mobile tree has a coherent visual identity and good structural instincts (property-card variants are genuinely different layouts rather than boolean flags, states are extracted into named widgets, forms are stepper-organised). Its weaknesses are **accessibility and token discipline**, not layout architecture.
 
 **Confirmed findings:**
+
 - Touch targets below the 48px contract in five distinct places (`M-01`, `M-02`, `M-03`, `M-19`, `M-20`).
 - Only **2** `Semantics(...)` widgets in the whole presentation tree (`M-09`).
 - A single `RichText` at `landing_mobile_sections.dart:103` that bypasses text scaling (`M-15`) — verified as the only `RichText(` in the tree, which makes it a one-line fix with outsized impact.
@@ -97,6 +100,7 @@ The remediation is mostly **targeted and additive** — ARIA attributes, a focus
 **Summary.** The web tree is the **cleaner of the two** in code discipline and the **more broken** in accessibility and responsive completeness. Its Dart contains no hex literals, it uses semantic `<a>`/`<button>` correctly, and its comments document design intent with unusual rigour. It also has the only truly blocking defect in the project.
 
 **Confirmed findings:**
+
 - **`W-05`: total navigation loss below 900px.** Verified by reading `styles.css:1845–1855` — `.masthead__nav` is disabled, `.footer-grid` collapses to one column, and `.sidebar` is set to `display: none`, with no replacement pattern defined anywhere in the stylesheet.
 - **`W-01`: no keyboard operability for overlays.** Verified by grep — zero occurrences of `Escape`, `onKeyDown`, `aria-modal`, or `role': 'dialog'` in `fyp_jaspr_web/lib`.
 - **`W-10`: form labels are `<span>`s.** Verified in `add_property_page.dart:311` — `span(classes: 'overline', ...)` with no `for`/`id` association, despite the inputs carrying `id` attributes.
@@ -113,6 +117,7 @@ The remediation is mostly **targeted and additive** — ARIA attributes, a focus
 **The two token sources agree on all hex values** and on the five-step spacing scale. That is the good news, and it is the reason this project reads as one product.
 
 **Where they diverge** (each is a real, visible inconsistency between platforms for the *same* logical component):
+
 
 | # | Divergence | Mobile | Web |
 |---|---|---|---|
@@ -250,6 +255,7 @@ Full structured format for **Critical** and **High**. Medium/Low are consolidate
 **Location:** `fyp_mobile_app/lib/presentation/mobile/landing/widgets/landing_mobile_sections.dart:103`
 
 **Current implementation:** `RichText(text: const TextSpan(style: TextStyle(fontSize: 34, ...)))`. Verified as the **only** `RichText(` in the presentation tree.
+
 
 **Problem:** `RichText` does not apply `MediaQuery.textScaler`. A user who raises their system font size sees this text stay at 34px while everything around it grows.
 
@@ -410,6 +416,7 @@ Full structured format for **Critical** and **High**. Medium/Low are consolidate
 
 **Implementation guidance:** The `.sr-only` utility already exists in `styles.css:405–415` — no new CSS needed.
 
+
 **Priority:** High
 **Effort:** Small
 **Verification:** axe-core / Lighthouse table rules pass.
@@ -537,6 +544,8 @@ Full structured format for **Critical** and **High**. Medium/Low are consolidate
 | `W-15` | Web | `styles.css:1228–1248` | Global `4px` focus radius on a `999px` circular button | Add `.p-card__save:focus-visible { border-radius: 999px }` |
 | `W-18` | Web | `styles.css:419–424` | `pointer-events: none` removes disabled buttons from keyboard reach | Use the native `disabled` attribute |
 | `C-03` | Shared | 13 mobile + 6 web files >300 lines | Monolithic files | Decompose incrementally (see §9 Stage 5) |
+
+
 
 ---
 

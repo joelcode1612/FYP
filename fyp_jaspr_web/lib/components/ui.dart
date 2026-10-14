@@ -16,6 +16,7 @@ library;
 
 import 'package:jaspr/dom.dart';
 import 'package:jaspr/jaspr.dart';
+import 'package:shared_logic/shared_logic.dart';
 
 import '../data/icon_variants.dart';
 
@@ -300,6 +301,366 @@ class WeightBar extends StatelessComponent {
         span(classes: 'weights__fill w-$bucket', []),
       ]),
       span(classes: 'small', [Component.text('$pct%')]),
+    ]);
+  }
+}
+
+// ==========================================================================
+//  Page-level primitives
+// --------------------------------------------------------------------------
+//  Everything above this line is content-level (a card, a pill, a bar). The
+//  components below give every page the same skeleton: a page header, titled
+//  section panels, empty states, loading placeholders, status badges, labelled
+//  form fields, breadcrumbs and a search input.
+//
+//  Before these existed, each page hand-rolled its own title block (or had
+//  none and relied only on the topbar), duplicated the `title-lg + body` empty
+//  state roughly ten times, and showed `Loading…` as plain text that reflowed
+//  the page once data arrived.
+// ==========================================================================
+
+/// Consistent page header: eyebrow + title + description on the left, actions
+/// on the right. Stacks below 640px.
+///
+/// Pages previously passed only `title`/`subtitle` to `AppLayout`, which meant
+/// the *only* place a page name appeared was the topbar — no description, and
+/// no room for a page-level action.
+class PageHead extends StatelessComponent {
+  /// Small uppercase label above the title, e.g. `Administrator`.
+  final String? eyebrow;
+
+  /// The page name. Rendered as an `h1` so heading order is correct.
+  final String title;
+
+  /// One-line explanation of what the page is for.
+  final String? description;
+
+  /// Page-level actions, e.g. a primary "Add property" button.
+  final List<Component> actions;
+
+  const PageHead({
+    super.key,
+    this.eyebrow,
+    required this.title,
+    this.description,
+    this.actions = const [],
+  });
+
+  @override
+  Component build(BuildContext context) {
+    return header(classes: 'page-head', [
+      div(classes: 'page-head__main', [
+        if (eyebrow != null) Eyebrow(eyebrow!),
+        h1(classes: 'page-head__title', [Component.text(title)]),
+        if (description != null)
+          p(classes: 'page-head__desc', [Component.text(description!)]),
+      ]),
+      if (actions.isNotEmpty) div(classes: 'page-head__actions', actions),
+    ]);
+  }
+}
+
+/// A titled panel. The body is padded by default; pass [flush] when the body is
+/// a table or list that should run edge to edge.
+class SectionCard extends StatelessComponent {
+  final String title;
+
+  /// Optional trailing content in the header row, e.g. a "See all" link.
+  final List<Component>? action;
+
+  final Component child;
+
+  /// Removes the body padding — use for tables and rows.
+  final bool flush;
+
+  const SectionCard({
+    super.key,
+    required this.title,
+    required this.child,
+    this.action,
+    this.flush = false,
+  });
+
+  @override
+  Component build(BuildContext context) {
+    return section(classes: 'section-card', [
+      div(classes: 'section-card__head', [
+        span(classes: 'section-card__title', [Component.text(title)]),
+        if (action != null) div(classes: 'row row--sm', action!),
+      ]),
+      div(
+        classes: flush
+            ? 'section-card__body section-card__body--flush'
+            : 'section-card__body',
+        [child],
+      ),
+    ]);
+  }
+}
+
+/// Placeholder shown when a list has no results. Replaces the ad-hoc
+/// `h2.title-lg + p.body` pattern that was duplicated across pages.
+class EmptyState extends StatelessComponent {
+  /// Material Symbols name shown in the leading circle.
+  final String icon;
+
+  final String title;
+
+  /// Explains why it is empty and, ideally, what to do about it.
+  final String body;
+
+  /// Optional call to action, e.g. a link to Explore.
+  final Component? action;
+
+  const EmptyState({
+    super.key,
+    required this.icon,
+    required this.title,
+    required this.body,
+    this.action,
+  });
+
+  @override
+  Component build(BuildContext context) {
+    return div(classes: 'empty', [
+      span(classes: 'empty__icon', [Icon(icon)]),
+      span(classes: 'empty__title', [Component.text(title)]),
+      p(classes: 'empty__body', [Component.text(body)]),
+      if (action != null) div(classes: 'empty__action', [action!]),
+    ]);
+  }
+}
+
+/// Loading placeholder. Keeps the page's dimensions stable while data loads,
+/// instead of swapping text for content and reflowing everything.
+class Skeleton extends StatelessComponent {
+  /// `text` | `title` | `row` | `block`
+  final String variant;
+
+  /// Renders this many stacked copies with the standard gap.
+  final int count;
+
+  const Skeleton({super.key, this.variant = 'row', this.count = 1});
+
+  @override
+  Component build(BuildContext context) {
+    final cls = variant == 'text'
+        ? 'skeleton skeleton--text'
+        : variant == 'title'
+        ? 'skeleton skeleton--title'
+        : variant == 'block'
+        ? 'skeleton skeleton--block'
+        : 'skeleton skeleton--row';
+
+    if (count <= 1) return div(classes: cls, []);
+
+    return div(classes: 'skeleton-stack', [
+      for (var i = 0; i < count; i++) div(classes: cls, []),
+    ]);
+  }
+}
+
+/// Status pill driven by the real domain enums, so colour is never chosen
+/// ad-hoc per page.
+///
+/// [USER.status] is a free-form String, which is why [forText] exists — it
+/// keyword-matches rather than pretending there is an enum behind it.
+class StatusBadge extends StatelessComponent {
+  final String label;
+
+  /// `neutral` | `action` | `success` | `warning` | `danger`
+  final String tone;
+
+  /// Show a leading dot. Off by default: the label already carries the meaning.
+  final bool dot;
+
+  const StatusBadge(
+    this.label, {
+    super.key,
+    this.tone = 'neutral',
+    this.dot = false,
+  });
+
+  /// Verification lifecycle — `draft` → neutral, `pending` → warning,
+  /// `verified` → success, `rejected` → danger.
+  factory StatusBadge.forVerification(VerificationStatus status) {
+    final (label, tone) = switch (status) {
+      VerificationStatus.draft => ('Draft', 'neutral'),
+      VerificationStatus.pending => ('Pending', 'warning'),
+      VerificationStatus.verified => ('Verified', 'success'),
+      VerificationStatus.rejected => ('Rejected', 'danger'),
+    };
+    return StatusBadge(label, tone: tone);
+  }
+
+  /// Tour lifecycle. Labels and tones match `tours_page.dart`'s original
+  /// `_statusLabel` / `_statusTone`, which were themselves written to match the
+  /// Flutter tours page exactly — so changing them here would fork the two
+  /// platforms' vocabulary.
+  factory StatusBadge.forTour(VirtualTourStatus status) {
+    final (label, tone) = switch (status) {
+      VirtualTourStatus.draft => ('Draft', 'action'),
+      VirtualTourStatus.processing => ('Processing…', 'warning'),
+      VirtualTourStatus.ready => ('Ready', 'action'),
+      VirtualTourStatus.pendingVerification => (
+        'Pending verification',
+        'warning',
+      ),
+      VirtualTourStatus.approved => ('Approved', 'success'),
+      VirtualTourStatus.rejected => ('Rejected', 'danger'),
+    };
+    return StatusBadge(label, tone: tone);
+  }
+
+  /// The label [StatusBadge.forTour] would render, for pages that also need the
+  /// status as prose (e.g. "12 scenes · Pending verification"). Keeping this
+  /// beside the factory means the badge and the sentence can never drift.
+  static String tourLabel(VirtualTourStatus status) => switch (status) {
+    VirtualTourStatus.draft => 'Draft',
+    VirtualTourStatus.processing => 'Processing…',
+    VirtualTourStatus.ready => 'Ready',
+    VirtualTourStatus.pendingVerification => 'Pending verification',
+    VirtualTourStatus.approved => 'Approved',
+    VirtualTourStatus.rejected => 'Rejected',
+  };
+
+  /// Best-effort tone for the free-text `User.status` field. Unknown words fall
+  /// back to neutral rather than guessing a stronger claim.
+  factory StatusBadge.forText(String status) {
+    final s = status.toLowerCase();
+    final tone =
+        s.contains('pending') ||
+            s.contains('processing') ||
+            s.contains('draft') ||
+            s.contains('review')
+        ? 'warning'
+        : s.contains('suspend') ||
+              s.contains('reject') ||
+              s.contains('banned') ||
+              s.contains('inactive')
+        ? 'danger'
+        : s.contains('active') ||
+              s.contains('verified') ||
+              s.contains('approved') ||
+              s.contains('ready')
+        ? 'success'
+        : 'neutral';
+    return StatusBadge(status, tone: tone);
+  }
+
+  @override
+  Component build(BuildContext context) {
+    final classes = dot ? 'pill pill--$tone row row--xs' : 'pill pill--$tone';
+    return span(classes: classes, [
+      if (dot) span(classes: 'dot dot--$tone', []),
+      span([Component.text(label)]),
+    ]);
+  }
+}
+
+/// Label + control + optional hint/error. The label wraps the control, so the
+/// association holds without every input needing a hand-written id
+/// (audit W-10).
+///
+/// Named [labelText] rather than `label` because Jaspr exports a `label()`
+/// element function, and a parameter of that name shadows it inside the body.
+class Field extends StatelessComponent {
+  final String labelText;
+
+  final Component child;
+
+  /// Helper text shown under the control.
+  final String? hint;
+
+  /// Validation message. Replaces [hint] when present.
+  final String? error;
+
+  const Field({
+    super.key,
+    required this.labelText,
+    required this.child,
+    this.hint,
+    this.error,
+  });
+
+  @override
+  Component build(BuildContext context) {
+    return label(classes: 'field', [
+      span(classes: 'field__label', [Component.text(labelText)]),
+      child,
+      if (error != null)
+        span(classes: 'field__error-row', [
+          Icon('error_outline', size: 'sm'),
+          span(classes: 'field__error', [Component.text(error!)]),
+        ])
+      else if (hint != null)
+        span(classes: 'field__hint', [Component.text(hint!)]),
+    ]);
+  }
+}
+
+/// Search input with a leading icon. Labelled by [ariaLabel] so it is not an
+/// unlabelled control (audit W-10).
+class SearchInput extends StatelessComponent {
+  final String placeholder;
+  final String ariaLabel;
+  final void Function(String) onInput;
+
+  /// Rendered above the input in the `.search` wrapper.
+  final String? label;
+
+  const SearchInput({
+    super.key,
+    required this.placeholder,
+    required this.ariaLabel,
+    required this.onInput,
+    this.label,
+  });
+
+  @override
+  Component build(BuildContext context) {
+    final field = div(classes: 'search', [
+      span(classes: 'search__icon', [Icon('search', size: 'sm')]),
+      input(
+        type: InputType.search,
+        classes: 'input',
+        attributes: {'placeholder': placeholder, 'aria-label': ariaLabel},
+        events: events<String>(onInput: onInput),
+      ),
+    ]);
+
+    if (label == null) return field;
+    return Field(labelText: label!, child: field);
+  }
+}
+
+/// Breadcrumb trail. Only the final item is meaningful on its own, so the
+/// earlier items are rendered as plain text rather than anchors — linking to a
+/// parent route that does not exist for a given context would be worse than
+/// showing no trail at all.
+class Breadcrumbs extends StatelessComponent {
+  final List<String> items;
+
+  const Breadcrumbs(this.items, {super.key});
+
+  @override
+  Component build(BuildContext context) {
+    if (items.length <= 1) return const span([]);
+    return nav(classes: 'crumbs', [
+      for (var i = 0; i < items.length; i++) ...[
+        if (i > 0) span(classes: 'crumbs__sep', [Component.text('›')]),
+        if (i == items.length - 1)
+          span(classes: 'crumbs__item crumbs__item--current', [
+            Component.text(items[i]),
+          ])
+        else
+          span(classes: 'crumbs__item crumbs__link', [
+            // A plain span, not an anchor: the parent's route is the only
+            // meaningful target and inventing a link to a section that may
+            // not exist as a route would be worse than no trail at all.
+            Component.text(items[i]),
+          ]),
+      ],
     ]);
   }
 }

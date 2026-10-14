@@ -35,7 +35,7 @@ class _ProfilePageState extends State<ProfilePage> {
       role: AppRole.owner,
       currentRoute: '/owner/profile',
       title: 'Profile',
-      subtitle: AppRole.owner.label,
+      subtitle: 'Your owner account details and contact information.',
       child: div(classes: 'w-50', [
         div(classes: 'card stack', [
           div(classes: 'avatar', [Component.text('D')]),
