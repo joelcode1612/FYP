@@ -1,0 +1,28 @@
+# Dart pub workspace root for the Sitewise FYP monorepo.
+#
+# A workspace lets these packages share ONE dependency resolution and ONE
+# lockfile while remaining separate packages with their own pubspecs:
+#   * fyp_mobile_app — the Flutter app (mobile + Flutter-web UI).
+#   * fyp_jaspr_web  — the Jaspr web app (real HTML/CSS for SEO).
+#   * shared_logic   — framework-free domain + application logic used by both.
+#
+# One pubspec cannot drive both `flutter build` and `jaspr build`, so the apps
+# must stay separate packages; `shared_logic` must stay free of Flutter because
+# the Jaspr app compiles to JavaScript where Flutter does not exist.
+#
+# Member packages declare `resolution: workspace` and depend on each other
+# with the `any` constraint; pub binds that to the local workspace member.
+#
+# Run `flutter pub get` from fyp_mobile_app (or `dart pub get` here) to resolve
+# the whole workspace. The lockfile lives at this root, not in the members.
+name: fyp_workspace
+description: Workspace root for the Sitewise FYP (Flutter app + Jaspr web app + shared logic).
+publish_to: none
+
+environment:
+  sdk: ^3.12.2
+
+workspace:
+  - fyp_mobile_app
+  - fyp_jaspr_web
+  - shared_logic

@@ -1,0 +1,152 @@
+/// Sidebar navigation, ported from
+/// `lib/presentation/web/shell/web_navigation.dart`.
+///
+/// The Flutter version stores an `IconData` per destination. Jaspr has no such
+/// type, so the Material Symbols *name* is stored instead and `Icon` renders it
+/// as `<span class="ms">`. Everything else — routes, labels, the per-role
+/// grouping — is a direct port.
+library;
+
+import 'site_content.dart';
+
+class WebDestination {
+  final String route;
+  final String icon;
+  final String label;
+
+  const WebDestination({
+    required this.route,
+    required this.icon,
+    required this.label,
+  });
+}
+
+/// Desktop sidebar destinations per role. The web tree is the only consumer —
+/// the mobile tree keeps its own bottom-navigation destinations in Flutter.
+List<WebDestination> webDestinationsFor(AppRole role) => switch (role) {
+  AppRole.admin => const [
+    WebDestination(route: '/admin', icon: 'dashboard', label: 'Dashboard'),
+    // `people`, not `group`: the mobile bottom nav uses Icons.people_outline,
+    // and Material Symbols renders `group` and `people` as different glyphs.
+    WebDestination(route: '/admin/users', icon: 'people', label: 'Users'),
+    WebDestination(
+      route: '/admin/verification',
+      icon: 'verified',
+      label: 'Verification',
+    ),
+    WebDestination(
+      route: '/admin/listings',
+      icon: 'business',
+      label: 'Listings',
+    ),
+    WebDestination(route: '/admin/profile', icon: 'person', label: 'Profile'),
+  ],
+  AppRole.owner => const [
+    WebDestination(route: '/owner', icon: 'home', label: 'Home'),
+    WebDestination(
+      route: '/owner/properties',
+      icon: 'store',
+      label: 'My Properties',
+    ),
+    WebDestination(
+      route: '/owner/add-property',
+      icon: 'add_business',
+      label: 'Add Property',
+    ),
+    WebDestination(
+      route: '/owner/tours',
+      icon: 'threesixty',
+      label: '360° Tours',
+    ),
+    WebDestination(route: '/owner/profile', icon: 'person', label: 'Profile'),
+  ],
+  AppRole.entrepreneur => const [
+    WebDestination(route: '/entrepreneur', icon: 'home', label: 'Home'),
+    WebDestination(
+      route: '/entrepreneur/explore',
+      icon: 'explore',
+      label: 'Explore',
+    ),
+    WebDestination(
+      route: '/entrepreneur/recommendations',
+      icon: 'auto_awesome',
+      label: 'Recommendations',
+    ),
+    WebDestination(
+      route: '/entrepreneur/compare',
+      icon: 'compare_arrows',
+      label: 'Compare',
+    ),
+    WebDestination(
+      route: '/entrepreneur/saved',
+      icon: 'bookmark',
+      label: 'Saved',
+    ),
+    WebDestination(
+      route: '/entrepreneur/profile',
+      icon: 'person',
+      label: 'Profile',
+    ),
+  ],
+};
+
+/// Maps a route to the shell entry that should appear selected.
+///
+/// Ported from `parentShellRoute` in the Flutter `presentation_environment.dart`:
+/// detail and capture routes highlight their parent section, so the sidebar
+/// still shows where you are when you drill into a record.
+String parentShellRoute(String route) {
+  const parents = {
+    '/entrepreneur/preferences': '/entrepreneur',
+    '/entrepreneur/property-detail': '/entrepreneur/explore',
+    '/entrepreneur/tour': '/entrepreneur/explore',
+    '/entrepreneur/report': '/entrepreneur/explore',
+    '/admin/user-detail': '/admin/users',
+    '/admin/verification-detail': '/admin/verification',
+    '/admin/listing-detail': '/admin/listings',
+    '/owner/property-detail': '/owner/properties',
+    '/owner/tour-preview': '/owner/tours',
+    '/owner/capture': '/owner/tours',
+  };
+  return parents[route] ?? route;
+}
+
+/// Derives the active role from the URL path.
+///
+/// In the Flutter tree the role lives in `AppCubit` and pages receive it as a
+/// parameter. Here the URL is the single source of truth: the sidebar, the
+/// topbar controls and the page body all read the role from the path they were
+/// rendered for, so they can never disagree — including after a role switch,
+/// which is just a navigation to the other role's home route.
+AppRole roleForPath(String path) {
+  if (path.startsWith('/admin')) return AppRole.admin;
+  if (path.startsWith('/owner')) return AppRole.owner;
+  return AppRole.entrepreneur;
+}
+
+/// Human-readable topbar title for any route, including detail routes that
+/// are not sidebar entries. Falls back to a prettified path segment.
+String titleForRoute(String route) {
+  for (final role in AppRole.values) {
+    for (final d in webDestinationsFor(role)) {
+      if (d.route == route) return d.label;
+    }
+  }
+  final names = const {
+    '/entrepreneur/preferences': 'Preferences',
+    '/entrepreneur/property-detail': 'Property',
+    '/entrepreneur/tour': '360° Tour',
+    '/entrepreneur/report': 'Suitability Report',
+    '/admin/user-detail': 'User',
+    '/admin/verification-detail': 'Verification',
+    '/admin/listing-detail': 'Listing',
+    '/owner/property-detail': 'Property',
+    '/owner/tour-preview': '360° Tour',
+  };
+  if (names.containsKey(route)) return names[route]!;
+  final segment = route.split('/').where((s) => s.isNotEmpty).lastOrNull;
+  if (segment == null) return 'Page';
+  return segment
+      .replaceAll('-', ' ')
+      .replaceAllMapped(RegExp(r'\b\w'), (m) => m.group(0)!.toUpperCase());
+}

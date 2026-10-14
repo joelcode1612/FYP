@@ -1,0 +1,21 @@
+name: shared_logic
+description: >-
+  Framework-free domain and data layers shared by the Sitewise Flutter app and
+  the Jaspr web app. No Flutter, no Jaspr, no third-party dependencies.
+version: 0.1.0
+publish_to: none
+
+environment:
+  sdk: ^3.12.0
+
+# Member of the fyp_workspace pub workspace: dependency resolution and the
+# lockfile are shared with the sibling packages.
+resolution: workspace
+
+# Intentionally empty. Everything here is pure Dart; adding a dependency would
+# be the first step toward making this package unusable from one of the two
+# apps (Flutter-only packages break the Jaspr build and vice versa).
+dependencies:
+  bloc: ^9.2.1
+dev_dependencies:
+  test: 1.31.0

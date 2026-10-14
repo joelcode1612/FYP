@@ -1,0 +1,1876 @@
+/* ==========================================================================
+   Sitewise — design system
+   --------------------------------------------------------------------------
+   Ported from `lib/core/theme/sitewise_theme.dart` (SitewiseColors /
+   SitewiseSpacing) in the Flutter app.
+
+   Why this file carries the whole visual language: Jaspr has no pre-styled
+   component library, and `Text` accepts only a String. Every colour, size and
+   weight that lived in a Flutter `TextStyle` has to live in CSS instead. So
+   the tokens below are the single source of truth, exactly as SitewiseColors
+   is in the Flutter tree.
+   ========================================================================== */
+
+:root {
+  /* --- Brand tokens (identical values to SitewiseColors) --- */
+  --ink: #10151f;
+  --action: #2f6fed;
+  --accent: #1d4ed8;
+  --background: #f6f7f9;
+  --surface: #ffffff;
+  --border: #e4e7ec;
+  --muted: #667085;
+  --overline: #98a2b3;
+  --success: #0e9f6e;
+  --warning: #b54708;
+  --danger: #d92d20;
+  --geo-wash: #eaf1fe;
+  --geo-border: #cfe0fd;
+
+  /* --- Contrast-safe text variants ---------------------------------------
+     `--overline` (#98A2B3) is only 2.60:1 on white and fails WCAG AA (4.5:1)
+     for small text, yet the Flutter app uses it as a text colour 53 times.
+     Since this file is written from scratch, text uses the accessible value
+     (#6B7280, 4.82:1) while `--overline` stays for borders and icons, where
+     the 3:1 bar applies and it passes. */
+  --overline-text: #6b7280;
+  --success-text: #0b815a; /* 4.96:1, for small text on light backgrounds */
+
+  /* --- Semantic wash backgrounds (mirrors the Flutter tokens) --- */
+  --success-wash: #d3f8df;
+  --warning-wash: #fef0c7;
+  --danger-wash: #fee4e2;
+  --neutral-wash: #f2f4f7;
+  --alt-surface: #fafbfc;
+
+  /* --- Spacing (mirrors SitewiseSpacing) --- */
+  --xs: 4px;
+  --sm: 8px;
+  --md: 16px;
+  --lg: 24px;
+  --xl: 32px;
+
+  /* --- Radii --- */
+  --radius: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 22px;
+  --radius-pill: 999px;
+
+  /* --- Type --- */
+  --font-display: "Sora", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+
+  /* --- Layout --- */
+  --content-max: 1180px;
+  --sidebar-w: 236px;
+  --topbar-h: 72px;
+}
+
+/* ==========================================================================
+   Reset & base
+   ========================================================================== */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+  /* Anchored sections must not hide under the sticky 72px header. */
+  scroll-padding-top: 88px;
+}
+
+body {
+  margin: 0;
+  background: var(--background);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: 15px;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1,
+h2,
+h3,
+h4 {
+  font-family: var(--font-display);
+  margin: 0;
+  letter-spacing: -0.02em;
+  line-height: 1.12;
+}
+
+p {
+  margin: 0;
+}
+
+a {
+  color: var(--action);
+  text-decoration: none;
+}
+
+img {
+  max-width: 100%;
+  display: block;
+}
+
+button {
+  font-family: inherit;
+  cursor: pointer;
+}
+
+/* Visible focus for keyboard users. The Flutter app relies on Material's
+   defaults; on the web we must provide it explicitly. */
+:focus-visible {
+  outline: 2px solid var(--action);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* ==========================================================================
+   Icons
+   --------------------------------------------------------------------------
+   Flutter ships Material icons as a font and exposes them as `Icons.*`.
+   On the web the equivalent is the Material Symbols font, so an icon becomes
+   <span class="ms">storefront</span>. Keeping the icon *name* (not a code
+   point) in the Dart content data means the two trees stay comparable.
+   ========================================================================== */
+
+.ms {
+  font-family: "Material Symbols Outlined", sans-serif;
+  font-weight: normal;
+  font-style: normal;
+  font-size: 20px;
+  line-height: 1;
+  letter-spacing: normal;
+  text-transform: none;
+  display: inline-block;
+  white-space: nowrap;
+  word-wrap: normal;
+  direction: ltr;
+  -webkit-font-feature-settings: "liga";
+  -webkit-font-smoothing: antialiased;
+  font-variation-settings:
+    "FILL" 0,
+    "wght" 400,
+    "GRAD" 0,
+    "opsz" 24;
+  flex: none;
+}
+
+.ms--sm {
+  font-size: 16px;
+}
+.ms--lg {
+  font-size: 24px;
+}
+
+/* --- Variants that mirror Flutter's icon naming ---------------------------
+   Flutter's `Icons.*` is not one style: it is five families crossed with a
+   filled/unfilled flag. The mobile tree uses three of them, so the web has to
+   be able to reproduce each. Which icon needs which variant is recorded in
+   `lib/data/icon_variants.dart` — one table, not a guess per call site.
+
+     Icons.foo_outlined -> Outlined family, FILL 0   (the .ms default)
+     Icons.foo_rounded  -> Rounded  family, FILL 0   -> .ms--rounded
+     Icons.foo          -> Outlined family, FILL 1   -> .ms--fill
+
+   These must come after `.ms` so the single-class overrides win. */
+.ms--fill {
+  font-variation-settings:
+    "FILL" 1,
+    "wght" 400,
+    "GRAD" 0,
+    "opsz" 24;
+}
+
+.ms--rounded {
+  font-family: "Material Symbols Rounded", sans-serif;
+}
+
+/* ==========================================================================
+   Width utilities
+   --------------------------------------------------------------------------
+   Used for the percentage-width bars (recommendation weights, coverage).
+   Deliberately classes rather than inline styles: the values are static data,
+   and classes keep every visual rule in this one file, which is the same
+   principle as SitewiseColors being the only place a hex may appear.
+   ========================================================================== */
+
+.w-5 { width: 5%; }
+.w-10 { width: 10%; }
+.w-15 { width: 15%; }
+.w-20 { width: 20%; }
+.w-25 { width: 25%; }
+.w-30 { width: 30%; }
+.w-35 { width: 35%; }
+.w-40 { width: 40%; }
+.w-45 { width: 45%; }
+.w-50 { width: 50%; }
+.w-55 { width: 55%; }
+.w-60 { width: 60%; }
+.w-65 { width: 65%; }
+.w-70 { width: 70%; }
+.w-75 { width: 75%; }
+.w-80 { width: 80%; }
+.w-85 { width: 85%; }
+.w-90 { width: 90%; }
+.w-95 { width: 95%; }
+.w-100 { width: 100%; }
+
+/* ==========================================================================
+   Layout primitives
+   ========================================================================== */
+
+.container {
+  max-width: var(--content-max);
+  margin: 0 auto;
+  padding: 0 20px;
+}
+
+.section {
+  padding: 84px 0;
+}
+
+.section--alt {
+  background: var(--alt-surface);
+}
+
+.stack {
+  display: flex;
+  flex-direction: column;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+}
+
+.row--top {
+  align-items: flex-start;
+}
+
+.grow {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+/* ==========================================================================
+   Typography
+   ========================================================================== */
+
+.eyebrow {
+  font-family: var(--font-body);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 1.1px;
+  text-transform: uppercase;
+  color: var(--action);
+}
+
+.overline {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.9px;
+  text-transform: uppercase;
+  color: var(--overline-text);
+}
+
+.display {
+  font-family: var(--font-display);
+  font-size: 46px;
+  font-weight: 800;
+  letter-spacing: -1.6px;
+  line-height: 1.06;
+}
+
+.title-xl {
+  font-family: var(--font-display);
+  font-size: 34px;
+  font-weight: 700;
+  letter-spacing: -1px;
+}
+
+.title-lg {
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 800;
+}
+
+.title {
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.lead {
+  font-size: 16px;
+  line-height: 1.65;
+  color: var(--muted);
+}
+
+.body {
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--muted);
+}
+
+.small {
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+.tiny {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.metric {
+  font-family: var(--font-display);
+  font-size: 26px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.text-action {
+  color: var(--action);
+}
+.text-success {
+  color: var(--success-text);
+}
+.text-danger {
+  color: var(--danger);
+}
+.text-warning {
+  color: var(--warning);
+}
+.text-ink {
+  color: var(--ink);
+}
+
+/* ==========================================================================
+   Buttons
+   ========================================================================== */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-lg);
+  font-weight: 700;
+  font-size: 14px;
+  padding: 0 20px;
+  height: 44px;
+  transition:
+    background-color 0.16s ease,
+    border-color 0.16s ease,
+    opacity 0.16s ease;
+}
+
+.btn--primary {
+  background: var(--action);
+  color: #fff;
+}
+.btn--primary:hover {
+  background: var(--accent);
+}
+
+.btn--secondary {
+  background: var(--surface);
+  color: var(--ink);
+  border-color: var(--border);
+}
+.btn--secondary:hover {
+  border-color: var(--action);
+  color: var(--action);
+}
+
+.btn--ghost {
+  background: transparent;
+  color: var(--muted);
+  padding: 0 10px;
+  height: 38px;
+  font-weight: 600;
+}
+.btn--ghost:hover {
+  color: var(--action);
+}
+
+.btn--danger-outline {
+  background: transparent;
+  color: var(--danger);
+  border-color: var(--border);
+}
+.btn--danger-outline:hover {
+  border-color: var(--danger);
+}
+
+/* Full-width primary CTA (the Flutter `SitewiseCtaButton`, height 52). */
+.btn--cta {
+  width: 100%;
+  height: 52px;
+  border-radius: var(--radius-lg);
+  font-weight: 800;
+}
+
+.btn[disabled],
+.btn.is-disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+/* Visually hidden but available to screen readers. Used for icon labels, so a
+   meaningful icon is announced without adding visual noise. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.btn-row {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+/* ==========================================================================
+   Surfaces
+   ========================================================================== */
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 20px;
+}
+
+.card--flat {
+  border-radius: var(--radius);
+  padding: 16px;
+}
+
+.card--dark {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: #fff;
+  border-radius: var(--radius);
+  padding: 24px;
+}
+
+.card--dark .muted-on-dark {
+  color: rgba(255, 255, 255, 0.62);
+}
+
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+
+.divider {
+  height: 1px;
+  background: var(--border);
+  border: 0;
+  margin: 0;
+}
+
+/* ==========================================================================
+   Badges & pills
+   ========================================================================== */
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: var(--radius-pill);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.pill--neutral {
+  background: var(--neutral-wash);
+  color: var(--muted);
+}
+.pill--action {
+  background: var(--geo-wash);
+  color: var(--action);
+}
+.pill--success {
+  background: var(--success-wash);
+  color: var(--success-text);
+}
+.pill--warning {
+  background: var(--warning-wash);
+  color: var(--warning);
+}
+.pill--danger {
+  background: var(--danger-wash);
+  color: var(--danger);
+}
+
+.dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex: none;
+}
+.dot--success {
+  background: var(--success-text);
+}
+.dot--warning {
+  background: var(--warning);
+}
+.dot--danger {
+  background: var(--danger);
+}
+
+/* ==========================================================================
+   Marketing header + footer
+   ========================================================================== */
+
+.masthead {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+
+.masthead__inner {
+  height: var(--topbar-h);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: var(--content-max);
+  margin: 0 auto;
+  padding: 0 24px;
+}
+
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  background: none;
+  border: 0;
+  padding: 0;
+}
+
+.brand__mark {
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+  background: linear-gradient(135deg, var(--action), var(--accent));
+  display: grid;
+  place-items: center;
+  color: #fff;
+  font-size: 15px;
+  font-weight: 800;
+}
+
+.brand__name {
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: 800;
+  letter-spacing: -0.5px;
+  color: var(--ink);
+}
+
+.masthead__nav {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+}
+
+.masthead__link {
+  background: none;
+  border: 0;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 600;
+  padding: 8px 10px;
+  border-radius: 8px;
+}
+.masthead__link:hover {
+  color: var(--ink);
+  background: var(--background);
+}
+
+.masthead__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: 8px;
+}
+
+.site-footer {
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  padding: 48px 0 32px;
+}
+
+.footer-grid {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr 1fr;
+  gap: 32px;
+}
+
+.footer-links {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.footer-links button {
+  background: none;
+  border: 0;
+  padding: 0;
+  text-align: left;
+  color: var(--muted);
+  font-size: 13px;
+}
+.footer-links button:hover {
+  color: var(--action);
+}
+
+/* ==========================================================================
+   Landing sections
+   ========================================================================== */
+
+.hero {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 58px;
+  align-items: center;
+}
+
+.hero__title {
+  font-family: var(--font-display);
+  font-size: 52px;
+  font-weight: 800;
+  letter-spacing: -2px;
+  line-height: 1.04;
+}
+
+.hero__title em {
+  font-style: normal;
+  color: var(--action);
+}
+
+.hero__lead {
+  font-size: 16px;
+  line-height: 1.68;
+  color: var(--muted);
+  max-width: 46ch;
+}
+
+.hero__note {
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+/* Visual placeholders: the Flutter version drew these with CustomPainter.
+   Here they are CSS gradients + simple geometry, which keeps them real DOM
+   (crawlable, styleable, and no canvas). */
+.visual {
+  border-radius: var(--radius-xl);
+  border: 1px solid var(--border);
+  background: linear-gradient(160deg, #f7fbff, var(--geo-wash));
+  position: relative;
+  overflow: hidden;
+  min-height: 320px;
+}
+
+.visual--map {
+  min-height: 300px;
+}
+
+.visual__grid {
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(75, 120, 184, 0.13) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(75, 120, 184, 0.13) 1px, transparent 1px);
+  background-size: 23px 23px;
+}
+
+.visual__chip {
+  position: absolute;
+  background: rgba(255, 255, 255, 0.93);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 7px 10px;
+  font-size: 11px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.visual__pin {
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--action);
+  box-shadow: 0 0 0 5px rgba(47, 111, 237, 0.16);
+}
+
+.score-card {
+  position: absolute;
+  right: 16px;
+  bottom: 18px;
+  width: 168px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 12px;
+}
+
+.score-card__ring {
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  border: 5px solid var(--geo-border);
+  border-top-color: var(--action);
+  display: grid;
+  place-items: center;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.grid-2 {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px;
+}
+
+.grid-4 {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+}
+
+.step {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 20px;
+}
+
+.step__num {
+  font-family: var(--font-display);
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--action);
+}
+
+.feature {
+  display: flex;
+  gap: 11px;
+  align-items: flex-start;
+}
+
+.icon-tile {
+  width: 40px;
+  height: 40px;
+  flex: none;
+  border-radius: var(--radius);
+  background: var(--geo-wash);
+  display: grid;
+  place-items: center;
+  color: var(--action);
+  font-size: 16px;
+}
+
+.weights__row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.weights__track {
+  flex: 1;
+  height: 8px;
+  border-radius: 4px;
+  background: var(--neutral-wash);
+  overflow: hidden;
+}
+
+.weights__fill {
+  height: 100%;
+  border-radius: 4px;
+  background: var(--action);
+}
+
+.cta-box {
+  background: var(--ink);
+  border-radius: var(--radius-xl);
+  padding: 52px 48px;
+  text-align: center;
+  color: #fff;
+}
+
+.cta-box .lead {
+  color: rgba(255, 255, 255, 0.74);
+  max-width: 60ch;
+  margin: 0 auto;
+}
+
+/* ==========================================================================
+   App shell (authenticated area)
+   ========================================================================== */
+
+.app-shell {
+  display: flex;
+  min-height: 100vh;
+}
+
+.sidebar {
+  width: var(--sidebar-w);
+  flex: none;
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+}
+
+.sidebar__head {
+  padding: 20px 20px 8px;
+}
+
+.sidebar__role {
+  padding: 8px 20px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  color: var(--overline-text);
+}
+
+.sidebar__nav {
+  flex: 1;
+  padding: 0 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 12px;
+  border-radius: 10px;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 500;
+  text-align: left;
+  width: 100%;
+}
+.nav-item:hover {
+  background: var(--background);
+}
+.nav-item--active {
+  background: var(--geo-wash);
+  color: var(--action);
+  font-weight: 700;
+}
+
+.sidebar__foot {
+  border-top: 1px solid var(--border);
+  padding: 16px;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.app-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.topbar {
+  height: var(--topbar-h);
+  flex: none;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 0 24px;
+}
+
+.topbar__titles {
+  min-width: 0;
+}
+
+.topbar__title {
+  font-family: var(--font-display);
+  font-size: 20px;
+  font-weight: 800;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.topbar__subtitle {
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.topbar__actions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.app-content {
+  flex: 1;
+  overflow-y: auto;
+}
+
+.app-content__inner {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 24px;
+}
+
+.stat-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 14px;
+}
+
+.stat {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 18px;
+}
+
+/* Data table — used by admin surfaces. */
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13.5px;
+}
+
+.table th {
+  text-align: left;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  color: var(--overline-text);
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border);
+}
+
+.table td {
+  padding: 14px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: middle;
+}
+
+.table tr:last-child td {
+  border-bottom: 0;
+}
+
+/* ==========================================================================
+   Topbar controls — search dialog, notification panel, avatar menu
+   (ported from the Flutter web tree's web_topbar.dart)
+   ========================================================================== */
+
+.topbar__controls {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 8px;
+}
+
+.icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--ink);
+  font-size: 20px;
+  cursor: pointer;
+}
+.icon-btn:hover {
+  background: var(--background);
+}
+
+.avatar-menu {
+  position: relative;
+}
+.avatar-menu__trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 999px;
+}
+.avatar-menu__trigger:hover {
+  background: var(--background);
+}
+.avatar {
+  width: 34px;
+  height: 34px;
+  border-radius: 999px;
+  background: var(--geo-wash);
+  color: var(--action);
+  font-weight: 800;
+  font-size: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Full-screen dimmer behind dialogs and menus. The panel itself stops
+   click propagation, so only the backdrop closes. */
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  background: rgba(15, 23, 42, 0.45);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 10vh 24px 24px;
+}
+.overlay--menu {
+  align-items: flex-start;
+  justify-content: flex-end;
+  padding: calc(var(--topbar-h) + 8px) 24px 24px;
+  background: transparent;
+}
+
+.dialog {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  box-shadow: 0 24px 64px rgba(15, 23, 42, 0.25);
+  width: 100%;
+  max-width: 420px;
+  max-height: 60vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.dialog--wide {
+  max-width: 560px;
+}
+.dialog__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border);
+}
+.dialog__title {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 16px;
+  padding: 14px 16px 10px;
+}
+.dialog__loading,
+.dialog__empty {
+  padding: 24px 16px;
+  color: var(--muted);
+  font-size: 13.5px;
+  text-align: center;
+}
+
+.input {
+  flex: 1;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-size: 14px;
+  font-family: inherit;
+  background: var(--background);
+  color: var(--ink);
+}
+.input:focus {
+  outline: 2px solid var(--action);
+  outline-offset: 0;
+}
+
+.result-list {
+  list-style: none;
+  margin: 0;
+  padding: 8px;
+  overflow-y: auto;
+}
+.result-list__item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  color: var(--ink);
+  text-decoration: none;
+}
+.result-list__item:hover {
+  background: var(--geo-wash);
+}
+.result-list__title {
+  font-weight: 700;
+  font-size: 14px;
+}
+
+.menu {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  box-shadow: 0 16px 48px rgba(15, 23, 42, 0.22);
+  min-width: 240px;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+}
+.menu__head {
+  padding: 10px 12px 8px;
+}
+.menu__name {
+  font-weight: 800;
+  font-size: 14px;
+}
+.menu__divider {
+  height: 1px;
+  background: var(--border);
+  margin: 6px 4px;
+}
+.menu__item {
+  display: block;
+  padding: 9px 12px;
+  border-radius: 8px;
+  color: var(--ink);
+  text-decoration: none;
+  font-size: 13.5px;
+}
+.menu__item:hover {
+  background: var(--background);
+}
+.menu__item--current {
+  color: var(--action);
+  font-weight: 700;
+}
+
+/* ==========================================================================
+   Property card — desktop grid card (ported from web_property_card.dart)
+   ========================================================================== */
+
+.p-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.p-card__banner {
+  padding: 10px;
+  background: var(--geo-wash);
+  font-size: 12px;
+  color: var(--ink);
+}
+.p-card__media {
+  position: relative;
+  height: 120px;
+  background: var(--geo-wash);
+}
+.p-card__media-link {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: var(--action);
+  opacity: 0.5;
+  text-decoration: none;
+}
+.p-card__badge {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+}
+.p-card__save {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  width: 34px;
+  height: 34px;
+  border-radius: 999px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.p-card__save:hover {
+  background: rgba(15, 23, 42, 0.06);
+}
+.p-card__save--on {
+  color: var(--action);
+}
+.p-card__body {
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.p-card__title {
+  font-weight: 600;
+  color: var(--ink);
+  text-decoration: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.p-card__meta {
+  font-size: 12px;
+  color: var(--muted);
+}
+.p-card__price-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-top: 8px;
+}
+.p-card__price {
+  font-weight: 700;
+  color: var(--action);
+}
+.p-card__size {
+  font-size: 12px;
+  color: var(--muted);
+}
+.p-card__score {
+  background: var(--geo-wash);
+  color: var(--accent, var(--action));
+  border-radius: 12px;
+  padding: 2px 8px;
+  font-size: 12px;
+  font-weight: 700;
+}
+.p-card__compare {
+  margin-top: 8px;
+  width: 100%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--ink);
+  border-radius: 10px;
+  padding: 8px 12px;
+  font-size: 13px;
+  cursor: pointer;
+}
+.p-card__compare:hover {
+  background: var(--background);
+}
+.p-card__compare--on {
+  border-color: var(--action);
+  color: var(--action);
+  font-weight: 600;
+}
+
+/* Card grid used by explore / recommendations / saved / listings pages. */
+.card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 16px;
+}
+
+/* Horizontal scroll wrapper for wide tables (compare, users). */
+.table-scroll {
+  overflow-x: auto;
+}
+.table__metric {
+  font-weight: 600;
+}
+.table__row--highlight td {
+  background: var(--geo-wash);
+}
+
+/* ==========================================================================
+   Filter panel
+   --------------------------------------------------------------------------
+   A bordered `surface` panel, same register as `.card` (radius 16, 1px border,
+   elevation 0). Groups follow the form pattern used elsewhere: an overline
+   label above a stack of controls. Nothing here introduces a new colour,
+   radius or shadow — every value is an existing token.
+   ========================================================================== */
+
+.filter {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.filter__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.filter__title {
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+}
+
+.filter__reset {
+  background: none;
+  border: 0;
+  padding: 6px 8px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.filter__reset:hover:not([disabled]) {
+  color: var(--action);
+  background: var(--background);
+}
+
+.filter__reset[disabled] {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.filter__group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.filter__label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.9px;
+  text-transform: uppercase;
+  /* overline-text, not overline — the latter is 2.60:1 and fails AA on text. */
+  color: var(--overline-text);
+}
+
+.filter__field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.filter__field-label {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.filter__range {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.filter__select {
+  width: 100%;
+  height: 40px;
+  padding: 0 12px;
+  font-family: inherit;
+  font-size: 14px;
+  color: var(--ink);
+  background: var(--background);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.filter__select:focus {
+  outline: 2px solid var(--action);
+  outline-offset: 0;
+}
+
+.filter__check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13.5px;
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.filter__check input {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--action);
+}
+
+/* Applied-filter chips. Reuse the `.pill` register but as a button, with a
+   close glyph, so each is individually removable. */
+.filter__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--border);
+  background: var(--geo-wash);
+  color: var(--action);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.chip:hover {
+  border-color: var(--action);
+}
+
+.chip .ms {
+  font-size: 14px;
+}
+
+.filter__count {
+  font-size: 12.5px;
+  color: var(--muted);
+  border-top: 1px solid var(--border);
+  padding-top: 12px;
+}
+
+.filter__count--error,
+.filter__error {
+  color: var(--danger);
+}
+
+.filter__error {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+/* ==========================================================================
+   Explore — map-first, with floating panels
+   --------------------------------------------------------------------------
+   The map fills the content area and the results list, filter panel and
+   selected-property detail float over it, matching the reference layout.
+
+   The panels are `surface` + `1px --border` + radius 16 at elevation 0. Over
+   the pale `--geo-wash` map that reads perfectly well — separation comes from
+   the border and the tint step, which is exactly what DESIGN.md §5 asks for.
+   No shadow is used anywhere here.
+   ========================================================================== */
+
+.explore {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-height: 0;
+}
+
+.explore__bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+}
+
+/* --- Body: property panel beside the map --------------------------------- */
+
+.explore__body {
+  display: grid;
+  grid-template-columns: 360px 1fr;
+  gap: 16px;
+  flex: 1;
+  min-height: 0;
+}
+
+/* Panel hidden: the map takes the full width. */
+.explore__body--full {
+  grid-template-columns: 1fr;
+}
+
+/* The left panel is ONE slot with two modes — property list, or filter inputs.
+   Both modes use this same frame, so switching never resizes or moves it, and
+   the map beside it never shifts. */
+.explore__panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-height: 0;
+}
+
+.explore__panel-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px;
+  border-bottom: 1px solid var(--border);
+  flex: none;
+}
+
+.explore__panel-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.explore__count {
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+}
+
+/* --- Map column ----------------------------------------------------------- */
+
+.explore__map-wrap {
+  position: relative;
+  border: 1px solid var(--geo-border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  min-height: 560px;
+}
+
+/* Same gradient as `.visual` — the map panel wash from the design system. */
+.explore__map {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(160deg, #f7fbff, var(--geo-wash));
+  overflow: hidden;
+}
+
+/* The detail card floats over the map, not in the side panel: it describes a
+   point on the map rather than a row in the list. */
+.explore__detail {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  width: 300px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  z-index: 3;
+}
+
+.explore__detail-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+/* --- Detail card internals ------------------------------------------------ */
+
+.explore__facts {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.explore__fact {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.explore__score-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border-top: 1px solid var(--border);
+  padding-top: 8px;
+}
+
+.explore__score-value {
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: 800;
+}
+
+/* --- Zoom, bottom-right. Each button drives the real projection. ---------- */
+
+.explore__zoom {
+  position: absolute;
+  right: 16px;
+  bottom: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  background: var(--border);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+  z-index: 2;
+}
+
+.explore__zoom-btn {
+  width: 38px;
+  height: 38px;
+  border: 0;
+  background: var(--surface);
+  color: var(--ink);
+  display: grid;
+  place-items: center;
+}
+
+.explore__zoom-btn:hover:not(.is-disabled) {
+  background: var(--background);
+  color: var(--action);
+}
+
+.explore__zoom-btn.is-disabled {
+  opacity: 0.45;
+  pointer-events: none;
+}
+
+.explore__map-zoom {
+  position: absolute;
+  left: 12px;
+  bottom: 12px;
+  padding: 3px 10px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--muted);
+}
+
+/* --- Price pins ----------------------------------------------------------- */
+
+.map-pin {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px 8px 3px 4px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--geo-border);
+  background: var(--surface);
+  color: var(--action);
+  cursor: pointer;
+  white-space: nowrap;
+  z-index: 1;
+}
+
+.map-pin:hover {
+  border-color: var(--action);
+  z-index: 2;
+}
+
+.map-pin--active {
+  border-color: var(--danger);
+  color: var(--danger);
+  z-index: 3;
+}
+
+/* FILL 1 scoped to the pin: the map marker is a solid pin in the mobile tree
+   (Icons.location_pin), whereas `place` elsewhere is used outlined. */
+.map-pin .ms {
+  font-size: 16px;
+  font-variation-settings:
+    "FILL" 1,
+    "wght" 400,
+    "GRAD" 0,
+    "opsz" 24;
+}
+
+.map-pin__price {
+  font-family: var(--font-display);
+  font-size: 11.5px;
+  font-weight: 800;
+  color: var(--ink);
+}
+
+/* --- Explore responsive --------------------------------------------------- */
+
+@media (max-width: 1100px) {
+  /* Narrow the panel rather than the map — the map is the point of the page. */
+  .explore__body {
+    grid-template-columns: 300px 1fr;
+  }
+  /* The detail card moves to the bottom of the map rather than disappearing;
+     hiding it would drop the property preview entirely on smaller desktops. */
+  .explore__detail {
+    top: auto;
+    bottom: 16px;
+    left: 16px;
+    right: 16px;
+    width: auto;
+  }
+}
+
+@media (max-width: 900px) {
+  /* Below this the two-column split stops working, so the panel stacks under
+     the map and the map keeps a usable height. */
+  .explore__body,
+  .explore__body--full {
+    grid-template-columns: 1fr;
+  }
+  .explore__map-wrap {
+    min-height: 380px;
+    order: -1; /* map first, then the list/filter beneath it */
+  }
+  .explore__panel {
+    max-height: 60vh;
+  }
+  .explore__detail {
+    left: 12px;
+    right: 12px;
+    bottom: 12px;
+  }
+}
+
+/* Selection highlight on the card that matches the chosen pin. Applied to the
+   wrapper rather than the card itself so it does not depend on the card's
+   internal class names. */
+.is-selected {
+  border-radius: var(--radius-lg);
+  outline: 2px solid var(--action);
+  outline-offset: 2px;
+}
+
+/* Recommendation grid item: the card plus its explanation bullets. */
+.rec-item {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.why {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.why__item {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+.why__item .ms {
+  color: var(--success);
+  font-size: 14px;
+  margin-top: 2px;
+}
+
+/* ==========================================================================
+   Responsive
+   ========================================================================== */
+
+@media (max-width: 1100px) {
+  .hero {
+    grid-template-columns: 1fr;
+    gap: 36px;
+  }
+  .hero__title {
+    font-size: 42px;
+    letter-spacing: -1.4px;
+  }
+  .grid-4,
+  .stat-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 900px) {
+  .masthead__nav {
+    display: none;
+  }
+  .footer-grid {
+    grid-template-columns: 1fr;
+  }
+  .sidebar {
+    display: none;
+  }
+}
+
+@media (max-width: 640px) {
+  .section {
+    padding: 56px 0;
+  }
+  .grid-2,
+  .grid-4,
+  .stat-grid {
+    grid-template-columns: 1fr;
+  }
+  .display {
+    font-size: 32px;
+    letter-spacing: -1px;
+  }
+  .hero__title {
+    font-size: 34px;
+  }
+  .cta-box {
+    padding: 36px 24px;
+  }
+}

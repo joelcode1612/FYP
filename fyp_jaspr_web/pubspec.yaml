@@ -1,0 +1,50 @@
+name: sitewise_jaspr_web
+description: >-
+  Sitewise web frontend, rebuilt with Jaspr so it renders real HTML and CSS
+  instead of a Flutter canvas.
+version: 0.1.0
+publish_to: none
+
+environment:
+  sdk: ^3.12.0
+
+# Member of the fyp_workspace pub workspace.
+resolution: workspace
+
+dependencies:
+  # Framework-independent bloc API for consuming the shared cubits
+  # (CubitBuilder subscribes to `cubit.stream`). Same version as shared_logic.
+  bloc: ^9.2.1
+  jaspr: ^0.23.5
+  jaspr_router: ^0.9.0
+
+  # The framework-free domain + data layers, shared with the Flutter app.
+  # `any` binds to the local workspace member (no path dependency needed).
+  # Only the browser-safe surface is exported by `shared_logic.dart`, so this
+  # import can never pull `dart:io` into the web build.
+  shared_logic: any
+
+dev_dependencies:
+  build_runner: ^2.6.0
+  build_web_compilers: 4.6.0
+  jaspr_builder: ^0.23.5
+  jaspr_cli: ^0.23.5
+  jaspr_test: ^0.23.5
+  lints: ^6.0.0 # bumped from ^5.0.0 to share the workspace resolution with flutter_lints 6
+
+# `static` mode = static site generation. Chosen because the reason to leave
+# Flutter Web is SEO: Flutter paints to a canvas, so crawlers see nothing.
+# Static mode emits real HTML per route at build time, which is exactly the
+# gap this port closes. Switch to `client` for a pure SPA, or `server` if the
+# app ever needs real per-request backend integration.
+jaspr:
+  mode: static
+
+  # Port 8080 is occupied on this machine (something else is listening on
+  # 0.0.0.0:8080), which makes `jaspr serve` fail with:
+  #   SocketException: Failed to create server socket
+  #   (OS Error: ... access permissions, errno = 10013)
+  # errno 10013 is WSAEACCES — on Windows that usually means the port is
+  # already taken, not that permission is genuinely denied. Override with
+  # `jaspr serve --port <n>` if 8090 is busy too.
+  port: 8090
