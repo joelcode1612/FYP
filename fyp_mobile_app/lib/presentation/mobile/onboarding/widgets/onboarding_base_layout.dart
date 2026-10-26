@@ -60,7 +60,7 @@ class OnboardingTitle extends StatelessWidget {
   Widget build(BuildContext context) => Text(
     text,
     style: const TextStyle(
-      fontFamily: 'Sora',
+      fontFamily: kFontFamily,
       fontSize: 28,
       height: 1.08,
       fontWeight: FontWeight.w800,

@@ -4,22 +4,27 @@ import 'package:shared_logic/shared_logic.dart';
 
 import 'ui.dart';
 
-/// Verification → pill tone, matching the Flutter
-/// `SitewiseStatusBadge.forVerification` mapping.
-String toneForVerification(VerificationStatus status) => switch (status) {
-  VerificationStatus.draft => 'neutral',
-  VerificationStatus.pending => 'warning',
-  VerificationStatus.verified => 'success',
-  VerificationStatus.rejected => 'danger',
-};
-
-/// Vertical property card for desktop grids — the Jaspr counterpart to
-/// `web_property_card.dart` in the Flutter web tree. Same data contract,
-/// desktop composition.
+/// Vertical property card for desktop grids.
+///
+/// Migrated to the source design's card structure (`sitewise-entrepreneur/
+/// assets/js/cards.js` + `app.css`):
+///
+///   article.pcard
+///     a.pcard-media > .cover      placeholder media, never a photograph
+///     div.body
+///       h3 > a                    title
+///       p.addr                    address
+///       p.pcard-price > small     rent
+///       ul.pcard-attrs > li       size, type, parking
+///       div.badges                verification + 360 pills
+///       div.actions               save / compare / 360
+///
+/// The previous markup used this file's own `p-card__*` vocabulary, which has no
+/// counterpart in the source design and no CSS behind it in `styles.css`.
 ///
 /// Navigation is a plain link ([href]), so the card works without JavaScript;
-/// the bookmark and compare controls are siblings of the link (never nested
-/// inside it) and call back into the page, which owns the `AppCubit`.
+/// the save and compare controls are siblings of the link (never nested inside
+/// it) and call back into the page, which owns the `AppCubit`.
 class PropertyCard extends StatelessComponent {
   final CommercialProperty property;
 
@@ -47,64 +52,94 @@ class PropertyCard extends StatelessComponent {
 
   @override
   Component build(BuildContext context) {
-    return div(classes: 'p-card', [
+    // Attribute list, in the source's order: size, type, parking. A missing
+    // value renders as an em dash with the `muted` class rather than being
+    // omitted, so the row never reflows when data is absent.
+    final firstTag = property.tags.isEmpty ? null : property.tags.first;
+    final attrs = <(String, bool)>[
+      ('${property.sizeSqft.toStringAsFixed(0)} sq ft', false),
+      (property.propertyType, false),
+      (firstTag ?? '—', firstTag == null),
+    ];
+
+    return article(classes: 'pcard', [
       if (rankBanner != null)
-        div(classes: 'p-card__banner', [Component.text(rankBanner!)]),
-      div(classes: 'p-card__media', [
-        a(href: href, classes: 'p-card__media-link', [
-          Icon('storefront', size: 'lg', label: property.title),
+        div(classes: 'pcard-banner', [Component.text(rankBanner!)]),
+
+      // Media. `aria-hidden` because the title link below is the real target -
+      // this is a decorative duplicate of the same destination.
+      a(
+        href: href,
+        classes: 'pcard-media',
+        attributes: {'tabindex': '-1', 'aria-hidden': 'true'},
+        [
+          span(classes: 'cover', [
+            Icon('storefront', size: 'lg', label: property.title),
+          ]),
+        ],
+      ),
+
+      div(classes: 'body', [
+        h3([
+          a(href: href, [Component.text(property.title)]),
         ]),
-        span(classes: 'p-card__badge', [
+        p(classes: 'addr', [
+          Component.text('${property.address}, ${property.city}'),
+        ]),
+        p(classes: 'pcard-price', [
+          Component.text('RM${property.rentalRm.toStringAsFixed(0)}'),
+          small([Component.text(' / month')]),
+        ]),
+        ul(classes: 'pcard-attrs', [
+          for (final (text, muted) in attrs)
+            li(classes: muted ? 'muted' : null, [Component.text(text)]),
+        ]),
+        div(classes: 'badges', [
           Pill(
             property.verification.label,
-            tone: toneForVerification(property.verification),
-          ),
-        ]),
-        if (onToggleSaved != null)
-          button(
-            classes: saved ? 'p-card__save p-card__save--on' : 'p-card__save',
-            attributes: {
-              'type': 'button',
-              'aria-label': saved ? 'Remove from saved' : 'Save property',
+            tone: switch (property.verification) {
+              VerificationStatus.draft => 'neutral',
+              VerificationStatus.pending => 'warning',
+              VerificationStatus.verified => 'success',
+              VerificationStatus.rejected => 'danger',
             },
-            events: events(onClick: onToggleSaved!),
-            [Icon(saved ? 'bookmark' : 'bookmark_border')],
           ),
-      ]),
-      div(classes: 'p-card__body', [
-        a(href: href, classes: 'p-card__title', [
-          Component.text(property.title),
+          if (property.hasTour) const Pill('360°', tone: 'action'),
         ]),
-        div(classes: 'p-card__meta', [
-          Component.text('${property.city}, ${property.state}'),
+
+        div(classes: 'actions', [
+          // The source card leads with the primary navigation action
+          // (`<a class="btn sm primary">View details</a>`); the target card had
+          // no primary action at all, only the two toggles.
+          a(href: href, classes: 'btn sm btn--primary', [
+            Component.text('View details'),
+          ]),
+          if (onToggleSaved != null)
+            button(
+              classes: saved ? 'btn sm icon-btn is-saved' : 'btn sm icon-btn',
+              attributes: {
+                'type': 'button',
+                'aria-pressed': saved ? 'true' : 'false',
+                'aria-label': saved ? 'Remove from saved' : 'Save property',
+              },
+              events: events(onClick: onToggleSaved!),
+              [Component.text(saved ? 'Saved' : 'Save')],
+            ),
+          if (onToggleCompared != null)
+            button(
+              classes: compared ? 'btn sm icon-btn is-on' : 'btn sm icon-btn',
+              attributes: {
+                'type': 'button',
+                'aria-pressed': compared ? 'true' : 'false',
+              },
+              events: events(onClick: onToggleCompared!),
+              [Component.text(compared ? 'In compare' : 'Compare')],
+            ),
+          if (property.hasTour)
+            a(href: '$href&tour=1', classes: 'btn sm', [
+              Component.text('360°'),
+            ]),
         ]),
-        div(classes: 'p-card__price-row', [
-          span(classes: 'p-card__price', [
-            Component.text('RM${property.rentalRm.toStringAsFixed(0)}'),
-          ]),
-          span(classes: 'p-card__size', [
-            Component.text(' / ${property.sizeSqft.toStringAsFixed(0)} sq ft'),
-          ]),
-          span(classes: 'grow', []),
-          span(classes: 'p-card__score', [
-            Component.text(property.suitabilityScore.toStringAsFixed(0)),
-          ]),
-        ]),
-        if (onToggleCompared != null)
-          button(
-            classes: compared
-                ? 'p-card__compare p-card__compare--on'
-                : 'p-card__compare',
-            attributes: {'type': 'button'},
-            events: events(onClick: onToggleCompared!),
-            [
-              Icon(
-                compared ? 'check_box' : 'check_box_outline_blank',
-                size: 'sm',
-              ),
-              Component.text(compared ? 'Added to compare' : 'Compare'),
-            ],
-          ),
       ]),
     ]);
   }

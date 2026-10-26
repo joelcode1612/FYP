@@ -7,13 +7,20 @@ import '../../components/ui.dart';
 import '../../data/app_locator.dart';
 import '../../layouts/app_layout.dart';
 
-/// Web compare: desktop comparison table (up to 3 properties).
+/// Web compare, laid out as the source's `compare.html`.
 ///
-/// Ported from `entrepreneur_compare_web_page.dart` in the Flutter web tree.
-/// The Flutter version rebuilds on `AppCubit` and pulls listings through
-/// `ServiceLocator.properties`; this version rebuilds on the shared
-/// `AppLocator.appCubit` via [CubitBuilder] and reads the same shared service.
-/// Detail ids travel as `?id=` query params instead of `settings.arguments`.
+/// ```text
+/// .page-head   "Compare" · "Compare N properties" · explanation
+/// .notice      "add another" / "some records dropped" warnings
+/// .panel       .compare-table  (field rows × property columns)
+/// disclaimer
+/// ```
+///
+/// The source table puts the property in the column header and the field names
+/// down the left, with each cell labelled by state ("Not provided", "Data
+/// unavailable"). The previous version used a generic `.table` with the property
+/// city as the header and a flat "—" for every absent value, collapsing three
+/// distinct states into one.
 class ComparePage extends StatelessComponent {
   final AppCubit appCubit;
   const ComparePage({super.key, required this.appCubit});
@@ -27,19 +34,30 @@ class ComparePage extends StatelessComponent {
         return AppLayout(
           role: AppRole.entrepreneur,
           currentRoute: '/entrepreneur/compare',
-          title: 'Compare',
+          title: compared.isEmpty
+              ? 'Compare properties'
+              : 'Compare ${compared.length} '
+                    '${compared.length == 1 ? 'property' : 'properties'}',
+          eyebrow: 'Compare',
           subtitle:
-              'The properties you have shortlisted for comparison, side by side.',
+              'Identical fields side by side. "Not provided" and "Data '
+              'unavailable" are labelled — a blank is never a better or worse '
+              'result.',
           child: compared.isEmpty
-              ? _EmptyCompare()
+              ? const _EmptyCompare()
               : FutureBuilder<List<CommercialProperty>>(
                   future: AppLocator.properties.listings(),
                   builder: (c, snap) {
-                    if (!snap.hasData) return _Loading();
-                    final items = snap.data!
+                    if (!snap.hasData) return const _Loading();
+                    final all = snap.data!;
+                    final items = all
                         .where((property) => compared.contains(property.id))
                         .toList();
-                    return _CompareBody(items: items, appCubit: appCubit);
+                    return _CompareBody(
+                      items: items,
+                      missing: compared.length - items.length,
+                      appCubit: appCubit,
+                    );
                   },
                 ),
         );
@@ -49,126 +67,176 @@ class ComparePage extends StatelessComponent {
 }
 
 class _Loading extends StatelessComponent {
+  const _Loading();
+
   @override
-  Component build(BuildContext context) {
-    return div(classes: 'card', [
-      p(classes: 'body muted', [Component.text('Loading listings…')]),
-    ]);
-  }
+  Component build(BuildContext context) => div(classes: 'loading', [
+    span(classes: 'spinner', []),
+    Component.text('Loading listings…'),
+  ]);
 }
 
 class _EmptyCompare extends StatelessComponent {
+  const _EmptyCompare();
+
   @override
-  Component build(BuildContext context) {
-    return div(classes: 'card stack', [
-      span(classes: 'overline', [Component.text('Compare')]),
-      h2(classes: 'title-lg', [Component.text('Nothing to compare')]),
-      p(classes: 'body', [
-        Component.text(
-          'Add up to 3 properties from Explore or Recommendations.',
-        ),
-      ]),
-      const ActionLink(
-        'Explore properties',
-        href: '/entrepreneur/explore',
-        variant: 'secondary',
-      ),
-    ]);
-  }
+  Component build(BuildContext context) => EmptyState(
+    title: 'Nothing to compare yet',
+    body:
+        'Add at least two properties from Explore, your favourites or a '
+        'recommendation run. Fields are shown side by side once two or more are '
+        'selected.',
+    action: const ActionLink(
+      'Browse properties',
+      href: '/entrepreneur/explore',
+      variant: 'primary',
+    ),
+  );
 }
 
 class _CompareBody extends StatelessComponent {
   final List<CommercialProperty> items;
+
+  /// Compared ids that are no longer in the listing set.
+  final int missing;
+
   final AppCubit appCubit;
-  const _CompareBody({required this.items, required this.appCubit});
+
+  const _CompareBody({
+    required this.items,
+    required this.appCubit,
+    this.missing = 0,
+  });
+
+  static String _toneFor(VerificationStatus status) => switch (status) {
+    VerificationStatus.verified => 'success',
+    VerificationStatus.pending => 'warning',
+    VerificationStatus.rejected => 'danger',
+    VerificationStatus.draft => 'neutral',
+  };
 
   @override
   Component build(BuildContext context) {
-    return div(classes: 'stack', [
-      div(classes: 'card', [
+    return div(classes: 'stack stack--md', [
+      if (items.length < 2)
+        div(classes: 'notice notice-warn', [
+          Component.text(
+            'Add at least one more property for a useful comparison.',
+          ),
+        ]),
+      if (missing > 0)
+        div(classes: 'notice notice-warn', [
+          Component.text(
+            '$missing saved ${missing == 1 ? 'property is' : 'properties are'} '
+            'no longer published and ${missing == 1 ? 'was' : 'were'} left out.',
+          ),
+        ]),
+      div(classes: 'panel', [
         div(classes: 'table-scroll', [
-          table(classes: 'table', [
+          table(classes: 'compare-table', [
             thead([
               tr([
-                th([Component.text('Metric')]),
-                for (final property in items)
-                  th([Component.text(property.city)]),
+                th([Component.text('Field')]),
+                for (final prop in items)
+                  th([
+                    Component.text(prop.title),
+                    div(classes: 'small', [Component.text(prop.city)]),
+                    div(classes: 'compare-remove', [
+                      ActionButton(
+                        'Remove',
+                        variant: 'ghost',
+                        onClick: () => appCubit.toggleCompared(prop.id),
+                      ),
+                    ]),
+                  ]),
               ]),
             ]),
             tbody([
-              _row(
-                'Property',
-                items.map((property) => property.title).toList(),
-              ),
-              _row(
-                'Rental',
-                items
-                    .map(
-                      (property) => 'RM${property.rentalRm.toStringAsFixed(0)}',
-                    )
-                    .toList(),
-              ),
-              _row(
-                'Size',
-                items
-                    .map(
-                      (property) =>
-                          '${property.sizeSqft.toStringAsFixed(0)} sq ft',
-                    )
-                    .toList(),
-              ),
-              _row(
-                'RM / sq ft',
-                items
-                    .map(
-                      (property) =>
-                          'RM${property.rentalPerSqft.toStringAsFixed(2)}',
-                    )
-                    .toList(),
-              ),
-              _row(
-                'Suitability',
-                items
-                    .map(
-                      (property) =>
-                          '${property.suitabilityScore.toStringAsFixed(0)}/100',
-                    )
-                    .toList(),
-                highlight: true,
-              ),
-              _row(
-                'Status',
-                items.map((property) => property.verification.label).toList(),
-              ),
-              _row(
-                '360° tour',
-                items
-                    .map((property) => property.hasTour ? 'Yes' : '—')
-                    .toList(),
-              ),
+              _row('Monthly rent', [
+                for (final prop in items) prop.rentalDisplay,
+              ]),
+              _row('Floor area', [
+                for (final prop in items)
+                  '${prop.sizeSqft.toStringAsFixed(0)} sq ft',
+              ]),
+              _row('Property type', [
+                for (final prop in items) prop.propertyType,
+              ]),
+              _row('Rental efficiency', [
+                for (final prop in items)
+                  'RM${prop.rentalPerSqft.toStringAsFixed(2)} / sq ft',
+              ]),
+              _nodeRow('Availability', [
+                for (final prop in items)
+                  StatusBadge(
+                    prop.verification == VerificationStatus.verified
+                        ? 'available'
+                        : 'pending',
+                    tone: prop.verification == VerificationStatus.verified
+                        ? 'action'
+                        : 'warning',
+                  ),
+              ]),
+              _nodeRow('Verification', [
+                for (final prop in items)
+                  StatusBadge(
+                    prop.verification.label,
+                    tone: _toneFor(prop.verification),
+                  ),
+              ]),
+              _row('Suitability score', [
+                for (final prop in items)
+                  '${prop.suitabilityScore.toStringAsFixed(0)}/100',
+              ], emphasise: true),
+              _row('360° tour', [
+                for (final prop in items)
+                  prop.hasTour ? 'Published' : 'Not available',
+              ]),
+              _nodeRow('Details', [
+                for (final prop in items)
+                  ActionLink(
+                    'Open',
+                    href: '/entrepreneur/property-detail?id=${prop.id}',
+                    variant: 'secondary',
+                  ),
+              ]),
             ]),
           ]),
         ]),
       ]),
-      div(classes: 'row', [
+      p(classes: 'disclaimer', [
+        Component.text(
+          'A suitability score is a relative decision-support indicator. It is '
+          'not a probability of business success, a revenue or customer-volume '
+          'forecast, regulatory approval, or a guarantee of any kind.',
+        ),
+      ]),
+      div(classes: 'actions-row', [
         ActionButton(
-          'Clear',
+          'Clear comparison',
           variant: 'secondary',
           onClick: appCubit.clearCompared,
         ),
-        if (items.isNotEmpty)
-          ActionLink(
-            'Open first detail',
-            href: '/entrepreneur/property-detail?id=${items.first.id}',
-          ),
+        const ActionLink(
+          'Back to results',
+          href: '/entrepreneur/explore',
+          variant: 'secondary',
+        ),
       ]),
     ]);
   }
 
-  Component _row(String metric, List<String> values, {bool highlight = false}) {
-    return tr(classes: highlight ? 'table__row--highlight' : null, [
-      td(classes: 'table__metric', [Component.text(metric)]),
-      for (final v in values) td([Component.text(v)]),
-    ]);
-  }
+  Component _row(String label, List<String> values, {bool emphasise = false}) =>
+      tr([
+        th(attributes: const {'scope': 'row'}, [Component.text(label)]),
+        for (final v in values)
+          td([
+            if (emphasise) strong([Component.text(v)]) else Component.text(v),
+          ]),
+      ]);
+
+  Component _nodeRow(String label, List<Component> values) => tr([
+    th(attributes: const {'scope': 'row'}, [Component.text(label)]),
+    for (final v in values) td([v]),
+  ]);
 }

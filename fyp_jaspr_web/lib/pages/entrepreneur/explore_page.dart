@@ -11,27 +11,31 @@ import '../../components/ui.dart';
 import '../../data/app_locator.dart';
 import '../../layouts/app_layout.dart';
 
-/// Web explore — property panel beside the map.
+/// Web explore, laid out as the source's `explore.html` with the `map.html`
+/// section appended — the target serves both source pages from this one route.
 ///
-/// Layout: a fixed-width panel on the left, the map filling the rest. The panel
-/// is **one slot with two modes** — it shows the property list by default and
-/// swaps to the filter inputs when Filters is pressed. Both modes share the same
-/// head/body frame, so the panel never changes size or position when switching.
+/// ```text
+/// .page-head        "Explore" · "Commercial properties" · description
+/// .filters          keyword · rent/area ranges · type/state/city · verification
+/// count line
+/// .pgrid            property cards
+/// section           "Map & surroundings"
+///   .map-layout     .map-pane (layers + pins + legend) | .analysis (.a-card…)
+/// ```
 ///
-/// The selected-property detail and the zoom controls float *over the map*,
-/// which is where they belong: they describe a point on the map, not the list.
+/// The previous version was a split panel (list on the left, map on the right)
+/// with the filter form hidden behind a toggle — a layout from an older mockup,
+/// not this design. The filter form is now always visible, as in the source, and
+/// the map moved into its own labelled section instead of occupying the whole
+/// viewport.
 ///
-/// Styling stays inside the existing system — the panel is `surface` + `1px
-/// --border` + radius 16 at `elevation: 0`, and the map keeps the `--geo-wash`
-/// treatment. No shadow is used anywhere (DESIGN.md §5).
-///
-/// Two honesty constraints:
-///  * There is **no map SDK** in either tree. The surface is the same stylised
-///    panel the mobile app uses; only its interaction is real.
-///  * Zoom is **real** — it scales the lat/lng projection, so pins genuinely
-///    move and clip. A decorative zoom button would be a lie.
+/// Two honesty constraints are unchanged:
+///  * there is **no map SDK** in either tree, so the surface is the stylised
+///    panel the mobile app uses; only the interaction is real;
+///  * zoom is **real** — it scales the lat/lng projection, so pins genuinely
+///    move and clip.
 class ExplorePage extends StatefulComponent {
-  /// Open with the map focused (route passes `id == 'map'`).
+  /// Open scrolled to the map section (route passes `id == 'map'`).
   final bool startInMap;
 
   const ExplorePage({super.key, this.startInMap = false});
@@ -46,14 +50,8 @@ class _ExplorePageState extends State<ExplorePage> {
   /// The structured filter, applied on top of the cubit's query results.
   PropertyFilter filter = PropertyFilter.empty;
 
-  /// Property chosen from a pin, shown in the map's detail card.
+  /// Property chosen from a pin, shown in the map's first analysis card.
   String? selectedId;
-
-  /// Which mode the left panel is in. `false` = property list, `true` = filters.
-  bool filtersOpen = false;
-
-  /// Hides the whole left panel, giving the map the full width.
-  late bool panelHidden = component.startInMap;
 
   /// Real zoom factor applied to the pin projection.
   int zoom = 1;
@@ -77,8 +75,9 @@ class _ExplorePageState extends State<ExplorePage> {
 
   /// Listings that can actually be plotted. A listing with no coordinates would
   /// otherwise land at 0,0 in the projection.
-  List<CommercialProperty> get _mappable =>
-      _results.where((p) => p.latitude != 0 || p.longitude != 0).toList();
+  List<CommercialProperty> get _mappable => _results
+      .where((prop) => prop.latitude != 0 || prop.longitude != 0)
+      .toList();
 
   CommercialProperty? get _selected {
     final id = selectedId;
@@ -91,7 +90,7 @@ class _ExplorePageState extends State<ExplorePage> {
 
   void _setFilter(PropertyFilter next) => setState(() {
     filter = next;
-    if (selectedId != null && !_results.any((p) => p.id == selectedId)) {
+    if (selectedId != null && !_results.any((prop) => prop.id == selectedId)) {
       selectedId = null;
     }
   });
@@ -113,13 +112,19 @@ class _ExplorePageState extends State<ExplorePage> {
             return AppLayout(
               role: AppRole.entrepreneur,
               currentRoute: '/entrepreneur/explore',
-              title: 'Explore',
+              title: 'Commercial properties',
+              eyebrow: 'Explore',
               subtitle:
-                  'Search and filter every listing, then read the detail beside the map.',
-              child: div(classes: 'explore', [
-                _topBar(),
-                if (vm.loading) const _Loading() else _body(appCubit),
-              ]),
+                  'Search verified listings. Only administrator-approved and '
+                  'currently available properties are shown; pending or rejected '
+                  'records are never presented as available.',
+              child: vm.loading
+                  ? const _Loading()
+                  : div(classes: 'stack stack--sections', [
+                      _filterSection(),
+                      _resultsSection(appCubit),
+                      _mapSection(),
+                    ]),
             );
           },
         );
@@ -127,255 +132,381 @@ class _ExplorePageState extends State<ExplorePage> {
     );
   }
 
-  // ----------------------------------------------------------------- top bar
+  // -------------------------------------------------------------- filter form
 
-  Component _topBar() => div(classes: 'explore__bar', [
-    div(classes: 'grow', [
-      input(
-        classes: 'input',
-        attributes: {
-          'type': 'search',
-          'placeholder': 'Search area, street or listing…',
-          'aria-label': 'Search area, street or listing',
-        },
-        events: events<String>(onInput: vm.setQuery),
-      ),
-    ]),
-    // Toggles the left panel between the list and the filter inputs. The label
-    // says which way it will switch, so the button is never ambiguous.
-    ActionButton(
-      filtersOpen ? 'Show list' : 'Filters',
-      variant: filtersOpen ? 'secondary' : 'primary',
-      icon: filtersOpen ? 'list' : 'tune',
-      onClick: () => setState(() {
-        filtersOpen = !filtersOpen;
-        panelHidden = false;
-      }),
-    ),
-    if (!panelHidden)
-      ActionButton(
-        'Hide panel',
-        variant: 'secondary',
-        icon: 'chevron_left',
-        onClick: () => setState(() => panelHidden = true),
-      )
-    else
-      ActionButton(
-        'Show panel',
-        variant: 'secondary',
-        icon: 'view_sidebar',
-        onClick: () => setState(() => panelHidden = false),
-      ),
-  ]);
-
-  // ------------------------------------------------------------------- body
-
-  Component _body(AppCubit appCubit) => div(
-    classes: panelHidden
-        ? 'explore__body explore__body--full'
-        : 'explore__body',
-    [
-      // LEFT — one slot, two modes. Swapping the children rather than moving
-      // the panel keeps its width and position fixed.
-      if (!panelHidden)
-        div(classes: 'explore__panel', [
-          if (filtersOpen) ..._filterMode() else ..._listMode(appCubit),
-        ]),
-
-      // RIGHT — the map. Detail card and zoom float over it.
-      div(classes: 'explore__map-wrap', [
-        _MapSurface(
-          pins: [
-            for (final p in _mappable)
-              _MapPin(
-                id: p.id,
-                label: p.title,
-                price: _compactRm(p.rentalRm),
-                latitude: p.latitude,
-                longitude: p.longitude,
-                highlighted: p.id == selectedId,
-                zoom: zoom,
-              ),
-          ],
-          zoom: zoom,
-        ),
-        if (_selected != null) _detailCard(_selected!),
-        _zoomControls(),
-      ]),
-    ],
+  Component _filterSection() => FilterPanel(
+    filter: filter,
+    source: vm.explore,
+    results: _results,
+    query: vm.query,
+    onQueryChanged: vm.setQuery,
+    onChanged: _setFilter,
+    onReset: _reset,
   );
 
-  // -------------------------------------------------------------- list mode
+  // ------------------------------------------------------------------ results
 
-  List<Component> _listMode(AppCubit appCubit) {
+  Component _resultsSection(AppCubit appCubit) {
     final results = _results;
-    final avg = results.isEmpty
-        ? null
-        : results.map((p) => p.rentalRm).reduce((a, b) => a + b) /
-              results.length;
+    if (results.isEmpty) {
+      return EmptyState(
+        title: 'No properties match these filters',
+        body:
+            'No approved listing satisfies every active criterion. Widen your '
+            'budget or floor-area range, remove a property type, or clear all '
+            'filters to see everything available.',
+        action: ActionButton('Clear all filters', onClick: _reset),
+      );
+    }
 
-    return [
-      div(classes: 'explore__panel-head', [
-        div(classes: 'grow stack', [
-          span(classes: 'explore__count', [
-            Component.text('${results.length} properties'),
-          ]),
-          span(classes: 'small', [
+    return div(classes: 'stack stack--md', [
+      p(classes: 'small', [
+        Component.text(
+          '${results.length} ${results.length == 1 ? 'property' : 'properties'} '
+          'match your filters.',
+        ),
+      ]),
+      div(classes: 'pgrid', [
+        for (final p in results)
+          PropertyCard(
+            property: p,
+            href: '/entrepreneur/property-detail?id=${p.id}',
+            saved: appCubit.isSaved(p.id),
+            compared: appCubit.isCompared(p.id),
+            onToggleSaved: () => appCubit.toggleSaved(p.id),
+            onToggleCompared: () => appCubit.toggleCompared(p.id),
+          ),
+      ]),
+    ]);
+  }
+
+  // ---------------------------------------------------------------------- map
+
+  Component _mapSection() {
+    final selected = _selected;
+    return section(
+      classes: 'stack stack--md',
+      attributes: const {'id': 'map'},
+      [
+        div(classes: 'stack', [
+          span(classes: 'eyebrow', [Component.text('Location analysis')]),
+          h2(classes: 'title-lg', [Component.text('Map & surroundings')]),
+          p(classes: 'small', [
             Component.text(
-              avg == null
-                  ? 'No matches'
-                  : 'Avg RM ${avg.toStringAsFixed(0)} / month',
+              'Select a pin to inspect its surroundings. Each panel states the '
+              'analysis radius and the source of the figure; where a source returned '
+              'nothing we say so — "0 records found" and "data unavailable" are '
+              'different things and are never mixed up.',
             ),
           ]),
         ]),
+        div(classes: 'map-layout', [_mapPane(), _analysisColumn(selected)]),
+      ],
+    );
+  }
+
+  Component _mapPane() {
+    final canZoomIn = zoom < _zoomLevels.last;
+    final canZoomOut = zoom > _zoomLevels.first;
+    return div(classes: 'map-pane', [
+      div(classes: 'layer-bar', [
+        for (final layer in const [
+          'Nearby F&B competitors',
+          'Demand generators',
+          'Transport',
+          'Population radius',
+        ])
+          button(
+            classes: 'layer-toggle',
+            attributes: {
+              'type': 'button',
+              'aria-pressed': layer == 'Nearby F&B competitors'
+                  ? 'true'
+                  : 'false',
+            },
+            events: events(onClick: () => _toastLayer(layer)),
+            [Component.text(layer)],
+          ),
       ]),
-      div(classes: 'explore__panel-body', [
-        if (results.isEmpty)
-          const _NoMatches()
-        else
-          for (final p in results)
-            div(classes: p.id == selectedId ? 'is-selected' : null, [
-              PropertyCard(
-                property: p,
-                href: '/entrepreneur/property-detail?id=${p.id}',
-                saved: appCubit.isSaved(p.id),
-                compared: appCubit.isCompared(p.id),
-                onToggleSaved: () => appCubit.toggleSaved(p.id),
-                onToggleCompared: () => appCubit.toggleCompared(p.id),
-              ),
-            ]),
+      div(classes: 'map-canvas', [
+        div(classes: 'visual__grid', []),
+        if (_mappable.isEmpty)
+          span(classes: 'visual__chip', [
+            Component.text('No properties to plot'),
+          ]),
+        for (final p in _mappable)
+          button(
+            classes: p.id == selectedId ? 'map-pin map-pin--active' : 'map-pin',
+            attributes: {
+              'type': 'button',
+              'style': _pinPosition(p, zoom),
+              'title': p.title,
+              'aria-label': '${p.title}, ${_compactRm(p.rentalRm)}',
+            },
+            events: events(onClick: () => setState(() => selectedId = p.id)),
+            [
+              Icon('place', size: 'sm'),
+              span(classes: 'map-pin__price', [
+                Component.text(_compactRm(p.rentalRm)),
+              ]),
+            ],
+          ),
+        // Zoom is real: it re-projects every pin.
+        div(classes: 'explore__zoom', [
+          button(
+            classes: canZoomIn
+                ? 'explore__zoom-btn'
+                : 'explore__zoom-btn is-disabled',
+            attributes: {'type': 'button', 'aria-label': 'Zoom in'},
+            events: events(
+              onClick: canZoomIn
+                  ? () => setState(
+                      () => zoom = _zoomLevels[_zoomLevels.indexOf(zoom) + 1],
+                    )
+                  : null,
+            ),
+            [Icon('add')],
+          ),
+          button(
+            classes: canZoomOut
+                ? 'explore__zoom-btn'
+                : 'explore__zoom-btn is-disabled',
+            attributes: {'type': 'button', 'aria-label': 'Zoom out'},
+            events: events(
+              onClick: canZoomOut
+                  ? () => setState(
+                      () => zoom = _zoomLevels[_zoomLevels.indexOf(zoom) - 1],
+                    )
+                  : null,
+            ),
+            [Icon('remove')],
+          ),
+        ]),
+        if (zoom > 1)
+          span(classes: 'explore__map-zoom', [Component.text('$zoom×')]),
       ]),
+      div(classes: 'map-legend', [
+        _legendItem('lg-prop', 'Property'),
+        _legendItem('lg-comp', 'Competitor'),
+        _legendItem('lg-demand', 'Demand generator'),
+        _legendItem('lg-transit', 'Transport'),
+        _legendItem('lg-pop', 'Population radius'),
+      ]),
+    ]);
+  }
+
+  Component _legendItem(String cls, String label) =>
+      span([span(classes: 'lg $cls', []), Component.text(label)]);
+
+  void _toastLayer(String layer) {
+    // Layer toggles are presentation-only in the source too: no tile layer is
+    // fetched. Selecting the property pin is what drives the analysis column.
+    setState(() {});
+  }
+
+  // ----------------------------------------------------------- analysis column
+
+  Component _analysisColumn(CommercialProperty? selected) {
+    return div(classes: 'analysis', [
+      if (selected != null) _selectedCard(selected),
+      ..._analysisCards(selected),
+    ]);
+  }
+
+  Component _selectedCard(CommercialProperty prop) => div(classes: 'a-card', [
+    h3([Component.text(prop.title)]),
+    p(classes: 'what', [
+      Component.text(
+        '${prop.address}, ${prop.city} · ${prop.rentalDisplay} · '
+        '${prop.sizeSqft.toStringAsFixed(0)} sq ft',
+      ),
+    ]),
+    div(classes: 'chips', [
+      StatusBadge(
+        'Verification: ${prop.verification.label.toLowerCase()}',
+        tone: toneForVerification(prop.verification),
+      ),
+      StatusBadge(
+        'Suitability: ${prop.suitabilityScore.toStringAsFixed(0)}/100',
+        tone: _scoreTone(prop.suitabilityScore),
+      ),
+    ]),
+    p([
+      ActionLink(
+        'Full details',
+        href: '/entrepreneur/property-detail?id=${prop.id}',
+        variant: 'secondary',
+      ),
+    ]),
+  ]);
+
+  List<Component> _analysisCards(CommercialProperty? selected) {
+    final id = selected?.id;
+    final cards = <Component>[];
+
+    if (id == null) {
+      cards.add(
+        div(classes: 'a-card', [
+          h3([Component.text('Select a property')]),
+          p(classes: 'what', [
+            Component.text(
+              'Choose a pin on the map to load its location analysis: population, '
+              'nearby competitors, accessibility and the indicators used for '
+              'scoring.',
+            ),
+          ]),
+        ]),
+      );
+      return cards;
+    }
+
+    // The cubit loads one analysis at a time, so the column reflects the last
+    // `loadAnalysis` call rather than the pin the user just clicked. Show the
+    // pending state instead of the previous property's numbers.
+    return [
+      FutureBuilder<LocationAnalysis?>(
+        future: AppLocator.recommendations.analysis(id),
+        builder: (context, snap) {
+          if (!snap.hasData) {
+            return div(classes: 'a-card', [
+              div(classes: 'loading', [
+                span(classes: 'spinner', []),
+                Component.text('Loading location analysis…'),
+              ]),
+            ]);
+          }
+          final a = snap.data;
+          if (a == null) {
+            return div(classes: 'a-card', [
+              h3([Component.text('Location analysis')]),
+              p(classes: 'what', [
+                Component.text('No analysis is available for this property.'),
+              ]),
+            ]);
+          }
+          return div(classes: 'analysis', _cardsFor(a));
+        },
+      ),
     ];
   }
 
-  // ------------------------------------------------------------ filter mode
-
-  List<Component> _filterMode() => [
-    div(classes: 'explore__panel-head', [
-      div(classes: 'grow stack', [
-        span(classes: 'explore__count', [Component.text('Filters')]),
-        span(classes: 'small', [
+  List<Component> _cardsFor(LocationAnalysis a) {
+    final factors = a.factors;
+    return [
+      // --- Suitability -----------------------------------------------------
+      div(classes: 'a-card', [
+        h3([Component.text('Suitability')]),
+        p(classes: 'what', [
           Component.text(
-            filter.isEmpty
-                ? 'Narrow the results'
-                : '${filter.activeCount} applied',
+            'A relative decision-support indicator built from the factors below. '
+            'It is not a probability of success or a revenue forecast.',
           ),
         ]),
+        div(classes: 'stat-row', [
+          div(classes: 'stat', [
+            strong([Component.text(a.suitabilityScore.toStringAsFixed(0))]),
+            span([Component.text('Out of 100')]),
+          ]),
+          div(classes: 'stat', [
+            strong([Component.text(a.verdict)]),
+            span([Component.text('Verdict')]),
+          ]),
+        ]),
+        p(classes: 'meta', [
+          Component.text('Computed from the indicators listed at the end. '),
+          span(classes: 'prov prov-demo', [Component.text('Demo value')]),
+        ]),
       ]),
-      ActionButton(
-        'Back to list',
-        variant: 'ghost',
-        icon: 'list',
-        onClick: () => setState(() => filtersOpen = false),
-      ),
-    ]),
-    div(classes: 'explore__panel-body', [
-      FilterPanel(
-        filter: filter,
-        source: vm.explore,
-        results: _results,
-        onChanged: _setFilter,
-        onReset: _reset,
-      ),
-    ]),
-  ];
 
-  // ----------------------------------------------------------- detail card
+      // --- Nearby competitors ----------------------------------------------
+      div(classes: 'a-card', [
+        h3([Component.text('Nearby F&B competitors')]),
+        p(classes: 'what', [
+          Component.text(
+            'Other food and drink operators close to this property. Higher '
+            'density means more competition for the same catchment.',
+          ),
+        ]),
+        div(classes: 'stat-row', [
+          div(classes: 'stat', [
+            strong([Component.text('${a.competitorCount}')]),
+            span([Component.text('Records nearby')]),
+          ]),
+          div(classes: 'stat', [
+            strong([Component.text(a.competitorCount == 0 ? '0' : 'Measured')]),
+            span([Component.text('Density')]),
+          ]),
+        ]),
+        p(classes: 'what', [Component.text(a.demandSummary)]),
+        p(classes: 'meta', [
+          Component.text(
+            'Method: nearby F&B records within the analysis radius. ',
+          ),
+          span(classes: 'prov prov-demo', [Component.text('Demo value')]),
+        ]),
+      ]),
 
-  Component _detailCard(CommercialProperty property) {
-    final score = property.suitabilityScore;
-    return div(classes: 'explore__detail', [
-      div(classes: 'explore__detail-head', [
-        span(classes: 'overline', [Component.text('Selected')]),
-        ActionButton(
-          'Close',
-          variant: 'ghost',
-          icon: 'close',
-          onClick: () => setState(() => selectedId = null),
-        ),
-      ]),
-      span(classes: 'title', [Component.text(property.title)]),
-      p(classes: 'small', [
-        Component.text(
-          '${property.address}, ${property.city}, ${property.state}',
-        ),
-      ]),
-      div(classes: 'explore__facts', [
-        _fact('Rent', property.rentalDisplay),
-        _fact('Floor area', '${property.sizeSqft.toStringAsFixed(0)} sq ft'),
-        _fact('Type', property.propertyType),
-        _fact(
-          'Efficiency',
-          'RM${property.rentalPerSqft.toStringAsFixed(2)} / sq ft',
-        ),
-      ]),
-      div(classes: 'explore__score-row', [
-        span(classes: 'small grow', [Component.text('Suitability')]),
-        span(
-          classes: 'explore__score-value',
-          attributes: {'style': 'color:${_scoreColor(score)}'},
-          [Component.text('${score.toStringAsFixed(0)} / 100')],
-        ),
-      ]),
-      ActionLink(
-        'View full property',
-        href: '/entrepreneur/property-detail?id=${property.id}',
-        variant: 'secondary',
-      ),
-    ]);
+      // --- Socioeconomic ----------------------------------------------------
+      if (a.socioeconomicSummary.isNotEmpty)
+        div(classes: 'a-card', [
+          h3([Component.text('Socioeconomic context')]),
+          p(classes: 'what', [
+            Component.text(
+              'How densely populated the area is and what households there earn.',
+            ),
+          ]),
+          p(classes: 'body', [Component.text(a.socioeconomicSummary)]),
+          p(classes: 'meta', [
+            Component.text('Source: DOSM household income survey · '),
+            span(classes: 'prov prov-demo', [Component.text('Demo value')]),
+          ]),
+        ]),
+
+      // --- Indicators used for scoring --------------------------------------
+      if (factors.isNotEmpty)
+        div(classes: 'a-card', [
+          h3([Component.text('Location indicators used for scoring')]),
+          p(classes: 'what', [
+            Component.text(
+              'Exactly the spatial values that were passed to the recommendation '
+              'engine for this property.',
+            ),
+          ]),
+          ul([
+            for (final f in factors)
+              li([
+                Component.text(
+                  '${f.name} — ${f.score.toStringAsFixed(0)}/100 · ${f.rating}',
+                ),
+              ]),
+          ]),
+          p(classes: 'meta', [
+            Component.text('${factors.length} indicators · '),
+            span(classes: 'prov prov-model', [Component.text('Model output')]),
+          ]),
+        ]),
+    ];
   }
 
-  Component _fact(String fieldLabel, String value) =>
-      div(classes: 'explore__fact', [
-        span(classes: 'tiny', [Component.text(fieldLabel)]),
-        span(classes: 'small', [Component.text(value)]),
-      ]);
+  // ------------------------------------------------------------------ helpers
 
-  // -------------------------------------------------------------------- zoom
-
-  Component _zoomControls() {
-    final canZoomIn = zoom < _zoomLevels.last;
-    final canZoomOut = zoom > _zoomLevels.first;
-    return div(classes: 'explore__zoom', [
-      button(
-        classes: canZoomIn
-            ? 'explore__zoom-btn'
-            : 'explore__zoom-btn is-disabled',
-        attributes: {'type': 'button', 'aria-label': 'Zoom in'},
-        events: events(
-          onClick: canZoomIn
-              ? () => setState(
-                  () => zoom = _zoomLevels[_zoomLevels.indexOf(zoom) + 1],
-                )
-              : null,
-        ),
-        [Icon('add')],
-      ),
-      button(
-        classes: canZoomOut
-            ? 'explore__zoom-btn'
-            : 'explore__zoom-btn is-disabled',
-        attributes: {'type': 'button', 'aria-label': 'Zoom out'},
-        events: events(
-          onClick: canZoomOut
-              ? () => setState(
-                  () => zoom = _zoomLevels[_zoomLevels.indexOf(zoom) - 1],
-                )
-              : null,
-        ),
-        [Icon('remove')],
-      ),
-    ]);
+  /// Same projection as the Flutter `SitewiseMapPanel`. Zoom divides the span, so
+  /// a higher zoom spreads the same coordinates further apart; pins that fall
+  /// outside are clipped by the map's overflow rather than clamped to the edge,
+  /// which would pile unrelated properties on top of each other.
+  static String _pinPosition(CommercialProperty prop, int zoom) {
+    final x = (prop.longitude - 100.3) / (3.5 / zoom);
+    final y = -((prop.latitude - 1.5) / (4.0 / zoom));
+    final left = ((x + 1) / 2 * 100).toStringAsFixed(2);
+    final top = ((1 - y) / 2 * 100).toStringAsFixed(2);
+    return 'left:$left%;top:$top%;';
   }
 
-  /// Same bands as every other score display. CSS custom-property references
-  /// rather than hex literals, so values still come from `styles.css`
-  /// (DESIGN.md §8, Don't #1).
-  static String _scoreColor(double score) {
-    if (score >= 75) return 'var(--success-text)';
-    if (score >= 55) return 'var(--action)';
-    if (score >= 40) return 'var(--warning)';
-    return 'var(--danger)';
+  static String _scoreTone(double score) {
+    if (score >= 75) return 'success';
+    if (score >= 55) return 'action';
+    if (score >= 40) return 'warning';
+    return 'danger';
   }
 
   /// `7000` -> `RM 7k`. Compact enough for a map label.
@@ -391,95 +522,12 @@ class _ExplorePageState extends State<ExplorePage> {
   }
 }
 
-// ===========================================================================
-// Supporting components
-// ===========================================================================
-
 class _Loading extends StatelessComponent {
   const _Loading();
 
   @override
-  Component build(BuildContext context) => div(classes: 'card', [
-    p(classes: 'body muted', [Component.text('Loading…')]),
-  ]);
-}
-
-class _NoMatches extends StatelessComponent {
-  const _NoMatches();
-
-  @override
-  Component build(BuildContext context) => div(classes: 'card stack', [
-    span(classes: 'overline', [Component.text('No matches')]),
-    h2(classes: 'title-lg', [
-      Component.text('No properties match these filters'),
-    ]),
-    p(classes: 'body', [
-      Component.text(
-        'Widen the rent range or clear a location to see more listings.',
-      ),
-    ]),
-  ]);
-}
-
-/// One price-labelled pin.
-class _MapPin {
-  final String id;
-  final String label;
-  final String price;
-  final double latitude;
-  final double longitude;
-  final bool highlighted;
-  final int zoom;
-
-  const _MapPin({
-    required this.id,
-    required this.label,
-    required this.price,
-    required this.latitude,
-    required this.longitude,
-    required this.zoom,
-    this.highlighted = false,
-  });
-
-  // Same projection as the Flutter `SitewiseMapPanel`. Zoom divides the span,
-  // so a higher zoom spreads the same coordinates further apart; pins that fall
-  // outside are clipped by the map's overflow rather than clamped to the edge,
-  // which would pile unrelated properties on top of each other.
-  double get _x => (longitude - 100.3) / (3.5 / zoom);
-
-  double get _y => -((latitude - 1.5) / (4.0 / zoom));
-
-  String get position =>
-      'left:${((_x + 1) / 2 * 100).toStringAsFixed(2)}%;'
-      'top:${((1 - _y) / 2 * 100).toStringAsFixed(2)}%;';
-}
-
-class _MapSurface extends StatelessComponent {
-  final List<_MapPin> pins;
-  final int zoom;
-
-  const _MapSurface({required this.pins, required this.zoom});
-
-  @override
-  Component build(BuildContext context) => div(classes: 'explore__map', [
-    div(classes: 'visual__grid', []),
-    if (pins.isEmpty)
-      span(classes: 'visual__chip', [Component.text('No properties to plot')]),
-    for (final pin in pins)
-      button(
-        classes: pin.highlighted ? 'map-pin map-pin--active' : 'map-pin',
-        attributes: {
-          'type': 'button',
-          'style': pin.position,
-          'title': pin.label,
-          'aria-label': '${pin.label}, ${pin.price}',
-        },
-        [
-          Icon('place', size: 'sm'),
-          span(classes: 'map-pin__price', [Component.text(pin.price)]),
-        ],
-      ),
-    if (zoom > 1)
-      span(classes: 'explore__map-zoom', [Component.text('${zoom}×')]),
+  Component build(BuildContext context) => div(classes: 'loading', [
+    span(classes: 'spinner', []),
+    Component.text('Loading listings…'),
   ]);
 }

@@ -2,7 +2,6 @@ import 'package:jaspr/dom.dart';
 import 'package:jaspr/jaspr.dart';
 import 'package:shared_logic/shared_logic.dart';
 
-import '../../components/property_card.dart';
 import '../../components/ui.dart';
 import '../../data/app_locator.dart';
 import '../../layouts/app_layout.dart';
@@ -40,6 +39,7 @@ class _PropertyDetailPageState extends State<PropertyDetailPage> {
       role: AppRole.owner,
       currentRoute: '/owner/property-detail',
       title: 'Property detail',
+      eyebrow: 'Listing status',
       subtitle:
           'The full record for this listing, including its verification state.',
       child: _submitted
@@ -80,28 +80,30 @@ class _DetailBody extends StatelessComponent {
   @override
   Component build(BuildContext context) {
     final prop = property;
-    return div(classes: 'row row--top', [
-      div(classes: 'w-60', [
-        div(classes: 'card stack', [
-          div(classes: 'row', [
-            h2(classes: 'title-lg grow', [Component.text(prop.title)]),
-            Pill(
+    // Source `property-status.html`: a `.detail-grid` with the listing facts as
+    // a `.kv` table on the left and the management actions on the right.
+    return div(classes: 'detail-grid', [
+      div(classes: 'analysis', [
+        section(classes: 'panel', [
+          h2([Component.text(prop.title)]),
+          div(classes: 'chips', [
+            StatusBadge(
               prop.verification.label,
               tone: toneForVerification(prop.verification),
+              dot: true,
             ),
+            if (prop.hasTour) const StatusBadge('360° tour', tone: 'action'),
           ]),
-          p(classes: 'body', [
-            Component.text(
-              '${prop.address}, ${prop.postcode} ${prop.city}, ${prop.state}',
-            ),
+          dl(classes: 'kv', [
+            _row('Address', '${prop.address}, ${prop.postcode} ${prop.city}'),
+            _row('State', prop.state),
+            _row('Monthly rent', prop.rentalDisplay),
+            _row('Floor area', '${prop.sizeSqft.toStringAsFixed(0)} sq ft'),
+            _row('Property type', prop.propertyType),
           ]),
-          p(classes: 'body', [
-            Component.text(
-              'RM${prop.rentalRm.toStringAsFixed(0)} · '
-              '${prop.sizeSqft.toStringAsFixed(0)} sq ft · '
-              '${prop.propertyType}',
-            ),
-          ]),
+        ]),
+        section(classes: 'panel', [
+          h2([Component.text('Location')]),
           _MapPanel(
             latitude: prop.latitude,
             longitude: prop.longitude,
@@ -109,26 +111,48 @@ class _DetailBody extends StatelessComponent {
           ),
         ]),
       ]),
-      div(classes: 'grow', []),
-      div(classes: 'w-35', [
-        div(classes: 'card stack', [
-          h3(classes: 'title', [Component.text('Manage listing')]),
-          ActionLink(
-            'Edit listing',
-            href: '/owner/add-property?id=${prop.id}',
-            variant: 'secondary',
-            icon: 'edit',
-          ),
+      div(classes: 'analysis', [
+        section(classes: 'panel', [
+          h2([Component.text('Manage listing')]),
+          div(classes: 'actions-row', [
+            ActionLink(
+              'Edit listing',
+              href: '/owner/add-property?id=${prop.id}',
+              variant: 'secondary',
+              icon: 'edit',
+            ),
+            if (prop.hasTour)
+              ActionLink(
+                'Preview 360° tour',
+                href: '/owner/tour-preview?id=${prop.id}',
+                variant: 'secondary',
+                icon: '360',
+              ),
+          ]),
           if (prop.verification == VerificationStatus.draft)
             ActionButton(
               'Submit for verification',
               onClick: onSubmit,
               icon: 'send',
             ),
+          if (prop.verification != VerificationStatus.draft)
+            p(classes: 'small', [
+              Component.text(
+                'This listing is already in the verification process. An '
+                'administrator records the decision.',
+              ),
+            ]),
         ]),
       ]),
     ]);
   }
+
+  /// One definition-list row: label + value.
+  Component _row(String label, String value) => div([
+    dt([Component.text(label)]),
+    dd([Component.text(value)]),
+    span([]),
+  ]);
 }
 
 /// Static stand-in for `SitewiseMapPanel` — the Flutter version draws a map

@@ -5,17 +5,22 @@ import 'package:jaspr/jaspr.dart';
 import 'package:shared_logic/shared_logic.dart';
 
 import '../../components/bloc.dart';
-import '../../components/property_card.dart';
 import '../../components/ui.dart';
 import '../../data/app_locator.dart';
 import '../../layouts/app_layout.dart';
 
-/// Web properties: 3-column desktop grid with an add-property action.
+/// Owner listings, laid out as the source's `properties.html`.
 ///
-/// Ported from `owner_properties_web_page.dart` in the Flutter web tree. The
-/// Flutter version's FloatingActionButton becomes a `PageHead` action; the grid
-/// is the same owner-scoped list from [OwnerCubit], each card linking to the
-/// detail route with a `?id=` query param.
+/// ```text
+/// .page-head   "Listings" · "My commercial properties" · add action
+/// .filters     .grid-2 → search field · status select
+/// .rows        .row-card  (media · title/address/rent · actions)
+/// ```
+///
+/// The source shows the owner's listings as **management rows** — each with
+/// View status / Edit / 360° tour — not as the browse grid used on Explore.
+/// The previous version reused the 3-column `.pgrid` card, so the owner had no
+/// per-listing actions at all.
 class PropertiesPage extends StatefulComponent {
   const PropertiesPage({super.key});
 
@@ -44,20 +49,16 @@ class _PropertiesPageState extends State<PropertiesPage> {
     return CubitBuilder<OwnerCubit, OwnerState>(
       cubit: vm,
       builder: (context, _) {
-        final properties = vm.properties;
+        final properties = vm.filteredProperties;
 
         return AppLayout(
           role: AppRole.owner,
           currentRoute: '/owner/properties',
-          // The page header is rendered by `AppLayout`; a page must not render
-          // its own `PageHead` or the title appears twice.
-          title: 'Properties',
+          title: 'My commercial properties',
+          eyebrow: 'Listings',
           subtitle:
-              'The commercial spaces you have listed. Each card shows the '
-              'rental asking price, built-up area and current verification '
-              'state.',
-          // The primary action belongs to this page's task rather than to the
-          // shell, so it lands on the right of the page header.
+              'The commercial spaces you have listed. Each row shows the asking '
+              'rental, built-up area and current verification state.',
           actions: const [
             ActionLink(
               'Add property',
@@ -65,36 +66,129 @@ class _PropertiesPageState extends State<PropertiesPage> {
               icon: 'add',
             ),
           ],
-          child: div(classes: 'stack stack--sections', [
-            if (vm.loading)
-              div(classes: 'card-grid', [
-                const Skeleton(variant: 'block', count: 6),
-              ])
-            else if (properties.isEmpty)
-              EmptyState(
-                icon: 'apartment',
-                title: 'No properties listed yet',
-                body:
-                    'Add your first commercial space and it will appear here. '
-                    'Listings need the location, floor area and asking rental '
-                    'before they can be shown to entrepreneurs.',
-                action: const ActionLink(
-                  'Add your first property',
-                  href: '/owner/add-property',
-                  icon: 'add',
-                ),
-              )
-            else
-              div(classes: 'card-grid', [
-                for (final p in properties)
-                  PropertyCard(
-                    property: p,
-                    href: '/owner/property-detail?id=${p.id}',
-                  ),
-              ]),
-          ]),
+          child: vm.loading
+              ? const _Loading()
+              : div(classes: 'stack stack--md', [
+                  _filters(),
+                  if (properties.isEmpty)
+                    EmptyState(
+                      title: 'You have no listings yet',
+                      body:
+                          'Create your first commercial property listing. It '
+                          'stays private until an administrator approves it.',
+                      action: const ActionLink(
+                        'Add property',
+                        href: '/owner/add-property',
+                        variant: 'primary',
+                      ),
+                    )
+                  else
+                    div(classes: 'rows', [for (final p in properties) _row(p)]),
+                ]),
         );
       },
     );
   }
+
+  // ------------------------------------------------------------------ filters
+
+  Component _filters() => div(classes: 'filters', [
+    div(classes: 'grid-2', [
+      div(classes: 'field', [
+        span(classes: 'field__label', [Component.text('Search')]),
+        input(
+          attributes: {
+            'type': 'search',
+            'placeholder': 'Title, address or city',
+            if (vm.query.isNotEmpty) 'value': vm.query,
+          },
+          events: events<String>(onInput: vm.setQuery),
+        ),
+      ]),
+      div(classes: 'field', [
+        span(classes: 'field__label', [Component.text('Status')]),
+        select(
+          events: events<String>(
+            onInput: (raw) => vm.setStatusFilter(switch (raw) {
+              'Draft' => VerificationStatus.draft,
+              'Pending review' => VerificationStatus.pending,
+              'Approved' => VerificationStatus.verified,
+              'Rejected' => VerificationStatus.rejected,
+              _ => null,
+            }),
+          ),
+          [
+            option(
+              value: 'All statuses',
+              attributes: {if (vm.statusFilter == null) 'selected': ''},
+              [Component.text('All statuses')],
+            ),
+            for (final (label, status) in const [
+              ('Draft', VerificationStatus.draft),
+              ('Pending review', VerificationStatus.pending),
+              ('Approved', VerificationStatus.verified),
+              ('Rejected', VerificationStatus.rejected),
+            ])
+              option(
+                value: label,
+                attributes: {if (vm.statusFilter == status) 'selected': ''},
+                [Component.text(label)],
+              ),
+          ],
+        ),
+      ]),
+    ]),
+  ]);
+
+  // --------------------------------------------------------------------- rows
+
+  Component _row(CommercialProperty prop) => div(classes: 'row-card', [
+    span(classes: 'row-media', [Icon('storefront', size: 'lg')]),
+    div(classes: 'row-main', [
+      h3([Component.text(prop.title)]),
+      div(classes: 'meta', [Component.text('${prop.address}, ${prop.city}')]),
+      div(classes: 'meta', [
+        Component.text(
+          '${prop.rentalDisplay} · ${prop.sizeSqft.toStringAsFixed(0)} sq ft · '
+          '${prop.propertyType}',
+        ),
+      ]),
+      div(classes: 'badges', [
+        StatusBadge(
+          prop.verification.label,
+          tone: toneForVerification(prop.verification),
+          dot: true,
+        ),
+        if (prop.hasTour) const StatusBadge('360° tour', tone: 'action'),
+      ]),
+    ]),
+    div(classes: 'row-actions', [
+      ActionLink(
+        'View status',
+        href: '/owner/property-detail?id=${prop.id}',
+        variant: 'secondary',
+      ),
+      ActionLink(
+        'Edit',
+        href: '/owner/add-property?id=${prop.id}',
+        variant: 'secondary',
+      ),
+      if (prop.hasTour)
+        ActionLink(
+          '360° tour',
+          href: '/owner/tour-preview?id=${prop.id}',
+          variant: 'secondary',
+        ),
+    ]),
+  ]);
+}
+
+class _Loading extends StatelessComponent {
+  const _Loading();
+
+  @override
+  Component build(BuildContext context) => div(classes: 'loading', [
+    span(classes: 'spinner', []),
+    Component.text('Loading listings…'),
+  ]);
 }

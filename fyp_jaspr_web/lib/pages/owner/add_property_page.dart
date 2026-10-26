@@ -168,6 +168,7 @@ class _AddPropertyPageState extends State<AddPropertyPage> {
       role: AppRole.owner,
       currentRoute: '/owner/add-property',
       title: editingId == null ? 'Add Property' : 'Edit Property',
+      eyebrow: editingId == null ? 'New listing' : 'Edit listing',
       subtitle: 'Add a commercial space, or edit one you have already listed.',
       child: body,
     );
@@ -295,8 +296,10 @@ class _Section extends StatelessComponent {
 
   @override
   Component build(BuildContext context) {
-    return div(classes: 'card stack', [
-      h3(classes: 'title', [Component.text(heading)]),
+    // The source groups the form into `.form-section` blocks (a titled card
+    // with a hint line), not a generic `.card`.
+    return div(classes: 'form-section', [
+      h2([Component.text(heading)]),
       ...children,
     ]);
   }
@@ -307,10 +310,10 @@ Component _field({
   required Component field,
   String? error,
 }) {
-  return div(classes: 'stack', [
-    span(classes: 'overline', [Component.text(labelText)]),
+  return div(classes: error != null ? 'field invalid' : 'field', [
+    span(classes: 'field__label', [Component.text(labelText)]),
     field,
-    if (error != null) p(classes: 'small text-danger', [Component.text(error)]),
+    if (error != null) span(classes: 'err', [Component.text(error)]),
   ]);
 }
 

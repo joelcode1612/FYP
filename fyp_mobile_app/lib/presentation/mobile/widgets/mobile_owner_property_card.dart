@@ -2,6 +2,7 @@ import 'package:shared_logic/shared_logic.dart';
 import 'package:flutter/material.dart';
 
 import '../../../core/theme/sitewise_theme.dart';
+import '../../shared/widgets/sitewise_status_badge.dart';
 import 'mobile_property_image.dart';
 
 /// Owner-facing compact property card for horizontal rails on Home.
@@ -114,42 +115,9 @@ class MobileOwnerPropertyCard extends StatelessWidget {
   }
 
   Widget _verificationPill(VerificationStatus status) {
-    final (label, color, bg) = switch (status) {
-      VerificationStatus.verified => (
-        'Verified',
-        SitewiseColors.success,
-        const Color(0xFFD3F8DF),
-      ),
-      VerificationStatus.pending => (
-        'Pending',
-        SitewiseColors.warning,
-        const Color(0xFFFEF0C7),
-      ),
-      VerificationStatus.rejected => (
-        'Rejected',
-        SitewiseColors.danger,
-        const Color(0xFFFEE4E2),
-      ),
-      VerificationStatus.draft => (
-        'Draft',
-        SitewiseColors.muted,
-        const Color(0xFFF2F4F7),
-      ),
-    };
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      decoration: BoxDecoration(
-        color: bg,
-        borderRadius: BorderRadius.circular(999),
-      ),
-      child: Text(
-        label,
-        style: TextStyle(
-          fontSize: 10.5,
-          fontWeight: FontWeight.w700,
-          color: color,
-        ),
-      ),
-    );
+    // Delegates to the shared badge. This widget used to carry its own copy of
+    // the status → (label, colour, wash) mapping with inline hexes, which is the
+    // second duplicate of the same table in the codebase.
+    return SitewiseStatusBadge.forVerification(status);
   }
 }

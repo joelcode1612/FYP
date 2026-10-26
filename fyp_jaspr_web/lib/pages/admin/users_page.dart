@@ -9,12 +9,15 @@ import '../../components/ui.dart';
 import '../../data/app_locator.dart';
 import '../../layouts/app_layout.dart';
 
-/// Web user management: desktop table with role/status columns.
+/// Web user management, ported to the source `admin/users.html` structure: a
+/// `.filters` bar (Search + Status + Role, in a `.grid-3`) above an
+/// `.audit-table` whose Account cell uses `.who`/`.sub` and whose Status cell
+/// uses `.st`.
 ///
-/// Ported from `admin_users_web_page.dart`. The Flutter page keeps a local
-/// `query` field filtered over `name`/`email` (not the cubit's `query`, which
-/// searches more fields); this version does the same so the search scope
-/// matches one-for-one. Row taps become name-cell links to the detail route.
+/// The source's Suspend/Reactivate action is intentionally omitted: the data
+/// layer exposes no `setUserStatus`, so the table is read-only here. The
+/// Listings column is derived from `vm.listings` (the entity has no count of
+/// its own), and Joined is the user's `joinedAt`.
 class UsersPage extends StatefulComponent {
   const UsersPage({super.key});
 
@@ -25,6 +28,8 @@ class UsersPage extends StatefulComponent {
 class _UsersPageState extends State<UsersPage> {
   late final AdminCubit vm;
   String query = '';
+  String statusFilter = 'all';
+  AppRole? roleFilter;
 
   @override
   void initState() {
@@ -39,24 +44,51 @@ class _UsersPageState extends State<UsersPage> {
     super.dispose();
   }
 
-  /// Clears the search box, which is also the way out of the "no matches"
-  /// empty state — the state names its own escape hatch.
-  void _clearQuery() => setState(() => query = '');
+  List<SitewiseUser> get _filtered {
+    final q = query.trim().toLowerCase();
+    return vm.users.where((user) {
+      final matchesQ =
+          q.isEmpty || '${user.name} ${user.email}'.toLowerCase().contains(q);
+      final matchesStatus =
+          statusFilter == 'all' ||
+          user.status.toLowerCase() == statusFilter.toLowerCase();
+      final matchesRole = roleFilter == null || user.role == roleFilter;
+      return matchesQ && matchesStatus && matchesRole;
+    }).toList();
+  }
+
+  String _joined(SitewiseUser user) {
+    final m = user.joinedAt.month.toString().padLeft(2, '0');
+    final d = user.joinedAt.day.toString().padLeft(2, '0');
+    return '${user.joinedAt.year}-$m-$d';
+  }
+
+  int _listingCount(SitewiseUser user) =>
+      vm.listings.where((prop) => prop.ownerId == user.id).length;
+
+  Component _selectField({
+    required String labelText,
+    required String value,
+    required List<(String, String)> options,
+    required void Function(String) onChanged,
+  }) => Field(
+    labelText: labelText,
+    child: select(events: events<String>(onInput: (raw) => onChanged(raw)), [
+      for (final opt in options)
+        option(
+          value: opt.$2,
+          attributes: {if (opt.$2 == value) 'selected': ''},
+          [Component.text(opt.$1)],
+        ),
+    ]),
+  );
 
   @override
   Component build(BuildContext context) {
     return CubitBuilder<AdminCubit, AdminState>(
       cubit: vm,
       builder: (context, _) {
-        final users = vm.users
-            .where(
-              (user) =>
-                  query.isEmpty ||
-                  '${user.name} ${user.email}'.toLowerCase().contains(
-                    query.toLowerCase(),
-                  ),
-            )
-            .toList();
+        final users = _filtered;
 
         return AppLayout(
           role: AppRole.admin,
@@ -64,39 +96,57 @@ class _UsersPageState extends State<UsersPage> {
           // The page header is rendered by `AppLayout`; a page must not render
           // its own `PageHead` or the title appears twice.
           title: 'Users',
+          eyebrow: 'Accounts',
           subtitle:
-              'Every account on the platform across all three roles. '
-              'Search by name or email, then open a record to review its '
-              'activity and access.',
+              'Account status only. Roles are not editable from this screen — '
+              'changing a role requires a separate permission path that this '
+              'build does not implement.',
           child: div(classes: 'stack stack--sections', [
-            SearchInput(
-              label: 'Search users',
-              placeholder: 'Search by name or email…',
-              ariaLabel: 'Search users by name or email',
-              onInput: (value) => setState(() => query = value),
-            ),
+            div(classes: 'filters', [
+              div(classes: 'grid-3', [
+                SearchInput(
+                  label: 'Search',
+                  placeholder: 'Name or email',
+                  ariaLabel: 'Search users by name or email',
+                  onInput: (value) => setState(() => query = value),
+                ),
+                _selectField(
+                  labelText: 'Status',
+                  value: statusFilter,
+                  options: const [
+                    ('All statuses', 'all'),
+                    ('Active', 'active'),
+                    ('Suspended', 'suspended'),
+                  ],
+                  onChanged: (v) => setState(() => statusFilter = v),
+                ),
+                _selectField(
+                  labelText: 'Role',
+                  value: roleFilter?.label ?? 'all',
+                  options: const [
+                    ('All roles', 'all'),
+                    ('Entrepreneur', 'entrepreneur'),
+                    ('Owner', 'owner'),
+                    ('Administrator', 'admin'),
+                  ],
+                  onChanged: (v) => setState(() {
+                    roleFilter = switch (v) {
+                      'entrepreneur' => AppRole.entrepreneur,
+                      'owner' => AppRole.owner,
+                      'admin' => AppRole.admin,
+                      _ => null,
+                    };
+                  }),
+                ),
+              ]),
+            ]),
 
             if (vm.loading)
               const Skeleton(variant: 'row', count: 6)
             else if (users.isEmpty)
               EmptyState(
-                icon: query.isEmpty ? 'group' : 'search_off',
-                title: query.isEmpty
-                    ? 'No accounts yet'
-                    : 'No users match that search',
-                body: query.isEmpty
-                    ? 'When accounts are created they will appear here with '
-                          'their role and status.'
-                    : 'Nothing matched "$query". Try a different name or '
-                          'email, or clear the search to see all accounts.',
-                action: query.isEmpty
-                    ? null
-                    : ActionButton(
-                        'Clear search',
-                        icon: 'close',
-                        variant: 'secondary',
-                        onClick: _clearQuery,
-                      ),
+                title: 'No accounts match',
+                body: 'Try a different search or filter.',
               )
             else
               SectionCard(
@@ -105,36 +155,55 @@ class _UsersPageState extends State<UsersPage> {
                     '${users.length == 1 ? 'account' : 'accounts'}',
                 flush: true,
                 child: div(classes: 'table-scroll', [
-                  table(classes: 'table', [
+                  table(classes: 'audit-table', [
                     thead([
                       tr([
-                        th([Component.text('Name')]),
+                        th([Component.text('Account')]),
                         th([Component.text('Role')]),
-                        th([Component.text('Email')]),
                         th([Component.text('Status')]),
+                        th([Component.text('Listings')]),
+                        th([Component.text('Joined')]),
+                        th([Component.text('')]),
                       ]),
                     ]),
                     tbody([
-                      for (final u in users)
+                      for (final user in users)
                         tr([
                           td([
-                            a(
-                              href: '/admin/user-detail?id=${u.id}',
-                              classes: 'text-action',
-                              [Component.text(u.name)],
-                            ),
+                            span(classes: 'who', [Component.text(user.name)]),
+                            span(classes: 'sub', [Component.text(user.email)]),
                           ]),
-                          td([Component.text(u.role.label)]),
-                          td([Component.text(u.email)]),
-                          // Status is a free-text field on the User entity,
-                          // so the tone is derived by keyword rather than
-                          // pretending there is an enum behind it.
-                          td([StatusBadge.forText(u.status)]),
+                          td([
+                            user.role == AppRole.admin
+                                ? span(classes: 'badge badge-info', [
+                                    Component.text('Administrator'),
+                                  ])
+                                : span(classes: 'badge badge-muted', [
+                                    Component.text('User'),
+                                  ]),
+                          ]),
+                          td([StatusBadge.forText(user.status)]),
+                          td([Component.text('${_listingCount(user)}')]),
+                          td([Component.text(_joined(user))]),
+                          td([
+                            if (user.role == AppRole.admin)
+                              span(classes: 'stat-note', [
+                                Component.text('Admin accounts are protected'),
+                              ])
+                            else
+                              const Component.text(''),
+                          ]),
                         ]),
                     ]),
                   ]),
                 ]),
               ),
+            p(classes: 'stat-note', [
+              Component.text(
+                'Only the fields needed to administer an account are shown. '
+                'Passwords and other private credentials are never exposed.',
+              ),
+            ]),
           ]),
         );
       },

@@ -2,7 +2,6 @@ import 'package:jaspr/dom.dart';
 import 'package:jaspr/jaspr.dart';
 import 'package:shared_logic/shared_logic.dart';
 
-import '../../components/property_card.dart';
 import '../../components/ui.dart';
 import '../../data/app_locator.dart';
 import '../../layouts/app_layout.dart';
@@ -24,6 +23,7 @@ class ListingDetailPage extends StatelessComponent {
       role: AppRole.admin,
       currentRoute: '/admin/listings',
       title: 'Listing detail',
+      eyebrow: 'Verification',
       subtitle:
           'A single listing as submitted, with the details you need to decide whether it should be verified.',
       child: id.isEmpty

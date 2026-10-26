@@ -5,12 +5,18 @@ import 'package:shared_logic/shared_logic.dart';
 import '../../components/ui.dart';
 import '../../layouts/app_layout.dart';
 
-/// Web entrepreneur profile: centred account card.
+/// Entrepreneur account, laid out as the source's
+/// `sitewise-entrepreneur/profile.html`.
 ///
-/// Ported from `entrepreneur_profile_web_page.dart` in the Flutter web tree.
-/// The Flutter version shows a SnackBar on save; here the confirmation is an
-/// inline success line under the button (works without JavaScript). The card
-/// is capped at 640px like the Flutter `WebContentColumn(maxWidth: 640)`.
+/// ```text
+/// .detail-grid
+///   .panel    Contact details — labelled .field rows + .actions-row
+///   .analysis .panel Recommendation settings · .panel Workspace
+/// ```
+///
+/// The previous version was one centred card with two unlabelled inputs and no
+/// link to the preferences that actually drive ranking, so the account page gave
+/// the user no route to the settings it referred to.
 class ProfilePage extends StatefulComponent {
   const ProfilePage({super.key});
 
@@ -19,6 +25,8 @@ class ProfilePage extends StatefulComponent {
 }
 
 class _ProfilePageState extends State<ProfilePage> {
+  String _concept = 'Nasi House';
+  String _phone = '';
   bool _saved = false;
 
   @override
@@ -26,52 +34,114 @@ class _ProfilePageState extends State<ProfilePage> {
     return AppLayout(
       role: AppRole.entrepreneur,
       currentRoute: '/entrepreneur/profile',
-      title: 'Profile',
+      title: 'Profile & preferences',
+      eyebrow: 'Account',
       subtitle:
-          'Your account details and the preferences feeding your recommendations.',
-      child: div(
-        attributes: const {'style': 'max-width:640px'},
-        classes: 'stack',
-        [
-          div(classes: 'card stack', [
-            div(
-              attributes: const {
-                'style': 'width:60px;height:60px;font-size:24px',
+          'Your account details and the preferences feeding your '
+          'recommendations.',
+      child: div(classes: 'detail-grid', [
+        // --- Contact details -------------------------------------------------
+        section(classes: 'panel', [
+          h2([Component.text('Contact details')]),
+          div(classes: 'field', [
+            span(classes: 'field__label', [Component.text('Email address')]),
+            input(
+              attributes: {
+                'type': 'email',
+                'value': 'sarah@nasihouse.my',
+                'readonly': '',
               },
-              classes: 'avatar',
-              [Component.text('S')],
             ),
-            span(classes: 'title', [Component.text('Sarah Lim')]),
-            p(classes: 'body', [
-              Component.text('sarah@nasihouse.my · F&B Entrepreneur'),
-            ]),
-            div(classes: 'stack', [
-              span(classes: 'small', [Component.text('Concept name')]),
-              input(
-                classes: 'input',
-                attributes: {'type': 'text', 'aria-label': 'Concept name'},
-              ),
-            ]),
-            div(classes: 'stack', [
-              span(classes: 'small', [Component.text('Contact number')]),
-              input(
-                classes: 'input',
-                attributes: {'type': 'text', 'aria-label': 'Contact number'},
-              ),
-            ]),
-            div(classes: 'btn-row', [
-              ActionButton(
-                'Save changes',
-                onClick: () => setState(() => _saved = true),
-              ),
-              if (_saved)
-                span(classes: 'small text-success', [
-                  Component.text('Profile updated.'),
-                ]),
+            span(classes: 'hint', [
+              Component.text('Email changes go through account recovery.'),
             ]),
           ]),
-        ],
-      ),
+          div(classes: 'field', [
+            span(classes: 'field__label', [Component.text('Concept name')]),
+            input(
+              attributes: {'type': 'text', 'value': _concept},
+              events: events<String>(onInput: (v) => _concept = v),
+            ),
+          ]),
+          div(classes: 'field', [
+            span(classes: 'field__label', [Component.text('Contact number')]),
+            input(
+              attributes: {
+                'type': 'tel',
+                'value': _phone,
+                'placeholder': '+60 12 345 6789',
+              },
+              events: events<String>(onInput: (v) => _phone = v),
+            ),
+          ]),
+          div(classes: 'actions-row', [
+            ActionButton(
+              'Save profile',
+              onClick: () => setState(() => _saved = true),
+            ),
+            ActionButton(
+              'Discard changes',
+              variant: 'secondary',
+              onClick: () => setState(() {
+                _concept = 'Nasi House';
+                _phone = '';
+                _saved = false;
+              }),
+            ),
+          ]),
+          if (_saved)
+            div(classes: 'notice notice-info', [
+              Component.text('Profile updated.'),
+            ]),
+        ]),
+
+        // --- Recommendation settings + workspace ------------------------------
+        div(classes: 'analysis', [
+          section(classes: 'panel', [
+            h2([Component.text('Recommendation settings')]),
+            p(classes: 'body', [
+              Component.text(
+                'Your budget, floor area and property type determine which '
+                'listings are eligible before any location scoring happens.',
+              ),
+            ]),
+            div(classes: 'actions-row', [
+              const ActionLink(
+                'Edit preferences',
+                href: '/entrepreneur/preferences',
+                variant: 'primary',
+              ),
+              const ActionLink(
+                'See shortlist',
+                href: '/entrepreneur/recommendations',
+                variant: 'secondary',
+              ),
+            ]),
+          ]),
+          section(classes: 'panel', [
+            h2([Component.text('Workspace')]),
+            p(classes: 'body', [
+              Component.text(
+                'You are signed in as an F&B entrepreneur. Switch to the '
+                'property owner view to manage listings, or to the '
+                'administrator console to review submissions.',
+              ),
+            ]),
+            div(classes: 'actions-row', [
+              const ActionLink(
+                'Property owner view',
+                href: '/owner',
+                variant: 'secondary',
+              ),
+              const ActionLink(
+                'Administrator console',
+                href: '/admin',
+                variant: 'secondary',
+              ),
+            ]),
+          ]),
+        ]),
+      ]),
     );
   }
 }

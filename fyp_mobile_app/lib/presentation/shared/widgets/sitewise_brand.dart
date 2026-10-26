@@ -35,7 +35,7 @@ class SitewiseBrand extends StatelessWidget {
         Text(
           'Sitewise',
           style: TextStyle(
-            fontFamily: 'Sora',
+            fontFamily: kFontFamily,
             fontSize: fontSize,
             fontWeight: FontWeight.w800,
             letterSpacing: -.5,

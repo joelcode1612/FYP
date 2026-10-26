@@ -41,15 +41,9 @@ class MobilePropertyCard extends StatelessWidget {
     return Container(
       decoration: BoxDecoration(
         color: SitewiseColors.surface,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(SitewiseSpacing.radiusLg),
         border: Border.all(color: SitewiseColors.border),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x0A0F172A),
-            blurRadius: 10,
-            offset: Offset(0, 3),
-          ),
-        ],
+        boxShadow: SitewiseShadows.cardSm,
       ),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
@@ -83,7 +77,9 @@ class MobilePropertyCard extends StatelessWidget {
                     property: property,
                     width: 108,
                     height: 112,
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: BorderRadius.circular(
+                      SitewiseSpacing.radius,
+                    ),
                     badge: property.hasTour ? '360°' : null,
                   ),
                   const SizedBox(width: 12),
@@ -246,7 +242,7 @@ class MobileFeaturedPropertyCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ClipRRect(
-      borderRadius: BorderRadius.circular(20),
+      borderRadius: BorderRadius.circular(SitewiseSpacing.radiusXl),
       child: AspectRatio(
         aspectRatio: 1.22,
         child: Stack(
@@ -310,15 +306,18 @@ class MobileFeaturedPropertyCard extends StatelessWidget {
                       child: SitewiseStatusBadge(
                         label: 'Verified',
                         color: SitewiseColors.success,
-                        background: Color(0xFFD3F8DF),
+                        background: SitewiseColors.successWash,
                       ),
                     ),
                   Text(
                     property.title,
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontFamily: 'Sora',
+                    style: TextStyle(
+                      // Was the literal 'Sora', which was never bundled and so
+                      // fell back to the platform default. Now the design's
+                      // single family, which *is* bundled.
+                      fontFamily: kFontFamily,
                       fontSize: 21,
                       fontWeight: FontWeight.w800,
                       color: Colors.white,
@@ -410,7 +409,9 @@ class MobileFeaturedPropertyCard extends StatelessWidget {
                         foregroundColor: SitewiseColors.action,
                         elevation: 0,
                         shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(14),
+                          borderRadius: BorderRadius.circular(
+                            SitewiseSpacing.radiusLg,
+                          ),
                         ),
                       ),
                       child: const Text(
@@ -451,7 +452,7 @@ class MobileCompactPropertyCard extends StatelessWidget {
       width: width,
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(SitewiseSpacing.radiusLg),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -459,7 +460,7 @@ class MobileCompactPropertyCard extends StatelessWidget {
               property: property,
               height: 112,
               width: double.infinity,
-              borderRadius: BorderRadius.circular(14),
+              borderRadius: BorderRadius.circular(SitewiseSpacing.radiusLg),
               badge: property.hasTour ? '360°' : null,
             ),
             const SizedBox(height: 8),
@@ -527,7 +528,7 @@ class _IconAction extends StatelessWidget {
     message: tooltip,
     child: InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(20),
+      borderRadius: BorderRadius.circular(SitewiseSpacing.radiusLg),
       child: Padding(
         padding: const EdgeInsets.all(5),
         child: Icon(

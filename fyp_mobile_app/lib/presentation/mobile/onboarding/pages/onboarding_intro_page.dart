@@ -140,7 +140,7 @@ class _Headline extends StatelessWidget {
       ),
       textAlign: TextAlign.center,
       style: const TextStyle(
-        fontFamily: 'Sora',
+        fontFamily: kFontFamily,
         fontSize: 25,
         height: 1.18,
         fontWeight: FontWeight.w800,
@@ -220,7 +220,7 @@ class _BottomPanel extends StatelessWidget {
                     padding: const EdgeInsets.symmetric(horizontal: 20),
                     shape: const StadiumBorder(),
                     textStyle: const TextStyle(
-                      fontFamily: 'Sora',
+                      fontFamily: kFontFamily,
                       fontSize: 15,
                       fontWeight: FontWeight.w700,
                       letterSpacing: .1,

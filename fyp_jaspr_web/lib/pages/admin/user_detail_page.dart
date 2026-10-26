@@ -24,6 +24,7 @@ class UserDetailPage extends StatelessComponent {
       role: AppRole.admin,
       currentRoute: '/admin/users',
       title: 'User detail',
+      eyebrow: 'Accounts',
       subtitle:
           'One account in full — role, status, join date and recent activity.',
       child: id.isEmpty
@@ -48,7 +49,6 @@ class UserDetailPage extends StatelessComponent {
 
   Component _notFound() {
     return EmptyState(
-      icon: 'person_off',
       title: 'Record not found',
       body: 'No user matches this id. It may have been removed.',
       action: const ActionLink(

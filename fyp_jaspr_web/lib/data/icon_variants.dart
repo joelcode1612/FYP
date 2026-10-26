@@ -22,8 +22,11 @@ library;
 
 /// Icons the Flutter tree renders **filled** (`Icons.foo`, no `_outlined`).
 const Set<String> kFilledIcons = {
-  // fyp_mobile_app .../mobile_navigation.dart — Icons.threesixty
-  'threesixty',
+  // fyp_mobile_app .../mobile_navigation.dart — Icons.threesixty.
+  // Flutter's name is `threesixty`; Material Symbols' ligature for the same
+  // glyph is `360`. Using `threesixty` here rendered the literal word, because
+  // the font has no such ligature — verified by measuring the glyph.
+  '360',
 
   // fyp_mobile_app .../mobile_navigation.dart — Icons.compare_arrows
   'compare_arrows',

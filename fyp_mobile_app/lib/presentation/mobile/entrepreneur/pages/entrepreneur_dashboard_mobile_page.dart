@@ -105,6 +105,10 @@ class _EntrepreneurDashboardMobilePageState
                 // is deliberately omitted: AppState carries no user, and printing
                 // one would imply data the layer cannot back. Wire the auth user
                 // in here once it is exposed to the page.
+                //
+                // Restyled to the new design's `.eyebrow-sm` + `.bento-head h1`:
+                // an uppercase, letter-spaced, weight-900 eyebrow in the primary
+                // colour above a weight-900 headline.
                 const Padding(
                   padding: EdgeInsets.symmetric(horizontal: SitewiseSpacing.md),
                   child: Column(
@@ -113,17 +117,20 @@ class _EntrepreneurDashboardMobilePageState
                       Text(
                         'Welcome back',
                         style: TextStyle(
-                          fontSize: 12.5,
-                          color: SitewiseColors.muted,
+                          fontFamily: kFontFamily,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w900,
+                          letterSpacing: 1.3,
+                          color: SitewiseColors.action,
                         ),
                       ),
                       SizedBox(height: SitewiseSpacing.xs),
                       Text(
                         'What kind of location\nare you looking for?',
                         style: TextStyle(
-                          fontFamily: 'Sora',
+                          fontFamily: kFontFamily,
                           fontSize: 22,
-                          fontWeight: FontWeight.w800,
+                          fontWeight: FontWeight.w900,
                           height: 1.12,
                           letterSpacing: -0.44,
                           color: SitewiseColors.ink,

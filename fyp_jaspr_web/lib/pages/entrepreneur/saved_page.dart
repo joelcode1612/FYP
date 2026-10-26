@@ -8,17 +8,19 @@ import '../../components/ui.dart';
 import '../../data/app_locator.dart';
 import '../../layouts/app_layout.dart';
 
-/// Web saved shortlist: 3-column desktop grid.
+/// Web saved shortlist, laid out as the source's `favourites.html`.
 ///
-/// Ported from `entrepreneur_saved_web_page.dart` in the Flutter web tree.
-/// The list is filtered by the shared `AppLocator.appCubit` saved set, and
-/// both Flutter empty states ("No saved properties" / "Shortlist is empty")
-/// are preserved verbatim. Cards wire the bookmark toggle only — the Flutter
-/// page passes no compare callback, so no compare button is rendered.
+/// ```text
+/// .page-head   "Favourites" · "Saved properties" · count
+/// .notice      delisted records are kept, not silently dropped
+/// .pgrid       live favourites
+/// section      "No longer available" (saved ids with no current listing)
+/// ```
 ///
-/// The local `_Loading` / `_Empty` widgets this page used to carry were
-/// duplicates of the shared primitives, so they now use `Skeleton` /
-/// `EmptyState` directly.
+/// The saved set is a session-scoped id set, so a saved id whose listing has
+/// disappeared is shown as unavailable rather than filtered away. No title or
+/// address is invented for it: the source's snapshot fields are not stored in
+/// this build.
 class SavedPage extends StatelessComponent {
   const SavedPage({super.key});
 
@@ -32,49 +34,105 @@ class SavedPage extends StatelessComponent {
           role: AppRole.entrepreneur,
           currentRoute: '/entrepreneur/saved',
           title: 'Saved properties',
+          eyebrow: 'Favourites',
           subtitle:
               'Your shortlist. Bookmark any listing to keep it here while you '
               'weigh it against the others.',
           child: div(classes: 'stack stack--sections', [
             if (appCubit.saved.isEmpty)
               EmptyState(
-                icon: 'bookmark_border',
-                title: 'No saved properties',
+                title: 'No favourites yet',
                 body:
-                    'Tap the bookmark on any listing to build your shortlist.',
+                    'Save a property while browsing to keep it here. Saved '
+                    'items are held for this session and can be removed again '
+                    'from this page.',
                 action: const ActionLink(
-                  'Explore properties',
+                  'Browse properties',
                   href: '/entrepreneur/explore',
-                  variant: 'secondary',
+                  variant: 'primary',
                 ),
               )
             else
               FutureBuilder<List<CommercialProperty>>(
                 future: AppLocator.properties.listings(),
                 builder: (c, snap) {
-                  if (!snap.hasData) {
-                    return div(classes: 'card-grid', [
+                  if (snap.connectionState != ConnectionState.done) {
+                    return div(classes: 'pgrid', [
                       const Skeleton(variant: 'block', count: 6),
                     ]);
                   }
-                  final items = snap.data!
+                  final all = snap.data ?? const <CommercialProperty>[];
+                  final live = all
                       .where((property) => appCubit.saved.contains(property.id))
                       .toList();
-                  if (items.isEmpty) {
-                    return EmptyState(
-                      icon: 'bookmark_border',
-                      title: 'Shortlist is empty',
-                      body: 'Saved items were removed or are unavailable.',
-                    );
-                  }
-                  return div(classes: 'card-grid', [
-                    for (final property in items)
-                      PropertyCard(
-                        property: property,
-                        href: '/entrepreneur/property-detail?id=${property.id}',
-                        saved: true,
-                        onToggleSaved: () => appCubit.toggleSaved(property.id),
+                  final liveIds = live.map((property) => property.id).toSet();
+                  final gone = appCubit.saved
+                      .where((id) => !liveIds.contains(id))
+                      .toList();
+
+                  return div(classes: 'stack stack--sections', [
+                    p(classes: 'small', [
+                      Component.text(
+                        '${live.length} saved. Saved items are held for this '
+                        'session.',
                       ),
+                    ]),
+                    if (gone.isNotEmpty)
+                      div(classes: 'notice notice-warn', [
+                        Component.text(
+                          '${gone.length} saved '
+                          '${gone.length == 1 ? 'property is' : 'properties are'} '
+                          'no longer published (delisted, unapproved or no '
+                          'longer available), so '
+                          '${gone.length == 1 ? 'it cannot' : 'they cannot'} be '
+                          'opened.',
+                        ),
+                      ]),
+                    if (live.isNotEmpty)
+                      div(classes: 'pgrid', [
+                        for (final property in live)
+                          PropertyCard(
+                            property: property,
+                            href:
+                                '/entrepreneur/property-detail?id=${property.id}',
+                            saved: true,
+                            compared: appCubit.isCompared(property.id),
+                            onToggleSaved: () =>
+                                appCubit.toggleSaved(property.id),
+                            onToggleCompared: () =>
+                                appCubit.toggleCompared(property.id),
+                          ),
+                      ])
+                    else
+                      const EmptyState(
+                        title: 'No saved listing is currently available',
+                        body:
+                            'Every saved property has been delisted or is no '
+                            'longer approved. You can remove the records below.',
+                      ),
+                    if (gone.isNotEmpty)
+                      section(classes: 'section', [
+                        h2([Component.text('No longer available')]),
+                        div(classes: 'analysis', [
+                          for (final id in gone)
+                            div(classes: 'a-card', [
+                              h3([Component.text('Saved listing')]),
+                              p(classes: 'what', [
+                                Component.text(
+                                  'Listing $id is no longer published. Its '
+                                  'title and address were not stored in this '
+                                  'build.',
+                                ),
+                              ]),
+                              ActionButton(
+                                'Remove from favourites',
+                                variant: 'secondary',
+                                icon: 'delete',
+                                onClick: () => appCubit.toggleSaved(id),
+                              ),
+                            ]),
+                        ]),
+                      ]),
                   ]);
                 },
               ),

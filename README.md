@@ -46,8 +46,31 @@ cd fyp_jaspr_web
 dart analyze
 dart run tool/typecheck.dart       # compile-based typecheck harness (exit 0)
 dart run jaspr_cli:jaspr build     # static build → build/jaspr (28 routes)
-dart run jaspr_cli:jaspr serve     # dev server → http://localhost:8090
+.\serve                            # dev server → http://localhost:8090
 cd ..
 ```
+
+**Start the dev server with `.\serve`, not `dart run jaspr_cli:jaspr serve`.**
+
+`serve.cmd` frees port 8090 first, then starts the server. This matters because
+**Windows does not terminate child processes when a console closes** — unlike
+POSIX, where the shell sends `SIGHUP` to the process group. Closing the terminal
+therefore leaves `jaspr serve` running and holding 8090 indefinitely. The next
+`jaspr serve` then fails with `errno 10048 (EADDRINUSE)` while the *old* server
+keeps serving *old* built assets, which looks exactly like "my changes had no
+effect".
+
+`serve.cmd` detects whatever owns the port, walks its Dart-only parent chain,
+and kills it child-first before starting. It refuses to touch a non-Dart process.
+A `.cmd` wrapper is used rather than a bare `.ps1` because this machine's
+`LocalMachine` execution policy is `AllSigned`, which blocks unsigned scripts.
+
+```
+.\serve              start (clears the port first)
+.\serve -CheckOnly   clear the port and exit without starting
+.\serve -NoKill      report what holds the port, change nothing
+.\serve -Port 8091   use a different port for this run
+```
+
 
 Deps between members use `shared_logic: any` (workspace resolution, no paths).

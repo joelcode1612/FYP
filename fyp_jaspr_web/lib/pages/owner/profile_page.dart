@@ -5,16 +5,18 @@ import 'package:shared_logic/shared_logic.dart';
 import '../../components/ui.dart';
 import '../../layouts/app_layout.dart';
 
-/// Web owner profile: centred account card.
+/// Owner account, laid out as the source's `sitewise-owner/profile.html`.
 ///
-/// Ported from `owner_profile_web_page.dart` in the Flutter web tree. The
-/// Flutter page is read-only demo chrome: static identity copy and two
-/// uncontrolled `TextField`s whose Save button only shows a SnackBar. Here
-/// the same copy and fields render as inputs, and Save flips an inline
-/// success notice — no persistence in either tree.
+/// ```text
+/// .detail-grid
+///   .panel   Contact details — labelled .field rows + .actions-row
+///   .analysis .panel Workspace · .panel Notifications
+/// ```
 ///
-/// The centred `maxWidth: 640` column becomes a `w-50` wrapper inside the
-/// 1080px app content column.
+/// The previous version was a single centred card with two unlabelled
+/// `overline` captions and no right-hand column, so the "switch to the
+/// entrepreneur view" and notification-policy notes the source carries were
+/// missing entirely.
 class ProfilePage extends StatefulComponent {
   const ProfilePage({super.key});
 
@@ -23,10 +25,8 @@ class ProfilePage extends StatefulComponent {
 }
 
 class _ProfilePageState extends State<ProfilePage> {
-  String _company = '';
-  String _contact = '';
-
-  /// Replaces the Flutter SnackBar('Profile updated.') with an inline note.
+  String _name = 'Daniel Wong';
+  String _phone = '';
   bool _saved = false;
 
   @override
@@ -34,52 +34,101 @@ class _ProfilePageState extends State<ProfilePage> {
     return AppLayout(
       role: AppRole.owner,
       currentRoute: '/owner/profile',
-      title: 'Profile',
+      title: 'Profile & settings',
+      eyebrow: 'Account',
       subtitle: 'Your owner account details and contact information.',
-      child: div(classes: 'w-50', [
-        div(classes: 'card stack', [
-          div(classes: 'avatar', [Component.text('D')]),
-          h2(classes: 'title-lg', [Component.text('Daniel Wong')]),
-          p(classes: 'small', [
-            Component.text('daniel@wongproperties.my · Owner'),
+      child: div(classes: 'detail-grid', [
+        // --- Contact details ------------------------------------------------
+        section(classes: 'panel', [
+          h2([Component.text('Contact details')]),
+          div(classes: 'field', [
+            span(classes: 'field__label', [Component.text('Email address')]),
+            input(
+              attributes: {
+                'type': 'email',
+                'value': 'daniel@wongproperties.my',
+                'readonly': '',
+              },
+            ),
+            span(classes: 'hint', [
+              Component.text('Email changes go through account recovery.'),
+            ]),
           ]),
-          _field(
-            labelText: 'Company name',
-            field: input(
-              type: InputType.text,
-              classes: 'input',
-              value: _company,
-              attributes: {'id': 'profile-company'},
-              events: events<String>(onInput: (v) => _company = v),
+          div(classes: 'field', [
+            span(classes: 'field__label', [Component.text('Full name')]),
+            input(
+              attributes: {'type': 'text', 'value': _name},
+              events: events<String>(onInput: (v) => _name = v),
             ),
-          ),
-          _field(
-            labelText: 'Contact number',
-            field: input(
-              type: InputType.tel,
-              classes: 'input',
-              value: _contact,
-              attributes: {'id': 'profile-contact'},
-              events: events<String>(onInput: (v) => _contact = v),
+          ]),
+          div(classes: 'field', [
+            span(classes: 'field__label', [Component.text('Phone')]),
+            input(
+              attributes: {
+                'type': 'tel',
+                'value': _phone,
+                'placeholder': '+60 12 345 6789',
+              },
+              events: events<String>(onInput: (v) => _phone = v),
             ),
-          ),
-          ActionButton(
-            'Save changes',
-            onClick: () => setState(() => _saved = true),
-          ),
+          ]),
+          div(classes: 'actions-row', [
+            ActionButton(
+              'Save profile',
+              onClick: () => setState(() => _saved = true),
+            ),
+            ActionButton(
+              'Discard changes',
+              variant: 'secondary',
+              onClick: () => setState(() {
+                _name = 'Daniel Wong';
+                _phone = '';
+                _saved = false;
+              }),
+            ),
+          ]),
           if (_saved)
-            p(classes: 'body text-success', [
+            div(classes: 'notice notice-info', [
               Component.text('Profile updated.'),
             ]),
+        ]),
+
+        // --- Workspace + notifications ---------------------------------------
+        div(classes: 'analysis', [
+          section(classes: 'panel', [
+            h2([Component.text('Workspace')]),
+            p(classes: 'body', [
+              Component.text(
+                'You are signed in as a property owner. Switch to the '
+                'entrepreneur view to browse listings, or to the administrator '
+                'console to review submissions.',
+              ),
+            ]),
+            div(classes: 'actions-row', [
+              const ActionLink(
+                'Entrepreneur view',
+                href: '/entrepreneur',
+                variant: 'secondary',
+              ),
+              const ActionLink(
+                'Administrator console',
+                href: '/admin',
+                variant: 'secondary',
+              ),
+            ]),
+          ]),
+          section(classes: 'panel', [
+            h2([Component.text('Notifications')]),
+            p(classes: 'body', [
+              Component.text(
+                'This prototype has no email or push service. Verification '
+                'status changes appear on your listings and tours pages as soon '
+                'as an administrator records a decision.',
+              ),
+            ]),
+          ]),
         ]),
       ]),
     );
   }
-}
-
-Component _field({required String labelText, required Component field}) {
-  return div(classes: 'stack', [
-    span(classes: 'overline', [Component.text(labelText)]),
-    field,
-  ]);
 }

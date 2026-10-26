@@ -68,7 +68,7 @@ class TourVisual extends StatelessWidget {
                         '360°',
                         style: TextStyle(
                           color: Colors.white,
-                          fontFamily: 'Sora',
+                          fontFamily: kFontFamily,
                           fontSize: 21,
                           fontWeight: FontWeight.w800,
                         ),

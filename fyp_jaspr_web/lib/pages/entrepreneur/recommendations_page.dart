@@ -5,17 +5,22 @@ import 'package:jaspr/jaspr.dart';
 import 'package:shared_logic/shared_logic.dart';
 
 import '../../components/bloc.dart';
-import '../../components/property_card.dart';
 import '../../components/ui.dart';
 import '../../data/app_locator.dart';
 import '../../layouts/app_layout.dart';
 
-/// Web recommendations: ranked 3-column desktop grid.
+/// Web recommendations ("Your shortlist"), laid out as the source's
+/// `recommendations.html`.
 ///
-/// Ported from `entrepreneur_recommendations_web_page.dart` in the Flutter web
-/// tree. The page loads the same ranked list through a per-page
-/// `EntrepreneurCubit` and renders the Flutter empty/loading states verbatim.
-/// Card rank banners read `#N · reason`, matching the Flutter page.
+/// ```text
+/// .page-head   "Recommendations" · "Your shortlist" · criteria line
+/// .rec-item    rank tile · title + why bullets · score
+/// ```
+///
+/// The source renders one **row** per recommendation — rank, property, score —
+/// with the model's reasons inline. The previous version wrapped a full
+/// `.pcard` in a 3-column grid and appended a separate `.why` block, which
+/// duplicated the card's own actions and buried the score.
 class RecommendationsPage extends StatefulComponent {
   const RecommendationsPage({super.key});
 
@@ -51,40 +56,36 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
             return AppLayout(
               role: AppRole.entrepreneur,
               currentRoute: '/entrepreneur/recommendations',
-              title: 'Recommendations',
+              title: 'Your shortlist',
+              eyebrow: 'Recommendations',
               subtitle:
-                  'Ranked sites with the reasoning behind each one, so you can see why a location was suggested.',
-              child: div(classes: 'stack stack--sm', [
-                div(classes: 'row row--top', [
-                  div(classes: 'grow stack', [
-                    h2(classes: 'title', [
-                      Component.text('Ranked for your concept'),
+                  '${vm.prefs.businessType} · up to '
+                  'RM${vm.prefs.maxBudgetRm.toStringAsFixed(0)} · min '
+                  '${vm.prefs.minSizeSqft.toStringAsFixed(0)} sq ft. Ranked '
+                  'sites with the reasoning behind each one.',
+              actions: const [
+                ActionLink(
+                  'Edit preferences',
+                  href: '/entrepreneur/preferences',
+                  variant: 'secondary',
+                ),
+              ],
+              child: vm.loading
+                  ? const _Loading()
+                  : vm.recommendations.isEmpty
+                  ? const _Empty()
+                  : div(classes: 'stack stack--md', [
+                      for (var i = 0; i < vm.recommendations.length; i++)
+                        _row(appCubit, vm.recommendations[i], i),
+                      p(classes: 'disclaimer', [
+                        Component.text(
+                          'A suitability score is a relative decision-support '
+                          'indicator. It is not a probability of business '
+                          'success, a revenue or customer-volume forecast, '
+                          'regulatory approval, or a guarantee of any kind.',
+                        ),
+                      ]),
                     ]),
-                    p(classes: 'small', [
-                      Component.text(
-                        '${vm.prefs.businessType} · up to '
-                        'RM${vm.prefs.maxBudgetRm.toStringAsFixed(0)} · '
-                        'min ${vm.prefs.minSizeSqft.toStringAsFixed(0)} '
-                        'sq ft',
-                      ),
-                    ]),
-                  ]),
-                  const ActionLink(
-                    'Edit preferences',
-                    href: '/entrepreneur/preferences',
-                    variant: 'ghost',
-                  ),
-                ]),
-                if (vm.loading)
-                  const _Loading()
-                else if (vm.recommendations.isEmpty)
-                  const _Empty()
-                else
-                  div(classes: 'card-grid', [
-                    for (var i = 0; i < vm.recommendations.length; i++)
-                      _card(appCubit, vm.recommendations[i], i),
-                  ]),
-              ]),
             );
           },
         );
@@ -92,33 +93,76 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
     );
   }
 
-  Component _card(AppCubit appCubit, PropertyRecommendation r, int index) {
+  Component _row(AppCubit appCubit, PropertyRecommendation r, int index) {
     final id = r.property.id;
+    final prop = r.property;
     return div(classes: 'rec-item', [
-      PropertyCard(
-        property: r.property,
-        href: '/entrepreneur/property-detail?id=$id',
-        rankBanner: '#${index + 1} · ${r.reason}',
-        saved: appCubit.isSaved(id),
-        compared: appCubit.isCompared(id),
-        onToggleSaved: () => appCubit.toggleSaved(id),
-        onToggleCompared: () => appCubit.toggleCompared(id),
-      ),
-      // The model's own explanation bullets. Previously only `reason` was
-      // shown, in the rank banner — a single phrase that told the user a
-      // ranking existed but not what produced it. These are the real
-      // `whyRecommended` strings returned with the recommendation; nothing
-      // here is generated by the UI, and there are no SHAP values to show
-      // because the model does not return any.
-      if (r.whyRecommended.isNotEmpty)
-        div(classes: 'why', [
-          span(classes: 'overline', [Component.text('Why recommended')]),
-          for (final bullet in r.whyRecommended)
-            div(classes: 'why__item', [
-              Icon('check', size: 'sm'),
-              span([Component.text(bullet)]),
-            ]),
+      // Rank tile.
+      span(classes: 'rec-rank', [Component.text('${index + 1}')]),
+
+      // Title, meta, and the model's own explanation bullets.
+      div(classes: 'stack stack--sm', [
+        h3(classes: 'title', [
+          a(href: '/entrepreneur/property-detail?id=$id', [
+            Component.text(prop.title),
+          ]),
         ]),
+        p(classes: 'small', [
+          Component.text(
+            '${prop.address}, ${prop.city} · ${prop.rentalDisplay} · '
+            '${prop.sizeSqft.toStringAsFixed(0)} sq ft · ${prop.propertyType}',
+          ),
+        ]),
+        div(classes: 'chips', [
+          StatusBadge(
+            'Verification: ${prop.verification.label.toLowerCase()}',
+            tone: toneForVerification(prop.verification),
+          ),
+          if (prop.hasTour) const StatusBadge('360° tour', tone: 'action'),
+        ]),
+        // `whyRecommended` is the model's own text — nothing here is generated
+        // by the UI, and there are no SHAP values to show because the model does
+        // not return any.
+        if (r.whyRecommended.isNotEmpty)
+          div(classes: 'why', [
+            span(classes: 'overline', [Component.text('Why recommended')]),
+            for (final bullet in r.whyRecommended)
+              div(classes: 'why__item', [
+                Icon('check', size: 'sm'),
+                span([Component.text(bullet)]),
+              ]),
+          ]),
+        div(classes: 'actions-row', [
+          ActionLink(
+            'View details',
+            href: '/entrepreneur/property-detail?id=$id',
+            variant: 'primary',
+          ),
+          ActionButton(
+            appCubit.isSaved(id) ? 'Saved' : 'Save',
+            variant: 'secondary',
+            icon: appCubit.isSaved(id) ? 'bookmark' : 'bookmark_border',
+            onClick: () => appCubit.toggleSaved(id),
+          ),
+          ActionButton(
+            appCubit.isCompared(id) ? 'In compare' : 'Compare',
+            variant: 'secondary',
+            icon: 'compare_arrows',
+            onClick: () => appCubit.toggleCompared(id),
+          ),
+          ActionLink(
+            'Why this score',
+            href: '/entrepreneur/explanation?property=$id',
+            variant: 'secondary',
+          ),
+        ]),
+      ]),
+
+      // Score.
+      div(classes: 'rec-score', [
+        strong([Component.text(prop.suitabilityScore.toStringAsFixed(0))]),
+        span([Component.text('Suitability')]),
+      ]),
     ]);
   }
 }
@@ -127,26 +171,25 @@ class _Loading extends StatelessComponent {
   const _Loading();
 
   @override
-  Component build(BuildContext context) {
-    return div(classes: 'card', [
-      p(classes: 'body muted', [Component.text('Loading…')]),
-    ]);
-  }
+  Component build(BuildContext context) => div(classes: 'loading', [
+    span(classes: 'spinner', []),
+    Component.text('Ranking properties…'),
+  ]);
 }
 
 class _Empty extends StatelessComponent {
   const _Empty();
 
   @override
-  Component build(BuildContext context) {
-    return div(classes: 'card stack', [
-      span(classes: 'overline', [Component.text('Recommendations')]),
-      h2(classes: 'title-lg', [Component.text('No matches yet')]),
-      p(classes: 'body', [
-        Component.text(
-          'Loosen your budget or size filters to see more shoplots.',
-        ),
-      ]),
-    ]);
-  }
+  Component build(BuildContext context) => EmptyState(
+    title: 'No recommendations yet',
+    body:
+        'Recommendations are generated from your saved preferences. Set them '
+        'first, then run a search so there is something to rank.',
+    action: const ActionLink(
+      'Set your preferences',
+      href: '/entrepreneur/preferences',
+      variant: 'primary',
+    ),
+  );
 }

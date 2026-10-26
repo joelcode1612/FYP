@@ -4,7 +4,6 @@ import 'package:jaspr/dom.dart';
 import 'package:jaspr/jaspr.dart';
 import 'package:shared_logic/shared_logic.dart';
 
-import '../../components/property_card.dart';
 import '../../components/ui.dart';
 import '../../data/app_locator.dart';
 import '../../layouts/app_layout.dart';
@@ -58,6 +57,7 @@ class _VerificationDetailPageState extends State<VerificationDetailPage> {
       role: AppRole.admin,
       currentRoute: '/admin/verification',
       title: 'Verification detail',
+      eyebrow: 'Verification',
       subtitle:
           'The evidence available for this submission, and the decision you are about to record.',
       child: component.id.isEmpty

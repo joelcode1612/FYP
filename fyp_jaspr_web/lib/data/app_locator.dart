@@ -27,6 +27,14 @@ abstract final class AppLocator {
   static final RecommendationService recommendations = RecommendationService(
     recommendationRepo,
   );
+
+  /// Explanation + location intelligence live on their own repository in
+  /// `shared_logic`; the recommendation repository only serves rankings.
+  static final LocationIntelligenceRepositoryImpl intelligenceRepo =
+      LocationIntelligenceRepositoryImpl();
+  static final LocationIntelligenceService intelligence =
+      LocationIntelligenceService(intelligenceRepo);
+
   static final VerificationService verification = VerificationService(
     verificationRepo,
   );

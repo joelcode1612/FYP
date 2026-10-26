@@ -166,7 +166,7 @@ class _EntrepreneurPropertyDetailMobilePageState
             child: Text(
               p.title,
               style: const TextStyle(
-                fontFamily: 'Sora',
+                fontFamily: kFontFamily,
                 fontSize: 20,
                 fontWeight: FontWeight.w800,
                 color: SitewiseColors.ink,

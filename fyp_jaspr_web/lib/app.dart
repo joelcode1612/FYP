@@ -4,9 +4,13 @@ import 'package:jaspr_router/jaspr_router.dart';
 import 'data/app_locator.dart';
 import 'pages/landing_page.dart';
 import 'pages/login_page.dart';
+import 'pages/signup_page.dart';
+import 'pages/forgot_password_page.dart';
 import 'pages/entrepreneur/compare_page.dart';
 import 'pages/entrepreneur/dashboard_page.dart' as e_dashboard;
+import 'pages/entrepreneur/explanation_page.dart' as e_explanation;
 import 'pages/entrepreneur/explore_page.dart' as e_explore;
+import 'pages/entrepreneur/map_page.dart' as e_map;
 import 'pages/entrepreneur/preferences_page.dart' as e_preferences;
 import 'pages/entrepreneur/profile_page.dart' as e_profile;
 import 'pages/entrepreneur/property_detail_page.dart' as e_property_detail;
@@ -68,6 +72,11 @@ class SitewiseApp extends StatelessComponent {
           builder: (context, state) => const LandingPage(),
         ),
         Route(path: '/login', builder: (context, state) => const LoginPage()),
+        Route(path: '/signup', builder: (context, state) => const SignupPage()),
+        Route(
+          path: '/forgot',
+          builder: (context, state) => const ForgotPasswordPage(),
+        ),
 
         // --- Admin -----------------------------------------------------------
         Route(
@@ -157,6 +166,17 @@ class SitewiseApp extends StatelessComponent {
           path: '/entrepreneur/explore',
           builder: (context, state) => e_explore.ExplorePage(
             startInMap: state.queryParams['id'] == 'map',
+          ),
+        ),
+        Route(
+          path: '/entrepreneur/map',
+          builder: (context, state) =>
+              e_map.MapPage(initialId: state.queryParams['id']),
+        ),
+        Route(
+          path: '/entrepreneur/explanation',
+          builder: (context, state) => e_explanation.ExplanationPage(
+            propertyId: state.queryParams['property'] ?? '',
           ),
         ),
         Route(

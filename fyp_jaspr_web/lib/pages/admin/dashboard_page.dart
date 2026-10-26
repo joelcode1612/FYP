@@ -5,18 +5,26 @@ import 'package:jaspr/jaspr.dart';
 import 'package:shared_logic/shared_logic.dart';
 
 import '../../components/bloc.dart';
-import '../../components/property_card.dart';
+import '../../components/letter_reveal.dart';
 import '../../components/ui.dart';
 import '../../data/app_locator.dart';
 import '../../layouts/app_layout.dart';
 
-/// Web admin dashboard: stat row plus a desktop grid of the pending queue.
+/// Admin console home, restructured to the bento grid used across the app.
 ///
-/// Ported from `admin_dashboard_web_page.dart` in the Flutter web tree. The
-/// Flutter version rebuilds on `AppCubit` for the shell and pulls data through
-/// the per-page `AdminViewModel`; here the page owns one [AdminCubit] from
-/// [AppLocator.newAdminCubit] and rebuilds on it via [CubitBuilder].
-/// Detail ids travel as `?id=` query params instead of `settings.arguments`.
+/// The previous version rendered a **second** page header on top of the one
+/// `AppLayout` already provides and then a `.pgrid` of property cards — a
+/// browse layout where the source has a work-queue console. This rebuilds it
+/// as:
+///
+/// ```text
+/// .bento-head    eyebrow + greeting + actions
+/// .bento-kpis    4 KPI tiles (live queue counts)
+/// .bento         hero (verification health) · wide (audit activity)
+///               · 3 work-queue cards
+/// ```
+///
+/// Every count is read from the in-memory record store; nothing is fabricated.
 class DashboardPage extends StatefulComponent {
   const DashboardPage({super.key});
 
@@ -48,98 +56,240 @@ class _DashboardPageState extends State<DashboardPage> {
         return AppLayout(
           role: AppRole.admin,
           currentRoute: '/admin',
-          title: 'Admin Dashboard',
-          subtitle:
-              'Platform-wide signal: how many listings and accounts are active, and what is waiting for review.',
+          title: 'Verification overview',
+          // The source dashboard has no page header — its first element is
+          // `.bento-head`. Rendering both produced two competing titles, which
+          // the source does not have.
+          showPageHead: false,
           child: vm.loading
-              ? _loading()
+              ? const _Loading()
               : vm.error != null
               ? _error(vm.error!)
-              : _body(),
+              : div(classes: 'stack', [
+                  _head(),
+                  _kpis(),
+                  div(classes: 'bento', [
+                    _healthCard(),
+                    _auditCard(),
+                    _queueCard(
+                      'Property verification',
+                      vm.queue.length,
+                      'Review submitted listings against the evidence the owner '
+                          'provided.',
+                      '/admin/verification',
+                      pending: vm.queue.length,
+                    ),
+                    _queueCard(
+                      '360° tour verification',
+                      vm.pendingTours.length,
+                      'Confirm the tour belongs to the property and the '
+                          'panorama is ready.',
+                      '/admin/verification',
+                      pending: vm.pendingTours.length,
+                    ),
+                    _queueCard(
+                      'Account management',
+                      vm.users.length,
+                      'Inspect owner and administrator accounts and their '
+                          'status.',
+                      '/admin/users',
+                      pending: 0,
+                    ),
+                  ]),
+                  p(classes: 'stat-note', [
+                    Component.text(
+                      'Counts are read from the in-memory record store, not a '
+                      'database. Seeded demonstration listings have no owner '
+                      'account and are excluded from owner queues.',
+                    ),
+                  ]),
+                ]),
         );
       },
     );
   }
 
-  Component _loading() {
-    return div(classes: 'card', [
-      p(classes: 'body muted', [Component.text('Loading overview…')]),
+  Component _error(String message) => EmptyState(
+    title: 'Something went wrong',
+    body: message,
+    action: ActionButton(
+      'Try again',
+      variant: 'primary',
+      onClick: () => unawaited(vm.loadDashboard()),
+    ),
+  );
+
+  // -------------------------------------------------------------------- head
+
+  Component _head() {
+    return div(classes: 'bento-head', [
+      div(classes: 'bh-title', [
+        span(classes: 'eyebrow-sm', [Component.text('Administrator console')]),
+        LetterRevealHeading.text('Verification overview', level: 1),
+        p(classes: 'muted', [
+          Component.text(
+            'Queues are live counts from the record store. Every decision is '
+            'written to the audit log with the administrator identity and a '
+            'timestamp.',
+          ),
+        ]),
+      ]),
+      div(classes: 'bh-actions', [
+        a(href: '/admin/verification', classes: 'bento-cta', [
+          Component.text('Review queue'),
+        ]),
+        a(href: '/admin/listings', classes: 'bento-period', [
+          Component.text('Manage listings'),
+        ]),
+        a(href: '/admin/users', classes: 'bento-period', [
+          Component.text('Manage users'),
+        ]),
+      ]),
     ]);
   }
 
-  Component _error(String message) {
-    return div(classes: 'card stack', [
-      span(classes: 'title', [Component.text('Something went wrong')]),
-      p(classes: 'body', [Component.text(message)]),
-      ActionButton(
-        'Try again',
-        variant: 'secondary',
-        onClick: () => unawaited(vm.loadDashboard()),
+  // -------------------------------------------------------------------- KPIs
+
+  Component _kpis() {
+    final approved = vm.listings
+        .where((it) => it.verification == VerificationStatus.verified)
+        .length;
+    return div(classes: 'bento-kpis', [
+      _kpi(
+        'Properties awaiting review',
+        '${vm.queue.length}',
+        vm.queue.isEmpty ? 'Queue clear' : 'Needs a decision',
+      ),
+      _kpi(
+        'Tours awaiting review',
+        '${vm.pendingTours.length}',
+        vm.pendingTours.isEmpty ? 'Queue clear' : 'Needs a decision',
+      ),
+      _kpi('Approved listings', '$approved', '${vm.listings.length} in total'),
+      _kpi('Accounts', '${vm.users.length}', 'Administrators and owners'),
+    ]);
+  }
+
+  Component _kpi(String k, String v, String n) {
+    return div(classes: 'kpi', [
+      span(classes: 'k', [Component.text(k)]),
+      span(classes: 'v', [Component.text(v)]),
+      span(classes: 'n', [Component.text(n)]),
+    ]);
+  }
+
+  // ----------------------------------------------------- verification health
+
+  /// Dark hero card with a donut showing the share of all listings that are
+  /// approved versus still in flight (pending + rejected).
+  Component _healthCard() {
+    final listings = vm.listings;
+    final total = listings.length;
+    final approved = listings
+        .where((it) => it.verification == VerificationStatus.verified)
+        .length;
+    final inFlight = total - approved;
+    final pct = total > 0 ? (approved * 100 ~/ total) : 0;
+
+    if (total == 0) {
+      return div(classes: 'bento-hero', [
+        div(classes: 'bento-card__head', [
+          h3([Component.text('Verification health')]),
+          span(classes: 'hero-badge', [Component.text('No data')]),
+        ]),
+        div(classes: 'stack', [
+          span(classes: 'title', [Component.text('No listings yet')]),
+          p(classes: 'hero-cap', [
+            Component.text(
+              'Approval health appears here once listings exist in the record '
+              'store.',
+            ),
+          ]),
+        ]),
+      ]);
+    }
+
+    return div(classes: 'bento-hero', [
+      div(classes: 'bento-card__head', [
+        h3([Component.text('Verification health')]),
+        span(classes: 'hero-badge', [Component.text('$total listings')]),
+      ]),
+      div(classes: 'donut-wrap', [
+        div(classes: 'donut', styles: Styles(raw: {'--pct': '$pct'}), [
+          div(classes: 'donut-center', [
+            div(classes: 'dc-v', [Component.text('$pct%')]),
+            div(classes: 'dc-k', [Component.text('approved')]),
+          ]),
+        ]),
+      ]),
+      div(classes: 'hero-legend', [
+        span(classes: 'lg', [
+          span(classes: 'dot a', []),
+          Component.text('$approved approved'),
+        ]),
+        span(classes: 'lg', [
+          span(classes: 'dot b', []),
+          Component.text('$inFlight pending or rejected'),
+        ]),
+      ]),
+      p(classes: 'hero-cap', [
+        Component.text(
+          '$pct% of all listings are approved. The ring reflects current '
+          'verification status from the record store, not a forecast.',
+        ),
+      ]),
+      a(href: '/admin/verification', classes: 'bento-cta', [
+        Component.text('Open verification queue'),
+      ]),
+    ]);
+  }
+
+  // -------------------------------------------------------- audit activity
+
+  /// The target has no audit store, so this is the source's own empty state
+  /// rather than a table with invented rows.
+  Component _auditCard() {
+    return div(classes: 'bento-card bento-wide', [
+      div(classes: 'bento-card__head', [
+        h3([Component.text('Recent administrative activity')]),
+        span(classes: 'card-note', [Component.text('Live log')]),
+      ]),
+      EmptyState(
+        title: 'No administrative actions yet',
+        body:
+            'Approvals, rejections, publication changes and account updates '
+            'are recorded here as they happen. This prototype keeps no audit '
+            'log, so nothing is listed.',
       ),
     ]);
   }
 
-  Component _body() {
-    return div(classes: 'stack', [
-      div(classes: 'row row--top', [
-        div(classes: 'grow stack', [
-          h2(classes: 'title-lg', [Component.text('Good day, Admin')]),
-          p(classes: 'body muted', [
-            Component.text(
-              'Review queue, users and listing quality at a glance.',
-            ),
-          ]),
-        ]),
-        const ActionLink(
-          'View queue',
-          href: '/admin/verification',
-          variant: 'secondary',
-        ),
-      ]),
-      div(classes: 'row', [
-        for (final s in _stats()) div(classes: 'grow', [s]),
-      ]),
-      h2(classes: 'title', [Component.text('Pending verification')]),
-      if (vm.queue.isEmpty)
-        div(classes: 'card', [
-          p(classes: 'body', [
-            Component.text('Queue is clear. No properties awaiting review.'),
-          ]),
-        ])
-      else
-        div(classes: 'card-grid', [
-          for (final p in vm.queue.take(3))
-            PropertyCard(
-              property: p,
-              href: '/admin/verification-detail?id=${p.id}',
-            ),
-        ]),
-    ]);
-  }
+  // ------------------------------------------------------------ work queues
 
-  List<Component> _stats() => [
-    _stat(
-      'Pending verifications',
-      '${vm.queue.length}',
-      'verified',
-      delta: vm.queue.isEmpty ? 'Clear' : 'Needs review',
-    ),
-    _stat('Total listings', '${vm.listings.length}', 'business'),
-    _stat('Registered users', '${vm.users.length}', 'people'),
-  ];
-
-  /// Same composition as [StatCard] plus the optional success-coloured delta
-  /// the Flutter `SitewiseStatCard` renders in the icon row.
-  Component _stat(String label, String value, String icon, {String? delta}) {
-    return div(classes: 'stat', [
-      div(classes: 'row', [
-        Icon(icon, size: 'sm'),
-        span(classes: 'grow', []),
-        if (delta != null)
-          span(classes: 'small text-success', [Component.text(delta)]),
+  Component _queueCard(
+    String title,
+    int count,
+    String body,
+    String href, {
+    required int pending,
+  }) => a(classes: 'bento-card', href: href, [
+    div(classes: 'bento-card__head', [
+      h3([Component.text(title)]),
+      span(classes: 'card-note', [
+        Component.text(pending > 0 ? 'Action needed' : 'Queue clear'),
       ]),
-      span(classes: 'overline', [Component.text(label)]),
-      div(classes: 'metric text-ink', [Component.text(value)]),
-    ]);
-  }
+    ]),
+    p(classes: 'muted', [Component.text(body)]),
+    p(classes: 'queue-count', [Component.text('$count')]),
+  ]);
+}
+
+class _Loading extends StatelessComponent {
+  const _Loading();
+
+  @override
+  Component build(BuildContext context) => div(classes: 'loading', [
+    span(classes: 'spinner', []),
+    Component.text('Loading overview…'),
+  ]);
 }

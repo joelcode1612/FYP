@@ -21,6 +21,15 @@ class WebDestination {
   });
 }
 
+/// The role line under the wordmark, matching the source lockup
+/// ("ENTREPRENEUR WORKSPACE", "OWNER WORKSPACE", …). Rendered uppercase by
+/// `.brand__sub`, so the stored value is sentence case.
+String workspaceLabelFor(AppRole role) => switch (role) {
+  AppRole.admin => 'Admin workspace',
+  AppRole.owner => 'Owner workspace',
+  AppRole.entrepreneur => 'Entrepreneur workspace',
+};
+
 /// Desktop sidebar destinations per role. The web tree is the only consumer —
 /// the mobile tree keeps its own bottom-navigation destinations in Flutter.
 List<WebDestination> webDestinationsFor(AppRole role) => switch (role) {
@@ -53,11 +62,7 @@ List<WebDestination> webDestinationsFor(AppRole role) => switch (role) {
       icon: 'add_business',
       label: 'Add Property',
     ),
-    WebDestination(
-      route: '/owner/tours',
-      icon: 'threesixty',
-      label: '360° Tours',
-    ),
+    WebDestination(route: '/owner/tours', icon: '360', label: '360° Tours'),
     WebDestination(route: '/owner/profile', icon: 'person', label: 'Profile'),
   ],
   AppRole.entrepreneur => const [
@@ -67,6 +72,7 @@ List<WebDestination> webDestinationsFor(AppRole role) => switch (role) {
       icon: 'explore',
       label: 'Explore',
     ),
+    WebDestination(route: '/entrepreneur/map', icon: 'map', label: 'Map'),
     WebDestination(
       route: '/entrepreneur/recommendations',
       icon: 'auto_awesome',
@@ -101,6 +107,7 @@ String parentShellRoute(String route) {
     '/entrepreneur/property-detail': '/entrepreneur/explore',
     '/entrepreneur/tour': '/entrepreneur/explore',
     '/entrepreneur/report': '/entrepreneur/explore',
+    '/entrepreneur/explanation': '/entrepreneur/recommendations',
     '/admin/user-detail': '/admin/users',
     '/admin/verification-detail': '/admin/verification',
     '/admin/listing-detail': '/admin/listings',
@@ -137,6 +144,7 @@ String titleForRoute(String route) {
     '/entrepreneur/property-detail': 'Property',
     '/entrepreneur/tour': '360° Tour',
     '/entrepreneur/report': 'Suitability Report',
+    '/entrepreneur/explanation': 'Why this score',
     '/admin/user-detail': 'User',
     '/admin/verification-detail': 'Verification',
     '/admin/listing-detail': 'Listing',

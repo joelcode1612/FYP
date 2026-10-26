@@ -53,6 +53,14 @@ class AppLayout extends StatefulComponent {
   /// Page-level CTAs. Rendered on the right of the page header.
   final List<Component> actions;
 
+  /// Set to false when the page renders its own header.
+  ///
+  /// The source's entrepreneur dashboard has no page header at all — its first
+  /// element is `.bento-head` (eyebrow + greeting + actions). Rendering both
+  /// produced two competing titles ("Home" above "Hello there"), which the
+  /// source does not have.
+  final bool showPageHead;
+
   final Component child;
 
   const AppLayout({
@@ -63,6 +71,7 @@ class AppLayout extends StatefulComponent {
     this.subtitle,
     this.eyebrow,
     this.actions = const [],
+    this.showPageHead = true,
     required this.child,
   });
 
@@ -121,7 +130,7 @@ class _AppLayoutState extends State<AppLayout> {
             [Icon(_navOpen ? 'close' : 'menu')],
           ),
 
-          const Brand(),
+          Brand(subtitle: workspaceLabelFor(component.role)),
 
           nav(classes: 'app-pill__nav', [
             for (final d in destinations)
@@ -137,10 +146,11 @@ class _AppLayoutState extends State<AppLayout> {
                     ? 'app-pill__link app-pill__link--active'
                     : 'app-pill__link',
                 events: events(onClick: _closeNav),
-                [
-                  Icon(d.icon, size: 'sm'),
-                  span(classes: 'app-pill__label', [Component.text(d.label)]),
-                ],
+                // The source's pill row carries labels only. Icons were removed
+                // because the scrollable row flex-shrank them to zero width, and
+                // because `threesixty` is not a Material Symbols ligature — it
+                // rendered the literal word.
+                [Component.text(d.label)],
               ),
           ]),
 
@@ -152,12 +162,13 @@ class _AppLayoutState extends State<AppLayout> {
         // --- Page ----------------------------------------------------------
         div(classes: 'app-content', [
           div(classes: 'app-content__inner', [
-            PageHead(
-              title: component.title,
-              description: component.subtitle,
-              eyebrow: component.eyebrow,
-              actions: component.actions,
-            ),
+            if (component.showPageHead)
+              PageHead(
+                title: component.title,
+                description: component.subtitle,
+                eyebrow: component.eyebrow,
+                actions: component.actions,
+              ),
             component.child,
           ]),
         ]),
@@ -188,7 +199,9 @@ class _Sidebar extends StatelessComponent {
       classes: open ? 'sidebar sidebar--open' : 'sidebar',
       attributes: const {'id': 'app-sidebar'},
       [
-        div(classes: 'sidebar__head', [const Brand()]),
+        div(classes: 'sidebar__head', [
+          Brand(subtitle: workspaceLabelFor(role)),
+        ]),
         div(classes: 'sidebar__role', [Component.text(role.label)]),
         nav(classes: 'sidebar__nav', [
           for (final d in destinations)

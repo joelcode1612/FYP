@@ -16,8 +16,10 @@ import 'ui.dart';
 /// [PropertyFilter.typesIn] / [citiesIn] / [statesIn], so the panel can never
 /// advertise a filter that matches nothing or hide one that would.
 ///
-/// Styling lives entirely in `styles.css` (`.filter*` classes); this component
-/// carries class names only, per DESIGN.md §8 Do #2.
+/// Styling lives entirely in `styles.css` (`.filters`, `.field`, `.frow`,
+/// `.checkpill`, `.chips`, `.actions-row`, `.err`); this component carries class
+/// names only, per DESIGN.md §8 Do #2. Previously it emitted its own `filter__*`
+/// vocabulary, which had no counterpart in the source design.
 ///
 /// NOTE: no parameter below may be called `label`, `select` or `option` — those
 /// are Jaspr DOM element functions, and a same-named parameter would shadow them
@@ -34,6 +36,12 @@ class FilterPanel extends StatelessComponent {
   final void Function(PropertyFilter) onChanged;
   final void Function() onReset;
 
+  /// Current keyword query. The source's form leads with a keyword field inside
+  /// the same `.filters` panel; the target keeps the query on the cubit, so it
+  /// is passed in and echoed back through [onQueryChanged].
+  final String query;
+  final void Function(String)? onQueryChanged;
+
   const FilterPanel({
     super.key,
     required this.filter,
@@ -41,6 +49,8 @@ class FilterPanel extends StatelessComponent {
     required this.results,
     required this.onChanged,
     required this.onReset,
+    this.query = '',
+    this.onQueryChanged,
   });
 
   @override
@@ -51,73 +61,63 @@ class FilterPanel extends StatelessComponent {
     final validation = filter.validate();
     final chips = filter.activeChips;
 
-    return div(classes: 'filter', [
-      // --- Head: title + reset -------------------------------------------
-      div(classes: 'filter__head', [
-        span(classes: 'filter__title', [Component.text('Filters')]),
-        button(
-          classes: 'filter__reset',
-          attributes: {'type': 'button', if (filter.isEmpty) 'disabled': ''},
-          events: events(onClick: onReset),
-          [Component.text('Reset')],
+    // Layout follows the source form exactly: one keyword `.field`, then two
+    // four-column `.frow`s. The previous version nested a `.frow` inside a
+    // `.field` for the budget pair, which produced a third, uneven row.
+    return div(classes: 'filters', [
+      // --- Keyword ---------------------------------------------------------
+      div(classes: 'field', [
+        span(classes: 'field__label', [Component.text('Keyword or location')]),
+        input(
+          attributes: {
+            'type': 'search',
+            'placeholder': 'e.g. Bangsar, cafe, Jalan Alor',
+            if (query.isNotEmpty) 'value': query,
+          },
+          events: events<String>(onInput: (v) => onQueryChanged?.call(v)),
         ),
       ]),
 
-      // --- Validation ----------------------------------------------------
-      if (validation != null)
-        div(classes: 'filter__error', [
-          Icon('error_outline', size: 'sm'),
-          Component.text(validation),
-        ]),
-
-      // --- A. Rental budget ----------------------------------------------
-      _group('Rental budget', [
-        div(classes: 'filter__range', [
-          _numberField(
-            fieldLabel: 'Min rent (RM)',
-            value: filter.minRentalRm,
-            onChanged: (v) => onChanged(
-              filter.copyWith(minRentalRm: v, clearMinRental: v == null),
-            ),
+      // --- A. Ranges: rent and floor area ----------------------------------
+      div(classes: 'frow', [
+        _numberField(
+          fieldLabel: 'Min rent (RM)',
+          value: filter.minRentalRm,
+          onChanged: (v) => onChanged(
+            filter.copyWith(minRentalRm: v, clearMinRental: v == null),
           ),
-          _numberField(
-            fieldLabel: 'Max rent (RM)',
-            value: filter.maxRentalRm,
-            onChanged: (v) => onChanged(
-              filter.copyWith(maxRentalRm: v, clearMaxRental: v == null),
-            ),
+        ),
+        _numberField(
+          fieldLabel: 'Max rent (RM)',
+          value: filter.maxRentalRm,
+          onChanged: (v) => onChanged(
+            filter.copyWith(maxRentalRm: v, clearMaxRental: v == null),
           ),
-        ]),
+        ),
+        _numberField(
+          fieldLabel: 'Min area (sq ft)',
+          value: filter.minSizeSqft,
+          onChanged: (v) => onChanged(
+            filter.copyWith(minSizeSqft: v, clearMinSize: v == null),
+          ),
+        ),
+        _numberField(
+          fieldLabel: 'Max area (sq ft)',
+          value: filter.maxSizeSqft,
+          onChanged: (v) => onChanged(
+            filter.copyWith(maxSizeSqft: v, clearMaxSize: v == null),
+          ),
+        ),
       ]),
 
-      // --- B. Property details -------------------------------------------
-      _group('Property details', [
-        div(classes: 'filter__range', [
-          _numberField(
-            fieldLabel: 'Min area (sq ft)',
-            value: filter.minSizeSqft,
-            onChanged: (v) => onChanged(
-              filter.copyWith(minSizeSqft: v, clearMinSize: v == null),
-            ),
-          ),
-          _numberField(
-            fieldLabel: 'Max area (sq ft)',
-            value: filter.maxSizeSqft,
-            onChanged: (v) => onChanged(
-              filter.copyWith(maxSizeSqft: v, clearMaxSize: v == null),
-            ),
-          ),
-        ]),
+      // --- B. Type, location, verification, actions ------------------------
+      div(classes: 'frow', [
         _select(
           fieldLabel: 'Property type',
           value: filter.propertyType,
           options: types,
           onChanged: (v) => onChanged(filter.copyWith(propertyType: v)),
         ),
-      ]),
-
-      // --- C. Location ----------------------------------------------------
-      _group('Location', [
         _select(
           fieldLabel: 'State',
           value: filter.state,
@@ -130,33 +130,36 @@ class FilterPanel extends StatelessComponent {
           options: cities,
           onChanged: (v) => onChanged(filter.copyWith(city: v)),
         ),
-      ]),
 
-      // --- D. Verification ------------------------------------------------
-      // Kept conceptually separate from suitability: verification is a fact
-      // about the listing, suitability is a model estimate. They are not the
-      // same kind of claim and must not be presented as one.
-      _group('Verification', [
-        label(classes: 'filter__check', [
-          input(
-            attributes: {
-              'type': 'checkbox',
-              if (filter.verifiedOnly) 'checked': '',
-            },
-            events: events(
-              onChange: (_) => onChanged(
-                filter.copyWith(verifiedOnly: !filter.verifiedOnly),
+        // Verification is a fact about the listing, suitability is a model
+        // estimate. They are not the same kind of claim and are never merged.
+        div(classes: 'field', [
+          span(classes: 'field__label', [Component.text('Verification')]),
+          label(classes: 'checkpill', [
+            input(
+              attributes: {
+                'type': 'checkbox',
+                if (filter.verifiedOnly) 'checked': '',
+              },
+              events: events(
+                onChange: (_) => onChanged(
+                  filter.copyWith(verifiedOnly: !filter.verifiedOnly),
+                ),
               ),
             ),
-          ),
-          span([Component.text('Verified properties only')]),
+            span([Component.text('Verified only')]),
+          ]),
         ]),
       ]),
 
-      // --- Applied filters ------------------------------------------------
+      // --- Validation ------------------------------------------------------
+      if (validation != null) p(classes: 'err', [Component.text(validation)]),
+
+      // --- Applied filters -------------------------------------------------
       if (chips.isNotEmpty)
-        _group('Applied filters', [
-          div(classes: 'filter__chips', [
+        div(classes: 'field', [
+          span(classes: 'field__label', [Component.text('Applied filters')]),
+          div(classes: 'chips', [
             for (final chip in chips)
               button(
                 classes: 'chip',
@@ -169,37 +172,32 @@ class FilterPanel extends StatelessComponent {
           ]),
         ]),
 
-      // --- Result count ---------------------------------------------------
-      // Comes from the actual filtered list, never a hardcoded figure.
-      p(
-        classes: validation != null
-            ? 'filter__count filter__count--error'
-            : 'filter__count',
-        [
+      // --- Actions ---------------------------------------------------------
+      div(classes: 'actions-row', [
+        button(
+          classes: 'btn btn--primary',
+          attributes: {'type': 'button'},
+          events: events(onClick: onReset),
+          [Component.text('Clear all')],
+        ),
+        span(classes: 'filters__count', [
           Component.text(
             validation != null
                 ? 'Fix the range above to see results.'
                 : '${results.length} of ${source.length} properties',
           ),
-        ],
-      ),
+        ]),
+      ]),
     ]);
   }
-
-  Component _group(String title, List<Component> children) =>
-      div(classes: 'filter__group', [
-        span(classes: 'filter__label', [Component.text(title)]),
-        ...children,
-      ]);
 
   Component _numberField({
     required String fieldLabel,
     required double? value,
     required void Function(double?) onChanged,
-  }) => label(classes: 'filter__field', [
-    span(classes: 'filter__field-label', [Component.text(fieldLabel)]),
+  }) => div(classes: 'field', [
+    span(classes: 'field__label', [Component.text(fieldLabel)]),
     input(
-      classes: 'input',
       attributes: {
         'type': 'number',
         'min': '0',
@@ -221,19 +219,15 @@ class FilterPanel extends StatelessComponent {
     required String value,
     required List<String> options,
     required void Function(String) onChanged,
-  }) => label(classes: 'filter__field', [
-    span(classes: 'filter__field-label', [Component.text(fieldLabel)]),
-    select(
-      classes: 'filter__select',
-      events: events<String>(onInput: (raw) => onChanged(raw)),
-      [
-        for (final opt in options)
-          option(
-            value: opt,
-            attributes: {if (opt == value) 'selected': ''},
-            [Component.text(opt)],
-          ),
-      ],
-    ),
+  }) => div(classes: 'field', [
+    span(classes: 'field__label', [Component.text(fieldLabel)]),
+    select(events: events<String>(onInput: (raw) => onChanged(raw)), [
+      for (final opt in options)
+        option(
+          value: opt,
+          attributes: {if (opt == value) 'selected': ''},
+          [Component.text(opt)],
+        ),
+    ]),
   ]);
 }

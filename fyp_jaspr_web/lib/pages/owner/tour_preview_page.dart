@@ -103,6 +103,7 @@ class _TourPreviewPageState extends State<TourPreviewPage> {
       role: AppRole.owner,
       currentRoute: '/owner/tour-preview',
       title: 'Tour preview',
+      eyebrow: '360° tour',
       subtitle:
           'Preview the 360° tour captured for this listing and manage its scenes.',
       child: _deleted

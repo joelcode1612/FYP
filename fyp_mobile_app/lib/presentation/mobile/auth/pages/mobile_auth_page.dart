@@ -136,7 +136,7 @@ class _MobileAuthPageState extends State<MobileAuthPage> {
                     Text(
                       isLogin ? 'Welcome Back' : 'Create your account',
                       style: const TextStyle(
-                        fontFamily: 'Sora',
+                        fontFamily: kFontFamily,
                         fontSize: 28,
                         fontWeight: FontWeight.w800,
                         color: SitewiseColors.ink,

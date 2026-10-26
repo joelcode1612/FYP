@@ -360,7 +360,7 @@ class _OwnerDashboardMobilePageState extends State<OwnerDashboardMobilePage> {
                 child: Text(
                   'Filter by status',
                   style: TextStyle(
-                    fontFamily: 'Sora',
+                    fontFamily: kFontFamily,
                     fontSize: 16,
                     fontWeight: FontWeight.w700,
                   ),

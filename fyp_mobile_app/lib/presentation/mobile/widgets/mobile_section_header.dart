@@ -31,7 +31,7 @@ class MobileSectionHeader extends StatelessWidget {
               Text(
                 title,
                 style: const TextStyle(
-                  fontFamily: 'Sora',
+                  fontFamily: kFontFamily,
                   fontSize: 17,
                   fontWeight: FontWeight.w700,
                   color: SitewiseColors.ink,

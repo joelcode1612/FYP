@@ -43,8 +43,46 @@ void main() {
           tag: 'link',
           attributes: {'rel': 'stylesheet', 'href': 'styles.css'},
         ),
-        // Fonts: Sora (display) + IBM Plex Sans (body), matching the Flutter
-        // theme's font families.
+        Component.element(
+          tag: 'link',
+          attributes: {
+            'rel': 'icon',
+            'type': 'image/png',
+            'href': 'assets/sitewise-icon-32.png',
+          },
+        ),
+        Component.element(
+          tag: 'link',
+          attributes: {
+            'rel': 'apple-touch-icon',
+            'href': 'assets/sitewise-icon-180.png',
+          },
+        ),
+        // Three.js (vendored locally) + the hero scene script. three.min.js
+        // loads blocking so `window.THREE` exists when the deferred scene
+        // script runs; the scene mounts into #concept3dScene (landing_page)
+        // and degrades to the .model-fallback composition when WebGL is
+        // unavailable.
+        Component.element(
+          tag: 'script',
+          attributes: {'src': 'vendor/three.min.js'},
+        ),
+        Component.element(
+          tag: 'script',
+          attributes: {'src': 'three_scene.js', 'defer': ''},
+        ),
+        // Letter-reveal trigger. The per-character spans are rendered by the
+        // component tree (`_letterSpans` in landing_page.dart); this script
+        // only toggles `.is-armed` / `.is-visible` on the section headings when
+        // they scroll into view, so hydration is never restructured.
+        Component.element(
+          tag: 'script',
+          attributes: {'src': 'reveal.js', 'defer': ''},
+        ),
+        // Fonts: Archivo, bundled locally in web/fonts/ and declared with
+        // @font-face in styles.css. The previous system linked Sora and IBM Plex
+        // Sans from Google Fonts, but neither was referenced by any CSS rule, so
+        // those were two wasted requests that pulled nothing the app used.
         Component.element(
           tag: 'link',
           attributes: {
@@ -58,14 +96,6 @@ void main() {
             'rel': 'preconnect',
             'href': 'https://fonts.gstatic.com',
             'crossorigin': '',
-          },
-        ),
-        Component.element(
-          tag: 'link',
-          attributes: {
-            'rel': 'stylesheet',
-            'href':
-                'https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=Sora:wght@600;700;800&display=swap',
           },
         ),
         // Material Symbols: the web counterpart to Flutter's `Icons.*`. The

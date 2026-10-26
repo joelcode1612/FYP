@@ -91,6 +91,30 @@ flutter:
 
   uses-material-design: true
 
+  # The new UI design specifies a single family — Archivo — across all six
+  # weights (400–900), differentiating headings by weight rather than family.
+  # The family name must match `kFontFamily` in
+  # `lib/core/theme/sitewise_theme.dart`.
+  #
+  # The previous system referenced 'Sora' and 'IBM Plex Sans' without bundling
+  # them, so every Text silently fell back to Roboto. Bundling Archivo here is
+  # what makes the new typography actually take effect.
+  fonts:
+    - family: Archivo
+      fonts:
+        - asset: assets/fonts/Archivo-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/Archivo-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/Archivo-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/Archivo-Bold.ttf
+          weight: 700
+        - asset: assets/fonts/Archivo-ExtraBold.ttf
+          weight: 800
+        - asset: assets/fonts/Archivo-Black.ttf
+          weight: 900
+
   # To add assets to your application, add an assets section, like this:
   # assets:
   #   - images/a_dot_burr.jpeg

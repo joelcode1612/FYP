@@ -76,7 +76,7 @@ class MobileFeaturedBanner extends StatelessWidget {
                       Text(
                         headline,
                         style: const TextStyle(
-                          fontFamily: 'Sora',
+                          fontFamily: kFontFamily,
                           fontSize: 18,
                           height: 1.2,
                           fontWeight: FontWeight.w800,

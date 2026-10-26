@@ -19,6 +19,7 @@ import 'package:jaspr/jaspr.dart';
 import 'package:shared_logic/shared_logic.dart';
 
 import '../data/icon_variants.dart';
+import 'letter_reveal.dart';
 
 /// A Material Symbols glyph.
 ///
@@ -75,19 +76,75 @@ class Icon extends StatelessComponent {
 }
 
 /// The Sitewise wordmark. An anchor so it is crawlable and keyboard-reachable.
+///
+/// Structure follows the source lockup (`theme.css` `.brand` + `pill-nav.css`
+/// `.pillnav .brand`): a dark gradient tile carrying the map-pin glyph, the
+/// wordmark at weight 900, and an optional uppercase role line beneath it.
+/// The previous version was a blue gradient square with the letter "S" and no
+/// role line, which read as a different logo.
 class Brand extends StatelessComponent {
-  const Brand({super.key});
+  /// Role line under the wordmark, e.g. "Entrepreneur workspace".
+  ///
+  /// Null on the marketing pages, where the source lockup has no role line.
+  final String? subtitle;
+
+  const Brand({super.key, this.subtitle});
 
   @override
   Component build(BuildContext context) {
     return a(href: '/', classes: 'brand', [
-      span(classes: 'brand__mark', [Component.text('S')]),
-      span(classes: 'brand__name', [Component.text('Sitewise')]),
+      span(classes: 'brand__mark', [
+        Component.element(
+          tag: 'img',
+          classes: 'brand__mark-img',
+          attributes: {
+            'src': 'assets/sitewise-mark-64.png',
+            'alt': 'Sitewise',
+            'width': '24',
+            'height': '24',
+          },
+          children: [],
+        ),
+      ]),
+      span(classes: 'brand__text', [
+        span(classes: 'brand__name', [Component.text('Sitewise')]),
+        if (subtitle != null)
+          span(classes: 'brand__sub', [Component.text(subtitle!)]),
+      ]),
     ]);
   }
 }
 
 /// Small rounded status label.
+/// Maps this component's tone names onto the source design's pill classes.
+///
+/// The source distinguishes two pills by the leading dot: `.st-*`
+/// (`owner.css`) carries one via `::before`, `.badge-*` (`app.css`) does not.
+/// Both use the same tone suffixes, so one map serves both.
+String pillToneClass(String tone) => switch (tone) {
+  'neutral' => 'muted',
+  'action' => 'info',
+  'success' => 'det',
+  'warning' => 'warn',
+  'danger' => 'danger',
+  _ => 'muted',
+};
+
+/// Verification → pill tone. Lives beside [StatusBadge] because every page that
+/// renders a verification pill needs the same mapping; `property_card.dart`
+/// re-exports it for its own callers.
+String toneForVerification(VerificationStatus status) => switch (status) {
+  VerificationStatus.draft => 'neutral',
+  VerificationStatus.pending => 'warning',
+  VerificationStatus.verified => 'success',
+  VerificationStatus.rejected => 'danger',
+};
+
+/// Status pill — the source design's `.st`.
+///
+/// Previously emitted `pill pill--<tone>`, this file's own vocabulary, which had
+/// no counterpart in the source design. The leading dot comes from `.st::before`
+/// in the stylesheet rather than a child element, matching the source.
 class Pill extends StatelessComponent {
   final String label;
 
@@ -98,7 +155,9 @@ class Pill extends StatelessComponent {
 
   @override
   Component build(BuildContext context) {
-    return span(classes: 'pill pill--$tone', [Component.text(label)]);
+    return span(classes: 'st st-${pillToneClass(tone)}', [
+      Component.text(label),
+    ]);
   }
 }
 
@@ -201,13 +260,22 @@ class ActionButton extends StatelessComponent {
   }
 }
 
-/// A single metric tile.
+/// A single metric tile — the source's `.metric-card` (`.k` / `.v` / `.n`).
 class StatCard extends StatelessComponent {
   final String label;
   final String value;
   final String? icon;
 
-  /// Optional colour class, e.g. `text-success`.
+  /// Optional third line under the value (`.n` in the source), e.g.
+  /// "No run yet" or "Synced to your account".
+  final String? note;
+
+  /// Optional colour class applied to the value, e.g. `text-success`.
+  ///
+  /// No caller currently passes one; the parameter is kept so the public API is
+  /// unchanged. The value would otherwise be `var(--ink)` from
+  /// `.metric-card .v`, which has higher specificity than a bare `text-*` class,
+  /// so the tone is applied through `.metric-card .v.text-*` in the stylesheet.
   final String? toneClass;
 
   const StatCard({
@@ -215,45 +283,51 @@ class StatCard extends StatelessComponent {
     required this.label,
     required this.value,
     this.icon,
+    this.note,
     this.toneClass,
   });
 
   @override
   Component build(BuildContext context) {
-    return div(classes: 'stat', [
-      div(classes: 'row', [
-        if (icon != null) ...[
-          Icon(icon!, size: 'sm'),
-          span(classes: 'grow', []),
-        ],
-      ]),
-      span(classes: 'overline', [Component.text(label)]),
-      div(classes: 'metric ${toneClass ?? 'text-ink'}', [
-        Component.text(value),
-      ]),
+    // Restyled to the new design's `.metric-card`: `.k` label, `.v` value and
+    // the optional `.n` note. Previously `.stat` (icon row + `.overline` +
+    // `.metric`). The public API is unchanged.
+    return div(classes: 'metric-card', [
+      span(classes: 'k', [Component.text(label)]),
+      span(classes: 'v ${toneClass ?? ''}', [Component.text(value)]),
+      if (note != null) span(classes: 'n', [Component.text(note!)]),
     ]);
   }
 }
 
-/// One numbered workflow step.
+/// One numbered workflow step — the source's `.step`.
+///
+/// Structure: `.stepno` (the number), `.step-icon` (the glyph tile), `h3`, `p`.
+/// The previous version emitted `.step__num`, a BEM name the source does not
+/// use, and had no icon tile at all.
 class StepCard extends StatelessComponent {
   final String num;
   final String title;
   final String body;
+
+  /// Material Symbols name for the tile above the title.
+  final String? icon;
 
   const StepCard({
     super.key,
     required this.num,
     required this.title,
     required this.body,
+    this.icon,
   });
 
   @override
   Component build(BuildContext context) {
     return div(classes: 'step', [
-      span(classes: 'step__num', [Component.text(num)]),
-      h3(classes: 'title', [Component.text(title)]),
-      p(classes: 'body', [Component.text(body)]),
+      span(classes: 'stepno', [Component.text(num)]),
+      if (icon != null) span(classes: 'step-icon', [Icon(icon!)]),
+      h3([Component.text(title)]),
+      p([Component.text(body)]),
     ]);
   }
 }
@@ -335,6 +409,13 @@ class PageHead extends StatelessComponent {
   /// One-line explanation of what the page is for.
   final String? description;
 
+  /// Status pills shown under the description.
+  ///
+  /// The source's property detail header carries the verification and
+  /// availability badges in exactly this position; without a slot for them a
+  /// page has to abandon `PageHead` and hand-roll the whole header.
+  final List<Component> badges;
+
   /// Page-level actions, e.g. a primary "Add property" button.
   final List<Component> actions;
 
@@ -343,6 +424,7 @@ class PageHead extends StatelessComponent {
     this.eyebrow,
     required this.title,
     this.description,
+    this.badges = const [],
     this.actions = const [],
   });
 
@@ -351,9 +433,12 @@ class PageHead extends StatelessComponent {
     return header(classes: 'page-head', [
       div(classes: 'page-head__main', [
         if (eyebrow != null) Eyebrow(eyebrow!),
-        h1(classes: 'page-head__title', [Component.text(title)]),
+        // Page titles are above the fold on every role, so they use the
+        // on-mount variant: pure CSS, no observer, no flash of static text.
+        LetterRevealHeading.text(title, level: 1, classes: 'page-head__title'),
         if (description != null)
           p(classes: 'page-head__desc', [Component.text(description!)]),
+        if (badges.isNotEmpty) div(classes: 'badges', badges),
       ]),
       if (actions.isNotEmpty) div(classes: 'page-head__actions', actions),
     ]);
@@ -383,27 +468,29 @@ class SectionCard extends StatelessComponent {
 
   @override
   Component build(BuildContext context) {
-    return section(classes: 'section-card', [
-      div(classes: 'section-card__head', [
-        span(classes: 'section-card__title', [Component.text(title)]),
+    // Source vocabulary: `.panel` frame + `.panel__head` / `.panel__title` /
+    // `.panel__body`. The flush variant adds `panel--flush`, which is the only
+    // case where the source's paddingless frame needs a header rule.
+    return section(classes: flush ? 'panel panel--flush' : 'panel', [
+      div(classes: 'panel__head', [
+        span(classes: 'panel__title', [Component.text(title)]),
         if (action != null) div(classes: 'row row--sm', action!),
       ]),
-      div(
-        classes: flush
-            ? 'section-card__body section-card__body--flush'
-            : 'section-card__body',
-        [child],
-      ),
+      div(classes: flush ? 'panel__body panel__body--flush' : 'panel__body', [
+        child,
+      ]),
     ]);
   }
 }
 
-/// Placeholder shown when a list has no results. Replaces the ad-hoc
-/// `h2.title-lg + p.body` pattern that was duplicated across pages.
+/// Placeholder shown when a list has no results.
+///
+/// The source's `ui.emptyState()` renders exactly three things — an `h3`, a
+/// `p` and an optional action — inside a dashed-border box. The previous
+/// version added a circular icon badge above the title, which the source does
+/// not have, so the state read as a different component. The `icon` parameter
+/// is gone rather than silently ignored.
 class EmptyState extends StatelessComponent {
-  /// Material Symbols name shown in the leading circle.
-  final String icon;
-
   final String title;
 
   /// Explains why it is empty and, ideally, what to do about it.
@@ -414,7 +501,6 @@ class EmptyState extends StatelessComponent {
 
   const EmptyState({
     super.key,
-    required this.icon,
     required this.title,
     required this.body,
     this.action,
@@ -423,7 +509,6 @@ class EmptyState extends StatelessComponent {
   @override
   Component build(BuildContext context) {
     return div(classes: 'empty', [
-      span(classes: 'empty__icon', [Icon(icon)]),
       span(classes: 'empty__title', [Component.text(title)]),
       p(classes: 'empty__body', [Component.text(body)]),
       if (action != null) div(classes: 'empty__action', [action!]),
@@ -497,7 +582,7 @@ class StatusBadge extends StatelessComponent {
   /// `_statusLabel` / `_statusTone`, which were themselves written to match the
   /// Flutter tours page exactly — so changing them here would fork the two
   /// platforms' vocabulary.
-  factory StatusBadge.forTour(VirtualTourStatus status) {
+  factory StatusBadge.forTour(VirtualTourStatus status, {bool dot = false}) {
     final (label, tone) = switch (status) {
       VirtualTourStatus.draft => ('Draft', 'action'),
       VirtualTourStatus.processing => ('Processing…', 'warning'),
@@ -509,7 +594,7 @@ class StatusBadge extends StatelessComponent {
       VirtualTourStatus.approved => ('Approved', 'success'),
       VirtualTourStatus.rejected => ('Rejected', 'danger'),
     };
-    return StatusBadge(label, tone: tone);
+    return StatusBadge(label, tone: tone, dot: dot);
   }
 
   /// The label [StatusBadge.forTour] would render, for pages that also need the
@@ -550,10 +635,12 @@ class StatusBadge extends StatelessComponent {
 
   @override
   Component build(BuildContext context) {
-    final classes = dot ? 'pill pill--$tone row row--xs' : 'pill pill--$tone';
-    return span(classes: classes, [
-      if (dot) span(classes: 'dot dot--$tone', []),
-      span([Component.text(label)]),
+    // The source's two pills differ only by the leading dot: `.st-*` has one
+    // (via `::before`), `.badge-*` does not. So `dot` selects the family rather
+    // than adding a child element — which also removes the old `.dot--*` span.
+    final family = dot ? 'st st-' : 'badge badge-';
+    return span(classes: '$family${pillToneClass(tone)}', [
+      Component.text(label),
     ]);
   }
 }
@@ -599,14 +686,17 @@ class Field extends StatelessComponent {
   }
 }
 
-/// Search input with a leading icon. Labelled by [ariaLabel] so it is not an
-/// unlabelled control (audit W-10).
+/// Search input with a leading icon.
+///
+/// The visible label is [label] when given, otherwise [ariaLabel] — the source
+/// always renders a `<label>` above the control, so there is no unlabelled
+/// state (audit W-10).
 class SearchInput extends StatelessComponent {
   final String placeholder;
   final String ariaLabel;
   final void Function(String) onInput;
 
-  /// Rendered above the input in the `.search` wrapper.
+  /// Visible label above the input. Falls back to [ariaLabel].
   final String? label;
 
   const SearchInput({
@@ -619,18 +709,20 @@ class SearchInput extends StatelessComponent {
 
   @override
   Component build(BuildContext context) {
-    final field = div(classes: 'search', [
-      span(classes: 'search__icon', [Icon('search', size: 'sm')]),
-      input(
-        type: InputType.search,
-        classes: 'input',
-        attributes: {'placeholder': placeholder, 'aria-label': ariaLabel},
-        events: events<String>(onInput: onInput),
-      ),
+    // Source vocabulary: `.field` with a label and the control, plus a
+    // leading-icon row for the search affordance. Previously a
+    // `.search` / `.search__icon` / `.input` wrapper of this file's own.
+    return div(classes: 'field', [
+      span(classes: 'field__label', [Component.text(label ?? ariaLabel)]),
+      div(classes: 'field__control', [
+        span(classes: 'field__icon', [Icon('search', size: 'sm')]),
+        input(
+          type: InputType.search,
+          attributes: {'placeholder': placeholder, 'aria-label': ariaLabel},
+          events: events<String>(onInput: onInput),
+        ),
+      ]),
     ]);
-
-    if (label == null) return field;
-    return Field(labelText: label!, child: field);
   }
 }
 

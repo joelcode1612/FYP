@@ -4,17 +4,21 @@ import 'package:jaspr/dom.dart';
 import 'package:jaspr/jaspr.dart';
 import 'package:shared_logic/shared_logic.dart';
 
+import '../../components/admin_review_split.dart';
 import '../../components/bloc.dart';
 import '../../components/ui.dart';
 import '../../data/app_locator.dart';
 import '../../layouts/app_layout.dart';
 
-/// Web verification queue: property table with review links plus the
-/// tours-awaiting-verification list with approve/reject actions.
+/// Web verification queue, ported to the source `admin/review.html` split
+/// layout: a status-tabbed `.queue` of listings on the left and a detail
+/// `.panel` (evidence, photos, verification evidence, decision bar) on the
+/// right, both inside a `.split`.
 ///
-/// Ported from `admin_verification_web_page.dart`. Same two loads as Flutter
-/// (`loadDashboard` + `loadPendingTours`); tour actions call the same cubit
-/// methods and report through an inline success card instead of a SnackBar.
+/// The source `review.html` is purely property verification — no tours. The
+/// "Tours awaiting verification" block below is a *target-only* addition (the
+/// source `tours.html` has no web route); it is kept so the capability is not
+/// lost, but it is not part of the source review design.
 class VerificationPage extends StatefulComponent {
   const VerificationPage({super.key});
 
@@ -58,120 +62,59 @@ class _VerificationPageState extends State<VerificationPage> {
         return AppLayout(
           role: AppRole.admin,
           currentRoute: '/admin/verification',
-          title: 'Verification queue',
+          title: 'Property verification',
+          eyebrow: 'Verification',
           subtitle:
-              'Submissions waiting on a decision. Each one shows what was submitted and by whom.',
-          child: div(classes: 'stack', [
-            div(classes: 'stack', [
-              h2(classes: 'title', [Component.text('Awaiting review')]),
-              p(classes: 'small muted', [
-                Component.text(
-                  'Manage → review → verify to keep listing quality.',
-                ),
-              ]),
-            ]),
-            vm.loading
-                ? div(classes: 'card', [
-                    p(classes: 'body muted', [Component.text('Loading…')]),
-                  ])
-                : vm.queue.isEmpty
-                ? div(classes: 'card stack', [
-                    span(classes: 'title', [Component.text('Queue is clear')]),
-                    p(classes: 'body', [
-                      Component.text(
-                        'No properties are waiting for verification right now.',
-                      ),
-                    ]),
-                  ])
-                : div(classes: 'card', [
-                    div(classes: 'table-scroll', [
-                      table(classes: 'table', [
-                        thead([
-                          tr([
-                            th([Component.text('Property')]),
-                            th([Component.text('City')]),
-                            th([Component.text('Rental')]),
-                            th([Component.text('Size')]),
-                            th([Component.text('Action')]),
-                          ]),
-                        ]),
-                        tbody([
-                          for (final p in vm.queue)
-                            tr([
-                              td([Component.text(p.title)]),
-                              td([Component.text(p.city)]),
-                              td([
-                                Component.text(
-                                  'RM${p.rentalRm.toStringAsFixed(0)}',
-                                ),
-                              ]),
-                              td([
-                                Component.text(
-                                  '${p.sizeSqft.toStringAsFixed(0)} sq ft',
-                                ),
-                              ]),
-                              td([
-                                ActionLink(
-                                  'Review',
-                                  href: '/admin/verification-detail?id=${p.id}',
-                                  variant: 'ghost',
-                                ),
-                              ]),
-                            ]),
-                        ]),
-                      ]),
+              'Review the submitted record against the evidence the owner '
+              'provided. Approval verifies the listing details — it does not '
+              'grant permission to operate a food business.',
+          child: div(classes: 'stack stack--sections', [
+            ReviewSplit(vm: vm, mode: ReviewMode.verification),
+
+            // --- Target-only: tours awaiting verification (no source route) ---
+            SectionCard(
+              title: 'Tours awaiting verification',
+              child: div(classes: 'stack', [
+                p(classes: 'small muted', [
+                  Component.text(
+                    'Approve completed 360° tours so entrepreneurs can view '
+                    'them. This workflow is not part of the source review '
+                    'design.',
+                  ),
+                ]),
+                if (_tourSuccess != null)
+                  div(classes: 'card stack', [
+                    span(classes: 'small text-success', [
+                      Component.text(_tourSuccess!),
                     ]),
                   ]),
-            div(classes: 'stack', [
-              h2(classes: 'title', [
-                Component.text('Tours awaiting verification'),
-              ]),
-              p(classes: 'small muted', [
-                Component.text(
-                  'Approve completed 360° tours for entrepreneurs.',
-                ),
-              ]),
-            ]),
-            if (_tourSuccess != null)
-              div(classes: 'card stack', [
-                span(classes: 'small text-success', [
-                  Component.text(_tourSuccess!),
-                ]),
-                const ActionLink(
-                  'Back to verification queue',
-                  href: '/admin/verification',
-                  variant: 'secondary',
-                ),
-              ]),
-            if (vm.pendingTours.isEmpty)
-              div(classes: 'card', [
-                p(classes: 'body', [
-                  Component.text('No tours are waiting for verification.'),
-                ]),
-              ])
-            else
-              div(classes: 'card', [
-                div(classes: 'stack', [
-                  for (final t in vm.pendingTours)
-                    div(classes: 'row', [
-                      div(classes: 'grow stack', [
-                        span(classes: 'body', [Component.text(t.title)]),
-                        span(classes: 'small muted', [
-                          Component.text('${t.frameCount} frames'),
+                if (vm.pendingTours.isEmpty)
+                  p(classes: 'body', [
+                    Component.text('No tours are waiting for verification.'),
+                  ])
+                else
+                  div(classes: 'stack', [
+                    for (final t in vm.pendingTours)
+                      div(classes: 'row', [
+                        div(classes: 'grow stack', [
+                          span(classes: 'body', [Component.text(t.title)]),
+                          span(classes: 'small muted', [
+                            Component.text('${t.frameCount} frames'),
+                          ]),
                         ]),
+                        ActionButton(
+                          'Reject',
+                          variant: 'secondary',
+                          onClick: () => unawaited(_rejectTour(t.id)),
+                        ),
+                        ActionButton(
+                          'Approve',
+                          onClick: () => unawaited(_approveTour(t.id)),
+                        ),
                       ]),
-                      ActionButton(
-                        'Reject',
-                        variant: 'secondary',
-                        onClick: () => unawaited(_rejectTour(t.id)),
-                      ),
-                      ActionButton(
-                        'Approve',
-                        onClick: () => unawaited(_approveTour(t.id)),
-                      ),
-                    ]),
-                ]),
+                  ]),
               ]),
+            ),
           ]),
         );
       },
