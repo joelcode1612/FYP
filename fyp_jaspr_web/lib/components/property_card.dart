@@ -68,20 +68,32 @@ class PropertyCard extends StatelessComponent {
 
       // Media. `aria-hidden` because the title link below is the real target -
       // this is a decorative duplicate of the same destination.
-      a(
-        href: href,
+      AppLink(
+        to: href,
         classes: 'pcard-media',
         attributes: {'tabindex': '-1', 'aria-hidden': 'true'},
-        [
-          span(classes: 'cover', [
-            Icon('storefront', size: 'lg', label: property.title),
-          ]),
+        children: [
+          if (property.imageUrl != null)
+            Component.element(
+              tag: 'img',
+              attributes: {
+                'src': property.imageUrl!,
+                'alt': property.title,
+                'loading': 'lazy',
+                'referrerpolicy': 'no-referrer',
+                'style': 'width:100%;height:100%;object-fit:cover',
+              },
+            )
+          else
+            span(classes: 'cover', [
+              Icon('storefront', size: 'lg', label: property.title),
+            ]),
         ],
       ),
 
       div(classes: 'body', [
         h3([
-          a(href: href, [Component.text(property.title)]),
+          AppLink(to: href, children: [Component.text(property.title)]),
         ]),
         p(classes: 'addr', [
           Component.text('${property.address}, ${property.city}'),
@@ -111,9 +123,11 @@ class PropertyCard extends StatelessComponent {
           // The source card leads with the primary navigation action
           // (`<a class="btn sm primary">View details</a>`); the target card had
           // no primary action at all, only the two toggles.
-          a(href: href, classes: 'btn sm btn--primary', [
-            Component.text('View details'),
-          ]),
+          AppLink(
+            to: href,
+            classes: 'btn sm btn--primary',
+            children: [Component.text('View details')],
+          ),
           if (onToggleSaved != null)
             button(
               classes: saved ? 'btn sm icon-btn is-saved' : 'btn sm icon-btn',
@@ -136,9 +150,11 @@ class PropertyCard extends StatelessComponent {
               [Component.text(compared ? 'In compare' : 'Compare')],
             ),
           if (property.hasTour)
-            a(href: '$href&tour=1', classes: 'btn sm', [
-              Component.text('360°'),
-            ]),
+            AppLink(
+              to: '$href&tour=1',
+              classes: 'btn sm',
+              children: [Component.text('360°')],
+            ),
         ]),
       ]),
     ]);

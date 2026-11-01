@@ -3,6 +3,7 @@ import 'package:jaspr/jaspr.dart';
 import 'package:shared_logic/shared_logic.dart';
 
 import '../data/app_locator.dart';
+import '../data/auth_service.dart';
 import 'ui.dart';
 
 /// Header controls ported from the Flutter web tree's
@@ -170,10 +171,10 @@ class _SearchResults extends StatelessComponent {
         return ul(classes: 'result-list', [
           for (final property in items)
             li([
-              a(
-                href: '$detail?id=${property.id}',
+              AppLink(
+                to: '$detail?id=${property.id}',
                 classes: 'result-list__item',
-                [
+                children: [
                   div(classes: 'grow', [
                     div(classes: 'result-list__title', [
                       Component.text(property.title),
@@ -329,10 +330,10 @@ class _NotificationList extends StatelessComponent {
         return ul(classes: 'result-list', [
           for (final item in snapshot.data!)
             li([
-              a(
-                href: '${item.route}?id=${item.id}',
+              AppLink(
+                to: '${item.route}?id=${item.id}',
                 classes: 'result-list__item',
-                [
+                children: [
                   div(classes: 'grow', [
                     div(classes: 'result-list__title', [
                       Component.text(item.title),
@@ -366,7 +367,13 @@ class AvatarMenuState extends State<AvatarMenu> {
 
   @override
   Component build(BuildContext context) {
-    final profile = profileFor(component.role);
+    final account = WebAuth.profile;
+    final profile = account == null
+        ? profileFor(component.role)
+        : (
+            name: account['display_name'] as String,
+            email: account['email'] as String,
+          );
     return div(classes: 'avatar-menu', [
       button(
         classes: 'avatar-menu__trigger',
@@ -416,23 +423,34 @@ class AvatarMenuState extends State<AvatarMenu> {
                   ]),
                 ]),
                 div(classes: 'menu__divider', []),
-                a(
-                  href: profileRouteFor(component.role),
+                AppLink(
+                  to: profileRouteFor(component.role),
                   classes: 'menu__item',
-                  [Component.text('View profile')],
+                  children: [Component.text('View profile')],
                 ),
                 div(classes: 'menu__divider', []),
-                for (final role in AppRole.values)
-                  a(
-                    href: role.homeRoute,
+                for (final role in AppRole.values.where(
+                  (role) => role.name == account?['role'],
+                ))
+                  AppLink(
+                    to: role.homeRoute,
                     classes:
                         'menu__item${role == component.role ? ' menu__item--current' : ''}',
-                    [
+                    children: [
                       Component.text(
                         '${role.label}${role == component.role ? ' ✓' : ''}',
                       ),
                     ],
                   ),
+                button(
+                  classes: 'menu__item',
+                  events: events(
+                    onClick: () async {
+                      await WebAuth.signout();
+                    },
+                  ),
+                  [Component.text('Sign out')],
+                ),
               ],
             ),
           ],

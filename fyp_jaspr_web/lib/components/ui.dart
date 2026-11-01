@@ -16,6 +16,7 @@ library;
 
 import 'package:jaspr/dom.dart';
 import 'package:jaspr/jaspr.dart';
+import 'package:jaspr_router/jaspr_router.dart';
 import 'package:shared_logic/shared_logic.dart';
 
 import '../data/icon_variants.dart';
@@ -92,26 +93,30 @@ class Brand extends StatelessComponent {
 
   @override
   Component build(BuildContext context) {
-    return a(href: '/', classes: 'brand', [
-      span(classes: 'brand__mark', [
-        Component.element(
-          tag: 'img',
-          classes: 'brand__mark-img',
-          attributes: {
-            'src': 'assets/sitewise-mark-64.png',
-            'alt': 'Sitewise',
-            'width': '24',
-            'height': '24',
-          },
-          children: [],
-        ),
-      ]),
-      span(classes: 'brand__text', [
-        span(classes: 'brand__name', [Component.text('Sitewise')]),
-        if (subtitle != null)
-          span(classes: 'brand__sub', [Component.text(subtitle!)]),
-      ]),
-    ]);
+    return Link(
+      to: '/',
+      classes: 'brand',
+      children: [
+        span(classes: 'brand__mark', [
+          Component.element(
+            tag: 'img',
+            classes: 'brand__mark-img',
+            attributes: {
+              'src': 'assets/sitewise-mark-64.png',
+              'alt': 'Sitewise',
+              'width': '24',
+              'height': '24',
+            },
+            children: [],
+          ),
+        ]),
+        span(classes: 'brand__text', [
+          span(classes: 'brand__name', [Component.text('Sitewise')]),
+          if (subtitle != null)
+            span(classes: 'brand__sub', [Component.text(subtitle!)]),
+        ]),
+      ],
+    );
   }
 }
 
@@ -221,11 +226,46 @@ class ActionLink extends StatelessComponent {
   @override
   Component build(BuildContext context) {
     final classes = ['btn', 'btn--$variant', if (cta) 'btn--cta'].join(' ');
-    return a(href: href, classes: classes, [
-      if (icon != null) Icon(icon!, size: 'sm'),
-      Component.text(label),
-    ]);
+    return Link(
+      to: href,
+      classes: classes,
+      children: [
+        if (icon != null) Icon(icon!, size: 'sm'),
+        Component.text(label),
+      ],
+    );
   }
+}
+
+/// A crawlable anchor that upgrades to client-side navigation when hydrated.
+///
+/// Use this for Sitewise routes instead of a raw `a(href: ...)`. The installed
+/// [jaspr_router] [Link] keeps direct URLs working while preventing a full
+/// document navigation for ordinary in-app clicks.
+class AppLink extends StatelessComponent {
+  final String to;
+  final String? classes;
+  final Styles? styles;
+  final Map<String, String>? attributes;
+  final List<Component> children;
+
+  const AppLink({
+    required this.to,
+    required this.children,
+    this.classes,
+    this.styles,
+    this.attributes,
+    super.key,
+  });
+
+  @override
+  Component build(BuildContext context) => Link(
+    to: to,
+    classes: classes,
+    styles: styles,
+    attributes: attributes,
+    children: children,
+  );
 }
 
 /// A call to action that performs an action rather than navigating.

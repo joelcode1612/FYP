@@ -135,15 +135,21 @@ class _DashboardPageState extends State<DashboardPage> {
         ]),
       ]),
       div(classes: 'bh-actions', [
-        a(href: '/admin/verification', classes: 'bento-cta', [
-          Component.text('Review queue'),
-        ]),
-        a(href: '/admin/listings', classes: 'bento-period', [
-          Component.text('Manage listings'),
-        ]),
-        a(href: '/admin/users', classes: 'bento-period', [
-          Component.text('Manage users'),
-        ]),
+        AppLink(
+          to: '/admin/verification',
+          classes: 'bento-cta',
+          children: [Component.text('Review queue')],
+        ),
+        AppLink(
+          to: '/admin/listings',
+          classes: 'bento-period',
+          children: [Component.text('Manage listings')],
+        ),
+        AppLink(
+          to: '/admin/users',
+          classes: 'bento-period',
+          children: [Component.text('Manage users')],
+        ),
       ]),
     ]);
   }
@@ -238,9 +244,11 @@ class _DashboardPageState extends State<DashboardPage> {
           'verification status from the record store, not a forecast.',
         ),
       ]),
-      a(href: '/admin/verification', classes: 'bento-cta', [
-        Component.text('Open verification queue'),
-      ]),
+      AppLink(
+        to: '/admin/verification',
+        classes: 'bento-cta',
+        children: [Component.text('Open verification queue')],
+      ),
     ]);
   }
 
@@ -272,16 +280,20 @@ class _DashboardPageState extends State<DashboardPage> {
     String body,
     String href, {
     required int pending,
-  }) => a(classes: 'bento-card', href: href, [
-    div(classes: 'bento-card__head', [
-      h3([Component.text(title)]),
-      span(classes: 'card-note', [
-        Component.text(pending > 0 ? 'Action needed' : 'Queue clear'),
+  }) => AppLink(
+    to: href,
+    classes: 'bento-card',
+    children: [
+      div(classes: 'bento-card__head', [
+        h3([Component.text(title)]),
+        span(classes: 'card-note', [
+          Component.text(pending > 0 ? 'Action needed' : 'Queue clear'),
+        ]),
       ]),
-    ]),
-    p(classes: 'muted', [Component.text(body)]),
-    p(classes: 'queue-count', [Component.text('$count')]),
-  ]);
+      p(classes: 'muted', [Component.text(body)]),
+      p(classes: 'queue-count', [Component.text('$count')]),
+    ],
+  );
 }
 
 class _Loading extends StatelessComponent {

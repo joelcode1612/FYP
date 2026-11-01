@@ -6,6 +6,9 @@
   "private": true,
   "scripts": {
     "start": "node server.js",
+    "start:app": "node app-server.js",
+    "import:properties": "node scripts/import-properties.js",
+    "test:app": "node --test app-api.test.js",
     "check-db": "node scripts/check-db.js"
   },
   "dependencies": {

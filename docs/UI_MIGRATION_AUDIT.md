@@ -327,3 +327,31 @@ demo-build submit posture, and the same `/forgot` + `/signup` links.
   `aria-pressed`, bad-email vs valid email, disabled socials, both routes,
   checkbox default-on, 0px overflow at 1440/390, zero console errors).
   `tool/verify_pages.js` `/login` contract updated to the `lp-` vocabulary.
+
+## 9. Sign-up navbar swap (2026-10-28)
+
+The bespoke `.su-topbar` ("Already have an account? — Sign in") was removed and
+replaced with the site's real navigation bar.
+
+* The landing page's top bar was extracted verbatim into a shared
+  `lib/components/site_topbar.dart` (`SiteTopbar`): brand mark + wordmark +
+  tagline, the four section links, Sign in / Sign up actions, and the small-
+  screen menu. The landing page now renders `const SiteTopbar()` instead of its
+  inline `_topbar()`, so both pages share one implementation.
+* `SiteTopbar` takes a `linkPrefix`: landing keeps `''` so links scroll in
+  place (`#problem`); sign-up passes `'/'` so they navigate back to the landing
+  sections (`/#problem`) instead of dead-ending.
+* The nav's CSS lives in the landing page's global `.topbar` / `.nav` block and
+  depends on the `--lnd-*` tokens, so the sign-up page wraps the bar in
+  `div.lnd` to supply them.
+* Dead `.su-topbar*` / `.su-signin` / `.su-brand__name` rules (including two in
+  media queries and one focus-visible selector group) were deleted; `.su-body`
+  height changed from `calc(100vh - 73px)` to `calc(100vh - 75px)` for the
+  74px nav + 1px border.
+* The sign-up background is intentionally unchanged (its own
+  `assets/signup-city.jpg` hero).
+* Verified: `dart analyze lib` clean; build 32/32 routes;
+  `probe_signup.js` — Sign in → /login, brand present, old `.su-topbar` count 0,
+  form behaviour unchanged; nav height 74px, body 905px at 980px viewport,
+  0 horizontal overflow at 1440 and 390; landing page nav still uses in-page
+  anchors and `verify_pages.js` reports 0 problems across 62 routes.

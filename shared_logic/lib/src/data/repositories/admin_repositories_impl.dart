@@ -3,10 +3,10 @@ import '../../domain/entities/user.dart';
 import '../../domain/entities/virtual_tour.dart';
 import '../../domain/repositories/admin_repositories.dart';
 import '../datasources/local/demo_data.dart';
-import 'property_repository_impl.dart';
+import '../../domain/repositories/property_repository.dart';
 
 class VerificationRepositoryImpl implements VerificationRepository {
-  final PropertyRepositoryImpl properties;
+  final PropertyRepository properties;
   VerificationRepositoryImpl(this.properties);
 
   @override

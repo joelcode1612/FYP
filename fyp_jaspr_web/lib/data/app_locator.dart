@@ -1,22 +1,18 @@
 import 'package:shared_logic/shared_logic.dart';
+import 'api_property_repository.dart';
+import 'auth_service.dart';
 
 /// Web composition root — the Jaspr counterpart to the Flutter app's
 /// `ServiceLocator`.
 ///
-/// Same rule as the mobile locator: repositories and services are shared
-/// implementations from `shared_logic` (demo-data mode), instantiated fresh
-/// here so the web runtime owns its own object graph. Nothing Flutter-bound
-/// is reachable from this file.
-///
-/// Session-scoped state ([appCubit]) is a client-side singleton: the static
-/// build renders each route from fresh component trees, and the browser keeps
-/// this instance alive across client-side navigations, which is exactly when
-/// saved/compared selections need to persist.
+/// Properties come from the authenticated local API. User identity comes from
+/// Supabase; unsupported analysis throws an explicit unavailable-data error.
+/// Saved/compare selections and preferences remain local to this browser session.
 abstract final class AppLocator {
   // --- Repositories (shared, demo-data implementations) ---------------------
-  static final PropertyRepositoryImpl propertyRepo = PropertyRepositoryImpl();
-  static final RecommendationRepositoryImpl recommendationRepo =
-      RecommendationRepositoryImpl();
+  static final PropertyRepository propertyRepo = ApiPropertyRepository();
+  static final RecommendationRepository recommendationRepo =
+      DatasetRecommendationRepository(propertyRepo);
   static final VerificationRepositoryImpl verificationRepo =
       VerificationRepositoryImpl(propertyRepo);
   static final UserRepositoryImpl userRepo = UserRepositoryImpl();
@@ -30,8 +26,8 @@ abstract final class AppLocator {
 
   /// Explanation + location intelligence live on their own repository in
   /// `shared_logic`; the recommendation repository only serves rankings.
-  static final LocationIntelligenceRepositoryImpl intelligenceRepo =
-      LocationIntelligenceRepositoryImpl();
+  static final LocationIntelligenceRepository intelligenceRepo =
+      UnavailableIntelligenceRepository();
   static final LocationIntelligenceService intelligence =
       LocationIntelligenceService(intelligenceRepo);
 
@@ -45,7 +41,13 @@ abstract final class AppLocator {
 
   /// App-wide preferences (the mobile app's onboarding writes these too; the
   /// web app only reads/edits them in Preferences).
-  static BusinessPreferences preferences = DemoData.defaultPreferences;
+  static BusinessPreferences preferences = const BusinessPreferences(
+    businessType: '',
+    maxBudgetRm: 25000,
+    minSizeSqft: 0,
+    maxSizeSqft: 6000,
+    propertyType: 'Any',
+  );
 
   // --- Session state ---------------------------------------------------------
   /// Saved/compare selections and role. Client-side singleton.
@@ -63,7 +65,7 @@ abstract final class AppLocator {
   static OwnerCubit newOwnerCubit() => OwnerCubit(
     properties: properties,
     tours: tourService,
-    ownerId: DemoData.demoOwnerId,
+    ownerId: WebAuth.profile?['user_id'] as String? ?? '',
   );
 
   static AdminCubit newAdminCubit() => AdminCubit(

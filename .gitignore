@@ -11,6 +11,8 @@ __pycache__/
 
 # Environmental variables (Security)
 .env
+test/.data/
+fyp_jaspr_web/web/auth_bundle.js
 
 # Large media / OS specific
 .DS_Store

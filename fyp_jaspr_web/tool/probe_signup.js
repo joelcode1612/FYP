@@ -66,7 +66,9 @@ const log = (label, v) => console.log(`  ${label}: ${v}`);
   log('lr char count', (await p.$$('.su-title .lr-char')).length);
 
   // 8. Topbar "Sign in" link
-  log('signin href', await p.$eval('.su-signin', e => e.getAttribute('href')));
+  log('navbar Sign in href', await p.$eval('.nav-actions a[href="/login"]', e => e.getAttribute('href')));
+  log('navbar brand present', await p.locator('.topbar .brand').count());
+  log('old su-topbar (must be 0)', await p.locator('.su-topbar').count());
 
   console.log('  errors:', errs.length ? errs.join(' | ') : 'none');
   await b.close();

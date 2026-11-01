@@ -103,9 +103,10 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
       // Title, meta, and the model's own explanation bullets.
       div(classes: 'stack stack--sm', [
         h3(classes: 'title', [
-          a(href: '/entrepreneur/property-detail?id=$id', [
-            Component.text(prop.title),
-          ]),
+          AppLink(
+            to: '/entrepreneur/property-detail?id=$id',
+            children: [Component.text(prop.title)],
+          ),
         ]),
         p(classes: 'small', [
           Component.text(

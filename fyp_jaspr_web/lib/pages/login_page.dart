@@ -4,6 +4,7 @@ import 'package:jaspr/jaspr.dart';
 import '../components/auth_icons.dart';
 import '../components/dom_helpers.dart';
 import '../components/ui.dart';
+import '../data/auth_service.dart';
 
 /// Credential sign-in surface — Jaspr port of the updated sign-in design
 /// (`sitewise_login.html`, top navbar removed per the design brief).
@@ -42,10 +43,12 @@ class _LoginState extends State<LoginPage> {
   final Map<String, String> _errors = {};
   String _alert = '';
   String _alertTone = 'info';
+  bool _busy = false;
 
   static final _emailRe = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$');
 
-  void _submit() {
+  Future<void> _submit() async {
+    if (_busy) return;
     final e = <String, String>{};
     if (!_emailRe.hasMatch(_email)) e['email'] = 'Enter a valid email address.';
     if (_password.isEmpty) e['password'] = 'Password is required.';
@@ -54,14 +57,43 @@ class _LoginState extends State<LoginPage> {
         ..clear()
         ..addAll(e);
       if (e.isEmpty) {
-        _alert =
-            'Demo build — sign-in is disabled. No account is created or stored.';
+        _alert = 'Signing in…';
         _alertTone = 'info';
       } else {
         _alert = 'Please fix the highlighted fields.';
         _alertTone = 'err';
       }
     });
+    if (e.isNotEmpty) return;
+    setState(() => _busy = true);
+    try {
+      await WebAuth.password(_email.trim(), _password, _remember);
+    } catch (error) {
+      if (mounted) {
+        setState(() {
+          _alert = error.toString();
+          _alertTone = 'err';
+        });
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _google() async {
+    if (_busy) return;
+    setState(() => _busy = true);
+    try {
+      await WebAuth.google('entrepreneur', _remember);
+    } catch (error) {
+      if (mounted) {
+        setState(() {
+          _alert = error.toString();
+          _alertTone = 'err';
+          _busy = false;
+        });
+      }
+    }
   }
 
   // ------------------------------------------------------------------ hero
@@ -130,11 +162,14 @@ class _LoginState extends State<LoginPage> {
     classes: 'lp-social',
     attributes: {
       'type': 'button',
-      'disabled': 'true',
-      'aria-label': '$provider sign-in (not configured)',
-      'title': 'Not configured in this deployment',
+      if (provider != 'Google' || !WebAuth.configured || _busy)
+        'disabled': 'true',
+      'aria-label': provider == 'Google' && WebAuth.configured
+          ? 'Continue with Google'
+          : '$provider sign-in (not configured)',
     },
     [icon, Component.text('Continue with $provider')],
+    events: provider == 'Google' ? events(onClick: _google) : null,
   );
 
   @override
@@ -217,7 +252,9 @@ class _LoginState extends State<LoginPage> {
               ]),
               p(classes: 'lp-social-note', [
                 Component.text(
-                  'Social sign-in is not configured in this deployment.',
+                  WebAuth.configured
+                      ? 'Google sign-in is managed by Supabase. Apple sign-in is not configured.'
+                      : 'Social sign-in is not configured in this deployment.',
                 ),
               ]),
 
@@ -262,7 +299,10 @@ class _LoginState extends State<LoginPage> {
               ),
 
               p(classes: 'lp-forgot', [
-                a(href: '/forgot', [Component.text('Forgot password?')]),
+                AppLink(
+                  to: '/forgot',
+                  children: [Component.text('Forgot password?')],
+                ),
               ]),
 
               div(classes: 'lp-remember', [
@@ -295,14 +335,17 @@ class _LoginState extends State<LoginPage> {
 
               button(
                 classes: 'lp-submit',
-                attributes: const {'type': 'button'},
+                attributes: {'type': 'button', if (_busy) 'disabled': 'true'},
                 events: events(onClick: _submit),
                 [Component.text('Sign in'), Icon('arrow_forward', size: 'sm')],
               ),
 
               p(classes: 'lp-switch', [
                 Component.text("Don't have an account? "),
-                a(href: '/signup', [Component.text('Create one now')]),
+                AppLink(
+                  to: '/signup',
+                  children: [Component.text('Create one now')],
+                ),
               ]),
             ]),
           ]),

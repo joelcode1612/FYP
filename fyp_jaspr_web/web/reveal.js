@@ -18,15 +18,24 @@
  *    arming them would produce a visible "hide then reveal" flicker.
  *  - Progressive enhancement: no IntersectionObserver, reduced motion, or any
  *    thrown error leaves the headings plainly readable.
- *  - Runs on `load` + 250 ms so Jaspr's first client render has settled and
- *    cannot wipe the classes.
+ *  - Observes newly mounted headings, including client-side route changes.
  */
 (function () {
   'use strict';
 
   var SELECTOR = '.lr--scroll';
+  var seen = new WeakSet();
+  var observed = new Set();
+  var io = null;
 
   function init() {
+    // Release headings belonging to the previous client route.
+    if (io) observed.forEach(function (el) {
+      if (!el.isConnected) {
+        io.unobserve(el);
+        observed.delete(el);
+      }
+    });
     if (!('IntersectionObserver' in window)) return;
     if (
       window.matchMedia &&
@@ -37,16 +46,17 @@
 
     var targets = Array.prototype.slice.call(
       document.querySelectorAll(SELECTOR)
-    );
+    ).filter(function (el) { return !seen.has(el); });
     if (!targets.length) return;
 
-    var io = new IntersectionObserver(
+    if (!io) io = new IntersectionObserver(
       function (entries) {
         for (var i = 0; i < entries.length; i++) {
           var entry = entries[i];
           if (!entry.isIntersecting) continue;
           entry.target.classList.add('is-visible');
           io.unobserve(entry.target);
+          observed.delete(entry.target);
         }
       },
       { threshold: 0.2, rootMargin: '0px 0px -8% 0px' }
@@ -57,12 +67,14 @@
     try {
       for (var t = 0; t < targets.length; t++) {
         var el = targets[t];
+        seen.add(el);
         var rect = el.getBoundingClientRect();
         // Already on screen: leave it visible rather than hiding and
         // re-revealing it, which would read as a flicker.
         if (rect.top < viewportHeight && rect.bottom > 0) continue;
         el.classList.add('is-armed');
         io.observe(el);
+        observed.add(el);
       }
     } catch (err) {
       // Never leave a heading hidden because of an error.
@@ -72,10 +84,14 @@
     }
   }
 
-  function boot() {
-    window.setTimeout(init, 250);
-  }
-
-  if (document.readyState === 'complete') boot();
-  else window.addEventListener('load', boot);
+  var scheduled = false;
+  new MutationObserver(function () {
+    if (scheduled) return;
+    scheduled = true;
+    requestAnimationFrame(function () {
+      scheduled = false;
+      init();
+    });
+  }).observe(document.body, { childList: true, subtree: true });
+  init();
 })();

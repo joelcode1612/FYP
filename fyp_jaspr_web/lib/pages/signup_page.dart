@@ -5,6 +5,8 @@ import '../components/auth_icons.dart';
 import '../components/dom_helpers.dart';
 import '../components/letter_reveal.dart';
 import '../components/ui.dart';
+import '../components/site_topbar.dart';
+import '../data/auth_service.dart';
 
 /// Account-creation surface — split marketing layout.
 ///
@@ -36,6 +38,7 @@ class _SignupState extends State<SignupPage> {
   final Map<String, String> _errors = {};
   String _alert = '';
   String _alertTone = 'info';
+  bool _busy = false;
 
   static final _emailRe = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$');
 
@@ -47,7 +50,8 @@ class _SignupState extends State<SignupPage> {
     'Bakery & Patisserie',
   ];
 
-  void _submit() {
+  Future<void> _submit() async {
+    if (_busy) return;
     final e = <String, String>{};
     if (_name.trim().isEmpty) e['name'] = 'Enter your full name.';
     if (!_emailRe.hasMatch(_email)) e['email'] = 'Enter a valid email address.';
@@ -68,31 +72,55 @@ class _SignupState extends State<SignupPage> {
         ..clear()
         ..addAll(e);
       if (e.isEmpty) {
-        _alert =
-            'Demo build — account creation is disabled. No account is created '
-            'or stored.';
+        _alert = 'Creating your account…';
         _alertTone = 'info';
       } else {
         _alert = 'Please fix the highlighted fields.';
         _alertTone = 'err';
       }
     });
+    if (e.isNotEmpty) return;
+    setState(() => _busy = true);
+    try {
+      final message = await WebAuth.signup(
+        _email.trim(),
+        _password,
+        _name.trim(),
+        _accountType,
+      );
+      if (mounted) {
+        setState(() {
+          _alert = message;
+          _alertTone = 'info';
+        });
+      }
+    } catch (error) {
+      if (mounted) {
+        setState(() {
+          _alert = error.toString();
+          _alertTone = 'err';
+        });
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
   }
 
-  // ------------------------------------------------------------------ brand
-
-  Component _brandMark() => Component.element(
-    tag: 'img',
-    classes: 'su-brand__mark-img',
-    attributes: {
-      'src': 'assets/sitewise-mark-64.png',
-      'alt': 'Sitewise',
-      'width': '30',
-      'height': '30',
-      'aria-hidden': 'true',
-    },
-    children: [],
-  );
+  Future<void> _google() async {
+    if (_busy) return;
+    setState(() => _busy = true);
+    try {
+      await WebAuth.google(_accountType);
+    } catch (error) {
+      if (mounted) {
+        setState(() {
+          _alert = error.toString();
+          _alertTone = 'err';
+          _busy = false;
+        });
+      }
+    }
+  }
 
   // ------------------------------------------------------------------ scene
 
@@ -266,6 +294,15 @@ class _SignupState extends State<SignupPage> {
         attributes: const {'role': 'alert'},
         [textNode(_alert)],
       ),
+      button(
+        classes: 'lp-social',
+        attributes: {
+          'type': 'button',
+          if (!WebAuth.configured || _busy) 'disabled': 'true',
+        },
+        events: events(onClick: _google),
+        [authSocialGoogle(), Component.text('Continue with Google')],
+      ),
       _fieldBlock(
         labelText: 'Full name',
         errKey: 'name',
@@ -416,22 +453,11 @@ class _SignupState extends State<SignupPage> {
   @override
   Component build(BuildContext context) {
     return div(classes: 'signup-page', [
-      header(classes: 'su-topbar', [
-        div(classes: 'su-topbar__inner', [
-          a(href: '/', classes: 'su-brand', [
-            span(classes: 'su-brand__mark', [_brandMark()]),
-            span(classes: 'su-brand__name', [Component.text('SiteWise')]),
-          ]),
-          div(classes: 'su-topbar__actions', [
-            span(classes: 'su-topbar__hint', [
-              Component.text('Already have an account?'),
-            ]),
-            a(href: '/login', classes: 'su-signin', [
-              Component.text('Sign in'),
-            ]),
-          ]),
-        ]),
-      ]),
+      // The site's real navbar (brand + section links + Sign in / Sign up)
+      // replaces the bespoke sign-up top bar. `linkPrefix: '/'` sends the
+      // section anchors back to the landing page, since those sections do not
+      // exist here. `.lnd` supplies the `--lnd-*` tokens the nav styles use.
+      div(classes: 'lnd', [const SiteTopbar(linkPrefix: '/')]),
       div(classes: 'su-body', [_hero(), _panel()]),
     ]);
   }

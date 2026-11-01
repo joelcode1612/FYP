@@ -61,14 +61,8 @@ class _DashboardPageState extends State<DashboardPage> {
     } catch (_) {
       return;
     }
-    if (vm.recommendations.isEmpty) return;
-    final topId = vm.recommendations.first.property.id;
-    try {
-      await vm.loadAnalysis(topId);
-    } catch (_) {
-      // No analysis available — the chart and competitor cards fall back to a
-      // plain message rather than inventing numbers.
-    }
+    // This dataset contains a suitability index, not live competitor/demand
+    // analysis. Leave the optional analysis panels unavailable.
   }
 
   @override
@@ -117,8 +111,8 @@ class _DashboardPageState extends State<DashboardPage> {
                       ]),
                       p(classes: 'stat-note', [
                         Component.text(
-                          'Everything above is computed from your own saved '
-                          'records. Suitability scores are relative '
+                          'Properties and suitability indices come from the imported '
+                          'workbook. Saved selections remain in this browser session. Scores are relative '
                           'decision-support indicators, not a probability of '
                           'business success.',
                         ),
@@ -159,22 +153,22 @@ class _DashboardPageState extends State<DashboardPage> {
         LetterRevealHeading.text('Hello there', level: 1),
       ]),
       div(classes: 'bh-actions', [
-        a(
-          href: '/entrepreneur/explore',
+        AppLink(
+          to: '/entrepreneur/explore',
           classes: 'bento-iconbtn',
           attributes: {'aria-label': 'Search properties'},
-          [Icon('search', label: 'Search properties')],
+          children: [Icon('search', label: 'Search properties')],
         ),
         span(classes: 'bento-period', [
           Icon('calendar_today', size: 'sm'),
           Component.text('No run yet'),
         ]),
-        a(
-          href: prefsSet
+        AppLink(
+          to: prefsSet
               ? '/entrepreneur/recommendations'
               : '/entrepreneur/preferences',
           classes: 'bento-cta',
-          [
+          children: [
             Component.text(
               prefsSet ? 'Generate shortlist' : 'Set your preferences',
             ),
@@ -202,7 +196,7 @@ class _DashboardPageState extends State<DashboardPage> {
     final saved = appCubit.saved.length;
     return div(classes: 'bento-kpis', [
       _kpi('Shortlist', '$recs', 'Latest run'),
-      _kpi('Saved favourites', '$saved', 'Synced to your account'),
+      _kpi('Saved favourites', '$saved', 'This browser session'),
       // The source shows a recommendation-run count. The target keeps no run
       // history in state, so this reports an honest zero, not a fabricated one.
       _kpi('Recommendation runs', '0', 'None yet'),
@@ -241,9 +235,11 @@ class _DashboardPageState extends State<DashboardPage> {
               'Nothing is shown until you set them and run a search.',
             ),
           ]),
-          a(href: '/entrepreneur/preferences', classes: 'bento-cta', [
-            Component.text('Set your preferences'),
-          ]),
+          AppLink(
+            to: '/entrepreneur/preferences',
+            classes: 'bento-cta',
+            children: [Component.text('Set your preferences')],
+          ),
         ]),
       ]);
     }
@@ -284,9 +280,11 @@ class _DashboardPageState extends State<DashboardPage> {
           'have favourited from the current run — it is not a success forecast.',
         ),
       ]),
-      a(href: '/entrepreneur/recommendations', classes: 'bento-cta', [
-        Component.text('See the full ranking'),
-      ]),
+      AppLink(
+        to: '/entrepreneur/recommendations',
+        classes: 'bento-cta',
+        children: [Component.text('See the full ranking')],
+      ),
     ]);
   }
 
@@ -316,10 +314,10 @@ class _DashboardPageState extends State<DashboardPage> {
         .reduce((x, y) => x > y ? x : y);
     final rank = vm.recommendations.indexOf(r) + 1;
     final pct = ((r.score / top) * 100).round().clamp(4, 100);
-    return a(
-      href: '/entrepreneur/property-detail?id=${p.id}',
+    return AppLink(
+      to: '/entrepreneur/property-detail?id=${p.id}',
       classes: 'brow',
-      [
+      children: [
         div(classes: 'b-ico', [Component.text('$rank')]),
         div(classes: 'b-main', [
           div(classes: 't', [Component.text(p.title)]),
@@ -348,7 +346,7 @@ class _DashboardPageState extends State<DashboardPage> {
     return div(classes: 'bento-card', [
       div(classes: 'bento-card__head', [
         h3([Component.text('Shortlist scores')]),
-        span(classes: 'card-note', [Component.text('Relative · demo scorer')]),
+        span(classes: 'card-note', [Component.text('Imported workbook index')]),
       ]),
       if (recs.isEmpty)
         _empty(
@@ -408,10 +406,10 @@ class _DashboardPageState extends State<DashboardPage> {
       else
         div(classes: 'blist', [
           for (final r in rows)
-            a(
-              href: '/entrepreneur/property-detail?id=${r.property.id}',
+            AppLink(
+              to: '/entrepreneur/property-detail?id=${r.property.id}',
               classes: 'brow',
-              [
+              children: [
                 div(classes: 'b-ico', [Icon('favorite', size: 'sm')]),
                 div(classes: 'b-main', [
                   div(classes: 't', [Component.text(r.property.title)]),
@@ -453,11 +451,15 @@ class _DashboardPageState extends State<DashboardPage> {
   Component _actionsCard() {
     final prefsSet = _prefsSet;
     Component tile(String eye, String title, String body, String href) {
-      return a(href: href, classes: 'qtile', [
-        span(classes: 'eyebrow-sm', [Component.text(eye)]),
-        h4([Component.text(title)]),
-        p([Component.text(body)]),
-      ]);
+      return AppLink(
+        to: href,
+        classes: 'qtile',
+        children: [
+          span(classes: 'eyebrow-sm', [Component.text(eye)]),
+          h4([Component.text(title)]),
+          p([Component.text(body)]),
+        ],
+      );
     }
 
     return div(classes: 'bento-card bento-wide', [

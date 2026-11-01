@@ -55,6 +55,7 @@ class _ExplorePageState extends State<ExplorePage> {
 
   /// Real zoom factor applied to the pin projection.
   int zoom = 1;
+  int _visibleLimit = 24;
 
   static const _zoomLevels = [1, 2, 4];
 
@@ -89,6 +90,7 @@ class _ExplorePageState extends State<ExplorePage> {
   }
 
   void _setFilter(PropertyFilter next) => setState(() {
+    _visibleLimit = 24;
     filter = next;
     if (selectedId != null && !_results.any((prop) => prop.id == selectedId)) {
       selectedId = null;
@@ -96,6 +98,7 @@ class _ExplorePageState extends State<ExplorePage> {
   });
 
   void _reset() => setState(() {
+    _visibleLimit = 24;
     filter = PropertyFilter.empty;
     selectedId = null;
   });
@@ -115,11 +118,19 @@ class _ExplorePageState extends State<ExplorePage> {
               title: 'Commercial properties',
               eyebrow: 'Explore',
               subtitle:
-                  'Search verified listings. Only administrator-approved and '
-                  'currently available properties are shown; pending or rejected '
-                  'records are never presented as available.',
+                  'Accepted property records from your imported workbook. Dataset '
+                  'quality checks do not establish current availability or administrator verification.',
               child: vm.loading
                   ? const _Loading()
+                  : vm.error != null
+                  ? EmptyState(
+                      title: 'Properties could not load',
+                      body: vm.error!,
+                      action: ActionButton(
+                        'Try again',
+                        onClick: () => vm.loadExplore(),
+                      ),
+                    )
                   : div(classes: 'stack stack--sections', [
                       _filterSection(),
                       _resultsSection(appCubit),
@@ -167,7 +178,7 @@ class _ExplorePageState extends State<ExplorePage> {
         ),
       ]),
       div(classes: 'pgrid', [
-        for (final p in results)
+        for (final p in results.take(_visibleLimit))
           PropertyCard(
             property: p,
             href: '/entrepreneur/property-detail?id=${p.id}',
@@ -177,6 +188,11 @@ class _ExplorePageState extends State<ExplorePage> {
             onToggleCompared: () => appCubit.toggleCompared(p.id),
           ),
       ]),
+      if (results.length > _visibleLimit)
+        ActionButton(
+          'Show more properties',
+          onClick: () => setState(() => _visibleLimit += 24),
+        ),
     ]);
   }
 

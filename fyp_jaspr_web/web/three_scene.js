@@ -1,15 +1,9 @@
-/* Sitewise hero — Three.js scene (ported verbatim from the design source)
-   with a hydration-aware mount harness: Jaspr client hydration may replace
-   #concept3dScene after this script first runs, so the scene re-mounts while
-   the canvas is missing (bounded retries), and degrades to .model-fallback
-   when WebGL is unavailable. */
+/* Sitewise hero — mount when the client router creates the landing page,
+   and dispose when it removes it. Fall back to CSS when WebGL is unavailable. */
 (function () {
   'use strict';
 
-  var inits = 0;
-  var tries = 0;
-  var missingStreak = 0;
-  var presentStreak = 0;
+  var mountedHost = null;
 
   /* The most recent mounted scene. Hydration can replace #concept3dScene after
      we mount, so a later start() must tear down the previous renderer instead
@@ -17,8 +11,6 @@
   var active = null;
 
   function start() {
-    inits++;
-    missingStreak = 0;
     if (active && active.dispose) {
       try { active.dispose(); } catch (e) { /* already gone */ }
     }
@@ -305,6 +297,28 @@
               if (resizeObs) { resizeObs.disconnect(); resizeObs = null; }
               window.removeEventListener('resize', resize);
               document.removeEventListener('visibilitychange', onVisibility);
+              if (scene) {
+                const disposed = new Set();
+                scene.traverse(function (object) {
+                  if (object.geometry && !disposed.has(object.geometry)) {
+                    disposed.add(object.geometry);
+                    object.geometry.dispose();
+                  }
+                  const materials = Array.isArray(object.material) ? object.material : [object.material];
+                  materials.forEach(function (material) {
+                    if (!material || disposed.has(material)) return;
+                    disposed.add(material);
+                    Object.values(material).forEach(function (value) {
+                      if (value && value.isTexture && !disposed.has(value)) {
+                        disposed.add(value);
+                        value.dispose();
+                      }
+                    });
+                    material.dispose();
+                  });
+                });
+              }
+              delete window.setSitewiseCameraPreset;
               if (renderer) {
                 renderer.dispose();
                 const cv = renderer.domElement;
@@ -413,40 +427,34 @@
           }
   }
 
-  /* Boot ~0.8s after parse, then keep the canvas alive: Jaspr client
-     hydration (DDC lazy compile) can replace the mount seconds later, so
-     re-mount whenever the canvas has been missing for two consecutive
-     ticks — bounded at 12 re-inits over ~60s. */
-  var t = setInterval(function () {
-    tries++;
+  function reconcile() {
     var host = document.getElementById('concept3dScene');
-    if (!host) {
-      presentStreak = 0;
-      if (tries > 150) clearInterval(t);
-      return;
-    }
-    if (host.querySelector('canvas')) {
-      presentStreak++;
-      missingStreak = 0;
-      if (presentStreak >= 3 && tries > 10) clearInterval(t);
-      return;
-    }
-    presentStreak = 0;
-    missingStreak++;
-    if (missingStreak >= 2 && inits < 12) start();
-    if (tries > 150) clearInterval(t);
-  }, 400);
+    if (host === mountedHost) return;
+    mountedHost = host;
+    if (active && active.dispose) active.dispose();
+    active = null;
+    if (host) start();
+  }
+  var scheduled = false;
+  new MutationObserver(function () {
+    if (scheduled) return;
+    scheduled = true;
+    requestAnimationFrame(function () {
+      scheduled = false;
+      reconcile();
+    });
+  }).observe(document.body, { childList: true, subtree: true });
+  reconcile();
 })();
 
 /* Glass cards: focus the 3D camera on the card target view (guarded). */
 (function () {
-  if (!document.querySelector('.glass-card')) return;
-  Array.prototype.forEach.call(document.querySelectorAll('.glass-card'), function (card) {
-    card.addEventListener('click', function () {
+  document.addEventListener('click', function (event) {
+      var card = event.target.closest && event.target.closest('.glass-card');
+      if (!card) return;
       Array.prototype.forEach.call(document.querySelectorAll('.glass-card'), function (c) { c.classList.remove('active'); });
       card.classList.add('active');
       var focus = card.getAttribute('data-card-focus');
       if (focus && window.setSitewiseCameraPreset) window.setSitewiseCameraPreset(focus);
-    });
   });
 })();

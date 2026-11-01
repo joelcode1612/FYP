@@ -31,6 +31,7 @@ class CommercialProperty {
   final double suitabilityScore; // 0–100
   final String ownerId;
   final bool hasTour;
+  final String? imageUrl;
 
   /// Business requirements the unit satisfies (Ground Floor, F&B Suitable…).
   final List<String> requirements;
@@ -53,6 +54,7 @@ class CommercialProperty {
     required this.suitabilityScore,
     required this.ownerId,
     required this.hasTour,
+    this.imageUrl,
     this.requirements = const [],
     this.tags = const [],
   }) : rentalMaxRm = rentalMaxRm ?? rentalRm;
@@ -90,6 +92,7 @@ class CommercialProperty {
     suitabilityScore: suitabilityScore,
     ownerId: ownerId,
     hasTour: hasTour,
+    imageUrl: imageUrl,
     requirements: requirements,
     tags: tags,
   );

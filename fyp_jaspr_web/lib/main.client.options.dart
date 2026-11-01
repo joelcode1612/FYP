@@ -6,8 +6,6 @@
 
 import 'package:jaspr/client.dart';
 
-import 'package:sitewise_jaspr_web/app.dart' deferred as _app;
-
 /// Default [ClientOptions] for use with your Jaspr project.
 ///
 /// Use this to initialize Jaspr **before** calling [runApp].
@@ -24,8 +22,4 @@ import 'package:sitewise_jaspr_web/app.dart' deferred as _app;
 ///   runApp(...);
 /// }
 /// ```
-ClientOptions get defaultClientOptions => ClientOptions(
-  clients: {
-    'app': ClientLoader((p) => _app.SitewiseApp(), loader: _app.loadLibrary),
-  },
-);
+ClientOptions get defaultClientOptions => ClientOptions();

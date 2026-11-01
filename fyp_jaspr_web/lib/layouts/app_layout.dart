@@ -110,7 +110,6 @@ class _AppLayoutState extends State<AppLayout> {
         role: component.role,
         currentRoute: component.currentRoute,
         open: _navOpen,
-        onNavigate: _closeNav,
       ),
 
       div(classes: 'app-main', [
@@ -134,8 +133,8 @@ class _AppLayoutState extends State<AppLayout> {
 
           nav(classes: 'app-pill__nav', [
             for (final d in destinations)
-              a(
-                href: d.route,
+              AppLink(
+                to: d.route,
                 // `aria-current="page"` is the standard way to tell assistive
                 // technology which entry is the current one; without it the
                 // active item is communicated by colour alone.
@@ -145,12 +144,11 @@ class _AppLayoutState extends State<AppLayout> {
                 classes: d.route == selected
                     ? 'app-pill__link app-pill__link--active'
                     : 'app-pill__link',
-                events: events(onClick: _closeNav),
                 // The source's pill row carries labels only. Icons were removed
                 // because the scrollable row flex-shrank them to zero width, and
                 // because `threesixty` is not a Material Symbols ligature — it
                 // rendered the literal word.
-                [Component.text(d.label)],
+                children: [Component.text(d.label)],
               ),
           ]),
 
@@ -181,13 +179,11 @@ class _Sidebar extends StatelessComponent {
   final AppRole role;
   final String currentRoute;
   final bool open;
-  final void Function() onNavigate;
 
   const _Sidebar({
     required this.role,
     required this.currentRoute,
     required this.open,
-    required this.onNavigate,
   });
 
   @override
@@ -205,16 +201,15 @@ class _Sidebar extends StatelessComponent {
         div(classes: 'sidebar__role', [Component.text(role.label)]),
         nav(classes: 'sidebar__nav', [
           for (final d in destinations)
-            a(
-              href: d.route,
+            AppLink(
+              to: d.route,
               attributes: d.route == selected
                   ? const {'aria-current': 'page'}
                   : null,
               classes: d.route == selected
                   ? 'nav-item nav-item--active'
                   : 'nav-item',
-              events: events(onClick: onNavigate),
-              [
+              children: [
                 Icon(d.icon),
                 span(classes: 'grow', [Component.text(d.label)]),
               ],

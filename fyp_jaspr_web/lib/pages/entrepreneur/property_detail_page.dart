@@ -194,14 +194,25 @@ class _Detail extends StatelessComponent {
     return section(classes: 'panel', [
       h2([Component.text('Gallery')]),
       div(classes: 'gallery', [
-        for (var i = 0; i < 3; i++)
+        if (property.imageUrl != null)
+          Component.element(
+            tag: 'img',
+            attributes: {
+              'src': property.imageUrl!,
+              'alt': property.title,
+              'loading': 'lazy',
+              'referrerpolicy': 'no-referrer',
+              'style': 'width:100%;height:100%;object-fit:cover',
+            },
+          )
+        else
           span(classes: 'cover', [Icon('storefront', size: 'lg')]),
       ]),
       p(classes: 'disclaimer', [
         Component.text(
-          'Illustrative placeholders. The web prototype ships no listing '
-          'photographs, so these tiles stand in for the owner-uploaded images '
-          'the mobile capture flow produces.',
+          property.imageUrl == null
+              ? 'No image URL is available for this property.'
+              : 'Source listing image from the imported workbook. Availability depends on the original image host.',
         ),
       ]),
     ]);

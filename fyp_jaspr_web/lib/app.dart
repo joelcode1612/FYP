@@ -2,6 +2,10 @@ import 'package:jaspr/jaspr.dart';
 import 'package:jaspr_router/jaspr_router.dart';
 
 import 'data/app_locator.dart';
+import 'data/auth_service.dart';
+import 'pages/auth_callback_page.dart';
+import 'components/ui.dart';
+import 'layouts/marketing_layout.dart';
 import 'pages/landing_page.dart';
 import 'pages/login_page.dart';
 import 'pages/signup_page.dart';
@@ -43,8 +47,7 @@ import 'pages/owner/tours_page.dart' as o_tours;
 /// the web tree, so:
 ///
 /// * Routes map one-to-one to pages (the mobile tree stays in Flutter);
-/// * Detail ids travel as `?id=` query params, so links are shareable and
-///   work without JavaScript;
+/// * Detail ids travel as `?id=` query params, so links are shareable;
 /// * The active role is derived from the URL path (`roleForPath`), not from
 ///   mutable client state.
 ///
@@ -52,18 +55,33 @@ import 'pages/owner/tours_page.dart' as o_tours;
 /// `app_routes.dart`); the sidebar in `navigation.dart` mirrors the same
 /// path strings.
 ///
-/// `@client` is required for `jaspr serve` (static dev mode): the dev server
-/// serves `web/index.html` raw and the browser mounts/hydrates this component
-/// from the client bundle. Without it the bundle has no entry component and
-/// the dev page renders blank (the static *build* still worked because it
-/// pre-renders HTML at build time).
-@client
+/// Mounted directly by main.client.dart; no server hydration anchors are needed.
 class SitewiseApp extends StatelessComponent {
   const SitewiseApp({super.key});
 
   @override
   Component build(BuildContext context) {
     return Router(
+      redirect: (context, state) {
+        final path = Uri.parse(state.location).path;
+        final rolePath = RegExp(
+          r'^/(entrepreneur|owner|admin)(/|$)',
+        ).firstMatch(path);
+        if (rolePath == null) return null;
+        final profile = WebAuth.profile;
+        if (profile == null) {
+          return '/login?next=${Uri.encodeComponent(state.location)}';
+        }
+        final role = profile['role'] as String;
+        return rolePath.group(1) == role ? null : '/$role';
+      },
+      errorBuilder: (context, state) => const MarketingLayout(
+        child: EmptyState(
+          title: 'Page not found',
+          body: 'This address does not match a Sitewise page.',
+          action: ActionLink('Back to home', href: '/'),
+        ),
+      ),
       routes: [
         // --- Public ----------------------------------------------------------
         Route(path: '/', builder: (context, state) => const LandingPage()),
@@ -72,6 +90,10 @@ class SitewiseApp extends StatelessComponent {
           builder: (context, state) => const LandingPage(),
         ),
         Route(path: '/login', builder: (context, state) => const LoginPage()),
+        Route(
+          path: '/auth/callback',
+          builder: (context, state) => const AuthCallbackPage(),
+        ),
         Route(path: '/signup', builder: (context, state) => const SignupPage()),
         Route(
           path: '/forgot',
@@ -214,11 +236,7 @@ class SitewiseApp extends StatelessComponent {
           builder: (context, state) => const e_profile.ProfilePage(),
         ),
 
-        // Note: no `/*path` wildcard. Static generation materialises one
-        // directory per route, and `*` is not a valid filename character on
-        // Windows — unknown paths simply 404, which is the right behaviour
-        // for a standalone web app anyway (the Flutter fallback assumed the
-        // entrepreneur dashboard, a Navigator-only concept).
+        // Unknown browser routes use errorBuilder above.
       ],
     );
   }

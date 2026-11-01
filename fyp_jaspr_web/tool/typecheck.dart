@@ -11,11 +11,11 @@
 // the app code. It is a verification aid, never shipped.
 //
 // IMPORTANT: this harness is a *supplement*, not the primary check. It does not
-// import `lib/main.server.dart`, so it cannot catch errors in the entry point —
+// import `lib/main.client.dart`, so it cannot catch errors in the entry point —
 // an earlier version of this file gave a false all-clear while the entry point
 // held two real `ambiguous_import` errors. Always run the real entry point first:
 //
-//   dart compile js lib/main.server.dart -o /tmp/main.js   <- primary
+//   jaspr build                                          <- primary
 //   dart compile js tool/typecheck.dart                    <- extra coverage
 //
 // Run:

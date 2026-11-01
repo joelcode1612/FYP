@@ -32,13 +32,12 @@ dev_dependencies:
   jaspr_test: ^0.23.5
   lints: ^6.0.0 # bumped from ^5.0.0 to share the workspace resolution with flutter_lints 6
 
-# `static` mode = static site generation. Chosen because the reason to leave
-# Flutter Web is SEO: Flutter paints to a canvas, so crawlers see nothing.
-# Static mode emits real HTML per route at build time, which is exactly the
-# gap this port closes. Switch to `client` for a pure SPA, or `server` if the
-# app ever needs real per-request backend integration.
+# Browser-rendered app: web/index.html loads lib/main.client.dart as JavaScript.
+# Pages still use real HTML/CSS. The hosting service must send index.html for
+# application routes such as /entrepreneur/explore (see README.md).
 jaspr:
-  mode: static
+  mode: client
+  styles: standalone
 
   # Port 8080 is occupied on this machine (something else is listening on
   # 0.0.0.0:8080), which makes `jaspr serve` fail with:

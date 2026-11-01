@@ -115,15 +115,21 @@ class _DashboardPageState extends State<DashboardPage> {
         ]),
       ]),
       div(classes: 'bh-actions', [
-        a(href: '/owner/add-property', classes: 'bento-cta', [
-          Component.text('Add property'),
-        ]),
-        a(href: '/owner/properties', classes: 'bento-period', [
-          Component.text('Manage listings'),
-        ]),
-        a(href: '/owner/tours', classes: 'bento-period', [
-          Component.text('360° tours'),
-        ]),
+        AppLink(
+          to: '/owner/add-property',
+          classes: 'bento-cta',
+          children: [Component.text('Add property')],
+        ),
+        AppLink(
+          to: '/owner/properties',
+          classes: 'bento-period',
+          children: [Component.text('Manage listings')],
+        ),
+        AppLink(
+          to: '/owner/tours',
+          classes: 'bento-period',
+          children: [Component.text('360° tours')],
+        ),
       ]),
     ]);
   }
@@ -181,9 +187,11 @@ class _DashboardPageState extends State<DashboardPage> {
               'process. Its status will appear here at every step.',
             ),
           ]),
-          a(href: '/owner/add-property', classes: 'bento-cta', [
-            Component.text('Add your first property'),
-          ]),
+          AppLink(
+            to: '/owner/add-property',
+            classes: 'bento-cta',
+            children: [Component.text('Add your first property')],
+          ),
         ]),
       ]);
     }
@@ -217,9 +225,11 @@ class _DashboardPageState extends State<DashboardPage> {
           'verification status from the record store, not a forecast.',
         ),
       ]),
-      a(href: '/owner/properties', classes: 'bento-cta', [
-        Component.text('Manage listings'),
-      ]),
+      AppLink(
+        to: '/owner/properties',
+        classes: 'bento-cta',
+        children: [Component.text('Manage listings')],
+      ),
     ]);
   }
 
@@ -251,25 +261,29 @@ class _DashboardPageState extends State<DashboardPage> {
   }
 
   Component _listingRow(CommercialProperty p) {
-    return a(href: '/owner/property-detail?id=${p.id}', classes: 'brow', [
-      div(classes: 'b-ico', [Icon('storefront', size: 'lg')]),
-      div(classes: 'b-main', [
-        div(classes: 't', [Component.text(p.title)]),
-        div(classes: 's', [Component.text('${p.address}, ${p.city}')]),
-        div(classes: 'badges', [
-          StatusBadge(
-            p.verification.label,
-            tone: toneForVerification(p.verification),
-            dot: true,
-          ),
-          if (p.hasTour) const StatusBadge('360° tour', tone: 'action'),
+    return AppLink(
+      to: '/owner/property-detail?id=${p.id}',
+      classes: 'brow',
+      children: [
+        div(classes: 'b-ico', [Icon('storefront', size: 'lg')]),
+        div(classes: 'b-main', [
+          div(classes: 't', [Component.text(p.title)]),
+          div(classes: 's', [Component.text('${p.address}, ${p.city}')]),
+          div(classes: 'badges', [
+            StatusBadge(
+              p.verification.label,
+              tone: toneForVerification(p.verification),
+              dot: true,
+            ),
+            if (p.hasTour) const StatusBadge('360° tour', tone: 'action'),
+          ]),
         ]),
-      ]),
-      div(classes: 'b-val', [
-        div(classes: 'v', [Component.text(p.rentalDisplay)]),
-        div(classes: 'p', [Component.text('per month')]),
-      ]),
-    ]);
+        div(classes: 'b-val', [
+          div(classes: 'v', [Component.text(p.rentalDisplay)]),
+          div(classes: 'p', [Component.text('per month')]),
+        ]),
+      ],
+    );
   }
 
   // -------------------------------------------------------------- how works

@@ -2,6 +2,8 @@ import 'package:jaspr/dom.dart';
 import 'package:jaspr/jaspr.dart';
 
 import '../components/letter_reveal.dart';
+import '../components/site_topbar.dart';
+import '../components/ui.dart';
 
 /// Public pre-auth landing page — the Jaspr port of
 /// `sitewise-roles/index.html`.
@@ -35,8 +37,6 @@ class LandingPage extends StatefulComponent {
 }
 
 class _LandingState extends State<LandingPage> {
-  bool _navOpen = false;
-
   // Section 01 — problem/solution topic (0..3).
   int _challenge = 0;
 
@@ -196,7 +196,7 @@ class _LandingState extends State<LandingPage> {
 
   @override
   Component build(BuildContext context) => div(classes: 'lnd', [
-    _topbar(),
+    const SiteTopbar(),
     _hero(),
     _problem(),
     _explore(),
@@ -204,74 +204,6 @@ class _LandingState extends State<LandingPage> {
     _recommendations(),
     _footer(),
   ]);
-
-  // ------------------------------------------------------------- top bar
-
-  Component _topbar() => header(classes: 'topbar', [
-    div(classes: 'wrap', [
-      nav(
-        classes: 'nav',
-        attributes: {'aria-label': 'Main navigation'},
-        [
-          a(classes: 'brand', href: '#top', [
-            span(classes: 'brand-icon', [
-              Component.element(
-                tag: 'img',
-                classes: 'brand-icon-img',
-                attributes: {
-                  'src': 'assets/sitewise-mark-64.png',
-                  'alt': 'Sitewise',
-                  'width': '26',
-                  'height': '26',
-                },
-                children: [],
-              ),
-            ]),
-            span([
-              Component.text('SITEWISE'),
-              br(),
-              small([Component.text('F&B LOCATION INTELLIGENCE')]),
-            ]),
-          ]),
-          div(classes: 'navlinks', [
-            _navLink('Problem & solution', '#problem'),
-            _navLink('Explore', '#explore'),
-            _navLink('Assessment', '#assessment'),
-            _navLink('Recommendations', '#recommendations'),
-          ]),
-          div(classes: 'nav-actions', [
-            a(classes: 'nav-btn signin', href: '/login', [
-              Component.text('Sign in'),
-            ]),
-            a(classes: 'nav-btn signup', href: '/signup', [
-              Component.text('Sign up ↗'),
-            ]),
-          ]),
-          button(
-            classes: 'menu-btn',
-            attributes: {
-              'aria-label': 'Toggle navigation',
-              'aria-expanded': _navOpen ? 'true' : 'false',
-            },
-            events: events(onClick: () => setState(() => _navOpen = !_navOpen)),
-            [Component.text('☰')],
-          ),
-        ],
-      ),
-      div(classes: 'mobile-nav${_navOpen ? ' open' : ''}', [
-        _navLink('Problem & solution', '#problem'),
-        _navLink('Explore', '#explore'),
-        _navLink('Assessment', '#assessment'),
-        _navLink('Recommendations', '#recommendations'),
-        a(classes: 'mobile-signup', href: '/signup', [
-          Component.text('Sign up ↗'),
-        ]),
-      ]),
-    ]),
-  ]);
-
-  Component _navLink(String label, String href) =>
-      a(classes: 'navlinks-a', href: href, [Component.text(label)]);
 
   // --------------------------------------------------------- letter reveal
 
@@ -1658,9 +1590,12 @@ class _LandingState extends State<LandingPage> {
       ]),
       div(classes: 'footer-col', [
         strong([Component.text('Get started')]),
-        a(href: '/login', [Component.text('Sign in')]),
-        a(href: '/signup', [Component.text('Create an account')]),
-        a(href: '/entrepreneur', [Component.text('Entrepreneur workspace')]),
+        AppLink(to: '/login', children: [Component.text('Sign in')]),
+        AppLink(to: '/signup', children: [Component.text('Create an account')]),
+        AppLink(
+          to: '/entrepreneur',
+          children: [Component.text('Entrepreneur workspace')],
+        ),
       ]),
       div(classes: 'footer-col footer-col--note', [
         strong([Component.text('Note')]),

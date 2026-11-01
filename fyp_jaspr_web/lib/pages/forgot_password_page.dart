@@ -73,11 +73,11 @@ class _ForgotState extends State<ForgotPasswordPage> {
     return main_(classes: 'auth-page', [
       section(classes: 'auth-card', [
         div(classes: 'auth-topbar', [
-          a(
-            href: '/login',
+          AppLink(
+            to: '/login',
             classes: 'auth-back',
             attributes: const {'aria-label': 'Back to log in'},
-            [Icon('chevron_left', size: 'sm')],
+            children: [Icon('chevron_left', size: 'sm')],
           ),
           span(classes: 'auth-brand', [
             span(classes: 'mark', [authBrandMark()]),
@@ -121,7 +121,7 @@ class _ForgotState extends State<ForgotPasswordPage> {
         ),
         p(classes: 'auth-switch', [
           Component.text('Remembered it? '),
-          a(href: '/login', [Component.text('Back to log in')]),
+          AppLink(to: '/login', children: [Component.text('Back to log in')]),
         ]),
       ]),
     ]);

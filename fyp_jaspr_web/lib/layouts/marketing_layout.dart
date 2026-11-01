@@ -17,12 +17,23 @@ class MarketingLayout extends StatelessComponent {
 
   @override
   Component build(BuildContext context) {
-    return div([const _Masthead(), child, const _SiteFooter()]);
+    return div([const Masthead(), child, const _SiteFooter()]);
   }
 }
 
-class _Masthead extends StatelessComponent {
-  const _Masthead();
+/// The public site header: brand mark + section links + Log In / Get Started.
+///
+/// Extracted from the marketing layout so standalone pages (e.g. sign-up) can
+/// reuse the real navbar instead of a bespoke top bar.
+///
+/// [linkPrefix] is prepended to the section anchors. The landing page keeps the
+/// default (empty) so the links scroll in place; any other page passes `'/'`
+/// so the links navigate back to the landing sections instead of being dead
+/// anchors.
+class Masthead extends StatelessComponent {
+  final String linkPrefix;
+
+  const Masthead({super.key, this.linkPrefix = ''});
 
   @override
   Component build(BuildContext context) {
@@ -33,7 +44,7 @@ class _Masthead extends StatelessComponent {
           for (final link in LandingContent.navLinks)
             // Plain `#anchor` links: the browser handles smooth scrolling via
             // `scroll-behavior` in CSS, so no JavaScript and no GlobalKeys.
-            a(href: '#${link.$2}', classes: 'masthead__link', [
+            a(href: '$linkPrefix#${link.$2}', classes: 'masthead__link', [
               Component.text(link.$1),
             ]),
         ]),
@@ -73,9 +84,18 @@ class _SiteFooter extends StatelessComponent {
           div(classes: 'stack', [
             span(classes: 'overline', [Component.text('Get started')]),
             div(classes: 'footer-links', [
-              a(href: '/entrepreneur', [Component.text('F&B Entrepreneur')]),
-              a(href: '/owner', [Component.text('Property Owner')]),
-              a(href: '/admin', [Component.text('Administrator')]),
+              AppLink(
+                to: '/entrepreneur',
+                children: [Component.text('F&B Entrepreneur')],
+              ),
+              AppLink(
+                to: '/owner',
+                children: [Component.text('Property Owner')],
+              ),
+              AppLink(
+                to: '/admin',
+                children: [Component.text('Administrator')],
+              ),
             ]),
           ]),
         ]),

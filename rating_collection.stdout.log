@@ -1,0 +1,19 @@
+[INPUT] Reading workbook: C:\Users\Lenovo\Documents\Qoder\2026-10-30\a9ec8342\gm_batch\Property_CompetitorFeatures_Enhanced_with_google_maps.xlsx
+[INPUT] C:\Users\Lenovo\Documents\Qoder\2026-10-30\a9ec8342\gm_batch\Property_CompetitorFeatures_Enhanced_with_google_maps.xlsx
+[INPUT] Worksheet: property_features | Header row: 1 | Property records: 2126
+[OUTPUT] C:\Users\Lenovo\Documents\Qoder\2026-10-30\a9ec8342\gm_batch\Property_CompetitorFeatures_Enhanced_with_google_maps_final.xlsx
+[OK] Google Maps scraper API is responding.
+[METHOD] Category validation enabled. Only matching F&B categories within the radius are included.
+[PRICE] RM-range midpoints are estimates. Missing and symbol-only prices remain blank; priced counts show coverage.
+[PLAN] Unique valid coordinate groups: 328 | To process/resume: 328
+
+[1/328] Searching coordinate 3.165857,101.697045 for 2 property row(s); IDs=['EP-01345', 'EP-01645']
+[RESUME] Reconnecting to an existing scraper job.
+[JOB] 708383a1-a7df-4c75-a39e-0cc3259dc23f | 10 search phrases | radius=1000m | depth=5
+[STATUS] 708383a1-a7df-4c75-a39e-0cc3259dc23f: pending
+[ERROR] Job 708383a1-a7df-4c75-a39e-0cc3259dc23f ended with status=pending; details={'ID': '708383a1-a7df-4c75-a39e-0cc3259dc23f', 'Name': 'fnb-rating-1793425737', 'Date': '2026-10-31T05:48:57Z', 'Status': 'pending', 'Data': {'keywords': ['cafes and coffee shops near 3.165857,101.697045, Kuala Lumpur, Malaysia', 'kopitiam and coffee bars near 3.165857,101.697045, Kuala Lumpur, Malaysia', 'restaurants and casual dining near 3.165857,101.697045, Kuala Lumpur, Malaysia', 'mamak, kedai makan and local eateries near 3.165857,101.697045, Kuala Lumpur, Malaysia', 'fast food and takeaway near 3.165857,101.697045, Kuala Lumpur, Malaysia', 'burger and fried chicken shops near 3.165857,101.697045, Kuala Lumpur, Malaysia', 'bakeries and pastry shops near 3.165857,101.697045, Kuala Lumpur, Malaysia', 'dessert shops, bubble tea, ice cream and juice bars near 3.165857,101.697045, Kuala Lumpur, Malaysia', 'food courts, hawker centres and food stalls near 3.165857,101.697045, Kuala Lumpur, Malaysia', 'tea houses and tea rooms near 3.165857,101.697045, Kuala Lumpur, Malaysia'], 'lang': 'en', 'zoom': 16, 'lat': '3.1658570', 'lon': '101.6970450', 'fast_mode': False, 'radius': 1000, 'depth': 5, 'email': False, 'extra_reviews': False, 'max_time': 300000000000, 'proxies': None}}
+[WAIT] Pausing 11.0s before the next property-coordinate job.
+
+[2/328] Searching coordinate 1.457601,103.645550 for 14 property row(s); IDs=['EP-01857', 'EP-01880', 'EP-01900']
+[JOB] 0090ddb4-beb9-4e6b-b0f5-90caa775a1a5 | 10 search phrases | radius=1000m | depth=5
+[STATUS] 0090ddb4-beb9-4e6b-b0f5-90caa775a1a5: pending

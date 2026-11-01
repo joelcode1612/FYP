@@ -1,0 +1,9 @@
+{
+  "name": "sitewise-web-tools",
+  "private": true,
+  "scripts": {
+    "build-auth": "esbuild auth_client.js --bundle --platform=browser --format=iife --minify --outfile=../web/auth_bundle.js"
+  },
+  "dependencies": { "@supabase/supabase-js": "^2.0.0" },
+  "devDependencies": { "esbuild": "^0.25.0", "playwright-core": "^1.58.0" }
+}
