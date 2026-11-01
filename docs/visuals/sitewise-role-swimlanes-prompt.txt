@@ -1,0 +1,40 @@
+Render a meticulous enterprise architecture SWIMLANE FLOWCHART, landscape 3:2 high resolution, flat vector-like geometric diagram, white background, crisp typography. Title "SITEWISE | ROLE WORKFLOW & DATA ARCHITECTURE". Subtitle "Current implementation • Web + Mobile • 1 November 2026". Absolutely no illustrations, logos, people, photography, gradients, ornamental graphics. Rounded rectangle steps, diamond decisions, thin orthogonal arrow connectors with arrowheads and short precise labels. Navy/slate/teal/emerald palette. Role lanes have subtle tinted backgrounds; incomplete features outlined dashed slate. Legibility above density.
+
+STRICT FACTS: Web is Jaspr client HTML/CSS/JS using real Supabase Google/email auth and local Express API and PostgreSQL. Mobile Flutter uses demo/local auth and demo repositories, with on-device sessions/capture; NOT connected to Supabase/API/database. Imported properties are read-only and not assigned to owners. No integrated owner-to-admin verification handoff. Do not invent payment, booking, notification, real-time sync, automatic approvals, prediction model or uploads. Do not claim all role API write permissions implemented. This diagram represents current code, not future design.
+
+LAYOUT:
+TOP: compact shared WEB ACCESS FLOW above role lanes, left to right:
+rounded "Web sign-in / signup" -> rounded "Supabase Auth" -> diamond "Valid API token?"
+No branch -> small "401: sign in again"
+Yes branch -> rounded "Load / create PostgreSQL role profile" -> diamond "URL role matches profile?"
+No branch -> "Redirect to own role home"
+Yes branch -> vertical labeled connector "Open assigned role workspace" distributing to WEB entry in each of three role lanes below. Label profile note "Signup: entrepreneur or owner. Existing role preserved. Admin assigned by trusted DB operator."
+Show "Supabase Auth" -> valid token checkpoint connector label "Access token"; API checks token with Supabase. Include small note "Missing web profile → login". Do not imply user selects any role at login or that profile roles guard catalog API reads.
+
+MIDDLE: THREE clearly labeled HORIZONTAL ROLE SWIMLANES stacked vertically. Dedicated lane label at left. Inside each lane two parallel rows explicitly labeled WEB and MOBILE. All chronological arrows left to right.
+
+Lane1 "F&B ENTREPRENEUR" teal:
+WEB: "Entrepreneur home" -> "Explore / filter catalogue" -> "Property details" -> "Shortlist: source index ranking". Under final note "Budget / size / location / type; top 10". Small linked side node "Save / compare: browser session only".
+MOBILE: "Demo entrepreneur home" -> "Browse demo properties" -> "Compare / recommendations". Small row note "Local demo repositories".
+Lane2 "PROPERTY OWNER" emerald:
+WEB: "Owner workspace" -> "Own-property lookup" -> "No assigned imported properties". Dashed note node beside end "Listing submission / uploads not connected".
+MOBILE: "Demo owner home" -> "Demo listings" -> "Camera / AR capture" -> "Panorama workflow / preview". Attach small note "On-device capture files; device testing required".
+Lane3 "ADMINISTRATOR" navy:
+WEB: "DB-assigned admin profile" -> "Admin pages: users / listings / verification" -> dashed "Prototype actions; no persistent admin write endpoints".
+MOBILE: "Demo admin home" -> "Demo users / listings" -> "Demo verification workflow".
+Do not draw an owner-lane-to-admin-lane handoff arrow. Small shared note beneath role lanes: "No connected owner submission → admin approval workflow exists yet."
+
+BOTTOM: a separate horizontal band headed "SHARED SERVICES & DATA TOUCHPOINTS" (a services band, NOT another user role lane).
+Three concise component boxes arranged:
+1 "Local Express API :3001" small "Token verification • /api/me • read-only catalogue"
+2 "Local PostgreSQL" small "sitewise_app.profiles + properties"
+3 "Workbook import" small "Filtered_Data: 2,126 records • 2,004 image URLs"
+API -> DB arrow "Read catalogue / upsert profile"; Workbook -> DB arrow "Normalize + upsert accepted rows".
+Connect entrepreneur WEB catalogue node down to API along unobstructed left gutter with labeled "Authenticated catalogue request" and return meaning label "Property data" (single double-ended connector permitted).
+Connect top role profile node to DB via discreet outer right gutter connector "Role profile".
+A narrow bottom capsule "shared_logic: Dart entities, use cases, services and Cubits • reused by both apps".
+Another note "Mobile storage remains local; no mobile ↔ backend synchronization."
+Bottom legend "Solid = connected flow | Dashed = incomplete backend feature | MOBILE rows = demo/local".
+Optional tiny footer "Quality PASS is not administrator verification. Suitability index is workbook data, not a trained prediction."
+
+No arrows from mobile rows to backend. No inter-role business triggers invented. Actual system intersections are shared web auth/profile routing and API/database access; communicate these via labeled clean connectors. Avoid connector overlap with text. Keep all role labels, platform row labels, decision yes/no labels readable. Make the result a polished technical architecture blueprint suitable for a final-year project presentation.

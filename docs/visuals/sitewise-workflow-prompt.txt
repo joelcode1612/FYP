@@ -1,0 +1,35 @@
+Create a high-resolution landscape infographic, approximately 3:2, with exceptionally legible typography and clean professional system-architecture diagram style. Title: "SITEWISE — CURRENT SYSTEM WORKFLOW". Subtitle: "Repository snapshot • 1 November 2026". This is a factual diagram of implemented code, NOT a proposed architecture. White background, navy text, teal for connected web features, amber for local prototypes, grey dashed lines for future work. Use laptop and mobile outline icons, database cylinder, Google sign-in icon, clear arrows and generous whitespace. No decorative fake UI, no secrets or credentials.
+
+LAYOUT: upper 60% is two side-by-side platform lanes, a shared logic bar spanning them beneath, lower 35% is a concise role testing matrix. Tiny legend at bottom "Solid teal = connected • Amber = local/demo • Dashed grey = not connected".
+
+LEFT lane heading "WEB • Jaspr client mode". Draw connected flow:
+"Browser • HTML / CSS / JavaScript" → "Google or email sign-in" → "Supabase Auth" → "Session + access token" → "Local Express API • :3001" → "Local PostgreSQL".
+Label API "Verifies token with Supabase".
+Database box text "sitewise_app" and "Properties + role profiles".
+Feed workbook icon into database via "Import accepted sheet", with text "2,126 properties • 2,004 image URLs".
+A branch from sign-in/profile goes to "Role-based web routes", then three little chips "Entrepreneur", "Owner", "Admin".
+Small web status note: "Live catalogue is read-only. Saved / compare: browser session only."
+Small separate prototype note: "Owner uploads and admin writes: backend endpoints pending."
+Do not imply that every role has implemented write API authorization, or that Supabase stores property records.
+
+RIGHT lane heading "MOBILE • Flutter". Draw amber flow:
+"First-run onboarding" → "Local demo sign-in" → "Demo role / home" → branch three chips "Entrepreneur", "Owner", "Admin".
+Then "Local repositories + demo data" → "On-device session and capture files".
+Side branch from Owner "Camera / AR capture → panorama workflow".
+Clearly visible amber badge: "NOT CONNECTED TO SUPABASE OR PROPERTY API".
+A dashed grey arrow from mobile towards the local API with label "Future integration".
+Do not draw a solid mobile-to-cloud connection. Mobile provider sign-in is simulated.
+
+SHARED bar between upper lanes and testing matrix: "shared_logic • Dart entities, services, use cases and Cubits". Smaller text "Shared application logic; platform authentication and storage differ." Draw subtle lines to both apps, not a synchronization link.
+
+BOTTOM: heading "ROLE TEST PATHS — WHAT TO CHECK". Three aligned columns or rows:
+"ENTREPRENEUR" | "Web: sign in → explore → filter → shortlist" | "Mobile: demo sign-in → browse → compare"
+"PROPERTY OWNER" | "Web: owner profile → owner pages; uploads pending" | "Mobile: demo owner → listing / capture / preview"
+"ADMINISTRATOR" | "Web: trusted DB-assigned role → admin pages; writes pending" | "Mobile: demo admin → users / listings / verification"
+
+Bottom short testing note in a pale blue strip:
+"Check signed-out redirects, wrong-role redirects and invalid-token rejection on web. Mobile role switching is for demos."
+Second smaller note:
+"Real Google consent/callback and device capture need hands-on testing. Test paths are a checklist, not a claim that all tests passed."
+
+Ensure all text spelled correctly, no crossing arrows, consistent labels, no claim of real mobile backend integration, no claim admin can self-register, no production-ready claims. Prioritize clarity and factual status over embellishment.

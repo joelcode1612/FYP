@@ -1,0 +1,1276 @@
+{
+  "roles": [
+    {
+      "role": "F&B ENTREPRENEUR",
+      "color": "#087f8c",
+      "tracks": [
+        {
+          "code": "E01",
+          "title": "Web identity and role access",
+          "status": "CONNECTED",
+          "steps": [
+            {
+              "action": "Sign in with Google or email",
+              "module": "WebAuth / Supabase SDK",
+              "detail": "PKCE callback: /auth/callback",
+              "gate": false
+            },
+            {
+              "action": "Valid access token?",
+              "module": "Express authentication middleware",
+              "detail": "False: HTTP 401; service outage: 503",
+              "gate": true
+            },
+            {
+              "action": "Load or create role profile",
+              "module": "POST /api/me",
+              "detail": "UUID, email, name; existing role preserved",
+              "gate": false
+            },
+            {
+              "action": "URL role matches profile?",
+              "module": "Jaspr Router redirect",
+              "detail": "False: redirect to assigned role home",
+              "gate": true
+            },
+            {
+              "action": "Open entrepreneur workspace",
+              "module": "SitewiseApp / AppLayout",
+              "detail": "True: role route is displayed",
+              "gate": false
+            }
+          ],
+          "note": "Signup allows entrepreneur or owner; metadata cannot grant administrator.",
+          "refs": "REQ-101,102,105"
+        },
+        {
+          "code": "E02",
+          "title": "Mobile startup and authentication",
+          "status": "LOCAL / DEMO",
+          "steps": [
+            {
+              "action": "Onboarding completed?",
+              "module": "AppStartGate",
+              "detail": "False: /onboarding; persist completion",
+              "gate": true
+            },
+            {
+              "action": "Local session exists?",
+              "module": "AuthRepositoryImpl.currentUser",
+              "detail": "False: /auth; local/demo sign-in",
+              "gate": true
+            },
+            {
+              "action": "Resolve local user role",
+              "module": "AppCubit.setRole",
+              "detail": "Demo role menu can switch roles",
+              "gate": false
+            },
+            {
+              "action": "Navigate to role home",
+              "module": "AppRoutes",
+              "detail": "Named routes; no production role API",
+              "gate": false
+            }
+          ],
+          "note": "Email password length is checked; demo account matching is not real password authentication. Provider login is simulated.",
+          "refs": "REQ-101,102,105"
+        },
+        {
+          "code": "E03",
+          "title": "Account maintenance and logout",
+          "status": "MIXED",
+          "steps": [
+            {
+              "action": "Open profile / edit fields",
+              "module": "ProfilePage / mobile profile",
+              "detail": "Profile edits are prototype UI state",
+              "gate": false
+            },
+            {
+              "action": "Request password reset",
+              "module": "ForgotPasswordPage",
+              "detail": "Web validates email; sends no reset email",
+              "gate": false
+            },
+            {
+              "action": "Sign out of web",
+              "module": "WebAuth.signout",
+              "detail": "Supabase signOut; /login",
+              "gate": false
+            },
+            {
+              "action": "Sign out of mobile",
+              "module": "AuthService / local repository",
+              "detail": "Delete session.json; /auth",
+              "gate": false
+            }
+          ],
+          "note": "These are independent account actions, not mandatory sequential tasks.",
+          "refs": "REQ-103,104,106"
+        },
+        {
+          "code": "E04",
+          "title": "Catalogue search, filters and detail",
+          "status": "CONNECTED WEB",
+          "steps": [
+            {
+              "action": "Open dashboard / explore",
+              "module": "EntrepreneurCubit / PropertyService",
+              "detail": "Web: imported catalogue; mobile: demo",
+              "gate": false
+            },
+            {
+              "action": "Fetch catalogue pages",
+              "module": "ApiPropertyRepository",
+              "detail": "GET /api/catalog/properties; limit 200",
+              "gate": false
+            },
+            {
+              "action": "Apply search and filters",
+              "module": "PropertyFilter / FilterPanel",
+              "detail": "Text, rent, size, property type, location",
+              "gate": false
+            },
+            {
+              "action": "Matching property found?",
+              "module": "ExplorePage / detail lookup",
+              "detail": "False: no-results / record-not-found state",
+              "gate": true
+            },
+            {
+              "action": "Open property details",
+              "module": "PropertyDetailPage",
+              "detail": "Address, rent, area, coordinates, image URL",
+              "gate": false
+            }
+          ],
+          "note": "API verifies bearer token. Imported data is not proof of current availability or administrator verification.",
+          "refs": "REQ-204,205,206; UC105"
+        },
+        {
+          "code": "E05",
+          "title": "Preferences and current shortlist",
+          "status": "CONNECTED WEB",
+          "steps": [
+            {
+              "action": "Set business preferences",
+              "module": "BusinessPreferences / preferences page",
+              "detail": "Budget, floor area, location, property type",
+              "gate": false
+            },
+            {
+              "action": "Apply preference bounds",
+              "module": "DatasetRecommendationRepository",
+              "detail": "Read current property catalogue",
+              "gate": false
+            },
+            {
+              "action": "Candidate matches all bounds?",
+              "module": "DatasetRecommendationRepository",
+              "detail": "False: exclude candidate; empty results possible",
+              "gate": true
+            },
+            {
+              "action": "Sort suitability index descending",
+              "module": "DatasetRecommendationRepository",
+              "detail": "Workbook index is already 0–100",
+              "gate": false
+            },
+            {
+              "action": "Display highest 10 candidates",
+              "module": "RecommendationsPage",
+              "detail": "Factual matching reasons; browser state",
+              "gate": false
+            }
+          ],
+          "note": "Mobile uses RecommendationRepositoryImpl demo filtering/ranking. Preferences are not saved to PostgreSQL.",
+          "refs": "REQ-402,403,404 (partial)"
+        },
+        {
+          "code": "E06",
+          "title": "Documented AI scoring and history",
+          "status": "SPEC / NOT CONNECTED",
+          "steps": [
+            {
+              "action": "Retrieve preferences and properties",
+              "module": "AI Recommendation Module",
+              "detail": "Specification inputs",
+              "gate": false
+            },
+            {
+              "action": "Retrieve geospatial features",
+              "module": "Data Processing and Geospatial Intelligence",
+              "detail": "Specification inputs",
+              "gate": false
+            },
+            {
+              "action": "Predict location suitability",
+              "module": "Positive-Unlabeled Learning",
+              "detail": "Not invoked by either current app locator",
+              "gate": false
+            },
+            {
+              "action": "Rank and refresh recommendations",
+              "module": "Property Suitability Ranking",
+              "detail": "Specification target, not current index sort",
+              "gate": false
+            },
+            {
+              "action": "Retrieve prior recommendations",
+              "module": "Recommendation Management Module",
+              "detail": "No connected recommendation-history UI",
+              "gate": false
+            }
+          ],
+          "note": "Specification processing-failure and no-suitable-property alternatives are required; current web shortlist is not this AI pipeline.",
+          "refs": "REQ-401–405; UC107"
+        },
+        {
+          "code": "E07",
+          "title": "Geospatial data preparation",
+          "status": "SPEC / NOT CONNECTED",
+          "steps": [
+            {
+              "action": "Select property and coordinates",
+              "module": "Geospatial Intelligence Module",
+              "detail": "Invalid coordinates: location error",
+              "gate": false
+            },
+            {
+              "action": "Retrieve population distribution",
+              "module": "Population Analysis",
+              "detail": "Predefined catchment areas",
+              "gate": false
+            },
+            {
+              "action": "Retrieve nearby F&B competition",
+              "module": "Competitor Analysis",
+              "detail": "Spatial competitor density",
+              "gate": false
+            },
+            {
+              "action": "Retrieve demand generators",
+              "module": "Demand Generator Analysis",
+              "detail": "Malls, offices, universities, hospitals, hubs",
+              "gate": false
+            },
+            {
+              "action": "Evaluate transport accessibility",
+              "module": "Accessibility Analysis",
+              "detail": "Road access and connectivity",
+              "gate": false
+            },
+            {
+              "action": "Retrieve socioeconomic indicators",
+              "module": "Socioeconomic Analysis",
+              "detail": "Income / surrounding socioeconomic data",
+              "gate": false
+            }
+          ],
+          "note": "These source retrievals are independent inputs to E08; order here follows UC106. They are not live web computations.",
+          "refs": "REQ-301–305; UC106"
+        },
+        {
+          "code": "E08",
+          "title": "Spatial indicators and explanation",
+          "status": "BLOCKED WEB / DEMO MOBILE",
+          "steps": [
+            {
+              "action": "Required spatial data available?",
+              "module": "LocationIntelligenceService",
+              "detail": "False: web repository throws unavailable",
+              "gate": true
+            },
+            {
+              "action": "Prepare suitability indicators",
+              "module": "Location Suitability Analysis",
+              "detail": "Specification target; mobile uses demo data",
+              "gate": false
+            },
+            {
+              "action": "Request factor contributions",
+              "module": "Recommendation Explanation",
+              "detail": "Web UnavailableIntelligenceRepository",
+              "gate": false
+            },
+            {
+              "action": "Interpret recommendation factors",
+              "module": "Explainable AI Module",
+              "detail": "No connected SHAP / explanation model",
+              "gate": false
+            },
+            {
+              "action": "Display understandable explanation",
+              "module": "ExplanationPage",
+              "detail": "Current web shows failure/unavailable state",
+              "gate": false
+            }
+          ],
+          "note": "True path describes the specification. Web does not fabricate competitor, demand or contribution values.",
+          "refs": "REQ-306,501–503; UC106,108"
+        },
+        {
+          "code": "E09",
+          "title": "Map exploration and spatial layers",
+          "status": "PARTIAL / PROTOTYPE",
+          "steps": [
+            {
+              "action": "Open map / map view",
+              "module": "MapPage / ExplorePage",
+              "detail": "Stylised projection; no map SDK",
+              "gate": false
+            },
+            {
+              "action": "Show and select property markers",
+              "module": "Map rendering / selection state",
+              "detail": "Coordinates from current repository",
+              "gate": false
+            },
+            {
+              "action": "Choose geographic overlay",
+              "module": "Spatial Layer Management",
+              "detail": "Competitors, demand, nearby property",
+              "gate": false
+            },
+            {
+              "action": "Retrieve transit and demographics",
+              "module": "Interactive Map Module",
+              "detail": "Layer data not connected",
+              "gate": false
+            },
+            {
+              "action": "Selected layer available?",
+              "module": "Map UI / layer availability",
+              "detail": "False: disabled or unavailable layer",
+              "gate": true
+            }
+          ],
+          "note": "Specification also requires map-load error handling and location-corresponding overlays. Mobile uses SitewiseMapPanel prototype.",
+          "refs": "REQ-601–609; UC109"
+        },
+        {
+          "code": "E10",
+          "title": "Save, view and remove favourites",
+          "status": "LOCAL STATE",
+          "steps": [
+            {
+              "action": "Select available property",
+              "module": "Property detail / PropertyCard",
+              "detail": "Property identifier",
+              "gate": false
+            },
+            {
+              "action": "Toggle saved membership",
+              "module": "AppCubit.toggleSaved",
+              "detail": "Set semantics prevent duplicate IDs",
+              "gate": false
+            },
+            {
+              "action": "Open saved properties",
+              "module": "SavedPage / mobile saved page",
+              "detail": "Resolve selected IDs against repository",
+              "gate": false
+            },
+            {
+              "action": "Remove saved property",
+              "module": "AppCubit.toggleSaved",
+              "detail": "Emit updated immutable state",
+              "gate": false
+            }
+          ],
+          "note": "Web selections survive only in current browser session; mobile selections are AppCubit state. No persistent favourites endpoint is wired.",
+          "refs": "REQ-701–703; UC110"
+        },
+        {
+          "code": "E11",
+          "title": "Compare property alternatives",
+          "status": "LOCAL STATE",
+          "steps": [
+            {
+              "action": "Choose comparison property",
+              "module": "PropertyCard / detail actions",
+              "detail": "Property identifier",
+              "gate": false
+            },
+            {
+              "action": "Removing item or fewer than 3?",
+              "module": "AppCubit.toggleCompared",
+              "detail": "False: adding fourth property is ignored",
+              "gate": true
+            },
+            {
+              "action": "Update comparison set",
+              "module": "AppCubit / AppState",
+              "detail": "True: add or remove identifier",
+              "gate": false
+            },
+            {
+              "action": "View or clear comparison",
+              "module": "ComparePage / clearCompared",
+              "detail": "Current property characteristics",
+              "gate": false
+            }
+          ],
+          "note": "Comparison does not create a persisted assessment, prediction, or database record.",
+          "refs": ""
+        },
+        {
+          "code": "E12",
+          "title": "Approved virtual-tour viewing",
+          "status": "LOCAL / DEMO",
+          "steps": [
+            {
+              "action": "Open property tour route",
+              "module": "TourPage / mobile tour page",
+              "detail": "Selected property identifier",
+              "gate": false
+            },
+            {
+              "action": "Resolve published tour",
+              "module": "TourService.tourForPropertyApproved",
+              "detail": "TourRepositoryImpl in each app process",
+              "gate": false
+            },
+            {
+              "action": "Approved and published tour exists?",
+              "module": "TourRepositoryImpl.getTourByProperty",
+              "detail": "False: tour unavailable",
+              "gate": true
+            },
+            {
+              "action": "View panorama / navigate controls",
+              "module": "Virtual-tour UI",
+              "detail": "Local/demo media; imported records have no tour",
+              "gate": false
+            }
+          ],
+          "note": "Approval gate exists in shared code. No mobile-to-web media synchronization or storage upload is connected.",
+          "refs": "REQ-801–804; UC111"
+        },
+        {
+          "code": "E13",
+          "title": "Location evaluation report",
+          "status": "BLOCKED WEB / DEMO MOBILE",
+          "steps": [
+            {
+              "action": "Open evaluation report",
+              "module": "ReportPage / mobile report page",
+              "detail": "Selected property identifier",
+              "gate": false
+            },
+            {
+              "action": "Load property information",
+              "module": "PropertyService.detail",
+              "detail": "Rent, area, type and verification",
+              "gate": false
+            },
+            {
+              "action": "Request location analysis",
+              "module": "RecommendationService.analysis",
+              "detail": "Web repository throws UnsupportedError",
+              "gate": false
+            },
+            {
+              "action": "Prepare summary and evidence",
+              "module": "Reporting Module",
+              "detail": "Supporting factors, limits, unknowns",
+              "gate": false
+            }
+          ],
+          "note": "Web report depends on missing analysis and may remain at “Generating report”; it does not produce a complete live analysis.",
+          "refs": ""
+        },
+        {
+          "code": "E14",
+          "title": "Extended business-assessment modules",
+          "status": "SPEC INVENTORY",
+          "steps": [
+            {
+              "action": "Assessment Orchestration Module",
+              "module": "Specification §1.6",
+              "detail": "No connected role route identified",
+              "gate": false
+            },
+            {
+              "action": "Adaptive Questionnaire Module",
+              "module": "Specification §1.6",
+              "detail": "No ordered workflow specified here",
+              "gate": false
+            },
+            {
+              "action": "Evidence Processing Module",
+              "module": "Specification §1.6",
+              "detail": "No connected app data touchpoint",
+              "gate": false
+            },
+            {
+              "action": "Decision Analysis Module",
+              "module": "Deterministic Decision Engine",
+              "detail": "Not the catalogue ranking implementation",
+              "gate": false
+            },
+            {
+              "action": "Knowledge Management / AI-RAG",
+              "module": "Specification §1.6",
+              "detail": "Knowledge retrieval and business explanation",
+              "gate": false
+            },
+            {
+              "action": "Business Assessment Report",
+              "module": "Reporting Module",
+              "detail": "Specification lists scope; no invented events",
+              "gate": false
+            }
+          ],
+          "note": "Inventory blocks are parallel named modules, not a claimed executable sequence. Detailed ordering is not established by the inspected source.",
+          "refs": ""
+        }
+      ]
+    },
+    {
+      "role": "PROPERTY OWNER",
+      "color": "#08734d",
+      "tracks": [
+        {
+          "code": "O01",
+          "title": "Web identity and owner access",
+          "status": "CONNECTED",
+          "steps": [
+            {
+              "action": "Sign in with Google or email",
+              "module": "WebAuth / Supabase SDK",
+              "detail": "PKCE callback: /auth/callback",
+              "gate": false
+            },
+            {
+              "action": "Valid access token?",
+              "module": "Express authentication middleware",
+              "detail": "False: HTTP 401; service outage: 503",
+              "gate": true
+            },
+            {
+              "action": "Load or create role profile",
+              "module": "POST /api/me",
+              "detail": "UUID, email, name; existing role preserved",
+              "gate": false
+            },
+            {
+              "action": "URL role matches profile?",
+              "module": "Jaspr Router redirect",
+              "detail": "False: redirect to assigned role home",
+              "gate": true
+            },
+            {
+              "action": "Open owner workspace",
+              "module": "SitewiseApp / AppLayout",
+              "detail": "True: role route is displayed",
+              "gate": false
+            }
+          ],
+          "note": "New profile may select owner. Owner identity does not link imported workbook rows to that account.",
+          "refs": "REQ-102,105"
+        },
+        {
+          "code": "O02",
+          "title": "Mobile onboarding and owner entry",
+          "status": "LOCAL / DEMO",
+          "steps": [
+            {
+              "action": "Onboarding completed?",
+              "module": "AppStartGate",
+              "detail": "False: /onboarding; persist completion",
+              "gate": true
+            },
+            {
+              "action": "Local session exists?",
+              "module": "AuthRepositoryImpl.currentUser",
+              "detail": "False: /auth; local/demo sign-in",
+              "gate": true
+            },
+            {
+              "action": "Resolve local user role",
+              "module": "AppCubit.setRole",
+              "detail": "Demo role menu can switch roles",
+              "gate": false
+            },
+            {
+              "action": "Navigate to role home",
+              "module": "AppRoutes",
+              "detail": "Named routes; no production role API",
+              "gate": false
+            }
+          ],
+          "note": "Mobile owner scope is DemoData.demoOwnerId; demo role switching is not production authorization.",
+          "refs": ""
+        },
+        {
+          "code": "O03",
+          "title": "Owner dashboard and listing status",
+          "status": "MIXED",
+          "steps": [
+            {
+              "action": "Load owner workspace",
+              "module": "OwnerCubit.load",
+              "detail": "Owner user identifier",
+              "gate": false
+            },
+            {
+              "action": "Find properties belonging to owner",
+              "module": "PropertyService.ownerListings",
+              "detail": "Web: empty list; mobile: demo owner rows",
+              "gate": false
+            },
+            {
+              "action": "Apply text and status filters",
+              "module": "OwnerCubit.filteredProperties",
+              "detail": "Draft / pending / verified / rejected",
+              "gate": false
+            },
+            {
+              "action": "Inspect listing and statistics",
+              "module": "Owner properties / detail pages",
+              "detail": "Counts derived from repository rows",
+              "gate": false
+            }
+          ],
+          "note": "Web ApiPropertyRepository.getPropertiesByOwner returns []; imported records carry empty ownerId.",
+          "refs": "REQ-208"
+        },
+        {
+          "code": "O04",
+          "title": "Add and update commercial listing",
+          "status": "BLOCKED WEB / MOBILE UI ONLY",
+          "steps": [
+            {
+              "action": "Choose add or edit listing",
+              "module": "AddPropertyPage / mobile Stepper",
+              "detail": "Existing identifier for edit",
+              "gate": false
+            },
+            {
+              "action": "Enter basics and location",
+              "module": "Listing form",
+              "detail": "Title, address, city / location",
+              "gate": false
+            },
+            {
+              "action": "Enter commercial details",
+              "module": "Listing form",
+              "detail": "Monthly rent, area, type",
+              "gate": false
+            },
+            {
+              "action": "Required form values valid?",
+              "module": "Form validators",
+              "detail": "False: display errors; correct inputs",
+              "gate": true
+            },
+            {
+              "action": "Attempt create or update",
+              "module": "PropertyService.create / update",
+              "detail": "Web read-only repository rejects write",
+              "gate": false
+            },
+            {
+              "action": "Show draft result",
+              "module": "Mobile Stepper confirmation",
+              "detail": "Mobile currently confirms and returns; no write",
+              "gate": false
+            }
+          ],
+          "note": "Specification requires validated data storage. The final mobile confirmation is not persisted listing creation.",
+          "refs": "REQ-201,202; UC104"
+        },
+        {
+          "code": "O05",
+          "title": "Property images and deletion",
+          "status": "SPEC / NOT CONNECTED",
+          "steps": [
+            {
+              "action": "Choose listing image content",
+              "module": "Commercial Property Management",
+              "detail": "REQ-207: image upload requirement",
+              "gate": false
+            },
+            {
+              "action": "Supported format and size?",
+              "module": "Specification upload validation",
+              "detail": "False: reject input / retry upload",
+              "gate": true
+            },
+            {
+              "action": "Store uploaded listing images",
+              "module": "Property image storage requirement",
+              "detail": "No connected owner upload endpoint",
+              "gate": false
+            },
+            {
+              "action": "Request listing deletion",
+              "module": "Commercial Property Management",
+              "detail": "REQ-203: owner-scoped removal",
+              "gate": false
+            },
+            {
+              "action": "Owner confirms deletion?",
+              "module": "Specification confirmation prompt",
+              "detail": "False: retain listing; return to management",
+              "gate": true
+            },
+            {
+              "action": "Delete or mark listing removed",
+              "module": "Property persistence requirement",
+              "detail": "No shared PropertyRepository delete method",
+              "gate": false
+            }
+          ],
+          "note": "True paths describe the specification only. Existing catalogue uses external image URLs; no Supabase Storage upload occurs.",
+          "refs": "REQ-203,207; UC104 A1–A4"
+        },
+        {
+          "code": "O06",
+          "title": "Submit listing and observe review",
+          "status": "LOCAL MOBILE / BLOCKED WEB",
+          "steps": [
+            {
+              "action": "Open listing detail",
+              "module": "Owner property detail page",
+              "detail": "Selected listing identifier",
+              "gate": false
+            },
+            {
+              "action": "Submit for verification",
+              "module": "OwnerCubit.submit / PropertyService.submit",
+              "detail": "Local call: submitForVerification(id)",
+              "gate": false
+            },
+            {
+              "action": "Set listing status pending",
+              "module": "PropertyRepositoryImpl",
+              "detail": "Mobile in-memory; web throws read-only",
+              "gate": false
+            },
+            {
+              "action": "Read subsequent review status",
+              "module": "Owner listings / status filter",
+              "detail": "Local shared repository only",
+              "gate": false
+            }
+          ],
+          "note": "Event L1: pending listing can enter administrator queue within the same mobile process. No HTTP submission API exists.",
+          "refs": "REQ-208,902"
+        },
+        {
+          "code": "O07",
+          "title": "Capture panorama frames on mobile",
+          "status": "DEVICE LOCAL",
+          "steps": [
+            {
+              "action": "Open capture for property",
+              "module": "PanoramaCapturePage",
+              "detail": "/owner/capture; property identifier",
+              "gate": false
+            },
+            {
+              "action": "Initialize camera and AR guidance",
+              "module": "ArCaptureService / PanoramaCaptureService",
+              "detail": "Platform camera / sensor boundary",
+              "gate": false
+            },
+            {
+              "action": "Capture guided target sequence",
+              "module": "PanoramaCaptureViewModel",
+              "detail": "26 capture targets",
+              "gate": false
+            },
+            {
+              "action": "Store frames and session metadata",
+              "module": "CaptureFrameStore / CaptureSessionStore",
+              "detail": "On-device paths and ordered frame indices",
+              "gate": false
+            },
+            {
+              "action": "Prepare generation request",
+              "module": "PanoramaGenerationService",
+              "detail": "Tour draft and captured frame list",
+              "gate": false
+            }
+          ],
+          "note": "Native camera, AR and stitching require hands-on device verification. Web has no capture implementation.",
+          "refs": ""
+        },
+        {
+          "code": "O08",
+          "title": "Validate and stitch panorama",
+          "status": "DEVICE LOCAL",
+          "steps": [
+            {
+              "action": "At least 26 unique frame indices?",
+              "module": "PanoramaGenerationService",
+              "detail": "False: insufficient or duplicate frame error",
+              "gate": true
+            },
+            {
+              "action": "Read and decode each frame",
+              "module": "OpenCvPanoramaStitcher",
+              "detail": "Missing or invalid file: preserve source frames",
+              "gate": false
+            },
+            {
+              "action": "Run panorama stitching",
+              "module": "OpenCV StitcherMode.PANORAMA",
+              "detail": "Native stitchAsync operation",
+              "gate": false
+            },
+            {
+              "action": "Stitch and nonempty output succeed?",
+              "module": "OpenCvPanoramaStitcher",
+              "detail": "False: explain failure; retry / retake frames",
+              "gate": true
+            },
+            {
+              "action": "Write panorama.jpg and ready status",
+              "module": "File system / TourRepositoryImpl",
+              "detail": "Record output path; local tour metadata",
+              "gate": false
+            }
+          ],
+          "note": "Output is local media plus in-memory tour state; there is no backend upload or inter-device sharing.",
+          "refs": ""
+        },
+        {
+          "code": "O09",
+          "title": "Preview, regenerate and submit tour",
+          "status": "LOCAL / DEMO",
+          "steps": [
+            {
+              "action": "Open tour preview / manage tours",
+              "module": "TourPreviewViewModel / preview pages",
+              "detail": "Owner tour identifier",
+              "gate": false
+            },
+            {
+              "action": "Regenerate or retake content",
+              "module": "PanoramaGenerationService",
+              "detail": "Mobile uses stored frames; web has zero frames",
+              "gate": false
+            },
+            {
+              "action": "Generated panorama path exists?",
+              "module": "TourService.submitTour",
+              "detail": "False: generate panorama before submitting",
+              "gate": true
+            },
+            {
+              "action": "Submit tour for verification",
+              "module": "TourService.submitTour",
+              "detail": "Set pendingVerification in local repository",
+              "gate": false
+            },
+            {
+              "action": "Observe approved or rejected state",
+              "module": "OwnerCubit / tours page",
+              "detail": "Rejection permits retake and resubmission",
+              "gate": false
+            }
+          ],
+          "note": "Event T1: pendingTours() exposes submission to admin within same repository instance. No upload API is called.",
+          "refs": "REQ-805–807; UC111"
+        },
+        {
+          "code": "O10",
+          "title": "Delete virtual tour",
+          "status": "LOCAL / DEMO",
+          "steps": [
+            {
+              "action": "Request deletion",
+              "module": "Tours / preview UI",
+              "detail": "Select tour identifier",
+              "gate": false
+            },
+            {
+              "action": "Confirm delete action?",
+              "module": "Confirmation dialog",
+              "detail": "False: cancel; retain tour",
+              "gate": true
+            },
+            {
+              "action": "Purge local capture frames",
+              "module": "TourService.purgeFrames",
+              "detail": "Mobile hook; web has no frame files",
+              "gate": false
+            },
+            {
+              "action": "Remove tour metadata",
+              "module": "TourRepositoryImpl.deleteTour",
+              "detail": "In-memory removal",
+              "gate": false
+            }
+          ],
+          "note": "Specification says authorized owner may delete an unpublished tour; current shared service itself does not enforce an unpublished-only guard.",
+          "refs": "REQ-808; UC111 A3"
+        },
+        {
+          "code": "O11",
+          "title": "Owner profile and session maintenance",
+          "status": "MIXED",
+          "steps": [
+            {
+              "action": "Open and edit profile form",
+              "module": "Owner ProfilePage",
+              "detail": "Web form state; no profile update endpoint",
+              "gate": false
+            },
+            {
+              "action": "Save display confirmation",
+              "module": "Profile UI state",
+              "detail": "Does not persist edited profile fields",
+              "gate": false
+            },
+            {
+              "action": "Sign out on selected platform",
+              "module": "WebAuth / AuthService",
+              "detail": "Web: Supabase; mobile: delete local session",
+              "gate": false
+            }
+          ],
+          "note": "Password reset is disabled on web. Owner profile editing is not database account management.",
+          "refs": "REQ-103,104,106"
+        }
+      ]
+    },
+    {
+      "role": "ADMINISTRATOR",
+      "color": "#223d73",
+      "tracks": [
+        {
+          "code": "A01",
+          "title": "Administrator authentication and access",
+          "status": "CONNECTED WEB",
+          "steps": [
+            {
+              "action": "Sign in with Google or email",
+              "module": "WebAuth / Supabase SDK",
+              "detail": "PKCE callback: /auth/callback",
+              "gate": false
+            },
+            {
+              "action": "Valid access token?",
+              "module": "Express authentication middleware",
+              "detail": "False: HTTP 401; service outage: 503",
+              "gate": true
+            },
+            {
+              "action": "Load or create role profile",
+              "module": "POST /api/me",
+              "detail": "UUID, email, name; existing role preserved",
+              "gate": false
+            },
+            {
+              "action": "URL role matches profile?",
+              "module": "Jaspr Router redirect",
+              "detail": "False: redirect to assigned role home",
+              "gate": true
+            },
+            {
+              "action": "Open administrator workspace",
+              "module": "SitewiseApp / AppLayout",
+              "detail": "True: role route is displayed",
+              "gate": false
+            }
+          ],
+          "note": "Only a trusted local database operator assigns admin in sitewise_app.profiles; self-service signup cannot do so.",
+          "refs": "REQ-102,105"
+        },
+        {
+          "code": "A02",
+          "title": "Mobile administrator demo entry",
+          "status": "LOCAL / DEMO",
+          "steps": [
+            {
+              "action": "Onboarding completed?",
+              "module": "AppStartGate",
+              "detail": "False: /onboarding; persist completion",
+              "gate": true
+            },
+            {
+              "action": "Local session exists?",
+              "module": "AuthRepositoryImpl.currentUser",
+              "detail": "False: /auth; local/demo sign-in",
+              "gate": true
+            },
+            {
+              "action": "Resolve local user role",
+              "module": "AppCubit.setRole",
+              "detail": "Demo role menu can switch roles",
+              "gate": false
+            },
+            {
+              "action": "Navigate to role home",
+              "module": "AppRoutes",
+              "detail": "Named routes; no production role API",
+              "gate": false
+            }
+          ],
+          "note": "Admin mobile routes are demo workflows; role menu switches AppCubit state.",
+          "refs": ""
+        },
+        {
+          "code": "A03",
+          "title": "Dashboard and listing oversight",
+          "status": "MIXED",
+          "steps": [
+            {
+              "action": "Open administrator dashboard",
+              "module": "AdminCubit.loadDashboard",
+              "detail": "Load queue, listings and users",
+              "gate": false
+            },
+            {
+              "action": "Load pending property queue",
+              "module": "VerificationService.queue",
+              "detail": "Web: imported records mapped pending",
+              "gate": false
+            },
+            {
+              "action": "Load catalogue and account list",
+              "module": "PropertyService / UserRepositoryImpl",
+              "detail": "Web properties live; account list demo",
+              "gate": false
+            },
+            {
+              "action": "Derive status counts and listings",
+              "module": "AdminCubit / dashboard UI",
+              "detail": "Search and inspect listing detail",
+              "gate": false
+            }
+          ],
+          "note": "Dataset quality PASS is not admin approval. Activity/monitoring displays are not a durable audit log.",
+          "refs": "REQ-906"
+        },
+        {
+          "code": "A04",
+          "title": "Review, approve or reject listing",
+          "status": "LOCAL MOBILE / BLOCKED WEB",
+          "steps": [
+            {
+              "action": "Choose pending property",
+              "module": "VerificationPage / detail page",
+              "detail": "Local event L1: pending listing",
+              "gate": false
+            },
+            {
+              "action": "Inspect submitted record",
+              "module": "Property detail / review UI",
+              "detail": "No connected document upload pipeline",
+              "gate": false
+            },
+            {
+              "action": "Administrator chooses approval?",
+              "module": "VerificationService",
+              "detail": "False: reject with reason input",
+              "gate": true
+            },
+            {
+              "action": "True: mark property verified",
+              "module": "VerificationRepositoryImpl.verify",
+              "detail": "Mobile local mutation; web read-only error",
+              "gate": false
+            },
+            {
+              "action": "False: mark property rejected",
+              "module": "VerificationRepositoryImpl.reject",
+              "detail": "Mobile local mutation; web read-only error",
+              "gate": false
+            }
+          ],
+          "note": "Branches are alternatives, not sequential approvals. Reason is passed but not persisted by PropertyRepository; no email or notification is sent.",
+          "refs": "REQ-902; UC112"
+        },
+        {
+          "code": "A05",
+          "title": "Review and moderate virtual tours",
+          "status": "LOCAL / DEMO",
+          "steps": [
+            {
+              "action": "Load submitted tours",
+              "module": "AdminCubit.loadPendingTours",
+              "detail": "TourRepositoryImpl.pendingTours",
+              "gate": false
+            },
+            {
+              "action": "Inspect submitted tour content",
+              "module": "Verification UI / tour data",
+              "detail": "Local event T1: pendingVerification",
+              "gate": false
+            },
+            {
+              "action": "Administrator chooses approval?",
+              "module": "TourService",
+              "detail": "False: rejection branch",
+              "gate": true
+            },
+            {
+              "action": "True: approve and publish",
+              "module": "TourService.approveTour",
+              "detail": "approved; published = true",
+              "gate": false
+            },
+            {
+              "action": "False: reject and unpublish",
+              "module": "TourService.rejectTour",
+              "detail": "rejected; published = false",
+              "gate": false
+            },
+            {
+              "action": "Remove tour when requested",
+              "module": "TourService.deleteTour",
+              "detail": "Service exists; admin removal UI not established",
+              "gate": false
+            }
+          ],
+          "note": "Event T2: approved and published tour resolves through entrepreneur visibility gate in same app instance. No cross-device propagation.",
+          "refs": "REQ-903; UC112"
+        },
+        {
+          "code": "A06",
+          "title": "Account inspection and management",
+          "status": "DEMO READ / SPEC WRITE",
+          "steps": [
+            {
+              "action": "Open users and search accounts",
+              "module": "AdminCubit.loadUsers / filteredUsers",
+              "detail": "UserRepositoryImpl returns DemoData.users",
+              "gate": false
+            },
+            {
+              "action": "Select account details",
+              "module": "UserDetailPage / mobile user detail",
+              "detail": "Name, email, role, status, joined date",
+              "gate": false
+            },
+            {
+              "action": "Manage account lifecycle",
+              "module": "Administration Module",
+              "detail": "Specification requirement; no connected write API",
+              "gate": false
+            }
+          ],
+          "note": "The administrator user list is separate from live sitewise_app.profiles; it is not a view of Supabase Auth users.",
+          "refs": "REQ-901; UC112"
+        },
+        {
+          "code": "A07",
+          "title": "Recommendation monitoring",
+          "status": "SPEC / NOT CONNECTED",
+          "steps": [
+            {
+              "action": "Request recommendation monitoring",
+              "module": "Administration Module",
+              "detail": "Specification administrative operation",
+              "gate": false
+            },
+            {
+              "action": "Monitoring information available?",
+              "module": "Recommendation monitoring requirement",
+              "detail": "False: monitoring information unavailable",
+              "gate": true
+            },
+            {
+              "action": "Display available ranking results",
+              "module": "AI Recommendation Monitoring",
+              "detail": "No registered admin monitoring route identified",
+              "gate": false
+            }
+          ],
+          "note": "No prediction monitoring API is invoked by the current administrator app.",
+          "refs": "REQ-904; UC112"
+        },
+        {
+          "code": "A08",
+          "title": "Explanation monitoring",
+          "status": "SPEC / NOT CONNECTED",
+          "steps": [
+            {
+              "action": "Request explanation monitoring",
+              "module": "Administration Module",
+              "detail": "Specification administrative operation",
+              "gate": false
+            },
+            {
+              "action": "Explanation evidence available?",
+              "module": "Explanation monitoring requirement",
+              "detail": "False: monitoring information unavailable",
+              "gate": true
+            },
+            {
+              "action": "Inspect explanations and factors",
+              "module": "Recommendation Explanation Monitoring",
+              "detail": "No connected administrator monitoring route",
+              "gate": false
+            }
+          ],
+          "note": "Existing explanation backend source is not an application integration.",
+          "refs": "REQ-905; UC112"
+        },
+        {
+          "code": "A09",
+          "title": "Administrator profile and logout",
+          "status": "MIXED",
+          "steps": [
+            {
+              "action": "Edit profile fields",
+              "module": "Administrator ProfilePage",
+              "detail": "Web save sets local confirmation state",
+              "gate": false
+            },
+            {
+              "action": "Show profile updated message",
+              "module": "Profile UI",
+              "detail": "No persistent profile update request",
+              "gate": false
+            },
+            {
+              "action": "Sign out",
+              "module": "WebAuth / mobile AuthService",
+              "detail": "Supabase logout or local session deletion",
+              "gate": false
+            }
+          ],
+          "note": "No automatic administrator approval, privilege escalation or trusted-role assignment UI is implemented.",
+          "refs": "REQ-103,104,106"
+        }
+      ]
+    }
+  ],
+  "events": [
+    [
+      "L1",
+      "O06",
+      "A04",
+      "submitForVerification(id) → getPendingQueue()",
+      "Mobile in-memory property repository only; web write is blocked."
+    ],
+    [
+      "L2",
+      "A04",
+      "O06",
+      "verify(id) / reject(id, reason) → owner status lookup",
+      "Local status mutation only; reason is not stored and no notification is sent."
+    ],
+    [
+      "T1",
+      "O09",
+      "A05",
+      "submitTour(id) → pendingTours()",
+      "Same app TourRepositoryImpl instance; no network event or webhook."
+    ],
+    [
+      "T2",
+      "A05",
+      "E12",
+      "approveTour(id) → getTourByProperty(propertyId)",
+      "Only approved AND published tours resolve. No mobile ↔ web synchronization."
+    ]
+  ]
+}
