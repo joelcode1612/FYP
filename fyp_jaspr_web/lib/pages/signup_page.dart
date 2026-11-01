@@ -3,21 +3,27 @@ import 'package:jaspr/jaspr.dart';
 
 import '../components/auth_icons.dart';
 import '../components/dom_helpers.dart';
-import '../components/letter_reveal.dart';
 import '../components/ui.dart';
-import '../components/site_topbar.dart';
 import '../data/auth_service.dart';
 
-/// Account-creation surface — split marketing layout.
+/// Account-creation surface.
 ///
-/// Left: a city-scene panel with the value proposition and three benefit rows.
-/// Right: the form card (name, email, password, confirm, account type, planned
-/// concept, terms).
+/// Shares the [LoginPage] shell (`lp-*`): full-bleed photographic backdrop
+/// under a left-to-right dark scrim, value-proposition column on the left,
+/// white credential card on the right, and deliberately **no top navigation
+/// bar** — sign-in is reached through the card's "Sign in" link. Only the
+/// backdrop differs: signup paints the KL street scene
+/// (`assets/signup-city.jpg`) instead of `login-bg.jpg`, via
+/// `.signup-page .lp-bg`.
 ///
-/// Same no-backend posture as [LoginPage]: client-side validation only, and a
-/// submit reports that account creation is disabled. The scene behind the
-/// headline is an inline SVG rather than a photograph, so the page ships with
-/// no image payload and no external requests.
+/// Signup-only controls (account type, planned concept, terms) are the
+/// `su-*` rules in `web/styles.css`; everything shared reuses the `lp-*`
+/// rules so the two auth pages cannot drift apart again.
+///
+/// Same no-backend posture as [LoginPage]: client-side validation only.
+/// Required / email-format / password-length / mismatch / terms checks
+/// surface inline `lp-err` messages plus a non-blocking `lp-alert`, and a
+/// clean submit reports that account creation is unavailable.
 class SignupPage extends StatefulComponent {
   const SignupPage({super.key});
 
@@ -42,6 +48,8 @@ class _SignupState extends State<SignupPage> {
 
   static final _emailRe = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$');
 
+  static const int _minPasswordLength = 8;
+
   static const List<String> _concepts = [
     'Specialty Café',
     'Quick-Service Restaurant',
@@ -50,6 +58,15 @@ class _SignupState extends State<SignupPage> {
     'Bakery & Patisserie',
   ];
 
+  static const Map<String, String> _typeHints = {
+    'entrepreneur':
+        'Explore locations, compare properties and get AI-assisted '
+        'suitability recommendations.',
+    'owner':
+        'Manage commercial listings and submit 360° property tours for '
+        'review.',
+  };
+
   Future<void> _submit() async {
     if (_busy) return;
     final e = <String, String>{};
@@ -57,8 +74,8 @@ class _SignupState extends State<SignupPage> {
     if (!_emailRe.hasMatch(_email)) e['email'] = 'Enter a valid email address.';
     if (_password.isEmpty) {
       e['password'] = 'Create a password.';
-    } else if (_password.length < 6) {
-      e['password'] = 'Use at least 6 characters.';
+    } else if (_password.length < _minPasswordLength) {
+      e['password'] = 'Use at least $_minPasswordLength characters.';
     }
     if (_confirm.isEmpty) {
       e['confirm'] = 'Confirm your password.';
@@ -122,88 +139,97 @@ class _SignupState extends State<SignupPage> {
     }
   }
 
-  // ------------------------------------------------------------------ scene
-
-  /// The hero backdrop is the user-supplied city photograph (the same scene
-  /// used across the marketing site), cleaned of composited copy and cropped
-  /// to the panel. It fills `.su-hero__art` (absolute, object-fit: cover) and
-  /// sits behind the white legibility scrim (`.su-hero::after`).
-  Component _heroArt() => Component.element(
-    tag: 'img',
-    classes: 'su-hero__art',
-    attributes: {
-      'src': 'assets/signup-city.jpg',
-      'alt': '',
-      'aria-hidden': 'true',
-      'fetchpriority': 'high',
-    },
-    children: [],
-  );
-
   // ------------------------------------------------------------------ hero
 
-  Component _benefit(String icon, String title, String body) =>
-      div(classes: 'su-benefit', [
-        span(classes: 'su-benefit__icon', [Icon(icon)]),
+  Component _feature(Component icon, String title, String body) =>
+      div(classes: 'lp-feature', [
+        div(classes: 'lp-feat-icon', [icon]),
         div([
           h3([Component.text(title)]),
           p([Component.text(body)]),
         ]),
       ]);
 
-  Component _hero() => aside(
-    classes: 'su-hero',
-    attributes: const {'aria-label': 'Why Sitewise'},
-    [
-      _heroArt(),
-      div(classes: 'su-hero__inner', [
-        span(classes: 'su-eyebrow', [
-          Component.text('COMMERCIAL F&B LOCATION INTELLIGENCE'),
-        ]),
-        h1(classes: 'su-hero__title', [
-          Component.text('Find the right '),
-          span(classes: 'su-accent', [Component.text('space')]),
-          Component.text(' for your '),
-          span(classes: 'su-accent', [Component.text('business.')]),
-        ]),
-        p(classes: 'su-hero__lead', [
-          Component.text(
-            'Compare commercial properties through location context, '
-            'surrounding demand and explainable suitability insights.',
-          ),
-        ]),
-        div(classes: 'su-benefits', [
-          _benefit(
-            'search',
-            'Explore with context',
-            'Search and filter commercial properties based on location, '
-                'surrounding amenities and F&B demand.',
-          ),
-          _benefit(
-            'map',
-            'Compare locations',
-            'Review access, nearby F&B competition and area indicators in one '
-                'place.',
-          ),
-          _benefit(
-            'monitoring',
-            'Understand recommendations',
-            'See the factors behind property suitability with explainable AI '
-                'insights.',
-          ),
-        ]),
-      ]),
-    ],
-  );
+  Component _hero() => div(classes: 'lp-left', [
+    p(classes: 'lp-eyebrow', [
+      Component.text('Commercial Property & Location Intelligence'),
+    ]),
+    h1(classes: 'lp-hero', [
+      Component.text('Discover the right property.'),
+      br(),
+      span(classes: 'lp-accent', [Component.text('Assess its business potential.')]),
+    ]),
+    p(classes: 'lp-desc', [
+      Component.text(
+        'Find suitable commercial properties and evaluate locations through '
+        'geospatial analysis, surrounding F&B demand, accessibility and '
+        'AI-powered suitability insights.',
+      ),
+    ]),
+    div(classes: 'lp-features', [
+      _feature(
+        const Icon('search', filled: false),
+        'Discover commercial properties',
+        'Search and filter properties based on location, property '
+            'characteristics, rental details and business requirements.',
+      ),
+      _feature(
+        const Icon('map', filled: false),
+        'Evaluate location potential',
+        'Analyse surrounding population, F&B competitors, accessibility, '
+            'amenities and local market conditions.',
+      ),
+      _feature(
+        const Icon('monitoring', filled: false),
+        'Understand AI recommendations',
+        'Compare property suitability scores, explore assessment results and '
+            'understand the factors behind each recommendation.',
+      ),
+    ]),
+  ]);
 
-  // --------------------------------------------------------------- controls
+  // ----------------------------------------------------------------- fields
+
+  Component _field({
+    required String forId,
+    required String labelText,
+    required String errKey,
+    required Component icon,
+    required String placeholder,
+    required InputType type,
+    required String autocomplete,
+    required void Function(String) onInput,
+    Component? trailing,
+  }) => div(classes: 'lp-group', [
+    label(
+      classes: 'lp-label',
+      attributes: {'for': forId},
+      [Component.text(labelText)],
+    ),
+    div(classes: 'lp-field${_errors[errKey] != null ? ' is-invalid' : ''}', [
+      span(classes: 'lp-ico', attributes: {'aria-hidden': 'true'}, [icon]),
+      input(
+        type: type,
+        id: forId,
+        attributes: {'placeholder': placeholder, 'autocomplete': autocomplete},
+        events: events<String>(onInput: (v) => setState(() => onInput(v))),
+      ),
+      ?trailing,
+    ]),
+    span(
+      classes: 'lp-err${_errors[errKey] == null ? ' is-hidden' : ''}',
+      attributes: {'role': 'alert'},
+      [textNode(_errors[errKey])],
+    ),
+  ]);
 
   Component _eye({required bool show, required void Function() onToggle}) =>
       button(
-        classes: 'su-eye',
-        attributes: const {
+        classes: 'lp-eye',
+        attributes: {
           'type': 'button',
           'aria-label': 'Toggle password visibility',
+          'aria-pressed': show ? 'true' : 'false',
         },
         events: events(onClick: onToggle),
         [
@@ -213,237 +239,232 @@ class _SignupState extends State<SignupPage> {
         ],
       );
 
-  Component _fieldBlock({
-    required String labelText,
-    required String errKey,
-    required String placeholder,
-    required InputType type,
-    required String autocomplete,
-    required void Function(String) onInput,
-    Component? leading,
-    Component? trailing,
-    String? hint,
-    bool optional = false,
-  }) {
-    final err = _errors[errKey];
-    return div(classes: 'su-field', [
-      label(classes: 'su-field__label', [
-        span(classes: 'su-label', [
-          Component.text(labelText),
-          if (optional)
-            span(classes: 'su-optional', [Component.text(' (optional)')]),
-        ]),
-        div(classes: 'su-control${err != null ? ' is-invalid' : ''}', [
-          if (leading != null) span(classes: 'su-control__icon', [leading]),
-          input(
-            type: type,
-            attributes: {
-              'placeholder': placeholder,
-              'autocomplete': autocomplete,
-              'aria-label': labelText,
-            },
-            events: events<String>(onInput: (v) => setState(() => onInput(v))),
-          ),
-          ?trailing,
-        ]),
-      ]),
-      if (hint != null) p(classes: 'su-hint', [Component.text(hint)]),
-      span(classes: 'su-err${err == null ? ' is-hidden' : ''}', [
-        textNode(err),
-      ]),
-    ]);
-  }
-
-  Component _typeCard(String id, String icon, String title, String desc) {
+  Component _segOption(String id, String icon, String title) {
     final selected = _accountType == id;
     return button(
-      classes: 'su-type${selected ? ' is-selected' : ''}',
+      classes: 'su-seg__opt${selected ? ' is-selected' : ''}',
       attributes: {
         'type': 'button',
         'role': 'radio',
         'aria-checked': selected ? 'true' : 'false',
       },
       events: events(onClick: () => setState(() => _accountType = id)),
-      [
-        span(classes: 'su-type__icon', [Icon(icon)]),
-        span(classes: 'su-type__body', [
-          span(classes: 'su-type__title', [Component.text(title)]),
-          span(classes: 'su-type__desc', [Component.text(desc)]),
-        ]),
-        span(classes: 'su-radio', []),
-      ],
+      [Icon(icon, filled: false), Component.text(title)],
     );
   }
 
   // ------------------------------------------------------------------ panel
 
-  Component _panel() => main_(classes: 'su-panel', [
-    div(classes: 'su-card', [
-      LetterRevealHeading.text(
-        'Create your Sitewise account',
-        level: 2,
-        classes: 'su-title',
-      ),
-      p(classes: 'su-sub', [
+  Component _panel() => div(classes: 'lp-right', [
+    section(classes: 'lp-card', [
+      h2(classes: 'lp-card-title', [
+        Component.text('Create your Sitewise account'),
+      ]),
+      p(classes: 'lp-card-sub', [
         Component.text(
-          'Find and evaluate commercial F&B properties with greater confidence.',
+          'Find and evaluate commercial F&B properties with greater '
+          'confidence.',
         ),
       ]),
+
       div(
-        classes: 'su-alert $_alertTone${_alert.isEmpty ? ' is-hidden' : ''}',
+        classes:
+            'lp-alert $_alertTone${_alert.isEmpty ? ' is-hidden' : ''}',
         attributes: const {'role': 'alert'},
         [textNode(_alert)],
       ),
-      button(
-        classes: 'lp-social',
-        attributes: {
-          'type': 'button',
-          if (!WebAuth.configured || _busy) 'disabled': 'true',
-        },
-        events: events(onClick: _google),
-        [authSocialGoogle(), Component.text('Continue with Google')],
-      ),
-      _fieldBlock(
+
+      div(classes: 'lp-social-row', [
+        button(
+          classes: 'lp-social',
+          attributes: {
+            'type': 'button',
+            if (!WebAuth.configured || _busy) 'disabled': 'true',
+            'aria-label': WebAuth.configured
+                ? 'Continue with Google'
+                : 'Google sign-up (not configured)',
+          },
+          events: events(onClick: _google),
+          [authSocialGoogle(), Component.text('Continue with Google')],
+        ),
+      ]),
+      p(classes: 'lp-social-note', [
+        Component.text(
+          WebAuth.configured
+              ? 'Google sign-up is managed by Supabase.'
+              : 'Social sign-up is not configured in this deployment.',
+        ),
+      ]),
+
+      div(classes: 'lp-divider', [
+        span(classes: 'lp-line', attributes: {'aria-hidden': 'true'}, []),
+        span(classes: 'lp-divider-text', [Component.text('or')]),
+        span(classes: 'lp-line', attributes: {'aria-hidden': 'true'}, []),
+      ]),
+
+      _field(
+        forId: 'su-name',
         labelText: 'Full name',
         errKey: 'name',
+        icon: authIconUser(),
         placeholder: 'Enter your full name',
         type: InputType.text,
         autocomplete: 'name',
         onInput: (v) => _name = v,
-        leading: authIconUser(),
       ),
-      _fieldBlock(
+
+      _field(
+        forId: 'su-email',
         labelText: 'Work or personal email',
         errKey: 'email',
+        icon: authIconEmail(),
         placeholder: 'Enter your email address',
         type: InputType.email,
         autocomplete: 'email',
         onInput: (v) => _email = v,
-        leading: authIconEmail(),
       ),
-      _fieldBlock(
-        labelText: 'Create password',
-        errKey: 'password',
-        placeholder: 'Create a password',
-        type: _showPw ? InputType.text : InputType.password,
-        autocomplete: 'new-password',
-        onInput: (v) => _password = v,
-        leading: authIconLock(),
-        trailing: _eye(
-          show: _showPw,
-          onToggle: () => setState(() => _showPw = !_showPw),
+
+      div(classes: 'su-pw-row', [
+        _field(
+          forId: 'su-password',
+          labelText: 'Create password',
+          errKey: 'password',
+          icon: authIconLock(),
+          placeholder: 'Create password',
+          type: _showPw ? InputType.text : InputType.password,
+          autocomplete: 'new-password',
+          onInput: (v) => _password = v,
+          trailing: _eye(
+            show: _showPw,
+            onToggle: () => setState(() => _showPw = !_showPw),
+          ),
         ),
-        hint:
-            'At least 6 characters with a mix of letters, numbers and symbols.',
-      ),
-      _fieldBlock(
-        labelText: 'Confirm password',
-        errKey: 'confirm',
-        placeholder: 'Confirm your password',
-        type: _showConfirm ? InputType.text : InputType.password,
-        autocomplete: 'new-password',
-        onInput: (v) => _confirm = v,
-        leading: authIconLockCheck(),
-        trailing: _eye(
-          show: _showConfirm,
-          onToggle: () => setState(() => _showConfirm = !_showConfirm),
-        ),
-      ),
-      div(classes: 'su-field', [
-        span(classes: 'su-label', [Component.text('Account type')]),
-        div(
-          classes: 'su-types',
-          attributes: const {
-            'role': 'radiogroup',
-            'aria-label': 'Account type',
-          },
-          [
-            _typeCard(
-              'entrepreneur',
-              'storefront',
-              'F&B Entrepreneur',
-              'Explore locations, compare properties and get AI-assisted '
-                  'suitability recommendations.',
-            ),
-            _typeCard(
-              'owner',
-              'domain',
-              'Commercial Property Owner',
-              'Manage commercial listings and submit 360° property tours for '
-                  'review.',
-            ),
-          ],
+        _field(
+          forId: 'su-confirm',
+          labelText: 'Confirm password',
+          errKey: 'confirm',
+          icon: authIconLockCheck(),
+          placeholder: 'Confirm password',
+          type: _showConfirm ? InputType.text : InputType.password,
+          autocomplete: 'new-password',
+          onInput: (v) => _confirm = v,
+          trailing: _eye(
+            show: _showConfirm,
+            onToggle: () => setState(() => _showConfirm = !_showConfirm),
+          ),
         ),
       ]),
-      div(classes: 'su-field', [
-        label(classes: 'su-field__label', [
-          span(classes: 'su-label', [
-            Component.text('Planned F&B concept'),
-            span(classes: 'su-optional', [Component.text(' (optional)')]),
+      p(classes: 'su-hint', [
+        Component.text(
+          'At least $_minPasswordLength characters with a mix of letters, '
+          'numbers and symbols.',
+        ),
+      ]),
+
+      div(classes: 'lp-group', [
+        span(classes: 'lp-label', [Component.text('Account type')]),
+        div(
+          classes: 'su-seg',
+          attributes: const {'role': 'radiogroup', 'aria-label': 'Account type'},
+          [
+            _segOption('entrepreneur', 'storefront', 'F&B Entrepreneur'),
+            _segOption('owner', 'domain', 'Property Owner'),
+          ],
+        ),
+        p(classes: 'su-seg-hint', [
+          Component.text(_typeHints[_accountType] ?? ''),
+        ]),
+      ]),
+
+      div(classes: 'lp-group', [
+        span(classes: 'lp-label', [
+          Component.text('Planned F&B concept'),
+          span(classes: 'su-opt', [Component.text(' (optional)')]),
+        ]),
+        div(classes: 'lp-field su-select-wrap', [
+          span(classes: 'lp-ico', attributes: const {'aria-hidden': 'true'}, [
+            const Icon('restaurant', filled: false),
           ]),
-          div(classes: 'su-control su-control--select', [
-            span(classes: 'su-control__icon', [Icon('restaurant')]),
-            select(
-              [
+          select(
+            [
+              option(
+                [Component.text('Select your F&B concept')],
+                value: '',
+                selected: _concept.isEmpty,
+              ),
+              for (final c in _concepts)
                 option(
-                  [Component.text('Select your F&B concept')],
-                  value: '',
-                  selected: _concept.isEmpty,
+                  [Component.text(c)],
+                  value: c,
+                  selected: _concept == c,
                 ),
-                for (final c in _concepts)
-                  option(
-                    [Component.text(c)],
-                    value: c,
-                    selected: _concept == c,
-                  ),
-              ],
-              classes: 'su-select',
-              attributes: const {'aria-label': 'Planned F&B concept'},
-              onChange: (vals) =>
-                  setState(() => _concept = vals.isEmpty ? '' : vals.first),
-            ),
-            span(classes: 'su-control__chevron', [Icon('expand_more')]),
+            ],
+            classes: 'su-select',
+            attributes: const {'aria-label': 'Planned F&B concept'},
+            onChange: (vals) =>
+                setState(() => _concept = vals.isEmpty ? '' : vals.first),
+          ),
+          span(classes: 'su-chev', attributes: const {'aria-hidden': 'true'}, [
+            Icon('expand_more', size: 'sm'),
           ]),
         ]),
         p(classes: 'su-hint', [
           Component.text('You can update this later in your profile.'),
         ]),
       ]),
-      div(classes: 'su-terms', [
-        input<bool>(
+
+      div(classes: 'lp-remember su-terms', [
+        input(
           type: InputType.checkbox,
           id: 'su-terms',
+          classes: 'lp-checkbox',
           checked: _agreed,
           attributes: const {
             'aria-label': 'I agree to the Terms of Service and Privacy Policy',
           },
-          onChange: (v) => setState(() => _agreed = v),
+          events: events(onClick: () => setState(() => _agreed = !_agreed)),
         ),
-        p([
-          Component.text('I agree to the '),
-          a(href: '#', [Component.text('Terms of Service')]),
-          Component.text(' and '),
-          a(href: '#', [Component.text('Privacy Policy')]),
-          Component.text('.'),
+        // Not a `<label for>`: the row contains the Terms and Privacy links,
+        // and a label wrapping them would toggle the checkbox when either link
+        // is clicked.
+        p(classes: 'lp-remember-text', [
+          strong([
+            Component.text('I agree to the '),
+            a(href: '#', [Component.text('Terms of Service')]),
+            Component.text(' and '),
+            a(href: '#', [Component.text('Privacy Policy')]),
+            Component.text('.'),
+          ]),
+          small([
+            Component.text(
+              'Your details are used to set up your SiteWise account. You can '
+              'complete or update your profile details later.',
+            ),
+          ]),
         ]),
       ]),
-      span(classes: 'su-err${_errors['terms'] == null ? ' is-hidden' : ''}', [
-        textNode(_errors['terms']),
-      ]),
-      button(
-        classes: 'su-submit',
-        attributes: const {'type': 'button'},
-        events: events(onClick: _submit),
-        [Component.text('Create account'), Icon('arrow_forward', size: 'sm')],
+      span(
+        classes: 'lp-err${_errors['terms'] == null ? ' is-hidden' : ''}',
+        attributes: const {'role': 'alert'},
+        [textNode(_errors['terms'])],
       ),
-      div(classes: 'su-note', [
-        span(classes: 'su-note__icon', [Icon('verified_user', size: 'sm')]),
-        p([
-          Component.text(
-            'Your details are used to set up your SiteWise account. You can '
-            'complete or update your profile details later.',
-          ),
-        ]),
+
+      button(
+        classes: 'lp-submit',
+        attributes: {'type': 'button', if (_busy) 'disabled': 'true'},
+        events: events(onClick: _submit),
+        [
+          Component.text(_busy ? 'Creating account…' : 'Create account'),
+          Icon('arrow_forward', size: 'sm'),
+        ],
+      ),
+
+      p(classes: 'lp-switch', [
+        Component.text('Already have an account? '),
+        AppLink(
+          to: '/login',
+          children: [Component.text('Sign in')],
+        ),
       ]),
     ]),
   ]);
@@ -452,13 +473,18 @@ class _SignupState extends State<SignupPage> {
 
   @override
   Component build(BuildContext context) {
-    return div(classes: 'signup-page', [
-      // The site's real navbar (brand + section links + Sign in / Sign up)
-      // replaces the bespoke sign-up top bar. `linkPrefix: '/'` sends the
-      // section anchors back to the landing page, since those sections do not
-      // exist here. `.lnd` supplies the `--lnd-*` tokens the nav styles use.
-      div(classes: 'lnd', [const SiteTopbar(linkPrefix: '/')]),
-      div(classes: 'su-body', [_hero(), _panel()]),
-    ]);
+    return main_(
+      classes: 'login-page signup-page',
+      attributes: const {'aria-label': 'Create a SiteWise account'},
+      [
+        div(classes: 'lp-bg', attributes: const {'aria-hidden': 'true'}, []),
+        div(
+          classes: 'lp-overlay',
+          attributes: const {'aria-hidden': 'true'},
+          [],
+        ),
+        div(classes: 'lp-content', [_hero(), _panel()]),
+      ],
+    );
   }
 }

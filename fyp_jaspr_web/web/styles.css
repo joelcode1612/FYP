@@ -8509,612 +8509,224 @@ input[type="range"] {
 }
 
 /* ==========================================================================
-   Signup — split marketing layout
+   Signup — additions on the shared login shell
    --------------------------------------------------------------------------
-   Left: city-scene panel (inline SVG, no image payload) with the value
-   proposition and benefits. Right: the form card. Scoped to `.signup-page` so
-   the login and forgot-password pages keep the centred `.auth-page` layout.
+   `/signup` reuses `.login-page` and the `lp-*` rules (Login block below) for
+   its backdrop, scrim, hero column, card, fields, alert, submit and switch
+   link. Only rules with no login equivalent live here, so the two auth pages
+   cannot drift apart again:
+
+     .signup-page       backdrop swap + the wider card signup's controls need
+     .su-pw-row       create / confirm password side by side
+     .su-seg          account-type segmented control
+     .su-select-wrap  styled <select> inside .lp-field
+     .su-hint/.su-opt helper and optional-label text
+
+   Every rule is either prefixed `.su-` or scoped under `.signup-page`, so
+   nothing reaches the login or forgot-password surfaces.
    ========================================================================== */
 
-.signup-page {
-  --su-ink: #0b1220;
-  --su-text: #1e293b;
-  --su-muted: #64748b;
-  --su-line: #e2e8f0;
-  --su-blue: #2563eb;
-  --su-blue-deep: #1d4ed8;
-  --su-blue-soft: #eff6ff;
-  --su-danger: #dc2626;
-  min-height: 100vh;
-  background: #fff;
-  color: var(--su-text);
-  font-family: var(--lnd-font);
+/* Signup paints the KL street scene the page was designed around, under the
+   same dark scrim as login. */
+.signup-page .lp-bg {
+  background-image: url('assets/signup-city.jpg');
+  background-position: 50% 100%;
 }
 
-/* ---- two-column body --------------------------------------------------- */
+/* The signup card carries seven controls against login's two, so it needs
+   more width than `.lp-right` allows: at 500px the side-by-side password pair
+   keeps ~130px of usable text each after the leading icon and eye button. */
+.signup-page .lp-right {
+  flex: 0 1 500px;
+  max-width: 500px;
+}
 
-.su-body {
+/* Login's card clears 48px of content padding twice over; signup's is ~900px
+   tall, so the same padding pushes it past a 980px viewport. Tightening the
+   vertical padding keeps the whole form visible without scrolling. */
+@media (min-width: 981px) {
+  .signup-page .lp-content {
+    padding-top: 30px;
+    padding-bottom: 30px;
+  }
+}
+
+/* ---- password pair ------------------------------------------------------- */
+
+.su-pw-row {
   display: grid;
-  grid-template-columns: minmax(0, 1.1fr) minmax(470px, 0.9fr);
-  min-height: calc(100vh - 75px);
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 6px;
 }
 
-/* ---- hero panel -------------------------------------------------------- */
-
-.su-hero {
-  position: relative;
-  overflow: hidden;
-  background: linear-gradient(
-    180deg,
-    #cfe4fb 0%,
-    #e6f1fd 40%,
-    #f6fbff 68%,
-    #ffffff 100%
-  );
-}
-
-.su-hero__art {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  display: block;
-  object-fit: cover;
-  object-position: 50% 100%;
-  /* Fade the very bottom so the road does not read as a hard bar where the
-     scene meets the panel below. */
-  -webkit-mask-image: linear-gradient(180deg, #000 88%, transparent 100%);
-  mask-image: linear-gradient(180deg, #000 88%, transparent 100%);
-}
-
-/* Wash the left side so the headline stays legible over the scene. */
-.su-hero::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background:
-    linear-gradient(
-      180deg,
-      rgba(255, 255, 255, 0.92) 0%,
-      rgba(255, 255, 255, 0.68) 26%,
-      rgba(255, 255, 255, 0.26) 46%,
-      rgba(255, 255, 255, 0) 62%
-    ),
-    linear-gradient(
-      90deg,
-      rgba(255, 255, 255, 0.55) 0%,
-      rgba(255, 255, 255, 0.2) 42%,
-      rgba(255, 255, 255, 0) 68%
-    );
-  pointer-events: none;
-}
-
-.su-hero__inner {
-  position: relative;
-  z-index: 1;
-  padding: 64px 56px 72px;
-  max-width: 680px;
-}
-
-.su-eyebrow {
-  display: block;
-  font-size: 10.5px;
-  font-weight: 800;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-  color: #64748b;
-  margin-bottom: 18px;
-}
-
-.su-hero__title {
-  margin: 0;
-  font-size: clamp(34px, 3.6vw, 54px);
-  line-height: 1.06;
-  letter-spacing: -0.03em;
-  font-weight: 900;
-  color: var(--su-ink);
-}
-
-.su-accent {
-  color: var(--su-blue);
-}
-
-.su-hero__lead {
-  margin: 18px 0 0;
-  max-width: 440px;
-  font-size: 14.5px;
-  line-height: 1.6;
-  color: #475569;
-}
-
-.su-benefits {
-  display: grid;
-  gap: 22px;
-  margin-top: 34px;
-}
-
-.su-benefit {
-  display: grid;
-  grid-template-columns: auto 1fr;
-  gap: 14px;
-  align-items: start;
-  max-width: 480px;
-}
-
-.su-benefit__icon {
-  width: 44px;
-  height: 44px;
-  border-radius: 50%;
-  display: grid;
-  place-items: center;
-  background: rgba(255, 255, 255, 0.88);
-  border: 1px solid rgba(29, 78, 216, 0.14);
-  color: var(--su-blue-deep);
-  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.06);
-}
-
-.su-benefit__icon .ms {
-  font-size: 20px;
-}
-
-.su-benefit h3 {
-  margin: 0 0 3px;
-  font-size: 13.5px;
-  font-weight: 800;
-  color: var(--su-ink);
-}
-
-.su-benefit p {
-  margin: 0;
-  font-size: 12.5px;
-  line-height: 1.5;
-  color: #475569;
-}
-
-/* ---- form panel -------------------------------------------------------- */
-
-.su-panel {
-  background: #f1f5f9;
-  padding: 40px 32px 56px;
-  display: flex;
-  align-items: flex-start;
-  justify-content: center;
-}
-
-.su-card {
-  width: 100%;
-  max-width: 452px;
-  background: #fff;
-  border: 1px solid var(--su-line);
-  border-radius: 18px;
-  padding: 28px;
-  box-shadow: 0 24px 60px rgba(15, 23, 42, 0.08);
-}
-
-.su-title {
-  margin: 0 0 6px;
-  font-size: 25px;
-  line-height: 1.2;
-  letter-spacing: -0.02em;
-  font-weight: 900;
-  color: var(--su-ink);
-}
-
-.su-sub {
-  margin: 0 0 18px;
-  font-size: 12.5px;
-  line-height: 1.5;
-  color: var(--su-muted);
-}
-
-.su-alert {
-  display: block;
-  margin: 0 0 14px;
-  padding: 9px 12px;
-  border-radius: 8px;
-  font-size: 12px;
-  font-weight: 700;
-  line-height: 1.45;
-}
-
-.su-alert.info {
-  background: var(--su-blue-soft);
-  border: 1px solid #dbeafe;
-  color: var(--su-blue-deep);
-}
-
-.su-alert.err {
-  background: #fef2f2;
-  border: 1px solid #fee2e2;
-  color: #b91c1c;
-}
-
-.su-alert.is-hidden,
-.su-err.is-hidden {
-  display: none;
-}
-
-/* ---- fields ------------------------------------------------------------ */
-
-.su-field {
-  display: grid;
-  gap: 6px;
-  margin-bottom: 14px;
-}
-
-.su-field__label {
-  display: grid;
-  gap: 6px;
-}
-
-.su-label {
-  font-size: 12px;
-  font-weight: 800;
-  color: var(--su-ink);
-}
-
-.su-optional {
-  font-weight: 600;
-  color: var(--su-muted);
-}
-
-.su-control {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  height: 40px;
-  padding: 0 10px;
-  border: 1px solid #d5dde8;
-  border-radius: 9px;
-  background: #fff;
-  transition: border-color 0.15s ease, box-shadow 0.15s ease;
-}
-
-.su-control:focus-within {
-  border-color: var(--su-blue-deep);
-  box-shadow: 0 0 0 3px rgba(29, 78, 216, 0.12);
-}
-
-.su-control.is-invalid {
-  border-color: var(--su-danger);
-}
-
-.su-control__icon {
-  display: inline-flex;
-  color: #94a3b8;
-}
-
-.su-control__icon .ms {
-  font-size: 18px;
-}
-
-.su-control input {
-  flex: 1;
-  min-width: 0;
-  height: 100%;
-  border: 0;
-  outline: 0;
-  background: transparent;
-  font: inherit;
-  font-size: 13px;
-  color: var(--su-ink);
-}
-
-.su-control input::placeholder {
-  color: #94a3b8;
-}
-
-.su-eye {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 26px;
-  height: 26px;
-  border: 0;
-  border-radius: 6px;
-  background: transparent;
-  color: #94a3b8;
-  cursor: pointer;
-}
-
-.su-eye:hover {
-  color: var(--su-blue-deep);
-  background: var(--su-blue-soft);
+.su-pw-row .lp-group {
+  margin-bottom: 0;
 }
 
 .su-hint {
-  margin: 0;
   font-size: 11.5px;
   line-height: 1.45;
-  color: var(--su-muted);
+  color: var(--lp-muted);
+  margin: 0 0 14px;
 }
 
-.su-err {
-  font-size: 11.5px;
-  font-weight: 700;
-  color: var(--su-danger);
+.lp-group .su-hint {
+  margin: 6px 0 0;
 }
 
-/* ---- account type ------------------------------------------------------ */
+.su-opt {
+  font-weight: 400;
+  color: var(--lp-muted);
+}
 
-.su-types {
+/* ---- account type -------------------------------------------------------- */
+
+.su-seg {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 10px;
+  gap: 5px;
+  padding: 5px;
+  background: #f1f5f9;
+  border: 1px solid var(--lp-line);
+  border-radius: 11px;
 }
 
-.su-type {
-  position: relative;
-  display: grid;
-  grid-template-columns: auto 1fr;
-  gap: 8px;
-  align-items: start;
-  padding: 10px;
-  text-align: left;
-  border: 1px solid #d5dde8;
-  border-radius: 10px;
-  background: #fff;
-  cursor: pointer;
-  transition: border-color 0.15s ease, background 0.15s ease,
-    box-shadow 0.15s ease;
-}
-
-.su-type:hover {
-  border-color: #b9c6d8;
-}
-
-.su-type.is-selected {
-  border-color: var(--su-blue-deep);
-  background: #f5f9ff;
-  box-shadow: inset 0 0 0 1px var(--su-blue-deep);
-}
-
-.su-type__icon {
-  width: 26px;
-  height: 26px;
-  border-radius: 8px;
-  display: grid;
-  place-items: center;
-  background: var(--su-blue-soft);
-  color: var(--su-blue-deep);
-}
-
-.su-type__icon .ms {
-  font-size: 18px;
-}
-
-.su-type.is-selected .su-type__icon {
-  background: var(--su-blue-deep);
-  color: #fff;
-}
-
-.su-type__body {
-  display: grid;
-  gap: 3px;
-  padding-right: 12px;
-}
-
-.su-type__title {
-  font-size: 12px;
-  font-weight: 800;
-  color: var(--su-ink);
-}
-
-.su-type__desc {
-  font-size: 11px;
-  line-height: 1.4;
-  color: var(--su-muted);
-}
-
-.su-radio {
-  position: absolute;
-  top: 10px;
-  right: 10px;
-  width: 14px;
-  height: 14px;
-  border-radius: 50%;
-  border: 1.5px solid #cbd5e1;
-  background: #fff;
-}
-
-.su-type.is-selected .su-radio {
-  border-color: var(--su-blue-deep);
-  background: radial-gradient(
-    circle,
-    var(--su-blue-deep) 0 45%,
-    #fff 46% 100%
-  );
-}
-
-/* ---- select ------------------------------------------------------------ */
-
-.su-control--select {
-  padding-right: 8px;
-}
-
-.su-select {
-  flex: 1;
-  min-width: 0;
-  height: 100%;
-  border: 0;
-  outline: 0;
-  background: transparent;
-  font: inherit;
-  font-size: 13px;
-  color: var(--su-ink);
-  appearance: none;
-  -webkit-appearance: none;
-  cursor: pointer;
-}
-
-.su-control__chevron {
-  display: inline-flex;
-  color: #94a3b8;
-  pointer-events: none;
-}
-
-/* ---- terms, submit, note ----------------------------------------------- */
-
-.su-terms {
+.su-seg__opt {
   display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  margin: 4px 0 10px;
-}
-
-.su-terms input {
-  width: 15px;
-  height: 15px;
-  margin: 1px 0 0;
-  accent-color: var(--su-blue-deep);
-  flex: none;
-}
-
-.su-terms p {
-  margin: 0;
-  font-size: 11.5px;
-  line-height: 1.5;
-  color: #475569;
-}
-
-.su-terms a {
-  color: var(--su-blue-deep);
-  font-weight: 700;
-  text-decoration: none;
-}
-
-.su-terms a:hover {
-  text-decoration: underline;
-}
-
-.su-submit {
-  width: 100%;
-  height: 42px;
-  margin-top: 6px;
-  display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  border: 0;
-  border-radius: 9px;
-  background: var(--su-blue);
-  color: #fff;
-  font: inherit;
-  font-size: 13px;
-  font-weight: 800;
+  gap: 7px;
+  min-height: 38px;
+  padding: 0 8px;
+  border: none;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--lp-muted);
+  font-family: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
   cursor: pointer;
-  transition: background 0.15s ease, transform 0.15s ease;
+  transition: background 0.18s ease, color 0.18s ease, box-shadow 0.18s ease;
 }
 
-.su-submit:hover {
-  background: var(--su-blue-deep);
+.su-seg__opt:hover {
+  color: var(--lp-ink);
 }
 
-.su-submit:active {
-  transform: translateY(1px);
+.su-seg__opt.is-selected {
+  background: #fff;
+  color: var(--lp-blue-deep);
+  font-weight: 700;
+  /* The global `.is-selected` rule paints a permanent 2px action outline for
+     the dashboard's selectable cards. Here the white pill plus its hairline
+     already carry the selected state, so a ring would double-signal; the
+     `:focus-visible` rule below restores the ring for keyboard users. */
+  outline: none;
+  box-shadow:
+    0 1px 3px rgba(15, 23, 42, 0.14),
+    inset 0 0 0 1px rgba(15, 23, 42, 0.07);
 }
 
-.su-submit:focus-visible,
-.su-type:focus-visible,
-.su-eye:focus-visible {
-  outline: 3px solid rgba(37, 99, 235, 0.35);
+.su-seg__opt:focus-visible {
+  outline: 3px solid rgba(0, 117, 255, 0.45);
   outline-offset: 2px;
 }
 
-.su-note {
+.su-seg__opt .ms {
+  font-size: 18px;
+}
+
+/* The description follows the selection instead of being duplicated inside two
+   tiles, which is what made the old cards wrap to four lines. */
+.su-seg-hint {
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--lp-muted);
+  margin: 8px 0 0;
+  min-height: 17px;
+}
+
+/* ---- concept select ------------------------------------------------------ */
+
+.su-select-wrap select {
+  width: 100%;
+  min-height: 44px;
+  padding: 0 38px;
+  border: 1px solid var(--lp-line);
+  border-radius: 10px;
+  font-size: 13.5px;
+  font-family: inherit;
+  color: var(--lp-ink);
+  background: #fff;
+  appearance: none;
+  -webkit-appearance: none;
+  cursor: pointer;
+  transition: border-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.su-select-wrap select:focus {
+  outline: none;
+  border-color: var(--lp-blue);
+  box-shadow: 0 0 0 4px rgba(0, 117, 255, 0.1);
+}
+
+.su-chev {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #94a3b8;
   display: flex;
-  gap: 8px;
-  margin-top: 14px;
-  padding-top: 12px;
-  border-top: 1px solid #eef2f7;
+  line-height: 0;
+  pointer-events: none;
 }
 
-.su-note__icon {
-  display: inline-flex;
-  margin-top: 1px;
-  color: var(--su-muted);
+/* ---- terms --------------------------------------------------------------- */
+
+/* The terms row reuses `.lp-remember` but is not a `<label for>` (see
+   signup_page.dart), so it drops that label's pointer cursor. */
+.su-terms .lp-remember-text {
+  cursor: default;
 }
 
-.su-note p {
-  margin: 0;
-  font-size: 11px;
-  line-height: 1.5;
-  color: var(--su-muted);
+.su-terms .lp-remember-text a {
+  color: var(--lp-blue);
+  font-weight: 600;
+  text-decoration: none;
 }
 
-/* ---- responsive -------------------------------------------------------- */
-
-@media (max-width: 1080px) {
-  .su-body {
-    grid-template-columns: 1fr;
-    min-height: 0;
-  }
-
-  .su-hero {
-    min-height: 380px;
-  }
-
-  .su-hero__inner {
-    padding: 40px 32px 44px;
-    max-width: none;
-  }
-
-  .su-hero__title {
-    font-size: clamp(30px, 5vw, 42px);
-  }
-
-  .su-benefits {
-    display: none;
-  }
-
-  /* Stacked layout puts the copy over the scene, so the scrim is weighted
-     toward the top to keep the headline and lead fully legible. */
-  .su-hero::after {
-    background: linear-gradient(
-      180deg,
-      rgba(255, 255, 255, 0.95) 0%,
-      rgba(255, 255, 255, 0.86) 38%,
-      rgba(255, 255, 255, 0.6) 62%,
-      rgba(255, 255, 255, 0.18) 88%,
-      rgba(255, 255, 255, 0) 100%
-    );
-  }
-
-  .su-panel {
-    padding: 32px 20px 48px;
-  }
+.su-terms .lp-remember-text a:hover {
+  text-decoration: underline;
 }
+
+.su-terms + .lp-err {
+  margin-top: -12px;
+  margin-bottom: 14px;
+}
+
+/* ---- responsive ---------------------------------------------------------- */
 
 @media (max-width: 560px) {
-  .su-hero {
-    min-height: 320px;
+  .signup-page .lp-right {
+    max-width: 460px;
   }
 
-  .su-hero__inner {
-    padding: 30px 22px 34px;
+  .su-pw-row {
+    grid-template-columns: 1fr;
+    gap: 0;
+    margin-bottom: 14px;
   }
 
-  .su-eyebrow {
-    font-size: 9.5px;
-    letter-spacing: 0.13em;
-    margin-bottom: 12px;
+  .su-pw-row .lp-group {
+    margin-bottom: 14px;
   }
 
-  .su-hero__lead {
-    font-size: 13.5px;
-    margin-top: 12px;
+  .su-pw-row .lp-group:last-child {
+    margin-bottom: 0;
   }
 
-  .su-card {
-    padding: 22px 18px;
-    border-radius: 14px;
-  }
-
-  .su-title {
-    font-size: 22px;
-  }
-
-  .su-types {
+  .su-seg {
     grid-template-columns: 1fr;
   }
 }

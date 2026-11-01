@@ -1,7 +1,7 @@
-// Functional probe for the rebuilt split-layout signup page.
+// Functional probe for the signup page on the shared login shell.
 const { chromium } = require('playwright-core');
 const EXE = 'C:/Users/Lenovo/AppData/Local/ms-playwright/chromium-1248/chrome-win64/chrome.exe';
-const BASE = 'http://127.0.0.1:8141';
+const BASE = process.argv[2] || 'http://127.0.0.1:8141';
 
 const log = (label, v) => console.log(`  ${label}: ${v}`);
 
@@ -16,59 +16,79 @@ const log = (label, v) => console.log(`  ${label}: ${v}`);
   await p.goto(BASE + '/signup/', { waitUntil: 'networkidle', timeout: 60000 });
   await p.waitForTimeout(1200);
 
-  // 1. Empty submit -> validation errors
-  await p.click('.su-submit');
-  await p.waitForTimeout(400);
-  const errTexts = await p.$$eval('.su-err:not(.is-hidden)', els => els.map(e => e.textContent.trim()).filter(Boolean));
-  log('empty-submit errors', JSON.stringify(errTexts));
-  log('alert', await p.$eval('.su-alert', e => e.textContent.trim()));
+  // 1. Shell parity with login: same backdrop structure, no navbar.
+  log('shell classes', await p.$eval('main', e => e.className));
+  log('backdrop is signup-city', await p.$eval('.lp-bg', e => getComputedStyle(e).backgroundImage));
+  log('navbar present (must be 0)', await p.locator('.topbar').count());
 
-  // 2. Fill valid data
+  // 2. Card fits the viewport without scrolling.
+  const card = await p.$eval('.lp-card', e => { const r = e.getBoundingClientRect(); return { h: Math.round(r.height), w: Math.round(r.width), top: Math.round(r.top) }; });
+  log('card size', JSON.stringify(card));
+  log('card clipped above viewport', card.top < 0);
+  log('page scrolls', await p.evaluate(() => document.documentElement.scrollHeight > window.innerHeight));
+
+  // 3. Empty submit -> validation errors
+  await p.click('.lp-submit');
+  await p.waitForTimeout(400);
+  const errTexts = await p.$$eval('.lp-err:not(.is-hidden)', els => els.map(e => e.textContent.trim()).filter(Boolean));
+  log('empty-submit errors', JSON.stringify(errTexts));
+  log('alert', await p.$eval('.lp-alert', e => e.textContent.trim()));
+
+  // 4. Password shorter than the documented minimum is rejected
   await p.fill('input[autocomplete="name"]', 'Aisha Rahman');
   await p.fill('input[type="email"]', 'aisha@example.com');
   const pwInputs = await p.$$('input[type="password"]');
-  await pwInputs[0].fill('Passw0rd!');
-  await pwInputs[1].fill('Passw0rd!');
+  await pwInputs[0].fill('Passw0!');
+  await pwInputs[1].fill('Passw0!');
+  await p.check('#su-terms');
+  await p.click('.lp-submit');
+  await p.waitForTimeout(300);
+  log('7-char rejected', await p.$eval('.su-pw-row .lp-group:first-child .lp-err', e => e.textContent.trim()));
   log('password fields', pwInputs.length);
 
-  // 3. Password visibility toggle
-  const pwTypeBefore = await pwInputs[0].getAttribute('type');
-  await p.click('.su-eye >> nth=0');
+  // 5. Password visibility toggle
+  await pwInputs[0].fill('Passw0rd!');
+  await pwInputs[1].fill('Passw0rd!');
+  await p.click('.lp-eye >> nth=0');
   await p.waitForTimeout(300);
   const afterToggle = await p.$$eval('input', els => els.filter(e => e.value === 'Passw0rd!').map(e => e.type));
-  log('pw type before', pwTypeBefore);
   log('pw types after toggle', JSON.stringify(afterToggle));
+  await p.click('.lp-eye >> nth=0');
 
-  // 4. Switch account type
-  await p.click('.su-type >> nth=1');
+  // 6. Switch account type via the segmented control
+  await p.click('.su-seg__opt >> nth=1');
   await p.waitForTimeout(300);
-  log('selected type after click', await p.$eval('.su-type.is-selected .su-type__title', e => e.textContent.trim()));
-  log('aria-checked values', JSON.stringify(await p.$$eval('.su-type', els => els.map(e => e.getAttribute('aria-checked')))));
+  log('selected option', await p.$eval('.su-seg__opt.is-selected', e => e.textContent.trim()));
+  log('aria-checked values', JSON.stringify(await p.$$eval('.su-seg__opt', els => els.map(e => e.getAttribute('aria-checked')))));
+  log('hint follows selection', (await p.$eval('.su-seg-hint', e => e.textContent.trim())).slice(0, 40));
+  await p.click('.su-seg__opt >> nth=0');
 
-  // 5. Select F&B concept
+  // 7. Select F&B concept
   const opts = await p.$$eval('.su-select option', els => els.map(e => e.value));
   log('concept options', JSON.stringify(opts));
   await p.selectOption('.su-select', { label: 'Cloud Kitchen' });
   await p.waitForTimeout(200);
   log('concept value', await p.$eval('.su-select', e => e.value));
 
-  // 6. Terms + valid submit
-  await p.check('#su-terms');
-  await p.click('.su-submit');
-  await p.waitForTimeout(500);
-  log('final alert', await p.$eval('.su-alert', e => e.textContent.trim()));
-  log('final alert tone', await p.$eval('.su-alert', e => e.className));
-  log('remaining visible errors', JSON.stringify(await p.$$eval('.su-err:not(.is-hidden)', els => els.map(e => e.textContent.trim()).filter(Boolean))));
+  // 8. The terms row must not be a <label for="su-terms">: its Terms/Privacy
+  //    links would then toggle the checkbox when clicked.
+  log('terms text tag', await p.$eval('.su-terms .lp-remember-text', e => e.tagName));
+  log('terms label-for (must be null)', await p.$eval('.su-terms .lp-remember-text', e => e.getAttribute('for')));
+  const checkedBefore = await p.isChecked('#su-terms');
+  await p.click('.su-terms .lp-remember-text small');
+  await p.waitForTimeout(200);
+  log('clicking the text does not toggle', checkedBefore === await p.isChecked('#su-terms'));
+
+  // 9. Valid submit
+  await p.click('.lp-submit');
+  await p.waitForTimeout(600);
+  log('final alert', await p.$eval('.lp-alert', e => e.textContent.trim()));
+  log('final alert tone', await p.$eval('.lp-alert', e => e.className));
+  log('remaining visible errors', JSON.stringify(await p.$$eval('.lp-err:not(.is-hidden)', els => els.map(e => e.textContent.trim()).filter(Boolean))));
   log('still on signup', p.url());
 
-  // 7. Letter reveal present
-  log('lr heading classes', await p.$eval('.su-title', e => e.className));
-  log('lr char count', (await p.$$('.su-title .lr-char')).length);
-
-  // 8. Topbar "Sign in" link
-  log('navbar Sign in href', await p.$eval('.nav-actions a[href="/login"]', e => e.getAttribute('href')));
-  log('navbar brand present', await p.locator('.topbar .brand').count());
-  log('old su-topbar (must be 0)', await p.locator('.su-topbar').count());
+  // 10. Switch link back to login
+  log('switch link href', await p.$eval('.lp-switch a', e => e.getAttribute('href')));
 
   console.log('  errors:', errs.length ? errs.join(' | ') : 'none');
   await b.close();

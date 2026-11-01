@@ -16,7 +16,7 @@ const BASE = process.argv[2] || 'http://127.0.0.1:8124';
 const PAGES = [
   ['/', ['lnd', 'topbar', 'scroll-experience', 'section', 'site-footer']],
   ['/login', ['login-page', 'lp-bg', 'lp-overlay', 'lp-hero', 'lp-feature', 'lp-card', 'lp-field', 'lp-submit', 'lp-eye', 'lp-social']],
-  ['/signup', ['signup-page', 'topbar', 'su-hero', 'su-card', 'su-control', 'su-type', 'su-submit']],
+  ['/signup', ['login-page', 'signup-page', 'lp-bg', 'lp-overlay', 'lp-hero', 'lp-feature', 'lp-card', 'lp-field', 'lp-submit', 'lp-eye', 'su-seg', 'su-select']],
   ['/forgot', ['auth-page', 'auth-card', 'auth-topbar', 'auth-title', 'auth-field', 'auth-submit']],
   ['/entrepreneur', ['bento-head', 'bento-kpis', 'bento', 'bento-hero', 'brow', 'schart', 'qtile']],
   ['/entrepreneur/explore', ['page-head', 'filters', 'frow', 'checkpill', 'pgrid', 'pcard', 'map-pane', 'layer-bar', 'layer-toggle', 'map-legend', 'a-card']],
