@@ -124,7 +124,9 @@ class _DashboardPageState extends State<DashboardPage> {
   Component _head() {
     return div(classes: 'bento-head', [
       div(classes: 'bh-title', [
-        span(classes: 'eyebrow-sm', [Component.text('Administrator console')]),
+        span(classes: 'eyebrow-sm', [
+          Component.text('Staff portal · administrator'),
+        ]),
         LetterRevealHeading.text('Verification overview', level: 1),
         p(classes: 'muted', [
           Component.text(

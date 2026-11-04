@@ -143,15 +143,31 @@ Write-Step "  port    : $Port"
 Write-Step "  proxy   : $ProxyPort (Jaspr's internal dev-proxy port)"
 Write-Step ""
 
-# --- Find whatever is listening ---------------------------------------------
+# --- Find whatever is using either port -------------------------------------
 # Both ports are checked: the user-facing one and the internal proxy port.
+#
+# Do not filter to State=Listen here. On Windows, an orphaned Dart/Jaspr proxy
+# can retain CLOSE_WAIT sockets after its listener has gone away. It is absent
+# from a Listen-only query but still prevents shelf from binding 0.0.0.0 to
+# the same port (WSAEADDRINUSE / errno 10048).
+#
+# EXCEPT TimeWait: those are protocol-mandated remnants of already-closed
+# connections (they linger ~2-4 minutes after the last packet). They have no
+# owning process — Get-NetTCPConnection reports OwningProcess 0 ("Idle") —
+# and they are not held by anything killable. Filtering them out lets the
+# start proceed normally; if a bind conflict genuinely remains, jaspr itself
+# fails loudly, which is a better outcome than blocking on a phantom PID.
 Write-Step "Checking ports $Port and $ProxyPort ..."
 
 $listeners = @()
 try {
     $listeners = @(
-        Get-NetTCPConnection -State Listen -ErrorAction SilentlyContinue |
-            Where-Object { $_.LocalPort -in $Port, $ProxyPort }
+        Get-NetTCPConnection -ErrorAction SilentlyContinue |
+            Where-Object {
+                $_.LocalPort -in $Port, $ProxyPort -and
+                $_.State -ne 'TimeWait' -and
+                $_.OwningProcess -ne 0
+            }
     )
 } catch {
     Write-Warn2 "Get-NetTCPConnection unavailable; falling back to netstat."
@@ -169,12 +185,13 @@ if ($listeners.Count -eq 0) {
             continue
         }
 
-        # Report which of the two ports this process holds — they are different
-        # failure modes and the message should say which one was cleared.
+        # Report which of the two ports this process holds. Include socket
+        # states because CLOSE_WAIT is the important non-listening case above.
         $heldPorts = ($listeners |
             Where-Object { $_.OwningProcess -eq $ownerPid } |
-            Select-Object -ExpandProperty LocalPort -Unique) -join ', '
-        Write-Warn2 "PID $ownerPid ($($proc.ProcessName)) is listening on port(s) $heldPorts"
+            ForEach-Object { "$($_.LocalPort) [$($_.State)]" } |
+            Select-Object -Unique) -join ', '
+        Write-Warn2 "PID $ownerPid ($($proc.ProcessName)) owns socket(s) $heldPorts"
 
         # Only touch the Dart/Jaspr family. An unrelated service on this port is
         # reported and left alone, because killing it could break something else.
@@ -215,8 +232,12 @@ if ($listeners.Count -eq 0) {
     $stillHeld = @()
     try {
         $stillHeld = @(
-            Get-NetTCPConnection -State Listen -ErrorAction SilentlyContinue |
-                Where-Object { $_.LocalPort -in $Port, $ProxyPort }
+            Get-NetTCPConnection -ErrorAction SilentlyContinue |
+                Where-Object {
+                    $_.LocalPort -in $Port, $ProxyPort -and
+                    $_.State -ne 'TimeWait' -and
+                    $_.OwningProcess -ne 0
+                }
         )
     } catch { }
 

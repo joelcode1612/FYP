@@ -2,18 +2,20 @@ import 'package:jaspr/dom.dart';
 import 'package:jaspr/jaspr.dart';
 
 import '../components/auth_icons.dart';
+import '../components/auth_navbar.dart';
 import '../components/dom_helpers.dart';
 import '../components/ui.dart';
 import '../data/auth_service.dart';
 
 /// Credential sign-in surface — Jaspr port of the updated sign-in design
-/// (`sitewise_login.html`, top navbar removed per the design brief).
+/// (`sitewise_login.html`).
 ///
-/// Layout: full-bleed photographic backdrop (`assets/login-bg.jpg`, extracted
-/// from the reference's inline data URI) under a left-to-right dark scrim, the
-/// value-proposition column on the left, and the white credential card on the
-/// right. There is deliberately **no top navigation bar**; registration is
-/// reached through the card's "Create one now" link.
+/// Layout: the site [AuthNavbar] floated over a full-bleed photographic
+/// backdrop (`assets/login-bg.jpg`, extracted from the reference's inline data
+/// URI) under a left-to-right dark scrim, the value-proposition column on the
+/// left, and the white credential card on the right. The navbar is the landing
+/// page's own bar, so it also carries the reference's "Sign up" route; the
+/// card's "Create one now" link stays as the second way in.
 ///
 /// The project deliberately has **no password backend**, so this is the
 /// design's visual + client-side validation only: email-format / required
@@ -185,6 +187,7 @@ class _LoginState extends State<LoginPage> {
           attributes: const {'aria-hidden': 'true'},
           [],
         ),
+        const AuthNavbar(),
 
         div(classes: 'lp-content', [
           // ---------------------------------------------------------- hero

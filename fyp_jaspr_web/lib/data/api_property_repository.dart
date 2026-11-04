@@ -135,11 +135,18 @@ class DatasetRecommendationRepository implements RecommendationRepository {
   );
 }
 
-class UnavailableIntelligenceRepository implements LocationIntelligenceRepository {
+class UnavailableIntelligenceRepository
+    implements LocationIntelligenceRepository {
   @override
-  Future<LocationAnalysis> getLocationIntelligence(String propertyId) async =>
-      throw UnsupportedError('Competitor and demand analysis has not been imported for this property.');
+  Future<LocationAnalysis> getLocationIntelligence(
+    String propertyId,
+  ) async => throw UnsupportedError(
+    'Competitor and demand analysis has not been imported for this property.',
+  );
   @override
-  Future<RecommendationExplanation> getExplanation(String propertyId) async =>
-      throw UnsupportedError('An explanation model is not connected. The workbook suitability index is not a prediction.');
+  Future<RecommendationExplanation> getExplanation(
+    String propertyId,
+  ) async => throw UnsupportedError(
+    'An explanation model is not connected. The workbook suitability index is not a prediction.',
+  );
 }

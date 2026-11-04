@@ -178,8 +178,44 @@
   --shadow-sm: 0 12px 32px rgba(15, 23, 42, 0.05);
   --shadow: 0 24px 80px rgba(15, 23, 42, 0.08);
 
-  /* --- Layout --- */
-  --content-max: 1180px;
+  /* --- Layout -------------------------------------------------------------
+     One width system for the whole app, so no page invents its own cap.
+
+     `--content-max` is the *measure* — the column of text, cards and charts a
+     page actually renders into. `--content-band` is the box that holds it:
+     the measure plus one gutter on each side. Containers are given
+     `--content-band` as their `max-width` and `--page-gutter` as their inline
+     padding, which is only meaningful because `box-sizing: border-box` is set
+     globally — otherwise the padding would be added on top and the measure
+     would silently become `--content-max + 2 * gutter`.
+
+     `--layout-max` (1440px) is the wider band a full-page shell may occupy,
+     used by the two-column auth layout.
+
+     The nav pill reads `--content-band` too. It previously carried its own
+     hardcoded 1360px while `.app-content__inner` used `--content-max: 1180px`,
+     so the pill hung 180px wider than every page beneath it.
+
+     Gutters come from `--page-gutter` rather than per-rule pixel padding, so
+     a breakpoint only has to change one token to reflow the whole app. Vertical
+     rhythm between sections is not repeated here: the app already has a
+     spacing scale (`--xs` … `--xl`, where `--xl` is 32px) and every grid and
+     panel reads from it. */
+  --layout-max: 1440px;
+  --content-max: 1360px;
+  --content-band: calc(var(--content-max) + var(--page-gutter) * 2);
+  /* The auth pages are a two-column marketing layout, not a data surface: at
+     `--layout-max` the hero column simply turned into a wide empty band on a
+     2560px monitor. 1280px (Tailwind `max-w-7xl`) keeps both columns inside a
+     readable measure while the backdrop still bleeds to the viewport edges. */
+  --lp-max: 1280px;
+  /* Shared by the `lp-*` credential card and the `auth-*` centered card, so
+     this single token keeps every auth surface the same measure. */
+  --login-form-max: 420px;
+  --form-max: 720px;
+  --modal-max: 640px;
+  --sidebar-width: 260px;
+  --page-gutter: 32px;
   --topbar-h: 72px;
 
   /* --- Elevation and the modal scrim (DESIGN.md §5) ---
@@ -353,9 +389,25 @@ button {
    ========================================================================== */
 
 .container {
-  max-width: var(--content-max);
-  margin: 0 auto;
-  padding: 0 20px;
+  /* `width` + `max-width` rather than a fixed width, and `min-width: 0` so a
+     grid/flex child of this container can still shrink below its content —
+     without it a wide table or image forces the whole page to overflow. */
+  width: 100%;
+  min-width: 0;
+  max-width: var(--content-band);
+  margin-inline: auto;
+  padding-inline: var(--page-gutter);
+}
+
+/* A single-purpose form must not stretch across the whole content band: at
+   1360px a two-column form reads as two disconnected halves with a desert
+   between them. Pages that own a standalone form add this to their root
+   stack so the form keeps its own, narrower measure. */
+.form-standalone {
+  width: 100%;
+  min-width: 0;
+  max-width: var(--form-max);
+  margin-inline: auto;
 }
 
 .section {
@@ -364,6 +416,21 @@ button {
 
 .section--alt {
   background: var(--alt-surface);
+}
+
+/* Gutters tighten as the viewport does. Because every container reads the
+   same token, one override here reflows the whole app instead of leaving
+   page-specific padding rules to drift out of sync. */
+@media (max-width: 620px) {
+  :root {
+    --page-gutter: 20px;
+  }
+}
+
+@media (max-width: 380px) {
+  :root {
+    --page-gutter: 14px;
+  }
 }
 
 .stack {
@@ -962,7 +1029,7 @@ a.card:hover {
 
 .footer-grid {
   display: grid;
-  grid-template-columns: 1.4fr 1fr 1fr;
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) minmax(0, 1fr);
   gap: 32px;
 }
 
@@ -1015,8 +1082,14 @@ a.card:hover {
 }
 
 .wrap {
-  width: min(1280px, calc(100% - 48px));
-  margin: auto;
+  /* Was `min(1280px, calc(100% - 48px))` — a third width band, independent of
+     the app's content column, so marketing pages and dashboards never shared a
+     left edge. Reads the same token as `.container` and `.app-content__inner`. */
+  width: 100%;
+  min-width: 0;
+  max-width: var(--content-band);
+  margin-inline: auto;
+  padding-inline: var(--page-gutter);
 }
 
 .hero-grid {
@@ -1145,9 +1218,9 @@ a.card:hover {
     padding: 36px 0 30px;
     background-size: 48px 48px;
   }
-  .wrap {
-    width: calc(100% - 28px);
-  }
+  /* No `.wrap` override here. The base rule sizes itself from `--page-gutter`,
+     which the gutter breakpoints already tighten — a per-breakpoint width here
+     was just a second source of truth for the same edge. */
 }
 
 /* Evidence chip in the strip under the hero plate. */
@@ -1293,13 +1366,16 @@ a.card:hover {
 
 .grid-2 {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
+  /* `minmax(0, 1fr)`, not `1fr`: a bare `1fr` track has an automatic minimum,
+     so one wide child (a table, an unbreakable string) refuses to shrink and
+     pushes the page past the viewport. */
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 16px;
 }
 
 .grid-4 {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 16px;
 }
 
@@ -1381,7 +1457,10 @@ a.card:hover {
    the ≤900px query turns it on, and nothing above 900px ever shows it.       */
 
 .app-shell {
-  min-height: 100vh;
+  /* `dvh`, not `vh`: on mobile `vh` measures the *largest* viewport, so a
+     `min-height: 100vh` shell sits ~90px taller than the visible area and the
+     bottom of the page hides behind the URL bar. */
+  min-height: 100dvh;
   /* The pill is `position: fixed` (as in the source's `pill-nav.css`), so the
      shell has to reserve its height. Source: `--pill-h 58px` + `--pill-gap 14px`
      twice = 86px. */
@@ -1404,7 +1483,12 @@ a.card:hover {
   left: 50%;
   transform: translateX(-50%);
   z-index: 70;
-  width: min(1360px, calc(100vw - 28px));
+  /* `100%`, not `100vw`. A `position: fixed` box resolves percentages against
+     the viewport *excluding* the classic scrollbar, while `100vw` includes it —
+     so the old value made the pill roughly a scrollbar wider than the page
+     beneath it whenever the shell overflowed vertically, which it always does
+     (`min-height: 100dvh` plus the reserved pill padding). */
+  width: min(var(--content-band), calc(100% - 28px));
   min-height: 58px;
   margin: 0;
   padding: 6px 8px 6px 10px;
@@ -1568,12 +1652,14 @@ a.card:hover {
 }
 
 .app-content__inner {
-  /* Was a hardcoded 1080px, which bypassed `--content-max` (1180px) and made
-     every authenticated page 100px narrower than the public site's `.container`.
-     The pill above uses the same cap, so the two stay aligned. */
-  max-width: var(--content-max);
-  margin: 0 auto;
-  padding: 24px;
+  /* Shares `--content-max` with `.app-pill` above, so the nav and every page
+     body sit on the same vertical grid lines. Was 1180px against the pill's
+     hardcoded 1360px, which left the pill hanging 180px wider than its pages. */
+  width: 100%;
+  min-width: 0;
+  max-width: var(--content-band);
+  margin-inline: auto;
+  padding: var(--page-gutter);
 }
 
 /* KPI tile row. Aligned to the source's `.metrics`: four across on desktop,
@@ -1727,7 +1813,9 @@ a.card:hover {
   display: flex;
   align-items: flex-start;
   justify-content: center;
-  padding: 10vh 24px 24px;
+  /* dvh: 10vh is 10% of the *largest* viewport, so on a mobile browser with
+     a toolbar the panel was pushed below the visible area. */
+  padding: 10dvh 24px 24px;
 }
 .overlay--menu {
   align-items: flex-start;
@@ -1743,13 +1831,13 @@ a.card:hover {
   box-shadow: var(--dialog-shadow);
   width: 100%;
   max-width: 420px;
-  max-height: 60vh;
+  max-height: 60dvh;
   display: flex;
   flex-direction: column;
   overflow: hidden;
 }
 .dialog--wide {
-  max-width: 560px;
+  max-width: var(--modal-max);
 }
 .dialog__head {
   display: flex;
@@ -1757,6 +1845,7 @@ a.card:hover {
   gap: 8px;
   padding: 14px 16px;
   border-bottom: 1px solid var(--border);
+  flex: none;
 }
 .dialog__title {
   font-family: var(--font-display);
@@ -1791,7 +1880,12 @@ a.card:hover {
   list-style: none;
   margin: 0;
   padding: 8px;
+  /* A flex child with the default `min-height: auto` refuses to shrink below
+     its content, so `overflow-y: auto` alone never engaged and long lists were
+     clipped by `.dialog{overflow:hidden}` instead of scrolling. */
+  min-height: 0;
   overflow-y: auto;
+  overscroll-behavior: contain;
 }
 .result-list__item {
   display: flex;
@@ -1948,7 +2042,10 @@ a.card:hover {
 
 .explore__body {
   display: grid;
-  grid-template-columns: 360px 1fr;
+  /* `minmax(0, …)` on the content track: a bare `1fr` has an automatic minimum
+     equal to its content, so one wide marker panel or image would push the map
+     off the right edge instead of scrolling inside its own column. */
+  grid-template-columns: minmax(280px, 360px) minmax(0, 1fr);
   gap: 16px;
   flex: 1;
   min-height: 0;
@@ -1956,7 +2053,7 @@ a.card:hover {
 
 /* Panel hidden: the map takes the full width. */
 .explore__body--full {
-  grid-template-columns: 1fr;
+  grid-template-columns: minmax(0, 1fr);
 }
 
 /* The left panel is ONE slot with two modes — property list, or filter inputs.
@@ -2005,7 +2102,9 @@ a.card:hover {
   border: 1px solid var(--geo-border);
   border-radius: var(--radius-lg);
   overflow: hidden;
-  min-height: 560px;
+  /* 560px is the desktop height; on a short viewport it would eat the screen,
+     so the floor follows the viewport and only reaches 560 when there is room. */
+  min-height: clamp(320px, 60dvh, 560px);
 }
 
 /* Same gradient as `.visual` — the map panel wash from the design system. */
@@ -2044,7 +2143,7 @@ a.card:hover {
 
 .explore__facts {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
 }
 
@@ -2169,7 +2268,7 @@ a.card:hover {
 @media (max-width: 1100px) {
   /* Narrow the panel rather than the map — the map is the point of the page. */
   .explore__body {
-    grid-template-columns: 300px 1fr;
+    grid-template-columns: minmax(260px, 300px) minmax(0, 1fr);
   }
   /* The detail card moves to the bottom of the map rather than disappearing;
      hiding it would drop the property preview entirely on smaller desktops. */
@@ -2194,7 +2293,7 @@ a.card:hover {
     order: -1; /* map first, then the list/filter beneath it */
   }
   .explore__panel {
-    max-height: 60vh;
+    max-height: 60dvh;
   }
   .explore__detail {
     left: 12px;
@@ -2256,7 +2355,7 @@ a.card:hover {
 
 .dash__metrics {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 16px;
   /* The mockup's overlap. Pulled up only far enough to read as a stack. */
   margin-top: -28px;
@@ -2279,7 +2378,12 @@ a.card:hover {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  max-height: calc(100vh - 120px);
+  /* Capped to the viewport because it is `position: sticky`; without its own
+     scroll the capped box simply spilled past its border and overlapped the
+     content below it. */
+  max-height: calc(100dvh - 120px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 /* --- Listing card -------------------------------------------------------- */
@@ -3482,7 +3586,7 @@ a.card:hover {
 /* Two-up field row that collapses on narrow screens. */
 .field-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: var(--md);
 }
 
@@ -3547,7 +3651,7 @@ a.card:hover {
   }
   .grid-4,
   .stat-grid {
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
@@ -3595,7 +3699,7 @@ a.card:hover {
     top: 0;
     bottom: 0;
     left: 0;
-    width: min(300px, 84vw);
+    width: min(var(--sidebar-width), 84vw);
     flex: none;
     z-index: 70;
     transform: translateX(-100%);
@@ -4223,7 +4327,7 @@ a.card:hover {
   border-radius: var(--radius-lg);
   overflow: hidden;
   background: #dbe3ee;
-  height: 460px;
+  height: min(460px, 60dvh);
   cursor: grab;
   touch-action: none;
 }
@@ -5346,7 +5450,7 @@ details.advanced .grid-3 {
   min-height: 100dvh;
   display: grid;
   place-items: center;
-  padding: 40px 18px;
+  padding: 40px var(--page-gutter);
   background:
     radial-gradient(1200px 520px at 50% -10%, #f4f7fb 0%, rgba(244, 247, 251, 0) 60%),
     var(--background);
@@ -5355,10 +5459,11 @@ details.advanced .grid-3 {
 .auth-card {
   position: relative;
   width: 100%;
-  max-width: 420px;
-  padding: 22px 26px 26px;
+  min-width: 0;
+  max-width: var(--login-form-max);
+  padding: 20px 22px 20px;
   background: var(--surface);
-  border-radius: 30px;
+  border-radius: 20px;
   box-shadow:
     0 1px 2px rgba(15, 23, 42, 0.04),
     0 24px 60px rgba(15, 23, 42, 0.1);
@@ -5418,10 +5523,10 @@ details.advanced .grid-3 {
 }
 
 .auth-title {
-  margin: 4px 0 8px;
+  margin: 2px 0 8px;
   text-align: center;
   font-family: var(--font-display);
-  font-size: 27px;
+  font-size: 22px;
   font-weight: 900;
   line-height: 1.12;
   letter-spacing: -0.035em;
@@ -5429,7 +5534,7 @@ details.advanced .grid-3 {
 }
 
 .auth-sub {
-  margin: 0 auto 22px;
+  margin: 0 auto 16px;
   max-width: 38ch;
   text-align: center;
   font-size: 12.5px;
@@ -5446,8 +5551,8 @@ details.advanced .grid-3 {
   display: flex;
   align-items: center;
   gap: 2px;
-  min-height: 50px;
-  margin-bottom: 12px;
+  min-height: 44px;
+  margin-bottom: 10px;
   padding: 0 8px 0 0;
   border-radius: var(--radius-pill);
   background: var(--paper);
@@ -5474,7 +5579,7 @@ details.advanced .grid-3 {
 
 .auth-field .ico,
 .auth-option .ico {
-  width: 46px;
+  width: 40px;
   flex: none;
   display: grid;
   place-items: center;
@@ -5485,7 +5590,7 @@ details.advanced .grid-3 {
 .auth-field input {
   flex: 1;
   min-width: 0;
-  height: 48px;
+  height: 44px;
   border: 0;
   background: transparent;
   padding: 0 8px 0 0;
@@ -5523,7 +5628,7 @@ details.advanced .grid-3 {
   align-items: center;
   justify-content: center;
   width: 100%;
-  height: 48px;
+  height: 44px;
   border: 0;
   border-radius: var(--radius-pill);
   background: var(--action);
@@ -5544,7 +5649,7 @@ details.advanced .grid-3 {
 }
 
 .auth-switch {
-  margin: 16px 0 0;
+  margin: 12px 0 0;
   text-align: center;
   font-size: 12.5px;
   line-height: 1.5;
@@ -5746,6 +5851,485 @@ details.advanced .grid-3 {
   }
 }
 
+/* ==========================================================================
+   Workspace kit — callouts, aside rows, numeric columns, funnel
+   ==========================================================================
+   Shared by the agent workspace, the admin roster and the profile access
+   request. Only these four structures are new; the table reuses `.audit-table`,
+   two-line cells reuse `.who`/`.sub`, notices reuse `.notice-*` and modals
+   reuse `.overlay`/`.dialog`/`.btn-row`, so anything restyled elsewhere carries
+   over here without a second rule.
+   ========================================================================== */
+
+.callout {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--action);
+  border-radius: var(--radius);
+  background: var(--alt-surface);
+  padding: 12px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.55;
+  color: var(--text);
+}
+
+.callout .ms {
+  flex: none;
+  font-size: 18px;
+}
+
+.callout-info {
+  border-left-color: var(--action);
+}
+
+.callout-success {
+  border-left-color: var(--success);
+}
+
+/* A warning callout changes what the reader should trust, so it has to be seen
+   as a different class of statement from a note. */
+.callout-warning {
+  border-left-color: var(--warning);
+  background: var(--warning-wash);
+  color: var(--warning);
+}
+
+.callout-danger {
+  border-left-color: var(--danger);
+  background: var(--danger-wash);
+  color: var(--danger);
+}
+
+.aside-list {
+  display: grid;
+}
+
+.aside-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.aside-row:last-child {
+  border-bottom: 0;
+}
+
+.aside-row .grow {
+  min-width: 0;
+  display: grid;
+  gap: 1px;
+}
+
+.aside-row .who {
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--ink);
+}
+
+.aside-row .sub {
+  font-size: 11.5px;
+  color: var(--overline-text);
+}
+
+.aside-row__end {
+  flex: none;
+  margin-left: auto;
+}
+
+/* Number or initial badge at the head of an aside row. `.circ-blue` is a
+   pending/neutral item, `.circ-teal` a completed one, `.circ-amber` a caveat. */
+.circ {
+  flex: none;
+  display: grid;
+  place-items: center;
+  /* A count can be four digits ("2126 listings in the dataset"), which a fixed
+     28px disc clips. The badge grows sideways instead. */
+  min-width: 28px;
+  height: 28px;
+  padding: 0 7px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--border);
+  background: var(--neutral-wash);
+  color: var(--text);
+  font-size: 11.5px;
+  font-weight: 900;
+  font-variant-numeric: tabular-nums;
+}
+
+.circ-blue {
+  background: var(--geo-wash);
+  border-color: var(--geo-border);
+  color: var(--action);
+}
+
+.circ-teal {
+  background: var(--success-wash);
+  border-color: transparent;
+  color: var(--success-text);
+}
+
+.circ-amber {
+  background: var(--warning-wash);
+  border-color: transparent;
+  color: var(--warning);
+}
+
+/* Seven columns cannot fit a phone. Below this the cells wrap into unreadable
+   stacks, so the table keeps its width and `.table-scroll` carries it. */
+.table-scroll > .audit-table {
+  min-width: 640px;
+}
+
+.table-hint {
+  display: none;
+}
+
+@media (max-width: 790px) {
+  .table-hint {
+    display: block;
+    margin-top: 8px;
+    font-size: 11.5px;
+    color: var(--muted);
+  }
+}
+
+/* A `SitewiseDialog` body is one `.stack` under the padded title, and the panel
+   clips at 60dvh. Without this the stack sits flush to the dialog edges and a
+   long body is cut off with no way to reach it. `min-height: 0` is what lets a
+   flex child scroll instead of overflowing. */
+.dialog > .stack {
+  padding: 0 16px;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.dialog > .btn-row {
+  flex: none;
+  padding: 12px 16px 16px;
+}
+
+/* The confirm dialogs used by the owner tour screens put a bare paragraph under
+   the title rather than a stack, so it needs the same inset. */
+.dialog > p.body {
+  padding: 0 16px;
+}
+
+/* Right-aligned columns. `.num` also gets tabular figures so a column of prices
+   or areas keeps its digits in one vertical line. */
+.audit-table th.num,
+.audit-table td.num {
+  text-align: right;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.audit-table th.acts,
+.audit-table td.acts {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.tab__count {
+  font-size: 11px;
+  font-weight: 900;
+  opacity: 0.72;
+}
+
+/* The four-stage enquiry funnel. Every stage renders empty by design — see
+   `pages/agent/performance_page.dart` — so the value slot is a placeholder
+   glyph rather than a number. */
+.funnel {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.funnel__stage {
+  display: grid;
+  gap: 3px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--alt-surface);
+  padding: 12px;
+}
+
+.funnel__name {
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.funnel__value {
+  font-family: var(--font-display);
+  font-size: 24px;
+  font-weight: 900;
+  line-height: 1;
+  color: var(--overline);
+}
+
+.funnel__def {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.funnel__gap {
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--overline-text);
+}
+
+@media (max-width: 790px) {
+  .funnel {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 540px) {
+  .funnel {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ==========================================================================
+   Dark workspace shell
+   ==========================================================================
+   The design reference puts every authenticated dashboard on the dark staff
+   canvas and leaves the marketing and auth surfaces light. That is expressible
+   as one token override, because `.app-shell` roots all four dashboards and the
+   components beneath it already read `--surface` / `--ink` / `--border` /
+   `--muted`.
+
+   Two kinds of rule had a light colour baked in and are re-declared below: the
+   subtle-fill literals (`#f8fafc`, `#eef2f7`, `#f1f5f9`) and the pair of rules
+   that treat `--ink` as a *background*. Those two never mean "the text colour"
+   — the dark hero card is dark in both themes on purpose — so they get their own
+   tokens instead of flipping with the theme.
+
+   Landing and auth pages sit outside `.app-shell` and keep the light canvas.
+   ========================================================================== */
+
+:root {
+  /* A solid panel that stays dark in either theme — the bento hero. */
+  --hero-surface: #0b0f19;
+  --hero-border: #0b0f19;
+  /* The inverted chip: dark on a light page, light on a dark page. Spelled
+     out rather than derived from `--ink`, because a custom property resolves
+     `var()` on the element that declares it — inheriting `var(--ink)` here
+     would freeze the light value and the override below would be the only
+     thing keeping dark mode legible. */
+  --contrast-surface: #0b0f19;
+  --contrast-on-surface: #ffffff;
+}
+
+.app-shell {
+  color-scheme: dark;
+
+  --ink: #f7f7f7;
+  --text: #dfe0e4;
+  --muted: #989ba4;
+  --overline: #666b72;
+  --overline-text: #989ba4;
+
+  --background: #090909;
+  --surface: #181818;
+  --alt-surface: #212121;
+  --paper: #141414;
+  --neutral-wash: #232327;
+
+  --border: #303036;
+  --border-strong: #3d3f45;
+
+  --action: #1683fc;
+  --accent: #4da3ff;
+  --geo-wash: rgba(22, 131, 252, 0.16);
+  --geo-border: rgba(22, 131, 252, 0.42);
+
+  --success: #17b3a6;
+  --success-text: #86e4a2;
+  --success-wash: rgba(134, 228, 162, 0.15);
+  --warning: #ffc277;
+  --warning-wash: rgba(255, 194, 119, 0.14);
+  --danger: #ff8787;
+  --danger-wash: rgba(255, 135, 135, 0.14);
+
+  --scrim: rgba(0, 0, 0, 0.68);
+  --dialog-shadow: 0 24px 64px rgba(0, 0, 0, 0.6);
+  --menu-shadow: 0 16px 48px rgba(0, 0, 0, 0.55);
+  --shadow-sm: 0 12px 32px rgba(0, 0, 0, 0.4);
+  --shadow: 0 24px 80px rgba(0, 0, 0, 0.5);
+
+  --hero-surface: #101013;
+  --hero-border: #26262c;
+  --contrast-surface: #f7f7f7;
+  --contrast-on-surface: #0b0b0b;
+
+  background: var(--background);
+  color: var(--text);
+}
+
+/* The pill floats translucent white; over a near-black canvas it has to float
+   near-black instead, or every dashboard reads as having a light bar glued to
+   the top of it. */
+.app-shell .app-pill {
+  background: rgba(24, 24, 24, 0.82);
+  border-color: rgba(255, 255, 255, 0.09);
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.5),
+    0 12px 32px rgba(0, 0, 0, 0.45);
+}
+
+.app-shell .app-pill__link {
+  color: var(--muted);
+}
+
+.app-shell .app-pill__link:hover {
+  background: rgba(255, 255, 255, 0.07);
+  color: var(--ink);
+}
+
+.app-shell .app-pill__link--active,
+.app-shell .app-pill__link--active:hover {
+  background: var(--contrast-surface);
+  border-color: var(--contrast-surface);
+  color: var(--contrast-on-surface);
+}
+
+/* Rules that used `--ink` as a background are contrast or hero, never text. */
+.app-shell .bento-cta:hover {
+  background: var(--contrast-surface);
+  color: var(--contrast-on-surface);
+}
+
+.app-shell .bento-hero {
+  background: var(--hero-surface);
+  border-color: var(--hero-border);
+}
+
+.app-shell .donut::after {
+  background: var(--hero-surface);
+}
+
+/* Literal subtle fills, re-declared against the flipped tokens. Each selector
+   here had a hex that assumed a white page beneath it. */
+.app-shell .stat,
+.app-shell .layer-bar,
+.app-shell .audit-table thead th,
+.app-shell .queue-item.is-active,
+.app-shell .evidence .ev,
+.app-shell .uploader,
+.app-shell .row-card img,
+.app-shell .upload-item .shot,
+.app-shell .station .shot,
+.app-shell .station-strip .shot,
+.app-shell .thumbs .shot,
+.app-shell .queue-item .shot {
+  background: var(--alt-surface);
+}
+
+.app-shell .compare-table thead th {
+  background: var(--alt-surface);
+}
+
+.app-shell .compare-table tbody th {
+  background: var(--paper);
+}
+
+.app-shell .bar,
+.app-shell .progress-track {
+  background: var(--border);
+}
+
+/* The tour viewport is a stage, not a card: a neutral slate that reads as
+   "no panorama loaded" under either theme. */
+.app-shell .tour-stage {
+  background: #24282f;
+}
+
+.app-shell .skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--alt-surface) 0%,
+    var(--neutral-wash) 50%,
+    var(--alt-surface) 100%
+  );
+}
+
+/* Buttons. Declared base-first: `.app-shell .btn` and `.app-shell .btn--primary`
+   have equal specificity, so the variant that must win has to come last. */
+.app-shell .btn,
+.app-shell .btn--secondary {
+  background: var(--surface);
+  color: var(--ink);
+  border-color: var(--border-strong);
+}
+
+.app-shell .btn--secondary:hover {
+  border-color: var(--action);
+  color: var(--action);
+}
+
+.app-shell .btn--ghost {
+  background: transparent;
+  color: var(--muted);
+}
+
+.app-shell .btn--ghost:hover {
+  background: var(--alt-surface);
+  color: var(--ink);
+  border-color: var(--border-strong);
+}
+
+/* The source builds the primary action out of `--ink`; on a dark canvas that
+   reads as the page showing through the button, so it becomes the inverted
+   chip instead. */
+.app-shell .btn--primary {
+  background: var(--contrast-surface);
+  border-color: var(--contrast-surface);
+  color: var(--contrast-on-surface);
+}
+
+.app-shell .btn--primary:hover {
+  background: var(--action);
+  border-color: var(--action);
+  color: #ffffff;
+}
+
+.app-shell .btn--danger-outline {
+  background: transparent;
+}
+
+/* The hero card keeps its own inversion: a light label on the dark panel, in
+   either theme. */
+.app-shell .bento-hero .bento-cta {
+  background: #f7f7f7;
+  color: #0b0b0b;
+}
+
+.app-shell .tour-controls button {
+  background: rgba(24, 24, 24, 0.86);
+  color: var(--ink);
+  border-color: var(--border);
+}
+
+/* Native controls otherwise render with the UA's light field. */
+.app-shell input,
+.app-shell select,
+.app-shell textarea {
+  color-scheme: dark;
+}
+
+/* ==========================================================================
+   Generated landing port — see tool/gen_landing_css.py
+   ========================================================================== */
+
 /* === BEGIN SITEWISE LANDING PORT (generated from sitewise-roles/index.html, .lnd-scoped) === */
 /* PORTED LANDING CSS (sitewise-roles) -- generated by tool/gen_landing_css.py.
    Do NOT hand-edit: regenerate from the source page instead.
@@ -5841,10 +6425,9 @@ button:focus-visible,
 img {
       max-width: 100%;
     }
-.wrap {
-      width: min(1280px, calc(100% - 48px));
-      margin: auto;
-    }
+/* `.wrap` is deliberately not redeclared here. The base rule already reads the
+   shared width tokens; a landing-scoped copy of it would be a second place to
+   keep in sync, and `.lnd .wrap` outranks `.wrap`, so it would silently win. */
 /* Fixed 74px Top Navigation Bar */
 .topbar {
   background: rgba(255, 255, 255, 0.95) !important;
@@ -6092,7 +6675,7 @@ img {
       transform: translateY(12px) scale(.98);
       transition: transform .22s cubic-bezier(.2, .8, .2, 1);
       position: relative;
-      max-height: calc(100vh - 40px);
+      max-height: calc(100dvh - 40px);
       overflow-y: auto;
     }
 .auth-modal-backdrop.open .auth-modal-card {
@@ -6432,15 +7015,20 @@ img {
     }
 /* Non-Overlapping 3-Zone 3D Hero Showcase */
     .scroll-experience {
-      height: 100vh;
-      min-height: 680px;
-      max-height: 920px;
+      /* `min-height: 680px` inside a `100vh` box meant any viewport shorter
+         than that got a hero taller than the screen, with the scene overlays
+         positioned against a height the user could not see. The clamp keeps
+         the desktop band (920px cap) and lets short viewports own their
+         height instead. */
+      height: clamp(560px, 100dvh, 920px);
       position: relative;
       background: var(--lnd-bg);
     }
 .scene-sticky {
       height: 100%;
-      min-height: 680px;
+      /* Same 680px floor as the parent, but here `overflow: hidden` turned it
+         into actual clipping on short viewports. */
+      min-height: 0;
       position: relative;
       overflow: hidden;
       isolation: isolate;
@@ -6524,7 +7112,7 @@ img {
     }
 .model-badge {
       position: absolute;
-      left: max(24px, calc((100vw - 1280px)/2));
+      left: max(var(--page-gutter), calc((100% - var(--content-max)) / 2));
       top: 18px;
       z-index: 6;
       display: flex;
@@ -6552,7 +7140,7 @@ img {
 /* Left Zone: Hero Copy */
     .scene-copy {
       position: absolute;
-      left: max(24px, calc((100vw - 1280px)/2));
+      left: max(var(--page-gutter), calc((100% - var(--content-max)) / 2));
       top: 50%;
       transform: translateY(-54%);
       width: min(420px, 34vw);
@@ -6742,7 +7330,7 @@ img {
 /* Bottom-Left: Compact Camera View Pills */
     .camera-presets {
       position: absolute;
-      left: max(24px, calc((100vw - 1280px)/2));
+      left: max(var(--page-gutter), calc((100% - var(--content-max)) / 2));
       bottom: 24px;
       display: flex;
       gap: 6px;
@@ -6944,7 +7532,7 @@ img {
     }
 .two {
       display: grid;
-      grid-template-columns: 1fr 1fr;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
       gap: 18px;
       align-items: stretch;
     }
@@ -7031,7 +7619,7 @@ img {
       padding: 20px 24px;
       box-shadow: var(--lnd-shadow-sm);
       display: grid;
-      grid-template-columns: 1fr 1.2fr;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr);
       gap: 24px;
       align-items: center;
     }
@@ -8004,7 +8592,7 @@ input[type="range"] {
       font-weight: 800;
       box-shadow: var(--lnd-shadow);
       transition: opacity .2s, transform .2s;
-      max-width: calc(100vw - 32px);
+      max-width: calc(100% - 32px);
     }
 .toast.show {
       opacity: 1;
@@ -8027,6 +8615,22 @@ input[type="range"] {
       will-change: translate;
     }
 @media(max-width:1050px) {
+      /* Header collapse. The nav row cannot shrink below its min-content width
+         (~960px: brand 230 + links 522 + actions 136 + the gaps), and flex
+         items refuse to go under that, so above this step the row hung past the
+         container's right edge and gave the whole page a sideways scrollbar.
+         The 760px step below already hands navigation to `.menu-btn` +
+         `.mobile-nav`; the header just needs to reach it earlier. */
+      .navlinks,
+      .nav > .nav-actions {
+        display: none;
+      }
+
+      .menu-btn {
+        display: block;
+        margin-left: auto;
+      }
+
       .workflow,
       .concept-grid,
       .summary-boxes {
@@ -8050,9 +8654,10 @@ input[type="range"] {
       }
     }
 @media(max-width:760px) {
-      .wrap {
-        width: calc(100% - 28px);
-      }
+      /* No `.wrap` width override here either. The base container already
+         reads `--content-max` + `--page-gutter`; re-declaring `width` inside
+         `.lnd` outranks it and would stack a second set of gutters on top of
+         the container's own padding. */
 
       .navlinks,
       .nav>.nav-actions {
@@ -8065,9 +8670,12 @@ input[type="range"] {
       }
 
       .scene-copy {
-        top: 38%;
-        left: 18px;
-        width: calc(100% - 36px);
+        /* Was 38%, which put the copy's bottom edge inside the glass stack on
+           any viewport under ~700px tall — the scene is now short enough that
+           the two percentage anchors collided. */
+        top: 12%;
+        left: var(--page-gutter);
+        width: calc(100% - var(--page-gutter) * 2);
         max-width: 400px;
       }
 
@@ -8516,11 +9124,9 @@ input[type="range"] {
    link. Only rules with no login equivalent live here, so the two auth pages
    cannot drift apart again:
 
-     .signup-page       backdrop swap + the wider card signup's controls need
-     .su-pw-row       create / confirm password side by side
-     .su-seg          account-type segmented control
-     .su-select-wrap  styled <select> inside .lp-field
-     .su-hint/.su-opt helper and optional-label text
+     .signup-page   backdrop swap (everything else is the shared `lp-*` set)
+     .su-pw-row     create / confirm password side by side
+     .su-hint       password-rule helper text
 
    Every rule is either prefixed `.su-` or scoped under `.signup-page`, so
    nothing reaches the login or forgot-password surfaces.
@@ -8533,31 +9139,16 @@ input[type="range"] {
   background-position: 50% 100%;
 }
 
-/* The signup card carries seven controls against login's two, so it needs
-   more width than `.lp-right` allows: at 500px the side-by-side password pair
-   keeps ~130px of usable text each after the leading icon and eye button. */
-.signup-page .lp-right {
-  flex: 0 1 500px;
-  max-width: 500px;
-}
-
-/* Login's card clears 48px of content padding twice over; signup's is ~900px
-   tall, so the same padding pushes it past a 980px viewport. Tightening the
-   vertical padding keeps the whole form visible without scrolling. */
-@media (min-width: 981px) {
-  .signup-page .lp-content {
-    padding-top: 30px;
-    padding-bottom: 30px;
-  }
-}
-
 /* ---- password pair ------------------------------------------------------- */
 
 .su-pw-row {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  /* `minmax(0, 1fr)`: a bare `1fr` track will not shrink below the intrinsic
+     width of the `<input>` inside it, so two side-by-side password fields set
+     the floor for the whole card and the form overflowed on small screens. */
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
-  margin-bottom: 6px;
+  margin-bottom: 4px;
 }
 
 .su-pw-row .lp-group {
@@ -8568,150 +9159,16 @@ input[type="range"] {
   font-size: 11.5px;
   line-height: 1.45;
   color: var(--lp-muted);
-  margin: 0 0 14px;
+  margin: 0 0 8px;
 }
 
 .lp-group .su-hint {
   margin: 6px 0 0;
 }
 
-.su-opt {
-  font-weight: 400;
-  color: var(--lp-muted);
-}
-
-/* ---- account type -------------------------------------------------------- */
-
-.su-seg {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 5px;
-  padding: 5px;
-  background: #f1f5f9;
-  border: 1px solid var(--lp-line);
-  border-radius: 11px;
-}
-
-.su-seg__opt {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 7px;
-  min-height: 38px;
-  padding: 0 8px;
-  border: none;
-  border-radius: 7px;
-  background: transparent;
-  color: var(--lp-muted);
-  font-family: inherit;
-  font-size: 12.5px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background 0.18s ease, color 0.18s ease, box-shadow 0.18s ease;
-}
-
-.su-seg__opt:hover {
-  color: var(--lp-ink);
-}
-
-.su-seg__opt.is-selected {
-  background: #fff;
-  color: var(--lp-blue-deep);
-  font-weight: 700;
-  /* The global `.is-selected` rule paints a permanent 2px action outline for
-     the dashboard's selectable cards. Here the white pill plus its hairline
-     already carry the selected state, so a ring would double-signal; the
-     `:focus-visible` rule below restores the ring for keyboard users. */
-  outline: none;
-  box-shadow:
-    0 1px 3px rgba(15, 23, 42, 0.14),
-    inset 0 0 0 1px rgba(15, 23, 42, 0.07);
-}
-
-.su-seg__opt:focus-visible {
-  outline: 3px solid rgba(0, 117, 255, 0.45);
-  outline-offset: 2px;
-}
-
-.su-seg__opt .ms {
-  font-size: 18px;
-}
-
-/* The description follows the selection instead of being duplicated inside two
-   tiles, which is what made the old cards wrap to four lines. */
-.su-seg-hint {
-  font-size: 11.5px;
-  line-height: 1.45;
-  color: var(--lp-muted);
-  margin: 8px 0 0;
-  min-height: 17px;
-}
-
-/* ---- concept select ------------------------------------------------------ */
-
-.su-select-wrap select {
-  width: 100%;
-  min-height: 44px;
-  padding: 0 38px;
-  border: 1px solid var(--lp-line);
-  border-radius: 10px;
-  font-size: 13.5px;
-  font-family: inherit;
-  color: var(--lp-ink);
-  background: #fff;
-  appearance: none;
-  -webkit-appearance: none;
-  cursor: pointer;
-  transition: border-color 0.18s ease, box-shadow 0.18s ease;
-}
-
-.su-select-wrap select:focus {
-  outline: none;
-  border-color: var(--lp-blue);
-  box-shadow: 0 0 0 4px rgba(0, 117, 255, 0.1);
-}
-
-.su-chev {
-  position: absolute;
-  right: 12px;
-  top: 50%;
-  transform: translateY(-50%);
-  color: #94a3b8;
-  display: flex;
-  line-height: 0;
-  pointer-events: none;
-}
-
-/* ---- terms --------------------------------------------------------------- */
-
-/* The terms row reuses `.lp-remember` but is not a `<label for>` (see
-   signup_page.dart), so it drops that label's pointer cursor. */
-.su-terms .lp-remember-text {
-  cursor: default;
-}
-
-.su-terms .lp-remember-text a {
-  color: var(--lp-blue);
-  font-weight: 600;
-  text-decoration: none;
-}
-
-.su-terms .lp-remember-text a:hover {
-  text-decoration: underline;
-}
-
-.su-terms + .lp-err {
-  margin-top: -12px;
-  margin-bottom: 14px;
-}
-
 /* ---- responsive ---------------------------------------------------------- */
 
 @media (max-width: 560px) {
-  .signup-page .lp-right {
-    max-width: 460px;
-  }
-
   .su-pw-row {
     grid-template-columns: 1fr;
     gap: 0;
@@ -8725,20 +9182,16 @@ input[type="range"] {
   .su-pw-row .lp-group:last-child {
     margin-bottom: 0;
   }
-
-  .su-seg {
-    grid-template-columns: 1fr;
-  }
 }
 
 /* ==========================================================================
    Login — split hero + credential card
    --------------------------------------------------------------------------
-   Jaspr port of the updated sign-in design (`sitewise_login.html`, top
-   navbar removed per the brief). Scoped to `.login-page` with an `lp-`
-   class prefix so no rule reaches any other surface. Typography keeps the
-   project's Archivo stack (`--lnd-font`); the reference's DM Sans link was
-   therefore intentionally not imported.
+   Jaspr port of the updated sign-in design (`sitewise_login.html`), with the
+   landing page's own navbar floated over the hero. Scoped to `.login-page`
+   with an `lp-` class prefix so no rule reaches any other surface. Typography
+   keeps the project's Archivo stack (`--lnd-font`); the reference's DM Sans
+   link was therefore intentionally not imported.
    ========================================================================== */
 
 .login-page {
@@ -8748,8 +9201,11 @@ input[type="range"] {
   --lp-ink: #0f172a;
   --lp-muted: #64748b;
   --lp-line: #e2e8f0;
+  /* Height of the overlaid `SiteTopbar` (`.nav` is 74px); every content offset
+     that has to clear it reads this token. */
+  --lp-nav-h: 74px;
   position: relative;
-  min-height: 100vh;
+  min-height: 100dvh;
   overflow: hidden;
   font-family: var(--lnd-font);
 }
@@ -8791,36 +9247,76 @@ input[type="range"] {
   );
 }
 
+/* ---- navbar ------------------------------------------------------------- */
+
+/* The landing page's `SiteTopbar`, floated over the hero so it costs no
+   vertical band. It is wrapped in `.lnd` because every nav rule lives in the
+   landing-scoped block and reads the `--lnd-*` tokens — which also means the
+   wrapper has to give up `.lnd`'s own paper background.
+
+   The bar deliberately keeps the landing's solid white treatment: the `.topbar`
+   rule in the landing block pins background, border and shadow with
+   `!important`, so nothing here overrides it. A transparent bar made the
+   wordmark and links compete with the sky, and the auth pages never scroll
+   (`.login-page` is `overflow: hidden` at one viewport high), so a
+   scroll-triggered solid state had nothing to trigger it. */
+.lp-nav {
+  position: absolute;
+  inset: 0 0 auto;
+  z-index: 5;
+}
+
+.lp-nav.lnd {
+  background: transparent;
+}
+
+/* `.wrap` reads the wider marketing band (`--content-band`), which would leave
+   the brand and the Sign-up button hanging outside the hero/card columns;
+   border-box is already in force here via `.lnd *`. */
+.lp-nav .wrap {
+  max-width: var(--lp-max);
+}
+
 /* ---- layout -------------------------------------------------------------- */
 
+/* Two-column auth band. Grid rather than flex so the pair is centred as a
+   unit: the old flex row carried `margin-left: auto` on `.lp-right`, which
+   pinned the card to the right edge of a 1500px band — on a wide monitor that
+   read as the form being shoved off-centre, with a dead gap between it and
+   the hero. `minmax(0, …)` on both tracks keeps either side able to shrink. */
 .lp-content {
   position: relative;
   z-index: 2;
-  max-width: 1500px;
-  margin: 0 auto;
-  min-height: 100vh;
-  padding: 48px;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 48px;
+  width: 100%;
+  max-width: var(--lp-max);
+  margin-inline: auto;
+  min-height: 100dvh;
+  /* Top padding reserves the navbar: it is absolutely positioned over the
+     backdrop, so without this the bar would sit on top of the eyebrow. */
+  padding:
+    calc(var(--lp-nav-h) + var(--page-gutter)) var(--page-gutter)
+    var(--page-gutter);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, var(--login-form-max));
+  /* `gap-x-12` between the copy and the card, but a tighter row gap: once the
+     columns stack on tablet and mobile a 48px seam just adds dead space. */
+  column-gap: 48px;
+  row-gap: 24px;
   align-items: center;
 }
 
 .lp-left {
-  flex: 1 1 380px;
-  min-width: 290px;
+  min-width: 0;
   max-width: 560px;
   color: #fff;
 }
 
 .lp-right {
-  flex: 0 1 420px;
-  min-width: 320px;
-  max-width: 420px;
+  width: 100%;
+  min-width: 0;
+  max-width: var(--login-form-max);
   display: flex;
   justify-content: flex-end;
-  margin-left: auto;
-  width: 100%;
 }
 
 /* ---- hero copy ------------------------------------------------------------ */
@@ -8835,7 +9331,10 @@ input[type="range"] {
 }
 
 .lp-hero {
-  font-size: clamp(36px, 4.2vw, 50px);
+  /* Was `clamp(36px, 4.2vw, 50px)`; the `vw` term kept pushing it toward the
+     ceiling on wide monitors. Capped at 44px — between `text-4xl` and
+     `text-5xl` — so the headline stays the hero without dominating it. */
+  font-size: clamp(30px, 3.1vw, 44px);
   font-weight: 800;
   line-height: 1.08;
   letter-spacing: -0.03em;
@@ -8914,8 +9413,8 @@ input[type="range"] {
   width: 100%;
   background: #fff;
   /* Soft, rounded container: a generous radius plus a gentle outer shadow. */
-  border-radius: 24px;
-  padding: 28px 28px 26px;
+  border-radius: 18px;
+  padding: 22px 24px 20px;
   box-shadow:
     0 24px 64px rgba(0, 0, 0, 0.28),
     /* Subtle dark inner stroke — a hairline inset ring that reads as a
@@ -8936,7 +9435,7 @@ input[type="range"] {
 }
 
 .lp-card-title {
-  font-size: clamp(19px, 1.8vw, 23px);
+  font-size: clamp(18px, 1.6vw, 21px);
   font-weight: 700;
   color: var(--lp-ink);
   margin: 0 0 6px;
@@ -8947,15 +9446,15 @@ input[type="range"] {
   font-size: 13px;
   color: var(--lp-muted);
   line-height: 1.5;
-  margin: 0 0 20px;
+  margin: 0 0 14px;
 }
 
 .lp-alert {
   border-radius: 10px;
-  padding: 10px 12px;
+  padding: 9px 11px;
   font-size: 12.5px;
   font-weight: 600;
-  margin: 0 0 16px;
+  margin: 0 0 12px;
 }
 
 .lp-alert.info {
@@ -8978,7 +9477,7 @@ input[type="range"] {
 
 .lp-social-row {
   display: grid;
-  gap: 10px;
+  gap: 8px;
 }
 
 .lp-social {
@@ -9019,7 +9518,7 @@ input[type="range"] {
   font-size: 11.5px;
   color: #94a3b8;
   text-align: center;
-  margin: 10px 0 0;
+  margin: 8px 0 0;
 }
 
 /* ---- divider ---------------------------------------------------------------- */
@@ -9028,7 +9527,7 @@ input[type="range"] {
   display: flex;
   align-items: center;
   gap: 12px;
-  margin: 18px 0;
+  margin: 14px 0;
 }
 
 .lp-line {
@@ -9046,7 +9545,7 @@ input[type="range"] {
 /* ---- fields ------------------------------------------------------------------ */
 
 .lp-group {
-  margin-bottom: 14px;
+  margin-bottom: 10px;
 }
 
 .lp-label {
@@ -9054,7 +9553,7 @@ input[type="range"] {
   font-size: 12.5px;
   font-weight: 600;
   color: var(--lp-ink);
-  margin-bottom: 6px;
+  margin-bottom: 5px;
 }
 
 .lp-field {
@@ -9146,7 +9645,7 @@ input[type="range"] {
 
 .lp-forgot {
   text-align: right;
-  margin: 0 0 14px;
+  margin: 0 0 12px;
 }
 
 .lp-forgot a {
@@ -9171,7 +9670,7 @@ input[type="range"] {
   display: flex;
   align-items: flex-start;
   gap: 10px;
-  margin-bottom: 20px;
+  margin-bottom: 14px;
 }
 
 .lp-checkbox {
@@ -9274,12 +9773,18 @@ input[type="range"] {
 /* ---- responsive ------------------------------------------------------------------ */
 
 @media (max-width: 980px) {
+  /* Stack. */
   .lp-content {
-    flex-direction: column;
-    align-items: stretch;
-    padding: 36px 28px;
+    grid-template-columns: minmax(0, 1fr);
+    justify-items: start;
+    /* Vertical padding is its own value (plus the overlaid navbar); horizontal
+       comes from `--page-gutter` so the auth pages tighten their margins with
+       the rest of the app rather than holding a hardcoded 28px the other pages
+       do not share. */
+    padding:
+      calc(var(--lp-nav-h) + 36px) var(--page-gutter) 36px;
     gap: 32px;
-    min-height: 100vh;
+    min-height: 100dvh;
   }
 
   /* Rotate the scrim so the hero copy sits on the dark end on tablets. */
@@ -9297,15 +9802,19 @@ input[type="range"] {
   }
 
   .lp-right {
-    margin-left: 0;
     justify-content: flex-start;
     max-width: 460px;
   }
 }
 
 @media (max-width: 520px) {
+  /* Only the *vertical* padding tightens here. The horizontal edge keeps
+     reading `--page-gutter`, which already steps 32 → 20 → 14; a hardcoded
+     `16px` here made the auth pages the only surfaces in the app that ignored
+     the shared gutter. */
   .lp-content {
-    padding: 26px 16px;
+    padding-block: calc(var(--lp-nav-h) + 26px) 26px;
+    padding-inline: var(--page-gutter);
   }
 
   .lp-left {
@@ -9332,5 +9841,33 @@ input[type="range"] {
 
   .lp-hero {
     font-size: 30px;
+  }
+}
+
+/* ---- Signup portal iframe (standalone Tailwind design) ------------------
+   The supplied auth-portal.html brings its own compiled Tailwind CSS. It is
+   loaded in a same-origin iframe so its preflight reset is isolated from the
+   rest of the site. The host script sets an exact pixel height from the
+   portal's postMessage; these rules cover the initial paint and overflow. */
+.su-portal-right {
+  align-self: start;
+  max-width: 460px;
+}
+
+.su-portal-frame {
+  display: block;
+  width: 100%;
+  min-height: 620px;
+  height: 760px;               /* replaced by the measured height at runtime */
+  border: 0;
+  border-radius: 24px;
+  background: transparent;
+  overflow: hidden;
+}
+
+@media (max-width: 980px) {
+  .su-portal-right {
+    max-width: 460px;
+    margin-inline: auto;
   }
 }

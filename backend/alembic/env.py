@@ -7,9 +7,9 @@ from alembic import context
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
-from sitesense.core.config import settings
-from sitesense.db.session import engine
-from sitesense.db.models import *  # noqa: F401,F403
+from sitewise.core.config import settings
+from sitewise.db.session import engine
+from sitewise.db.models import *  # noqa: F401,F403
 from sqlmodel import SQLModel
 
 config = context.config

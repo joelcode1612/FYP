@@ -4,7 +4,7 @@ import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 from fastapi.testclient import TestClient
-from sitesense.main import app
+from sitewise.main import app
 
 
 def test_health():

@@ -3,6 +3,7 @@
 const fs = require('fs');
 const path = require('path');
 const { chromium } = require('playwright-core');
+const { installHarnessSession } = require('./session_harness');
 
 const EXE = 'C:/Users/Lenovo/AppData/Local/ms-playwright/chromium-1248/chrome-win64/chrome.exe';
 
@@ -28,19 +29,28 @@ const EXE = 'C:/Users/Lenovo/AppData/Local/ms-playwright/chromium-1248/chrome-wi
   // login.html without a session in localStorage. Seed one so the pages under
   // comparison actually render. Key/shape come from data-source.js `_key` +
   // `_session`; ROLE=admin selects the seeded administrator.
+  //
+  // The Jaspr app is gated the other way — by `window.sitewiseAuth` and the
+  // authenticated API — so it needs session_harness.js instead of a key. Set
+  // HARNESS=1 and ROLE=entrepreneur|owner|admin|agent for those pages.
+  const harness = process.env.HARNESS === '1';
   const role = process.env.ROLE || 'user';
-  const session =
-    role === 'none'
-      ? null
-      : role === 'admin'
-      ? { userId: 'u-admin', email: 'admin@sitewise.test', name: 'Sitewise Administrator', role: 'admin', at: new Date().toISOString() }
-      : { userId: 'u-1001', email: 'owner@sitewise.test', name: 'Amir Rahman', role: 'user', at: new Date().toISOString() };
-  if (session) {
-    await ctx.addInitScript((s) => {
-      try {
-        localStorage.setItem('sitewise:v1:uanon:session', JSON.stringify(s));
-      } catch (e) {}
-    }, session);
+  if (harness) {
+    await installHarnessSession(page, { role: role === 'user' ? 'auto' : role });
+  } else {
+    const session =
+      role === 'none'
+        ? null
+        : role === 'admin'
+        ? { userId: 'u-admin', email: 'admin@sitewise.test', name: 'Sitewise Administrator', role: 'admin', at: new Date().toISOString() }
+        : { userId: 'u-1001', email: 'owner@sitewise.test', name: 'Amir Rahman', role: 'user', at: new Date().toISOString() };
+    if (session) {
+      await ctx.addInitScript((s) => {
+        try {
+          localStorage.setItem('sitewise:v1:uanon:session', JSON.stringify(s));
+        } catch (e) {}
+      }, session);
+    }
   }
 
   for (let i = 0; i < rest.length; i += 2) {

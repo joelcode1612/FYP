@@ -1,8 +1,10 @@
 import 'package:jaspr/jaspr.dart';
 import 'package:jaspr_router/jaspr_router.dart';
+import 'package:shared_logic/shared_logic.dart';
 
 import 'data/app_locator.dart';
 import 'data/auth_service.dart';
+import 'data/workspaces.dart';
 import 'pages/auth_callback_page.dart';
 import 'components/ui.dart';
 import 'layouts/marketing_layout.dart';
@@ -22,6 +24,13 @@ import 'pages/entrepreneur/recommendations_page.dart' as e_recommendations;
 import 'pages/entrepreneur/report_page.dart' as e_report;
 import 'pages/entrepreneur/saved_page.dart' as e_saved;
 import 'pages/entrepreneur/tour_page.dart' as e_tour;
+import 'pages/admin/agents_page.dart';
+import 'pages/agent/dashboard_page.dart';
+import 'pages/agent/enquiries_page.dart';
+import 'pages/agent/listings_page.dart';
+import 'pages/agent/performance_page.dart';
+import 'pages/agent/profile_page.dart';
+import 'pages/agent/property_detail_page.dart';
 import 'pages/admin/dashboard_page.dart' as a_dashboard;
 import 'pages/admin/listing_detail_page.dart' as a_listing_detail;
 import 'pages/admin/listings_page.dart' as a_listings;
@@ -65,15 +74,25 @@ class SitewiseApp extends StatelessComponent {
       redirect: (context, state) {
         final path = Uri.parse(state.location).path;
         final rolePath = RegExp(
-          r'^/(entrepreneur|owner|admin)(/|$)',
+          r'^/(entrepreneur|owner|admin|agent)(/|$)',
         ).firstMatch(path);
         if (rolePath == null) return null;
         final profile = WebAuth.profile;
         if (profile == null) {
           return '/login?next=${Uri.encodeComponent(state.location)}';
         }
-        final role = profile['role'] as String;
-        return rolePath.group(1) == role ? null : '/$role';
+        final assigned = profile['role'] as String;
+        final requested = rolePath.group(1)!;
+        // The server-assigned role always opens. Anything else needs an entry
+        // in `Workspaces`, which only the in-session access request can add —
+        // so a typed URL still cannot reach another role's data.
+        if (requested == assigned) return null;
+        final role = _roleNamed(requested);
+        if (role != null && Workspaces.canOpen(role)) return null;
+        // Unknown or ungranted: send the account to its own home rather than
+        // inventing a destination for a role string the backend did not issue.
+        final home = _roleNamed(assigned);
+        return home == null ? '/login' : home.homeRoute;
       },
       errorBuilder: (context, state) => const MarketingLayout(
         child: EmptyState(
@@ -108,6 +127,10 @@ class SitewiseApp extends StatelessComponent {
         Route(
           path: '/admin/users',
           builder: (context, state) => const a_users.UsersPage(),
+        ),
+        Route(
+          path: '/admin/agents',
+          builder: (context, state) => const AdminAgentsPage(),
         ),
         Route(
           path: '/admin/user-detail',
@@ -236,8 +259,51 @@ class SitewiseApp extends StatelessComponent {
           builder: (context, state) => const e_profile.ProfilePage(),
         ),
 
+        // --- Agent -----------------------------------------------------------
+        // The staff workspace. Reachable only through `Workspaces` — no agent
+        // account exists server-side, so the profile-page access request is the
+        // sole way in, and it is revoked on reload.
+        Route(
+          path: '/agent',
+          builder: (context, state) => const AgentDashboardPage(),
+        ),
+        Route(
+          path: '/agent/listings',
+          builder: (context, state) => const AgentListingsPage(),
+        ),
+        Route(
+          path: '/agent/property-detail',
+          builder: (context, state) =>
+              AgentPropertyDetailPage(id: state.queryParams['id'] ?? ''),
+        ),
+        Route(
+          path: '/agent/enquiries',
+          builder: (context, state) => const AgentEnquiriesPage(),
+        ),
+        Route(
+          path: '/agent/performance',
+          builder: (context, state) => const AgentPerformancePage(),
+        ),
+        Route(
+          path: '/agent/profile',
+          builder: (context, state) => const AgentProfilePage(),
+        ),
+
         // Unknown browser routes use errorBuilder above.
       ],
     );
   }
+}
+
+/// Resolves a role name from the URL or the profile claim.
+///
+/// Returns null for anything the enum does not define, which is what keeps a
+/// forged `role` claim from mapping onto a workspace: the guard treats null as
+/// "not authorised" rather than defaulting to the most permissive role.
+AppRole? _roleNamed(String? name) {
+  if (name == null) return null;
+  for (final role in AppRole.values) {
+    if (role.name == name) return role;
+  }
+  return null;
 }

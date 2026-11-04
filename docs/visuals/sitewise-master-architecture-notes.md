@@ -4,7 +4,7 @@ Snapshot: 1 November 2026. Exactly three primary role lanes; 34 independent trac
 
 Primary specification: `C:/Users/Lenovo/OneDrive/Desktop/RSW_JOELTANHOUJUN_Project1.pdf`, §§1.6, 3.2.1 and 4.4.1–4.4.9. Read directly with PyMuPDF. Current source takes precedence over the older implementation audit. No payments, bookings, notification service or production cloud deployment was inferred.
 
-Code sources: `fyp_jaspr_web/lib/app.dart`, `lib/data/app_locator.dart`, `lib/data/api_property_repository.dart`, `tool/auth_client.js`; `fyp_mobile_app/lib/core/routing/app_routes.dart`, `lib/application/services/service_locator.dart`, `lib/presentation/mobile/start/app_start_gate.dart`, `lib/data/repositories/auth_repository_impl.dart`; shared `AppCubit`, `OwnerCubit`, `AdminCubit`, `TourService`, `VerificationRepositoryImpl`, `TourRepositoryImpl`; mobile panorama generation and OpenCV stitcher; `test/app-api.js`, `test/app-schema.sql`, workbook import tools; `backend/src/sitesense/main.py` and `api/v1/router.py`.
+Code sources: `fyp_jaspr_web/lib/app.dart`, `lib/data/app_locator.dart`, `lib/data/api_property_repository.dart`, `tool/auth_client.js`; `fyp_mobile_app/lib/core/routing/app_routes.dart`, `lib/application/services/service_locator.dart`, `lib/presentation/mobile/start/app_start_gate.dart`, `lib/data/repositories/auth_repository_impl.dart`; shared `AppCubit`, `OwnerCubit`, `AdminCubit`, `TourService`, `VerificationRepositoryImpl`, `TourRepositoryImpl`; mobile panorama generation and OpenCV stitcher; `test/app-api.js`, `test/app-schema.sql`, workbook import tools; `backend/src/sitewise/main.py` and `api/v1/router.py`.
 
 ## Interpreting the diagram
 

@@ -149,7 +149,9 @@ class _DashboardPageState extends State<DashboardPage> {
     final prefsSet = _prefsSet;
     return div(classes: 'bento-head', [
       div(classes: 'bh-title', [
-        span(classes: 'eyebrow-sm', [Component.text('Workspace')]),
+        span(classes: 'eyebrow-sm', [
+          Component.text('Public portal · entrepreneur'),
+        ]),
         LetterRevealHeading.text('Hello there', level: 1),
       ]),
       div(classes: 'bh-actions', [

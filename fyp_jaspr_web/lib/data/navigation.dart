@@ -28,6 +28,7 @@ String workspaceLabelFor(AppRole role) => switch (role) {
   AppRole.admin => 'Admin workspace',
   AppRole.owner => 'Owner workspace',
   AppRole.entrepreneur => 'Entrepreneur workspace',
+  AppRole.agent => 'Agent workspace',
 };
 
 /// Desktop sidebar destinations per role. The web tree is the only consumer —
@@ -38,6 +39,7 @@ List<WebDestination> webDestinationsFor(AppRole role) => switch (role) {
     // `people`, not `group`: the mobile bottom nav uses Icons.people_outline,
     // and Material Symbols renders `group` and `people` as different glyphs.
     WebDestination(route: '/admin/users', icon: 'people', label: 'Users'),
+    WebDestination(route: '/admin/agents', icon: 'badge', label: 'Agents'),
     WebDestination(
       route: '/admin/verification',
       icon: 'verified',
@@ -49,6 +51,21 @@ List<WebDestination> webDestinationsFor(AppRole role) => switch (role) {
       label: 'Listings',
     ),
     WebDestination(route: '/admin/profile', icon: 'person', label: 'Profile'),
+  ],
+  AppRole.agent => const [
+    WebDestination(route: '/agent', icon: 'dashboard', label: 'Dashboard'),
+    WebDestination(
+      route: '/agent/listings',
+      icon: 'business',
+      label: 'Assigned Listings',
+    ),
+    WebDestination(route: '/agent/enquiries', icon: 'mail', label: 'Enquiries'),
+    WebDestination(
+      route: '/agent/performance',
+      icon: 'monitoring',
+      label: 'Performance',
+    ),
+    WebDestination(route: '/agent/profile', icon: 'person', label: 'Profile'),
   ],
   AppRole.owner => const [
     WebDestination(route: '/owner', icon: 'home', label: 'Home'),
@@ -111,6 +128,9 @@ String parentShellRoute(String route) {
     '/admin/user-detail': '/admin/users',
     '/admin/verification-detail': '/admin/verification',
     '/admin/listing-detail': '/admin/listings',
+    '/admin/agent-detail': '/admin/agents',
+    '/agent/property-detail': '/agent/listings',
+    '/agent/enquiry-detail': '/agent/enquiries',
     '/owner/property-detail': '/owner/properties',
     '/owner/tour-preview': '/owner/tours',
     '/owner/capture': '/owner/tours',
@@ -127,6 +147,7 @@ String parentShellRoute(String route) {
 /// which is just a navigation to the other role's home route.
 AppRole roleForPath(String path) {
   if (path.startsWith('/admin')) return AppRole.admin;
+  if (path.startsWith('/agent')) return AppRole.agent;
   if (path.startsWith('/owner')) return AppRole.owner;
   return AppRole.entrepreneur;
 }

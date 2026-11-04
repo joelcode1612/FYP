@@ -127,12 +127,14 @@ class _UsersPageState extends State<UsersPage> {
                     ('All roles', 'all'),
                     ('Entrepreneur', 'entrepreneur'),
                     ('Owner', 'owner'),
+                    ('Agent', 'agent'),
                     ('Administrator', 'admin'),
                   ],
                   onChanged: (v) => setState(() {
                     roleFilter = switch (v) {
                       'entrepreneur' => AppRole.entrepreneur,
                       'owner' => AppRole.owner,
+                      'agent' => AppRole.agent,
                       'admin' => AppRole.admin,
                       _ => null,
                     };

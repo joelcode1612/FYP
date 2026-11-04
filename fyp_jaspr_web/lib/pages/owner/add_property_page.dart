@@ -218,7 +218,7 @@ class _FormBody extends StatelessComponent {
 
   @override
   Component build(BuildContext context) {
-    return div(classes: 'stack', [
+    return div(classes: 'stack form-standalone', [
       div(classes: 'grid-2', [
         _Section('Basics', [
           _field(

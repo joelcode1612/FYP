@@ -50,10 +50,29 @@ class ReportPage extends StatelessComponent {
                 return FutureBuilder<LocationAnalysis>(
                   future: AppLocator.recommendations.analysis(id),
                   builder: (c2, aSnap) {
-                    if (!aSnap.hasData) {
+                    if (aSnap.connectionState != ConnectionState.done) {
                       return const _Loading(message: 'Generating report…');
                     }
-                    return _Report(property: p, analysis: aSnap.data!);
+                    // Without this branch an unavailable analysis left the page
+                    // spinning forever: `hasData` is also false when the future
+                    // completed with an error.
+                    if (aSnap.hasError) {
+                      return EmptyState(
+                        title: 'Report could not be generated',
+                        body:
+                            'This listing has no location analysis in the '
+                            'imported workbook, so the report has nothing to '
+                            'summarise. The listing itself is still available.',
+                        action: const ActionLink(
+                          'Open the listing',
+                          href: '/entrepreneur/explore',
+                          variant: 'primary',
+                        ),
+                      );
+                    }
+                    final analysis = aSnap.data;
+                    if (analysis == null) return const _NotFound();
+                    return _Report(property: p, analysis: analysis);
                   },
                 );
               },

@@ -2,8 +2,10 @@ import 'package:jaspr/dom.dart';
 import 'package:jaspr/jaspr.dart';
 import 'package:shared_logic/shared_logic.dart';
 
+import '../data/agent_records.dart';
 import '../data/app_locator.dart';
 import '../data/auth_service.dart';
+import '../data/workspaces.dart';
 import 'ui.dart';
 
 /// Header controls ported from the Flutter web tree's
@@ -23,18 +25,23 @@ String detailRouteFor(AppRole role) => switch (role) {
   AppRole.admin => '/admin/listing-detail',
   AppRole.owner => '/owner/property-detail',
   AppRole.entrepreneur => '/entrepreneur/property-detail',
+  AppRole.agent => '/agent/property-detail',
 };
 
 String profileRouteFor(AppRole role) => switch (role) {
   AppRole.admin => '/admin/profile',
   AppRole.owner => '/owner/profile',
   AppRole.entrepreneur => '/entrepreneur/profile',
+  AppRole.agent => '/agent/profile',
 };
 
 ({String name, String email}) profileFor(AppRole role) => switch (role) {
   AppRole.admin => (name: 'Aina Razak', email: 'aina@sitewise.my'),
   AppRole.owner => (name: 'Daniel Wong', email: 'daniel@wongproperties.my'),
   AppRole.entrepreneur => (name: 'Sarah Lim', email: 'sarah@nasihouse.my'),
+  // No agent account has been issued, so there is no address to show. Inventing
+  // one would make the demo identity look like a real login.
+  AppRole.agent => (name: 'Agent Aina', email: 'No account issued'),
 };
 
 /// The three header controls, rendered in the topbar's right-hand slot.
@@ -216,6 +223,7 @@ class NotificationControlState extends State<NotificationControl> {
     AppRole.admin => 'Verification queue',
     AppRole.owner => 'Your listings',
     AppRole.entrepreneur => 'Top picks for you',
+    AppRole.agent => 'Assigned listings',
   };
 
   Future<List<({String title, String subtitle, String id, String route})>>
@@ -256,6 +264,19 @@ class NotificationControlState extends State<NotificationControl> {
               subtitle: r.reason,
               id: r.property.id,
               route: '/entrepreneur/property-detail',
+            ),
+        ];
+      case AppRole.agent:
+        // The same catalog the listings page reads, so the bell and the table
+        // can never disagree about what this agent is holding.
+        final assigned = await AgentRecords.assignedProperties();
+        return [
+          for (final p in assigned.take(5))
+            (
+              title: p.title,
+              subtitle: AgentRecords.listingLabel(p.verification),
+              id: p.id,
+              route: '/agent/property-detail',
             ),
         ];
     }
@@ -429,16 +450,20 @@ class AvatarMenuState extends State<AvatarMenu> {
                   children: [Component.text('View profile')],
                 ),
                 div(classes: 'menu__divider', []),
-                for (final role in AppRole.values.where(
-                  (role) => role.name == account?['role'],
-                ))
+                // Every workspace this session may open: the server-assigned
+                // role, plus anything the in-session access request granted. A
+                // grant is labelled rather than hidden, because it is not
+                // persisted and does not widen what the API will answer.
+                for (final role in Workspaces.openable)
                   AppLink(
                     to: role.homeRoute,
                     classes:
                         'menu__item${role == component.role ? ' menu__item--current' : ''}',
                     children: [
                       Component.text(
-                        '${role.label}${role == component.role ? ' ✓' : ''}',
+                        '${role.label}'
+                        '${Workspaces.isDemoGrant(role) ? ' · demo' : ''}'
+                        '${role == component.role ? ' ✓' : ''}',
                       ),
                     ],
                   ),

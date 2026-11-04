@@ -105,7 +105,9 @@ class _DashboardPageState extends State<DashboardPage> {
   Component _head() {
     return div(classes: 'bento-head', [
       div(classes: 'bh-title', [
-        span(classes: 'eyebrow-sm', [Component.text('Owner workspace')]),
+        span(classes: 'eyebrow-sm', [
+          Component.text('Public portal · property owner'),
+        ]),
         LetterRevealHeading.text('Your portfolio', level: 1),
         p(classes: 'muted', [
           Component.text(

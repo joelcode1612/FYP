@@ -11,4 +11,4 @@ COPY alembic.ini ./
 
 ENV PYTHONPATH=/app/src
 
-CMD ["uvicorn", "sitesense.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "sitewise.main:app", "--host", "0.0.0.0", "--port", "8000"]

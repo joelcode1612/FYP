@@ -105,5 +105,10 @@ List<MobileDestination> mobileDestinationsFor(AppRole role) {
           label: 'Profile',
         ),
       ];
+    case AppRole.agent:
+      // No mobile agent screens exist, and an agent cannot sign in yet (the
+      // profiles table rejects the role). The workspace is web-only, so the
+      // bottom bar stays empty rather than pointing at routes that 404.
+      return const [];
   }
 }

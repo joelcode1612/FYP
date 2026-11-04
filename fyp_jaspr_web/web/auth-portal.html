@@ -1,0 +1,635 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta content="width=device-width, initial-scale=1.0" name="viewport">
+  <title>Sitewise — Create your account</title>
+
+  <!-- Public fonts; system-ui fallback if offline. -->
+  <link href="https://fonts.googleapis.com" rel="preconnect">
+  <link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <!-- Locally compiled Tailwind utility CSS (offline-safe, no CDN). -->
+  <link rel="stylesheet" href="auth-portal.css">
+</head>
+
+<body class="min-h-screen flex items-center justify-center p-4 antialiased selection:bg-brand-500 selection:text-white">
+
+  <!-- BEGIN: RightPortalCard (the form) -->
+  <section class="w-full max-w-md relative z-20">
+    <!-- Interactive Authentication Card Container -->
+    <div class="portal-transition glass-entrepreneur rounded-3xl p-6 sm:p-8 relative overflow-hidden transition-all duration-300"
+         id="authCard"
+         style="background-color: rgb(255, 255, 255); box-shadow: rgba(0, 0, 0, 0.5) 0px 25px 60px -15px, rgba(255, 255, 255, 0.15) 0px 0px 0px 1px;">
+
+      <!-- Dual Portal Switcher Tabs (Entrepreneur vs Staff) -->
+      <div class="mb-5">
+        <div class="p-1 rounded-xl bg-slate-100 flex items-center justify-between text-xs font-semibold portal-transition" id="portalToggleBg">
+          <button class="flex-1 py-2 px-3 rounded-lg flex items-center justify-center gap-2 transition-all bg-white text-slate-900 shadow-sm font-bold"
+                  id="btnPortalEntrepreneur" onclick="setPortal('entrepreneur')" type="button">
+            <!-- Storefront Icon -->
+            <svg class="w-4 h-4 text-brand-600" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
+              <polyline points="9 22 9 12 15 12 15 22"></polyline>
+            </svg>
+            <span>Entrepreneur Portal</span>
+          </button>
+          <button class="flex-1 py-2 px-3 rounded-lg flex items-center justify-center gap-2 transition-all text-slate-500 hover:text-slate-900 font-medium"
+                  id="btnPortalStaff" onclick="setPortal('staff')" type="button">
+            <!-- Shield/Agent Icon -->
+            <svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+            </svg>
+            <span>Staff &amp; Internal</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Secondary Mode Switcher: Sign In vs Sign Up -->
+      <div class="flex items-center justify-between border-b pb-3 mb-5 border-slate-200" id="secondaryNavDivider">
+        <div class="flex items-center space-x-6 text-sm">
+          <button class="font-bold text-slate-900 border-b-2 border-brand-600 pb-2 -mb-[13px] transition-all"
+                  id="tabBtnSignin" onclick="setAuthMode('signin')" type="button">
+            Sign In
+          </button>
+          <button class="font-medium text-slate-400 hover:text-slate-700 pb-2 -mb-[13px] transition-all"
+                  id="tabBtnSignup" onclick="setAuthMode('signup')" type="button">
+            Create Account
+          </button>
+        </div>
+        <span class="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded bg-brand-50 text-brand-700 border border-brand-200"
+              id="roleBadge">Property Seeker</span>
+      </div>
+
+      <!-- ======================================================== -->
+      <!-- FORM 1: ENTREPRENEUR SIGN IN                             -->
+      <!-- ======================================================== -->
+      <div class="space-y-4" id="formEntrepreneurSignIn">
+        <div>
+          <h2 class="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">Sign in to SiteWise</h2>
+          <p class="text-xs text-slate-500 mt-1">Welcome back! Sign in to access your account and continue your F&amp;B property journey.</p>
+        </div>
+
+        <!-- Social Logins -->
+        <div class="space-y-2 pt-1">
+          <button class="w-full py-2.5 px-4 border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 hover:bg-slate-50 flex items-center justify-center gap-2.5 transition"
+                  onclick="googleAuth()" type="button">
+            <svg class="w-4 h-4" viewBox="0 0 24 24">
+              <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"></path>
+              <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"></path>
+              <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" fill="#FBBC05"></path>
+              <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" fill="#EA4335"></path>
+            </svg>
+            <span>Continue with Google</span>
+          </button>
+          <button class="w-full py-2.5 px-4 border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 hover:bg-slate-50 flex items-center justify-center gap-2.5 transition"
+                  onclick="triggerToast('Apple sign-in is not configured in this deployment.')" type="button">
+            <svg class="w-4 h-4 fill-current text-slate-900" viewBox="0 0 24 24">
+              <path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.81-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M15.97 6.37c.63-.76 1.05-1.82.93-2.88-.91.04-2.02.61-2.67 1.37-.58.67-1.09 1.74-.95 2.78 1.02.08 2.06-.51 2.69-1.27z"></path>
+            </svg>
+            <span>Continue with Apple</span>
+          </button>
+        </div>
+
+        <div class="relative text-center my-3">
+          <div class="absolute inset-0 flex items-center"><div class="w-full border-t border-slate-200"></div></div>
+          <span class="relative px-3 bg-white text-[11px] font-medium text-slate-400 uppercase">or</span>
+        </div>
+
+        <!-- Email & Password Form -->
+        <form class="space-y-3.5" onsubmit="handleFormSubmit(event, 'entrepreneur-signin')">
+          <div>
+            <label class="block text-xs font-semibold text-slate-700 mb-1" for="ent_signin_email">Email address</label>
+            <div class="relative">
+              <input class="w-full text-xs py-2.5 px-3 pl-9 rounded-xl border-slate-200 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-brand-600 focus:border-brand-600 text-slate-900 transition"
+                     id="ent_signin_email" placeholder="name@business.com" required="" type="email">
+              <svg class="w-4 h-4 text-slate-400 absolute left-3 top-3 pointer-events-none" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path>
+                <polyline points="22,6 12,13 2,6"></polyline>
+              </svg>
+            </div>
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-700 mb-1" for="ent_signin_pass">Password</label>
+            <div class="relative">
+              <input class="w-full text-xs py-2.5 px-3 pl-9 pr-10 rounded-xl border-slate-200 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-brand-600 focus:border-brand-600 text-slate-900 transition"
+                     id="ent_signin_pass" placeholder="Enter your password" required="" type="password">
+              <svg class="w-4 h-4 text-slate-400 absolute left-3 top-3 pointer-events-none" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <rect height="11" rx="2" ry="2" width="18" x="3" y="11"></rect>
+                <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+              </svg>
+              <button class="absolute right-3 top-2.5 text-slate-400 hover:text-slate-600 p-0.5"
+                      onclick="togglePasswordVisibility('ent_signin_pass', this)" type="button">
+                <svg class="w-4 h-4 eye-icon" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                  <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                  <circle cx="12" cy="12" r="3"></circle>
+                </svg>
+              </button>
+            </div>
+          </div>
+          <div class="flex items-center justify-between text-xs pt-1">
+            <label class="flex items-center gap-2 cursor-pointer text-slate-600">
+              <input checked="" class="w-4 h-4 rounded text-brand-600 border-slate-300 focus:ring-brand-500" type="checkbox">
+              <span>Remember me on this device</span>
+            </label>
+            <a class="font-medium text-brand-600 hover:text-brand-800" href="#forgot"
+               onclick="triggerToast('Password recovery is not configured in this deployment.')">Forgot password?</a>
+          </div>
+          <button class="w-full mt-2 py-3 px-4 bg-brand-600 hover:bg-brand-700 text-white font-semibold text-xs rounded-xl shadow-md shadow-brand-500/20 hover:shadow-brand-500/35 transition flex items-center justify-center gap-1.5" type="submit">
+            <span>Sign in</span>
+            <span class="text-sm leading-none">→</span>
+          </button>
+        </form>
+        <div class="text-center pt-2 text-xs text-slate-500">
+          Don't have an account?
+          <button class="font-semibold text-brand-600 hover:underline" onclick="setAuthMode('signup')" type="button">Create one now</button>
+        </div>
+      </div>
+
+      <!-- ======================================================== -->
+      <!-- FORM 2: ENTREPRENEUR SIGN UP (Create Account)            -->
+      <!-- ======================================================== -->
+      <div class="space-y-3.5 hidden" id="formEntrepreneurSignUp">
+        <div>
+          <h2 class="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">Create your Sitewise account</h2>
+          <p class="text-xs text-slate-500 mt-1">Join as a <strong>Property Seeker</strong> to find and evaluate commercial F&amp;B properties with greater confidence.</p>
+        </div>
+
+        <div class="p-3 bg-brand-50 border border-brand-200 rounded-xl flex items-start gap-3">
+          <div class="w-7 h-7 rounded-lg bg-brand-600 text-white flex items-center justify-center shrink-0 mt-0.5">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <rect height="14" rx="2" ry="2" width="20" x="2" y="7"></rect>
+              <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"></path>
+            </svg>
+          </div>
+          <div class="text-[11px] leading-tight text-slate-700">
+            <span class="font-bold text-brand-900 block mb-0.5">Agent or Internal Staff?</span>
+            Staff roles cannot self-register. Please
+            <button class="text-brand-700 font-semibold underline hover:text-brand-900"
+                    onclick="setPortal('staff'); setAuthMode('signup');" type="button">switch to Staff registration</button>
+            for manual verification.
+          </div>
+        </div>
+
+        <button class="w-full py-2.5 px-4 border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 hover:bg-slate-50 flex items-center justify-center gap-2.5 transition"
+                onclick="googleAuth()" type="button">
+          <svg class="w-4 h-4" viewBox="0 0 24 24">
+            <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"></path>
+            <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"></path>
+            <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" fill="#FBBC05"></path>
+            <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" fill="#EA4335"></path>
+          </svg>
+          <span>Continue with Google</span>
+        </button>
+
+        <div class="relative text-center my-2">
+          <div class="absolute inset-0 flex items-center"><div class="w-full border-t border-slate-200"></div></div>
+          <span class="relative px-3 bg-white text-[10px] font-medium text-slate-400 uppercase tracking-wider">OR</span>
+        </div>
+
+        <form class="space-y-3" onsubmit="handleFormSubmit(event, 'entrepreneur-signup')">
+          <div>
+            <label class="block text-[11px] font-semibold text-slate-700 uppercase mb-1" for="ent_signup_name">Full name</label>
+            <div class="relative">
+              <input class="w-full text-xs py-2 px-3 pl-8 rounded-xl border-slate-200 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-brand-600 focus:border-brand-600 text-slate-900 transition"
+                     id="ent_signup_name" placeholder="Enter your full name" required="" type="text">
+              <svg class="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                <circle cx="12" cy="7" r="4"></circle>
+              </svg>
+            </div>
+          </div>
+          <div>
+            <label class="block text-[11px] font-semibold text-slate-700 uppercase mb-1" for="ent_signup_email">Work or personal email</label>
+            <div class="relative">
+              <input class="w-full text-xs py-2 px-3 pl-8 rounded-xl border-slate-200 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-brand-600 focus:border-brand-600 text-slate-900 transition"
+                     id="ent_signup_email" placeholder="Enter your email address" required="" type="email">
+              <svg class="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path>
+                <polyline points="22,6 12,13 2,6"></polyline>
+              </svg>
+            </div>
+          </div>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label class="block text-[11px] font-semibold text-slate-700 uppercase mb-1" for="ent_signup_pass">Create password</label>
+              <div class="relative">
+                <input class="w-full text-xs py-2 px-2.5 pl-7 pr-7 rounded-xl border-slate-200 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-brand-600 focus:border-brand-600 text-slate-900 transition"
+                       id="ent_signup_pass" placeholder="Password" required="" type="password">
+                <svg class="w-3 h-3 text-slate-400 absolute left-2.5 top-2.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                  <rect height="11" rx="2" ry="2" width="18" x="3" y="11"></rect>
+                  <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+                </svg>
+                <button class="absolute right-2 top-2 text-slate-400 hover:text-slate-600"
+                        onclick="togglePasswordVisibility('ent_signup_pass', this)" type="button">
+                  <svg class="w-3.5 h-3.5 eye-icon" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                    <circle cx="12" cy="12" r="3"></circle>
+                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                  </svg>
+                </button>
+              </div>
+            </div>
+            <div>
+              <label class="block text-[11px] font-semibold text-slate-700 uppercase mb-1" for="ent_signup_confirm">Confirm</label>
+              <div class="relative">
+                <input class="w-full text-xs py-2 px-2.5 pl-7 pr-7 rounded-xl border-slate-200 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-brand-600 focus:border-brand-600 text-slate-900 transition"
+                       id="ent_signup_confirm" placeholder="Confirm" required="" type="password">
+                <svg class="w-3 h-3 text-slate-400 absolute left-2.5 top-2.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                  <polyline points="20 6 9 17 4 12"></polyline>
+                </svg>
+                <button class="absolute right-2 top-2 text-slate-400 hover:text-slate-600"
+                        onclick="togglePasswordVisibility('ent_signup_confirm', this)" type="button">
+                  <svg class="w-3.5 h-3.5 eye-icon" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                    <circle cx="12" cy="12" r="3"></circle>
+                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                  </svg>
+                </button>
+              </div>
+            </div>
+          </div>
+          <div class="text-[10px] text-slate-500 flex items-center gap-1.5">
+            <svg class="w-3 h-3 text-emerald-600 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <polyline points="20 6 9 17 4 12"></polyline>
+            </svg>
+            <span>At least 8 characters with a mix of letters, numbers, and symbols.</span>
+          </div>
+          <button class="w-full mt-2 py-3 px-4 bg-brand-600 hover:bg-brand-700 text-white font-semibold text-xs rounded-xl shadow-md shadow-brand-500/20 hover:shadow-brand-500/35 transition flex items-center justify-center gap-1.5" type="submit">
+            <span>Create account</span>
+            <span class="text-sm leading-none">→</span>
+          </button>
+        </form>
+        <div class="text-center pt-1 text-xs text-slate-500">
+          Already have an account?
+          <button class="font-semibold text-brand-600 hover:underline" onclick="setAuthMode('signin')" type="button">Sign in</button>
+        </div>
+      </div>
+
+      <!-- ======================================================== -->
+      <!-- FORM 3: STAFF SIGN IN (Dark Theme)                       -->
+      <!-- ======================================================== -->
+      <div class="space-y-4 hidden" id="formStaffSignIn">
+        <div class="flex items-center justify-between">
+          <div>
+            <h2 class="text-xl sm:text-2xl font-bold text-white tracking-tight">Staff Portal</h2>
+            <p class="text-xs text-slate-400 mt-1">Authorized access for Sitewise Agents, Auditors, and Platform Administrators.</p>
+          </div>
+          <span class="px-2.5 py-1 rounded bg-amber-500/10 border border-amber-500/30 text-amber-400 text-[10px] font-bold tracking-wider">RESTRICTED</span>
+        </div>
+
+        <div class="p-3 bg-slate-800/80 border border-slate-700 rounded-xl flex items-center gap-3">
+          <svg class="w-5 h-5 text-brand-400 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <circle cx="12" cy="12" r="10"></circle>
+            <line x1="12" x2="12" y1="8" y2="12"></line>
+            <line x1="12" x2="12.01" y1="16" y2="16"></line>
+          </svg>
+          <span class="text-[11px] text-slate-300">Staff logins are monitored with hardware IP fingerprinting and audit trails.</span>
+        </div>
+
+        <form class="space-y-3.5" onsubmit="handleFormSubmit(event, 'staff-signin')">
+          <div>
+            <label class="block text-xs font-semibold text-slate-300 mb-1" for="staff_signin_email">Sitewise Agency / Staff Email</label>
+            <div class="relative">
+              <input class="w-full text-xs py-2.5 px-3 pl-9 rounded-xl border-slate-700 bg-slate-800/90 text-white placeholder-slate-500 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition"
+                     id="staff_signin_email" placeholder="agent.name@sitewise.my" required="" type="email">
+              <svg class="w-4 h-4 text-slate-400 absolute left-3 top-3 pointer-events-none" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path>
+                <polyline points="22,6 12,13 2,6"></polyline>
+              </svg>
+            </div>
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-300 mb-1" for="staff_signin_pass">Staff Password</label>
+            <div class="relative">
+              <input class="w-full text-xs py-2.5 px-3 pl-9 pr-10 rounded-xl border-slate-700 bg-slate-800/90 text-white placeholder-slate-500 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition"
+                     id="staff_signin_pass" placeholder="••••••••••••" required="" type="password">
+              <svg class="w-4 h-4 text-slate-400 absolute left-3 top-3 pointer-events-none" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <rect height="11" rx="2" ry="2" width="18" x="3" y="11"></rect>
+                <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+              </svg>
+              <button class="absolute right-3 top-2.5 text-slate-400 hover:text-slate-200"
+                      onclick="togglePasswordVisibility('staff_signin_pass', this)" type="button">
+                <svg class="w-4 h-4 eye-icon" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                  <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                  <circle cx="12" cy="12" r="3"></circle>
+                </svg>
+              </button>
+            </div>
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-300 mb-1 flex items-center justify-between" for="staff_signin_2fa">
+              <span>Authenticator TOTP (Optional)</span>
+              <span class="text-[10px] text-slate-400 font-normal">6-digit token</span>
+            </label>
+            <input class="w-full font-mono text-center tracking-widest text-xs py-2 px-3 rounded-xl border-slate-700 bg-slate-800/90 text-white placeholder-slate-600 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition"
+                   id="staff_signin_2fa" maxlength="6" placeholder="000 000" type="text">
+          </div>
+          <div class="flex items-center justify-between text-xs pt-1 text-slate-400">
+            <label class="flex items-center gap-2 cursor-pointer">
+              <input class="w-4 h-4 rounded text-blue-500 bg-slate-800 border-slate-700 focus:ring-blue-500" type="checkbox">
+              <span>Hardware Key Active</span>
+            </label>
+            <button class="font-medium text-brand-400 hover:underline"
+                    onclick="triggerToast('Staff access is provisioned by an administrator.')" type="button">
+              Lost access?
+            </button>
+          </div>
+          <button class="w-full mt-3 py-3 px-4 bg-brand-600 hover:bg-brand-500 text-white font-semibold text-xs rounded-xl shadow-lg shadow-blue-600/30 transition flex items-center justify-center gap-2" type="submit">
+            <span>Staff Sign in</span>
+            <span>→</span>
+          </button>
+        </form>
+        <div class="text-center pt-2 text-xs text-slate-400">
+          Not registered as internal personnel?
+          <button class="font-semibold text-blue-400 hover:underline" onclick="setAuthMode('signup')" type="button">Apply for Agent Credential</button>
+        </div>
+      </div>
+
+      <!-- ======================================================== -->
+      <!-- FORM 4: STAFF SIGN UP (Agent Credential Application)     -->
+      <!-- ======================================================== -->
+      <div class="space-y-3.5 hidden" id="formStaffSignUp">
+        <div>
+          <div class="flex items-center justify-between">
+            <h2 class="text-xl sm:text-2xl font-bold text-white tracking-tight">Staff Registration</h2>
+            <span class="px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30 text-[10px] font-bold">APPROVAL REQ</span>
+          </div>
+          <p class="text-xs text-slate-400 mt-1">Staff and Agent accounts require manual administrator screening before access is granted.</p>
+        </div>
+
+        <div class="p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl text-[11px] text-amber-200/90 leading-tight">
+          <strong>Notice:</strong> Your credentials will be queued for manual verification by a Sitewise Administrator. Please use your official real estate license or corporate email.
+        </div>
+
+        <form class="space-y-3" onsubmit="handleFormSubmit(event, 'staff-signup')">
+          <div>
+            <label class="block text-[11px] font-semibold text-slate-300 uppercase mb-1" for="staff_signup_name">Full Legal Name</label>
+            <input class="w-full text-xs py-2 px-3 rounded-xl border-slate-700 bg-slate-800/90 text-white placeholder-slate-500 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                   id="staff_signup_name" placeholder="Agent / Auditor Name" required="" type="text">
+          </div>
+          <div>
+            <label class="block text-[11px] font-semibold text-slate-300 uppercase mb-1" for="staff_signup_email">Official Agency or Staff Email</label>
+            <input class="w-full text-xs py-2 px-3 rounded-xl border-slate-700 bg-slate-800/90 text-white placeholder-slate-500 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                   id="staff_signup_email" placeholder="name@agency.com" required="" type="email">
+          </div>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label class="block text-[11px] font-semibold text-slate-300 uppercase mb-1" for="staff_signup_license">License / Staff ID</label>
+              <input class="w-full text-xs py-2 px-3 rounded-xl border-slate-700 bg-slate-800/90 text-white placeholder-slate-500 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                     id="staff_signup_license" placeholder="REN / REA No." required="" type="text">
+            </div>
+            <div>
+              <label class="block text-[11px] font-semibold text-slate-300 uppercase mb-1" for="staff_signup_role">Requested Role</label>
+              <select class="w-full text-xs py-2 px-3 rounded-xl border-slate-700 bg-slate-800 text-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500" id="staff_signup_role">
+                <option value="agent">Commercial Agent</option>
+                <option value="auditor">Platform Auditor</option>
+                <option value="admin">Administrator Staff</option>
+              </select>
+            </div>
+          </div>
+          <div>
+            <label class="block text-[11px] font-semibold text-slate-300 uppercase mb-1" for="staff_signup_pass">Set Account Password</label>
+            <div class="relative">
+              <input class="w-full text-xs py-2 px-3 pr-9 rounded-xl border-slate-700 bg-slate-800/90 text-white placeholder-slate-500 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                     id="staff_signup_pass" placeholder="••••••••••••" required="" type="password">
+              <button class="absolute right-2.5 top-2 text-slate-400 hover:text-slate-200"
+                      onclick="togglePasswordVisibility('staff_signup_pass', this)" type="button">
+                <svg class="w-4 h-4 eye-icon" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                  <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                  <circle cx="12" cy="12" r="3"></circle>
+                </svg>
+              </button>
+            </div>
+          </div>
+          <button class="w-full mt-2 py-3 px-4 bg-brand-600 hover:bg-brand-500 text-white font-semibold text-xs rounded-xl shadow-lg shadow-blue-600/30 transition flex items-center justify-center gap-2" type="submit">
+            <span>Submit Credentials for Approval</span>
+            <span>→</span>
+          </button>
+        </form>
+        <div class="text-center pt-1 text-xs text-slate-400">
+          Already approved?
+          <button class="font-semibold text-blue-400 hover:underline" onclick="setAuthMode('signin')" type="button">Staff Sign In</button>
+        </div>
+      </div>
+
+    </div>
+  </section>
+  <!-- END: RightPortalCard -->
+
+  <!-- Notification Toast Element (needed for triggers) -->
+  <div class="fixed bottom-6 right-6 z-50 transform translate-y-24 opacity-0 transition-all duration-300 pointer-events-none" id="toastNotification">
+    <div class="flex items-center gap-3 bg-slate-900 text-white px-5 py-3.5 rounded-2xl shadow-2xl border border-slate-700 text-xs font-medium">
+      <div class="w-5 h-5 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0" id="toastIcon">
+        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <polyline points="20 6 9 17 4 12"></polyline>
+        </svg>
+      </div>
+      <span id="toastMessage">Success message here</span>
+    </div>
+  </div>
+
+  <!-- JavaScript (from original page) -->
+  <script>
+    let currentPortal = 'entrepreneur';
+    let currentMode = 'signup';
+
+    const authCard = document.getElementById('authCard');
+    const portalToggleBg = document.getElementById('portalToggleBg');
+    const btnPortalEntrepreneur = document.getElementById('btnPortalEntrepreneur');
+    const btnPortalStaff = document.getElementById('btnPortalStaff');
+    const tabBtnSignin = document.getElementById('tabBtnSignin');
+    const tabBtnSignup = document.getElementById('tabBtnSignup');
+    const roleBadge = document.getElementById('roleBadge');
+    const secondaryNavDivider = document.getElementById('secondaryNavDivider');
+
+    const formEntSignIn = document.getElementById('formEntrepreneurSignIn');
+    const formEntSignUp = document.getElementById('formEntrepreneurSignUp');
+    const formStaffSignIn = document.getElementById('formStaffSignIn');
+    const formStaffSignUp = document.getElementById('formStaffSignUp');
+
+    function setPortal(portal) {
+      currentPortal = portal;
+      updateUI();
+      if (typeof syncHeight === "function") setTimeout(syncHeight, 30);
+    }
+
+    function setAuthMode(mode) {
+      currentMode = mode;
+      updateUI();
+      if (typeof syncHeight === "function") setTimeout(syncHeight, 30);
+    }
+
+    function updateUI() {
+      formEntSignIn.classList.add('hidden');
+      formEntSignUp.classList.add('hidden');
+      formStaffSignIn.classList.add('hidden');
+      formStaffSignUp.classList.add('hidden');
+
+      if (currentPortal === 'entrepreneur') {
+        authCard.className = 'portal-transition glass-entrepreneur rounded-3xl p-6 sm:p-8 relative overflow-hidden transition-all duration-300';
+        portalToggleBg.className = 'p-1 rounded-xl bg-slate-100 flex items-center justify-between text-xs font-semibold portal-transition';
+        btnPortalEntrepreneur.className = 'flex-1 py-2 px-3 rounded-lg flex items-center justify-center gap-2 transition-all bg-white text-slate-900 shadow-sm font-bold';
+        btnPortalStaff.className = 'flex-1 py-2 px-3 rounded-lg flex items-center justify-center gap-2 transition-all text-slate-500 hover:text-slate-900 font-medium';
+        secondaryNavDivider.className = 'flex items-center justify-between border-b pb-3 mb-5 border-slate-200';
+        roleBadge.className = 'text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded bg-brand-50 text-brand-700 border border-brand-200';
+        roleBadge.innerText = 'Property Seeker';
+
+        if (currentMode === 'signin') {
+          tabBtnSignin.className = 'font-bold text-slate-900 border-b-2 border-brand-600 pb-2 -mb-[13px] transition-all';
+          tabBtnSignup.className = 'font-medium text-slate-400 hover:text-slate-700 pb-2 -mb-[13px] transition-all';
+          formEntSignIn.classList.remove('hidden');
+        } else {
+          tabBtnSignin.className = 'font-medium text-slate-400 hover:text-slate-700 pb-2 -mb-[13px] transition-all';
+          tabBtnSignup.className = 'font-bold text-slate-900 border-b-2 border-brand-600 pb-2 -mb-[13px] transition-all';
+          formEntSignUp.classList.remove('hidden');
+        }
+      } else {
+        authCard.className = 'portal-transition glass-staff rounded-3xl p-6 sm:p-8 relative overflow-hidden transition-all duration-300 text-white';
+        portalToggleBg.className = 'p-1 rounded-xl bg-slate-800/90 border border-slate-700 flex items-center justify-between text-xs font-semibold portal-transition';
+        btnPortalEntrepreneur.className = 'flex-1 py-2 px-3 rounded-lg flex items-center justify-center gap-2 transition-all text-slate-400 hover:text-white font-medium';
+        btnPortalStaff.className = 'flex-1 py-2 px-3 rounded-lg flex items-center justify-center gap-2 transition-all bg-slate-700/80 text-white shadow-sm font-bold border border-slate-600/50';
+        secondaryNavDivider.className = 'flex items-center justify-between border-b pb-3 mb-5 border-slate-800';
+        roleBadge.className = 'text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded bg-blue-500/20 text-blue-300 border border-blue-500/30';
+        roleBadge.innerText = 'Staff & Internal';
+
+        if (currentMode === 'signin') {
+          tabBtnSignin.className = 'font-bold text-white border-b-2 border-blue-400 pb-2 -mb-[13px] transition-all';
+          tabBtnSignup.className = 'font-medium text-slate-400 hover:text-slate-200 pb-2 -mb-[13px] transition-all';
+          formStaffSignIn.classList.remove('hidden');
+        } else {
+          tabBtnSignin.className = 'font-medium text-slate-400 hover:text-slate-200 pb-2 -mb-[13px] transition-all';
+          tabBtnSignup.className = 'font-bold text-white border-b-2 border-blue-400 pb-2 -mb-[13px] transition-all';
+          formStaffSignUp.classList.remove('hidden');
+        }
+      }
+    }
+
+    function togglePasswordVisibility(inputId, btnElement) {
+      const input = document.getElementById(inputId);
+      if (!input) return;
+      if (input.type === 'password') {
+        input.type = 'text';
+        btnElement.classList.add('text-brand-500');
+      } else {
+        input.type = 'password';
+        btnElement.classList.remove('text-brand-500');
+      }
+    }
+
+    // ---- Real Supabase authentication (parent window bridge) --------------
+    // The portal is embedded in the Jaspr signup page as a same-origin
+    // iframe. `window.parent.sitewiseAuth` is provided by auth_bundle.js
+    // (Supabase SDK + PKCE). No form silently pretends success: every
+    // submit either calls the real bridge or explains that the flow does
+    // not exist in this deployment.
+
+    function bridge() {
+      try { return window.parent.sitewiseAuth; } catch (e) { return null; }
+    }
+
+    function value(id) {
+      const el = document.getElementById(id);
+      return el ? el.value.trim() : '';
+    }
+
+    function busy(button, on) {
+      if (!button) return;
+      button.disabled = on;
+      button.style.opacity = on ? '0.65' : '1';
+    }
+
+    async function runAuth(button, fn, fallbackMessage) {
+      const auth = bridge();
+      if (!auth || !JSON.parse(auth.snapshot()).configured) {
+        triggerToast('Authentication service unavailable. Start the local API (port 3001), then refresh.');
+        return;
+      }
+      busy(button, true);
+      try {
+        await auth.ready;
+        const message = await fn(auth);
+        if (message) triggerToast(message);
+      } catch (error) {
+        triggerToast(error && error.message ? error.message : 'Authentication failed.');
+      } finally {
+        busy(button, false);
+      }
+    }
+
+    function googleAuth() {
+      const auth = bridge();
+      if (!auth || !JSON.parse(auth.snapshot()).configured) {
+        triggerToast('Authentication service unavailable. Start the local API (port 3001), then refresh.');
+        return;
+      }
+      auth.ready
+        .then(() => auth.google('entrepreneur', true))
+        .catch((e) => triggerToast(e && e.message ? e.message : 'Google sign-in failed.'));
+    }
+
+    function handleFormSubmit(event, type) {
+      event.preventDefault();
+      const button = event.target.querySelector('button[type="submit"]');
+      switch (type) {
+        case 'entrepreneur-signin':
+          runAuth(button, (auth) =>
+            auth.password(value('ent_signin_email'), value('ent_signin_pass'),
+              document.querySelector('#formEntrepreneurSignIn input[type=checkbox]').checked));
+          break;
+        case 'entrepreneur-signup': {
+          const pass = value('ent_signup_pass');
+          const confirm = value('ent_signup_confirm');
+          if (pass.length < 8) { triggerToast('Use at least 8 characters for your password.'); return; }
+          if (pass !== confirm) { triggerToast('Passwords do not match.'); return; }
+          runAuth(button, (auth) =>
+            auth.signup(value('ent_signup_email'), pass, value('ent_signup_name'), 'entrepreneur'));
+          break;
+        }
+        case 'staff-signin':
+          runAuth(button, (auth) =>
+            auth.password(value('staff_signin_email'), value('staff_signin_pass'), false));
+          break;
+        case 'staff-signup':
+          triggerToast('Staff and agent accounts require administrator approval. Public staff registration is not available.');
+          break;
+        default:
+          triggerToast('This flow is not available.');
+      }
+    }
+
+    // ---- Toast -------------------------------------------------------------
+    let toastTimeout;
+    function triggerToast(message) {
+      const toast = document.getElementById('toastNotification');
+      const toastMsg = document.getElementById('toastMessage');
+      if (!toast || !toastMsg) return;
+      toastMsg.innerText = message;
+      toast.classList.remove('translate-y-24', 'opacity-0');
+      toast.classList.add('translate-y-0', 'opacity-100');
+      clearTimeout(toastTimeout);
+      toastTimeout = setTimeout(() => {
+        toast.classList.remove('translate-y-0', 'opacity-100');
+        toast.classList.add('translate-y-24', 'opacity-0');
+      }, 5000);
+    }
+
+    // ---- Keep the parent iframe in sync with the active form's height ------
+    function syncHeight() {
+      const h = Math.max(document.documentElement.scrollHeight, document.body.scrollHeight);
+      try {
+        window.parent.postMessage({ type: 'sitewise:portal-height', height: h }, window.location.origin);
+      } catch (e) { /* parent gone */ }
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+      updateUI();
+      syncHeight();
+      setTimeout(syncHeight, 120);
+      if ('ResizeObserver' in window) {
+        new ResizeObserver(syncHeight).observe(document.body);
+      }
+      window.addEventListener('resize', syncHeight);
+    });
+  </script>
+
+</body>
+</html>
