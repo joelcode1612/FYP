@@ -1,6 +1,11 @@
 import { createClient } from '@supabase/supabase-js';
 
 const api = document.querySelector('meta[name="sitewise-api"]')?.content || 'http://localhost:3001';
+// Same-origin public configuration generated from the private .env by
+// tool/gen_auth_config.js. Contains ONLY the project URL and the publishable
+// (client-safe) key — never the secret key. It lets the sign-in/sign-up pages
+// initialize Supabase even when the separate API process is not running.
+const publicConfigUrl = 'auth-config.json';
 let client;
 let state = { configured: false, user: null, profile: null, error: '' };
 const pendingRoleKey = 'sitewise.pendingRole';
@@ -62,22 +67,54 @@ function goHome() {
 // now reusable: the initial `ready` promise retries a few times, and a
 // background poller keeps trying while the API is down, then re-enables the
 // rendered buttons in place (no refresh needed).
-async function initialize() {
-  const response = await fetch(api + '/api/config', { signal: AbortSignal.timeout(5000) });
-  if (!response.ok) throw new Error('The local authentication configuration is unavailable.');
+// Load the public Supabase configuration. Prefer the live API (so a rotated
+// key is picked up automatically); fall back to the generated static file
+// when the API process is down. Both carry only client-safe values.
+async function loadConfig() {
+  try {
+    const response = await fetch(api + '/api/config', { signal: AbortSignal.timeout(2500) });
+    if (response.ok) {
+      const config = await response.json();
+      if (config.configured && config.supabaseUrl && config.supabasePublishableKey) return config;
+    }
+  } catch (_) { /* API down — use the static fallback below */ }
+
+  const response = await fetch(publicConfigUrl, { signal: AbortSignal.timeout(2500) });
+  if (!response.ok) throw new Error('The authentication configuration is unavailable.');
   const config = await response.json();
-  if (!config.configured) throw new Error('Set the Supabase URL and publishable key in the local backend configuration.');
+  if (!config.configured || !config.supabaseUrl || !config.supabasePublishableKey) {
+    throw new Error('The authentication configuration is incomplete. Run npm run gen-auth-config.');
+  }
+  return config;
+}
+
+// Profile loading is optional for the auth UI itself. The Google button must
+// stay usable even if the data API (which owns profile roles) is down; the
+// protected workspaces still require a valid profile, so no access is granted
+// implicitly here.
+async function tryProfile() {
+  try {
+    await profile();
+  } catch (error) {
+    state.profile = null;
+    state.error = '';
+  }
+}
+
+async function initialize() {
+  const config = await loadConfig();
   if (client) return;                       // already recovered; do not create a second client
   client = createClient(config.supabaseUrl, config.supabasePublishableKey, {
     auth: { flowType: 'pkce', persistSession: true, autoRefreshToken: true, detectSessionInUrl: true, storage },
   });
   state.configured = true;
   state.error = '';
+  announceReady();
   const { data, error } = await client.auth.getSession();
   if (error) throw error;
   if (data.session) {
     state.user = { id: data.session.user.id, email: data.session.user.email };
-    await profile(); // Backend verifies the token with Supabase, never trusts decoded claims.
+    await tryProfile(); // Backend verifies the token with Supabase, never trusts decoded claims.
   }
   client.auth.onAuthStateChange(event => {
     if (event === 'SIGNED_OUT') {
@@ -164,7 +201,7 @@ window.sitewiseAuth = {
     const { data, error } = await client.auth.signInWithPassword({ email, password });
     if (error) throw error;
     state.user = { id: data.user.id, email: data.user.email };
-    await profile();
+    await tryProfile();
     goHome();
   },
   async signup(email, password, name, role) {
@@ -176,13 +213,22 @@ window.sitewiseAuth = {
       data: { full_name: name }, emailRedirectTo: location.origin + '/auth/callback',
     } });
     if (error) throw error;
-    if (data.session) { await profile(); goHome(); }
+    if (data.session) { await tryProfile(); goHome(); }
     return 'Check your email to confirm your account, then sign in.';
   },
   async complete() {
     await ready;
-    if (!state.profile) throw new Error(state.error || 'No authenticated session was returned. Try signing in again.');
-    goHome();
+    if (state.profile) { goHome(); return; }
+    // The Supabase session is valid but the profile could not be loaded — the
+    // usual cause is the local data API being down. Fall back to the
+    // least-privileged default workspace rather than trapping the user; the
+    // API still gates every real data request.
+    if (state.user) {
+      state.profile = { role: 'entrepreneur', email: state.user.email, source: 'supabase-fallback' };
+      goHome();
+      return;
+    }
+    throw new Error(state.error || 'No authenticated session was returned. Try signing in again.');
   },
   async signout() {
     await ready;

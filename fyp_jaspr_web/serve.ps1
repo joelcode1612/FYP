@@ -257,6 +257,39 @@ if ($CheckOnly) {
     exit 0
 }
 
+# --- Ensure the auth/data API is running ------------------------------------
+# The signup/login pages need the Express API (port 3001) for profile sync and
+# app data. When it is down they used to disable Google sign-in and show
+# "not configured"; the auth glue now recovers on its own, but data pages
+# still need the process. Start it once, in its own window, when missing.
+$apiPort = 3001
+$apiUp = Get-NetTCPConnection -LocalPort $apiPort -State Listen -ErrorAction SilentlyContinue
+if ($apiUp) {
+    Write-Ok "auth/data API already running on port $apiPort"
+} else {
+    $apiScript = Join-Path (Split-Path -Parent $PSScriptRoot) 'test\start-api.ps1'
+    if (Test-Path $apiScript) {
+        Write-Step "API not running. Opening it in a separate window (port $apiPort)..."
+        Start-Process -FilePath 'powershell.exe' -ArgumentList @(
+            '-NoExit',
+            '-ExecutionPolicy', 'Bypass',
+            '-File', ('"{0}"' -f $apiScript)
+        ) -WorkingDirectory (Split-Path -Parent $apiScript)
+        # Give the Node process a moment to bind; do not fail the web start if it is slow.
+        for ($i = 0; $i -lt 5; $i++) {
+            Start-Sleep -Milliseconds 800
+            if (Get-NetTCPConnection -LocalPort $apiPort -State Listen -ErrorAction SilentlyContinue) { break }
+        }
+        if (Get-NetTCPConnection -LocalPort $apiPort -State Listen -ErrorAction SilentlyContinue) {
+            Write-Ok "auth/data API started on port $apiPort"
+        } else {
+            Write-Warn2 "API is still starting in its own window; auth will recover automatically once it binds."
+        }
+    } else {
+        Write-Warn2 "API starter not found at $apiScript - sign-in will work, but data pages need the API."
+    }
+}
+
 # --- Start ------------------------------------------------------------------
 
 # The proxy fix. `HTTP_PROXY` is set on this machine with `NO_PROXY` unset, so

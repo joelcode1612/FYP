@@ -47,15 +47,23 @@ if (Test-Port 3001) {
     ) -WorkingDirectory (Join-Path $root 'test')
 }
 
-# --- Generated auth bundle --------------------------------------------------
-# auth_bundle.js is generated and git-ignored. Regenerate it on a fresh clone
-# so the pages always have the real Supabase bridge (with retry/recovery).
+# --- Generated auth config + bundle -----------------------------------------
+# Both files are generated and git-ignored. The config carries only the public
+# client values (project URL + publishable key) so the auth pages work even
+# while the API is starting; the bundle is the Supabase PKCE bridge.
 $bundle = Join-Path $webDir 'web\auth_bundle.js'
-if (-not (Test-Path $bundle)) {
-    Write-Host '  BUILD  generating web/auth_bundle.js' -ForegroundColor Yellow
-    Push-Location (Join-Path $webDir 'tool')
-    try { & npm.cmd run build-auth } finally { Pop-Location }
-}
+$config = Join-Path $webDir 'web\auth-config.json'
+Push-Location (Join-Path $webDir 'tool')
+try {
+    if (-not (Test-Path $config)) {
+        Write-Host '  BUILD  generating web/auth-config.json (public client values)' -ForegroundColor Yellow
+        & npm.cmd run gen-auth-config
+    }
+    if (-not (Test-Path $bundle)) {
+        Write-Host '  BUILD  generating web/auth_bundle.js' -ForegroundColor Yellow
+        & npm.cmd run build-auth
+    }
+} finally { Pop-Location }
 
 # --- Web (port 8090) --------------------------------------------------------
 Write-Host '  START  Jaspr dev server in this window (port 8090)' -ForegroundColor Yellow

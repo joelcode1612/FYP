@@ -68,3 +68,6 @@ htmlcov/
 # Perch generated index (large, rebuilt locally)
 .perch/index.json
 
+
+# Generated auth config (contains only public client values)
+fyp_jaspr_web/web/auth-config.json
