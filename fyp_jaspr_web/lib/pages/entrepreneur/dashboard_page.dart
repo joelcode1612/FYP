@@ -209,7 +209,6 @@ class _DashboardPageState extends State<DashboardPage>
   /// Illustrative neighbourhood preview built from CSS (no SVG namespace, no
   /// live geodata). The 500 m / 1 km toggle only scales the drawn ring.
   Component _mapFrame(int radius) {
-    final isWide = _radiusIndex == 1;
     return div(classes: 'sw-lh-map-frame', [
       div(classes: 'sw-lh-map-head', [
         span(classes: 'sw-lh-window-dots', attributes: const {
@@ -229,38 +228,7 @@ class _DashboardPageState extends State<DashboardPage>
         span(classes: 'sw-lh-demo-mark', [Component.text('ILLUSTRATIVE')]),
       ]),
       div(classes: 'sw-lh-map-body', [
-        div(classes: 'sw-lh-map-canvas', [
-          div(
-            classes: isWide
-                ? 'sw-lh-radius-ring sw-lh-radius-ring--wide'
-                : 'sw-lh-radius-ring',
-            attributes: const {'aria-hidden': 'true'},
-            [],
-          ),
-          div(classes: 'sw-lh-pin sw-lh-pin--property', [
-            Icon('place', size: 'sm'),
-          ]),
-          div(classes: 'sw-lh-pin sw-lh-pin--fb', styles: Styles(raw: {
-            'left': '24%',
-            'top': '32%',
-          }), []),
-          div(classes: 'sw-lh-pin sw-lh-pin--fb', styles: Styles(raw: {
-            'left': '72%',
-            'top': '28%',
-          }), []),
-          div(classes: 'sw-lh-pin sw-lh-pin--fb', styles: Styles(raw: {
-            'left': '78%',
-            'top': '62%',
-          }), []),
-          div(classes: 'sw-lh-pin sw-lh-pin--fb', styles: Styles(raw: {
-            'left': '36%',
-            'top': '74%',
-          }), []),
-          div(classes: 'sw-lh-pin sw-lh-pin--other', styles: Styles(raw: {
-            'left': '60%',
-            'top': '44%',
-          }), []),
-        ]),
+        _mapSvg(),
         div(classes: 'sw-lh-map-key', [
           _keyDot('sw-lh-key-dot-blue', 'Property'),
           _keyDot('sw-lh-key-dot-green', 'Nearby F&B'),
@@ -316,6 +284,393 @@ class _DashboardPageState extends State<DashboardPage>
         ),
       ]),
     ]);
+  }
+
+  /// Illustrative neighbourhood preview built as a real inline SVG — no live
+  /// geodata. Mirrors the reference's patterned street grid, catchment ring,
+  /// coloured pins and "Sample location" label. The 500 m / 1 km toggle only
+  /// scales the drawn catchment ring (the reference draws a single 140-px ring).
+  Component _mapSvg() {
+    final ringR = _radiusIndex == 1 ? 190 : 140;
+    const cx = '308';
+    const cy = '210';
+    return svg(
+      viewBox: '0 0 600 410',
+      attributes: const {
+        'role': 'img',
+        'aria-labelledby': 'sw-lh-map-title sw-lh-map-desc',
+        'preserveAspectRatio': 'xMidYMid slice',
+      },
+      [
+        Component.element(
+          tag: 'title',
+          attributes: const {'id': 'sw-lh-map-title'},
+          children: [Component.text('Illustrative neighbourhood catchment')],
+        ),
+        Component.element(
+          tag: 'desc',
+          attributes: const {'id': 'sw-lh-map-desc'},
+          children: [
+            Component.text(
+              'A schematic street grid with a sample commercial property at the '
+              'centre, plus surrounding cafe, transit and amenity markers. This '
+              'is not a live geographic map.',
+            ),
+          ],
+        ),
+        Component.element(
+          tag: 'defs',
+          children: [
+            Component.element(
+              tag: 'pattern',
+              attributes: {
+                'id': 'sw-lh-small-blocks',
+                'width': '56',
+                'height': '54',
+                'patternUnits': 'userSpaceOnUse',
+                'patternTransform': 'rotate(-8)',
+              },
+              children: [
+                Component.element(
+                  tag: 'rect',
+                  attributes: {
+                    'x': '0',
+                    'y': '0',
+                    'width': '56',
+                    'height': '54',
+                    'fill': '#f4f7fa',
+                  },
+                ),
+                Component.element(
+                  tag: 'path',
+                  attributes: {
+                    'd': 'M0 0H56M0 0V54',
+                    'fill': 'none',
+                    'stroke': '#e0e6ec',
+                    'stroke-width': '2',
+                  },
+                ),
+                Component.element(
+                  tag: 'path',
+                  attributes: {
+                    'd': 'M29 0V54M0 26H56',
+                    'fill': 'none',
+                    'stroke': '#e8edf1',
+                    'stroke-width': '1',
+                  },
+                ),
+              ],
+            ),
+          ],
+        ),
+        Component.element(
+          tag: 'rect',
+          attributes: {
+            'width': '600',
+            'height': '410',
+            'fill': 'url(#sw-lh-small-blocks)',
+          },
+        ),
+        Component.element(
+          tag: 'g',
+          attributes: {
+            'stroke': '#ffffff',
+            'stroke-linecap': 'round',
+            'fill': 'none',
+          },
+          children: [
+            Component.element(
+              tag: 'path',
+              attributes: {
+                'd': 'M-30 70C145 93 185 96 344 83S526 63 627 49',
+                'stroke-width': '20',
+              },
+            ),
+            Component.element(
+              tag: 'path',
+              attributes: {
+                'd': 'M-27 266C137 248 213 263 340 255S533 264 627 233',
+                'stroke-width': '17',
+              },
+            ),
+            Component.element(
+              tag: 'path',
+              attributes: {
+                'd': 'M116 -35C142 77 154 160 150 265S160 363 157 440',
+                'stroke-width': '21',
+              },
+            ),
+            Component.element(
+              tag: 'path',
+              attributes: {
+                'd': 'M392 -40C411 83 398 155 418 247S419 363 429 447',
+                'stroke-width': '19',
+              },
+            ),
+            Component.element(
+              tag: 'path',
+              attributes: {
+                'd': 'M-30 350C159 329 234 337 326 345S530 350 618 364',
+                'stroke-width': '11',
+              },
+            ),
+          ],
+        ),
+        Component.element(
+          tag: 'g',
+          attributes: {
+            'stroke': '#d5dce4',
+            'stroke-width': '1',
+            'fill': 'none',
+            'opacity': '.72',
+          },
+          children: [
+            Component.element(
+              tag: 'path',
+              attributes: {
+                'd': 'M-30 70C145 93 185 96 344 83S526 63 627 49',
+              },
+            ),
+            Component.element(
+              tag: 'path',
+              attributes: {
+                'd': 'M-27 266C137 248 213 263 340 255S533 264 627 233',
+              },
+            ),
+            Component.element(
+              tag: 'path',
+              attributes: {
+                'd': 'M116 -35C142 77 154 160 150 265S160 363 157 440',
+              },
+            ),
+            Component.element(
+              tag: 'path',
+              attributes: {
+                'd': 'M392 -40C411 83 398 155 418 247S419 363 429 447',
+              },
+            ),
+          ],
+        ),
+        Component.element(
+          tag: 'g',
+          attributes: {
+            'fill': '#99a7b7',
+            'font-family': 'Arial, sans-serif',
+            'font-size': '11',
+            'font-weight': '600',
+            'opacity': '.93',
+          },
+          children: [
+            Component.element(
+              tag: 'text',
+              attributes: {
+                'x': '28',
+                'y': '78',
+                'transform': 'rotate(7 28 78)',
+              },
+              children: [Component.text('Market Street')],
+            ),
+            Component.element(
+              tag: 'text',
+              attributes: {
+                'x': '401',
+                'y': '82',
+                'transform': 'rotate(-8 401 82)',
+              },
+              children: [Component.text('Commercial Avenue')],
+            ),
+            Component.element(
+              tag: 'text',
+              attributes: {
+                'x': '35',
+                'y': '253',
+                'transform': 'rotate(-5 35 253)',
+              },
+              children: [Component.text('Station Road')],
+            ),
+            Component.element(
+              tag: 'text',
+              attributes: {
+                'x': '439',
+                'y': '269',
+                'transform': 'rotate(-6 439 269)',
+              },
+              children: [Component.text('Jalan Utama')],
+            ),
+            Component.element(
+              tag: 'text',
+              attributes: {
+                'x': '146',
+                'y': '159',
+                'transform': 'rotate(82 146 159)',
+              },
+              children: [Component.text('Retail Walk')],
+            ),
+            Component.element(
+              tag: 'text',
+              attributes: {
+                'x': '395',
+                'y': '144',
+                'transform': 'rotate(80 395 144)',
+              },
+              children: [Component.text('Main Street')],
+            ),
+            Component.element(
+              tag: 'text',
+              attributes: {
+                'x': '42',
+                'y': '354',
+              },
+              children: [Component.text('Neighbourhood Lane')],
+            ),
+          ],
+        ),
+        Component.element(
+          tag: 'circle',
+          attributes: {
+            'cx': cx,
+            'cy': cy,
+            'r': '$ringR',
+            'fill': 'rgba(29,78,216,.07)',
+            'stroke': '#3b82f6',
+            'stroke-width': '2',
+            'stroke-opacity': '.75',
+          },
+        ),
+        Component.element(
+          tag: 'circle',
+          attributes: {
+            'cx': cx,
+            'cy': cy,
+            'r': '18',
+            'fill': '#fff',
+            'stroke': '#cbd9f2',
+            'stroke-width': '1.5',
+          },
+        ),
+        Component.element(
+          tag: 'path',
+          attributes: {
+            'd':
+                'M308 174c-11 0-19 9-19 20 0 14 19 32 19 32s19-18 19-32c0-11-8-20-19-20z',
+            'fill': '#1d4ed8',
+            'stroke': '#ffffff',
+            'stroke-width': '2.5',
+          },
+        ),
+        Component.element(
+          tag: 'circle',
+          attributes: {
+            'cx': '308',
+            'cy': '194',
+            'r': '6',
+            'fill': '#fff',
+          },
+        ),
+        Component.element(
+          tag: 'g',
+          children: [
+            Component.element(
+              tag: 'circle',
+              attributes: {
+                'cx': '217',
+                'cy': '146',
+                'r': '6',
+                'fill': '#0d9488',
+                'stroke': '#fff',
+                'stroke-width': '3',
+              },
+            ),
+            Component.element(
+              tag: 'circle',
+              attributes: {
+                'cx': '376',
+                'cy': '122',
+                'r': '6',
+                'fill': '#0d9488',
+                'stroke': '#fff',
+                'stroke-width': '3',
+              },
+            ),
+            Component.element(
+              tag: 'circle',
+              attributes: {
+                'cx': '424',
+                'cy': '250',
+                'r': '6',
+                'fill': '#0d9488',
+                'stroke': '#fff',
+                'stroke-width': '3',
+              },
+            ),
+            Component.element(
+              tag: 'circle',
+              attributes: {
+                'cx': '251',
+                'cy': '296',
+                'r': '6',
+                'fill': '#0d9488',
+                'stroke': '#fff',
+                'stroke-width': '3',
+              },
+            ),
+            Component.element(
+              tag: 'circle',
+              attributes: {
+                'cx': '366',
+                'cy': '311',
+                'r': '6',
+                'fill': '#1e293b',
+                'stroke': '#fff',
+                'stroke-width': '3',
+              },
+            ),
+            Component.element(
+              tag: 'circle',
+              attributes: {
+                'cx': '182',
+                'cy': '229',
+                'r': '6',
+                'fill': '#1e293b',
+                'stroke': '#fff',
+                'stroke-width': '3',
+              },
+            ),
+          ],
+        ),
+        Component.element(
+          tag: 'g',
+          attributes: {
+            'font-family': 'Arial, sans-serif',
+            'font-size': '11',
+            'font-weight': '700',
+            'fill': '#24334c',
+          },
+          children: [
+            Component.element(
+              tag: 'rect',
+              attributes: {
+                'x': '326',
+                'y': '175',
+                'width': '116',
+                'height': '27',
+                'rx': '7',
+                'fill': '#fff',
+                'stroke': '#d8e1ee',
+              },
+            ),
+            Component.element(
+              tag: 'text',
+              attributes: {
+                'x': '338',
+                'y': '192',
+              },
+              children: [Component.text('Sample location')],
+            ),
+          ],
+        ),
+      ],
+    );
   }
 
   Component _keyDot(String cls, String label) => span([
@@ -519,7 +874,7 @@ class _DashboardPageState extends State<DashboardPage>
       ),
       _kpi(
         'bookmark',
-        '#0d9488',
+        '#059669',
         'Saved favourites',
         '$saved',
         saved == 1 ? 'Property shortlisted' : 'Properties shortlisted',
@@ -527,7 +882,7 @@ class _DashboardPageState extends State<DashboardPage>
       ),
       _kpi(
         'tune',
-        '#64748b',
+        '#e11d48',
         'Preferences',
         _prefsSet ? 'Set' : '—',
         _prefsSet ? 'Up to date' : 'Set them to get matches',
@@ -535,7 +890,7 @@ class _DashboardPageState extends State<DashboardPage>
       ),
       _kpi(
         'history',
-        '#1d4ed8',
+        '#475569',
         'Assessment runs',
         '0',
         'None yet',
