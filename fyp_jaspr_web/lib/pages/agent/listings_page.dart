@@ -23,6 +23,7 @@ import '../../layouts/app_layout.dart';
 /// `UnsupportedError` from `updateProperty`, and agent write-authorisation is a
 /// server-side decision that does not exist yet — so the row actions navigate
 /// to a read-only record instead of offering a form that cannot save.
+@client
 class AgentListingsPage extends StatefulComponent {
   const AgentListingsPage({super.key});
 

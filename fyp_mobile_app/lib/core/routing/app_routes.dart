@@ -13,8 +13,10 @@ import '../../presentation/mobile/admin/pages/admin_user_detail_mobile_page.dart
 import '../../presentation/mobile/admin/pages/admin_users_mobile_page.dart';
 import '../../presentation/mobile/admin/pages/admin_verification_detail_mobile_page.dart';
 import '../../presentation/mobile/admin/pages/admin_verification_mobile_page.dart';
+import '../../presentation/mobile/entrepreneur/pages/entrepreneur_assess_mobile_page.dart';
 import '../../presentation/mobile/entrepreneur/pages/entrepreneur_compare_mobile_page.dart';
 import '../../presentation/mobile/landing/pages/landing_mobile_page.dart';
+import '../../presentation/mobile/entrepreneur/pages/entrepreneur_spaces_mobile_page.dart';
 import '../../presentation/mobile/entrepreneur/pages/entrepreneur_dashboard_mobile_page.dart';
 import '../../presentation/mobile/entrepreneur/pages/entrepreneur_explore_mobile_page.dart';
 import '../../presentation/mobile/entrepreneur/pages/entrepreneur_preferences_mobile_page.dart';
@@ -47,10 +49,14 @@ import '../../presentation/shared/capture/panorama_capture_page.dart';
 /// code across the two apps.)
 String parentShellRoute(String route) {
   const parents = {
-    '/entrepreneur/preferences': '/entrepreneur',
+    // Detail routes highlight their owning tab in the five-tab model.
+    '/entrepreneur/preferences': '/entrepreneur/profile',
+    '/entrepreneur/saved': '/entrepreneur/spaces',
+    '/entrepreneur/compare': '/entrepreneur/spaces',
+    '/entrepreneur/recommendations': '/entrepreneur/explore',
     '/entrepreneur/property-detail': '/entrepreneur/explore',
     '/entrepreneur/tour': '/entrepreneur/explore',
-    '/entrepreneur/report': '/entrepreneur/explore',
+    '/entrepreneur/report': '/entrepreneur/assess',
     '/admin/user-detail': '/admin/users',
     '/admin/verification-detail': '/admin/verification',
     '/admin/listing-detail': '/admin/listings',
@@ -121,6 +127,13 @@ abstract final class AppRoutes {
           '/owner/capture' => PanoramaCapturePage(propertyId: id),
           // Entrepreneur
           '/entrepreneur' => EntrepreneurDashboardMobilePage(
+            appState: appState,
+          ),
+          // Material 3 five-tab workspace: Assess and Spaces.
+          '/entrepreneur/assess' => EntrepreneurAssessMobilePage(
+            appState: appState,
+          ),
+          '/entrepreneur/spaces' => EntrepreneurSpacesMobilePage(
             appState: appState,
           ),
           '/entrepreneur/preferences' => EntrepreneurPreferencesMobilePage(

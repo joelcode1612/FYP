@@ -41,8 +41,10 @@ class ApiPropertyRepository implements PropertyRepository {
     final rows = <CommercialProperty>[];
     var offset = 0;
     while (true) {
+      // Intended FastAPI backend (FYP/backend). The Jaspr same-origin proxy
+      // forwards /api/* to it; `test/app-server.js` is no longer used.
       final response = await WebAuth.request(
-        '/api/catalog/properties?limit=200&offset=$offset',
+        '/api/v1/catalog/properties?limit=200&offset=$offset',
       );
       final page = (response['data'] as List).cast<Map<String, dynamic>>();
       rows.addAll(page.map(fromJson));

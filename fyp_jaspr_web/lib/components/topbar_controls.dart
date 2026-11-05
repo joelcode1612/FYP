@@ -389,11 +389,17 @@ class AvatarMenuState extends State<AvatarMenu> {
   @override
   Component build(BuildContext context) {
     final account = WebAuth.profile;
+    final fallback = profileFor(component.role);
+    // `/auth/me` spells the name `full_name`; the SSR session cookie mirrors it
+    // as `name`. Accept either and fall back to the role's placeholder rather
+    // than casting a missing field to String.
     final profile = account == null
-        ? profileFor(component.role)
+        ? fallback
         : (
-            name: account['display_name'] as String,
-            email: account['email'] as String,
+            name:
+                (account['full_name'] ?? account['name'] ?? fallback.name)
+                    as String,
+            email: (account['email'] ?? fallback.email) as String,
           );
     return div(classes: 'avatar-menu', [
       button(

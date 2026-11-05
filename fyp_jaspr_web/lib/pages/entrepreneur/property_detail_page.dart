@@ -26,6 +26,7 @@ import '../../layouts/app_layout.dart';
 ///  * a missing value is labelled, never printed as 0 or invented;
 ///  * provenance is shown next to each fact;
 ///  * the score is a relative indicator and always carries the disclaimer.
+@client
 class PropertyDetailPage extends StatefulComponent {
   /// The property id from the `?id=` query param.
   final String id;

@@ -15,6 +15,7 @@ import '../../layouts/app_layout.dart';
 /// and a detail `.panel` on the right. This route shows every property
 /// (`vm.listings`, default tab All); `/admin/verification` shows the
 /// awaiting-review subset (default tab Pending). Both share [ReviewSplit].
+@client
 class ListingsPage extends StatefulComponent {
   const ListingsPage({super.key});
 

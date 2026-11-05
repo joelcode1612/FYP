@@ -21,6 +21,7 @@ import '../../layouts/app_layout.dart';
 /// with the model's reasons inline. The previous version wrapped a full
 /// `.pcard` in a 3-column grid and appended a separate `.why` block, which
 /// duplicated the card's own actions and buried the score.
+@client
 class RecommendationsPage extends StatefulComponent {
   const RecommendationsPage({super.key});
 

@@ -21,6 +21,7 @@ import '../../layouts/app_layout.dart';
 /// The previous version was two generic `.card`s with two range sliders, so the
 /// three-step explanation the source uses to justify the form was missing and
 /// the numeric inputs were sliders rather than the source's labelled fields.
+@client
 class PreferencesPage extends StatefulComponent {
   const PreferencesPage({super.key});
 

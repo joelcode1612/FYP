@@ -1,6 +1,7 @@
 import 'package:shared_logic/shared_logic.dart';
 import 'package:flutter/material.dart';
 
+import '../../../core/theme/sitewise_m3.dart';
 import 'mobile_bottom_nav.dart';
 import 'mobile_navigation.dart';
 import 'mobile_topbar.dart';
@@ -10,10 +11,15 @@ import 'mobile_topbar.dart';
 /// Pages own their scrolling/padding so full-bleed layouts (maps, viewers)
 /// are possible.
 ///
-/// Set [embeddedHeader] when the page supplies its own Home-style header (the
-/// reference pattern's compact menu / brand / utility row that scrolls with the
-/// content). The shell then drops the [AppBar] entirely and lets the body start
-/// at the top of the safe area — no duplicate bar, no double padding.
+/// The **entrepreneur** workspace opts into the Material 3 reference chrome
+/// (paper canvas, brand-lockup header, five-tab pill-indicator bar). Admin and
+/// owner keep their original shell, so this refresh cannot regress their
+/// screens. Detail routes under `/entrepreneur/*` inherit the same chrome and
+/// keep their back affordance via [MobileTopBar].
+///
+/// Set [embeddedHeader] when a page supplies its own Home-style header (the
+/// older pattern's compact menu / brand / utility row that scrolls with the
+/// content). Ignored for the Material 3 shell, which always renders its header.
 
 class MobileAppShell extends StatelessWidget {
   final AppCubit appState;
@@ -30,6 +36,10 @@ class MobileAppShell extends StatelessWidget {
   /// the [AppBar] and does not wrap the body in a top [SafeArea].
   final bool embeddedHeader;
 
+  /// Force / override the Material 3 chrome. When null (default) it is enabled
+  /// automatically for the entrepreneur role.
+  final bool? m3;
+
   const MobileAppShell({
     super.key,
     required this.appState,
@@ -40,32 +50,39 @@ class MobileAppShell extends StatelessWidget {
     this.floatingActionButton,
     this.brandTitle = false,
     this.embeddedHeader = false,
+    this.m3,
   });
 
   @override
   Widget build(BuildContext context) {
     final destinations = mobileDestinationsFor(appState.role);
+    final useM3 = m3 ?? (appState.role == AppRole.entrepreneur);
 
     void go(String route) {
       if (route == currentRoute) return;
       Navigator.of(context).pushReplacementNamed(route);
     }
 
+    final showTopBar = useM3 || !embeddedHeader;
+
     return Scaffold(
-      appBar: embeddedHeader
-          ? null
-          : MobileTopBar(
+      backgroundColor: useM3 ? SitewiseM3.paper : null,
+      appBar: showTopBar
+          ? MobileTopBar(
               title: title,
               actions: actions,
               appState: appState,
               brandTitle: brandTitle,
-            ),
-      body: embeddedHeader ? SafeArea(bottom: false, child: body) : body,
+              m3: useM3,
+            )
+          : null,
+      body: !showTopBar ? SafeArea(bottom: false, child: body) : body,
       floatingActionButton: floatingActionButton,
       bottomNavigationBar: MobileBottomNav(
         destinations: destinations,
         currentRoute: currentRoute,
         onGo: go,
+        m3: useM3,
       ),
     );
   }

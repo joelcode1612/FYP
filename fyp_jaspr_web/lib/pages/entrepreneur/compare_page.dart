@@ -21,12 +21,15 @@ import '../../layouts/app_layout.dart';
 /// unavailable"). The previous version used a generic `.table` with the property
 /// city as the header and a flat "—" for every absent value, collapsing three
 /// distinct states into one.
+@client
 class ComparePage extends StatelessComponent {
-  final AppCubit appCubit;
-  const ComparePage({super.key, required this.appCubit});
+  const ComparePage({super.key});
 
   @override
   Component build(BuildContext context) {
+    // The selection lives in the locator (seeded from the cookie), so the page
+    // needs no constructor argument and stays a plain encodable client target.
+    final appCubit = AppLocator.appCubit;
     return CubitBuilder<AppCubit, AppState>(
       cubit: appCubit,
       builder: (ctx, _) {

@@ -22,10 +22,11 @@ const FIXTURE = path.join(
   'jaspr_catalog_fixture.json',
 );
 
-const API_ORIGIN = 'http://localhost:3001';
+// Same-origin: the Jaspr server proxies /api/* to the FastAPI backend. All of
+// those calls are intercepted below, so no live service is contacted.
+const API_ORIGIN = '';
 
-// Mirrors the shape of `POST /api/me` (test/app-api.js) so the pages read the
-// same keys they read in a real session.
+// Mirrors the shape of GET /api/v1/auth/me (FYP/backend).
 const PROFILES = {
   entrepreneur: { user_id: 'harness-entrepreneur', email: 'sarah@nasihouse.my', display_name: 'Sarah Lim', role: 'entrepreneur' },
   owner: { user_id: 'harness-owner', email: 'owner@nasihouse.my', display_name: 'Owner Demo', role: 'owner' },
@@ -100,15 +101,12 @@ async function installHarnessSession(page, { role = 'auto' } = {}) {
         headers: { 'Access-Control-Allow-Origin': route.request().headers()['origin'] || '*' },
         body: JSON.stringify(body),
       });
-    if (url.pathname === '/api/config') {
-      return json({ supabaseUrl: '', supabasePublishableKey: '', configured: false });
-    }
-    if (url.pathname === '/api/catalog/properties') {
+    if (url.pathname === '/api/v1/catalog/properties') {
       const limit = Math.min(200, Math.max(1, Number(url.searchParams.get('limit')) || 100));
       const offset = Math.max(0, Number(url.searchParams.get('offset')) || 0);
       return json({ ok: true, data: rows.slice(offset, offset + limit), meta: { total: rows.length, limit, offset } });
     }
-    const detail = /^\/api\/catalog\/properties\/(.+)$/.exec(url.pathname);
+    const detail = /^\/api\/v1\/catalog\/properties\/(.+)$/.exec(url.pathname);
     if (detail) {
       const row = rows.find((r) => r.id === decodeURIComponent(detail[1])) || null;
       return json({ ok: Boolean(row), data: row });

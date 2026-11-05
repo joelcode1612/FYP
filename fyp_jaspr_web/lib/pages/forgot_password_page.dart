@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:jaspr/dom.dart';
 import 'package:jaspr/jaspr.dart';
 
@@ -5,16 +7,15 @@ import '../components/auth_icons.dart';
 import '../components/dom_helpers.dart';
 import '../components/letter_reveal.dart';
 import '../components/ui.dart';
+import '../data/auth_service.dart';
 
-/// Password-reset request surface — the Jaspr port of
-/// `sitewise-entrepreneur/forgot-password.html`.
+/// Password-reset request surface for BOTH portals (the native Supabase
+/// recovery email lands on `/auth/callback?next=/reset-password`, where the
+/// new password is set). Entrepreneur accounts and staff accounts use the
+/// same flow; roles are irrelevant to the link itself.
 ///
-/// No email backend exists, so "Continue" only runs client-side email-format
-/// validation and reports that reset is disabled (no reset email is sent).
-///
-/// Deliberately *not* `@client`: `SitewiseApp` is the client entry point for
-/// every route, and Jaspr asserts that no client anchor nests inside another
-/// one (`component_anchors.dart`), which would break hydration of the page.
+/// `@client` so the form hydrates; the field and copy are server-rendered.
+@client
 class ForgotPasswordPage extends StatefulComponent {
   const ForgotPasswordPage({super.key});
 
@@ -27,10 +28,12 @@ class _ForgotState extends State<ForgotPasswordPage> {
   final Map<String, String> _errors = {};
   String _alert = '';
   String _alertTone = 'info';
+  bool _busy = false;
 
   static final _emailRe = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$');
 
-  void _submit() {
+  Future<void> _submit() async {
+    if (_busy) return;
     final e = <String, String>{};
     if (!_emailRe.hasMatch(_email)) e['email'] = 'Enter a valid email address.';
     setState(() {
@@ -38,14 +41,33 @@ class _ForgotState extends State<ForgotPasswordPage> {
         ..clear()
         ..addAll(e);
       if (e.isEmpty) {
-        _alert =
-            'Demo build — password reset is disabled. No reset email is sent.';
+        _alert = 'Sending the reset link…';
         _alertTone = 'info';
       } else {
         _alert = 'Please fix the highlighted field.';
         _alertTone = 'err';
       }
     });
+    if (e.isNotEmpty) return;
+    setState(() => _busy = true);
+    try {
+      final message = await WebAuth.resetPassword(_email.trim());
+      if (mounted) {
+        setState(() {
+          _alert = message;
+          _alertTone = 'info';
+        });
+      }
+    } catch (error) {
+      if (mounted) {
+        setState(() {
+          _alert = error.toString();
+          _alertTone = 'err';
+        });
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
   }
 
   Component _field({
@@ -115,9 +137,9 @@ class _ForgotState extends State<ForgotPasswordPage> {
         ),
         button(
           classes: 'auth-submit',
-          attributes: const {'type': 'button'},
+          attributes: {'type': 'button', if (_busy) 'disabled': 'true'},
           events: events(onClick: _submit),
-          [Component.text('Continue')],
+          [Component.text(_busy ? 'Sending…' : 'Continue')],
         ),
         p(classes: 'auth-switch', [
           Component.text('Remembered it? '),

@@ -23,6 +23,7 @@ import '../data/auth_service.dart';
 /// Required / email-format / password-length / mismatch checks surface inline
 /// `lp-err` messages plus a non-blocking `lp-alert`, and a clean submit reports
 /// that account creation is unavailable.
+@client
 class SignupPage extends StatefulComponent {
   const SignupPage({super.key});
 
@@ -46,9 +47,9 @@ class _SignupState extends State<SignupPage> {
 
   static const int _minPasswordLength = 8;
 
-  /// Self-service signup creates an entrepreneur workspace only; property
-  /// owners are onboarded through the admin side.
-  static const String _signupRole = 'entrepreneur';
+  // The role is NEVER submitted from the client: public registration always
+  // provisions the permitted public-account role (entrepreneur) server-side,
+  // so a tampered request cannot mint an agent or admin account.
 
   Future<void> _submit() async {
     if (_busy) return;
@@ -85,7 +86,6 @@ class _SignupState extends State<SignupPage> {
         _email.trim(),
         _password,
         _name.trim(),
-        _signupRole,
       );
       if (mounted) {
         setState(() {
@@ -109,7 +109,7 @@ class _SignupState extends State<SignupPage> {
     if (_busy) return;
     setState(() => _busy = true);
     try {
-      await WebAuth.google(_signupRole);
+      await WebAuth.google(true);
     } catch (error) {
       if (mounted) {
         setState(() {
@@ -248,6 +248,7 @@ class _SignupState extends State<SignupPage> {
           classes: 'lp-social',
           attributes: {
             'type': 'button',
+            'data-provider': 'google',
             if (!WebAuth.configured || _busy) 'disabled': 'true',
             'aria-label': WebAuth.configured
                 ? 'Continue with Google'

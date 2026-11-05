@@ -2,11 +2,13 @@ from fastapi import APIRouter
 
 from sitewise.api.v1 import (
     auth,
+    catalog,
     geospatial,
     properties,
     recommendations,
     reports,
     saved_properties,
+    staff,
     statistics,
     suitability,
     users,
@@ -16,8 +18,11 @@ from sitewise.api.v1 import (
 router = APIRouter()
 
 router.include_router(auth.router, prefix="/auth", tags=["auth"])
+# Imported property catalogue (read-only, previously served by FYP/test).
+router.include_router(catalog.router, prefix="/catalog", tags=["catalog"])
 router.include_router(properties.router, prefix="/properties", tags=["properties"])
 router.include_router(users.router, prefix="/users", tags=["users"])
+router.include_router(staff.router, prefix="/staff", tags=["staff"])
 router.include_router(recommendations.router, prefix="/recommendations", tags=["recommendations"])
 router.include_router(suitability.router, prefix="/suitability", tags=["suitability"])
 router.include_router(saved_properties.router, prefix="/saved-properties", tags=["saved_properties"])

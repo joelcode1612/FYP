@@ -25,6 +25,7 @@ import '../../layouts/app_layout.dart';
 /// ```
 ///
 /// Every figure is a live count from [OwnerCubit]; nothing is fabricated.
+@client
 class DashboardPage extends StatefulComponent {
   const DashboardPage({super.key});
 

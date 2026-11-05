@@ -23,6 +23,7 @@ import '../../layouts/app_layout.dart';
 /// Layout reuses the app's bento grid (`.bento-head` / `.bento-kpis` /
 /// `.bento`) so the agent shell is the same object as the admin and owner
 /// shells rather than a fourth one-off.
+@client
 class AgentDashboardPage extends StatelessComponent {
   const AgentDashboardPage({super.key});
 

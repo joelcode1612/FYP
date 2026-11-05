@@ -19,6 +19,7 @@ import '../../layouts/app_layout.dart';
 /// placeholders (capture frames live only on the mobile app). Regenerate
 /// reproduces the Flutter view-model's own frames<26 guard, which on web
 /// always trips at 0/26 frames.
+@client
 class TourPreviewPage extends StatefulComponent {
   final String id;
 

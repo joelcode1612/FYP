@@ -18,6 +18,7 @@ import '../../layouts/app_layout.dart';
 /// layer exposes no `setUserStatus`, so the table is read-only here. The
 /// Listings column is derived from `vm.listings` (the entity has no count of
 /// its own), and Joined is the user's `joinedAt`.
+@client
 class UsersPage extends StatefulComponent {
   const UsersPage({super.key});
 

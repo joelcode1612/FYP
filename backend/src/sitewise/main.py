@@ -8,10 +8,12 @@ from sitewise.api.v1.router import router as v1_router
 from sitewise.core.config import settings
 from sitewise.core.exceptions import (
     AuthError,
+    ConflictError,
     ForbiddenError,
     NotFoundError,
     SiteWiseError,
 )
+from sitewise.core.supabase_admin import SupabaseAdminError
 from sitewise.core.logging import configure_logging, logger
 from sitewise.db.session import create_db_and_tables
 
@@ -42,13 +44,21 @@ app.add_middleware(
 @app.exception_handler(AuthError)
 @app.exception_handler(ForbiddenError)
 @app.exception_handler(NotFoundError)
+@app.exception_handler(ConflictError)
 async def auth_error_handler(request: Request, exc: SiteWiseError):
     """Map authentication / authorization errors to their mandated statuses.
 
     AuthError -> 401, AuthUnavailableError -> 503 (it subclasses AuthError),
-    ForbiddenError -> 403, NotFoundError -> 404. The messages are written for
-    clients and carry no token or secret material.
+    ForbiddenError -> 403, NotFoundError -> 404, ConflictError -> 409. The
+    messages are written for clients and carry no token or secret material.
     """
+    return JSONResponse(status_code=exc.status_code, content={"detail": str(exc)})
+
+
+@app.exception_handler(SupabaseAdminError)
+async def supabase_admin_error_handler(request: Request, exc: SupabaseAdminError):
+    """A trusted provider operation failed (GoTrue/PostgREST). 502, no keys."""
+    logger.error("Supabase admin operation failed on %s %s", request.method, request.url.path)
     return JSONResponse(status_code=exc.status_code, content={"detail": str(exc)})
 
 

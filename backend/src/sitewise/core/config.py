@@ -18,7 +18,7 @@ class Settings(BaseSettings):
     secret_key: str = "change-me"  # app-local signing (NOT Supabase's JWT secret)
     cors_origins: str = (
         "http://localhost:8090,http://127.0.0.1:8090,http://localhost:3000,"
-        "http://127.0.0.1:3000,http://localhost:3001"
+        "http://127.0.0.1:3000"
     )
 
     # --- Supabase authentication ------------------------------------------
@@ -40,9 +40,26 @@ class Settings(BaseSettings):
     # cache expires or immediately when an unknown `kid` appears.
     supabase_jwks_cache_seconds: int = 600
 
+    # --- Staff administration ----------------------------------------------
+    # Redirect target Supabase embeds in agent invite / password-setup emails.
+    # This URL must ALSO be allow-listed in Supabase Auth -> URL Configuration
+    # (Redirect URLs), otherwise GoTrue rejects the flow. Empty falls back to
+    # the first CORS origin + /auth/callback.
+    supabase_staff_invite_redirect_url: str = ""
+    # Timeout (seconds) for GoTrue admin REST calls not wrapped by supabase-py
+    # (MFA factor administration in supabase-py 2.34.0).
+    supabase_admin_timeout_seconds: int = 15
+
     @property
     def cors_origin_list(self) -> list[str]:
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
+
+    @property
+    def staff_invite_redirect(self) -> str:
+        if self.supabase_staff_invite_redirect_url:
+            return self.supabase_staff_invite_redirect_url
+        origin = self.cors_origin_list[0] if self.cors_origin_list else "http://localhost:8090"
+        return f"{origin}/auth/callback"
 
     @property
     def supabase_issuer(self) -> str:

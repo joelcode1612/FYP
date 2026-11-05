@@ -19,6 +19,7 @@ import '../../layouts/app_layout.dart';
 /// "Tours awaiting verification" block below is a *target-only* addition (the
 /// source `tours.html` has no web route); it is kept so the capability is not
 /// lost, but it is not part of the source review design.
+@client
 class VerificationPage extends StatefulComponent {
   const VerificationPage({super.key});
 

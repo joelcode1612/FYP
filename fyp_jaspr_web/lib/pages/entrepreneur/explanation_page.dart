@@ -21,6 +21,7 @@ import '../../layouts/app_layout.dart';
 /// considerations, but **not** per-factor contribution weights. The source's
 /// contribution chart is therefore rendered as an explicit unavailable state
 /// instead of inventing SHAP-style values.
+@client
 class ExplanationPage extends StatefulComponent {
   /// The property id from the `?property=` query param.
   final String propertyId;

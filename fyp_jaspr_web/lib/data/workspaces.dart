@@ -1,5 +1,6 @@
 import 'package:shared_logic/shared_logic.dart';
 
+import 'app_locator.dart';
 import 'auth_service.dart';
 
 /// Which workspaces the signed-in account may open.
@@ -22,6 +23,21 @@ import 'auth_service.dart';
 /// what the API will answer — every data call still carries the real token.
 abstract final class Workspaces {
   static final Set<AppRole> _granted = {};
+
+  /// Demo grants as plain role names, so they can be mirrored into the
+  /// per-visitor cookie and survive a full document navigation.
+  static Set<String> get granted => {for (final role in _granted) role.name};
+
+  /// Restores the grants that came back in the cookie.
+  static void seed(Set<String> names) {
+    _granted
+      ..clear()
+      ..addAll([
+        for (final name in names)
+          for (final role in AppRole.values)
+            if (role.name == name) role,
+      ]);
+  }
 
   /// The role the backend assigned to this session, or null when signed out.
   static AppRole? get primary {
@@ -52,7 +68,13 @@ abstract final class Workspaces {
   static bool isDemoGrant(AppRole role) =>
       _granted.contains(role) && role != primary;
 
-  static void grant(AppRole role) => _granted.add(role);
+  static void grant(AppRole role) {
+    _granted.add(role);
+    AppLocator.persistUi();
+  }
 
-  static void revoke(AppRole role) => _granted.remove(role);
+  static void revoke(AppRole role) {
+    _granted.remove(role);
+    AppLocator.persistUi();
+  }
 }

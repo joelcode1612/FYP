@@ -51,7 +51,7 @@ const dataset = JSON.parse(fs.readFileSync(path.join(__dirname, '../../test/.dat
       await p.route('**/auth_bundle.js',route => route.fulfill({ contentType:'application/javascript',body:`
         const rows=${JSON.stringify(dataset)};
         window.sitewiseAuth={ready:Promise.resolve(),snapshot:()=>JSON.stringify({configured:true,error:'',profile:{user_id:'fixture',display_name:'Test account',email:'test@example.com',role:'entrepreneur'}}),
-          request:async (route)=>{const u=new URL(route,'http://fixture');if(u.pathname==='/api/catalog/properties'){const offset=+(u.searchParams.get('offset')||0),limit=+(u.searchParams.get('limit')||200);return JSON.stringify({data:rows.slice(offset,offset+limit),meta:{total:rows.length}});}throw new Error('Unexpected fixture route');},signout:async()=>{},google:async()=>{}};
+          request:async (route)=>{const u=new URL(route,'http://fixture');if(u.pathname==='/api/v1/catalog/properties'){const offset=+(u.searchParams.get('offset')||0),limit=+(u.searchParams.get('limit')||200);return JSON.stringify({data:rows.slice(offset,offset+limit),meta:{total:rows.length}});}throw new Error('Unexpected fixture route');},signout:async()=>{},google:async()=>{}};
       ` }));
       await p.goto(base + '/entrepreneur/explore');
       await p.locator('.pcard').first().waitFor();

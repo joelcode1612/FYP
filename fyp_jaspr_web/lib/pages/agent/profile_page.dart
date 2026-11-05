@@ -17,6 +17,7 @@ import '../../layouts/app_layout.dart';
 /// a form here would accept input it cannot store. The account panel therefore
 /// reports the real session and names the gap, rather than rendering disabled
 /// fields that imply an eventual save.
+@client
 class AgentProfilePage extends StatelessComponent {
   const AgentProfilePage({super.key});
 

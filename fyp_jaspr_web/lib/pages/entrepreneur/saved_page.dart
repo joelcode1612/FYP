@@ -21,6 +21,7 @@ import '../../layouts/app_layout.dart';
 /// disappeared is shown as unavailable rather than filtered away. No title or
 /// address is invented for it: the source's snapshot fields are not stored in
 /// this build.
+@client
 class SavedPage extends StatelessComponent {
   const SavedPage({super.key});
 

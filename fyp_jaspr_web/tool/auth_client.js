@@ -1,16 +1,43 @@
 import { createClient } from '@supabase/supabase-js';
 
-const api = document.querySelector('meta[name="sitewise-api"]')?.content || 'http://localhost:3001';
-// Same-origin public configuration generated from the private .env by
-// tool/gen_auth_config.js. Contains ONLY the project URL and the publishable
-// (client-safe) key — never the secret key. It lets the sign-in/sign-up pages
-// initialize Supabase even when the separate API process is not running.
-const publicConfigUrl = 'auth-config.json';
+// --- Centralized API configuration -----------------------------------------
+// The Jaspr SSR server proxies /api/* to the intended FastAPI backend, so
+// browser requests are same-origin by default. NO host or port is baked into
+// this bundle: the only override is the `sitewise-api` meta tag emitted by
+// lib/main.server.dart before this (deferred) script runs. An empty/absent
+// content means "same-origin proxy". Deployments that deliberately host the
+// API elsewhere set SITEWISE_PUBLIC_API_BASE on the Jaspr process instead of
+// editing generated assets.
+const apiMeta = document.querySelector('meta[name="sitewise-api"]');
+const api = apiMeta ? apiMeta.content.trim().replace(/\/+$/, '') : '';
+// Same-origin public configuration generated from the intended backend's
+// .env by tool/gen_auth_config.js. Contains ONLY the project URL and the
+// publishable (client-safe) key — never the secret/service-role key. It lets
+// the sign-in/sign-up pages initialize Supabase even while the API boots.
+// Root-relative on purpose: this bundle also runs on /auth/callback, /login,
+// /signup, ... where a relative URL would resolve to /<route>/auth-config.json.
+const publicConfigUrl = '/auth-config.json';
 let client;
-let state = { configured: false, user: null, profile: null, error: '' };
-const pendingRoleKey = 'sitewise.pendingRole';
+let state = {
+  configured: false,
+  backendAvailable: false,
+  user: null,
+  profile: null,
+  error: '',
+  mfaRequired: false,
+  mfaFactorId: null,
+  mfaChallengeId: null,
+  // Staff enrollment ("Secure Your Staff Account"): populated after a staff
+  // sign-in when no verified TOTP factor exists. QR is the Supabase-generated
+  // SVG data URI; secret is shown for manual authenticator entry.
+  mfaEnrollmentRequired: false,
+  mfaEnrollFactorId: null,
+  mfaEnrollQr: null,
+  mfaEnrollSecret: null,
+};
 const nextKey = 'sitewise.next';
 const rememberKey = 'sitewise.remember';
+const STAFF_ROLES = ['agent', 'admin', 'administrator'];
 const storage = {
   getItem: key => sessionStorage.getItem(key) ?? localStorage.getItem(key),
   setItem(key, value) {
@@ -29,20 +56,152 @@ async function apiRequest(path, method = 'GET', body) {
   if (error || !data.session) throw new Error('Sign in to continue.');
   const response = await fetch(api + path, {
     method,
+    credentials: 'same-origin',
     headers: { Authorization: 'Bearer ' + data.session.access_token, 'Content-Type': 'application/json' },
     body: body == null ? undefined : JSON.stringify(body),
     signal: AbortSignal.timeout(15000),
   });
-  const payload = await response.json();
-  if (!response.ok) throw new Error(payload.error?.message || 'The data service could not complete this request.');
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    // FastAPI error shape: {detail: string} or {detail: {code, message}}.
+    const detail = payload.detail;
+    const message = typeof detail === 'string'
+      ? detail
+      : detail?.message || 'The data service could not complete this request.';
+    const err = new Error(message);
+    err.code = typeof detail === 'object' ? detail?.code : undefined;
+    err.status = response.status;
+    throw err;
+  }
   return payload;
 }
 
+// The authoritative profile lives server-side: GET /api/v1/auth/me verifies
+// the bearer token against Supabase, provisions the profile on first sign-in
+// and returns the SERVER-assigned role. No client-submitted role is ever sent.
 async function profile() {
-  const pending = sessionStorage.getItem(pendingRoleKey);
-  const response = await apiRequest('/api/me', 'POST', { role: pending === 'owner' ? 'owner' : 'entrepreneur' });
-  sessionStorage.removeItem(pendingRoleKey);
-  state.profile = response.data;
+  const response = await apiRequest('/api/v1/auth/me', 'GET');
+  assertActiveAccount(response);
+  state.profile = response;
+  state.backendAvailable = true;
+  state.error = '';
+  await syncSessionCookies();
+}
+
+// The backend's /auth/me is authoritative for role AND account_status. A
+// pending or suspended identity must never be routed into a workspace, and a
+// missing role must never silently fall back to the least-privileged one.
+function assertActiveAccount(profile) {
+  const status = String(profile?.account_status || '').toLowerCase();
+  if (status && status !== 'active') {
+    const error = new Error(
+      status === 'pending'
+        ? 'Your account is pending approval. An administrator must activate it before you can continue.'
+        : 'Your account is suspended. Please contact a Sitewise administrator.',
+    );
+    error.code = 'account_' + status;
+    throw error;
+  }
+  if (!profile?.role) {
+    throw new Error('The server did not return an authorized role. Please sign in again.');
+  }
+}
+
+function isStaffRole(role) {
+  return STAFF_ROLES.includes(role);
+}
+
+async function hasVerifiedTotpFactor() {
+  const { data } = await client.auth.mfa.listFactors().catch(() => ({ data: null }));
+  return !!data?.all?.find(f => f.type === 'totp' && f.status === 'verified');
+}
+
+// Documented Supabase AAL flow: after a password sign-in, compare the current
+// assurance level with the next required one. A verified TOTP factor makes
+// nextLevel aal2 -> the session needs the challenge before any protected work.
+async function assuranceNeedsChallenge() {
+  const { data } = await client.auth.mfa.getAuthenticatorAssuranceLevel().catch(() => ({ data: null }));
+  if (!data) return false;
+  return data.currentLevel !== data.currentLevelMaxPossible
+    && data.nextLevel === 'aal2'
+    && data.currentLevel !== 'aal2';
+}
+
+async function startChallengeForVerifiedFactor() {
+  const { data } = await client.auth.mfa.listFactors().catch(() => ({ data: null }));
+  const totp = data?.all?.find(f => f.type === 'totp' && f.status === 'verified');
+  if (!totp) return false;
+  const challenge = await client.auth.mfa.challenge({ factorId: totp.id });
+  if (challenge.error) throw challenge.error;
+  state.mfaFactorId = totp.id;
+  state.mfaChallengeId = challenge.data.id;
+  state.mfaRequired = true;
+  return true;
+}
+
+// Staff rule: agents/administrators MUST have a verified TOTP factor. A staff
+// session without one is routed to the enrollment screen instead of a
+// workspace. Entrepreneurs keep MFA optional — never forced here.
+async function staffNeedsEnrollment() {
+  if (!state.profile || !isStaffRole(state.profile.role)) return false;
+  return !(await hasVerifiedTotpFactor());
+}
+
+// --- SSR session mirror -------------------------------------------------------
+// The server renders every route before the browser bundle runs, so it cannot
+// read localStorage. Mirror the minimum the server needs (who you are + the
+// access token) into cookies the SSR pass reads back in `installServerSession`.
+// Only the public profile fields go into the session cookie - the token cookie
+// is the same bearer token the browser already sends on every API call.
+const SESSION_COOKIE = 'sitewise_session';
+const TOKEN_COOKIE = 'sitewise_token';
+
+function writeCookie(name, value) {
+  const secure = location.protocol === 'https:' ? '; Secure' : '';
+  // 8h: long enough for a working session, short enough not to linger.
+  document.cookie = `${name}=${value}; Path=/; SameSite=Lax; Max-Age=28800${secure}`;
+}
+
+function clearCookie(name) {
+  document.cookie = `${name}=; Path=/; SameSite=Lax; Max-Age=0`;
+}
+
+function encodeSession(profile) {
+  const json = JSON.stringify({
+    user_id: profile.user_id || state.user?.id || null,
+    role: profile.role || null,
+    name: profile.full_name || null,
+    email: profile.email || state.user?.email || null,
+  });
+  const bytes = new TextEncoder().encode(json);
+  let binary = '';
+  bytes.forEach(b => { binary += String.fromCharCode(b); });
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+async function syncSessionCookies() {
+  const { data } = await client.auth.getSession();
+  if (!data.session) return clearSessionCookies();
+  writeCookie(TOKEN_COOKIE, data.session.access_token);
+  if (state.profile) writeCookie(SESSION_COOKIE, encodeSession(state.profile));
+}
+
+function clearSessionCookies() {
+  clearCookie(SESSION_COOKIE);
+  clearCookie(TOKEN_COOKIE);
+}
+
+// A single document must issue at most ONE auth-driven navigation. Overlapping
+// async paths (OAuth callback completion, a SIGNED_OUT event, a re-mounted
+// @client widget calling complete() again) each used to call location.assign,
+// which made the browser start two document loads — the "page runs twice"
+// symptom. replace() also keeps transient /login and /auth/callback documents
+// out of history, so Back cannot re-execute the sign-in flow automatically.
+let navigationStarted = false;
+function navigate(url) {
+  if (navigationStarted) return;
+  navigationStarted = true;
+  location.replace(url);
 }
 
 function rememberNext() {
@@ -51,12 +210,29 @@ function rememberNext() {
 }
 
 function goHome() {
-  const role = state.profile?.role || 'entrepreneur';
-  const home = '/' + role;
+  // Never invent a role. The profile is always the backend-verified response
+  // from /api/v1/auth/me; without one there is no authorized destination.
+  const role = state.profile?.role;
+  if (!role) throw new Error('No authorized profile was returned by the server.');
+  const home = isStaffRole(role) ? (role === 'administrator' ? '/admin' : '/agent') : '/entrepreneur';
   const next = sessionStorage.getItem(nextKey);
   sessionStorage.removeItem(nextKey);
   // Never allow a return URL to bypass the user's server-assigned role.
-  location.assign(next && (next === home || next.startsWith(home + '/') || next.startsWith(home + '?')) ? next : home);
+  navigate(next && (next === home || next.startsWith(home + '/') || next.startsWith(home + '?')) ? next : home);
+}
+
+// Route after any successful sign-in: ALWAYS validate the authoritative
+// server profile first, then staff-without-a-factor go to enrollment and
+// everyone else goes to their role's workspace.
+async function finishSignIn() {
+  if (!state.profile) await profile();   // strict: surface API failures
+  assertActiveAccount(state.profile);
+  if (await staffNeedsEnrollment()) {
+    state.mfaEnrollmentRequired = true;
+    navigate('/staff/mfa');
+    return;
+  }
+  goHome();
 }
 
 // Initialize from the local API's public configuration.
@@ -67,19 +243,15 @@ function goHome() {
 // now reusable: the initial `ready` promise retries a few times, and a
 // background poller keeps trying while the API is down, then re-enables the
 // rendered buttons in place (no refresh needed).
-// Load the public Supabase configuration. Prefer the live API (so a rotated
-// key is picked up automatically); fall back to the generated static file
-// when the API process is down. Both carry only client-safe values.
+// Load the public Supabase configuration. It is served by the Jaspr server
+// itself, so it is available even when the FastAPI backend is still starting.
+// The old code probed `api + '/health'` here and then ignored the result;
+// readiness is now reported separately by probeBackend() below.
 async function loadConfig() {
-  try {
-    const response = await fetch(api + '/api/config', { signal: AbortSignal.timeout(2500) });
-    if (response.ok) {
-      const config = await response.json();
-      if (config.configured && config.supabaseUrl && config.supabasePublishableKey) return config;
-    }
-  } catch (_) { /* API down — use the static fallback below */ }
-
-  const response = await fetch(publicConfigUrl, { signal: AbortSignal.timeout(2500) });
+  const response = await fetch(publicConfigUrl, {
+    cache: 'no-store',
+    signal: AbortSignal.timeout(5000),
+  });
   if (!response.ok) throw new Error('The authentication configuration is unavailable.');
   const config = await response.json();
   if (!config.configured || !config.supabaseUrl || !config.supabasePublishableKey) {
@@ -88,43 +260,111 @@ async function loadConfig() {
   return config;
 }
 
-// Profile loading is optional for the auth UI itself. The Google button must
-// stay usable even if the data API (which owns profile roles) is down; the
-// protected workspaces still require a valid profile, so no access is granted
-// implicitly here.
+// Non-blocking liveness probe against the same-origin proxy. Exposed through
+// snapshot() so the launcher/verification tools can confirm which backend the
+// browser is actually talking to. Never gates Supabase initialization.
+async function probeBackend() {
+  try {
+    const response = await fetch(api + '/health', {
+      cache: 'no-store',
+      signal: AbortSignal.timeout(3000),
+    });
+    state.backendAvailable = response.ok;
+  } catch (_) {
+    state.backendAvailable = false;
+  }
+}
+
+// Profile loading is optional when merely restoring an existing session on a
+// page load. Sign-in / callback flows use the strict profile() instead so an
+// unreachable backend or a non-active account is reported, not papered over.
 async function tryProfile() {
   try {
     await profile();
   } catch (error) {
     state.profile = null;
     state.error = '';
+    // A suspended/pending account must not keep a stale SSR session cookie.
+    if (String(error?.code || '').startsWith('account_')) {
+      clearSessionCookies();
+      state.error = error.message;
+    }
   }
 }
 
-async function initialize() {
+// Reads the Supabase session, briefly waiting on OAuth/invite/recovery
+// callbacks while `detectSessionInUrl` exchanges the PKCE authorization code.
+// Without this the /auth/callback page can observe a null session before the
+// exchange finishes and report "no authenticated session was returned".
+async function currentSession() {
+  const hasCallbackParams = /[?&](code|access_token|refresh_token|token_hash)=/.test(location.href);
+  let lastError = null;
+  for (let attempt = 0; attempt < 10; attempt++) {
+    const { data, error } = await client.auth.getSession();
+    if (data?.session) return data.session;
+    if (error) lastError = error;
+    if (!hasCallbackParams) break;
+    await new Promise(resolve => setTimeout(resolve, 200));
+  }
+  if (lastError) throw lastError;
+  return null;
+}
+
+// Single-flight init: the retry loop AND the background recovery poller can
+// call initialize() in the same tick. Without this lock two Supabase clients
+// and two onAuthStateChange subscriptions could be created, duplicating every
+// session event (and therefore every redirect) on the page.
+let initInFlight = null;
+function initialize() {
+  if (!initInFlight) {
+    initInFlight = doInitialize().catch(error => {
+      initInFlight = null; // allow a later retry after a genuine failure
+      throw error;
+    });
+  }
+  return initInFlight;
+}
+
+async function doInitialize() {
   const config = await loadConfig();
-  if (client) return;                       // already recovered; do not create a second client
+  if (client) { await probeBackend(); return; }   // already recovered; never create a second client
   client = createClient(config.supabaseUrl, config.supabasePublishableKey, {
     auth: { flowType: 'pkce', persistSession: true, autoRefreshToken: true, detectSessionInUrl: true, storage },
   });
   state.configured = true;
   state.error = '';
   announceReady();
-  const { data, error } = await client.auth.getSession();
-  if (error) throw error;
-  if (data.session) {
-    state.user = { id: data.session.user.id, email: data.session.user.email };
-    await tryProfile(); // Backend verifies the token with Supabase, never trusts decoded claims.
-  }
+
+  // Subscribe BEFORE reading the session: the PKCE code exchange on
+  // /auth/callback emits SIGNED_IN asynchronously during client init.
   client.auth.onAuthStateChange(event => {
     if (event === 'SIGNED_OUT') {
       state.user = null;
       state.profile = null;
-      if (/^\/(admin|owner|entrepreneur)(\/|$)/.test(location.pathname)) location.assign('/login');
+      clearSessionCookies();
+      if (/^\/(admin|agent|entrepreneur|staff)(\/|$)/.test(location.pathname)) navigate('/login');
+    } else if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+      // Keep the SSR mirror in step with the rotated token; the server must
+      // never serve a page with a stale bearer token.
+      syncSessionCookies();
     }
   });
+
+  const session = await currentSession();
+  if (session) {
+    state.user = { id: session.user.id, email: session.user.email };
+    await tryProfile(); // Backend verifies the token with Supabase, never trusts decoded claims.
+  }
+  void probeBackend();
   announceReady();
 }
+
+// The DOM refresh below is idempotent and must stay re-runnable (the config
+// can recover late), but the readiness *event* must fire exactly once per
+// document. It was previously dispatched twice on every normal page load —
+// once right after client creation and once after the session read — which
+// made every listener run twice ("the page runs two times").
+let readyAnnounced = false;
 
 // Update the server-rendered `lp-*` auth card after a late recovery: remove
 // the disabled state from social buttons and replace the "not configured"
@@ -133,9 +373,13 @@ function announceReady() {
   const isSignup = location.pathname.startsWith('/signup');
   const label = isSignup ? 'Google sign-up is managed by Supabase.'
                          : 'Google sign-in is managed by Supabase. Apple sign-in is not configured.';
-  document.querySelectorAll('.lp-social').forEach(button => {
+  // Re-enable ONLY the Google social button once the auth config is loaded.
+  // Apple (data-provider="apple") is permanently disabled and must keep its own
+  // aria-label — a prior blanket `.lp-social` selector wrongly removed
+  // `disabled` from and relabelled every social control, leaking
+  // "Continue with Google" onto the disabled Apple button.
+  document.querySelectorAll('.lp-social[data-provider="google"]').forEach(button => {
     button.removeAttribute('disabled');
-    button.setAttribute('aria-label', 'Continue with Google');
   });
   document.querySelectorAll('.lp-social-note').forEach(note => { note.textContent = label; });
   document.querySelectorAll('.lp-alert.err').forEach(alert => {
@@ -143,14 +387,18 @@ function announceReady() {
       alert.classList.add('is-hidden');
     }
   });
-  window.dispatchEvent(new CustomEvent('sitewise:auth-ready'));
+  if (!readyAnnounced) {
+    readyAnnounced = true;
+    window.dispatchEvent(new CustomEvent('sitewise:auth-ready'));
+  }
 }
 
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 
 const ready = (async () => {
   let lastError;
-  // Short burst of retries covers the common case: the API is still booting.
+  // Short burst of retries covers a slow first load of the static public
+  // config. Supabase initialization itself does NOT depend on the backend.
   for (let attempt = 0; attempt < 4; attempt++) {
     try {
       await initialize();
@@ -174,61 +422,193 @@ const ready = (async () => {
       await initialize();
       clearInterval(poll);
     } catch (_) {
-      state.error = 'The local API is unavailable. Start it, then this page will enable sign-in automatically.';
+      state.error = 'The Sitewise API is unavailable. Start FYP/backend (uvicorn on port 8000); sign-in will enable automatically once it is up.';
     } finally {
       polling = false;
     }
   }, 3000);
 })();
 
+// One callback completion per document. A rejected completion clears the slot
+// so the user can genuinely retry instead of being stuck with a cached error.
+let completionInFlight = null;
+async function doComplete(next) {
+  await ready;
+  // /auth/callback is a full SSR document load. detectSessionInUrl exchanges
+  // the PKCE code during client initialization; currentSession() waits for
+  // that exchange before we decide anything.
+  const session = await currentSession();
+  if (!session) {
+    throw new Error('No authenticated session was returned. Try signing in again.');
+  }
+  state.user = { id: session.user.id, email: session.user.email };
+
+  // Recovery / invite links go to the new-password screen first.
+  if (next === '/reset-password') {
+    navigate('/reset-password');
+    return;
+  }
+
+  // Strict profile validation: the backend verifies the bearer token and
+  // returns the authoritative role + account_status. The old code invented
+  // an entrepreneur profile when the API was down, which hid the outage and
+  // skipped the pending/suspended checks. Never grant access implicitly.
+  await profile();
+  if (await staffNeedsEnrollment()) {
+    state.mfaEnrollmentRequired = true;
+    navigate('/staff/mfa');
+    return;
+  }
+  goHome();
+}
+
 window.sitewiseAuth = {
   ready,
   snapshot: () => JSON.stringify(state),
-  async google(role = 'entrepreneur', remember = true) {
+  async google(remember = true) {
     await ready;
     if (!client) throw new Error(state.error || 'Authentication is not configured.');
     rememberNext();
     localStorage.setItem(rememberKey, String(remember));
-    sessionStorage.setItem(pendingRoleKey, role === 'owner' ? 'owner' : 'entrepreneur');
+    // Role is NEVER requested here: Google sign-ups are provisioned as
+    // entrepreneurs server-side (auth.users trigger + backend /auth/me).
     const { error } = await client.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: location.origin + '/auth/callback' } });
     if (error) throw error;
   },
-  async password(email, password, remember = true) {
+  async password(email, password, remember = true, mfaCode = '') {
     await ready;
     if (!client) throw new Error(state.error || 'Authentication is not configured.');
     rememberNext();
     localStorage.setItem(rememberKey, String(remember));
-    const { data, error } = await client.auth.signInWithPassword({ email, password });
-    if (error) throw error;
-    state.user = { id: data.user.id, email: data.user.email };
-    await tryProfile();
-    goHome();
+    if (!mfaCode) {
+      const { data, error } = await client.auth.signInWithPassword({ email, password });
+      if (error) throw error;
+      if (data.session) {
+        state.user = { id: data.session.user.id, email: data.session.user.email };
+        // AAL rule: a verified TOTP factor demands the challenge first —
+        // a password login alone never opens a protected workspace.
+        if (await assuranceNeedsChallenge()) {
+          if (await startChallengeForVerifiedFactor()) {
+            throw new Error('Enter the 6-digit code from your authenticator app.');
+          }
+        }
+        // finishSignIn() validates the authoritative server profile; a
+        // pending/suspended account or an unreachable backend fails loudly.
+        await finishSignIn();
+        return;
+      }
+      // No session returned: either a TOTP MFA challenge is pending or the
+      // account still needs email confirmation. Distinguish by listing factors.
+      const { data: factorsData } = await client.auth.mfa.listFactors().catch(() => ({ data: null }));
+      const totp = factorsData?.all?.find(f => f.type === 'totp' && f.status === 'verified');
+      if (totp) {
+        const challenge = await client.auth.mfa.challenge({ factorId: totp.id });
+        if (challenge.error) throw challenge.error;
+        state.mfaFactorId = totp.id;
+        state.mfaChallengeId = challenge.data.id;
+        state.mfaRequired = true;
+        throw new Error('Enter the 6-digit code from your authenticator app.');
+      }
+      throw new Error('Check your email to confirm your account, then sign in.');
+    }
+    // Completing an MFA challenge with the supplied code.
+    if (!state.mfaFactorId || !state.mfaChallengeId) {
+      throw new Error('Your sign-in session expired. Try again.');
+    }
+    const verify = await client.auth.mfa.verify({
+      factorId: state.mfaFactorId,
+      challengeId: state.mfaChallengeId,
+      code: mfaCode,
+    });
+    if (verify.error) throw verify.error;
+    const { data: sess } = await client.auth.getSession();
+    if (!sess.session) throw new Error('Could not complete sign-in. Try again.');
+    state.user = { id: sess.session.user.id, email: sess.session.user.email };
+    state.mfaRequired = false;
+    state.mfaFactorId = null;
+    state.mfaChallengeId = null;
+    await finishSignIn();
   },
-  async signup(email, password, name, role) {
+  // --- Staff TOTP enrollment ("Secure Your Staff Account") -----------------
+  // Native Supabase enrollment: the QR + secret come from Supabase, the
+  // factor is only usable after a verified challenge. No custom storage.
+  async mfaEnrollStart() {
+    await ready;
+    if (!client) throw new Error(state.error || 'Authentication is not configured.');
+    const { data, error } = await client.auth.mfa.enroll({
+      factorType: 'totp',
+      friendlyName: 'Sitewise Staff',
+    });
+    if (error) throw error;
+    state.mfaEnrollFactorId = data.id;
+    state.mfaEnrollQr = data.totp?.qr_code || null;
+    state.mfaEnrollSecret = data.totp?.secret || null;
+    return { qr: state.mfaEnrollQr, secret: state.mfaEnrollSecret };
+  },
+  async mfaEnrollVerify(code) {
+    await ready;
+    if (!client) throw new Error(state.error || 'Authentication is not configured.');
+    if (!state.mfaEnrollFactorId) throw new Error('Start the enrollment again.');
+    const challenge = await client.auth.mfa.challenge({ factorId: state.mfaEnrollFactorId });
+    if (challenge.error) throw challenge.error;
+    const verify = await client.auth.mfa.verify({
+      factorId: state.mfaEnrollFactorId,
+      challengeId: challenge.data.id,
+      code,
+    });
+    if (verify.error) throw verify.error;
+    // Only a verified factor satisfies the staff MFA requirement.
+    state.mfaEnrollmentRequired = false;
+    state.mfaEnrollFactorId = null;
+    state.mfaEnrollQr = null;
+    state.mfaEnrollSecret = null;
+    await finishSignIn();
+  },
+  // --- Password recovery (both portals) -------------------------------------
+  // Native Supabase recovery email; the link lands on /auth/callback with a
+  // recovery session and the app routes to /reset-password. No custom token.
+  async resetPassword(email) {
     await ready;
     if (!client) throw new Error(state.error || 'Authentication is not configured.');
     localStorage.setItem(rememberKey, 'true');
-    sessionStorage.setItem(pendingRoleKey, role === 'owner' ? 'owner' : 'entrepreneur');
+    const { error } = await client.auth.resetPasswordForEmail(email, {
+      redirectTo: location.origin + '/auth/callback?next=/reset-password',
+    });
+    if (error) throw error;
+    return 'Check your email for the password reset link.';
+  },
+  async updatePassword(password) {
+    await ready;
+    if (!client) throw new Error(state.error || 'Authentication is not configured.');
+    const { error } = await client.auth.updateUser({ password });
+    if (error) throw error;
+    await finishSignIn();
+  },
+  async signup(email, password, name) {
+    await ready;
+    if (!client) throw new Error(state.error || 'Authentication is not configured.');
+    localStorage.setItem(rememberKey, 'true');
+    // No role is submitted: public registration always provisions the
+    // permitted public-account role (entrepreneur) on the server.
     const { data, error } = await client.auth.signUp({ email, password, options: {
       data: { full_name: name }, emailRedirectTo: location.origin + '/auth/callback',
     } });
     if (error) throw error;
-    if (data.session) { await tryProfile(); goHome(); }
+    if (data.session) await finishSignIn();
     return 'Check your email to confirm your account, then sign in.';
   },
-  async complete() {
-    await ready;
-    if (state.profile) { goHome(); return; }
-    // The Supabase session is valid but the profile could not be loaded — the
-    // usual cause is the local data API being down. Fall back to the
-    // least-privileged default workspace rather than trapping the user; the
-    // API still gates every real data request.
-    if (state.user) {
-      state.profile = { role: 'entrepreneur', email: state.user.email, source: 'supabase-fallback' };
-      goHome();
-      return;
+  async complete(next) {
+    // AuthCallbackPage (and StaffMfaPage, when the factor already exists) both
+    // reach this method. Hydration can also re-mount a @client widget. Memoize
+    // the first call so the PKCE exchange, profile fetch and final redirect run
+    // exactly once per document instead of twice.
+    if (!completionInFlight) {
+      completionInFlight = doComplete(next).catch(error => {
+        completionInFlight = null; // allow a genuine retry after a failure
+        throw error;
+      });
     }
-    throw new Error(state.error || 'No authenticated session was returned. Try signing in again.');
+    return completionInFlight;
   },
   async signout() {
     await ready;
@@ -236,11 +616,15 @@ window.sitewiseAuth = {
       const { error } = await client.auth.signOut();
       if (error) throw error;
     }
-    location.assign('/login');
+    state.user = null;
+    state.profile = null;
+    state.error = '';
+    clearSessionCookies();
+    navigate('/login');
   },
   async request(path, method, body) {
     await ready;
-    if (!client) throw new Error(state.error || 'The local API is unavailable.');
+    if (!client) throw new Error(state.error || 'The Sitewise API is unavailable.');
     return JSON.stringify(await apiRequest(path, method, body ? JSON.parse(body) : null));
   },
 };

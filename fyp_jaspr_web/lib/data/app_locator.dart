@@ -1,6 +1,8 @@
 import 'package:shared_logic/shared_logic.dart';
 import 'api_property_repository.dart';
 import 'auth_service.dart';
+import 'ui_store.dart';
+import 'workspaces.dart';
 
 /// Web composition root — the Jaspr counterpart to the Flutter app's
 /// `ServiceLocator`.
@@ -50,8 +52,37 @@ abstract final class AppLocator {
   );
 
   // --- Session state ---------------------------------------------------------
-  /// Saved/compare selections and role. Client-side singleton.
-  static final AppCubit appCubit = AppCubit();
+  /// Saved/compare selections and role. One per document.
+  ///
+  /// Each navigation is a fresh document now, so this singleton is rebuilt per
+  /// request/page load; [installUiState] seeds it from the selection cookie and
+  /// every emit writes back. The role still comes from the server-side profile.
+  static AppCubit appCubit = AppCubit();
+
+  /// Seeds the saved/compare sets and starts mirroring them into the cookie.
+  ///
+  /// The [cookies] argument is the request's cookie map on the server; the
+  /// browser implementation ignores it and reads `document.cookie` instead.
+  /// Called once per render, before the router builds.
+  static void installUiState([Map<String, String> cookies = const {}]) {
+    final stored = UiStore.read(cookies);
+    appCubit = AppCubit(
+      AppState(saved: stored.saved, compared: stored.compared),
+    );
+    Workspaces.seed(stored.roles);
+    appCubit.stream.listen((_) => persistUi());
+  }
+
+  /// Writes the current selections and demo role grants back to the cookie.
+  static void persistUi() {
+    UiStore.write((
+      saved: appCubit.state.saved,
+      compared: appCubit.state.compared,
+      roles: Workspaces.granted,
+    ));
+  }
+  /// Demo role grants as role names — the shape the cookie stores.
+  static Set<String> get grantedRoles => Workspaces.granted;
 
   // --- Per-page cubits (mirroring the mobile app's per-page lifetimes) -------
   static EntrepreneurCubit newEntrepreneurCubit() => EntrepreneurCubit(

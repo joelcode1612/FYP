@@ -25,6 +25,7 @@ import '../../layouts/app_layout.dart';
 /// ```
 ///
 /// Every count is read from the in-memory record store; nothing is fabricated.
+@client
 class DashboardPage extends StatefulComponent {
   const DashboardPage({super.key});
 

@@ -13,6 +13,7 @@ import '../../layouts/app_layout.dart';
 /// version does the same via [AppLocator.userRepo], and treats a null result
 /// (or an empty `?id=`) as the guide's "record not found" empty state instead
 /// of an endless loading card.
+@client
 class UserDetailPage extends StatelessComponent {
   final String id;
 

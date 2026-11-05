@@ -79,8 +79,15 @@ def make_token(
     omit: tuple[str, ...] = (),
     key=None,
     headers: dict | None = None,
+    aal: str | None = None,
+    amr: list | None = None,
 ) -> str:
-    """Craft a token exactly like Supabase would (or unlike it, for negatives)."""
+    """Craft a token exactly like Supabase would (or unlike it, for negatives).
+
+    ``aal`` mirrors Supabase's authentication-assurance claim (``aal1`` =
+    password only, ``aal2`` = password + verified MFA factor). Omitted for
+    entrepreneur flows; staff flows pass it explicitly.
+    """
     now = issued_at or datetime.now(timezone.utc)
     payload = {
         "sub": sub or str(uuid.uuid4()),
@@ -96,6 +103,10 @@ def make_token(
         "app_metadata": {"provider": "email", "providers": ["email"]},
         "user_metadata": role_claims or {"full_name": "Test User"},
     }
+    if aal:
+        payload["aal"] = aal
+    if amr is not None:
+        payload["amr"] = amr
     for field in omit:
         payload.pop(field, None)
     if not_before:

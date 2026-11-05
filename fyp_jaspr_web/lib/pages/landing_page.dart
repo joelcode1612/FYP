@@ -26,9 +26,11 @@ import '../components/ui.dart';
 /// gauge are illustrative (the dataset is sample EP-01037 etc.), exactly as in
 /// the source.
 ///
-/// Deliberately *not* `@client`: `SitewiseApp` is the client entry point for
-/// every route, and Jaspr asserts that no client anchor nests inside another
-/// one (`component_anchors.dart`), which would break hydration of the page.
+/// `@client` so the section state above hydrates in the browser; the markup it
+/// builds is still server-rendered, so the page reads and indexes without
+/// JavaScript. Nothing inside it is `@client` — Jaspr forbids nested anchors
+/// (`component_anchors.dart`).
+@client
 class LandingPage extends StatefulComponent {
   const LandingPage({super.key});
 

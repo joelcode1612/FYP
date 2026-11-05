@@ -3,7 +3,7 @@
 // disabled social providers, forgot/signup routes, remember checkbox.
 const { chromium } = require('playwright-core');
 const EXE = 'C:/Users/Lenovo/AppData/Local/ms-playwright/chromium-1248/chrome-win64/chrome.exe';
-const BASE = 'http://127.0.0.1:8141';
+const BASE = process.env.BASE || 'http://127.0.0.1:8141';
 
 const log = (label, v) => console.log(`  ${label}: ${v}`);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));

@@ -21,6 +21,7 @@ import '../../layouts/app_layout.dart';
 /// View status / Edit / 360° tour — not as the browse grid used on Explore.
 /// The previous version reused the 3-column `.pgrid` card, so the owner had no
 /// per-listing actions at all.
+@client
 class PropertiesPage extends StatefulComponent {
   const PropertiesPage({super.key});
 

@@ -7,6 +7,12 @@ Auth errors: `401` (missing/invalid/expired token), `403` (forbidden or
 suspended), `404` (hidden/absent), `503` (auth/analytics service unavailable),
 `410` (disabled legacy endpoint). All errors: `{"detail": "..."}`.
 
+## Catalogue (imported workbook — read-only)
+
+| Method | Path | Auth | Notes |
+|---|---|---|---|
+| GET | `/api/v1/catalog/properties` | Bearer | Paginated (`limit≤200`, `offset`). Returns `{data: [...], meta: {total, limit, offset}}` from `sitewise_app.properties` in the analytics DB. Replaces the old `FYP/test` Express route `/api/catalog/properties`. |
+
 ## Auth
 
 | Method | Path | Auth | Notes |

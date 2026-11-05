@@ -12,6 +12,7 @@ import '../../layouts/app_layout.dart';
 /// button sets a success flag and renders an inline success card instead
 /// (guide pattern — no auto-navigation). The Flutter `TextField`s become
 /// labelled `<input>`s.
+@client
 class ProfilePage extends StatefulComponent {
   const ProfilePage({super.key});
 

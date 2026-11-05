@@ -12,6 +12,7 @@ import '../../layouts/app_layout.dart';
 /// `SitewiseMapPanel` (a stylised painter, not a real map SDK); here the map
 /// area is a static, clearly-labelled placeholder built from the existing
 /// `visual visual--map` classes, with the pin coordinates kept visible.
+@client
 class ListingDetailPage extends StatelessComponent {
   final String id;
 

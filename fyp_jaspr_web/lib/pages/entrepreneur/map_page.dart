@@ -23,6 +23,7 @@ import '../../layouts/app_layout.dart';
 /// stylised Klang Valley projection the Explore page uses. Layer toggles are
 /// disabled and the page says why; the analysis column renders every aggregate
 /// figure the service actually returns.
+@client
 class MapPage extends StatefulComponent {
   /// A property chosen from the `?id=` query param, if any.
   final String? initialId;

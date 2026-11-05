@@ -9,6 +9,14 @@ class NotFoundError(SiteWiseError):
     status_code = 404
 
 
+class ConflictError(SiteWiseError):
+    """The request conflicts with existing state (e.g. the agent email is
+    already a registered Supabase identity and the caller has not explicitly
+    authorised upgrading that account). Maps to 409."""
+
+    status_code = 409
+
+
 # ---------------------------------------------------------------------------
 # Authentication / authorization errors.
 #

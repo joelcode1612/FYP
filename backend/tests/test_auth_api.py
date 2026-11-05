@@ -37,7 +37,7 @@ def test_auth_me_requires_token(client):
 def test_auth_me_provisions_profile_once(client, identity, cleanup_users):
     payload = identity["profile"]
     assert payload["email"].endswith(TEST_EMAIL_DOMAIN)
-    assert payload["role"] == "user"  # never privileged by default
+    assert payload["role"] == "entrepreneur"  # never privileged by default
     assert payload["account_status"] == "active"
     assert payload["email_verified"] is True
 
@@ -70,7 +70,7 @@ def test_users_me_status(client, identity):
     r = client.get("/api/v1/users/me/status", headers=auth(identity["token"]))
     assert r.status_code == 200
     body = r.json()
-    assert body["role"] == "user"
+    assert body["role"] == "entrepreneur"
     assert body["account_status"] == "active"
 
 
@@ -90,12 +90,12 @@ def test_patch_own_profile_rejects_role_change(client, identity):
     r = client.patch(
         "/api/v1/users/me",
         headers=auth(identity["token"]),
-        json={"role": "administrator"},
+        json={"role": "admin"},
     )
     assert r.status_code == 403
     # And it really did not change.
     r2 = client.get("/api/v1/users/me", headers=auth(identity["token"]))
-    assert r2.json()["role"] == "user"
+    assert r2.json()["role"] == "entrepreneur"
 
 
 def test_patch_own_profile_rejects_status_and_verification_change(client, identity):
@@ -113,7 +113,7 @@ def test_patch_rejects_protected_fields_even_mixed_with_valid_ones(client, ident
     r = client.patch(
         "/api/v1/users/me",
         headers=auth(identity["token"]),
-        json={"full_name": "Still Applied?", "role": "administrator"},
+        json={"full_name": "Still Applied?", "role": "admin"},
     )
     assert r.status_code == 403
     r2 = client.get("/api/v1/users/me", headers=auth(identity["token"]))
@@ -177,7 +177,18 @@ def test_saved_property_ownership(client, identity, cleanup_users):
 # ------------------------------------------------- property management RBAC
 
 
-def test_property_creation_requires_owner_role(client, identity):
+def test_property_creation_requires_owner_role(client, identity, cleanup_users):
+    """Entrepreneurs own properties (the legacy property_owner role folded
+    into entrepreneur), so the denial case is now the AGENT role."""
+    from sqlmodel import Session
+
+    from sitewise.db.session import engine
+    from sitewise.repositories.user_repository import UserRepository
+
+    sub = uuid.UUID(identity["sub"])
+    with Session(engine) as session:
+        UserRepository(session).update(sub, {"role": "agent"})
+
     r = client.post(
         "/api/v1/properties/",
         headers=auth(identity["token"]),

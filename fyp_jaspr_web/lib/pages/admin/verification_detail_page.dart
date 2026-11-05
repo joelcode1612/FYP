@@ -17,6 +17,7 @@ import '../../layouts/app_layout.dart';
 /// state for the confirm step and the post-action success card — the Flutter
 /// SnackBar + `pop` becomes an inline success card with a link back to the
 /// queue (no auto-navigation).
+@client
 class VerificationDetailPage extends StatefulComponent {
   final String id;
 

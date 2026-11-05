@@ -106,6 +106,11 @@ List<WebDestination> webDestinationsFor(AppRole role) => switch (role) {
       label: 'Saved',
     ),
     WebDestination(
+      route: '/entrepreneur/my-properties',
+      icon: 'storefront',
+      label: 'My Properties',
+    ),
+    WebDestination(
       route: '/entrepreneur/profile',
       icon: 'person',
       label: 'Profile',
@@ -125,6 +130,8 @@ String parentShellRoute(String route) {
     '/entrepreneur/tour': '/entrepreneur/explore',
     '/entrepreneur/report': '/entrepreneur/explore',
     '/entrepreneur/explanation': '/entrepreneur/recommendations',
+    '/entrepreneur/my-properties': '/entrepreneur/my-properties',
+    '/entrepreneur/add-property': '/entrepreneur/my-properties',
     '/admin/user-detail': '/admin/users',
     '/admin/verification-detail': '/admin/verification',
     '/admin/listing-detail': '/admin/listings',

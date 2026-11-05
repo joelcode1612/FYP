@@ -19,6 +19,7 @@ import '../../layouts/app_layout.dart';
 /// The previous version was one centred card with two unlabelled inputs and no
 /// link to the preferences that actually drive ranking, so the account page gave
 /// the user no route to the settings it referred to.
+@client
 class ProfilePage extends StatefulComponent {
   const ProfilePage({super.key});
 

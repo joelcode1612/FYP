@@ -19,6 +19,7 @@ import '../../layouts/app_layout.dart';
 /// placeholder with the pin coordinates, and the post-submit SnackBar + pop
 /// becomes an inline success card with a link back to the list — the page
 /// itself stays put, which is the web-native equivalent.
+@client
 class PropertyDetailPage extends StatefulComponent {
   final String id;
 

@@ -22,6 +22,7 @@ import '../../layouts/app_layout.dart';
 /// `editingId` arrives as the `?id=` query param (nullable — the add route
 /// omits it). When set, the existing property is loaded and the form is
 /// prefilled, mirroring the Flutter edit flow's argument-driven prefill.
+@client
 class AddPropertyPage extends StatefulComponent {
   final String? editingId;
 

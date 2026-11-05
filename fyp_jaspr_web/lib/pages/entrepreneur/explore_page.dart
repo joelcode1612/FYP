@@ -34,6 +34,7 @@ import '../../layouts/app_layout.dart';
 ///    panel the mobile app uses; only the interaction is real;
 ///  * zoom is **real** — it scales the lat/lng projection, so pins genuinely
 ///    move and clip.
+@client
 class ExplorePage extends StatefulComponent {
   /// Open scrolled to the map section (route passes `id == 'map'`).
   final bool startInMap;
@@ -44,8 +45,12 @@ class ExplorePage extends StatefulComponent {
   State<ExplorePage> createState() => _ExplorePageState();
 }
 
-class _ExplorePageState extends State<ExplorePage> {
-  late final EntrepreneurCubit vm;
+class _ExplorePageState extends State<ExplorePage> with PreloadStateMixin<ExplorePage> {
+  EntrepreneurCubit? _vm;
+
+  /// Created on first use so the server preload and the browser share one
+  /// cubit instead of fetching the same listings twice.
+  EntrepreneurCubit get vm => _vm ??= AppLocator.newEntrepreneurCubit();
 
   /// The structured filter, applied on top of the cubit's query results.
   PropertyFilter filter = PropertyFilter.empty;
@@ -60,15 +65,18 @@ class _ExplorePageState extends State<ExplorePage> {
   static const _zoomLevels = [1, 2, 4];
 
   @override
+  Future<void> preloadState() => vm.loadExplore();
+
+  @override
   void initState() {
     super.initState();
-    vm = AppLocator.newEntrepreneurCubit();
-    unawaited(vm.loadExplore());
+    if (_vm == null) unawaited(vm.loadExplore());
   }
 
   @override
   void dispose() {
-    unawaited(vm.close());
+    final cubit = _vm;
+    if (cubit != null) unawaited(cubit.close());
     super.dispose();
   }
 

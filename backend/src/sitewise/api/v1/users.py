@@ -13,6 +13,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlmodel import Session
 
 from sitewise.core.exceptions import ForbiddenActionError
+from sitewise.core.supabase_admin import get_admin_service
 from sitewise.db.session import get_db
 from sitewise.dependencies import (
     ActiveUser,
@@ -115,22 +116,75 @@ def admin_update_user(
     user_id: uuid.UUID,
     data: dict,
     session: Session = Depends(get_db),
-    _: AuthenticatedUser = Depends(require_admin),
+    current: AuthenticatedUser = Depends(require_admin),
 ) -> dict:
     """Administrative update (role / account status management).
 
     Administrator-submitted changes skip the self-service field filter but
-    are still validated against the domain role/status vocabularies.
+    are still validated against the domain role/status vocabularies. Every
+    role or status change is (a) written to the authoritative Supabase
+    ``public.users`` row when the admin adapter is configured and (b)
+    recorded in ``role_change_audit`` - audit events are server-generated and
+    cannot be created by ordinary users.
     """
+    from sitewise.core.supabase_admin import SupabaseAdminError
     from sitewise.domain import rbac
 
     if "role" in data and not rbac.is_valid_role(data["role"]):
         raise HTTPException(status_code=422, detail="Unknown role value.")
     if "account_status" in data and not rbac.is_valid_status(data["account_status"]):
         raise HTTPException(status_code=422, detail="Unknown account status value.")
-    updated = UserService(session).update_user(user_id, data)
+
+    service = UserService(session)
+    target = service.get_user(user_id)
+    if not target:
+        raise HTTPException(status_code=404, detail="User not found")
+    previous_role = rbac.canonical_role(target.role)
+    previous_status = target.account_status
+
+    # Canonicalise any legacy role value before writing (new rows never use
+    # legacy values).
+    write_data = dict(data)
+    if "role" in write_data:
+        write_data["role"] = rbac.canonical_role(write_data["role"])
+
+    # Authoritative identity row in the Supabase identity database (best
+    # effort: when the admin adapter is not configured the local mirror is
+    # still updated, and the audit record states identity-sync was skipped).
+    identity_synced = False
+    identity_error: str | None = None
+    try:
+        get_admin_service().update_identity_profile(user_id, write_data)
+        identity_synced = True
+    except SupabaseAdminError as exc:
+        identity_error = str(exc)
+    except Exception:  # adapter not configured (503 condition) - keep local
+        identity_error = "Supabase admin adapter not configured."
+
+    updated = service.update_user(user_id, write_data)
     if not updated:
         raise HTTPException(status_code=404, detail="User not found")
+
+    new_role = rbac.canonical_role(updated.role)
+    new_status = updated.account_status
+    if new_role != previous_role or new_status != previous_status:
+        action = "role.changed" if new_role != previous_role else "status.changed"
+        try:
+            get_admin_service().insert_role_audit(
+                affected_user_id=user_id,
+                affected_email=updated.email,
+                performed_by_user_id=current.user_id,
+                performed_by_email=current.email,
+                action=action,
+                previous_role=previous_role,
+                new_role=new_role,
+                previous_status=previous_status,
+                new_status=new_status,
+                details={"identity_synced": identity_synced, **({"identity_error": identity_error} if identity_error else {})},
+            )
+        except Exception:  # audit must not mask the operation result
+            pass
+
     return _profile_payload(updated)
 
 

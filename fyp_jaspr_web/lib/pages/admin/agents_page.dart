@@ -25,6 +25,7 @@ import '../../layouts/app_layout.dart';
 /// exist, and `test/app-api.js` serves six routes, none of which can create an
 /// agent. The roster row below is the demonstration identity, and the invite
 /// action composes the request without sending it.
+@client
 class AdminAgentsPage extends StatefulComponent {
   const AdminAgentsPage({super.key});
 

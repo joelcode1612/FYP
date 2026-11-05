@@ -1,10 +1,21 @@
 <#
 .SYNOPSIS
-    Starts the Jaspr dev server, clearing stale instances and the proxy trap.
+    Starts the Jaspr SSR dev server against the intended FastAPI backend,
+    clearing stale instances and the proxy trap.
 
 .DESCRIPTION
-    Two separate failure modes stop `jaspr serve` on this machine. Both are
-    handled here so the command just works.
+    Service ports for a normal local run:
+      8090  Jaspr SSR frontend (this script) - HTML, CSS, JS, /api/* proxy
+      8000  FYP/backend FastAPI API  - GET /health, /api/v1/*
+      5567  Jaspr's internal dev/build proxy (framework-managed)
+      8181  Dart VM service (dev only; unrelated to API authentication)
+
+    The backend is FYP/backend (Python/FastAPI), NOT FYP/test (the old Express
+    research server on 3001). The frontend never needs to know port 8000: the
+    SSR process proxies same-origin /api/* to it.
+
+    Two separate failure modes used to stop `jaspr serve` on this machine. Both
+    are handled here so the command just works.
 
     ## 1. Stale instance holding the port
     `jaspr serve` fails with `errno 10048 (EADDRINUSE)` when a previous run is
@@ -42,15 +53,15 @@
     reported rather than killed.
 
 .EXAMPLE
-    powershell -ExecutionPolicy Bypass -File .\serve.ps1
+    .\serve              (serve.cmd invokes this script with Bypass)
 
 .EXAMPLE
     # Use a different port for this run
-    .\serve.ps1 -Port 8091
+    .\serve -Port 8091
 
 .EXAMPLE
     # Report what would be killed, then exit without starting the server
-    .\serve.ps1 -CheckOnly
+    .\serve -CheckOnly
 #>
 
 [CmdletBinding()]
@@ -257,38 +268,101 @@ if ($CheckOnly) {
     exit 0
 }
 
-# --- Ensure the auth/data API is running ------------------------------------
-# The signup/login pages need the Express API (port 3001) for profile sync and
-# app data. When it is down they used to disable Google sign-in and show
-# "not configured"; the auth glue now recovers on its own, but data pages
-# still need the process. Start it once, in its own window, when missing.
-$apiPort = 3001
-$apiUp = Get-NetTCPConnection -LocalPort $apiPort -State Listen -ErrorAction SilentlyContinue
-if ($apiUp) {
-    Write-Ok "auth/data API already running on port $apiPort"
+# --- Ensure the intended FastAPI backend is reachable ----------------------
+# FYP/backend (uvicorn on 8000) owns token verification, profiles and the
+# property catalogue. The legacy Express research API in FYP/test (port 3001)
+# is NEVER started here. A health check avoids spawning duplicate processes.
+$apiPort = if ($env:SITEWISE_API_PORT) { [int]$env:SITEWISE_API_PORT } else { 8000 }
+if (-not $env:SITEWISE_API_BASE) { $env:SITEWISE_API_BASE = "http://127.0.0.1:$apiPort" }
+# Empty = the browser uses same-origin /api/* and the SSR server proxies it.
+if ($null -eq $env:SITEWISE_PUBLIC_API_BASE) { $env:SITEWISE_PUBLIC_API_BASE = '' }
+
+function Test-BackendHealth([string]$url) {
+    try {
+        $req = [System.Net.HttpWebRequest]::Create($url)
+        $req.Method = 'GET'
+        $req.Timeout = 2500
+        $req.ReadWriteTimeout = 2500
+        $req.Proxy = $null
+        $resp = $req.GetResponse()
+        try { return ($resp.StatusCode -eq [System.Net.HttpStatusCode]::OK) }
+        finally { $resp.Close() }
+    } catch { return $false }
+}
+
+$backendHealth = "http://127.0.0.1:$apiPort/health"
+if (Test-BackendHealth $backendHealth) {
+    Write-Ok "FastAPI backend healthy at $backendHealth (FYP/backend)"
 } else {
-    $apiScript = Join-Path (Split-Path -Parent $PSScriptRoot) 'test\start-api.ps1'
-    if (Test-Path $apiScript) {
-        Write-Step "API not running. Opening it in a separate window (port $apiPort)..."
-        Start-Process -FilePath 'powershell.exe' -ArgumentList @(
-            '-NoExit',
-            '-ExecutionPolicy', 'Bypass',
-            '-File', ('"{0}"' -f $apiScript)
-        ) -WorkingDirectory (Split-Path -Parent $apiScript)
-        # Give the Node process a moment to bind; do not fail the web start if it is slow.
-        for ($i = 0; $i -lt 5; $i++) {
-            Start-Sleep -Milliseconds 800
-            if (Get-NetTCPConnection -LocalPort $apiPort -State Listen -ErrorAction SilentlyContinue) { break }
-        }
-        if (Get-NetTCPConnection -LocalPort $apiPort -State Listen -ErrorAction SilentlyContinue) {
-            Write-Ok "auth/data API started on port $apiPort"
-        } else {
-            Write-Warn2 "API is still starting in its own window; auth will recover automatically once it binds."
-        }
+    $occupied = $false
+    try { $occupied = [bool](Get-NetTCPConnection -LocalPort $apiPort -State Listen -ErrorAction SilentlyContinue) } catch { }
+    if ($occupied) {
+        Write-Err2 "Port $apiPort is occupied but /health did not answer. Not starting a duplicate process."
+        Write-Err2 'Expected FYP/backend (uvicorn sitewise.main:app). Inspect that window or run:'
+        Write-Err2 '  netstat -ano | findstr :8000'
     } else {
-        Write-Warn2 "API starter not found at $apiScript - sign-in will work, but data pages need the API."
+        $backendDir = Join-Path (Split-Path -Parent $PSScriptRoot) 'backend'
+        $starter = Join-Path $backendDir 'start-api.ps1'
+        if (-not (Test-Path $starter)) {
+            Write-Err2 "Backend starter missing: $starter"
+            Write-Err2 'Start it manually: cd FYP\backend; .\start-api.ps1'
+        } else {
+            Write-Step "FastAPI backend not running. Starting FYP/backend in its own window (port $apiPort)..."
+            Start-Process -FilePath 'powershell.exe' -ArgumentList @(
+                '-NoExit', '-ExecutionPolicy', 'Bypass',
+                '-File', ('"{0}"' -f $starter), '-Port', $apiPort
+            ) -WorkingDirectory $backendDir | Out-Null
+            $healthy = $false
+            for ($i = 0; $i -lt 30; $i++) {
+                Start-Sleep -Milliseconds 600
+                if (Test-BackendHealth $backendHealth) { $healthy = $true; break }
+            }
+            if ($healthy) {
+                Write-Ok "FastAPI backend is up at $backendHealth"
+            } else {
+                Write-Err2 'Backend did not become healthy within 18 seconds.'
+                Write-Err2 'Check the backend window. Common causes:'
+                Write-Err2 '  - missing FYP/backend/.env (copy .env.example)'
+                Write-Err2 '  - PostgreSQL not running on localhost:5432'
+                Write-Err2 '  - missing venv: cd FYP\backend; .\.venv\Scripts\pip install -e .'
+                Write-Err2 'The web server will still start; API-backed pages will report errors.'
+            }
+        }
     }
 }
+
+# --- Generated public config + auth bundle ----------------------------------
+# auth-config.json is generated from FYP/backend/.env and contains ONLY the
+# public Supabase URL + publishable key. auth_bundle.js is built from the
+# source tool/auth_client.js (never patch the minified output by hand).
+$toolDir = Join-Path $PSScriptRoot 'tool'
+$configFile = Join-Path $PSScriptRoot 'web\auth-config.json'
+$bundleFile = Join-Path $PSScriptRoot 'web\auth_bundle.js'
+Push-Location $toolDir
+try {
+    $genScript = Join-Path $toolDir 'gen_auth_config.js'
+    $needConfig = $true
+    if (Test-Path $configFile) {
+        $needConfig = (Get-Item $genScript).LastWriteTime -gt (Get-Item $configFile).LastWriteTime
+    }
+    if ($needConfig) {
+        Write-Step '  BUILD  generating web/auth-config.json from FYP/backend/.env'
+        & npm.cmd run gen-auth-config
+        if ($LASTEXITCODE -ne 0) { Write-Err2 'gen-auth-config failed; sign-in will not be configured.' }
+    }
+    $authSource = Join-Path $toolDir 'auth_client.js'
+    $needBundle = $true
+    if (Test-Path $bundleFile) {
+        $needBundle = (Get-Item $authSource).LastWriteTime -gt (Get-Item $bundleFile).LastWriteTime
+    }
+    if ($needBundle) {
+        Write-Step '  BUILD  regenerating web/auth_bundle.js from tool/auth_client.js'
+        & npm.cmd run build-auth
+        if ($LASTEXITCODE -ne 0) { Write-Err2 'build-auth failed; the existing bundle will be used.' }
+    }
+} finally { Pop-Location }
+
+Write-Step "  API    : $env:SITEWISE_API_BASE (browser uses same-origin /api/*)"
 
 # --- Start ------------------------------------------------------------------
 

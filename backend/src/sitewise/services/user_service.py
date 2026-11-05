@@ -75,3 +75,51 @@ class UserService:
                 "These profile fields cannot be changed: " + ", ".join(sorted(attempted_protected))
             )
         return self.repo.update(user_id, editable)
+
+    def ensure_staff_profile(
+        self,
+        *,
+        user_id: uuid.UUID,
+        email: str,
+        full_name: str | None,
+        phone_number: str | None,
+        role: str,
+        account_status: str,
+    ) -> User:
+        """Create-or-update the local enforcement mirror for a provisioned
+        staff account (trusted backend operation, never client-driven).
+
+        The authoritative role/status live in the Supabase identity row; this
+        mirror is what the auth dependencies read on every request.
+
+        Orphan reconciliation: if a mirror row exists with the same email but
+        a stale Supabase UUID (identity deleted and recreated in Supabase),
+        the row is re-keyed to the new UUID so the unique-email constraint is
+        satisfied and account history is preserved.
+        """
+        existing = self.repo.get_by_id(user_id)
+        data = {
+            "role": rbac.canonical_role(role) or role,
+            "account_status": account_status,
+        }
+        if full_name is not None:
+            data["full_name"] = full_name
+        if phone_number is not None:
+            data["phone_number"] = phone_number
+        if existing is not None:
+            updated = self.repo.update(user_id, data)
+            assert updated is not None
+            return updated
+        orphan = self.repo.get_by_email(email)
+        if orphan is not None and orphan.user_id != user_id:
+            self.repo.rekey(orphan.user_id, user_id)
+        user = User(
+            user_id=user_id,
+            email=email,
+            full_name=full_name,
+            phone_number=phone_number,
+            role=data["role"],
+            account_status=account_status,
+            email_verified=False,
+        )
+        return self.repo.create(user)

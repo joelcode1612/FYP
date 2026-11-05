@@ -21,6 +21,7 @@ import '../../layouts/app_layout.dart';
 /// The previous version was one centred `.card` with `divider`s — a document
 /// dump with no grouping, so a supporting factor and an unknown looked the same.
 /// The source separates them into three graded columns of evidence.
+@client
 class ReportPage extends StatelessComponent {
   /// The property id from the `?id=` query param.
   final String id;

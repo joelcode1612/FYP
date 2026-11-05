@@ -20,6 +20,7 @@ import '../../layouts/app_layout.dart';
 /// matching the `AppLocator.tourService` note. What is real is the tour's
 /// metadata, the property summary and the honesty notice — the source says the
 /// panorama is synthetic, and so does this page.
+@client
 class TourPage extends StatelessComponent {
   /// The property id from the `?id=` query param.
   final String id;

@@ -15,6 +15,7 @@ import '../../layouts/app_layout.dart';
 /// has no authorised write path — `ApiPropertyRepository.updateProperty`
 /// throws, and assignment is not a server concept — so this view shows the
 /// record and states what the agent can and cannot do with it.
+@client
 class AgentPropertyDetailPage extends StatefulComponent {
   final String id;
 

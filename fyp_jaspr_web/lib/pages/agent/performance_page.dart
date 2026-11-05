@@ -17,6 +17,7 @@ import '../../layouts/app_layout.dart';
 /// That split is the whole point of the page: a chart of invented views would
 /// be indistinguishable from a real report to anyone reading a screenshot,
 /// which is exactly the failure mode the brief warns about.
+@client
 class AgentPerformancePage extends StatelessComponent {
   const AgentPerformancePage({super.key});
 

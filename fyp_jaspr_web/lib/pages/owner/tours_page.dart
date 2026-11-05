@@ -21,6 +21,7 @@ import '../../layouts/app_layout.dart';
 /// station count and the two actions. The previous version used a 2-column grid
 /// of large cards each embedding a dead "preview" placeholder, which made a
 /// management list read like a gallery.
+@client
 class ToursPage extends StatefulComponent {
   const ToursPage({super.key});
 

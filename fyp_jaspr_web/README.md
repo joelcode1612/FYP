@@ -1,154 +1,165 @@
-# Sitewise web app: local PostgreSQL + Supabase Auth
+# Sitewise web app — Jaspr SSR + FastAPI backend + Supabase Auth
 
-The Jaspr app uses client rendering: `web/index.html` loads the generated Dart
-JavaScript and mounts `SitewiseApp` in `#app`. It renders normal HTML/CSS.
+The Jaspr app runs in **server rendering mode** (`jaspr: mode: server`, port
+8090). Every route returns a complete HTML document; only interactive leaves are
+hydrated in the browser. There is no SPA `#app` shell.
 
-## Services and data flow
+## Services, ports and data flow
 
 ```text
-Browser (localhost:8091, or Jaspr development on 8090)
-  |-- Google / email sign-in --> Supabase Auth
-  |-- Supabase access token --> local Express application API (localhost:3001)
-                                 |-- verifies token with Supabase Auth
-                                 |-- reads application data from local PostgreSQL
+Browser (http://localhost:8090)
+  |  HTML / CSS / JS / same-origin /api/* and /health
+  v
+Jaspr SSR frontend  (fyp_jaspr_web, port 8090)
+  |  same-origin reverse proxy (lib/data/api_proxy.dart)
+  |  + SSR-side HTTP client (lib/data/auth_stub.dart)
+  v
+Intended backend    (FYP/backend, FastAPI/uvicorn, port 8000)
+  |  GET /health, /api/v1/auth/me, /api/v1/catalog/properties, ...
+  |  verifies Supabase ES256 access tokens via JWKS
+  |  app database: PostgreSQL `sitesense`
+  |  analytics/catalogue database: PostgreSQL `Final_Location_Analysis`
+  v
+Existing Supabase project (Auth + public.users) — https://lzdpjwmcjbhtkzkqudyt.supabase.co
 ```
 
-Supabase manages identities and browser sessions. PostgreSQL stores the property
-catalogue, original workbook fields and application role profiles keyed by the
-Supabase user UUID. PostgreSQL credentials stay in `test/.env`; the browser sees
-only the Supabase project URL and publishable key. No Supabase secret/service-role
-key is required. The older research API on port 3000 remains separate.
+| Port | Service | Owner |
+| --- | --- | --- |
+| 8090 | Jaspr SSR frontend + `/api/*` proxy | `.\serve` |
+| 8000 | FastAPI backend (`sitewise.main:app`) | `backend\start-api.ps1` |
+| 5567 | Jaspr internal dev/build proxy | Jaspr CLI (framework-managed) |
+| 8181 | Dart VM service (dev only) | Dart CLI — **not** the API |
+| 5432 | PostgreSQL (`sitesense`, `Final_Location_Analysis`) | local Postgres |
 
-## Property dataset
+`FYP/test` is **not** an application API or a configuration source. Its Express
+server (port 3001) and `test/.env` are legacy research/import tooling only. The
+two remaining references are test-time fixtures for browser probes
+(`test/.data/*.json`) and the one-off workbook import scripts listed below.
 
-The supplied workbook's `Filtered_Data` sheet contains **2,126 accepted records**,
-with **2,004 image URLs**. The 374 `Filtered_Out` records are excluded. The import
-preserves every accepted source row in JSONB alongside normalized columns, in
-`sitewise_app.properties`. It does not alter existing `fyp.*` research tables.
-The original image URLs are used; images are not copied into Supabase Storage.
-
-A workbook quality PASS is not administrator verification or proof that a unit
-is currently available. The source suitability index is already on a 0–100 scale.
-The shortlist filters the real catalogue and sorts that source index; it is not
-a trained business-success prediction. Competitor/demand explanations are shown
-as unavailable rather than replaced with demo figures.
+Browser requests never contain a hardcoded host or port: `<meta
+name="sitewise-api">` is emitted by `lib/main.server.dart` (empty = same-origin)
+and `tool/auth_client.js` reads it. The SSR process forwards `/api/*` and
+`/health` to `SITEWISE_API_BASE` (default `http://127.0.0.1:8000`), so no CORS
+preflight is needed. Set `SITEWISE_PUBLIC_API_BASE` only if the API is
+deliberately cross-origin.
 
 ## Authentication configuration
 
-Use `test/.env.example` as the reference. The application needs:
+Configuration lives in **`FYP/backend/.env`** (see `FYP/backend/.env.example`):
 
 ```dotenv
 SUPABASE_URL=https://your-project.supabase.co
-SUPABASE_PUBLISHABLE_KEY=your-publishable-key
-APP_API_PORT=3001
+SUPABASE_PUBLISHABLE_KEY=sb_publishable_...
+SUPABASE_JWKS_URL=https://your-project.supabase.co/auth/v1/.well-known/jwks.json
+SUPABASE_SECRET_KEY=sb_secret_...        # SERVER ONLY - never in web assets
+DATABASE_URL=postgresql+psycopg2://.../sitesense
+ANALYTICS_DATABASE_URL=postgresql+psycopg2://.../Final_Location_Analysis
+CORS_ORIGINS=http://localhost:8090,http://127.0.0.1:8090
 ```
 
-Keep the existing PGHOST, PGPORT, PGDATABASE, PGUSER and PGPASSWORD values in
-`test/.env`. Do not commit this file or expose database credentials in web code.
+`npm run gen-auth-config` reads that file and writes
+`web/auth-config.json` with **only** `supabaseUrl` +
+`supabasePublishableKey`. It refuses to emit a `sb_secret_` / service-role key.
+`npm run build-auth` bundles `tool/auth_client.js` into
+`web/auth_bundle.js`. Both outputs are git-ignored and are regenerated
+automatically by `.\serve` when their sources change.
 
 In Supabase Authentication:
 
 1. Enable Google under Sign In / Providers and configure the Google OAuth client.
 2. Google Cloud's authorized redirect URI is your Supabase project's
    `https://your-project.supabase.co/auth/v1/callback`.
-3. Set Site URL to `http://localhost:8091` and allow these Redirect URLs:
+3. Allow these Redirect URLs (both hostnames have separate browser storage):
    - `http://localhost:8090/auth/callback`
    - `http://127.0.0.1:8090/auth/callback`
-   - `http://localhost:8091/auth/callback`
-   - `http://127.0.0.1:8091/auth/callback`
 
-Google's client secret belongs in the provider settings. The browser uses PKCE.
-The existing Remember me option selects local storage or session-only storage.
-Email/password uses Supabase as well; confirmation requirements follow your
-Supabase settings. Password-reset UI is still a prototype and does not send mail.
-
-Signing in for the first time creates a local role profile. Signup can choose
-entrepreneur or owner. Administrators must be assigned in the local database by
-a trusted operator; URL changes, form values and OAuth metadata cannot grant
-administrator access or change an existing role.
+Sign-in uses PKCE. `redirectTo` is `location.origin + '/auth/callback'`; the
+callback page is server-rendered, loads the deferred auth bundle, waits for the
+code exchange, then calls `window.sitewiseAuth.complete()`. That validates the
+bearer token against `GET /api/v1/auth/me` before routing by server-assigned
+role. `pending` and `suspended` accounts are refused. Staff accounts without a
+verified TOTP factor go to `/staff/mfa`. Remember me selects localStorage vs
+sessionStorage; the SSR session mirror is kept in `sitewise_session` /
+`sitewise_token` cookies and refreshed on `SIGNED_IN` / `TOKEN_REFRESHED`.
 
 ## Start on your laptop
 
-From `test/`:
-
 ```powershell
-npm install
-npm run start:app
+cd C:\Users\Lenovo\AndroidStudioProjects\FYP\fyp_jaspr_web
+.\serve
 ```
 
-Leave that terminal running. In a second terminal, from `fyp_jaspr_web/`:
+`.\serve` resolves to `serve.cmd`, which invokes `serve.impl.ps1` with a
+process-scoped `-ExecutionPolicy Bypass` (PowerShell 5.1 compatible):
+
+1. Frees the Jaspr ports 8090 / 5567 — **only** for Dart-owned processes.
+2. Health-checks `http://127.0.0.1:8000/health`; starts
+   `FYP/backend/start-api.ps1` in its own window only when unhealthy, and never
+   starts a duplicate if the port is occupied.
+3. Regenerates `web/auth-config.json` / `web/auth_bundle.js` if stale.
+4. Sets `NO_PROXY` for localhost and starts Jaspr SSR on 8090.
+
+> There is deliberately **no `serve.ps1`**: PowerShell resolves a bare
+> `.\serve` to `serve.ps1` before it checks `serve.cmd`, and this machine's
+> `AllSigned` policy rejects the unsigned script. The PowerShell implementation
+> is named `serve.impl.ps1` so `.\serve` reaches the `.cmd` wrapper.
+
+The root-level `start-sitewise.ps1` is a convenience wrapper around the same
+script. To run the backend by itself:
 
 ```powershell
-npm install --prefix tool
-npm run build-auth --prefix tool
-jaspr serve --port 8090
+cd FYP\backend
+.\start-api.ps1
 ```
 
-Open `http://localhost:8090/login`. For a production preview instead:
+Open `http://localhost:8090/login`. For a production build:
 
 ```powershell
 npm run build-auth --prefix tool
 jaspr build
-python tool/serve_client_preview.py --port 8091
+cd build\jaspr && PORT=8090 .\app.exe
 ```
 
-Open `http://localhost:8091/login` and choose Continue with Google. Use the same
-hostname on departure and return: localhost and 127.0.0.1 have separate storage.
-`web/index.html` contains the local API address in the `sitewise-api` meta tag.
+## Property dataset
 
-## Repeat the property import
+The workbook's `Filtered_Data` sheet contains **2,126 accepted records** stored
+in `sitewise_app.properties` in `Final_Location_Analysis`. The intended backend
+serves them read-only at `GET /api/v1/catalog/properties` (bearer token required,
+`{data, meta:{total,limit,offset}}`), which is what
+`lib/data/api_property_repository.dart` consumes. No analytics/scoring tables
+are modified. A workbook quality PASS is not administrator verification, and the
+source suitability index is not a trained prediction.
 
-From the repository root (requires Python openpyxl):
-
-```powershell
-python test/scripts/prepare-property-workbook.py "C:/path/to/property_workbook.xlsx"
-node test/scripts/import-properties.js
-```
-
-The prepared JSON is ignored by Git. Import is transactional and upserts by
-canonical property ID. Repeating it updates the same records without duplicating
-them; it does not delete unrelated records. Restart/reload the browser afterwards
-because the catalogue is cached for the browser session.
+One-off import tooling still lives in `FYP/test/scripts/` (not a runtime
+service): `prepare-property-workbook.py` and `import-properties.js`.
 
 ## Files to change
 
 | Concern | Location |
 | --- | --- |
-| Google/email session and browser API requests | `tool/auth_client.js` (bundled into ignored `web/auth_bundle.js`) |
+| Browser auth + API requests | `tool/auth_client.js` → `web/auth_bundle.js` |
+| Public Supabase config generation | `tool/gen_auth_config.js` (reads `../backend/.env`) |
+| SSR API base + same-origin proxy | `lib/data/api_config.dart`, `lib/data/api_proxy.dart`, `lib/main.server.dart` |
+| SSR-side API client | `lib/data/auth_stub.dart` |
 | Dart/browser bridge | `lib/data/auth_service.dart`, `auth_browser.dart` |
 | Protected routes and role redirects | `lib/app.dart` |
-| Live catalogue / source-index ranking | `lib/data/api_property_repository.dart` |
+| Catalogue / source-index ranking | `lib/data/api_property_repository.dart` |
 | Repository wiring | `lib/data/app_locator.dart` |
-| Backend token verification / catalogue endpoints | `../test/app-api.js` |
-| Local API startup | `../test/app-server.js` |
-| PostgreSQL tables | `../test/app-schema.sql` |
-| Import tools | `../test/scripts/prepare-property-workbook.py`, `import-properties.js` |
-
-## Current scope
-
-Properties, image URLs and sign-in are integrated. The imported catalogue is
-read-only. New owner listings, uploads, persistent favourites/preferences, tour
-storage, admin workflows and analysis models still need their corresponding
-backend endpoints. Saved/compare choices currently last only for this browser
-session. User role URLs are protected; the API independently validates tokens.
+| Backend routes, token verification | `../backend/src/sitewise/api/v1/`, `dependencies.py` |
+| Backend startup / env | `../backend/start-api.ps1`, `../backend/.env.example` |
+| Launchers | `serve.cmd` (`.\serve`), `serve.impl.ps1`, `../start-sitewise.ps1` |
 
 ## Verification
 
 ```powershell
-# From test/
-npm run test:app
-# From fyp_jaspr_web/
+# Backend (from FYP/backend)
+.\.venv\Scripts\python.exe -m pytest -q
+# Frontend (from FYP/fyp_jaspr_web)
 dart analyze lib
-dart test
 jaspr build
-node tool/verify_backend_integration.js http://localhost:8091
+node tool/probe_ssr_mpa.js
 ```
 
-Browser tests verify unsigned redirects and Google PKCE request parameters. Their
-signed-in data-binding checks use explicitly labelled fixtures from the imported
-workbook; they do not log in to a real Google account. Complete your own first
-Google sign-in to verify the live consent, callback and authenticated session.
-
-Production hosting needs SPA fallback for nested application routes. The local
-preview and `web/_redirects` provide that behavior for supported hosts. The
-current HTML base path assumes hosting at the domain root.
+Browser probes use explicitly labelled fixtures; they do not create or modify
+real user records. Complete one real sign-in yourself to verify live OAuth
+consent, `/auth/callback`, session restoration on refresh and logout.

@@ -17,6 +17,7 @@ import '../../layouts/app_layout.dart';
 /// `overline` captions and no right-hand column, so the "switch to the
 /// entrepreneur view" and notification-policy notes the source carries were
 /// missing entirely.
+@client
 class ProfilePage extends StatefulComponent {
   const ProfilePage({super.key});
 

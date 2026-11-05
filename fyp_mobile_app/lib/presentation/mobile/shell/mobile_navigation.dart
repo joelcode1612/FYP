@@ -1,9 +1,7 @@
 import 'package:shared_logic/shared_logic.dart';
 import 'package:flutter/material.dart';
 
-
 /// One mobile navigation destination (bottom-navigation entry).
-
 class MobileDestination {
   final String route;
   final IconData icon;
@@ -16,9 +14,18 @@ class MobileDestination {
   });
 }
 
-/// Bottom-navigation destinations per role. Mobile-only — web uses its own
-/// sidebar destinations. Profiles reachable only from the top bar are
-/// intentionally absent here.
+/// Bottom-navigation destinations per role.
+///
+/// The entrepreneur workspace follows the consolidated five-tab model from
+/// `Sitewise_Mobile_Material3_Mock_Data.html`:
+/// **Home / Listing / Assess / Spaces / Profile**. The previous
+/// Home / Explore / Saved / Compare / Profile bar folded discovery into one
+/// tab and had no home for assessments or property records. Saved and Compare
+/// remain reachable from Profile and Home quick links — they are no longer
+/// top-level destinations.
+///
+/// Admin / owner keep their own destination sets; only the entrepreneur
+/// post-sign-in experience opts into the Material 3 reference.
 List<MobileDestination> mobileDestinationsFor(AppRole role) {
   switch (role) {
     case AppRole.admin:
@@ -86,22 +93,22 @@ List<MobileDestination> mobileDestinationsFor(AppRole role) {
         ),
         MobileDestination(
           route: '/entrepreneur/explore',
-          icon: Icons.explore_outlined,
-          label: 'Explore',
+          icon: Icons.search_rounded,
+          label: 'Listing',
         ),
         MobileDestination(
-          route: '/entrepreneur/saved',
-          icon: Icons.bookmark_border,
-          label: 'Saved',
+          route: '/entrepreneur/assess',
+          icon: Icons.assignment_outlined,
+          label: 'Assess',
         ),
         MobileDestination(
-          route: '/entrepreneur/compare',
-          icon: Icons.compare_arrows,
-          label: 'Compare',
+          route: '/entrepreneur/spaces',
+          icon: Icons.storefront_outlined,
+          label: 'Spaces',
         ),
         MobileDestination(
           route: '/entrepreneur/profile',
-          icon: Icons.person_outline,
+          icon: Icons.person_outline_rounded,
           label: 'Profile',
         ),
       ];

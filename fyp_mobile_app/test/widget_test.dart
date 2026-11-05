@@ -226,7 +226,11 @@ void main() {
     await tester.pumpWidget(const SitewiseApp());
     await tester.pumpAndSettle();
 
-    expect(find.textContaining('Find the right F&B location'), findsOneWidget);
+    // Post-sign-in Home follows the Material 3 reference: greeting +
+    // discovery feature card. The old "Find the right F&B location" banner
+    // headline was removed by that redesign.
+    expect(find.text('Welcome to Sitewise.'), findsOneWidget);
+    expect(find.text('Explore listings'), findsOneWidget);
   });
 
   // TEST 12 — logging in from the auth screen enters the entrepreneur app.
@@ -250,10 +254,66 @@ void main() {
     await tester.tap(find.widgetWithText(ElevatedButton, 'Log in'));
     await tester.pumpAndSettle();
 
-    expect(find.textContaining('Find the right F&B location'), findsOneWidget);
+    expect(find.text('Welcome to Sitewise.'), findsOneWidget);
+    expect(find.text('Your overview'), findsOneWidget);
   });
 
-  // TEST 13 — the Flutter app is mobile-only now: even on a wide desktop
+  // TEST 13 — post-sign-in Home uses the consolidated five-tab navigation and
+  // the new Assess / Spaces tabs are reachable with real data.
+  testWidgets('entrepreneur home shows the five Material 3 tabs', (tester) async {
+    _useMobileSurface(tester);
+    onboarding = InMemoryOnboardingLocalDataSource(completed: true);
+    ServiceLocator.onboardingRepo = OnboardingRepositoryImpl(onboarding);
+    auth.user = _FakeAuthRepository._demoUser;
+
+    await tester.pumpWidget(const SitewiseApp());
+    await tester.pumpAndSettle();
+
+    // Reference nav: Home / Listing / Assess / Spaces / Profile.
+    for (final label in const ['Home', 'Listing', 'Assess', 'Spaces', 'Profile']) {
+      expect(find.text(label), findsOneWidget, reason: 'missing tab: $label');
+    }
+    // The retired tab labels must be gone.
+    expect(find.text('Explore'), findsNothing);
+    expect(find.text('Saved'), findsNothing);
+    expect(find.text('Compare'), findsNothing);
+
+    // Reference Home structure (top of the scroll view).
+    expect(find.text('Welcome to Sitewise.'), findsOneWidget);
+    expect(find.text('Your overview'), findsOneWidget);
+    expect(find.text('Recommendations'), findsOneWidget);
+    expect(find.text('Saved spaces'), findsOneWidget);
+
+    // Sections further down the ListView are only built once scrolled into
+    // view — scroll rather than asserting against an unbuilt subtree.
+    await tester.scrollUntilVisible(
+      find.text('Quick actions'),
+      120,
+      scrollable: find.byType(Scrollable).first,
+    );
+    expect(find.text('Quick actions'), findsOneWidget);
+    await tester.scrollUntilVisible(
+      find.text('Manage my spaces'),
+      120,
+      scrollable: find.byType(Scrollable).first,
+    );
+    expect(find.text('Demand assessments'), findsOneWidget);
+    expect(find.text('Manage my spaces'), findsOneWidget);
+
+    // Assess tab renders with real repository data (not invented records).
+    await tester.tap(find.text('Assess'));
+    await tester.pumpAndSettle();
+    expect(find.text('My assessments'), findsOneWidget);
+    expect(find.text('Available assessments'), findsOneWidget);
+
+    // Spaces tab renders with an honest empty shortlist state.
+    await tester.tap(find.text('Spaces'));
+    await tester.pumpAndSettle();
+    expect(find.text('My spaces'), findsOneWidget);
+    expect(find.text('No spaces saved yet'), findsOneWidget);
+  });
+
+  // TEST 14 — the Flutter app is mobile-only now: even on a wide desktop
   // viewport it boots to the mobile onboarding, never the old web tree
   // (which lives in the Jaspr app, fyp_jaspr_web).
   testWidgets('wide viewport still boots the mobile flow, not a web tree', (

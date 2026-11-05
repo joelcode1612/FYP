@@ -22,6 +22,7 @@ import '../../layouts/app_layout.dart';
 ///   arrived instead of pretending an agent can reply from this page.
 /// * **No lead scoring.** Quality scores need enquiry history to rank
 ///   against; without it a score would be decoration.
+@client
 class AgentEnquiriesPage extends StatelessComponent {
   const AgentEnquiriesPage({super.key});
 
