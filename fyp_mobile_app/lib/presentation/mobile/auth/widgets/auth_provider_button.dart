@@ -2,6 +2,7 @@ import 'package:shared_logic/shared_logic.dart';
 import 'package:flutter/material.dart';
 
 import '../../../../core/theme/sitewise_theme.dart';
+import '../../../shared/widgets/sitewise_icon.dart';
 
 /// Federated sign-in button (Apple / Google).
 
@@ -24,13 +25,18 @@ class AuthProviderButton extends StatelessWidget {
       child: OutlinedButton.icon(
         onPressed: onPressed,
         icon: apple
-            ? const Icon(Icons.apple, size: 21, color: Colors.black)
+            ? SitewiseIcon(
+                Icons.apple,
+                intent: SitewiseIconIntent.button,
+                color: Colors.black,
+                semanticLabel: 'Apple',
+              )
             : const Text(
                 'G',
                 style: TextStyle(
                   color: Color(0xFF4285F4),
                   fontWeight: FontWeight.w900,
-                  fontSize: 19,
+                  fontSize: 20,
                 ),
               ),
         label: Text(
@@ -42,7 +48,7 @@ class AuthProviderButton extends StatelessWidget {
           ),
         ),
         style: OutlinedButton.styleFrom(
-          backgroundColor: Colors.white,
+          backgroundColor: SitewiseColors.surface,
           side: const BorderSide(color: SitewiseColors.border),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(16),

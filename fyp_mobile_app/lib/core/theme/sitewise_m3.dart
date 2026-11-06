@@ -95,6 +95,63 @@ abstract final class SitewiseM3 {
   /// Reference `.tab-indicator` pill.
   static const double indicatorWidth = 61;
   static const double indicatorHeight = 33;
+
+  /// Bottom-nav glyph colours, kept at the values the Material 3 reference
+  /// sheet specifies. They differ from [primary] and [muted] by a shade, so
+  /// they are tokens of their own instead of being re-pointed at those.
+  static const Color navActive = Color(0xFF1B4BB7);
+  static const Color navInactive = Color(0xFF64758E);
+
+  // Floating bottom dock -----------------------------------------------------
+  // Ported from `style-guide.md` §4.4 "Desktop nav pill" — the documented
+  // recipe for a floating, pill-shaped navigation surface: 14px side inset
+  // (§1.5), radius 999 (§4.9), translucent white + 8% ink hairline border and
+  // the two-stage shadow below. The dock reuses [tabHeight] rather than a new
+  // height, and the pill reuses [indicatorWidth] / [indicatorHeight].
+  static const double dockSideInset = 14;
+
+  /// Breathing room below the dock, added on top of the system inset so the
+  /// surface never sits under the home indicator / gesture bar.
+  static const double dockBottomInset = 10;
+
+  /// Sliding pill behind the active glyph — same geometry as [indicatorWidth]
+  /// and [indicatorHeight], restated so the dock reads as one concept.
+  static const double dockPillWidth = indicatorWidth;
+  static const double dockPillHeight = indicatorHeight;
+
+  /// Tracks the icon band of `_DockTab`: the tab column is 33 + 2 + 12 tall
+  /// and centred in [tabHeight], so the band starts 8px below the top.
+  static const double dockPillTop = 8;
+
+  /// One duration and curve family for every dock transition, so the pill,
+  /// glyph lift and label fade read as a single move rather than four.
+  static const Duration dockMotion = Duration(milliseconds: 320);
+
+  /// §4.4 `background: rgba(255, 255, 255, 0.86)`. No backdrop blur here:
+  /// §4.8 sanctions blur for the top pill only.
+  static const Color dockSurface = Color(0xDBFFFFFF);
+
+  /// §4.4 `border: 1px solid rgba(15, 23, 42, 0.08)`.
+  static const Color dockBorder = Color(0x140F1729);
+
+  /// §4.4 two-stage shadow: `0 1px 2px rgba(15,23,42,0.04)` and
+  /// `0 12px 32px rgba(15,23,42,0.08)`.
+  ///
+  /// Note the tension with §4.8 "Never add a shadow to a … navigation bar at
+  /// rest": this dock is a floating pill surface, so it follows §4.4, which is
+  /// the section that actually specifies it. Empty this list to obey §4.8.
+  static const List<BoxShadow> dockShadows = [
+    BoxShadow(
+      color: Color(0x0A0F1729),
+      blurRadius: 2,
+      offset: Offset(0, 1),
+    ),
+    BoxShadow(
+      color: Color(0x140F1729),
+      blurRadius: 32,
+      offset: Offset(0, 12),
+    ),
+  ];
 }
 
 /// Typography helpers matching the reference's type scale. Keeping these here

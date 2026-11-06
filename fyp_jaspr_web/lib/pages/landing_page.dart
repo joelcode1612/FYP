@@ -221,7 +221,7 @@ class _LandingState extends State<LandingPage> {
     classes: 'scroll-experience',
     attributes: {'aria-label': 'Commercial F&B property showcase'},
     [
-      div(classes: 'scene-sticky', [
+      div(id: 'sceneSticky', classes: 'scene-sticky', [
         div(classes: 'scene-mount', [
           div(
             id: 'concept3dScene',
@@ -243,6 +243,7 @@ class _LandingState extends State<LandingPage> {
             children: [],
           ),
           div(
+            id: 'modelFallback',
             classes: 'model-fallback',
             attributes: {'hidden': ''},
             [

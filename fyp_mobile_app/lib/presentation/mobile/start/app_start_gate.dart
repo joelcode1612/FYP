@@ -2,6 +2,7 @@ import 'package:shared_logic/shared_logic.dart';
 import 'package:flutter/material.dart';
 
 import '../../../application/services/service_locator.dart';
+import '../../../core/routing/mobile_role.dart';
 import '../../../core/theme/sitewise_theme.dart';
 import '../../shared/widgets/sitewise_brand.dart';
 
@@ -9,7 +10,8 @@ import '../../shared/widgets/sitewise_brand.dart';
 ///
 ///   onboarding not completed -> /onboarding
 ///   onboarding completed, not authenticated -> /auth
-///   authenticated -> the role's home route
+///   authenticated as an Entrepreneur -> that role's home route
+///   authenticated in a web-only role -> signed out, back to /auth
 ///
 /// The web tree that used to branch here lives in the Jaspr app now; this
 /// gate serves the Flutter app only.
@@ -50,8 +52,17 @@ class _AppStartGateState extends State<AppStartGate> {
       return;
     }
 
+    final home = mobileHomeRouteFor(user.role);
+    if (home == null) {
+      // A web-only role would bounce back here on every cold start, so the
+      // session is cleared and the sign-in screen explains where to go.
+      await ServiceLocator.auth.signOut();
+      if (!mounted) return;
+      _go('/auth');
+      return;
+    }
     widget.appState.setRole(user.role);
-    _go(user.role.homeRoute);
+    _go(home);
   }
 
   void _go(String route) {

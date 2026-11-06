@@ -36,7 +36,7 @@ def load_local_env():
         if not path.is_file():
             continue
         for line in path.read_text(encoding="utf-8-sig").splitlines():
-            line = line.strip()
+            line = line.strip
             if not line or line.startswith("#") or "=" not in line:
                 continue
             name, value = line.split("=", 1)

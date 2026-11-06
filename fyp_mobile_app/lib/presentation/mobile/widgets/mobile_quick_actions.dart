@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/theme/sitewise_theme.dart';
+import '../../shared/widgets/sitewise_icon_tile.dart';
 
 /// One circular quick action. Unlike [MobileQuickAction] (route-only), this
 /// carries a callback so the same component serves navigation *and* in-place
-/// actions (e.g. admin "Review next", owner "Add property").
+/// actions (e.g. "Saved", "Compare", "Shortlist next").
 
 class MobileQuickActionItem {
   final IconData icon;
@@ -67,19 +68,9 @@ class _QuickActionTile extends StatelessWidget {
               Stack(
                 clipBehavior: Clip.none,
                 children: [
-                  Container(
-                    width: 54,
-                    height: 54,
-                    decoration: BoxDecoration(
-                      color: SitewiseColors.geoWash,
-                      shape: BoxShape.circle,
-                      border: Border.all(color: SitewiseColors.geoBorder),
-                    ),
-                    child: Icon(
-                      item.icon,
-                      size: 24,
-                      color: SitewiseColors.action,
-                    ),
+                  SitewiseIconTile.glyph(
+                    item.icon,
+                    semanticLabel: item.label,
                   ),
                   if (item.count != null && item.count! > 0)
                     Positioned(

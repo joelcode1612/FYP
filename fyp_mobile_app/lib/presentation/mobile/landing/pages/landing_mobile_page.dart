@@ -1,8 +1,10 @@
 import 'package:shared_logic/shared_logic.dart';
 import 'package:flutter/material.dart';
 
+import '../../../../core/routing/mobile_role.dart';
 import '../../../../core/theme/sitewise_theme.dart';
 import '../../../shared/landing/landing_content.dart';
+import '../../../shared/widgets/sitewise_icon.dart';
 import '../widgets/landing_mobile_sections.dart';
 
 /// Public pre-auth landing page (Mobile tree): compact header with drawer,
@@ -34,7 +36,14 @@ class _LandingMobilePageState extends State<LandingMobilePage> {
     }
   }
 
+  /// Every landing CTA resolves through the mobile role gate. A web-only role
+  /// (the Owner card, for instance) opens Sign In, which explains where that
+  /// workspace lives, instead of pushing a route the app no longer has.
   void _enter(AppRole role, String route) {
+    if (mobileHomeRouteFor(role) == null) {
+      _toAuth('login');
+      return;
+    }
     widget.appState.setRole(role);
     Navigator.of(context).pushNamedAndRemoveUntil(route, (_) => false);
   }
@@ -42,27 +51,13 @@ class _LandingMobilePageState extends State<LandingMobilePage> {
   void _getStarted() =>
       _enter(AppRole.entrepreneur, AppRole.entrepreneur.homeRoute);
 
-  Future<void> _login() async {
-    Navigator.of(context).maybePop();
-    final role = await showDialog<AppRole>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Log in as'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            for (final role in AppRole.values)
-              ListTile(
-                title: Text(role.label),
-                trailing: const Icon(Icons.chevron_right),
-                onTap: () => Navigator.of(ctx).pop(role),
-              ),
-          ],
-        ),
-      ),
-    );
-    if (role != null && mounted) _enter(role, role.homeRoute);
-  }
+  void _toAuth(String tab) =>
+      Navigator.of(context).pushNamed('/auth', arguments: tab);
+
+  /// Sign In is the entry point, not a role picker: the account itself
+  /// carries the role, and `_enter` keeps non-Entrepreneur accounts on the
+  /// auth screen.
+  void _login() => _toAuth('login');
 
   @override
   Widget build(BuildContext context) {
@@ -136,7 +131,11 @@ class _LandingMobilePageState extends State<LandingMobilePage> {
               Builder(
                 builder: (ctx) => IconButton(
                   tooltip: 'Menu',
-                  icon: const Icon(Icons.menu),
+                  icon: SitewiseIcon(
+                    Icons.menu,
+                    intent: SitewiseIconIntent.appBarAction,
+                    semanticLabel: 'Open menu',
+                  ),
                   onPressed: () => Scaffold.of(ctx).openDrawer(),
                 ),
               ),

@@ -52,6 +52,15 @@
             host.classList.add('hidden');
             if (controls) controls.classList.add('hidden');
           }
+          /* A later successful start() (hydration recovery, or THREE arriving
+             after a container replacement) must undo a previously shown
+             fallback so the healthy scene is what the user sees. */
+          function hideFallback() {
+            if (fallback) fallback.hidden = true;
+            if (image) image.classList.add('hidden');
+            host.classList.remove('hidden');
+            if (controls) controls.classList.remove('hidden');
+          }
           if (!THREERef) { showFallback(); return; }
           const T = THREERef;
     
@@ -297,6 +306,11 @@
               if (resizeObs) { resizeObs.disconnect(); resizeObs = null; }
               window.removeEventListener('resize', resize);
               document.removeEventListener('visibilitychange', onVisibility);
+              /* Hydration recovery re-runs start() on the SAME surviving hero
+                 nodes, so these two listeners must be detached here or every
+                 recovery would stack a duplicate handler on them. */
+              if (controls) controls.removeEventListener('click', onControlsClick);
+              if (parallaxEl) parallaxEl.removeEventListener('pointermove', onParallaxMove);
               if (scene) {
                 const disposed = new Set();
                 scene.traverse(function (object) {
@@ -381,26 +395,27 @@
             canvas.addEventListener('pointerup', stopDrag);
             canvas.addEventListener('pointercancel', stopDrag);
     
-            if (controls) {
-              controls.addEventListener('click', e => {
-                const b = e.target.closest('button[data-model-action]');
-                if (!b) return;
-                const act = b.dataset.modelAction;
-                if (act === 'zoom-in') targetRadius = clamp(targetRadius * .86, 7.5, 16.5);
-                if (act === 'zoom-out') targetRadius = clamp(targetRadius * 1.15, 7.5, 16.5);
-                if (act === 'auto') { autoRotate = !autoRotate; b.setAttribute('aria-pressed', String(autoRotate)); }
-                if (act === 'lighting') toggleLightingMode(b);
-                if (act === 'reset') window.setSitewiseCameraPreset('overview');
-              });
+            function onControlsClick(e) {
+              const b = e.target.closest('button[data-model-action]');
+              if (!b) return;
+              const act = b.dataset.modelAction;
+              if (act === 'zoom-in') targetRadius = clamp(targetRadius * .86, 7.5, 16.5);
+              if (act === 'zoom-out') targetRadius = clamp(targetRadius * 1.15, 7.5, 16.5);
+              if (act === 'auto') { autoRotate = !autoRotate; b.setAttribute('aria-pressed', String(autoRotate)); }
+              if (act === 'lighting') toggleLightingMode(b);
+              if (act === 'reset') window.setSitewiseCameraPreset('overview');
             }
-    
-            (parallaxSurface || host).addEventListener('pointermove', e => {
+            if (controls) controls.addEventListener('click', onControlsClick);
+
+            const parallaxEl = parallaxSurface || host;
+            function onParallaxMove(e) {
               if (dragging || (e.pointerType && e.pointerType !== 'mouse')) return;
-              const r = (parallaxSurface || host).getBoundingClientRect();
+              const r = parallaxEl.getBoundingClientRect();
               if (!r.width || !r.height) return;
               pointerParallaxX = clamp(((e.clientX - r.left) / r.width - .5) * 2, -1, 1);
               pointerParallaxY = clamp(((e.clientY - r.top) / r.height - .5) * 2, -1, 1);
-            }, { passive: true });
+            }
+            parallaxEl.addEventListener('pointermove', onParallaxMove, { passive: true });
     
             if ('ResizeObserver' in window) {
               resizeObs = new ResizeObserver(resize);
@@ -417,8 +432,12 @@
               io.observe(host);
             }
 
+            hideFallback();
             running = true;
-            active = { dispose: dispose };
+            // Expose the mounted container and the renderer's own canvas so
+            // reconcile() can verify the scene is still attached after Jaspr
+            // hydration re-renders the hero (it strips imperative children).
+            active = { dispose: dispose, host: host, canvas: canvas };
             resize();
             ensureLoop();
           } catch (err) {
@@ -429,11 +448,42 @@
 
   function reconcile() {
     var host = document.getElementById('concept3dScene');
-    if (host === mountedHost) return;
-    mountedHost = host;
+
+    // Container gone (navigated away / hero unmounted): tear everything down
+    // so no renderer, RAF loop or listener outlives the section.
+    if (!host) {
+      if (active && active.dispose) active.dispose();
+      active = null;
+      mountedHost = null;
+      return;
+    }
+
+    // Healthy scene: same container AND the renderer's own canvas is still
+    // attached to it. Return without touching anything, so unrelated hero
+    // mutations (text, cards, controls) never rebuild the scene.
+    if (
+      host === mountedHost && active && active.canvas &&
+      active.canvas.parentNode === host
+    ) return;
+
+    // Same container, no live scene. If the THREE-less fallback is already
+    // visible in the DOM, stay steady; otherwise (re)initialize — this covers
+    // "never started", a previous failed attempt, and hydration resetting the
+    // fallback markup back to its server-rendered hidden state.
+    if (host === mountedHost && !active) {
+      var steadyFallback = document.getElementById('modelFallback');
+      if (steadyFallback && !steadyFallback.hidden) return;
+    }
+
+    // New/replaced container, scene never initialized after a container
+    // swap, or the canvas was stripped — Jaspr hydration re-renders @client
+    // leaves and removes the imperatively-appended canvas. Dispose the stale
+    // renderer first (kills its RAF loop, listeners and GPU resources), then
+    // build exactly one fresh scene on the surviving container.
     if (active && active.dispose) active.dispose();
     active = null;
-    if (host) start();
+    mountedHost = host;
+    start();
   }
   var scheduled = false;
   new MutationObserver(function () {

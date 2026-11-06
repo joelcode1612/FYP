@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../../core/theme/sitewise_theme.dart';
+import '../../../shared/widgets/sitewise_icon.dart';
 
 /// Labelled text field used across the Log In / Sign Up forms.
 
@@ -54,10 +55,14 @@ class AuthField extends StatelessWidget {
               fontSize: 12,
               color: SitewiseColors.overline,
             ),
-            prefixIcon: Icon(icon, size: 18, color: SitewiseColors.muted),
+            prefixIcon: SitewiseIcon(
+              icon,
+              intent: SitewiseIconIntent.field,
+              semanticLabel: label,
+            ),
             suffixIcon: suffix,
             filled: true,
-            fillColor: Colors.white,
+            fillColor: SitewiseColors.surface,
             contentPadding: const EdgeInsets.symmetric(
               horizontal: 14,
               vertical: 14,

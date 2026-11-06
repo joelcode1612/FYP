@@ -76,9 +76,9 @@ class EntrepreneurReportMobilePage extends StatelessWidget {
             const Divider(height: 24),
             for (final f in a.factors) SitewiseFactorRow(factor: f),
             const Divider(height: 24),
-            const Text(
-              'Recommendation: shortlist this unit if evening footfall and rental efficiency match your concept margins.',
-              style: TextStyle(fontWeight: FontWeight.w600),
+            Text(
+              'Verdict: ${a.verdict}',
+              style: const TextStyle(fontWeight: FontWeight.w600),
             ),
             const SizedBox(height: 16),
             SitewiseButton(

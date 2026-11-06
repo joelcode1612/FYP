@@ -6,6 +6,7 @@ import 'package:fyp/data/datasources/local/onboarding_local_data_source.dart';
 import 'package:fyp/data/repositories/auth_repository_impl.dart';
 import 'package:fyp/data/repositories/onboarding_repository_impl.dart';
 import 'package:fyp/main.dart';
+import 'package:fyp/presentation/mobile/widgets/mobile_property_card.dart';
 
 /// Fake auth repository so tests can control the "authenticated" state without
 /// touching disk or a backend.
@@ -78,6 +79,7 @@ void main() {
       FileOnboardingLocalDataSource(),
     );
     ServiceLocator.auth = AuthService(AuthRepositoryImpl());
+    ServiceLocator.assessmentSession.discard();
   });
 
   // TEST 1 — fresh install: onboarding appears on mobile.
@@ -300,11 +302,11 @@ void main() {
     expect(find.text('Demand assessments'), findsOneWidget);
     expect(find.text('Manage my spaces'), findsOneWidget);
 
-    // Assess tab renders with real repository data (not invented records).
+    // Assess tab renders the Option A hub (session draft + honest labels).
     await tester.tap(find.text('Assess'));
     await tester.pumpAndSettle();
-    expect(find.text('My assessments'), findsOneWidget);
-    expect(find.text('Available assessments'), findsOneWidget);
+    expect(find.text('Your assessments'), findsOneWidget);
+    expect(find.text('Recent activity'), findsOneWidget);
 
     // Spaces tab renders with an honest empty shortlist state.
     await tester.tap(find.text('Spaces'));
@@ -331,5 +333,183 @@ void main() {
 
     expect(find.textContaining('Find the right F&B location'), findsOneWidget);
     expect(find.text('How It Works'), findsNothing);
+  });
+
+  // TEST 15 — the public landing page: its Log In action opens the Sign In
+  // screen (the account carries the role; there is no role-picker dialog).
+  // Log In lives in the navigation drawer, so the test opens it first.
+  testWidgets('landing Log In opens the Sign In screen', (tester) async {
+    _useMobileSurface(tester);
+    await tester.pumpWidget(const SitewiseApp());
+    await tester.pumpAndSettle();
+    tester
+        .state<NavigatorState>(find.byType(Navigator))
+        .pushNamed('/landing');
+    await tester.pumpAndSettle();
+
+    // The eyebrow renders uppercased by MobileEyebrow.
+    expect(
+      find.textContaining('EVIDENCE-BASED F&B LOCATION'),
+      findsOneWidget,
+    );
+
+    await tester.tap(find.byTooltip('Menu'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Log In'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Welcome Back'), findsOneWidget);
+  });
+
+  // TEST 16 — mobile ships the Entrepreneur workspace only: the Property
+  // Owner landing card cannot route to the deleted /owner screens; it lands
+  // on Sign In, which explains where that workspace lives.
+  testWidgets('landing Owner card falls back to Sign In', (tester) async {
+    _useMobileSurface(tester);
+    await tester.pumpWidget(const SitewiseApp());
+    await tester.pumpAndSettle();
+    tester
+        .state<NavigatorState>(find.byType(Navigator))
+        .pushNamed('/landing');
+    await tester.pumpAndSettle();
+
+    // The CTA renders as "See property presentation →" (arrow suffix).
+    final ownerLink = find.textContaining('See property presentation');
+    await tester.scrollUntilVisible(
+      ownerLink,
+      400,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(ownerLink);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Welcome Back'), findsOneWidget);
+  });
+
+  // TEST 17 — the floating dock contract: every slot is a >=48x48 target,
+  // exactly one label is visible at a time (the active tab), and switching
+  // tabs moves that visibility with the selection.
+  testWidgets('floating dock keeps 48dp targets and active-only labels', (
+    tester,
+  ) async {
+    _useMobileSurface(tester);
+    onboarding = InMemoryOnboardingLocalDataSource(completed: true);
+    ServiceLocator.onboardingRepo = OnboardingRepositoryImpl(onboarding);
+    auth.user = _FakeAuthRepository._demoUser;
+
+    await tester.pumpWidget(const SitewiseApp());
+    await tester.pumpAndSettle();
+
+    const labels = ['Home', 'Listing', 'Assess', 'Spaces', 'Profile'];
+    for (final label in labels) {
+      expect(find.text(label), findsOneWidget, reason: 'missing tab: $label');
+    }
+
+    double opacityOf(String label) => tester
+        .widget<AnimatedOpacity>(
+          find.ancestor(
+            of: find.text(label),
+            matching: find.byType(AnimatedOpacity),
+          ),
+        )
+        .opacity;
+
+    // Only the landing tab (Home) is announced visually.
+    expect(opacityOf('Home'), 1.0);
+    for (final label in labels.skip(1)) {
+      expect(opacityOf(label), 0.0, reason: '$label should be hidden');
+    }
+
+    // Each slot is the tap target: it must clear 48x48 even on a narrow
+    // phone so taps cannot misclick between destinations.
+    for (final label in labels) {
+      final inkWell = find.ancestor(
+        of: find.text(label),
+        matching: find.byType(InkWell),
+      );
+      final rect = tester.getRect(inkWell);
+      expect(rect.width, greaterThanOrEqualTo(48), reason: '$label too narrow');
+      expect(rect.height, greaterThanOrEqualTo(48), reason: '$label too short');
+    }
+
+    // Selecting Listing moves the active state (the pill slides with it).
+    await tester.tap(find.text('Listing'));
+    await tester.pumpAndSettle();
+    expect(opacityOf('Listing'), 1.0);
+    expect(opacityOf('Home'), 0.0);
+    expect(find.text('Explore'), findsNothing);
+  });
+
+  // TEST 18 — the Option A journey: Listing → Property Details →
+  // Assess This Property → setup → evidence → summary → save, with the
+  // property staying linked the whole way and the hub showing the
+  // session-only record afterwards.
+  testWidgets('assessment journey keeps the property link end to end', (
+    tester,
+  ) async {
+    _useMobileSurface(tester);
+    onboarding = InMemoryOnboardingLocalDataSource(completed: true);
+    ServiceLocator.onboardingRepo = OnboardingRepositoryImpl(onboarding);
+    auth.user = _FakeAuthRepository._demoUser;
+
+    Future<void> scrollTo(Finder finder) async {
+      await tester.dragUntilVisible(
+        finder,
+        find.byType(ListView).first,
+        const Offset(0, -250),
+      );
+      await tester.pumpAndSettle();
+    }
+
+    await tester.pumpWidget(const SitewiseApp());
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Listing'));
+    await tester.pumpAndSettle();
+    expect(find.text('Find a location'), findsOneWidget);
+
+    // Open the first real repository listing.
+    await tester.tap(find.byType(MobilePropertyCard).first);
+    await tester.pumpAndSettle();
+    final assessButton = find.text('Assess this property');
+    await scrollTo(assessButton);
+    await tester.tap(assessButton);
+    await tester.pumpAndSettle();
+
+    // Setup: the property arrived via route arguments — the screen shows the
+    // link without asking for the property again.
+    expect(find.text('Tell us about your business'), findsOneWidget);
+    expect(find.text('NEW ASSESSMENT / STEP 1 OF 3'), findsOneWidget);
+    await tester.tap(find.text('Specialty café'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField), '8500');
+    await tester.pumpAndSettle();
+    await scrollTo(find.text('Residents'));
+    await tester.tap(find.text('Residents'));
+    await tester.pumpAndSettle();
+    await scrollTo(find.text('Continue to evidence matching'));
+    await tester.tap(find.text('Continue to evidence matching'));
+    await tester.pumpAndSettle();
+
+    // Evidence: honest states only — no fabricated campaign matching.
+    expect(find.text('Evidence matching'), findsOneWidget);
+    expect(find.text('Property linked'), findsOneWidget);
+    expect(find.text('Survey evidence requires backend check'), findsOneWidget);
+    await scrollTo(find.text('View assessment summary'));
+    await tester.tap(find.text('View assessment summary'));
+    await tester.pumpAndSettle();
+
+    // Summary: repository analysis (or its explicit absence), never invented.
+    expect(find.text('Assessment summary'), findsOneWidget);
+    expect(find.text('Demand analysis'), findsOneWidget);
+    final saveButton = find.text('Save this assessment');
+    await scrollTo(saveButton);
+    await tester.tap(saveButton);
+    await tester.pumpAndSettle();
+
+    // Back on the hub: one session record, explicitly session-scoped.
+    expect(find.text('Saved in this session'), findsOneWidget);
+    expect(find.textContaining('Specialty café'), findsOneWidget);
   });
 }

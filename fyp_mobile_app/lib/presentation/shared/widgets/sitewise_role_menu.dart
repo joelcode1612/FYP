@@ -2,6 +2,7 @@ import 'package:shared_logic/shared_logic.dart';
 import 'package:flutter/material.dart';
 
 import '../../../application/services/service_locator.dart';
+import '../../../core/routing/mobile_role.dart';
 
 /// Account menu shared by the mobile shell: the demo role switcher plus Log
 /// out.
@@ -54,7 +55,9 @@ class SitewiseRoleMenu extends StatelessWidget {
   }
 
   static List<PopupMenuEntry<String>> _itemsFor(AppCubit appState) => [
-    for (final role in AppRole.values)
+    // Only roles with a mobile workspace are offered — the rest belong to
+    // fyp_jaspr_web and would route to a screen that no longer exists here.
+    for (final role in mobileSupportedRoles)
       PopupMenuItem(
         value: role.name,
         child: Text('${role.label}${role == appState.role ? ' ✓' : ''}'),
@@ -68,7 +71,7 @@ class SitewiseRoleMenu extends StatelessWidget {
       SitewiseRoleMenu(appState: appState)._logOut(context);
       return;
     }
-    final role = AppRole.values.firstWhere((r) => r.name == value);
+    final role = mobileSupportedRoles.firstWhere((r) => r.name == value);
     appState.setRole(role);
     Navigator.of(context).pushNamedAndRemoveUntil(role.homeRoute, (_) => false);
   }

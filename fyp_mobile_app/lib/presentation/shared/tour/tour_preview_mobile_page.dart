@@ -4,15 +4,15 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:panorama/panorama.dart';
 
-import '../../../../core/theme/sitewise_theme.dart';
-import '../../../../core/utils/pano_bytes.dart';
-import '../../../shared/viewmodels/tour_preview_viewmodel.dart';
-import '../../../shared/widgets/sitewise_button.dart';
-import '../../../shared/widgets/sitewise_confirm_dialog.dart';
-import '../../../shared/widgets/sitewise_empty_state.dart';
-import '../../../shared/widgets/sitewise_loading_state.dart';
-import '../../../shared/widgets/sitewise_secondary_button.dart';
-import '../../shell/mobile_app_shell.dart';
+import '../../../core/theme/sitewise_theme.dart';
+import '../../../core/utils/pano_bytes.dart';
+import '../viewmodels/tour_preview_viewmodel.dart';
+import '../widgets/sitewise_button.dart';
+import '../widgets/sitewise_confirm_dialog.dart';
+import '../widgets/sitewise_empty_state.dart';
+import '../widgets/sitewise_loading_state.dart';
+import '../widgets/sitewise_secondary_button.dart';
+import '../../mobile/shell/mobile_app_shell.dart';
 
 /// Mobile tour preview: real 360° panorama, 26-frame grid with retake,
 /// regenerate, submit and delete. The capture screen resumes for retakes.
@@ -52,7 +52,9 @@ class _TourPreviewMobilePageState extends State<TourPreviewMobilePage> {
       builder: (ctx, _) => MobileAppShell(
         appState: widget.appState,
         title: 'Tour preview',
-        currentRoute: '/owner/tours',
+        // Matches parentShellRoute('/tour-preview') so the Listing tab stays
+        // highlighted while the tour is open.
+        currentRoute: '/entrepreneur/explore',
         body: vm.loading
             ? const SitewiseLoadingState()
             : vm.tour == null
@@ -301,7 +303,7 @@ class _TourPreviewMobilePageState extends State<TourPreviewMobilePage> {
     if (mounted) {
       Navigator.of(
         context,
-      ).pushNamed('/owner/capture', arguments: tour.propertyId);
+      ).pushNamed('/capture', arguments: tour.propertyId);
     }
   }
 }

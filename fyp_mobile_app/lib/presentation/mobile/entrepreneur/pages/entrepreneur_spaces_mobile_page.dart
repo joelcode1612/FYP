@@ -3,6 +3,7 @@ import 'package:shared_logic/shared_logic.dart';
 
 import '../../../../application/services/service_locator.dart';
 import '../../../../core/theme/sitewise_m3.dart';
+import '../../../../core/theme/sitewise_theme.dart';
 import '../../shell/mobile_app_shell.dart';
 import '../../widgets/m3_kit.dart';
 
@@ -177,7 +178,7 @@ class _SpaceCard extends StatelessWidget {
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
-                        fontFamily: 'Archivo',
+                        fontFamily: kFontFamily,
                         fontSize: 13,
                         fontWeight: FontWeight.w800,
                         color: SitewiseM3.rowTitle,
@@ -189,7 +190,7 @@ class _SpaceCard extends StatelessWidget {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
-                        fontFamily: 'Archivo',
+                        fontFamily: kFontFamily,
                         fontSize: 11,
                         color: SitewiseM3.rowDesc,
                       ),

@@ -2,9 +2,11 @@ import 'package:shared_logic/shared_logic.dart';
 import 'package:flutter/material.dart';
 
 import '../../../../application/services/service_locator.dart';
+import '../../../../core/routing/mobile_role.dart';
 import '../../../../core/theme/sitewise_theme.dart';
 import '../../../shared/widgets/sitewise_brand.dart';
 import '../../../shared/widgets/sitewise_cta_button.dart';
+import '../../../shared/widgets/sitewise_icon.dart';
 import '../widgets/auth_field.dart';
 import '../widgets/auth_provider_button.dart';
 import '../widgets/auth_tabs.dart';
@@ -14,8 +16,8 @@ import '../widgets/auth_terms_row.dart';
 ///
 /// Presentation only — it calls [ServiceLocator.auth] (the application layer),
 /// which talks to the repository. No Supabase/network access happens here.
-/// On success it preserves the project's existing role-based routing by
-/// entering `user.role.homeRoute`.
+/// On success it enters the Entrepreneur workspace; roles that only exist on
+/// the web are reported here rather than routed into a missing screen.
 
 class MobileAuthPage extends StatefulWidget {
   final AppCubit appState;
@@ -104,13 +106,20 @@ class _MobileAuthPageState extends State<MobileAuthPage> {
     }
   }
 
-  /// Preserves existing role-based routing: Administrator / Property Owner /
-  /// F&B Entrepreneur each land on their own shell.
+  /// Mobile ships the Entrepreneur workspace only, so a non-Entrepreneur
+  /// account stays here with an explanation instead of entering a route that
+  /// no longer exists. The role itself is untouched — `fyp_jaspr_web` still
+  /// resolves it from the same shared [AppRole].
   void _enterHome(SitewiseUser user) {
+    final home = mobileHomeRouteFor(user.role);
+    if (home == null) {
+      _message(mobileUnsupportedRoleMessage(user.role));
+      return;
+    }
     widget.appState.setRole(user.role);
     Navigator.of(
       context,
-    ).pushNamedAndRemoveUntil(user.role.homeRoute, (_) => false);
+    ).pushNamedAndRemoveUntil(home, (_) => false);
   }
 
   @override
@@ -178,11 +187,14 @@ class _MobileAuthPageState extends State<MobileAuthPage> {
                       suffix: IconButton(
                         onPressed: () =>
                             setState(() => _hidePassword = !_hidePassword),
-                        icon: Icon(
+                        icon: SitewiseIcon(
                           _hidePassword
                               ? Icons.visibility_outlined
                               : Icons.visibility_off_outlined,
-                          size: 18,
+                          intent: SitewiseIconIntent.field,
+                          semanticLabel: _hidePassword
+                              ? 'Show password'
+                              : 'Hide password',
                         ),
                       ),
                     ),
@@ -199,11 +211,14 @@ class _MobileAuthPageState extends State<MobileAuthPage> {
                         suffix: IconButton(
                           onPressed: () =>
                               setState(() => _hideConfirm = !_hideConfirm),
-                          icon: Icon(
+                          icon: SitewiseIcon(
                             _hideConfirm
                                 ? Icons.visibility_outlined
                                 : Icons.visibility_off_outlined,
-                            size: 18,
+                            intent: SitewiseIconIntent.field,
+                            semanticLabel: _hideConfirm
+                                ? 'Show password'
+                                : 'Hide password',
                           ),
                         ),
                       ),

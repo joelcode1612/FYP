@@ -3,6 +3,7 @@ import 'package:shared_logic/shared_logic.dart';
 import 'package:flutter/material.dart';
 
 import '../../../../application/services/service_locator.dart';
+import '../../../../core/theme/sitewise_m3.dart';
 import '../../../../core/theme/sitewise_theme.dart';
 import '../../../shared/widgets/sitewise_bottom_sheet.dart';
 import '../../../shared/widgets/sitewise_button.dart';
@@ -11,17 +12,20 @@ import '../../../shared/widgets/sitewise_error_state.dart';
 import '../../../shared/widgets/sitewise_filter_chip.dart';
 import '../../../shared/widgets/sitewise_map_panel.dart';
 import '../../shell/mobile_app_shell.dart';
+import '../../widgets/m3_kit.dart';
 import '../../widgets/mobile_filter_sheet.dart';
 import '../../widgets/mobile_property_card.dart';
 import '../../widgets/mobile_search_field.dart';
 import '../../widgets/mobile_skeleton.dart';
 
-/// Mobile explore: search-first browsing of commercial properties.
+/// Mobile explore — Option A **"Find a location"**.
 ///
 /// Search runs through the existing [EntrepreneurCubit] (repository-backed);
-/// the filter bottom sheet only narrows the already-loaded list using fields
-/// that exist on [CommercialProperty]. Map pins open a bottom sheet instead of
-/// the web split-screen layout.
+/// the Option A quick chips (All spaces / Under RM 8.5k / Ground floor) and
+/// the original filter bottom sheet only narrow the already-loaded list using
+/// fields that exist on [CommercialProperty] — budget caps on `rentalRm`,
+/// ground floor on the listing's `requirements`. Map pins open a bottom sheet
+/// instead of the web split-screen layout.
 
 class EntrepreneurExploreMobilePage extends StatefulWidget {
   final AppCubit appState;
@@ -40,12 +44,17 @@ class EntrepreneurExploreMobilePage extends StatefulWidget {
       _EntrepreneurExploreMobilePageState();
 }
 
+/// Option A quick filters — mapped onto real listing fields, never invented
+/// backend query behaviour.
+enum _QuickFilter { all, budget, ground }
+
 class _EntrepreneurExploreMobilePageState
     extends State<EntrepreneurExploreMobilePage> {
   final vm = ServiceLocator.newEntrepreneurCubit();
 
   late bool showMap = widget.startInMap;
   MobilePropertyFilter filter = MobilePropertyFilter.empty;
+  _QuickFilter quick = _QuickFilter.all;
 
   /// Unfiltered listings, used only to derive the category/area options so the
   /// chips always reflect the real data set.
@@ -78,8 +87,16 @@ class _EntrepreneurExploreMobilePageState
     return set;
   }
 
-  List<CommercialProperty> get _results =>
-      vm.explore.where(filter.matches).toList();
+  List<CommercialProperty> get _results => vm.explore
+      .where(filter.matches)
+      .where(_quickMatches)
+      .toList();
+
+  bool _quickMatches(CommercialProperty p) => switch (quick) {
+    _QuickFilter.all => true,
+    _QuickFilter.budget => p.rentalRm <= 8500,
+    _QuickFilter.ground => p.requirements.contains('Ground Floor'),
+  };
 
   Future<void> _openFilter() async {
     final applied = await showMobilePropertyFilterSheet(
@@ -92,7 +109,10 @@ class _EntrepreneurExploreMobilePageState
   }
 
   void _clearFilters() {
-    setState(() => filter = MobilePropertyFilter.empty);
+    setState(() {
+      filter = MobilePropertyFilter.empty;
+      quick = _QuickFilter.all;
+    });
     vm.setFilter('All');
     vm.setQuery('');
   }
@@ -114,20 +134,18 @@ class _EntrepreneurExploreMobilePageState
         body: Column(
           children: [
             Padding(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+              padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
-                    'Find commercial locations for your F&B business.',
-                    style: TextStyle(
-                      fontSize: 12.5,
-                      color: SitewiseColors.muted,
-                    ),
+                  const M3ScreenHeading(
+                    eyebrow: 'Listing discovery',
+                    title: 'Find a location',
+                    lead: 'Browse commercial spaces suitable for F&B concepts.',
                   ),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 14),
                   MobileSearchField(
-                    hint: 'Search property, area or location',
+                    hint: 'Search area or property',
                     onChanged: vm.setQuery,
                     trailing: MobileIconAction(
                       icon: showMap ? Icons.list_rounded : Icons.map_outlined,
@@ -137,6 +155,8 @@ class _EntrepreneurExploreMobilePageState
                     ),
                   ),
                   const SizedBox(height: 12),
+                  _quickChips(),
+                  const SizedBox(height: 10),
                   _categoryChips(),
                   const SizedBox(height: 10),
                   _locationFilterRow(),
@@ -167,27 +187,20 @@ class _EntrepreneurExploreMobilePageState
     if (results.isEmpty) {
       return SitewiseEmptyState(
         icon: Icons.search_off_rounded,
-        title: 'No suitable properties found',
-        message: 'Try adjusting your location, budget or property type.',
+        title: 'No matching properties',
+        message: 'Try another search or clear the filters.',
         actionLabel: 'Clear filters',
         onAction: _clearFilters,
       );
     }
 
     return ListView.separated(
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 20),
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 122),
       itemCount: results.length + 1,
       separatorBuilder: (context, index) => const SizedBox(height: 12),
       itemBuilder: (context, i) {
         if (i == 0) {
-          return Padding(
-            padding: const EdgeInsets.only(bottom: 2),
-            child: Text(
-              '${results.length} ${results.length == 1 ? 'property' : 'properties'}'
-              '${filter.isActive ? ' · filtered' : ''}',
-              style: const TextStyle(fontSize: 12, color: SitewiseColors.muted),
-            ),
-          );
+          return _sectionRow(results.length);
         }
         final p = results[i - 1];
         return MobilePropertyCard(
@@ -199,6 +212,73 @@ class _EntrepreneurExploreMobilePageState
           onTap: () => _openDetail(p.id),
         );
       },
+    );
+  }
+
+  /// Option A quick chips: All spaces / Under RM 8.5k / Ground floor, with
+  /// visible selected states (aria-pressed equivalent via [Semantics]).
+  Widget _quickChips() {
+    const entries = [
+      (_QuickFilter.all, 'All spaces'),
+      (_QuickFilter.budget, 'Under RM 8.5k'),
+      (_QuickFilter.ground, 'Ground floor'),
+    ];
+    return Semantics(
+      container: true,
+      label: 'Listing filters',
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          children: [
+            for (final (value, label) in entries)
+              Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: SitewiseFilterChip(
+                  label: label,
+                  selected: quick == value,
+                  onTap: () => setState(() => quick = value),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// `section-row` — "Available spaces" + live result count.
+  Widget _sectionRow(int count) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 2),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          const Expanded(
+            child: Text(
+              'Available spaces',
+              style: TextStyle(
+                fontFamily: kFontFamily,
+                fontSize: 17,
+                fontWeight: FontWeight.w700,
+                letterSpacing: -0.48,
+                color: SitewiseM3.ink,
+              ),
+            ),
+          ),
+          Semantics(
+            liveRegion: true,
+            child: Text(
+              '$count sample results',
+              style: const TextStyle(
+                fontFamily: kFontFamily,
+                fontSize: 10,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 0.54,
+                color: SitewiseM3.overline,
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 

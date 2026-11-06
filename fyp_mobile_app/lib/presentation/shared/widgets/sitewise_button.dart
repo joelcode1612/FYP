@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'sitewise_icon.dart';
 
 /// Primary action button.
 
@@ -22,8 +23,20 @@ class SitewiseButton extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        if (icon != null) ...[Icon(icon, size: 18), const SizedBox(width: 8)],
-        Text(label),
+        if (icon != null) ...[
+          SitewiseIcon(icon!, intent: SitewiseIconIntent.button),
+          const SizedBox(width: 8),
+        ],
+        // The label yields under width pressure (narrow viewports, large text
+        // scale) instead of pushing the row past the button's bounds.
+        Flexible(
+          child: Text(
+            label,
+            textAlign: TextAlign.center,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
       ],
     );
     final btn = ElevatedButton(onPressed: onPressed, child: child);

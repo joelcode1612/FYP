@@ -2,6 +2,7 @@ import 'package:shared_logic/shared_logic.dart';
 import 'package:flutter/material.dart';
 
 import '../../../core/theme/sitewise_m3.dart';
+import '../../../core/theme/sitewise_theme.dart';
 
 /// Reusable presentational pieces for the Material 3 entrepreneur workspace.
 ///
@@ -66,7 +67,7 @@ class M3BrandHeader extends StatelessWidget implements PreferredSizeWidget {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: const TextStyle(
-                  fontFamily: 'Archivo',
+                  fontFamily: kFontFamily,
                   fontSize: 12,
                   fontWeight: FontWeight.w700,
                   color: SitewiseM3.muted,
@@ -119,7 +120,7 @@ class M3BrandLockup extends StatelessWidget {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
-                  fontFamily: 'Archivo',
+                  fontFamily: kFontFamily,
                   fontSize: 17,
                   fontWeight: FontWeight.w900,
                   letterSpacing: -0.94,
@@ -133,7 +134,7 @@ class M3BrandLockup extends StatelessWidget {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
-                  fontFamily: 'Archivo',
+                  fontFamily: kFontFamily,
                   fontSize: 7,
                   fontWeight: FontWeight.w800,
                   letterSpacing: 0.63,
@@ -249,7 +250,7 @@ class M3SectionRow extends StatelessWidget {
             Text(
               overline!,
               style: const TextStyle(
-                fontFamily: 'Archivo',
+                fontFamily: kFontFamily,
                 fontSize: 9,
                 fontWeight: FontWeight.w700,
                 letterSpacing: 0.54,
@@ -264,7 +265,7 @@ class M3SectionRow extends StatelessWidget {
                 minimumSize: const Size(0, 40),
                 padding: const EdgeInsets.symmetric(horizontal: 8),
                 textStyle: const TextStyle(
-                  fontFamily: 'Archivo',
+                  fontFamily: kFontFamily,
                   fontSize: 12,
                   fontWeight: FontWeight.w700,
                 ),
@@ -415,7 +416,7 @@ class M3FeatureCard extends StatelessWidget {
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: const TextStyle(
-                              fontFamily: 'Archivo',
+                              fontFamily: kFontFamily,
                               fontSize: 9,
                               fontWeight: FontWeight.w800,
                               letterSpacing: 0.72,
@@ -433,7 +434,7 @@ class M3FeatureCard extends StatelessWidget {
                   child: Text(
                     title,
                     style: const TextStyle(
-                      fontFamily: 'Archivo',
+                      fontFamily: kFontFamily,
                       fontSize: 24,
                       fontWeight: FontWeight.w800,
                       height: 1.16,
@@ -448,7 +449,7 @@ class M3FeatureCard extends StatelessWidget {
                   child: Text(
                     body,
                     style: const TextStyle(
-                      fontFamily: 'Archivo',
+                      fontFamily: kFontFamily,
                       fontSize: 12,
                       height: 1.6,
                       color: SitewiseM3.featureTitle,
@@ -508,13 +509,17 @@ class M3PrimaryButton extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.center,
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text(
-                  label,
-                  style: const TextStyle(
-                    fontFamily: 'Archivo',
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
-                    color: SitewiseM3.surface,
+                Flexible(
+                  child: Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontFamily: kFontFamily,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      color: SitewiseM3.surface,
+                    ),
                   ),
                 ),
                 const SizedBox(width: 7),
@@ -586,7 +591,7 @@ class M3MetricTile extends StatelessWidget {
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: const TextStyle(
-              fontFamily: 'Archivo',
+              fontFamily: kFontFamily,
               fontSize: 12,
               fontWeight: FontWeight.w600,
               color: Color(0xFF3A5983),
@@ -596,7 +601,7 @@ class M3MetricTile extends StatelessWidget {
           Text(
             value,
             style: const TextStyle(
-              fontFamily: 'Archivo',
+              fontFamily: kFontFamily,
               fontSize: 27,
               fontWeight: FontWeight.w800,
               letterSpacing: -1.2,
@@ -610,7 +615,7 @@ class M3MetricTile extends StatelessWidget {
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
             style: const TextStyle(
-              fontFamily: 'Archivo',
+              fontFamily: kFontFamily,
               fontSize: 10,
               color: Color(0xFF566E88),
             ),
@@ -653,7 +658,7 @@ class M3DataNote extends StatelessWidget {
             child: Text(
               text,
               style: const TextStyle(
-                fontFamily: 'Archivo',
+                fontFamily: kFontFamily,
                 fontSize: 11,
                 height: 1.5,
                 color: SitewiseM3.noteText,
@@ -727,7 +732,7 @@ class M3QuickActionRow extends StatelessWidget {
                       Text(
                         title,
                         style: const TextStyle(
-                          fontFamily: 'Archivo',
+                          fontFamily: kFontFamily,
                           fontSize: 13,
                           fontWeight: FontWeight.w700,
                           color: SitewiseM3.rowTitle,
@@ -737,7 +742,7 @@ class M3QuickActionRow extends StatelessWidget {
                       Text(
                         subtitle,
                         style: const TextStyle(
-                          fontFamily: 'Archivo',
+                          fontFamily: kFontFamily,
                           fontSize: 11,
                           color: SitewiseM3.rowDesc,
                         ),
@@ -790,7 +795,7 @@ class M3Banner extends StatelessWidget {
             child: Text(
               text,
               style: const TextStyle(
-                fontFamily: 'Archivo',
+                fontFamily: kFontFamily,
                 fontSize: 11,
                 height: 1.5,
                 color: SitewiseM3.bannerText,
@@ -824,7 +829,7 @@ class M3Tag extends StatelessWidget {
       child: Text(
         label,
         style: TextStyle(
-          fontFamily: 'Archivo',
+          fontFamily: kFontFamily,
           fontSize: 10,
           fontWeight: FontWeight.w700,
           color: positive ? SitewiseM3.green : const Color(0xFF3E5D84),
@@ -909,7 +914,7 @@ class M3EmptyState extends StatelessWidget {
             title,
             textAlign: TextAlign.center,
             style: const TextStyle(
-              fontFamily: 'Archivo',
+              fontFamily: kFontFamily,
               fontSize: 15,
               fontWeight: FontWeight.w800,
               color: SitewiseM3.ink,
@@ -920,7 +925,7 @@ class M3EmptyState extends StatelessWidget {
             message,
             textAlign: TextAlign.center,
             style: const TextStyle(
-              fontFamily: 'Archivo',
+              fontFamily: kFontFamily,
               fontSize: 11.5,
               height: 1.55,
               color: SitewiseM3.muted,

@@ -5,16 +5,11 @@ import '../../presentation/mobile/auth/pages/mobile_auth_page.dart';
 import '../../presentation/mobile/auth/widgets/auth_tabs.dart';
 import '../../presentation/mobile/onboarding/pages/onboarding_flow_page.dart';
 import '../../presentation/mobile/start/app_start_gate.dart';
-import '../../presentation/mobile/admin/pages/admin_dashboard_mobile_page.dart';
-import '../../presentation/mobile/admin/pages/admin_listing_detail_mobile_page.dart';
-import '../../presentation/mobile/admin/pages/admin_listings_mobile_page.dart';
-import '../../presentation/mobile/admin/pages/admin_profile_mobile_page.dart';
-import '../../presentation/mobile/admin/pages/admin_user_detail_mobile_page.dart';
-import '../../presentation/mobile/admin/pages/admin_users_mobile_page.dart';
-import '../../presentation/mobile/admin/pages/admin_verification_detail_mobile_page.dart';
-import '../../presentation/mobile/admin/pages/admin_verification_mobile_page.dart';
 import '../../presentation/mobile/entrepreneur/pages/entrepreneur_assess_mobile_page.dart';
+import '../../presentation/mobile/entrepreneur/pages/entrepreneur_assessment_setup_mobile_page.dart';
+import '../../presentation/mobile/entrepreneur/pages/entrepreneur_assessment_summary_mobile_page.dart';
 import '../../presentation/mobile/entrepreneur/pages/entrepreneur_compare_mobile_page.dart';
+import '../../presentation/mobile/entrepreneur/pages/entrepreneur_evidence_mobile_page.dart';
 import '../../presentation/mobile/landing/pages/landing_mobile_page.dart';
 import '../../presentation/mobile/entrepreneur/pages/entrepreneur_spaces_mobile_page.dart';
 import '../../presentation/mobile/entrepreneur/pages/entrepreneur_dashboard_mobile_page.dart';
@@ -26,14 +21,8 @@ import '../../presentation/mobile/entrepreneur/pages/entrepreneur_recommendation
 import '../../presentation/mobile/entrepreneur/pages/entrepreneur_report_mobile_page.dart';
 import '../../presentation/mobile/entrepreneur/pages/entrepreneur_saved_mobile_page.dart';
 import '../../presentation/mobile/entrepreneur/pages/entrepreneur_tour_mobile_page.dart';
-import '../../presentation/mobile/property_owner/pages/owner_add_property_mobile_page.dart';
-import '../../presentation/mobile/property_owner/pages/owner_dashboard_mobile_page.dart';
-import '../../presentation/mobile/property_owner/pages/owner_profile_mobile_page.dart';
-import '../../presentation/mobile/property_owner/pages/owner_properties_mobile_page.dart';
-import '../../presentation/mobile/property_owner/pages/owner_property_detail_mobile_page.dart';
-import '../../presentation/mobile/property_owner/pages/owner_tours_mobile_page.dart';
-import '../../presentation/mobile/property_owner/pages/tour_preview_mobile_page.dart';
 import '../../presentation/shared/capture/panorama_capture_page.dart';
+import '../../presentation/shared/tour/tour_preview_mobile_page.dart';
 
 /// Centralised route table for the Flutter app (mobile tree only).
 ///
@@ -57,11 +46,14 @@ String parentShellRoute(String route) {
     '/entrepreneur/property-detail': '/entrepreneur/explore',
     '/entrepreneur/tour': '/entrepreneur/explore',
     '/entrepreneur/report': '/entrepreneur/assess',
-    '/admin/user-detail': '/admin/users',
-    '/admin/verification-detail': '/admin/verification',
-    '/admin/listing-detail': '/admin/listings',
-    '/owner/property-detail': '/owner/properties',
-    '/owner/capture': '/owner/tours',
+    // The Option A assessment flow keeps the Assess tab highlighted.
+    '/entrepreneur/assessment-setup': '/entrepreneur/assess',
+    '/entrepreneur/assessment-evidence': '/entrepreneur/assess',
+    '/entrepreneur/assessment-summary': '/entrepreneur/assess',
+    // The 360° capture and preview flow is role-neutral shared work; it is
+    // entered from a property tour, so it highlights the Listing tab.
+    '/capture': '/entrepreneur/explore',
+    '/tour-preview': '/entrepreneur/explore',
   };
   return parents[route] ?? route;
 }
@@ -87,44 +79,12 @@ abstract final class AppRoutes {
             appState: appState,
             initialTab: id == 'signUp' ? AuthTab.signUp : AuthTab.login,
           ),
-          // Admin
-          '/admin' => AdminDashboardMobilePage(appState: appState),
-          '/admin/users' => AdminUsersMobilePage(appState: appState),
-          '/admin/user-detail' => AdminUserDetailMobilePage(
-            appState: appState,
-            userId: id ?? '',
-          ),
-          '/admin/verification' => AdminVerificationMobilePage(
-            appState: appState,
-          ),
-          '/admin/verification-detail' => AdminVerificationDetailMobilePage(
-            appState: appState,
-            propertyId: id ?? '',
-          ),
-          '/admin/listings' => AdminListingsMobilePage(appState: appState),
-          '/admin/listing-detail' => AdminListingDetailMobilePage(
-            appState: appState,
-            propertyId: id ?? '',
-          ),
-          '/admin/profile' => AdminProfileMobilePage(appState: appState),
-          // Owner
-          '/owner' => OwnerDashboardMobilePage(appState: appState),
-          '/owner/properties' => OwnerPropertiesMobilePage(appState: appState),
-          '/owner/property-detail' => OwnerPropertyDetailMobilePage(
-            appState: appState,
-            propertyId: id ?? '',
-          ),
-          '/owner/add-property' => OwnerAddPropertyMobilePage(
-            appState: appState,
-            editingId: id,
-          ),
-          '/owner/tours' => OwnerToursMobilePage(appState: appState),
-          '/owner/profile' => OwnerProfileMobilePage(appState: appState),
-          '/owner/tour-preview' => TourPreviewMobilePage(
+          // Shared 360° capture + preview flow (device-bound, no role namespace).
+          '/capture' => PanoramaCapturePage(propertyId: id),
+          '/tour-preview' => TourPreviewMobilePage(
             appState: appState,
             tourId: id ?? '',
           ),
-          '/owner/capture' => PanoramaCapturePage(propertyId: id),
           // Entrepreneur
           '/entrepreneur' => EntrepreneurDashboardMobilePage(
             appState: appState,
@@ -164,6 +124,17 @@ abstract final class AppRoutes {
             appState: appState,
             propertyId: id ?? '',
           ),
+          // Option A assessment flow. The setup step receives the chosen
+          // property id as arguments; the later steps read the session draft.
+          '/entrepreneur/assessment-setup' =>
+            EntrepreneurAssessmentSetupMobilePage(
+              appState: appState,
+              propertyId: id ?? '',
+            ),
+          '/entrepreneur/assessment-evidence' =>
+            EntrepreneurEvidenceMobilePage(appState: appState),
+          '/entrepreneur/assessment-summary' =>
+            EntrepreneurAssessmentSummaryMobilePage(appState: appState),
           '/entrepreneur/profile' => EntrepreneurProfileMobilePage(
             appState: appState,
           ),

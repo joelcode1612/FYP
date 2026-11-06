@@ -18,12 +18,14 @@ class SitewiseSecondaryButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final labelWidget = Text(label);
     final child = Row(
       mainAxisSize: MainAxisSize.min,
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
         if (icon != null) ...[Icon(icon, size: 18), const SizedBox(width: 8)],
-        Text(label),
+        // Only the expanded (bounded-width) layout can flex safely.
+        if (expanded) Flexible(child: labelWidget) else labelWidget,
       ],
     );
     final btn = OutlinedButton(onPressed: onPressed, child: child);

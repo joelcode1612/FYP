@@ -62,7 +62,7 @@ class _PanoramaCapturePageState extends State<PanoramaCapturePage>
       _navigatedToPreview = true;
       Navigator.of(
         context,
-      ).pushNamed('/owner/tour-preview', arguments: _vm.tourId);
+      ).pushNamed('/tour-preview', arguments: _vm.tourId);
     } else if (!ok) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(_vm.error ?? 'Generation failed.')),

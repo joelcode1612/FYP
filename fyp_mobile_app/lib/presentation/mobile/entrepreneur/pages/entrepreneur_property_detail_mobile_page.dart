@@ -11,15 +11,20 @@ import '../../../shared/widgets/sitewise_map_panel.dart';
 import '../../../shared/widgets/sitewise_secondary_button.dart';
 import '../../../shared/widgets/sitewise_status_badge.dart';
 import '../../shell/mobile_app_shell.dart';
+import '../../widgets/m3_kit.dart';
 import '../../widgets/mobile_property_image.dart';
 import '../../widgets/mobile_section_header.dart';
 import '../../widgets/mobile_skeleton.dart';
 import '../../widgets/mobile_suitability_badge.dart';
 
-/// Mobile property detail — the evaluation flow.
+/// Mobile property detail — Option A layout over the existing evaluation flow.
 ///
-/// Imagery → identity → price → suitability → key facts → location insights →
-/// 360° tour → actions. Every action maps to an existing route/state.
+/// Imagery → identity → price → key facts (with explicit Unknown/Unverified
+/// markers) → property information → location insights → 360° tour → actions.
+/// **Assess This Property** is the primary action: it carries this
+/// `property.id` into the assessment setup route as arguments, so the user
+/// never selects the same property twice. Every other action maps to an
+/// existing route/state.
 
 class EntrepreneurPropertyDetailMobilePage extends StatefulWidget {
   final AppCubit appState;
@@ -55,60 +60,76 @@ class _EntrepreneurPropertyDetailMobilePageState
       builder: (ctx, _) => BlocBuilder<EntrepreneurCubit, EntrepreneurState>(
         bloc: vm,
         builder: (ctx, _) => MobileAppShell(
-        appState: widget.appState,
-        title: 'Property',
-        currentRoute: '/entrepreneur/explore',
-        body: FutureBuilder<CommercialProperty?>(
-          future: ServiceLocator.properties.detail(widget.propertyId),
-          builder: (c, snap) {
-            if (snap.connectionState != ConnectionState.done) {
-              return const MobilePropertyListSkeleton(
-                padding: EdgeInsets.all(16),
-              );
-            }
-            final p = snap.data;
-            if (p == null) {
-              return const Center(
-                child: Text('This property is no longer available.'),
-              );
-            }
-            final saved = widget.appState.isSaved(p.id);
-            return ListView(
-              padding: const EdgeInsets.fromLTRB(16, 14, 16, 28),
-              children: [
-                _hero(p, saved),
-                const SizedBox(height: 16),
-                _identity(p),
-                const SizedBox(height: 18),
-                _keyFacts(p),
-                const SizedBox(height: 22),
-                const MobileSectionHeader(
-                  title: 'Location insights',
-                  subtitle: 'What surrounds this property.',
-                ),
-                const SizedBox(height: 12),
-                _insights(p),
-                if (p.hasTour) ...[
+          appState: widget.appState,
+          title: 'Property',
+          currentRoute: '/entrepreneur/explore',
+          body: FutureBuilder<CommercialProperty?>(
+            future: ServiceLocator.properties.detail(widget.propertyId),
+            builder: (c, snap) {
+              if (snap.connectionState != ConnectionState.done) {
+                return const MobilePropertyListSkeleton(
+                  padding: EdgeInsets.all(16),
+                );
+              }
+              final p = snap.data;
+              if (p == null) {
+                return const Center(
+                  child: Text('This property is no longer available.'),
+                );
+              }
+              final saved = widget.appState.isSaved(p.id);
+              return ListView(
+                padding: const EdgeInsets.fromLTRB(16, 14, 16, 122),
+                children: [
+                  _hero(p, saved),
+                  const SizedBox(height: 16),
+                  _identity(p),
                   const SizedBox(height: 18),
+                  _keyFacts(p),
+                  const SizedBox(height: 22),
+                  const MobileSectionHeader(
+                    title: 'Location insights',
+                    subtitle: 'What surrounds this property.',
+                  ),
+                  const SizedBox(height: 12),
+                  _insights(p),
+                  if (p.hasTour) ...[
+                    const SizedBox(height: 18),
+                    SitewiseSecondaryButton(
+                      label: 'View 360° tour',
+                      icon: Icons.threesixty_rounded,
+                      onPressed: () =>
+                          _open('/entrepreneur/tour', arguments: p.id),
+                    ),
+                  ],
+                  const SizedBox(height: 22),
+                  const M3Banner(
+                    text:
+                        'Evaluate this property for your own business. '
+                        'Survey and location analysis are linked separately '
+                        'when available.',
+                  ),
+                  const SizedBox(height: 18),
+                  M3PrimaryButton(
+                    label: 'Assess this property',
+                    onTap: () => _open(
+                      '/entrepreneur/assessment-setup',
+                      arguments: p.id,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  _actions(p, saved),
+                  const SizedBox(height: 8),
                   SitewiseSecondaryButton(
-                    label: 'View 360° tour',
-                    icon: Icons.threesixty_rounded,
-                    onPressed: () =>
-                        _open('/entrepreneur/tour', arguments: p.id),
+                    label: 'Back to listings',
+                    icon: Icons.arrow_back_rounded,
+                    onPressed: () => Navigator.of(context).pop(),
                   ),
                 ],
-                const SizedBox(height: 22),
-                const MobileSectionHeader(
-                  title: 'Actions',
-                  subtitle: 'Shortlist or evaluate this location.',
-                ),
-                const SizedBox(height: 12),
-                _actions(p, saved),
-              ],
-            );
-          },
+              );
+            },
+          ),
         ),
-      ),
       ),
     );
   }
@@ -203,13 +224,17 @@ class _EntrepreneurPropertyDetailMobilePageState
       Row(
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
-          Text(
-            p.rentalDisplay,
-            style: const TextStyle(
-              fontSize: 22,
-              fontWeight: FontWeight.w800,
-              color: SitewiseColors.action,
-              height: 1.1,
+          Flexible(
+            child: Text(
+              p.rentalDisplay,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                fontSize: 22,
+                fontWeight: FontWeight.w800,
+                color: SitewiseColors.action,
+                height: 1.1,
+              ),
             ),
           ),
           const SizedBox(width: 4),
@@ -243,7 +268,7 @@ class _EntrepreneurPropertyDetailMobilePageState
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const Text(
-          'Key facts',
+          'Property information',
           style: TextStyle(
             fontSize: 13.5,
             fontWeight: FontWeight.w800,
@@ -254,14 +279,20 @@ class _EntrepreneurPropertyDetailMobilePageState
         Row(
           children: [
             Expanded(
-              child: _Fact(label: 'Property type', value: p.propertyType),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
               child: _Fact(
                 label: 'Floor area',
                 value: '${p.sizeSqft.toStringAsFixed(0)} sq ft',
               ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _Fact(label: 'Unit type', value: p.propertyType),
+            ),
+            const SizedBox(width: 12),
+            // The repository carries no F&B licensing data — the Option A
+            // marker stays honestly "Unknown" rather than guessed.
+            const Expanded(
+              child: _Fact(label: 'F&B approval', value: 'Unknown'),
             ),
           ],
         ),
@@ -272,6 +303,15 @@ class _EntrepreneurPropertyDetailMobilePageState
               child: _Fact(
                 label: 'Rental efficiency',
                 value: 'RM${p.rentalPerSqft.toStringAsFixed(2)} / sq ft',
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _Fact(
+                label: 'Verification',
+                value: p.verification == VerificationStatus.verified
+                    ? 'Verified'
+                    : 'Unverified',
               ),
             ),
             const SizedBox(width: 12),
@@ -308,6 +348,20 @@ class _EntrepreneurPropertyDetailMobilePageState
             children: [for (final t in p.tags) _Tag(t)],
           ),
         ],
+        const SizedBox(height: 12),
+        Text(
+          AppConfig.usesDemoData
+              ? 'Floor area and price are sample data in this build and '
+                    'require verification.'
+              : 'Floor area and price are provided per listing and require '
+                    'verification.',
+          style: const TextStyle(
+            fontFamily: kFontFamily,
+            fontSize: 10.5,
+            height: 1.5,
+            color: SitewiseColors.muted,
+          ),
+        ),
       ],
     ),
   );

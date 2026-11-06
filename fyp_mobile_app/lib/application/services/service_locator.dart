@@ -9,6 +9,7 @@ import '../../data/datasources/local/opencv_panorama_stitcher_stub.dart'
 import '../../data/repositories/auth_repository_impl.dart';
 import '../../data/repositories/onboarding_repository_impl.dart';
 import 'ar_capture_service.dart';
+import 'assessment_session.dart';
 import 'capture_session_store.dart';
 import 'panorama_capture_service.dart';
 import 'panorama_generation_service.dart';
@@ -24,9 +25,6 @@ abstract final class ServiceLocator {
   static final PropertyRepositoryImpl propertyRepo = PropertyRepositoryImpl();
   static final RecommendationRepositoryImpl recommendationRepo =
       RecommendationRepositoryImpl();
-  static final VerificationRepositoryImpl verificationRepo =
-      VerificationRepositoryImpl(propertyRepo);
-  static final UserRepositoryImpl userRepo = UserRepositoryImpl();
   static final TourRepositoryImpl tourRepo = TourRepositoryImpl();
 
   /// Mobile first-run onboarding persistence. Non-final so tests can swap in
@@ -42,9 +40,6 @@ abstract final class ServiceLocator {
   static final PropertyService properties = PropertyService(propertyRepo);
   static final RecommendationService recommendations = RecommendationService(
     recommendationRepo,
-  );
-  static final VerificationService verification = VerificationService(
-    verificationRepo,
   );
   static final CaptureFrameStore frameStore = CaptureFrameStore();
   static final CaptureSessionStore captureSessions = CaptureSessionStore();
@@ -62,6 +57,10 @@ abstract final class ServiceLocator {
 
   static BusinessPreferences preferences = DemoData.defaultPreferences;
 
+  /// Single in-session assessment draft (app-layer because the flow that
+  /// reads and writes it is mobile presentation; nothing persists it).
+  static final AssessmentSessionStore assessmentSession = AssessmentSessionStore();
+
   /// Fresh entrepreneur browsing cubit (shared logic).
   ///
   /// The use cases and the initial preferences are constructor-injected — the
@@ -74,18 +73,6 @@ abstract final class ServiceLocator {
     getLocationAnalysis: GetLocationAnalysis(recommendationRepo),
     preferences: preferences,
     onPreferencesUpdated: (value) => preferences = value,
-  );
-
-  /// Fresh owner cubit (shared logic) scoped to the demo owner.
-  static OwnerCubit newOwnerCubit() =>
-      OwnerCubit(properties: properties, tours: tourService, ownerId: DemoData.demoOwnerId);
-
-  /// Fresh admin cubit (shared logic).
-  static AdminCubit newAdminCubit() => AdminCubit(
-    verification: verification,
-    properties: properties,
-    users: userRepo,
-    tours: tourService,
   );
 
   /// Fresh panorama session over the 26 local capture targets.

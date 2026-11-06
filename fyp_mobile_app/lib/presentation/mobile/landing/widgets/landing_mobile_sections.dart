@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import '../../../../core/theme/sitewise_theme.dart';
 import '../../../shared/landing/landing_content.dart';
 import '../../../shared/widgets/sitewise_button.dart';
+import '../../../shared/widgets/sitewise_icon.dart';
+import '../../../shared/widgets/sitewise_icon_tile.dart';
 import '../../../shared/widgets/sitewise_map_panel.dart';
 import '../../../shared/widgets/sitewise_secondary_button.dart';
 import '../../widgets/mobile_tour_viewer.dart';
@@ -323,18 +325,9 @@ class MobileRoleCards extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Container(
-                      width: 42,
-                      height: 42,
-                      decoration: BoxDecoration(
-                        color: SitewiseColors.geoWash,
-                        borderRadius: BorderRadius.circular(11),
-                      ),
-                      child: Icon(
-                        r.icon,
-                        color: SitewiseColors.action,
-                        size: 22,
-                      ),
+                    SitewiseIconTile.glyph(
+                      r.icon,
+                      size: SitewiseIconTileSize.card,
                     ),
                     const SizedBox(height: 12),
                     Text(
@@ -658,11 +651,13 @@ class MobileWeights extends StatelessWidget {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text(
-                          w.$1,
-                          style: const TextStyle(
-                            fontSize: 11.5,
-                            fontWeight: FontWeight.w700,
+                        Flexible(
+                          child: Text(
+                            w.$1,
+                            style: const TextStyle(
+                              fontSize: 11.5,
+                              fontWeight: FontWeight.w700,
+                            ),
                           ),
                         ),
                         Text(
@@ -727,11 +722,13 @@ class MobileTourShowcase extends StatelessWidget {
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text(
-                          r.$1,
-                          style: const TextStyle(
-                            fontSize: 12,
-                            color: SitewiseColors.muted,
+                        Flexible(
+                          child: Text(
+                            r.$1,
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: SitewiseColors.muted,
+                            ),
                           ),
                         ),
                         Text(
@@ -913,7 +910,11 @@ class _MobileBrandMark extends StatelessWidget {
           colors: [SitewiseColors.action, SitewiseColors.accent],
         ),
       ),
-      child: const Icon(Icons.location_on, color: Colors.white, size: 20),
+      child: SitewiseIcon(
+        Icons.location_on,
+        intent: SitewiseIconIntent.button,
+        color: Colors.white,
+      ),
     );
   }
 }
@@ -957,19 +958,24 @@ class MobileBrand extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(8),
-      child: const Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          _MobileBrandMark(),
-          SizedBox(width: 8),
-          Text(
-            'Sitewise',
-            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
-          ),
-        ],
+    // Scale down instead of overflowing when the app bar title area is
+    // squeezed by trailing actions (or the fallback test font renders wide).
+    return FittedBox(
+      fit: BoxFit.scaleDown,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(8),
+        child: const Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _MobileBrandMark(),
+            SizedBox(width: 8),
+            Text(
+              'Sitewise',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+            ),
+          ],
+        ),
       ),
     );
   }
