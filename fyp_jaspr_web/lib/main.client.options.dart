@@ -92,6 +92,8 @@ import 'package:sitewise_jaspr_web/pages/signup_page.dart'
     deferred as _signup_page;
 import 'package:sitewise_jaspr_web/pages/staff_mfa_page.dart'
     deferred as _staff_mfa_page;
+import 'package:sitewise_jaspr_web/pages/staff_verify_page.dart'
+    deferred as _staff_verify_page;
 
 /// Default [ClientOptions] for use with your Jaspr project.
 ///
@@ -292,6 +294,10 @@ ClientOptions get defaultClientOptions => ClientOptions(
     'staff_mfa_page': ClientLoader(
       (p) => _staff_mfa_page.StaffMfaPage(),
       loader: _staff_mfa_page.loadLibrary,
+    ),
+    'staff_verify_page': ClientLoader(
+      (p) => _staff_verify_page.StaffVerifyPage(),
+      loader: _staff_verify_page.loadLibrary,
     ),
   },
 );

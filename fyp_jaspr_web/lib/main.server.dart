@@ -18,6 +18,7 @@ import 'data/api_proxy.dart';
 import 'data/app_locator.dart';
 import 'data/auth_service.dart';
 import 'data/ssr_service.dart';
+import 'data/staff_guard.dart';
 import 'data/workspaces.dart';
 
 // This file is generated automatically by Jaspr, do not remove or edit.
@@ -29,6 +30,12 @@ void main() {
   // middleware before runApp means it wraps Jaspr's whole SSR/static cascade
   // without changing any rendered HTML.
   ServerApp.addMiddleware(createApiProxy(kBackendApiBase));
+
+  // Staff authorization guard (F4): /admin and /agent are rendered only after
+  // the backend confirms the bearer token's active staff role AND aal2. The
+  // unsigned session cookie is never trusted for a staff decision; it is
+  // rewritten to the server-verified profile before the render isolate reads it.
+  ServerApp.addMiddleware(createStaffGuard(kBackendApiBase));
 
   Jaspr.initializeApp(
     options: defaultServerOptions,
@@ -81,6 +88,7 @@ class _DocumentShell extends StatelessComponent {
         link(rel: 'icon', type: 'image/png', href: 'assets/sitewise-icon-32.png'),
         link(rel: 'apple-touch-icon', href: 'assets/sitewise-icon-180.png'),
         link(rel: 'stylesheet', type: 'text/css', href: 'styles.css'),
+        link(rel: 'stylesheet', type: 'text/css', href: 'staff-mfa.css'),
         link(rel: 'preconnect', href: 'https://fonts.googleapis.com'),
         link(
           rel: 'preconnect',

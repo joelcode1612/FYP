@@ -255,22 +255,6 @@ def require_property_owner(
     return user
 
 
-def require_agent(
-    user: Annotated[AuthenticatedUser, Depends(get_active_user)],
-) -> AuthenticatedUser:
-    if not rbac.has_role(user.role, (rbac.ROLE_AGENT, rbac.ROLE_ADMIN)):
-        raise ForbiddenError("This action requires an agent account.")
-    return user
-
-
-def require_admin(
-    user: Annotated[AuthenticatedUser, Depends(get_active_user)],
-) -> AuthenticatedUser:
-    if not rbac.can_administer_users(user.role):
-        raise ForbiddenError("This action requires an administrator account.")
-    return user
-
-
 # Convenience aliases for router signatures.
 CurrentUser = Annotated[AuthenticatedUser, Depends(get_current_user)]
 ActiveUser = Annotated[AuthenticatedUser, Depends(get_active_user)]

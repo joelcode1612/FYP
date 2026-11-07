@@ -15,6 +15,8 @@ extension type _AuthBridge(JSObject _) implements JSObject {
     JSString mfaCode,
   );
   // Native Supabase TOTP enrollment ("Secure Your Staff Account").
+  external JSPromise<JSString> mfaChallengeStart();
+  external JSPromise<JSAny?> mfaChallengeVerify(JSString code);
   external JSPromise<JSAny?> mfaEnrollStart();
   external JSPromise<JSAny?> mfaEnrollVerify(JSString code);
   // Native Supabase password recovery + update (both portals).
@@ -78,6 +80,13 @@ abstract final class WebAuth {
         .toDart;
   }
 
+  static Future<String> mfaChallengeStart() async =>
+      (await _bridge.mfaChallengeStart().toDart).toDart;
+
+  static Future<void> mfaChallengeVerify(String code) async {
+    await _bridge.mfaChallengeVerify(code.toJS).toDart;
+  }
+
   static Future<void> mfaEnrollStart() async {
     await _bridge.mfaEnrollStart().toDart;
   }
@@ -115,16 +124,20 @@ abstract final class WebAuth {
     String path, {
     String method = 'GET',
     Map<String, dynamic>? body,
-  }) async =>
-      jsonDecode(
-            (await _bridge
-                    .request(
-                      path.toJS,
-                      method.toJS,
-                      (body == null ? '' : jsonEncode(body)).toJS,
-                    )
-                    .toDart)
-                .toDart,
-          )
-          as Map<String, dynamic>;
+  }) async {
+    final decoded = jsonDecode(
+      (await _bridge
+              .request(
+                path.toJS,
+                method.toJS,
+                (body == null ? '' : jsonEncode(body)).toJS,
+              )
+              .toDart)
+          .toDart,
+    );
+    // GET /users/ returns a bare array; wrap it exactly as the VM bridge does
+    // so callers see one shape on both platforms (a Map cast would throw here).
+    if (decoded is Map<String, dynamic>) return decoded;
+    return {'data': decoded};
+  }
 }

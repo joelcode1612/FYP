@@ -5,7 +5,7 @@ from sqlmodel import Session, select
 
 from sitewise.db.models.recommendation_result import RecommendationResult
 from sitewise.db.session import get_db
-from sitewise.dependencies import AuthenticatedUser, get_active_user, require_admin
+from sitewise.dependencies import AuthenticatedUser, get_active_user, require_admin_mfa
 from sitewise.domain import rbac
 from sitewise.services.recommendation_service import RecommendationService
 
@@ -17,7 +17,7 @@ def list_recommendations(
     offset: int = 0,
     limit: int = 100,
     session: Session = Depends(get_db),
-    _: AuthenticatedUser = Depends(require_admin),
+    _: AuthenticatedUser = Depends(require_admin_mfa),
 ):
     """Administrative overview of all stored recommendation results."""
     return RecommendationService(session).list_results(offset, limit)

@@ -19,7 +19,7 @@ from sitewise.dependencies import (
     ActiveUser,
     AuthenticatedUser,
     CurrentUser,
-    require_admin,
+    require_admin_mfa,
 )
 from sitewise.services.user_service import UserService
 
@@ -94,7 +94,7 @@ def list_users(
     offset: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=200),
     session: Session = Depends(get_db),
-    _: AuthenticatedUser = Depends(require_admin),
+    _: AuthenticatedUser = Depends(require_admin_mfa),
 ) -> list[dict]:
     return [_profile_payload(u) for u in UserService(session).list_users(offset, limit)]
 
@@ -103,7 +103,7 @@ def list_users(
 def get_user(
     user_id: uuid.UUID,
     session: Session = Depends(get_db),
-    current: AuthenticatedUser = Depends(require_admin),
+    current: AuthenticatedUser = Depends(require_admin_mfa),
 ) -> dict:
     target = UserService(session).get_user(user_id)
     if not target:
@@ -116,7 +116,7 @@ def admin_update_user(
     user_id: uuid.UUID,
     data: dict,
     session: Session = Depends(get_db),
-    current: AuthenticatedUser = Depends(require_admin),
+    current: AuthenticatedUser = Depends(require_admin_mfa),
 ) -> dict:
     """Administrative update (role / account status management).
 
@@ -192,7 +192,7 @@ def admin_update_user(
 def delete_user(
     user_id: uuid.UUID,
     session: Session = Depends(get_db),
-    current: AuthenticatedUser = Depends(require_admin),
+    current: AuthenticatedUser = Depends(require_admin_mfa),
 ) -> None:
     if user_id == current.user_id:
         raise HTTPException(status_code=422, detail="Administrators cannot delete themselves.")

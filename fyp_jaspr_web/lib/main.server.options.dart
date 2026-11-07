@@ -86,6 +86,8 @@ import 'package:sitewise_jaspr_web/pages/reset_password_page.dart'
 import 'package:sitewise_jaspr_web/pages/signup_page.dart' as _signup_page;
 import 'package:sitewise_jaspr_web/pages/staff_mfa_page.dart'
     as _staff_mfa_page;
+import 'package:sitewise_jaspr_web/pages/staff_verify_page.dart'
+    as _staff_verify_page;
 
 /// Default [ServerOptions] for use with your Jaspr project.
 ///
@@ -258,6 +260,8 @@ ServerOptions get defaultServerOptions => ServerOptions(
     _staff_mfa_page.StaffMfaPage: ClientTarget<_staff_mfa_page.StaffMfaPage>(
       'staff_mfa_page',
     ),
+    _staff_verify_page.StaffVerifyPage:
+        ClientTarget<_staff_verify_page.StaffVerifyPage>('staff_verify_page'),
   },
 );
 

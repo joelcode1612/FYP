@@ -38,6 +38,10 @@ let state = {
 const nextKey = 'sitewise.next';
 const rememberKey = 'sitewise.remember';
 const STAFF_ROLES = ['agent', 'admin', 'administrator'];
+// Staff workspaces that require a completed-MFA (aal2) session to view. The
+// MFA routes themselves (/staff/*) are deliberately excluded so the verify and
+// enrollment screens never redirect to themselves.
+const STAFF_WORKSPACE = /^\/(admin|agent)(\/|$)/;
 const storage = {
   getItem: key => sessionStorage.getItem(key) ?? localStorage.getItem(key),
   setItem(key, value) {
@@ -112,31 +116,9 @@ function isStaffRole(role) {
 }
 
 async function hasVerifiedTotpFactor() {
-  const { data } = await client.auth.mfa.listFactors().catch(() => ({ data: null }));
-  return !!data?.all?.find(f => f.type === 'totp' && f.status === 'verified');
-}
-
-// Documented Supabase AAL flow: after a password sign-in, compare the current
-// assurance level with the next required one. A verified TOTP factor makes
-// nextLevel aal2 -> the session needs the challenge before any protected work.
-async function assuranceNeedsChallenge() {
-  const { data } = await client.auth.mfa.getAuthenticatorAssuranceLevel().catch(() => ({ data: null }));
-  if (!data) return false;
-  return data.currentLevel !== data.currentLevelMaxPossible
-    && data.nextLevel === 'aal2'
-    && data.currentLevel !== 'aal2';
-}
-
-async function startChallengeForVerifiedFactor() {
-  const { data } = await client.auth.mfa.listFactors().catch(() => ({ data: null }));
-  const totp = data?.all?.find(f => f.type === 'totp' && f.status === 'verified');
-  if (!totp) return false;
-  const challenge = await client.auth.mfa.challenge({ factorId: totp.id });
-  if (challenge.error) throw challenge.error;
-  state.mfaFactorId = totp.id;
-  state.mfaChallengeId = challenge.data.id;
-  state.mfaRequired = true;
-  return true;
+  const { data, error } = await client.auth.mfa.listFactors();
+  if (error || !data) throw error || new Error('Could not check authenticator factors.');
+  return !!data.all?.find(f => f.type === 'totp' && f.status === 'verified');
 }
 
 // Staff rule: agents/administrators MUST have a verified TOTP factor. A staff
@@ -214,22 +196,57 @@ function goHome() {
   // from /api/v1/auth/me; without one there is no authorized destination.
   const role = state.profile?.role;
   if (!role) throw new Error('No authorized profile was returned by the server.');
-  const home = isStaffRole(role) ? (role === 'administrator' ? '/admin' : '/agent') : '/entrepreneur';
+  const home = (role === 'admin' || role === 'administrator') ? '/admin' : role === 'agent' ? '/agent' : '/entrepreneur';
   const next = sessionStorage.getItem(nextKey);
   sessionStorage.removeItem(nextKey);
   // Never allow a return URL to bypass the user's server-assigned role.
   navigate(next && (next === home || next.startsWith(home + '/') || next.startsWith(home + '?')) ? next : home);
 }
 
+// Single source of truth for the staff MFA gate, reused by sign-in, session
+// restore and token refresh. Returns 'ok' (non-staff, or staff at aal2),
+// 'enroll' (staff without a verified TOTP factor) or 'verify' (staff factor
+// present but this session has not completed the challenge). Fail closed: an
+// assurance check that errors throws rather than being treated as 'ok'.
+async function ensureStaffAssurance() {
+  if (!state.profile || !isStaffRole(state.profile.role)) return 'ok';
+  if (await staffNeedsEnrollment()) return 'enroll';
+  const { data: assurance, error } = await client.auth.mfa.getAuthenticatorAssuranceLevel();
+  if (error || !assurance) throw error || new Error('MFA assurance could not be checked.');
+  return assurance.currentLevel === 'aal2' ? 'ok' : 'verify';
+}
+
+// A restored or refreshed session must not leave a staff workspace rendered at
+// aal1. The server guard is the authoritative backstop; this routes the client
+// to re-verify (or enroll) so a stale staff page is never shown. Only staff
+// workspaces are enforced - /staff/*, /login and /entrepreneur are left alone.
+async function enforceStaffAssurance() {
+  if (!STAFF_WORKSPACE.test(location.pathname)) return;
+  if (!state.profile || !isStaffRole(state.profile.role)) return;
+  let status;
+  try {
+    status = await ensureStaffAssurance();
+  } catch (_) {
+    status = 'verify'; // fail closed when assurance cannot be confirmed
+  }
+  if (status === 'enroll') navigate('/staff/mfa');
+  else if (status === 'verify') navigate('/staff/verify');
+}
+
 // Route after any successful sign-in: ALWAYS validate the authoritative
-// server profile first, then staff-without-a-factor go to enrollment and
-// everyone else goes to their role's workspace.
+// server profile first, then staff-without-a-factor go to enrollment, staff
+// without aal2 go to verification, and everyone else to their role's workspace.
 async function finishSignIn() {
   if (!state.profile) await profile();   // strict: surface API failures
   assertActiveAccount(state.profile);
-  if (await staffNeedsEnrollment()) {
+  const status = await ensureStaffAssurance();
+  if (status === 'enroll') {
     state.mfaEnrollmentRequired = true;
     navigate('/staff/mfa');
+    return;
+  }
+  if (status === 'verify') {
+    navigate('/staff/verify');
     return;
   }
   goHome();
@@ -342,11 +359,15 @@ async function doInitialize() {
       state.user = null;
       state.profile = null;
       clearSessionCookies();
-      if (/^\/(admin|agent|entrepreneur|staff)(\/|$)/.test(location.pathname)) navigate('/login');
+      if (/^\/(admin|agent|entrepreneur|staff)(\/|$)/.test(location.pathname))
+        navigate(location.pathname.startsWith('/staff/') ? '/staff/signin' : '/login');
     } else if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
-      // Keep the SSR mirror in step with the rotated token; the server must
-      // never serve a page with a stale bearer token.
-      syncSessionCookies();
+      // Keep the SSR mirror in step with the rotated token, then re-confirm
+      // staff assurance: a refresh can land on a session that has not completed
+      // MFA, and a staff workspace must never stay rendered at aal1.
+      syncSessionCookies()
+        .then(() => enforceStaffAssurance())
+        .catch(() => {});
     }
   });
 
@@ -354,6 +375,9 @@ async function doInitialize() {
   if (session) {
     state.user = { id: session.user.id, email: session.user.email };
     await tryProfile(); // Backend verifies the token with Supabase, never trusts decoded claims.
+    // A restored staff session on a workspace must re-confirm aal2 before the
+    // page is allowed to stay; routes to /staff/verify or /staff/mfa otherwise.
+    await enforceStaffAssurance();
   }
   void probeBackend();
   announceReady();
@@ -454,12 +478,7 @@ async function doComplete(next) {
   // an entrepreneur profile when the API was down, which hid the outage and
   // skipped the pending/suspended checks. Never grant access implicitly.
   await profile();
-  if (await staffNeedsEnrollment()) {
-    state.mfaEnrollmentRequired = true;
-    navigate('/staff/mfa');
-    return;
-  }
-  goHome();
+  await finishSignIn();
 }
 
 window.sitewiseAuth = {
@@ -485,15 +504,8 @@ window.sitewiseAuth = {
       if (error) throw error;
       if (data.session) {
         state.user = { id: data.session.user.id, email: data.session.user.email };
-        // AAL rule: a verified TOTP factor demands the challenge first —
-        // a password login alone never opens a protected workspace.
-        if (await assuranceNeedsChallenge()) {
-          if (await startChallengeForVerifiedFactor()) {
-            throw new Error('Enter the 6-digit code from your authenticator app.');
-          }
-        }
-        // finishSignIn() validates the authoritative server profile; a
-        // pending/suspended account or an unreachable backend fails loudly.
+        // First factor complete: finishSignIn() requires staff AAL2 and routes
+        // AAL1 accounts to /staff/verify. No challenge input remains on /login.
         await finishSignIn();
         return;
       }
@@ -501,33 +513,54 @@ window.sitewiseAuth = {
       // account still needs email confirmation. Distinguish by listing factors.
       const { data: factorsData } = await client.auth.mfa.listFactors().catch(() => ({ data: null }));
       const totp = factorsData?.all?.find(f => f.type === 'totp' && f.status === 'verified');
-      if (totp) {
-        const challenge = await client.auth.mfa.challenge({ factorId: totp.id });
-        if (challenge.error) throw challenge.error;
-        state.mfaFactorId = totp.id;
-        state.mfaChallengeId = challenge.data.id;
-        state.mfaRequired = true;
-        throw new Error('Enter the 6-digit code from your authenticator app.');
-      }
+      if (totp) throw new Error('The sign-in session could not be established. Please sign in again.');
       throw new Error('Check your email to confirm your account, then sign in.');
     }
-    // Completing an MFA challenge with the supplied code.
-    if (!state.mfaFactorId || !state.mfaChallengeId) {
-      throw new Error('Your sign-in session expired. Try again.');
-    }
-    const verify = await client.auth.mfa.verify({
+    // The second factor is completed only on /staff/verify. The login form
+    // never accepts a one-time code and must not reuse a password to retry it.
+    throw new Error('Complete verification on the staff verification page.');
+  },
+  // New explicit second-step challenge: the earlier JS state is lost when
+  // navigating from the password document to /staff/verify, so always obtain
+  // a new factor/challenge using the valid Supabase AAL1 session.
+  async mfaChallengeStart() {
+    await ready;
+    const { data: sessionResult, error: sessionError } = await client.auth.getSession();
+    if (sessionError || !sessionResult?.session) throw new Error('Your sign-in session expired. Please sign in again.');
+    await profile();
+    if (!isStaffRole(state.profile?.role)) throw new Error('Staff role is required.');
+    const { data: levels, error: levelsError } = await client.auth.mfa.getAuthenticatorAssuranceLevel();
+    if (levelsError || !levels) throw levelsError || new Error('MFA assurance check unavailable.');
+    if (levels.currentLevel === 'aal2') return 'verified';
+    const { data: factors, error: factorsError } = await client.auth.mfa.listFactors();
+    if (factorsError || !factors) throw factorsError || new Error('Authenticator factors unavailable.');
+    const factor = factors.all?.find(f => f.type === 'totp' && f.status === 'verified');
+    if (!factor) { navigate('/staff/mfa'); return 'enroll'; }
+    const challenge = await client.auth.mfa.challenge({ factorId: factor.id });
+    if (challenge.error || !challenge.data?.id) throw challenge.error || new Error('Could not start MFA challenge.');
+    state.mfaFactorId = factor.id;
+    state.mfaChallengeId = challenge.data.id;
+    state.mfaRequired = true;
+    return 'challenge';
+  },
+  async mfaChallengeVerify(code) {
+    await ready;
+    if (!/^\d{6}$/.test(code)) throw new Error('Enter a valid six-digit code.');
+    if (!state.mfaFactorId || !state.mfaChallengeId) throw new Error('Challenge expired. Restart verification.');
+    const { error } = await client.auth.mfa.verify({
       factorId: state.mfaFactorId,
       challengeId: state.mfaChallengeId,
-      code: mfaCode,
+      code,
     });
-    if (verify.error) throw verify.error;
-    const { data: sess } = await client.auth.getSession();
-    if (!sess.session) throw new Error('Could not complete sign-in. Try again.');
-    state.user = { id: sess.session.user.id, email: sess.session.user.email };
+    if (error) throw error;
+    const { data: assurance, error: aalError } = await client.auth.mfa.getAuthenticatorAssuranceLevel();
+    if (aalError || assurance?.currentLevel !== 'aal2') throw aalError || new Error('MFA verification was not confirmed.');
+    // Do not redirect here; the UI first displays the provider-backed success state.
     state.mfaRequired = false;
     state.mfaFactorId = null;
     state.mfaChallengeId = null;
-    await finishSignIn();
+    await profile();
+    return true;
   },
   // --- Staff TOTP enrollment ("Secure Your Staff Account") -----------------
   // Native Supabase enrollment: the QR + secret come from Supabase, the
@@ -535,6 +568,11 @@ window.sitewiseAuth = {
   async mfaEnrollStart() {
     await ready;
     if (!client) throw new Error(state.error || 'Authentication is not configured.');
+    const { data: session, error: sessionError } = await client.auth.getSession();
+    if (sessionError || !session?.session) throw new Error('Your sign-in session expired. Please sign in again.');
+    await profile();
+    if (!isStaffRole(state.profile?.role)) throw new Error('Staff role is required.');
+    if (await hasVerifiedTotpFactor()) { navigate('/staff/verify'); throw new Error('Authenticator already enrolled.'); }
     const { data, error } = await client.auth.mfa.enroll({
       factorType: 'totp',
       friendlyName: 'Sitewise Staff',
@@ -562,7 +600,11 @@ window.sitewiseAuth = {
     state.mfaEnrollFactorId = null;
     state.mfaEnrollQr = null;
     state.mfaEnrollSecret = null;
-    await finishSignIn();
+    const { data: assurance, error: aalError } = await client.auth.mfa.getAuthenticatorAssuranceLevel();
+    if (aalError || assurance?.currentLevel !== 'aal2') throw aalError || new Error('MFA enrollment was not confirmed.');
+    await profile();
+    // UI displays verified success, then invokes complete() to route.
+    return true;
   },
   // --- Password recovery (both portals) -------------------------------------
   // Native Supabase recovery email; the link lands on /auth/callback with a
@@ -620,7 +662,7 @@ window.sitewiseAuth = {
     state.profile = null;
     state.error = '';
     clearSessionCookies();
-    navigate('/login');
+    navigate(location.pathname.startsWith('/staff/') ? '/staff/signin' : '/login');
   },
   async request(path, method, body) {
     await ready;
@@ -628,3 +670,5 @@ window.sitewiseAuth = {
     return JSON.stringify(await apiRequest(path, method, body ? JSON.parse(body) : null));
   },
 };
+
+

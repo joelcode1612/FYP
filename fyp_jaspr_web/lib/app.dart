@@ -13,6 +13,7 @@ import 'pages/login_page.dart';
 import 'pages/signup_page.dart';
 import 'pages/forgot_password_page.dart';
 import 'pages/staff_mfa_page.dart';
+import 'pages/staff_verify_page.dart';
 import 'pages/reset_password_page.dart';
 import 'pages/entrepreneur/compare_page.dart';
 import 'pages/entrepreneur/dashboard_page.dart' as e_dashboard;
@@ -183,6 +184,15 @@ class SitewiseApp extends StatelessComponent {
           builder: (context, state) => _page(
             const ForgotPasswordPage(),
             title: 'Reset password — Sitewise',
+          ),
+        ),
+        Route(
+          path: '/staff/verify',
+          builder: (context, state) => _page(
+            const StaffVerifyPage(),
+            title: 'Verify your identity — SiteWise',
+            description:
+                'Enter your current six-digit staff authenticator code.',
           ),
         ),
         // Mandatory TOTP enrollment for staff accounts (first-time setup and
