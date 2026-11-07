@@ -25,6 +25,12 @@ import 'ui.dart';
 /// Navigation is a plain link ([href]), so the card works without JavaScript;
 /// the save and compare controls are siblings of the link (never nested inside
 /// it) and call back into the page, which owns the `AppCubit`.
+///
+/// Explore additions, all opt-in so other pages are unaffected: [selected]
+/// marks the card that a map interaction picked, [onLocate] asks the page to
+/// bring this property up on the map, [anchorId] gives the card a DOM id so a
+/// map click can scroll it into view, and a valid [CommercialProperty.sourceUrl]
+/// renders an external "Original listing" link.
 class PropertyCard extends StatelessComponent {
   final CommercialProperty property;
 
@@ -39,6 +45,15 @@ class PropertyCard extends StatelessComponent {
   /// Optional banner above the media area (recommendation rank, etc.).
   final String? rankBanner;
 
+  /// Highlighted because a map marker / locate action chose this property.
+  final bool selected;
+
+  /// Ask the owning page to show this property on the map.
+  final void Function()? onLocate;
+
+  /// DOM id for the article, so map interactions can scroll to the card.
+  final String? anchorId;
+
   const PropertyCard({
     super.key,
     required this.property,
@@ -48,6 +63,9 @@ class PropertyCard extends StatelessComponent {
     this.onToggleSaved,
     this.onToggleCompared,
     this.rankBanner,
+    this.selected = false,
+    this.onLocate,
+    this.anchorId,
   });
 
   @override
@@ -57,47 +75,51 @@ class PropertyCard extends StatelessComponent {
     // omitted, so the row never reflows when data is absent.
     final firstTag = property.tags.isEmpty ? null : property.tags.first;
     final attrs = <(String, bool)>[
+      ('#${property.id}', false),
       ('${property.sizeSqft.toStringAsFixed(0)} sq ft', false),
       (property.propertyType, false),
       (firstTag ?? '—', firstTag == null),
     ];
 
-    return article(classes: 'pcard', [
-      if (rankBanner != null)
-        div(classes: 'pcard-banner', [Component.text(rankBanner!)]),
+    return article(
+      classes: selected ? 'pcard pcard--selected' : 'pcard',
+      attributes: anchorId != null ? {'id': anchorId} : null,
+      [
+        if (rankBanner != null)
+          div(classes: 'pcard-banner', [Component.text(rankBanner!)]),
 
-      // Media. `aria-hidden` because the title link below is the real target -
-      // this is a decorative duplicate of the same destination.
-      AppLink(
-        to: href,
-        classes: 'pcard-media',
-        attributes: {'tabindex': '-1', 'aria-hidden': 'true'},
-        children: [
-          if (property.imageUrl != null)
-            Component.element(
-              tag: 'img',
-              attributes: {
-                'src': property.imageUrl!,
-                'alt': property.title,
-                'loading': 'lazy',
-                'referrerpolicy': 'no-referrer',
-                'style': 'width:100%;height:100%;object-fit:cover',
-              },
-            )
-          else
-            span(classes: 'cover', [
-              Icon('storefront', size: 'lg', label: property.title),
-            ]),
-        ],
-      ),
+        // Media. `aria-hidden` because the title link below is the real target -
+        // this is a decorative duplicate of the same destination.
+        AppLink(
+          to: href,
+          classes: 'pcard-media',
+          attributes: {'tabindex': '-1', 'aria-hidden': 'true'},
+          children: [
+            if (property.imageUrl != null)
+              Component.element(
+                tag: 'img',
+                attributes: {
+                  'src': property.imageUrl!,
+                  'alt': property.title,
+                  'loading': 'lazy',
+                  'referrerpolicy': 'no-referrer',
+                  'style': 'width:100%;height:100%;object-fit:cover',
+                },
+              )
+            else
+              span(classes: 'cover', [
+                Icon('storefront', size: 'lg', label: property.title),
+              ]),
+          ],
+        ),
 
-      div(classes: 'body', [
-        h3([
-          AppLink(to: href, children: [Component.text(property.title)]),
-        ]),
-        p(classes: 'addr', [
-          Component.text('${property.address}, ${property.city}'),
-        ]),
+        div(classes: 'body', [
+          h3([
+            AppLink(to: href, children: [Component.text(property.title)]),
+          ]),
+          p(classes: 'addr', [
+            Component.text('${property.address}, ${property.city}, ${property.state}'),
+          ]),
         p(classes: 'pcard-price', [
           Component.text('RM${property.rentalRm.toStringAsFixed(0)}'),
           small([Component.text(' / month')]),
@@ -128,6 +150,16 @@ class PropertyCard extends StatelessComponent {
             classes: 'btn sm btn--primary',
             children: [Component.text('View details')],
           ),
+          if (onLocate != null)
+            button(
+              classes: 'btn sm',
+              attributes: {
+                'type': 'button',
+                'aria-label': 'Locate ${property.title} on the map',
+              },
+              events: events(onClick: onLocate!),
+              [Component.text('Locate')],
+            ),
           if (onToggleSaved != null)
             button(
               classes: saved ? 'btn sm icon-btn is-saved' : 'btn sm icon-btn',
@@ -155,8 +187,30 @@ class PropertyCard extends StatelessComponent {
               classes: 'btn sm',
               children: [Component.text('360°')],
             ),
+          // Only when the dataset recorded a usable http(s) source link.
+          if (_validSourceUrl(property) != null)
+            Component.element(
+              tag: 'a',
+              classes: 'btn sm',
+              attributes: {
+                'href': _validSourceUrl(property)!,
+                'target': '_blank',
+                'rel': 'noopener noreferrer',
+              },
+              children: [Component.text('Original listing')],
+            ),
         ]),
       ]),
     ]);
+  }
+
+  /// The property's source link, but only if it is a real http(s) URL.
+  /// Anything else (relative junk, mailto, empty) renders no link at all.
+  static String? _validSourceUrl(CommercialProperty property) {
+    final raw = property.sourceUrl;
+    if (raw == null || raw.isEmpty) return null;
+    final uri = Uri.tryParse(raw);
+    if (uri == null) return null;
+    return (uri.scheme == 'http' || uri.scheme == 'https') ? raw : null;
   }
 }

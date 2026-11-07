@@ -24,6 +24,7 @@ class ApiPropertyRepository implements PropertyRepository {
     ownerId: '',
     hasTour: false,
     imageUrl: row['image_url'] as String?,
+    sourceUrl: row['source_url'] as String?,
     tags: ['Imported dataset', 'Quality: ${row['dataset_validation']}'],
   );
 

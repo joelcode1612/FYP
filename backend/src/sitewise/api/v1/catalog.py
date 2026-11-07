@@ -37,6 +37,7 @@ _COLUMNS = (
     "longitude",
     "property_type",
     "image_url",
+    "source_url",
     "suitability_score",
     "dataset_validation",
 )

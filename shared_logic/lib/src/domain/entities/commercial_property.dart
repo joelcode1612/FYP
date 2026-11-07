@@ -33,6 +33,10 @@ class CommercialProperty {
   final bool hasTour;
   final String? imageUrl;
 
+  /// Where this listing was imported from, when the dataset recorded it.
+  /// Null means the source workbook has no link — never render a made-up one.
+  final String? sourceUrl;
+
   /// Business requirements the unit satisfies (Ground Floor, F&B Suitable…).
   final List<String> requirements;
   final List<String> tags;
@@ -55,6 +59,7 @@ class CommercialProperty {
     required this.ownerId,
     required this.hasTour,
     this.imageUrl,
+    this.sourceUrl,
     this.requirements = const [],
     this.tags = const [],
   }) : rentalMaxRm = rentalMaxRm ?? rentalRm;
@@ -93,6 +98,7 @@ class CommercialProperty {
     ownerId: ownerId,
     hasTour: hasTour,
     imageUrl: imageUrl,
+    sourceUrl: sourceUrl,
     requirements: requirements,
     tags: tags,
   );
