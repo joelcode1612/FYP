@@ -94,6 +94,8 @@ abstract final class WebAuth {
     bool remember = true,
     String? mfaCode,
   ]) async => throw StateError(error);
+  static Future<String> mfaChallengeStart() async => throw StateError(error);
+  static Future<void> mfaChallengeVerify(String code) async => throw StateError(error);
   static Future<void> mfaEnrollStart() async => throw StateError(error);
   static Future<void> mfaEnrollVerify(String code) async => throw StateError(error);
   static Future<String> resetPassword(String email) async => throw StateError(error);
@@ -117,7 +119,14 @@ abstract final class WebAuth {
     Map<String, dynamic>? body,
   }) async {
     if (!_server) throw StateError(error);
-    final uri = _base.replace(path: path);
+    // Split any query off the path: `Uri.replace(path:)` would percent-encode
+    // the '?' (→ %3F) and 404 the route. The browser bridge passes the same
+    // string straight to `fetch`, which parses it correctly — mirror that here.
+    final target = Uri.parse(path);
+    final uri = _base.replace(
+      path: target.path,
+      query: target.hasQuery ? target.query : null,
+    );
     final headers = <String, String>{
       if (_token != null) 'Authorization': 'Bearer $_token',
       if (body != null) 'Content-Type': 'application/json',
@@ -131,6 +140,9 @@ abstract final class WebAuth {
     if (response.statusCode >= 400) {
       throw StateError('${response.statusCode} ${response.reasonPhrase ?? ''}'.trim());
     }
+    // 204 No Content (e.g. DELETE) has an empty body; the browser bridge's
+    // `response.json().catch(() => ({}))` yields {} for it, so match that.
+    if (response.bodyBytes.isEmpty) return <String, dynamic>{};
     final decoded = jsonDecode(utf8.decode(response.bodyBytes));
     if (decoded is Map<String, dynamic>) return decoded;
     return {'data': decoded};

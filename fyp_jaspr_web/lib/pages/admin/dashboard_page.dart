@@ -99,9 +99,10 @@ class _DashboardPageState extends State<DashboardPage> {
                   ]),
                   p(classes: 'stat-note', [
                     Component.text(
-                      'Counts are read from the in-memory record store, not a '
-                      'database. Seeded demonstration listings have no owner '
-                      'account and are excluded from owner queues.',
+                      'Property and account counts are read live from the '
+                      'authenticated backend API. 360° tour verification is '
+                      'still demonstration data — capture frames exist only on '
+                      'mobile, so there is no web source yet.',
                     ),
                   ]),
                 ]),

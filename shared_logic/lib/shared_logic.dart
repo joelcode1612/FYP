@@ -57,6 +57,7 @@ export 'src/data/models/commercial_property_model.dart';
 export 'src/data/models/location_intelligence_model.dart';
 export 'src/data/models/user_model.dart';
 export 'src/data/repositories/admin_repositories_impl.dart';
+export 'src/data/repositories/api_user_repository.dart';
 export 'src/data/repositories/intelligence_repositories_impl.dart';
 export 'src/data/repositories/property_repository_impl.dart';
 export 'src/data/repositories/recommendation_repository_impl.dart';

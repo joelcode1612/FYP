@@ -2,6 +2,7 @@ import 'package:shared_logic/shared_logic.dart';
 import 'api_property_repository.dart';
 import 'auth_service.dart';
 import 'ui_store.dart';
+import 'web_api_client.dart';
 import 'workspaces.dart';
 
 /// Web composition root — the Jaspr counterpart to the Flutter app's
@@ -11,13 +12,16 @@ import 'workspaces.dart';
 /// Supabase; unsupported analysis throws an explicit unavailable-data error.
 /// Saved/compare selections and preferences remain local to this browser session.
 abstract final class AppLocator {
-  // --- Repositories (shared, demo-data implementations) ---------------------
+  // --- Repositories ---------------------------------------------------------
+  // Properties and users come from the authenticated FastAPI backend (bearer
+  // token via WebAuth); verification wraps the live property repo. Tours remain
+  // demo-data — capture frames exist only on mobile, so there is no web source.
   static final PropertyRepository propertyRepo = ApiPropertyRepository();
   static final RecommendationRepository recommendationRepo =
       DatasetRecommendationRepository(propertyRepo);
   static final VerificationRepositoryImpl verificationRepo =
       VerificationRepositoryImpl(propertyRepo);
-  static final UserRepositoryImpl userRepo = UserRepositoryImpl();
+  static final UserRepository userRepo = ApiUserRepository(const WebApiClient());
   static final TourRepositoryImpl tourRepo = TourRepositoryImpl();
 
   // --- Application services (shared orchestration) --------------------------

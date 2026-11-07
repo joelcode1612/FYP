@@ -14,10 +14,13 @@ import '../../layouts/app_layout.dart';
 /// `.audit-table` whose Account cell uses `.who`/`.sub` and whose Status cell
 /// uses `.st`.
 ///
-/// The source's Suspend/Reactivate action is intentionally omitted: the data
-/// layer exposes no `setUserStatus`, so the table is read-only here. The
-/// Listings column is derived from `vm.listings` (the entity has no count of
-/// its own), and Joined is the user's `joinedAt`.
+/// Records are live: the user repository reads the authenticated FastAPI
+/// `/users` API (administrator + aal2 enforced server-side), not demo data.
+/// The screen is deliberately read-only status visibility — the backend
+/// supports role/status mutations, but this build does not expose them, so no
+/// change is ever simulated as persisted. A failed load surfaces an error
+/// state rather than an empty directory. The Listings column is derived from
+/// `vm.listings`, and Joined is the user's `joinedAt`.
 @client
 class UsersPage extends StatefulComponent {
   const UsersPage({super.key});
@@ -67,6 +70,16 @@ class _UsersPageState extends State<UsersPage> {
   int _listingCount(SitewiseUser user) =>
       vm.listings.where((prop) => prop.ownerId == user.id).length;
 
+  Component _error(String message) => EmptyState(
+    title: 'Could not load accounts',
+    body: message,
+    action: ActionButton(
+      'Try again',
+      variant: 'primary',
+      onClick: () => unawaited(vm.loadUsers()),
+    ),
+  );
+
   Component _selectField({
     required String labelText,
     required String value,
@@ -99,9 +112,9 @@ class _UsersPageState extends State<UsersPage> {
           title: 'Users',
           eyebrow: 'Accounts',
           subtitle:
-              'Account status only. Roles are not editable from this screen — '
-              'changing a role requires a separate permission path that this '
-              'build does not implement.',
+              'Live account records from the authenticated backend '
+              '(administrator sign-in with MFA required). Read-only: role and '
+              'status are shown here but not changed on this screen.',
           child: div(classes: 'stack stack--sections', [
             div(classes: 'filters', [
               div(classes: 'grid-3', [
@@ -146,6 +159,8 @@ class _UsersPageState extends State<UsersPage> {
 
             if (vm.loading)
               const Skeleton(variant: 'row', count: 6)
+            else if (vm.error != null)
+              _error(vm.error!)
             else if (users.isEmpty)
               EmptyState(
                 title: 'No accounts match',

@@ -9,20 +9,10 @@ venv/
 __pycache__/
 *.pyc
 
-# Environmental variables (Security)
-.env
-test/.data/
-fyp_jaspr_web/web/auth_bundle.js
-
 # Large media / OS specific
 .DS_Store
 *.mp4
 *.zip
-
-# Dart / Flutter pub workspace
-.dart_tool/
-.flutter-plugins
-.flutter-plugins-dependencies
 
 # Windows reserved device names
 # A shell redirect like `cmd > nul` can create a literal 0-byte file named
@@ -68,6 +58,5 @@ htmlcov/
 # Perch generated index (large, rebuilt locally)
 .perch/index.json
 
-
-# Generated auth config (contains only public client values)
-fyp_jaspr_web/web/auth-config.json
+# FVM Version Cache
+.fvm/

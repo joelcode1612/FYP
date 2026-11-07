@@ -30,10 +30,8 @@ class StaffSignInForm extends StatefulComponent {
 class _StaffSignInState extends State<StaffSignInForm> {
   String _email = '';
   String _password = '';
-  String _mfaCode = '';
   bool _show = false;
   bool _remember = true;
-  bool _mfaChallenge = false;
   final Map<String, String> _errors = {};
   String _alert = '';
   String _alertTone = 'info';
@@ -46,17 +44,12 @@ class _StaffSignInState extends State<StaffSignInForm> {
     final e = <String, String>{};
     if (!_emailRe.hasMatch(_email)) e['email'] = 'Enter a valid email address.';
     if (_password.isEmpty) e['password'] = 'Password is required.';
-    if (_mfaChallenge && _mfaCode.trim().isEmpty) {
-      e['mfa'] = 'Enter the verification code from your authenticator app.';
-    }
     setState(() {
       _errors
         ..clear()
         ..addAll(e);
       if (e.isEmpty) {
-        _alert = _mfaChallenge
-            ? 'Verifying your code…'
-            : 'Signing in securely…';
+        _alert = 'Signing in securely…';
         _alertTone = 'info';
       } else {
         _alert = 'Please fix the highlighted fields.';
@@ -66,29 +59,14 @@ class _StaffSignInState extends State<StaffSignInForm> {
     if (e.isNotEmpty) return;
     setState(() => _busy = true);
     try {
-      // The bridge performs the Supabase sign-in and — when a TOTP factor is
-      // enrolled — the MFA challenge/verify. On success it redirects to the
-      // backend-resolved workspace; on an MFA requirement it throws and sets
-      // `mfaRequired`, which reveals the verification-code field below.
-      await WebAuth.password(
-        _email.trim(),
-        _password,
-        _remember,
-        _mfaChallenge ? _mfaCode.trim() : null,
-      );
+      // Password is the first factor. The JS bridge routes staff with AAL1
+      // sessions to /staff/verify or first-time users to /staff/mfa.
+      await WebAuth.password(_email.trim(), _password, _remember);
     } catch (error) {
       if (!mounted) return;
       setState(() {
-        if (WebAuth.mfaRequired && !_mfaChallenge) {
-          _mfaChallenge = true;
-          _alert =
-              'A verification code is required. Enter the 6-digit code from '
-              'your authenticator app.';
-          _alertTone = 'info';
-        } else {
-          _alert = error.toString();
-          _alertTone = 'err';
-        }
+        _alert = error.toString();
+        _alertTone = 'err';
         _busy = false;
       });
     }
@@ -205,21 +183,6 @@ class _StaffSignInState extends State<StaffSignInForm> {
         ),
       ),
 
-      // Verification code: hidden until the backend reports an MFA challenge,
-      // then required. Never shown otherwise (no synthetic role selectors).
-      if (_mfaChallenge)
-        _field(
-          forId: 'stf-mfa',
-          labelText: 'Verification code',
-          errKey: 'mfa',
-          icon: authIconLock(),
-          placeholder: '6-digit code',
-          type: InputType.text,
-          autocomplete: 'one-time-code',
-          inputMode: 'numeric',
-          onInput: (v) => _mfaCode = v,
-        ),
-
       div(classes: 'stf-row', [
         div(classes: 'lp-remember', [
           input(
@@ -269,3 +232,5 @@ class _StaffSignInState extends State<StaffSignInForm> {
     ]);
   }
 }
+
+
