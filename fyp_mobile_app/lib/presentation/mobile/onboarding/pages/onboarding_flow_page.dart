@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 
 import '../../../../application/onboarding/onboarding_controller.dart';
 import '../../../../application/services/service_locator.dart';
+import '../../../../core/routing/auth_route_guard.dart';
+import '../../../../core/routing/mobile_role.dart';
 import '../../../../core/theme/sitewise_theme.dart';
 import 'onboarding_360_tour_page.dart';
 import 'onboarding_business_preferences_page.dart';
@@ -15,10 +17,13 @@ import 'onboarding_location_intelligence_page.dart';
 /// presentation-only and never perform navigation themselves.
 ///
 /// On exit (Get Started / Log In / Sign Up / Skip) the controller marks
-/// onboarding complete and this page routes to the separate `/auth` feature.
+/// onboarding complete and this page hands off. Because the flow now runs
+/// after sign-in, that hand-off enters the workspace; only a screen with no
+/// verified session is sent back to `/auth` on the tab the flow asked for.
 
 class OnboardingFlowPage extends StatefulWidget {
   final AppCubit appState;
+  final AuthCubit auth;
 
   /// Injectable for tests; when null the page builds one from [ServiceLocator].
   final OnboardingController? controller;
@@ -26,6 +31,7 @@ class OnboardingFlowPage extends StatefulWidget {
   const OnboardingFlowPage({
     super.key,
     required this.appState,
+    required this.auth,
     this.controller,
   });
 
@@ -49,7 +55,21 @@ class _OnboardingFlowPageState extends State<OnboardingFlowPage> {
 
   void _openAuth(AuthEntryPoint entry) {
     if (!mounted) return;
-    Navigator.of(context).pushNamed('/auth', arguments: entry.name);
+    final user = widget.auth.state.user;
+    final home = user == null ? null : mobileHomeRouteFor(user.role);
+    if (user == null || home == null) {
+      // No verified session (or a web-only role): fall back to the auth
+      // screen rather than inventing a workspace to enter.
+      Navigator.of(
+        context,
+      ).pushNamed('/auth', arguments: entry.name);
+      return;
+    }
+    widget.appState.setRole(user.role);
+    final pending = AuthPendingDestination.takeFor(user.role);
+    Navigator.of(
+      context,
+    ).pushNamedAndRemoveUntil(pending ?? home, (_) => false);
   }
 
   void _onPageChanged(int value) {
@@ -102,6 +122,7 @@ class _OnboardingFlowPageState extends State<OnboardingFlowPage> {
                 onSkip: _controller.skip,
                 onLogin: () => _controller.openAuth(AuthEntryPoint.login),
                 onSignUp: () => _controller.openAuth(AuthEntryPoint.signUp),
+                signedIn: widget.auth.state.isAuthenticated,
               ),
             ],
           ),

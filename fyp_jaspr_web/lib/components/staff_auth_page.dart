@@ -59,9 +59,11 @@ class _StaffSignInState extends State<StaffSignInForm> {
     if (e.isNotEmpty) return;
     setState(() => _busy = true);
     try {
-      // Password is the first factor. The JS bridge routes staff with AAL1
-      // sessions to /staff/verify or first-time users to /staff/mfa.
-      await WebAuth.password(_email.trim(), _password, _remember);
+      // Password is the first factor. The staff portal context makes the JS
+      // bridge reject non-staff accounts before any routing, and staff with
+      // AAL1 sessions are routed to /staff/verify or first-time users to
+      // /staff/mfa.
+      await WebAuth.password(_email.trim(), _password, _remember, null, 'staff');
     } catch (error) {
       if (!mounted) return;
       setState(() {

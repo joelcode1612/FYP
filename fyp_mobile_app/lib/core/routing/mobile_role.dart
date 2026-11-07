@@ -13,8 +13,9 @@ String? mobileHomeRouteFor(AppRole role) =>
 
 /// Shown wherever a web-only account reaches the mobile app.
 String mobileUnsupportedRoleMessage(AppRole role) =>
-    '${role.label} workspace is available on the SiteWise web app. '
-    'Sign in as F&B Entrepreneur to continue on mobile.';
+    '${role.label} works from the SiteWise Staff Web Portal, not the mobile '
+    'app, and signing in there requires multi-factor authentication. '
+    'Open the portal on a computer, or use an F&B Entrepreneur account here.';
 
 /// Roles that can be entered on mobile, in the shared enum's order.
 List<AppRole> get mobileSupportedRoles =>

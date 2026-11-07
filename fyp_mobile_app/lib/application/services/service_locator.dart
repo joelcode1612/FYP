@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:shared_logic/shared_logic.dart';
 
 import '../../core/utils/capture_log.dart';
@@ -6,8 +8,8 @@ import '../../data/datasources/local/onboarding_local_data_source.dart';
 import '../../data/datasources/local/opencv_panorama_stitcher_stub.dart'
 
     if (dart.library.io) '../../data/datasources/local/opencv_panorama_stitcher.dart';
-import '../../data/repositories/auth_repository_impl.dart';
 import '../../data/repositories/onboarding_repository_impl.dart';
+import '../../data/repositories/supabase_auth_repository.dart';
 import 'ar_capture_service.dart';
 import 'assessment_session.dart';
 import 'capture_session_store.dart';
@@ -33,9 +35,24 @@ abstract final class ServiceLocator {
     FileOnboardingLocalDataSource(),
   );
 
-  /// Authentication (demo/local today; Supabase-ready contract). Non-final so
-  /// tests can inject a fake repository.
-  static AuthService auth = AuthService(AuthRepositoryImpl());
+  /// Authentication. Supabase Auth for the credentials, SiteWise for the
+  /// role. Non-final so tests can inject a fake repository; [useAuth] swaps
+  /// the state machine together with it.
+  static AuthService auth = AuthService(SupabaseAuthRepository());
+
+  /// The single shared authentication state. Startup, the auth screens, the
+  /// route guards and sign-out all read this one instance, so they can never
+  /// disagree about who is signed in.
+  static AuthCubit authState = AuthCubit(auth: auth);
+
+  /// Replaces the repository *and* rebuilds [authState] from it. Closing the
+  /// previous cubit means a stale restore cannot emit into a new test.
+  static void useAuth(AuthRepository repo) {
+    final previous = authState;
+    auth = AuthService(repo);
+    authState = AuthCubit(auth: auth);
+    unawaited(previous.close());
+  }
 
   static final PropertyService properties = PropertyService(propertyRepo);
   static final RecommendationService recommendations = RecommendationService(

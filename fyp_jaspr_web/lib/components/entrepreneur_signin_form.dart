@@ -54,7 +54,11 @@ class _EntrepreneurSignInState extends State<EntrepreneurSignInForm> {
     if (e.isNotEmpty) return;
     setState(() => _busy = true);
     try {
-      await WebAuth.password(_email.trim(), _password, _remember);
+      // Entrepreneur portal context: the JS bridge rejects staff (agent/admin)
+      // accounts here and directs them to the Agent & Admin portal, where the
+      // mandatory TOTP MFA gate is enforced. No staff MFA is imposed on
+      // entrepreneurs.
+      await WebAuth.password(_email.trim(), _password, _remember, null, 'entrepreneur');
     } catch (error) {
       if (mounted) {
         setState(() {

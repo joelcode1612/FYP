@@ -1,6 +1,8 @@
 import 'package:shared_logic/shared_logic.dart';
 import 'package:flutter/material.dart';
 
+import 'auth_route_guard.dart';
+import '../../presentation/mobile/auth/pages/forgot_password_mobile_page.dart';
 import '../../presentation/mobile/auth/pages/mobile_auth_page.dart';
 import '../../presentation/mobile/auth/widgets/auth_tabs.dart';
 import '../../presentation/mobile/onboarding/pages/onboarding_flow_page.dart';
@@ -65,89 +67,155 @@ String parentShellRoute(String route) {
 }
 
 abstract final class AppRoutes {
+  /// Every route is generated behind [AuthGuard] except the public ones, so a
+  /// manual `pushNamed`, a restored deep link and an expired session all
+  /// reach the same decision — `AppStartGate` alone could never cover them.
   static Route<dynamic>? onGenerateRoute(
     RouteSettings settings,
     AppCubit appState,
+    AuthCubit auth,
   ) {
+    final (RouteAccess access, Widget Function() page) entry = switch (
+      settings.name
+    ) {
+      // Startup decision point: verify session -> auth / onboarding / home.
+      '/' => (
+        RouteAccess.public,
+        () => AppStartGate(appState: appState, auth: auth),
+      ),
+      // Public landing (kept reachable for demos and deep links).
+      '/landing' => (
+        RouteAccess.public,
+        () => LandingMobilePage(appState: appState),
+      ),
+      // Authentication. `arguments` = 'login' | 'signUp'.
+      '/auth' => (
+        RouteAccess.public,
+        () => MobileAuthPage(
+          appState: appState,
+          auth: auth,
+          initialTab: settings.arguments == 'signUp'
+              ? AuthTab.signUp
+              : AuthTab.login,
+        ),
+      ),
+      '/forgot-password' => (
+        RouteAccess.public,
+        () => ForgotPasswordMobilePage(auth: auth),
+      ),
+      // Onboarding belongs AFTER sign-in: it is part of the workspace, not
+      // the pre-registration funnel.
+      '/onboarding' => (
+        RouteAccess.workspace,
+        () => OnboardingFlowPage(appState: appState, auth: auth),
+      ),
+      // Shared 360° capture + preview flow (device-bound, no role namespace).
+      '/capture' => (
+        RouteAccess.workspace,
+        () => PanoramaCapturePage(propertyId: settings.arguments as String?),
+      ),
+      '/tour-preview' => (
+        RouteAccess.workspace,
+        () => TourPreviewMobilePage(
+          appState: appState,
+          tourId: settings.arguments as String? ?? '',
+        ),
+      ),
+      // Entrepreneur
+      '/entrepreneur' => (
+        RouteAccess.workspace,
+        () => EntrepreneurDashboardMobilePage(appState: appState),
+      ),
+      // Material 3 five-tab workspace: Assess and Spaces.
+      '/entrepreneur/assess' => (
+        RouteAccess.workspace,
+        () => EntrepreneurAssessMobilePage(appState: appState),
+      ),
+      '/entrepreneur/spaces' => (
+        RouteAccess.workspace,
+        () => EntrepreneurSpacesMobilePage(appState: appState),
+      ),
+      '/entrepreneur/preferences' => (
+        RouteAccess.workspace,
+        () => EntrepreneurPreferencesMobilePage(appState: appState),
+      ),
+      '/entrepreneur/explore' => (
+        RouteAccess.workspace,
+        () => EntrepreneurExploreMobilePage(
+          appState: appState,
+          startInMap: settings.arguments == 'map',
+        ),
+      ),
+      '/entrepreneur/property-detail' => (
+        RouteAccess.workspace,
+        () => EntrepreneurPropertyDetailMobilePage(
+          appState: appState,
+          propertyId: settings.arguments as String? ?? '',
+        ),
+      ),
+      '/entrepreneur/tour' => (
+        RouteAccess.workspace,
+        () => EntrepreneurTourMobilePage(
+          appState: appState,
+          propertyId: settings.arguments as String? ?? '',
+        ),
+      ),
+      '/entrepreneur/recommendations' => (
+        RouteAccess.workspace,
+        () => EntrepreneurRecommendationsMobilePage(appState: appState),
+      ),
+      '/entrepreneur/compare' => (
+        RouteAccess.workspace,
+        () => EntrepreneurCompareMobilePage(appState: appState),
+      ),
+      '/entrepreneur/saved' => (
+        RouteAccess.workspace,
+        () => EntrepreneurSavedMobilePage(appState: appState),
+      ),
+      '/entrepreneur/report' => (
+        RouteAccess.workspace,
+        () => EntrepreneurReportMobilePage(
+          appState: appState,
+          propertyId: settings.arguments as String? ?? '',
+        ),
+      ),
+      // Option A assessment flow. The setup step receives the chosen
+      // property id as arguments; the later steps read the session draft.
+      '/entrepreneur/assessment-setup' => (
+        RouteAccess.workspace,
+        () => EntrepreneurAssessmentSetupMobilePage(
+          appState: appState,
+          propertyId: settings.arguments as String? ?? '',
+        ),
+      ),
+      '/entrepreneur/assessment-evidence' => (
+        RouteAccess.workspace,
+        () => EntrepreneurEvidenceMobilePage(appState: appState),
+      ),
+      '/entrepreneur/assessment-summary' => (
+        RouteAccess.workspace,
+        () => EntrepreneurAssessmentSummaryMobilePage(appState: appState),
+      ),
+      '/entrepreneur/profile' => (
+        RouteAccess.workspace,
+        () => EntrepreneurProfileMobilePage(appState: appState, auth: auth),
+      ),
+      // An unknown path is treated as protected and resolved to the
+      // workspace root, never to a public page.
+      _ => (
+        RouteAccess.workspace,
+        () => EntrepreneurDashboardMobilePage(appState: appState),
+      ),
+    };
+
     return MaterialPageRoute(
       settings: settings,
-      builder: (ctx) {
-        final id = settings.arguments as String?;
-        final Widget page = switch (settings.name) {
-          // Startup decision point: onboarding / auth / role home.
-          '/' => AppStartGate(appState: appState),
-          // Public landing (kept reachable for demos and deep links).
-          '/landing' => LandingMobilePage(appState: appState),
-          // First-run onboarding.
-          '/onboarding' => OnboardingFlowPage(appState: appState),
-          // Authentication. `arguments` = 'login' | 'signUp'.
-          '/auth' => MobileAuthPage(
-            appState: appState,
-            initialTab: id == 'signUp' ? AuthTab.signUp : AuthTab.login,
-          ),
-          // Shared 360° capture + preview flow (device-bound, no role namespace).
-          '/capture' => PanoramaCapturePage(propertyId: id),
-          '/tour-preview' => TourPreviewMobilePage(
-            appState: appState,
-            tourId: id ?? '',
-          ),
-          // Entrepreneur
-          '/entrepreneur' => EntrepreneurDashboardMobilePage(
-            appState: appState,
-          ),
-          // Material 3 five-tab workspace: Assess and Spaces.
-          '/entrepreneur/assess' => EntrepreneurAssessMobilePage(
-            appState: appState,
-          ),
-          '/entrepreneur/spaces' => EntrepreneurSpacesMobilePage(
-            appState: appState,
-          ),
-          '/entrepreneur/preferences' => EntrepreneurPreferencesMobilePage(
-            appState: appState,
-          ),
-          '/entrepreneur/explore' => EntrepreneurExploreMobilePage(
-            appState: appState,
-            startInMap: id == 'map',
-          ),
-          '/entrepreneur/property-detail' =>
-            EntrepreneurPropertyDetailMobilePage(
-              appState: appState,
-              propertyId: id ?? '',
-            ),
-          '/entrepreneur/tour' => EntrepreneurTourMobilePage(
-            appState: appState,
-            propertyId: id ?? '',
-          ),
-          '/entrepreneur/recommendations' =>
-            EntrepreneurRecommendationsMobilePage(appState: appState),
-          '/entrepreneur/compare' => EntrepreneurCompareMobilePage(
-            appState: appState,
-          ),
-          '/entrepreneur/saved' => EntrepreneurSavedMobilePage(
-            appState: appState,
-          ),
-          '/entrepreneur/report' => EntrepreneurReportMobilePage(
-            appState: appState,
-            propertyId: id ?? '',
-          ),
-          // Option A assessment flow. The setup step receives the chosen
-          // property id as arguments; the later steps read the session draft.
-          '/entrepreneur/assessment-setup' =>
-            EntrepreneurAssessmentSetupMobilePage(
-              appState: appState,
-              propertyId: id ?? '',
-            ),
-          '/entrepreneur/assessment-evidence' =>
-            EntrepreneurEvidenceMobilePage(appState: appState),
-          '/entrepreneur/assessment-summary' =>
-            EntrepreneurAssessmentSummaryMobilePage(appState: appState),
-          '/entrepreneur/profile' => EntrepreneurProfileMobilePage(
-            appState: appState,
-          ),
-          _ => EntrepreneurDashboardMobilePage(appState: appState),
-        };
-        return page;
-      },
+      builder: (_) => AuthGuard(
+        auth: auth,
+        access: entry.$1,
+        appState: appState,
+        builder: (_) => entry.$2(),
+      ),
     );
   }
 }

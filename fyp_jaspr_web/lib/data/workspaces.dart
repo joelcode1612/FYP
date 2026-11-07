@@ -24,17 +24,15 @@ abstract final class Workspaces {
     return null;
   }
 
-  /// A primary workspace is always shown; an administrator may also use the
-  /// agent / entrepreneur interface as permitted by the existing backend
-  /// policy. These are UX options, NOT proof of API authorization.
+  /// Strictly the single backend-assigned workspace. Role-separated
+  /// interfaces are a product requirement: an administrator uses the admin
+  /// workspace only, an agent the agent workspace only, an entrepreneur the
+  /// entrepreneur workspace only. Cross-role data access is a backend-
+  /// authorized API concern (FastAPI RBAC), never a frontend presentation
+  /// grant.
   static List<AppRole> get openable {
     final assigned = primary;
-    if (assigned == null) return [];
-    return [
-      assigned,
-      if (assigned == AppRole.admin) AppRole.agent,
-      if (assigned == AppRole.admin) AppRole.entrepreneur,
-    ];
+    return assigned == null ? <AppRole>[] : <AppRole>[assigned];
   }
 
   static bool canOpen(AppRole role) => openable.contains(role);

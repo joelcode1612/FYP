@@ -18,7 +18,10 @@ class StaffSecurityFlow extends StatefulComponent {
   State<StaffSecurityFlow> createState() => _StaffSecurityFlowState();
 }
 
-enum _Screen { loading, verify, enroll, invalid, expired, success, unavailable, sessionExpired }
+enum _Screen {
+  loading, verify, enroll, invalid, expired, success,
+  unavailable, sessionExpired, roleDenied, accountBlocked,
+}
 
 class _StaffSecurityFlowState extends State<StaffSecurityFlow> {
   _Screen _screen = _Screen.loading;
@@ -35,8 +38,13 @@ class _StaffSecurityFlowState extends State<StaffSecurityFlow> {
 
   Future<void> _init() async {
     try {
-      await WebAuth.initialize();
-      if (!WebAuth.configured) throw StateError('Authentication is unavailable.');
+      // The auth bundle keeps retrying while the Supabase configuration is
+      // unavailable (and its `ready` promise only settles on success), so
+      // bound the wait here to guarantee an actionable state.
+      await WebAuth.initialize().timeout(const Duration(seconds: 15));
+      if (!WebAuth.configured) {
+        throw StateError('The authentication configuration is unavailable.');
+      }
       if (component.enrollment) {
         await WebAuth.mfaEnrollStart();
         if (mounted) setState(() => _screen = _Screen.enroll);
@@ -53,26 +61,94 @@ class _StaffSecurityFlowState extends State<StaffSecurityFlow> {
         }
       }
     } catch (error) {
+      // The JS bridge logs the original technical error to the browser
+      // console in development (safe metadata only — never tokens, codes or
+      // QR data). Here it is mapped to a specific, safe UI state; the raw
+      // error text is never rendered.
+      final type = _classify(error);
       if (!mounted) return;
+      if (type == _Screen.enroll) {
+        // "Authenticator already enrolled": the bridge navigated to
+        // /staff/verify — let the navigation land instead of flashing a card.
+        return;
+      }
       setState(() {
-        _screen = _classify(error) == _Screen.sessionExpired
-            ? _Screen.sessionExpired : _Screen.unavailable;
-        _message = 'Unable to start verification. Check your connection or sign in again.';
+        _screen = type;
+        _message = switch (type) {
+          _Screen.sessionExpired =>
+            'Your sign-in session has expired. Please sign in again.',
+          _Screen.roleDenied =>
+            'This account does not have Agent or Administrator access, so it cannot use staff verification.',
+          _Screen.accountBlocked =>
+            'Your account is not active. Contact a Sitewise administrator before signing in.',
+          _Screen.enroll =>
+            'Your account still needs authenticator setup.',
+          _ =>
+            'The verification service could not be reached. Check your connection and try again.',
+        };
       });
     }
   }
 
+  /// Maps a thrown bridge error to a screen. The text comes from the auth
+  /// bridge's own messages (plus Supabase/network strings), so matching is
+  /// ordered most-specific-first. Classification only — never rendered.
   _Screen _classify(Object error) {
     final text = error.toString().toLowerCase();
-    if (text.contains('expired') && (text.contains('challenge') || text.contains('code'))) {
-      return _Screen.expired;
-    }
-    if (text.contains('session') || text.contains('sign in again') || text.contains('not signed in')) {
+    bool has(List<String> needles) => needles.any(text.contains);
+    // Session / identity problems outrank everything downstream.
+    if (has([
+      'sign-in session expired',
+      'sign in to continue',
+      'session expired',
+      'identity changed',
+    ])) {
       return _Screen.sessionExpired;
     }
-    if (text.contains('network') || text.contains('fetch') || text.contains('connection') || text.contains('timeout')) {
+    // Portal / role violations.
+    if (has([
+      'staff role is required',
+      'not a staff account',
+      'staff accounts sign in through',
+    ])) {
+      return _Screen.roleDenied;
+    }
+    // Account lifecycle (backend-crafted status messages).
+    if (has([
+      'pending approval',
+      'suspended',
+      'account status could not be verified',
+    ])) {
+      return _Screen.accountBlocked;
+    }
+    // Success-adjacent navigation from the bridge (verified factor exists).
+    if (has(['already enrolled'])) return _Screen.enroll;
+    // Code-lifecycle failures get their dedicated card.
+    if (has(['code has expired', 'code expired', 'challenge expired'])) {
+      return _Screen.expired;
+    }
+    // Transport / service availability.
+    if (has([
+      'failed to fetch',
+      'networkerror',
+      'timeout',
+      'timed out',
+      'the authentication configuration',
+      'data service',
+      'could not complete this request',
+      'assurance',
+      'factors unavailable',
+      'could not start mfa challenge',
+      'could not start the authenticator setup',
+      'could not verify the enrollment code',
+      'was not confirmed',
+      'timeoutexception',
+      'unable to start',
+    ])) {
       return _Screen.unavailable;
     }
+    // Everything else (e.g. Supabase "Invalid TOTP code detected") is a
+    // code-level rejection.
     return _Screen.invalid;
   }
 
@@ -100,6 +176,8 @@ class _StaffSecurityFlowState extends State<StaffSecurityFlow> {
         _message = switch (type) {
           _Screen.expired => 'Your code has expired. Enter the newest code from the app.',
           _Screen.sessionExpired => 'Your sign-in session has expired. Please sign in again.',
+          _Screen.roleDenied => 'This account does not have Agent or Administrator access.',
+          _Screen.accountBlocked => 'Your account is not active. Contact a Sitewise administrator.',
           _Screen.unavailable => 'Unable to contact the authentication service. Try again.',
           _ => 'The code is incorrect. Check the current code and try again.',
         };
@@ -239,13 +317,36 @@ class _StaffSecurityFlowState extends State<StaffSecurityFlow> {
     _action('Back to staff sign-in', _cancel, secondary: true),
   ]);
 
-  Component _utilityCard() => div(classes: 'smfa-card smfa-result', [
-    _titleIcon(_screen == _Screen.sessionExpired ? 'lock_clock' : 'wifi_off', 'amber'),
-    h2([Component.text(_screen == _Screen.sessionExpired ? 'Session Expired' : 'Verification Unavailable')]),
-    p(classes: 'smfa-description', [Component.text(_message ?? 'Checking your authentication session…')]),
-    _action(_screen == _Screen.sessionExpired ? 'Back to staff sign-in' : 'Try again',
-        _screen == _Screen.sessionExpired ? _cancel : _retry),
-  ]);
+  Component _utilityCard() {
+    final isRoleIssue =
+        _screen == _Screen.roleDenied || _screen == _Screen.accountBlocked;
+    return div(classes: 'smfa-card smfa-result', [
+      _titleIcon(
+        switch (_screen) {
+          _Screen.sessionExpired => 'lock_clock',
+          _Screen.roleDenied => 'badge',
+          _Screen.accountBlocked => 'lock_person',
+          _ => 'wifi_off',
+        },
+        'amber',
+      ),
+      h2([
+        Component.text(switch (_screen) {
+          _Screen.sessionExpired => 'Session Expired',
+          _Screen.roleDenied => 'Staff Access Only',
+          _Screen.accountBlocked => 'Account Not Active',
+          _ => 'Verification Unavailable',
+        }),
+      ]),
+      p(classes: 'smfa-description', [Component.text(_message ?? 'Checking your authentication session…')]),
+      _action(
+        _screen == _Screen.sessionExpired || isRoleIssue
+            ? 'Back to staff sign-in'
+            : 'Try again',
+        _screen == _Screen.sessionExpired || isRoleIssue ? _cancel : _retry,
+      ),
+    ]);
+  }
 
   @override
   Component build(BuildContext context) => StaffSecurityShell(

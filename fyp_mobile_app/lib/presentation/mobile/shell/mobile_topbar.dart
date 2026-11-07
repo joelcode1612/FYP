@@ -144,15 +144,8 @@ class MobileTopBar extends StatelessWidget implements PreferredSizeWidget {
           tooltip: 'Notifications',
           onTap: notify,
         ),
-        M3CircleButton(
-          icon: Icons.person_outline_rounded,
-          tooltip: 'Profile',
-          onTap: () =>
-              Navigator.of(context).pushNamed('/entrepreneur/profile'),
-        ),
-        // Only two utility buttons — Notifications and Profile — matching the
-        // reference `.app-head .right`. The mobile build is entrepreneur-only,
-        // so the demo role switcher is intentionally NOT exposed here. The
+        // Single utility button — Notifications. The profile is reached via
+        // the bottom navigation's Profile tab, so no person button here. The
         // classic (admin / owner) header below keeps its own account menu.
         const SizedBox(width: 6),
       ],

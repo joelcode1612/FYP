@@ -11,6 +11,7 @@ Never put the secret key in Flutter/Jaspr or commit it to Git.
 import hashlib
 import os
 import sys
+import uuid
 from getpass import getpass
 from pathlib import Path
 
@@ -20,12 +21,12 @@ from supabase.lib.client_options import ClientOptions
 
 # Public project URL and intended one-time Administrator address.
 SUPABASE_URL = "https://lzdpjwmcjbhtkzkqudyt.supabase.co"
-ADMIN_EMAIL = "admin.sitewise@gmail.com"
-ADMIN_FULL_NAME = "Sitewise Administrator"
+ADMIN_EMAIL = "admin.sitewise1@gmail.com"
+ADMIN_FULL_NAME = "Sitewise Administrator1"
 
 # SHA-256 fingerprint ONLY (not the secret) of the key previously exposed.
 EXPOSED_KEY_SHA256 = (
-    "sb_secret_LqfvdBpz9TG5RQm4H99Kpg_2d9S90CA"
+    "sb_secret_q2uEfjpJOCpsUCGeRf7YFA__i2Qanpk"
 )
 
 
@@ -36,7 +37,7 @@ def load_local_env():
         if not path.is_file():
             continue
         for line in path.read_text(encoding="utf-8-sig").splitlines():
-            line = line.strip
+            line = line.strip()
             if not line or line.startswith("#") or "=" not in line:
                 continue
             name, value = line.split("=", 1)
@@ -188,6 +189,46 @@ def main():
         fail(
             "Auth user exists, but public.users profile update failed: " + str(exc)
             + "\nDo NOT create the Auth account again. Check the users table, triggers, and logs."
+        )
+
+    # --- Local application mirror (what FastAPI /auth/me actually reads) ------
+    # The Supabase public.users row alone is NOT enough: the backend resolves
+    # the authoritative role from its own PostgreSQL mirror and auto-provisions
+    # a missing row as `entrepreneur` on first sign-in. Reconcile the SAME
+    # Supabase Auth UUID here through the trusted staff-provisioning service so
+    # both stores agree and the Administrator lands on /admin, never
+    # /entrepreneur. No client-submitted role is involved.
+    try:
+        src = Path(__file__).resolve().parent / "backend" / "src"
+        if src.is_dir() and str(src) not in sys.path:
+            sys.path.insert(0, str(src))
+        from sqlmodel import Session
+
+        from sitewise.db.session import engine
+        from sitewise.repositories.user_repository import UserRepository
+        from sitewise.services.user_service import UserService
+
+        with Session(engine) as session:
+            mirror = UserService(session).ensure_staff_profile(
+                user_id=uuid.UUID(uid),
+                email=ADMIN_EMAIL,
+                full_name=ADMIN_FULL_NAME,
+                phone_number=None,
+                role="admin",
+                account_status="active",
+            )
+            if not mirror.email_verified:
+                # Supabase owns verification; mirror the confirmed flag.
+                UserRepository(session).update(mirror.user_id, {"email_verified": True})
+        print("Local application profile reconciled (role=admin, status=active).")
+    except SystemExit:
+        raise
+    except Exception as exc:
+        fail(
+            "Supabase profile is correct, but the local application mirror could not be reconciled: "
+            + str(exc)
+            + "\nRun this script with backend/.venv/Scripts/python.exe so the sitewise package and "
+            "DATABASE_URL are available, then verify the users table."
         )
 
     print("\nSUCCESS: Initial Sitewise Administrator is provisioned.")

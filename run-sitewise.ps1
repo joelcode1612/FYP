@@ -60,9 +60,12 @@ if (-not (Test-Path -LiteralPath (Join-Path $distDir 'index.html'))) {
 # Check ALL TCP states, not just Listen: a stale Dart build daemon holds the
 # port in Bound state (netstat shows nothing), which makes uvicorn fail with
 # WSAEACCES 10013 — the same trap serve.impl.ps1 documents for the SSR server.
-$holder = Get-NetTCPConnection -LocalPort $Port -ErrorAction SilentlyContinue |
-    Select-Object -First 1
-if ($holder) {
+# Only Listen/Bound actually prevent a new bind; kernel-owned transient states
+# (TimeWait, CloseWait, ...) from already-closed connections must not block.
+$blocking = Get-NetTCPConnection -LocalPort $Port -ErrorAction SilentlyContinue |
+    Where-Object { $_.State -in 'Listen', 'Bound' }
+if ($blocking) {
+    $holder = $blocking | Select-Object -First 1
     $holderName = try {
         (Get-Process -Id $holder.OwningProcess -ErrorAction Stop).ProcessName
     } catch { "PID $($holder.OwningProcess)" }

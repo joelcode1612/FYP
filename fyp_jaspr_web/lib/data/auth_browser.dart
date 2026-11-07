@@ -13,6 +13,7 @@ extension type _AuthBridge(JSObject _) implements JSObject {
     JSString password,
     JSBoolean remember,
     JSString mfaCode,
+    JSString expectedPortal,
   );
   // Native Supabase TOTP enrollment ("Secure Your Staff Account").
   external JSPromise<JSString> mfaChallengeStart();
@@ -64,11 +65,15 @@ abstract final class WebAuth {
     await _bridge.google(remember.toJS).toDart;
   }
 
+  /// [expectedPortal] is a validation context only ('entrepreneur' | 'staff'):
+  /// the JS bridge rejects an account whose backend-assigned role does not
+  /// belong to the selected portal. It never grants or changes a role.
   static Future<void> password(
     String email,
     String password, [
     bool remember = true,
     String? mfaCode,
+    String? expectedPortal,
   ]) async {
     await _bridge
         .password(
@@ -76,6 +81,7 @@ abstract final class WebAuth {
           password.toJS,
           remember.toJS,
           (mfaCode ?? '').toJS,
+          (expectedPortal ?? '').toJS,
         )
         .toDart;
   }

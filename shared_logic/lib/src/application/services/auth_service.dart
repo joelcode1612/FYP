@@ -8,9 +8,6 @@ class AuthService {
 
   const AuthService(this.repo);
 
-  /// Seeded accounts for the demo hint (empty with a real backend).
-  List<SitewiseUser> get demoAccounts => repo.demoAccounts;
-
   Future<SitewiseUser?> currentUser() => repo.currentUser();
 
   Future<bool> isAuthenticated() => repo.isAuthenticated();
@@ -23,10 +20,18 @@ class AuthService {
   Future<SitewiseUser> signUp({
     required String email,
     required String password,
-  }) => repo.signUpWithEmail(email: email, password: password);
+    String? fullName,
+  }) => repo.signUpWithEmail(
+    email: email,
+    password: password,
+    fullName: fullName,
+  );
 
   Future<SitewiseUser> signInWithProvider(AuthProvider provider) =>
       repo.signInWithProvider(provider);
+
+  Future<void> sendPasswordRecoveryEmail(String email, {String? redirectTo}) =>
+      repo.sendPasswordRecoveryEmail(email, redirectTo: redirectTo);
 
   Future<void> signOut() => repo.signOut();
 }

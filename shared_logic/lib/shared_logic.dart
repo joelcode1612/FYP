@@ -85,10 +85,12 @@ export 'src/core/network/api_client.dart';
 //   OwnerCubit          <- OwnerViewModel
 //   AdminCubit          <- AdminViewModel
 export 'src/application/cubits/app_cubit.dart';
+export 'src/application/cubits/auth_cubit.dart';
 export 'src/application/cubits/entrepreneur_cubit.dart';
 export 'src/application/cubits/owner_cubit.dart';
 export 'src/application/cubits/admin_cubit.dart';
 export 'src/application/states/app_state.dart';
+export 'src/application/states/auth_state.dart';
 export 'src/application/states/entrepreneur_state.dart';
 export 'src/application/states/owner_state.dart';
 export 'src/application/states/admin_state.dart';

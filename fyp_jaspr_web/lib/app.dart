@@ -99,7 +99,12 @@ class SitewiseApp extends StatelessComponent {
         if (profile == null) {
           return '/login?next=${Uri.encodeComponent(state.location)}';
         }
-        final assigned = profile['role'] as String;
+        final assigned = _canonicalRoleName(profile['role'] as String?);
+        if (assigned == null) {
+          // Unsupported or missing role: fail closed rather than inventing a
+          // destination for a role string the backend did not issue.
+          return '/login';
+        }
         final requested = rolePath.group(1)!;
         // Workspace presentation is based on the backend-verified account
         // role. Client-controlled demo grants cannot authorize another role.
@@ -556,3 +561,14 @@ AppRole? _roleNamed(String? name) {
   }
   return null;
 }
+
+/// Mirrors the backend's legacy alias normalisation
+/// (`sitewise.domain.rbac.canonical_role`) so a session mirror written before
+/// canonicalisation still routes to the canonical workspace. Anything the
+/// three-role model does not define returns null and fails closed.
+String? _canonicalRoleName(String? name) => switch (name) {
+  'administrator' => 'admin',
+  'property_owner' || 'user' => 'entrepreneur',
+  'entrepreneur' || 'agent' || 'admin' => name,
+  _ => null,
+};

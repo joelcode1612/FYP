@@ -93,6 +93,7 @@ abstract final class WebAuth {
     String password, [
     bool remember = true,
     String? mfaCode,
+    String? expectedPortal,
   ]) async => throw StateError(error);
   static Future<String> mfaChallengeStart() async => throw StateError(error);
   static Future<void> mfaChallengeVerify(String code) async => throw StateError(error);

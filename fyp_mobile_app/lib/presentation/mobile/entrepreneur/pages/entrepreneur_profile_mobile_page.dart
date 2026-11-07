@@ -1,3 +1,4 @@
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:shared_logic/shared_logic.dart';
 import 'package:flutter/material.dart';
 
@@ -10,10 +11,19 @@ import '../../shell/mobile_app_shell.dart';
 
 class EntrepreneurProfileMobilePage extends StatelessWidget {
   final AppCubit appState;
-  const EntrepreneurProfileMobilePage({super.key, required this.appState});
+  final AuthCubit auth;
 
+  const EntrepreneurProfileMobilePage({
+    super.key,
+    required this.appState,
+    required this.auth,
+  });
+
+  /// Signs out through the cubit so the session, the persisted tokens and
+  /// every route guard see the same transition; the workspace is then torn
+  /// down in one navigation rather than left underneath the auth screen.
   Future<void> _logOut(BuildContext context) async {
-    await ServiceLocator.auth.signOut();
+    await auth.signOut();
     if (!context.mounted) return;
     Navigator.of(context).pushNamedAndRemoveUntil('/auth', (_) => false);
   }
@@ -37,9 +47,13 @@ class EntrepreneurProfileMobilePage extends StatelessWidget {
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
         children: [
-          _IdentityCard(
-            saved: appState.saved.length,
-            compared: appState.compared.length,
+          BlocBuilder<AuthCubit, AuthState>(
+            bloc: auth,
+            builder: (context, state) => _IdentityCard(
+              user: state.user,
+              saved: appState.saved.length,
+              compared: appState.compared.length,
+            ),
           ),
           const SizedBox(height: 20),
           _SectionLabel('Business'),
@@ -113,13 +127,22 @@ class EntrepreneurProfileMobilePage extends StatelessWidget {
 }
 
 class _IdentityCard extends StatelessWidget {
+  /// The backend-verified profile, or null while the session is still being
+  /// resolved. Never a placeholder identity.
+  final SitewiseUser? user;
   final int saved;
   final int compared;
 
-  const _IdentityCard({required this.saved, required this.compared});
+  const _IdentityCard({
+    required this.user,
+    required this.saved,
+    required this.compared,
+  });
 
   @override
   Widget build(BuildContext context) {
+    final name = user?.name ?? 'Sitewise account';
+    final initial = name.trim().isEmpty ? 'S' : name.trim()[0].toUpperCase();
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -129,12 +152,12 @@ class _IdentityCard extends StatelessWidget {
       ),
       child: Row(
         children: [
-          const CircleAvatar(
+          CircleAvatar(
             radius: 26,
             backgroundColor: SitewiseColors.geoWash,
             child: Text(
-              'S',
-              style: TextStyle(
+              initial,
+              style: const TextStyle(
                 fontSize: 20,
                 fontWeight: FontWeight.w800,
                 color: SitewiseColors.action,
@@ -146,26 +169,31 @@ class _IdentityCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
-                  'Sarah Lim',
-                  style: TextStyle(
+                Text(
+                  name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.w800,
                     color: SitewiseColors.ink,
                   ),
                 ),
                 const SizedBox(height: 2),
-                const Text(
-                  'sarah@nasihouse.my',
+                Text(
+                  user?.email ?? 'Not signed in',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: TextStyle(fontSize: 12, color: SitewiseColors.muted),
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: SitewiseColors.muted,
+                  ),
                 ),
                 const SizedBox(height: 8),
                 Wrap(
                   spacing: 6,
                   children: [
-                    _Pill('F&B Entrepreneur'),
+                    _Pill(user?.role.label ?? 'F&B Entrepreneur'),
                     _Pill('$saved saved'),
                     _Pill('$compared compared'),
                   ],
@@ -222,11 +250,14 @@ class _TileGroup extends StatelessWidget {
   const _TileGroup({required this.children});
 
   @override
-  Widget build(BuildContext context) => Container(
-    decoration: BoxDecoration(
-      color: SitewiseColors.surface,
+  Widget build(BuildContext context) => Material(
+    // Material, not a coloured Container: the tiles draw their own ink
+    // splashes on the nearest Material ancestor, and a DecoratedBox here
+    // would hide them entirely.
+    color: SitewiseColors.surface,
+    shape: RoundedRectangleBorder(
       borderRadius: BorderRadius.circular(16),
-      border: Border.all(color: SitewiseColors.border),
+      side: const BorderSide(color: SitewiseColors.border),
     ),
     clipBehavior: Clip.antiAlias,
     child: Column(children: children),

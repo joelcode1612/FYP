@@ -38,6 +38,51 @@ let state = {
 const nextKey = 'sitewise.next';
 const rememberKey = 'sitewise.remember';
 const STAFF_ROLES = ['agent', 'admin', 'administrator'];
+// Canonical three-role model — mirrors backend/src/sitewise/domain/rbac.py.
+// Legacy aliases are normalised on read; any OTHER value is unsupported and
+// must fail closed instead of silently falling back to a least-privileged
+// portal (the "admin lands on /entrepreneur" class of bug).
+const CANONICAL_ROLES = ['entrepreneur', 'agent', 'admin'];
+const ROLE_ALIASES = { administrator: 'admin', property_owner: 'entrepreneur', user: 'entrepreneur' };
+const ROLE_HOME = { entrepreneur: '/entrepreneur', agent: '/agent', admin: '/admin' };
+
+function canonicalRole(role) {
+  const name = String(role || '').trim().toLowerCase();
+  const mapped = Object.prototype.hasOwnProperty.call(ROLE_ALIASES, name) ? ROLE_ALIASES[name] : name;
+  return CANONICAL_ROLES.includes(mapped) ? mapped : null;
+}
+
+// Explicit destination map. Returns null for an unsupported role — callers
+// must treat null as "not authorised", never default to /entrepreneur.
+function homeForRole(role) {
+  const canonical = canonicalRole(role);
+  return canonical ? ROLE_HOME[canonical] : null;
+}
+
+// --- MFA diagnostics ---------------------------------------------------------
+// Development-only technical logging. NEVER log passwords, JWTs, access
+// tokens, TOTP secrets, QR data URIs or recovery codes: only these safe error
+// metadata fields are printed, picked explicitly rather than dumping the
+// error object (which could carry response payloads).
+const DEV_CONSOLE = /^(localhost|127\.0\.0\.1)$/.test(location.hostname);
+function diag(scope, error) {
+  if (!DEV_CONSOLE || !error) return;
+  console.warn('[sitewise-auth]', scope, {
+    name: typeof error.name === 'string' ? error.name : undefined,
+    message: typeof error.message === 'string' ? error.message : String(error),
+    code: error.code,
+    status: error.status,
+  });
+}
+
+// Builds an Error tagged with a stable machine code (the Dart flow maps codes
+// / messages to specific UI states) and logs the original cause in dev mode.
+function authError(code, message, cause) {
+  const error = new Error(message);
+  error.code = code;
+  if (cause) diag(code, cause);
+  return error;
+}
 // Staff workspaces that require a completed-MFA (aal2) session to view. The
 // MFA routes themselves (/staff/*) are deliberately excluded so the verify and
 // enrollment screens never redirect to themselves.
@@ -216,14 +261,45 @@ function rememberNext() {
 
 function goHome() {
   // Never invent a role. The profile is always the backend-verified response
-  // from /api/v1/auth/me; without one there is no authorized destination.
-  const role = state.profile?.role;
-  if (!role) throw new Error('No authorized profile was returned by the server.');
-  const home = (role === 'admin' || role === 'administrator') ? '/admin' : role === 'agent' ? '/agent' : '/entrepreneur';
+  // from /api/v1/auth/me, and the destination map is explicit per role.
+  const home = homeForRole(state.profile?.role);
+  if (!home) {
+    // Fail closed: an unsupported/missing role must never fall back to the
+    // entrepreneur workspace. Drop the stale mirror and surface the error.
+    state.profile = null;
+    clearSessionCookies();
+    throw new Error('The server returned an unsupported account role. Please contact a Sitewise administrator.');
+  }
   const next = sessionStorage.getItem(nextKey);
   sessionStorage.removeItem(nextKey);
   // Never allow a return URL to bypass the user's server-assigned role.
   navigate(next && (next === home || next.startsWith(home + '/') || next.startsWith(home + '?')) ? next : home);
+}
+
+// Portal context passed by the sign-in forms ('entrepreneur' | 'staff'). It is
+// a VALIDATION context only: it can reject an account whose backend-assigned
+// role does not belong to the portal, and can never grant or change a role.
+function assertPortalRole(expectedPortal) {
+  if (expectedPortal !== 'entrepreneur' && expectedPortal !== 'staff') return;
+  const role = canonicalRole(state.profile?.role);
+  if (!role) {
+    state.profile = null;
+    clearSessionCookies();
+    throw new Error('The server returned an unsupported account role. Please contact a Sitewise administrator.');
+  }
+  if (expectedPortal === 'staff' && role === 'entrepreneur') {
+    state.profile = null;
+    clearSessionCookies();
+    throw new Error('This is not a staff account. Please sign in through the Entrepreneur portal.');
+  }
+  if (expectedPortal === 'entrepreneur' && role !== 'entrepreneur') {
+    // Agents and administrators sign in through the Agent & Admin portal,
+    // where the mandatory TOTP MFA gate is enforced. They are never routed
+    // into the entrepreneur workspace from the public portal.
+    state.profile = null;
+    clearSessionCookies();
+    throw new Error('Staff accounts sign in through the Agent & Admin portal.');
+  }
 }
 
 // Single source of truth for the staff MFA gate, reused by sign-in, session
@@ -257,13 +333,18 @@ async function enforceStaffAssurance() {
 }
 
 // Route after any successful sign-in: ALWAYS validate the authoritative
-// server profile first, then staff-without-a-factor go to enrollment, staff
+// server profile first, then (when the calling portal is known) reject
+// portal/role mismatches, then staff-without-a-factor go to enrollment, staff
 // without aal2 go to verification, and everyone else to their role's workspace.
-async function finishSignIn() {
+async function finishSignIn(expectedPortal) {
   // Never choose a workspace using a previously authenticated account's
   // profile. The backend resolves the role from the current signed JWT.
   await profile();
   assertActiveAccount(state.profile);
+  // Portal/role cross-check BEFORE any MFA step or workspace routing, so a
+  // mismatched account stops here with a clear message instead of being sent
+  // through the wrong portal's flow.
+  assertPortalRole(expectedPortal);
   const status = await ensureStaffAssurance();
   if (status === 'enroll') {
     state.mfaEnrollmentRequired = true;
@@ -523,7 +604,7 @@ window.sitewiseAuth = {
     const { error } = await client.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: location.origin + '/auth/callback' } });
     if (error) throw error;
   },
-  async password(email, password, remember = true, mfaCode = '') {
+  async password(email, password, remember = true, mfaCode = '', expectedPortal = '') {
     await ready;
     if (!client) throw new Error(state.error || 'Authentication is not configured.');
     rememberNext();
@@ -535,9 +616,10 @@ window.sitewiseAuth = {
         state.user = { id: data.session.user.id, email: data.session.user.email };
         state.profile = null; // Never inherit a prior user's role.
         clearSessionCookies();
-        // First factor complete: finishSignIn() requires staff AAL2 and routes
-        // AAL1 accounts to /staff/verify. No challenge input remains on /login.
-        await finishSignIn();
+        // finishSignIn validates the authoritative profile against the
+        // selected portal, requires staff AAL2 and routes AAL1 staff accounts
+        // to /staff/verify. No challenge input remains on /login.
+        await finishSignIn(expectedPortal);
         return;
       }
       // No session returned: either a TOTP MFA challenge is pending or the
@@ -557,18 +639,34 @@ window.sitewiseAuth = {
   async mfaChallengeStart() {
     await ready;
     const { data: sessionResult, error: sessionError } = await client.auth.getSession();
-    if (sessionError || !sessionResult?.session) throw new Error('Your sign-in session expired. Please sign in again.');
-    await profile();
-    if (!isStaffRole(state.profile?.role)) throw new Error('Staff role is required.');
+    if (sessionError || !sessionResult?.session) {
+      throw authError('mfa_session', 'Your sign-in session expired. Please sign in again.', sessionError);
+    }
+    try {
+      await profile();
+    } catch (error) {
+      // profile() failures are already specific (backend unreachable, account
+      // status, identity change). Preserve the message, tag the stage.
+      throw authError('mfa_profile:' + (error?.code || 'error'), error?.message || 'Could not verify the account.', error);
+    }
+    if (!isStaffRole(state.profile?.role)) {
+      throw authError('mfa_role', 'Staff role is required.', null);
+    }
     const { data: levels, error: levelsError } = await client.auth.mfa.getAuthenticatorAssuranceLevel();
-    if (levelsError || !levels) throw levelsError || new Error('MFA assurance check unavailable.');
+    if (levelsError || !levels) {
+      throw authError('mfa_assurance', 'MFA assurance check unavailable.', levelsError);
+    }
     if (levels.currentLevel === 'aal2') return 'verified';
     const { data: factors, error: factorsError } = await client.auth.mfa.listFactors();
-    if (factorsError || !factors) throw factorsError || new Error('Authenticator factors unavailable.');
+    if (factorsError || !factors) {
+      throw authError('mfa_factors', 'Authenticator factors unavailable.', factorsError);
+    }
     const factor = factors.all?.find(f => f.type === 'totp' && f.status === 'verified');
     if (!factor) { navigate('/staff/mfa'); return 'enroll'; }
     const challenge = await client.auth.mfa.challenge({ factorId: factor.id });
-    if (challenge.error || !challenge.data?.id) throw challenge.error || new Error('Could not start MFA challenge.');
+    if (challenge.error || !challenge.data?.id) {
+      throw authError('mfa_challenge', 'Could not start MFA challenge.', challenge.error);
+    }
     state.mfaFactorId = factor.id;
     state.mfaChallengeId = challenge.data.id;
     state.mfaRequired = true;
@@ -583,9 +681,15 @@ window.sitewiseAuth = {
       challengeId: state.mfaChallengeId,
       code,
     });
-    if (error) throw error;
+    if (error) {
+      // Supabase's own message ("Invalid TOTP code detected", etc.) is
+      // preserved — it contains no secret material.
+      throw authError('mfa_challenge_verify', error?.message || 'Code verification failed.', error);
+    }
     const { data: assurance, error: aalError } = await client.auth.mfa.getAuthenticatorAssuranceLevel();
-    if (aalError || assurance?.currentLevel !== 'aal2') throw aalError || new Error('MFA verification was not confirmed.');
+    if (aalError || assurance?.currentLevel !== 'aal2') {
+      throw authError('mfa_assurance', 'MFA verification was not confirmed.', aalError);
+    }
     // Do not redirect here; the UI first displays the provider-backed success state.
     state.mfaRequired = false;
     state.mfaFactorId = null;
@@ -598,17 +702,43 @@ window.sitewiseAuth = {
   // factor is only usable after a verified challenge. No custom storage.
   async mfaEnrollStart() {
     await ready;
-    if (!client) throw new Error(state.error || 'Authentication is not configured.');
+    if (!client) throw authError('mfa_config', state.error || 'Authentication is not configured.', null);
     const { data: session, error: sessionError } = await client.auth.getSession();
-    if (sessionError || !session?.session) throw new Error('Your sign-in session expired. Please sign in again.');
-    await profile();
-    if (!isStaffRole(state.profile?.role)) throw new Error('Staff role is required.');
-    if (await hasVerifiedTotpFactor()) { navigate('/staff/verify'); throw new Error('Authenticator already enrolled.'); }
+    if (sessionError || !session?.session) {
+      throw authError('mfa_session', 'Your sign-in session expired. Please sign in again.', sessionError);
+    }
+    try {
+      await profile();
+    } catch (error) {
+      throw authError('mfa_profile:' + (error?.code || 'error'), error?.message || 'Could not verify the account.', error);
+    }
+    if (!isStaffRole(state.profile?.role)) {
+      throw authError('mfa_role', 'Staff role is required.', null);
+    }
+    if (await hasVerifiedTotpFactor()) {
+      // Returning user: NEVER generate a second QR code and NEVER delete or
+      // replace the verified factor. Send them to the challenge screen.
+      navigate('/staff/verify');
+      throw authError('mfa_already_enrolled', 'Authenticator already enrolled.', null);
+    }
+    // Housekeeping: an abandoned earlier enrollment leaves an UNVERIFIED
+    // factor behind, which would stack duplicate factors on every visit to
+    // this screen. Remove unverified TOTP factors only — VERIFIED factors are
+    // never deleted here; losing an authenticator is handled exclusively by
+    // the administrator-authorized MFA recovery endpoint.
+    const { data: existingFactors, error: listError } = await client.auth.mfa.listFactors();
+    if (listError) throw authError('mfa_factors', 'Authenticator factors unavailable.', listError);
+    for (const stale of existingFactors?.all || []) {
+      if (stale.type === 'totp' && stale.status !== 'verified') {
+        const { error: staleError } = await client.auth.mfa.unenroll({ factorId: stale.id });
+        if (staleError) diag('mfaEnrollStart/stale-unverified', staleError); // non-fatal
+      }
+    }
     const { data, error } = await client.auth.mfa.enroll({
       factorType: 'totp',
       friendlyName: 'Sitewise Staff',
     });
-    if (error) throw error;
+    if (error) throw authError('mfa_enroll', 'Could not start the authenticator setup. Please try again.', error);
     state.mfaEnrollFactorId = data.id;
     state.mfaEnrollQr = data.totp?.qr_code || null;
     state.mfaEnrollSecret = data.totp?.secret || null;
@@ -616,23 +746,27 @@ window.sitewiseAuth = {
   },
   async mfaEnrollVerify(code) {
     await ready;
-    if (!client) throw new Error(state.error || 'Authentication is not configured.');
+    if (!client) throw authError('mfa_config', state.error || 'Authentication is not configured.', null);
     if (!state.mfaEnrollFactorId) throw new Error('Start the enrollment again.');
     const challenge = await client.auth.mfa.challenge({ factorId: state.mfaEnrollFactorId });
-    if (challenge.error) throw challenge.error;
+    if (challenge.error) throw authError('mfa_enroll_challenge', 'Could not verify the enrollment code.', challenge.error);
     const verify = await client.auth.mfa.verify({
       factorId: state.mfaEnrollFactorId,
       challengeId: challenge.data.id,
       code,
     });
-    if (verify.error) throw verify.error;
+    if (verify.error) {
+      throw authError('mfa_enroll_verify', verify.error?.message || 'Code verification failed.', verify.error);
+    }
     // Only a verified factor satisfies the staff MFA requirement.
     state.mfaEnrollmentRequired = false;
     state.mfaEnrollFactorId = null;
     state.mfaEnrollQr = null;
     state.mfaEnrollSecret = null;
     const { data: assurance, error: aalError } = await client.auth.mfa.getAuthenticatorAssuranceLevel();
-    if (aalError || assurance?.currentLevel !== 'aal2') throw aalError || new Error('MFA enrollment was not confirmed.');
+    if (aalError || assurance?.currentLevel !== 'aal2') {
+      throw authError('mfa_assurance', 'MFA enrollment was not confirmed.', aalError);
+    }
     await profile();
     // UI displays verified success, then invokes complete() to route.
     return true;

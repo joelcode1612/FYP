@@ -1,14 +1,15 @@
 Running `(cd C:\Users\Lenovo\AppData\Local\Pub\Cache\hosted\pub.dev\dartcv4-2.2.2\; PATH=C:\Program Files\Android\Android Studio\jbr\bin;C:\oraclexe\app\oracle\product\11.2.0\server\bin;C:\Program Files\Python311\Scripts\;C:\Program Files\Python311\;C:\Program Files\Common Files\Oracle\Java\javapath;C:\oraclexe\app\oracle\product\11.2.0\server\bin;C:\Program Files\Microsoft\jdk-11.0.16.101-hotspot\bin;C:\WINDOWS\system32;C:\WINDOWS;C:\WINDOWS\System32\Wbem;C:\WINDOWS\System32\WindowsPowerShell\v1.0\;C:\WINDOWS\System32\OpenSSH\;C:\Program Files\Microsoft SQL Server\Client SDK\ODBC\170\Tools\Binn\;C:\Program Files\Git\cmd;C:\Program Files (x86)\Microsoft SQL Server\160\Tools\Binn\;C:\Program Files\Microsoft SQL Server\160\Tools\Binn\;C:\Program Files\Microsoft SQL Server\160\DTS\Binn\;C:\Program Files (x86)\Microsoft SQL Server\150\Tools\Binn\;C:\Program Files\Microsoft SQL Server\150\Tools\Binn\;C:\Program Files\Microsoft SQL Server\150\DTS\Binn\;C:\Program Files (x86)\Microsoft SQL Server\150\DTS\Binn\;C:\ProgramData\chocolatey\bin;C:\Program Files\dotnet\;C:\Program Files (x86)\Windows Kits\10\Windows Performance Toolkit\;C:\sui;C:\sui\target\release;C:\xampp\php;C:\Program Files\Docker\Docker\resources\bin;C:\Users\Lenovo\AppData\Local\Android\Sdk\platform-tools;C:\flutter\bin;C:\Program Files\nodejs\;C:\Users\Lenovo\.cargo\bin;C:\Users\Lenovo\AppData\Local\Microsoft\WindowsApps;C:\Users\Lenovo\AppData\Local\Programs\Microsoft VS Code\bin;C:\Program Files\nodejs\;C:\Users\Lenovo\.dotnet\tools;C:\projects\sui\target\release;C:\Users\Lenovo\AppData\Roaming\Python\Python311\Scripts;C:\Users\Lenovo\AppData\Local\GitHubDesktop\bin;C:\flutter\bin;C:\Users\Lenovo\AppData\Local\Programs\Ollama;C:\Users\Lenovo\AppData\Roaming\npm;C:\Users\Lenovo\AppData\Local\Pub\Cache\bin;C:\Program Files\Python311\;C:\Program Files\Python311\Scripts\;C:\Users\Lenovo\AppData\Local\Programs\Microsoft VS Code\bin\copilot-shim;C:\flutter\bin\mingit\cmd;C:\flutter\bin\mingit\cmd PROGRAMDATA=C:\ProgramData SYSTEMDRIVE=C: SYSTEMROOT=C:\WINDOWS TEMP=C:\Users\Lenovo\AppData\Local\Temp TMP=C:\Users\Lenovo\AppData\Local\Temp USERPROFILE=C:\Users\Lenovo WINDIR=C:\WINDOWS C:\flutter\bin\cache\dart-sdk\bin\dart --packages=C:\Users\Lenovo\AndroidStudioProjects\FYP\.dart_tool\package_config.json C:\Users\Lenovo\AndroidStudioProjects\FYP\.dart_tool\hooks_runner\dartcv4\4070f78865\hook.dill --config=C:\Users\Lenovo\AndroidStudioProjects\FYP\.dart_tool\hooks_runner\dartcv4\4070f78865\input.json )`.
+[dartcv4] platform defines: {windows: null, linux: Using generator: Ninja
+
+d: null, ios: null}
+
+
 [dartcv4] exclude modules: {}
 
 
-[dartcv4] merged modules: {imgcodecs, imgproc}
+userDefines: {}
 
-
-[dartcv4] platform defines: {windows: null, linux: null, macos: null, android: null, ios: null}
-
-
-Resolved userConfig: UserConfig(targetOS: android, cmakeVersion: null, ninjaVersion: null, ndkVersion: null, androidHome: null, preferAndroidCmake: true, preferAndroidNinja: true)
+g: UserConfig(targetOS: android, cmakeVersion: null, ninjaVersion: null, ndkVersion: null, androidHome: null, preferAndroidCmake: true, preferAndroidNinja: true)
 
 Running `COMSPEC=C:\WINDOWS\SYSTEM32\cmd.exe PATH=C:\Program Files\Android\Android Studio\jbr\bin;C:\oraclexe\app\oracle\product\11.2.0\server\bin;C:\Program Files\Python311\Scripts\;C:\Program Files\Python311\;C:\Program Files\Common Files\Oracle\Java\javapath;C:\oraclexe\app\oracle\product\11.2.0\server\bin;C:\Program Files\Microsoft\jdk-11.0.16.101-hotspot\bin;C:\WINDOWS\system32;C:\WINDOWS;C:\WINDOWS\System32\Wbem;C:\WINDOWS\System32\WindowsPowerShell\v1.0\;C:\WINDOWS\System32\OpenSSH\;C:\Program Files\Microsoft SQL Server\Client SDK\ODBC\170\Tools\Binn\;C:\Program Files\Git\cmd;C:\Program Files (x86)\Microsoft SQL Server\160\Tools\Binn\;C:\Program Files\Microsoft SQL Server\160\Tools\Binn\;C:\Program Files\Microsoft SQL Server\160\DTS\Binn\;C:\Program Files (x86)\Microsoft SQL Server\150\Tools\Binn\;C:\Program Files\Microsoft SQL Server\150\Tools\Binn\;C:\Program Files\Microsoft SQL Server\150\DTS\Binn\;C:\Program Files (x86)\Microsoft SQL Server\150\DTS\Binn\;C:\ProgramData\chocolatey\bin;C:\Program Files\dotnet\;C:\Program Files (x86)\Windows Kits\10\Windows Performance Toolkit\;C:\sui;C:\sui\target\release;C:\xampp\php;C:\Program Files\Docker\Docker\resources\bin;C:\Users\Lenovo\AppData\Local\Android\Sdk\platform-tools;C:\flutter\bin;C:\Program Files\nodejs\;C:\Users\Lenovo\.cargo\bin;C:\Users\Lenovo\AppData\Local\Microsoft\WindowsApps;C:\Users\Lenovo\AppData\Local\Programs\Microsoft VS Code\bin;C:\Program Files\nodejs\;C:\Users\Lenovo\.dotnet\tools;C:\projects\sui\target\release;C:\Users\Lenovo\AppData\Roaming\Python\Python311\Scripts;C:\Users\Lenovo\AppData\Local\GitHubDesktop\bin;C:\flutter\bin;C:\Users\Lenovo\AppData\Local\Programs\Ollama;C:\Users\Lenovo\AppData\Roaming\npm;C:\Users\Lenovo\AppData\Local\Pub\Cache\bin;C:\Program Files\Python311\;C:\Program Files\Python311\Scripts\;C:\Users\Lenovo\AppData\Local\Programs\Microsoft VS Code\bin\copilot-shim;C:\flutter\bin\mingit\cmd;C:\flutter\bin\mingit\cmd PATHEXT=.COM;.EXE;.BAT;.CMD;.VBS;.JS;.WS;.MSC PROGRAMDATA=C:\ProgramData PROMPT=$P$G SYSTEMDRIVE=C: SYSTEMROOT=C:\WINDOWS TEMP=C:\Users\Lenovo\AppData\Local\Temp TMP=C:\Users\Lenovo\AppData\Local\Temp USERPROFILE=C:\Users\Lenovo WINDIR=C:\WINDOWS where.exe aapt`.
 
@@ -17,10 +18,10 @@ INFO: Could not find files for the given pattern(s).
 
 Running `COMSPEC=C:\WINDOWS\SYSTEM32\cmd.exe PATH=C:\Program Files\Android\Android Studio\jbr\bin;C:\oraclexe\app\oracle\product\11.2.0\server\bin;C:\Program Files\Python311\Scripts\;C:\Program Files\Python311\;C:\Program Files\Common Files\Oracle\Java\javapath;C:\oraclexe\app\oracle\product\11.2.0\server\bin;C:\Program Files\Microsoft\jdk-11.0.16.101-hotspot\bin;C:\WINDOWS\system32;C:\WINDOWS;C:\WINDOWS\System32\Wbem;C:\WINDOWS\System32\WindowsPowerShell\v1.0\;C:\WINDOWS\System32\OpenSSH\;C:\Program Files\Microsoft SQL Server\Client SDK\ODBC\170\Tools\Binn\;C:\Program Files\Git\cmd;C:\Program Files (x86)\Microsoft SQL Server\160\Tools\Binn\;C:\Program Files\Microsoft SQL Server\160\Tools\Binn\;C:\Program Files\Microsoft SQL Server\160\DTS\Binn\;C:\Program Files (x86)\Microsoft SQL Server\150\Tools\Binn\;C:\Program Files\Microsoft SQL Server\150\Tools\Binn\;C:\Program Files\Microsoft SQL Server\150\DTS\Binn\;C:\Program Files (x86)\Microsoft SQL Server\150\DTS\Binn\;C:\ProgramData\chocolatey\bin;C:\Program Files\dotnet\;C:\Program Files (x86)\Windows Kits\10\Windows Performance Toolkit\;C:\sui;C:\sui\target\release;C:\xampp\php;C:\Program Files\Docker\Docker\resources\bin;C:\Users\Lenovo\AppData\Local\Android\Sdk\platform-tools;C:\flutter\bin;C:\Program Files\nodejs\;C:\Users\Lenovo\.cargo\bin;C:\Users\Lenovo\AppData\Local\Microsoft\WindowsApps;C:\Users\Lenovo\AppData\Local\Programs\Microsoft VS Code\bin;C:\Program Files\nodejs\;C:\Users\Lenovo\.dotnet\tools;C:\projects\sui\target\release;C:\Users\Lenovo\AppData\Roaming\Python\Python311\Scripts;C:\Users\Lenovo\AppData\Local\GitHubDesktop\bin;C:\flutter\bin;C:\Users\Lenovo\AppData\Local\Programs\Ollama;C:\Users\Lenovo\AppData\Roaming\npm;C:\Users\Lenovo\AppData\Local\Pub\Cache\bin;C:\Program Files\Python311\;C:\Program Files\Python311\Scripts\;C:\Users\Lenovo\AppData\Local\Programs\Microsoft VS Code\bin\copilot-shim;C:\flutter\bin\mingit\cmd;C:\flutter\bin\mingit\cmd PATHEXT=.COM;.EXE;.BAT;.CMD;.VBS;.JS;.WS;.MSC PROGRAMDATA=C:\ProgramData PROMPT=$P$G SYSTEMDRIVE=C: SYSTEMROOT=C:\WINDOWS TEMP=C:\Users\Lenovo\AppData\Local\Temp TMP=C:\Users\Lenovo\AppData\Local\Temp USERPROFILE=C:\Users\Lenovo WINDIR=C:\WINDOWS where.exe adb`.
 
+C:\Users\Lenovo\AppData\Local\Android\Sdk\platform-tools\adb.exe
+
 
 
-
-rs\Lenovo\AppData\Local\Android\Sdk\platform-tools\adb.exe
 
 Android SDK root candidates: [file:///C:/Users/Lenovo/AppData/Local/Android/Sdk/, file:///C:/Users/Lenovo/AppData/Local/Android/sdk/]
 
@@ -28,8 +29,6 @@ Running `COMSPEC=C:\WINDOWS\SYSTEM32\cmd.exe PATH=C:\Program Files\Android\Andro
 
 INFO: Could not find files for the given pattern(s).
 
-
-Did not find ndk-build on PATH.
 
 Android NDK candidates (priority order): [(uri: file:///C:/Users/Lenovo/AppData/Local/Android/Sdk/ndk/28.2.13676358/, version: 28.2.13676358), (uri: file:///C:/Users/Lenovo/AppData/Local/Android/Sdk/ndk/27.0.12077973/, version: 27.0.12077973), (uri: file:///C:/Users/Lenovo/AppData/Local/Android/Sdk/ndk/25.1.8937393/, version: 25.1.8937393), (uri: file:///C:/Users/Lenovo/AppData/Local/Android/sdk/ndk/28.2.13676358/, version: 28.2.13676358), (uri: file:///C:/Users/Lenovo/AppData/Local/Android/sdk/ndk/27.0.12077973/, version: 27.0.12077973), (uri: file:///C:/Users/Lenovo/AppData/Local/Android/sdk/ndk/25.1.8937393/, version: 25.1.8937393)]
 
@@ -43,20 +42,16 @@ Thread model: posix
 InstalledDir: C:/Users/Lenovo/AppData/Local/Android/Sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/windows-x86_64/bin
 
 
-Found version for ToolInstance(Clang, 19.0.1, file:///C:/Users/Lenovo/AppData/Local/Android/Sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/windows-x86_64/bin/clang.exe). 19.0.1
-
-Running `C:\Users\Lenovo\AppData\Local\Android\Sdk\ndk\28.2.13676358\toolchains\llvm\prebuilt\windows-x86_64\bin\llvm-ar.exe --version`.
-
 Looking up version with --version for ToolInstance(LLVM archiver, null, file:///C:/Users/Lenovo/AppData/Local/Android/Sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/windows-x86_64/bin/llvm-ar.exe).
+
+Found version for ToolInstance(Clang, 19.0.1, file:///C:/Users/Lenovo/AppData/Local/Android/Sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/windows-x86_64/bin/clang.exe). 19.0.1
 
 LLVM (http://llvm.org/):
   LLVM version 19.0.1 (/mnt/disks/build-disk/src/android/llvm-r530567/out/llvm-project/llvm 97a699bf4812a18fb657c2779f5296a4ab2694d2)
   Optimized build.
 
 
-Running `C:\Users\Lenovo\AppData\Local\Android\Sdk\ndk\28.2.13676358\toolchains\llvm\prebuilt\windows-x86_64\bin\ld.lld.exe --version`.
-
-ns/llvm/prebuilt/windows-x86_64/bin/ld.lld.exe).
+Looking up version with --version for ToolInstance(LLD, null, file:///C:/Users/Lenovo/AppData/Local/Android/Sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/windows-x86_64/bin/ld.lld.exe).
 
 LLD 19.0.1 (compatible with GNU linkers)
 
@@ -67,42 +62,40 @@ Looking for Ninja in [$HOME/AppData/Local/Android/Sdk/cmake/*/bin/ninja.exe].
 
 Found [ToolInstance(Ninja, null, file:///C:/Users/Lenovo/AppData/Local/Android/Sdk/cmake/3.22.1/bin/ninja.exe)].
 
-make/3.22.1/bin/ninja.exe).
+Running `C:\Users\Lenovo\AppData\Local\Android\Sdk\cmake\3.22.1\bin\ninja.exe --version`.
+
+Looking up version with --version for ToolInstance(Ninja, null, file:///C:/Users/Lenovo/AppData/Local/Android/Sdk/cmake/3.22.1/bin/ninja.exe).
 
 1.10.2
 
 
-Found version for ToolInstance(Ninja, 1.10.2, file:///C:/Users/Lenovo/AppData/Local/Android/Sdk/cmake/3.22.1/bin/ninja.exe). 1.10.2
+Found version for ToolInstance(Ninja, 1.10.2, file:///C:/Users/Lenovo/AppData/Local/Android/Sdk/cmake/3.22.1/bin/ninja.exe). 1.10Running `COMSPEC=C:\WINDOWS\SYSTEM32\cmd.exe PATH=C:\Program Files\Android\Android Studio\jbr\bin;C:\oraclexe\app\oracle\product\11.2.0\server\bin;C:\Program Files\Python311\Scripts\;C:\Program Files\Python311\;C:\Program Files\Common Files\Oracle\Java\javapath;C:\oraclexe\app\oracle\product\11.2.0\server\bin;C:\Program Files\Microsoft\jdk-11.0.16.101-hotspot\bin;C:\WINDOWS\system32;C:\WINDOWS;C:\WINDOWS\System32\Wbem;C:\WINDOWS\System32\WindowsPowerShell\v1.0\;C:\WINDOWS\System32\OpenSSH\;C:\Program Files\Microsoft SQL Server\Client SDK\ODBC\170\Tools\Binn\;C:\Program Files\Git\cmd;C:\Program Files (x86)\Microsoft SQL Server\160\Tools\Binn\;C:\Program Files\Microsoft SQL Server\160\Tools\Binn\;C:\Program Files\Microsoft SQL Server\160\DTS\Binn\;C:\Program Files (x86)\Microsoft SQL Server\150\Tools\Binn\;C:\Program Files\Microsoft SQL Server\150\Tools\Binn\;C:\Program Files\Microsoft SQL Server\150\DTS\Binn\;C:\Program Files (x86)\Microsoft SQL Server\150\DTS\Binn\;C:\ProgramData\chocolatey\bin;C:\Program Files\dotnet\;C:\Program Files (x86)\Windows Kits\10\Windows Performance Toolkit\;C:\sui;C:\sui\target\release;C:\xampp\php;C:\Program Files\Docker\Docker\resources\bin;C:\Users\Lenovo\AppData\Local\Android\Sdk\platform-tools;C:\flutter\bin;C:\Program Files\nodejs\;C:\Users\Lenovo\.cargo\bin;C:\Users\Lenovo\AppData\Local\Microsoft\WindowsApps;C:\Users\Lenovo\AppData\Local\Programs\Microsoft VS Code\bin;C:\Program Files\nodejs\;C:\Users\Lenovo\.dotnet\tools;C:\projects\sui\target\release;C:\Users\Lenovo\AppData\Roaming\Python\Python311\Scripts;C:\Users\Lenovo\AppData\Local\GitHubDesktop\bin;C:\flutter\bin;C:\Users\Lenovo\AppData\Local\Programs\Ollama;C:\Users\Lenovo\AppData\Roaming\npm;C:\Users\Lenovo\AppData\Local\Pub\Cache\bin;C:\Program Files\Python311\;C:\Program Files\Python311\Scripts\;C:\Users\Lenovo\AppData\Local\Programs\Microsoft VS Code\bin\copilot-shim;C:\flutter\bin\mingit\cmd;C:\flutter\bin\mingit\cmd PATHEXT=.COM;.EXE;.BAT;.CMD;.VBS;.JS;.WS;.MSC PROGRAMDATA=C:\ProgramData PROMPT=$P$G SYSTEMDRIVE=C: SYSTEMROOT=C:\WINDOWS TEMP=C:\Users\Lenovo\AppData\Local\Temp TMP=C:\Users\Lenovo\AppData\Local\Temp USERPROFILE=C:\Users\Lenovo WINDIR=C:\WINDOWS where.exe ninja`.
 
-Running `COMSPEC=C:\WINDOWS\SYSTEM32\cmd.exe PATH=C:\Program Files\Android\Android Studio\jbr\bin;C:\oraclexe\app\oracle\product\11.2.0\server\bin;C:\Program Files\Python311\Scripts\;C:\Program Files\Python311\;C:\Program Files\Common Files\Oracle\Java\javapath;C:\oraclexe\app\oracle\product\11.2.0\server\bin;C:\Program Files\Microsoft\jdk-11.0.16.101-hotspot\bin;C:\WINDOWS\system32;C:\WINDOWS;C:\WINDOWS\System32\Wbem;C:\WINDOWS\System32\WindowsPowerShell\v1.0\;C:\WINDOWS\System32\OpenSSH\;C:\Program Files\Microsoft SQL Server\Client SDK\ODBC\170\Tools\Binn\;C:\Program Files\Git\cmd;C:\Program Files (x86)\Microsoft SQL Server\160\Tools\Binn\;C:\Program Files\Microsoft SQL Server\160\Tools\Binn\;C:\Program Files\Microsoft SQL Server\160\DTS\Binn\;C:\Program Files (x86)\Microsoft SQL Server\150\Tools\Binn\;C:\Program Files\Microsoft SQL Server\150\Tools\Binn\;C:\Program Files\Microsoft SQL Server\150\DTS\Binn\;C:\Program Files (x86)\Microsoft SQL Server\150\DTS\Binn\;C:\ProgramData\chocolatey\bin;C:\Program Files\dotnet\;C:\Program Files (x86)\Windows Kits\10\Windows Performance Toolkit\;C:\sui;C:\sui\target\release;C:\xampp\php;C:\Program Files\Docker\Docker\resources\bin;C:\Users\Lenovo\AppData\Local\Android\Sdk\platform-tools;C:\flutter\bin;C:\Program Files\nodejs\;C:\Users\Lenovo\.cargo\bin;C:\Users\Lenovo\AppData\Local\Microsoft\WindowsApps;C:\Users\Lenovo\AppData\Local\Programs\Microsoft VS Code\bin;C:\Program Files\nodejs\;C:\Users\Lenovo\.dotnet\tools;C:\projects\sui\target\release;C:\Users\Lenovo\AppData\Roaming\Python\Python311\Scripts;C:\Users\Lenovo\AppData\Local\GitHubDesktop\bin;C:\flutter\bin;C:\Users\Lenovo\AppData\Local\Programs\Ollama;C:\Users\Lenovo\AppData\Roaming\npm;C:\Users\Lenovo\AppData\Local\Pub\Cache\bin;C:\Program Files\Python311\;C:\Program Files\Python311\Scripts\;C:\Users\Lenovo\AppData\Local\Programs\Microsoft VS Code\bin\copilot-shim;C:\flutter\bin\mingit\cmd;C:\flutter\bin\mingit\cmd PATHEXT=.COM;.EXE;.BAT;.CMD;.VBS;.JS;.WS;.MSC PROGRAMDATA=C:\ProgramData PROMPT=$P$G SYSTEMDRIVE=C: SYSTEMROOT=C:\WINDOWS TEMP=C:\Users\Lenovo\AppData\Local\Temp TMP=C:\Users\Lenovo\AppData\Local\Temp USERPROFILE=C:\Users\Lenovo WINDIR=C:\WINDOWS where.exe ninja`.
+INFO: Could not find files for the given pattern(s).
 
-Looking for Ninja on PATH.
 
 Found System Ninja: 
 
-les for the given pattern(s).
+ce(Ninja, 1.10.2, file:///C:/Users/Lenovo/AppData/Local/Android/Sdk/cmake/3.22.1/bin/ninja.exe)
 
+Looking for CMake in [$HOME/AppData/Local/Android/Sdk/cmake/*/bin/cmake.exe].
 
-Found Ninja: ToolInstance(Ninja, 1.10.2, file:///C:/Users/Lenovo/AppData/Local/Android/Sdk/cmake/3.22.1/bin/ninja.exe)
-
+Looking up version with --version for ToolInstance(CMake, null, file:///C:/Users/Lenovo/AppData/Local/Android/Sdk/cmake/3.22.1/bin/cmake.exe).
 Running `C:\Users\Lenovo\AppData\Local\Android\Sdk\cmake\3.22.1\bin\cmake.exe --version`.
-
-ata/Local/Android/Sdk/cmake/3.22.1/bin/cmake.exe).
 
 
 CMake suite maintained and supported by Kitware (kitware.com/cmake).
 
 
-Looking for CMake on PATH.
-Running `COMSPEC=C:\WINDOWS\SYSTEM32\cmd.exe PATH=C:\Program Files\Android\Android Studio\jbr\bin;C:\oraclexe\app\oracle\product\11.2.0\server\bin;C:\Program Files\Python311\Scripts\;C:\Program Files\Python311\;C:\Program Files\Common Files\Oracle\Java\javapath;C:\oraclexe\app\oracle\product\11.2.0\server\bin;C:\Program Files\Microsoft\jdk-11.0.16.101-hotspot\bin;C:\WINDOWS\system32;C:\WINDOWS;C:\WINDOWS\System32\Wbem;C:\WINDOWS\System32\WindowsPowerShell\v1.0\;C:\WINDOWS\System32\OpenSSH\;C:\Program Files\Microsoft SQL Server\Client SDK\ODBC\170\Tools\Binn\;C:\Program Files\Git\cmd;C:\Program Files (x86)\Microsoft SQL Server\160\Tools\Binn\;C:\Program Files\Microsoft SQL Server\160\Tools\Binn\;C:\Program Files\Microsoft SQL Server\160\DTS\Binn\;C:\Program Files (x86)\Microsoft SQL Server\150\Tools\Binn\;C:\Program Files\Microsoft SQL Server\150\Tools\Binn\;C:\Program Files\Microsoft SQL Server\150\DTS\Binn\;C:\Program Files (x86)\Microsoft SQL Server\150\DTS\Binn\;C:\ProgramData\chocolatey\bin;C:\Program Files\dotnet\;C:\Program Files (x86)\Windows Kits\10\Windows Performance Toolkit\;C:\sui;C:\sui\target\release;C:\xampp\php;C:\Program Files\Docker\Docker\resources\bin;C:\Users\Lenovo\AppData\Local\Android\Sdk\platform-tools;C:\flutter\bin;C:\Program Files\nodejs\;C:\Users\Lenovo\.cargo\bin;C:\Users\Lenovo\AppData\Local\Microsoft\WindowsApps;C:\Users\Lenovo\AppData\Local\Programs\Microsoft VS Code\bin;C:\Program Files\nodejs\;C:\Users\Lenovo\.dotnet\tools;C:\projects\sui\target\release;C:\Users\Lenovo\AppData\Roaming\Python\Python311\Scripts;C:\Users\Lenovo\AppData\Local\GitHubDesktop\bin;C:\flutter\bin;C:\Users\Lenovo\AppData\Local\Programs\Ollama;C:\Users\Lenovo\AppData\Roaming\npm;C:\Users\Lenovo\AppData\Local\Pub\Cache\bin;C:\Program Files\Python311\;C:\Program Files\Python311\Scripts\;C:\Users\Lenovo\AppData\Local\Programs\Microsoft VS Code\bin\copilot-shim;C:\flutter\bin\mingit\cmd;C:\flutter\bin\mingit\cmd PATHEXT=.COM;.EXE;.BAT;.CMD;.VBS;.JS;.WS;.MSC PROGRAMDATA=C:\ProgramData PROMPT=$P$G SYSTEMDRIVE=C: SYSTEMROOT=C:\WINDOWS TEMP=C:\Users\Lenovo\AppData\Local\Temp TMP=C:\Users\Lenovo\AppData\Local\Temp USERPROFILE=C:\Users\Lenovo WINDIR=C:\WINDOWS where.exe cmake`.
-
-Found version for ToolInstance(CMake, 3.22.1-g37088a8-dirty, file:///C:/Users/Lenovo/AppData/Local/Android/Sdk/cmake/3.22.1/bin/cmake.exe). 3.22.1-g37088a8-dirty
-
 Found Android CMake: ToolInstance(CMake, 3.22.1-g37088a8-dirty, file:///C:/Users/Lenovo/AppData/Local/Android/Sdk/cmake/3.22.1/bin/cmake.exe)
 
-Did not find CMake on PATH.
+.1-g37088a8-dirty
 
- the given pattern(s).
+Looking for CMake on PATH.
+
+YSTEM32\cmd.exe PATH=C:\Program Files\Android\Android Studio\jbr\bin;C:\oraclexe\app\oracle\product\11.2.0\server\bin;C:\Program Files\Python311\Scripts\;C:\Program Files\Python311\;C:\Program Files\Common Files\Oracle\Java\javapath;C:\oraclexe\app\oracle\product\11.2.0\server\bin;C:\Program Files\Microsoft\jdk-11.0.16.101-hotspot\bin;C:\WINDOWS\system32;C:\WINDOWS;C:\WINDOWS\System32\Wbem;C:\WINDOWS\System32\WindowsPowerShell\v1.0\;C:\WINDOWS\System32\OpenSSH\;C:\Program Files\Microsoft SQL Server\Client SDK\ODBC\170\Tools\Binn\;C:\Program Files\Git\cmd;C:\Program Files (x86)\Microsoft SQL Server\160\Tools\Binn\;C:\Program Files\Microsoft SQL Server\160\Tools\Binn\;C:\Program Files\Microsoft SQL Server\160\DTS\Binn\;C:\Program Files (x86)\Microsoft SQL Server\150\Tools\Binn\;C:\Program Files\Microsoft SQL Server\150\Tools\Binn\;C:\Program Files\Microsoft SQL Server\150\DTS\Binn\;C:\Program Files (x86)\Microsoft SQL Server\150\DTS\Binn\;C:\ProgramData\chocolatey\bin;C:\Program Files\dotnet\;C:\Program Files (x86)\Windows Kits\10\Windows Performance Toolkit\;C:\sui;C:\sui\target\release;C:\xampp\php;C:\Program Files\Docker\Docker\resources\bin;C:\Users\Lenovo\AppData\Local\Android\Sdk\platform-tools;C:\flutter\bin;C:\Program Files\nodejs\;C:\Users\Lenovo\.cargo\bin;C:\Users\Lenovo\AppData\Local\Microsoft\WindowsApps;C:\Users\Lenovo\AppData\Local\Programs\Microsoft VS Code\bin;C:\Program Files\nodejs\;C:\Users\Lenovo\.dotnet\tools;C:\projects\sui\target\release;C:\Users\Lenovo\AppData\Roaming\Python\Python311\Scripts;C:\Users\Lenovo\AppData\Local\GitHubDesktop\bin;C:\flutter\bin;C:\Users\Lenovo\AppData\Local\Programs\Ollama;C:\Users\Lenovo\AppData\Roaming\npm;C:\Users\Lenovo\AppData\Local\Pub\Cache\bin;C:\Program Files\Python311\;C:\Program Files\Python311\Scripts\;C:\Users\Lenovo\AppData\Local\Programs\Microsoft VS Code\bin\copilot-shim;C:\flutter\bin\mingit\cmd;C:\flutter\bin\mingit\cmd PATHEXT=.COM;.EXE;.BAT;.CMD;.VBS;.JS;.WS;.MSC PROGRAMDATA=C:\ProgramData PROMPT=$P$G SYSTEMDRIVE=C: SYSTEMROOT=C:\WINDOWS TEMP=C:\Users\Lenovo\AppData\Local\Temp TMP=C:\Users\Lenovo\AppData\Local\Temp USERPROFILE=C:\Users\Lenovo WINDIR=C:\WINDOWS where.exe cmake`.
+
+INFO: Could not find files for the given pattern(s).
 
 
 Found CMake: ToolInstance(CMake, 3.22.1-g37088a8-dirty, file:///C:/Users/Lenovo/AppData/Local/Android/Sdk/cmake/3.22.1/bin/cmake.exe)
@@ -113,18 +106,13 @@ Running `(cd C:\Users\Lenovo\AndroidStudioProjects\FYP\.dart_tool\hooks_runner\s
 -- OpenCV Prebuilt Version: 4.12.0.0
 
 
--- dartcv Version: 2.2.2
-
-
 -- Detected processor: aarch64
 
 
 CMake Warning at C:/Users/Lenovo/AndroidStudioProjects/FYP/.dart_tool/hooks_runner/shared/dartcv4/build/4070f78865/_deps/opencv-src/cmake/OpenCVUtils.cmake:762 (message):
-  Unexpected option: BUILD_WITH_STATIC_CRT (=ON)
 
-  Condition: IF (MSVC)
-Call Stack (most recent call first):
-  C:/Users/Lenovo/AndroidStudioProjects/FYP/.dart_tool/hooks_runner/shared/dartcv4/build/4070f78865/_deps/opencv-src/CMakeLists.txt:497 (OCV_OPTION)
+
+runner/shared/dartcv4/build/4070f78865/_deps/opencv-src/CMakeLists.txt:497 (OCV_OPTION)
 
 
 
@@ -181,68 +169,126 @@ Call Stack (most recent call first):
 -- Excluding from source files list: modules/imgproc/src/corner.avx.cpp
 
 
-
-
+-- Excluding from source files list: modules/imgproc/src/imgwarp.lasx.cpp
 
 
 -- Excluding from source files list: modules/imgproc/src/resize.avx2.cpp
 
 
+
+
+-- Excluding from source files list: modules/imgproc/src/resize.lasx.cpp
+
+
 -- Excluding from source files list: modules/imgproc/src/resize.sse4_1.cpp
 
 
---     Host:                        Windows 10.0.26300
+-- General configuration for OpenCV 4.13.0 =====================================
 
 
+--     CMake build tool:            C:/Users/Lenovo/AppData/Local/Android/Sdk/cmake/3.22.1/bin/ninja.exe
 
+--     Configuration:               Release
 
-===================
+--     Algorithm Hint:              ALGO_HINT_ACCURATE
+
+-- 
+
+--   CPU/HW features:
+
+--     Baseline:                    NEON FP16
+
+--       requested:                 DETECT
+
+--     Dispatched code generation:  NEON_DOTPROD NEON_FP16 NEON_BF16
+
+--       requested:                 NEON_FP16 NEON_BF16 NEON_DOTPROD
 
 
 --       NEON_BF16 (0 files):       + NEON_BF16
+-- 
+--   C/C++:
+--     Built as dynamic libs?:      NO
+--     C++ standard:                20
+--     C++ Compiler:                C:/Users/Lenovo/AppData/Local/Android/Sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/windows-x86_64/bin/clang++.exe  (ver 19.0.1)
+--     C++ flags (Release):         -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security     -fsigned-char -W -Wall -Wreturn-type -Wnon-virtual-dtor -Waddress -Wsequence-point -Wformat -Wformat-security -Wmissing-declarations -Wmissing-prototypes -Wstrict-prototypes -Wundef -Winit-self -Wpointer-arith -Wshadow -Wsign-promo -Wuninitialized -Winconsistent-missing-override -Wno-delete-non-virtual-dtor -Wno-unnamed-type-template-args -Wno-comment -Wno-deprecated-enum-enum-conversion -Wno-deprecated-anon-enum-enum-conversion -fdiagnostics-show-option -Qunused-arguments  -fvisibility=hidden -fvisibility-inlines-hidden -O3 -DNDEBUG   -DNDEBUG
+
+--     C++ flags (Debug):           -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security     -fsigned-char -W -Wall -Wreturn-type -Wnon-virtual-dtor -Waddress -Wsequence-point -Wformat -Wformat-security -Wmissing-declarations -Wmissing-prototypes -Wstrict-prototypes -Wundef -Winit-self -Wpointer-arith -Wshadow -Wsign-promo -Wuninitialized -Winconsistent-missing-override -Wno-delete-non-virtual-dtor -Wno-unnamed-type-template-args -Wno-comment -Wno-deprecated-enum-enum-conversion -Wno-deprecated-anon-enum-enum-conversion -fdiagnostics-show-option -Qunused-arguments  -fvisibility=hidden -fvisibility-inlines-hidden -fno-limit-debug-info   -O0 -DDEBUG -D_DEBUG
+
+--     C Compiler:                  C:/Users/Lenovo/AppData/Local/Android/Sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/windows-x86_64/bin/clang.exe
+--     C flags (Release):           -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security    -fsigned-char -W -Wall -Wreturn-type -Wnon-virtual-dtor -Waddress -Wsequence-point -Wformat -Wformat-security -Wmissing-declarations -Wmissing-prototypes -Wstrict-prototypes -Wundef -Winit-self -Wpointer-arith -Wshadow -Wsign-promo -Wuninitialized -Winconsistent-missing-override -Wno-delete-non-virtual-dtor -Wno-unnamed-type-template-args -Wno-comment -Wno-deprecated-enum-enum-conversion -Wno-deprecated-anon-enum-enum-conversion -fdiagnostics-show-option -Qunused-arguments  -fvisibility=hidden -fvisibility-inlines-hidden -O3 -DNDEBUG   -DNDEBUG
+--     C flags (Debug):             -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security    -fsigned-char -W -Wall -Wreturn-type -Wnon-virtual-dtor -Waddress -Wsequence-point -Wformat -Wformat-security -Wmissing-declarations -Wmissing-prototypes -Wstrict-prototypes -Wundef -Winit-self -Wpointer-arith -Wshadow -Wsign-promo -Wuninitialized -Winconsistent-missing-override -Wno-delete-non-virtual-dtor -Wno-unnamed-type-template-args -Wno-comment -Wno-deprecated-enum-enum-conversion -Wno-deprecated-anon-enum-enum-conversion -fdiagnostics-show-option -Qunused-arguments  -fvisibility=hidden -fvisibility-inlines-hidden -fno-limit-debug-info   -O0 -DDEBUG -D_DEBUG
+
+
+-- 
+
+--   OpenCV modules:
+
+--     To be built--     Disabled:                    calib3d dnn features2d flann highgui java_bindings_generator js_bindings_generator ml objc_bindings_generator objdetect photo stitching video videoio world
+
+
+ Linker flags (Debug):        -static-libstdc++ -Wl,--build-id=sha1 -Wl,--no-rosegment -Wl,--no-undefined-version -Wl,--fatal-warnings -Wl,--no-undefined -Qunused-arguments   -Wl,--as-needed -Wl,--no-undefined  
+--     ccache:                      NO
+--     Precompiled headers:         NO
+
+
+--     Documentation:               NO
+
+
+va python2 python3 ts
+
+
+--     HDR:                         YES
+
+---     Native API level:            24
+
+
+tic
+
+
+ndroid-clang
+
+
+
+)
+
+--       SIMD Support Request:      YES
+
+----   Install to:                    C:/Users/Lenovo/AndroidStudioProjects/FYP/.dart_tool/hooks_runner/shared/dartcv4/build/4070f78865/install-- -----------------------------------------------------------------
 
 -- 
 
 
-N_DOTPROD
-
---       NEON_DOTPROD (2 files):    +--   OpenCV modules:
+--   Trace:                         YES (built-in)
 
 
-ase):      -static-libstdc++ -Wl,--build-id=sha1 -Wl,--no-rosegment -Wl,--no-undefined-version -Wl,--fatal-warnings -Wl,--no-undefined -Qunused-arguments   -Wl,--as-needed -Wl,--no-undefined -Wl,--gc-sections  
-
---     Linker flags (Debug):        -static-libstdc++ -Wl,--build-id=sha1 -Wl,--no-rosegment -Wl,--no-undefined-version -Wl,--fatal-warnings -Wl,--no-undefined -Qunused-arguments   -Wl,--as-needed -Wl,--no-undefined  
-
---     ccache:                      NO
+-- 
 
 
-ototypes -Wstrict-prototypes -Wundef -Winit-self -Wpointer-arith -Wshadow -Wsign-promo -Wuninitialized -Winconsistent-missing-override -Wno-delete-non-virtual-dtor -Wno-unnamed-type-template-args -Wno-comment -Wno-deprecated-enum-enum-conversion -Wno-deprecated-anon-enum-enum-co--     ZLib:                        build (ver 1.3.1)
+rotobuf:                    build (3.19.1)
 
 
-er 3.1.2-70)
+--     Flatbuffers:                 builtin/3rdparty (25.9.23)
+
+-- 
 
 
--fvisibility-inlines-hidden -O3 -DNDEBUG   -DNDEBUG
-
---     C flags (Debug):             -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security    -fsigned-char -W -Wall -Wreturn-type -Wnon-virtual-dtor -Waddress -Wsequence-point -Wformat -Wformat-security -Wmissing-declarations -Wmissing-prototypes -Wstrict-prototypes -Wundef -Winit-self -Wpointer-arith -Wshadow -Wsign-promo -Wuninitialized -Winconsistent-missing-override -Wno-delete-non-virtual-dtor -Wno-unnamed-type-template-args -Wno-comment -Wno-deprecated-enum-enum-conversion -Wno-deprecated-anon-enum-enum-conversion -fdiagnostics-show-option -Qunused-arguments  -fvisibility=hidden -fvisibility-inlines-hidden -fno-limit-debug-info   -O0 -DDEBUG -D_DEBUG
+--     Orbbec:                      NO
 
 
---   Android NDK:                   C:/Users--    NDK Camer--   Parallel framework:            pthreads
+--     Link libraries:              Dynamic load
 
 
-lude path:        -- 
-
-
-tall to:                    C:/Users/Lenovo/AndroidStudioProjects/FYP/.dart_tool/hooks_runner/sha--   Python (for build):            C:/Program Files/Python311/python.exe
-
-
--- DARTCV_DEPS: opencv_core;opencv_imgcodecs;opencv_imgproc
--- PLATFORM_LIBS: camera2ndk;mediandk;-landroid
-
--- Installing  to C:/Users/Lenovo/AndroidStudioProjects/FYP/.dart_tool/hooks_runner/shared/dartcv4/build/4070f78865/install
+--     Include path:                C:/Users/Lenovo/AndroidStudioProjects/FYP/.dart_tool/hooks_runner/shared/dartcv4/build/4070f78865/_deps/opencv-src/3rdparty/include/opencl/1.2
 
 
 -- Added library: dartcv
+
+
+pencv_imgcodecs;opencv_imgproc
+-- PLATFORM_LIBS: camera2ndk;mediandk;-landroid
+
+-- Installing  to C:/Users/Lenovo/AndroidStudioProjects/FYP/.dart_tool/hooks_runner/shared/dartcv4/build/4070f78865/install
 
 
 -- Configuring done
@@ -256,43 +302,28 @@ tall to:                    C:/Users/Lenovo/AndroidStudioProjects/FYP/.dart_tool
 
 Looking for CMake in [$HOME/AppData/Local/Android/Sdk/cmake/*/bin/cmake.exe].
 
-Found [ToolInstance(CMake, null, file:///C:/Users/Lenovo/AppData/Local/Android/Sdk/cmake/3.22.1/bin/cmake.exe)].
+Looking up version with --version for ToolInstance(CMake, null, file:///C:/Users/Lenovo/AppData/Local/Android/Sdk/cmake/3.22.1/bin/cmake.exe).
 
-make/3.22.1/bin/cmake.exe).
 Running `C:\Users\Lenovo\AppData\Local\Android\Sdk\cmake\3.22.1\bin\cmake.exe --version`.
 
-cmake version 3.22.1-g37088a8-dirty
+
+CMake suite maintained and supported by Kitware (kitware.com/cmake).
 
 
-y Kitware (kitware.com/cmake).
-
-
-Found version for ToolInstance(CMake, 3.22.1-g37088a8-dirty, file:///C:/Users/Lenovo/AppData/Local/Android/Sdk/cmake/3.22.1/bin/cmake.exe). 3.22.1-g37088a8-dirty
-
-PATH.
+Found Android CMake: ToolInstance(CMake, 3.22.1-g37088a8-dirty, file:///C:/Users/Lenovo/AppData/Local/Android/Sdk/cmake/3.22.1/bin/cmake.exe)
+Looking for CMake on PATH.
 
 1\Scripts\;C:\Program Files\Python311\;C:\Program Files\Common Files\Oracle\Java\javapath;C:\oraclexe\app\oracle\product\11.2.0\server\bin;C:\Program Files\Microsoft\jdk-11.0.16.101-hotspot\bin;C:\WINDOWS\system32;C:\WINDOWS;C:\WINDOWS\System32\Wbem;C:\WINDOWS\System32\WindowsPowerShell\v1.0\;C:\WINDOWS\System32\OpenSSH\;C:\Program Files\Microsoft SQL Server\Client SDK\ODBC\170\Tools\Binn\;C:\Program Files\Git\cmd;C:\Program Files (x86)\Microsoft SQL Server\160\Tools\Binn\;C:\Program Files\Microsoft SQL Server\160\Tools\Binn\;C:\Program Files\Microsoft SQL Server\160\DTS\Binn\;C:\Program Files (x86)\Microsoft SQL Server\150\Tools\Binn\;C:\Program Files\Microsoft SQL Server\150\Tools\Binn\;C:\Program Files\Microsoft SQL Server\150\DTS\Binn\;C:\Program Files (x86)\Microsoft SQL Server\150\DTS\Binn\;C:\ProgramData\chocolatey\bin;C:\Program Files\dotnet\;C:\Program Files (x86)\Windows Kits\10\Windows Performance Toolkit\;C:\sui;C:\sui\target\release;C:\xampp\php;C:\Program Files\Docker\Docker\resources\bin;C:\Users\Lenovo\AppData\Local\Android\Sdk\platform-tools;C:\flutter\bin;C:\Program Files\nodejs\;C:\Users\Lenovo\.cargo\bin;C:\Users\Lenovo\AppData\Local\Microsoft\WindowsApps;C:\Users\Lenovo\AppData\Local\Programs\Microsoft VS Code\bin;C:\Program Files\nodejs\;C:\Users\Lenovo\.dotnet\tools;C:\projects\sui\target\release;C:\Users\Lenovo\AppData\Roaming\Python\Python311\Scripts;C:\Users\Lenovo\AppData\Local\GitHubDesktop\bin;C:\flutter\bin;C:\Users\Lenovo\AppData\Local\Programs\Ollama;C:\Users\Lenovo\AppData\Roaming\npm;C:\Users\Lenovo\AppData\Local\Pub\Cache\bin;C:\Program Files\Python311\;C:\Program Files\Python311\Scripts\;C:\Users\Lenovo\AppData\Local\Programs\Microsoft VS Code\bin\copilot-shim;C:\flutter\bin\mingit\cmd;C:\flutter\bin\mingit\cmd PATHEXT=.COM;.EXE;.BAT;.CMD;.VBS;.JS;.WS;.MSC PROGRAMDATA=C:\ProgramData PROMPT=$P$G SYSTEMDRIVE=C: SYSTEMROOT=C:\WINDOWS TEMP=C:\Users\Lenovo\AppData\Local\Temp TMP=C:\Users\Lenovo\AppData\Local\Temp USERPROFILE=C:\Users\Lenovo WINDIR=C:\WINDOWS where.exe cmake`.
 
 INFO: Could not find files for the given pattern(s).
 
 
-Did not find CMake on PATH.
-
 Found System CMake: 
 Found CMake: ToolInstance(CMake, 3.22.1-g37088a8-dirty, file:///C:/Users/Lenovo/AppData/Local/Android/Sdk/cmake/3.22.1/bin/cmake.exe)
 
 Running `(cd C:\Users\Lenovo\AndroidStudioProjects\FYP\.dart_tool\hooks_runner\shared\dartcv4\build\4070f78865\; COMSPEC=C:\WINDOWS\SYSTEM32\cmd.exe PATH=C:\Program Files\Android\Android Studio\jbr\bin;C:\oraclexe\app\oracle\product\11.2.0\server\bin;C:\Program Files\Python311\Scripts\;C:\Program Files\Python311\;C:\Program Files\Common Files\Oracle\Java\javapath;C:\oraclexe\app\oracle\product\11.2.0\server\bin;C:\Program Files\Microsoft\jdk-11.0.16.101-hotspot\bin;C:\WINDOWS\system32;C:\WINDOWS;C:\WINDOWS\System32\Wbem;C:\WINDOWS\System32\WindowsPowerShell\v1.0\;C:\WINDOWS\System32\OpenSSH\;C:\Program Files\Microsoft SQL Server\Client SDK\ODBC\170\Tools\Binn\;C:\Program Files\Git\cmd;C:\Program Files (x86)\Microsoft SQL Server\160\Tools\Binn\;C:\Program Files\Microsoft SQL Server\160\Tools\Binn\;C:\Program Files\Microsoft SQL Server\160\DTS\Binn\;C:\Program Files (x86)\Microsoft SQL Server\150\Tools\Binn\;C:\Program Files\Microsoft SQL Server\150\Tools\Binn\;C:\Program Files\Microsoft SQL Server\150\DTS\Binn\;C:\Program Files (x86)\Microsoft SQL Server\150\DTS\Binn\;C:\ProgramData\chocolatey\bin;C:\Program Files\dotnet\;C:\Program Files (x86)\Windows Kits\10\Windows Performance Toolkit\;C:\sui;C:\sui\target\release;C:\xampp\php;C:\Program Files\Docker\Docker\resources\bin;C:\Users\Lenovo\AppData\Local\Android\Sdk\platform-tools;C:\flutter\bin;C:\Program Files\nodejs\;C:\Users\Lenovo\.cargo\bin;C:\Users\Lenovo\AppData\Local\Microsoft\WindowsApps;C:\Users\Lenovo\AppData\Local\Programs\Microsoft VS Code\bin;C:\Program Files\nodejs\;C:\Users\Lenovo\.dotnet\tools;C:\projects\sui\target\release;C:\Users\Lenovo\AppData\Roaming\Python\Python311\Scripts;C:\Users\Lenovo\AppData\Local\GitHubDesktop\bin;C:\flutter\bin;C:\Users\Lenovo\AppData\Local\Programs\Ollama;C:\Users\Lenovo\AppData\Roaming\npm;C:\Users\Lenovo\AppData\Local\Pub\Cache\bin;C:\Program Files\Python311\;C:\Program Files\Python311\Scripts\;C:\Users\Lenovo\AppData\Local\Programs\Microsoft VS Code\bin\copilot-shim;C:\flutter\bin\mingit\cmd;C:\flutter\bin\mingit\cmd PATHEXT=.COM;.EXE;.BAT;.CMD;.VBS;.JS;.WS;.MSC PROGRAMDATA=C:\ProgramData PROMPT=$P$G SYSTEMDRIVE=C: SYSTEMROOT=C:\WINDOWS TEMP=C:\Users\Lenovo\AppData\Local\Temp TMP=C:\Users\Lenovo\AppData\Local\Temp USERPROFILE=C:\Users\Lenovo WINDIR=C:\WINDOWS C:\Users\Lenovo\AppData\Local\Android\Sdk\cmake\3.22.1\bin\cmake.exe --build C:\Users\Lenovo\AndroidStudioProjects\FYP\.dart_tool\hooks_runner\shared\dartcv4\build\4070f78865\ --config Release --target install --parallel 10 )`.
 
-[
-
-1/4] Building CXX object _deps/opencv-build/modules/core/CMakeFiles/opencv_core.dir/src/system.cpp.o
-
-
-[
-2/4] Linking CXX static library _deps\opencv-build\lib\arm64-v8a\libopencv_core.a
-
-
-[3/43/4] Linking CXX shared library dartcv\libdartcv.so
+0/1] Install the project...
 
 
 -- Install configuration: "Release"
@@ -301,7 +332,7 @@ Running `(cd C:\Users\Lenovo\AndroidStudioProjects\FYP\.dart_tool\hooks_runner\s
 -- Up-to-date: C:/Users/Lenovo/AndroidStudioProjects/FYP/.dart_tool/hooks_runner/shared/dartcv4/build/4070f78865/install/sdk/etc/licenses/dlpack-LICENSE
 
 
-.txt
+-- Up-to-date: C:/Users/Lenovo/AndroidStudioProjects/FYP/.dart_tool/hooks_runner/shared/dartcv4/build/4070f78865/install/sdk/etc/licenses/flatbuffers-LICENSE.txt
 
 
 -- Up-to-date: C:/Users/Lenovo/AndroidStudioProjects/FYP/.dart_tool/hooks_runner/shared/dartcv4/build/4070f78865/install/sdk/etc/licenses/opencl-headers-LICENSE.txt
@@ -418,7 +449,7 @@ Running `(cd C:\Users\Lenovo\AndroidStudioProjects\FYP\.dart_tool\hooks_runner\s
 -- Up-to-date: C:/Users/Lenovo/AndroidStudioProjects/FYP/.dart_tool/hooks_runner/shared/dartcv4/build/4070f78865/install/sdk/native/jni/include/opencv2/opencv.hpp
 
 
--- Installing: C:/Users/Lenovo/AndroidStudioProjects/FYP/.dart_tool/hooks_runner/shared/dartcv4/build/4070f78865/install/sdk/native/staticlibs/arm64-v8a/libopencv_core.a
+-- Up-to-date: C:/Users/Lenovo/AndroidStudioProjects/FYP/.dart_tool/hooks_runner/shared/dartcv4/build/4070f78865/install/sdk/native/staticlibs/arm64-v8a/libopencv_core.a
 
 
 -- Up-to-date: C:/Users/Lenovo/AndroidStudioProjects/FYP/.dart_tool/hooks_runner/shared/dartcv4/build/4070f78865/install/sdk/native/jni/include/opencv2/core.hpp
@@ -1087,6 +1118,6 @@ Running `(cd C:\Users\Lenovo\AndroidStudioProjects\FYP\.dart_tool\hooks_runner\s
 -- Up-to-date: C:/Users/Lenovo/AndroidStudioProjects/FYP/.dart_tool/hooks_runner/shared/dartcv4/build/4070f78865/install/include/dartcv/videoio/videoio.h
 
 
--- Installing: C:/Users/Lenovo/AndroidStudioProjects/FYP/.dart_tool/hooks_runner/shared/dartcv4/build/4070f78865/install/lib/libdartcv.so
+-- Up-to-date: C:/Users/Lenovo/AndroidStudioProjects/FYP/.dart_tool/hooks_runner/shared/dartcv4/build/4070f78865/install/lib/libdartcv.so
 
 
