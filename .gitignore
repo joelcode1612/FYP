@@ -57,3 +57,6 @@ htmlcov/
 
 # Perch generated index (large, rebuilt locally)
 .perch/index.json
+
+# FVM Version Cache
+.fvm/
