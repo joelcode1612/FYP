@@ -24,11 +24,24 @@ FYP/                          ← workspace root (pubspec.yaml: workspace: [...]
   DI composition root (`application/services/service_locator.dart`), platform
   data sources. The Flutter **web tree has been removed** — the web app is
   Jaspr now. The app boots to onboarding/auth regardless of viewport width.
-- **`fyp_jaspr_web`** — the whole web experience in Jaspr (static mode,
-  port 8090): marketing landing, `/login` role picker, and all 24
-  role pages (admin/owner/entrepreneur) with `?id=` detail routes, sharing the
-  same `shared_logic` services/cubits through its own composition root
-  (`lib/data/app_locator.dart`).
+- **`fyp_jaspr_web`** — the whole web experience in Jaspr (client mode): the
+  compiled bundle is served by the unified FastAPI server on port 8090
+  together with the REST API. Marketing landing, `/login` role picker, and
+  all 24 role pages (admin/owner/entrepreneur) with `?id=` detail routes,
+  sharing the same `shared_logic` services/cubits through its own composition
+  root (`lib/data/app_locator.dart`).
+
+## Run the unified app (one server)
+
+```sh
+cd fyp_jaspr_web && jaspr build    # compile the client frontend → build/jaspr
+cd ..\..\run-sitewise.cmd          # FastAPI on http://localhost:8090 (frontend + /api/v1 + /docs)
+```
+
+`backend/src/sitewise/main.py` serves the compiled frontend with a SPA
+fallback (`backend/src/sitewise/frontend.py`): nested routes survive a hard
+refresh, missing assets and unknown `/api/*` paths never return HTML, and the
+old two-server flow (Jaspr SSR + internal FastAPI) is no longer started.
 
 ## Commands (run from the workspace root)
 
@@ -45,12 +58,13 @@ cd ..
 cd fyp_jaspr_web
 dart analyze
 dart run tool/typecheck.dart       # compile-based typecheck harness (exit 0)
-dart run jaspr_cli:jaspr build     # static build → build/jaspr (28 routes)
-.\serve                            # dev server → http://localhost:8090
+dart run jaspr_cli:jaspr build     # client build → build/jaspr (served by FastAPI)
 cd ..
 ```
 
-**Start the dev server with `.\serve`, not `dart run jaspr_cli:jaspr serve`.**
+**Run the app with `.\run-sitewise.cmd`.** The legacy dev-server flow below is
+superseded — `serve.cmd` starts the retired Jaspr SSR process and is kept only
+until the unified flow is fully validated.
 
 `serve.cmd` frees port 8090 first, then starts the server. This matters because
 **Windows does not terminate child processes when a console closes** — unlike

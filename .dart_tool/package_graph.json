@@ -254,7 +254,7 @@
     },
     {
       "name": "shelf",
-      "version": "1.4.2",
+      "version": "1.4.3",
       "dependencies": [
         "async",
         "collection",
@@ -501,7 +501,7 @@
     },
     {
       "name": "shelf_static",
-      "version": "1.1.3",
+      "version": "1.2.0",
       "dependencies": [
         "convert",
         "http_parser",
@@ -566,7 +566,7 @@
     },
     {
       "name": "http_multi_server",
-      "version": "3.2.2",
+      "version": "3.2.3",
       "dependencies": [
         "async"
       ]
@@ -657,7 +657,7 @@
     },
     {
       "name": "vm_service",
-      "version": "15.3.0",
+      "version": "15.4.0",
       "dependencies": []
     },
     {
@@ -794,7 +794,7 @@
     },
     {
       "name": "build_daemon",
-      "version": "4.1.6",
+      "version": "4.1.7",
       "dependencies": [
         "built_collection",
         "built_value",
@@ -919,10 +919,8 @@
     },
     {
       "name": "crypto",
-      "version": "3.0.7",
-      "dependencies": [
-        "typed_data"
-      ]
+      "version": "3.0.8",
+      "dependencies": []
     },
     {
       "name": "bazel_worker",
@@ -934,7 +932,7 @@
     },
     {
       "name": "archive",
-      "version": "4.4.0",
+      "version": "4.6.0",
       "dependencies": [
         "path",
         "posix"
@@ -1021,7 +1019,7 @@
     },
     {
       "name": "permission_handler_windows",
-      "version": "0.2.2",
+      "version": "0.2.4",
       "dependencies": [
         "flutter",
         "permission_handler_platform_interface"
@@ -1039,7 +1037,7 @@
     },
     {
       "name": "permission_handler_apple",
-      "version": "9.6.2",
+      "version": "9.6.5",
       "dependencies": [
         "flutter",
         "permission_handler_platform_interface",
@@ -1355,7 +1353,7 @@
     },
     {
       "name": "posix",
-      "version": "6.5.2",
+      "version": "6.5.4",
       "dependencies": [
         "ffi",
         "meta",
@@ -1364,7 +1362,7 @@
     },
     {
       "name": "pubspec_parse",
-      "version": "1.6.0",
+      "version": "1.7.0",
       "dependencies": [
         "checked_yaml",
         "collection",
@@ -1487,7 +1485,7 @@
     },
     {
       "name": "jni",
-      "version": "1.1.0",
+      "version": "1.1.2",
       "dependencies": [
         "args",
         "collection",
@@ -1518,7 +1516,7 @@
     },
     {
       "name": "geolocator_apple",
-      "version": "2.3.14",
+      "version": "2.4.3",
       "dependencies": [
         "flutter",
         "geolocator_platform_interface"
@@ -1536,7 +1534,7 @@
     },
     {
       "name": "geolocator_platform_interface",
-      "version": "4.4.0",
+      "version": "4.4.1",
       "dependencies": [
         "flutter",
         "meta",
@@ -1563,8 +1561,9 @@
     },
     {
       "name": "extension_discovery",
-      "version": "2.1.0",
+      "version": "2.1.1",
       "dependencies": [
+        "path",
         "yaml"
       ]
     },
@@ -1644,14 +1643,13 @@
     },
     {
       "name": "unified_analytics",
-      "version": "8.0.18",
+      "version": "8.4.0",
       "dependencies": [
         "clock",
         "convert",
         "file",
         "http",
-        "meta",
-        "platform"
+        "meta"
       ]
     },
     {

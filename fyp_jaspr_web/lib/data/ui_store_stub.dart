@@ -34,7 +34,7 @@ abstract final class UiStore {
       return (
         saved: ids(value['s'], kMaxSaved),
         compared: ids(value['c'], 3),
-        roles: ids(value['g'], 4),
+        roles: <String>{}, // Never restore client-written role grants
       );
     } on Object {
       return emptyUiState;

@@ -13,28 +13,35 @@ import 'package:flutter/material.dart';
 ///
 /// Colour names mirror the CSS custom properties so a future change to the
 /// HTML reference can be diffed directly against this file.
+///
+/// WHITE THEME (mobile profile/navigation refresh): every *surface* token is
+/// pure `#FFFFFF`; ink is dark navy `#0B0F19`, secondary text `#64748B`, the
+/// single interactive blue is the existing `SitewiseColors.action` token
+/// (`#1D4ED8`), light-blue icon washes are `#DBEAFE` and hairlines are
+/// `#E7E8EA`. No cream / beige / tinted-page / dark surfaces remain. The token
+/// NAMES are unchanged so the 50+ screens that reference them need no edits.
 abstract final class SitewiseM3 {
   // Surfaces -----------------------------------------------------------------
-  static const Color bg = Color(0xFFE8EEF6);
-  static const Color paper = Color(0xFFF7F9FF);
+  static const Color bg = Color(0xFFFFFFFF);
+  static const Color paper = Color(0xFFFFFFFF);
   static const Color surface = Color(0xFFFFFFFF);
 
   // Ink ----------------------------------------------------------------------
-  static const Color ink = Color(0xFF173E73);
-  static const Color text = Color(0xFF273B59);
-  static const Color muted = Color(0xFF51647E);
-  static const Color stone = Color(0xFF70839E);
+  static const Color ink = Color(0xFF0B0F19);
+  static const Color text = Color(0xFF0B0F19);
+  static const Color muted = Color(0xFF64748B);
+  static const Color stone = Color(0xFF64748B);
 
   // Brand --------------------------------------------------------------------
   static const Color primary = Color(0xFF1D4ED8);
-  static const Color accent = Color(0xFF376BF1);
+  static const Color accent = Color(0xFF1D4ED8);
   static const Color primaryHover = Color(0xFF1746C4);
-  static const Color quiet = Color(0xFFE7EEFF);
-  static const Color quietStrong = Color(0xFFDBE7FF);
-  static const Color brandBorder = Color(0xFFD0DEFF);
-  static const Color line = Color(0xFFDAE4F2);
-  static const Color soft = Color(0xFFEDF3FC);
-  static const Color divider = Color(0xFFE2EAF4);
+  static const Color quiet = Color(0xFFDBEAFE);
+  static const Color quietStrong = Color(0xFFDBEAFE);
+  static const Color brandBorder = Color(0xFFE7E8EA);
+  static const Color line = Color(0xFFE7E8EA);
+  static const Color soft = Color(0xFFFFFFFF);
+  static const Color divider = Color(0xFFE7E8EA);
 
   // Status -------------------------------------------------------------------
   static const Color green = Color(0xFF086A60);
@@ -42,40 +49,40 @@ abstract final class SitewiseM3 {
   static const Color amber = Color(0xFF92550D);
   static const Color amberWash = Color(0xFFFFF3D9);
 
-  // Home feature card --------------------------------------------------------
-  static const Color featureStart = Color(0xFFE3EDFF);
-  static const Color featureMid = Color(0xFFDCEAFF);
-  static const Color featureEnd = Color(0xFFF4F8FF);
-  static const Color featureBorder = Color(0xFFC9DAFE);
-  static const Color featureTitle = Color(0xFF46648B);
-  static const Color kickerText = Color(0xFF174BB1);
+  // Home feature card — flat white with a hairline border, no gradient wash.
+  static const Color featureStart = Color(0xFFFFFFFF);
+  static const Color featureMid = Color(0xFFFFFFFF);
+  static const Color featureEnd = Color(0xFFFFFFFF);
+  static const Color featureBorder = Color(0xFFE7E8EA);
+  static const Color featureTitle = Color(0xFF0B0F19);
+  static const Color kickerText = Color(0xFF1D4ED8);
 
   // Metric tiles -------------------------------------------------------------
-  static const Color metricBlueBg = Color(0xFFEAF1FF);
-  static const Color metricBlueBorder = Color(0xFFD9E5FC);
-  static const Color metricTealBg = Color(0xFFEEF9F8);
-  static const Color metricTealBorder = Color(0xFFD8F0ED);
-  static const Color metricValue = Color(0xFF174A9E);
-  static const Color metricIconBg = Color(0xFFD7E5FF);
-  static const Color metricTealIconBg = Color(0xFFD3F2EB);
-  static const Color metricTealIcon = Color(0xFF0B7167);
+  static const Color metricBlueBg = Color(0xFFFFFFFF);
+  static const Color metricBlueBorder = Color(0xFFE7E8EA);
+  static const Color metricTealBg = Color(0xFFFFFFFF);
+  static const Color metricTealBorder = Color(0xFFE7E8EA);
+  static const Color metricValue = Color(0xFF0B0F19);
+  static const Color metricIconBg = Color(0xFFDBEAFE);
+  static const Color metricTealIconBg = Color(0xFFDBEAFE);
+  static const Color metricTealIcon = Color(0xFF1D4ED8);
 
   // Notes / banners / rows ---------------------------------------------------
-  static const Color noteBg = Color(0xFFF2F7FF);
-  static const Color noteBorder = Color(0xFFCCE1F8);
-  static const Color noteText = Color(0xFF345B89);
-  static const Color bannerBg = Color(0xFFEAF1FF);
-  static const Color bannerBorder = Color(0xFFD6E5FF);
-  static const Color bannerText = Color(0xFF315883);
-  static const Color rowBorder = Color(0xFFE1E9F5);
-  static const Color rowIconBg = Color(0xFFE9F0FF);
-  static const Color rowTitle = Color(0xFF203E69);
-  static const Color rowDesc = Color(0xFF60758D);
-  static const Color circleBtnBg = Color(0xFFEEF3FD);
-  static const Color circleBtnBorder = Color(0xFFE5EBF6);
-  static const Color circleBtnIcon = Color(0xFF315B9D);
-  static const Color brandTag = Color(0xFF5B7191);
-  static const Color overline = Color(0xFF637BA0);
+  static const Color noteBg = Color(0xFFFFFFFF);
+  static const Color noteBorder = Color(0xFFE7E8EA);
+  static const Color noteText = Color(0xFF64748B);
+  static const Color bannerBg = Color(0xFFFFFFFF);
+  static const Color bannerBorder = Color(0xFFE7E8EA);
+  static const Color bannerText = Color(0xFF0B0F19);
+  static const Color rowBorder = Color(0xFFE7E8EA);
+  static const Color rowIconBg = Color(0xFFDBEAFE);
+  static const Color rowTitle = Color(0xFF0B0F19);
+  static const Color rowDesc = Color(0xFF64748B);
+  static const Color circleBtnBg = Color(0xFFDBEAFE);
+  static const Color circleBtnBorder = Color(0xFFE7E8EA);
+  static const Color circleBtnIcon = Color(0xFF1D4ED8);
+  static const Color brandTag = Color(0xFF64748B);
+  static const Color overline = Color(0xFF64748B);
 
   // Radii --------------------------------------------------------------------
   static const double radiusCard = 22;
@@ -99,8 +106,8 @@ abstract final class SitewiseM3 {
   /// Bottom-nav glyph colours, kept at the values the Material 3 reference
   /// sheet specifies. They differ from [primary] and [muted] by a shade, so
   /// they are tokens of their own instead of being re-pointed at those.
-  static const Color navActive = Color(0xFF1B4BB7);
-  static const Color navInactive = Color(0xFF64758E);
+  static const Color navActive = Color(0xFF1D4ED8);
+  static const Color navInactive = Color(0xFF64748B);
 
   // Floating bottom dock -----------------------------------------------------
   // Ported from `style-guide.md` §4.4 "Desktop nav pill" — the documented
@@ -127,12 +134,11 @@ abstract final class SitewiseM3 {
   /// glyph lift and label fade read as a single move rather than four.
   static const Duration dockMotion = Duration(milliseconds: 320);
 
-  /// §4.4 `background: rgba(255, 255, 255, 0.86)`. No backdrop blur here:
-  /// §4.8 sanctions blur for the top pill only.
-  static const Color dockSurface = Color(0xDBFFFFFF);
+  /// Opaque pure white — no cream, tint or translucency over a coloured page.
+  static const Color dockSurface = Color(0xFFFFFFFF);
 
-  /// §4.4 `border: 1px solid rgba(15, 23, 42, 0.08)`.
-  static const Color dockBorder = Color(0x140F1729);
+  /// §4.4 hairline, retuned to the shared card border token.
+  static const Color dockBorder = Color(0xFFE7E8EA);
 
   /// §4.4 two-stage shadow: `0 1px 2px rgba(15,23,42,0.04)` and
   /// `0 12px 32px rgba(15,23,42,0.08)`.
@@ -187,6 +193,6 @@ abstract final class SitewiseM3Type {
     fontSize: 13,
     fontWeight: FontWeight.w400,
     height: 1.6,
-    color: Color(0xFF526781),
+    color: SitewiseM3.muted,
   );
 }

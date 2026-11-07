@@ -1,9 +1,18 @@
 /// The entrypoint for the **server** environment.
 ///
-/// Every request is answered here: the router resolves the URL, the page is
-/// rendered to HTML, and the interactive leaves are emitted as `@client`
-/// anchors that `main.client.dart` hydrates in the browser. Nothing here runs
-/// in the browser, and nothing in `main.client.dart` runs on the server.
+/// DORMANT since the unified-server migration (`jaspr: mode: client` in
+/// pubspec.yaml): the browser app is now served by FastAPI from the compiled
+/// client build, and nothing starts this SSR process. The file and its
+/// middlewares (`api_proxy.dart`, `staff_guard.dart`) are retained until the
+/// client-side equivalents (router guard in `app.dart`,
+/// `enforceStaffAssurance` in `tool/auth_client.js`) are validated end-to-end;
+/// their tests still run on the VM.
+///
+/// Every request used to be answered here: the router resolved the URL, the
+/// page was rendered to HTML, and the interactive leaves were emitted as
+/// `@client` anchors that `main.client.dart` hydrated in the browser. Nothing
+/// here runs in the browser, and nothing in `main.client.dart` runs on the
+/// server.
 library;
 
 import 'package:jaspr/dom.dart';
@@ -19,7 +28,6 @@ import 'data/app_locator.dart';
 import 'data/auth_service.dart';
 import 'data/ssr_service.dart';
 import 'data/staff_guard.dart';
-import 'data/workspaces.dart';
 
 // This file is generated automatically by Jaspr, do not remove or edit.
 import 'main.server.options.dart';
@@ -31,7 +39,7 @@ void main() {
   // without changing any rendered HTML.
   ServerApp.addMiddleware(createApiProxy(kBackendApiBase));
 
-  // Staff authorization guard (F4): /admin and /agent are rendered only after
+  // Workspace authorization guard: protected workspaces render only after
   // the backend confirms the bearer token's active staff role AND aal2. The
   // unsigned session cookie is never trusted for a staff decision; it is
   // rewritten to the server-verified profile before the render isolate reads it.
@@ -61,7 +69,6 @@ class _DocumentShell extends StatelessComponent {
     final cookies = context.cookies;
     WebAuth.installServerSession(cookies);
     AppLocator.installUiState(cookies);
-    Workspaces.seed(AppLocator.grantedRoles);
 
     // Anonymous request for a workspace: answer with a real 302 to the sign-in
     // screen and keep the destination. The router drops `next` when it sets the

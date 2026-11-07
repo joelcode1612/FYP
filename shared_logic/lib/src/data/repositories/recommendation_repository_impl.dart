@@ -18,8 +18,11 @@ class RecommendationRepositoryImpl implements RecommendationRepository {
             )
             .toList()
           ..sort((a, b) => b.suitabilityScore.compareTo(a.suitabilityScore));
-    final ranked = eligible.isEmpty ? DemoData.properties : eligible;
-    return ranked
+    // No fallback to the full catalogue. When no property satisfies the
+    // entrepreneur's budget / size requirements the genuine result is an
+    // EMPTY list; returning every demo property would show locations that
+    // violate the stated preferences and make a failure look like a match.
+    return eligible
         .take(5)
         .map(
           (p) => PropertyRecommendation(

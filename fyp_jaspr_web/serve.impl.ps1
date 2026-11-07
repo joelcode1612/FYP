@@ -3,6 +3,11 @@
     Starts the Jaspr SSR dev server against the intended FastAPI backend,
     clearing stale instances and the proxy trap.
 
+    DEPRECATED since the unified-server migration: the frontend is a compiled
+    client app served by FastAPI (repo-root run-sitewise.cmd), so nothing
+    starts this SSR process any more. Retained so the legacy launchers
+    (run-sitewise-unified.ps1, start-sitewise.ps1) still work unchanged.
+
 .DESCRIPTION
     Service ports for a normal local run:
       8090  Jaspr SSR frontend (this script) - HTML, CSS, JS, /api/* proxy

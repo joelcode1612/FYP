@@ -1,4 +1,4 @@
-/// Server-side authorization guard for STAFF workspaces (F4 hardening).
+/// Server-side authorization guard for protected workspaces.
 ///
 /// The SSR pass used to admit `/admin` and `/agent` purely from the unsigned
 /// `sitewise_session` cookie: a forged cookie — or a real password-only (`aal1`)
@@ -14,12 +14,12 @@
 /// staff authorization decision, and `aal2` is taken only from the signed token
 /// the backend verified — never from a cookie, body, query or frontend flag.
 ///
-/// Scope: only the privileged staff surface (`/admin`, `/agent`) is guarded
-/// here. Non-staff workspace chrome (`/entrepreneur`, `/owner`) keeps its
-/// existing cookie-driven render, but every privileged DATA call is still gated
-/// by the backend on the bearer token, and a forged staff role cannot escalate:
-/// the staff paths it would redirect to are themselves guarded. Fails CLOSED —
-/// an absent/invalid token or an unreachable backend redirects to sign-in.
+/// Scope: all authenticated workspaces. Browser cookies may carry the bearer
+/// token, but their role/permission fields are untrusted; the server always
+/// calls FastAPI to validate the signed token and local authorization profile.
+/// Staff identities require AAL2 even when navigating to a nonstaff workspace.
+/// Legacy /owner routes redirect to /entrepreneur/my-properties, where
+/// per-property access remains a backend concern.
 library;
 
 import 'dart:convert';
@@ -31,9 +31,8 @@ import 'package:shelf/shelf.dart' as shelf;
 
 import 'auth_stub.dart' show kSessionCookie, kTokenCookie;
 
-/// Privileged staff workspaces. The MFA routes (`/staff/*`) are deliberately
-/// excluded so the verify/enrollment screens are never guarded into a loop.
-final RegExp _staffPath = RegExp(r'^/(admin|agent)(/|$)');
+/// MFA screens (/staff/*) are excluded to avoid an enrollment redirect loop.
+final RegExp _workspacePath = RegExp(r'^/(admin|agent|entrepreneur|owner)(/|$)');
 
 const Set<String> _staffRoles = {'agent', 'admin'};
 
@@ -70,9 +69,13 @@ shelf.Middleware createStaffGuard(Uri backend, {http.Client? client}) {
   return (shelf.Handler inner) {
     return (shelf.Request request) async {
       final path = request.requestedUri.path;
-      if (!_staffPath.hasMatch(path)) return inner(request);
+      if (!_workspacePath.hasMatch(path)) return inner(request);
 
-      final login = '/login?next=${Uri.encodeComponent(request.requestedUri.toString())}';
+      // Root-relative return target avoids losing the destination in the
+      // browser bridge and never allows an external redirect.
+      final target = request.requestedUri.path +
+          (request.requestedUri.hasQuery ? '?${request.requestedUri.query}' : '');
+      final login = '/login?next=${Uri.encodeComponent(target)}';
       final token = _parseCookies(request.headers['cookie'])[kTokenCookie];
       // No bearer token: the unsigned session cookie alone never admits staff.
       if (token == null || token.isEmpty) return _redirect(login);
@@ -85,25 +88,38 @@ shelf.Middleware createStaffGuard(Uri backend, {http.Client? client}) {
       final status = (identity['account_status'] as String? ?? '').toLowerCase();
       final aal = identity['assurance_level'] as String?;
       if (role.isEmpty || status != 'active') return _redirect(login);
-      // A verified non-staff account belongs in its own workspace, not here.
-      if (!_staffRoles.contains(role)) return _redirect(_homeFor(role));
-      // Staff role confirmed, but this session has not completed MFA.
-      if (aal != 'aal2') return _redirect('/staff/verify');
-      // The admin workspace is administrator-only: an agent (even at aal2)
-      // belongs in /agent. Administrators may act in /agent, mirroring the
-      // backend's require_admin_mfa / require_agent_mfa split.
+      if (!{'entrepreneur', ..._staffRoles}.contains(role)) return _redirect(login);
+      // Every staff account needs AAL2 irrespective of which UI it requests.
+      if (_staffRoles.contains(role) && aal != 'aal2') {
+        return _redirect('/staff/verify');
+      }
       final isAdminPath = path == '/admin' || path.startsWith('/admin/');
+      final isAgentPath = path == '/agent' || path.startsWith('/agent/');
+      final isOwnerPath = path == '/owner' || path.startsWith('/owner/');
       if (isAdminPath && role != 'admin') return _redirect(_homeFor(role));
+      if (isAgentPath && role != 'agent' && role != 'admin') {
+        return _redirect(_homeFor(role));
+      }
+      // The owner capability is an entrepreneur property-level permission,
+      // not a fourth account role or a demo cookie grant.
+      if (isOwnerPath) {
+        return _redirect(role == 'entrepreneur'
+            ? '/entrepreneur/my-properties'
+            : _homeFor(role));
+      }
 
-      // Verified staff at aal2: replace the unsigned cookie with the
-      // backend-verified profile so the render isolate installs a trustworthy
-      // role. All other cookies (token, UI state) are preserved.
+      // Rebuild the session mirror from FastAPI's verified identity for EVERY
+      // protected workspace; never trust the browser's unsigned role cookie.
       final rewritten = _withCookie(
         request.headers['cookie'],
         kSessionCookie,
         _encodeSession(identity),
       );
-      return inner(request.change(headers: {'cookie': rewritten}));
+      final response = await inner(request.change(headers: {'cookie': rewritten}));
+      return response.change(headers: {
+        ...response.headers,
+        'cache-control': 'private, no-store',
+      });
     };
   };
 }

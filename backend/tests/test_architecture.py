@@ -74,3 +74,52 @@ def test_no_circular_import_of_main_from_inner_layers():
     )
     assert "sitewise.main" not in domain_sources
     assert "sitewise.api" not in domain_sources
+
+
+def test_identity_email_collision_fails_closed_without_rekey():
+    """A matching email never authorizes replacing a Supabase identity UUID."""
+    import uuid
+    import pytest
+    from sitewise.core.exceptions import ConflictError
+    from sitewise.services.user_service import UserService
+
+    old_id = uuid.uuid4()
+    new_id = uuid.uuid4()
+
+    class FakeRepo:
+        def __init__(self):
+            self.existing = type('UserRow', (), {'user_id': old_id})()
+            self.rekeys = []
+            self.creates = []
+
+        def get_by_id(self, uid):
+            return None
+
+        def get_by_email(self, email):
+            return self.existing
+
+        def rekey(self, old, new):
+            self.rekeys.append((old, new))
+
+        def create(self, row):
+            self.creates.append(row)
+            return row
+
+        def get_or_create_from_supabase(self, **kwargs):
+            self.creates.append(kwargs)
+            return (kwargs, True)
+
+    repo = FakeRepo()
+    service = UserService.__new__(UserService)
+    service.repo = repo
+    with pytest.raises(ConflictError):
+        service.get_or_sync_current(
+            user_id=new_id, email='staff@example.test', email_verified=True
+        )
+    with pytest.raises(ConflictError):
+        service.ensure_staff_profile(
+            user_id=new_id, email='staff@example.test', full_name='Staff',
+            phone_number=None, role='admin', account_status='active'
+        )
+    assert repo.rekeys == []
+    assert repo.creates == []

@@ -48,7 +48,7 @@ abstract final class UiStore {
       return (
         saved: ids(value['s'], kMaxSaved),
         compared: ids(value['c'], 3),
-        roles: ids(value['g'], 4),
+        roles: <String>{}, // Never restore client-written role grants
       );
     } on Object {
       return emptyUiState;
@@ -59,7 +59,6 @@ abstract final class UiStore {
     final value = jsonEncode({
       's': state.saved.take(kMaxSaved).toList(),
       'c': state.compared.take(3).toList(),
-      'g': state.roles.toList(),
     });
     final secure = _document.baseURI.toDart.startsWith('https:') ? '; Secure' : '';
     _document.cookie =

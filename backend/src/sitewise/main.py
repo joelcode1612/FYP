@@ -16,6 +16,7 @@ from sitewise.core.exceptions import (
 from sitewise.core.supabase_admin import SupabaseAdminError
 from sitewise.core.logging import configure_logging, logger
 from sitewise.db.session import create_db_and_tables
+from sitewise.frontend import DEFAULT_DIST_DIR, mount_frontend
 
 configure_logging()
 
@@ -90,3 +91,15 @@ def health_v1() -> dict:
     except Exception:
         db_ok = False
     return {"status": "ok" if db_ok else "degraded", "database": "ok" if db_ok else "error"}
+
+
+# Serve the compiled Jaspr frontend (static assets + SPA fallback) on this
+# same origin. Registered LAST so every explicit route above (/api/v1/*,
+# /health, /docs, /openapi.json) is matched first; a missing build output
+# keeps the API usable (the run launcher reports that as a startup error).
+if not mount_frontend(app):
+    logger.warning(
+        "Compiled frontend not found at %s; starting as API-only. "
+        "Run 'jaspr build' in fyp_jaspr_web first.",
+        DEFAULT_DIST_DIR,
+    )

@@ -73,11 +73,10 @@ abstract final class AppLocator {
     appCubit = AppCubit(
       AppState(saved: stored.saved, compared: stored.compared),
     );
-    Workspaces.seed(stored.roles);
     appCubit.stream.listen((_) => persistUi());
   }
 
-  /// Writes the current selections and demo role grants back to the cookie.
+  /// Persists only UI selections, never authorization grants.
   static void persistUi() {
     UiStore.write((
       saved: appCubit.state.saved,
@@ -85,7 +84,7 @@ abstract final class AppLocator {
       roles: Workspaces.granted,
     ));
   }
-  /// Demo role grants as role names — the shape the cookie stores.
+  /// Compatibility shim; authorization grants are never persisted.
   static Set<String> get grantedRoles => Workspaces.granted;
 
   // --- Per-page cubits (mirroring the mobile app's per-page lifetimes) -------

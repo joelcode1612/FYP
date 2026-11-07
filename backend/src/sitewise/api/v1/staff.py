@@ -123,6 +123,20 @@ def create_agent(
     service = _admin_service()
     email = payload.email.lower()
     existing = service.find_auth_user_by_email(email)
+    # Detect local UUID collisions BEFORE creating/inviting the Supabase user
+    # or changing the authoritative Supabase role. No automatic email-based
+    # identity merge or primary-key reassignment is permitted.
+    local_profile = UserService(session).get_user_by_email(email)
+    if local_profile is not None and (
+        existing is None or str(local_profile.user_id) != str(existing["id"])
+    ):
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "A different local identity already uses this email. "
+                "Administrator identity reconciliation is required."
+            ),
+        )
 
     invited = False
     if existing is not None:

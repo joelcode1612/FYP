@@ -41,25 +41,27 @@ class _ListingsPageState extends State<ListingsPage> {
 
   @override
   Component build(BuildContext context) {
-    return CubitBuilder<AdminCubit, AdminState>(
-      cubit: vm,
-      builder: (context, _) {
-        return AppLayout(
-          role: AppRole.admin,
-          currentRoute: '/admin/listings',
-          // The page header is rendered by `AppLayout`; a page must not render
-          // its own `PageHead` or the title appears twice.
-          title: 'Listings',
-          eyebrow: 'Verification',
-          subtitle:
-              'Every commercial property on the platform, across all owners. '
-              'Open a listing to review its details or decide whether it '
-              'should be verified.',
-          child: div(classes: 'stack stack--sections', [
-            ReviewSplit(vm: vm, mode: ReviewMode.listings),
-          ]),
-        );
-      },
+    return AppLayout(
+      role: AppRole.admin,
+      currentRoute: '/admin/listings',
+      // The page header is rendered by `AppLayout`; a page must not render
+      // its own `PageHead` or the title appears twice.
+      title: 'Listings',
+      eyebrow: 'Verification',
+      subtitle:
+          'Every commercial property on the platform, across all owners. '
+          'Open a listing to review its details or decide whether it '
+          'should be verified.',
+      // Scoped to the data slices ReviewSplit renders, and inside the layout,
+      // so the chrome never rebuilds on a VM emit.
+      child: CubitBuilder<AdminCubit, AdminState>(
+        cubit: vm,
+        when: (prev, next) =>
+            prev.queue != next.queue || prev.listings != next.listings,
+        builder: (context, _) => div(classes: 'stack stack--sections', [
+          ReviewSplit(vm: vm, mode: ReviewMode.listings),
+        ]),
+      ),
     );
   }
 }

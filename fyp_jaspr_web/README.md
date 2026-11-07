@@ -1,22 +1,20 @@
-# Sitewise web app — Jaspr SSR + FastAPI backend + Supabase Auth
+# Sitewise web app — Jaspr client + Unified FastAPI server + Supabase Auth
 
-The Jaspr app runs in **server rendering mode** (`jaspr: mode: server`, port
-8090). Every route returns a complete HTML document; only interactive leaves are
-hydrated in the browser. There is no SPA `#app` shell.
+The Jaspr app runs in **client mode** (`jaspr: mode: client`). `jaspr build`
+compiles the router and every page into `build/jaspr/` (entry document
+`web/index.html`, bundle `main.client.dart.js`), and the unified FastAPI
+server (repo-root `run-sitewise.cmd`) serves those static assets together
+with the REST API on port 8090. There is no SSR process.
 
 ## Services, ports and data flow
 
 ```text
-Browser (http://localhost:8090)
-  |  HTML / CSS / JS / same-origin /api/* and /health
+Browser / Flutter mobile (http://localhost:8090)
+  |  compiled frontend  +  same-origin /api/v1/* and /health
   v
-Jaspr SSR frontend  (fyp_jaspr_web, port 8090)
-  |  same-origin reverse proxy (lib/data/api_proxy.dart)
-  |  + SSR-side HTTP client (lib/data/auth_stub.dart)
-  v
-Intended backend    (FYP/backend, FastAPI/uvicorn, port 8000)
-  |  GET /health, /api/v1/auth/me, /api/v1/catalog/properties, ...
-  |  verifies Supabase ES256 access tokens via JWKS
+Unified FastAPI server  (FYP/backend, uvicorn sitewise.main:app, port 8090)
+  |  static hosting + SPA fallback  (src/sitewise/frontend.py)
+  |  /api/v1/*, /health, /docs — verifies Supabase ES256 access tokens via JWKS
   |  app database: PostgreSQL `sitesense`
   |  analytics/catalogue database: PostgreSQL `Final_Location_Analysis`
   v
@@ -25,10 +23,7 @@ Existing Supabase project (Auth + public.users) — https://lzdpjwmcjbhtkzkqudyt
 
 | Port | Service | Owner |
 | --- | --- | --- |
-| 8090 | Jaspr SSR frontend + `/api/*` proxy | `.\serve` |
-| 8000 | FastAPI backend (`sitewise.main:app`) | `backend\start-api.ps1` |
-| 5567 | Jaspr internal dev/build proxy | Jaspr CLI (framework-managed) |
-| 8181 | Dart VM service (dev only) | Dart CLI — **not** the API |
+| 8090 | Unified FastAPI: compiled frontend + `/api/v1/*` | `..\run-sitewise.cmd` |
 | 5432 | PostgreSQL (`sitesense`, `Final_Location_Analysis`) | local Postgres |
 
 `FYP/test` is **not** an application API or a configuration source. Its Express
@@ -37,11 +32,16 @@ two remaining references are test-time fixtures for browser probes
 (`test/.data/*.json`) and the one-off workbook import scripts listed below.
 
 Browser requests never contain a hardcoded host or port: `<meta
-name="sitewise-api">` is emitted by `lib/main.server.dart` (empty = same-origin)
-and `tool/auth_client.js` reads it. The SSR process forwards `/api/*` and
-`/health` to `SITEWISE_API_BASE` (default `http://127.0.0.1:8000`), so no CORS
-preflight is needed. Set `SITEWISE_PUBLIC_API_BASE` only if the API is
+name="sitewise-api">` ships in `web/index.html` (empty = same-origin) and
+`tool/auth_client.js` reads it, so the browser talks to the same FastAPI
+origin. Set `SITEWISE_PUBLIC_API_BASE`… only via the meta tag if the API is
 deliberately cross-origin.
+
+> LEGACY (superseded): the retired SSR flow served documents from a Jaspr
+> process on :8090 and proxied `/api/*` to FastAPI on :8000
+> (`lib/main.server.dart`, `api_proxy.dart`, `auth_stub.dart`, `serve.cmd`).
+> Those files are dormant but retained; `backend/src/sitewise/main.py` now
+> hosts the frontend itself and no second server exists.
 
 ## Authentication configuration
 
@@ -117,8 +117,16 @@ Open `http://localhost:8090/login`. For a production build:
 ```powershell
 npm run build-auth --prefix tool
 jaspr build
-cd build\jaspr && PORT=8090 .\app.exe
+cd ..\..\
+.\run-sitewise.cmd
 ```
+
+> The SSR flow above is DEPRECATED since the unified-server migration: Jaspr
+> now compiles in client mode and `run-sitewise.cmd` starts ONE FastAPI server
+> that serves both the compiled frontend (`build/jaspr`, including
+> `web/index.html`) and the REST API on :8090 — no `app.exe`, no proxy, no
+> second server. `serve.cmd` / `serve.impl.ps1` are retained only until the
+> unified flow is fully validated.
 
 ## Property dataset
 
@@ -139,15 +147,16 @@ service): `prepare-property-workbook.py` and `import-properties.js`.
 | --- | --- |
 | Browser auth + API requests | `tool/auth_client.js` → `web/auth_bundle.js` |
 | Public Supabase config generation | `tool/gen_auth_config.js` (reads `../backend/.env`) |
-| SSR API base + same-origin proxy | `lib/data/api_config.dart`, `lib/data/api_proxy.dart`, `lib/main.server.dart` |
-| SSR-side API client | `lib/data/auth_stub.dart` |
-| Dart/browser bridge | `lib/data/auth_service.dart`, `auth_browser.dart` |
-| Protected routes and role redirects | `lib/app.dart` |
+| Browser document shell + API base | `web/index.html` (`sitewise-api` meta = same-origin) |
+| Browser entrypoint (router + guard) | `lib/main.client.dart`, `lib/app.dart` |
+| Client-side API client | `lib/data/auth_browser.dart`, `web_api_client.dart` |
+| Protected routes and role redirects | `lib/app.dart` (router redirect) |
+| Frontend hosting / SPA fallback | `../backend/src/sitewise/frontend.py`, wired in `../backend/src/sitewise/main.py` |
 | Catalogue / source-index ranking | `lib/data/api_property_repository.dart` |
 | Repository wiring | `lib/data/app_locator.dart` |
 | Backend routes, token verification | `../backend/src/sitewise/api/v1/`, `dependencies.py` |
 | Backend startup / env | `../backend/start-api.ps1`, `../backend/.env.example` |
-| Launchers | `serve.cmd` (`.\serve`), `serve.impl.ps1`, `../start-sitewise.ps1` |
+| Launchers | `..\run-sitewise.cmd` (unified), legacy: `serve.cmd`, `serve.impl.ps1`, `../start-sitewise.ps1` |
 
 ## Verification
 

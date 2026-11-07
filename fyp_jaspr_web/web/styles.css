@@ -3552,6 +3552,21 @@ a.card:hover {
   }
 }
 
+/* Bento-shaped loading placeholders (BentoSkeleton): the skeleton inherits
+   the real card wrappers — same grid spans, padding and gaps — so the swap
+   from skeleton to data keeps the page geometry instead of reflowing it.
+   Only the block height differs per wrapper, tuned to each card's loaded
+   content height. */
+.kpi .skeleton--block {
+  height: 56px;
+}
+.bento-card .skeleton--block {
+  height: 130px;
+}
+.bento-hero .skeleton--block {
+  height: 300px;
+}
+
 /* ==========================================================================
    Form field — label + control + hint/error
    --------------------------------------------------------------------------

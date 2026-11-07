@@ -51,53 +51,57 @@ class _DashboardPageState extends State<DashboardPage> {
 
   @override
   Component build(BuildContext context) {
-    return CubitBuilder<OwnerCubit, OwnerState>(
-      cubit: vm,
-      builder: (context, _) {
-        return AppLayout(
-          role: AppRole.owner,
-          currentRoute: '/owner',
-          title: 'Your portfolio',
-          // The source dashboard has no page header — its first element is
-          // `.bento-head` (eyebrow + greeting + actions). Rendering both the
-          // layout header and the bento head produced two competing titles,
-          // which the source does not have.
-          showPageHead: false,
-          child: vm.loading
-              ? const _Loading()
-              : div(classes: 'stack', [
-                  _head(),
-                  _kpis(),
-                  div(classes: 'bento', [
-                    _healthCard(),
-                    _listingsCard(),
-                    _stepCard(
-                      'Step 1',
-                      'Create the listing',
-                      'Title, address, rent, size, type and photos.',
-                    ),
-                    _stepCard(
-                      'Step 2',
-                      'Submit for review',
-                      'An administrator checks the details and photos.',
-                    ),
-                    _stepCard(
-                      'Step 3',
-                      'Publish and add a tour',
-                      'Once approved, entrepreneurs can see it and you can '
-                          'submit a 360° tour.',
-                    ),
-                  ]),
-                  p(classes: 'stat-note', [
-                    Component.text(
-                      'Every figure above is a live count from your saved '
-                      'records. Verification status reflects the current state '
-                      'of each listing in the record store.',
-                    ),
-                  ]),
-                ]),
-        );
-      },
+    return AppLayout(
+      role: AppRole.owner,
+      currentRoute: '/owner',
+      title: 'Your portfolio',
+      // The source dashboard has no page header — its first element is
+      // `.bento-head` (eyebrow + greeting + actions). Rendering both the
+      // layout header and the bento head produced two competing titles,
+      // which the source does not have.
+      showPageHead: false,
+      // The outer builder re-renders only the loading/error shells; the
+      // chrome and the static heading never rebuild on a data emit.
+      child: CubitBuilder<OwnerCubit, OwnerState>(
+        cubit: vm,
+        when: (prev, next) =>
+            prev.loading != next.loading || prev.error != next.error,
+        builder: (context, state) {
+          if (state.loading) return const BentoSkeleton();
+          if (state.error != null) return _error(state.error!);
+          return div(classes: 'stack', [
+            _head(),
+            _kpis(),
+            div(classes: 'bento', [
+              _healthCard(),
+              _listingsCard(),
+              _stepCard(
+                'Step 1',
+                'Create the listing',
+                'Title, address, rent, size, type and photos.',
+              ),
+              _stepCard(
+                'Step 2',
+                'Submit for review',
+                'An administrator checks the details and photos.',
+              ),
+              _stepCard(
+                'Step 3',
+                'Publish and add a tour',
+                'Once approved, entrepreneurs can see it and you can '
+                    'submit a 360° tour.',
+              ),
+            ]),
+            p(classes: 'stat-note', [
+              Component.text(
+                'Every figure above is a live count from your saved '
+                'records. Verification status reflects the current state '
+                'of each listing in the record store.',
+              ),
+            ]),
+          ]);
+        },
+      ),
     );
   }
 
@@ -298,14 +302,14 @@ class _DashboardPageState extends State<DashboardPage> {
       p(classes: 'muted', [Component.text(body)]),
     ]);
   }
-}
 
-class _Loading extends StatelessComponent {
-  const _Loading();
-
-  @override
-  Component build(BuildContext context) => div(classes: 'loading', [
-    span(classes: 'spinner', []),
-    Component.text('Loading your portfolio…'),
-  ]);
+  Component _error(String message) => EmptyState(
+    title: 'Something went wrong',
+    body: message,
+    action: ActionButton(
+      'Try again',
+      variant: 'primary',
+      onClick: () => unawaited(vm.load()),
+    ),
+  );
 }

@@ -55,7 +55,13 @@ String parentShellRoute(String route) {
     '/capture': '/entrepreneur/explore',
     '/tour-preview': '/entrepreneur/explore',
   };
-  return parents[route] ?? route;
+  // Normalise a trailing slash or query string before lookup, so a deep link
+  // cannot silently fall through to "no tab selected".
+  final normalized = Uri.parse(route).path;
+  final path = normalized.length > 1 && normalized.endsWith('/')
+      ? normalized.substring(0, normalized.length - 1)
+      : normalized;
+  return parents[path] ?? path;
 }
 
 abstract final class AppRoutes {

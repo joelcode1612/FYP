@@ -85,12 +85,32 @@ void main() {
   }
 
   group('createStaffGuard passthrough', () {
-    test('non-staff workspace is not guarded and never calls the backend', () async {
+    test('entrepreneur requires a verified token, not an unsigned role cookie', () async {
       final forged = 'sitewise_session=${sessionValue({'role': 'entrepreneur'})}';
       final r = await run(req('/entrepreneur/explore', cookie: forged));
-      expect(r.rendered, isNotNull);
+      expect(r.rendered, isNull);
+      expect(r.response.statusCode, 302);
+      expect(r.response.headers['location'], '/login?next=%2Fentrepreneur%2Fexplore');
       expect(r.calls, isEmpty);
-      expect(await r.response.readAsString(), 'RENDERED');
+    });
+
+    test('a verified entrepreneur may enter the entrepreneur workspace', () async {
+      final r = await run(
+        req('/entrepreneur/explore', cookie: 'sitewise_token=abc'),
+        id: identity(role: 'entrepreneur', aal: 'aal1'),
+      );
+      expect(r.response.statusCode, 200);
+      expect(r.rendered, isNotNull);
+      expect(decodeSession(r.rendered!.headers['cookie']!)['role'], 'entrepreneur');
+    });
+
+    test('client-written role grants cannot open the owner workspace', () async {
+      final r = await run(
+        req('/owner', cookie: 'sitewise_token=abc; sitewise_ui=forged'),
+        id: identity(role: 'entrepreneur'),
+      );
+      expect(r.response.statusCode, 302);
+      expect(r.response.headers['location'], '/entrepreneur/my-properties');
     });
 
     test('the /staff/verify screen is not guarded (no redirect loop)', () async {
@@ -105,7 +125,7 @@ void main() {
       final forged = 'sitewise_session=${sessionValue({'role': 'admin'})}';
       final r = await run(req('/admin', cookie: forged));
       expect(r.response.statusCode, 302);
-      expect(r.response.headers['location'], '/login?next=http%3A%2F%2Flocalhost%2Fadmin');
+      expect(r.response.headers['location'], '/login?next=%2Fadmin');
       expect(r.rendered, isNull);
       expect(r.calls, isEmpty, reason: 'no token means no backend call');
     });

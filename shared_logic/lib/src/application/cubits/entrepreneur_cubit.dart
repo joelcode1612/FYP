@@ -1,5 +1,6 @@
 import 'package:bloc/bloc.dart';
 
+import '../../core/errors/app_failure.dart';
 import '../../domain/entities/commercial_property.dart';
 import '../../domain/entities/location_intelligence.dart';
 import '../../domain/entities/recommendation.dart';
@@ -81,29 +82,63 @@ class EntrepreneurCubit extends Cubit<EntrepreneurState> {
         ),
       );
     } catch (e) {
-      emit(state.copyWith(error: e.toString(), loading: false));
+      emit(
+        state.copyWith(
+          error: readableFailure(
+            e,
+            fallback: 'We could not load listings. Please try again.',
+          ),
+          loading: false,
+        ),
+      );
     }
   }
 
   /// Ranks recommendations against the current preferences.
+  ///
+  /// A failed request must be distinguishable from a genuine empty result, so
+  /// the previous error is cleared on *every* new attempt and on success, and
+  /// the failed list is left untouched rather than rendered as "no matches".
   Future<void> loadRecommendations() async {
-    emit(state.copyWith(loading: true));
+    emit(state.copyWith(loading: true, clearError: true));
     try {
       final ranked = await _getRecommendations(state.preferences);
-      emit(state.copyWith(recommendations: ranked, loading: false));
+      emit(
+        state.copyWith(
+          recommendations: ranked,
+          loading: false,
+          clearError: true,
+        ),
+      );
     } catch (e) {
-      emit(state.copyWith(error: e.toString(), loading: false));
+      emit(
+        state.copyWith(
+          error: readableFailure(
+            e,
+            fallback: 'We could not load recommendations. Please try again.',
+          ),
+          loading: false,
+        ),
+      );
     }
   }
 
   /// Loads the location analysis for one property.
   Future<void> loadAnalysis(String propertyId) async {
-    emit(state.copyWith(loading: true));
+    emit(state.copyWith(loading: true, clearError: true));
     try {
       final analysis = await _getLocationAnalysis(propertyId);
-      emit(state.copyWith(analysis: analysis, loading: false));
+      emit(state.copyWith(analysis: analysis, loading: false, clearError: true));
     } catch (e) {
-      emit(state.copyWith(error: e.toString(), loading: false));
+      emit(
+        state.copyWith(
+          error: readableFailure(
+            e,
+            fallback: 'We could not load the location analysis. Please try again.',
+          ),
+          loading: false,
+        ),
+      );
     }
   }
 
