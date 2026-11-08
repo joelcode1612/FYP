@@ -1,10 +1,8 @@
-import 'package:provider/provider.dart';
-import 'package:shared_logic/shared_logic.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_logic/shared_logic.dart';
 
 import '../../../application/services/service_locator.dart';
-import '../../../application/state/app_view_model.dart';
-import '../../../application/state/auth_view_model.dart';
 import '../../../core/routing/mobile_role.dart';
 import '../../../core/theme/sitewise_theme.dart';
 import '../../shared/widgets/sitewise_brand.dart';
@@ -24,16 +22,14 @@ import 'auth_blocking_views.dart';
 ///
 /// Nothing below the first line is reachable while the restore is still
 /// running — the same screen shows a spinner, never a glimpse of a dashboard.
-class AppStartGate extends StatefulWidget {
+class AppStartGate extends ConsumerStatefulWidget {
   const AppStartGate({super.key});
 
   @override
-  State<AppStartGate> createState() => _AppStartGateState();
+  ConsumerState<AppStartGate> createState() => _AppStartGateState();
 }
 
-class _AppStartGateState extends State<AppStartGate> {
-  late final AppViewModel _app = context.read<AppViewModel>();
-
+class _AppStartGateState extends ConsumerState<AppStartGate> {
   bool? _onboardingDone;
 
   /// One navigation per gate: a rebuild while the frame is pending must not
@@ -44,8 +40,12 @@ class _AppStartGateState extends State<AppStartGate> {
   void initState() {
     super.initState();
     // Idempotent: if a route guard already began the restore, this joins it
-    // rather than starting a second one.
-    context.read<AuthViewModel>().start();
+    // rather than starting a second one. Deferred because a provider must not
+    // be modified inside the build lifecycle; the splash frame is unconditional.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      ref.read(authNotifierProvider.notifier).start();
+    });
   }
 
   Future<void> _readOnboarding() async {
@@ -58,28 +58,30 @@ class _AppStartGateState extends State<AppStartGate> {
     if (_navigated) return;
     _navigated = true;
     // Deferred: the decision can complete on a microtask inside build, and a
-    // view model must not notify while the tree is being built.
+    // notifier must not change state while the tree is being built.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      if (enterRole != null) _app.setRole(enterRole);
+      if (enterRole != null) {
+        ref.read(appNotifierProvider.notifier).setRole(enterRole);
+      }
       Navigator.of(context).pushReplacementNamed(route);
     });
   }
 
   @override
   Widget build(BuildContext context) {
-    final auth = context.watch<AuthViewModel>();
-    switch (auth.status) {
+    final state = ref.watch(authNotifierProvider);
+    switch (state.status) {
       case AuthStatus.authenticated:
-        final role = auth.role;
+        final role = state.role;
         if (role == null || mobileHomeRouteFor(role) == null) {
-          return StaffWorkspaceRequiredView(role: role, auth: auth);
+          return StaffWorkspaceRequiredView(role: role);
         }
         return _afterSignIn(role);
       case AuthStatus.accountInactive:
-        return AccountStatusView(message: auth.message, auth: auth);
+        return AccountStatusView(message: state.message);
       case AuthStatus.error:
-        return AuthUnavailableView(auth: auth);
+        return const AuthUnavailableView();
       case AuthStatus.sessionExpired:
       case AuthStatus.unauthenticated:
       case AuthStatus.emailConfirmationRequired:

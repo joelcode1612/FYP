@@ -106,6 +106,17 @@ class SupabaseAuthRepository implements AuthRepository {
   final IdentityProbe _probe;
   final GoTrueClient Function() _auth;
 
+  /// Supabase calls had no timeout at all, so an unreachable auth host left
+  /// the button spinning forever. The identity probe already used 15s; the
+  /// credential calls get the same ceiling with a message that says what
+  /// actually timed out.
+  static const Duration _authTimeout = Duration(seconds: 15);
+
+  Future<T> _guard<T>(Future<T> future, String timeoutMessage) =>
+      future.timeout(_authTimeout, onTimeout: () async {
+        throw AuthUnavailableFailure(timeoutMessage);
+      });
+
   /// Fails closed when `Supabase.initialize()` never ran — an unconfigured
   /// build must report an unavailable service, not an empty session that a
   /// caller could mistake for "signed out and everything is fine".
@@ -139,9 +150,9 @@ class SupabaseAuthRepository implements AuthRepository {
     _requirePassword(password);
     AuthResponse response;
     try {
-      response = await _client.signInWithPassword(
-        email: normalized,
-        password: password,
+      response = await _guard(
+        _client.signInWithPassword(email: normalized, password: password),
+        'Signing in took too long. Check your connection and try again.',
       );
     } on AuthException catch (error) {
       throw mapSupabaseError(error, email: normalized);
@@ -166,13 +177,18 @@ class SupabaseAuthRepository implements AuthRepository {
       // Only `full_name` goes up. Public registration can never assign a
       // role: the backend provisions the profile (entrepreneur for the
       // public flow) and the authoritative value is re-read from `/auth/me`.
-      response = await _client.signUp(
-        email: normalized,
-        password: password,
-        data: {
-          if (name != null && name.isNotEmpty) 'full_name': name,
-        },
-        emailRedirectTo: MobileEndpoints.emailConfirmationRedirect.toString(),
+      response = await _guard(
+        _client.signUp(
+          email: normalized,
+          password: password,
+          data: {
+            if (name != null && name.isNotEmpty) 'full_name': name,
+          },
+          emailRedirectTo: MobileEndpoints.emailConfirmationRedirect
+              .toString(),
+        ),
+        'Creating the account took too long. Check your connection and try '
+            'again.',
       );
     } on AuthException catch (error) {
       throw mapSupabaseError(error, email: normalized);
@@ -202,11 +218,14 @@ class SupabaseAuthRepository implements AuthRepository {
   }) async {
     final normalized = _normalize(email);
     try {
-      await _client.resetPasswordForEmail(
-        normalized,
-        redirectTo:
-            redirectTo ??
-            MobileEndpoints.passwordRecoveryRedirect.toString(),
+      await _guard(
+        _client.resetPasswordForEmail(
+          normalized,
+          redirectTo:
+              redirectTo ??
+              MobileEndpoints.passwordRecoveryRedirect.toString(),
+        ),
+        'The reset request took too long. Check your connection and try again.',
       );
     } on AuthException catch (error) {
       throw mapSupabaseError(error, email: normalized);
@@ -218,9 +237,13 @@ class SupabaseAuthRepository implements AuthRepository {
   @override
   Future<void> signOut() async {
     try {
-      await _client.signOut();
+      // A hung sign-out must not trap the user in a broken session view; the
+      // local credential clear is what actually matters here.
+      await _guard(_client.signOut(), 'Signing out timed out.');
     } on AuthException {
       // Already signed out server-side: the local clear is what matters.
+    } on AuthUnavailableFailure {
+      // Same tolerance: the local session clear below still runs.
     }
   }
 

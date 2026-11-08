@@ -15,6 +15,7 @@ class AuthField extends StatelessWidget {
   final TextInputType? keyboardType;
   final TextInputAction? textInputAction;
   final void Function(String)? onSubmitted;
+  final Iterable<String>? autofillHints;
 
   const AuthField({
     super.key,
@@ -27,6 +28,7 @@ class AuthField extends StatelessWidget {
     this.keyboardType,
     this.textInputAction,
     this.onSubmitted,
+    this.autofillHints,
   });
 
   @override
@@ -37,22 +39,26 @@ class AuthField extends StatelessWidget {
         Text(
           label,
           style: const TextStyle(
-            fontSize: 12.5,
+            fontSize: 13,
             fontWeight: FontWeight.w700,
             color: SitewiseColors.ink,
           ),
         ),
-        const SizedBox(height: 7),
+        const SizedBox(height: 8),
         TextField(
           controller: controller,
           obscureText: obscure,
           keyboardType: keyboardType,
           textInputAction: textInputAction,
           onSubmitted: onSubmitted,
+          autofillHints: autofillHints,
+          // Lets the framework scroll the focused field above the keyboard.
+          scrollPadding: const EdgeInsets.all(24),
+          style: const TextStyle(fontSize: 15, color: SitewiseColors.ink),
           decoration: InputDecoration(
             hintText: hint,
             hintStyle: const TextStyle(
-              fontSize: 12,
+              fontSize: 13,
               color: SitewiseColors.overline,
             ),
             prefixIcon: SitewiseIcon(
@@ -65,18 +71,18 @@ class AuthField extends StatelessWidget {
             fillColor: SitewiseColors.surface,
             contentPadding: const EdgeInsets.symmetric(
               horizontal: 14,
-              vertical: 14,
+              vertical: 16,
             ),
             border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(16),
+              borderRadius: BorderRadius.circular(SitewiseSpacing.radiusLg),
               borderSide: const BorderSide(color: SitewiseColors.border),
             ),
             enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(16),
+              borderRadius: BorderRadius.circular(SitewiseSpacing.radiusLg),
               borderSide: const BorderSide(color: SitewiseColors.border),
             ),
             focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(16),
+              borderRadius: BorderRadius.circular(SitewiseSpacing.radiusLg),
               borderSide: const BorderSide(
                 color: SitewiseColors.action,
                 width: 1.2,

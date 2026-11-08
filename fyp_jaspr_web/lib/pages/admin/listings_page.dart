@@ -2,19 +2,17 @@ import 'dart:async';
 
 import 'package:jaspr/dom.dart';
 import 'package:jaspr/jaspr.dart';
-import 'package:jaspr_provider_compat/jaspr_provider_compat.dart' as provider;
+import 'package:jaspr_riverpod/jaspr_riverpod.dart';
 import 'package:shared_logic/shared_logic.dart';
 
 import '../../components/admin_review_split.dart';
-import '../../data/app_locator.dart';
 import '../../layouts/app_layout.dart';
-import '../../state/admin_view_model.dart';
 
 /// Web listings, ported to the source `admin/review.html` split layout.
 ///
 /// The source review design is one page: a status-tabbed `.queue` on the left
 /// and a detail `.panel` on the right. This route shows every property
-/// (`vm.listings`, default tab All); `/admin/verification` shows the
+/// (all listings, default tab All); `/admin/verification` shows the
 /// awaiting-review subset (default tab Pending). Both share [ReviewSplit].
 @client
 class ListingsPage extends StatefulComponent {
@@ -25,19 +23,15 @@ class ListingsPage extends StatefulComponent {
 }
 
 class _ListingsPageState extends State<ListingsPage> {
-  late final AdminViewModel vm;
-
   @override
   void initState() {
     super.initState();
-    vm = AppLocator.newAdminViewModel();
-    unawaited(vm.loadDashboard());
-  }
-
-  @override
-  void dispose() {
-    vm.dispose();
-    super.dispose();
+    Future.microtask(() {
+      if (!mounted) return;
+      unawaited(
+        context.read(adminNotifierProvider.notifier).loadDashboard(),
+      );
+    });
   }
 
   @override
@@ -53,25 +47,11 @@ class _ListingsPageState extends State<ListingsPage> {
           'Every commercial property on the platform, across all owners. '
           'Open a listing to review its details or decide whether it '
           'should be verified.',
-      // Scoped to the data slices ReviewSplit renders, and inside the layout,
-      // so the chrome never rebuilds on a notification.
-      child: provider.ChangeNotifierProvider<AdminViewModel>.value(
-        value: vm,
-        child:
-            provider.Selector<
-              AdminViewModel,
-              ({
-                List<CommercialProperty> queue,
-                List<CommercialProperty> listings,
-              })
-            >(
-              selector: (context, vm) =>
-                  (queue: vm.queue, listings: vm.listings),
-              builder: (context, data, child) => div(
-                classes: 'stack stack--sections',
-                [ReviewSplit(vm: vm, mode: ReviewMode.listings)],
-              ),
-            ),
+      // ReviewSplit scopes its own watches, so the chrome never rebuilds on a
+      // notification.
+      child: const div(
+        classes: 'stack stack--sections',
+        [ReviewSplit(mode: ReviewMode.listings)],
       ),
     );
   }

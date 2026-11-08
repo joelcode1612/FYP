@@ -1,25 +1,23 @@
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_logic/shared_logic.dart';
 import 'package:flutter/material.dart';
 
 import '../../../../application/services/service_locator.dart';
-import '../../../../application/state/app_view_model.dart';
-import '../../../../application/state/auth_view_model.dart';
 import '../../../../core/theme/sitewise_theme.dart';
 import '../../shell/mobile_app_shell.dart';
 
 /// Mobile entrepreneur profile: identity, business preferences and account
 /// actions. Intentionally not an analytics surface.
 
-class EntrepreneurProfileMobilePage extends StatelessWidget {
+class EntrepreneurProfileMobilePage extends ConsumerWidget {
   const EntrepreneurProfileMobilePage({super.key});
 
   /// Signs out through the shared auth state so the session, the persisted
   /// tokens and every route guard see the same transition; the workspace is
   /// then torn down in one navigation rather than left underneath the auth
   /// screen.
-  Future<void> _logOut(BuildContext context) async {
-    await context.read<AuthViewModel>().signOut();
+  Future<void> _logOut(BuildContext context, WidgetRef ref) async {
+    await ref.read(authNotifierProvider.notifier).signOut();
     if (!context.mounted) return;
     Navigator.of(context).pushNamedAndRemoveUntil('/auth', (_) => false);
   }
@@ -34,9 +32,9 @@ class EntrepreneurProfileMobilePage extends StatelessWidget {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final prefs = ServiceLocator.preferences;
-    final appState = context.watch<AppViewModel>();
+    final appState = ref.watch(appNotifierProvider);
     return MobileAppShell(
       title: 'Profile',
       currentRoute: '/entrepreneur/profile',
@@ -45,13 +43,10 @@ class EntrepreneurProfileMobilePage extends StatelessWidget {
         children: [
           // Only the verified profile is observed here; the identity card
           // must not repaint for auth messages it never renders.
-          Selector<AuthViewModel, SitewiseUser?>(
-            selector: (_, auth) => auth.user,
-            builder: (context, user, _) => _IdentityCard(
-              user: user,
-              saved: appState.saved.length,
-              compared: appState.compared.length,
-            ),
+          _IdentityCard(
+            user: ref.watch(authNotifierProvider.select((s) => s.user)),
+            saved: appState.saved.length,
+            compared: appState.compared.length,
           ),
           const SizedBox(height: 20),
           _SectionLabel('Business'),
@@ -102,7 +97,7 @@ class EntrepreneurProfileMobilePage extends StatelessWidget {
           ),
           const SizedBox(height: 20),
           OutlinedButton.icon(
-            onPressed: () => _logOut(context),
+            onPressed: () => _logOut(context, ref),
             icon: const Icon(Icons.logout_rounded, size: 18),
             label: const Text('Log out'),
             style: OutlinedButton.styleFrom(

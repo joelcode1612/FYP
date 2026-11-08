@@ -51,6 +51,15 @@
 	<true/>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>
+	<!-- Development only: the unified FastAPI server is plain HTTP on the LAN
+	     or on localhost for the iOS simulator. ATS blocks cleartext by default.
+	     NSAllowsLocalNetworkLoads is scoped to local/private hosts; it does NOT
+	     enable arbitrary internet HTTP. Remove for a release that uses HTTPS. -->
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsLocalNetworkLoads</key>
+		<true/>
+	</dict>
 	<key>NSCameraUsageDescription</key>
 	<string>Sitewise uses the camera for AR-guided 360° property capture.</string>
 	<key>UIMainStoryboardFile</key>

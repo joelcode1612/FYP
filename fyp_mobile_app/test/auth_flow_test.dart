@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
@@ -14,165 +15,177 @@ import 'support/fake_auth_repository.dart';
 
 /// Unit coverage for the authentication state machine and the two testable
 /// seams of the Supabase repository: how a backend profile response is read,
-/// and how a provider error is translated. The screen-level consequences are
+/// and how a provider error is translated. The machine runs as the shared
+/// [AuthNotifier] over a test container. The screen-level consequences are
 /// in `widget_test.dart`; the real-service check is `supabase_live_test.dart`.
 void main() {
   late FakeAuthRepository repo;
-  late AuthCubit cubit;
+  late ProviderContainer container;
 
   setUp(() {
     repo = FakeAuthRepository();
-    cubit = AuthCubit(auth: AuthService(repo));
+    container = ProviderContainer(
+      overrides: [
+        authServiceProvider.overrideWithValue(AuthService(repo)),
+      ],
+    );
   });
 
   tearDown(() async {
-    await cubit.close();
+    container.dispose();
   });
 
   group('startup restore', () {
     test('begins initializing and exposes no user before the check', () {
-      expect(cubit.state.status, AuthStatus.initializing);
-      expect(cubit.state.user, isNull);
-      expect(cubit.state.isAuthenticated, isFalse);
+      expect(container.read(authNotifierProvider).status, AuthStatus.initializing);
+      expect(container.read(authNotifierProvider).user, isNull);
+      expect(container.read(authNotifierProvider).isAuthenticated, isFalse);
     });
 
     test('no stored session resolves to unauthenticated', () async {
-      await cubit.start();
-      expect(cubit.state.status, AuthStatus.unauthenticated);
+      await container.read(authNotifierProvider.notifier).start();
+      expect(container.read(authNotifierProvider).status, AuthStatus.unauthenticated);
       expect(repo.restoreCalls, 1);
     });
 
     test('a valid stored session resolves to the backend-assigned role',
         () async {
       repo.user = testUser();
-      await cubit.start();
-      expect(cubit.state.status, AuthStatus.authenticated);
-      expect(cubit.state.role, AppRole.entrepreneur);
-      expect(cubit.state.status.isActiveSession, isTrue);
+      await container.read(authNotifierProvider.notifier).start();
+      expect(container.read(authNotifierProvider).status, AuthStatus.authenticated);
+      expect(container.read(authNotifierProvider).role, AppRole.entrepreneur);
+      expect(container.read(authNotifierProvider).status.isActiveSession, isTrue);
     });
 
     test('start is re-entrant: two widgets mounting cannot race two restores',
         () async {
-      await Future.wait([cubit.start(), cubit.start()]);
+      await Future.wait([container.read(authNotifierProvider.notifier).start(), container.read(authNotifierProvider.notifier).start()]);
       expect(repo.restoreCalls, 1);
     });
 
     test('a second start after the first finished changes nothing', () async {
-      await cubit.start();
-      await cubit.start();
+      await container.read(authNotifierProvider.notifier).start();
+      await container.read(authNotifierProvider.notifier).start();
       expect(repo.restoreCalls, 1);
     });
 
     test('an unreachable service is an error with no user', () async {
       repo.restoreFailure = const AuthUnavailableFailure();
-      await cubit.start();
-      expect(cubit.state.status, AuthStatus.error);
-      expect(cubit.state.user, isNull);
-      expect(cubit.state.isAuthenticated, isFalse);
+      await container.read(authNotifierProvider.notifier).start();
+      expect(container.read(authNotifierProvider).status, AuthStatus.error);
+      expect(container.read(authNotifierProvider).user, isNull);
+      expect(container.read(authNotifierProvider).isAuthenticated, isFalse);
     });
 
     test('an expired session is dropped so a restart cannot re-offer it',
         () async {
       repo.user = testUser();
       repo.restoreFailure = const SessionExpiredFailure();
-      await cubit.start();
-      expect(cubit.state.status, AuthStatus.sessionExpired);
+      await container.read(authNotifierProvider.notifier).start();
+      expect(container.read(authNotifierProvider).status, AuthStatus.sessionExpired);
       expect(repo.signOutCalls, 1);
       expect(repo.user, isNull);
     });
 
     test('a suspended profile at restore reports account inactive', () async {
       repo.restoreFailure = const AccountInactiveFailure(status: 'suspended');
-      await cubit.start();
-      expect(cubit.state.status, AuthStatus.accountInactive);
-      expect(cubit.state.user, isNull);
+      await container.read(authNotifierProvider.notifier).start();
+      expect(container.read(authNotifierProvider).status, AuthStatus.accountInactive);
+      expect(container.read(authNotifierProvider).user, isNull);
       expect(repo.signOutCalls, 1);
     });
 
     test('retry re-checks after the user acted on a failure', () async {
       repo.restoreFailure = const AuthUnavailableFailure();
-      await cubit.start();
-      expect(cubit.state.status, AuthStatus.error);
+      await container.read(authNotifierProvider.notifier).start();
+      expect(container.read(authNotifierProvider).status, AuthStatus.error);
 
       repo.restoreFailure = null;
       repo.user = testUser();
-      await cubit.retry();
-      expect(cubit.state.status, AuthStatus.authenticated);
+      await container.read(authNotifierProvider.notifier).retry();
+      expect(container.read(authNotifierProvider).status, AuthStatus.authenticated);
       expect(repo.restoreCalls, 2);
     });
 
     test('an unexpected repository crash still fails closed', () async {
-      final broken = AuthCubit(
-        auth: AuthService(_ThrowingRepository(StateError('boom'))),
+      final broken = ProviderContainer(
+        overrides: [
+          authServiceProvider.overrideWithValue(
+            AuthService(_ThrowingRepository(StateError('boom'))),
+          ),
+        ],
       );
-      addTearDown(broken.close);
-      await broken.start();
-      expect(broken.state.status, AuthStatus.error);
-      expect(broken.state.user, isNull);
+      addTearDown(broken.dispose);
+      await broken.read(authNotifierProvider.notifier).start();
+      expect(broken.read(authNotifierProvider).status, AuthStatus.error);
+      expect(broken.read(authNotifierProvider).user, isNull);
     });
   });
 
   group('sign in', () {
     test('success authenticates with the profile the backend returned',
         () async {
-      final ok = await cubit.signIn(
+      final ok = await container.read(authNotifierProvider.notifier).signIn(
         email: 'sarah@artisanbrew.my',
         password: 'secret123',
       );
       expect(ok, isTrue);
-      expect(cubit.state.status, AuthStatus.authenticated);
-      expect(cubit.state.user?.role, AppRole.entrepreneur);
+      expect(container.read(authNotifierProvider).status, AuthStatus.authenticated);
+      expect(container.read(authNotifierProvider).user?.role, AppRole.entrepreneur);
       expect(repo.lastSignInEmail, 'sarah@artisanbrew.my');
     });
 
     test('wrong credentials stay unauthenticated and carry the reason',
         () async {
       repo.signInFailure = const InvalidCredentialsFailure();
-      final ok = await cubit.signIn(
+      final ok = await container.read(authNotifierProvider.notifier).signIn(
         email: 'sarah@artisanbrew.my',
         password: 'nope',
       );
       expect(ok, isFalse);
-      expect(cubit.state.status, AuthStatus.unauthenticated);
-      expect(cubit.state.user, isNull);
-      expect(cubit.state.message, 'Incorrect email or password.');
+      expect(container.read(authNotifierProvider).status, AuthStatus.unauthenticated);
+      expect(container.read(authNotifierProvider).user, isNull);
+      expect(container.read(authNotifierProvider).message, 'Incorrect email or password.');
     });
 
     test('a pending account is inactive, never signed in', () async {
       repo.signInFailure = const AccountInactiveFailure(status: 'pending');
-      final ok = await cubit.signIn(
+      final ok = await container.read(authNotifierProvider.notifier).signIn(
         email: 'sarah@artisanbrew.my',
         password: 'secret123',
       );
       expect(ok, isFalse);
-      expect(cubit.state.status, AuthStatus.accountInactive);
-      expect(cubit.state.user, isNull);
-      expect(cubit.state.email, 'sarah@artisanbrew.my');
+      expect(container.read(authNotifierProvider).status, AuthStatus.accountInactive);
+      expect(container.read(authNotifierProvider).user, isNull);
+      expect(container.read(authNotifierProvider).email, 'sarah@artisanbrew.my');
     });
 
     test('a network failure withholds access as an error', () async {
       repo.signInFailure = const NetworkFailure();
-      final ok = await cubit.signIn(
+      final ok = await container.read(authNotifierProvider.notifier).signIn(
         email: 'sarah@artisanbrew.my',
         password: 'secret123',
       );
       expect(ok, isFalse);
-      expect(cubit.state.status, AuthStatus.error);
-      expect(cubit.state.user, isNull);
+      expect(container.read(authNotifierProvider).status, AuthStatus.error);
+      expect(container.read(authNotifierProvider).user, isNull);
     });
 
     test('a second tap while a request is in flight sends one request',
         () async {
       final gate = Completer<SitewiseUser>();
       final slow = _SlowRepository(gate);
-      final slowCubit = AuthCubit(auth: AuthService(slow));
-      addTearDown(slowCubit.close);
+      final slowContainer = ProviderContainer(
+        overrides: [authServiceProvider.overrideWithValue(AuthService(slow))],
+      );
+      addTearDown(slowContainer.dispose);
+      final slowNotifier = slowContainer.read(authNotifierProvider.notifier);
 
-      final first = slowCubit.signIn(
+      final first = slowNotifier.signIn(
         email: 'a@b.my',
         password: 'secret123',
       );
-      final second = slowCubit.signIn(
+      final second = slowNotifier.signIn(
         email: 'c@d.my',
         password: 'secret123',
       );
@@ -181,7 +194,7 @@ void main() {
 
       gate.complete(testUser(email: 'a@b.my'));
       expect(await first, isTrue);
-      expect(slowCubit.state.user?.email, 'a@b.my');
+      expect(slowContainer.read(authNotifierProvider).user?.email, 'a@b.my');
     });
 
     test('federated sign in reports failure instead of inventing a session',
@@ -189,36 +202,36 @@ void main() {
       repo.providerFailure = const AuthFailure(
         'Sign in with google is not available in the mobile app yet.',
       );
-      final ok = await cubit.signInWithProvider(AuthProvider.google);
+      final ok = await container.read(authNotifierProvider.notifier).signInWithProvider(AuthProvider.google);
       expect(ok, isFalse);
-      expect(cubit.state.status, AuthStatus.unauthenticated);
-      expect(cubit.state.user, isNull);
+      expect(container.read(authNotifierProvider).status, AuthStatus.unauthenticated);
+      expect(container.read(authNotifierProvider).user, isNull);
     });
   });
 
   group('registration', () {
     test('creates an entrepreneur and carries the collected name', () async {
-      final ok = await cubit.signUp(
+      final ok = await container.read(authNotifierProvider.notifier).signUp(
         email: 'joel@artisanbrew.my',
         password: 'secret123',
         fullName: 'Joel Tan',
       );
       expect(ok, isTrue);
       expect(repo.lastSignUpFullName, 'Joel Tan');
-      expect(cubit.state.user?.role, AppRole.entrepreneur);
+      expect(container.read(authNotifierProvider).user?.role, AppRole.entrepreneur);
     });
 
     test('a taken address keeps the user on the form', () async {
       repo.signUpFailure = const DuplicateEmailFailure();
-      final ok = await cubit.signUp(
+      final ok = await container.read(authNotifierProvider.notifier).signUp(
         email: 'sarah@artisanbrew.my',
         password: 'secret123',
         fullName: 'Sarah Tan',
       );
       expect(ok, isFalse);
-      expect(cubit.state.status, AuthStatus.unauthenticated);
-      expect(cubit.state.user, isNull);
-      expect(cubit.state.message, isNotNull);
+      expect(container.read(authNotifierProvider).status, AuthStatus.unauthenticated);
+      expect(container.read(authNotifierProvider).user, isNull);
+      expect(container.read(authNotifierProvider).message, isNotNull);
     });
 
     test('an unconfirmed address is its own state with the address shown',
@@ -226,49 +239,49 @@ void main() {
       repo.signUpFailure = const EmailConfirmationRequiredFailure(
         email: 'joel@artisanbrew.my',
       );
-      final ok = await cubit.signUp(
+      final ok = await container.read(authNotifierProvider.notifier).signUp(
         email: 'joel@artisanbrew.my',
         password: 'secret123',
         fullName: 'Joel Tan',
       );
       expect(ok, isFalse);
-      expect(cubit.state.status, AuthStatus.emailConfirmationRequired);
-      expect(cubit.state.email, 'joel@artisanbrew.my');
-      expect(cubit.state.user, isNull);
+      expect(container.read(authNotifierProvider).status, AuthStatus.emailConfirmationRequired);
+      expect(container.read(authNotifierProvider).email, 'joel@artisanbrew.my');
+      expect(container.read(authNotifierProvider).user, isNull);
     });
   });
 
   group('sign out and recovery', () {
     test('signing out clears the session and the state', () async {
-      await cubit.signIn(email: 'sarah@artisanbrew.my', password: 'secret123');
-      await cubit.signOut();
-      expect(cubit.state.status, AuthStatus.unauthenticated);
-      expect(cubit.state.user, isNull);
+      await container.read(authNotifierProvider.notifier).signIn(email: 'sarah@artisanbrew.my', password: 'secret123');
+      await container.read(authNotifierProvider.notifier).signOut();
+      expect(container.read(authNotifierProvider).status, AuthStatus.unauthenticated);
+      expect(container.read(authNotifierProvider).user, isNull);
       expect(repo.user, isNull);
     });
 
     test('a failing server-side sign-out still locks the app', () async {
-      await cubit.signIn(email: 'sarah@artisanbrew.my', password: 'secret123');
+      await container.read(authNotifierProvider.notifier).signIn(email: 'sarah@artisanbrew.my', password: 'secret123');
       repo.signOutFailure = const NetworkFailure();
-      await cubit.signOut();
-      expect(cubit.state.status, AuthStatus.unauthenticated);
-      expect(cubit.state.isAuthenticated, isFalse);
+      await container.read(authNotifierProvider.notifier).signOut();
+      expect(container.read(authNotifierProvider).status, AuthStatus.unauthenticated);
+      expect(container.read(authNotifierProvider).isAuthenticated, isFalse);
     });
 
     test('recovery sends the email and never signs the user in', () async {
-      final message = await cubit.recoverPassword('sarah@artisanbrew.my');
+      final message = await container.read(authNotifierProvider.notifier).recoverPassword('sarah@artisanbrew.my');
       expect(repo.lastRecoveryEmail, 'sarah@artisanbrew.my');
       expect(message, contains('reset link'));
-      expect(cubit.state.status, AuthStatus.initializing);
-      expect(cubit.state.user, isNull);
+      expect(container.read(authNotifierProvider).status, AuthStatus.initializing);
+      expect(container.read(authNotifierProvider).user, isNull);
     });
 
     test('a recovery failure surfaces without touching the session state',
         () async {
       repo.recoveryFailure = const NetworkFailure();
-      final message = await cubit.recoverPassword('sarah@artisanbrew.my');
+      final message = await container.read(authNotifierProvider.notifier).recoverPassword('sarah@artisanbrew.my');
       expect(message, isNotEmpty);
-      expect(cubit.state.status, AuthStatus.initializing);
+      expect(container.read(authNotifierProvider).status, AuthStatus.initializing);
       expect(repo.credentialCalls, 0);
     });
   });
@@ -452,12 +465,18 @@ void main() {
       );
     });
 
-    test('the cubit turns that into the error state with no access', () async {
-      final live = AuthCubit(auth: AuthService(SupabaseAuthRepository()));
-      addTearDown(live.close);
-      await live.start();
-      expect(live.state.status, AuthStatus.error);
-      expect(live.state.isAuthenticated, isFalse);
+    test('the notifier turns that into the error state with no access', () async {
+      final live = ProviderContainer(
+        overrides: [
+          authServiceProvider.overrideWithValue(
+            AuthService(SupabaseAuthRepository()),
+          ),
+        ],
+      );
+      addTearDown(live.dispose);
+      await live.read(authNotifierProvider.notifier).start();
+      expect(live.read(authNotifierProvider).status, AuthStatus.error);
+      expect(live.read(authNotifierProvider).isAuthenticated, isFalse);
     });
   });
 }

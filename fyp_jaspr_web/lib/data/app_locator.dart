@@ -1,11 +1,10 @@
+import 'package:jaspr_riverpod/jaspr_riverpod.dart';
+// The main barrel does not re-export `Override`; this companion barrel does.
+import 'package:jaspr_riverpod/misc.dart' show Override;
 import 'package:shared_logic/shared_logic.dart';
 
-import '../state/admin_view_model.dart';
-import '../state/app_view_model.dart';
-import '../state/entrepreneur_view_model.dart';
-import '../state/owner_view_model.dart';
+import 'admin_api.dart';
 import 'api_property_repository.dart';
-import 'auth_service.dart';
 import 'ui_store.dart';
 import 'web_api_client.dart';
 import 'workspaces.dart';
@@ -15,7 +14,14 @@ import 'workspaces.dart';
 ///
 /// Properties come from the authenticated local API. User identity comes from
 /// Supabase; unsupported analysis throws an explicit unavailable-data error.
-/// Saved/compare selections and preferences remain local to this browser session.
+/// Saved/compare selections and preferences remain local to this browser
+/// session.
+///
+/// All shared state flows through the Riverpod providers from `shared_logic`;
+/// [webOverrides] is the one place that points them at the services this
+/// locator owns. Pages resolve the services directly (`AppLocator.properties`,
+/// `AppLocator.verification`, …) exactly as before — only the state plumbing
+/// changed.
 abstract final class AppLocator {
   // --- Repositories ---------------------------------------------------------
   // Properties and users come from the authenticated FastAPI backend (bearer
@@ -30,6 +36,12 @@ abstract final class AppLocator {
     const WebApiClient(),
   );
   static final TourRepositoryImpl tourRepo = TourRepositoryImpl();
+
+  /// Staff/audit/properties reads and writes for the five administrator
+  /// operations pages (Ownership, Agents, Campaigns, Activity, Surveys).
+  /// Stateless: one shared const instance. Campaigns and Surveys deliberately
+  /// do not use it — those two have no backend surface on purpose.
+  static const AdminApi adminApi = AdminApi();
 
   // --- Application services (shared orchestration) --------------------------
   static final PropertyService properties = PropertyService(propertyRepo);
@@ -62,25 +74,20 @@ abstract final class AppLocator {
     propertyType: 'Any',
   );
 
-  // --- Session state ---------------------------------------------------------
-  /// Saved/compare selections and role. One per document.
-  ///
-  /// Each navigation is a fresh document now, so this singleton is rebuilt per
-  /// request/page load; [installUiState] seeds it from the selection cookie and
-  /// every change writes back. The role still comes from the server-side profile.
-  static AppViewModel appViewModel = AppViewModel();
+  /// The saved/compare selection the first frame shows, seeded from the
+  /// selection cookie. The `appNotifierProvider` override in [webOverrides]
+  /// plants it in the container when the scope mounts.
+  static AppState uiSeed = const AppState();
 
-  /// Seeds the saved/compare sets and starts mirroring them into the cookie.
+  /// Seeds the saved/compare sets and recommendation preferences.
   ///
   /// The [cookies] argument is the request's cookie map on the server; the
   /// browser implementation ignores it and reads `document.cookie` instead.
-  /// Called once per render, before the router builds.
+  /// Called once per render, before the router builds — the values are picked
+  /// up by the next `ProviderScope` mount.
   static void installUiState([Map<String, String> cookies = const {}]) {
     final stored = UiStore.read(cookies);
-    appViewModel = AppViewModel(
-      AppState(saved: stored.saved, compared: stored.compared),
-    );
-    appViewModel.addListener(persistUi);
+    uiSeed = AppState(saved: stored.saved, compared: stored.compared);
     // Recommendation preferences survive reloads through their own cookie, so
     // the criteria the user saved are what the ranking actually uses — not a
     // silently-reset default.
@@ -110,10 +117,10 @@ abstract final class AppLocator {
   }
 
   /// Persists only UI selections, never authorization grants.
-  static void persistUi() {
+  static void persistUiState(AppState state) {
     UiStore.write((
-      saved: appViewModel.saved,
-      compared: appViewModel.compared,
+      saved: state.saved,
+      compared: state.compared,
       roles: Workspaces.granted,
     ));
   }
@@ -121,32 +128,43 @@ abstract final class AppLocator {
   /// Compatibility shim; authorization grants are never persisted.
   static Set<String> get grantedRoles => Workspaces.granted;
 
-  // --- Per-page view models (mirroring the mobile app's per-page lifetimes) --
-  static EntrepreneurViewModel newEntrepreneurViewModel() =>
-      EntrepreneurViewModel(
-        EntrepreneurController(
-          getProperties: GetProperties(propertyRepo),
-          getRecommendations: GetRecommendations(recommendationRepo),
-          getLocationAnalysis: GetLocationAnalysis(recommendationRepo),
-          preferences: preferences,
-          onPreferencesUpdated: (value) => preferences = value,
-        ),
-      );
-
-  static OwnerViewModel newOwnerViewModel() => OwnerViewModel(
-    OwnerController(
-      properties: properties,
-      tours: tourService,
-      ownerId: WebAuth.profile?['user_id'] as String? ?? '',
+  /// Points every composition-required provider from `shared_logic` at this
+  /// app's implementations. Reading an un-overridden provider fails loudly by
+  /// contract, so this list must stay complete.
+  static List<Override> webOverrides() => [
+    appInitialStateProvider.overrideWithValue(uiSeed),
+    businessPreferencesProvider.overrideWithValue(preferences),
+    onPreferencesUpdatedProvider.overrideWithValue(persistPreferences),
+    getPropertiesProvider.overrideWithValue(GetProperties(propertyRepo)),
+    getRecommendationsProvider.overrideWithValue(
+      GetRecommendations(recommendationRepo),
     ),
-  );
-
-  static AdminViewModel newAdminViewModel() => AdminViewModel(
-    AdminController(
-      verification: verification,
-      properties: properties,
-      users: userRepo,
-      tours: tourService,
+    getLocationAnalysisProvider.overrideWithValue(
+      GetLocationAnalysis(recommendationRepo),
     ),
-  );
+    propertyServiceProvider.overrideWithValue(properties),
+    tourServiceProvider.overrideWithValue(tourService),
+    verificationServiceProvider.overrideWithValue(verification),
+    userRepositoryProvider.overrideWithValue(userRepo),
+  ];
+}
+
+/// Mirrors every `appNotifierProvider` publish into the selection cookie.
+///
+/// Riverpod's scope owns the container, so there is no handle to attach a
+/// listener to — an observer is the sanctioned hook. Authorization grants are
+/// never persisted here.
+final class UiPersistObserver extends ProviderObserver {
+  const UiPersistObserver();
+
+  @override
+  void didUpdateProvider(
+    ProviderObserverContext context,
+    Object? previousValue,
+    Object? newValue,
+  ) {
+    if (context.provider == appNotifierProvider && newValue is AppState) {
+      AppLocator.persistUiState(newValue);
+    }
+  }
 }

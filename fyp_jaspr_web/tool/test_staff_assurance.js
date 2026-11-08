@@ -149,6 +149,10 @@ async function boot({
   const location = {
     pathname,
     href: 'https://x.test' + pathname,
+    // Real browsers always expose these as strings; the callback detection
+    // reads them once at document load.
+    search: '',
+    hash: '',
     protocol: 'https:',
     origin: 'https://x.test',
     // localhost enables the bridge's DEV_CONSOLE diagnostics so the safety of
@@ -195,6 +199,7 @@ async function boot({
     btoa,
     atob,
     URL,
+    URLSearchParams,
     AbortSignal,
     console: { log: record, warn: record, error: record, info: record },
   };

@@ -1,9 +1,6 @@
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_logic/shared_logic.dart';
 import 'package:flutter/material.dart';
-
-import '../../../../application/services/service_locator.dart';
-import '../../../../application/state/app_view_model.dart';
-import '../../../../application/state/entrepreneur_view_model.dart';
 
 import '../../../../core/theme/sitewise_theme.dart';
 import '../../../shared/widgets/sitewise_empty_state.dart';
@@ -15,40 +12,34 @@ import '../../widgets/mobile_skeleton.dart';
 /// Mobile recommendations: "locations recommended for your business", each with
 /// a plain-language reason. No model internals are shown.
 
-class EntrepreneurRecommendationsMobilePage extends StatefulWidget {
+class EntrepreneurRecommendationsMobilePage extends ConsumerStatefulWidget {
   const EntrepreneurRecommendationsMobilePage({super.key});
 
   @override
-  State<EntrepreneurRecommendationsMobilePage> createState() =>
+  ConsumerState<EntrepreneurRecommendationsMobilePage> createState() =>
       _EntrepreneurRecommendationsMobilePageState();
 }
 
 class _EntrepreneurRecommendationsMobilePageState
-    extends State<EntrepreneurRecommendationsMobilePage> {
-  final EntrepreneurViewModel vm = ServiceLocator.newEntrepreneurViewModel();
-
+    extends ConsumerState<EntrepreneurRecommendationsMobilePage> {
   @override
   void initState() {
     super.initState();
-    vm.loadRecommendations();
-  }
-
-  @override
-  void dispose() {
-    // The provider exposes this instance by value, so the route tears it down.
-    vm.dispose();
-    super.dispose();
+    // The load publishes synchronously; a kick from initState would modify
+    // the provider while the widget tree is building.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      ref.read(entrepreneurNotifierProvider.notifier).loadRecommendations();
+    });
   }
 
   @override
   Widget build(BuildContext context) {
     // Two slices, two rebuilds: the ranked list repaints on entrepreneur
     // state, the card toggles on the app-wide saved/compare sets.
-    return ChangeNotifierProvider<EntrepreneurViewModel>.value(
-      value: vm,
-      child: Consumer<AppViewModel>(
-        builder: (ctx, appState, _) => Consumer<EntrepreneurViewModel>(
-          builder: (ctx, model, _) => MobileAppShell(
+    final appState = ref.watch(appNotifierProvider);
+    final model = ref.watch(entrepreneurNotifierProvider);
+    return MobileAppShell(
             title: 'Recommendations',
             currentRoute: '/entrepreneur/recommendations',
             body: ListView(
@@ -57,7 +48,7 @@ class _EntrepreneurRecommendationsMobilePageState
                 MobileSectionHeader(
                   title: 'Recommended for your business',
                   subtitle:
-                      '${vm.prefs.businessType} · up to RM${vm.prefs.maxBudgetRm.toStringAsFixed(0)}',
+                      '${model.preferences.businessType} · up to RM${model.preferences.maxBudgetRm.toStringAsFixed(0)}',
                   actionLabel: 'Preferences',
                   onAction: () => Navigator.of(
                     context,
@@ -74,12 +65,12 @@ class _EntrepreneurRecommendationsMobilePageState
                   ),
                 ),
                 const SizedBox(height: 16),
-                if (vm.loading)
+                if (model.loading)
                   const MobilePropertyListSkeleton(
                     padding: EdgeInsets.zero,
                     count: 3,
                   )
-                else if (vm.recommendations.isEmpty)
+                else if (model.recommendations.isEmpty)
                   SitewiseEmptyState(
                     icon: Icons.auto_awesome_outlined,
                     title: 'No matches yet',
@@ -91,36 +82,34 @@ class _EntrepreneurRecommendationsMobilePageState
                     ).pushNamed('/entrepreneur/preferences'),
                   )
                 else
-                  for (var i = 0; i < vm.recommendations.length; i++) ...[
+                  for (var i = 0; i < model.recommendations.length; i++) ...[
                     MobilePropertyCard(
-                      property: vm.recommendations[i].property,
-                      rankBanner: '${i + 1}. ${vm.recommendations[i].reason}',
-                      saved: appState.isSaved(
-                        vm.recommendations[i].property.id,
+                      property: model.recommendations[i].property,
+                      rankBanner:
+                          '${i + 1}. ${model.recommendations[i].reason}',
+                      saved: appState.saved.contains(
+                        model.recommendations[i].property.id,
                       ),
-                      onToggleSaved: () => appState.toggleSaved(
-                        vm.recommendations[i].property.id,
+                      onToggleSaved: () => ref
+                          .read(appNotifierProvider.notifier)
+                          .toggleSaved(model.recommendations[i].property.id),
+                      compared: appState.compared.contains(
+                        model.recommendations[i].property.id,
                       ),
-                      compared: appState.isCompared(
-                        vm.recommendations[i].property.id,
-                      ),
-                      onToggleCompare: () => appState.toggleCompared(
-                        vm.recommendations[i].property.id,
-                      ),
+                      onToggleCompare: () => ref
+                          .read(appNotifierProvider.notifier)
+                          .toggleCompared(model.recommendations[i].property.id),
                       onTap: () => Navigator.of(context).pushNamed(
                         '/entrepreneur/property-detail',
-                        arguments: vm.recommendations[i].property.id,
+                        arguments: model.recommendations[i].property.id,
                       ),
                     ),
                     const SizedBox(height: 8),
-                    _WhyItFits(reasons: vm.recommendations[i].whyRecommended),
+                    _WhyItFits(reasons: model.recommendations[i].whyRecommended),
                     const SizedBox(height: 18),
                   ],
               ],
             ),
-          ),
-        ),
-      ),
     );
   }
 }

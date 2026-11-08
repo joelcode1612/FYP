@@ -2,13 +2,16 @@ import 'dart:async';
 
 import 'package:jaspr/dom.dart';
 import 'package:jaspr/jaspr.dart';
-import 'package:jaspr_provider_compat/jaspr_provider_compat.dart' as provider;
+import 'package:jaspr_riverpod/jaspr_riverpod.dart';
 import 'package:shared_logic/shared_logic.dart';
 
 import '../../components/ui.dart';
-import '../../data/app_locator.dart';
+import '../../data/auth_service.dart';
 import '../../layouts/app_layout.dart';
-import '../../state/owner_view_model.dart';
+
+/// The signed-in owner id from the server-verified profile. Each navigation is
+/// a fresh document, so the family argument is stable for the page's lifetime.
+String _ownerId() => WebAuth.profile?['user_id'] as String? ?? '';
 
 /// Owner 360° tours, laid out as the source's `sitewise-owner/tours.html`.
 ///
@@ -31,8 +34,6 @@ class ToursPage extends StatefulComponent {
 }
 
 class _ToursPageState extends State<ToursPage> {
-  late final OwnerViewModel vm;
-
   /// One-shot success notice (the Flutter SnackBar equivalent).
   String? _notice;
 
@@ -42,24 +43,24 @@ class _ToursPageState extends State<ToursPage> {
   @override
   void initState() {
     super.initState();
-    vm = AppLocator.newOwnerViewModel();
-    unawaited(vm.load());
-  }
-
-  @override
-  void dispose() {
-    vm.dispose();
-    super.dispose();
+    Future.microtask(() {
+      if (!mounted) return;
+      unawaited(context.read(ownerNotifierProvider(_ownerId()).notifier).load());
+    });
   }
 
   Future<void> _submit(VirtualTour tour) async {
-    await vm.submitTour(tour.id);
+    await context.read(ownerNotifierProvider(_ownerId()).notifier).submitTour(
+      tour.id,
+    );
     if (mounted) setState(() => _notice = 'Submitted for verification.');
   }
 
   Future<void> _delete(VirtualTour tour) async {
     setState(() => _confirming = null);
-    await vm.deleteTour(tour.id);
+    await context.read(ownerNotifierProvider(_ownerId()).notifier).deleteTour(
+      tour.id,
+    );
     if (mounted) setState(() => _notice = 'Tour deleted.');
   }
 
@@ -75,51 +76,72 @@ class _ToursPageState extends State<ToursPage> {
           'entrepreneurs after an administrator approves them.',
       // Inside the layout, so submit/delete notifications rebuild only the
       // content, never the chrome.
-      child: provider.ChangeNotifierProvider<OwnerViewModel>.value(
-        value: vm,
-        child: provider.Consumer<OwnerViewModel>(
-          builder: (context, vm, child) {
-            return vm.loading
-                ? const _Loading()
-                : div(classes: 'stack stack--md', [
-                    if (_notice != null)
-                      div(classes: 'notice notice-info', [
-                        Component.text(_notice!),
-                      ]),
-                    if (vm.tours.isEmpty)
-                      EmptyState(
-                        title: 'No tours yet',
-                        body:
-                            'Capture a 360° tour for a listing to help '
-                            'entrepreneurs explore remotely. Capture runs in the '
-                            'mobile app, where the camera is available.',
-                        action: const ActionLink(
-                          'View my listings',
-                          href: '/owner/properties',
-                          variant: 'primary',
-                        ),
-                      )
-                    else
-                      div(classes: 'rows', [
-                        for (final tour in vm.tours) _row(tour),
-                      ]),
-                    p(classes: 'owner-note', [
-                      Component.text(
-                        'A tour is captured as a fixed sequence of stations. The '
-                        'station count on each row comes from the tour record, not '
-                        'from a number hardcoded in the interface.',
-                      ),
-                    ]),
-                    if (_confirming != null)
-                      _ConfirmDialog(
-                        onCancel: () => setState(() => _confirming = null),
-                        onConfirm: () => _delete(_confirming!),
-                      ),
-                  ]);
-          },
-        ),
+      child: _Content(
+        onRowDelete: (tour) => setState(() => _confirming = tour),
+        confirming: _confirming,
+        onConfirmDelete: () => _delete(_confirming!),
+        onDialogCancel: () => setState(() => _confirming = null),
+        notice: _notice,
+        onNoticeSubmit: _submit,
       ),
     );
+  }
+}
+
+/// The tour list, watching the owner state so submit/delete publishes rebuild
+/// only this content, never the chrome.
+class _Content extends StatelessComponent {
+  const _Content({
+    required this.onRowDelete,
+    required this.confirming,
+    required this.onConfirmDelete,
+    required this.onDialogCancel,
+    required this.notice,
+    required this.onNoticeSubmit,
+  });
+
+  final void Function(VirtualTour tour) onRowDelete;
+  final VirtualTour? confirming;
+  final Future<void> Function() onConfirmDelete;
+  final void Function() onDialogCancel;
+  final String? notice;
+  final Future<void> Function(VirtualTour tour) onNoticeSubmit;
+
+  @override
+  Component build(BuildContext context) {
+    final state = context.watch(ownerNotifierProvider(_ownerId()));
+    return state.loading
+        ? const _Loading()
+        : div(classes: 'stack stack--md', [
+            if (notice != null)
+              div(classes: 'notice notice-info', [Component.text(notice!)]),
+            if (state.tours.isEmpty)
+              EmptyState(
+                title: 'No tours yet',
+                body:
+                    'Capture a 360° tour for a listing to help '
+                    'entrepreneurs explore remotely. Capture runs in the '
+                    'mobile app, where the camera is available.',
+                action: const ActionLink(
+                  'View my listings',
+                  href: '/owner/properties',
+                  variant: 'primary',
+                ),
+              )
+            else
+              div(classes: 'rows', [
+                for (final tour in state.tours) _row(tour),
+              ]),
+            p(classes: 'owner-note', [
+              Component.text(
+                'A tour is captured as a fixed sequence of stations. The '
+                'station count on each row comes from the tour record, not '
+                'from a number hardcoded in the interface.',
+              ),
+            ]),
+            if (confirming != null)
+              _ConfirmDialog(onCancel: onDialogCancel, onConfirm: onConfirmDelete),
+          ]);
   }
 
   Component _row(VirtualTour tour) {
@@ -153,7 +175,7 @@ class _ToursPageState extends State<ToursPage> {
         if (canSubmit)
           ActionButton(
             'Submit for verification',
-            onClick: () => _submit(tour),
+            onClick: () => onNoticeSubmit(tour),
             icon: 'send',
           ),
         ActionLink(
@@ -163,7 +185,7 @@ class _ToursPageState extends State<ToursPage> {
         ),
         ActionButton(
           'Delete',
-          onClick: () => setState(() => _confirming = tour),
+          onClick: () => onRowDelete(tour),
           variant: 'danger-outline',
         ),
       ]),

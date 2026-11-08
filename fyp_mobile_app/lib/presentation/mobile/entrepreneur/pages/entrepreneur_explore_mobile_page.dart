@@ -1,10 +1,8 @@
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_logic/shared_logic.dart';
 import 'package:flutter/material.dart';
 
 import '../../../../application/services/service_locator.dart';
-import '../../../../application/state/app_view_model.dart';
-import '../../../../application/state/entrepreneur_view_model.dart';
 import '../../../../core/theme/sitewise_m3.dart';
 import '../../../../core/theme/sitewise_theme.dart';
 import '../../../shared/widgets/sitewise_bottom_sheet.dart';
@@ -22,21 +20,21 @@ import '../../widgets/mobile_skeleton.dart';
 
 /// Mobile explore — Option A **"Find a location"**.
 ///
-/// Search runs through the existing [EntrepreneurViewModel] (repository-backed);
+/// Search runs through the shared [EntrepreneurNotifier] (repository-backed);
 /// the Option A quick chips (All spaces / Under RM 8.5k / Ground floor) and
 /// the original filter bottom sheet only narrow the already-loaded list using
 /// fields that exist on [CommercialProperty] — budget caps on `rentalRm`,
 /// ground floor on the listing's `requirements`. Map pins open a bottom sheet
 /// instead of the web split-screen layout.
 
-class EntrepreneurExploreMobilePage extends StatefulWidget {
+class EntrepreneurExploreMobilePage extends ConsumerStatefulWidget {
   /// Open directly in map mode (Home → "Explore on map").
   final bool startInMap;
 
   const EntrepreneurExploreMobilePage({super.key, this.startInMap = false});
 
   @override
-  State<EntrepreneurExploreMobilePage> createState() =>
+  ConsumerState<EntrepreneurExploreMobilePage> createState() =>
       _EntrepreneurExploreMobilePageState();
 }
 
@@ -45,13 +43,7 @@ class EntrepreneurExploreMobilePage extends StatefulWidget {
 enum _QuickFilter { all, budget, ground }
 
 class _EntrepreneurExploreMobilePageState
-    extends State<EntrepreneurExploreMobilePage> {
-  final EntrepreneurViewModel vm = ServiceLocator.newEntrepreneurViewModel();
-
-  /// Saved / compare selections, read by the list builders below. The
-  /// `Consumer<AppViewModel>` in [build] is what repaints them.
-  late final AppViewModel _app = context.read<AppViewModel>();
-
+    extends ConsumerState<EntrepreneurExploreMobilePage> {
   late bool showMap = widget.startInMap;
   MobilePropertyFilter filter = MobilePropertyFilter.empty;
   _QuickFilter quick = _QuickFilter.all;
@@ -63,15 +55,13 @@ class _EntrepreneurExploreMobilePageState
   @override
   void initState() {
     super.initState();
-    vm.loadExplore();
+    // The load publishes synchronously; a kick from initState would modify
+    // the provider while the widget tree is building.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      ref.read(entrepreneurNotifierProvider.notifier).loadExplore();
+    });
     _loadOptions();
-  }
-
-  @override
-  void dispose() {
-    // The provider exposes this instance by value, so the route tears it down.
-    vm.dispose();
-    super.dispose();
   }
 
   Future<void> _loadOptions() async {
@@ -94,8 +84,12 @@ class _EntrepreneurExploreMobilePageState
     return set;
   }
 
-  List<CommercialProperty> get _results =>
-      vm.explore.where(filter.matches).where(_quickMatches).toList();
+  List<CommercialProperty> get _results => ref
+      .read(entrepreneurNotifierProvider)
+      .explore
+      .where(filter.matches)
+      .where(_quickMatches)
+      .toList();
 
   bool _quickMatches(CommercialProperty p) => switch (quick) {
     _QuickFilter.all => true,
@@ -118,8 +112,8 @@ class _EntrepreneurExploreMobilePageState
       filter = MobilePropertyFilter.empty;
       quick = _QuickFilter.all;
     });
-    vm.setFilter('All');
-    vm.setQuery('');
+    ref.read(entrepreneurNotifierProvider.notifier).setFilter('All');
+    ref.read(entrepreneurNotifierProvider.notifier).setQuery('');
   }
 
   void _openDetail(String id) => Navigator.of(
@@ -128,14 +122,9 @@ class _EntrepreneurExploreMobilePageState
 
   @override
   Widget build(BuildContext context) {
-    // The page owns [vm] (created here, disposed with the route), so the
-    // provider exposes it by value. The entrepreneur Consumer repaints the
-    // results and the app-wide one repaints the saved/compare card toggles.
-    return ChangeNotifierProvider<EntrepreneurViewModel>.value(
-      value: vm,
-      child: Consumer<AppViewModel>(
-        builder: (ctx, appState, _) => Consumer<EntrepreneurViewModel>(
-          builder: (ctx, model, _) => MobileAppShell(
+    // The entrepreneur provider state repaints the results; the app-wide
+    // saved/compare sets repaint the saved/compare card toggles.
+    return MobileAppShell(
             title: 'Explore',
             currentRoute: '/entrepreneur/explore',
             body: Column(
@@ -154,7 +143,9 @@ class _EntrepreneurExploreMobilePageState
                       const SizedBox(height: 14),
                       MobileSearchField(
                         hint: 'Search area or property',
-                        onChanged: vm.setQuery,
+                        onChanged: (q) => ref
+                            .read(entrepreneurNotifierProvider.notifier)
+                            .setQuery(q),
                         trailing: MobileIconAction(
                           icon: showMap
                               ? Icons.list_rounded
@@ -177,19 +168,20 @@ class _EntrepreneurExploreMobilePageState
                 Expanded(child: _body()),
               ],
             ),
-          ),
-        ),
-      ),
     );
   }
 
   Widget _body() {
-    if (vm.loading) return const MobilePropertyListSkeleton();
-    if (vm.error != null) {
+    final model = ref.watch(entrepreneurNotifierProvider);
+    final appState = ref.watch(appNotifierProvider);
+    if (model.loading) return const MobilePropertyListSkeleton();
+    if (model.error != null) {
       return SitewiseErrorState(
         title: 'Unable to load properties',
         message: 'Please check your connection and try again.',
-        onRetry: vm.loadExplore,
+        onRetry: () => ref
+            .read(entrepreneurNotifierProvider.notifier)
+            .loadExplore(),
       );
     }
     if (showMap) return _mapView();
@@ -216,10 +208,12 @@ class _EntrepreneurExploreMobilePageState
         final p = results[i - 1];
         return MobilePropertyCard(
           property: p,
-          saved: _app.isSaved(p.id),
-          onToggleSaved: () => _app.toggleSaved(p.id),
-          compared: _app.isCompared(p.id),
-          onToggleCompare: () => _app.toggleCompared(p.id),
+          saved: appState.saved.contains(p.id),
+          onToggleSaved: () =>
+              ref.read(appNotifierProvider.notifier).toggleSaved(p.id),
+          compared: appState.compared.contains(p.id),
+          onToggleCompare: () =>
+              ref.read(appNotifierProvider.notifier).toggleCompared(p.id),
           onTap: () => _openDetail(p.id),
         );
       },

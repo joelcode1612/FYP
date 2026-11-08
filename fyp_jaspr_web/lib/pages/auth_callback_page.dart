@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:jaspr/dom.dart';
 import 'package:jaspr/jaspr.dart';
 import '../components/ui.dart';
 import '../data/auth_service.dart';
@@ -56,6 +57,15 @@ class _CallbackState extends State<AuthCallbackPage> {
     body: error ?? 'Verifying your account and loading your profile.',
     action: error == null
         ? null
-        : const ActionLink('Back to sign in', href: '/login'),
+        // Expired/invalid email links must give the user a way back to the
+        // portal they came from - the Agent & Admin sign-in above all.
+        : div(classes: 'empty__links', [
+            const ActionLink(
+              'Back to Staff Sign-in',
+              href: '/staff/signin',
+              icon: 'arrow_back',
+            ),
+            const ActionLink('Go to sign in', href: '/login', variant: 'ghost'),
+          ]),
   );
 }

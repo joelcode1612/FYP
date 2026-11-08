@@ -1,10 +1,8 @@
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_logic/shared_logic.dart';
 import 'package:flutter/material.dart';
 
 import '../../../../application/services/service_locator.dart';
-import '../../../../application/state/app_view_model.dart';
-import '../../../../application/state/entrepreneur_view_model.dart';
 import '../../../../core/theme/sitewise_theme.dart';
 import '../../../shared/widgets/sitewise_button.dart';
 import '../../../shared/widgets/sitewise_evidence_score.dart';
@@ -28,7 +26,7 @@ import '../../widgets/mobile_suitability_badge.dart';
 /// never selects the same property twice. Every other action maps to an
 /// existing route/state.
 
-class EntrepreneurPropertyDetailMobilePage extends StatefulWidget {
+class EntrepreneurPropertyDetailMobilePage extends ConsumerStatefulWidget {
   final String propertyId;
   const EntrepreneurPropertyDetailMobilePage({
     super.key,
@@ -36,29 +34,23 @@ class EntrepreneurPropertyDetailMobilePage extends StatefulWidget {
   });
 
   @override
-  State<EntrepreneurPropertyDetailMobilePage> createState() =>
+  ConsumerState<EntrepreneurPropertyDetailMobilePage> createState() =>
       _EntrepreneurPropertyDetailMobilePageState();
 }
 
 class _EntrepreneurPropertyDetailMobilePageState
-    extends State<EntrepreneurPropertyDetailMobilePage> {
-  final EntrepreneurViewModel vm = ServiceLocator.newEntrepreneurViewModel();
-
-  /// Saved / compare selections, read by the hero and action builders below.
-  /// The `Consumer<AppViewModel>` in [build] is what repaints them.
-  late final AppViewModel _app = context.read<AppViewModel>();
-
+    extends ConsumerState<EntrepreneurPropertyDetailMobilePage> {
   @override
   void initState() {
     super.initState();
-    vm.loadAnalysis(widget.propertyId);
-  }
-
-  @override
-  void dispose() {
-    // The provider exposes this instance by value, so the route tears it down.
-    vm.dispose();
-    super.dispose();
+    // The load publishes synchronously; a kick from initState would modify
+    // the provider while the widget tree is building.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      ref
+          .read(entrepreneurNotifierProvider.notifier)
+          .loadAnalysis(widget.propertyId);
+    });
   }
 
   void _open(String route, {Object? arguments}) =>
@@ -67,12 +59,12 @@ class _EntrepreneurPropertyDetailMobilePageState
   @override
   Widget build(BuildContext context) {
     // Two slices, two rebuilds: the entrepreneur state repaints the location
-    // insights, the app-wide saved/compare sets repaint the toggles.
-    return ChangeNotifierProvider<EntrepreneurViewModel>.value(
-      value: vm,
-      child: Consumer<AppViewModel>(
-        builder: (ctx, appState, _) => Consumer<EntrepreneurViewModel>(
-          builder: (ctx, model, _) => MobileAppShell(
+    // insights, the app-wide saved/compare sets repaint the toggles. Watching
+    // both here also keeps the page-scoped entrepreneur provider alive for
+    // the route's lifetime.
+    final appState = ref.watch(appNotifierProvider);
+    final model = ref.watch(entrepreneurNotifierProvider);
+    return MobileAppShell(
             title: 'Property',
             currentRoute: '/entrepreneur/explore',
             body: FutureBuilder<CommercialProperty?>(
@@ -89,7 +81,7 @@ class _EntrepreneurPropertyDetailMobilePageState
                     child: Text('This property is no longer available.'),
                   );
                 }
-                final saved = _app.isSaved(p.id);
+                final saved = appState.saved.contains(p.id);
                 return ListView(
                   padding: const EdgeInsets.fromLTRB(16, 14, 16, 122),
                   children: [
@@ -104,7 +96,7 @@ class _EntrepreneurPropertyDetailMobilePageState
                       subtitle: 'What surrounds this property.',
                     ),
                     const SizedBox(height: 12),
-                    _insights(p),
+                    _insights(p, model),
                     if (p.hasTour) ...[
                       const SizedBox(height: 18),
                       SitewiseSecondaryButton(
@@ -141,9 +133,6 @@ class _EntrepreneurPropertyDetailMobilePageState
                 );
               },
             ),
-          ),
-        ),
-      ),
     );
   }
 
@@ -165,7 +154,7 @@ class _EntrepreneurPropertyDetailMobilePageState
           child: InkWell(
             customBorder: const CircleBorder(),
             onTap: () {
-              _app.toggleSaved(p.id);
+              ref.read(appNotifierProvider.notifier).toggleSaved(p.id);
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
                   content: Text(
@@ -379,8 +368,8 @@ class _EntrepreneurPropertyDetailMobilePageState
     ),
   );
 
-  Widget _insights(CommercialProperty p) {
-    final a = vm.analysis;
+  Widget _insights(CommercialProperty p, EntrepreneurState model) {
+    final a = model.analysis;
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -404,7 +393,7 @@ class _EntrepreneurPropertyDetailMobilePageState
             ],
           ),
           const SizedBox(height: 16),
-          if (vm.loading)
+          if (model.loading)
             const Padding(
               padding: EdgeInsets.symmetric(vertical: 12),
               child: MobileSkeletonBox(height: 14, width: 180),
@@ -442,20 +431,24 @@ class _EntrepreneurPropertyDetailMobilePageState
   }
 
   Widget _actions(CommercialProperty p, bool saved) {
-    final compared = _app.isCompared(p.id);
+    final compared = ref
+        .read(appNotifierProvider)
+        .compared
+        .contains(p.id);
     return Column(
       children: [
         SitewiseButton(
           label: saved ? 'Saved ✓' : 'Save property',
           icon: saved ? Icons.bookmark_rounded : Icons.bookmark_border_rounded,
-          onPressed: () => _app.toggleSaved(p.id),
+          onPressed: () =>
+              ref.read(appNotifierProvider.notifier).toggleSaved(p.id),
         ),
         const SizedBox(height: 8),
         SitewiseSecondaryButton(
           label: compared ? 'In comparison ✓' : 'Add to compare',
           icon: Icons.compare_arrows,
           onPressed: () {
-            _app.toggleCompared(p.id);
+            ref.read(appNotifierProvider.notifier).toggleCompared(p.id);
             _open('/entrepreneur/compare');
           },
         ),

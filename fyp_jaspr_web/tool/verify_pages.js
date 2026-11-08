@@ -67,7 +67,18 @@ const PAGES = [
   ['/agent/enquiries', ['page-head', 'callout', 'audit-table', 'aside-row']],
   ['/agent/performance', ['bento-kpis', 'kpi', 'funnel', 'funnel__stage', 'aside-row']],
   ['/agent/profile', ['bento', 'callout', 'audit-table', 'aside-row']],
-  ['/admin/agents', ['page-head', 'callout', 'audit-table', 'aside-row']],
+  // Administrator operations suite (five screens). Structural checks only:
+  // frame classes every screen renders regardless of whether the staff API
+  // answered (data views branch underneath them).
+  // `/admin/agents` was rewired to the live staff API: its demo roster
+  // (audit-table / aside-row) is gone, so the expectations moved with it.
+  ['/admin/agents', ['page-head', 'ops-hero', 'callout', 'panel']],
+  ['/admin/ownership', ['page-head', 'callout', 'ops-stats', 'ops-split', 'panel']],
+  // populated: ops-grid (agent cards) — needs a signed-in staff API round-trip
+  ['/admin/campaigns', ['page-head', 'ops-hero', 'callout', 'panel', 'empty', 'table-scroll']],
+  // populated: ops-ev-list — needs the audit endpoint to answer
+  ['/admin/activity', ['page-head', 'callout', 'ops-chips', 'panel']],
+  ['/admin/surveys', ['page-head', 'callout', 'ops-split', 'panel', 'ops-checkrow']],
 ];
 
 (async () => {

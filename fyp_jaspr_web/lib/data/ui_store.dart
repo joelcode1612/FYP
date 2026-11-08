@@ -1,7 +1,7 @@
 /// Cookie-backed store for the entrepreneur's saved / compare selections.
 ///
-/// Server-rendered pages are separate documents, so the in-memory
-/// `AppViewModel` singleton no longer survives a navigation on its own. Keeping the two id
+/// Server-rendered pages are separate documents, so the in-memory app-state
+/// notifier no longer survives a navigation on its own. Keeping the two id
 /// sets in a small cookie restores the old behaviour — and because the cookie
 /// is readable by the SSR pass as well, a server-rendered page and the
 /// hydrated one agree on which cards are marked.

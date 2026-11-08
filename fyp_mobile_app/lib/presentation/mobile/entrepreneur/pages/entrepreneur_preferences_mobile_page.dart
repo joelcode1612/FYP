@@ -1,24 +1,23 @@
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_logic/shared_logic.dart';
 import 'package:flutter/material.dart';
 
 import '../../../../application/services/service_locator.dart';
-import '../../../../application/state/entrepreneur_view_model.dart';
 import '../../../shared/widgets/sitewise_button.dart';
 import '../../shell/mobile_app_shell.dart';
 
 /// Mobile preferences: single-column touch form.
 
-class EntrepreneurPreferencesMobilePage extends StatefulWidget {
+class EntrepreneurPreferencesMobilePage extends ConsumerStatefulWidget {
   const EntrepreneurPreferencesMobilePage({super.key});
 
   @override
-  State<EntrepreneurPreferencesMobilePage> createState() =>
+  ConsumerState<EntrepreneurPreferencesMobilePage> createState() =>
       _EntrepreneurPreferencesMobilePageState();
 }
 
 class _EntrepreneurPreferencesMobilePageState
-    extends State<EntrepreneurPreferencesMobilePage> {
-  final EntrepreneurViewModel vm = ServiceLocator.newEntrepreneurViewModel();
+    extends ConsumerState<EntrepreneurPreferencesMobilePage> {
   late final TextEditingController _type;
   late double _budget;
   late double _size;
@@ -35,7 +34,6 @@ class _EntrepreneurPreferencesMobilePageState
 
   @override
   void dispose() {
-    vm.dispose();
     _type.dispose();
     super.dispose();
   }
@@ -80,7 +78,9 @@ class _EntrepreneurPreferencesMobilePageState
                   label: 'Save & see recommendations',
                   icon: Icons.auto_awesome,
                   onPressed: () {
-                    vm.updatePreferences(
+                    ref
+                        .read(entrepreneurNotifierProvider.notifier)
+                        .updatePreferences(
                       BusinessPreferences(
                         businessType: _type.text,
                         maxBudgetRm: _budget,

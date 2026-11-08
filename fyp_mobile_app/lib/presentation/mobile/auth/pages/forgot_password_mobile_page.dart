@@ -1,7 +1,7 @@
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_logic/shared_logic.dart';
 import 'package:flutter/material.dart';
 
-import '../../../../application/state/auth_view_model.dart';
 import '../../../../core/config/mobile_endpoints.dart';
 import '../../../../core/theme/sitewise_theme.dart';
 import '../../../shared/widgets/sitewise_brand.dart';
@@ -14,15 +14,16 @@ import '../widgets/auth_field.dart';
 /// web portal because this build registers no OAuth deep link. Saying so is
 /// part of the screen — a button that silently "resets" nothing would be a
 /// fake, and the user would wait for an email they cannot use.
-class ForgotPasswordMobilePage extends StatefulWidget {
+class ForgotPasswordMobilePage extends ConsumerStatefulWidget {
   const ForgotPasswordMobilePage({super.key});
 
   @override
-  State<ForgotPasswordMobilePage> createState() =>
+  ConsumerState<ForgotPasswordMobilePage> createState() =>
       _ForgotPasswordMobilePageState();
 }
 
-class _ForgotPasswordMobilePageState extends State<ForgotPasswordMobilePage> {
+class _ForgotPasswordMobilePageState
+    extends ConsumerState<ForgotPasswordMobilePage> {
   final _email = TextEditingController();
   bool _loading = false;
   String? _result;
@@ -43,7 +44,9 @@ class _ForgotPasswordMobilePageState extends State<ForgotPasswordMobilePage> {
       _loading = true;
       _result = null;
     });
-    final message = await context.read<AuthViewModel>().recoverPassword(email);
+    final message = await ref
+        .read(authNotifierProvider.notifier)
+        .recoverPassword(email);
     if (!mounted) return;
     setState(() {
       _loading = false;

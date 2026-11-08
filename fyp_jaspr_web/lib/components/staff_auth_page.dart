@@ -37,6 +37,17 @@ class _StaffSignInState extends State<StaffSignInForm> {
   String _alertTone = 'info';
   bool _busy = false;
 
+  // One-time "Password successfully created!" notice left by the invited
+  // agent's password-setup flow (sessionStorage, fixed display text only).
+  Map<String, dynamic>? _passwordNotice;
+
+  @override
+  void initState() {
+    super.initState();
+    final notice = WebAuth.consumePasswordNotice();
+    if (notice != null) _passwordNotice = notice;
+  }
+
   static final _emailRe = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$');
 
   Future<void> _submit() async {
@@ -158,6 +169,19 @@ class _StaffSignInState extends State<StaffSignInForm> {
         attributes: const {'role': 'alert'},
         [textNode(_alert)],
       ),
+
+      // Success notice from the invitation password-setup flow. Fixed strings
+      // composed on the JS side; nothing here echoes credentials or tokens.
+      if (_passwordNotice != null)
+        div(classes: 'stf-callout is-success', attributes: const {'role': 'status'}, [
+          Icon('check_circle', size: 'sm'),
+          div(classes: 'stf-callout__body', [
+            strong([
+              Component.text((_passwordNotice!['title'] ?? '') as String),
+            ]),
+            Component.text(' ${_passwordNotice!['body'] ?? ''}'),
+          ]),
+        ]),
 
       _field(
         forId: 'stf-email',

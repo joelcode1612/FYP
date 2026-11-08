@@ -1,12 +1,11 @@
 import 'package:jaspr/dom.dart';
 import 'package:jaspr/jaspr.dart';
-import 'package:jaspr_provider_compat/jaspr_provider_compat.dart' as provider;
+import 'package:jaspr_riverpod/jaspr_riverpod.dart';
 import 'package:shared_logic/shared_logic.dart';
 
 import '../../components/ui.dart';
 import '../../data/app_locator.dart';
 import '../../layouts/app_layout.dart';
-import '../../state/app_view_model.dart';
 
 /// Web compare, laid out as the source's `compare.html`.
 ///
@@ -31,40 +30,37 @@ class ComparePage extends StatelessComponent {
     // The selection lives in the root provider scope (seeded from the cookie),
     // so the page needs no constructor argument and stays a plain encodable
     // client target.
-    return provider.Consumer<AppViewModel>(
-      builder: (ctx, app, child) {
-        final compared = app.compared;
-        return AppLayout(
-          role: AppRole.entrepreneur,
-          currentRoute: '/entrepreneur/compare',
-          title: compared.isEmpty
-              ? 'Compare properties'
-              : 'Compare ${compared.length} '
-                    '${compared.length == 1 ? 'property' : 'properties'}',
-          eyebrow: 'Compare',
-          subtitle:
-              'Identical fields side by side. "Not provided" and "Data '
-              'unavailable" are labelled — a blank is never a better or worse '
-              'result.',
-          child: compared.isEmpty
-              ? const _EmptyCompare()
-              : FutureBuilder<List<CommercialProperty>>(
-                  future: AppLocator.properties.listings(),
-                  builder: (c, snap) {
-                    if (!snap.hasData) return const _Loading();
-                    final all = snap.data!;
-                    final items = all
-                        .where((property) => compared.contains(property.id))
-                        .toList();
-                    return _CompareBody(
-                      items: items,
-                      missing: compared.length - items.length,
-                      appVm: app,
-                    );
-                  },
-                ),
-        );
-      },
+    final compared = context.watch(
+      appNotifierProvider.select((app) => app.compared),
+    );
+    return AppLayout(
+      role: AppRole.entrepreneur,
+      currentRoute: '/entrepreneur/compare',
+      title: compared.isEmpty
+          ? 'Compare properties'
+          : 'Compare ${compared.length} '
+                '${compared.length == 1 ? 'property' : 'properties'}',
+      eyebrow: 'Compare',
+      subtitle:
+          'Identical fields side by side. "Not provided" and "Data '
+          'unavailable" are labelled — a blank is never a better or worse '
+          'result.',
+      child: compared.isEmpty
+          ? const _EmptyCompare()
+          : FutureBuilder<List<CommercialProperty>>(
+              future: AppLocator.properties.listings(),
+              builder: (c, snap) {
+                if (!snap.hasData) return const _Loading();
+                final all = snap.data!;
+                final items = all
+                    .where((property) => compared.contains(property.id))
+                    .toList();
+                return _CompareBody(
+                  items: items,
+                  missing: compared.length - items.length,
+                );
+              },
+            ),
     );
   }
 }
@@ -103,13 +99,7 @@ class _CompareBody extends StatelessComponent {
   /// Compared ids that are no longer in the listing set.
   final int missing;
 
-  final AppViewModel appVm;
-
-  const _CompareBody({
-    required this.items,
-    required this.appVm,
-    this.missing = 0,
-  });
+  const _CompareBody({required this.items, this.missing = 0});
 
   static String _toneFor(VerificationStatus status) => switch (status) {
     VerificationStatus.verified => 'success',
@@ -148,7 +138,9 @@ class _CompareBody extends StatelessComponent {
                       ActionButton(
                         'Remove',
                         variant: 'ghost',
-                        onClick: () => appVm.toggleCompared(prop.id),
+                        onClick: () => context
+                            .read(appNotifierProvider.notifier)
+                            .toggleCompared(prop.id),
                       ),
                     ]),
                   ]),
@@ -218,7 +210,8 @@ class _CompareBody extends StatelessComponent {
         ActionButton(
           'Clear comparison',
           variant: 'secondary',
-          onClick: appVm.clearCompared,
+          onClick: () =>
+              context.read(appNotifierProvider.notifier).clearCompared(),
         ),
         const ActionLink(
           'Back to results',

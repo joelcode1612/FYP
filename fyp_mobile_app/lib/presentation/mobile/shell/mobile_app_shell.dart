@@ -1,8 +1,7 @@
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_logic/shared_logic.dart';
 import 'package:flutter/material.dart';
 
-import '../../../application/state/app_view_model.dart';
 import '../../../core/theme/sitewise_m3.dart';
 import 'mobile_bottom_nav.dart';
 import 'mobile_navigation.dart';
@@ -23,7 +22,7 @@ import 'mobile_topbar.dart';
 /// older pattern's compact menu / brand / utility row that scrolls with the
 /// content). Ignored for the Material 3 shell, which always renders its header.
 
-class MobileAppShell extends StatelessWidget {
+class MobileAppShell extends ConsumerWidget {
   final String title;
   final String currentRoute;
   final Widget body;
@@ -54,10 +53,10 @@ class MobileAppShell extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     // Only the role is observed: the shell must not repaint when a property is
     // saved or compared.
-    final role = context.select<AppViewModel, AppRole>((v) => v.role);
+    final role = ref.watch(appNotifierProvider.select((s) => s.role));
     final destinations = mobileDestinationsFor(role);
     final useM3 = m3 ?? (role == AppRole.entrepreneur);
 

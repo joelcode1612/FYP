@@ -6,16 +6,24 @@
 
 import 'package:jaspr/client.dart';
 
+import 'package:sitewise_jaspr_web/pages/admin/activity_page.dart'
+    deferred as _activity_page;
 import 'package:sitewise_jaspr_web/pages/admin/agents_page.dart'
     deferred as _agents_page;
+import 'package:sitewise_jaspr_web/pages/admin/campaigns_page.dart'
+    deferred as _campaigns_page;
 import 'package:sitewise_jaspr_web/pages/admin/dashboard_page.dart'
     deferred as _dashboard_page;
 import 'package:sitewise_jaspr_web/pages/admin/listing_detail_page.dart'
     deferred as _listing_detail_page;
 import 'package:sitewise_jaspr_web/pages/admin/listings_page.dart'
     deferred as _listings_page;
+import 'package:sitewise_jaspr_web/pages/admin/ownership_page.dart'
+    deferred as _ownership_page;
 import 'package:sitewise_jaspr_web/pages/admin/profile_page.dart'
     deferred as _profile_page;
+import 'package:sitewise_jaspr_web/pages/admin/surveys_page.dart'
+    deferred as _surveys_page;
 import 'package:sitewise_jaspr_web/pages/admin/user_detail_page.dart'
     deferred as _user_detail_page;
 import 'package:sitewise_jaspr_web/pages/admin/users_page.dart'
@@ -113,9 +121,17 @@ import 'package:sitewise_jaspr_web/pages/staff_verify_page.dart'
 /// ```
 ClientOptions get defaultClientOptions => ClientOptions(
   clients: {
+    'activity_page': ClientLoader(
+      (p) => _activity_page.AdminActivityPage(),
+      loader: _activity_page.loadLibrary,
+    ),
     'agents_page': ClientLoader(
       (p) => _agents_page.AdminAgentsPage(),
       loader: _agents_page.loadLibrary,
+    ),
+    'campaigns_page': ClientLoader(
+      (p) => _campaigns_page.AdminCampaignsPage(),
+      loader: _campaigns_page.loadLibrary,
     ),
     'dashboard_page': ClientLoader(
       (p) => _dashboard_page.DashboardPage(),
@@ -129,9 +145,17 @@ ClientOptions get defaultClientOptions => ClientOptions(
       (p) => _listings_page.ListingsPage(),
       loader: _listings_page.loadLibrary,
     ),
+    'ownership_page': ClientLoader(
+      (p) => _ownership_page.AdminOwnershipPage(),
+      loader: _ownership_page.loadLibrary,
+    ),
     'profile_page': ClientLoader(
       (p) => _profile_page.ProfilePage(),
       loader: _profile_page.loadLibrary,
+    ),
+    'surveys_page': ClientLoader(
+      (p) => _surveys_page.AdminSurveysPage(),
+      loader: _surveys_page.loadLibrary,
     ),
     'user_detail_page': ClientLoader(
       (p) => _user_detail_page.UserDetailPage(id: p['id'] as String),

@@ -1,9 +1,7 @@
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_logic/shared_logic.dart';
 import 'package:flutter/material.dart';
 
-import '../../../application/state/app_view_model.dart';
-import '../../../application/state/auth_view_model.dart';
 import '../../../core/routing/mobile_role.dart';
 
 /// Account menu shared by the mobile shell: the demo role switcher plus Log
@@ -14,7 +12,7 @@ import '../../../core/routing/mobile_role.dart';
 /// sign-out the menu performed. Onboarding is never shown again (its
 /// completion flag is separate).
 
-class SitewiseRoleMenu extends StatelessWidget {
+class SitewiseRoleMenu extends ConsumerWidget {
   const SitewiseRoleMenu({super.key});
 
   /// Opens the same account menu that [SitewiseRoleMenu] renders, anchored to
@@ -38,13 +36,14 @@ class SitewiseRoleMenu extends StatelessWidget {
   static Future<void> _logOut(BuildContext context) async {
     // Through the shared auth state, so the guard and every screen lose the
     // session at the same moment instead of only the repository knowing.
-    await context.read<AuthViewModel>().signOut();
+    final container = ProviderScope.containerOf(context, listen: false);
+    await container.read(authNotifierProvider.notifier).signOut();
     if (!context.mounted) return;
     Navigator.of(context).pushNamedAndRemoveUntil('/auth', (_) => false);
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return PopupMenuButton<String>(
       tooltip: 'Account',
       icon: const Icon(Icons.switch_account_outlined),
@@ -54,7 +53,10 @@ class SitewiseRoleMenu extends StatelessWidget {
   }
 
   static List<PopupMenuEntry<String>> _itemsFor(BuildContext context) {
-    final appState = context.read<AppViewModel>();
+    final appState = ProviderScope.containerOf(
+      context,
+      listen: false,
+    ).read(appNotifierProvider);
     return [
       // Only roles with a mobile workspace are offered — the rest belong to
       // fyp_jaspr_web and would route to a screen that no longer exists here.
@@ -74,7 +76,10 @@ class SitewiseRoleMenu extends StatelessWidget {
       return;
     }
     final role = mobileSupportedRoles.firstWhere((r) => r.name == value);
-    context.read<AppViewModel>().setRole(role);
+    ProviderScope.containerOf(
+      context,
+      listen: false,
+    ).read(appNotifierProvider.notifier).setRole(role);
     Navigator.of(context).pushNamedAndRemoveUntil(role.homeRoute, (_) => false);
   }
 }

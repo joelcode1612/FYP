@@ -2,7 +2,6 @@
   "roots": [
     "fyp",
     "fyp_workspace",
-    "jaspr_provider_compat",
     "shared_logic",
     "sitewise_jaspr_web"
   ],
@@ -20,12 +19,12 @@
         "ar_flutter_plugin",
         "cupertino_icons",
         "flutter",
+        "flutter_riverpod",
         "flutter_secure_storage",
         "http",
         "opencv_dart",
         "panorama",
         "path_provider",
-        "provider",
         "shared_logic",
         "supabase_flutter",
         "vector_math"
@@ -41,8 +40,9 @@
       "dependencies": [
         "http",
         "jaspr",
-        "jaspr_provider_compat",
+        "jaspr_riverpod",
         "jaspr_router",
+        "riverpod",
         "shared_logic",
         "shelf",
         "universal_web"
@@ -60,21 +60,10 @@
       "name": "shared_logic",
       "version": "0.1.0",
       "dependencies": [
-        "bloc"
+        "bloc",
+        "riverpod"
       ],
       "devDependencies": [
-        "test"
-      ]
-    },
-    {
-      "name": "jaspr_provider_compat",
-      "version": "0.1.0",
-      "dependencies": [
-        "jaspr"
-      ],
-      "devDependencies": [
-        "jaspr_test",
-        "lints",
         "test"
       ]
     },
@@ -110,6 +99,28 @@
       ]
     },
     {
+      "name": "riverpod",
+      "version": "3.5.0",
+      "dependencies": [
+        "async",
+        "clock",
+        "collection",
+        "listen",
+        "meta",
+        "stack_trace",
+        "state_notifier",
+        "test_api",
+        "uuid"
+      ]
+    },
+    {
+      "name": "bloc",
+      "version": "9.2.1",
+      "dependencies": [
+        "meta"
+      ]
+    },
+    {
       "name": "lints",
       "version": "6.1.0",
       "dependencies": []
@@ -124,29 +135,6 @@
         "meta",
         "test",
         "universal_web"
-      ]
-    },
-    {
-      "name": "jaspr",
-      "version": "0.23.5",
-      "dependencies": [
-        "hotreloader",
-        "html",
-        "http",
-        "meta",
-        "path",
-        "shelf",
-        "shelf_gzip",
-        "shelf_proxy",
-        "shelf_static",
-        "universal_web"
-      ]
-    },
-    {
-      "name": "bloc",
-      "version": "9.2.1",
-      "dependencies": [
-        "meta"
       ]
     },
     {
@@ -277,6 +265,31 @@
       ]
     },
     {
+      "name": "jaspr_riverpod",
+      "version": "0.4.6",
+      "dependencies": [
+        "jaspr",
+        "meta",
+        "riverpod"
+      ]
+    },
+    {
+      "name": "jaspr",
+      "version": "0.23.5",
+      "dependencies": [
+        "hotreloader",
+        "html",
+        "http",
+        "meta",
+        "path",
+        "shelf",
+        "shelf_gzip",
+        "shelf_proxy",
+        "shelf_static",
+        "universal_web"
+      ]
+    },
+    {
       "name": "shelf",
       "version": "1.4.3",
       "dependencies": [
@@ -376,12 +389,16 @@
       ]
     },
     {
-      "name": "provider",
-      "version": "6.1.5+1",
+      "name": "flutter_riverpod",
+      "version": "3.5.0",
       "dependencies": [
         "collection",
         "flutter",
-        "nested"
+        "flutter_test",
+        "material_ui",
+        "meta",
+        "riverpod",
+        "state_notifier"
       ]
     },
     {
@@ -683,8 +700,35 @@
       ]
     },
     {
+      "name": "uuid",
+      "version": "4.6.0",
+      "dependencies": [
+        "crypto",
+        "fixnum"
+      ]
+    },
+    {
+      "name": "state_notifier",
+      "version": "1.0.0",
+      "dependencies": [
+        "meta"
+      ]
+    },
+    {
       "name": "meta",
       "version": "1.18.0",
+      "dependencies": []
+    },
+    {
+      "name": "listen",
+      "version": "1.0.1",
+      "dependencies": [
+        "meta"
+      ]
+    },
+    {
+      "name": "clock",
+      "version": "1.1.2",
       "dependencies": []
     },
     {
@@ -693,33 +737,6 @@
       "dependencies": [
         "csslib",
         "source_span"
-      ]
-    },
-    {
-      "name": "shelf_proxy",
-      "version": "1.0.5",
-      "dependencies": [
-        "http",
-        "path",
-        "shelf"
-      ]
-    },
-    {
-      "name": "shelf_gzip",
-      "version": "4.1.0",
-      "dependencies": [
-        "shelf"
-      ]
-    },
-    {
-      "name": "hotreloader",
-      "version": "4.4.0",
-      "dependencies": [
-        "logging",
-        "path",
-        "stream_transform",
-        "vm_service",
-        "watcher"
       ]
     },
     {
@@ -734,6 +751,15 @@
       "name": "vm_service",
       "version": "15.4.0",
       "dependencies": []
+    },
+    {
+      "name": "shelf_proxy",
+      "version": "1.0.5",
+      "dependencies": [
+        "http",
+        "path",
+        "shelf"
+      ]
     },
     {
       "name": "pub_updater",
@@ -940,14 +966,6 @@
       ]
     },
     {
-      "name": "uuid",
-      "version": "4.6.0",
-      "dependencies": [
-        "crypto",
-        "fixnum"
-      ]
-    },
-    {
       "name": "stream_transform",
       "version": "2.1.2",
       "dependencies": []
@@ -1047,6 +1065,24 @@
       "dependencies": []
     },
     {
+      "name": "shelf_gzip",
+      "version": "4.1.0",
+      "dependencies": [
+        "shelf"
+      ]
+    },
+    {
+      "name": "hotreloader",
+      "version": "4.4.0",
+      "dependencies": [
+        "logging",
+        "path",
+        "stream_transform",
+        "vm_service",
+        "watcher"
+      ]
+    },
+    {
       "name": "http_parser",
       "version": "4.1.2",
       "dependencies": [
@@ -1102,11 +1138,6 @@
         "matcher",
         "meta"
       ]
-    },
-    {
-      "name": "clock",
-      "version": "1.1.2",
-      "dependencies": []
     },
     {
       "name": "fake_async",
@@ -1234,10 +1265,16 @@
       ]
     },
     {
-      "name": "nested",
-      "version": "1.0.0",
+      "name": "material_ui",
+      "version": "1.2.0",
       "dependencies": [
-        "flutter"
+        "collection",
+        "cupertino_ui",
+        "flutter",
+        "flutter_localizations",
+        "intl",
+        "material_color_utilities",
+        "vector_math"
       ]
     },
     {
@@ -1401,6 +1438,11 @@
       ]
     },
     {
+      "name": "fixnum",
+      "version": "1.1.1",
+      "dependencies": []
+    },
+    {
       "name": "csslib",
       "version": "1.0.2",
       "dependencies": [
@@ -1499,11 +1541,6 @@
         "collection",
         "meta"
       ]
-    },
-    {
-      "name": "fixnum",
-      "version": "1.1.1",
-      "dependencies": []
     },
     {
       "name": "protobuf",
@@ -1790,6 +1827,34 @@
       "dependencies": [
         "app_links_platform_interface",
         "flutter"
+      ]
+    },
+    {
+      "name": "intl",
+      "version": "0.20.2",
+      "dependencies": [
+        "clock",
+        "meta",
+        "path"
+      ]
+    },
+    {
+      "name": "flutter_localizations",
+      "version": "0.0.0",
+      "dependencies": [
+        "flutter",
+        "intl",
+        "path"
+      ]
+    },
+    {
+      "name": "cupertino_ui",
+      "version": "1.0.2",
+      "dependencies": [
+        "collection",
+        "flutter",
+        "flutter_localizations",
+        "intl"
       ]
     },
     {

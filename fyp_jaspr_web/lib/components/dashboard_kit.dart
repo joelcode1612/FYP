@@ -1,5 +1,6 @@
 import 'package:jaspr/dom.dart';
 import 'package:jaspr/jaspr.dart';
+import 'package:universal_web/web.dart' as web;
 
 import 'ui.dart';
 
@@ -214,7 +215,12 @@ class SitewiseDialog extends StatelessComponent {
         events: {
           ...events(onClick: () {}),
           'keydown': (event) {
-            final key = (event as dynamic).key;
+            // The event is a JS-interop value: reading `.key` through
+            // `dynamic` throws in the release bundle ("... is not a
+            // function"), which silently disabled Escape-to-close everywhere
+            // this dialog is used. The typed accessor compiles to a plain
+            // `event.key` property read instead.
+            final key = (event as web.KeyboardEvent).key;
             if (key == 'Escape' || key == 'Esc') onClose();
           },
         },

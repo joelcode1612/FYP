@@ -19,11 +19,13 @@ dependencies:
   # lib/data/api_proxy.dart (already used transitively by Jaspr).
   shelf: ^1.4.2
   jaspr: ^0.23.5
-  # Provider surface (ChangeNotifier + Provider/Consumer/Selector) for Jaspr
-  # 0.23. `jaspr_provider` itself is abandoned at 0.0.3 and pins jaspr ^0.1.4
-  # on a pre-Dart-3 SDK, so it cannot resolve here — see the package README for
-  # the port and the five documented differences.
-  jaspr_provider_compat: any
+  # Riverpod — same major (^3.3.2) as the Flutter app — for the Jaspr client
+  # build. `jaspr_riverpod` supplies the Jaspr `ProviderScope` and the
+  # `context.watch`/`read` extensions and re-exports `package:riverpod`. The
+  # shared Riverpod notifiers carry all state; `AppLocator.webOverrides()`
+  # injects the web implementations and the cookie-seeded initial state.
+  jaspr_riverpod: ^0.4.6
+  riverpod: ^3.3.2
   jaspr_router: ^0.9.0
   # Typed browser DOM bindings imported directly by the explore map's
   # drag-to-pan helpers (lib/components/map_dom_browser.dart). Already a

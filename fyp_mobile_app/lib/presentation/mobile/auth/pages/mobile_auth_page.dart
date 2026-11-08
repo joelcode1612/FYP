@@ -1,9 +1,7 @@
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_logic/shared_logic.dart';
 import 'package:flutter/material.dart';
 
-import '../../../../application/state/app_view_model.dart';
-import '../../../../application/state/auth_view_model.dart';
 import '../../../../core/routing/auth_route_guard.dart';
 import '../../../../core/routing/mobile_role.dart';
 import '../../../../core/theme/sitewise_theme.dart';
@@ -18,26 +16,24 @@ import '../widgets/auth_terms_row.dart';
 /// Mobile authentication feature: Log In / Sign Up in one screen.
 ///
 /// Presentation only — every credential call goes through the shared
-/// [AuthViewModel], which drives the auth state machine and the Supabase
+/// [AuthNotifier], which drives the auth state machine and the Supabase
 /// repository. This screen
 /// never reads a token, guesses a role, or navigates on an unverified session:
 /// it reacts to that state and only enters a workspace once the backend
 /// has confirmed the profile.
-class MobileAuthPage extends StatefulWidget {
+class MobileAuthPage extends ConsumerStatefulWidget {
   final AuthTab initialTab;
 
   const MobileAuthPage({super.key, this.initialTab = AuthTab.login});
 
   @override
-  State<MobileAuthPage> createState() => _MobileAuthPageState();
+  ConsumerState<MobileAuthPage> createState() => _MobileAuthPageState();
 }
 
 enum _NoticeTone { info, warning, error }
 
-class _MobileAuthPageState extends State<MobileAuthPage> {
+class _MobileAuthPageState extends ConsumerState<MobileAuthPage> {
   static final RegExp _emailPattern = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$');
-
-  late final AuthViewModel _auth = context.read<AuthViewModel>();
 
   late AuthTab _tab = widget.initialTab;
   final _email = TextEditingController();
@@ -54,7 +50,12 @@ class _MobileAuthPageState extends State<MobileAuthPage> {
     super.initState();
     // The cold-start gate normally does this first; calling it again is a
     // no-op, so a direct jump to /auth still resolves an existing session.
-    _auth.start();
+    // Deferred because the notifier publishes synchronously and initState
+    // runs while the widget tree is building.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      ref.read(authNotifierProvider.notifier).start();
+    });
   }
 
   @override
@@ -99,23 +100,26 @@ class _MobileAuthPageState extends State<MobileAuthPage> {
     if (!_validate()) return;
     final email = _email.text.trim();
     final pass = _password.text;
+    final auth = ref.read(authNotifierProvider.notifier);
     final ok = _tab == AuthTab.login
-        ? await _auth.signIn(email: email, password: pass)
-        : await _auth.signUp(
+        ? await auth.signIn(email: email, password: pass)
+        : await auth.signUp(
             email: email,
             password: pass,
             fullName: _name.text.trim(),
           );
     if (!ok || !mounted) return;
-    final user = _auth.state.user;
+    final user = ref.read(authNotifierProvider).user;
     if (user != null) _enterWorkspace(user);
   }
 
   Future<void> _provider(AuthProvider provider) async {
     setState(() => _fieldError = null);
-    final ok = await _auth.signInWithProvider(provider);
+    final ok = await ref
+        .read(authNotifierProvider.notifier)
+        .signInWithProvider(provider);
     if (!ok || !mounted) return;
-    final user = _auth.state.user;
+    final user = ref.read(authNotifierProvider).user;
     if (user != null) _enterWorkspace(user);
   }
 
@@ -124,7 +128,7 @@ class _MobileAuthPageState extends State<MobileAuthPage> {
   /// away here instead of being routed into a dashboard that does not exist.
   void _enterWorkspace(SitewiseUser user) {
     final home = mobileHomeRouteFor(user.role);
-    context.read<AppViewModel>().setRole(user.role);
+    ref.read(appNotifierProvider.notifier).setRole(user.role);
     if (home == null) {
       setState(() => _fieldError = mobileUnsupportedRoleMessage(user.role));
       return;
@@ -138,226 +142,218 @@ class _MobileAuthPageState extends State<MobileAuthPage> {
   @override
   Widget build(BuildContext context) {
     final isLogin = _tab == AuthTab.login;
-    // Selecting the auth state itself repaints on a status, message or
+    // Watching the auth state repaints on a status, message or
     // pending-address change — and never while the user is just typing.
-    return Selector<AuthViewModel, AuthState>(
-      selector: (_, auth) => auth.state,
-      builder: (context, state, _) {
-        final busy = state.status == AuthStatus.authenticating;
-        return Scaffold(
-          backgroundColor: SitewiseColors.background,
-          body: SafeArea(
-            child: Column(
-              children: [
-                _header(),
-                Expanded(
-                  child: SingleChildScrollView(
-                    padding: const EdgeInsets.fromLTRB(20, 10, 20, 26),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        AuthTabs(
-                          tab: _tab,
-                          onChanged: (v) {
-                            if (busy) return;
-                            setState(() {
-                              _tab = v;
-                              _fieldError = null;
-                            });
-                          },
-                        ),
-                        const SizedBox(height: 22),
-                        Text(
-                          isLogin ? 'Welcome Back' : 'Create your account',
-                          style: const TextStyle(
-                            fontFamily: kFontFamily,
-                            fontSize: 28,
-                            fontWeight: FontWeight.w800,
-                            color: SitewiseColors.ink,
-                            letterSpacing: -.7,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          isLogin
-                              ? 'Log in to Sitewise and continue exploring better F&B locations.'
-                              : 'Join Sitewise to explore, compare and evaluate commercial F&B locations.',
-                          style: const TextStyle(
-                            fontSize: 13,
-                            height: 1.45,
-                            color: SitewiseColors.muted,
-                          ),
-                        ),
-                        const SizedBox(height: 21),
-                        _Notice(
-                          state: state,
-                          isLogin: isLogin,
-                          fieldError: _fieldError,
-                        ),
-                        AuthField(
-                          label: 'Email address',
-                          controller: _email,
-                          hint: 'Enter your email',
-                          icon: Icons.mail_outline_rounded,
-                          keyboardType: TextInputType.emailAddress,
-                        ),
-                        const SizedBox(height: 13),
-                        if (!isLogin) ...[
-                          AuthField(
-                            label: 'Full name',
-                            controller: _name,
-                            hint: 'Enter your full name',
-                            icon: Icons.person_outline_rounded,
-                            textInputAction: TextInputAction.next,
-                          ),
-                          const SizedBox(height: 13),
-                        ],
-                        AuthField(
-                          label: 'Password',
-                          controller: _password,
-                          hint: isLogin
-                              ? 'Enter your password'
-                              : 'Create a password',
-                          icon: Icons.lock_outline_rounded,
-                          obscure: _hidePassword,
-                          textInputAction: isLogin
-                              ? TextInputAction.done
-                              : TextInputAction.next,
-                          onSubmitted: isLogin && !busy
-                              ? (_) => _submit()
-                              : null,
-                          suffix: IconButton(
-                            onPressed: () =>
-                                setState(() => _hidePassword = !_hidePassword),
-                            icon: SitewiseIcon(
-                              _hidePassword
-                                  ? Icons.visibility_outlined
-                                  : Icons.visibility_off_outlined,
-                              intent: SitewiseIconIntent.field,
-                              semanticLabel: _hidePassword
-                                  ? 'Show password'
-                                  : 'Hide password',
-                            ),
-                          ),
-                        ),
-                        if (!isLogin) ...[
-                          const SizedBox(height: 13),
-                          AuthField(
-                            label: 'Confirm Password',
-                            controller: _confirm,
-                            hint: 'Confirm your password',
-                            icon: Icons.lock_outline_rounded,
-                            obscure: _hideConfirm,
-                            textInputAction: TextInputAction.done,
-                            onSubmitted: busy ? null : (_) => _submit(),
-                            suffix: IconButton(
-                              onPressed: () =>
-                                  setState(() => _hideConfirm = !_hideConfirm),
-                              icon: SitewiseIcon(
-                                _hideConfirm
-                                    ? Icons.visibility_outlined
-                                    : Icons.visibility_off_outlined,
-                                intent: SitewiseIconIntent.field,
-                                semanticLabel: _hideConfirm
-                                    ? 'Show password'
-                                    : 'Hide password',
-                              ),
-                            ),
-                          ),
-                        ],
-                        if (isLogin)
-                          Align(
-                            alignment: Alignment.centerRight,
-                            child: TextButton(
-                              onPressed: () => Navigator.of(
-                                context,
-                              ).pushNamed('/forgot-password'),
-                              child: const Text(
-                                'Forgot password?',
-                                style: TextStyle(
-                                  color: SitewiseColors.action,
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
-                            ),
-                          )
-                        else
-                          AuthTermsRow(
-                            value: _terms,
-                            onChanged: (v) {
-                              if (busy) return;
-                              setState(() => _terms = v);
-                            },
-                          ),
-                        const SizedBox(height: 7),
-                        SitewiseCtaButton(
-                          label: busy
-                              ? (isLogin
-                                    ? 'Logging in...'
-                                    : 'Creating account...')
-                              : (isLogin ? 'Log in' : 'Sign up'),
-                          onPressed: busy ? null : _submit,
-                        ),
-                        const SizedBox(height: 18),
-                        const AuthDividerText(),
-                        const SizedBox(height: 11),
-                        AuthProviderButton(
-                          provider: AuthProvider.apple,
-                          onPressed: busy
-                              ? null
-                              : () => _provider(AuthProvider.apple),
-                        ),
-                        const SizedBox(height: 9),
-                        AuthProviderButton(
-                          provider: AuthProvider.google,
-                          onPressed: busy
-                              ? null
-                              : () => _provider(AuthProvider.google),
-                        ),
-                        const SizedBox(height: 15),
-                        Center(
-                          child: Wrap(
-                            children: [
-                              Text(
-                                isLogin
-                                    ? "Don't have an account? "
-                                    : 'Already have an account? ',
-                                style: const TextStyle(
-                                  fontSize: 12,
-                                  color: SitewiseColors.muted,
-                                ),
-                              ),
-                              GestureDetector(
-                                onTap: busy
-                                    ? null
-                                    : () => setState(() {
-                                        _tab = isLogin
-                                            ? AuthTab.signUp
-                                            : AuthTab.login;
-                                        _fieldError = null;
-                                      }),
-                                child: Text(
-                                  isLogin ? 'Sign up' : 'Log in',
-                                  style: const TextStyle(
-                                    fontSize: 12,
-                                    color: SitewiseColors.action,
-                                    fontWeight: FontWeight.w800,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
+    final state = ref.watch(authNotifierProvider);
+    final busy = state.status == AuthStatus.authenticating;
+    return Scaffold(
+      backgroundColor: SitewiseColors.background,
+      body: SafeArea(
+        child: Column(
+          children: [
+            _header(),
+            Expanded(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(20, 10, 20, 26),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    AuthTabs(
+                      tab: _tab,
+                      onChanged: (v) {
+                        if (busy) return;
+                        setState(() {
+                          _tab = v;
+                          _fieldError = null;
+                        });
+                      },
                     ),
-                  ),
+                    const SizedBox(height: 22),
+                    Text(
+                      isLogin ? 'Welcome Back' : 'Create your account',
+                      style: const TextStyle(
+                        fontFamily: kFontFamily,
+                        fontSize: 28,
+                        fontWeight: FontWeight.w800,
+                        color: SitewiseColors.ink,
+                        letterSpacing: -.7,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      isLogin
+                          ? 'Log in to Sitewise and continue exploring better F&B locations.'
+                          : 'Join Sitewise to explore, compare and evaluate commercial F&B locations.',
+                      style: const TextStyle(
+                        fontSize: 13,
+                        height: 1.45,
+                        color: SitewiseColors.muted,
+                      ),
+                    ),
+                    const SizedBox(height: 21),
+                    _Notice(
+                      state: state,
+                      isLogin: isLogin,
+                      fieldError: _fieldError,
+                    ),
+                    AuthField(
+                      label: 'Email address',
+                      controller: _email,
+                      hint: 'Enter your email',
+                      icon: Icons.mail_outline_rounded,
+                      keyboardType: TextInputType.emailAddress,
+                    ),
+                    const SizedBox(height: 13),
+                    if (!isLogin) ...[
+                      AuthField(
+                        label: 'Full name',
+                        controller: _name,
+                        hint: 'Enter your full name',
+                        icon: Icons.person_outline_rounded,
+                        textInputAction: TextInputAction.next,
+                      ),
+                      const SizedBox(height: 13),
+                    ],
+                    AuthField(
+                      label: 'Password',
+                      controller: _password,
+                      hint: isLogin
+                          ? 'Enter your password'
+                          : 'Create a password',
+                      icon: Icons.lock_outline_rounded,
+                      obscure: _hidePassword,
+                      textInputAction: isLogin
+                          ? TextInputAction.done
+                          : TextInputAction.next,
+                      onSubmitted: isLogin && !busy ? (_) => _submit() : null,
+                      suffix: IconButton(
+                        onPressed: () =>
+                            setState(() => _hidePassword = !_hidePassword),
+                        icon: SitewiseIcon(
+                          _hidePassword
+                              ? Icons.visibility_outlined
+                              : Icons.visibility_off_outlined,
+                          intent: SitewiseIconIntent.field,
+                          semanticLabel: _hidePassword
+                              ? 'Show password'
+                              : 'Hide password',
+                        ),
+                      ),
+                    ),
+                    if (!isLogin) ...[
+                      const SizedBox(height: 13),
+                      AuthField(
+                        label: 'Confirm Password',
+                        controller: _confirm,
+                        hint: 'Confirm your password',
+                        icon: Icons.lock_outline_rounded,
+                        obscure: _hideConfirm,
+                        textInputAction: TextInputAction.done,
+                        onSubmitted: busy ? null : (_) => _submit(),
+                        suffix: IconButton(
+                          onPressed: () =>
+                              setState(() => _hideConfirm = !_hideConfirm),
+                          icon: SitewiseIcon(
+                            _hideConfirm
+                                ? Icons.visibility_outlined
+                                : Icons.visibility_off_outlined,
+                            intent: SitewiseIconIntent.field,
+                            semanticLabel: _hideConfirm
+                                ? 'Show password'
+                                : 'Hide password',
+                          ),
+                        ),
+                      ),
+                    ],
+                    if (isLogin)
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: TextButton(
+                          onPressed: () => Navigator.of(
+                            context,
+                          ).pushNamed('/forgot-password'),
+                          child: const Text(
+                            'Forgot password?',
+                            style: TextStyle(
+                              color: SitewiseColors.action,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                      )
+                    else
+                      AuthTermsRow(
+                        value: _terms,
+                        onChanged: (v) {
+                          if (busy) return;
+                          setState(() => _terms = v);
+                        },
+                      ),
+                    const SizedBox(height: 7),
+                    SitewiseCtaButton(
+                      label: busy
+                          ? (isLogin ? 'Logging in...' : 'Creating account...')
+                          : (isLogin ? 'Log in' : 'Sign up'),
+                      onPressed: busy ? null : _submit,
+                    ),
+                    const SizedBox(height: 18),
+                    const AuthDividerText(),
+                    const SizedBox(height: 11),
+                    AuthProviderButton(
+                      provider: AuthProvider.apple,
+                      onPressed: busy
+                          ? null
+                          : () => _provider(AuthProvider.apple),
+                    ),
+                    const SizedBox(height: 9),
+                    AuthProviderButton(
+                      provider: AuthProvider.google,
+                      onPressed: busy
+                          ? null
+                          : () => _provider(AuthProvider.google),
+                    ),
+                    const SizedBox(height: 15),
+                    Center(
+                      child: Wrap(
+                        children: [
+                          Text(
+                            isLogin
+                                ? "Don't have an account? "
+                                : 'Already have an account? ',
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: SitewiseColors.muted,
+                            ),
+                          ),
+                          GestureDetector(
+                            onTap: busy
+                                ? null
+                                : () => setState(() {
+                                    _tab = isLogin
+                                        ? AuthTab.signUp
+                                        : AuthTab.login;
+                                    _fieldError = null;
+                                  }),
+                            child: Text(
+                              isLogin ? 'Sign up' : 'Log in',
+                              style: const TextStyle(
+                                fontSize: 12,
+                                color: SitewiseColors.action,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
-              ],
+              ),
             ),
-          ),
-        );
-      },
+          ],
+        ),
+      ),
     );
   }
 
@@ -451,7 +447,7 @@ class _Notice extends StatelessWidget {
         );
       default:
         // Wrong credentials and duplicate emails keep the user on this form;
-        // the cubit reports why in `state.message`, local validation in
+        // the notifier reports why in `state.message`, local validation in
         // `fieldError`. Either way the reason stays visible.
         final message =
             fieldError ??

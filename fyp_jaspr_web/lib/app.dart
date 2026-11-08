@@ -1,13 +1,12 @@
 import 'package:jaspr/jaspr.dart';
-import 'package:jaspr_provider_compat/jaspr_provider_compat.dart' as provider;
 import 'package:jaspr_router/jaspr_router.dart';
+import 'package:jaspr_riverpod/jaspr_riverpod.dart';
 import 'package:shared_logic/shared_logic.dart';
 
 import 'data/app_locator.dart';
 import 'data/auth_service.dart';
 import 'data/ssr_service.dart';
 import 'data/workspaces.dart';
-import 'state/app_view_model.dart';
 import 'pages/auth_callback_page.dart';
 import 'components/ui.dart';
 import 'layouts/marketing_layout.dart';
@@ -39,10 +38,14 @@ import 'pages/agent/listings_page.dart';
 import 'pages/agent/performance_page.dart';
 import 'pages/agent/profile_page.dart';
 import 'pages/agent/property_detail_page.dart';
+import 'pages/admin/activity_page.dart' as a_activity;
+import 'pages/admin/campaigns_page.dart' as a_campaigns;
 import 'pages/admin/dashboard_page.dart' as a_dashboard;
 import 'pages/admin/listing_detail_page.dart' as a_listing_detail;
 import 'pages/admin/listings_page.dart' as a_listings;
+import 'pages/admin/ownership_page.dart' as a_ownership;
 import 'pages/admin/profile_page.dart' as a_profile;
+import 'pages/admin/surveys_page.dart' as a_surveys;
 import 'pages/admin/user_detail_page.dart' as a_user_detail;
 import 'pages/admin/users_page.dart' as a_users;
 import 'pages/admin/verification_detail_page.dart' as a_verification_detail;
@@ -70,17 +73,13 @@ import 'pages/owner/tours_page.dart' as o_tours;
 ///
 /// ## State management
 ///
-/// The app-wide [AppViewModel] (saved/compare selections, active role, preview
-/// mode) is published here through `ChangeNotifierProvider.value`, so every
-/// route reads the same instance with `context.watch<AppViewModel>()`,
-/// `Consumer` or `Selector` instead of subscribing to a cubit stream. `.value`
-/// is deliberate: the composition root owns the notifier, and Jaspr does not
-/// unmount the tree it renders on the server, so a `create:`-built notifier
-/// would leak a listener per request.
-///
-/// Per-page view models ([OwnerViewModel], [AdminViewModel],
-/// [EntrepreneurViewModel]) are provided by the page that owns their lifetime,
-/// mirroring the mobile app's per-screen lifetimes.
+/// Shared state (saved/compare selections, active role, preview mode) lives in
+/// the Riverpod notifiers from `shared_logic` — the same providers the mobile
+/// app watches. The [ProviderScope] below mounts them with this app's
+/// composition overrides (`AppLocator.webOverrides`) and a `UiPersistObserver`
+/// that mirrors every saved/compare publish into the selection cookie. Pages
+/// read slices with `context.watch(provider.select(…))` and act through
+/// `context.read(provider.notifier)`.
 ///
 /// ## Where this router runs
 ///
@@ -101,8 +100,12 @@ class SitewiseApp extends StatelessComponent {
 
   @override
   Component build(BuildContext context) {
-    return provider.ChangeNotifierProvider<AppViewModel>.value(
-      value: AppLocator.appViewModel,
+    // The scope lives here, not in main.client.dart, so the dormant server
+    // entry point (`main.server.dart` builds this same component per request)
+    // re-seeds the cookie state for each render without its own wiring.
+    return ProviderScope(
+      overrides: AppLocator.webOverrides(),
+      observers: [const UiPersistObserver()],
       child: Router(
         redirect: (context, state) {
           final path = Uri.parse(state.location).path;
@@ -279,6 +282,50 @@ class SitewiseApp extends StatelessComponent {
             builder: (context, state) => _page(
               a_user_detail.UserDetailPage(id: state.queryParams['id'] ?? ''),
               title: 'User detail — Sitewise admin',
+            ),
+          ),
+          // --- Administrator operations (five-screen suite) ------------------
+          // Ownership reviews, Survey campaigns, System activity and
+          // Community surveys — the new screens of the five-screen admin
+          // suite. Agent management keeps its pre-existing `/admin/agents`
+          // route and page class, so no bookmarked URL is replaced.
+          Route(
+            path: '/admin/ownership',
+            builder: (context, state) => _page(
+              const a_ownership.AdminOwnershipPage(),
+              title: 'Ownership reviews — Sitewise admin',
+              description:
+                  'Owner-linked listings awaiting a recorded decision, from '
+                  'the live catalogue.',
+            ),
+          ),
+          Route(
+            path: '/admin/campaigns',
+            builder: (context, state) => _page(
+              const a_campaigns.AdminCampaignsPage(),
+              title: 'Survey campaigns — Sitewise admin',
+              description:
+                  'Area research campaign lifecycles (backend not yet '
+                  'provisioned).',
+            ),
+          ),
+          Route(
+            path: '/admin/activity',
+            builder: (context, state) => _page(
+              const a_activity.AdminActivityPage(),
+              title: 'System activity — Sitewise admin',
+              description:
+                  'Privileged actions from the server-side audit feed.',
+            ),
+          ),
+          Route(
+            path: '/admin/surveys',
+            builder: (context, state) => _page(
+              const a_surveys.AdminSurveysPage(),
+              title: 'Community surveys — Sitewise admin',
+              description:
+                  'Participant screening and questionnaire preview (no '
+                  'response capture).',
             ),
           ),
           Route(

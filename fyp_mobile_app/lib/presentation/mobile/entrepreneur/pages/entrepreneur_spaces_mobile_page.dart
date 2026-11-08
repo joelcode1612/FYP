@@ -1,9 +1,8 @@
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_logic/shared_logic.dart';
 
 import '../../../../application/services/service_locator.dart';
-import '../../../../application/state/app_view_model.dart';
 import '../../../../core/theme/sitewise_m3.dart';
 import '../../../../core/theme/sitewise_theme.dart';
 import '../../shell/mobile_app_shell.dart';
@@ -16,18 +15,18 @@ import '../../widgets/m3_kit.dart';
 /// property-owner concern and `PropertyService.ownerListings` is scoped to an
 /// owner id. Rather than invent records, this screen presents the two real
 /// collections an entrepreneur actually has —
-/// [AppViewModel.saved] (shortlisted spaces) and [AppViewModel.compared] (the
+/// [AppState.saved] (shortlisted spaces) and [AppState.compared] (the
 /// comparison set) — cross-referenced against the real property repository.
 ///
 /// Labels say "shortlisted" rather than "owned" so the UI never implies an
 /// authorization the data layer cannot back.
 
-class EntrepreneurSpacesMobilePage extends StatelessWidget {
+class EntrepreneurSpacesMobilePage extends ConsumerWidget {
   const EntrepreneurSpacesMobilePage({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    final appState = context.watch<AppViewModel>();
+  Widget build(BuildContext context, WidgetRef ref) {
+    final appState = ref.watch(appNotifierProvider);
     return MobileAppShell(
       title: 'Spaces',
       currentRoute: '/entrepreneur/spaces',
@@ -111,7 +110,7 @@ class EntrepreneurSpacesMobilePage extends StatelessWidget {
                     for (final p in records) ...[
                       _SpaceCard(
                         property: p,
-                        compared: appState.isCompared(p.id),
+                        compared: appState.compared.contains(p.id),
                         onTap: () => Navigator.of(context).pushNamed(
                           '/entrepreneur/property-detail',
                           arguments: p.id,

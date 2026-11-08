@@ -39,11 +39,35 @@ List<WebDestination> webDestinationsFor(AppRole role) => switch (role) {
     // `people`, not `group`: the mobile bottom nav uses Icons.people_outline,
     // and Material Symbols renders `group` and `people` as different glyphs.
     WebDestination(route: '/admin/users', icon: 'people', label: 'Users'),
+    // The five-screen operations suite: Ownership → Agents → Verification →
+    // Campaigns → Activity → Surveys. Kept as separate sidebar/pill entries
+    // (no merged mega-menu), because each screen has its own route and its
+    // own audience among the admin tabs.
+    WebDestination(
+      route: '/admin/ownership',
+      icon: 'fact_check',
+      label: 'Ownership',
+    ),
     WebDestination(route: '/admin/agents', icon: 'badge', label: 'Agents'),
     WebDestination(
       route: '/admin/verification',
       icon: 'verified',
       label: 'Verification',
+    ),
+    WebDestination(
+      route: '/admin/campaigns',
+      icon: 'campaign',
+      label: 'Campaigns',
+    ),
+    WebDestination(
+      route: '/admin/activity',
+      icon: 'history',
+      label: 'Activity',
+    ),
+    WebDestination(
+      route: '/admin/surveys',
+      icon: 'how_to_vote',
+      label: 'Surveys',
     ),
     WebDestination(
       route: '/admin/listings',
@@ -147,8 +171,8 @@ String parentShellRoute(String route) {
 
 /// Derives the active role from the URL path.
 ///
-/// In the Flutter tree the role lives in `AppCubit` and pages receive it as a
-/// parameter. Here the URL is the single source of truth: the sidebar, the
+/// In the Flutter tree the role lives in the shared `AppNotifier` and pages
+/// receive it as a parameter. Here the URL is the single source of truth: the sidebar, the
 /// topbar controls and the page body all read the role from the path they were
 /// rendered for, so they can never disagree — including after a role switch,
 /// which is just a navigation to the other role's home route.
