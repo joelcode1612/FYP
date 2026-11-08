@@ -26,7 +26,7 @@ ADMIN_FULL_NAME = "Sitewise Administrator FYP"
 
 # SHA-256 fingerprint ONLY (not the secret) of the key previously exposed.
 EXPOSED_KEY_SHA256 = (
-    "sb_secret_q2uEfjpJOCpsUCGeRf7YFA__i2Qanpk"
+    "sb_secret_8ZvylyGIZxhIgYOu2-RgdA__KH57Sfn"
 )
 
 

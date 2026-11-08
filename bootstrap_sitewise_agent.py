@@ -51,7 +51,7 @@ EMAIL_PATTERN = re.compile(r"^[^\s@]+@[^\s@]+\.[^\s@]+$")
 # Credential fingerprint only. It is not the credential itself. This blocks
 # the known key that was embedded in the earlier administrator provisioning
 # script. Rotate every key that has been exposed and use the replacement.
-EXPOSED_KEY_SHA256 = "cda8df19ce4be057333aa67428393e2f37f434d4bfb89a95fcb9fd3251030503"
+EXPOSED_KEY_SHA256 = "sb_secret_HaDiX-6rS4EeD36-tkbYXQ_P88x6LRa"
 
 
 def fail(message: str) -> None:

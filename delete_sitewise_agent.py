@@ -19,7 +19,7 @@ from pathlib import Path
 
 
 EXPECTED_SUPABASE_URL = "https://lzdpjwmcjbhtkzkqudyt.supabase.co"
-TARGET_USER_ID = "bc8d3770-84ba-4fba-af93-ecaf61246d0b"
+TARGET_USER_ID = "83cdcd24-9927-4b78-abe3-f234d7f04bdf"
 TARGET_EMAIL = "joelstrengthpersonal@gmail.com"
 CONFIRMATION_TEXT = f"DELETE {TARGET_EMAIL}"
 
