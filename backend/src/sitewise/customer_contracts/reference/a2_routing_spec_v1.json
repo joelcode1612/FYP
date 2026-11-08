@@ -1,0 +1,300 @@
+{
+  "spec_id": "A2-CQ-ROUTING-CANDIDATE",
+  "spec_version": "A2-CRS-v1.0",
+  "status": "CANDIDATE_NOT_ADOPTED",
+  "classification": "CANDIDATE_ROUTING_CONTRACT_NO_ITEM_APPROVAL_NO_FIELDING_AUTHORITY",
+  "generated": "2026-11-05",
+  "authority": {
+    "scientific_inputs_adopted_from": "doc/PROJECT1_CQ_SCIENTIFIC_ROUTING_R3_20261105/A1_W1_SCI_COMPLETE_SCIENTIFIC_RESPONSE.md",
+    "adopted_scientific_rules": [
+      "A1-Q01-R1 agreement routing (concordant multi-terminal -> agreed exit + separate partition; competing multi-terminal -> INVALID)",
+      "A1-Q09-R1 preconditions, adopted ONLY as a NOT_SHOWN precondition list (the gate value itself is NOT set here)",
+      "A1-Q10-R1 preconditions, adopted ONLY as a NOT_SHOWN precondition list (the gate value itself is NOT set here)"
+    ],
+    "explicitly_not_adopted": [
+      "A1-Q09-R1 estimand clause (c)/(d) as a resolved gate: still UNRESOLVED, owner WS2 scientific + Owner",
+      "any Q02 Option A/B decision (SCIENTIFIC_DECISION_BLOCKED preserved)",
+      "any item approval, status change or release flag"
+    ],
+    "prior_run_status": "doc/PROJECT1_V1_CRITICAL_CORRECTION_R2_20261105 is EVIDENCE TO TEST, never authority",
+    "approval_granted_by_this_spec": "NONE"
+  },
+  "source": {
+    "id": "SRC-CUST03",
+    "path": "CUST_RECOVERY_20261027/CUST03_CORRECTED_QUESTIONNAIRE_AND_ROUTING_CONTRACT.json",
+    "bytes": 139905,
+    "sha256": "ec2b5494ecf82447076e0d7a2bfb57599a24f049bbcc925a9ecbea6e833bce59",
+    "read_only": true,
+    "mutation_policy": "never modified; every test refuses to run on a byte-different source unless --allow-unsealed is passed for a negative control"
+  },
+  "q01": {
+    "item_id": "Q01",
+    "codes_source": "items[0].codes",
+    "terminal_codes_source": "items[0].exclusive_codes",
+    "affiliation_codes_source": "items[0].substantive_codes",
+    "terminal_exit_map": {
+      "RARELY": "AREA_OUTSIDE",
+      "NEVER": "AREA_OUTSIDE",
+      "NOT_SURE": "AREA_UNKNOWN"
+    },
+    "terminal_exit_map_source": "items[0].eligibility_effect (per-code values); the map is READ from the contract at run time, never typed into code",
+    "policies": {
+      "concordant_terminal_policy": "AGREE_ROUTE",
+      "empty_answer_policy": "SKIPPED_STATE_WITH_CONTRACT_DEFAULT_SCREEN"
+    },
+    "policy_status": "PROPOSED_PENDING_SD_A",
+    "declared_precedence": [
+      {
+        "order": 0,
+        "rule_id": "Q01-R0",
+        "match": "UNKNOWN_CODE",
+        "q01_screen": "SCREEN_INVALID",
+        "answer_state": "INVALID",
+        "locator": "items[0].eligibility_effect.disposition_rule.rules[2] (rule 3) + unknown_code_policy REJECT",
+        "status": "CONTRACT_DECLARED"
+      },
+      {
+        "order": 1,
+        "rule_id": "Q01-R1",
+        "match": "EMPTY",
+        "q01_screen": "AREA_UNKNOWN",
+        "answer_state": "SKIPPED",
+        "locator": "items[0].eligibility_effect.default_when_empty (rule 4) for the SCREEN; response_lifecycle.answer_states.SKIPPED for the STATE",
+        "status": "CONTRACT_DECLARED_BUT_SELF_CONFLICTING_D02"
+      },
+      {
+        "order": 2,
+        "rule_id": "Q01-R2",
+        "match": "MULTI_TERMINAL_COMPETING",
+        "q01_screen": "SCREEN_INVALID",
+        "answer_state": "INVALID",
+        "locator": "A1-Q01-R1 branch 2 (adopted scientific position); no frozen rule reaches this region",
+        "status": "PROPOSED_PENDING_SD_A"
+      },
+      {
+        "order": 3,
+        "rule_id": "Q01-R3",
+        "match": "MULTI_TERMINAL_CONCORDANT",
+        "q01_screen": "TERMINAL_EXIT",
+        "answer_state": "ANSWERED_NON_SUBSTANTIVE",
+        "locator": "A1-Q01-R1 branch 1 (adopted scientific position); exit value read from terminal_exit_map",
+        "status": "PROPOSED_PENDING_SD_A"
+      },
+      {
+        "order": 4,
+        "rule_id": "Q01-R4",
+        "match": "SINGLE_TERMINAL_WITH_AFFILIATION",
+        "q01_screen": "TERMINAL_EXIT",
+        "answer_state": "ANSWERED_NON_SUBSTANTIVE",
+        "locator": "items[0].eligibility_effect.disposition_rule.rules[0] (rule 1) terminal-wins",
+        "status": "CONTRACT_DECLARED_PROPOSED_PENDING_SD_A"
+      },
+      {
+        "order": 5,
+        "rule_id": "Q01-R5",
+        "match": "SOLE_TERMINAL",
+        "q01_screen": "TERMINAL_EXIT",
+        "answer_state": "ANSWERED_NON_SUBSTANTIVE",
+        "locator": "items[0].eligibility_effect.disposition_rule.rules[1] (rule 2)",
+        "status": "CONTRACT_DECLARED_PROPOSED_PENDING_SD_A"
+      },
+      {
+        "order": 6,
+        "rule_id": "Q01-R6",
+        "match": "AFFILIATION_ONLY",
+        "q01_screen": "ELIGIBLE",
+        "answer_state": "ANSWERED_SUBSTANTIVE",
+        "locator": "items[0].eligibility_effect.disposition_rule.rules[4] (rule 5)",
+        "status": "CONTRACT_DECLARED_PROPOSED_PENDING_SD_A"
+      }
+    ],
+    "precedence_declaration": {
+      "declared_in": "this file, q01.declared_precedence (ordered, first match wins)",
+      "hidden_in_code": false,
+      "requirement": "the reference implementation MUST refuse to run if this block is absent, empty or non-totally ordered; it MUST NOT fall back to a built-in precedence",
+      "tie_break_within_a_region": "none: R2 and R3 are disjoint by construction (competing vs concordant); no inter-terminal ordering is ever applied"
+    },
+    "domain_definitions": {
+      "D_STEM": "the stem's own instruction: affiliations only (63) or exactly one terminal alone when nothing applies (3) = 66 admissible non-empty answers",
+      "D_AFFORDANCE": "type multi_select_with_exclusive_terminals + exclusive_codes + max_selections=null: non-empty selections with at most one terminal = 255, plus 1 empty input state = 256 input states",
+      "D_POWERSET": "all 2^9 = 512 subsets of items[0].codes (capture-surface domain, not an answer domain)",
+      "governing_definition_for_coverage": "D_POWERSET for the robustness record; D_STEM for admissibility; D_AFFORDANCE for the denominator of answer states",
+      "note": "the contract claims totality over D_POWERSET (items[0].eligibility_effect.disposition_rule.totality); this spec quotes that claim and tests it rather than assuming it"
+    },
+    "answer_state_rule": {
+      "declared": true,
+      "rule": "Q01 answer_state is a function of the matched disposition rule (see declared_precedence[].answer_state), not of the substantive/non_substantive code lists",
+      "why_needed": "items[0] carries NO option_to_state_map and NO refusal_route; refusal_and_state_semantics.answer_state_precedence_rule supplies no precedence for an answer SET that is simultaneously substantive and non-substantive. 441 of 512 subsets mix an affiliation with a terminal and therefore have no determinable state under the frozen fallback.",
+      "affected_subsets": 441,
+      "status": "IMPLEMENTATION_CHOICE_CONSISTENT_WITH_DISPOSITION_PROPOSED_PENDING_SD_A"
+    },
+    "counter_separation": {
+      "concordant_multi_terminal": "counted in its own MULTI_TERMINAL_CONCORDANT partition; MUST NOT be reported as a RARELY, NEVER or NOT_SURE single-terminal screen-out (items[0].permitted_claim requires SEPARATE counts)",
+      "competing_multi_terminal": "counted only in the INVALID / SCREEN_INVALID partition; never in any terminal counter"
+    }
+  },
+  "gate": {
+    "gate_table_source": "routing_model.item_show_gate, read PER ITEM at run time",
+    "route_input_enumeration_source": "routing_model.route_inputs",
+    "input_values_today_source": "routing_model.input_values_today",
+    "token_predicates": {
+      "ALWAYS": {
+        "clauses": [{"op": "const", "value": true}]
+      },
+      "Q01_ELIGIBLE": {
+        "clauses": [{"op": "eq", "lhs": "Q01_SCREEN", "rhs": "ELIGIBLE"}]
+      },
+      "Q01_ELIGIBLE_AND_APPROVED_EXACT_OFFER_STIMULUS": {
+        "clauses": [
+          {"op": "eq", "lhs": "Q01_SCREEN", "rhs": "ELIGIBLE"},
+          {"op": "is_true", "lhs": "APPROVED_EXACT_OFFER_STIMULUS"}
+        ]
+      },
+      "Q01_ELIGIBLE_AND_OPTIONAL_CONTEXT_ENABLED": {
+        "clauses": [
+          {"op": "eq", "lhs": "Q01_SCREEN", "rhs": "ELIGIBLE"},
+          {"op": "is_true", "lhs": "OPTIONAL_CONTEXT_ENABLED"}
+        ]
+      },
+      "Q01_ELIGIBLE_AND_Q04_SUBSTANTIVE_NONZERO": {
+        "clauses": [
+          {"op": "eq", "lhs": "Q01_SCREEN", "rhs": "ELIGIBLE"},
+          {"op": "eq", "lhs": "Q04_ANSWER", "rhs": "SUBSTANTIVE_NONZERO"}
+        ]
+      },
+      "OPEN_ROUTING_01": {
+        "undecided": true,
+        "reason_code": "NO_PREDICATE_IN_CONTRACT",
+        "owner": "WS2 scientific + Owner",
+        "corresponds_to": "routing_model.open_decisions.ROUTING-01 (Q09)"
+      },
+      "OPEN_ROUTING_02": {
+        "undecided": true,
+        "reason_code": "NO_PREDICATE_IN_CONTRACT",
+        "owner": "WS2 scientific + Owner",
+        "corresponds_to": "routing_model.open_decisions.ROUTING-02 (Q10)"
+      }
+    },
+    "unresolved_token_policy": "NOT_SHOWN",
+    "unresolved_token_policy_status": "IMPLEMENTATION_CHOICE_NOT_CONTRACT_REQUIREMENT",
+    "undecided_input_policy": "NOT_SHOWN",
+    "undecided_input_policy_status": "IMPLEMENTATION_CHOICE_NOT_CONTRACT_REQUIREMENT",
+    "forbidden_behaviours": [
+      "default_true",
+      "treat_undefined_as_zero",
+      "treat_undefined_as_refusal",
+      "treat_undefined_as_not_yet_answered",
+      "author_declared_boolean_per_headline"
+    ],
+    "source_dependence_requirement": {
+      "rule": "for every item, changing routing_model.item_show_gate[item] to a token with different semantics MUST change at least one route verdict; changing a gate input value in input_values_today MUST change at least one verdict for an item whose gate names that input",
+      "a_gate_that_does_not_move_when_its_source_changes": "DEFECT_NON_SOURCE_DEPENDENT",
+      "test": "t03_gate_source_dependence.py"
+    },
+    "class_to_gate_mapping": {
+      "exists_in_contract": false,
+      "verified_by": "t00_source_assertions.py (exhaustive key/string search of the sealed bytes)",
+      "consequence": "items[8].show_rule_conflict.governs_until_decided ('the declared class governs') is NOT_SUPPORTED as a documentary tie-break and is NOT implemented by this spec"
+    }
+  },
+  "states": {
+    "answer_states_source": "response_lifecycle.answer_states",
+    "in_A": {
+      "ANSWERED_SUBSTANTIVE": true,
+      "ANSWERED_NON_SUBSTANTIVE": true,
+      "INVALID": true,
+      "REFUSED": true,
+      "SKIPPED": false,
+      "NOT_SHOWN": false
+    },
+    "in_V": {
+      "ANSWERED_SUBSTANTIVE": true,
+      "ANSWERED_NON_SUBSTANTIVE": false,
+      "INVALID": false,
+      "REFUSED": false,
+      "SKIPPED": false,
+      "NOT_SHOWN": false
+    },
+    "in_S": {
+      "ANSWERED_SUBSTANTIVE": true,
+      "ANSWERED_NON_SUBSTANTIVE": true,
+      "INVALID": true,
+      "REFUSED": true,
+      "SKIPPED": true,
+      "NOT_SHOWN": false
+    },
+    "NOT_SHOWN_is_not_zero": true,
+    "REFUSED_is_never": ["SKIPPED", "AREA_OUTSIDE", "a substantive category", "silently dropped from A"],
+    "refusal_vs_uncertainty": "REFUSED and ANSWERED_NON_SUBSTANTIVE (reason NOT_SURE/CANNOT_JUDGE/etc.) are distinct states and are reported separately",
+    "q01_refusal_route_exists": false,
+    "q01_refusal_route_note": "refusal_and_state_semantics.refusal_route_required_on omits Q01 and items[0] carries no refusal_route key; Q01 refusal is therefore UNREACHABLE and must never be synthesised from an empty answer"
+  },
+  "snapshot": {
+    "resolution": "last admitted snapshot per (unit_id, question_id, question_version)",
+    "superseded_contribution": {"S": 0, "A": 0, "V": 0},
+    "reroute_on_revision": "Q01_SCREEN and the route are RECOMPUTED from the last admitted Q01 snapshot, with an audit record",
+    "q_pre_membership": "fixed at admission; a revision changes only which partition term the unit occupies",
+    "double_counting": "forbidden: a unit contributes exactly one final state per item",
+    "already_displayed_history_policy": "FROZEN_HISTORY_WITH_EXPOSURE_FLAG",
+    "already_displayed_history_policy_status": "OPEN_OWNER_DECISION_NOT_DERIVABLE_FROM_BYTES",
+    "alternative_policy": "RETRO_VOID",
+    "invariant": "0 <= V <= A <= S <= Q within one stage and population (pre_screen_population.same_cohort_rule)"
+  },
+  "q09": {
+    "item_id": "Q09",
+    "gate_source": "routing_model.item_show_gate.Q09",
+    "operational_verdict": "NOT_SHOWN",
+    "verdict_status": "IMPLEMENTATION_CHOICE_FAIL_CLOSED_NOT_CONTRACT_REQUIREMENT",
+    "independent_not_shown_grounds": [
+      "routing_model.item_show_gate.Q09 = OPEN_ROUTING_01, an unresolved token with no predicate (contract-declared)",
+      "items[8].status = BLOCKED_SOURCE (contract-declared)",
+      "items[8].coverage_limitation = 'Same provisional bank as Q08' i.e. no approved occasion bank (contract-declared)",
+      "items[8].show_rule requires an approved versioned concept card; routing_model.input_values_today.APPROVED_EXACT_OFFER_STIMULUS = false (contract-declared value, item-level disclosure absent)",
+      "items[8] carries no stimulus_dependency key at all, so the stimulus obligation is undeclared (contract-declared absence)"
+    ],
+    "conflicting_governing_statements_recorded": [
+      {"n": 1, "locator": "items[8].show_rule", "statement": "Shown after the versioned concept card. Independent of Q04.", "implemented": false},
+      {"n": 2, "locator": "items[8].class", "statement": "CONDITIONAL_R07 (module label shared with Q08/Q10)", "implemented": false, "reason": "no class->gate mapping exists in the bytes"},
+      {"n": 3, "locator": "items[8].show_rule_conflict.governs_until_decided", "statement": "the declared class governs", "implemented": false, "reason": "NOT_SUPPORTED: the class token has no gate semantics anywhere in the contract"},
+      {"n": 4, "locator": "routing_model.item_show_gate.Q09", "statement": "OPEN_ROUTING_01", "implemented": true},
+      {"n": 5, "locator": "routing_model.open_decisions.ROUTING-01.author_default", "statement": "Q01_ELIGIBLE_AND_Q04_SUBSTANTIVE_NONZERO", "implemented": false, "reason": "author default is recorded in open_decisions only and is NOT substituted into the gate table"}
+    ],
+    "author_default_applied": false,
+    "author_default_applied_reason": "applying it would resolve ROUTING-01 without the Owner's decision and would additionally shift R07/D05B's estimand to recent purchasers of existing cafes",
+    "gate_resolution_authority": "WS2 scientific + Owner"
+  },
+  "q10": {
+    "item_id": "Q10",
+    "gate_source": "routing_model.item_show_gate.Q10",
+    "operational_verdict": "NOT_SHOWN",
+    "verdict_status": "IMPLEMENTATION_CHOICE_FAIL_CLOSED_NOT_CONTRACT_REQUIREMENT",
+    "show_rule_key_present": false,
+    "independent_not_shown_grounds": [
+      "routing_model.item_show_gate.Q10 = OPEN_ROUTING_02, an unresolved token with no predicate (contract-declared)",
+      "items[9].feature_bank.approved_bank = null and feature_count_F = null (contract-declared): there is no feature set to rate",
+      "items[9].stimulus_dependency.stimulus_approved = false with stem citing 'the described cafe' (contract-declared)",
+      "items[9].status = G06_APPROVAL_PENDING and construct_registry.D06_EXPERIENCE_PRIORITY.approval = BLOCKED_SOURCE"
+    ],
+    "correction_to_routing_02_conflict_text": "ROUTING-02.conflict states Q10 has 'no gate of any kind'; the bytes carry OPEN_ROUTING_02. The accurate statement is 'a gate token with no declared semantics and no item-level rule'.",
+    "gate_resolution_authority": "G06 owner + ROUTING-02/03 + Owner"
+  },
+  "publishability": {
+    "rule": "an item's answer distribution is PUBLISHABLE only if (a) the item's UE status carries a signed approval record (approver identity, scope, date, artifact digest) AND (b) report_availability for its section is not SPECIFICATION_ONLY/UNAVAILABLE for that section",
+    "count_equality_is_not_authority": true,
+    "note_on_items_approved": "release_state/items_approved = 0 and no approval record fields exist anywhere in the contract; a count derived from items[].status alone would manufacture a pass (refused here)",
+    "today": "0 of 13 items publishable; 0 of 12 report sections RENDERABLE beyond R02/R12 administrative",
+    "never_publishable_regardless_of_approval": [
+      "a non-substantive answer inside V",
+      "an area-ineligible or area-unknown unit inside Q_post",
+      "a Q01 multi-terminal concordant unit inside a single-terminal RARELY/NEVER/NOT_SURE counter",
+      "a Q10 composite/weight/ranking score",
+      "any percentage when V == 0"
+    ]
+  },
+  "admission": {
+    "rule": "a unit enters Q_post if and only if Q01_SCREEN == ELIGIBLE",
+    "fail_closed_states": ["SCREEN_INVALID", "AREA_OUTSIDE", "AREA_UNKNOWN", "SKIPPED_screen_unknown", "UNRESOLVED"],
+    "requirement": "no INVALID, REFUSED, SKIPPED, NOT_SHOWN, undecided-gate or unresolved-rule input may ever reach an admitted or publishable state",
+    "test": "t04_state_semantics.py + t07_negative_controls.py"
+  }
+}

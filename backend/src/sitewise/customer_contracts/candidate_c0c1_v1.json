@@ -1,0 +1,707 @@
+{
+  "version": "CUST03-C0C1-CANDIDATE-20261107.1",
+  "status": "PROPOSED_NOT_SCIENTIFICALLY_ACCEPTED_NOT_OWNER_ADOPTED",
+  "execution_scope": "SYNTHETIC_IN_MEMORY_ONLY",
+  "fielding_authorized": false,
+  "source_sha256": "ec2b5494ecf82447076e0d7a2bfb57599a24f049bbcc925a9ecbea6e833bce59",
+  "q01_policy": "STRICT_TERMINAL_MUTUAL_EXCLUSION_PROPOSED_SD_A",
+  "q01_option_state_map": {
+    "LIVE": "ANSWERED_SUBSTANTIVE",
+    "WORK": "ANSWERED_SUBSTANTIVE",
+    "STUDY": "ANSWERED_SUBSTANTIVE",
+    "RUN_BUSINESS": "ANSWERED_SUBSTANTIVE",
+    "VISIT_PURPOSE": "ANSWERED_SUBSTANTIVE",
+    "PASS_THROUGH": "ANSWERED_SUBSTANTIVE",
+    "RARELY": "ANSWERED_NON_SUBSTANTIVE",
+    "NEVER": "ANSWERED_NON_SUBSTANTIVE",
+    "NOT_SURE": "ANSWERED_NON_SUBSTANTIVE"
+  },
+  "q02_policy_default": "UNDECIDED",
+  "q02_policy_choices": [
+    "UNDECIDED",
+    "SHOW_ALL",
+    "ELIGIBLE_ONLY"
+  ],
+  "q02_distinct_day_labels": {
+    "NONE": "0 days",
+    "DAYS_1_3": "1–3 days",
+    "DAYS_4_10": "4–10 days",
+    "DAYS_11_20": "11–20 days",
+    "DAYS_GT_20": "21–28 days",
+    "PREFER_NOT_TO_ANSWER": "Prefer not to answer"
+  },
+  "item_show_gate": {
+    "Q01": "ALWAYS",
+    "Q02": "Q02_POLICY",
+    "Q03": "CONCEPT",
+    "Q04": "Q01_ELIGIBLE",
+    "Q05": "CONCEPT",
+    "Q06": "MENU",
+    "Q07": "Q01_ELIGIBLE_AND_APPROVED_EXACT_OFFER_STIMULUS",
+    "Q08": "Q01_ELIGIBLE_AND_Q04_SUBSTANTIVE_NONZERO",
+    "Q09": "FUTURE_OCCASION",
+    "Q10": "FEATURES",
+    "Q11": "Q01_ELIGIBLE_AND_OPTIONAL_CONTEXT_ENABLED",
+    "Q12": "Q01_ELIGIBLE_AND_OPTIONAL_CONTEXT_ENABLED",
+    "Q13": "Q01_ELIGIBLE_AND_OPTIONAL_CONTEXT_ENABLED"
+  },
+  "gate": {
+    "gate_table_source": "routing_model.item_show_gate, read PER ITEM at run time",
+    "route_input_enumeration_source": "routing_model.route_inputs",
+    "input_values_today_source": "routing_model.input_values_today",
+    "token_predicates": {
+      "ALWAYS": {
+        "clauses": [
+          {
+            "op": "const",
+            "value": true
+          }
+        ]
+      },
+      "Q01_ELIGIBLE": {
+        "clauses": [
+          {
+            "op": "eq",
+            "lhs": "Q01_SCREEN",
+            "rhs": "ELIGIBLE"
+          }
+        ]
+      },
+      "Q01_ELIGIBLE_AND_APPROVED_EXACT_OFFER_STIMULUS": {
+        "clauses": [
+          {
+            "op": "eq",
+            "lhs": "Q01_SCREEN",
+            "rhs": "ELIGIBLE"
+          },
+          {
+            "op": "is_true",
+            "lhs": "APPROVED_EXACT_OFFER_STIMULUS"
+          }
+        ]
+      },
+      "Q01_ELIGIBLE_AND_OPTIONAL_CONTEXT_ENABLED": {
+        "clauses": [
+          {
+            "op": "eq",
+            "lhs": "Q01_SCREEN",
+            "rhs": "ELIGIBLE"
+          },
+          {
+            "op": "is_true",
+            "lhs": "OPTIONAL_CONTEXT_ENABLED"
+          }
+        ]
+      },
+      "Q01_ELIGIBLE_AND_Q04_SUBSTANTIVE_NONZERO": {
+        "clauses": [
+          {
+            "op": "eq",
+            "lhs": "Q01_SCREEN",
+            "rhs": "ELIGIBLE"
+          },
+          {
+            "op": "eq",
+            "lhs": "Q04_ANSWER",
+            "rhs": "SUBSTANTIVE_NONZERO"
+          }
+        ]
+      },
+      "OPEN_ROUTING_01": {
+        "undecided": true,
+        "reason_code": "NO_PREDICATE_IN_CONTRACT",
+        "owner": "WS2 scientific + Owner",
+        "corresponds_to": "routing_model.open_decisions.ROUTING-01 (Q09)"
+      },
+      "OPEN_ROUTING_02": {
+        "undecided": true,
+        "reason_code": "NO_PREDICATE_IN_CONTRACT",
+        "owner": "WS2 scientific + Owner",
+        "corresponds_to": "routing_model.open_decisions.ROUTING-02 (Q10)"
+      },
+      "Q02_POLICY": {
+        "clauses": [
+          {
+            "op": "is_true",
+            "lhs": "Q01_COMPLETED"
+          },
+          {
+            "op": "is_true",
+            "lhs": "Q02_VISIBLE"
+          }
+        ]
+      },
+      "CONCEPT": {
+        "clauses": [
+          {
+            "op": "eq",
+            "lhs": "Q01_SCREEN",
+            "rhs": "ELIGIBLE"
+          },
+          {
+            "op": "is_true",
+            "lhs": "CONCEPT_READY"
+          }
+        ]
+      },
+      "MENU": {
+        "clauses": [
+          {
+            "op": "eq",
+            "lhs": "Q01_SCREEN",
+            "rhs": "ELIGIBLE"
+          },
+          {
+            "op": "is_true",
+            "lhs": "CONCEPT_READY"
+          },
+          {
+            "op": "is_true",
+            "lhs": "MENU_READY"
+          }
+        ]
+      },
+      "FUTURE_OCCASION": {
+        "clauses": [
+          {
+            "op": "eq",
+            "lhs": "Q01_SCREEN",
+            "rhs": "ELIGIBLE"
+          },
+          {
+            "op": "is_true",
+            "lhs": "CONCEPT_READY"
+          },
+          {
+            "op": "is_true",
+            "lhs": "OCCASION_READY"
+          }
+        ]
+      },
+      "FEATURES": {
+        "clauses": [
+          {
+            "op": "eq",
+            "lhs": "Q01_SCREEN",
+            "rhs": "ELIGIBLE"
+          },
+          {
+            "op": "is_true",
+            "lhs": "CONCEPT_READY"
+          },
+          {
+            "op": "is_true",
+            "lhs": "FEATURE_BANK_READY"
+          }
+        ]
+      }
+    },
+    "unresolved_token_policy": "NOT_SHOWN",
+    "unresolved_token_policy_status": "IMPLEMENTATION_CHOICE_NOT_CONTRACT_REQUIREMENT",
+    "undecided_input_policy": "NOT_SHOWN",
+    "undecided_input_policy_status": "IMPLEMENTATION_CHOICE_NOT_CONTRACT_REQUIREMENT",
+    "forbidden_behaviours": [
+      "default_true",
+      "treat_undefined_as_zero",
+      "treat_undefined_as_refusal",
+      "treat_undefined_as_not_yet_answered",
+      "author_declared_boolean_per_headline"
+    ],
+    "source_dependence_requirement": {
+      "rule": "for every item, changing routing_model.item_show_gate[item] to a token with different semantics MUST change at least one route verdict; changing a gate input value in input_values_today MUST change at least one verdict for an item whose gate names that input",
+      "a_gate_that_does_not_move_when_its_source_changes": "DEFECT_NON_SOURCE_DEPENDENT",
+      "test": "t03_gate_source_dependence.py"
+    },
+    "class_to_gate_mapping": {
+      "exists_in_contract": false,
+      "verified_by": "t00_source_assertions.py (exhaustive key/string search of the sealed bytes)",
+      "consequence": "items[8].show_rule_conflict.governs_until_decided ('the declared class governs') is NOT_SUPPORTED as a documentary tie-break and is NOT implemented by this spec"
+    }
+  },
+  "decisions_pending": [
+    "OD-CQ-01",
+    "OD-CQ-02",
+    "OD-CQ-03",
+    "OD-CQ-04",
+    "OD-CQ-05",
+    "OD-CQ-06",
+    "OD-CQ-07",
+    "OD-CQ-08",
+    "OD-CQ-09",
+    "OD-CQ-10",
+    "OD-CQ-11",
+    "OD-CQ-12"
+  ],
+  "structured_pretest": {
+    "Q01": {
+      "locales": [
+        "EN",
+        "BM"
+      ],
+      "question_version": "CUST03-C0C1-CANDIDATE-20261107.1:Q01",
+      "option_codes": [
+        "LIVE",
+        "WORK",
+        "STUDY",
+        "RUN_BUSINESS",
+        "VISIT_PURPOSE",
+        "PASS_THROUGH",
+        "RARELY",
+        "NEVER",
+        "NOT_SURE"
+      ],
+      "source_original": "CS-01",
+      "method": "STRUCTURED_CLOSED_ENDED_ONLY",
+      "bm_translation_status": "MISSING_NOT_APPROVED",
+      "en_review_status": "PENDING",
+      "checks": [
+        "MEANING_MATCH",
+        "RECALL_WINDOW",
+        "OPTION_COMPREHENSION",
+        "REFUSAL",
+        "ROUTE_EXPECTATION"
+      ],
+      "result_choices": [
+        "CORRECT",
+        "INCORRECT",
+        "UNSURE",
+        "NOT_APPLICABLE"
+      ],
+      "human_results": "NOT_EXECUTED",
+      "source_question_version": "P3-01C-VNEXT-0.6.1-CUST-REC"
+    },
+    "Q02": {
+      "locales": [
+        "EN",
+        "BM"
+      ],
+      "question_version": "CUST03-C0C1-CANDIDATE-20261107.1:Q02",
+      "option_codes": [
+        "NONE",
+        "DAYS_1_3",
+        "DAYS_4_10",
+        "DAYS_11_20",
+        "DAYS_GT_20",
+        "PREFER_NOT_TO_ANSWER"
+      ],
+      "source_original": "CS-02",
+      "method": "STRUCTURED_CLOSED_ENDED_ONLY",
+      "bm_translation_status": "MISSING_NOT_APPROVED",
+      "en_review_status": "PENDING",
+      "checks": [
+        "MEANING_MATCH",
+        "RECALL_WINDOW",
+        "OPTION_COMPREHENSION",
+        "REFUSAL",
+        "ROUTE_EXPECTATION",
+        "DISTINCT_DAYS_NOT_VISITS"
+      ],
+      "result_choices": [
+        "CORRECT",
+        "INCORRECT",
+        "UNSURE",
+        "NOT_APPLICABLE"
+      ],
+      "human_results": "NOT_EXECUTED",
+      "source_question_version": "P3-01C-VNEXT-0.6.1-CUST-REC"
+    },
+    "Q03": {
+      "locales": [
+        "EN",
+        "BM"
+      ],
+      "question_version": "CUST03-C0C1-CANDIDATE-20261107.1:Q03",
+      "option_codes": [
+        "HOME",
+        "WORKPLACE",
+        "STUDY_LOCATION",
+        "OTHER_ACTIVITY",
+        "VARIES",
+        "DECLINE",
+        "NOT_SURE"
+      ],
+      "source_original": "CS-11",
+      "method": "STRUCTURED_CLOSED_ENDED_ONLY",
+      "bm_translation_status": "MISSING_NOT_APPROVED",
+      "en_review_status": "PENDING",
+      "checks": [
+        "MEANING_MATCH",
+        "RECALL_WINDOW",
+        "OPTION_COMPREHENSION",
+        "REFUSAL",
+        "ROUTE_EXPECTATION"
+      ],
+      "result_choices": [
+        "CORRECT",
+        "INCORRECT",
+        "UNSURE",
+        "NOT_APPLICABLE"
+      ],
+      "human_results": "NOT_EXECUTED",
+      "source_question_version": "P3-01C-VNEXT-0.6.1-CUST-REC"
+    },
+    "Q04": {
+      "locales": [
+        "EN",
+        "BM"
+      ],
+      "question_version": "CUST03-C0C1-CANDIDATE-20261107.1:Q04",
+      "option_codes": [
+        "ZERO",
+        "ONE",
+        "TWO_THREE",
+        "FOUR_SEVEN",
+        "EIGHT_PLUS",
+        "CANNOT_REMEMBER",
+        "PREFER_NOT_TO_ANSWER"
+      ],
+      "source_original": "CS-03",
+      "method": "STRUCTURED_CLOSED_ENDED_ONLY",
+      "bm_translation_status": "MISSING_NOT_APPROVED",
+      "en_review_status": "PENDING",
+      "checks": [
+        "MEANING_MATCH",
+        "RECALL_WINDOW",
+        "OPTION_COMPREHENSION",
+        "REFUSAL",
+        "ROUTE_EXPECTATION"
+      ],
+      "result_choices": [
+        "CORRECT",
+        "INCORRECT",
+        "UNSURE",
+        "NOT_APPLICABLE"
+      ],
+      "human_results": "NOT_EXECUTED",
+      "source_question_version": "P3-01C-VNEXT-0.6.1-CUST-REC"
+    },
+    "Q05": {
+      "locales": [
+        "EN",
+        "BM"
+      ],
+      "question_version": "CUST03-C0C1-CANDIDATE-20261107.1:Q05",
+      "option_codes": [
+        "DEF_NO",
+        "PROB_NO",
+        "UNSURE",
+        "PROB_YES",
+        "DEF_YES",
+        "CANNOT_JUDGE",
+        "PREFER_NOT_TO_ANSWER"
+      ],
+      "source_original": "CS-06",
+      "method": "STRUCTURED_CLOSED_ENDED_ONLY",
+      "bm_translation_status": "MISSING_NOT_APPROVED",
+      "en_review_status": "PENDING",
+      "checks": [
+        "MEANING_MATCH",
+        "RECALL_WINDOW",
+        "OPTION_COMPREHENSION",
+        "REFUSAL",
+        "ROUTE_EXPECTATION"
+      ],
+      "result_choices": [
+        "CORRECT",
+        "INCORRECT",
+        "UNSURE",
+        "NOT_APPLICABLE"
+      ],
+      "human_results": "NOT_EXECUTED",
+      "source_question_version": "P3-01C-VNEXT-0.6.1-CUST-REC"
+    },
+    "Q06": {
+      "locales": [
+        "EN",
+        "BM"
+      ],
+      "question_version": "CUST03-C0C1-CANDIDATE-20261107.1:Q06",
+      "option_codes": [
+        "COFFEE_ESPRESSO",
+        "NON_COFFEE",
+        "BAKED_PASTRY",
+        "LIGHT_MEALS",
+        "DESSERTS",
+        "RETAIL",
+        "UNLISTED_CATEGORY_REPORTED",
+        "NONE",
+        "NOT_SURE",
+        "PREFER_NOT_TO_ANSWER"
+      ],
+      "source_original": "CS-09",
+      "method": "STRUCTURED_CLOSED_ENDED_ONLY",
+      "bm_translation_status": "MISSING_NOT_APPROVED",
+      "en_review_status": "PENDING",
+      "checks": [
+        "MEANING_MATCH",
+        "RECALL_WINDOW",
+        "OPTION_COMPREHENSION",
+        "REFUSAL",
+        "ROUTE_EXPECTATION"
+      ],
+      "result_choices": [
+        "CORRECT",
+        "INCORRECT",
+        "UNSURE",
+        "NOT_APPLICABLE"
+      ],
+      "human_results": "NOT_EXECUTED",
+      "source_question_version": "P3-01C-VNEXT-0.6.1-CUST-REC"
+    },
+    "Q07": {
+      "locales": [
+        "EN",
+        "BM"
+      ],
+      "question_version": "CUST03-C0C1-CANDIDATE-20261107.1:Q07",
+      "option_codes": [
+        "VERY_UNACCEPTABLE",
+        "SOMEWHAT_UNACCEPTABLE",
+        "NEITHER",
+        "SOMEWHAT_ACCEPTABLE",
+        "VERY_ACCEPTABLE",
+        "CANNOT_JUDGE",
+        "PREFER_NOT_TO_ANSWER"
+      ],
+      "source_original": "CS-07",
+      "method": "STRUCTURED_CLOSED_ENDED_ONLY",
+      "bm_translation_status": "MISSING_NOT_APPROVED",
+      "en_review_status": "PENDING",
+      "checks": [
+        "MEANING_MATCH",
+        "RECALL_WINDOW",
+        "OPTION_COMPREHENSION",
+        "REFUSAL",
+        "ROUTE_EXPECTATION"
+      ],
+      "result_choices": [
+        "CORRECT",
+        "INCORRECT",
+        "UNSURE",
+        "NOT_APPLICABLE"
+      ],
+      "human_results": "NOT_EXECUTED",
+      "source_question_version": "P3-01C-VNEXT-0.6.1-CUST-REC"
+    },
+    "Q08": {
+      "locales": [
+        "EN",
+        "BM"
+      ],
+      "question_version": "CUST03-C0C1-CANDIDATE-20261107.1:Q08",
+      "option_codes": [
+        "WORK_BREAK",
+        "STUDY",
+        "SOCIAL",
+        "ON_THE_GO",
+        "UNLISTED_OCCASION_REPORTED",
+        "CANNOT_REMEMBER",
+        "PREFER_NOT_TO_ANSWER"
+      ],
+      "source_original": null,
+      "method": "STRUCTURED_CLOSED_ENDED_ONLY",
+      "bm_translation_status": "MISSING_NOT_APPROVED",
+      "en_review_status": "PENDING",
+      "checks": [
+        "MEANING_MATCH",
+        "RECALL_WINDOW",
+        "OPTION_COMPREHENSION",
+        "REFUSAL",
+        "ROUTE_EXPECTATION"
+      ],
+      "result_choices": [
+        "CORRECT",
+        "INCORRECT",
+        "UNSURE",
+        "NOT_APPLICABLE"
+      ],
+      "human_results": "NOT_EXECUTED",
+      "source_question_version": "P3-01C-VNEXT-0.6.1-CUST-REC"
+    },
+    "Q09": {
+      "locales": [
+        "EN",
+        "BM"
+      ],
+      "question_version": "CUST03-C0C1-CANDIDATE-20261107.1:Q09",
+      "option_codes": [
+        "WORK_BREAK",
+        "STUDY",
+        "SOCIAL",
+        "ON_THE_GO",
+        "UNLISTED_OCCASION_REPORTED",
+        "NONE",
+        "CANNOT_JUDGE",
+        "PREFER_NOT_TO_ANSWER"
+      ],
+      "source_original": null,
+      "method": "STRUCTURED_CLOSED_ENDED_ONLY",
+      "bm_translation_status": "MISSING_NOT_APPROVED",
+      "en_review_status": "PENDING",
+      "checks": [
+        "MEANING_MATCH",
+        "RECALL_WINDOW",
+        "OPTION_COMPREHENSION",
+        "REFUSAL",
+        "ROUTE_EXPECTATION"
+      ],
+      "result_choices": [
+        "CORRECT",
+        "INCORRECT",
+        "UNSURE",
+        "NOT_APPLICABLE"
+      ],
+      "human_results": "NOT_EXECUTED",
+      "source_question_version": "P3-01C-VNEXT-0.6.1-CUST-REC"
+    },
+    "Q10": {
+      "locales": [
+        "EN",
+        "BM"
+      ],
+      "question_version": "CUST03-C0C1-CANDIDATE-20261107.1:Q10",
+      "option_codes": [
+        "NOT_AT_ALL_IMPORTANT",
+        "SLIGHTLY_IMPORTANT",
+        "MODERATELY_IMPORTANT",
+        "VERY_IMPORTANT",
+        "EXTREMELY_IMPORTANT",
+        "NOT_APPLICABLE",
+        "CANNOT_JUDGE",
+        "PREFER_NOT_TO_ANSWER"
+      ],
+      "source_original": null,
+      "method": "STRUCTURED_CLOSED_ENDED_ONLY",
+      "bm_translation_status": "MISSING_NOT_APPROVED",
+      "en_review_status": "PENDING",
+      "checks": [
+        "MEANING_MATCH",
+        "RECALL_WINDOW",
+        "OPTION_COMPREHENSION",
+        "REFUSAL",
+        "ROUTE_EXPECTATION",
+        "FEATURE_ROW_COMPREHENSION"
+      ],
+      "result_choices": [
+        "CORRECT",
+        "INCORRECT",
+        "UNSURE",
+        "NOT_APPLICABLE"
+      ],
+      "human_results": "NOT_EXECUTED",
+      "source_question_version": "P3-01C-VNEXT-0.6.1-CUST-REC"
+    },
+    "Q11": {
+      "locales": [
+        "EN",
+        "BM"
+      ],
+      "question_version": "CUST03-C0C1-CANDIDATE-20261107.1:Q11",
+      "option_codes": [
+        "DINE_IN",
+        "TAKEAWAY",
+        "EITHER_EQUALLY",
+        "CANNOT_JUDGE",
+        "PREFER_NOT_TO_ANSWER"
+      ],
+      "source_original": "CS-08",
+      "method": "STRUCTURED_CLOSED_ENDED_ONLY",
+      "bm_translation_status": "MISSING_NOT_APPROVED",
+      "en_review_status": "PENDING",
+      "checks": [
+        "MEANING_MATCH",
+        "RECALL_WINDOW",
+        "OPTION_COMPREHENSION",
+        "REFUSAL",
+        "ROUTE_EXPECTATION"
+      ],
+      "result_choices": [
+        "CORRECT",
+        "INCORRECT",
+        "UNSURE",
+        "NOT_APPLICABLE"
+      ],
+      "human_results": "NOT_EXECUTED",
+      "source_question_version": "P3-01C-VNEXT-0.6.1-CUST-REC"
+    },
+    "Q12": {
+      "locales": [
+        "EN",
+        "BM"
+      ],
+      "question_version": "CUST03-C0C1-CANDIDATE-20261107.1:Q12",
+      "option_codes": [
+        "WALK",
+        "MOTORCYCLE",
+        "CAR",
+        "PUBLIC_TRANSPORT",
+        "OTHER",
+        "NOT_SURE",
+        "PREFER_NOT_TO_ANSWER"
+      ],
+      "source_original": "CS-12",
+      "method": "STRUCTURED_CLOSED_ENDED_ONLY",
+      "bm_translation_status": "MISSING_NOT_APPROVED",
+      "en_review_status": "PENDING",
+      "checks": [
+        "MEANING_MATCH",
+        "RECALL_WINDOW",
+        "OPTION_COMPREHENSION",
+        "REFUSAL",
+        "ROUTE_EXPECTATION"
+      ],
+      "result_choices": [
+        "CORRECT",
+        "INCORRECT",
+        "UNSURE",
+        "NOT_APPLICABLE"
+      ],
+      "human_results": "NOT_EXECUTED",
+      "source_question_version": "P3-01C-VNEXT-0.6.1-CUST-REC"
+    },
+    "Q13": {
+      "locales": [
+        "EN",
+        "BM"
+      ],
+      "question_version": "CUST03-C0C1-CANDIDATE-20261107.1:Q13",
+      "option_codes": [
+        "LT_RM8",
+        "RM8_TO_1199",
+        "RM12_TO_1499",
+        "RM15_TO_1799",
+        "GE_RM18",
+        "NOT_SURE",
+        "PREFER_NOT_TO_ANSWER"
+      ],
+      "source_original": "CS-07",
+      "method": "STRUCTURED_CLOSED_ENDED_ONLY",
+      "bm_translation_status": "MISSING_NOT_APPROVED",
+      "en_review_status": "PENDING",
+      "checks": [
+        "MEANING_MATCH",
+        "RECALL_WINDOW",
+        "OPTION_COMPREHENSION",
+        "REFUSAL",
+        "ROUTE_EXPECTATION"
+      ],
+      "result_choices": [
+        "CORRECT",
+        "INCORRECT",
+        "UNSURE",
+        "NOT_APPLICABLE"
+      ],
+      "human_results": "NOT_EXECUTED",
+      "source_question_version": "P3-01C-VNEXT-0.6.1-CUST-REC"
+    }
+  },
+  "changes": {
+    "Q01": "Reject terminal plus affiliation and all multiple-terminal submissions; no terminal-wins normalization.",
+    "Q02": "Explicit synthetic SHOW_ALL versus ELIGIBLE_ONLY; UNDECIDED withholds. No eligibility threshold.",
+    "Q05": "Require version/hash-bound concept stimulus review record.",
+    "Q09": "Eligible + concept + occasion bank. Independent of Q04 and Q05 positivity.",
+    "Q10": "Eligible + concept + nonempty version/hash-bound feature bank; per-feature states only.",
+    "Q03": "Additional conservative proposal: require concept exposure.",
+    "Q06": "Additional conservative proposal: require concept exposure plus menu bank bound to that concept."
+  }
+}
