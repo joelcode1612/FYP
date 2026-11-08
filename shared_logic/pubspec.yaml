@@ -20,6 +20,7 @@ resolution: workspace
 # `src/application/notifiers/` (M2 assessment included), which replaced the
 # former `bloc` Cubits. `package:bloc` is no longer imported anywhere in the
 # monorepo, so the `bloc` declaration was dropped with it.
+dependencies:
   riverpod: ^3.3.2
 dev_dependencies:
   # 1.31.1 requires test_api 0.7.12, but flutter_test (SDK 3.44.6) pins 0.7.11.
