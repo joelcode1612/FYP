@@ -67,17 +67,18 @@ import 'pages/owner/tours_page.dart' as o_tours;
 ///
 /// ## Where this router runs
 ///
-/// Exclusively **on the server**. `SitewiseApp` is part of the document the
-/// server renders, so `/entrepreneur/explore` returns that page's own HTML on
-/// a cold request or a hard refresh; the browser never boots a second router
-/// over the markup. The interactive leaves inside each page are `@client`
-/// components hydrated in place by `main.client.dart`, and because no router
-/// exists on the client, `Link` falls through to normal anchor navigation —
-/// i.e. a genuine document request per page.
+/// Entirely **in the browser** (`jaspr: mode: client`): `main.client.dart`
+/// mounts `SitewiseApp` from `web/index.html`, and navigation happens
+/// client-side through the History API. A hard refresh of a nested route is
+/// answered by FastAPI's SPA fallback (it returns `web/index.html`), after
+/// which this router boots at the requested URL. There is no server render.
 ///
-/// Consequence worth remembering: `redirect` and `errorBuilder` only ever run
-/// during a render, so they can set a real status line (`302`, `404`) instead
-/// of swapping a widget after the fact.
+/// `WebAuth.profile` is resolved before mounting (`WebAuth.initialize()` in
+/// `main.client.dart`), so the redirect guard below never routes with a stale
+/// or half-loaded identity: anonymous workspace requests go to
+/// `/login?next=…`, role mismatches go to the account's own home, and staff
+/// MFA state is enforced by the auth bundle's `enforceStaffAssurance` (with
+/// FastAPI independently re-checking every protected API call).
 class SitewiseApp extends StatelessComponent {
   const SitewiseApp({super.key});
 
@@ -90,16 +91,25 @@ class SitewiseApp extends StatelessComponent {
           r'^/(entrepreneur|owner|admin|agent)(/|$)',
         ).firstMatch(path);
         if (rolePath == null) return null;
-        // Server-side identity comes from the session cookie the browser
-        // mirrors. The 302 itself is set by the document shell, which can also
-        // keep the `?next=` destination the router would drop.
+        // Anonymous request for a workspace: go to the sign-in screen and keep
+        // the destination. FastAPI stays the authorization authority — every
+        // protected API call is independently verified against the bearer
+        // token, so this only prevents rendering an empty workspace shell.
         final profile = WebAuth.profile;
-        if (profile == null) return null;
+        if (profile == null) {
+          return '/login?next=${Uri.encodeComponent(state.location)}';
+        }
         final assigned = profile['role'] as String;
         final requested = rolePath.group(1)!;
-        // The server-assigned role always opens. Anything else needs an entry
-        // in `Workspaces`, which only the in-session access request can add —
-        // so a typed URL still cannot reach another role's data.
+        // Workspace presentation is based on the backend-verified account
+        // role. Client-controlled demo grants cannot authorize another role.
+        // Owner is a verified property capability within entrepreneur, not a
+        // standalone role. Legacy links resolve to My Properties.
+        if (requested == 'owner') {
+          return assigned == 'entrepreneur'
+              ? '/entrepreneur/my-properties'
+              : (_roleNamed(assigned)?.homeRoute ?? '/login');
+        }
         if (requested == assigned) return null;
         final role = _roleNamed(requested);
         if (role != null && Workspaces.canOpen(role)) return null;

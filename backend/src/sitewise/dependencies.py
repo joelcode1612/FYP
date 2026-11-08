@@ -181,6 +181,11 @@ def require_roles(*allowed):
     ) -> AuthenticatedUser:
         if not rbac.has_role(user.role, tuple(flat)):
             raise ForbiddenError("You do not have permission to perform this action.")
+        # An administrator acting through a broadly scoped dependency still
+        # requires the same signed AAL2 assurance as an admin-only endpoint.
+        if (rbac.canonical_role(user.role) == rbac.ROLE_ADMIN
+                and user.assurance_level != rbac.REQUIRED_STAFF_AAL):
+            raise _staff_mfa_required()
         return user
 
     return dependency
@@ -240,6 +245,9 @@ def require_entrepreneur(
 ) -> AuthenticatedUser:
     if not rbac.has_role(user.role, (rbac.ROLE_ENTREPRENEUR, rbac.ROLE_ADMIN)):
         raise ForbiddenError("This action requires an entrepreneur account.")
+    if (rbac.canonical_role(user.role) == rbac.ROLE_ADMIN
+            and user.assurance_level != rbac.REQUIRED_STAFF_AAL):
+        raise _staff_mfa_required()
     return user
 
 
@@ -252,6 +260,9 @@ def require_property_owner(
     ``entrepreneur``.)"""
     if not rbac.can_manage_properties(user.role):
         raise ForbiddenError("This action requires an entrepreneur (property owner) account.")
+    if (rbac.canonical_role(user.role) == rbac.ROLE_ADMIN
+            and user.assurance_level != rbac.REQUIRED_STAFF_AAL):
+        raise _staff_mfa_required()
     return user
 
 

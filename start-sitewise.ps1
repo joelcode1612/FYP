@@ -26,6 +26,11 @@
 #>
 
 $ErrorActionPreference = 'Stop'
+
+Write-Host 'DEPRECATED: this launcher starts the legacy SSR + backend pair.' -ForegroundColor Yellow
+Write-Host 'SiteWise now runs as a single FastAPI application server on :8090 —' -ForegroundColor Yellow
+Write-Host 'use .\run-sitewise.cmd instead.' -ForegroundColor Yellow
+Write-Host ''
 $root = Split-Path -Parent $MyInvocation.MyCommand.Path
 $webDir = Join-Path $root 'fyp_jaspr_web'
 # `.\serve` resolves to serve.cmd (the .ps1 implementation is named

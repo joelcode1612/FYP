@@ -84,8 +84,29 @@ async function apiRequest(path, method = 'GET', body) {
 // the bearer token against Supabase, provisions the profile on first sign-in
 // and returns the SERVER-assigned role. No client-submitted role is ever sent.
 async function profile() {
+  const { data: before, error: sessionError } = await client.auth.getSession();
+  const identityId = before?.session?.user?.id;
+  if (sessionError || !identityId) throw new Error('Sign in to continue.');
+  // On account switching, discard the old role and its SSR mirror immediately.
+  if (state.profile?.user_id && state.profile.user_id !== identityId) {
+    state.profile = null;
+    clearSessionCookies();
+  }
   const response = await apiRequest('/api/v1/auth/me', 'GET');
-  assertActiveAccount(response);
+  const { data: after } = await client.auth.getSession();
+  if (response.user_id !== identityId || after?.session?.user?.id !== identityId) {
+    state.profile = null;
+    clearSessionCookies();
+    throw new Error('The authenticated identity changed. Please sign in again.');
+  }
+  try {
+    assertActiveAccount(response);
+  } catch (error) {
+    state.profile = null;
+    clearSessionCookies();
+    throw error;
+  }
+  state.user = { id: identityId, email: after.session.user.email };
   state.profile = response;
   state.backendAvailable = true;
   state.error = '';
@@ -97,11 +118,13 @@ async function profile() {
 // missing role must never silently fall back to the least-privileged one.
 function assertActiveAccount(profile) {
   const status = String(profile?.account_status || '').toLowerCase();
-  if (status && status !== 'active') {
+  if (status !== 'active') {
     const error = new Error(
       status === 'pending'
         ? 'Your account is pending approval. An administrator must activate it before you can continue.'
-        : 'Your account is suspended. Please contact a Sitewise administrator.',
+        : status === 'suspended'
+          ? 'Your account is suspended. Please contact a Sitewise administrator.'
+          : 'Account status could not be verified. Please contact support.',
     );
     error.code = 'account_' + status;
     throw error;
@@ -237,7 +260,9 @@ async function enforceStaffAssurance() {
 // server profile first, then staff-without-a-factor go to enrollment, staff
 // without aal2 go to verification, and everyone else to their role's workspace.
 async function finishSignIn() {
-  if (!state.profile) await profile();   // strict: surface API failures
+  // Never choose a workspace using a previously authenticated account's
+  // profile. The backend resolves the role from the current signed JWT.
+  await profile();
   assertActiveAccount(state.profile);
   const status = await ensureStaffAssurance();
   if (status === 'enroll') {
@@ -300,12 +325,10 @@ async function tryProfile() {
     await profile();
   } catch (error) {
     state.profile = null;
-    state.error = '';
-    // A suspended/pending account must not keep a stale SSR session cookie.
-    if (String(error?.code || '').startsWith('account_')) {
-      clearSessionCookies();
-      state.error = error.message;
-    }
+    // No SSR session is usable when the backend cannot revalidate identity,
+    // regardless of whether the cause is account status or network failure.
+    clearSessionCookies();
+    state.error = error?.message || 'Could not verify the account.';
   }
 }
 
@@ -354,20 +377,26 @@ async function doInitialize() {
 
   // Subscribe BEFORE reading the session: the PKCE code exchange on
   // /auth/callback emits SIGNED_IN asynchronously during client init.
-  client.auth.onAuthStateChange(event => {
+  client.auth.onAuthStateChange((event, session) => {
     if (event === 'SIGNED_OUT') {
       state.user = null;
       state.profile = null;
       clearSessionCookies();
-      if (/^\/(admin|agent|entrepreneur|staff)(\/|$)/.test(location.pathname))
+      if (/^\/(admin|agent|entrepreneur|staff|owner)(\/|$)/.test(location.pathname))
         navigate(location.pathname.startsWith('/staff/') ? '/staff/signin' : '/login');
     } else if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
-      // Keep the SSR mirror in step with the rotated token, then re-confirm
-      // staff assurance: a refresh can land on a session that has not completed
-      // MFA, and a staff workspace must never stay rendered at aal1.
-      syncSessionCookies()
-        .then(() => enforceStaffAssurance())
-        .catch(() => {});
+      if (session?.user?.id && state.profile?.user_id !== session.user.id) {
+        state.profile = null;
+        clearSessionCookies();
+      }
+      // Supabase recommends deferring auth-client calls outside this callback.
+      // The API fetch revalidates the current signed identity before a cookie
+      // mirror is issued, including when the token refreshes.
+      setTimeout(() => {
+        profile()
+          .then(() => enforceStaffAssurance())
+          .catch(() => { state.profile = null; clearSessionCookies(); });
+      }, 0);
     }
   });
 
@@ -504,6 +533,8 @@ window.sitewiseAuth = {
       if (error) throw error;
       if (data.session) {
         state.user = { id: data.session.user.id, email: data.session.user.email };
+        state.profile = null; // Never inherit a prior user's role.
+        clearSessionCookies();
         // First factor complete: finishSignIn() requires staff AAL2 and routes
         // AAL1 accounts to /staff/verify. No challenge input remains on /login.
         await finishSignIn();

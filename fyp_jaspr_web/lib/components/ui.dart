@@ -585,6 +585,46 @@ class Skeleton extends StatelessComponent {
   }
 }
 
+/// Loading placeholder for the bento console pages (admin and owner
+/// dashboards).
+///
+/// It renders the same wrappers the loaded page renders — `.bento-head`,
+/// `.bento-kpis` with `.kpi` tiles and the `.bento` grid with the real card
+/// classes — so the swap from skeleton to data keeps every grid span, padding
+/// and gap instead of collapsing the layout to a spinner bar. The skeleton
+/// block heights inside those wrappers are tuned in `styles.css`.
+class BentoSkeleton extends StatelessComponent {
+  const BentoSkeleton({super.key});
+
+  @override
+  Component build(BuildContext context) => div(classes: 'stack', [
+    div(classes: 'bento-head', [
+      div(classes: 'bh-title', [
+        const Skeleton(variant: 'title'),
+        const Skeleton(variant: 'text'),
+        const Skeleton(variant: 'text'),
+      ]),
+      div(classes: 'bh-actions', [
+        const Skeleton(variant: 'row'),
+        const Skeleton(variant: 'row'),
+        const Skeleton(variant: 'row'),
+      ]),
+    ]),
+    div(classes: 'bento-kpis', [
+      for (var i = 0; i < 4; i++)
+        div(classes: 'kpi', [const Skeleton(variant: 'block')]),
+    ]),
+    div(classes: 'bento', [
+      div(classes: 'bento-hero', [const Skeleton(variant: 'block')]),
+      div(classes: 'bento-card bento-wide', [
+        const Skeleton(variant: 'block'),
+      ]),
+      for (var i = 0; i < 3; i++)
+        div(classes: 'bento-card', [const Skeleton(variant: 'block')]),
+    ]),
+  ]);
+}
+
 /// Status pill driven by the real domain enums, so colour is never chosen
 /// ad-hoc per page.
 ///

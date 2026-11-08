@@ -29,7 +29,6 @@ class VerificationPage extends StatefulComponent {
 
 class _VerificationPageState extends State<VerificationPage> {
   late final AdminCubit vm;
-  String? _tourSuccess;
 
   @override
   void initState() {
@@ -45,80 +44,104 @@ class _VerificationPageState extends State<VerificationPage> {
     super.dispose();
   }
 
-  Future<void> _approveTour(String id) async {
+  @override
+  Component build(BuildContext context) {
+    return AppLayout(
+      role: AppRole.admin,
+      currentRoute: '/admin/verification',
+      title: 'Property verification',
+      eyebrow: 'Verification',
+      subtitle:
+          'Review the submitted record against the evidence the owner '
+          'provided. Approval verifies the listing details — it does not '
+          'grant permission to operate a food business.',
+      // Scoped to the data slices the two sections render, and inside the
+      // layout, so the chrome never rebuilds on a VM emit (the review split
+      // and the tour queue keep their own interaction state).
+      child: CubitBuilder<AdminCubit, AdminState>(
+        cubit: vm,
+        when: (prev, next) =>
+            prev.queue != next.queue ||
+            prev.listings != next.listings ||
+            prev.pendingTours != next.pendingTours,
+        builder: (context, _) => div(classes: 'stack stack--sections', [
+          ReviewSplit(vm: vm, mode: ReviewMode.verification),
+          _TourQueue(vm: vm),
+        ]),
+      ),
+    );
+  }
+}
+
+/// Target-only section: tours awaiting verification (no source route).
+/// Owns the approval notice state so approving/rejecting a tour rebuilds only
+/// this card, never the layout or the review split.
+class _TourQueue extends StatefulComponent {
+  final AdminCubit vm;
+
+  const _TourQueue({required this.vm});
+
+  @override
+  State<_TourQueue> createState() => _TourQueueState();
+}
+
+class _TourQueueState extends State<_TourQueue> {
+  String? _success;
+
+  AdminCubit get vm => component.vm;
+
+  Future<void> _approve(String id) async {
     await vm.approveTour(id);
-    if (mounted) setState(() => _tourSuccess = 'Tour approved.');
+    if (mounted) setState(() => _success = 'Tour approved.');
   }
 
-  Future<void> _rejectTour(String id) async {
+  Future<void> _reject(String id) async {
     await vm.rejectTour(id);
-    if (mounted) setState(() => _tourSuccess = 'Tour rejected.');
+    if (mounted) setState(() => _success = 'Tour rejected.');
   }
 
   @override
   Component build(BuildContext context) {
-    return CubitBuilder<AdminCubit, AdminState>(
-      cubit: vm,
-      builder: (context, _) {
-        return AppLayout(
-          role: AppRole.admin,
-          currentRoute: '/admin/verification',
-          title: 'Property verification',
-          eyebrow: 'Verification',
-          subtitle:
-              'Review the submitted record against the evidence the owner '
-              'provided. Approval verifies the listing details — it does not '
-              'grant permission to operate a food business.',
-          child: div(classes: 'stack stack--sections', [
-            ReviewSplit(vm: vm, mode: ReviewMode.verification),
-
-            // --- Target-only: tours awaiting verification (no source route) ---
-            SectionCard(
-              title: 'Tours awaiting verification',
-              child: div(classes: 'stack', [
-                p(classes: 'small muted', [
-                  Component.text(
-                    'Approve completed 360° tours so entrepreneurs can view '
-                    'them. This workflow is not part of the source review '
-                    'design.',
-                  ),
-                ]),
-                if (_tourSuccess != null)
-                  div(classes: 'card stack', [
-                    span(classes: 'small text-success', [
-                      Component.text(_tourSuccess!),
-                    ]),
-                  ]),
-                if (vm.pendingTours.isEmpty)
-                  p(classes: 'body', [
-                    Component.text('No tours are waiting for verification.'),
-                  ])
-                else
-                  div(classes: 'stack', [
-                    for (final t in vm.pendingTours)
-                      div(classes: 'row', [
-                        div(classes: 'grow stack', [
-                          span(classes: 'body', [Component.text(t.title)]),
-                          span(classes: 'small muted', [
-                            Component.text('${t.frameCount} frames'),
-                          ]),
-                        ]),
-                        ActionButton(
-                          'Reject',
-                          variant: 'secondary',
-                          onClick: () => unawaited(_rejectTour(t.id)),
-                        ),
-                        ActionButton(
-                          'Approve',
-                          onClick: () => unawaited(_approveTour(t.id)),
-                        ),
-                      ]),
-                  ]),
-              ]),
-            ),
+    return SectionCard(
+      title: 'Tours awaiting verification',
+      child: div(classes: 'stack', [
+        p(classes: 'small muted', [
+          Component.text(
+            'Approve completed 360° tours so entrepreneurs can view '
+            'them. This workflow is not part of the source review '
+            'design.',
+          ),
+        ]),
+        if (_success != null)
+          div(classes: 'card stack', [
+            span(classes: 'small text-success', [Component.text(_success!)]),
           ]),
-        );
-      },
+        if (vm.pendingTours.isEmpty)
+          p(classes: 'body', [
+            Component.text('No tours are waiting for verification.'),
+          ])
+        else
+          div(classes: 'stack', [
+            for (final t in vm.pendingTours)
+              div(classes: 'row', [
+                div(classes: 'grow stack', [
+                  span(classes: 'body', [Component.text(t.title)]),
+                  span(classes: 'small muted', [
+                    Component.text('${t.frameCount} frames'),
+                  ]),
+                ]),
+                ActionButton(
+                  'Reject',
+                  variant: 'secondary',
+                  onClick: () => unawaited(_reject(t.id)),
+                ),
+                ActionButton(
+                  'Approve',
+                  onClick: () => unawaited(_approve(t.id)),
+                ),
+              ]),
+          ]),
+      ]),
     );
   }
 }

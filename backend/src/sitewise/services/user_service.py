@@ -3,7 +3,7 @@ from typing import Optional
 
 from sqlmodel import Session
 
-from sitewise.core.exceptions import ForbiddenActionError
+from sitewise.core.exceptions import ConflictError, ForbiddenActionError
 from sitewise.db.models.user import User
 from sitewise.domain import rbac
 from sitewise.repositories.user_repository import UserRepository
@@ -49,6 +49,15 @@ class UserService:
         The authoritative role/status always come from this local row - never
         from token metadata, which the client could influence at signup.
         """
+        # The Supabase UUID is the identity key. An email collision with a
+        # different local UUID must be reconciled by a trusted administrator,
+        # not silently re-keyed or promoted on sign-in.
+        collision = self.repo.get_by_email(email)
+        if collision is not None and collision.user_id != user_id:
+            raise ConflictError(
+                "This identity conflicts with an existing profile. "
+                "Contact an administrator for verified reconciliation."
+            )
         user, created = self.repo.get_or_create_from_supabase(
             user_id=user_id,
             email=email,
@@ -92,14 +101,22 @@ class UserService:
         The authoritative role/status live in the Supabase identity row; this
         mirror is what the auth dependencies read on every request.
 
-        Orphan reconciliation: if a mirror row exists with the same email but
-        a stale Supabase UUID (identity deleted and recreated in Supabase),
-        the row is re-keyed to the new UUID so the unique-email constraint is
-        satisfied and account history is preserved.
+        Identity collisions are NEVER resolved automatically using an email
+        match. A staff account with a different Supabase UUID must be reviewed
+        through an explicit, audited administrator recovery workflow.
         """
+        role = rbac.canonical_role(role)
+        if role not in rbac.STAFF_ROLES or not rbac.is_valid_status(account_status):
+            raise ValueError("Invalid staff role or account status")
         existing = self.repo.get_by_id(user_id)
+        collision = self.repo.get_by_email(email)
+        if collision is not None and collision.user_id != user_id:
+            raise ConflictError(
+                "A different local identity already uses this email. "
+                "Staff provisioning requires explicit identity reconciliation."
+            )
         data = {
-            "role": rbac.canonical_role(role) or role,
+            "role": role,
             "account_status": account_status,
         }
         if full_name is not None:
@@ -110,9 +127,6 @@ class UserService:
             updated = self.repo.update(user_id, data)
             assert updated is not None
             return updated
-        orphan = self.repo.get_by_email(email)
-        if orphan is not None and orphan.user_id != user_id:
-            self.repo.rekey(orphan.user_id, user_id)
         user = User(
             user_id=user_id,
             email=email,

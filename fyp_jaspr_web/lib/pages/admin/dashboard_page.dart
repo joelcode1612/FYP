@@ -41,6 +41,9 @@ class _DashboardPageState extends State<DashboardPage> {
     super.initState();
     vm = AppLocator.newAdminCubit();
     unawaited(vm.loadDashboard());
+    // The tours KPI and queue card read pendingTours; without this call they
+    // would permanently show 0 (only the verification page loaded tours).
+    unawaited(vm.loadPendingTours());
   }
 
   @override
@@ -51,63 +54,53 @@ class _DashboardPageState extends State<DashboardPage> {
 
   @override
   Component build(BuildContext context) {
-    return CubitBuilder<AdminCubit, AdminState>(
-      cubit: vm,
-      builder: (context, _) {
-        return AppLayout(
-          role: AppRole.admin,
-          currentRoute: '/admin',
-          title: 'Verification overview',
-          // The source dashboard has no page header — its first element is
-          // `.bento-head`. Rendering both produced two competing titles, which
-          // the source does not have.
-          showPageHead: false,
-          child: vm.loading
-              ? const _Loading()
-              : vm.error != null
-              ? _error(vm.error!)
-              : div(classes: 'stack', [
-                  _head(),
-                  _kpis(),
-                  div(classes: 'bento', [
-                    _healthCard(),
-                    _auditCard(),
-                    _queueCard(
-                      'Property verification',
-                      vm.queue.length,
-                      'Review submitted listings against the evidence the owner '
-                          'provided.',
-                      '/admin/verification',
-                      pending: vm.queue.length,
-                    ),
-                    _queueCard(
-                      '360° tour verification',
-                      vm.pendingTours.length,
-                      'Confirm the tour belongs to the property and the '
-                          'panorama is ready.',
-                      '/admin/verification',
-                      pending: vm.pendingTours.length,
-                    ),
-                    _queueCard(
-                      'Account management',
-                      vm.users.length,
-                      'Inspect owner and administrator accounts and their '
-                          'status.',
-                      '/admin/users',
-                      pending: 0,
-                    ),
-                  ]),
-                  p(classes: 'stat-note', [
-                    Component.text(
-                      'Property and account counts are read live from the '
-                      'authenticated backend API. 360° tour verification is '
-                      'still demonstration data — capture frames exist only on '
-                      'mobile, so there is no web source yet.',
-                    ),
-                  ]),
-                ]),
-        );
-      },
+    // The cubit never leaves this page, so callbacks close over `vm` directly
+    // (the read style) instead of capturing values from builder state.
+    return AppLayout(
+      role: AppRole.admin,
+      currentRoute: '/admin',
+      title: 'Verification overview',
+      // The source dashboard has no page header — its first element is
+      // `.bento-head`. Rendering both produced two competing titles, which
+      // the source does not have.
+      showPageHead: false,
+      // The outer builder re-renders only the loading/error shells. Data-only
+      // emits (e.g. the late tour counts) are consumed by the region builders
+      // below, so the static heading never rebuilds or replays its
+      // letter-reveal animation. A tours failure is deliberately not surfaced
+      // here: the dashboard data is still valid and the note below explains
+      // that tours are demonstration data.
+      child: CubitBuilder<AdminCubit, AdminState>(
+        cubit: vm,
+        when: (prev, next) =>
+            prev.loading != next.loading ||
+            (next.error != null &&
+                next.listings.isEmpty &&
+                next.users.isEmpty),
+        builder: (context, state) {
+          if (state.loading) return const BentoSkeleton();
+          if (state.error != null) return _error(state.error!);
+          return div(classes: 'stack', [
+            _head(),
+            _kpisRegion(),
+            div(classes: 'bento', [
+              _healthRegion(),
+              _auditCard(),
+              _propertyQueueRegion(),
+              _tourQueueRegion(),
+              _accountQueueRegion(),
+            ]),
+            p(classes: 'stat-note', [
+              Component.text(
+                'Property and account counts are read live from the '
+                'authenticated backend API. 360° tour verification is '
+                'still demonstration data — capture frames exist only on '
+                'mobile, so there is no web source yet.',
+              ),
+            ]),
+          ]);
+        },
+      ),
     );
   }
 
@@ -118,6 +111,70 @@ class _DashboardPageState extends State<DashboardPage> {
       'Try again',
       variant: 'primary',
       onClick: () => unawaited(vm.loadDashboard()),
+    ),
+  );
+
+  // ------------------------------------------------------- scoped regions
+
+  /// KPI row: rebuilt only when one of the four lists behind the numbers
+  /// actually changes.
+  Component _kpisRegion() => CubitBuilder<AdminCubit, AdminState>(
+    cubit: vm,
+    when: (prev, next) =>
+        prev.queue != next.queue ||
+        prev.pendingTours != next.pendingTours ||
+        prev.listings != next.listings ||
+        prev.users != next.users,
+    builder: (context, state) => _kpis(state),
+  );
+
+  /// Verification-health hero: depends on listings only, so a late tours emit
+  /// never rebuilds (or restarts the donut transition).
+  Component _healthRegion() => CubitBuilder<AdminCubit, AdminState>(
+    cubit: vm,
+    when: (prev, next) => prev.listings != next.listings,
+    builder: (context, state) => _healthCard(),
+  );
+
+  /// Work-queue cards: one scoped builder per card, so each card's count
+  /// updates independently and each stays a direct child of the `.bento`
+  /// grid.
+  Component _propertyQueueRegion() => CubitBuilder<AdminCubit, AdminState>(
+    cubit: vm,
+    when: (prev, next) => prev.queue != next.queue,
+    builder: (context, state) => _queueCard(
+      'Property verification',
+      state.queue.length,
+      'Review submitted listings against the evidence the owner '
+          'provided.',
+      '/admin/verification',
+      pending: state.queue.length,
+    ),
+  );
+
+  Component _tourQueueRegion() => CubitBuilder<AdminCubit, AdminState>(
+    cubit: vm,
+    when: (prev, next) => prev.pendingTours != next.pendingTours,
+    builder: (context, state) => _queueCard(
+      '360° tour verification',
+      state.pendingTours.length,
+      'Confirm the tour belongs to the property and the '
+          'panorama is ready.',
+      '/admin/verification',
+      pending: state.pendingTours.length,
+    ),
+  );
+
+  Component _accountQueueRegion() => CubitBuilder<AdminCubit, AdminState>(
+    cubit: vm,
+    when: (prev, next) => prev.users != next.users,
+    builder: (context, state) => _queueCard(
+      'Account management',
+      state.users.length,
+      'Inspect owner and administrator accounts and their '
+          'status.',
+      '/admin/users',
+      pending: 0,
     ),
   );
 
@@ -160,23 +217,27 @@ class _DashboardPageState extends State<DashboardPage> {
 
   // -------------------------------------------------------------------- KPIs
 
-  Component _kpis() {
-    final approved = vm.listings
+  Component _kpis(AdminState state) {
+    final approved = state.listings
         .where((it) => it.verification == VerificationStatus.verified)
         .length;
     return div(classes: 'bento-kpis', [
       _kpi(
         'Properties awaiting review',
-        '${vm.queue.length}',
-        vm.queue.isEmpty ? 'Queue clear' : 'Needs a decision',
+        '${state.queue.length}',
+        state.queue.isEmpty ? 'Queue clear' : 'Needs a decision',
       ),
       _kpi(
         'Tours awaiting review',
-        '${vm.pendingTours.length}',
-        vm.pendingTours.isEmpty ? 'Queue clear' : 'Needs a decision',
+        '${state.pendingTours.length}',
+        state.pendingTours.isEmpty ? 'Queue clear' : 'Needs a decision',
       ),
-      _kpi('Approved listings', '$approved', '${vm.listings.length} in total'),
-      _kpi('Accounts', '${vm.users.length}', 'Administrators and owners'),
+      _kpi(
+        'Approved listings',
+        '$approved',
+        '${state.listings.length} in total',
+      ),
+      _kpi('Accounts', '${state.users.length}', 'Administrators and owners'),
     ]);
   }
 
@@ -298,14 +359,4 @@ class _DashboardPageState extends State<DashboardPage> {
       p(classes: 'queue-count', [Component.text('$count')]),
     ],
   );
-}
-
-class _Loading extends StatelessComponent {
-  const _Loading();
-
-  @override
-  Component build(BuildContext context) => div(classes: 'loading', [
-    span(classes: 'spinner', []),
-    Component.text('Loading overview…'),
-  ]);
 }

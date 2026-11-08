@@ -64,18 +64,20 @@ class _ToursPageState extends State<ToursPage> {
 
   @override
   Component build(BuildContext context) {
-    return CubitBuilder<OwnerCubit, OwnerState>(
-      cubit: vm,
-      builder: (context, _) {
-        return AppLayout(
-          role: AppRole.owner,
-          currentRoute: '/owner/tours',
-          title: '360° tours',
-          eyebrow: 'Virtual tours',
-          subtitle:
-              'Each tour is captured for one property. Tours are only visible to '
-              'entrepreneurs after an administrator approves them.',
-          child: vm.loading
+    return AppLayout(
+      role: AppRole.owner,
+      currentRoute: '/owner/tours',
+      title: '360° tours',
+      eyebrow: 'Virtual tours',
+      subtitle:
+          'Each tour is captured for one property. Tours are only visible to '
+          'entrepreneurs after an administrator approves them.',
+      // Inside the layout, so submit/delete emits rebuild only the content,
+      // never the chrome.
+      child: CubitBuilder<OwnerCubit, OwnerState>(
+        cubit: vm,
+        builder: (context, _) {
+          return vm.loading
               ? const _Loading()
               : div(classes: 'stack stack--md', [
                   if (_notice != null)
@@ -111,9 +113,9 @@ class _ToursPageState extends State<ToursPage> {
                       onCancel: () => setState(() => _confirming = null),
                       onConfirm: () => _delete(_confirming!),
                     ),
-                ]),
-        );
-      },
+                ]);
+        },
+      ),
     );
   }
 

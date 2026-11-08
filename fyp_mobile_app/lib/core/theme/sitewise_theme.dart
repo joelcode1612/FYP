@@ -52,7 +52,9 @@ abstract final class SitewiseColors {
   static const Color ink = Color(0xFF0B0F19);
   static const Color action = Color(0xFF1D4ED8);
   static const Color accent = Color(0xFF3B82F6);
-  static const Color background = Color(0xFFE8EEF6);
+  /// Page canvas. Pure white for the mobile refresh — the previous light-blue
+  /// wash made every screen read as tinted rather than white.
+  static const Color background = Color(0xFFFFFFFF);
   static const Color surface = Color(0xFFFFFFFF);
   static const Color border = Color(0xFFE7E8EA);
   static const Color muted = Color(0xFF64748B);
@@ -62,7 +64,8 @@ abstract final class SitewiseColors {
   static const Color danger = Color(0xFFDC2626);
 
   /// Second canvas, between `background` and `surface`.
-  static const Color paper = Color(0xFFF4F7FB);
+  /// Now white too: no cream / beige / tinted page surfaces anywhere.
+  static const Color paper = Color(0xFFFFFFFF);
 
   /// Body copy. Distinct from `ink` so headings can stay near-black while body
   /// text sits at the design's `--text`.
@@ -185,8 +188,11 @@ ThemeData sitewiseTheme() {
     scaffoldBackgroundColor: SitewiseColors.background,
     fontFamily: bodyFamily,
     appBarTheme: const AppBarTheme(
-      backgroundColor: SitewiseColors.ink,
-      foregroundColor: Colors.white,
+      // White header with dark ink content — a dark AppBar would break the
+      // pure-white theme and clash with the shared MobileTopBar lockup.
+      backgroundColor: SitewiseColors.surface,
+      foregroundColor: SitewiseColors.ink,
+      surfaceTintColor: SitewiseColors.surface,
       elevation: 0,
       centerTitle: false,
     ),
@@ -255,8 +261,9 @@ ThemeData sitewiseTheme() {
       type: BottomNavigationBarType.fixed,
     ),
     snackBarTheme: const SnackBarThemeData(
-      backgroundColor: SitewiseColors.ink,
-      contentTextStyle: TextStyle(color: Colors.white),
+      backgroundColor: SitewiseColors.surface,
+      contentTextStyle: TextStyle(color: SitewiseColors.ink),
+      elevation: 0,
     ),
   );
 

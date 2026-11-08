@@ -47,27 +47,29 @@ class _PropertiesPageState extends State<PropertiesPage> {
 
   @override
   Component build(BuildContext context) {
-    return CubitBuilder<OwnerCubit, OwnerState>(
-      cubit: vm,
-      builder: (context, _) {
-        final properties = vm.filteredProperties;
+    return AppLayout(
+      role: AppRole.owner,
+      currentRoute: '/owner/properties',
+      title: 'My commercial properties',
+      eyebrow: 'Listings',
+      subtitle:
+          'The commercial spaces you have listed. Each row shows the asking '
+          'rental, built-up area and current verification state.',
+      actions: const [
+        ActionLink(
+          'Add property',
+          href: '/owner/add-property',
+          icon: 'add',
+        ),
+      ],
+      // Inside the layout, so search/filter emits rebuild only the content,
+      // never the chrome.
+      child: CubitBuilder<OwnerCubit, OwnerState>(
+        cubit: vm,
+        builder: (context, _) {
+          final properties = vm.filteredProperties;
 
-        return AppLayout(
-          role: AppRole.owner,
-          currentRoute: '/owner/properties',
-          title: 'My commercial properties',
-          eyebrow: 'Listings',
-          subtitle:
-              'The commercial spaces you have listed. Each row shows the asking '
-              'rental, built-up area and current verification state.',
-          actions: const [
-            ActionLink(
-              'Add property',
-              href: '/owner/add-property',
-              icon: 'add',
-            ),
-          ],
-          child: vm.loading
+          return vm.loading
               ? const _Loading()
               : div(classes: 'stack stack--md', [
                   _filters(),
@@ -85,9 +87,9 @@ class _PropertiesPageState extends State<PropertiesPage> {
                     )
                   else
                     div(classes: 'rows', [for (final p in properties) _row(p)]),
-                ]),
-        );
-      },
+                ]);
+        },
+      ),
     );
   }
 

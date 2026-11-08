@@ -196,3 +196,20 @@ def test_role_only_staff_helpers_removed():
     assert not hasattr(deps, "require_agent")
     for safe in ("require_admin_mfa", "require_agent_mfa", "get_staff_user"):
         assert hasattr(deps, safe), safe
+
+def test_password_only_admin_cannot_use_property_owner_admin_exception(
+    client, cleanup_users
+):
+    """Admin access through owner APIs must require AAL2."""
+    _, token = _mirror(cleanup_users, role="admin", aal="aal1")
+
+    response = client.get(
+        "/api/v1/properties/mine",
+        headers=auth(token),
+    )
+
+    assert response.status_code == 403, response.text
+    assert (
+        response.json()["detail"]["code"]
+        == "staff_mfa_required"
+    )

@@ -38,13 +38,13 @@ dev_dependencies:
   jaspr_test: ^0.23.5
   lints: ^6.0.0 # bumped from ^5.0.0 to share the workspace resolution with flutter_lints 6
 
-# Server-rendered, multi-page app: `lib/main.server.dart` answers every URL with
-# a complete HTML document, and only the interactive leaves are hydrated by
-# `lib/main.client.dart`. Navigation is a normal document request, so a hard
-# refresh of a nested route is handled by the router on the server (no
-# `index.html` rewrite rule is needed any more — see README.md).
+# Client-side single-page app: `lib/main.client.dart` boots the whole router in
+# the browser from `web/index.html`, and FastAPI (the unified app server) serves
+# the compiled output in `build/jaspr/` together with the REST API. Navigation
+# is client-side; a hard refresh of a nested route hits FastAPI's SPA fallback
+# (see backend/src/sitewise/frontend.py and README.md).
 jaspr:
-  mode: server
+  mode: client
   styles: standalone
 
   # Port 8080 is occupied on this machine (something else is listening on

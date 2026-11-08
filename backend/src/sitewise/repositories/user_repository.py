@@ -3,7 +3,6 @@ from datetime import datetime, timezone
 from typing import Optional
 
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy import update as sa_update
 from sqlmodel import Session, select
 
 from sitewise.db.models.user import User
@@ -49,22 +48,6 @@ class UserRepository:
         self.session.delete(user)
         self.session.commit()
         return True
-
-    def rekey(self, old_user_id: uuid.UUID, new_user_id: uuid.UUID) -> None:
-        """Re-key an orphaned mirror row to a new Supabase UUID.
-
-        Used when the identity was deleted and re-created in Supabase with
-        the same email: the local row keeps its history but its primary key
-        follows the authoritative identity. Referencing child rows (favourites
-        etc.) follow automatically via the FK.
-        """
-        user = self.get_by_id(old_user_id)
-        if not user:
-            return
-        self.session.execute(
-            sa_update(User).where(User.user_id == old_user_id).values(user_id=new_user_id)
-        )
-        self.session.commit()
 
     def get_or_create_from_supabase(
         self,

@@ -64,4 +64,5 @@ def session_info(user: ActiveUser) -> dict:
         "user_id": str(uuid.UUID(str(user.user_id))),
         "role": rbac.canonical_role(user.role) or user.role,
         "account_status": user.account_status,
+        "assurance_level": user.assurance_level,
     }
