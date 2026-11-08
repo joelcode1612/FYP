@@ -1,0 +1,1 @@
+{"format-version":[1,0,0],"native-assets":{"android_arm":{"package:dartcv4/dartcv.dart":["absolute","libdartcv.so"]},"android_arm64":{"package:dartcv4/dartcv.dart":["absolute","libdartcv.so"]},"android_x64":{"package:dartcv4/dartcv.dart":["absolute","libdartcv.so"]}}}

@@ -1,0 +1,17 @@
+Unhandled exception:
+Exception: Failed to build CMake project: 
+#0      RunCMakeBuilder.run (package:native_toolchain_cmake/src/builder/run_builder.dart:192:7)
+<asynchronous suspension>
+#1      CMakeBuilder.runStandalone (package:native_toolchain_cmake/src/builder/builder.dart:429:5)
+<asynchronous suspension>
+#2      CMakeBuilder.run (package:native_toolchain_cmake/src/builder/builder.dart:235:5)
+<asynchronous suspension>
+#3      runBuild (package:dartcv4/src/hook_helpers/run_build.dart:148:3)
+<asynchronous suspension>
+#4      main.<anonymous closure> (file:///c:/users/lenovo/appdata/local/pub/cache/hosted/pub.dev/dartcv4-2.2.2/hook/build.dart:9:5)
+<asynchronous suspension>
+#5      build (package:hooks/src/api/build_and_link.dart:250:5)
+<asynchronous suspension>
+#6      main (file:///c:/users/lenovo/appdata/local/pub/cache/hosted/pub.dev/dartcv4-2.2.2/hook/build.dart:8:3)
+<asynchronous suspension>
+

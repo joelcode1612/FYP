@@ -1,0 +1,17 @@
+{
+  "assets": [
+    {
+      "encoding": {
+        "file": "C:\\Users\\Lenovo\\AndroidStudioProjects\\FYP\\.dart_tool\\hooks_runner\\shared\\dartcv4\\build\\d846a387ae\\install\\lib\\libdartcv.so",
+        "id": "package:dartcv4/dartcv.dart",
+        "link_mode": {
+          "type": "dynamic_loading_bundle"
+        }
+      },
+      "type": "code_assets/code"
+    }
+  ],
+  "assets_for_linking": {},
+  "status": "success",
+  "timestamp": "2026-11-08 17:01:20.000"
+}
