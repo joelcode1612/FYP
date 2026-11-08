@@ -6,7 +6,7 @@ class Settings(BaseSettings):
 
     # --- Databases ---------------------------------------------------------
     # Application database (user profiles, saved properties, preferences).
-    database_url: str = "postgresql+psycopg2://postgres:123456@localhost:5432/sitesense"
+    database_url: str ="postgresql+psycopg2://postgres:123456@localhost:5432/Dss"
     # Analytics database (DOSM statistics, geospatial features). Read-only by
     # convention; the ORM never runs create_all or migrations against it.
     analytics_database_url: str = (

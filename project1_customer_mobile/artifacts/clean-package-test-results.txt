@@ -1,0 +1,45 @@
+00:00 +0: loading D:/Codex_Project1_UI_20261108_01a1b826/project1_customer_mobile/test/questionnaire_viewmodel_test.dart
+00:00 +0: D:/Codex_Project1_UI_20261108_01a1b826/project1_customer_mobile/test/questionnaire_viewmodel_test.dart: source response-code sets are preserved for all 13 identities
+00:00 +1: D:/Codex_Project1_UI_20261108_01a1b826/project1_customer_mobile/test/questionnaire_viewmodel_test.dart: consent gates start and submission is blocked before review
+00:00 +2: D:/Codex_Project1_UI_20261108_01a1b826/project1_customer_mobile/test/questionnaire_viewmodel_test.dart: no answer cannot advance required item
+00:00 +3: D:/Codex_Project1_UI_20261108_01a1b826/project1_customer_mobile/test/questionnaire_viewmodel_test.dart: invalid response codes and matrix intents are rejected
+00:00 +4: D:/Codex_Project1_UI_20261108_01a1b826/project1_customer_mobile/test/questionnaire_viewmodel_test.dart: all 512 Q01 subsets resolve without conflicting exclusive choices
+00:00 +5: D:/Codex_Project1_UI_20261108_01a1b826/project1_customer_mobile/test/questionnaire_viewmodel_test.dart: affiliation and terminal choices clear one another
+00:00 +6: D:/Codex_Project1_UI_20261108_01a1b826/project1_customer_mobile/test/questionnaire_viewmodel_test.dart: RARELY uses short mock route with Q02 and truthful two-item review
+00:00 +7: D:/Codex_Project1_UI_20261108_01a1b826/project1_customer_mobile/test/questionnaire_viewmodel_test.dart: NEVER uses short mock route with Q02 and truthful two-item review
+00:00 +8: D:/Codex_Project1_UI_20261108_01a1b826/project1_customer_mobile/test/questionnaire_viewmodel_test.dart: NOT_SURE uses short mock route with Q02 and truthful two-item review
+00:00 +9: D:/Codex_Project1_UI_20261108_01a1b826/project1_customer_mobile/test/questionnaire_viewmodel_test.dart: Q04 ZERO excludes Q08 but keeps Q09 future occasions
+00:00 +10: D:/Codex_Project1_UI_20261108_01a1b826/project1_customer_mobile/test/questionnaire_viewmodel_test.dart: Q04 CANNOT_REMEMBER excludes Q08 but keeps Q09 future occasions
+00:00 +11: D:/Codex_Project1_UI_20261108_01a1b826/project1_customer_mobile/test/questionnaire_viewmodel_test.dart: Q04 PREFER_NOT_TO_ANSWER excludes Q08 but keeps Q09 future occasions
+00:00 +12: D:/Codex_Project1_UI_20261108_01a1b826/project1_customer_mobile/test/questionnaire_viewmodel_test.dart: Q04 ONE includes Q08
+00:00 +13: D:/Codex_Project1_UI_20261108_01a1b826/project1_customer_mobile/test/questionnaire_viewmodel_test.dart: Q04 TWO_THREE includes Q08
+00:00 +14: D:/Codex_Project1_UI_20261108_01a1b826/project1_customer_mobile/test/questionnaire_viewmodel_test.dart: Q04 FOUR_SEVEN includes Q08
+00:00 +15: D:/Codex_Project1_UI_20261108_01a1b826/project1_customer_mobile/test/questionnaire_viewmodel_test.dart: Q04 EIGHT_PLUS includes Q08
+00:00 +16: D:/Codex_Project1_UI_20261108_01a1b826/project1_customer_mobile/test/questionnaire_viewmodel_test.dart: concept absence blocks stimulus-dependent questions, not past behavior
+00:00 +17: D:/Codex_Project1_UI_20261108_01a1b826/project1_customer_mobile/test/questionnaire_viewmodel_test.dart: individual fixture switches suppress only their modules
+00:00 +18: D:/Codex_Project1_UI_20261108_01a1b826/project1_customer_mobile/test/questionnaire_viewmodel_test.dart: Q02 0 days does not invent another eligibility threshold
+00:00 +19: D:/Codex_Project1_UI_20261108_01a1b826/project1_customer_mobile/test/questionnaire_viewmodel_test.dart: Q06 max three and exclusive clearing
+00:00 +20: D:/Codex_Project1_UI_20261108_01a1b826/project1_customer_mobile/test/questionnaire_viewmodel_test.dart: matrix partial is incomplete; each synthetic feature needs its own answer
+00:00 +21: D:/Codex_Project1_UI_20261108_01a1b826/project1_customer_mobile/test/questionnaire_viewmodel_test.dart: optional skips remain empty; default ZERO route has 12 shown, 9 answers, 3 skips
+00:00 +22: D:/Codex_Project1_UI_20261108_01a1b826/project1_customer_mobile/test/questionnaire_viewmodel_test.dart: positive purchase full route shows 13 without claiming 13 answers
+00:00 +23: D:/Codex_Project1_UI_20261108_01a1b826/project1_customer_mobile/test/questionnaire_viewmodel_test.dart: Q04 edit clears excluded Q08 and does not restore stale answer
+00:00 +24: D:/Codex_Project1_UI_20261108_01a1b826/project1_customer_mobile/test/questionnaire_viewmodel_test.dart: Q01 edit prunes all hidden downstream answers and retains screen answers
+00:00 +25: D:/Codex_Project1_UI_20261108_01a1b826/project1_customer_mobile/test/questionnaire_viewmodel_test.dart: route expansion after review is blocked until unvisited required items answered
+00:00 +26: D:/Codex_Project1_UI_20261108_01a1b826/project1_customer_mobile/test/questionnaire_viewmodel_test.dart: optional skipped answer can be edited and counts recomputed
+00:00 +27: D:/Codex_Project1_UI_20261108_01a1b826/project1_customer_mobile/test/questionnaire_viewmodel_test.dart: language toggle preserves codes and session navigation
+00:00 +28: D:/Codex_Project1_UI_20261108_01a1b826/project1_customer_mobile/test/questionnaire_viewmodel_test.dart: back to welcome and resume preserves exposure and answers; setup freezes after start
+00:00 +29: D:/Codex_Project1_UI_20261108_01a1b826/project1_customer_mobile/test/questionnaire_viewmodel_test.dart: reset clears consent, response and exposure history
+00:00 +30: D:/Codex_Project1_UI_20261108_01a1b826/project1_customer_mobile/test/questionnaire_viewmodel_test.dart: state and answer collections cannot be externally mutated
+00:01 +31: D:/Codex_Project1_UI_20261108_01a1b826/project1_customer_mobile/test/ui_test.dart: (setUpAll)
+00:01 +31: D:/Codex_Project1_UI_20261108_01a1b826/project1_customer_mobile/test/ui_test.dart: welcome consent gate, bilingual labels and question selection work
+00:05 +32: D:/Codex_Project1_UI_20261108_01a1b826/project1_customer_mobile/test/ui_test.dart: Q05 styled selected option and route-aware review screenshots
+00:07 +33: D:/Codex_Project1_UI_20261108_01a1b826/project1_customer_mobile/test/ui_test.dart: welcome at 320x568 with 200% text in en has no overflow
+00:07 +34: D:/Codex_Project1_UI_20261108_01a1b826/project1_customer_mobile/test/ui_test.dart: q05 at 320x568 with 200% text in en has no overflow
+00:07 +35: D:/Codex_Project1_UI_20261108_01a1b826/project1_customer_mobile/test/ui_test.dart: review at 320x568 with 200% text in en has no overflow
+00:07 +36: D:/Codex_Project1_UI_20261108_01a1b826/project1_customer_mobile/test/ui_test.dart: matrix at 320x568 with 200% text in en has no overflow
+00:07 +37: D:/Codex_Project1_UI_20261108_01a1b826/project1_customer_mobile/test/ui_test.dart: welcome at 320x568 with 200% text in bm has no overflow
+00:07 +38: D:/Codex_Project1_UI_20261108_01a1b826/project1_customer_mobile/test/ui_test.dart: q05 at 320x568 with 200% text in bm has no overflow
+00:08 +39: D:/Codex_Project1_UI_20261108_01a1b826/project1_customer_mobile/test/ui_test.dart: review at 320x568 with 200% text in bm has no overflow
+00:08 +40: D:/Codex_Project1_UI_20261108_01a1b826/project1_customer_mobile/test/ui_test.dart: matrix at 320x568 with 200% text in bm has no overflow
+00:08 +41: D:/Codex_Project1_UI_20261108_01a1b826/project1_customer_mobile/test/ui_test.dart: (tearDownAll)
+00:08 +41: All tests passed!

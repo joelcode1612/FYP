@@ -1,0 +1,7 @@
+00:00 +0: loading D:/Codex_Project1_UI_20261108_01a1b826/project1_customer_mobile/integration_test/app_test.dart
+Running Gradle task 'assembleDebug'...                            606.7s
+√ Built build\app\outputs\flutter-apk\app-debug.apk
+Installing build\app\outputs\flutter-apk\app-debug.apk...           7.1s
+00:00 +0: Android synthetic walkthrough, language toggle, optional skips and review editing
+00:49 +1: (tearDownAll)
+00:54 +1: All tests passed!

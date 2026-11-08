@@ -1,0 +1,281 @@
+[
+  {
+    "id": "Q01",
+    "construct": "G01_AREA_AFFILIATION",
+    "type": "multi_select_with_exclusive_terminals",
+    "codes": [
+      "LIVE",
+      "WORK",
+      "STUDY",
+      "RUN_BUSINESS",
+      "VISIT_PURPOSE",
+      "PASS_THROUGH",
+      "RARELY",
+      "NEVER",
+      "NOT_SURE"
+    ],
+    "exclusive_codes": [
+      "RARELY",
+      "NEVER",
+      "NOT_SURE"
+    ],
+    "non_substantive_codes": [
+      "NEVER",
+      "NOT_SURE",
+      "RARELY"
+    ],
+    "status": "BLOCKED_MEASUREMENT"
+  },
+  {
+    "id": "Q02",
+    "construct": "G01_AREA_PRESENCE_FREQUENCY",
+    "type": "ordinal_single",
+    "codes": [
+      "NONE",
+      "DAYS_1_3",
+      "DAYS_4_10",
+      "DAYS_11_20",
+      "DAYS_GT_20",
+      "PREFER_NOT_TO_ANSWER"
+    ],
+    "exclusive_codes": [],
+    "non_substantive_codes": [
+      "PREFER_NOT_TO_ANSWER"
+    ],
+    "status": "SCIENTIFIC_APPROVAL_PENDING"
+  },
+  {
+    "id": "Q03",
+    "construct": "GEO_ORIGIN_TYPE_01",
+    "type": "nominal_single",
+    "codes": [
+      "HOME",
+      "WORKPLACE",
+      "STUDY_LOCATION",
+      "OTHER_ACTIVITY",
+      "VARIES",
+      "DECLINE",
+      "NOT_SURE"
+    ],
+    "exclusive_codes": [],
+    "non_substantive_codes": [
+      "DECLINE",
+      "NOT_SURE"
+    ],
+    "status": "BLOCKED_SOURCE"
+  },
+  {
+    "id": "Q04",
+    "construct": "D04_EXISTING_USE",
+    "type": "ordinal_single",
+    "codes": [
+      "ZERO",
+      "ONE",
+      "TWO_THREE",
+      "FOUR_SEVEN",
+      "EIGHT_PLUS",
+      "CANNOT_REMEMBER",
+      "PREFER_NOT_TO_ANSWER"
+    ],
+    "exclusive_codes": [],
+    "non_substantive_codes": [
+      "CANNOT_REMEMBER",
+      "PREFER_NOT_TO_ANSWER"
+    ],
+    "status": "BLOCKED_MEASUREMENT"
+  },
+  {
+    "id": "Q05",
+    "construct": "D01_CONCEPT_INTENT",
+    "type": "ordinal_single",
+    "codes": [
+      "DEF_NO",
+      "PROB_NO",
+      "UNSURE",
+      "PROB_YES",
+      "DEF_YES",
+      "CANNOT_JUDGE",
+      "PREFER_NOT_TO_ANSWER"
+    ],
+    "exclusive_codes": [],
+    "non_substantive_codes": [
+      "CANNOT_JUDGE",
+      "PREFER_NOT_TO_ANSWER"
+    ],
+    "status": "BLOCKED_MEASUREMENT"
+  },
+  {
+    "id": "Q06",
+    "construct": "D02_PRODUCT_INTEREST",
+    "type": "multi_select",
+    "codes": [
+      "COFFEE_ESPRESSO",
+      "NON_COFFEE",
+      "BAKED_PASTRY",
+      "LIGHT_MEALS",
+      "DESSERTS",
+      "RETAIL",
+      "UNLISTED_CATEGORY_REPORTED",
+      "NONE",
+      "NOT_SURE",
+      "PREFER_NOT_TO_ANSWER"
+    ],
+    "exclusive_codes": [
+      "NONE",
+      "NOT_SURE",
+      "PREFER_NOT_TO_ANSWER"
+    ],
+    "non_substantive_codes": [
+      "NOT_SURE",
+      "PREFER_NOT_TO_ANSWER"
+    ],
+    "status": "BLOCKED_MEASUREMENT"
+  },
+  {
+    "id": "Q07",
+    "construct": "D03A_PRICE_ACCEPT",
+    "type": "ordinal_single",
+    "codes": [
+      "VERY_UNACCEPTABLE",
+      "SOMEWHAT_UNACCEPTABLE",
+      "NEITHER",
+      "SOMEWHAT_ACCEPTABLE",
+      "VERY_ACCEPTABLE",
+      "CANNOT_JUDGE",
+      "PREFER_NOT_TO_ANSWER"
+    ],
+    "exclusive_codes": [],
+    "non_substantive_codes": [
+      "CANNOT_JUDGE",
+      "PREFER_NOT_TO_ANSWER"
+    ],
+    "status": "BLOCKED_MEASUREMENT"
+  },
+  {
+    "id": "Q08",
+    "construct": "D05A_PAST_OCCASION",
+    "type": "multi_select",
+    "codes": [
+      "WORK_BREAK",
+      "STUDY",
+      "SOCIAL",
+      "ON_THE_GO",
+      "UNLISTED_OCCASION_REPORTED",
+      "CANNOT_REMEMBER",
+      "PREFER_NOT_TO_ANSWER"
+    ],
+    "exclusive_codes": [
+      "CANNOT_REMEMBER"
+    ],
+    "non_substantive_codes": [
+      "CANNOT_REMEMBER",
+      "PREFER_NOT_TO_ANSWER"
+    ],
+    "status": "BLOCKED_SOURCE"
+  },
+  {
+    "id": "Q09",
+    "construct": "D05B_PLANNED_OCCASION",
+    "type": "multi_select",
+    "codes": [
+      "WORK_BREAK",
+      "STUDY",
+      "SOCIAL",
+      "ON_THE_GO",
+      "UNLISTED_OCCASION_REPORTED",
+      "NONE",
+      "CANNOT_JUDGE",
+      "PREFER_NOT_TO_ANSWER"
+    ],
+    "exclusive_codes": [
+      "NONE",
+      "CANNOT_JUDGE"
+    ],
+    "non_substantive_codes": [
+      "CANNOT_JUDGE",
+      "PREFER_NOT_TO_ANSWER"
+    ],
+    "status": "BLOCKED_SOURCE"
+  },
+  {
+    "id": "Q10",
+    "construct": "D06_EXPERIENCE_PRIORITY",
+    "type": "ordinal_matrix",
+    "codes": [
+      "NOT_AT_ALL_IMPORTANT",
+      "SLIGHTLY_IMPORTANT",
+      "MODERATELY_IMPORTANT",
+      "VERY_IMPORTANT",
+      "EXTREMELY_IMPORTANT",
+      "NOT_APPLICABLE",
+      "CANNOT_JUDGE",
+      "PREFER_NOT_TO_ANSWER"
+    ],
+    "exclusive_codes": [],
+    "non_substantive_codes": [
+      "NOT_APPLICABLE",
+      "CANNOT_JUDGE",
+      "PREFER_NOT_TO_ANSWER"
+    ],
+    "status": "G06_APPROVAL_PENDING"
+  },
+  {
+    "id": "Q11",
+    "construct": "FMT01_FORMAT_CHOICE",
+    "type": "nominal_single",
+    "codes": [
+      "DINE_IN",
+      "TAKEAWAY",
+      "EITHER_EQUALLY",
+      "CANNOT_JUDGE",
+      "PREFER_NOT_TO_ANSWER"
+    ],
+    "exclusive_codes": [],
+    "non_substantive_codes": [
+      "CANNOT_JUDGE",
+      "PREFER_NOT_TO_ANSWER"
+    ],
+    "status": "BLOCKED_OWNER"
+  },
+  {
+    "id": "Q12",
+    "construct": "GEO_TRANSPORT_TO_AREA_01",
+    "type": "nominal_single",
+    "codes": [
+      "WALK",
+      "MOTORCYCLE",
+      "CAR",
+      "PUBLIC_TRANSPORT",
+      "OTHER",
+      "NOT_SURE",
+      "PREFER_NOT_TO_ANSWER"
+    ],
+    "exclusive_codes": [],
+    "non_substantive_codes": [
+      "NOT_SURE",
+      "PREFER_NOT_TO_ANSWER",
+      "OTHER"
+    ],
+    "status": "BLOCKED_MEASUREMENT"
+  },
+  {
+    "id": "Q13",
+    "construct": "EXP01_PRICE_EXPECTATION",
+    "type": "ordinal_single",
+    "codes": [
+      "LT_RM8",
+      "RM8_TO_1199",
+      "RM12_TO_1499",
+      "RM15_TO_1799",
+      "GE_RM18",
+      "NOT_SURE",
+      "PREFER_NOT_TO_ANSWER"
+    ],
+    "exclusive_codes": [],
+    "non_substantive_codes": [
+      "NOT_SURE",
+      "PREFER_NOT_TO_ANSWER"
+    ],
+    "status": "BLOCKED_OWNER"
+  }
+]
