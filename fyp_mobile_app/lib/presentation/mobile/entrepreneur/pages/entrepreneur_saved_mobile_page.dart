@@ -1,9 +1,8 @@
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_logic/shared_logic.dart';
 import 'package:flutter/material.dart';
 
 import '../../../../application/services/service_locator.dart';
-import '../../../../application/state/app_view_model.dart';
 import '../../../shared/widgets/sitewise_empty_state.dart';
 import '../../shell/mobile_app_shell.dart';
 import '../../widgets/mobile_property_card.dart';
@@ -12,13 +11,13 @@ import '../../widgets/mobile_skeleton.dart';
 
 /// Mobile saved shortlist — same card system as Explore.
 
-class EntrepreneurSavedMobilePage extends StatelessWidget {
+class EntrepreneurSavedMobilePage extends ConsumerWidget {
   const EntrepreneurSavedMobilePage({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    return Consumer<AppViewModel>(
-      builder: (ctx, appState, _) => MobileAppShell(
+  Widget build(BuildContext context, WidgetRef ref) {
+    final appState = ref.watch(appNotifierProvider);
+    return MobileAppShell(
         title: 'Saved',
         currentRoute: '/entrepreneur/saved',
         body: appState.saved.isEmpty
@@ -59,9 +58,13 @@ class EntrepreneurSavedMobilePage extends StatelessWidget {
                         MobilePropertyCard(
                           property: p,
                           saved: true,
-                          onToggleSaved: () => appState.toggleSaved(p.id),
-                          compared: appState.isCompared(p.id),
-                          onToggleCompare: () => appState.toggleCompared(p.id),
+                          onToggleSaved: () => ref
+                              .read(appNotifierProvider.notifier)
+                              .toggleSaved(p.id),
+                          compared: appState.compared.contains(p.id),
+                          onToggleCompare: () => ref
+                              .read(appNotifierProvider.notifier)
+                              .toggleCompared(p.id),
                           onTap: () => Navigator.of(context).pushNamed(
                             '/entrepreneur/property-detail',
                             arguments: p.id,
@@ -73,7 +76,6 @@ class EntrepreneurSavedMobilePage extends StatelessWidget {
                   );
                 },
               ),
-      ),
     );
   }
 }

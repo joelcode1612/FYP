@@ -1,10 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_logic/shared_logic.dart';
 
-import '../../../../application/services/service_locator.dart';
-import '../../../../application/state/app_view_model.dart';
-import '../../../../application/state/entrepreneur_view_model.dart';
 import '../../shell/mobile_app_shell.dart';
 import '../../widgets/m3_kit.dart';
 
@@ -16,8 +13,8 @@ import '../../widgets/m3_kit.dart';
 /// lockup header and pill-indicator bottom bar come from [MobileAppShell].
 ///
 /// **No invented records.** Both overview tiles are wired to real state:
-/// `EntrepreneurViewModel.recommendations` (ranked from the property
-/// repository) and `AppViewModel.saved` (the user's shortlist). Labels say what the data is —
+/// `entrepreneurNotifierProvider`'s `recommendations` (ranked from the property
+/// repository) and `appNotifierProvider`'s `saved` (the user's shortlist). Labels say what the data is —
 /// "Recommendations" and "Saved spaces" — rather than copying the prototype's
 /// "Assessments" / "My properties", which would imply entities this app does
 /// not have.
@@ -26,28 +23,25 @@ import '../../widgets/m3_kit.dart';
 /// recommendations, tours) stays reachable from the Profile and Listing tabs,
 /// so this is a layout change only, not a loss of routes.
 
-class EntrepreneurDashboardMobilePage extends StatefulWidget {
+class EntrepreneurDashboardMobilePage extends ConsumerStatefulWidget {
   const EntrepreneurDashboardMobilePage({super.key});
 
   @override
-  State<EntrepreneurDashboardMobilePage> createState() =>
+  ConsumerState<EntrepreneurDashboardMobilePage> createState() =>
       _EntrepreneurDashboardMobilePageState();
 }
 
 class _EntrepreneurDashboardMobilePageState
-    extends State<EntrepreneurDashboardMobilePage> {
-  final EntrepreneurViewModel vm = ServiceLocator.newEntrepreneurViewModel();
-
+    extends ConsumerState<EntrepreneurDashboardMobilePage> {
   @override
   void initState() {
     super.initState();
-    vm.loadRecommendations();
-  }
-
-  @override
-  void dispose() {
-    vm.dispose();
-    super.dispose();
+    // The load publishes synchronously; a kick from initState would modify
+    // the provider while the widget tree is building.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      ref.read(entrepreneurNotifierProvider.notifier).loadRecommendations();
+    });
   }
 
   void _open(String route, {Object? arguments}) =>
@@ -55,18 +49,13 @@ class _EntrepreneurDashboardMobilePageState
 
   @override
   Widget build(BuildContext context) {
-    // The page owns [vm] (created in initState, disposed below), so the
-    // provider exposes it by value and never disposes it twice.
-    return ChangeNotifierProvider<EntrepreneurViewModel>.value(
-      value: vm,
-      child: Consumer<AppViewModel>(
-        builder: (ctx, appState, _) => Consumer<EntrepreneurViewModel>(
-          builder: (ctx, model, _) {
-            final recommendations = model.recommendations.length;
-            final saved = appState.saved.length;
-            final compared = appState.compared.length;
+    final appState = ref.watch(appNotifierProvider);
+    final model = ref.watch(entrepreneurNotifierProvider);
+    final recommendations = model.recommendations.length;
+    final saved = appState.saved.length;
+    final compared = appState.compared.length;
 
-            return MobileAppShell(
+    return MobileAppShell(
               title: 'Home',
               currentRoute: '/entrepreneur',
               body: M3Content(
@@ -161,10 +150,6 @@ class _EntrepreneurDashboardMobilePageState
                   ),
                 ],
               ),
-            );
-          },
-        ),
-      ),
     );
   }
 }

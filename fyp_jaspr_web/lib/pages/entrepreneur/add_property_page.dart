@@ -1,9 +1,25 @@
 import 'package:jaspr/dom.dart';
 import 'package:jaspr/jaspr.dart';
 import 'package:shared_logic/shared_logic.dart';
+import 'package:universal_web/web.dart' as web;
 
 import '../../components/ui.dart';
 import '../../layouts/app_layout.dart';
+
+/// A photo selected in this browser session. [url] is a browser object URL,
+/// revoked when the photo is removed or the page state is disposed. Nothing is
+/// uploaded: the web app has no image-upload endpoint or media service.
+final class _SelectedPhoto {
+  const _SelectedPhoto({
+    required this.name,
+    required this.sizeLabel,
+    required this.url,
+  });
+
+  final String name;
+  final String sizeLabel;
+  final String url;
+}
 
 /// Entrepreneur property registration — a **browser-local draft** wizard.
 ///
@@ -26,7 +42,10 @@ class _AddPropertyPageState extends State<AddPropertyPage> {
   final Set<String> _facilities = {};
   bool _confirm = false;
   bool _saved = false;
+  bool _saving = false;
   final Map<String, String> _errors = {};
+  final List<_SelectedPhoto> _photos = [];
+  String? _photoError;
 
   static const _steps = [
     'Property details',
@@ -42,6 +61,28 @@ class _AddPropertyPageState extends State<AddPropertyPage> {
     1: ['address', 'city', 'state', 'postcode', 'monthlyRent'],
     3: ['ownerRole'],
     4: [],
+  };
+
+  /// Human labels for cross-step validation messages.
+  static const _labels = <String, String>{
+    'propertyName': 'Property name',
+    'propertyType': 'Property type',
+    'builtUp': 'Built-up area',
+    'address': 'Street address',
+    'city': 'City / township',
+    'state': 'State',
+    'postcode': 'Postcode',
+    'monthlyRent': 'Monthly rent',
+    'ownerRole': 'Relationship to the property',
+    'confirm': 'Confirmation',
+  };
+
+  static const int _maxPhotos = 8;
+  static const int _maxPhotoBytes = 8 * 1024 * 1024;
+  static const _allowedPhotoTypes = <String>{
+    'image/jpeg',
+    'image/png',
+    'image/webp',
   };
 
   bool get _isLast => _step == _steps.length - 1;
@@ -65,19 +106,63 @@ class _AddPropertyPageState extends State<AddPropertyPage> {
         _errors[key] = 'This field is required.';
       }
     }
-    if (_isLast && !_confirm) {
+    // Numeric values are validated in Dart, not left to the browser's
+    // type=number spinner (which accepts "-1", "e" and empty strings).
+    if (_step == 0 || _isLast) {
+      _validatePositiveNumber(
+        'builtUp',
+        'Built-up area must be a number greater than 0.',
+      );
+    }
+    if (_step == 1 || _isLast) {
+      _validatePositiveNumber(
+        'monthlyRent',
+        'Monthly rent must be a number greater than 0.',
+      );
+      _validatePostcode();
+    }
+    // On the final step, re-check every earlier step so navigating back and
+    // clearing a field cannot produce an incomplete draft.
+    if (_isLast) {
+      for (final keys in _required.values) {
+        for (final key in keys) {
+          if ((_fields[key] ?? '').trim().isEmpty) {
+            _errors[key] = 'This field is required.';
+          }
+        }
+      }
+      if (!_confirm) {
       _errors['confirm'] = 'Please confirm the details before saving.';
     }
   }
+  }
 
-  void _next() {
+  void _validatePositiveNumber(String key, String message) {
+    final raw = (_fields[key] ?? '').trim();
+    if (raw.isEmpty || _errors.containsKey(key)) return;
+    final value = double.tryParse(raw);
+    if (value == null || !value.isFinite || value <= 0) {
+      _errors[key] = message;
+    }
+  }
+
+  void _validatePostcode() {
+    final raw = (_fields['postcode'] ?? '').trim();
+    if (raw.isEmpty || _errors.containsKey('postcode')) return;
+    if (!RegExp(r'^\d{5}$').hasMatch(raw)) {
+      _errors['postcode'] = 'Enter a 5-digit Malaysian postcode.';
+    }
+  }
+
+  Future<void> _next() async {
+    if (_saving || _saved) return;
     _validate();
     if (_errors.isNotEmpty) {
       setState(() {});
       return;
     }
     if (_isLast) {
-      _saveDraft();
+      await _saveDraft();
     } else {
       setState(() => _step++);
     }
@@ -87,13 +172,33 @@ class _AddPropertyPageState extends State<AddPropertyPage> {
     if (_step > 0) setState(() => _step--);
   }
 
-  void _saveDraft() {
-    // The draft is held in memory for the current browser session only. There
-    // is no backend entity for owner-listed properties, and the reference
-    // prototype does not submit anywhere — so this is intentionally a local,
-    // unverified, in-session record rather than something persisted to
-    // localStorage or a server.
-    setState(() => _saved = true);
+  Future<void> _saveDraft() async {
+    // Duplicate-submit guard. `_saving` stays true for the whole transition so
+    // a second click cannot start a second save. No async property-creation
+    // service exists: the web repository's createProperty() throws
+    // UnsupportedError and there is no image-upload endpoint. When a real
+    // service is connected, its `await` replaces the microtask below and the
+    // real returned property_id can be read afterwards.
+    if (_saving || _saved) return;
+    setState(() => _saving = true);
+    await Future<void>.delayed(Duration.zero);
+    if (!mounted) return;
+    setState(() {
+      // The draft is held in memory for this browser session only. Nothing is
+      // persisted to a server, localStorage or the database, and no
+      // property_id is issued.
+      _saving = false;
+      _saved = true;
+    });
+  }
+
+  @override
+  void dispose() {
+    for (final photo in _photos) {
+      web.URL.revokeObjectURL(photo.url);
+    }
+    _photos.clear();
+    super.dispose();
   }
 
   @override
@@ -108,101 +213,115 @@ class _AddPropertyPageState extends State<AddPropertyPage> {
       child: div(classes: 'stack stack--sections sw-reg', [
         div(classes: 'sw-reg-breadcrumb', [
           AppLink(
+            to: '/entrepreneur',
+            classes: 'sw-reg-crumb-link',
+            children: [Component.text('Home')],
+          ),
+          span(classes: 'sw-reg-crumb-sep', [Component.text('›')]),
+          AppLink(
             to: '/entrepreneur/my-properties',
             classes: 'sw-reg-crumb-link',
             children: [Component.text('My Properties')],
           ),
-          span(classes: 'sw-reg-crumb-sep', [Component.text('/')]),
-          span([Component.text('New property')]),
+          span(classes: 'sw-reg-crumb-sep', [Component.text('›')]),
+          span([Component.text('Add Property')]),
         ]),
         div(classes: 'sw-reg-hero', [
           div([
             p(classes: 'sw-reg-kicker', [
-              Component.text('PROPERTY WORKSPACE / REGISTRATION'),
+              Component.text('ENTREPRENEUR WORKSPACE / REGISTRATION'),
             ]),
-            h1([Component.text('Register a property')]),
+            h1([Component.text('Add commercial property')]),
             p([
               Component.text(
                 'Capture commercial details, location, F&B facilities and '
-                'ownership information in one structured workflow.',
+                'ownership information in one structured workflow. This form '
+                'keeps a local draft only.',
               ),
             ]),
           ]),
           span(classes: 'sw-reg-status', [
-            i(classes: 'sw-reg-status-dot', attributes: const {
-              'aria-hidden': 'true',
-            }, []),
-            span([Component.text('Local draft')]),
+            i(
+              classes: 'sw-reg-status-dot',
+              attributes: const {'aria-hidden': 'true'},
+              [],
+            ),
+            span([Component.text('Local draft · not submitted')]),
           ]),
         ]),
+        _stepper(),
         div(classes: 'sw-reg-grid', [
-          _sidebar(),
           div(classes: 'sw-reg-card', [_stepCard()]),
-          _preview(),
+          div(classes: 'sw-reg-aside', [_preview(), _connectionNotice()]),
         ]),
       ]),
     );
   }
 
-  // --------------------------------------------------------------- sidebar
+  // --------------------------------------------------------------- stepper
 
-  Component _sidebar() => aside(classes: 'sw-reg-sidebar', [
-        div(classes: 'sw-reg-side-head', [
-          span(classes: 'sw-label', [Component.text('REGISTRATION PROGRESS')]),
-          div(classes: 'sw-reg-progress-top', [
+  /// Horizontal five-step progress strip. Completed steps remain clickable so
+  /// entered values can be edited without losing the rest of the draft.
+  Component _stepper() => div(classes: 'sw-reg-stepper-wrap', [
+    div(classes: 'sw-reg-stepper-caption', [
             strong([Component.text('Step ${_step + 1} of ${_steps.length}')]),
-            span([Component.text(_percent)]),
+      span([Component.text(' · $_percent complete')]),
           ]),
-          div(
-            classes: 'sw-reg-meter',
-            attributes: const {'role': 'progressbar'},
+    nav(
+      classes: 'sw-reg-stepper',
+      attributes: const {'aria-label': 'Add Property progress'},
             [
-              div(classes: 'sw-reg-meter-fill', styles: Styles(raw: {
-                'width': _percent,
-              }), []),
-            ],
-          ),
-        ]),
-        nav(classes: 'sw-reg-steps', [
           for (var i = 0; i < _steps.length; i++)
             button(
-              classes: i == _step ? 'active' : (i < _step ? 'done' : ''),
+            classes:
+                'sw-reg-step'
+                '${i == _step ? ' is-active' : ''}'
+                '${i < _step ? ' is-done' : ''}',
               attributes: {
                 'type': 'button',
                 'aria-current': i == _step ? 'step' : 'false',
+              if (i > _step) 'disabled': '',
               },
               events: events(
-                onClick: i <= _step ? () => setState(() => _step = i) : null,
+              onClick: i < _step ? () => setState(() => _step = i) : null,
               ),
               [
-                span(classes: 'sw-step-circle', [
-                  Component.text('0${i + 1}'),
-                ]),
-                span([
+              span(
+                classes: 'sw-reg-step-index',
+                attributes: const {'aria-hidden': 'true'},
+                [Component.text(i < _step ? '✓' : '${i + 1}')],
+              ),
+              span(classes: 'sw-reg-step-meta', [
                   strong([Component.text(_steps[i])]),
-                  small([Component.text(_stepHint(i))]),
+                small([
+                  Component.text(
+                    i == _step
+                        ? 'In progress'
+                        : (i < _step ? 'Completed' : 'Upcoming'),
+                  ),
+                ]),
                 ]),
               ],
             ),
-        ]),
-        div(classes: 'sw-reg-side-foot', [
-          strong([Component.text('Local preview')]),
+      ],
+    ),
+  ]);
+
+  Component _connectionNotice() => div(
+    classes: 'sw-reg-connection',
+    attributes: const {'role': 'note'},
+    [
+      h3([Component.text('Submission not connected')]),
           p([
             Component.text(
-              'Records are held in this browser session. This form does not '
-              'submit to a server or perform ownership verification.',
+          'The web property repository does not expose a working create '
+          'operation, and no image-upload endpoint exists. Saving keeps a '
+          'local, in-session draft: nothing is sent to the backend, no '
+          'record is created and no property ID is issued.',
             ),
           ]),
-        ]),
-      ]);
-
-  String _stepHint(int i) => switch (i) {
-        0 => 'Premises & dimensions',
-        1 => 'Address & commercial terms',
-        2 => 'Utilities & infrastructure',
-        3 => 'Visuals & ownership',
-        _ => 'Verify your details',
-      };
+    ],
+  );
 
   // --------------------------------------------------------------- step card
 
@@ -220,11 +339,13 @@ class _AddPropertyPageState extends State<AddPropertyPage> {
           ]),
         ]),
         _errorSummary(),
-        if (_step == 0) _stepDetails(),
-        if (_step == 1) _stepLocation(),
-        if (_step == 2) _stepReadiness(),
-        if (_step == 3) _stepProof(),
-        if (_step == 4) _stepReview(),
+        div(classes: 'sw-reg-step-body', [
+          if (_step == 0) _stepDetails(),
+          if (_step == 1) _stepLocation(),
+          if (_step == 2) _stepReadiness(),
+          if (_step == 3) _stepProof(),
+          if (_step == 4) _stepReview(),
+        ]),
         footer(classes: 'sw-reg-footer', [
           AppLink(
             to: '/entrepreneur/my-properties',
@@ -234,20 +355,25 @@ class _AddPropertyPageState extends State<AddPropertyPage> {
           div([
             button(
               classes: 'sw-btn',
-              attributes: {
-                'type': 'button',
-                if (_step == 0) 'disabled': '',
-              },
+          attributes: {'type': 'button', if (_step == 0) 'disabled': ''},
               events: events(onClick: _step == 0 ? null : _back),
               [Component.text('← Back')],
             ),
             button(
               classes: 'sw-btn sw-btn-primary',
-              attributes: {'type': 'button'},
+          attributes: {
+            'type': 'button',
+            if (_saving) 'disabled': '',
+            'aria-busy': _saving ? 'true' : 'false',
+          },
               events: events(onClick: _next),
               [
-                Component.text(_isLast ? 'Save draft ' : 'Continue '),
-                span([Component.text(_isLast ? '✓' : '→')]),
+            Component.text(
+              _saving
+                  ? 'Saving…'
+                  : (_isLast ? 'Save local draft ' : 'Continue '),
+            ),
+            if (!_saving) span([Component.text('→')]),
               ],
             ),
           ]),
@@ -264,7 +390,8 @@ class _AddPropertyPageState extends State<AddPropertyPage> {
 
   String _stepDesc() => switch (_step) {
         0 => 'Start with the identifying details of the commercial premises.',
-        1 => 'Where the premises is and the commercial terms on offer. '
+    1 =>
+      'Where the premises is and the commercial terms on offer. '
             'Malaysia · MYR.',
         2 => 'Utilities and infrastructure that affect F&B operations.',
         3 => 'Visuals and the ownership or authorization behind the listing.',
@@ -288,8 +415,11 @@ class _AddPropertyPageState extends State<AddPropertyPage> {
     final field = switch (type) {
       'select' => select(
           attributes: {
+          'id': key,
             'name': key,
+          if (required) 'required': '',
             if (err != null) 'aria-invalid': 'true',
+          if (err != null) 'aria-describedby': '$key-error',
           },
           events: events<List<String>>(
             onInput: (v) => _set(key, v.isEmpty ? '' : v.first),
@@ -306,16 +436,20 @@ class _AddPropertyPageState extends State<AddPropertyPage> {
         ),
       _ when isTextarea => textarea(
           attributes: {
+          'id': key,
             'name': key,
             'rows': '4',
             'placeholder': hint ?? '',
+          if (required) 'required': '',
             if (err != null) 'aria-invalid': 'true',
+          if (err != null) 'aria-describedby': '$key-error',
           },
           events: events<String>(onInput: (v) => _set(key, v)),
           [Component.text(value)],
         ),
       _ => input(
           attributes: {
+            'id': key,
             'name': key,
             'type': type,
             'value': value,
@@ -324,30 +458,53 @@ class _AddPropertyPageState extends State<AddPropertyPage> {
             // and fail the `attributes` parameter type.
             // ignore: use_null_aware_elements
             if (hint != null) 'placeholder': hint,
+            if (required) 'required': '',
             if (err != null) 'aria-invalid': 'true',
+            if (err != null) 'aria-describedby': '$key-error',
           },
-          events: events<String>(onInput: (v) => _set(key, v)),
+          // Jaspr delivers `num` (valueAsNumber) for type=number controls and
+          // `String` for everything else. Subscribing a number input as
+          // `events<String>` throws at runtime, so rent/area never reached
+          // state. See jaspr/src/dom/events.dart.
+          events: type == 'number'
+              ? events<num>(onInput: (v) => _set(key, _numberText(v)))
+              : events<String>(onInput: (v) => _set(key, v)),
         ),
     };
 
-    return div(
-      classes: wide ? 'sw-field sw-field--wide' : 'sw-field',
-      [
-        _label(label, required),
-        field,
-        if (err != null) _fieldError(err),
-      ],
-    );
-  }
-
-  Component _label(String label, bool required) => span(classes: 'sw-field-label', [
+    return div(classes: wide ? 'sw-field sw-field--wide' : 'sw-field', [
+      // A real <label for> (not a <span>) so assistive technology and
+      // click-to-focus work on every field. `Component.element` is used
+      // because the `_field(..., label: ...)` parameter shadows Jaspr's
+      // top-level `label()` helper.
+      Component.element(
+        tag: 'label',
+        classes: 'sw-field-label',
+        attributes: {'for': key},
+        children: [
         Component.text(label),
         if (required)
-          em(attributes: const {'aria-hidden': 'true'}, [Component.text(' *')]),
+            Component.element(
+              tag: 'em',
+              attributes: const {'aria-hidden': 'true'},
+              children: [Component.text(' *')],
+            ),
+        ],
+      ),
+      field,
+      if (err != null) _fieldError(key, err),
       ]);
+  }
 
-  Component _fieldError(String err) =>
-      span(classes: 'sw-field-error', [Component.text(err)]);
+  Component _fieldError(String key, String err) => span(
+    classes: 'sw-field-error',
+    attributes: {'id': '$key-error', 'role': 'alert'},
+    [Component.text(err)],
+  );
+
+  /// `valueAsNumber` is a double in JS; keep integer-looking values readable.
+  static String _numberText(num value) =>
+      value % 1 == 0 ? value.toInt().toString() : value.toString();
 
   // --------------------------------------------------------------- step: details
 
@@ -411,12 +568,7 @@ class _AddPropertyPageState extends State<AddPropertyPage> {
   // --------------------------------------------------------------- step: location
 
   Component _stepLocation() => div(classes: 'sw-fields', [
-        _field(
-          key: 'address',
-          label: 'Street address',
-          required: true,
-          wide: true,
-        ),
+    _field(key: 'address', label: 'Street address', required: true, wide: true),
         _field(key: 'city', label: 'City / township', required: true),
         _field(
           key: 'state',
@@ -499,10 +651,16 @@ class _AddPropertyPageState extends State<AddPropertyPage> {
               classes: _facilities.contains(f)
                   ? 'sw-facility sw-facility--on'
                   : 'sw-facility',
-              attributes: {'type': 'button', 'aria-pressed': _facilities.contains(f) ? 'true' : 'false'},
+          attributes: {
+            'type': 'button',
+            'aria-pressed': _facilities.contains(f) ? 'true' : 'false',
+          },
               events: events(onClick: () => _toggleFacility(f)),
               [
-                Icon(_facilities.contains(f) ? 'check_circle' : 'add_circle', size: 'sm'),
+            Icon(
+              _facilities.contains(f) ? 'check_circle' : 'add_circle',
+              size: 'sm',
+            ),
                 Component.text(f),
               ],
             ),
@@ -538,7 +696,8 @@ class _AddPropertyPageState extends State<AddPropertyPage> {
             label: 'Readiness notes',
             wide: true,
             isTextarea: true,
-            hint: 'Ventilation, utilities, equipment restrictions or fit-out needs…',
+        hint:
+            'Ventilation, utilities, equipment restrictions or fit-out needs…',
           ),
         ]),
         p(classes: 'sw-reg-note', [
@@ -560,24 +719,70 @@ class _AddPropertyPageState extends State<AddPropertyPage> {
           classes: 'sw-upload',
           attributes: const {'for': 'swRegPhotoInput'},
           [
-            span(classes: 'sw-upload-icon', attributes: const {
-              'aria-hidden': 'true',
-            }, [Component.text('↥')]),
+        span(
+          classes: 'sw-upload-icon',
+          attributes: const {'aria-hidden': 'true'},
+          [Component.text('↥')],
+        ),
             span([
               strong([Component.text('Select property photographs')]),
               small([Component.text('JPG, PNG or WebP · up to 8 MB per file')]),
             ]),
           ],
         ),
-        input(attributes: {
+    input(
+      attributes: const {
           'id': 'swRegPhotoInput',
           'type': 'file',
           'accept': 'image/jpeg,image/png,image/webp',
           'multiple': '',
-        }),
+      },
+      events: events<List<web.File>>(onChange: _onPhotosSelected),
+    ),
+    if (_photoError != null)
+      p(
+        classes: 'sw-photo-error',
+        attributes: const {'role': 'alert'},
+        [Component.text(_photoError!)],
+      ),
+    if (_photos.isNotEmpty)
+      div(classes: 'sw-photo-grid', [
+        for (var i = 0; i < _photos.length; i++)
+          div(classes: 'sw-photo-item', [
+            Component.element(
+              tag: 'img',
+              attributes: {
+                'src': _photos[i].url,
+                'alt': 'Selected photo: ${_photos[i].name}',
+              },
+              children: const [],
+            ),
+            div(classes: 'sw-photo-meta', [
+              span([Component.text(_photos[i].name)]),
+              small([Component.text(_photos[i].sizeLabel)]),
+            ]),
+            button(
+              classes: 'sw-photo-remove',
+              attributes: {
+                'type': 'button',
+                'aria-label': 'Remove ${_photos[i].name}',
+              },
+              events: events(onClick: () => _removePhoto(i)),
+              [Component.text('×')],
+            ),
+          ]),
+      ])
+    else
+      p(classes: 'sw-reg-note', [
+        Component.text(
+          'No photographs selected yet. Photos are optional for a local draft.',
+        ),
+      ]),
         p(classes: 'sw-reg-note', [
           Component.text(
-            'Photos are previewed locally and not persisted or uploaded.',
+        'Selected images are previewed in this browser only. No image '
+        'upload endpoint or media service is connected, so they are never '
+        'transmitted, stored or attached to a property record.',
           ),
         ]),
         h3(classes: 'sw-reg-section-title sw-extra-title', [
@@ -612,6 +817,60 @@ class _AddPropertyPageState extends State<AddPropertyPage> {
         ]),
       ]);
 
+  // ------------------------------------------------------------ photo handling
+
+  /// Applies the existing file-input contract (JPG/PNG/WebP, 8 MB, 8 files)
+  /// and creates browser object URLs for local previews. No upload is attempted.
+  void _onPhotosSelected(List<web.File> files) {
+    String? error;
+    final accepted = <web.File>[];
+    for (final file in files) {
+      if (!_allowedPhotoTypes.contains(file.type)) {
+        error = 'Only JPG, PNG or WebP images are supported.';
+        continue;
+      }
+      if (file.size > _maxPhotoBytes) {
+        error = 'Each photograph must be 8 MB or smaller.';
+        continue;
+      }
+      accepted.add(file);
+    }
+    final free = _maxPhotos - _photos.length;
+    if (accepted.length > free) {
+      error = 'You can select up to $_maxPhotos photographs.';
+      if (free <= 0) {
+        accepted.clear();
+      } else {
+        accepted.removeRange(free, accepted.length);
+      }
+    }
+    final added = <_SelectedPhoto>[];
+    for (final file in accepted) {
+      added.add(
+        _SelectedPhoto(
+          name: file.name,
+          sizeLabel: _formatBytes(file.size),
+          url: web.URL.createObjectURL(file),
+        ),
+      );
+    }
+    setState(() {
+      _photos.addAll(added);
+      _photoError = error;
+    });
+  }
+
+  void _removePhoto(int index) {
+    if (index < 0 || index >= _photos.length) return;
+    final removed = _photos.removeAt(index);
+    web.URL.revokeObjectURL(removed.url);
+    setState(() => _photoError = null);
+  }
+
+  static String _formatBytes(int bytes) => bytes < 1024 * 1024
+      ? '${(bytes / 1024).round()} KB'
+      : '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+
   // --------------------------------------------------------------- step: review
 
   Component _stepReview() => div([
@@ -630,10 +889,17 @@ class _AddPropertyPageState extends State<AddPropertyPage> {
           _reviewRow('Monthly rent (RM)', _fields['monthlyRent']),
           _reviewRow('Facilities', '${_facilities.length} selected'),
           _reviewRow('F&B approval', _fields['fbApproval']),
+      _reviewRow(
+        'Photographs',
+        '${_photos.length} selected (local preview only)',
+      ),
+      _reviewRow('Relationship', _fields['ownerRole']),
         ]),
         label(classes: _confirm ? 'sw-confirm sw-confirm--on' : 'sw-confirm', [
           button(
-            classes: _confirm ? 'sw-confirm-box sw-confirm-box--on' : 'sw-confirm-box',
+        classes: _confirm
+            ? 'sw-confirm-box sw-confirm-box--on'
+            : 'sw-confirm-box',
             attributes: {
               'type': 'button',
               'role': 'checkbox',
@@ -650,7 +916,7 @@ class _AddPropertyPageState extends State<AddPropertyPage> {
             ),
           ]),
         ]),
-        if (_errors['confirm'] != null) _fieldError(_errors['confirm']!),
+    if (_errors['confirm'] != null) _fieldError('confirm', _errors['confirm']!),
       ]);
 
   Component _reviewRow(String label, String? value) => div([
@@ -664,9 +930,12 @@ class _AddPropertyPageState extends State<AddPropertyPage> {
           classes: 'sw-error-summary',
           attributes: const {'role': 'alert'},
           [
-            strong([Component.text('Please correct the highlighted information')]),
+            strong([
+              Component.text('Please correct the highlighted information'),
+            ]),
             ul([
-              for (final e in _errors.values) li([Component.text(e)]),
+              for (final e in _errors.entries)
+                li([Component.text('${_labels[e.key] ?? e.key}: ${e.value}')]),
             ]),
           ],
         );
@@ -680,17 +949,29 @@ class _AddPropertyPageState extends State<AddPropertyPage> {
         ]),
         div(classes: 'sw-preview-content', [
           span(classes: 'sw-label', [Component.text('COMMERCIAL PROPERTY')]),
-          h3([Component.text(_fields['propertyName']?.isNotEmpty == true
+      h3([
+        Component.text(
+          _fields['propertyName']?.isNotEmpty == true
               ? _fields['propertyName']!
-              : 'Untitled property')]),
-          p([Component.text(_fields['address']?.isNotEmpty == true
+              : 'Untitled property',
+        ),
+      ]),
+      p([
+        Component.text(
+          _fields['address']?.isNotEmpty == true
               ? _fields['address']!
-              : 'Location not specified')]),
+              : 'Location not specified',
+        ),
+      ]),
           div(classes: 'sw-preview-rent', [
             small([Component.text('MONTHLY RENT')]),
-            strong([Component.text(_fields['monthlyRent']?.isNotEmpty == true
+        strong([
+          Component.text(
+            _fields['monthlyRent']?.isNotEmpty == true
                 ? 'RM ${_fields['monthlyRent']}'
-                : '—')]),
+                : '—',
+          ),
+        ]),
             span([Component.text(' / month')]),
           ]),
           dl([
@@ -724,14 +1005,29 @@ class _AddPropertyPageState extends State<AddPropertyPage> {
         child: div(classes: 'stack stack--sections sw-reg-saved', [
           div(classes: 'sw-saved-card', [
             div(classes: 'sw-saved-icon', [Icon('check_circle', size: 'lg')]),
-            h2([Component.text('Draft saved locally')]),
+        h2([Component.text('Local draft saved — not submitted')]),
             p([
               Component.text(
                 '“${_fields['propertyName']?.isNotEmpty == true ? _fields['propertyName']! : 'Untitled property'}” '
-                'is held in this browser session. It has not been submitted to a '
-                'server or published as a public listing.',
+            'is held in this browser session only. It has not been sent to '
+            'the backend, no property was created and no property ID was '
+            'issued.',
               ),
             ]),
+        div(
+          classes: 'sw-saved-notice',
+          attributes: const {'role': 'note'},
+          [
+            strong([Component.text('Property creation is not connected.')]),
+            p([
+              Component.text(
+                'The web repository has no working create operation and '
+                'there is no image-upload endpoint. This screen is a '
+                'design-state preview, not a successful API response.',
+              ),
+            ]),
+          ],
+        ),
             div(classes: 'sw-saved-actions', [
               AppLink(
                 to: '/entrepreneur/add-property',

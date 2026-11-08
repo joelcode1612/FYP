@@ -24,7 +24,7 @@ import 'ui.dart';
 ///
 /// Navigation is a plain link ([href]), so the card works without JavaScript;
 /// the save and compare controls are siblings of the link (never nested inside
-/// it) and call back into the page, which owns the `AppViewModel`.
+/// it) and call back into the page, which owns the app-state notifier.
 ///
 /// Explore additions, all opt-in so other pages are unaffected: [selected]
 /// marks the card that a map interaction picked, [onLocate] asks the page to

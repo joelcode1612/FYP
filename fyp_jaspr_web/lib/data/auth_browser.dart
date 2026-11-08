@@ -30,6 +30,7 @@ extension type _AuthBridge(JSObject _) implements JSObject {
   );
   external JSPromise<JSAny?> complete([JSString next]);
   external JSPromise<JSAny?> signout();
+  external JSString? consumePasswordNotice();
   external JSPromise<JSString> request(
     JSString path,
     JSString method,
@@ -106,10 +107,22 @@ abstract final class WebAuth {
   static Future<String> resetPassword(String email) async =>
       (await _bridge.resetPassword(email.toJS).toDart).toDart;
 
-  /// Sets a new password using the current Supabase session (recovery or
-  /// invite link), then routes by the server-assigned role.
+  /// Sets a new password using the current Supabase session. The JS side
+  /// splits the flow by context: an invitation session ends with a local
+  /// sign-out and a redirect to /staff/signin (the account stays pending
+  /// until an administrator activates it); a recovery session continues with
+  /// the normal sign-in completion.
   static Future<void> updatePassword(String password) async {
     await _bridge.updatePassword(password.toJS).toDart;
+  }
+
+  /// One-time success notice shown on the Staff Sign-in page after an invited
+  /// agent sets their password. Returns {title, body} or null. Fixed display
+  /// text only - never credentials, tokens or account identifiers.
+  static Map<String, dynamic>? consumePasswordNotice() {
+    final raw = _bridge.consumePasswordNotice();
+    if (raw == null) return null;
+    return jsonDecode(raw.toDart) as Map<String, dynamic>;
   }
 
   static Future<String> signup(

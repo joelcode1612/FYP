@@ -2,14 +2,12 @@ import 'dart:async';
 
 import 'package:jaspr/dom.dart';
 import 'package:jaspr/jaspr.dart';
-import 'package:jaspr_provider_compat/jaspr_provider_compat.dart' as provider;
+import 'package:jaspr_riverpod/jaspr_riverpod.dart';
 import 'package:shared_logic/shared_logic.dart';
 
 import '../../components/admin_review_split.dart';
 import '../../components/ui.dart';
-import '../../data/app_locator.dart';
 import '../../layouts/app_layout.dart';
-import '../../state/admin_view_model.dart';
 
 /// Web verification queue, ported to the source `admin/review.html` split
 /// layout: a status-tabbed `.queue` of listings on the left and a detail
@@ -29,20 +27,15 @@ class VerificationPage extends StatefulComponent {
 }
 
 class _VerificationPageState extends State<VerificationPage> {
-  late final AdminViewModel vm;
-
   @override
   void initState() {
     super.initState();
-    vm = AppLocator.newAdminViewModel();
-    unawaited(vm.loadDashboard());
-    unawaited(vm.loadPendingTours());
-  }
-
-  @override
-  void dispose() {
-    vm.dispose();
-    super.dispose();
+    Future.microtask(() {
+      if (!mounted) return;
+      final admin = context.read(adminNotifierProvider.notifier);
+      unawaited(admin.loadDashboard());
+      unawaited(admin.loadPendingTours());
+    });
   }
 
   @override
@@ -56,44 +49,21 @@ class _VerificationPageState extends State<VerificationPage> {
           'Review the submitted record against the evidence the owner '
           'provided. Approval verifies the listing details — it does not '
           'grant permission to operate a food business.',
-      // Scoped to the data slices the two sections render, and inside the
-      // layout, so the chrome never rebuilds on a notification (the review
-      // split and the tour queue keep their own interaction state).
-      child: provider.ChangeNotifierProvider<AdminViewModel>.value(
-        value: vm,
-        child: provider.Selector<AdminViewModel, _ReviewData>(
-          selector: (context, vm) => (
-            queue: vm.queue,
-            listings: vm.listings,
-            pendingTours: vm.pendingTours,
-          ),
-          builder: (context, data, child) =>
-              div(classes: 'stack stack--sections', [
-                ReviewSplit(vm: vm, mode: ReviewMode.verification),
-                _TourQueue(vm: vm),
-              ]),
-        ),
-      ),
+      // The review split and the tour queue keep their own watches and
+      // interaction state, so the chrome never rebuilds on a notification.
+      child: const div(classes: 'stack stack--sections', [
+        ReviewSplit(mode: ReviewMode.verification),
+        _TourQueue(),
+      ]),
     );
   }
 }
-
-/// The three lists the review split and the tour queue render together.
-/// Selecting them as one value rebuilds that subtree exactly when the
-/// previous `buildWhen` predicate would have.
-typedef _ReviewData = ({
-  List<CommercialProperty> queue,
-  List<CommercialProperty> listings,
-  List<VirtualTour> pendingTours,
-});
 
 /// Target-only section: tours awaiting verification (no source route).
 /// Owns the approval notice state so approving/rejecting a tour rebuilds only
 /// this card, never the layout or the review split.
 class _TourQueue extends StatefulComponent {
-  final AdminViewModel vm;
-
-  const _TourQueue({required this.vm});
+  const _TourQueue();
 
   @override
   State<_TourQueue> createState() => _TourQueueState();
@@ -102,20 +72,21 @@ class _TourQueue extends StatefulComponent {
 class _TourQueueState extends State<_TourQueue> {
   String? _success;
 
-  AdminViewModel get vm => component.vm;
-
   Future<void> _approve(String id) async {
-    await vm.approveTour(id);
+    await context.read(adminNotifierProvider.notifier).approveTour(id);
     if (mounted) setState(() => _success = 'Tour approved.');
   }
 
   Future<void> _reject(String id) async {
-    await vm.rejectTour(id);
+    await context.read(adminNotifierProvider.notifier).rejectTour(id);
     if (mounted) setState(() => _success = 'Tour rejected.');
   }
 
   @override
   Component build(BuildContext context) {
+    final tours = context.watch(
+      adminNotifierProvider.select((state) => state.pendingTours),
+    );
     return SectionCard(
       title: 'Tours awaiting verification',
       child: div(classes: 'stack', [
@@ -130,13 +101,13 @@ class _TourQueueState extends State<_TourQueue> {
           div(classes: 'card stack', [
             span(classes: 'small text-success', [Component.text(_success!)]),
           ]),
-        if (vm.pendingTours.isEmpty)
+        if (tours.isEmpty)
           p(classes: 'body', [
             Component.text('No tours are waiting for verification.'),
           ])
         else
           div(classes: 'stack', [
-            for (final t in vm.pendingTours)
+            for (final t in tours)
               div(classes: 'row', [
                 div(classes: 'grow stack', [
                   span(classes: 'body', [Component.text(t.title)]),

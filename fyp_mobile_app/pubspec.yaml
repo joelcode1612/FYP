@@ -49,11 +49,11 @@ dependencies:
   # workspace member instead of fetching from pub.dev.
   shared_logic: any
 
-  # App-facing state management: ChangeNotifier view models exposed through the
-  # widget tree. The shared controllers in `shared_logic` stay framework-free,
-  # and `bloc` remains a pure-Dart implementation detail of the auth state
-  # machine there — none of its Flutter widgets are used here.
-  provider: ^6.1.5+1
+  # App-facing state management: Riverpod notifiers from `shared_logic` are
+  # read through this app's single [ProviderScope] (main.dart), which installs
+  # the composition-root overrides from `application/providers.dart`. The
+  # shared controllers stay framework-free underneath.
+  flutter_riverpod: ^3.3.2
   supabase_flutter: ^2.18.3
   http: ^1.6.0
   flutter_secure_storage: ^11.2.0

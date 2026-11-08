@@ -74,29 +74,34 @@ export 'src/core/network/api_client.dart';
 
 // --- Application: shared state management -----------------------------------
 //
-// Built on `package:bloc`, which is pure Dart. Nothing exported here may import
-// Flutter or Jaspr — that is what lets the Flutter app consume these cubits via
-// `flutter_bloc` while the Jaspr app uses the raw Cubit API.
+// Built on `package:riverpod` (pure Dart). Nothing exported here may import
+// Flutter or Jaspr — that is what lets the Flutter app consume these notifiers
+// through `flutter_riverpod` while the Jaspr app consumes them through
+// `jaspr_riverpod`, on the same Riverpod 3 core.
 //
-// These replace the Flutter `ChangeNotifier` classes they were ported from:
-//   AppCubit            <- AppState (lib/application/state/app_state.dart)
-//   EntrepreneurCubit   <- EntrepreneurViewModel
+// These replace the `package:bloc` Cubit adapters (and before those, the
+// Flutter `ChangeNotifier` classes):   AppNotifier  <- AppState
+//   AuthNotifier        <- auth_state.dart (single owner of sign-in state)
+//   EntrepreneurNotifier <- EntrepreneurViewModel
 //                          (lib/presentation/shared/viewmodels/)
-//   OwnerCubit          <- OwnerViewModel
-//   AdminCubit          <- AdminViewModel
-export 'src/application/cubits/app_cubit.dart';
-export 'src/application/cubits/auth_cubit.dart';
-export 'src/application/cubits/entrepreneur_cubit.dart';
-export 'src/application/cubits/owner_cubit.dart';
-export 'src/application/cubits/admin_cubit.dart';
+//   OwnerNotifier        <- OwnerViewModel
+//   AdminNotifier        <- AdminViewModel
+export 'src/application/notifiers/app_notifier.dart';
+export 'src/application/notifiers/auth_notifier.dart';
+export 'src/application/notifiers/entrepreneur_notifier.dart';
+export 'src/application/notifiers/owner_notifier.dart';
+export 'src/application/notifiers/admin_notifier.dart';
 
-// --- Application: bloc-free state controllers --------------------------------
+// Composition-root providers the notifiers consume. Each app overrides these
+// in its `ProviderScope` with its own service implementations; tests override
+// them with fakes.
+export 'src/application/notifiers/providers.dart';
+
+// --- Application: framework-free state controllers ----------------------------
 //
-// The orchestration half of each cubit: same transitions, same rules, no
-// `package:bloc`. The cubits above are thin adapters over these, and each app
-// wraps them in its own notification mechanism (Flutter `ChangeNotifier` /
-// `provider`, Jaspr `ChangeNotifier` / `jaspr_provider`), so a state rule is
-// written once and cannot diverge between platforms.
+// The orchestration half of each notifier: same transitions, same rules, no
+// UI dependency. The notifiers above are thin adapters over these, so a state
+// rule is written once and cannot diverge between platforms.
 export 'src/application/controllers/admin_controller.dart';
 export 'src/application/controllers/app_controller.dart';
 export 'src/application/controllers/entrepreneur_controller.dart';

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_logic/shared_logic.dart';
+import 'package:fyp/application/providers.dart';
 import 'package:fyp/application/services/service_locator.dart';
 import 'package:fyp/core/routing/auth_route_guard.dart';
 import 'package:fyp/data/datasources/local/onboarding_local_data_source.dart';
@@ -31,10 +33,18 @@ void main() {
     ServiceLocator.onboardingRepo = OnboardingRepositoryImpl(onboarding);
   }
 
+  /// The production tree over the freshly swapped composition root:
+  /// [sitewiseOverrides] reads [ServiceLocator.auth] at call time, so the
+  /// fake repository installed by [setUp] is what the scope points at.
+  Widget app() => ProviderScope(
+    overrides: sitewiseOverrides(),
+    child: const SitewiseApp(),
+  );
+
   setUp(() {
     auth = FakeAuthRepository();
     useOnboarding();
-    ServiceLocator.useAuth(auth);
+    ServiceLocator.auth = AuthService(auth);
     AuthPendingDestination.clear();
   });
 
@@ -44,7 +54,7 @@ void main() {
     );
     // Back to the production wiring so a later test file cannot inherit a
     // fake session.
-    ServiceLocator.useAuth(SupabaseAuthRepository());
+    ServiceLocator.auth = AuthService(SupabaseAuthRepository());
     ServiceLocator.assessmentSession.discard();
     AuthPendingDestination.clear();
   });
@@ -55,7 +65,7 @@ void main() {
     tester,
   ) async {
     _useMobileSurface(tester);
-    await tester.pumpWidget(const SitewiseApp());
+    await tester.pumpWidget(app());
     await tester.pumpAndSettle();
 
     expect(find.text('Welcome Back'), findsOneWidget);
@@ -71,7 +81,7 @@ void main() {
     _useMobileSurface(tester);
     auth.user = testUser();
 
-    await tester.pumpWidget(const SitewiseApp());
+    await tester.pumpWidget(app());
     await tester.pumpAndSettle();
 
     expect(find.textContaining('Find the right F&B location'), findsOneWidget);
@@ -83,7 +93,7 @@ void main() {
   testWidgets('onboarding advances through all five stages', (tester) async {
     _useMobileSurface(tester);
     auth.user = testUser();
-    await tester.pumpWidget(const SitewiseApp());
+    await tester.pumpWidget(app());
     await tester.pumpAndSettle();
 
     Future<void> tapNext() async {
@@ -115,7 +125,7 @@ void main() {
   ) async {
     _useMobileSurface(tester);
     auth.user = testUser();
-    await tester.pumpWidget(const SitewiseApp());
+    await tester.pumpWidget(app());
     await tester.pumpAndSettle();
 
     for (var i = 0; i < 4; i++) {
@@ -135,7 +145,7 @@ void main() {
   ) async {
     _useMobileSurface(tester);
     auth.user = testUser();
-    await tester.pumpWidget(const SitewiseApp());
+    await tester.pumpWidget(app());
     await tester.pumpAndSettle();
 
     await tester.tap(find.text('Skip for now'));
@@ -151,7 +161,7 @@ void main() {
   ) async {
     _useMobileSurface(tester);
     auth.user = testUser();
-    await tester.pumpWidget(const SitewiseApp());
+    await tester.pumpWidget(app());
     await tester.pumpAndSettle();
 
     await tester.tap(find.text('Skip for now'));
@@ -162,7 +172,7 @@ void main() {
     // first so the Navigator is genuinely rebuilt from scratch.
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pumpAndSettle();
-    await tester.pumpWidget(const SitewiseApp());
+    await tester.pumpWidget(app());
     await tester.pumpAndSettle();
 
     expect(find.textContaining('Find the right F&B location'), findsNothing);
@@ -175,7 +185,7 @@ void main() {
     _useMobileSurface(tester);
     useOnboarding(completed: true);
 
-    await tester.pumpWidget(const SitewiseApp());
+    await tester.pumpWidget(app());
     await tester.pumpAndSettle();
 
     expect(find.text('Welcome Back'), findsOneWidget);
@@ -191,7 +201,7 @@ void main() {
     useOnboarding(completed: true);
     auth.user = testUser();
 
-    await tester.pumpWidget(const SitewiseApp());
+    await tester.pumpWidget(app());
     await tester.pumpAndSettle();
 
     expect(auth.restoreCalls, 1, reason: 'the restore must run exactly once');
@@ -206,7 +216,7 @@ void main() {
     _useMobileSurface(tester);
     useOnboarding(completed: true);
 
-    await tester.pumpWidget(const SitewiseApp());
+    await tester.pumpWidget(app());
     await tester.pumpAndSettle();
 
     await tester.enterText(
@@ -231,7 +241,7 @@ void main() {
     _useMobileSurface(tester);
     useOnboarding(completed: true);
 
-    await tester.pumpWidget(const SitewiseApp());
+    await tester.pumpWidget(app());
     await tester.pumpAndSettle();
     await tester.tap(find.text('Sign Up'));
     await tester.pumpAndSettle();
@@ -262,7 +272,7 @@ void main() {
     _useMobileSurface(tester);
     useOnboarding(completed: true);
 
-    await tester.pumpWidget(const SitewiseApp());
+    await tester.pumpWidget(app());
     await tester.pumpAndSettle();
 
     await tester.enterText(find.byType(TextField).first, 'not-an-email');
@@ -284,7 +294,7 @@ void main() {
     useOnboarding(completed: true);
     auth.signInFailure = const InvalidCredentialsFailure();
 
-    await tester.pumpWidget(const SitewiseApp());
+    await tester.pumpWidget(app());
     await tester.pumpAndSettle();
 
     await tester.enterText(
@@ -308,7 +318,7 @@ void main() {
     useOnboarding(completed: true);
     auth.signInFailure = const AccountInactiveFailure(status: 'suspended');
 
-    await tester.pumpWidget(const SitewiseApp());
+    await tester.pumpWidget(app());
     await tester.pumpAndSettle();
 
     await tester.enterText(
@@ -338,7 +348,7 @@ void main() {
       role: AppRole.admin,
     );
 
-    await tester.pumpWidget(const SitewiseApp());
+    await tester.pumpWidget(app());
     await tester.pumpAndSettle();
 
     await tester.enterText(
@@ -362,7 +372,7 @@ void main() {
     useOnboarding(completed: true);
     auth.restoreFailure = const AuthUnavailableFailure();
 
-    await tester.pumpWidget(const SitewiseApp());
+    await tester.pumpWidget(app());
     await tester.pumpAndSettle();
 
     expect(find.textContaining('could not reach'), findsOneWidget);
@@ -386,7 +396,7 @@ void main() {
     auth.user = testUser();
     auth.restoreFailure = const SessionExpiredFailure();
 
-    await tester.pumpWidget(const SitewiseApp());
+    await tester.pumpWidget(app());
     await tester.pumpAndSettle();
 
     expect(find.text('Welcome Back'), findsOneWidget);
@@ -404,7 +414,7 @@ void main() {
       _useMobileSurface(tester);
       useOnboarding(completed: true);
 
-      await tester.pumpWidget(const SitewiseApp());
+      await tester.pumpWidget(app());
       await tester.pumpAndSettle();
 
       final navigator = tester.state<NavigatorState>(find.byType(Navigator));
@@ -434,7 +444,7 @@ void main() {
     useOnboarding(completed: true);
     auth.user = testUser();
 
-    await tester.pumpWidget(const SitewiseApp());
+    await tester.pumpWidget(app());
     await tester.pumpAndSettle();
     expect(find.text('Welcome to Sitewise.'), findsOneWidget);
 
@@ -466,7 +476,7 @@ void main() {
       tester.view.resetDevicePixelRatio();
     });
 
-    await tester.pumpWidget(const SitewiseApp());
+    await tester.pumpWidget(app());
     await tester.pumpAndSettle();
 
     expect(find.text('Welcome Back'), findsOneWidget);
@@ -478,7 +488,7 @@ void main() {
   // its Log In action opens the Sign In screen.
   testWidgets('landing Log In opens the Sign In screen', (tester) async {
     _useMobileSurface(tester);
-    await tester.pumpWidget(const SitewiseApp());
+    await tester.pumpWidget(app());
     await tester.pumpAndSettle();
     tester.state<NavigatorState>(find.byType(Navigator)).pushNamed('/landing');
     await tester.pumpAndSettle();
@@ -499,7 +509,7 @@ void main() {
   // on Sign In, which explains where that workspace lives.
   testWidgets('landing Owner card falls back to Sign In', (tester) async {
     _useMobileSurface(tester);
-    await tester.pumpWidget(const SitewiseApp());
+    await tester.pumpWidget(app());
     await tester.pumpAndSettle();
     tester.state<NavigatorState>(find.byType(Navigator)).pushNamed('/landing');
     await tester.pumpAndSettle();
@@ -528,7 +538,7 @@ void main() {
     useOnboarding(completed: true);
     auth.user = testUser();
 
-    await tester.pumpWidget(const SitewiseApp());
+    await tester.pumpWidget(app());
     await tester.pumpAndSettle();
 
     const labels = ['Home', 'Listing', 'Assess', 'Spaces', 'Profile'];
@@ -591,7 +601,7 @@ void main() {
       await tester.pumpAndSettle();
     }
 
-    await tester.pumpWidget(const SitewiseApp());
+    await tester.pumpWidget(app());
     await tester.pumpAndSettle();
 
     await tester.tap(find.text('Listing'));

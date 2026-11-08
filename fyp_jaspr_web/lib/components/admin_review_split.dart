@@ -2,14 +2,14 @@ import 'dart:async';
 
 import 'package:jaspr/dom.dart';
 import 'package:jaspr/jaspr.dart';
+import 'package:jaspr_riverpod/jaspr_riverpod.dart';
 import 'package:shared_logic/shared_logic.dart';
 
 import '../components/ui.dart';
-import '../state/admin_view_model.dart';
 
 /// Which queue the split renders. `verification` uses the awaiting-review set
-/// (`vm.queue`) and defaults to the Pending tab; `listings` uses every property
-/// (`vm.listings`) and defaults to All.
+/// (`state.queue`) and defaults to the Pending tab; `listings` uses every
+/// property (`state.listings`) and defaults to All.
 enum ReviewMode { verification, listings }
 
 /// Master-detail review surface, ported from the source `admin/review.html`.
@@ -21,19 +21,25 @@ enum ReviewMode { verification, listings }
 ///
 /// The two admin routes (`/admin/verification`, `/admin/listings`) share this
 /// component; only the data source and default tab differ. Local selection and
-/// tab state live here so it survives the `Selector`/`Consumer` rebuilds that
-/// happen when [vm] notifies after an approve/reject. The page owns the view
-/// model — it is also published through the page's provider scope, so this
-/// child reads the same instance either way.
+/// tab state live here so it survives the rebuilds that happen when the admin
+/// notifier publishes after an approve/reject; the split watches only the
+/// three lists it renders, so unrelated admin transitions do not rebuild it.
 class ReviewSplit extends StatefulComponent {
-  final AdminViewModel vm;
   final ReviewMode mode;
 
-  const ReviewSplit({super.key, required this.vm, required this.mode});
+  const ReviewSplit({super.key, required this.mode});
 
   @override
   State<ReviewSplit> createState() => _ReviewSplitState();
 }
+
+/// The lists the split renders, selected as one value so the rebuild trigger
+/// mirrors the old Selector scope.
+typedef _ReviewData = ({
+  List<CommercialProperty> queue,
+  List<CommercialProperty> listings,
+  List<SitewiseUser> users,
+});
 
 class _ReviewSplitState extends State<ReviewSplit> {
   String? _selectedId;
@@ -49,25 +55,23 @@ class _ReviewSplitState extends State<ReviewSplit> {
         : null;
   }
 
-  List<CommercialProperty> get _items =>
-      component.mode == ReviewMode.verification
-      ? component.vm.queue
-      : component.vm.listings;
+  List<CommercialProperty> _itemsOf(_ReviewData data) =>
+      component.mode == ReviewMode.verification ? data.queue : data.listings;
 
-  List<CommercialProperty> get _visible {
-    final list = _items;
+  List<CommercialProperty> _visibleOf(_ReviewData data) {
+    final list = _itemsOf(data);
     if (_tab == null) return list;
     return list.where((prop) => prop.verification == _tab).toList();
   }
 
-  CommercialProperty? _find(String id) {
+  CommercialProperty? _find(String id, _ReviewData data) {
     try {
-      return component.vm.listings.firstWhere((prop) => prop.id == id);
+      return data.listings.firstWhere((prop) => prop.id == id);
     } on StateError {
       // not in the all-listings set (e.g. removed) — try the queue.
     }
     try {
-      return component.vm.queue.firstWhere((prop) => prop.id == id);
+      return data.queue.firstWhere((prop) => prop.id == id);
     } on StateError {
       return null;
     }
@@ -76,29 +80,30 @@ class _ReviewSplitState extends State<ReviewSplit> {
   /// The property shown on the right. Honours an explicit selection even when it
   /// has left the filtered queue (after an approve it stays visible, now
   /// verified), falling back to the first visible item when nothing is picked.
-  CommercialProperty? get _selected {
+  CommercialProperty? _selectedOf(_ReviewData data) {
     if (_selectedId != null) {
-      final picked = _find(_selectedId!);
+      final picked = _find(_selectedId!, data);
       if (picked != null) return picked;
     }
-    return _visible.isNotEmpty ? _visible.first : null;
+    final visible = _visibleOf(data);
+    return visible.isNotEmpty ? visible.first : null;
   }
 
-  String _ownerText(CommercialProperty prop) {
-    final owner = _ownerOf(prop);
+  String _ownerText(CommercialProperty prop, _ReviewData data) {
+    final owner = _ownerOf(prop, data);
     final who = owner?.name ?? prop.city;
     return '$who · ${prop.rentalDisplay}';
   }
 
-  SitewiseUser? _ownerOf(CommercialProperty prop) {
-    for (final u in component.vm.users) {
+  SitewiseUser? _ownerOf(CommercialProperty prop, _ReviewData data) {
+    for (final u in data.users) {
       if (u.id == prop.ownerId) return u;
     }
     return null;
   }
 
   Future<void> _approve(String id) async {
-    await component.vm.approve(id);
+    await context.read(adminNotifierProvider.notifier).approve(id);
     if (mounted) setState(() {});
   }
 
@@ -108,7 +113,7 @@ class _ReviewSplitState extends State<ReviewSplit> {
       if (mounted) setState(() {});
       return;
     }
-    await component.vm.reject(id, reason);
+    await context.read(adminNotifierProvider.notifier).reject(id, reason);
     if (mounted) {
       setState(() {
         _rejecting = false;
@@ -117,8 +122,8 @@ class _ReviewSplitState extends State<ReviewSplit> {
     }
   }
 
-  Component _queueItem(CommercialProperty prop) {
-    final active = _selected?.id == prop.id;
+  Component _queueItem(CommercialProperty prop, _ReviewData data) {
+    final active = _selectedOf(data)?.id == prop.id;
     return button(
       classes: 'queue-item${active ? ' is-active' : ''}',
       attributes: {'type': 'button'},
@@ -129,7 +134,7 @@ class _ReviewSplitState extends State<ReviewSplit> {
         div(classes: 'shot', [const Icon('image', size: 'sm')]),
         div([
           h4([Component.text(prop.title)]),
-          p([Component.text(_ownerText(prop))]),
+          p([Component.text(_ownerText(prop, data))]),
         ]),
         div(classes: 'queue-item__meta', [
           StatusBadge.forVerification(prop.verification),
@@ -146,8 +151,8 @@ class _ReviewSplitState extends State<ReviewSplit> {
   Component _missing(String text) =>
       span(classes: 'v-missing', [Component.text(text)]);
 
-  Component _detail(CommercialProperty prop) {
-    final owner = _ownerOf(prop);
+  Component _detail(CommercialProperty prop, _ReviewData data) {
+    final owner = _ownerOf(prop, data);
     final ownerLine = owner != null
         ? '${owner.name} · ${owner.email}'
         : prop.ownerId;
@@ -261,7 +266,7 @@ class _ReviewSplitState extends State<ReviewSplit> {
     div(classes: 'row', [
       ActionButton(
         'Confirm reject',
-        onClick: () => unawaited(_reject(_selected!.id)),
+        onClick: () => unawaited(_reject(_selectedId!)),
       ),
       ActionButton(
         'Cancel',
@@ -309,10 +314,15 @@ class _ReviewSplitState extends State<ReviewSplit> {
 
   @override
   Component build(BuildContext context) {
-    final visible = _visible;
+    final data = context.watch(
+      adminNotifierProvider.select(
+        (state) => (queue: state.queue, listings: state.listings, users: state.users),
+      ),
+    );
+    final visible = _visibleOf(data);
     final count = visible.length;
     final noun = 'listing';
-    final selected = _selected;
+    final selected = _selectedOf(data);
 
     return div([
       _tabs(),
@@ -326,12 +336,12 @@ class _ReviewSplitState extends State<ReviewSplit> {
             )
           else
             div(classes: 'queue', [
-              for (final item in visible) _queueItem(item),
+              for (final item in visible) _queueItem(item, data),
             ]),
         ]),
         div([
           selected != null
-              ? _detail(selected)
+              ? _detail(selected, data)
               : EmptyState(
                   title: 'Select a listing',
                   body: 'Choose a listing on the left to review its evidence.',

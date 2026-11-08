@@ -6190,31 +6190,79 @@ details.advanced .grid-3 {
   color: var(--text);
 }
 
-/* The pill floats translucent white; over a near-black canvas it has to float
-   near-black instead, or every dashboard reads as having a light bar glued to
-   the top of it. */
+/* The workspace navbar is a WHITE floating surface. This is still the single
+   shared `.app-pill` from AppLayout — no second navbar is introduced.
+   `.app-shell` deliberately flips the design tokens for the dark page canvas,
+   so the same tokens are re-declared with their light-surface values *on the
+   pill*. Every descendant (Brand, links, icon buttons, avatar, search dialog)
+   keeps reading the same token names and therefore stays legible on white.
+   The dark page canvas below the pill is unchanged. */
 .app-shell .app-pill {
-  background: rgba(24, 24, 24, 0.82);
-  border-color: rgba(255, 255, 255, 0.09);
+  --ink: #0b0f19;
+  --text: #1e293b;
+  --muted: #64748b;
+  --overline: #94a3b8;
+  --overline-text: #64748b;
+  --background: #f6f7f9;
+  --surface: #ffffff;
+  --alt-surface: #f8fafc;
+  --paper: #f4f7fb;
+  --neutral-wash: #f1f5f9;
+  --border: #e7e8ea;
+  --border-strong: #cbd5e1;
+  --action: #1d4ed8;
+  --accent: #3b82f6;
+  --geo-wash: #eaf1fe;
+  --geo-border: #c7dbfd;
+  --success: #0d9488;
+  --success-text: #0b815a;
+  --danger: #dc2626;
+  --scrim: rgba(15, 23, 42, 0.42);
+  --shadow-sm: 0 12px 32px rgba(15, 23, 42, 0.08);
+  --shadow: 0 24px 80px rgba(15, 23, 42, 0.12);
+  --menu-shadow: 0 16px 48px rgba(15, 23, 42, 0.14);
+  --dialog-shadow: 0 24px 64px rgba(15, 23, 42, 0.16);
+  --contrast-surface: #0b0f19;
+  --contrast-on-surface: #ffffff;
+
+  color-scheme: light;
+  background: rgba(255, 255, 255, 0.96);
+  border-color: rgba(15, 23, 42, 0.10);
   box-shadow:
-    0 1px 2px rgba(0, 0, 0, 0.5),
-    0 12px 32px rgba(0, 0, 0, 0.45);
+    0 1px 2px rgba(15, 23, 42, 0.04),
+    0 10px 28px rgba(15, 23, 42, 0.10);
+  color: var(--ink);
 }
 
 .app-shell .app-pill__link {
-  color: var(--muted);
+  min-height: 44px;
+  color: #46536b;
 }
 
 .app-shell .app-pill__link:hover {
-  background: rgba(255, 255, 255, 0.07);
+  background: rgba(15, 23, 42, 0.05);
   color: var(--ink);
 }
 
 .app-shell .app-pill__link--active,
 .app-shell .app-pill__link--active:hover {
-  background: var(--contrast-surface);
-  border-color: var(--contrast-surface);
-  color: var(--contrast-on-surface);
+  background: var(--ink);
+  border-color: var(--ink);
+  color: #fff;
+}
+
+/* Keyboard focus must stay visible against a white surface. */
+.app-shell .app-pill :is(a, button, input, select, summary):focus-visible {
+  outline: 3px solid var(--action);
+  outline-offset: 2px;
+}
+
+/* Match the 44px minimum interactive target on the right-hand controls. */
+.app-shell .app-pill .icon-btn,
+.app-shell .app-pill .avatar-menu__trigger,
+.app-shell .app-pill .topbar__burger {
+  min-width: 44px;
+  min-height: 44px;
 }
 
 /* Rules that used `--ink` as a background are contrast or hero, never text. */
@@ -10133,6 +10181,25 @@ input[type="range"] {
   color: rgba(253, 230, 138, 0.92);
 }
 
+/* Success variant — the one-time "Password successfully created!" notice
+   shown after an invited agent sets their password and returns here. */
+.stf-callout.is-success {
+  background: rgba(6, 40, 24, 0.6);
+  border-color: rgba(74, 222, 128, 0.35);
+}
+
+.stf-callout.is-success .ms {
+  color: #4ade80;
+}
+
+.stf-callout.is-success strong {
+  color: #86efac;
+}
+
+.stf-callout.is-success .stf-callout__body {
+  color: rgba(187, 247, 208, 0.92);
+}
+
 /* MFA notice footer. */
 .stf-mfa-note {
   display: flex;
@@ -10671,4 +10738,1195 @@ input[type="range"] {
 .pcard--selected {
   border-color: var(--action);
   box-shadow: 0 0 0 1px var(--action), var(--shadow);
+}
+
+/* ==========================================================================
+   Add Property (entrepreneur) — white-navbar presentation integration
+   --------------------------------------------------------------------------
+   Scope rules:
+   * Only `/entrepreneur/add-property` renders `.sw-reg` / `.sw-reg-saved`.
+     The `:has()` block re-declares the LIGHT token values for that one route so
+     the white floating navbar sits over a light workspace. Every other route
+     keeps the existing dark `.app-shell` canvas untouched.
+   * All presentation selectors are descendant-scoped under `.sw-reg`, so they
+     outrank (without editing or duplicating) the earlier `sw-reg*` one-line
+     rules. No global selector is redefined and no second stylesheet is loaded.
+   * Colours, radii, spacing and type come from the existing :root tokens.
+   ========================================================================== */
+
+.app-shell:has(.sw-reg),
+.app-shell:has(.sw-reg-saved) {
+  color-scheme: light;
+  --ink: #0b0f19;
+  --text: #1e293b;
+  --muted: #64748b;
+  --overline: #94a3b8;
+  --overline-text: #64748b;
+  --background: #f6f7f9;
+  --surface: #ffffff;
+  --alt-surface: #f8fafc;
+  --paper: #f4f7fb;
+  --neutral-wash: #f1f5f9;
+  --border: #e7e8ea;
+  --border-strong: #cbd5e1;
+  --action: #1d4ed8;
+  --accent: #3b82f6;
+  --geo-wash: #eaf1fe;
+  --geo-border: #c7dbfd;
+  --success: #0d9488;
+  --success-text: #0b815a;
+  --success-wash: #dcf5ee;
+  --warning: #b45309;
+  --warning-wash: #fef3c7;
+  --danger: #dc2626;
+  --danger-wash: #fee2e2;
+  --scrim: rgba(15, 23, 42, 0.42);
+  --shadow-sm: 0 12px 32px rgba(15, 23, 42, 0.08);
+  --shadow: 0 24px 80px rgba(15, 23, 42, 0.12);
+  --menu-shadow: 0 16px 48px rgba(15, 23, 42, 0.14);
+  --dialog-shadow: 0 24px 64px rgba(15, 23, 42, 0.16);
+  --contrast-surface: #0b0f19;
+  --contrast-on-surface: #ffffff;
+  background: var(--background);
+  color: var(--text);
+}
+
+/* ---- Breadcrumb + heading ------------------------------------------------ */
+
+.sw-reg .sw-reg-breadcrumb {
+  flex-wrap: wrap;
+  gap: 9px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #5c6b80;
+  margin: 6px 0 20px;
+}
+.sw-reg .sw-reg-crumb-link { color: var(--action); }
+.sw-reg .sw-reg-crumb-link:hover { text-decoration: underline; }
+.sw-reg .sw-reg-crumb-sep { color: var(--overline); }
+.sw-reg .sw-reg-hero { align-items: flex-start; margin-bottom: 26px; }
+.sw-reg .sw-reg-kicker {
+  font-size: 11px;
+  letter-spacing: 1.4px;
+  color: var(--action);
+}
+.sw-reg .sw-reg-hero h1 {
+  font-size: clamp(28px, 3.1vw, 40px);
+  line-height: 1.14;
+  letter-spacing: -0.035em;
+  font-weight: 900;
+  margin-bottom: 10px;
+}
+.sw-reg .sw-reg-hero p { font-size: 15px; max-width: 68ch; }
+.sw-reg .sw-reg-status {
+  background: #edf4ff;
+  border-color: #d4e3fb;
+  color: #1848b5;
+  font-size: 12px;
+  white-space: nowrap;
+}
+.sw-reg .sw-reg-status-dot { background: #2863e8; }
+
+/* ---- Horizontal five-step progress --------------------------------------- */
+
+.sw-reg .sw-reg-stepper-wrap { margin-bottom: 20px; }
+.sw-reg .sw-reg-stepper-caption {
+  display: flex;
+  gap: 2px;
+  font-size: 12px;
+  color: var(--muted);
+  margin-bottom: 8px;
+}
+.sw-reg .sw-reg-stepper-caption strong { color: var(--ink); }
+.sw-reg .sw-reg-stepper {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 8px;
+  padding: 19px 22px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 17px;
+  box-shadow: var(--shadow-sm);
+}
+.sw-reg .sw-reg-step {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  min-width: 0;
+  min-height: 44px;
+  padding: 0;
+  border: 0;
+  background: none;
+  text-align: left;
+  color: var(--text);
+  cursor: pointer;
+}
+.sw-reg .sw-reg-step:disabled { cursor: default; opacity: 1; }
+.sw-reg .sw-reg-step:not(:last-child)::after {
+  content: '';
+  position: absolute;
+  top: 21px;
+  left: calc(50% + 36px);
+  right: 3px;
+  height: 1px;
+  background: #dce4f1;
+  pointer-events: none;
+}
+.sw-reg .sw-reg-step-index {
+  display: grid;
+  place-items: center;
+  flex: 0 0 40px;
+  width: 40px;
+  height: 40px;
+  border: 1px solid #d6deea;
+  border-radius: 50%;
+  background: #f6f8fc;
+  color: #556276;
+  font-size: 13px;
+  font-weight: 800;
+}
+.sw-reg .sw-reg-step.is-active .sw-reg-step-index {
+  background: var(--action);
+  border-color: var(--action);
+  color: #fff;
+}
+.sw-reg .sw-reg-step.is-done .sw-reg-step-index {
+  background: #edf4ff;
+  border-color: #cfe0fd;
+  color: var(--action);
+}
+.sw-reg .sw-reg-step-meta { min-width: 0; }
+.sw-reg .sw-reg-step-meta strong {
+  display: block;
+  font-size: 12px;
+  line-height: 1.3;
+  color: #3e4a5e;
+}
+.sw-reg .sw-reg-step.is-active .sw-reg-step-meta strong { color: #1747b2; }
+.sw-reg .sw-reg-step-meta small {
+  display: block;
+  font-size: 11px;
+  line-height: 1.3;
+  color: #687587;
+}
+
+/* ---- Two-column content -------------------------------------------------- */
+
+.sw-reg .sw-reg-grid {
+  grid-template-columns: minmax(0, 1.68fr) minmax(280px, 0.84fr);
+  gap: 20px;
+}
+.sw-reg .sw-reg-card {
+  border-radius: 17px;
+  padding: 0;
+  overflow: hidden;
+  box-shadow: var(--shadow-sm);
+}
+.sw-reg .sw-reg-card-head {
+  align-items: flex-start;
+  gap: 16px;
+  margin: 0;
+  padding: 27px 31px 21px;
+  border-bottom: 1px solid #ebeff5;
+}
+.sw-reg .sw-reg-card-head h2 { font-size: clamp(20px, 2vw, 25px); margin: 6px 0 6px; }
+.sw-reg .sw-reg-card-head p { font-size: 14px; }
+.sw-reg .sw-reg-counter {
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: var(--neutral-wash);
+  color: #52657d;
+  white-space: nowrap;
+}
+.sw-reg .sw-reg-section-title { font-size: 16px; margin: 18px 0 12px; }
+/* One gutter for the whole step body keeps grids, readiness chips, photo
+   tiles and the review list aligned without per-element padding. */
+.sw-reg .sw-reg-step-body { padding: 25px 31px 0; }
+.sw-reg .sw-fields {
+  gap: 20px 18px;
+}
+.sw-reg .sw-field-label { display: block; color: #1c2637; }
+.sw-reg .sw-field input,
+.sw-reg .sw-field select,
+.sw-reg .sw-field textarea {
+  min-height: 47px;
+  padding: 11px 13px;
+  font-size: 15px;
+  border-color: #d5dde9;
+  border-radius: 11px;
+  background: #fafbfd;
+  color: #121c2e;
+}
+.sw-reg .sw-field input:focus,
+.sw-reg .sw-field select:focus,
+.sw-reg .sw-field textarea:focus {
+  outline: 3px solid var(--action);
+  outline-offset: 2px;
+}
+.sw-reg .sw-field [aria-invalid='true'] {
+  border-color: #ce3a3a;
+  box-shadow: 0 0 0 2px #fee2e2;
+}
+.sw-reg .sw-field-error { color: #991b1b; }
+.sw-reg .sw-facility { min-height: 44px; }
+.sw-reg .sw-reg-footer {
+  margin: 24px 31px 0;
+  padding: 20px 0 24px;
+}
+.sw-reg .sw-btn {
+  min-height: 46px;
+  padding: 11px 20px;
+  border-radius: 11px;
+  border-color: #d4deeb;
+  color: #1c2d47;
+  font-size: 14px;
+}
+.sw-reg .sw-btn:hover { background: #f6f8fd; }
+.sw-reg .sw-btn-primary {
+  background: var(--action);
+  border-color: var(--action);
+  color: #fff;
+  box-shadow: none;
+}
+.sw-reg .sw-btn-primary:hover { background: #1746c4; }
+.sw-reg .sw-error-summary {
+  margin: 20px 31px 0;
+  border-radius: 12px;
+}
+.sw-reg .sw-review-list { padding: 0; }
+.sw-reg .sw-confirm { margin: 20px 0 0; }
+.sw-reg .sw-confirm-box { width: 44px; height: 44px; }
+.sw-reg .sw-reg-note { color: #5b697a; }
+.sw-reg .sw-extra-title { margin: 24px 0 0; }
+
+/* ---- Local photo previews ------------------------------------------------ */
+
+.sw-reg .sw-upload {
+  border-color: #bbd0f3;
+  border-radius: 15px;
+  background: #f7faff;
+  min-height: 88px;
+}
+.sw-reg .sw-upload strong { font-size: 14px; }
+.sw-reg input[type='file'] {
+  display: block;
+  width: 100%;
+  min-height: 44px;
+  margin: 12px 0 0;
+  padding: 9px;
+  border: 1px solid var(--border);
+  border-radius: 11px;
+  background: var(--surface);
+  font-size: 14px;
+  color: var(--text);
+}
+.sw-reg .sw-photo-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 11px;
+  padding: 16px 0 0;
+}
+.sw-reg .sw-photo-item {
+  position: relative;
+  min-width: 0;
+  border: 1px solid #dce6f3;
+  border-radius: 11px;
+  overflow: hidden;
+  background: #edf3fb;
+}
+.sw-reg .sw-photo-item img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 1.3;
+  object-fit: cover;
+  background: #e1ebf7;
+}
+.sw-reg .sw-photo-meta { padding: 7px 9px; }
+.sw-reg .sw-photo-meta span {
+  display: block;
+  font-size: 12px;
+  font-weight: 700;
+  color: #1c2940;
+  overflow-wrap: anywhere;
+}
+.sw-reg .sw-photo-meta small { font-size: 11px; color: #59697e; }
+.sw-reg .sw-photo-remove {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  min-width: 44px;
+  min-height: 44px;
+  border: 1px solid #d4deeb;
+  border-radius: 11px;
+  background: rgba(255, 255, 255, 0.96);
+  color: #991b1b;
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+}
+.sw-reg .sw-photo-error {
+  margin-top: 12px;
+  color: #991b1b;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+/* ---- Right-hand summary + honesty notice --------------------------------- */
+
+.sw-reg .sw-reg-aside {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+}
+.sw-reg .sw-reg-preview {
+  position: static;
+  border-radius: 17px;
+  padding: 25px;
+  box-shadow: var(--shadow-sm);
+}
+.sw-reg .sw-preview-content { border-radius: 12px; }
+.sw-reg .sw-reg-connection {
+  border: 1px solid #f0d9a8;
+  border-radius: 17px;
+  background: #fff8e8;
+  padding: 21px 23px;
+}
+.sw-reg .sw-reg-connection h3 {
+  font-size: 15px;
+  font-weight: 800;
+  color: #7c4a08;
+  margin: 0 0 8px;
+}
+.sw-reg .sw-reg-connection p {
+  font-size: 13px;
+  line-height: 1.55;
+  color: #6b4a17;
+  margin: 0;
+}
+
+/* ---- Saved (design-only) state ------------------------------------------- */
+
+.sw-reg-saved .sw-saved-card { border-radius: 17px; box-shadow: var(--shadow-sm); }
+.sw-reg-saved .sw-saved-card h2 { color: var(--ink); }
+.sw-reg-saved .sw-saved-notice {
+  border: 1px solid #f0d9a8;
+  border-radius: 12px;
+  background: #fff8e8;
+  padding: 14px 16px;
+  margin: 0 0 22px;
+  text-align: left;
+}
+.sw-reg-saved .sw-saved-notice strong { display: block; color: #7c4a08; font-size: 13px; }
+.sw-reg-saved .sw-saved-notice p {
+  color: #6b4a17;
+  font-size: 13px;
+  line-height: 1.55;
+  margin: 6px 0 0;
+  max-width: none;
+}
+.sw-reg-saved .sw-saved-actions { flex-wrap: wrap; }
+.sw-reg-saved .sw-btn { min-height: 46px; border-radius: 11px; }
+
+/* ---- Keyboard focus, reduced motion -------------------------------------- */
+
+.sw-reg :is(button, a, input, select, textarea, summary):focus-visible,
+.sw-reg-saved :is(button, a):focus-visible {
+  outline: 3px solid var(--action);
+  outline-offset: 2px;
+}
+
+/* ---- Responsive ---------------------------------------------------------- */
+
+@media (max-width: 1170px) {
+  .sw-reg .sw-reg-stepper { padding: 16px 12px; }
+  .sw-reg .sw-reg-step:not(:last-child)::after { display: none; }
+}
+@media (max-width: 1024px) {
+  .sw-reg .sw-reg-grid { grid-template-columns: 1fr; }
+  .sw-reg .sw-reg-aside {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 640px) {
+  .sw-reg .sw-reg-stepper { gap: 0; padding: 12px 6px; }
+  .sw-reg .sw-reg-step { justify-content: center; }
+  .sw-reg .sw-reg-step-index { flex-basis: 34px; width: 34px; height: 34px; }
+  .sw-reg .sw-reg-step-meta { display: none; }
+  .sw-reg .sw-reg-grid { grid-template-columns: minmax(0, 1fr); }
+  .sw-reg .sw-reg-aside { grid-template-columns: 1fr; }
+  .sw-reg .sw-reg-step-body { padding: 19px 19px 0; }
+  .sw-reg .sw-reg-card-head { padding: 21px 19px 17px; }
+  .sw-reg .sw-reg-footer {
+    margin: 20px 19px 0;
+    padding: 17px 0 19px;
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .sw-reg .sw-error-summary { margin: 16px 19px 0; }
+  .sw-reg .sw-reg-footer > div { justify-content: space-between; }
+  .sw-reg .sw-fields { grid-template-columns: 1fr; }
+  .sw-reg .sw-photo-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .sw-reg .sw-facilities,
+  .sw-reg .sw-review-list,
+  .sw-reg .sw-preview-content dl { grid-template-columns: 1fr; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .app-shell .app-pill,
+  .app-shell .app-pill__link,
+  .sw-reg .sw-reg-step,
+  .sw-reg .sw-btn { transition: none !important; }
+  .sw-reg *, .sw-reg *::before, .sw-reg *::after { scroll-behavior: auto !important; }
+}
+
+/* ==========================================================================
+   "Set a New Password" onboarding surface (invite + recovery landing).
+   Isolation contract: every rule is prefixed `.rst-`, so the shared `.lp-*`,
+   `.stf-*` and `.auth-*` bases above are untouched. The page reuses the
+   `.login-page.is-staff` navy gradient + Kuala Lumpur cityscape band
+   (`.lp-bg` / `.lp-overlay`) and the shared `.stf-card` dark surface; only
+   the two-column shell, tracker, checklist and gradient action are new.
+   Two columns above 980px, single stacked column below, never wider than the
+   viewport (`.login-page.is-staff` already clamps horizontal overflow).
+   ========================================================================== */
+
+.rst-wrap {
+  position: relative;
+  z-index: 2;
+  width: 100%;
+  max-width: var(--lp-max);
+  margin-inline: auto;
+  min-height: 100dvh;
+  padding:
+    calc(var(--lp-nav-h) + var(--page-gutter)) var(--page-gutter)
+    var(--page-gutter);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.rst-shell {
+  width: 100%;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, var(--stf-form-max));
+  gap: clamp(28px, 5vw, 72px);
+  align-items: center;
+}
+
+/* Left panel: brand, heading, three-step tracker. */
+.rst-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 26px;
+}
+
+.rst-brand img {
+  width: 30px;
+  height: 30px;
+  display: block;
+}
+
+.rst-brand strong {
+  font-size: 18px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  color: #fff;
+}
+
+.rst-title {
+  font-size: clamp(26px, 3vw, 38px);
+  font-weight: 800;
+  color: #fff;
+  margin: 0 0 10px;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+}
+
+.rst-hero-sub {
+  max-width: 46ch;
+  font-size: 14px;
+  line-height: 1.6;
+  color: #b8c4d8;
+  margin: 0 0 30px;
+}
+
+.rst-steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-width: 420px;
+}
+
+.rst-step {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding-bottom: 26px;
+}
+
+.rst-step:last-child {
+  padding-bottom: 0;
+}
+
+/* Connector line between steps. */
+.rst-step::before {
+  content: '';
+  position: absolute;
+  left: 13px;
+  top: 32px;
+  bottom: 4px;
+  width: 2px;
+  background: rgba(148, 163, 184, 0.25);
+}
+
+.rst-step:last-child::before {
+  display: none;
+}
+
+.rst-step-dot {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12.5px;
+  font-weight: 700;
+  background: rgba(15, 23, 42, 0.72);
+  border: 1.5px solid rgba(148, 163, 184, 0.4);
+  color: #94a3b8;
+}
+
+.rst-step.is-done .rst-step-dot {
+  background: rgba(34, 197, 94, 0.18);
+  border-color: rgba(74, 222, 128, 0.55);
+  color: #4ade80;
+}
+
+.rst-step.is-current .rst-step-dot {
+  background: linear-gradient(135deg, #22d3ee, #1789fa);
+  border-color: transparent;
+  color: #06131f;
+  box-shadow: 0 0 0 5px rgba(23, 137, 250, 0.18);
+}
+
+.rst-step-name {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: #94a3b8;
+}
+
+.rst-step.is-done .rst-step-name,
+.rst-step.is-current .rst-step-name {
+  color: #f1f5f9;
+}
+
+/* Right panel: dark glass card (the `.stf-card` base + portal glass treatment). */
+.rst-card {
+  border: 1px solid rgba(148, 163, 184, 0.24);
+  background: linear-gradient(135deg, rgba(15, 23, 42, 0.72), rgba(11, 17, 32, 0.8));
+  backdrop-filter: blur(16px) saturate(140%);
+  -webkit-backdrop-filter: blur(16px) saturate(140%);
+  box-shadow:
+    0 25px 60px -12px rgba(2, 6, 16, 0.55),
+    inset 0 1px 0 rgba(255, 255, 255, 0.07);
+}
+
+/* Live requirements checklist. */
+.rst-reqs {
+  list-style: none;
+  margin: 4px 0 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px 16px;
+}
+
+.rst-req {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12.5px;
+  line-height: 1.4;
+  color: #8fa0b8;
+}
+
+.rst-req-ico {
+  display: inline-flex;
+  color: #475569;
+  transition: color 0.2s ease;
+}
+
+.rst-req.is-ok {
+  color: #d9e3f1;
+}
+
+.rst-req.is-ok .rst-req-ico {
+  color: #4ade80;
+}
+
+/* Cyan/blue gradient "Set Password" action. */
+.rst-card .lp-submit.rst-submit {
+  margin-top: 18px;
+  background: linear-gradient(135deg, #22d3ee 0%, #1789fa 55%, #117ef0 100%);
+  border: 1px solid transparent;
+  color: #04121f;
+  font-weight: 700;
+  box-shadow: 0 10px 24px -10px rgba(23, 137, 250, 0.65);
+}
+
+.rst-card .lp-submit.rst-submit:hover:not(:disabled) {
+  filter: brightness(1.08);
+}
+
+.rst-back {
+  margin: 14px 0 0;
+  text-align: center;
+  font-size: 13px;
+}
+
+.rst-back a {
+  color: #8ec2ff;
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.rst-back a:hover {
+  text-decoration: underline;
+}
+
+/* Stack the two panels on tablet/mobile: hero above the card, tracker
+   constrained, checklist in one column. No horizontal overflow. */
+@media (max-width: 980px) {
+  .rst-wrap {
+    align-items: stretch;
+    padding-top: calc(var(--lp-nav-h) + 18px);
+  }
+
+  .rst-shell {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 30px;
+    align-items: start;
+  }
+
+  .rst-hero-sub {
+    margin-bottom: 24px;
+  }
+
+  .rst-steps {
+    max-width: none;
+  }
+}
+
+@media (max-width: 560px) {
+  .rst-reqs {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* ==========================================================================
+   Administrator operations pages
+   --------------------------------------------------------------------------
+   Ownership reviews · Agent management · Survey campaigns · System activity ·
+   Community surveys.
+
+   Geometry comes from the approved HTML preview (metric tiles with icon
+   tiles, a queue/detail split, chip filters, a timeline); every value is
+   restyled onto the live SiteWise tokens — no colour literals, no second
+   shadow vocabulary, type at 16px for body copy (WCAG 2.2 AA). Because the
+   rules read custom properties, the dark `.app-shell` restyle and any later
+   token change apply to all five pages for free.
+
+   The `ops-` prefix keeps this vocabulary out of collision with `.stat`,
+   `.filters` and `.timeline`, which other pages already own.
+   ========================================================================== */
+
+/* --- Metric tile row ------------------------------------------------------ */
+
+.ops-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--md);
+}
+
+.ops-stat {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+  padding: 18px 20px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+}
+
+.ops-tile {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 44px;
+  height: 44px;
+  border-radius: var(--radius);
+  background: var(--geo-wash);
+  color: var(--action);
+}
+
+.ops-tile--lg {
+  width: 52px;
+  height: 52px;
+  border-radius: var(--radius-lg);
+}
+
+.ops-stat__body {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.ops-stat__label {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--overline-text);
+}
+
+.ops-stat__value {
+  font-family: var(--font-display);
+  font-size: 30px;
+  font-weight: 800;
+  line-height: 1.2;
+  color: var(--ink);
+}
+
+.ops-stat__note {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+/* --- Queue / detail split ------------------------------------------------- */
+
+.ops-split {
+  display: grid;
+  grid-template-columns: minmax(300px, 0.85fr) minmax(0, 1.35fr);
+  gap: var(--md);
+  align-items: start;
+}
+
+.ops-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* Queue rows are buttons, so the whole card is the target. The pressed state
+   is a border + inset ring (never colour alone) with aria-pressed carrying
+   the same fact for assistive tech. */
+.ops-qrow {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+  padding: 14px 16px;
+  text-align: left;
+  font: inherit;
+  color: var(--ink);
+  background: var(--alt-surface, var(--paper));
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: border-color 0.18s ease, background 0.18s ease;
+}
+
+.ops-qrow:hover {
+  border-color: var(--border-strong);
+}
+
+.ops-qrow:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.ops-qrow[aria-pressed="true"] {
+  background: var(--surface);
+  border-color: var(--action);
+  box-shadow: inset 0 0 0 1px var(--action);
+}
+
+.ops-qrow__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.ops-qrow__id {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  color: var(--overline-text);
+}
+
+.ops-qrow__title {
+  font-size: 17px;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.ops-qrow__meta {
+  font-size: 14px;
+  color: var(--muted);
+}
+
+/* --- Detail body ---------------------------------------------------------- */
+
+.ops-detail-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.ops-info {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px 0;
+  color: var(--muted);
+}
+
+.ops-info + .ops-info {
+  border-top: 1px solid var(--border);
+}
+
+.ops-info__text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.ops-info__label {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--overline-text);
+}
+
+.ops-info__value {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.ops-rule {
+  border: 0;
+  border-top: 1px solid var(--border);
+  margin: var(--md) 0;
+}
+
+.ops-subhead {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--ink);
+  margin-bottom: 8px;
+}
+
+.ops-empty {
+  margin: 0;
+  padding: 14px 16px;
+  font-size: 15px;
+  color: var(--muted);
+  background: var(--neutral-wash);
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius);
+}
+
+/* --- Chip filters --------------------------------------------------------- */
+
+.ops-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.ops-chip {
+  min-height: 40px;
+  padding: 8px 16px;
+  font: inherit;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--muted);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  cursor: pointer;
+  transition: background 0.18s ease, color 0.18s ease, border-color 0.18s ease;
+}
+
+.ops-chip:hover {
+  background: var(--paper);
+  color: var(--ink);
+}
+
+.ops-chip:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.ops-chip[aria-pressed="true"] {
+  background: var(--action);
+  border-color: var(--action);
+  color: #ffffff;
+}
+
+/* --- Hero strip ----------------------------------------------------------- */
+
+.ops-hero {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--lg);
+  flex-wrap: wrap;
+  padding: var(--lg);
+  background: var(--paper);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+}
+
+.ops-hero__main {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  min-width: 0;
+}
+
+.ops-hero__text {
+  min-width: 0;
+}
+
+.ops-hero__title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 21px;
+  font-weight: 800;
+  line-height: 1.3;
+  color: var(--ink);
+}
+
+.ops-hero__body {
+  margin: 6px 0 0;
+  font-size: 15px;
+  line-height: 1.55;
+  color: var(--muted);
+}
+
+.ops-hero__action {
+  display: flex;
+  gap: 10px;
+}
+
+/* --- Timeline ------------------------------------------------------------- */
+
+.ops-ev-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.ops-ev {
+  display: flex;
+  gap: 16px;
+  padding: 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.ops-ev__body {
+  min-width: 0;
+}
+
+.ops-ev__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.ops-ev__title {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 700;
+  line-height: 1.35;
+  color: var(--ink);
+}
+
+.ops-ev__subject {
+  margin: 4px 0 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.ops-ev__meta {
+  margin: 4px 0 0;
+  font-size: 14px;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+/* --- Card grids (agents, campaigns) --------------------------------------- */
+
+.ops-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: var(--md);
+}
+
+.ops-card {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 18px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.ops-card__head {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.ops-card__title {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+
+.ops-card__meta {
+  margin: 2px 0 0;
+  font-size: 14px;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.ops-card__tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.ops-card__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: auto;
+}
+
+/* --- Survey screening rows ------------------------------------------------ */
+
+.ops-checkrow {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px 16px;
+  font-size: 16px;
+  line-height: 1.5;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+
+.ops-checkrow + .ops-checkrow {
+  margin-top: 10px;
+}
+
+.ops-checkrow input {
+  width: 20px;
+  height: 20px;
+  margin-top: 2px;
+  accent-color: var(--action);
+}
+
+.ops-checkrow:focus-within {
+  outline: 3px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.ops-question {
+  margin: var(--lg) 0 10px;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+/* --- Responsive ----------------------------------------------------------- */
+
+@media (max-width: 980px) {
+  .ops-split {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .ops-stats {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 640px) {
+  .ops-hero {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .ops-hero__action {
+    width: 100%;
+  }
+
+  .ops-hero__action .btn {
+    width: 100%;
+  }
+
+  .ops-ev {
+    gap: 12px;
+  }
+}
+
+/* Entrances are a single 180ms fade+rise, opt-in only — with
+   `prefers-reduced-motion: reduce` the content is simply there. Motion is
+   never required to understand state, so nothing starts hidden for animation
+   alone outside this block. */
+@media (prefers-reduced-motion: no-preference) {
+  .ops-fade {
+    animation: ops-rise 0.18s ease-out both;
+  }
+}
+
+@keyframes ops-rise {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }

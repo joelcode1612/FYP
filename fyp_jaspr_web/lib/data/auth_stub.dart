@@ -109,6 +109,10 @@ abstract final class WebAuth {
   static Future<void> complete([String? next]) async => throw StateError(error);
   static Future<void> signout() async {}
 
+  /// VM/tests: no invitation session exists, so there is never a notice to
+  /// consume. The browser bridge returns the one-time password-set notice.
+  static Map<String, dynamic>? consumePasswordNotice() => null;
+
   /// Performs the same JSON round-trip the browser bridge performs.
   ///
   /// Throws when the API is unreachable or answers non-2xx; the calling cubit

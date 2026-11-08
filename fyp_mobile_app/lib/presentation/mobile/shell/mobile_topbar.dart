@@ -1,8 +1,7 @@
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_logic/shared_logic.dart';
 import 'package:flutter/material.dart';
 
-import '../../../application/state/app_view_model.dart';
 import '../../../core/theme/sitewise_m3.dart';
 import '../../../core/theme/sitewise_theme.dart';
 import '../../../presentation/mobile/widgets/m3_kit.dart';
@@ -18,7 +17,7 @@ import '../../shared/widgets/sitewise_role_menu.dart';
 ///
 /// Admin / owner keep the classic [AppBar] treatment (`m3: false`).
 
-class MobileTopBar extends StatelessWidget implements PreferredSizeWidget {
+class MobileTopBar extends ConsumerWidget implements PreferredSizeWidget {
   final String title;
   final List<Widget>? actions;
 
@@ -40,15 +39,15 @@ class MobileTopBar extends StatelessWidget implements PreferredSizeWidget {
   Size get preferredSize => Size.fromHeight(m3 ? 62 : kToolbarHeight);
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final canPop = Navigator.of(context).canPop();
-    if (!m3) return _classic(context, canPop);
+    if (!m3) return _classic(context, ref, canPop);
     return _m3(context, canPop);
   }
 
   // ── Classic (admin / owner) ────────────────────────────────────────────────
-  Widget _classic(BuildContext context, bool canPop) {
-    final role = context.select<AppViewModel, AppRole>((v) => v.role);
+  Widget _classic(BuildContext context, WidgetRef ref, bool canPop) {
+    final role = ref.watch(appNotifierProvider.select((s) => s.role));
     return AppBar(
       backgroundColor: SitewiseColors.surface,
       foregroundColor: SitewiseColors.ink,

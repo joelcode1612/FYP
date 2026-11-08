@@ -2,14 +2,11 @@ import 'dart:async';
 
 import 'package:jaspr/dom.dart';
 import 'package:jaspr/jaspr.dart';
-import 'package:jaspr_provider_compat/jaspr_provider_compat.dart' as provider;
+import 'package:jaspr_riverpod/jaspr_riverpod.dart';
 import 'package:shared_logic/shared_logic.dart';
 
 import '../../components/ui.dart';
-import '../../data/app_locator.dart';
 import '../../layouts/app_layout.dart';
-import '../../state/app_view_model.dart';
-import '../../state/entrepreneur_view_model.dart';
 
 /// Web entrepreneur home, restructured to the reference
 /// `SiteWise_Location_Hero_Integrated.html`:
@@ -33,42 +30,25 @@ class DashboardPage extends StatefulComponent {
   State<DashboardPage> createState() => _DashboardPageState();
 }
 
-class _DashboardPageState extends State<DashboardPage>
-    with PreloadStateMixin<DashboardPage> {
-  EntrepreneurViewModel? _vm;
-
-  EntrepreneurViewModel get vm => _vm ??= AppLocator.newEntrepreneurViewModel();
-
+class _DashboardPageState extends State<DashboardPage> {
   /// Illustrative catchment radius — purely presentational, mirrors the
   /// reference's 500 m / 1 km toggle. No real geodata is shown.
   int _radiusIndex = 0;
   static const _radii = [500, 1000];
 
   @override
-  Future<void> preloadState() => _load();
-
-  @override
   void initState() {
     super.initState();
-    if (_vm == null) unawaited(_load());
+    Future.microtask(() {
+      if (!mounted) return;
+      unawaited(
+        context.read(entrepreneurNotifierProvider.notifier).loadRecommendations(),
+      );
+    });
   }
 
-  Future<void> _load() async {
-    try {
-      await vm.loadRecommendations();
-    } catch (_) {
-      // The page renders its honest empty state if recommendations fail.
-    }
-  }
-
-  @override
-  void dispose() {
-    _vm?.dispose();
-    super.dispose();
-  }
-
-  bool get _prefsSet {
-    final p = vm.prefs;
+  bool _prefsSet(EntrepreneurState state) {
+    final p = state.preferences;
     return p.businessType.isNotEmpty ||
         p.preferredLocation.isNotEmpty ||
         p.maxBudgetRm > 0 ||
@@ -77,43 +57,34 @@ class _DashboardPageState extends State<DashboardPage>
 
   @override
   Component build(BuildContext context) {
-    return provider.ChangeNotifierProvider<EntrepreneurViewModel>.value(
-      value: vm,
-      child: provider.Consumer<AppViewModel>(
-        builder: (context, appVm, child) {
-          return provider.Consumer<EntrepreneurViewModel>(
-            builder: (context, model, child) {
-              return AppLayout(
-                role: AppRole.entrepreneur,
-                currentRoute: '/entrepreneur',
-                title: 'Home',
-                // The reference's first element is the hero itself — there is no
-                // separate page-title band above it.
-                showPageHead: false,
-                child: model.loading
-                    ? const _Loading()
-                    : model.error != null
-                    ? _error(model.error!)
-                    : div(classes: 'stack stack--sections sw-home', [
-                        _hero(),
-                        _actionCenter(),
-                        _kpis(appVm),
-                        p(classes: 'stat-note', [
-                          Component.text(
-                            'Recommendations, saved selections and preferences '
-                            'come from your session. The location preview and '
-                            'catchment ring are illustrative only — no live map '
-                            'or measured demand is shown. Scores are relative '
-                            'decision-support indicators, not a probability of '
-                            'business success.',
-                          ),
-                        ]),
-                      ]),
-              );
-            },
-          );
-        },
-      ),
+    final state = context.watch(entrepreneurNotifierProvider);
+    final saved = context.watch(appNotifierProvider.select((state) => state.saved));
+    return AppLayout(
+      role: AppRole.entrepreneur,
+      currentRoute: '/entrepreneur',
+      title: 'Home',
+      // The reference's first element is the hero itself — there is no
+      // separate page-title band above it.
+      showPageHead: false,
+      child: state.loading
+          ? const _Loading()
+          : state.error != null
+          ? _error(state.error!)
+          : div(classes: 'stack stack--sections sw-home', [
+              _hero(),
+              _actionCenter(state, saved),
+              _kpis(saved, state),
+              p(classes: 'stat-note', [
+                Component.text(
+                  'Recommendations, saved selections and preferences '
+                  'come from your session. The location preview and '
+                  'catchment ring are illustrative only — no live map '
+                  'or measured demand is shown. Scores are relative '
+                  'decision-support indicators, not a probability of '
+                  'business success.',
+                ),
+              ]),
+            ]),
     );
   }
 
@@ -126,7 +97,9 @@ class _DashboardPageState extends State<DashboardPage>
       ActionButton(
         'Try again',
         variant: 'secondary',
-        onClick: () => unawaited(vm.loadRecommendations()),
+        onClick: () => unawaited(
+          context.read(entrepreneurNotifierProvider.notifier).loadRecommendations(),
+        ),
       ),
     ]);
   }
@@ -666,9 +639,8 @@ class _DashboardPageState extends State<DashboardPage>
 
   // ---------------------------------------------------------- action center
 
-  Component _actionCenter() {
-    final recs = vm.recommendations;
-    final saved = AppLocator.appViewModel.saved;
+  Component _actionCenter(EntrepreneurState state, Set<String> saved) {
+    final recs = state.recommendations;
     final top = recs.isNotEmpty
         ? recs.reduce((r1, r2) => r1.score > r2.score ? r1 : r2)
         : null;
@@ -686,7 +658,9 @@ class _DashboardPageState extends State<DashboardPage>
           ]),
         ]),
         span(classes: 'sw-home-demo-pill', [
-          Component.text(_prefsSet ? 'Preferences saved' : 'Set preferences'),
+          Component.text(
+            _prefsSet(state) ? 'Preferences saved' : 'Set preferences',
+          ),
         ]),
       ]),
       div(classes: 'sw-home-action-grid', [
@@ -779,7 +753,7 @@ class _DashboardPageState extends State<DashboardPage>
               'tune',
               'Refine business requirements',
               'Adjust your concept, rent and space preferences',
-              _prefsSet
+              _prefsSet(state)
                   ? '/entrepreneur/recommendations'
                   : '/entrepreneur/preferences',
             ),
@@ -831,9 +805,8 @@ class _DashboardPageState extends State<DashboardPage>
 
   // -------------------------------------------------------------------- KPIs
 
-  Component _kpis(AppViewModel appVm) {
-    final recs = vm.recommendations.length;
-    final saved = appVm.saved.length;
+  Component _kpis(Set<String> saved, EntrepreneurState state) {
+    final recs = state.recommendations.length;
     return div(classes: 'sw-kpi-grid', [
       _kpi(
         'auto_awesome',
@@ -847,16 +820,16 @@ class _DashboardPageState extends State<DashboardPage>
         'bookmark',
         '#059669',
         'Saved favourites',
-        '$saved',
-        saved == 1 ? 'Property shortlisted' : 'Properties shortlisted',
+        '${saved.length}',
+        saved.length == 1 ? 'Property shortlisted' : 'Properties shortlisted',
         '/entrepreneur/saved',
       ),
       _kpi(
         'tune',
         '#e11d48',
         'Preferences',
-        _prefsSet ? 'Set' : '—',
-        _prefsSet ? 'Up to date' : 'Set them to get matches',
+        _prefsSet(state) ? 'Set' : '—',
+        _prefsSet(state) ? 'Up to date' : 'Set them to get matches',
         '/entrepreneur/preferences',
       ),
       _kpi(

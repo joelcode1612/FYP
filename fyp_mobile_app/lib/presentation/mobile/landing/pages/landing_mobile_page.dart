@@ -1,8 +1,7 @@
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_logic/shared_logic.dart';
 import 'package:flutter/material.dart';
 
-import '../../../../application/state/app_view_model.dart';
 import '../../../../core/routing/mobile_role.dart';
 import '../../../../core/theme/sitewise_theme.dart';
 import '../../../shared/landing/landing_content.dart';
@@ -12,14 +11,14 @@ import '../widgets/landing_mobile_sections.dart';
 /// Public pre-auth landing page (Mobile tree): compact header with drawer,
 /// stacked sections and footer. Same entry actions as the Web tree.
 
-class LandingMobilePage extends StatefulWidget {
+class LandingMobilePage extends ConsumerStatefulWidget {
   const LandingMobilePage({super.key});
 
   @override
-  State<LandingMobilePage> createState() => _LandingMobilePageState();
+  ConsumerState<LandingMobilePage> createState() => _LandingMobilePageState();
 }
 
-class _LandingMobilePageState extends State<LandingMobilePage> {
+class _LandingMobilePageState extends ConsumerState<LandingMobilePage> {
   final _keys = {
     for (final a in ['top', 'audience', 'how', 'geo', 'recs', 'tour'])
       a: GlobalKey(),
@@ -45,7 +44,7 @@ class _LandingMobilePageState extends State<LandingMobilePage> {
       _toAuth('login');
       return;
     }
-    context.read<AppViewModel>().setRole(role);
+    ref.read(appNotifierProvider.notifier).setRole(role);
     Navigator.of(context).pushNamedAndRemoveUntil(route, (_) => false);
   }
 

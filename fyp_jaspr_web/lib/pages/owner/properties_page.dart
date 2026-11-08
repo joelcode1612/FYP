@@ -2,13 +2,16 @@ import 'dart:async';
 
 import 'package:jaspr/dom.dart';
 import 'package:jaspr/jaspr.dart';
-import 'package:jaspr_provider_compat/jaspr_provider_compat.dart' as provider;
+import 'package:jaspr_riverpod/jaspr_riverpod.dart';
 import 'package:shared_logic/shared_logic.dart';
 
 import '../../components/ui.dart';
-import '../../data/app_locator.dart';
+import '../../data/auth_service.dart';
 import '../../layouts/app_layout.dart';
-import '../../state/owner_view_model.dart';
+
+/// The signed-in owner id from the server-verified profile. Each navigation is
+/// a fresh document, so the family argument is stable for the page's lifetime.
+String _ownerId() => WebAuth.profile?['user_id'] as String? ?? '';
 
 /// Owner listings, laid out as the source's `properties.html`.
 ///
@@ -31,19 +34,13 @@ class PropertiesPage extends StatefulComponent {
 }
 
 class _PropertiesPageState extends State<PropertiesPage> {
-  late final OwnerViewModel vm;
-
   @override
   void initState() {
     super.initState();
-    vm = AppLocator.newOwnerViewModel();
-    unawaited(vm.load());
-  }
-
-  @override
-  void dispose() {
-    vm.dispose();
-    super.dispose();
+    Future.microtask(() {
+      if (!mounted) return;
+      unawaited(context.read(ownerNotifierProvider(_ownerId()).notifier).load());
+    });
   }
 
   @override
@@ -59,90 +56,97 @@ class _PropertiesPageState extends State<PropertiesPage> {
       actions: const [
         ActionLink('Add property', href: '/owner/add-property', icon: 'add'),
       ],
-      // Inside the layout, so search/filter emits rebuild only the content,
-      // never the chrome.
-      child: provider.ChangeNotifierProvider<OwnerViewModel>.value(
-        value: vm,
-        child: provider.Consumer<OwnerViewModel>(
-          builder: (context, vm, child) {
-            final properties = vm.filteredProperties;
-
-            return vm.loading
-                ? const _Loading()
-                : div(classes: 'stack stack--md', [
-                    _filters(),
-                    if (properties.isEmpty)
-                      EmptyState(
-                        title: 'You have no listings yet',
-                        body:
-                            'Create your first commercial property listing. It '
-                            'stays private until an administrator approves it.',
-                        action: const ActionLink(
-                          'Add property',
-                          href: '/owner/add-property',
-                          variant: 'primary',
-                        ),
-                      )
-                    else
-                      div(classes: 'rows', [
-                        for (final p in properties) _row(p),
-                      ]),
-                  ]);
-          },
-        ),
-      ),
+      // Inside the layout, so search/filter publishes rebuild only the
+      // content, never the chrome.
+      child: const _Content(),
     );
+  }
+}
+
+class _Content extends StatelessComponent {
+  const _Content();
+
+  @override
+  Component build(BuildContext context) {
+    final state = context.watch(ownerNotifierProvider(_ownerId()));
+    final owner = context.read(ownerNotifierProvider(_ownerId()).notifier);
+    final properties = owner.filteredProperties;
+
+    return state.loading
+        ? const _Loading()
+        : div(classes: 'stack stack--md', [
+            _filters(state, owner),
+            if (properties.isEmpty)
+              EmptyState(
+                title: 'You have no listings yet',
+                body:
+                    'Create your first commercial property listing. It '
+                    'stays private until an administrator approves it.',
+                action: const ActionLink(
+                  'Add property',
+                  href: '/owner/add-property',
+                  variant: 'primary',
+                ),
+              )
+            else
+              div(classes: 'rows', [
+                for (final p in properties) _row(p),
+              ]),
+          ]);
   }
 
   // ------------------------------------------------------------------ filters
 
-  Component _filters() => div(classes: 'filters', [
-    div(classes: 'grid-2', [
-      div(classes: 'field', [
-        span(classes: 'field__label', [Component.text('Search')]),
-        input(
-          attributes: {
-            'type': 'search',
-            'placeholder': 'Title, address or city',
-            if (vm.query.isNotEmpty) 'value': vm.query,
-          },
-          events: events<String>(onInput: vm.setQuery),
-        ),
-      ]),
-      div(classes: 'field', [
-        span(classes: 'field__label', [Component.text('Status')]),
-        select(
-          events: events<String>(
-            onInput: (raw) => vm.setStatusFilter(switch (raw) {
-              'Draft' => VerificationStatus.draft,
-              'Pending review' => VerificationStatus.pending,
-              'Approved' => VerificationStatus.verified,
-              'Rejected' => VerificationStatus.rejected,
-              _ => null,
-            }),
-          ),
-          [
-            option(
-              value: 'All statuses',
-              attributes: {if (vm.statusFilter == null) 'selected': ''},
-              [Component.text('All statuses')],
+  Component _filters(OwnerState state, OwnerNotifier owner) =>
+      div(classes: 'filters', [
+        div(classes: 'grid-2', [
+          div(classes: 'field', [
+            span(classes: 'field__label', [Component.text('Search')]),
+            input(
+              attributes: {
+                'type': 'search',
+                'placeholder': 'Title, address or city',
+                if (state.query.isNotEmpty) 'value': state.query,
+              },
+              events: events<String>(onInput: owner.setQuery),
             ),
-            for (final (label, status) in const [
-              ('Draft', VerificationStatus.draft),
-              ('Pending review', VerificationStatus.pending),
-              ('Approved', VerificationStatus.verified),
-              ('Rejected', VerificationStatus.rejected),
-            ])
-              option(
-                value: label,
-                attributes: {if (vm.statusFilter == status) 'selected': ''},
-                [Component.text(label)],
+          ]),
+          div(classes: 'field', [
+            span(classes: 'field__label', [Component.text('Status')]),
+            select(
+              events: events<String>(
+                onInput: (raw) => owner.setStatusFilter(switch (raw) {
+                  'Draft' => VerificationStatus.draft,
+                  'Pending review' => VerificationStatus.pending,
+                  'Approved' => VerificationStatus.verified,
+                  'Rejected' => VerificationStatus.rejected,
+                  _ => null,
+                }),
               ),
-          ],
-        ),
-      ]),
-    ]),
-  ]);
+              [
+                option(
+                  value: 'All statuses',
+                  attributes: {if (state.statusFilter == null) 'selected': ''},
+                  [Component.text('All statuses')],
+                ),
+                for (final (label, status) in const [
+                  ('Draft', VerificationStatus.draft),
+                  ('Pending review', VerificationStatus.pending),
+                  ('Approved', VerificationStatus.verified),
+                  ('Rejected', VerificationStatus.rejected),
+                ])
+                  option(
+                    value: label,
+                    attributes: {
+                      if (state.statusFilter == status) 'selected': '',
+                    },
+                    [Component.text(label)],
+                  ),
+              ],
+            ),
+          ]),
+        ]),
+      ]);
 
   // --------------------------------------------------------------------- rows
 

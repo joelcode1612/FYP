@@ -37,6 +37,11 @@ let state = {
 };
 const nextKey = 'sitewise.next';
 const rememberKey = 'sitewise.remember';
+// Flow context for the new-password page ('invite' | 'recovery') and the
+// one-time password-set notice. Session-scoped display state; never carries
+// credentials, tokens or invitation tokens.
+const PASSWORD_FLOW_KEY = 'sitewise.passwordFlow';
+const PASSWORD_NOTICE_KEY = 'sitewise.passwordNotice';
 const STAFF_ROLES = ['agent', 'admin', 'administrator'];
 // Canonical three-role model — mirrors backend/src/sitewise/domain/rbac.py.
 // Legacy aliases are normalised on read; any OTHER value is unsupported and
@@ -83,6 +88,54 @@ function authError(code, message, cause) {
   if (cause) diag(code, cause);
   return error;
 }
+
+// --- Callback URL strategy ---------------------------------------------------
+// This application must serve TWO Supabase callback styles:
+//   * PKCE code callbacks (Google OAuth, signup confirmation and password
+//     recovery links requested by this app): `?code=...` query parameters,
+//     handled by the default flowType 'pkce' client.
+//   * Implicit token callbacks (server-generated invitation emails): the
+//     tokens arrive in the URL FRAGMENT (`#access_token=...`). auth-js throws
+//     "Not a valid PKCE flow url." when a 'pkce' client meets them, so these
+//     documents must build their client with flowType 'implicit' and let the
+//     SDK consume the tokens itself. Application code NEVER parses, stores or
+//     reconstructs the tokens.
+// The URL is inspected exactly ONCE at document load - before the Supabase SDK
+// initialises and strips the fragment/code - because every later decision
+// (client flow type, session wait, error mapping) needs the same answer for
+// the whole document lifetime. Only booleans and stable error codes are kept;
+// never the token values themselves.
+const CALLBACK_ERROR_MESSAGES = {
+  otp_expired: 'This link has expired. Request a new email link from the sign-in page.',
+  access_denied: 'This link was cancelled or is no longer valid. Request a new email link.',
+  over_email_send_rate_limit: 'Too many emails were requested. Wait a moment before requesting a new one.',
+};
+const documentCallback = (() => {
+  const params = new URLSearchParams(location.search);
+  const hash = location.hash.startsWith('#') ? location.hash.slice(1) : location.hash;
+  // Merge fragment parameters behind the query ones (query wins), mirroring
+  // how auth-js parses callback URLs where both styles can appear.
+  for (const [key, value] of new URLSearchParams(hash)) {
+    if (!params.has(key)) params.append(key, value);
+  }
+  const hasTokens = params.has('access_token') || params.has('refresh_token');
+  const hasCode = params.has('code');
+  const hasTokenHash = params.has('token_hash');
+  const hasError = !!(params.get('error') || params.get('error_code') || params.get('error_description'));
+  const errorCode = params.get('error_code') || params.get('error') || null;
+  return {
+    hasCallbackParams: hasTokens || hasCode || hasTokenHash || hasError,
+    isFragmentTokenCallback: hasTokens,
+    isCodeCallback: hasCode,
+    errorCode,
+    // Fixed, user-safe messages keyed by the stable code - the raw URL
+    // error_description is never echoed (it could contain link internals).
+    errorMessage: hasError
+      ? (CALLBACK_ERROR_MESSAGES[errorCode || '']
+         || 'This email link could not be completed. Open the most recent link, or sign in from the sign-in page.')
+      : null,
+  };
+})();
 
 // Inspects the NON-SECRET metadata of an otpauth://totp provisioning URI:
 // the issuer (query parameter and label prefix) and the account label. The
@@ -473,17 +526,20 @@ async function tryProfile() {
 }
 
 // Reads the Supabase session, briefly waiting on OAuth/invite/recovery
-// callbacks while `detectSessionInUrl` exchanges the PKCE authorization code.
-// Without this the /auth/callback page can observe a null session before the
-// exchange finishes and report "no authenticated session was returned".
+// callbacks while `detectSessionInUrl` exchanges the PKCE authorization code
+// or consumes the invitation fragment tokens. Without this the /auth/callback
+// page can observe a null session before the exchange finishes and report
+// "no authenticated session was returned".
 async function currentSession() {
-  const hasCallbackParams = /[?&](code|access_token|refresh_token|token_hash)=/.test(location.href);
+  // Callback presence is captured ONCE at document load (see documentCallback):
+  // the SDK strips the fragment and the PKCE code during init, so re-reading
+  // location.href here races the very exchange this loop must wait for.
   let lastError = null;
   for (let attempt = 0; attempt < 10; attempt++) {
     const { data, error } = await client.auth.getSession();
     if (data?.session) return data.session;
     if (error) lastError = error;
-    if (!hasCallbackParams) break;
+    if (!documentCallback.hasCallbackParams) break;
     await new Promise(resolve => setTimeout(resolve, 200));
   }
   if (lastError) throw lastError;
@@ -495,6 +551,10 @@ async function currentSession() {
 // and two onAuthStateChange subscriptions could be created, duplicating every
 // session event (and therefore every redirect) on the page.
 let initInFlight = null;
+
+// Set by the SDK's PASSWORD_RECOVERY event on the callback document, BEFORE
+// doComplete stashes the flow context for the next document (/reset-password).
+let passwordFlowContext = null;
 function initialize() {
   if (!initInFlight) {
     initInFlight = doInitialize().catch(error => {
@@ -509,7 +569,17 @@ async function doInitialize() {
   const config = await loadConfig();
   if (client) { await probeBackend(); return; }   // already recovered; never create a second client
   client = createClient(config.supabaseUrl, config.supabasePublishableKey, {
-    auth: { flowType: 'pkce', persistSession: true, autoRefreshToken: true, detectSessionInUrl: true, storage },
+    auth: {
+      // 'implicit' ONLY on documents whose URL carries fragment tokens (the
+      // server-generated invitation-link style); every other document keeps
+      // the PKCE flow, so OAuth / signup / recovery code exchanges are
+      // unchanged. See the callback-strategy note at the top of this file.
+      flowType: documentCallback.isFragmentTokenCallback ? 'implicit' : 'pkce',
+      persistSession: true,
+      autoRefreshToken: true,
+      detectSessionInUrl: true,
+      storage,
+    },
   });
   state.configured = true;
   state.error = '';
@@ -518,6 +588,9 @@ async function doInitialize() {
   // Subscribe BEFORE reading the session: the PKCE code exchange on
   // /auth/callback emits SIGNED_IN asynchronously during client init.
   client.auth.onAuthStateChange((event, session) => {
+    // A recovery link recognised by Supabase emits PASSWORD_RECOVERY; the
+    // callback completion stashes the reset page's flow context from it.
+    if (event === 'PASSWORD_RECOVERY') passwordFlowContext = 'recovery';
     if (event === 'SIGNED_OUT') {
       state.user = null;
       state.profile = null;
@@ -627,17 +700,38 @@ const ready = (async () => {
 let completionInFlight = null;
 async function doComplete(next) {
   await ready;
+  // Error-carrying callback URLs (expired invitation, cancelled flow, invalid
+  // link) are swallowed inside the SDK's initialization - it would otherwise
+  // surface much later as a misleading "no session" error. Fail fast with the
+  // mapped, user-safe message: only the stable error code and fixed text are
+  // used, never the raw URL description.
+  if (documentCallback.errorMessage) {
+    throw authError(
+      'callback_' + (documentCallback.errorCode || 'invalid'),
+      documentCallback.errorMessage,
+      { name: 'CallbackUrlError', message: 'code=' + (documentCallback.errorCode || 'unspecified') },
+    );
+  }
   // /auth/callback is a full SSR document load. detectSessionInUrl exchanges
-  // the PKCE code during client initialization; currentSession() waits for
-  // that exchange before we decide anything.
+  // the PKCE code (or consumes the invitation fragment tokens) during client
+  // initialization; currentSession() waits for that to finish before we
+  // decide anything.
   const session = await currentSession();
   if (!session) {
-    throw new Error('No authenticated session was returned. Try signing in again.');
+    throw new Error('No authenticated session was created. Open the most recent email link, or sign in again.');
   }
   state.user = { id: session.user.id, email: session.user.email };
 
-  // Recovery / invite links go to the new-password screen first.
+  // Password links (invitation and recovery) go to the new-password screen.
+  // The flow context decides what happens AFTER the password is set, so it is
+  // recorded here while the callback type is still known: recovery links are
+  // PKCE code callbacks (requested from this app), invitation links are the
+  // server-generated implicit-fragment kind, and Supabase's own
+  // PASSWORD_RECOVERY event is authoritative when it fires.
   if (next === '/reset-password') {
+    const context = passwordFlowContext
+      || (documentCallback.isCodeCallback ? 'recovery' : 'invite');
+    sessionStorage.setItem(PASSWORD_FLOW_KEY, context);
     navigate('/reset-password');
     return;
   }
@@ -900,8 +994,33 @@ window.sitewiseAuth = {
   async updatePassword(password) {
     await ready;
     if (!client) throw new Error(state.error || 'Authentication is not configured.');
+    // Context is PEEKED, never cleared up front: a failed server-side update
+    // must leave the flow in place so a retry stays in the same flow.
+    const context = sessionStorage.getItem(PASSWORD_FLOW_KEY);
+    // Supabase enforces the server-side password policy; the page's checklist
+    // is a UX aid only and never replaces this validation.
     const { error } = await client.auth.updateUser({ password });
     if (error) throw error;
+    if (context === 'invite') {
+      // Invitation flow (Issue C): the password is set and the account
+      // REMAINS PENDING until an administrator activates it. The invitation
+      // session must not continue as a signed-in session: end THIS device's
+      // session only (never a global sign-out of every device), clear the
+      // SSR mirror, and return the agent to the Staff Sign-in page.
+      sessionStorage.removeItem(PASSWORD_FLOW_KEY);
+      await client.auth.signOut({ scope: 'local' });
+      clearSessionCookies();
+      // One-time display notice consumed by the Staff Sign-in page. Fixed
+      // strings only - no credentials, tokens or account identifiers.
+      sessionStorage.setItem(PASSWORD_NOTICE_KEY, JSON.stringify({
+        title: 'Password successfully created!',
+        body: 'Your SiteWise password has been set successfully. Your account is currently awaiting administrator activation. You can sign in once your account has been activated.',
+      }));
+      navigate('/staff/signin', 'password-set:invite');
+      return;
+    }
+    // Recovery flow (default): an existing ACTIVE account signs straight in
+    // through the normal completion, which revalidates role/status server-side.
     await finishSignIn();
   },
   async signup(email, password, name) {
@@ -941,6 +1060,21 @@ window.sitewiseAuth = {
     state.error = '';
     clearSessionCookies();
     navigate(location.pathname.startsWith('/staff/') ? '/staff/signin' : '/login');
+  },
+  // One-time consumption of the password-set success notice by the Staff
+  // Sign-in page. Fixed display text only - never credentials or tokens.
+  consumePasswordNotice() {
+    const raw = sessionStorage.getItem(PASSWORD_NOTICE_KEY);
+    if (!raw) return null;
+    sessionStorage.removeItem(PASSWORD_NOTICE_KEY);
+    try {
+      const notice = JSON.parse(raw);
+      return notice && typeof notice.title === 'string' && typeof notice.body === 'string'
+        ? JSON.stringify({ title: notice.title, body: notice.body })
+        : null;
+    } catch (_) {
+      return null;
+    }
   },
   async request(path, method, body) {
     await ready;

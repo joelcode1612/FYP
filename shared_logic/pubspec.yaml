@@ -12,10 +12,17 @@ environment:
 # lockfile are shared with the sibling packages.
 resolution: workspace
 
-# Intentionally empty. Everything here is pure Dart; adding a dependency would
-# be the first step toward making this package unusable from one of the two
-# apps (Flutter-only packages break the Jaspr build and vice versa).
+# Deliberately minimal and pure Dart only (no Flutter, no Jaspr), so the Jaspr
+# app can compile this package to JavaScript and the Flutter app can use it
+# natively.
+#
+# `bloc` backs the five application cubits (auth/app/owner/entrepreneur/admin)
+# and is pure Dart. It MUST stay declared: the cubits import `package:bloc`
+# directly, and without it `flutter analyze` / `flutter test` fail with
+# "The getter 'state' isn't defined for the type 'AuthCubit'".
+# `riverpod` backs `application/notifiers/providers.dart`.
 dependencies:
   bloc: ^9.2.1
+  riverpod: ^3.3.2
 dev_dependencies:
   test: 1.31.0

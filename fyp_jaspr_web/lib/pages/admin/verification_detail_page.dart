@@ -12,8 +12,8 @@ import '../../layouts/app_layout.dart';
 /// the right.
 ///
 /// Ported from `admin_verification_detail_web_page.dart`. The Flutter page
-/// calls `ServiceLocator.verification` directly (no `AdminViewModel`), so this
-/// version does the same through [AppLocator.verification] and only uses local
+/// calls `ServiceLocator.verification` directly (no shared view model), so
+/// this version does the same through [AppLocator.verification] and only uses local
 /// state for the confirm step and the post-action success card — the Flutter
 /// SnackBar + `pop` becomes an inline success card with a link back to the
 /// queue (no auto-navigation).

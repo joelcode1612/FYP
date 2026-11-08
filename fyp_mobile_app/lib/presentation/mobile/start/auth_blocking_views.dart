@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_logic/shared_logic.dart';
 
-import '../../../application/state/auth_view_model.dart';
+import '../../../core/config/mobile_config.dart';
 import '../../../core/config/mobile_endpoints.dart';
 import '../../../core/theme/sitewise_theme.dart';
 import '../../shared/widgets/sitewise_brand.dart';
@@ -16,18 +17,13 @@ import '../../shared/widgets/sitewise_cta_button.dart';
 /// Admin and Agent accounts. Their workspaces exist only on the Staff Web
 /// Portal; signing in on mobile must not silently fold them into the
 /// Entrepreneur app, and their MFA requirement is not bypassed here.
-class StaffWorkspaceRequiredView extends StatelessWidget {
-  const StaffWorkspaceRequiredView({
-    super.key,
-    required this.role,
-    required this.auth,
-  });
+class StaffWorkspaceRequiredView extends ConsumerWidget {
+  const StaffWorkspaceRequiredView({super.key, required this.role});
 
   final AppRole? role;
-  final AuthViewModel auth;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final label = role?.label ?? 'This';
     return _BlockingScaffold(
       icon: Icons.desktop_mac_outlined,
@@ -46,14 +42,14 @@ class StaffWorkspaceRequiredView extends StatelessWidget {
         ],
       ),
       actionLabel: 'Sign out',
-      onAction: () => _leave(context),
+      onAction: () => _leave(context, ref),
       secondaryLabel: 'Try another account',
-      onSecondary: () => _leave(context),
+      onSecondary: () => _leave(context, ref),
     );
   }
 
-  Future<void> _leave(BuildContext context) async {
-    await auth.signOut();
+  Future<void> _leave(BuildContext context, WidgetRef ref) async {
+    await ref.read(authNotifierProvider.notifier).signOut();
     if (!context.mounted) return;
     Navigator.of(context).pushNamedAndRemoveUntil('/auth', (_) => false);
   }
@@ -62,14 +58,9 @@ class StaffWorkspaceRequiredView extends StatelessWidget {
 /// A profile the server recognises but will not let through — suspended, or
 /// provisioned and still awaiting activation.
 class AccountStatusView extends StatelessWidget {
-  const AccountStatusView({
-    super.key,
-    required this.message,
-    required this.auth,
-  });
+  const AccountStatusView({super.key, required this.message});
 
   final String? message;
-  final AuthViewModel auth;
 
   @override
   Widget build(BuildContext context) {
@@ -95,25 +86,36 @@ class AccountStatusView extends StatelessWidget {
 /// Authentication could not be verified — offline, server error, or a build
 /// with no credentials configured. Access stays withheld until the check
 /// succeeds, so Retry is the action that matters.
-class AuthUnavailableView extends StatelessWidget {
-  const AuthUnavailableView({super.key, required this.auth, this.onRetry});
+class AuthUnavailableView extends ConsumerWidget {
+  const AuthUnavailableView({super.key, this.onRetry});
 
-  final AuthViewModel auth;
   final VoidCallback? onRetry;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final message = ref.watch(authNotifierProvider).message;
     return _BlockingScaffold(
       icon: Icons.wifi_off_rounded,
       title: 'Cannot verify sign-in',
-      body: Text(
-        auth.state.message ??
-            'Sitewise could not reach the sign-in service, so your account has '
-                'not been checked. No data is available until it is.',
-        style: _bodyStyle,
+      body: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            message ??
+                'Sitewise could not reach the sign-in service, so your account '
+                    'has not been checked. No data is available until it is.',
+            style: _bodyStyle,
+          ),
+          // A missing compile-time define must be obvious rather than looking
+          // like a server outage. Only key-free diagnostics are shown.
+          if (!MobileConfig.supabaseReady) ...[
+            const SizedBox(height: 16),
+            _ConfigStatus(),
+          ],
+        ],
       ),
       actionLabel: 'Retry',
-      onAction: onRetry ?? auth.retry,
+      onAction: onRetry ?? ref.read(authNotifierProvider.notifier).retry,
       secondaryLabel: 'Sign in again',
       onSecondary: () {
         Navigator.of(
@@ -199,6 +201,82 @@ class _BlockingScaffold extends StatelessWidget {
               ],
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Key-free summary of this build's compile-time configuration, shown only on
+/// the "cannot verify sign-in" screen. Never contains key material.
+class _ConfigStatus extends StatelessWidget {
+  const _ConfigStatus();
+
+  @override
+  Widget build(BuildContext context) {
+    final problems = MobileConfig.problems;
+    return Semantics(
+      container: true,
+      label: 'Build configuration status',
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: SitewiseColors.warningWash,
+          borderRadius: BorderRadius.circular(SitewiseSpacing.radiusLg),
+          border: Border.all(color: SitewiseColors.borderStrong),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Build configuration status',
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w800,
+                color: SitewiseColors.ink,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Supabase credentials: '
+              '${MobileConfig.hasSupabaseCredentials ? 'present' : 'missing'}\n'
+              'Supabase initialised: '
+              '${MobileConfig.supabaseInitialized ? 'yes' : 'no'}\n'
+              'API host: ${MobileConfig.apiHost}\n'
+              'Supabase host: ${MobileConfig.supabaseHost}',
+              style: const TextStyle(
+                fontSize: 12,
+                height: 1.55,
+                color: SitewiseColors.text,
+              ),
+            ),
+            if (problems.isNotEmpty) ...[
+              const SizedBox(height: 9),
+              for (final problem in problems)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 5),
+                  child: Text(
+                    '• $problem',
+                    style: const TextStyle(
+                      fontSize: 12,
+                      height: 1.45,
+                      color: SitewiseColors.ink,
+                    ),
+                  ),
+                ),
+            ],
+            const SizedBox(height: 9),
+            const Text(
+              'Run with --dart-define-from-file=fyp_mobile_app/config/'
+              'sitewise_dev.env (see sitewise_dev.env.example).',
+              style: TextStyle(
+                fontSize: 11.5,
+                height: 1.45,
+                color: SitewiseColors.muted,
+              ),
+            ),
+          ],
         ),
       ),
     );

@@ -2,14 +2,11 @@ import 'dart:async';
 
 import 'package:jaspr/dom.dart';
 import 'package:jaspr/jaspr.dart';
-import 'package:jaspr_provider_compat/jaspr_provider_compat.dart' as provider;
+import 'package:jaspr_riverpod/jaspr_riverpod.dart';
 import 'package:shared_logic/shared_logic.dart';
 
 import '../../components/ui.dart';
-import '../../data/app_locator.dart';
 import '../../layouts/app_layout.dart';
-import '../../state/app_view_model.dart';
-import '../../state/entrepreneur_view_model.dart';
 
 /// Web recommendations ("Your shortlist"), laid out as the source's
 /// `recommendations.html`.
@@ -32,71 +29,69 @@ class RecommendationsPage extends StatefulComponent {
 }
 
 class _RecommendationsPageState extends State<RecommendationsPage> {
-  late final EntrepreneurViewModel vm;
-
   @override
   void initState() {
     super.initState();
-    vm = AppLocator.newEntrepreneurViewModel();
-    unawaited(vm.loadRecommendations());
-  }
-
-  @override
-  void dispose() {
-    vm.dispose();
-    super.dispose();
+    Future.microtask(() {
+      if (!mounted) return;
+      unawaited(
+        context
+            .read(entrepreneurNotifierProvider.notifier)
+            .loadRecommendations(),
+      );
+    });
   }
 
   @override
   Component build(BuildContext context) {
-    return provider.ChangeNotifierProvider<EntrepreneurViewModel>.value(
-      value: vm,
-      child: provider.Consumer<AppViewModel>(
-        builder: (context, appVm, child) {
-          return provider.Consumer<EntrepreneurViewModel>(
-            builder: (context, model, child) {
-              return AppLayout(
-                role: AppRole.entrepreneur,
-                currentRoute: '/entrepreneur/recommendations',
-                title: 'Your shortlist',
-                eyebrow: 'Recommendations',
-                subtitle:
-                    '${model.prefs.businessType} · up to '
-                    'RM${model.prefs.maxBudgetRm.toStringAsFixed(0)} · min '
-                    '${model.prefs.minSizeSqft.toStringAsFixed(0)} sq ft. Ranked '
-                    'sites with the reasoning behind each one.',
-                actions: const [
-                  ActionLink(
-                    'Edit preferences',
-                    href: '/entrepreneur/preferences',
-                    variant: 'secondary',
-                  ),
-                ],
-                child: model.loading
-                    ? const _Loading()
-                    : model.recommendations.isEmpty
-                    ? const _Empty()
-                    : div(classes: 'stack stack--md', [
-                        for (var i = 0; i < model.recommendations.length; i++)
-                          _row(appVm, model.recommendations[i], i),
-                        p(classes: 'disclaimer', [
-                          Component.text(
-                            'A suitability score is a relative decision-support '
-                            'indicator. It is not a probability of business '
-                            'success, a revenue or customer-volume forecast, '
-                            'regulatory approval, or a guarantee of any kind.',
-                          ),
-                        ]),
-                      ]),
-              );
-            },
-          );
-        },
-      ),
+    final state = context.watch(entrepreneurNotifierProvider);
+    final saved = context.watch(appNotifierProvider.select((app) => app.saved));
+    final compared = context.watch(
+      appNotifierProvider.select((app) => app.compared),
+    );
+
+    return AppLayout(
+      role: AppRole.entrepreneur,
+      currentRoute: '/entrepreneur/recommendations',
+      title: 'Your shortlist',
+      eyebrow: 'Recommendations',
+      subtitle:
+          '${state.preferences.businessType} · up to '
+          'RM${state.preferences.maxBudgetRm.toStringAsFixed(0)} · min '
+          '${state.preferences.minSizeSqft.toStringAsFixed(0)} sq ft. Ranked '
+          'sites with the reasoning behind each one.',
+      actions: const [
+        ActionLink(
+          'Edit preferences',
+          href: '/entrepreneur/preferences',
+          variant: 'secondary',
+        ),
+      ],
+      child: state.loading
+          ? const _Loading()
+          : state.recommendations.isEmpty
+          ? const _Empty()
+          : div(classes: 'stack stack--md', [
+              for (var i = 0; i < state.recommendations.length; i++)
+                _row(saved, compared, state.recommendations[i], i),
+              p(classes: 'disclaimer', [
+                Component.text(
+                  'A suitability score is a relative decision-support '
+                  'indicator. It is not a probability of business '
+                  'success, a revenue or customer-volume forecast, '
+                  'regulatory approval, or a guarantee of any kind.',
+                ),
+              ]),
+            ]),
     );
   }
 
-  Component _row(AppViewModel appVm, PropertyRecommendation r, int index) {
+  Component _row(
+    Set<String> saved,
+    Set<String> compared,
+    PropertyRecommendation r,
+    int index,
+  ) {
     final id = r.property.id;
     final prop = r.property;
     return div(classes: 'rec-item', [
@@ -143,16 +138,18 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
             variant: 'primary',
           ),
           ActionButton(
-            appVm.isSaved(id) ? 'Saved' : 'Save',
+            saved.contains(id) ? 'Saved' : 'Save',
             variant: 'secondary',
-            icon: appVm.isSaved(id) ? 'bookmark' : 'bookmark_border',
-            onClick: () => appVm.toggleSaved(id),
+            icon: saved.contains(id) ? 'bookmark' : 'bookmark_border',
+            onClick: () =>
+                context.read(appNotifierProvider.notifier).toggleSaved(id),
           ),
           ActionButton(
-            appVm.isCompared(id) ? 'In compare' : 'Compare',
+            compared.contains(id) ? 'In compare' : 'Compare',
             variant: 'secondary',
             icon: 'compare_arrows',
-            onClick: () => appVm.toggleCompared(id),
+            onClick: () =>
+                context.read(appNotifierProvider.notifier).toggleCompared(id),
           ),
           ActionLink(
             'Why this score',

@@ -1,11 +1,11 @@
 import 'package:jaspr/dom.dart';
 import 'package:jaspr/jaspr.dart';
+import 'package:jaspr_riverpod/jaspr_riverpod.dart';
 import 'package:shared_logic/shared_logic.dart';
 
 import '../../components/ui.dart';
 import '../../data/app_locator.dart';
 import '../../layouts/app_layout.dart';
-import '../../state/entrepreneur_view_model.dart';
 
 /// Web preferences, laid out as the source's `preferences.html`.
 ///
@@ -29,8 +29,6 @@ class PreferencesPage extends StatefulComponent {
 }
 
 class _PreferencesPageState extends State<PreferencesPage> {
-  late final EntrepreneurViewModel vm;
-
   /// Every control maps 1:1 onto a [BusinessPreferences] field — no shared
   /// state and no dead handlers, so what the user entered is what gets saved.
   late String _businessType = AppLocator.preferences.businessType;
@@ -48,18 +46,6 @@ class _PreferencesPageState extends State<PreferencesPage> {
   /// Property types the recommendation engine can rank. Same vocabulary the
   /// source's checkpills use.
   static const _types = ['Cafe', 'Restaurant', 'Kiosk', 'Bakery', 'Other'];
-
-  @override
-  void initState() {
-    super.initState();
-    vm = AppLocator.newEntrepreneurViewModel();
-  }
-
-  @override
-  void dispose() {
-    vm.dispose();
-    super.dispose();
-  }
 
   void _save() {
     if (_saving) return;
@@ -79,10 +65,10 @@ class _PreferencesPageState extends State<PreferencesPage> {
       preferredAreas: AppLocator.preferences.preferredAreas,
       seatingModel: AppLocator.preferences.seatingModel,
     );
-    // The controller applies the value AND the locator persists it (session
+    // The notifier applies the value AND the locator persists it (session
     // singleton + reload-surviving cookie), so the confirmation below states
     // what the ranking engine will actually read back.
-    vm.updatePreferences(value);
+    context.read(entrepreneurNotifierProvider.notifier).updatePreferences(value);
     AppLocator.persistPreferences(value);
     setState(() {
       _saving = false;

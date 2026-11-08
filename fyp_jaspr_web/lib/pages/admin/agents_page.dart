@@ -1,30 +1,40 @@
 import 'package:jaspr/dom.dart';
 import 'package:jaspr/jaspr.dart';
 import 'package:shared_logic/shared_logic.dart';
+import 'package:universal_web/web.dart' as web;
 
+import '../../components/admin_ops_kit.dart';
 import '../../components/dashboard_kit.dart';
 import '../../components/ui.dart';
-import '../../data/agent_records.dart';
+import '../../data/admin_api.dart';
 import '../../data/app_locator.dart';
 import '../../layouts/app_layout.dart';
 
-/// Agent roster for an administrator.
+/// Agent management — the administrator's live staff roster.
 ///
-/// ## The invite form is deliberately two fields
+/// ## What is real
 ///
-/// Name and work email — nothing else. The brief's rule is that an
-/// administrative screen must never set or display an agent password: an
-/// invited agent creates their own credential through the same Supabase flow
-/// the other roles use. A "temporary password" input here would be the exact
-/// anti-pattern, so it is absent rather than disabled.
+/// Every control on this page drives an existing backend route
+/// (`backend/src/sitewise/api/v1/staff.py`), all guarded by **administrator +
+/// MFA (`aal2`)** on the server, all recorded in `role_change_audit`:
 ///
-/// ## What is not real
+/// * `GET  /api/v1/staff/agents` — roster (local enforcement mirror merged
+///   with the Supabase `agent` profile),
+/// * `POST /api/v1/staff/agents` — invite: creates the Supabase identity and
+///   emails the native password-setup link. **No password is ever typed or
+///   displayed here** — the agent chooses their own credential, which is why
+///   the form has name/email/company/phone and nothing else.
+/// * `PATCH /api/v1/staff/agents/{id}/status` — suspend / activate /
+///   reactivate. The backend rejects no-ops with 409, so entries never
+///   pretend a change stuck when it did not.
+/// * `GET  /api/v1/staff/invitations` — Supabase invite tracking.
 ///
-/// There is no agent account to list. `profiles.role` has a check constraint
-/// accepting only `entrepreneur`, `owner` and `admin`, `agent_profiles` does not
-/// exist, and `test/app-api.js` serves six routes, none of which can create an
-/// agent. The roster row below is the demonstration identity, and the invite
-/// action composes the request without sending it.
+/// Failures surface as the backend's own sentence (the 409 that asks for
+/// `allow_existing=true`, an identity-collision notice, the structured MFA
+/// refusal) — never as a fabricated success and never as a silent retry. The
+/// previous build's demo roster and stale "no agent role exists" callout are
+/// gone: `public.agent`, the `agent` role value and the invitation flow are
+/// all live.
 @client
 class AdminAgentsPage extends StatefulComponent {
   const AdminAgentsPage({super.key});
@@ -34,29 +44,164 @@ class AdminAgentsPage extends StatefulComponent {
 }
 
 class _AdminAgentsPageState extends State<AdminAgentsPage> {
-  bool _inviteOpen = false;
-  String _name = '';
-  String _email = '';
+  bool _loading = true;
+  String? _error;
+  List<StaffAgent> _agents = const [];
+  List<StaffInvitation> _invitations = const [];
+  String _query = '';
 
-  /// Set once an invite is "sent". Nothing can actually send it, so the notice
-  /// names what would have to exist — a drafted request is not a delivered
-  /// email, and the page must not read as if one were.
-  bool _drafted = false;
+  /// Row currently awaiting a suspend confirmation (id of the account).
+  String? _confirmingId;
+
+  /// `busyId` — the row whose PATCH is in flight (disables its buttons).
+  String? _busyId;
+
+  /// Success or failure of the last mutation, shown over the roster.
+  String? _notice;
+  bool _noticeError = false;
+
+  // --- Invite dialog state --------------------------------------------------
+  bool _inviteOpen = false;
+  String _invName = '';
+  String _invEmail = '';
+  String _invCompany = '';
+  String _invPhone = '';
+  bool _allowExisting = false;
+  bool _submitting = false;
+  String? _inviteError;
+  String? _inviteSuccess;
+  bool _validated = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load({bool silent = false}) async {
+    if (!silent) {
+      setState(() {
+        _loading = true;
+        _error = null;
+      });
+    }
+    try {
+      final results = await Future.wait([
+        AppLocator.adminApi.listAgents(),
+        AppLocator.adminApi.listInvitations(),
+      ]);
+      if (!mounted) return;
+      setState(() {
+        _agents = results[0].cast<StaffAgent>();
+        _invitations = results[1].cast<StaffInvitation>();
+        _loading = false;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _error = AdminApi.message(error);
+      });
+    }
+  }
+
+  List<StaffAgent> get _filtered {
+    final q = _query.trim().toLowerCase();
+    if (q.isEmpty) return _agents;
+    return _agents
+        .where(
+          (agent) =>
+              '${agent.displayName} ${agent.email} ${agent.status} '
+                      '${agent.agentId}'
+                  .toLowerCase()
+                  .contains(q),
+        )
+        .toList(growable: false);
+  }
+
+  // --- Mutations ------------------------------------------------------------
+
+  void _setNotice(String text, {required bool error}) {
+    setState(() {
+      _notice = text;
+      _noticeError = error;
+    });
+  }
+
+  Future<void> _setStatus(StaffAgent agent, String status) async {
+    final label = switch (status) {
+      'active' => 'reactivated',
+      'suspended' => 'suspended',
+      _ => 'updated',
+    };
+    setState(() => _busyId = agent.userId);
+    try {
+      await AppLocator.adminApi.setAgentStatus(agent.userId, status);
+      await _load(silent: true);
+      if (!mounted) return;
+      setState(() => _confirmingId = null);
+      _setNotice(
+        '${agent.displayName} was $label. The change is stored server-side '
+        'and written to the administrator audit log.',
+        error: false,
+      );
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _confirmingId = null);
+      _setNotice(AdminApi.message(error), error: true);
+    } finally {
+      if (mounted) setState(() => _busyId = null);
+    }
+  }
+
+  // --- Invite dialog --------------------------------------------------------
+
+  /// Moves keyboard focus into a dialog the moment it opens.
+  ///
+  /// [SitewiseDialog] handles Escape on its own node, and a key event only
+  /// reaches that node while focus sits inside it — an unfocused dialog
+  /// cannot be dismissed from the keyboard at all. Opening a modal also has
+  /// to move focus into it (WCAG 2.4.3); the shared dialog is stateless and
+  /// cannot do that itself, so every opener on this page does it here.
+  void _focusOpenDialog() {
+    Future<void>.delayed(const Duration(milliseconds: 30), () {
+      if (!mounted) return;
+      final target = web.document.querySelector(
+        '.dialog input, .dialog button, .dialog [tabindex]',
+      );
+      // The selector only ever matches HTML form/interactive elements.
+      (target as web.HTMLElement?)?.focus();
+    });
+  }
+
+  void _openInvite() {
+    setState(() => _inviteOpen = true);
+    _focusOpenDialog();
+  }
+
+  void _openConfirm(String userId) {
+    setState(() => _confirmingId = userId);
+    _focusOpenDialog();
+  }
 
   void _closeInvite() => setState(() {
     _inviteOpen = false;
-    _drafted = false;
-    _name = '';
-    _email = '';
+    _inviteError = null;
+    _inviteSuccess = null;
+    _validated = false;
+    _submitting = false;
+    _allowExisting = false;
   });
 
-  String? get _nameError => _drafted && _name.trim().isEmpty
+  String? get _nameError => !_validated
+      ? null
+      : _invName.trim().isEmpty
       ? 'Enter the name the agent will be listed under'
       : null;
 
   String? get _emailError {
-    if (!_drafted) return null;
-    final value = _email.trim();
+    if (!_validated) return null;
+    final value = _invEmail.trim();
     if (value.isEmpty) return 'A work email is required to address the invite';
     if (!value.contains('@') || !value.contains('.')) {
       return 'This does not look like an email address';
@@ -64,174 +209,232 @@ class _AdminAgentsPageState extends State<AdminAgentsPage> {
     return null;
   }
 
-  bool get _canDraft =>
-      _name.trim().isNotEmpty &&
-      _email.trim().isNotEmpty &&
-      _email.contains('@') &&
-      _email.contains('.');
+  bool get _formValid =>
+      _invName.trim().isNotEmpty &&
+      _invEmail.trim().contains('@') &&
+      _invEmail.trim().contains('.');
 
-  @override
-  Component build(BuildContext context) {
-    return AppLayout(
-      role: AppRole.admin,
-      currentRoute: '/admin/agents',
-      title: 'Agents',
-      eyebrow: 'Staff portal',
-      subtitle:
-          'Who may represent listings, what they hold, and the invite that '
-          'would create the account.',
+  Future<void> _sendInvite() async {
+    setState(() {
+      _validated = true;
+      _inviteError = null;
+      _inviteSuccess = null;
+    });
+    if (!_formValid) return;
+    setState(() => _submitting = true);
+    try {
+      final result = await AppLocator.adminApi.createAgent(
+        fullName: _invName.trim(),
+        email: _invEmail.trim(),
+        companyName: _invCompany.trim(),
+        phoneNumber: _invPhone.trim(),
+        allowExisting: _allowExisting,
+      );
+      if (!mounted) return;
+      final invited = result['invited'] == true;
+      final email = '${result['email'] ?? _invEmail.trim()}';
+      setState(() {
+        _inviteSuccess = invited
+            ? 'Invite sent to $email. Supabase emailed the password-setup '
+                  'link; the account stays pending until the agent sets a '
+                  'credential and you activate it.'
+            : 'Staff access granted to $email without a new invite (the '
+                  'email already belonged to an account). The account is '
+                  'pending and audited as a role grant.';
+      });
+      await _load(silent: true);
+      return; // dialog stays open showing exactly what the server did
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _inviteError = AdminApi.message(error));
+    } finally {
+      if (mounted) setState(() => _submitting = false);
+    }
+  }
+
+  // --- Fragments ------------------------------------------------------------
+
+  Component _hero() => OpsHero(
+    icon: 'group_add',
+    title: 'Staff access, issued by the server',
+    body:
+        'An invite creates the Supabase identity and emails the native '
+        'password-setup link — this screen never sets, shows or stores an '
+        'agent password. Suspension is immediate and written to the audit log.',
+    action: ActionButton('Invite agent', icon: 'add', onClick: _openInvite),
+  );
+
+  Component _rosterPanel() {
+    return SectionCard(
+      title: _loading
+          ? 'Agent directory'
+          : 'Agent directory · '
+                '${_agents.length} ${_agents.length == 1 ? 'account' : 'accounts'}',
+      child: div(classes: 'stack', [
+        SearchInput(
+          label: 'Search agents',
+          placeholder: 'Name, email or status',
+          ariaLabel: 'Search agents or regions',
+          onInput: (value) => setState(() => _query = value),
+        ),
+        if (_notice != null)
+          ActionNotice(_notice!, tone: _noticeError ? 'danger' : 'info'),
+        _rosterBody(),
+      ]),
+    );
+  }
+
+  Component _rosterBody() {
+    if (_loading) {
+      return div(classes: 'ops-grid', [
+        for (var i = 0; i < 3; i++)
+          div(classes: 'ops-card', [const Skeleton(variant: 'text', count: 3)]),
+      ]);
+    }
+    if (_error != null) {
+      return div(classes: 'stack', [
+        Callout(
+          'The staff directory could not be read: $_error',
+          tone: 'danger',
+          icon: 'error',
+        ),
+        ActionButton('Try again', variant: 'secondary', onClick: _load),
+      ]);
+    }
+    final rows = _filtered;
+    if (rows.isEmpty) {
+      return InlineEmpty(
+        _agents.isEmpty
+            ? 'No agent accounts exist yet. Use “Invite agent” to provision '
+                  'the first one — Supabase will email the credential setup.'
+            : 'No agents match this search.',
+      );
+    }
+    return div(classes: 'ops-grid', [
+      for (final agent in rows) _agentCard(agent),
+    ]);
+  }
+
+  Component _agentCard(StaffAgent agent) {
+    final busy = _busyId == agent.userId;
+    final status = agent.status.toLowerCase();
+    final actions = <Component>[
+      if (status == 'suspended')
+        ActionButton(
+          'Reactivate',
+          variant: 'secondary',
+          onClick: busy ? null : () => _setStatus(agent, 'active'),
+        )
+      else if (status == 'pending')
+        ActionButton(
+          'Activate',
+          onClick: busy ? null : () => _setStatus(agent, 'active'),
+        )
+      else
+        ActionButton(
+          'Suspend',
+          variant: 'danger-outline',
+          onClick: busy ? null : () => _openConfirm(agent.userId),
+        ),
+    ];
+
+    return article(classes: 'ops-card', [
+      div(classes: 'ops-card__head', [
+        span(classes: 'ops-tile', [const Icon('person')]),
+        div([
+          h3(classes: 'ops-card__title', [Component.text(agent.displayName)]),
+          p(classes: 'ops-card__meta', [Component.text(agent.email)]),
+        ]),
+      ]),
+      div(classes: 'ops-card__tags', [
+        agent.status.isEmpty
+            ? const StatusBadge('Unknown', tone: 'neutral')
+            : StatusBadge.forText(agent.status),
+        if (agent.agentId.isNotEmpty)
+          StatusBadge('Agent #${agent.agentId}', tone: 'action'),
+        if (agent.companyId.isNotEmpty)
+          StatusBadge('Company ${agent.companyId}', tone: 'neutral'),
+        if (agent.phone.isNotEmpty) StatusBadge(agent.phone, tone: 'neutral'),
+      ]),
+      div(classes: 'ops-card__actions', [
+        ...actions,
+        if (busy) span(classes: 'ops-card__meta', [Component.text('Working…')]),
+      ]),
+    ]);
+  }
+
+  Component _invitationsPanel() {
+    return SectionCard(
+      title: 'Invitations',
+      child: _loading
+          ? const Skeleton(variant: 'row', count: 3)
+          : _error != null
+          ? InlineEmpty('Invitations could not be read: $_error')
+          : _invitations.isEmpty
+          ? InlineEmpty(
+              'No invitation records. Rows appear here once an invite is '
+              'sent — this is Supabase’s own tracking, not a page-local '
+              'list.',
+            )
+          : DataTable(
+              columns: const [
+                DataColumn('Invited address'),
+                DataColumn('State'),
+                DataColumn('Sent'),
+              ],
+              rows: [
+                for (final invite in _invitations)
+                  [
+                    CellIdentity(
+                      title: invite.email,
+                      caption: invite.invitedById.isEmpty
+                          ? 'Invitation record'
+                          : 'By ${invite.invitedById}',
+                    ),
+                    StatusBadge(
+                      invite.status.isEmpty ? 'Unknown' : invite.status,
+                      tone: 'warning',
+                    ),
+                    Component.text(invite.createdAt),
+                  ],
+              ],
+            ),
+    );
+  }
+
+  Component _confirmDialog() {
+    final agent = _agents
+        .where((row) => row.userId == _confirmingId)
+        .firstOrNull;
+    if (agent == null) return const span([]);
+    return SitewiseDialog(
+      title: 'Suspend ${agent.displayName}?',
+      ariaLabel: 'Confirm suspension',
+      onClose: () => setState(() => _confirmingId = null),
+      body: div(classes: 'stack', [
+        p(classes: 'body', [
+          Component.text(
+            'Suspension takes effect immediately on every route the backend '
+            'guards: the account keeps its identity and its invitation '
+            'history, but ${agent.email} loses staff access until you '
+            'reactivate it. The change is recorded in the audit log with '
+            'your administrator identity.',
+          ),
+        ]),
+      ]),
       actions: [
         ActionButton(
-          'Invite agent',
-          onClick: () => setState(() => _inviteOpen = true),
+          'Cancel',
+          variant: 'secondary',
+          onClick: () => setState(() => _confirmingId = null),
+        ),
+        ActionButton(
+          'Suspend account',
+          variant: 'danger-outline',
+          onClick: () => _setStatus(agent, 'suspended'),
         ),
       ],
-      child: div(classes: 'stack', [
-        Callout(
-          'Agent is a proposed role. No agent can sign in: the profiles table '
-          'rejects the value, and there is no endpoint that could create one. '
-          'This screen is the administrator workflow, built against the shape '
-          'of the data it will need.',
-          tone: 'warning',
-        ),
-        _roster(),
-        div(classes: 'bento', [_requirementsCard(), _assignmentCard()]),
-        if (_inviteOpen) _inviteDialog(),
-      ]),
     );
-  }
-
-  Component _roster() {
-    return SectionCard(
-      title: 'Roster · 1 demonstration agent',
-      flush: true,
-      child: DataTable(
-        columns: const [
-          DataColumn('Agent'),
-          DataColumn('Agency'),
-          DataColumn('Reference'),
-          DataColumn('Listings', numeric: true),
-          DataColumn('Account'),
-          DataColumn('Actions', actions: true),
-        ],
-        rows: [
-          [
-            CellIdentity(
-              title: AgentRecords.agentName,
-              caption: 'No email — no account exists to hold one',
-            ),
-            Component.text(AgentRecords.agentAgency),
-            Component.text(AgentRecords.agentId),
-            Component.text('${AgentRecords.assignmentCount}'),
-            Pill('Not issued', tone: 'warning'),
-            ActionLink('Open workspace', href: '/agent', variant: 'secondary'),
-          ],
-        ],
-      ),
-    );
-  }
-
-  Component _requirementsCard() {
-    return div(classes: 'bento-card bento-wide', [
-      div(classes: 'bento-card__head', [
-        h3([Component.text('What an agent account requires')]),
-        span(classes: 'card-note', [Component.text('Schema proposal')]),
-      ]),
-      DataTable(
-        columns: const [
-          DataColumn('Piece'),
-          DataColumn('Currently'),
-          DataColumn('Needed'),
-        ],
-        rows: [
-          [
-            Component.text('Role value'),
-            Component.text('Rejected by a CHECK constraint'),
-            Component.text('Migration widening profiles_role_check'),
-          ],
-          [
-            Component.text('Agent profile'),
-            Component.text('No table'),
-            Component.text('agency, phone, account status'),
-          ],
-          [
-            Component.text('Assignment'),
-            Component.text('No relation'),
-            Component.text('listing → agent → owner, with a status'),
-          ],
-          [
-            Component.text('Authorisation'),
-            Component.text(
-              'POST /api/me upserts email only; a role claim cannot self-promote',
-            ),
-            Component.text(
-              'Server-side check that the caller administers the target agency',
-            ),
-          ],
-          [
-            Component.text('Invitation delivery'),
-            Component.text('Supabase signup is self-service'),
-            Component.text('Admin-initiated invite link, no password set here'),
-          ],
-        ],
-      ),
-      p(classes: 'stat-note', [
-        Component.text(
-          'Proposed only — this build changes no schema and no backend file.',
-        ),
-      ]),
-    ]);
-  }
-
-  /// The listing catalog is real, so the only honest number on this page is a
-  /// count of it.
-  Component _assignmentCard() {
-    return div(classes: 'bento-card', [
-      div(classes: 'bento-card__head', [
-        h3([Component.text('Catalog coverage')]),
-        span(classes: 'card-note', [Component.text('Live')]),
-      ]),
-      FutureBuilder<List<CommercialProperty>>(
-        future: AppLocator.properties.listings(),
-        builder: (context, snapshot) {
-          if (!snapshot.hasData) {
-            return div(classes: 'dialog__loading', [
-              Component.text('Loading catalog…'),
-            ]);
-          }
-          final listings = snapshot.data!;
-          final verified = listings
-              .where((l) => l.verification == VerificationStatus.verified)
-              .length;
-          return div(classes: 'aside-list', [
-            AsideRow(
-              badge: '${listings.length}',
-              tone: 'blue',
-              title: 'Listings in the dataset',
-              caption: 'Served by the authenticated catalog endpoint',
-            ),
-            AsideRow(
-              badge: '$verified',
-              tone: 'teal',
-              title: 'Active',
-              caption:
-                  'Approved, and therefore assignable once the table exists',
-            ),
-            AsideRow(
-              badge: '${AgentRecords.assignmentCount}',
-              title: 'Held by the demonstration agent',
-              caption: 'Chosen by rank in the browser, not granted by a server',
-            ),
-            AsideRow(
-              badge: '0',
-              tone: 'amber',
-              title: 'Owners recorded against listings',
-              caption: 'The dataset carries no ownership relation',
-            ),
-          ]);
-        },
-      ),
-    ]);
   }
 
   Component _inviteDialog() {
@@ -239,27 +442,29 @@ class _AdminAgentsPageState extends State<AdminAgentsPage> {
       title: 'Invite an agent',
       ariaLabel: 'Invite an agent',
       onClose: _closeInvite,
+      wide: true,
       body: div(classes: 'stack', [
         p(classes: 'body', [
           Component.text(
-            'Two fields, because two are all an invite needs. The agent sets '
-            'their own password through the sign-up flow; no credential is '
-            'created or shown here.',
+            'Identity only — name and work email are what an invite needs. '
+            'The agent sets their own password through the Supabase link; '
+            'no credential is created or shown here.',
           ),
         ]),
+        if (_inviteSuccess != null) ActionNotice(_inviteSuccess!, tone: 'info'),
+        if (_inviteError != null) ActionNotice(_inviteError!, tone: 'danger'),
         Field(
           labelText: 'Full name',
           error: _nameError,
           hint: 'How the agent appears on the roster',
           child: input(
             type: InputType.text,
-            attributes: {
+            attributes: const {
               'placeholder': 'e.g. Aina Rahman',
               'autocomplete': 'name',
-              'autofocus': '',
             },
             events: events<String>(
-              onInput: (value) => setState(() => _name = value),
+              onInput: (value) => setState(() => _invName = value),
             ),
           ),
         ),
@@ -269,30 +474,99 @@ class _AdminAgentsPageState extends State<AdminAgentsPage> {
           hint: 'The invite is addressed here',
           child: input(
             type: InputType.email,
-            attributes: {
+            attributes: const {
               'placeholder': 'name@agency.my',
               'autocomplete': 'email',
             },
             events: events<String>(
-              onInput: (value) => setState(() => _email = value),
+              onInput: (value) => setState(() => _invEmail = value),
             ),
           ),
         ),
-        if (_drafted && _canDraft)
-          ActionNotice(
-            'Drafted in this browser only. Sending needs an admin-only invite '
-            'endpoint and a Supabase invite call, neither of which exists, so '
-            'no email has left this page.',
-            tone: 'warn',
+        Field(
+          labelText: 'Company (optional)',
+          hint: 'Linked to the agent profile, creating the company if new',
+          child: input(
+            type: InputType.text,
+            attributes: const {'placeholder': 'e.g. Aina Realty Sdn Bhd'},
+            events: events<String>(
+              onInput: (value) => setState(() => _invCompany = value),
+            ),
           ),
+        ),
+        Field(
+          labelText: 'Phone (optional)',
+          hint: 'Stored on the identity row, never displayed publicly',
+          child: input(
+            type: InputType.tel,
+            attributes: const {'placeholder': '+60 12 345 6789'},
+            events: events<String>(
+              onInput: (value) => setState(() => _invPhone = value),
+            ),
+          ),
+        ),
+        label(classes: 'ops-checkrow', [
+          input(
+            type: InputType.checkbox,
+            checked: _allowExisting,
+            events: events(
+              onClick: () => setState(() => _allowExisting = !_allowExisting),
+            ),
+          ),
+          span([
+            Component.text(
+              'This email already belongs to an account — grant it staff '
+              'access instead of inviting a new identity. Required by the '
+              'backend whenever the address is already registered; matching '
+              'emails never upgrade roles automatically.',
+            ),
+          ]),
+        ]),
       ]),
       actions: [
-        ActionButton('Cancel', onClick: _closeInvite, variant: 'secondary'),
         ActionButton(
-          'Draft invite',
-          onClick: () => setState(() => _drafted = true),
+          'Close',
+          variant: 'secondary',
+          onClick: _submitting ? null : _closeInvite,
+        ),
+        ActionButton(
+          _submitting
+              ? 'Sending…'
+              : (_allowExisting ? 'Grant access' : 'Send invite'),
+          onClick: _submitting ? null : _sendInvite,
         ),
       ],
+    );
+  }
+
+  @override
+  Component build(BuildContext context) {
+    return AppLayout(
+      role: AppRole.admin,
+      currentRoute: '/admin/agents',
+      title: 'Agent management',
+      eyebrow: 'Operations',
+      subtitle:
+          'Roster, invitations and account status from the live staff API — '
+          'administrator sign-in with MFA is required for every mutation.',
+      actions: [
+        ActionButton('Refresh', variant: 'secondary', onClick: _load),
+        ActionButton('Invite agent', icon: 'add', onClick: _openInvite),
+      ],
+      child: div(classes: 'stack ops-fade', [
+        _hero(),
+        Callout(
+          'Invitations and status changes run through the server-side staff '
+          'API, which requires an administrator account with MFA and writes '
+          'every change to the audit log. There is no password field here by '
+          'design: the invited agent sets their own credential.',
+          icon: 'shield',
+        ),
+        _rosterPanel(),
+        _invitationsPanel(),
+        if (_inviteOpen) _inviteDialog(),
+        if (_confirmingId != null) _confirmDialog(),
+      ]),
     );
   }
 }

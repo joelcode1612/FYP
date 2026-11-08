@@ -1,8 +1,7 @@
-import 'package:provider/provider.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_logic/shared_logic.dart';
 
-import '../../application/state/auth_view_model.dart';
 import '../../presentation/mobile/start/auth_blocking_views.dart';
 import 'mobile_role.dart';
 
@@ -59,13 +58,13 @@ enum RouteAccess {
 ///
 /// `AppStartGate` only decides the *first* screen; this wraps every other
 /// generated route, so a manual `pushNamed`, a saved deep link or a session
-/// that expires mid-use cannot land on a protected page. It reads the shared
-/// [AuthViewModel] from the provider scope rather than asking the repository,
-/// which is what keeps the guard, the auth screen and the dashboard reporting
-/// the same session.
+/// that expires mid-use cannot land on a protected page. It watches the
+/// shared [authNotifierProvider] from the widget tree rather than asking the
+/// repository, which is what keeps the guard, the auth screen and the
+/// dashboard reporting the same session.
 ///
 /// While the outcome is unknown it shows a spinner — never the page beneath.
-class AuthGuard extends StatefulWidget {
+class AuthGuard extends ConsumerStatefulWidget {
   const AuthGuard({super.key, required this.access, required this.builder});
 
   final RouteAccess access;
@@ -75,14 +74,10 @@ class AuthGuard extends StatefulWidget {
   final WidgetBuilder builder;
 
   @override
-  State<AuthGuard> createState() => _AuthGuardState();
+  ConsumerState<AuthGuard> createState() => _AuthGuardState();
 }
 
-class _AuthGuardState extends State<AuthGuard> {
-  /// The provider-owned, app-wide session state. Read once: the route below
-  /// the navigator root always resolves the same instance.
-  late final AuthViewModel _auth = context.read<AuthViewModel>();
-
+class _AuthGuardState extends ConsumerState<AuthGuard> {
   bool _redirecting = false;
 
   @override
@@ -90,8 +85,12 @@ class _AuthGuardState extends State<AuthGuard> {
     super.initState();
     // A protected route can be entered without ever passing through the
     // startup gate (deep link, state restore). Kick the single restore here;
-    // `start()` ignores repeat calls, so this cannot race the gate.
-    _auth.start();
+    // `start()` ignores repeat calls, so this cannot race the gate. Deferred
+    // because a provider must not be modified inside the build lifecycle.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      ref.read(authNotifierProvider.notifier).start();
+    });
   }
 
   void _redirectToAuth(AuthPendingDestination? requested) {
@@ -110,21 +109,20 @@ class _AuthGuardState extends State<AuthGuard> {
   Widget build(BuildContext context) {
     // The whole session state is watched, so an expiry mid-session re-checks
     // authority here instead of leaving a guarded screen mounted.
-    final auth = context.watch<AuthViewModel>();
+    final state = ref.watch(authNotifierProvider);
     if (widget.access == RouteAccess.public) return widget.builder(context);
 
-    final state = auth.state;
     switch (state.status) {
       case AuthStatus.authenticated:
         final role = state.role;
         // No role means no authority: only the backend-assigned one may open
         // a workspace, and a missing one is never guessed at.
         if (role == null || mobileHomeRouteFor(role) == null) {
-          return StaffWorkspaceRequiredView(role: role, auth: auth);
+          return StaffWorkspaceRequiredView(role: role);
         }
         return widget.builder(context);
       case AuthStatus.accountInactive:
-        return AccountStatusView(message: state.message, auth: auth);
+        return AccountStatusView(message: state.message);
       case AuthStatus.sessionExpired:
       case AuthStatus.unauthenticated:
       case AuthStatus.emailConfirmationRequired:
@@ -142,7 +140,7 @@ class _AuthGuardState extends State<AuthGuard> {
       case AuthStatus.authenticating:
         return const _AuthPendingView();
       case AuthStatus.error:
-        return AuthUnavailableView(auth: auth);
+        return const AuthUnavailableView();
     }
   }
 }

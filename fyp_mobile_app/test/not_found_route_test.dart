@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:fyp/application/providers.dart';
 import 'package:fyp/core/routing/app_routes.dart';
 import 'package:fyp/presentation/shared/pages/not_found_mobile_page.dart';
 
@@ -17,10 +19,14 @@ void _useMobileSurface(WidgetTester tester) {
 void main() {
   /// A plain first route so `canPop` is true and both exits are exercised.
   /// The unknown route is pushed on top, exactly like a deep link landing
-  /// inside an running session.
-  Widget app() => MaterialApp(
-    onGenerateRoute: AppRoutes.onGenerateRoute,
-    home: const Scaffold(body: Center(child: Text('Origin screen'))),
+  /// inside an running session. The scope is required because the generated
+  /// routes pass through the auth guard, which reads the shared auth state.
+  Widget app() => ProviderScope(
+    overrides: sitewiseOverrides(),
+    child: MaterialApp(
+      onGenerateRoute: AppRoutes.onGenerateRoute,
+      home: const Scaffold(body: Center(child: Text('Origin screen'))),
+    ),
   );
 
   Future<void> openUnknown(WidgetTester tester, String path) async {
@@ -79,9 +85,13 @@ void main() {
   ) async {
     _useMobileSurface(tester);
     await tester.pumpWidget(
-      MaterialApp(
-        onGenerateRoute: AppRoutes.onGenerateRoute,
-        initialRoute: '/no-such-page',
+      ProviderScope(
+        overrides: sitewiseOverrides(),
+        child: MaterialApp(
+          onGenerateRoute: AppRoutes.onGenerateRoute,
+          onGenerateInitialRoutes: AppRoutes.generateInitialRoutes,
+          initialRoute: '/no-such-page',
+        ),
       ),
     );
     await tester.pumpAndSettle();

@@ -1,9 +1,8 @@
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_logic/shared_logic.dart';
 import 'package:flutter/material.dart';
 
 import '../../../../application/services/service_locator.dart';
-import '../../../../application/state/app_view_model.dart';
 import '../../../../core/theme/sitewise_theme.dart';
 import '../../../shared/widgets/sitewise_button.dart';
 import '../../../shared/widgets/sitewise_empty_state.dart';
@@ -16,13 +15,13 @@ import '../../widgets/mobile_suitability_badge.dart';
 
 /// Mobile compare: stacked comparison cards per property — no desktop table.
 
-class EntrepreneurCompareMobilePage extends StatelessWidget {
+class EntrepreneurCompareMobilePage extends ConsumerWidget {
   const EntrepreneurCompareMobilePage({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    return Consumer<AppViewModel>(
-      builder: (ctx, appState, _) => MobileAppShell(
+  Widget build(BuildContext context, WidgetRef ref) {
+    final appState = ref.watch(appNotifierProvider);
+    return MobileAppShell(
         title: 'Compare',
         currentRoute: '/entrepreneur/compare',
         body: appState.compared.isEmpty
@@ -62,7 +61,9 @@ class EntrepreneurCompareMobilePage extends StatelessWidget {
                       for (final p in items) ...[
                         _CompareCard(
                           property: p,
-                          onRemove: () => appState.toggleCompared(p.id),
+                          onRemove: () => ref
+                              .read(appNotifierProvider.notifier)
+                              .toggleCompared(p.id),
                           onOpen: () => Navigator.of(context).pushNamed(
                             '/entrepreneur/property-detail',
                             arguments: p.id,
@@ -74,7 +75,9 @@ class EntrepreneurCompareMobilePage extends StatelessWidget {
                       SitewiseSecondaryButton(
                         label: 'Clear comparison',
                         icon: Icons.close_rounded,
-                        onPressed: appState.clearCompared,
+                        onPressed: () => ref
+                            .read(appNotifierProvider.notifier)
+                            .clearCompared(),
                       ),
                       const SizedBox(height: 8),
                       SitewiseButton(
@@ -88,7 +91,6 @@ class EntrepreneurCompareMobilePage extends StatelessWidget {
                   );
                 },
               ),
-      ),
     );
   }
 }

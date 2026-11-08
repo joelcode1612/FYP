@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:jaspr/dom.dart';
 import 'package:jaspr/jaspr.dart';
-import 'package:jaspr_provider_compat/jaspr_provider_compat.dart' as provider;
+import 'package:jaspr_riverpod/jaspr_riverpod.dart';
 import 'package:shared_logic/shared_logic.dart';
 
 import '../../components/filter_panel.dart';
@@ -11,8 +11,6 @@ import '../../components/property_card.dart';
 import '../../components/ui.dart';
 import '../../data/app_locator.dart';
 import '../../layouts/app_layout.dart';
-import '../../state/app_view_model.dart';
-import '../../state/entrepreneur_view_model.dart';
 
 /// Web explore, laid out as the source's `explore.html` with the `map.html`
 /// section appended — the target serves both source pages from this one route.
@@ -51,13 +49,11 @@ class ExplorePage extends StatefulComponent {
   State<ExplorePage> createState() => _ExplorePageState();
 }
 
-class _ExplorePageState extends State<ExplorePage>
-    with PreloadStateMixin<ExplorePage> {
-  EntrepreneurViewModel? _vm;
-
-  /// Created on first use so the server preload and the browser share one view
-  /// model instead of fetching the same listings twice.
-  EntrepreneurViewModel get vm => _vm ??= AppLocator.newEntrepreneurViewModel();
+class _ExplorePageState extends State<ExplorePage> {
+  /// Current notifier state. Safe anywhere: the root build watches the whole
+  /// state, so any change re-runs this build and these reads are never stale
+  /// inside it.
+  EntrepreneurState get _model => context.read(entrepreneurNotifierProvider);
 
   /// The structured filter, applied on top of the view model's query results.
   PropertyFilter filter = PropertyFilter.empty;
@@ -98,23 +94,24 @@ class _ExplorePageState extends State<ExplorePage>
   static const double _clusterCell = 8.0;
 
   @override
-  Future<void> preloadState() => vm.loadExplore();
-
-  @override
   void initState() {
     super.initState();
-    if (_vm == null) unawaited(vm.loadExplore());
+    Future.microtask(() {
+      if (!mounted) return;
+      unawaited(
+        context.read(entrepreneurNotifierProvider.notifier).loadExplore(),
+      );
+    });
   }
 
   @override
   void dispose() {
     _queryDebounce?.cancel();
-    _vm?.dispose();
     super.dispose();
   }
 
   List<CommercialProperty> get _results =>
-      sortForExplore(filter.apply(vm.explore), sort);
+      sortForExplore(filter.apply(_model.explore), sort);
 
   /// Listings that can actually be plotted. A listing with no coordinates would
   /// otherwise land at 0,0 in the projection.
@@ -188,51 +185,48 @@ class _ExplorePageState extends State<ExplorePage>
   }
 
   void _onQueryChanged(String value) {
-    // The view model refetches and notifies for every query change, which
+    // The notifier refetches and notifies for every query change, which
     // would flash the whole page per keystroke — settle first.
     _queryDebounce?.cancel();
     _queryDebounce = Timer(const Duration(milliseconds: 250), () {
-      vm.setQuery(value);
+      context.read(entrepreneurNotifierProvider.notifier).setQuery(value);
     });
   }
 
   @override
   Component build(BuildContext context) {
-    return provider.ChangeNotifierProvider<EntrepreneurViewModel>.value(
-      value: vm,
-      child: provider.Consumer<AppViewModel>(
-        builder: (context, appVm, child) {
-          return provider.Consumer<EntrepreneurViewModel>(
-            builder: (context, model, child) {
-              return AppLayout(
-                role: AppRole.entrepreneur,
-                currentRoute: '/entrepreneur/explore',
-                title: 'Commercial properties',
-                eyebrow: 'Explore',
-                subtitle:
-                    'Accepted property records from your imported workbook. Dataset '
-                    'quality checks do not establish current availability or administrator verification.',
-                child: model.loading
-                    ? const _Loading()
-                    : model.error != null
-                    ? EmptyState(
-                        title: 'Properties could not load',
-                        body: model.error!,
-                        action: ActionButton(
-                          'Try again',
-                          onClick: () => vm.loadExplore(),
-                        ),
-                      )
-                    : div(classes: 'stack stack--sections', [
-                        _filterSection(),
-                        _resultsSection(appVm),
-                        _mapSection(),
-                      ]),
-              );
-            },
-          );
-        },
-      ),
+    final state = context.watch(entrepreneurNotifierProvider);
+    final saved = context.watch(appNotifierProvider.select((app) => app.saved));
+    final compared = context.watch(
+      appNotifierProvider.select((app) => app.compared),
+    );
+
+    return AppLayout(
+      role: AppRole.entrepreneur,
+      currentRoute: '/entrepreneur/explore',
+      title: 'Commercial properties',
+      eyebrow: 'Explore',
+      subtitle:
+          'Accepted property records from your imported workbook. Dataset '
+          'quality checks do not establish current availability or administrator verification.',
+      child: state.loading
+          ? const _Loading()
+          : state.error != null
+          ? EmptyState(
+              title: 'Properties could not load',
+              body: state.error!,
+              action: ActionButton(
+                'Try again',
+                onClick: () => context
+                    .read(entrepreneurNotifierProvider.notifier)
+                    .loadExplore(),
+              ),
+            )
+          : div(classes: 'stack stack--sections', [
+              _filterSection(),
+              _resultsSection(saved, compared),
+              _mapSection(),
+            ]),
     );
   }
 
@@ -240,9 +234,9 @@ class _ExplorePageState extends State<ExplorePage>
 
   Component _filterSection() => FilterPanel(
     filter: filter,
-    source: vm.explore,
+    source: _model.explore,
     results: _results,
-    query: vm.query,
+    query: _model.query,
     onQueryChanged: _onQueryChanged,
     onChanged: _setFilter,
     onReset: _reset,
@@ -250,7 +244,7 @@ class _ExplorePageState extends State<ExplorePage>
 
   // ------------------------------------------------------------------ results
 
-  Component _resultsSection(AppViewModel appVm) {
+  Component _resultsSection(Set<String> saved, Set<String> compared) {
     final results = _results;
     if (results.isEmpty) {
       return EmptyState(
@@ -300,10 +294,12 @@ class _ExplorePageState extends State<ExplorePage>
             href: '/entrepreneur/property-detail?id=${p.id}',
             selected: p.id == selectedId,
             anchorId: 'pcard-${p.id}',
-            saved: appVm.isSaved(p.id),
-            compared: appVm.isCompared(p.id),
-            onToggleSaved: () => appVm.toggleSaved(p.id),
-            onToggleCompared: () => appVm.toggleCompared(p.id),
+            saved: saved.contains(p.id),
+            compared: compared.contains(p.id),
+            onToggleSaved: () =>
+                context.read(appNotifierProvider.notifier).toggleSaved(p.id),
+            onToggleCompared: () =>
+                context.read(appNotifierProvider.notifier).toggleCompared(p.id),
             onLocate: () => _locate(p),
           ),
       ]),

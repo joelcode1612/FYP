@@ -198,4 +198,15 @@ abstract final class AppRoutes {
       builder: (_) => AuthGuard(access: entry.$1, builder: (_) => entry.$2()),
     );
   }
+
+  /// Cold deep links boot straight into the requested route instead of
+  /// stacking it on top of '/'. Flutter's default pushes a '/' route beneath
+  /// every multi-segment initialRoute, which would leave the startup gate
+  /// under the not-found page and wrongly offer "Go back" into it. Each
+  /// route's [AuthGuard] already performs the session checks that gate would.
+  static List<Route<dynamic>> generateInitialRoutes(String initialRoute) {
+    // The table ends in a catch-all not-found entry, so every initialRoute
+    // resolves.
+    return [onGenerateRoute(RouteSettings(name: initialRoute))!];
+  }
 }

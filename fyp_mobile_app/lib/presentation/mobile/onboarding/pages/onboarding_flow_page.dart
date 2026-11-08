@@ -1,10 +1,9 @@
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_logic/shared_logic.dart';
 import 'package:flutter/material.dart';
 
 import '../../../../application/onboarding/onboarding_controller.dart';
 import '../../../../application/services/service_locator.dart';
-import '../../../../application/state/app_view_model.dart';
-import '../../../../application/state/auth_view_model.dart';
 import '../../../../core/routing/auth_route_guard.dart';
 import '../../../../core/routing/mobile_role.dart';
 import '../../../../core/theme/sitewise_theme.dart';
@@ -23,17 +22,17 @@ import 'onboarding_location_intelligence_page.dart';
 /// after sign-in, that hand-off enters the workspace; only a screen with no
 /// verified session is sent back to `/auth` on the tab the flow asked for.
 
-class OnboardingFlowPage extends StatefulWidget {
+class OnboardingFlowPage extends ConsumerStatefulWidget {
   /// Injectable for tests; when null the page builds one from [ServiceLocator].
   final OnboardingController? controller;
 
   const OnboardingFlowPage({super.key, this.controller});
 
   @override
-  State<OnboardingFlowPage> createState() => _OnboardingFlowPageState();
+  ConsumerState<OnboardingFlowPage> createState() => _OnboardingFlowPageState();
 }
 
-class _OnboardingFlowPageState extends State<OnboardingFlowPage> {
+class _OnboardingFlowPageState extends ConsumerState<OnboardingFlowPage> {
   late final OnboardingController _controller;
   late final bool _ownsController;
 
@@ -49,7 +48,7 @@ class _OnboardingFlowPageState extends State<OnboardingFlowPage> {
 
   void _openAuth(AuthEntryPoint entry) {
     if (!mounted) return;
-    final user = context.read<AuthViewModel>().state.user;
+    final user = ref.read(authNotifierProvider).user;
     final home = user == null ? null : mobileHomeRouteFor(user.role);
     if (user == null || home == null) {
       // No verified session (or a web-only role): fall back to the auth
@@ -57,7 +56,7 @@ class _OnboardingFlowPageState extends State<OnboardingFlowPage> {
       Navigator.of(context).pushNamed('/auth', arguments: entry.name);
       return;
     }
-    context.read<AppViewModel>().setRole(user.role);
+    ref.read(appNotifierProvider.notifier).setRole(user.role);
     final pending = AuthPendingDestination.takeFor(user.role);
     Navigator.of(
       context,
@@ -80,8 +79,8 @@ class _OnboardingFlowPageState extends State<OnboardingFlowPage> {
   Widget build(BuildContext context) {
     // Only the yes/no of a verified session is observed here; the Get Started
     // step must not repaint for every auth message change.
-    final signedIn = context.select<AuthViewModel, bool>(
-      (v) => v.state.isAuthenticated,
+    final signedIn = ref.watch(
+      authNotifierProvider.select((s) => s.isAuthenticated),
     );
     return PopScope(
       // Within the flow, system back steps to the previous onboarding page;

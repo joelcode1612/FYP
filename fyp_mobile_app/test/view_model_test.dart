@@ -1,270 +1,289 @@
 import 'package:flutter/widgets.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:provider/provider.dart';
 import 'package:shared_logic/shared_logic.dart';
-
-import 'package:fyp/application/state/app_view_model.dart';
-import 'package:fyp/application/state/auth_view_model.dart';
-import 'package:fyp/application/state/entrepreneur_view_model.dart';
 
 import 'support/fake_auth_repository.dart';
 
-/// The mobile state surface: three [ChangeNotifier] view models adapt the
-/// framework-free controllers in `shared_logic`, and the root `MultiProvider`
-/// plus the per-page `ChangeNotifierProvider`s publish them to
-/// `Consumer`/`Selector`/`context.select` builders.
+/// The mobile state surface: the Riverpod notifiers from `shared_logic`
+/// publish the framework-free controllers' transitions, and the app reads
+/// them through one [ProviderScope] whose overrides live in
+/// `application/providers.dart`.
 ///
-/// These are the counterparts of `fyp_jaspr_web/test/view_model_test.dart`: the
-/// same controller rules, checked through the Flutter notification mechanism
-/// this app uses instead of the Jaspr one.
+/// These are the counterparts of `fyp_jaspr_web/test/view_model_test.dart`:
+/// the same controller rules, checked through the Riverpod subscription
+/// mechanism this app uses.
 void main() {
   /// The shared repositories resolve from in-memory demo data, so a drained
   /// microtask queue is enough to settle a load.
   Future<void> settle() => Future<void>.delayed(Duration.zero);
 
-  EntrepreneurViewModel entrepreneurVm([
+  ProviderContainer appContainer() {
+    final container = ProviderContainer();
+    addTearDown(container.dispose);
+    return container;
+  }
+
+  ProviderContainer entrepreneurContainer([
     void Function(BusinessPreferences)? onPreferencesUpdated,
   ]) {
     final recommendationRepo = RecommendationRepositoryImpl();
-    return EntrepreneurViewModel(
-      EntrepreneurController(
-        getProperties: GetProperties(PropertyRepositoryImpl()),
-        getRecommendations: GetRecommendations(recommendationRepo),
-        getLocationAnalysis: GetLocationAnalysis(recommendationRepo),
-        preferences: DemoData.defaultPreferences,
-        onPreferencesUpdated: onPreferencesUpdated,
-      ),
+    final container = ProviderContainer(
+      overrides: [
+        getPropertiesProvider.overrideWithValue(
+          GetProperties(PropertyRepositoryImpl()),
+        ),
+        getRecommendationsProvider.overrideWithValue(
+          GetRecommendations(recommendationRepo),
+        ),
+        getLocationAnalysisProvider.overrideWithValue(
+          GetLocationAnalysis(recommendationRepo),
+        ),
+        businessPreferencesProvider.overrideWithValue(
+          DemoData.defaultPreferences,
+        ),
+        onPreferencesUpdatedProvider.overrideWithValue(
+          onPreferencesUpdated ?? (_) {},
+        ),
+      ],
     );
+    addTearDown(container.dispose);
+    return container;
   }
 
-  group('AppViewModel as a ChangeNotifier', () {
-    test('every controller transition notifies exactly once', () {
-      final vm = AppViewModel();
-      var notifies = 0;
-      vm.addListener(() => notifies++);
+  group('AppNotifier', () {
+    test('every controller transition publishes exactly once', () {
+      final container = appContainer();
+      var publishes = 0;
+      container.listen(appNotifierProvider, (_, _) => publishes++);
 
-      vm.toggleSaved('p1');
-      expect(vm.isSaved('p1'), isTrue);
-      expect(notifies, 1);
+      container.read(appNotifierProvider.notifier).toggleSaved('p1');
+      expect(container.read(appNotifierProvider).saved.contains('p1'), isTrue);
+      expect(publishes, 1);
 
-      vm.toggleSaved('p1');
-      expect(vm.isSaved('p1'), isFalse);
-      expect(notifies, 2);
+      container.read(appNotifierProvider.notifier).toggleSaved('p1');
+      expect(container.read(appNotifierProvider).saved.contains('p1'), isFalse);
+      expect(publishes, 2);
     });
 
     test('the compare cap is a silent no-op, not an error', () {
-      final vm = AppViewModel();
-      var notifies = 0;
-      vm
+      final container = appContainer();
+      container.read(appNotifierProvider.notifier)
         ..toggleCompared('a')
         ..toggleCompared('b')
-        ..toggleCompared('c')
-        ..addListener(() => notifies++);
+        ..toggleCompared('c');
+      var publishes = 0;
+      container.listen(appNotifierProvider, (_, _) => publishes++);
 
-      expect(vm.compared.length, AppState.maxCompare);
+      expect(container.read(appNotifierProvider).compared.length, 3);
 
       // Adding a fourth entry leaves the state untouched, so nothing is
       // published and no screen rebuild happens.
-      vm.toggleCompared('d');
-      expect(vm.compared.length, AppState.maxCompare);
-      expect(notifies, 0);
+      container.read(appNotifierProvider.notifier).toggleCompared('d');
+      expect(container.read(appNotifierProvider).compared.length, 3);
+      expect(publishes, 0);
 
-      vm.clearCompared();
-      expect(vm.compared, isEmpty);
-      expect(notifies, 1);
+      container.read(appNotifierProvider.notifier).clearCompared();
+      expect(container.read(appNotifierProvider).compared, isEmpty);
+      expect(publishes, 1);
     });
 
     test('restore reseeds the selection the app persisted', () {
-      final vm = AppViewModel();
-      vm.restore(const AppState(saved: {'s1'}, compared: {'c1'}));
-      expect(vm.isSaved('s1'), isTrue);
-      expect(vm.isCompared('c1'), isTrue);
-      expect(vm.role, AppRole.entrepreneur);
+      final container = appContainer();
+      container
+          .read(appNotifierProvider.notifier)
+          .restore(const AppState(saved: {'s1'}, compared: {'c1'}));
+      final state = container.read(appNotifierProvider);
+      expect(state.saved.contains('s1'), isTrue);
+      expect(state.compared.contains('c1'), isTrue);
+      expect(state.role, AppRole.entrepreneur);
     });
   });
 
-  group('EntrepreneurViewModel as a ChangeNotifier', () {
+  group('EntrepreneurNotifier', () {
     test('a load publishes the loading and settled transitions', () async {
-      final vm = entrepreneurVm();
-      var notifies = 0;
-      vm.addListener(() => notifies++);
+      final container = entrepreneurContainer();
+      var publishes = 0;
+      // The listener doubles as the keep-alive that stops autoDispose from
+      // tearing the notifier down mid-test.
+      container.listen(entrepreneurNotifierProvider, (_, _) => publishes++);
 
-      await vm.loadExplore();
+      await container
+          .read(entrepreneurNotifierProvider.notifier)
+          .loadExplore();
       await settle();
 
-      expect(vm.loading, isFalse);
-      expect(vm.error, isNull);
-      expect(vm.explore, isNotEmpty);
-      // One notification for `loading: true`, one for the results.
-      expect(notifies, 2);
-
-      vm.dispose();
+      final state = container.read(entrepreneurNotifierProvider);
+      expect(state.loading, isFalse);
+      expect(state.error, isNull);
+      expect(state.explore, isNotEmpty);
+      // One publish for `loading: true`, one for the results.
+      expect(publishes, 2);
     });
 
     test('setQuery refilters through the same controller', () async {
-      final vm = entrepreneurVm();
-      await vm.loadExplore();
+      final container = entrepreneurContainer();
+      final keepAlive = container.listen(
+        entrepreneurNotifierProvider,
+        (_, _) {},
+      );
+      await container
+          .read(entrepreneurNotifierProvider.notifier)
+          .loadExplore();
       await settle();
-      final all = vm.explore.length;
+      final all = container
+          .read(entrepreneurNotifierProvider)
+          .explore
+          .length;
 
-      // The controller applies the query before re-running the search, so a
-      // single view-model call produces the filtered list.
-      vm.setQuery('zzzz-no-such-listing');
+      // The notifier applies the query before re-running the search, so a
+      // single call produces the filtered list.
+      container
+          .read(entrepreneurNotifierProvider.notifier)
+          .setQuery('zzzz-no-such-listing');
       await settle();
-      expect(vm.query, 'zzzz-no-such-listing');
-      expect(vm.explore, isEmpty);
+      expect(
+        container.read(entrepreneurNotifierProvider).query,
+        'zzzz-no-such-listing',
+      );
+      expect(container.read(entrepreneurNotifierProvider).explore, isEmpty);
 
-      vm.setQuery('');
+      container.read(entrepreneurNotifierProvider.notifier).setQuery('');
       await settle();
-      expect(vm.explore.length, all);
-
-      vm.dispose();
+      expect(
+        container.read(entrepreneurNotifierProvider).explore.length,
+        all,
+      );
+      keepAlive.close();
     });
 
     test('a preference write reaches the state and the composition root', () {
-      final vm = entrepreneurVm();
       final written = <BusinessPreferences>[];
-      final captured = entrepreneurVm(written.add);
+      final container = entrepreneurContainer(written.add);
       const next = BusinessPreferences(
         businessType: 'Bakery',
         maxBudgetRm: 4000,
         minSizeSqft: 600,
       );
 
-      var notifies = 0;
-      captured.addListener(() => notifies++);
-      captured.updatePreferences(next);
+      var publishes = 0;
+      container.listen(entrepreneurNotifierProvider, (_, _) => publishes++);
+      container
+          .read(entrepreneurNotifierProvider.notifier)
+          .updatePreferences(next);
 
-      expect(captured.prefs.businessType, 'Bakery');
+      expect(
+        container.read(entrepreneurNotifierProvider).preferences.businessType,
+        'Bakery',
+      );
       expect(written, [next]);
-      expect(notifies, 1);
-
-      vm.dispose();
-      captured.dispose();
+      expect(publishes, 1);
     });
 
-    test('dispose unhooks the controller it owns', () async {
-      final vm = entrepreneurVm();
-      await vm.loadExplore();
+    test('autoDispose rebuilds fresh once the last listener unsubscribes', () async {
+      final container = entrepreneurContainer();
+      final sub = container.listen(entrepreneurNotifierProvider, (_, _) {});
+      await container
+          .read(entrepreneurNotifierProvider.notifier)
+          .loadExplore();
       await settle();
-      final loaded = vm.explore.length;
-      var notifies = 0;
-      vm.addListener(() => notifies++);
+      container.read(entrepreneurNotifierProvider.notifier).setQuery('gone');
+      await settle();
 
-      vm.dispose();
-      // The controller is disposed with the view model, so a late call is
-      // inert: `setState` returns before notifying, and the already-disposed
-      // notifier is never touched again.
-      vm.setQuery('zzzz-no-such-listing');
+      sub.close();
       await settle();
-      expect(notifies, 0);
-      expect(vm.query, isEmpty);
-      expect(vm.explore.length, loaded);
+      await settle();
+
+      // A later listener sees a brand-new notifier: the browsing state was
+      // dropped with its last screen, exactly like the old per-route
+      // ChangeNotifierProvider lifetime.
+      container.listen(entrepreneurNotifierProvider, (_, _) {});
+      expect(container.read(entrepreneurNotifierProvider).query, isEmpty);
     });
   });
 
-  group('AuthViewModel as a notification adapter', () {
-    test('one notification per cubit emission, and none invented', () async {
-      final repo = FakeAuthRepository()..user = testUser();
-      final cubit = AuthCubit(auth: AuthService(repo));
-      final vm = AuthViewModel(cubit: cubit);
-      var emits = 0;
-      var notifies = 0;
-      cubit.stream.listen((_) => emits++);
-      vm.addListener(() => notifies++);
+  group('AuthNotifier', () {
+    ProviderContainer authContainer(FakeAuthRepository repo) {
+      final container = ProviderContainer(
+        overrides: [authServiceProvider.overrideWithValue(AuthService(repo))],
+      );
+      addTearDown(container.dispose);
+      return container;
+    }
 
-      await vm.start();
+    test('a restore publishes through to external listeners', () async {
+      final repo = FakeAuthRepository()..user = testUser();
+      final container = authContainer(repo);
+      var publishes = 0;
+      container.listen(authNotifierProvider, (_, _) => publishes++);
+
+      await container.read(authNotifierProvider.notifier).start();
       await settle();
 
-      expect(vm.status, AuthStatus.authenticated);
-      expect(vm.user?.role, AppRole.entrepreneur);
-      expect(emits, greaterThan(0));
-      expect(notifies, emits);
-
-      await vm.dispose();
-      await cubit.close();
+      final state = container.read(authNotifierProvider);
+      expect(state.status, AuthStatus.authenticated);
+      expect(state.user?.role, AppRole.entrepreneur);
+      expect(publishes, greaterThan(0));
     });
 
     test('sign-in and sign-out are the repository results', () async {
       final repo = FakeAuthRepository();
-      final cubit = AuthCubit(auth: AuthService(repo));
-      final vm = AuthViewModel(cubit: cubit);
+      final container = authContainer(repo);
+      final notifier = container.read(authNotifierProvider.notifier);
 
-      final ok = await vm.signIn(
+      final ok = await notifier.signIn(
         email: 'sarah@artisanbrew.my',
         password: 'correct-horse',
       );
       await settle();
 
       expect(ok, isTrue);
-      expect(vm.isAuthenticated, isTrue);
-      expect(vm.email, isNull);
+      expect(container.read(authNotifierProvider).isAuthenticated, isTrue);
+      expect(container.read(authNotifierProvider).email, isNull);
       expect(repo.lastSignInEmail, 'sarah@artisanbrew.my');
 
-      await vm.signOut();
+      await notifier.signOut();
       await settle();
-      expect(vm.isAuthenticated, isFalse);
-      expect(vm.status, AuthStatus.unauthenticated);
+      expect(container.read(authNotifierProvider).isAuthenticated, isFalse);
+      expect(
+        container.read(authNotifierProvider).status,
+        AuthStatus.unauthenticated,
+      );
       expect(repo.signOutCalls, 1);
-
-      await vm.dispose();
-      await cubit.close();
     });
 
-    test(
-      'an unavailable auth service becomes a status, not an exception',
-      () async {
-        final repo = FakeAuthRepository()
-          ..restoreFailure = const AuthUnavailableFailure();
-        final cubit = AuthCubit(auth: AuthService(repo));
-        final vm = AuthViewModel(cubit: cubit);
-        var notifies = 0;
-        vm.addListener(() => notifies++);
+    test('an unavailable auth service becomes a status, not an exception',
+        () async {
+      final repo = FakeAuthRepository()
+        ..restoreFailure = const AuthUnavailableFailure();
+      final container = authContainer(repo);
+      var publishes = 0;
+      container.listen(authNotifierProvider, (_, _) => publishes++);
 
-        await vm.start();
-        await settle();
+      await container.read(authNotifierProvider.notifier).start();
+      await settle();
 
-        expect(vm.status, AuthStatus.error);
-        expect(vm.message, isNotNull);
-        expect(notifies, greaterThan(0));
-
-        await vm.dispose();
-        await cubit.close();
-      },
-    );
-
-    test('disposing the adapter leaves the cubit owning the session', () async {
-      final repo = FakeAuthRepository();
-      final cubit = AuthCubit(auth: AuthService(repo));
-      final vm = AuthViewModel(cubit: cubit);
-
-      await vm.dispose();
-      expect(cubit.isClosed, isFalse);
-
-      // The state machine still does its job — the adapter never owned it, so
-      // removing a `provider` scope cannot drop a session.
-      repo.user = testUser(role: AppRole.admin);
-      await cubit.retry();
-      expect(vm.status, AuthStatus.authenticated);
-      expect(vm.role, AppRole.admin);
-
-      await cubit.close();
+      expect(container.read(authNotifierProvider).status, AuthStatus.error);
+      expect(container.read(authNotifierProvider).message, isNotNull);
+      expect(publishes, greaterThan(0));
     });
   });
 
   group('provider scope', () {
-    testWidgets('Consumer rebuilds on any notification', (tester) async {
-      final vm = AppViewModel();
+    testWidgets('Consumer rebuilds on any state change', (tester) async {
+      final container = ProviderContainer();
+      addTearDown(container.dispose);
       var renders = 0;
       await tester.pumpWidget(
-        Directionality(
-          textDirection: TextDirection.ltr,
-          child: ChangeNotifierProvider<AppViewModel>.value(
-            value: vm,
-            child: Consumer<AppViewModel>(
-              builder: (context, model, child) {
+        UncontrolledProviderScope(
+          container: container,
+          child: Directionality(
+            textDirection: TextDirection.ltr,
+            child: Consumer(
+              builder: (context, ref, child) {
                 renders++;
-                return Text('saved=${model.saved.length}');
+                final saved = ref.watch(appNotifierProvider).saved.length;
+                return Text('saved=$saved');
               },
             ),
           ),
@@ -273,33 +292,32 @@ void main() {
       expect(find.text('saved=0'), findsOneWidget);
       expect(renders, 1);
 
-      vm.toggleSaved('p1');
+      container.read(appNotifierProvider.notifier).toggleSaved('p1');
       await tester.pump();
       expect(renders, 2);
       expect(find.text('saved=1'), findsOneWidget);
 
       // A role change leaves the rendered text alone but still rebuilds, which
       // is what the screens that read `saved` through the root scope rely on.
-      vm.setRole(AppRole.admin);
+      container.read(appNotifierProvider.notifier).setRole(AppRole.admin);
       await tester.pump();
       expect(renders, 3);
-
-      vm.dispose();
     });
 
-    testWidgets('Selector rebuilds only when its slice changes', (
-      tester,
-    ) async {
-      final vm = AppViewModel();
+    testWidgets('select rebuilds only when its slice changes', (tester) async {
+      final container = ProviderContainer();
+      addTearDown(container.dispose);
       var renders = 0;
       await tester.pumpWidget(
-        Directionality(
-          textDirection: TextDirection.ltr,
-          child: ChangeNotifierProvider<AppViewModel>.value(
-            value: vm,
-            child: Selector<AppViewModel, int>(
-              selector: (context, model) => model.saved.length,
-              builder: (context, savedCount, child) {
+        UncontrolledProviderScope(
+          container: container,
+          child: Directionality(
+            textDirection: TextDirection.ltr,
+            child: Consumer(
+              builder: (context, ref, child) {
+                final savedCount = ref.watch(
+                  appNotifierProvider.select((state) => state.saved.length),
+                );
                 renders++;
                 return Text('saved=$savedCount');
               },
@@ -310,34 +328,33 @@ void main() {
       expect(renders, 1);
 
       // The same slice after an unrelated transition: no rebuild.
-      vm.setRole(AppRole.owner);
+      container.read(appNotifierProvider.notifier).setRole(AppRole.owner);
       await tester.pump();
       expect(renders, 1);
 
-      vm.toggleSaved('p1');
+      container.read(appNotifierProvider.notifier).toggleSaved('p1');
       await tester.pump();
       expect(renders, 2);
       expect(find.text('saved=1'), findsOneWidget);
-
-      vm.dispose();
     });
 
     testWidgets(
-      'context.select keeps the shell out of saved/compare rebuilds',
+      'select keeps the shell out of saved/compare rebuilds',
       (tester) async {
         // What `MobileAppShell` and the top bar rely on: they show the role and
         // the tab bar, and must not repaint when a property is shortlisted.
-        final vm = AppViewModel();
+        final container = ProviderContainer();
+        addTearDown(container.dispose);
         var renders = 0;
         await tester.pumpWidget(
-          Directionality(
-            textDirection: TextDirection.ltr,
-            child: ChangeNotifierProvider<AppViewModel>.value(
-              value: vm,
-              child: Builder(
-                builder: (context) {
-                  final role = context.select<AppViewModel, AppRole>(
-                    (v) => v.role,
+          UncontrolledProviderScope(
+            container: container,
+            child: Directionality(
+              textDirection: TextDirection.ltr,
+              child: Consumer(
+                builder: (context, ref, child) {
+                  final role = ref.watch(
+                    appNotifierProvider.select((state) => state.role),
                   );
                   renders++;
                   return Text('role=${role.name}');
@@ -348,33 +365,32 @@ void main() {
         );
         expect(renders, 1);
 
-        vm
+        container.read(appNotifierProvider.notifier)
           ..toggleSaved('p1')
           ..toggleCompared('p2');
         await tester.pump();
         expect(renders, 1);
 
-        vm.setRole(AppRole.agent);
+        container.read(appNotifierProvider.notifier).setRole(AppRole.agent);
         await tester.pump();
         expect(renders, 2);
         expect(find.text('role=agent'), findsOneWidget);
-
-        vm.dispose();
       },
     );
 
-    testWidgets('.value does not dispose the instance the root owns', (
+    testWidgets('the container owns the state, not the widget tree', (
       tester,
     ) async {
-      final vm = AppViewModel();
+      final container = ProviderContainer();
+      addTearDown(container.dispose);
       await tester.pumpWidget(
-        Directionality(
-          textDirection: TextDirection.ltr,
-          child: ChangeNotifierProvider<AppViewModel>.value(
-            value: vm,
-            child: Consumer<AppViewModel>(
-              builder: (context, model, child) =>
-                  Text('role=${model.role.name}'),
+        UncontrolledProviderScope(
+          container: container,
+          child: Directionality(
+            textDirection: TextDirection.ltr,
+            child: Consumer(
+              builder: (context, ref, child) =>
+                  Text('role=${ref.watch(appNotifierProvider).role.name}'),
             ),
           ),
         ),
@@ -386,13 +402,11 @@ void main() {
         ),
       );
 
-      // Still usable after the scope unmounted: adding a listener after
-      // dispose would throw, so this proves the provider never owned it — the
-      // same rule [ServiceLocator.appViewModel] depends on.
-      vm.toggleSaved('p1');
-      expect(vm.isSaved('p1'), isTrue);
-
-      vm.dispose();
+      // Still usable after the tree unmounted: the notifier is container-owned
+      // (as [ServiceLocator]'s old app-lifetime singletons were), so tearing
+      // down screens cannot drop the app state.
+      container.read(appNotifierProvider.notifier).toggleSaved('p1');
+      expect(container.read(appNotifierProvider).saved.contains('p1'), isTrue);
     });
   });
 }
