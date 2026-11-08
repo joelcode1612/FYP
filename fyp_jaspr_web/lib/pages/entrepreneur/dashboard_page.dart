@@ -2,12 +2,14 @@ import 'dart:async';
 
 import 'package:jaspr/dom.dart';
 import 'package:jaspr/jaspr.dart';
+import 'package:jaspr_provider_compat/jaspr_provider_compat.dart' as provider;
 import 'package:shared_logic/shared_logic.dart';
 
-import '../../components/bloc.dart';
 import '../../components/ui.dart';
 import '../../data/app_locator.dart';
 import '../../layouts/app_layout.dart';
+import '../../state/app_view_model.dart';
+import '../../state/entrepreneur_view_model.dart';
 
 /// Web entrepreneur home, restructured to the reference
 /// `SiteWise_Location_Hero_Integrated.html`:
@@ -33,9 +35,9 @@ class DashboardPage extends StatefulComponent {
 
 class _DashboardPageState extends State<DashboardPage>
     with PreloadStateMixin<DashboardPage> {
-  EntrepreneurCubit? _vm;
+  EntrepreneurViewModel? _vm;
 
-  EntrepreneurCubit get vm => _vm ??= AppLocator.newEntrepreneurCubit();
+  EntrepreneurViewModel get vm => _vm ??= AppLocator.newEntrepreneurViewModel();
 
   /// Illustrative catchment radius — purely presentational, mirrors the
   /// reference's 500 m / 1 km toggle. No real geodata is shown.
@@ -61,8 +63,7 @@ class _DashboardPageState extends State<DashboardPage>
 
   @override
   void dispose() {
-    final cubit = _vm;
-    if (cubit != null) unawaited(cubit.close());
+    _vm?.dispose();
     super.dispose();
   }
 
@@ -76,42 +77,43 @@ class _DashboardPageState extends State<DashboardPage>
 
   @override
   Component build(BuildContext context) {
-    return CubitBuilder<AppCubit, AppState>(
-      cubit: AppLocator.appCubit,
-      builder: (context, _) {
-        return CubitBuilder<EntrepreneurCubit, EntrepreneurState>(
-          cubit: vm,
-          builder: (context, _) {
-            return AppLayout(
-              role: AppRole.entrepreneur,
-              currentRoute: '/entrepreneur',
-              title: 'Home',
-              // The reference's first element is the hero itself — there is no
-              // separate page-title band above it.
-              showPageHead: false,
-              child: vm.loading
-                  ? const _Loading()
-                  : vm.error != null
-                      ? _error(vm.error!)
-                      : div(classes: 'stack stack--sections sw-home', [
-                          _hero(),
-                          _actionCenter(),
-                          _kpis(AppLocator.appCubit),
-                          p(classes: 'stat-note', [
-                            Component.text(
-                              'Recommendations, saved selections and preferences '
-                              'come from your session. The location preview and '
-                              'catchment ring are illustrative only — no live map '
-                              'or measured demand is shown. Scores are relative '
-                              'decision-support indicators, not a probability of '
-                              'business success.',
-                            ),
-                          ]),
+    return provider.ChangeNotifierProvider<EntrepreneurViewModel>.value(
+      value: vm,
+      child: provider.Consumer<AppViewModel>(
+        builder: (context, appVm, child) {
+          return provider.Consumer<EntrepreneurViewModel>(
+            builder: (context, model, child) {
+              return AppLayout(
+                role: AppRole.entrepreneur,
+                currentRoute: '/entrepreneur',
+                title: 'Home',
+                // The reference's first element is the hero itself — there is no
+                // separate page-title band above it.
+                showPageHead: false,
+                child: model.loading
+                    ? const _Loading()
+                    : model.error != null
+                    ? _error(model.error!)
+                    : div(classes: 'stack stack--sections sw-home', [
+                        _hero(),
+                        _actionCenter(),
+                        _kpis(appVm),
+                        p(classes: 'stat-note', [
+                          Component.text(
+                            'Recommendations, saved selections and preferences '
+                            'come from your session. The location preview and '
+                            'catchment ring are illustrative only — no live map '
+                            'or measured demand is shown. Scores are relative '
+                            'decision-support indicators, not a probability of '
+                            'business success.',
+                          ),
                         ]),
-            );
-          },
-        );
-      },
+                      ]),
+              );
+            },
+          );
+        },
+      ),
     );
   }
 
@@ -137,9 +139,11 @@ class _DashboardPageState extends State<DashboardPage>
       div(classes: 'sw-lh-grid', [
         div(classes: 'sw-lh-copy', [
           p(classes: 'sw-lh-eyebrow', [
-            span(classes: 'sw-lh-eyebrow-rule', attributes: const {
-              'aria-hidden': 'true',
-            }, []),
+            span(
+              classes: 'sw-lh-eyebrow-rule',
+              attributes: const {'aria-hidden': 'true'},
+              [],
+            ),
             Component.text('F&B LOCATION INTELLIGENCE'),
           ]),
           h1(classes: 'sw-lh-title', [
@@ -156,18 +160,12 @@ class _DashboardPageState extends State<DashboardPage>
             AppLink(
               to: '/entrepreneur/recommendations',
               classes: 'sw-lh-button sw-lh-button-primary',
-              children: [
-                Component.text('Assess a location'),
-                _arrow(),
-              ],
+              children: [Component.text('Assess a location'), _arrow()],
             ),
             AppLink(
               to: '/entrepreneur/explore',
               classes: 'sw-lh-button sw-lh-button-secondary',
-              children: [
-                Component.text('Explore properties'),
-                _arrow(),
-              ],
+              children: [Component.text('Explore properties'), _arrow()],
             ),
           ]),
           p(classes: 'sw-lh-caveat', [
@@ -185,39 +183,32 @@ class _DashboardPageState extends State<DashboardPage>
   }
 
   Component _arrow() => svg(
-        attributes: {
-          'viewBox': '0 0 24 24',
-          'width': '17',
-          'height': '17',
-          'fill': 'none',
-          'stroke': 'currentColor',
-          'stroke-width': '2',
-          'stroke-linecap': 'round',
-          'stroke-linejoin': 'round',
-          'aria-hidden': 'true',
-        },
-        [
-          path(
-            attributes: {
-              'd': 'M5 12h14M13 6l6 6-6 6',
-            },
-            [],
-          ),
-        ],
-      );
+    attributes: {
+      'viewBox': '0 0 24 24',
+      'width': '17',
+      'height': '17',
+      'fill': 'none',
+      'stroke': 'currentColor',
+      'stroke-width': '2',
+      'stroke-linecap': 'round',
+      'stroke-linejoin': 'round',
+      'aria-hidden': 'true',
+    },
+    [
+      path(attributes: {'d': 'M5 12h14M13 6l6 6-6 6'}, []),
+    ],
+  );
 
   /// Illustrative neighbourhood preview built from CSS (no SVG namespace, no
   /// live geodata). The 500 m / 1 km toggle only scales the drawn ring.
   Component _mapFrame(int radius) {
     return div(classes: 'sw-lh-map-frame', [
       div(classes: 'sw-lh-map-head', [
-        span(classes: 'sw-lh-window-dots', attributes: const {
-          'aria-hidden': 'true',
-        }, [
-          i([]),
-          i([]),
-          i([]),
-        ]),
+        span(
+          classes: 'sw-lh-window-dots',
+          attributes: const {'aria-hidden': 'true'},
+          [i([]), i([]), i([])],
+        ),
         span(classes: 'sw-lh-map-headname', [
           Icon('place', size: 'sm'),
           Component.text('SITEWISE '),
@@ -239,29 +230,21 @@ class _DashboardPageState extends State<DashboardPage>
           attributes: const {'role': 'group'},
           [
             button(
-              classes: _radiusIndex == 0
-                  ? 'sw-lh-radius-selected'
-                  : '',
+              classes: _radiusIndex == 0 ? 'sw-lh-radius-selected' : '',
               attributes: {
                 'type': 'button',
                 'aria-pressed': _radiusIndex == 0 ? 'true' : 'false',
               },
-              events: events(
-                onClick: () => setState(() => _radiusIndex = 0),
-              ),
+              events: events(onClick: () => setState(() => _radiusIndex = 0)),
               [Component.text('500 m')],
             ),
             button(
-              classes: _radiusIndex == 1
-                  ? 'sw-lh-radius-selected'
-                  : '',
+              classes: _radiusIndex == 1 ? 'sw-lh-radius-selected' : '',
               attributes: {
                 'type': 'button',
                 'aria-pressed': _radiusIndex == 1 ? 'true' : 'false',
               },
-              events: events(
-                onClick: () => setState(() => _radiusIndex = 1),
-              ),
+              events: events(onClick: () => setState(() => _radiusIndex = 1)),
               [Component.text('1 km')],
             ),
           ],
@@ -427,9 +410,7 @@ class _DashboardPageState extends State<DashboardPage>
           children: [
             Component.element(
               tag: 'path',
-              attributes: {
-                'd': 'M-30 70C145 93 185 96 344 83S526 63 627 49',
-              },
+              attributes: {'d': 'M-30 70C145 93 185 96 344 83S526 63 627 49'},
             ),
             Component.element(
               tag: 'path',
@@ -517,10 +498,7 @@ class _DashboardPageState extends State<DashboardPage>
             ),
             Component.element(
               tag: 'text',
-              attributes: {
-                'x': '42',
-                'y': '354',
-              },
+              attributes: {'x': '42', 'y': '354'},
               children: [Component.text('Neighbourhood Lane')],
             ),
           ],
@@ -560,12 +538,7 @@ class _DashboardPageState extends State<DashboardPage>
         ),
         Component.element(
           tag: 'circle',
-          attributes: {
-            'cx': '308',
-            'cy': '194',
-            'r': '6',
-            'fill': '#fff',
-          },
+          attributes: {'cx': '308', 'cy': '194', 'r': '6', 'fill': '#fff'},
         ),
         Component.element(
           tag: 'g',
@@ -661,10 +634,7 @@ class _DashboardPageState extends State<DashboardPage>
             ),
             Component.element(
               tag: 'text',
-              attributes: {
-                'x': '338',
-                'y': '192',
-              },
+              attributes: {'x': '338', 'y': '192'},
               children: [Component.text('Sample location')],
             ),
           ],
@@ -674,34 +644,32 @@ class _DashboardPageState extends State<DashboardPage>
   }
 
   Component _keyDot(String cls, String label) => span([
-        i(classes: cls, attributes: const {'aria-hidden': 'true'}, []),
-        Component.text(label),
-      ]);
+    i(classes: cls, attributes: const {'aria-hidden': 'true'}, []),
+    Component.text(label),
+  ]);
 
   Component _builtFor() => div(
-        classes: 'sw-lh-built-for',
-        attributes: const {'aria-label': 'F&B businesses supported'},
-        [
-          span(classes: 'sw-lh-built-caption', [Component.text('BUILT FOR')]),
-          _builtItem('local_cafe', 'Cafés'),
-          _builtItem('restaurant', 'Restaurants'),
-          _builtItem('bakery_dining', 'Bakeries'),
-          _builtItem('takeout_dining', 'Takeaway'),
-          _builtItem('store', 'Cloud kitchens'),
-        ],
-      );
+    classes: 'sw-lh-built-for',
+    attributes: const {'aria-label': 'F&B businesses supported'},
+    [
+      span(classes: 'sw-lh-built-caption', [Component.text('BUILT FOR')]),
+      _builtItem('local_cafe', 'Cafés'),
+      _builtItem('restaurant', 'Restaurants'),
+      _builtItem('bakery_dining', 'Bakeries'),
+      _builtItem('takeout_dining', 'Takeaway'),
+      _builtItem('store', 'Cloud kitchens'),
+    ],
+  );
 
-  Component _builtItem(String icon, String label) => span([
-        Icon(icon, size: 'sm'),
-        Component.text(label),
-      ]);
+  Component _builtItem(String icon, String label) =>
+      span([Icon(icon, size: 'sm'), Component.text(label)]);
 
   // ---------------------------------------------------------- action center
 
   Component _actionCenter() {
     final recs = vm.recommendations;
-    final saved = AppLocator.appCubit.saved;
-        final top = recs.isNotEmpty
+    final saved = AppLocator.appViewModel.saved;
+    final top = recs.isNotEmpty
         ? recs.reduce((r1, r2) => r1.score > r2.score ? r1 : r2)
         : null;
 
@@ -717,21 +685,24 @@ class _DashboardPageState extends State<DashboardPage>
             ),
           ]),
         ]),
-        span(
-          classes: 'sw-home-demo-pill',
-          [Component.text(_prefsSet ? 'Preferences saved' : 'Set preferences')],
-        ),
+        span(classes: 'sw-home-demo-pill', [
+          Component.text(_prefsSet ? 'Preferences saved' : 'Set preferences'),
+        ]),
       ]),
       div(classes: 'sw-home-action-grid', [
         // Latest shortlist card — real top recommendation, no sample study.
         div(classes: 'sw-home-current', [
           div(classes: 'sw-home-row sw-home-study-head', [
-            span(classes: 'sw-home-kicker', [Component.text('LATEST SHORTLIST')]),
+            span(classes: 'sw-home-kicker', [
+              Component.text('LATEST SHORTLIST'),
+            ]),
             if (top != null)
               span(classes: 'sw-home-status', [
-                span(classes: 'sw-home-status-dot', attributes: const {
-                  'aria-hidden': 'true',
-                }, []),
+                span(
+                  classes: 'sw-home-status-dot',
+                  attributes: const {'aria-hidden': 'true'},
+                  [],
+                ),
                 Component.text('${recs.length} ranked'),
               ]),
           ]),
@@ -757,10 +728,12 @@ class _DashboardPageState extends State<DashboardPage>
               },
               [
                 span(
-                  styles: Styles(raw: {
-                    'width':
-                        '${((top.score / 1).clamp(0, 1) * 100).round()}%',
-                  }),
+                  styles: Styles(
+                    raw: {
+                      'width':
+                          '${((top.score / 1).clamp(0, 1) * 100).round()}%',
+                    },
+                  ),
                   [],
                 ),
               ],
@@ -772,9 +745,10 @@ class _DashboardPageState extends State<DashboardPage>
                 classes: 'sw-home-primary',
                 children: [
                   Component.text('Review recommendations '),
-                  span(attributes: const {'aria-hidden': 'true'}, [
-                    Component.text('→'),
-                  ]),
+                  span(
+                    attributes: const {'aria-hidden': 'true'},
+                    [Component.text('→')],
+                  ),
                 ],
               ),
             ]),
@@ -816,53 +790,50 @@ class _DashboardPageState extends State<DashboardPage>
   }
 
   Component _emptyStudy() => div(classes: 'sw-home-empty', [
-        Icon('search', size: 'lg'),
-        p(classes: 'sw-home-detail', [
-          Component.text(
-            'No recommendations yet. Set your preferences to generate a '
-            'ranked shortlist.',
-          ),
-        ]),
-        AppLink(
-          to: '/entrepreneur/preferences',
-          classes: 'sw-home-primary',
-          children: [
-            Component.text('Set your preferences '),
-            span(attributes: const {'aria-hidden': 'true'}, [
-              Component.text('→'),
-            ]),
-          ],
-        ),
-      ]);
+    Icon('search', size: 'lg'),
+    p(classes: 'sw-home-detail', [
+      Component.text(
+        'No recommendations yet. Set your preferences to generate a '
+        'ranked shortlist.',
+      ),
+    ]),
+    AppLink(
+      to: '/entrepreneur/preferences',
+      classes: 'sw-home-primary',
+      children: [
+        Component.text('Set your preferences '),
+        span(attributes: const {'aria-hidden': 'true'}, [Component.text('→')]),
+      ],
+    ),
+  ]);
 
   Component _actionButton(
     String icon,
     String title,
     String hint,
     String href,
-  ) =>
-      AppLink(
-        to: href,
-        classes: 'sw-home-action',
-        children: [
-          span(classes: 'sw-home-action-symbol', [
-            Icon(icon, size: 'md'),
-          ]),
-          span(classes: 'sw-home-action-copy', [
-            strong([Component.text(title)]),
-            small([Component.text(hint)]),
-          ]),
-          span(classes: 'sw-home-action-arrow', attributes: const {
-            'aria-hidden': 'true',
-          }, [Component.text('→')]),
-        ],
-      );
+  ) => AppLink(
+    to: href,
+    classes: 'sw-home-action',
+    children: [
+      span(classes: 'sw-home-action-symbol', [Icon(icon, size: 'md')]),
+      span(classes: 'sw-home-action-copy', [
+        strong([Component.text(title)]),
+        small([Component.text(hint)]),
+      ]),
+      span(
+        classes: 'sw-home-action-arrow',
+        attributes: const {'aria-hidden': 'true'},
+        [Component.text('→')],
+      ),
+    ],
+  );
 
   // -------------------------------------------------------------------- KPIs
 
-  Component _kpis(AppCubit appCubit) {
+  Component _kpis(AppViewModel appVm) {
     final recs = vm.recommendations.length;
-    final saved = appCubit.saved.length;
+    final saved = appVm.saved.length;
     return div(classes: 'sw-kpi-grid', [
       _kpi(
         'auto_awesome',
@@ -906,26 +877,22 @@ class _DashboardPageState extends State<DashboardPage>
     String value,
     String note,
     String href,
-  ) =>
-      AppLink(
-        to: href,
-        classes: 'kpi-card sw-kpi-button',
-        children: [
-          div(classes: 'kpi-top', [
-            div(
-              classes: 'kpi-ico',
-              styles: Styles(raw: {
-                'background': '${color}14',
-                'color': color,
-              }),
-              [Icon(icon, size: 'sm')],
-            ),
-            span(classes: 'kpi-label', [Component.text(label)]),
-          ]),
-          div(classes: 'kpi-value', [Component.text(value)]),
-          div(classes: 'kpi-note', [Component.text(note)]),
-        ],
-      );
+  ) => AppLink(
+    to: href,
+    classes: 'kpi-card sw-kpi-button',
+    children: [
+      div(classes: 'kpi-top', [
+        div(
+          classes: 'kpi-ico',
+          styles: Styles(raw: {'background': '${color}14', 'color': color}),
+          [Icon(icon, size: 'sm')],
+        ),
+        span(classes: 'kpi-label', [Component.text(label)]),
+      ]),
+      div(classes: 'kpi-value', [Component.text(value)]),
+      div(classes: 'kpi-note', [Component.text(note)]),
+    ],
+  );
 }
 
 class _Loading extends StatelessComponent {

@@ -2,12 +2,13 @@ import 'dart:async';
 
 import 'package:jaspr/dom.dart';
 import 'package:jaspr/jaspr.dart';
+import 'package:jaspr_provider_compat/jaspr_provider_compat.dart' as provider;
 import 'package:shared_logic/shared_logic.dart';
 
-import '../../components/bloc.dart';
 import '../../components/ui.dart';
 import '../../data/app_locator.dart';
 import '../../layouts/app_layout.dart';
+import '../../state/owner_view_model.dart';
 
 /// Owner listings, laid out as the source's `properties.html`.
 ///
@@ -30,18 +31,18 @@ class PropertiesPage extends StatefulComponent {
 }
 
 class _PropertiesPageState extends State<PropertiesPage> {
-  late final OwnerCubit vm;
+  late final OwnerViewModel vm;
 
   @override
   void initState() {
     super.initState();
-    vm = AppLocator.newOwnerCubit();
+    vm = AppLocator.newOwnerViewModel();
     unawaited(vm.load());
   }
 
   @override
   void dispose() {
-    unawaited(vm.close());
+    vm.dispose();
     super.dispose();
   }
 
@@ -56,39 +57,39 @@ class _PropertiesPageState extends State<PropertiesPage> {
           'The commercial spaces you have listed. Each row shows the asking '
           'rental, built-up area and current verification state.',
       actions: const [
-        ActionLink(
-          'Add property',
-          href: '/owner/add-property',
-          icon: 'add',
-        ),
+        ActionLink('Add property', href: '/owner/add-property', icon: 'add'),
       ],
       // Inside the layout, so search/filter emits rebuild only the content,
       // never the chrome.
-      child: CubitBuilder<OwnerCubit, OwnerState>(
-        cubit: vm,
-        builder: (context, _) {
-          final properties = vm.filteredProperties;
+      child: provider.ChangeNotifierProvider<OwnerViewModel>.value(
+        value: vm,
+        child: provider.Consumer<OwnerViewModel>(
+          builder: (context, vm, child) {
+            final properties = vm.filteredProperties;
 
-          return vm.loading
-              ? const _Loading()
-              : div(classes: 'stack stack--md', [
-                  _filters(),
-                  if (properties.isEmpty)
-                    EmptyState(
-                      title: 'You have no listings yet',
-                      body:
-                          'Create your first commercial property listing. It '
-                          'stays private until an administrator approves it.',
-                      action: const ActionLink(
-                        'Add property',
-                        href: '/owner/add-property',
-                        variant: 'primary',
-                      ),
-                    )
-                  else
-                    div(classes: 'rows', [for (final p in properties) _row(p)]),
-                ]);
-        },
+            return vm.loading
+                ? const _Loading()
+                : div(classes: 'stack stack--md', [
+                    _filters(),
+                    if (properties.isEmpty)
+                      EmptyState(
+                        title: 'You have no listings yet',
+                        body:
+                            'Create your first commercial property listing. It '
+                            'stays private until an administrator approves it.',
+                        action: const ActionLink(
+                          'Add property',
+                          href: '/owner/add-property',
+                          variant: 'primary',
+                        ),
+                      )
+                    else
+                      div(classes: 'rows', [
+                        for (final p in properties) _row(p),
+                      ]),
+                  ]);
+          },
+        ),
       ),
     );
   }

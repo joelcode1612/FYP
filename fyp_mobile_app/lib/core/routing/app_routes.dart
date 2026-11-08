@@ -1,4 +1,3 @@
-import 'package:shared_logic/shared_logic.dart';
 import 'package:flutter/material.dart';
 
 import 'auth_route_guard.dart';
@@ -24,6 +23,7 @@ import '../../presentation/mobile/entrepreneur/pages/entrepreneur_report_mobile_
 import '../../presentation/mobile/entrepreneur/pages/entrepreneur_saved_mobile_page.dart';
 import '../../presentation/mobile/entrepreneur/pages/entrepreneur_tour_mobile_page.dart';
 import '../../presentation/shared/capture/panorama_capture_page.dart';
+import '../../presentation/shared/pages/not_found_mobile_page.dart';
 import '../../presentation/shared/tour/tour_preview_mobile_page.dart';
 
 /// Centralised route table for the Flutter app (mobile tree only).
@@ -70,30 +70,21 @@ abstract final class AppRoutes {
   /// Every route is generated behind [AuthGuard] except the public ones, so a
   /// manual `pushNamed`, a restored deep link and an expired session all
   /// reach the same decision — `AppStartGate` alone could never cover them.
-  static Route<dynamic>? onGenerateRoute(
-    RouteSettings settings,
-    AppCubit appState,
-    AuthCubit auth,
-  ) {
-    final (RouteAccess access, Widget Function() page) entry = switch (
-      settings.name
-    ) {
+  ///
+  /// No state is threaded through here: the root `MultiProvider` sits above
+  /// the navigator, so every page and guard resolves the shared view models
+  /// from the widget tree.
+  static Route<dynamic>? onGenerateRoute(RouteSettings settings) {
+    final (RouteAccess access, Widget Function() page) entry = switch (settings
+        .name) {
       // Startup decision point: verify session -> auth / onboarding / home.
-      '/' => (
-        RouteAccess.public,
-        () => AppStartGate(appState: appState, auth: auth),
-      ),
+      '/' => (RouteAccess.public, () => const AppStartGate()),
       // Public landing (kept reachable for demos and deep links).
-      '/landing' => (
-        RouteAccess.public,
-        () => LandingMobilePage(appState: appState),
-      ),
+      '/landing' => (RouteAccess.public, () => const LandingMobilePage()),
       // Authentication. `arguments` = 'login' | 'signUp'.
       '/auth' => (
         RouteAccess.public,
         () => MobileAuthPage(
-          appState: appState,
-          auth: auth,
           initialTab: settings.arguments == 'signUp'
               ? AuthTab.signUp
               : AuthTab.login,
@@ -101,13 +92,13 @@ abstract final class AppRoutes {
       ),
       '/forgot-password' => (
         RouteAccess.public,
-        () => ForgotPasswordMobilePage(auth: auth),
+        () => const ForgotPasswordMobilePage(),
       ),
       // Onboarding belongs AFTER sign-in: it is part of the workspace, not
       // the pre-registration funnel.
       '/onboarding' => (
         RouteAccess.workspace,
-        () => OnboardingFlowPage(appState: appState, auth: auth),
+        () => const OnboardingFlowPage(),
       ),
       // Shared 360° capture + preview flow (device-bound, no role namespace).
       '/capture' => (
@@ -116,66 +107,60 @@ abstract final class AppRoutes {
       ),
       '/tour-preview' => (
         RouteAccess.workspace,
-        () => TourPreviewMobilePage(
-          appState: appState,
-          tourId: settings.arguments as String? ?? '',
-        ),
+        () =>
+            TourPreviewMobilePage(tourId: settings.arguments as String? ?? ''),
       ),
       // Entrepreneur
       '/entrepreneur' => (
         RouteAccess.workspace,
-        () => EntrepreneurDashboardMobilePage(appState: appState),
+        () => const EntrepreneurDashboardMobilePage(),
       ),
       // Material 3 five-tab workspace: Assess and Spaces.
       '/entrepreneur/assess' => (
         RouteAccess.workspace,
-        () => EntrepreneurAssessMobilePage(appState: appState),
+        () => const EntrepreneurAssessMobilePage(),
       ),
       '/entrepreneur/spaces' => (
         RouteAccess.workspace,
-        () => EntrepreneurSpacesMobilePage(appState: appState),
+        () => const EntrepreneurSpacesMobilePage(),
       ),
       '/entrepreneur/preferences' => (
         RouteAccess.workspace,
-        () => EntrepreneurPreferencesMobilePage(appState: appState),
+        () => const EntrepreneurPreferencesMobilePage(),
       ),
       '/entrepreneur/explore' => (
         RouteAccess.workspace,
         () => EntrepreneurExploreMobilePage(
-          appState: appState,
           startInMap: settings.arguments == 'map',
         ),
       ),
       '/entrepreneur/property-detail' => (
         RouteAccess.workspace,
         () => EntrepreneurPropertyDetailMobilePage(
-          appState: appState,
           propertyId: settings.arguments as String? ?? '',
         ),
       ),
       '/entrepreneur/tour' => (
         RouteAccess.workspace,
         () => EntrepreneurTourMobilePage(
-          appState: appState,
           propertyId: settings.arguments as String? ?? '',
         ),
       ),
       '/entrepreneur/recommendations' => (
         RouteAccess.workspace,
-        () => EntrepreneurRecommendationsMobilePage(appState: appState),
+        () => const EntrepreneurRecommendationsMobilePage(),
       ),
       '/entrepreneur/compare' => (
         RouteAccess.workspace,
-        () => EntrepreneurCompareMobilePage(appState: appState),
+        () => const EntrepreneurCompareMobilePage(),
       ),
       '/entrepreneur/saved' => (
         RouteAccess.workspace,
-        () => EntrepreneurSavedMobilePage(appState: appState),
+        () => const EntrepreneurSavedMobilePage(),
       ),
       '/entrepreneur/report' => (
         RouteAccess.workspace,
         () => EntrepreneurReportMobilePage(
-          appState: appState,
           propertyId: settings.arguments as String? ?? '',
         ),
       ),
@@ -184,38 +169,33 @@ abstract final class AppRoutes {
       '/entrepreneur/assessment-setup' => (
         RouteAccess.workspace,
         () => EntrepreneurAssessmentSetupMobilePage(
-          appState: appState,
           propertyId: settings.arguments as String? ?? '',
         ),
       ),
       '/entrepreneur/assessment-evidence' => (
         RouteAccess.workspace,
-        () => EntrepreneurEvidenceMobilePage(appState: appState),
+        () => const EntrepreneurEvidenceMobilePage(),
       ),
       '/entrepreneur/assessment-summary' => (
         RouteAccess.workspace,
-        () => EntrepreneurAssessmentSummaryMobilePage(appState: appState),
+        () => const EntrepreneurAssessmentSummaryMobilePage(),
       ),
       '/entrepreneur/profile' => (
         RouteAccess.workspace,
-        () => EntrepreneurProfileMobilePage(appState: appState, auth: auth),
+        () => const EntrepreneurProfileMobilePage(),
       ),
-      // An unknown path is treated as protected and resolved to the
-      // workspace root, never to a public page.
+      // Unknown deep links get a dedicated not-found destination instead of a
+      // silent dashboard fallback: the user sees what failed and how to leave.
+      // The page carries no sensitive content, so it is public.
       _ => (
-        RouteAccess.workspace,
-        () => EntrepreneurDashboardMobilePage(appState: appState),
+        RouteAccess.public,
+        () => NotFoundMobilePage(attemptedRoute: settings.name),
       ),
     };
 
     return MaterialPageRoute(
       settings: settings,
-      builder: (_) => AuthGuard(
-        auth: auth,
-        access: entry.$1,
-        appState: appState,
-        builder: (_) => entry.$2(),
-      ),
+      builder: (_) => AuthGuard(access: entry.$1, builder: (_) => entry.$2()),
     );
   }
 }

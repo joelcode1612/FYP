@@ -10,18 +10,12 @@ import '../../widgets/mobile_tour_viewer.dart';
 /// Mobile 360° tour: immersive viewer with a bottom scene selector.
 
 class EntrepreneurTourMobilePage extends StatelessWidget {
-  final AppCubit appState;
   final String propertyId;
-  const EntrepreneurTourMobilePage({
-    super.key,
-    required this.appState,
-    required this.propertyId,
-  });
+  const EntrepreneurTourMobilePage({super.key, required this.propertyId});
 
   @override
   Widget build(BuildContext context) {
     return MobileAppShell(
-      appState: appState,
       title: '360° tour',
       currentRoute: '/entrepreneur/explore',
       body: SingleChildScrollView(

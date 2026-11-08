@@ -1,6 +1,7 @@
+import 'package:provider/provider.dart';
 import 'package:flutter/material.dart';
-import 'package:shared_logic/shared_logic.dart';
 
+import '../../../../application/state/auth_view_model.dart';
 import '../../../../core/config/mobile_endpoints.dart';
 import '../../../../core/theme/sitewise_theme.dart';
 import '../../../shared/widgets/sitewise_brand.dart';
@@ -14,9 +15,7 @@ import '../widgets/auth_field.dart';
 /// part of the screen — a button that silently "resets" nothing would be a
 /// fake, and the user would wait for an email they cannot use.
 class ForgotPasswordMobilePage extends StatefulWidget {
-  const ForgotPasswordMobilePage({super.key, required this.auth});
-
-  final AuthCubit auth;
+  const ForgotPasswordMobilePage({super.key});
 
   @override
   State<ForgotPasswordMobilePage> createState() =>
@@ -44,7 +43,7 @@ class _ForgotPasswordMobilePageState extends State<ForgotPasswordMobilePage> {
       _loading = true;
       _result = null;
     });
-    final message = await widget.auth.recoverPassword(email);
+    final message = await context.read<AuthViewModel>().recoverPassword(email);
     if (!mounted) return;
     setState(() {
       _loading = false;

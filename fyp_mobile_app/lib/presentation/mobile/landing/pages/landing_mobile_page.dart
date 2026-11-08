@@ -1,6 +1,8 @@
+import 'package:provider/provider.dart';
 import 'package:shared_logic/shared_logic.dart';
 import 'package:flutter/material.dart';
 
+import '../../../../application/state/app_view_model.dart';
 import '../../../../core/routing/mobile_role.dart';
 import '../../../../core/theme/sitewise_theme.dart';
 import '../../../shared/landing/landing_content.dart';
@@ -11,8 +13,7 @@ import '../widgets/landing_mobile_sections.dart';
 /// stacked sections and footer. Same entry actions as the Web tree.
 
 class LandingMobilePage extends StatefulWidget {
-  final AppCubit appState;
-  const LandingMobilePage({super.key, required this.appState});
+  const LandingMobilePage({super.key});
 
   @override
   State<LandingMobilePage> createState() => _LandingMobilePageState();
@@ -44,7 +45,7 @@ class _LandingMobilePageState extends State<LandingMobilePage> {
       _toAuth('login');
       return;
     }
-    widget.appState.setRole(role);
+    context.read<AppViewModel>().setRole(role);
     Navigator.of(context).pushNamedAndRemoveUntil(route, (_) => false);
   }
 

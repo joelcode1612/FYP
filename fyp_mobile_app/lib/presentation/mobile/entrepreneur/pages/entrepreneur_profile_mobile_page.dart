@@ -1,8 +1,10 @@
-import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:provider/provider.dart';
 import 'package:shared_logic/shared_logic.dart';
 import 'package:flutter/material.dart';
 
 import '../../../../application/services/service_locator.dart';
+import '../../../../application/state/app_view_model.dart';
+import '../../../../application/state/auth_view_model.dart';
 import '../../../../core/theme/sitewise_theme.dart';
 import '../../shell/mobile_app_shell.dart';
 
@@ -10,20 +12,14 @@ import '../../shell/mobile_app_shell.dart';
 /// actions. Intentionally not an analytics surface.
 
 class EntrepreneurProfileMobilePage extends StatelessWidget {
-  final AppCubit appState;
-  final AuthCubit auth;
+  const EntrepreneurProfileMobilePage({super.key});
 
-  const EntrepreneurProfileMobilePage({
-    super.key,
-    required this.appState,
-    required this.auth,
-  });
-
-  /// Signs out through the cubit so the session, the persisted tokens and
-  /// every route guard see the same transition; the workspace is then torn
-  /// down in one navigation rather than left underneath the auth screen.
+  /// Signs out through the shared auth state so the session, the persisted
+  /// tokens and every route guard see the same transition; the workspace is
+  /// then torn down in one navigation rather than left underneath the auth
+  /// screen.
   Future<void> _logOut(BuildContext context) async {
-    await auth.signOut();
+    await context.read<AuthViewModel>().signOut();
     if (!context.mounted) return;
     Navigator.of(context).pushNamedAndRemoveUntil('/auth', (_) => false);
   }
@@ -40,17 +36,19 @@ class EntrepreneurProfileMobilePage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final prefs = ServiceLocator.preferences;
+    final appState = context.watch<AppViewModel>();
     return MobileAppShell(
-      appState: appState,
       title: 'Profile',
       currentRoute: '/entrepreneur/profile',
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
         children: [
-          BlocBuilder<AuthCubit, AuthState>(
-            bloc: auth,
-            builder: (context, state) => _IdentityCard(
-              user: state.user,
+          // Only the verified profile is observed here; the identity card
+          // must not repaint for auth messages it never renders.
+          Selector<AuthViewModel, SitewiseUser?>(
+            selector: (_, auth) => auth.user,
+            builder: (context, user, _) => _IdentityCard(
+              user: user,
               saved: appState.saved.length,
               compared: appState.compared.length,
             ),

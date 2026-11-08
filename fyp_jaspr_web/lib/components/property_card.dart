@@ -24,7 +24,7 @@ import 'ui.dart';
 ///
 /// Navigation is a plain link ([href]), so the card works without JavaScript;
 /// the save and compare controls are siblings of the link (never nested inside
-/// it) and call back into the page, which owns the `AppCubit`.
+/// it) and call back into the page, which owns the `AppViewModel`.
 ///
 /// Explore additions, all opt-in so other pages are unaffected: [selected]
 /// marks the card that a map interaction picked, [onLocate] asks the page to
@@ -74,6 +74,7 @@ class PropertyCard extends StatelessComponent {
     // value renders as an em dash with the `muted` class rather than being
     // omitted, so the row never reflows when data is absent.
     final firstTag = property.tags.isEmpty ? null : property.tags.first;
+    final anchor = anchorId;
     final attrs = <(String, bool)>[
       ('#${property.id}', false),
       ('${property.sizeSqft.toStringAsFixed(0)} sq ft', false),
@@ -83,7 +84,7 @@ class PropertyCard extends StatelessComponent {
 
     return article(
       classes: selected ? 'pcard pcard--selected' : 'pcard',
-      attributes: anchorId != null ? {'id': anchorId} : null,
+      attributes: anchor != null ? {'id': anchor} : null,
       [
         if (rankBanner != null)
           div(classes: 'pcard-banner', [Component.text(rankBanner!)]),
@@ -118,90 +119,93 @@ class PropertyCard extends StatelessComponent {
             AppLink(to: href, children: [Component.text(property.title)]),
           ]),
           p(classes: 'addr', [
-            Component.text('${property.address}, ${property.city}, ${property.state}'),
+            Component.text(
+              '${property.address}, ${property.city}, ${property.state}',
+            ),
           ]),
-        p(classes: 'pcard-price', [
-          Component.text('RM${property.rentalRm.toStringAsFixed(0)}'),
-          small([Component.text(' / month')]),
-        ]),
-        ul(classes: 'pcard-attrs', [
-          for (final (text, muted) in attrs)
-            li(classes: muted ? 'muted' : null, [Component.text(text)]),
-        ]),
-        div(classes: 'badges', [
-          Pill(
-            property.verification.label,
-            tone: switch (property.verification) {
-              VerificationStatus.draft => 'neutral',
-              VerificationStatus.pending => 'warning',
-              VerificationStatus.verified => 'success',
-              VerificationStatus.rejected => 'danger',
-            },
-          ),
-          if (property.hasTour) const Pill('360°', tone: 'action'),
-        ]),
+          p(classes: 'pcard-price', [
+            Component.text('RM${property.rentalRm.toStringAsFixed(0)}'),
+            small([Component.text(' / month')]),
+          ]),
+          ul(classes: 'pcard-attrs', [
+            for (final (text, muted) in attrs)
+              li(classes: muted ? 'muted' : null, [Component.text(text)]),
+          ]),
+          div(classes: 'badges', [
+            Pill(
+              property.verification.label,
+              tone: switch (property.verification) {
+                VerificationStatus.draft => 'neutral',
+                VerificationStatus.pending => 'warning',
+                VerificationStatus.verified => 'success',
+                VerificationStatus.rejected => 'danger',
+              },
+            ),
+            if (property.hasTour) const Pill('360°', tone: 'action'),
+          ]),
 
-        div(classes: 'actions', [
-          // The source card leads with the primary navigation action
-          // (`<a class="btn sm primary">View details</a>`); the target card had
-          // no primary action at all, only the two toggles.
-          AppLink(
-            to: href,
-            classes: 'btn sm btn--primary',
-            children: [Component.text('View details')],
-          ),
-          if (onLocate != null)
-            button(
-              classes: 'btn sm',
-              attributes: {
-                'type': 'button',
-                'aria-label': 'Locate ${property.title} on the map',
-              },
-              events: events(onClick: onLocate!),
-              [Component.text('Locate')],
-            ),
-          if (onToggleSaved != null)
-            button(
-              classes: saved ? 'btn sm icon-btn is-saved' : 'btn sm icon-btn',
-              attributes: {
-                'type': 'button',
-                'aria-pressed': saved ? 'true' : 'false',
-                'aria-label': saved ? 'Remove from saved' : 'Save property',
-              },
-              events: events(onClick: onToggleSaved!),
-              [Component.text(saved ? 'Saved' : 'Save')],
-            ),
-          if (onToggleCompared != null)
-            button(
-              classes: compared ? 'btn sm icon-btn is-on' : 'btn sm icon-btn',
-              attributes: {
-                'type': 'button',
-                'aria-pressed': compared ? 'true' : 'false',
-              },
-              events: events(onClick: onToggleCompared!),
-              [Component.text(compared ? 'In compare' : 'Compare')],
-            ),
-          if (property.hasTour)
+          div(classes: 'actions', [
+            // The source card leads with the primary navigation action
+            // (`<a class="btn sm primary">View details</a>`); the target card had
+            // no primary action at all, only the two toggles.
             AppLink(
-              to: '$href&tour=1',
-              classes: 'btn sm',
-              children: [Component.text('360°')],
+              to: href,
+              classes: 'btn sm btn--primary',
+              children: [Component.text('View details')],
             ),
-          // Only when the dataset recorded a usable http(s) source link.
-          if (_validSourceUrl(property) != null)
-            Component.element(
-              tag: 'a',
-              classes: 'btn sm',
-              attributes: {
-                'href': _validSourceUrl(property)!,
-                'target': '_blank',
-                'rel': 'noopener noreferrer',
-              },
-              children: [Component.text('Original listing')],
-            ),
+            if (onLocate != null)
+              button(
+                classes: 'btn sm',
+                attributes: {
+                  'type': 'button',
+                  'aria-label': 'Locate ${property.title} on the map',
+                },
+                events: events(onClick: onLocate!),
+                [Component.text('Locate')],
+              ),
+            if (onToggleSaved != null)
+              button(
+                classes: saved ? 'btn sm icon-btn is-saved' : 'btn sm icon-btn',
+                attributes: {
+                  'type': 'button',
+                  'aria-pressed': saved ? 'true' : 'false',
+                  'aria-label': saved ? 'Remove from saved' : 'Save property',
+                },
+                events: events(onClick: onToggleSaved!),
+                [Component.text(saved ? 'Saved' : 'Save')],
+              ),
+            if (onToggleCompared != null)
+              button(
+                classes: compared ? 'btn sm icon-btn is-on' : 'btn sm icon-btn',
+                attributes: {
+                  'type': 'button',
+                  'aria-pressed': compared ? 'true' : 'false',
+                },
+                events: events(onClick: onToggleCompared!),
+                [Component.text(compared ? 'In compare' : 'Compare')],
+              ),
+            if (property.hasTour)
+              AppLink(
+                to: '$href&tour=1',
+                classes: 'btn sm',
+                children: [Component.text('360°')],
+              ),
+            // Only when the dataset recorded a usable http(s) source link.
+            if (_validSourceUrl(property) != null)
+              Component.element(
+                tag: 'a',
+                classes: 'btn sm',
+                attributes: {
+                  'href': _validSourceUrl(property)!,
+                  'target': '_blank',
+                  'rel': 'noopener noreferrer',
+                },
+                children: [Component.text('Original listing')],
+              ),
+          ]),
         ]),
-      ]),
-    ]);
+      ],
+    );
   }
 
   /// The property's source link, but only if it is a real http(s) URL.

@@ -2,12 +2,14 @@ import 'dart:async';
 
 import 'package:jaspr/dom.dart';
 import 'package:jaspr/jaspr.dart';
+import 'package:jaspr_provider_compat/jaspr_provider_compat.dart' as provider;
 import 'package:shared_logic/shared_logic.dart';
 
-import '../../components/bloc.dart';
 import '../../components/ui.dart';
 import '../../data/app_locator.dart';
 import '../../layouts/app_layout.dart';
+import '../../state/app_view_model.dart';
+import '../../state/entrepreneur_view_model.dart';
 
 /// Web property detail, laid out as the source's `property.html`.
 ///
@@ -38,81 +40,81 @@ class PropertyDetailPage extends StatefulComponent {
 }
 
 class _PropertyDetailPageState extends State<PropertyDetailPage> {
-  late final EntrepreneurCubit vm;
+  late final EntrepreneurViewModel vm;
   String? _saveMessage;
   bool _compareLinkShown = false;
 
   @override
   void initState() {
     super.initState();
-    vm = AppLocator.newEntrepreneurCubit();
+    vm = AppLocator.newEntrepreneurViewModel();
     unawaited(vm.loadAnalysis(component.id));
   }
 
   @override
   void dispose() {
-    unawaited(vm.close());
+    vm.dispose();
     super.dispose();
   }
 
   @override
   Component build(BuildContext context) {
-    return CubitBuilder<AppCubit, AppState>(
-      cubit: AppLocator.appCubit,
-      builder: (context, _) {
-        final appCubit = AppLocator.appCubit;
-        return CubitBuilder<EntrepreneurCubit, EntrepreneurState>(
-          cubit: vm,
-          builder: (context, _) {
-            // The header carries the property's own title and address, so it is
-            // rendered inside the future rather than by `AppLayout`.
-            return AppLayout(
-              role: AppRole.entrepreneur,
-              currentRoute: '/entrepreneur/property-detail',
-              title: 'Property',
-              eyebrow: 'Property',
-              showPageHead: false,
-              child: component.id.isEmpty
-                  ? const _NotFound()
-                  : FutureBuilder<CommercialProperty?>(
-                      future: AppLocator.properties.detail(component.id),
-                      builder: (c, snap) {
-                        if (snap.connectionState != ConnectionState.done) {
-                          return const _Loading();
-                        }
-                        // `hasData` is false for both "pending" and "completed
-                        // with null", so the null case needs its own branch —
-                        // otherwise an unknown id spins forever.
-                        final p = snap.data;
-                        if (p == null) return const _NotFound();
-                        return _Detail(
-                          property: p,
-                          saved: appCubit.isSaved(p.id),
-                          compared: appCubit.isCompared(p.id),
-                          saveMessage: _saveMessage,
-                          compareLinkShown: _compareLinkShown,
-                          onToggleSaved: () {
-                            appCubit.toggleSaved(p.id);
-                            setState(() {
-                              _saveMessage = appCubit.isSaved(p.id)
-                                  ? 'Saved to your shortlist.'
-                                  : 'Removed from saved.';
-                            });
-                          },
-                          onToggleCompared: () {
-                            appCubit.toggleCompared(p.id);
-                            setState(
-                              () =>
-                                  _compareLinkShown = appCubit.isCompared(p.id),
-                            );
-                          },
-                        );
-                      },
-                    ),
-            );
-          },
-        );
-      },
+    return provider.ChangeNotifierProvider<EntrepreneurViewModel>.value(
+      value: vm,
+      child: provider.Consumer<AppViewModel>(
+        builder: (context, appVm, child) {
+          return provider.Consumer<EntrepreneurViewModel>(
+            builder: (context, model, child) {
+              // The header carries the property's own title and address, so it is
+              // rendered inside the future rather than by `AppLayout`.
+              return AppLayout(
+                role: AppRole.entrepreneur,
+                currentRoute: '/entrepreneur/property-detail',
+                title: 'Property',
+                eyebrow: 'Property',
+                showPageHead: false,
+                child: component.id.isEmpty
+                    ? const _NotFound()
+                    : FutureBuilder<CommercialProperty?>(
+                        future: AppLocator.properties.detail(component.id),
+                        builder: (c, snap) {
+                          if (snap.connectionState != ConnectionState.done) {
+                            return const _Loading();
+                          }
+                          // `hasData` is false for both "pending" and "completed
+                          // with null", so the null case needs its own branch —
+                          // otherwise an unknown id spins forever.
+                          final p = snap.data;
+                          if (p == null) return const _NotFound();
+                          return _Detail(
+                            property: p,
+                            saved: appVm.isSaved(p.id),
+                            compared: appVm.isCompared(p.id),
+                            saveMessage: _saveMessage,
+                            compareLinkShown: _compareLinkShown,
+                            onToggleSaved: () {
+                              appVm.toggleSaved(p.id);
+                              setState(() {
+                                _saveMessage = appVm.isSaved(p.id)
+                                    ? 'Saved to your shortlist.'
+                                    : 'Removed from saved.';
+                              });
+                            },
+                            onToggleCompared: () {
+                              appVm.toggleCompared(p.id);
+                              setState(
+                                () =>
+                                    _compareLinkShown = appVm.isCompared(p.id),
+                              );
+                            },
+                          );
+                        },
+                      ),
+              );
+            },
+          );
+        },
+      ),
     );
   }
 }

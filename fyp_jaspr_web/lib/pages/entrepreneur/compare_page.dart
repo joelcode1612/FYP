@@ -1,11 +1,12 @@
 import 'package:jaspr/dom.dart';
 import 'package:jaspr/jaspr.dart';
+import 'package:jaspr_provider_compat/jaspr_provider_compat.dart' as provider;
 import 'package:shared_logic/shared_logic.dart';
 
-import '../../components/bloc.dart';
 import '../../components/ui.dart';
 import '../../data/app_locator.dart';
 import '../../layouts/app_layout.dart';
+import '../../state/app_view_model.dart';
 
 /// Web compare, laid out as the source's `compare.html`.
 ///
@@ -27,13 +28,12 @@ class ComparePage extends StatelessComponent {
 
   @override
   Component build(BuildContext context) {
-    // The selection lives in the locator (seeded from the cookie), so the page
-    // needs no constructor argument and stays a plain encodable client target.
-    final appCubit = AppLocator.appCubit;
-    return CubitBuilder<AppCubit, AppState>(
-      cubit: appCubit,
-      builder: (ctx, _) {
-        final compared = appCubit.compared;
+    // The selection lives in the root provider scope (seeded from the cookie),
+    // so the page needs no constructor argument and stays a plain encodable
+    // client target.
+    return provider.Consumer<AppViewModel>(
+      builder: (ctx, app, child) {
+        final compared = app.compared;
         return AppLayout(
           role: AppRole.entrepreneur,
           currentRoute: '/entrepreneur/compare',
@@ -59,7 +59,7 @@ class ComparePage extends StatelessComponent {
                     return _CompareBody(
                       items: items,
                       missing: compared.length - items.length,
-                      appCubit: appCubit,
+                      appVm: app,
                     );
                   },
                 ),
@@ -103,11 +103,11 @@ class _CompareBody extends StatelessComponent {
   /// Compared ids that are no longer in the listing set.
   final int missing;
 
-  final AppCubit appCubit;
+  final AppViewModel appVm;
 
   const _CompareBody({
     required this.items,
-    required this.appCubit,
+    required this.appVm,
     this.missing = 0,
   });
 
@@ -148,7 +148,7 @@ class _CompareBody extends StatelessComponent {
                       ActionButton(
                         'Remove',
                         variant: 'ghost',
-                        onClick: () => appCubit.toggleCompared(prop.id),
+                        onClick: () => appVm.toggleCompared(prop.id),
                       ),
                     ]),
                   ]),
@@ -218,7 +218,7 @@ class _CompareBody extends StatelessComponent {
         ActionButton(
           'Clear comparison',
           variant: 'secondary',
-          onClick: appCubit.clearCompared,
+          onClick: appVm.clearCompared,
         ),
         const ActionLink(
           'Back to results',

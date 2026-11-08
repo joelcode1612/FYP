@@ -4,6 +4,8 @@ library;
 import 'dart:convert';
 import 'dart:js_interop';
 
+import 'package:shared_logic/shared_logic.dart' show BusinessPreferences;
+
 @JS('document')
 external _Document get _document;
 
@@ -14,6 +16,7 @@ extension type _Document(JSObject _) implements JSObject {
 }
 
 const String kUiCookie = 'sitewise_ui';
+const String kPrefsCookie = 'sitewise_prefs';
 const int kMaxSaved = 40;
 
 typedef UiState = ({
@@ -23,6 +26,16 @@ typedef UiState = ({
 });
 
 const UiState emptyUiState = (saved: {}, compared: {}, roles: {});
+
+typedef PrefState = ({
+  String businessType,
+  String propertyType,
+  double minBudgetRm,
+  double maxBudgetRm,
+  double minSizeSqft,
+  double maxSizeSqft,
+  List<String> requirements,
+});
 
 Map<String, String> _cookies() {
   final out = <String, String>{};
@@ -63,6 +76,52 @@ abstract final class UiStore {
     final secure = _document.baseURI.toDart.startsWith('https:') ? '; Secure' : '';
     _document.cookie =
         '$kUiCookie=${Uri.encodeComponent(value)}; Path=/; SameSite=Lax; Max-Age=28800$secure'
+            .toJS;
+  }
+
+  /// Restores the entrepreneur's recommendation preferences across reloads.
+  /// Returns null when no stored copy exists (first visit or cleared cookie).
+  /// The `cookies` argument mirrors the server signature and is ignored here:
+  /// the browser reads `document.cookie` directly.
+  static PrefState? readPreferences(Map<String, String> cookies) {
+    final raw = _cookies()[kPrefsCookie];
+    if (raw == null || raw.isEmpty) return null;
+    try {
+      final value = jsonDecode(Uri.decodeFull(raw));
+      if (value is! Map) return null;
+      double toDoubleOf(Object? v) => v is num
+          ? v.toDouble()
+          : (double.tryParse('$v') ?? 0);
+      return (
+        businessType: '${value['bt'] ?? ''}',
+        propertyType: '${value['pt'] ?? ''}',
+        minBudgetRm: toDoubleOf(value['nb']),
+        maxBudgetRm: toDoubleOf(value['xb']),
+        minSizeSqft: toDoubleOf(value['ns']),
+        maxSizeSqft: toDoubleOf(value['xs']),
+        requirements: [
+          for (final r in (value['rq'] as List? ?? const []))
+            if (r is String && r.isNotEmpty) r,
+        ],
+      );
+    } on Object {
+      return null;
+    }
+  }
+
+  static void writePreferences(BusinessPreferences prefs) {
+    final value = jsonEncode({
+      'bt': prefs.businessType,
+      'pt': prefs.propertyType,
+      'nb': prefs.minBudgetRm.isFinite ? prefs.minBudgetRm : 0,
+      'xb': prefs.maxBudgetRm.isFinite ? prefs.maxBudgetRm : 0,
+      'ns': prefs.minSizeSqft.isFinite ? prefs.minSizeSqft : 0,
+      'xs': prefs.maxSizeSqft.isFinite ? prefs.maxSizeSqft : 0,
+      'rq': prefs.requirements,
+    });
+    final secure = _document.baseURI.toDart.startsWith('https:') ? '; Secure' : '';
+    _document.cookie =
+        '$kPrefsCookie=${Uri.encodeComponent(value)}; Path=/; SameSite=Lax; Max-Age=28800$secure'
             .toJS;
   }
 }

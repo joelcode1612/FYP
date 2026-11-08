@@ -1,4 +1,9 @@
 import 'package:shared_logic/shared_logic.dart';
+
+import '../state/admin_view_model.dart';
+import '../state/app_view_model.dart';
+import '../state/entrepreneur_view_model.dart';
+import '../state/owner_view_model.dart';
 import 'api_property_repository.dart';
 import 'auth_service.dart';
 import 'ui_store.dart';
@@ -21,7 +26,9 @@ abstract final class AppLocator {
       DatasetRecommendationRepository(propertyRepo);
   static final VerificationRepositoryImpl verificationRepo =
       VerificationRepositoryImpl(propertyRepo);
-  static final UserRepository userRepo = ApiUserRepository(const WebApiClient());
+  static final UserRepository userRepo = ApiUserRepository(
+    const WebApiClient(),
+  );
   static final TourRepositoryImpl tourRepo = TourRepositoryImpl();
 
   // --- Application services (shared orchestration) --------------------------
@@ -60,8 +67,8 @@ abstract final class AppLocator {
   ///
   /// Each navigation is a fresh document now, so this singleton is rebuilt per
   /// request/page load; [installUiState] seeds it from the selection cookie and
-  /// every emit writes back. The role still comes from the server-side profile.
-  static AppCubit appCubit = AppCubit();
+  /// every change writes back. The role still comes from the server-side profile.
+  static AppViewModel appViewModel = AppViewModel();
 
   /// Seeds the saved/compare sets and starts mirroring them into the cookie.
   ///
@@ -70,42 +77,76 @@ abstract final class AppLocator {
   /// Called once per render, before the router builds.
   static void installUiState([Map<String, String> cookies = const {}]) {
     final stored = UiStore.read(cookies);
-    appCubit = AppCubit(
+    appViewModel = AppViewModel(
       AppState(saved: stored.saved, compared: stored.compared),
     );
-    appCubit.stream.listen((_) => persistUi());
+    appViewModel.addListener(persistUi);
+    // Recommendation preferences survive reloads through their own cookie, so
+    // the criteria the user saved are what the ranking actually uses — not a
+    // silently-reset default.
+    final storedPrefs = UiStore.readPreferences(cookies);
+    if (storedPrefs != null) {
+      preferences = BusinessPreferences(
+        businessType: storedPrefs.businessType,
+        propertyType: storedPrefs.propertyType.isEmpty
+            ? 'Any'
+            : storedPrefs.propertyType,
+        minBudgetRm: storedPrefs.minBudgetRm,
+        maxBudgetRm: storedPrefs.maxBudgetRm,
+        minSizeSqft: storedPrefs.minSizeSqft,
+        maxSizeSqft: storedPrefs.maxSizeSqft,
+        requirements: storedPrefs.requirements,
+        preferredAreas: preferences.preferredAreas,
+        seatingModel: preferences.seatingModel,
+      );
+    }
+  }
+
+  /// Persists the entrepreneur's preferences: the session singleton the
+  /// ranking reads, plus the reload-surviving cookie mirror.
+  static void persistPreferences(BusinessPreferences value) {
+    preferences = value;
+    UiStore.writePreferences(value);
   }
 
   /// Persists only UI selections, never authorization grants.
   static void persistUi() {
     UiStore.write((
-      saved: appCubit.state.saved,
-      compared: appCubit.state.compared,
+      saved: appViewModel.saved,
+      compared: appViewModel.compared,
       roles: Workspaces.granted,
     ));
   }
+
   /// Compatibility shim; authorization grants are never persisted.
   static Set<String> get grantedRoles => Workspaces.granted;
 
-  // --- Per-page cubits (mirroring the mobile app's per-page lifetimes) -------
-  static EntrepreneurCubit newEntrepreneurCubit() => EntrepreneurCubit(
-    getProperties: GetProperties(propertyRepo),
-    getRecommendations: GetRecommendations(recommendationRepo),
-    getLocationAnalysis: GetLocationAnalysis(recommendationRepo),
-    preferences: preferences,
-    onPreferencesUpdated: (value) => preferences = value,
+  // --- Per-page view models (mirroring the mobile app's per-page lifetimes) --
+  static EntrepreneurViewModel newEntrepreneurViewModel() =>
+      EntrepreneurViewModel(
+        EntrepreneurController(
+          getProperties: GetProperties(propertyRepo),
+          getRecommendations: GetRecommendations(recommendationRepo),
+          getLocationAnalysis: GetLocationAnalysis(recommendationRepo),
+          preferences: preferences,
+          onPreferencesUpdated: (value) => preferences = value,
+        ),
+      );
+
+  static OwnerViewModel newOwnerViewModel() => OwnerViewModel(
+    OwnerController(
+      properties: properties,
+      tours: tourService,
+      ownerId: WebAuth.profile?['user_id'] as String? ?? '',
+    ),
   );
 
-  static OwnerCubit newOwnerCubit() => OwnerCubit(
-    properties: properties,
-    tours: tourService,
-    ownerId: WebAuth.profile?['user_id'] as String? ?? '',
-  );
-
-  static AdminCubit newAdminCubit() => AdminCubit(
-    verification: verification,
-    properties: properties,
-    users: userRepo,
-    tours: tourService,
+  static AdminViewModel newAdminViewModel() => AdminViewModel(
+    AdminController(
+      verification: verification,
+      properties: properties,
+      users: userRepo,
+      tours: tourService,
+    ),
   );
 }

@@ -1,9 +1,11 @@
+import 'package:provider/provider.dart';
 import 'package:shared_logic/shared_logic.dart';
-import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'application/services/service_locator.dart';
+import 'application/state/app_view_model.dart';
+import 'application/state/auth_view_model.dart';
 import 'core/routing/app_routes.dart';
 import 'core/theme/sitewise_theme.dart';
 import 'data/datasources/local/secure_session_local_storage.dart';
@@ -39,34 +41,35 @@ Future<void> main() async {
 
 /// Root widget. Authentication comes first: '/' is the startup gate, which
 /// restores and *verifies* the session and only then chooses between Sign In,
-/// onboarding and the workspace. Holds the single [AppCubit] (role, preview,
-/// saved, compare) plus the shared [AuthCubit], and passes both to the route
-/// table so every screen and every guard reads the same state.
-class SitewiseApp extends StatefulWidget {
+/// onboarding and the workspace. The single [AppViewModel] (role, preview,
+/// saved, compare) and the shared [AuthViewModel] are registered here through
+/// `MultiProvider`, so every screen and every guard reads the same state from
+/// the widget tree instead of receiving it as a constructor argument.
+class SitewiseApp extends StatelessWidget {
   const SitewiseApp({super.key});
 
   @override
-  State<SitewiseApp> createState() => _SitewiseAppState();
-}
-
-class _SitewiseAppState extends State<SitewiseApp> {
-  final AppCubit appState = AppCubit();
-
-  AuthCubit get _auth => ServiceLocator.authState;
-
-  @override
   Widget build(BuildContext context) {
-    return BlocBuilder<AppCubit, AppState>(
-      bloc: appState,
-      builder: (ctx, _) => MaterialApp(
+    return MultiProvider(
+      providers: [
+        // `.value` for both: the composition root owns these instances (and
+        // tests swap the auth one), so the provider scope must never dispose
+        // them.
+        ChangeNotifierProvider<AppViewModel>.value(
+          value: ServiceLocator.appViewModel,
+        ),
+        ChangeNotifierProvider<AuthViewModel>.value(
+          value: ServiceLocator.authViewModel,
+        ),
+      ],
+      child: MaterialApp(
         title: 'Sitewise — F&B Location Intelligence',
         debugShowCheckedModeBanner: false,
         theme: sitewiseTheme(),
         // '/' is the startup decision point (verify session -> auth /
         // onboarding / role home). Nothing else is reachable without it.
         initialRoute: '/',
-        onGenerateRoute: (settings) =>
-            AppRoutes.onGenerateRoute(settings, appState, _auth),
+        onGenerateRoute: AppRoutes.onGenerateRoute,
       ),
     );
   }

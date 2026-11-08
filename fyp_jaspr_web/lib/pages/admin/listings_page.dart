@@ -2,12 +2,13 @@ import 'dart:async';
 
 import 'package:jaspr/dom.dart';
 import 'package:jaspr/jaspr.dart';
+import 'package:jaspr_provider_compat/jaspr_provider_compat.dart' as provider;
 import 'package:shared_logic/shared_logic.dart';
 
 import '../../components/admin_review_split.dart';
-import '../../components/bloc.dart';
 import '../../data/app_locator.dart';
 import '../../layouts/app_layout.dart';
+import '../../state/admin_view_model.dart';
 
 /// Web listings, ported to the source `admin/review.html` split layout.
 ///
@@ -24,18 +25,18 @@ class ListingsPage extends StatefulComponent {
 }
 
 class _ListingsPageState extends State<ListingsPage> {
-  late final AdminCubit vm;
+  late final AdminViewModel vm;
 
   @override
   void initState() {
     super.initState();
-    vm = AppLocator.newAdminCubit();
+    vm = AppLocator.newAdminViewModel();
     unawaited(vm.loadDashboard());
   }
 
   @override
   void dispose() {
-    unawaited(vm.close());
+    vm.dispose();
     super.dispose();
   }
 
@@ -53,14 +54,24 @@ class _ListingsPageState extends State<ListingsPage> {
           'Open a listing to review its details or decide whether it '
           'should be verified.',
       // Scoped to the data slices ReviewSplit renders, and inside the layout,
-      // so the chrome never rebuilds on a VM emit.
-      child: CubitBuilder<AdminCubit, AdminState>(
-        cubit: vm,
-        when: (prev, next) =>
-            prev.queue != next.queue || prev.listings != next.listings,
-        builder: (context, _) => div(classes: 'stack stack--sections', [
-          ReviewSplit(vm: vm, mode: ReviewMode.listings),
-        ]),
+      // so the chrome never rebuilds on a notification.
+      child: provider.ChangeNotifierProvider<AdminViewModel>.value(
+        value: vm,
+        child:
+            provider.Selector<
+              AdminViewModel,
+              ({
+                List<CommercialProperty> queue,
+                List<CommercialProperty> listings,
+              })
+            >(
+              selector: (context, vm) =>
+                  (queue: vm.queue, listings: vm.listings),
+              builder: (context, data, child) => div(
+                classes: 'stack stack--sections',
+                [ReviewSplit(vm: vm, mode: ReviewMode.listings)],
+              ),
+            ),
       ),
     );
   }

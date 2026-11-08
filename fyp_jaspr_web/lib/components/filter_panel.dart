@@ -221,13 +221,20 @@ class FilterPanel extends StatelessComponent {
     required void Function(String) onChanged,
   }) => div(classes: 'field', [
     span(classes: 'field__label', [Component.text(fieldLabel)]),
-    select(events: events<String>(onInput: (raw) => onChanged(raw)), [
-      for (final opt in options)
-        option(
-          value: opt,
-          attributes: {if (opt == value) 'selected': ''},
-          [Component.text(opt)],
-        ),
-    ]),
+    select(
+      // Jaspr passes `<select>` values as a list, so the generic must match or
+      // the debug assert fires and the release build throws on every change.
+      events: events<List<String>>(
+        onInput: (values) => onChanged(values.isNotEmpty ? values.first : ''),
+      ),
+      [
+        for (final opt in options)
+          option(
+            value: opt,
+            attributes: {if (opt == value) 'selected': ''},
+            [Component.text(opt)],
+          ),
+      ],
+    ),
   ]);
 }

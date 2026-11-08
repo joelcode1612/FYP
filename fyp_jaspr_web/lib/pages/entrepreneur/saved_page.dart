@@ -1,12 +1,13 @@
 import 'package:jaspr/dom.dart';
 import 'package:jaspr/jaspr.dart';
+import 'package:jaspr_provider_compat/jaspr_provider_compat.dart' as provider;
 import 'package:shared_logic/shared_logic.dart';
 
-import '../../components/bloc.dart';
 import '../../components/property_card.dart';
 import '../../components/ui.dart';
 import '../../data/app_locator.dart';
 import '../../layouts/app_layout.dart';
+import '../../state/app_view_model.dart';
 
 /// Web saved shortlist, laid out as the source's `favourites.html`.
 ///
@@ -27,10 +28,8 @@ class SavedPage extends StatelessComponent {
 
   @override
   Component build(BuildContext context) {
-    final appCubit = AppLocator.appCubit;
-    return CubitBuilder<AppCubit, AppState>(
-      cubit: appCubit,
-      builder: (context, _) {
+    return provider.Consumer<AppViewModel>(
+      builder: (context, appVm, child) {
         return AppLayout(
           role: AppRole.entrepreneur,
           currentRoute: '/entrepreneur/saved',
@@ -40,7 +39,7 @@ class SavedPage extends StatelessComponent {
               'Your shortlist. Bookmark any listing to keep it here while you '
               'weigh it against the others.',
           child: div(classes: 'stack stack--sections', [
-            if (appCubit.saved.isEmpty)
+            if (appVm.saved.isEmpty)
               EmptyState(
                 title: 'No favourites yet',
                 body:
@@ -64,10 +63,10 @@ class SavedPage extends StatelessComponent {
                   }
                   final all = snap.data ?? const <CommercialProperty>[];
                   final live = all
-                      .where((property) => appCubit.saved.contains(property.id))
+                      .where((property) => appVm.saved.contains(property.id))
                       .toList();
                   final liveIds = live.map((property) => property.id).toSet();
-                  final gone = appCubit.saved
+                  final gone = appVm.saved
                       .where((id) => !liveIds.contains(id))
                       .toList();
 
@@ -97,11 +96,10 @@ class SavedPage extends StatelessComponent {
                             href:
                                 '/entrepreneur/property-detail?id=${property.id}',
                             saved: true,
-                            compared: appCubit.isCompared(property.id),
-                            onToggleSaved: () =>
-                                appCubit.toggleSaved(property.id),
+                            compared: appVm.isCompared(property.id),
+                            onToggleSaved: () => appVm.toggleSaved(property.id),
                             onToggleCompared: () =>
-                                appCubit.toggleCompared(property.id),
+                                appVm.toggleCompared(property.id),
                           ),
                       ])
                     else
@@ -129,7 +127,7 @@ class SavedPage extends StatelessComponent {
                                 'Remove from favourites',
                                 variant: 'secondary',
                                 icon: 'delete',
-                                onClick: () => appCubit.toggleSaved(id),
+                                onClick: () => appVm.toggleSaved(id),
                               ),
                             ]),
                         ]),

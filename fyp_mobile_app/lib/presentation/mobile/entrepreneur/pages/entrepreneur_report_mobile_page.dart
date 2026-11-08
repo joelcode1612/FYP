@@ -11,18 +11,12 @@ import '../../shell/mobile_app_shell.dart';
 /// Mobile evaluation report: full-width document card.
 
 class EntrepreneurReportMobilePage extends StatelessWidget {
-  final AppCubit appState;
   final String propertyId;
-  const EntrepreneurReportMobilePage({
-    super.key,
-    required this.appState,
-    required this.propertyId,
-  });
+  const EntrepreneurReportMobilePage({super.key, required this.propertyId});
 
   @override
   Widget build(BuildContext context) {
     return MobileAppShell(
-      appState: appState,
       title: 'Evaluation report',
       currentRoute: '/entrepreneur/saved',
       body: SingleChildScrollView(

@@ -4,6 +4,7 @@ import 'package:shared_logic/shared_logic.dart';
 
 import '../../components/dashboard_kit.dart';
 import '../../components/ui.dart';
+import '../../data/auth_service.dart';
 import '../../data/workspaces.dart';
 import '../../layouts/app_layout.dart';
 
@@ -28,9 +29,69 @@ class ProfilePage extends StatefulComponent {
 }
 
 class _ProfilePageState extends State<ProfilePage> {
-  String _concept = 'Nasi House';
-  String _phone = '';
-  bool _saved = false;
+  late String _concept;
+  late String _phone;
+  late String _email;
+  bool _saving = false;
+  String? _savedMessage;
+  String? _errorMessage;
+
+  @override
+  void initState() {
+    super.initState();
+    // The identity comes from the backend-verified profile (GET /auth/me) —
+    // never a hardcoded demo account. Missing values degrade to blanks.
+    final profile = WebAuth.profile ?? <String, dynamic>{};
+    _concept = (profile['full_name'] as String?) ?? '';
+    _phone = (profile['phone_number'] as String?) ?? '';
+    _email = (profile['email'] as String?) ?? '';
+  }
+
+  Future<void> _save() async {
+    if (_saving) return;
+    setState(() {
+      _saving = true;
+      _savedMessage = null;
+      _errorMessage = null;
+    });
+    try {
+      // PATCH /api/v1/users/me: the server persists the permitted fields and
+      // echoes the updated profile back, so the confirmation below is backed
+      // by the stored row — not local widget state.
+      await WebAuth.request(
+        '/api/v1/users/me',
+        method: 'PATCH',
+        body: {
+          'full_name': _concept.trim(),
+          'phone_number': _phone.trim(),
+        },
+      );
+      if (!mounted) return;
+      setState(() {
+        _saving = false;
+        _savedMessage =
+            'Profile saved. Your account name and contact number are stored.';
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _saving = false;
+        _errorMessage =
+            'Your profile could not be saved. Please check your connection '
+            'and try again.';
+      });
+    }
+  }
+
+  void _discard() {
+    setState(() {
+      final profile = WebAuth.profile ?? <String, dynamic>{};
+      _concept = (profile['full_name'] as String?) ?? '';
+      _phone = (profile['phone_number'] as String?) ?? '';
+      _savedMessage = null;
+      _errorMessage = null;
+    });
+  }
 
   @override
   Component build(BuildContext context) {
@@ -51,7 +112,7 @@ class _ProfilePageState extends State<ProfilePage> {
             input(
               attributes: {
                 'type': 'email',
-                'value': 'sarah@nasihouse.my',
+                'value': _email,
                 'readonly': '',
               },
             ),
@@ -63,8 +124,11 @@ class _ProfilePageState extends State<ProfilePage> {
             span(classes: 'field__label', [Component.text('Concept name')]),
             input(
               attributes: {'type': 'text', 'value': _concept},
-              events: events<String>(onInput: (v) => _concept = v),
+              events: events<String>(onInput: (v) => setState(() => _concept = v)),
             ),
+            span(classes: 'hint', [
+              Component.text('Saved to your account as your display name.'),
+            ]),
           ]),
           div(classes: 'field', [
             span(classes: 'field__label', [Component.text('Contact number')]),
@@ -74,27 +138,27 @@ class _ProfilePageState extends State<ProfilePage> {
                 'value': _phone,
                 'placeholder': '+60 12 345 6789',
               },
-              events: events<String>(onInput: (v) => _phone = v),
+              events: events<String>(onInput: (v) => setState(() => _phone = v)),
             ),
           ]),
           div(classes: 'actions-row', [
             ActionButton(
-              'Save profile',
-              onClick: () => setState(() => _saved = true),
+              _saving ? 'Saving…' : 'Save profile',
+              onClick: _save,
             ),
             ActionButton(
               'Discard changes',
               variant: 'secondary',
-              onClick: () => setState(() {
-                _concept = 'Nasi House';
-                _phone = '';
-                _saved = false;
-              }),
+              onClick: _discard,
             ),
           ]),
-          if (_saved)
+          if (_savedMessage != null)
             div(classes: 'notice notice-info', [
-              Component.text('Profile updated.'),
+              Component.text(_savedMessage!),
+            ]),
+          if (_errorMessage != null)
+            div(classes: 'notice notice-warn', [
+              Component.text(_errorMessage!),
             ]),
         ]),
 

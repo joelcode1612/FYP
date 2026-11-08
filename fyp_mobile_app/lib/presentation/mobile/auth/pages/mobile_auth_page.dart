@@ -1,7 +1,9 @@
-import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:provider/provider.dart';
 import 'package:shared_logic/shared_logic.dart';
 import 'package:flutter/material.dart';
 
+import '../../../../application/state/app_view_model.dart';
+import '../../../../application/state/auth_view_model.dart';
 import '../../../../core/routing/auth_route_guard.dart';
 import '../../../../core/routing/mobile_role.dart';
 import '../../../../core/theme/sitewise_theme.dart';
@@ -15,22 +17,16 @@ import '../widgets/auth_terms_row.dart';
 
 /// Mobile authentication feature: Log In / Sign Up in one screen.
 ///
-/// Presentation only — every credential call goes through [AuthCubit], which
-/// talks to [ServiceLocator.auth] and the Supabase repository. This screen
+/// Presentation only — every credential call goes through the shared
+/// [AuthViewModel], which drives the auth state machine and the Supabase
+/// repository. This screen
 /// never reads a token, guesses a role, or navigates on an unverified session:
-/// it reacts to the cubit's state and only enters a workspace once the backend
+/// it reacts to that state and only enters a workspace once the backend
 /// has confirmed the profile.
 class MobileAuthPage extends StatefulWidget {
-  final AppCubit appState;
-  final AuthCubit auth;
   final AuthTab initialTab;
 
-  const MobileAuthPage({
-    super.key,
-    required this.appState,
-    required this.auth,
-    this.initialTab = AuthTab.login,
-  });
+  const MobileAuthPage({super.key, this.initialTab = AuthTab.login});
 
   @override
   State<MobileAuthPage> createState() => _MobileAuthPageState();
@@ -40,6 +36,8 @@ enum _NoticeTone { info, warning, error }
 
 class _MobileAuthPageState extends State<MobileAuthPage> {
   static final RegExp _emailPattern = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$');
+
+  late final AuthViewModel _auth = context.read<AuthViewModel>();
 
   late AuthTab _tab = widget.initialTab;
   final _email = TextEditingController();
@@ -56,7 +54,7 @@ class _MobileAuthPageState extends State<MobileAuthPage> {
     super.initState();
     // The cold-start gate normally does this first; calling it again is a
     // no-op, so a direct jump to /auth still resolves an existing session.
-    widget.auth.start();
+    _auth.start();
   }
 
   @override
@@ -102,22 +100,22 @@ class _MobileAuthPageState extends State<MobileAuthPage> {
     final email = _email.text.trim();
     final pass = _password.text;
     final ok = _tab == AuthTab.login
-        ? await widget.auth.signIn(email: email, password: pass)
-        : await widget.auth.signUp(
+        ? await _auth.signIn(email: email, password: pass)
+        : await _auth.signUp(
             email: email,
             password: pass,
             fullName: _name.text.trim(),
           );
     if (!ok || !mounted) return;
-    final user = widget.auth.state.user;
+    final user = _auth.state.user;
     if (user != null) _enterWorkspace(user);
   }
 
   Future<void> _provider(AuthProvider provider) async {
     setState(() => _fieldError = null);
-    final ok = await widget.auth.signInWithProvider(provider);
+    final ok = await _auth.signInWithProvider(provider);
     if (!ok || !mounted) return;
-    final user = widget.auth.state.user;
+    final user = _auth.state.user;
     if (user != null) _enterWorkspace(user);
   }
 
@@ -126,7 +124,7 @@ class _MobileAuthPageState extends State<MobileAuthPage> {
   /// away here instead of being routed into a dashboard that does not exist.
   void _enterWorkspace(SitewiseUser user) {
     final home = mobileHomeRouteFor(user.role);
-    widget.appState.setRole(user.role);
+    context.read<AppViewModel>().setRole(user.role);
     if (home == null) {
       setState(() => _fieldError = mobileUnsupportedRoleMessage(user.role));
       return;
@@ -140,13 +138,11 @@ class _MobileAuthPageState extends State<MobileAuthPage> {
   @override
   Widget build(BuildContext context) {
     final isLogin = _tab == AuthTab.login;
-    return BlocBuilder<AuthCubit, AuthState>(
-      bloc: widget.auth,
-      buildWhen: (previous, current) =>
-          previous.status != current.status ||
-          previous.message != current.message ||
-          previous.email != current.email,
-      builder: (context, state) {
+    // Selecting the auth state itself repaints on a status, message or
+    // pending-address change — and never while the user is just typing.
+    return Selector<AuthViewModel, AuthState>(
+      selector: (_, auth) => auth.state,
+      builder: (context, state, _) {
         final busy = state.status == AuthStatus.authenticating;
         return Scaffold(
           backgroundColor: SitewiseColors.background,
@@ -231,9 +227,8 @@ class _MobileAuthPageState extends State<MobileAuthPage> {
                               ? (_) => _submit()
                               : null,
                           suffix: IconButton(
-                            onPressed: () => setState(
-                              () => _hidePassword = !_hidePassword,
-                            ),
+                            onPressed: () =>
+                                setState(() => _hidePassword = !_hidePassword),
                             icon: SitewiseIcon(
                               _hidePassword
                                   ? Icons.visibility_outlined
@@ -256,9 +251,8 @@ class _MobileAuthPageState extends State<MobileAuthPage> {
                             textInputAction: TextInputAction.done,
                             onSubmitted: busy ? null : (_) => _submit(),
                             suffix: IconButton(
-                              onPressed: () => setState(
-                                () => _hideConfirm = !_hideConfirm,
-                              ),
+                              onPressed: () =>
+                                  setState(() => _hideConfirm = !_hideConfirm),
                               icon: SitewiseIcon(
                                 _hideConfirm
                                     ? Icons.visibility_outlined
@@ -459,10 +453,9 @@ class _Notice extends StatelessWidget {
         // Wrong credentials and duplicate emails keep the user on this form;
         // the cubit reports why in `state.message`, local validation in
         // `fieldError`. Either way the reason stays visible.
-        final message = fieldError ??
-            (state.status == AuthStatus.unauthenticated
-                ? state.message
-                : null);
+        final message =
+            fieldError ??
+            (state.status == AuthStatus.unauthenticated ? state.message : null);
         if (message == null) return null;
         return _NoticeContent(
           tone: _NoticeTone.error,

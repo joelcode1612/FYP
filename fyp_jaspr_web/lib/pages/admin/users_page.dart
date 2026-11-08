@@ -2,12 +2,13 @@ import 'dart:async';
 
 import 'package:jaspr/dom.dart';
 import 'package:jaspr/jaspr.dart';
+import 'package:jaspr_provider_compat/jaspr_provider_compat.dart' as provider;
 import 'package:shared_logic/shared_logic.dart';
 
-import '../../components/bloc.dart';
 import '../../components/ui.dart';
 import '../../data/app_locator.dart';
 import '../../layouts/app_layout.dart';
+import '../../state/admin_view_model.dart';
 
 /// Web user management, ported to the source `admin/users.html` structure: a
 /// `.filters` bar (Search + Status + Role, in a `.grid-3`) above an
@@ -30,18 +31,18 @@ class UsersPage extends StatefulComponent {
 }
 
 class _UsersPageState extends State<UsersPage> {
-  late final AdminCubit vm;
+  late final AdminViewModel vm;
 
   @override
   void initState() {
     super.initState();
-    vm = AppLocator.newAdminCubit();
+    vm = AppLocator.newAdminViewModel();
     unawaited(vm.loadUsers());
   }
 
   @override
   void dispose() {
-    unawaited(vm.close());
+    vm.dispose();
     super.dispose();
   }
 
@@ -68,25 +69,27 @@ class _UsersPageState extends State<UsersPage> {
           'Live account records from the authenticated backend '
           '(administrator sign-in with MFA required). Read-only: role and '
           'status are shown here but not changed on this screen.',
-      // The outer builder re-renders only the loading/error shells; the
+      // The outer selector re-renders only the loading/error shells; the
       // directory below owns its own subscription to the users slice, so the
-      // `AppLayout` chrome (topbar, page head, footer) never rebuilds on a VM
-      // emit.
-      child: CubitBuilder<AdminCubit, AdminState>(
-        cubit: vm,
-        when: (prev, next) =>
-            prev.loading != next.loading || prev.error != next.error,
-        builder: (context, state) {
-          if (state.loading) {
-            return SectionCard(
-              title: 'Loading accounts…',
-              flush: true,
-              child: const Skeleton(variant: 'row', count: 6),
-            );
-          }
-          if (state.error != null) return _error(state.error!);
-          return _Directory(vm: vm);
-        },
+      // `AppLayout` chrome (topbar, page head, footer) never rebuilds on a
+      // notification.
+      child: provider.ChangeNotifierProvider<AdminViewModel>.value(
+        value: vm,
+        child:
+            provider.Selector<AdminViewModel, ({bool loading, String? error})>(
+              selector: (context, vm) => (loading: vm.loading, error: vm.error),
+              builder: (context, slice, child) {
+                if (slice.loading) {
+                  return SectionCard(
+                    title: 'Loading accounts…',
+                    flush: true,
+                    child: const Skeleton(variant: 'row', count: 6),
+                  );
+                }
+                if (slice.error != null) return _error(slice.error!);
+                return _Directory(vm: vm);
+              },
+            ),
       ),
     );
   }
@@ -94,10 +97,10 @@ class _UsersPageState extends State<UsersPage> {
 
 /// Filter bar + directory table. Owns the local filter state, so a keystroke
 /// or filter change rebuilds only this subtree — never the `AppLayout`
-/// chrome — and the table region subscribes to the users/listings slice, so
-/// unrelated VM emits do not re-render it either.
+/// chrome — and the table region selects the users/listings slice, so
+/// unrelated notifications do not re-render it either.
 class _Directory extends StatefulComponent {
-  final AdminCubit vm;
+  final AdminViewModel vm;
 
   const _Directory({required this.vm});
 
@@ -110,7 +113,7 @@ class _DirectoryState extends State<_Directory> {
   String statusFilter = 'all';
   AppRole? roleFilter;
 
-  AdminCubit get vm => component.vm;
+  AdminViewModel get vm => component.vm;
 
   List<SitewiseUser> get _filtered {
     final q = query.trim().toLowerCase();
@@ -195,11 +198,12 @@ class _DirectoryState extends State<_Directory> {
         ]),
       ]),
 
-      CubitBuilder<AdminCubit, AdminState>(
-        cubit: vm,
-        when: (prev, next) =>
-            prev.users != next.users || prev.listings != next.listings,
-        builder: (context, _) {
+      provider.Selector<
+        AdminViewModel,
+        ({List<SitewiseUser> users, List<CommercialProperty> listings})
+      >(
+        selector: (context, vm) => (users: vm.users, listings: vm.listings),
+        builder: (context, data, child) {
           final users = _filtered;
           if (users.isEmpty) {
             return EmptyState(
@@ -228,7 +232,14 @@ class _DirectoryState extends State<_Directory> {
                   for (final user in users)
                     tr([
                       td([
-                        span(classes: 'who', [Component.text(user.name)]),
+                        // The account itself links into the detail route so
+                        // the directory row is the entry point to account
+                        // management — not a dead end.
+                        AppLink(
+                          to: '/admin/user-detail?id=${Uri.encodeComponent(user.id)}',
+                          classes: 'who text-action',
+                          children: [Component.text(user.name)],
+                        ),
                         span(classes: 'sub', [Component.text(user.email)]),
                       ]),
                       td([
@@ -244,12 +255,17 @@ class _DirectoryState extends State<_Directory> {
                       td([Component.text('${_listingCount(user)}')]),
                       td([Component.text(_joined(user))]),
                       td([
-                        if (user.role == AppRole.admin)
-                          span(classes: 'stat-note', [
-                            Component.text('Admin accounts are protected'),
-                          ])
-                        else
-                          const Component.text(''),
+                        div(classes: 'stack stack--xs', [
+                          AppLink(
+                            to: '/admin/user-detail?id=${Uri.encodeComponent(user.id)}',
+                            classes: 'text-action',
+                            children: [Component.text('Manage')],
+                          ),
+                          if (user.role == AppRole.admin)
+                            span(classes: 'stat-note', [
+                              Component.text('Protected account'),
+                            ]),
+                        ]),
                       ]),
                     ]),
                 ]),

@@ -1,7 +1,9 @@
-import 'package:shared_logic/shared_logic.dart';
-import '../../../../application/services/service_locator.dart';
-import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:provider/provider.dart';
 import 'package:flutter/material.dart';
+
+import '../../../../application/services/service_locator.dart';
+import '../../../../application/state/app_view_model.dart';
+import '../../../../application/state/entrepreneur_view_model.dart';
 
 import '../../../../core/theme/sitewise_theme.dart';
 import '../../../shared/widgets/sitewise_empty_state.dart';
@@ -14,11 +16,7 @@ import '../../widgets/mobile_skeleton.dart';
 /// a plain-language reason. No model internals are shown.
 
 class EntrepreneurRecommendationsMobilePage extends StatefulWidget {
-  final AppCubit appState;
-  const EntrepreneurRecommendationsMobilePage({
-    super.key,
-    required this.appState,
-  });
+  const EntrepreneurRecommendationsMobilePage({super.key});
 
   @override
   State<EntrepreneurRecommendationsMobilePage> createState() =>
@@ -27,7 +25,7 @@ class EntrepreneurRecommendationsMobilePage extends StatefulWidget {
 
 class _EntrepreneurRecommendationsMobilePageState
     extends State<EntrepreneurRecommendationsMobilePage> {
-  final vm = ServiceLocator.newEntrepreneurCubit();
+  final EntrepreneurViewModel vm = ServiceLocator.newEntrepreneurViewModel();
 
   @override
   void initState() {
@@ -36,82 +34,92 @@ class _EntrepreneurRecommendationsMobilePageState
   }
 
   @override
+  void dispose() {
+    // The provider exposes this instance by value, so the route tears it down.
+    vm.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return BlocBuilder<AppCubit, AppState>(
-      bloc: widget.appState,
-      builder: (ctx, _) => BlocBuilder<EntrepreneurCubit, EntrepreneurState>(
-        bloc: vm,
-        builder: (ctx, _) => MobileAppShell(
-        appState: widget.appState,
-        title: 'Recommendations',
-        currentRoute: '/entrepreneur/recommendations',
-        body: ListView(
-          padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
-          children: [
-            MobileSectionHeader(
-              title: 'Recommended for your business',
-              subtitle:
-                  '${vm.prefs.businessType} · up to RM${vm.prefs.maxBudgetRm.toStringAsFixed(0)}',
-              actionLabel: 'Preferences',
-              onAction: () =>
-                  Navigator.of(context).pushNamed('/entrepreneur/preferences'),
-            ),
-            const SizedBox(height: 6),
-            const Text(
-              'Ranked by how well each location fits your concept, budget and '
-              'target customers.',
-              style: TextStyle(
-                fontSize: 12.5,
-                height: 1.45,
-                color: SitewiseColors.muted,
-              ),
-            ),
-            const SizedBox(height: 16),
-            if (vm.loading)
-              const MobilePropertyListSkeleton(
-                padding: EdgeInsets.zero,
-                count: 3,
-              )
-            else if (vm.recommendations.isEmpty)
-              SitewiseEmptyState(
-                icon: Icons.auto_awesome_outlined,
-                title: 'No matches yet',
-                message:
-                    'Loosen your budget or size filters to see more shoplots.',
-                actionLabel: 'Edit preferences',
-                onAction: () => Navigator.of(
-                  context,
-                ).pushNamed('/entrepreneur/preferences'),
-              )
-            else
-              for (var i = 0; i < vm.recommendations.length; i++) ...[
-                MobilePropertyCard(
-                  property: vm.recommendations[i].property,
-                  rankBanner: '${i + 1}. ${vm.recommendations[i].reason}',
-                  saved: widget.appState.isSaved(
-                    vm.recommendations[i].property.id,
-                  ),
-                  onToggleSaved: () => widget.appState.toggleSaved(
-                    vm.recommendations[i].property.id,
-                  ),
-                  compared: widget.appState.isCompared(
-                    vm.recommendations[i].property.id,
-                  ),
-                  onToggleCompare: () => widget.appState.toggleCompared(
-                    vm.recommendations[i].property.id,
-                  ),
-                  onTap: () => Navigator.of(context).pushNamed(
-                    '/entrepreneur/property-detail',
-                    arguments: vm.recommendations[i].property.id,
+    // Two slices, two rebuilds: the ranked list repaints on entrepreneur
+    // state, the card toggles on the app-wide saved/compare sets.
+    return ChangeNotifierProvider<EntrepreneurViewModel>.value(
+      value: vm,
+      child: Consumer<AppViewModel>(
+        builder: (ctx, appState, _) => Consumer<EntrepreneurViewModel>(
+          builder: (ctx, model, _) => MobileAppShell(
+            title: 'Recommendations',
+            currentRoute: '/entrepreneur/recommendations',
+            body: ListView(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+              children: [
+                MobileSectionHeader(
+                  title: 'Recommended for your business',
+                  subtitle:
+                      '${vm.prefs.businessType} · up to RM${vm.prefs.maxBudgetRm.toStringAsFixed(0)}',
+                  actionLabel: 'Preferences',
+                  onAction: () => Navigator.of(
+                    context,
+                  ).pushNamed('/entrepreneur/preferences'),
+                ),
+                const SizedBox(height: 6),
+                const Text(
+                  'Ranked by how well each location fits your concept, budget and '
+                  'target customers.',
+                  style: TextStyle(
+                    fontSize: 12.5,
+                    height: 1.45,
+                    color: SitewiseColors.muted,
                   ),
                 ),
-                const SizedBox(height: 8),
-                _WhyItFits(reasons: vm.recommendations[i].whyRecommended),
-                const SizedBox(height: 18),
+                const SizedBox(height: 16),
+                if (vm.loading)
+                  const MobilePropertyListSkeleton(
+                    padding: EdgeInsets.zero,
+                    count: 3,
+                  )
+                else if (vm.recommendations.isEmpty)
+                  SitewiseEmptyState(
+                    icon: Icons.auto_awesome_outlined,
+                    title: 'No matches yet',
+                    message:
+                        'Loosen your budget or size filters to see more shoplots.',
+                    actionLabel: 'Edit preferences',
+                    onAction: () => Navigator.of(
+                      context,
+                    ).pushNamed('/entrepreneur/preferences'),
+                  )
+                else
+                  for (var i = 0; i < vm.recommendations.length; i++) ...[
+                    MobilePropertyCard(
+                      property: vm.recommendations[i].property,
+                      rankBanner: '${i + 1}. ${vm.recommendations[i].reason}',
+                      saved: appState.isSaved(
+                        vm.recommendations[i].property.id,
+                      ),
+                      onToggleSaved: () => appState.toggleSaved(
+                        vm.recommendations[i].property.id,
+                      ),
+                      compared: appState.isCompared(
+                        vm.recommendations[i].property.id,
+                      ),
+                      onToggleCompare: () => appState.toggleCompared(
+                        vm.recommendations[i].property.id,
+                      ),
+                      onTap: () => Navigator.of(context).pushNamed(
+                        '/entrepreneur/property-detail',
+                        arguments: vm.recommendations[i].property.id,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    _WhyItFits(reasons: vm.recommendations[i].whyRecommended),
+                    const SizedBox(height: 18),
+                  ],
               ],
-          ],
+            ),
+          ),
         ),
-      ),
       ),
     );
   }

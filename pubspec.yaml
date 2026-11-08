@@ -5,6 +5,8 @@
 #   * fyp_mobile_app — the Flutter app (mobile + Flutter-web UI).
 #   * fyp_jaspr_web  — the Jaspr web app (real HTML/CSS for SEO).
 #   * shared_logic   — framework-free domain + application logic used by both.
+#   * jaspr_provider_compat — provider pattern for Jaspr 0.23, used by the web
+#     app (the published `jaspr_provider` pins jaspr ^0.1.4 and cannot resolve).
 #
 # One pubspec cannot drive both `flutter build` and `jaspr build`, so the apps
 # must stay separate packages; `shared_logic` must stay free of Flutter because
@@ -26,3 +28,4 @@ workspace:
   - fyp_mobile_app
   - fyp_jaspr_web
   - shared_logic
+  - jaspr_provider_compat

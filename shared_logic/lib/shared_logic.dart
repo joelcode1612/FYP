@@ -89,6 +89,19 @@ export 'src/application/cubits/auth_cubit.dart';
 export 'src/application/cubits/entrepreneur_cubit.dart';
 export 'src/application/cubits/owner_cubit.dart';
 export 'src/application/cubits/admin_cubit.dart';
+
+// --- Application: bloc-free state controllers --------------------------------
+//
+// The orchestration half of each cubit: same transitions, same rules, no
+// `package:bloc`. The cubits above are thin adapters over these, and each app
+// wraps them in its own notification mechanism (Flutter `ChangeNotifier` /
+// `provider`, Jaspr `ChangeNotifier` / `jaspr_provider`), so a state rule is
+// written once and cannot diverge between platforms.
+export 'src/application/controllers/admin_controller.dart';
+export 'src/application/controllers/app_controller.dart';
+export 'src/application/controllers/entrepreneur_controller.dart';
+export 'src/application/controllers/owner_controller.dart';
+export 'src/application/controllers/state_controller.dart';
 export 'src/application/states/app_state.dart';
 export 'src/application/states/auth_state.dart';
 export 'src/application/states/entrepreneur_state.dart';

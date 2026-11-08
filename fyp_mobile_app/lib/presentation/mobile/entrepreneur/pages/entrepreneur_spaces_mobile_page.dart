@@ -1,7 +1,9 @@
+import 'package:provider/provider.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_logic/shared_logic.dart';
 
 import '../../../../application/services/service_locator.dart';
+import '../../../../application/state/app_view_model.dart';
 import '../../../../core/theme/sitewise_m3.dart';
 import '../../../../core/theme/sitewise_theme.dart';
 import '../../shell/mobile_app_shell.dart';
@@ -14,20 +16,19 @@ import '../../widgets/m3_kit.dart';
 /// property-owner concern and `PropertyService.ownerListings` is scoped to an
 /// owner id. Rather than invent records, this screen presents the two real
 /// collections an entrepreneur actually has —
-/// [AppCubit.saved] (shortlisted spaces) and [AppCubit.compared] (the
+/// [AppViewModel.saved] (shortlisted spaces) and [AppViewModel.compared] (the
 /// comparison set) — cross-referenced against the real property repository.
 ///
 /// Labels say "shortlisted" rather than "owned" so the UI never implies an
 /// authorization the data layer cannot back.
 
 class EntrepreneurSpacesMobilePage extends StatelessWidget {
-  final AppCubit appState;
-  const EntrepreneurSpacesMobilePage({super.key, required this.appState});
+  const EntrepreneurSpacesMobilePage({super.key});
 
   @override
   Widget build(BuildContext context) {
+    final appState = context.watch<AppViewModel>();
     return MobileAppShell(
-      appState: appState,
       title: 'Spaces',
       currentRoute: '/entrepreneur/spaces',
       body: M3Content(
@@ -35,7 +36,8 @@ class EntrepreneurSpacesMobilePage extends StatelessWidget {
           const M3ScreenHeading(
             eyebrow: 'Property workspace',
             title: 'My spaces',
-            lead: 'The commercial spaces you have shortlisted and the ones '
+            lead:
+                'The commercial spaces you have shortlisted and the ones '
                 'queued for comparison.',
           ),
           const SizedBox(height: 18),
@@ -75,7 +77,8 @@ class EntrepreneurSpacesMobilePage extends StatelessWidget {
             M3EmptyState(
               icon: Icons.storefront_outlined,
               title: 'No spaces saved yet',
-              message: 'Save a property from the Listing tab and it will '
+              message:
+                  'Save a property from the Listing tab and it will '
                   'appear here as a space record.',
               actionLabel: 'Browse listings',
               onAction: () =>
@@ -98,7 +101,8 @@ class EntrepreneurSpacesMobilePage extends StatelessWidget {
                   return const M3EmptyState(
                     icon: Icons.storefront_outlined,
                     title: 'Records unavailable',
-                    message: 'The saved properties are no longer present in '
+                    message:
+                        'The saved properties are no longer present in '
                         'the property repository.',
                   );
                 }
@@ -121,7 +125,8 @@ class EntrepreneurSpacesMobilePage extends StatelessWidget {
             ),
           const M3Banner(
             icon: Icons.verified_user_outlined,
-            text: 'Ownership verification, agent review and admin approval '
+            text:
+                'Ownership verification, agent review and admin approval '
                 'are separate from the shortlist. Editing a managed property '
                 'record is only available to its authorized owner or manager.',
           ),

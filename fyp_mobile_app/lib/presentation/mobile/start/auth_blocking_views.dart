@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:shared_logic/shared_logic.dart';
 
+import '../../../application/state/auth_view_model.dart';
 import '../../../core/config/mobile_endpoints.dart';
 import '../../../core/theme/sitewise_theme.dart';
 import '../../shared/widgets/sitewise_brand.dart';
@@ -20,12 +21,10 @@ class StaffWorkspaceRequiredView extends StatelessWidget {
     super.key,
     required this.role,
     required this.auth,
-    this.appState,
   });
 
   final AppRole? role;
-  final AuthCubit auth;
-  final AppCubit? appState;
+  final AuthViewModel auth;
 
   @override
   Widget build(BuildContext context) {
@@ -43,10 +42,7 @@ class StaffWorkspaceRequiredView extends StatelessWidget {
             style: _bodyStyle,
           ),
           const SizedBox(height: 10),
-          SelectableText(
-            MobileEndpoints.staffPortalHint,
-            style: _linkStyle,
-          ),
+          SelectableText(MobileEndpoints.staffPortalHint, style: _linkStyle),
         ],
       ),
       actionLabel: 'Sign out',
@@ -59,9 +55,7 @@ class StaffWorkspaceRequiredView extends StatelessWidget {
   Future<void> _leave(BuildContext context) async {
     await auth.signOut();
     if (!context.mounted) return;
-    Navigator.of(
-      context,
-    ).pushNamedAndRemoveUntil('/auth', (_) => false);
+    Navigator.of(context).pushNamedAndRemoveUntil('/auth', (_) => false);
   }
 }
 
@@ -75,7 +69,7 @@ class AccountStatusView extends StatelessWidget {
   });
 
   final String? message;
-  final AuthCubit auth;
+  final AuthViewModel auth;
 
   @override
   Widget build(BuildContext context) {
@@ -85,7 +79,7 @@ class AccountStatusView extends StatelessWidget {
       body: Text(
         message ??
             'This account cannot be used on Sitewise yet. Contact support to '
-            'have it activated.',
+                'have it activated.',
         style: _bodyStyle,
       ),
       actionLabel: 'Back to sign in',
@@ -104,7 +98,7 @@ class AccountStatusView extends StatelessWidget {
 class AuthUnavailableView extends StatelessWidget {
   const AuthUnavailableView({super.key, required this.auth, this.onRetry});
 
-  final AuthCubit auth;
+  final AuthViewModel auth;
   final VoidCallback? onRetry;
 
   @override
@@ -115,7 +109,7 @@ class AuthUnavailableView extends StatelessWidget {
       body: Text(
         auth.state.message ??
             'Sitewise could not reach the sign-in service, so your account has '
-            'not been checked. No data is available until it is.',
+                'not been checked. No data is available until it is.',
         style: _bodyStyle,
       ),
       actionLabel: 'Retry',

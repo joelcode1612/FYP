@@ -2,26 +2,29 @@ import 'package:bloc/bloc.dart';
 
 import '../../core/constants/app_constants.dart';
 import '../../domain/entities/app_role.dart';
+import '../controllers/app_controller.dart';
 import '../states/app_state.dart';
 
-/// App-wide UI state: active role, preview override, saved and compare sets.
+/// Cubit facade over [AppController].
 ///
-/// Direct translation of the Flutter `AppState extends ChangeNotifier`. `Cubit`
-/// is used rather than `Bloc` because the original API is imperative method
-/// calls (`toggleSaved(id)`), which map one-to-one onto cubit methods. Events
-/// would add a layer of indirection without adding behaviour.
-///
-/// `bloc` is pure Dart — no Flutter dependency — which is precisely why this
-/// class can live in the shared package and be consumed by both apps.
+/// Every transition lives in the controller; this class only mirrors it into a
+/// `Stream` for callers that still speak cubit (shared tests, mobile screens
+/// that have not switched to `provider` yet). The web app binds
+/// [AppController] directly through a `ChangeNotifier` and never constructs
+/// this.
 class AppCubit extends Cubit<AppState> {
-  AppCubit([AppState? initial]) : super(initial ?? const AppState());
+  final AppController _controller;
 
-  // Read-only projections of the current state.
-  //
-  // The Flutter UI reads `appState.role`, `appState.isSaved(id)` etc. directly
-  // (it used to mutate a ChangeNotifier). These getters keep that read syntax
-  // valid while every *write* still goes through the methods below and emits a
-  // new immutable [AppState]. They must never be used to bypass `emit`.
+  AppCubit([AppState? initial])
+    : _controller = AppController(initial),
+      super(initial ?? const AppState()) {
+    _controller.addListener(_publish);
+  }
+
+  /// The controller's state object, exposed so `AppCubit.state` and
+  /// `AppController.state` cannot drift apart.
+  AppState get snapshot => _controller.state;
+
   AppRole get role => state.role;
 
   PreviewMode get preview => state.preview;
@@ -34,29 +37,27 @@ class AppCubit extends Cubit<AppState> {
 
   bool isCompared(String id) => state.isCompared(id);
 
-  void setRole(AppRole value) => emit(state.copyWith(role: value));
+  void setRole(AppRole value) => _controller.setRole(value);
 
-  void setPreview(PreviewMode value) => emit(state.copyWith(preview: value));
+  void setPreview(PreviewMode value) => _controller.setPreview(value);
 
   /// Adds or removes a property from the saved set.
-  void toggleSaved(String id) {
-    final next = {...state.saved};
-    if (!next.remove(id)) next.add(id);
-    emit(state.copyWith(saved: next));
+  void toggleSaved(String id) => _controller.toggleSaved(id);
+
+  /// Adds or removes a property from the compare set. The three-entry cap is
+  /// enforced by the controller.
+  void toggleCompared(String id) => _controller.toggleCompared(id);
+
+  void clearCompared() => _controller.clearCompared();
+
+  void _publish(AppState next) {
+    if (!isClosed) super.emit(next);
   }
 
-  /// Adds or removes a property from the compare set.
-  ///
-  /// Preserves the original rule: adding a fourth entry is a no-op rather than
-  /// an error, and removing is always allowed.
-  void toggleCompared(String id) {
-    final next = {...state.compared};
-    if (!next.remove(id)) {
-      if (next.length >= AppState.maxCompare) return;
-      next.add(id);
-    }
-    emit(state.copyWith(compared: next));
+  @override
+  Future<void> close() {
+    _controller.removeListener(_publish);
+    _controller.dispose();
+    return super.close();
   }
-
-  void clearCompared() => emit(state.copyWith(compared: const <String>{}));
 }

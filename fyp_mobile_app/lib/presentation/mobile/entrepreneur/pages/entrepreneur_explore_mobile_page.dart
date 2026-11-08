@@ -1,8 +1,10 @@
-import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:provider/provider.dart';
 import 'package:shared_logic/shared_logic.dart';
 import 'package:flutter/material.dart';
 
 import '../../../../application/services/service_locator.dart';
+import '../../../../application/state/app_view_model.dart';
+import '../../../../application/state/entrepreneur_view_model.dart';
 import '../../../../core/theme/sitewise_m3.dart';
 import '../../../../core/theme/sitewise_theme.dart';
 import '../../../shared/widgets/sitewise_bottom_sheet.dart';
@@ -20,7 +22,7 @@ import '../../widgets/mobile_skeleton.dart';
 
 /// Mobile explore — Option A **"Find a location"**.
 ///
-/// Search runs through the existing [EntrepreneurCubit] (repository-backed);
+/// Search runs through the existing [EntrepreneurViewModel] (repository-backed);
 /// the Option A quick chips (All spaces / Under RM 8.5k / Ground floor) and
 /// the original filter bottom sheet only narrow the already-loaded list using
 /// fields that exist on [CommercialProperty] — budget caps on `rentalRm`,
@@ -28,16 +30,10 @@ import '../../widgets/mobile_skeleton.dart';
 /// instead of the web split-screen layout.
 
 class EntrepreneurExploreMobilePage extends StatefulWidget {
-  final AppCubit appState;
-
   /// Open directly in map mode (Home → "Explore on map").
   final bool startInMap;
 
-  const EntrepreneurExploreMobilePage({
-    super.key,
-    required this.appState,
-    this.startInMap = false,
-  });
+  const EntrepreneurExploreMobilePage({super.key, this.startInMap = false});
 
   @override
   State<EntrepreneurExploreMobilePage> createState() =>
@@ -50,7 +46,11 @@ enum _QuickFilter { all, budget, ground }
 
 class _EntrepreneurExploreMobilePageState
     extends State<EntrepreneurExploreMobilePage> {
-  final vm = ServiceLocator.newEntrepreneurCubit();
+  final EntrepreneurViewModel vm = ServiceLocator.newEntrepreneurViewModel();
+
+  /// Saved / compare selections, read by the list builders below. The
+  /// `Consumer<AppViewModel>` in [build] is what repaints them.
+  late final AppViewModel _app = context.read<AppViewModel>();
 
   late bool showMap = widget.startInMap;
   MobilePropertyFilter filter = MobilePropertyFilter.empty;
@@ -65,6 +65,13 @@ class _EntrepreneurExploreMobilePageState
     super.initState();
     vm.loadExplore();
     _loadOptions();
+  }
+
+  @override
+  void dispose() {
+    // The provider exposes this instance by value, so the route tears it down.
+    vm.dispose();
+    super.dispose();
   }
 
   Future<void> _loadOptions() async {
@@ -87,10 +94,8 @@ class _EntrepreneurExploreMobilePageState
     return set;
   }
 
-  List<CommercialProperty> get _results => vm.explore
-      .where(filter.matches)
-      .where(_quickMatches)
-      .toList();
+  List<CommercialProperty> get _results =>
+      vm.explore.where(filter.matches).where(_quickMatches).toList();
 
   bool _quickMatches(CommercialProperty p) => switch (quick) {
     _QuickFilter.all => true,
@@ -123,51 +128,57 @@ class _EntrepreneurExploreMobilePageState
 
   @override
   Widget build(BuildContext context) {
-    return BlocBuilder<AppCubit, AppState>(
-      bloc: widget.appState,
-      builder: (ctx, _) => BlocBuilder<EntrepreneurCubit, EntrepreneurState>(
-        bloc: vm,
-        builder: (ctx, _) => MobileAppShell(
-        appState: widget.appState,
-        title: 'Explore',
-        currentRoute: '/entrepreneur/explore',
-        body: Column(
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const M3ScreenHeading(
-                    eyebrow: 'Listing discovery',
-                    title: 'Find a location',
-                    lead: 'Browse commercial spaces suitable for F&B concepts.',
+    // The page owns [vm] (created here, disposed with the route), so the
+    // provider exposes it by value. The entrepreneur Consumer repaints the
+    // results and the app-wide one repaints the saved/compare card toggles.
+    return ChangeNotifierProvider<EntrepreneurViewModel>.value(
+      value: vm,
+      child: Consumer<AppViewModel>(
+        builder: (ctx, appState, _) => Consumer<EntrepreneurViewModel>(
+          builder: (ctx, model, _) => MobileAppShell(
+            title: 'Explore',
+            currentRoute: '/entrepreneur/explore',
+            body: Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const M3ScreenHeading(
+                        eyebrow: 'Listing discovery',
+                        title: 'Find a location',
+                        lead:
+                            'Browse commercial spaces suitable for F&B concepts.',
+                      ),
+                      const SizedBox(height: 14),
+                      MobileSearchField(
+                        hint: 'Search area or property',
+                        onChanged: vm.setQuery,
+                        trailing: MobileIconAction(
+                          icon: showMap
+                              ? Icons.list_rounded
+                              : Icons.map_outlined,
+                          tooltip: showMap ? 'Show list' : 'Show map',
+                          active: showMap,
+                          onPressed: () => setState(() => showMap = !showMap),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      _quickChips(),
+                      const SizedBox(height: 10),
+                      _categoryChips(),
+                      const SizedBox(height: 10),
+                      _locationFilterRow(),
+                    ],
                   ),
-                  const SizedBox(height: 14),
-                  MobileSearchField(
-                    hint: 'Search area or property',
-                    onChanged: vm.setQuery,
-                    trailing: MobileIconAction(
-                      icon: showMap ? Icons.list_rounded : Icons.map_outlined,
-                      tooltip: showMap ? 'Show list' : 'Show map',
-                      active: showMap,
-                      onPressed: () => setState(() => showMap = !showMap),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  _quickChips(),
-                  const SizedBox(height: 10),
-                  _categoryChips(),
-                  const SizedBox(height: 10),
-                  _locationFilterRow(),
-                ],
-              ),
+                ),
+                const SizedBox(height: 12),
+                Expanded(child: _body()),
+              ],
             ),
-            const SizedBox(height: 12),
-            Expanded(child: _body()),
-          ],
+          ),
         ),
-      ),
       ),
     );
   }
@@ -205,10 +216,10 @@ class _EntrepreneurExploreMobilePageState
         final p = results[i - 1];
         return MobilePropertyCard(
           property: p,
-          saved: widget.appState.isSaved(p.id),
-          onToggleSaved: () => widget.appState.toggleSaved(p.id),
-          compared: widget.appState.isCompared(p.id),
-          onToggleCompare: () => widget.appState.toggleCompared(p.id),
+          saved: _app.isSaved(p.id),
+          onToggleSaved: () => _app.toggleSaved(p.id),
+          compared: _app.isCompared(p.id),
+          onToggleCompare: () => _app.toggleCompared(p.id),
           onTap: () => _openDetail(p.id),
         );
       },

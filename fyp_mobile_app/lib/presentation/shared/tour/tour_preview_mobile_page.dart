@@ -18,13 +18,8 @@ import '../../mobile/shell/mobile_app_shell.dart';
 /// regenerate, submit and delete. The capture screen resumes for retakes.
 
 class TourPreviewMobilePage extends StatefulWidget {
-  final AppCubit appState;
   final String tourId;
-  const TourPreviewMobilePage({
-    super.key,
-    required this.appState,
-    required this.tourId,
-  });
+  const TourPreviewMobilePage({super.key, required this.tourId});
 
   @override
   State<TourPreviewMobilePage> createState() => _TourPreviewMobilePageState();
@@ -50,7 +45,6 @@ class _TourPreviewMobilePageState extends State<TourPreviewMobilePage> {
     return AnimatedBuilder(
       animation: vm,
       builder: (ctx, _) => MobileAppShell(
-        appState: widget.appState,
         title: 'Tour preview',
         // Matches parentShellRoute('/tour-preview') so the Listing tab stays
         // highlighted while the tour is open.
@@ -301,9 +295,7 @@ class _TourPreviewMobilePageState extends State<TourPreviewMobilePage> {
     if (tour == null) return;
     await vm.retakeFrame(index, tour.propertyId);
     if (mounted) {
-      Navigator.of(
-        context,
-      ).pushNamed('/capture', arguments: tour.propertyId);
+      Navigator.of(context).pushNamed('/capture', arguments: tour.propertyId);
     }
   }
 }

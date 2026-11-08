@@ -6,10 +6,12 @@ import '../../core/utils/capture_log.dart';
 import '../../data/datasources/local/capture_frame_store.dart';
 import '../../data/datasources/local/onboarding_local_data_source.dart';
 import '../../data/datasources/local/opencv_panorama_stitcher_stub.dart'
-
     if (dart.library.io) '../../data/datasources/local/opencv_panorama_stitcher.dart';
 import '../../data/repositories/onboarding_repository_impl.dart';
 import '../../data/repositories/supabase_auth_repository.dart';
+import '../state/app_view_model.dart';
+import '../state/auth_view_model.dart';
+import '../state/entrepreneur_view_model.dart';
 import 'ar_capture_service.dart';
 import 'assessment_session.dart';
 import 'capture_session_store.dart';
@@ -17,7 +19,7 @@ import 'panorama_capture_service.dart';
 import 'panorama_generation_service.dart';
 
 /// Minimal hand-rolled locator (no third-party DI package in pubspec).
-/// Wired once in main(); pages resolve cubits/services from here.
+/// Wired once in main(); pages resolve view models and services from here.
 ///
 /// The application-layer services (property, tour, auth, ...) and the shared
 /// cubits now live in `shared_logic` so the Jaspr web app can instantiate the
@@ -42,16 +44,29 @@ abstract final class ServiceLocator {
 
   /// The single shared authentication state. Startup, the auth screens, the
   /// route guards and sign-out all read this one instance, so they can never
-  /// disagree about who is signed in.
+  /// disagree about who is signed in. It owns the auth rules;
+  /// [authViewModel] only adapts its notifications for `provider`.
   static AuthCubit authState = AuthCubit(auth: auth);
 
+  /// The app-wide auth view model exposed by the root `MultiProvider`.
+  static AuthViewModel authViewModel = AuthViewModel(cubit: authState);
+
+  /// App-wide UI state (role, preview, saved and compare sets), one instance
+  /// for the lifetime of the process. The root provider exposes it *by value*
+  /// and never disposes it.
+  static final AppViewModel appViewModel = AppViewModel();
+
   /// Replaces the repository *and* rebuilds [authState] from it. Closing the
-  /// previous cubit means a stale restore cannot emit into a new test.
+  /// previous cubit means a stale restore cannot emit into a new test; the
+  /// previous view model is disposed so nothing keeps listening to it.
   static void useAuth(AuthRepository repo) {
     final previous = authState;
+    final previousViewModel = authViewModel;
     auth = AuthService(repo);
     authState = AuthCubit(auth: auth);
+    authViewModel = AuthViewModel(cubit: authState);
     unawaited(previous.close());
+    previousViewModel.dispose();
   }
 
   static final PropertyService properties = PropertyService(propertyRepo);
@@ -76,21 +91,26 @@ abstract final class ServiceLocator {
 
   /// Single in-session assessment draft (app-layer because the flow that
   /// reads and writes it is mobile presentation; nothing persists it).
-  static final AssessmentSessionStore assessmentSession = AssessmentSessionStore();
+  static final AssessmentSessionStore assessmentSession =
+      AssessmentSessionStore();
 
-  /// Fresh entrepreneur browsing cubit (shared logic).
+  /// Fresh entrepreneur browsing view model (shared logic).
   ///
   /// The use cases and the initial preferences are constructor-injected — the
-  /// cubit never touches this locator. The `onPreferencesUpdated` callback
+  /// view model never touches this locator. The `onPreferencesUpdated` callback
   /// preserves the old viewmodel's write-back to [preferences] so onboarding
-  /// and other screens keep seeing updated values app-wide.
-  static EntrepreneurCubit newEntrepreneurCubit() => EntrepreneurCubit(
-    getProperties: GetProperties(propertyRepo),
-    getRecommendations: GetRecommendations(recommendationRepo),
-    getLocationAnalysis: GetLocationAnalysis(recommendationRepo),
-    preferences: preferences,
-    onPreferencesUpdated: (value) => preferences = value,
-  );
+  /// and other screens keep seeing updated values app-wide. Each screen owns
+  /// the instance it builds and disposes it with its route.
+  static EntrepreneurViewModel newEntrepreneurViewModel() =>
+      EntrepreneurViewModel(
+        EntrepreneurController(
+          getProperties: GetProperties(propertyRepo),
+          getRecommendations: GetRecommendations(recommendationRepo),
+          getLocationAnalysis: GetLocationAnalysis(recommendationRepo),
+          preferences: preferences,
+          onPreferencesUpdated: (value) => preferences = value,
+        ),
+      );
 
   /// Fresh panorama session over the 26 local capture targets.
   static PanoramaCaptureService newPanoramaCaptureService([

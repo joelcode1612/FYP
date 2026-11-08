@@ -2,32 +2,32 @@ import 'package:bloc/bloc.dart';
 
 import '../../domain/entities/commercial_property.dart';
 import '../../domain/entities/virtual_tour.dart';
+import '../controllers/owner_controller.dart';
 import '../services/property_service.dart';
 import '../services/tour_service.dart';
 import '../states/owner_state.dart';
 
-/// Owner dashboard/properties/tours flow.
+/// Cubit facade over [OwnerController].
 ///
-/// Replaces the Flutter `OwnerViewModel`
-/// (`fyp_mobile_app/lib/application/viewmodels/owner_viewmodel.dart`) now that
-/// the owner screens exist in both the Flutter and the Jaspr app — the
-/// filter/count rules are business behaviour and must not be duplicated.
-///
-/// Behaviour is a faithful port, including the original's quirks:
-/// `setQuery`/`setStatusFilter` only change view state (filtering is derived
-/// at read time), and a failed load surfaces `error` without clearing the
-/// previously loaded lists.
+/// Every transition lives in the controller; this class only mirrors it into a
+/// `Stream` for callers that still speak cubit. The web app binds the
+/// controller directly through a `ChangeNotifier` and never constructs this,
+/// which is why the filter/count rules cannot drift between platforms.
 class OwnerCubit extends Cubit<OwnerState> {
-  final PropertyService _properties;
-  final TourService _tours;
+  final OwnerController _controller;
 
   OwnerCubit({
     required PropertyService properties,
     required TourService tours,
     required String ownerId,
-  }) : _properties = properties,
-       _tours = tours,
-       super(OwnerState(ownerId: ownerId));
+  }) : _controller = OwnerController(
+         properties: properties,
+         tours: tours,
+         ownerId: ownerId,
+       ),
+       super(OwnerState(ownerId: ownerId)) {
+    _controller.addListener(_publish);
+  }
 
   // Read-only projections of the current state, mirroring the field names the
   // Flutter `OwnerViewModel` exposed, so existing UI code reads the same
@@ -46,65 +46,37 @@ class OwnerCubit extends Cubit<OwnerState> {
   VerificationStatus? get statusFilter => state.statusFilter;
 
   /// Owner listings narrowed by the current [query] and [statusFilter].
-  /// Pure view-state derivation — no new data source.
-  List<CommercialProperty> get filteredProperties {
-    return state.properties.where((p) {
-      final matchesQuery =
-          state.query.isEmpty ||
-          '${p.title} ${p.city} ${p.state} ${p.address} ${p.propertyType}'
-              .toLowerCase()
-              .contains(state.query.toLowerCase());
-      final matchesStatus =
-          state.statusFilter == null || p.verification == state.statusFilter;
-      return matchesQuery && matchesStatus;
-    }).toList();
-  }
+  List<CommercialProperty> get filteredProperties =>
+      _controller.filteredProperties;
 
   /// Listings per verification status — real counts from [properties].
   int countByStatus(VerificationStatus status) =>
-      state.properties.where((p) => p.verification == status).length;
+      _controller.countByStatus(status);
 
   /// Listings carrying a published 360° tour.
-  int get withTourCount => state.properties.where((p) => p.hasTour).length;
+  int get withTourCount => _controller.withTourCount;
 
-  Future<void> load() async {
-    final ownerId = state.ownerId;
-    emit(state.copyWith(loading: true, clearError: true));
-    try {
-      final properties = await _properties.ownerListings(ownerId);
-      final tours = await _tours.toursForOwner(ownerId);
-      emit(
-        state.copyWith(properties: properties, tours: tours, loading: false),
-      );
-    } catch (e) {
-      emit(state.copyWith(error: e.toString(), loading: false));
-    }
+  Future<void> load() => _controller.load();
+
+  void setQuery(String value) => _controller.setQuery(value);
+
+  void setStatusFilter(VerificationStatus? value) =>
+      _controller.setStatusFilter(value);
+
+  Future<void> submit(String id) => _controller.submit(id);
+
+  Future<void> submitTour(String tourId) => _controller.submitTour(tourId);
+
+  Future<void> deleteTour(String tourId) => _controller.deleteTour(tourId);
+
+  void _publish(OwnerState next) {
+    if (!isClosed) super.emit(next);
   }
 
-  void setQuery(String value) => emit(state.copyWith(query: value));
-
-  void setStatusFilter(VerificationStatus? value) {
-    // copyWith cannot express "set to null" (null means unchanged), so
-    // clearing the filter takes an explicit branch.
-    if (value == null) {
-      emit(state.copyWith(clearStatusFilter: true));
-    } else {
-      emit(state.copyWith(statusFilter: value));
-    }
-  }
-
-  Future<void> submit(String id) async {
-    await _properties.submit(id);
-    await load();
-  }
-
-  Future<void> submitTour(String tourId) async {
-    await _tours.submitTour(tourId);
-    await load();
-  }
-
-  Future<void> deleteTour(String tourId) async {
-    await _tours.deleteTour(tourId);
-    await load();
+  @override
+  Future<void> close() {
+    _controller.removeListener(_publish);
+    _controller.dispose();
+    return super.close();
   }
 }

@@ -49,10 +49,11 @@ dependencies:
   # workspace member instead of fetching from pub.dev.
   shared_logic: any
 
-  # Required by the shared Cubits in `shared_logic` (AppCubit, EntrepreneurCubit).
-  # `bloc` itself is pure Dart and lives in the shared package; `flutter_bloc`
-  # adds the Flutter widgets (BlocBuilder etc.) on top.
-  flutter_bloc: ^9.1.0
+  # App-facing state management: ChangeNotifier view models exposed through the
+  # widget tree. The shared controllers in `shared_logic` stay framework-free,
+  # and `bloc` remains a pure-Dart implementation detail of the auth state
+  # machine there — none of its Flutter widgets are used here.
+  provider: ^6.1.5+1
   supabase_flutter: ^2.18.3
   http: ^1.6.0
   flutter_secure_storage: ^11.2.0

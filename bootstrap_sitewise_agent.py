@@ -1,18 +1,30 @@
-"""One-time SiteWise Agent account provisioning (NO invitation email).
+"""Send a Supabase invitation for a SiteWise Agent account.
 
 Run from the FYP repository root on an administrator-controlled computer:
 
-    & ".\\backend\\.venv\\Scripts\\python.exe" ".\\bootstrap_sitewise_agent.py"
+    & ".\\backend\\.venv\\Scripts\\python.exe" ".\\bootstrap_sitewise_agent_invite.py"
 
-Uses the existing SiteWise Supabase project and the FastAPI application's
-PostgreSQL mirror. Never run this script from Flutter/Jaspr or distribute a
-Supabase secret key to an Agent.
+The script uses Supabase Auth Admin to send the Agent an invitation email.
+The Agent opens the email link and sets their own password on the configured
+SiteWise invitation-acceptance page. The Supabase secret key is only read by
+this trusted administrator-side script and must never be shipped to Jaspr,
+Flutter, JavaScript, or an Agent's device.
 
-For a NEW account, an authorized administrator must first independently
-verify that the intended Agent controls the email address. Because Supabase
-admin.create_user(email_confirm=True) bypasses email verification, this
-script requires explicit confirmation of that verification before creation.
-Prefer the normal invitation/verified-signup flow where available.
+Required environment variables (root .env or backend/.env):
+    SUPABASE_URL=https://<project-ref>.supabase.co
+    SUPABASE_SECRET_KEY=<NEWLY ROTATED sb_secret_... key>
+
+Optional:
+    SUPABASE_INVITE_REDIRECT_URL=https://<your-site>/auth/accept-invite
+
+The redirect URL must be configured in Supabase Dashboard > Authentication >
+URL Configuration > Redirect URLs. If omitted, Supabase uses the project's
+configured Site URL.
+
+After the Agent accepts the invite and sets a password, run this script again
+for that email to reconcile email_verified=True in both user-profile stores.
+The application should also perform this reconciliation in its authenticated
+invite-acceptance callback/API; do not rely on user_metadata for authorization.
 """
 
 from __future__ import annotations
@@ -24,6 +36,8 @@ import sys
 import uuid
 from getpass import getpass
 from pathlib import Path
+from typing import Any
+from urllib.parse import urlparse
 
 from supabase import create_client
 from supabase.lib.client_options import ClientOptions
@@ -32,12 +46,12 @@ from supabase.lib.client_options import ClientOptions
 EXPECTED_SUPABASE_URL = "https://lzdpjwmcjbhtkzkqudyt.supabase.co"
 AGENT_ROLE = "agent"
 ALLOWED_PREVIOUS_ROLES = {"entrepreneur", "user", "agent"}
-
-# A fingerprint, NOT a credential. Rejects the exposed key copied into the
-# Administrator script supplied as the template. Other previously leaked keys
-# must also be revoked in Supabase before provisioning.
-EXPOSED_KEY_SHA256 = "cda8df19ce4be057333aa67428393e2f37f434d4bfb89a95fcb9fd3251030503"
 EMAIL_PATTERN = re.compile(r"^[^\s@]+@[^\s@]+\.[^\s@]+$")
+
+# Credential fingerprint only. It is not the credential itself. This blocks
+# the known key that was embedded in the earlier administrator provisioning
+# script. Rotate every key that has been exposed and use the replacement.
+EXPOSED_KEY_SHA256 = "cda8df19ce4be057333aa67428393e2f37f434d4bfb89a95fcb9fd3251030503"
 
 
 def fail(message: str) -> None:
@@ -45,13 +59,13 @@ def fail(message: str) -> None:
 
 
 def load_local_env() -> None:
-    """Load simple KEY=VALUE entries, without printing or overriding env vars."""
+    """Load simple KEY=VALUE entries without printing or overriding env vars."""
     project_root = Path(__file__).resolve().parent
     for env_path in (project_root / ".env", project_root / "backend" / ".env"):
         if not env_path.is_file():
             continue
-        for line in env_path.read_text(encoding="utf-8-sig").splitlines():
-            line = line.strip()
+        for raw_line in env_path.read_text(encoding="utf-8-sig").splitlines():
+            line = raw_line.strip()
             if not line or line.startswith("#") or "=" not in line:
                 continue
             key, value = (part.strip() for part in line.split("=", 1))
@@ -67,90 +81,123 @@ def confirm(prompt: str, phrase: str) -> None:
         fail("Cancelled. No further changes were made.")
 
 
-def get_auth_user_by_email(client, email: str):
-    """Paginate Auth identities; never create a duplicate if listing fails."""
+def field(value: Any, name: str, default: Any = None) -> Any:
+    """Read a field from either an SDK model or a dictionary response."""
+    if isinstance(value, dict):
+        return value.get(name, default)
+    return getattr(value, name, default)
+
+
+def response_user(response: Any) -> Any:
+    """Support the Auth SDK's model and dictionary response forms."""
+    user = field(response, "user")
+    if user is not None:
+        return user
+    data = field(response, "data")
+    if data is not None:
+        return field(data, "user")
+    return None
+
+
+def get_auth_user_by_email(client: Any, email: str) -> Any | None:
+    """Paginate Auth identities; never invite if the search fails."""
     page_size = 200
     for page in range(1, 101):
         response = client.auth.admin.list_users(page=page, per_page=page_size)
-        users = getattr(response, "users", None)
-        if users is None and isinstance(response, dict):
-            users = response.get("users")
+        users = field(response, "users")
         if users is None and isinstance(response, list):
             users = response
         if users is None:
             fail("Unexpected Supabase Auth list_users response; review SDK compatibility.")
+
         for user in users:
-            user_email = (getattr(user, "email", None) or "").casefold()
+            user_email = (field(user, "email") or "").casefold()
             if user_email == email:
                 return user
+
         if len(users) < page_size:
             return None
-    fail("Auth user search exceeded 100 pages. No account created.")
+
+    fail("Auth user search exceeded 100 pages. No invitation was sent.")
 
 
-def read_public_profile(client, user_id: str):
+def read_public_profile(client: Any, user_id: str) -> dict[str, Any] | None:
     result = (
         client.table("users")
-        .select("user_id,email,role,account_status")
+        .select("user_id,email,role,account_status,email_verified")
         .eq("user_id", user_id)
         .limit(1)
         .execute()
     )
-    return (result.data or [None])[0]
+    rows = field(result, "data", []) or []
+    return rows[0] if rows else None
 
 
-def assert_role_transition_safe(existing: dict | None, email: str) -> None:
+def assert_role_transition_safe(existing: dict[str, Any] | None, email: str) -> None:
     if not existing:
         return
+
     current_role = existing.get("role")
     status = existing.get("account_status")
     existing_email = (existing.get("email") or "").casefold()
 
     if status == "suspended":
         fail("Existing profile is suspended. Do not override the suspension.")
-    if current_role not in ALLOWED_PREVIOUS_ROLES:
+    if current_role not in (None, *ALLOWED_PREVIOUS_ROLES):
         fail(f"Conflicting existing role ({current_role!r}); refusing role change.")
     if existing_email and existing_email != email:
         fail("Existing profile email differs from the Auth identity. Review manually.")
 
 
-def create_new_auth_user(client, email: str, full_name: str):
+def invite_new_auth_user(
+    client: Any,
+    email: str,
+    full_name: str,
+    redirect_url: str | None,
+) -> Any:
+    """Create an unconfirmed Auth identity and send its invitation email."""
     print("No existing Supabase Auth account found for this email.")
-    print("This script does NOT send an invitation or verification email.")
-    print("The administrator MUST have independently verified the Agent's email ownership.")
-    confirm("Confirm that independent email verification has already been completed.", "EMAIL-VERIFIED")
+    print("Supabase will send the Agent an invitation email; no password is set by the admin.")
 
-    password = getpass("Enter the new Agent's password (hidden, minimum 12 characters): ")
-    repeated = getpass("Repeat the password: ")
-    if password != repeated or len(password) < 12:
-        fail("Passwords must match and be at least 12 characters.")
+    options: dict[str, Any] = {"data": {"full_name": full_name}}
+    if redirect_url:
+        options["redirect_to"] = redirect_url
 
-    confirm("Authorize creation of this Agent Auth identity.", "CREATE-AGENT")
+    confirm("Authorize sending the Agent invitation email.", "SEND-AGENT-INVITE")
     try:
-        response = client.auth.admin.create_user(
-            {
-                "email": email,
-                "password": password,
-                "email_confirm": True,
-                "user_metadata": {"full_name": full_name},
-            }
-        )
-        user = getattr(response, "user", None)
+        response = client.auth.admin.invite_user_by_email(email, options=options)
+        user = response_user(response)
         if user is None:
-            fail("Auth API created no returned user. Check Authentication > Users.")
-        print("Supabase Auth identity created.")
+            fail("Supabase invitation returned no user. Check Authentication > Users and email logs.")
+        print("Supabase Auth invitation sent successfully.")
         return user
+    except SystemExit:
+        raise
     except Exception as exc:
         fail(
-            "Supabase Auth creation failed: " + str(exc)
-            + "\nIf this is a database trigger error, check your Auth user creation triggers."
+            "Supabase invitation failed: " + str(exc)
+            + "\nCheck Auth email delivery, SMTP/rate limits, redirect allow-list, and whether this email already exists."
         )
-    finally:
-        password = repeated = None
 
 
-def reconcile_local_profile(user_id: str, email: str, full_name: str) -> None:
-    """Use the application's existing trusted staff service, not a new role path."""
+def validate_redirect_url(value: str | None) -> str | None:
+    if not value:
+        return None
+    parsed = urlparse(value)
+    if parsed.scheme not in {"https", "http"} or not parsed.netloc:
+        fail("SUPABASE_INVITE_REDIRECT_URL must be a complete https:// URL (http://localhost is allowed for development).")
+    if parsed.scheme == "http" and parsed.hostname not in {"localhost", "127.0.0.1"}:
+        fail("Use HTTPS for non-local invitation redirect URLs.")
+    return value
+
+
+def reconcile_local_profile(
+    user_id: str,
+    email: str,
+    full_name: str,
+    email_verified: bool,
+) -> None:
+    """Use the application's existing staff service and preserve verification state."""
     root = Path(__file__).resolve().parent
     backend_src = root / "backend" / "src"
     if not backend_src.is_dir():
@@ -173,10 +220,15 @@ def reconcile_local_profile(user_id: str, email: str, full_name: str) -> None:
             role=AGENT_ROLE,
             account_status="active",
         )
-        if not getattr(profile, "email_verified", False):
-            UserRepository(session).update(profile.user_id, {"email_verified": True})
+        UserRepository(session).update(
+            profile.user_id,
+            {"email_verified": email_verified},
+        )
 
-    print("Local PostgreSQL application profile synchronized (role=agent, active).")
+    print(
+        "Local PostgreSQL application profile synchronized "
+        f"(role=agent, active, email_verified={email_verified})."
+    )
 
 
 def main() -> None:
@@ -188,13 +240,17 @@ def main() -> None:
 
     secret = (os.getenv("SUPABASE_SECRET_KEY") or "").strip()
     if not secret:
-        secret = getpass("Paste your ROTATED Supabase secret key (hidden): ").strip()
+        secret = getpass("Paste your NEWLY ROTATED Supabase secret key (hidden): ").strip()
     if not secret.startswith("sb_secret_"):
         fail("SUPABASE_SECRET_KEY must be a Supabase sb_secret_ key.")
     if hashlib.sha256(secret.encode()).hexdigest() == EXPOSED_KEY_SHA256:
-        fail("This key was exposed in the supplied Administrator script. Rotate it first.")
+        fail("This key was exposed in the earlier administrator script. Rotate it before continuing.")
 
-    print("\nSiteWise Agent account provisioning (administrator-only)")
+    redirect_url = validate_redirect_url(
+        (os.getenv("SUPABASE_INVITE_REDIRECT_URL") or "").strip() or None
+    )
+
+    print("\nSiteWise Agent invitation (administrator-only)")
     print("Supabase project:", url)
     email = input("Agent email: ").strip().casefold()
     full_name = " ".join(input("Agent full name: ").strip().split())
@@ -205,6 +261,7 @@ def main() -> None:
 
     print(f"\nAccount: {email} ({full_name})")
     print("Requested role: agent")
+    print("An invited Agent remains email-unverified until the invitation is accepted.")
     print("Neither an admin nor a property_owner profile may be overwritten.")
     confirm("Confirm authorized administrator operation.", "PROVISION-AGENT")
 
@@ -221,19 +278,31 @@ def main() -> None:
     except Exception as exc:
         fail("Could not search Supabase Auth users: " + str(exc))
 
+    invited_now = False
     if auth_user is None:
-        auth_user = create_new_auth_user(client, email, full_name)
+        auth_user = invite_new_auth_user(client, email, full_name, redirect_url)
+        invited_now = True
     else:
-        print("Existing Auth user found. Will not recreate or reset its password.")
-        confirmed = (
-            getattr(auth_user, "email_confirmed_at", None)
-            or getattr(auth_user, "confirmed_at", None)
+        confirmed_at = (
+            field(auth_user, "email_confirmed_at")
+            or field(auth_user, "confirmed_at")
         )
-        if not confirmed:
-            fail("This existing account has not confirmed its email. Verify it first.")
+        if not confirmed_at:
+            fail(
+                "An unconfirmed Supabase Auth account already exists for this email. "
+                "No duplicate user was created and no second email was sent. "
+                "Check Authentication > Users and resend the pending invitation there, "
+                "or let the Agent complete the existing invitation."
+            )
+        print("A confirmed Supabase Auth account already exists; no invitation was sent.")
+        print("The script will only reconcile its SiteWise Agent profile after explicit authorization.")
 
-    uid = str(auth_user.id)
+    user_id = field(auth_user, "id")
+    if not user_id:
+        fail("Supabase Auth response did not include a user ID. Check Authentication > Users.")
+    uid = str(user_id)
 
+    email_verified = not invited_now
     try:
         existing = read_public_profile(client, uid)
         assert_role_transition_safe(existing, email)
@@ -248,24 +317,29 @@ def main() -> None:
                 "email": email,
                 "role": AGENT_ROLE,
                 "account_status": "active",
-                "email_verified": True,
+                "email_verified": email_verified,
             },
             on_conflict="user_id",
         ).execute()
 
         record = read_public_profile(client, uid)
-        if not record or record.get("role") != AGENT_ROLE or record.get("account_status") != "active":
+        if (
+            not record
+            or record.get("role") != AGENT_ROLE
+            or record.get("account_status") != "active"
+            or bool(record.get("email_verified")) != email_verified
+        ):
             fail("Supabase public.users verification failed. Inspect the database.")
     except SystemExit:
         raise
     except Exception as exc:
         fail(
-            "Supabase Auth exists, but public.users update failed: " + str(exc)
-            + "\nDo not create another Auth user. Inspect users/triggers and rerun."
+            "Supabase Auth identity exists, but public.users update failed: " + str(exc)
+            + "\nDo not create another Auth user. Inspect users/triggers and rerun after resolving the issue."
         )
 
     try:
-        reconcile_local_profile(uid, email, full_name)
+        reconcile_local_profile(uid, email, full_name, email_verified)
     except SystemExit:
         raise
     except Exception as exc:
@@ -275,13 +349,19 @@ def main() -> None:
             + "\nResolve backend/.env DATABASE_URL or service errors, then rerun this script."
         )
 
-    print("\nSUCCESS: SiteWise Agent provisioned in both identity stores.")
+    print("\nSUCCESS: SiteWise Agent profile synchronized.")
     print("Email:", email)
     print("Role: agent")
     print("Status: active")
+    print("Email verified:", email_verified)
     print("Supabase Auth UUID:", uid)
-    print("Next: Agent signs in through the Staff Portal and completes required MFA.")
-    print("No invitation email was sent; no administrator privilege was granted.")
+    if invited_now:
+        print("Invitation: sent by Supabase Auth.")
+        print("Next: Agent opens the email link, completes setup, and chooses a password.")
+        print("After acceptance, synchronize email_verified=True via the app callback/API or rerun this script.")
+    else:
+        print("Invitation: not sent because this Auth account is already confirmed.")
+    print("No administrator privilege was granted.")
 
 
 if __name__ == "__main__":

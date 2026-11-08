@@ -2,12 +2,14 @@ import 'dart:async';
 
 import 'package:jaspr/dom.dart';
 import 'package:jaspr/jaspr.dart';
+import 'package:jaspr_provider_compat/jaspr_provider_compat.dart' as provider;
 import 'package:shared_logic/shared_logic.dart';
 
-import '../../components/bloc.dart';
 import '../../components/ui.dart';
 import '../../data/app_locator.dart';
 import '../../layouts/app_layout.dart';
+import '../../state/app_view_model.dart';
+import '../../state/entrepreneur_view_model.dart';
 
 /// Standalone map and location analysis, laid out as the source's `map.html`.
 ///
@@ -35,7 +37,7 @@ class MapPage extends StatefulComponent {
 }
 
 class _MapPageState extends State<MapPage> {
-  late final EntrepreneurCubit vm;
+  late final EntrepreneurViewModel vm;
   String? selectedId;
   int zoom = 1;
 
@@ -44,14 +46,14 @@ class _MapPageState extends State<MapPage> {
   @override
   void initState() {
     super.initState();
-    vm = AppLocator.newEntrepreneurCubit();
+    vm = AppLocator.newEntrepreneurViewModel();
     selectedId = component.initialId;
     unawaited(vm.loadExplore());
   }
 
   @override
   void dispose() {
-    unawaited(vm.close());
+    vm.dispose();
     super.dispose();
   }
 
@@ -73,66 +75,67 @@ class _MapPageState extends State<MapPage> {
 
   @override
   Component build(BuildContext context) {
-    return CubitBuilder<AppCubit, AppState>(
-      cubit: AppLocator.appCubit,
-      builder: (context, _) {
-        return CubitBuilder<EntrepreneurCubit, EntrepreneurState>(
-          cubit: vm,
-          builder: (context, _) {
-            final selected = _selected;
-            return AppLayout(
-              role: AppRole.entrepreneur,
-              currentRoute: '/entrepreneur/map',
-              title: 'Map & surroundings',
-              eyebrow: 'Location analysis',
-              subtitle:
-                  'Select a pin to inspect its surroundings. Each panel states '
-                  'the analysis radius and the source of the figure; where a '
-                  'source returned nothing we say so — “0 records found” and '
-                  '“data unavailable” are different things and are never mixed '
-                  'up.',
-              child: vm.loading
-                  ? const _Loading()
-                  : vm.error != null
-                  ? EmptyState(
-                      title: 'Could not load the map',
-                      body:
-                          'The shared property service did not return '
-                          'listings, so there is nothing to plot yet.',
-                      action: ActionButton(
-                        'Try again',
-                        onClick: () => vm.loadExplore(),
-                      ),
-                    )
-                  : _properties.isEmpty
-                  ? const EmptyState(
-                      title: 'No available properties',
-                      body:
-                          'There are no approved available listings to map yet.',
-                      action: ActionLink(
-                        'Back to explore',
-                        href: '/entrepreneur/explore',
-                        variant: 'primary',
-                      ),
-                    )
-                  : div(classes: 'stack stack--sections', [
-                      div(classes: 'notice notice-warn', [
-                        Component.text(
-                          'Point-level competitor, demand-generator and transit '
-                          'layers are not present in the shared dataset. The '
-                          'map plots approved listings only; the aggregate '
-                          'figures for the selected property are shown below.',
+    return provider.ChangeNotifierProvider<EntrepreneurViewModel>.value(
+      value: vm,
+      child: provider.Consumer<AppViewModel>(
+        builder: (context, _, child) {
+          return provider.Consumer<EntrepreneurViewModel>(
+            builder: (context, model, child) {
+              final selected = _selected;
+              return AppLayout(
+                role: AppRole.entrepreneur,
+                currentRoute: '/entrepreneur/map',
+                title: 'Map & surroundings',
+                eyebrow: 'Location analysis',
+                subtitle:
+                    'Select a pin to inspect its surroundings. Each panel states '
+                    'the analysis radius and the source of the figure; where a '
+                    'source returned nothing we say so — “0 records found” and '
+                    '“data unavailable” are different things and are never mixed '
+                    'up.',
+                child: model.loading
+                    ? const _Loading()
+                    : model.error != null
+                    ? EmptyState(
+                        title: 'Could not load the map',
+                        body:
+                            'The shared property service did not return '
+                            'listings, so there is nothing to plot yet.',
+                        action: ActionButton(
+                          'Try again',
+                          onClick: () => vm.loadExplore(),
                         ),
+                      )
+                    : _properties.isEmpty
+                    ? const EmptyState(
+                        title: 'No available properties',
+                        body:
+                            'There are no approved available listings to map yet.',
+                        action: ActionLink(
+                          'Back to explore',
+                          href: '/entrepreneur/explore',
+                          variant: 'primary',
+                        ),
+                      )
+                    : div(classes: 'stack stack--sections', [
+                        div(classes: 'notice notice-warn', [
+                          Component.text(
+                            'Point-level competitor, demand-generator and transit '
+                            'layers are not present in the shared dataset. The '
+                            'map plots approved listings only; the aggregate '
+                            'figures for the selected property are shown below.',
+                          ),
+                        ]),
+                        div(classes: 'map-layout', [
+                          _mapPane(),
+                          _analysisColumn(selected),
+                        ]),
                       ]),
-                      div(classes: 'map-layout', [
-                        _mapPane(),
-                        _analysisColumn(selected),
-                      ]),
-                    ]),
-            );
-          },
-        );
-      },
+              );
+            },
+          );
+        },
+      ),
     );
   }
 

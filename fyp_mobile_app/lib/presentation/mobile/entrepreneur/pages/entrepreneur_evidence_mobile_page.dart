@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:shared_logic/shared_logic.dart';
 
 import '../../../../application/services/service_locator.dart';
 import '../../../../core/theme/sitewise_m3.dart';
@@ -21,14 +20,12 @@ import '../../widgets/m3_kit.dart';
 /// "requires backend check" and the UI says so.
 
 class EntrepreneurEvidenceMobilePage extends StatelessWidget {
-  final AppCubit appState;
-  const EntrepreneurEvidenceMobilePage({super.key, required this.appState});
+  const EntrepreneurEvidenceMobilePage({super.key});
 
   @override
   Widget build(BuildContext context) {
     final draft = ServiceLocator.assessmentSession.draft;
     return MobileAppShell(
-      appState: appState,
       title: 'Evidence',
       currentRoute: '/entrepreneur/assess',
       body: draft == null
@@ -77,7 +74,8 @@ class EntrepreneurEvidenceMobilePage extends StatelessWidget {
                       const _TimelineRow(
                         done: false,
                         title: 'Survey evidence requires backend check',
-                        body: 'No campaign matching or respondent validation '
+                        body:
+                            'No campaign matching or respondent validation '
                             'is connected yet.',
                       ),
                     ],
@@ -119,16 +117,16 @@ class EntrepreneurEvidenceMobilePage extends StatelessWidget {
                 ),
                 const M3Banner(
                   icon: Icons.error_outline_rounded,
-                  text: 'No live population, competition or demand evidence '
+                  text:
+                      'No live population, competition or demand evidence '
                       'has been calculated in this step.',
                 ),
                 const SizedBox(height: 18),
                 M3PrimaryButton(
                   label: 'View assessment summary',
-                  onTap: () =>
-                      Navigator.of(context).pushNamed(
-                        '/entrepreneur/assessment-summary',
-                      ),
+                  onTap: () => Navigator.of(
+                    context,
+                  ).pushNamed('/entrepreneur/assessment-summary'),
                 ),
               ],
             ),
@@ -147,7 +145,8 @@ class EntrepreneurEvidenceMobilePage extends StatelessWidget {
         M3EmptyState(
           icon: Icons.assignment_outlined,
           title: 'No assessment in progress',
-          message: 'Start an assessment from a listing or the Assess tab '
+          message:
+              'Start an assessment from a listing or the Assess tab '
               'before matching evidence.',
           actionLabel: 'Your assessments',
           onAction: () => Navigator.of(context).pushNamedAndRemoveUntil(

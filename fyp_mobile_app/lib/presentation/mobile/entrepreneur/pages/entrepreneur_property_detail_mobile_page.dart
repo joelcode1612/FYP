@@ -1,8 +1,10 @@
-import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:provider/provider.dart';
 import 'package:shared_logic/shared_logic.dart';
 import 'package:flutter/material.dart';
 
 import '../../../../application/services/service_locator.dart';
+import '../../../../application/state/app_view_model.dart';
+import '../../../../application/state/entrepreneur_view_model.dart';
 import '../../../../core/theme/sitewise_theme.dart';
 import '../../../shared/widgets/sitewise_button.dart';
 import '../../../shared/widgets/sitewise_evidence_score.dart';
@@ -27,11 +29,9 @@ import '../../widgets/mobile_suitability_badge.dart';
 /// existing route/state.
 
 class EntrepreneurPropertyDetailMobilePage extends StatefulWidget {
-  final AppCubit appState;
   final String propertyId;
   const EntrepreneurPropertyDetailMobilePage({
     super.key,
-    required this.appState,
     required this.propertyId,
   });
 
@@ -42,7 +42,11 @@ class EntrepreneurPropertyDetailMobilePage extends StatefulWidget {
 
 class _EntrepreneurPropertyDetailMobilePageState
     extends State<EntrepreneurPropertyDetailMobilePage> {
-  final vm = ServiceLocator.newEntrepreneurCubit();
+  final EntrepreneurViewModel vm = ServiceLocator.newEntrepreneurViewModel();
+
+  /// Saved / compare selections, read by the hero and action builders below.
+  /// The `Consumer<AppViewModel>` in [build] is what repaints them.
+  late final AppViewModel _app = context.read<AppViewModel>();
 
   @override
   void initState() {
@@ -50,84 +54,93 @@ class _EntrepreneurPropertyDetailMobilePageState
     vm.loadAnalysis(widget.propertyId);
   }
 
+  @override
+  void dispose() {
+    // The provider exposes this instance by value, so the route tears it down.
+    vm.dispose();
+    super.dispose();
+  }
+
   void _open(String route, {Object? arguments}) =>
       Navigator.of(context).pushNamed(route, arguments: arguments);
 
   @override
   Widget build(BuildContext context) {
-    return BlocBuilder<AppCubit, AppState>(
-      bloc: widget.appState,
-      builder: (ctx, _) => BlocBuilder<EntrepreneurCubit, EntrepreneurState>(
-        bloc: vm,
-        builder: (ctx, _) => MobileAppShell(
-          appState: widget.appState,
-          title: 'Property',
-          currentRoute: '/entrepreneur/explore',
-          body: FutureBuilder<CommercialProperty?>(
-            future: ServiceLocator.properties.detail(widget.propertyId),
-            builder: (c, snap) {
-              if (snap.connectionState != ConnectionState.done) {
-                return const MobilePropertyListSkeleton(
-                  padding: EdgeInsets.all(16),
-                );
-              }
-              final p = snap.data;
-              if (p == null) {
-                return const Center(
-                  child: Text('This property is no longer available.'),
-                );
-              }
-              final saved = widget.appState.isSaved(p.id);
-              return ListView(
-                padding: const EdgeInsets.fromLTRB(16, 14, 16, 122),
-                children: [
-                  _hero(p, saved),
-                  const SizedBox(height: 16),
-                  _identity(p),
-                  const SizedBox(height: 18),
-                  _keyFacts(p),
-                  const SizedBox(height: 22),
-                  const MobileSectionHeader(
-                    title: 'Location insights',
-                    subtitle: 'What surrounds this property.',
-                  ),
-                  const SizedBox(height: 12),
-                  _insights(p),
-                  if (p.hasTour) ...[
+    // Two slices, two rebuilds: the entrepreneur state repaints the location
+    // insights, the app-wide saved/compare sets repaint the toggles.
+    return ChangeNotifierProvider<EntrepreneurViewModel>.value(
+      value: vm,
+      child: Consumer<AppViewModel>(
+        builder: (ctx, appState, _) => Consumer<EntrepreneurViewModel>(
+          builder: (ctx, model, _) => MobileAppShell(
+            title: 'Property',
+            currentRoute: '/entrepreneur/explore',
+            body: FutureBuilder<CommercialProperty?>(
+              future: ServiceLocator.properties.detail(widget.propertyId),
+              builder: (c, snap) {
+                if (snap.connectionState != ConnectionState.done) {
+                  return const MobilePropertyListSkeleton(
+                    padding: EdgeInsets.all(16),
+                  );
+                }
+                final p = snap.data;
+                if (p == null) {
+                  return const Center(
+                    child: Text('This property is no longer available.'),
+                  );
+                }
+                final saved = _app.isSaved(p.id);
+                return ListView(
+                  padding: const EdgeInsets.fromLTRB(16, 14, 16, 122),
+                  children: [
+                    _hero(p, saved),
+                    const SizedBox(height: 16),
+                    _identity(p),
                     const SizedBox(height: 18),
+                    _keyFacts(p),
+                    const SizedBox(height: 22),
+                    const MobileSectionHeader(
+                      title: 'Location insights',
+                      subtitle: 'What surrounds this property.',
+                    ),
+                    const SizedBox(height: 12),
+                    _insights(p),
+                    if (p.hasTour) ...[
+                      const SizedBox(height: 18),
+                      SitewiseSecondaryButton(
+                        label: 'View 360° tour',
+                        icon: Icons.threesixty_rounded,
+                        onPressed: () =>
+                            _open('/entrepreneur/tour', arguments: p.id),
+                      ),
+                    ],
+                    const SizedBox(height: 22),
+                    const M3Banner(
+                      text:
+                          'Evaluate this property for your own business. '
+                          'Survey and location analysis are linked separately '
+                          'when available.',
+                    ),
+                    const SizedBox(height: 18),
+                    M3PrimaryButton(
+                      label: 'Assess this property',
+                      onTap: () => _open(
+                        '/entrepreneur/assessment-setup',
+                        arguments: p.id,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    _actions(p, saved),
+                    const SizedBox(height: 8),
                     SitewiseSecondaryButton(
-                      label: 'View 360° tour',
-                      icon: Icons.threesixty_rounded,
-                      onPressed: () =>
-                          _open('/entrepreneur/tour', arguments: p.id),
+                      label: 'Back to listings',
+                      icon: Icons.arrow_back_rounded,
+                      onPressed: () => Navigator.of(context).pop(),
                     ),
                   ],
-                  const SizedBox(height: 22),
-                  const M3Banner(
-                    text:
-                        'Evaluate this property for your own business. '
-                        'Survey and location analysis are linked separately '
-                        'when available.',
-                  ),
-                  const SizedBox(height: 18),
-                  M3PrimaryButton(
-                    label: 'Assess this property',
-                    onTap: () => _open(
-                      '/entrepreneur/assessment-setup',
-                      arguments: p.id,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  _actions(p, saved),
-                  const SizedBox(height: 8),
-                  SitewiseSecondaryButton(
-                    label: 'Back to listings',
-                    icon: Icons.arrow_back_rounded,
-                    onPressed: () => Navigator.of(context).pop(),
-                  ),
-                ],
-              );
-            },
+                );
+              },
+            ),
           ),
         ),
       ),
@@ -152,7 +165,7 @@ class _EntrepreneurPropertyDetailMobilePageState
           child: InkWell(
             customBorder: const CircleBorder(),
             onTap: () {
-              widget.appState.toggleSaved(p.id);
+              _app.toggleSaved(p.id);
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
                   content: Text(
@@ -429,20 +442,20 @@ class _EntrepreneurPropertyDetailMobilePageState
   }
 
   Widget _actions(CommercialProperty p, bool saved) {
-    final compared = widget.appState.isCompared(p.id);
+    final compared = _app.isCompared(p.id);
     return Column(
       children: [
         SitewiseButton(
           label: saved ? 'Saved ✓' : 'Save property',
           icon: saved ? Icons.bookmark_rounded : Icons.bookmark_border_rounded,
-          onPressed: () => widget.appState.toggleSaved(p.id),
+          onPressed: () => _app.toggleSaved(p.id),
         ),
         const SizedBox(height: 8),
         SitewiseSecondaryButton(
           label: compared ? 'In comparison ✓' : 'Add to compare',
           icon: Icons.compare_arrows,
           onPressed: () {
-            widget.appState.toggleCompared(p.id);
+            _app.toggleCompared(p.id);
             _open('/entrepreneur/compare');
           },
         ),

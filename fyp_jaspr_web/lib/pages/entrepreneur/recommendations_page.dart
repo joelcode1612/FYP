@@ -2,12 +2,14 @@ import 'dart:async';
 
 import 'package:jaspr/dom.dart';
 import 'package:jaspr/jaspr.dart';
+import 'package:jaspr_provider_compat/jaspr_provider_compat.dart' as provider;
 import 'package:shared_logic/shared_logic.dart';
 
-import '../../components/bloc.dart';
 import '../../components/ui.dart';
 import '../../data/app_locator.dart';
 import '../../layouts/app_layout.dart';
+import '../../state/app_view_model.dart';
+import '../../state/entrepreneur_view_model.dart';
 
 /// Web recommendations ("Your shortlist"), laid out as the source's
 /// `recommendations.html`.
@@ -30,71 +32,71 @@ class RecommendationsPage extends StatefulComponent {
 }
 
 class _RecommendationsPageState extends State<RecommendationsPage> {
-  late final EntrepreneurCubit vm;
+  late final EntrepreneurViewModel vm;
 
   @override
   void initState() {
     super.initState();
-    vm = AppLocator.newEntrepreneurCubit();
+    vm = AppLocator.newEntrepreneurViewModel();
     unawaited(vm.loadRecommendations());
   }
 
   @override
   void dispose() {
-    unawaited(vm.close());
+    vm.dispose();
     super.dispose();
   }
 
   @override
   Component build(BuildContext context) {
-    return CubitBuilder<AppCubit, AppState>(
-      cubit: AppLocator.appCubit,
-      builder: (context, _) {
-        final appCubit = AppLocator.appCubit;
-        return CubitBuilder<EntrepreneurCubit, EntrepreneurState>(
-          cubit: vm,
-          builder: (context, _) {
-            return AppLayout(
-              role: AppRole.entrepreneur,
-              currentRoute: '/entrepreneur/recommendations',
-              title: 'Your shortlist',
-              eyebrow: 'Recommendations',
-              subtitle:
-                  '${vm.prefs.businessType} · up to '
-                  'RM${vm.prefs.maxBudgetRm.toStringAsFixed(0)} · min '
-                  '${vm.prefs.minSizeSqft.toStringAsFixed(0)} sq ft. Ranked '
-                  'sites with the reasoning behind each one.',
-              actions: const [
-                ActionLink(
-                  'Edit preferences',
-                  href: '/entrepreneur/preferences',
-                  variant: 'secondary',
-                ),
-              ],
-              child: vm.loading
-                  ? const _Loading()
-                  : vm.recommendations.isEmpty
-                  ? const _Empty()
-                  : div(classes: 'stack stack--md', [
-                      for (var i = 0; i < vm.recommendations.length; i++)
-                        _row(appCubit, vm.recommendations[i], i),
-                      p(classes: 'disclaimer', [
-                        Component.text(
-                          'A suitability score is a relative decision-support '
-                          'indicator. It is not a probability of business '
-                          'success, a revenue or customer-volume forecast, '
-                          'regulatory approval, or a guarantee of any kind.',
-                        ),
+    return provider.ChangeNotifierProvider<EntrepreneurViewModel>.value(
+      value: vm,
+      child: provider.Consumer<AppViewModel>(
+        builder: (context, appVm, child) {
+          return provider.Consumer<EntrepreneurViewModel>(
+            builder: (context, model, child) {
+              return AppLayout(
+                role: AppRole.entrepreneur,
+                currentRoute: '/entrepreneur/recommendations',
+                title: 'Your shortlist',
+                eyebrow: 'Recommendations',
+                subtitle:
+                    '${model.prefs.businessType} · up to '
+                    'RM${model.prefs.maxBudgetRm.toStringAsFixed(0)} · min '
+                    '${model.prefs.minSizeSqft.toStringAsFixed(0)} sq ft. Ranked '
+                    'sites with the reasoning behind each one.',
+                actions: const [
+                  ActionLink(
+                    'Edit preferences',
+                    href: '/entrepreneur/preferences',
+                    variant: 'secondary',
+                  ),
+                ],
+                child: model.loading
+                    ? const _Loading()
+                    : model.recommendations.isEmpty
+                    ? const _Empty()
+                    : div(classes: 'stack stack--md', [
+                        for (var i = 0; i < model.recommendations.length; i++)
+                          _row(appVm, model.recommendations[i], i),
+                        p(classes: 'disclaimer', [
+                          Component.text(
+                            'A suitability score is a relative decision-support '
+                            'indicator. It is not a probability of business '
+                            'success, a revenue or customer-volume forecast, '
+                            'regulatory approval, or a guarantee of any kind.',
+                          ),
+                        ]),
                       ]),
-                    ]),
-            );
-          },
-        );
-      },
+              );
+            },
+          );
+        },
+      ),
     );
   }
 
-  Component _row(AppCubit appCubit, PropertyRecommendation r, int index) {
+  Component _row(AppViewModel appVm, PropertyRecommendation r, int index) {
     final id = r.property.id;
     final prop = r.property;
     return div(classes: 'rec-item', [
@@ -141,16 +143,16 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
             variant: 'primary',
           ),
           ActionButton(
-            appCubit.isSaved(id) ? 'Saved' : 'Save',
+            appVm.isSaved(id) ? 'Saved' : 'Save',
             variant: 'secondary',
-            icon: appCubit.isSaved(id) ? 'bookmark' : 'bookmark_border',
-            onClick: () => appCubit.toggleSaved(id),
+            icon: appVm.isSaved(id) ? 'bookmark' : 'bookmark_border',
+            onClick: () => appVm.toggleSaved(id),
           ),
           ActionButton(
-            appCubit.isCompared(id) ? 'In compare' : 'Compare',
+            appVm.isCompared(id) ? 'In compare' : 'Compare',
             variant: 'secondary',
             icon: 'compare_arrows',
-            onClick: () => appCubit.toggleCompared(id),
+            onClick: () => appVm.toggleCompared(id),
           ),
           ActionLink(
             'Why this score',

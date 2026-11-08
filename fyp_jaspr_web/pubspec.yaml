@@ -12,9 +12,6 @@ environment:
 resolution: workspace
 
 dependencies:
-  # Framework-independent bloc API for consuming the shared cubits
-  # (CubitBuilder subscribes to `cubit.stream`). Same version as shared_logic.
-  bloc: ^9.2.1
   # Server-side data loading for SSR needs a real HTTP client on the VM; the
   # browser side keeps using the JS `fetch` bridge (see data/auth_browser.dart).
   http: ^1.6.0
@@ -22,7 +19,16 @@ dependencies:
   # lib/data/api_proxy.dart (already used transitively by Jaspr).
   shelf: ^1.4.2
   jaspr: ^0.23.5
+  # Provider surface (ChangeNotifier + Provider/Consumer/Selector) for Jaspr
+  # 0.23. `jaspr_provider` itself is abandoned at 0.0.3 and pins jaspr ^0.1.4
+  # on a pre-Dart-3 SDK, so it cannot resolve here — see the package README for
+  # the port and the five documented differences.
+  jaspr_provider_compat: any
   jaspr_router: ^0.9.0
+  # Typed browser DOM bindings imported directly by the explore map's
+  # drag-to-pan helpers (lib/components/map_dom_browser.dart). Already a
+  # transitive dependency of jaspr; declared here because the import is direct.
+  universal_web: ^1.1.0
 
   # The framework-free domain + data layers, shared with the Flutter app.
   # `any` binds to the local workspace member (no path dependency needed).

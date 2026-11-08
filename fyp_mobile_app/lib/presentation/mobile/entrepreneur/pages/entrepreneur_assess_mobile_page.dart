@@ -19,14 +19,12 @@ import '../../../shared/widgets/sitewise_bottom_sheet.dart';
 /// existing one resumes it instead of creating a duplicate.
 
 class EntrepreneurAssessMobilePage extends StatelessWidget {
-  final AppCubit appState;
-  const EntrepreneurAssessMobilePage({super.key, required this.appState});
+  const EntrepreneurAssessMobilePage({super.key});
 
   @override
   Widget build(BuildContext context) {
     final draft = ServiceLocator.assessmentSession.draft;
     return MobileAppShell(
-      appState: appState,
       title: 'Assess',
       currentRoute: '/entrepreneur/assess',
       body: M3Content(
@@ -63,29 +61,32 @@ class EntrepreneurAssessMobilePage extends StatelessWidget {
               ),
             ],
           ),
-          const M3SectionRow(title: 'Recent activity', overline: 'THIS SESSION'),
+          const M3SectionRow(
+            title: 'Recent activity',
+            overline: 'THIS SESSION',
+          ),
           if (draft == null)
             M3EmptyState(
               icon: Icons.assignment_outlined,
               title: 'No assessments yet',
-              message: 'Start from a listing, or pick a property with the '
+              message:
+                  'Start from a listing, or pick a property with the '
                   'New button, to assess it for your business.',
               actionLabel: 'Find a location',
               onAction: () =>
                   Navigator.of(context).pushNamed('/entrepreneur/explore'),
             )
           else ...[
-            _DraftCard(
-              draft: draft,
-              onOpen: () => _openDraft(context, draft),
-            ),
+            _DraftCard(draft: draft, onOpen: () => _openDraft(context, draft)),
           ],
           const M3Banner(
-            text: 'Assessments are kept for this session only. Nothing is '
+            text:
+                'Assessments are kept for this session only. Nothing is '
                 'stored as history yet.',
           ),
           const M3DataNote(
-            text: 'You can begin an assessment from a listing and return to '
+            text:
+                'You can begin an assessment from a listing and return to '
                 'it here without selecting the property again.',
           ),
         ],
@@ -323,7 +324,9 @@ class _DraftCard extends StatelessWidget {
           ),
           const SizedBox(height: 4),
           Text(
-            saved ? 'Survey evidence not connected' : 'Linked property · ${p.id}',
+            saved
+                ? 'Survey evidence not connected'
+                : 'Linked property · ${p.id}',
             style: const TextStyle(
               fontFamily: kFontFamily,
               fontSize: 11,

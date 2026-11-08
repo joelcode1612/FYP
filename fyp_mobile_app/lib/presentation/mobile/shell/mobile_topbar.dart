@@ -1,6 +1,8 @@
+import 'package:provider/provider.dart';
 import 'package:shared_logic/shared_logic.dart';
 import 'package:flutter/material.dart';
 
+import '../../../application/state/app_view_model.dart';
 import '../../../core/theme/sitewise_m3.dart';
 import '../../../core/theme/sitewise_theme.dart';
 import '../../../presentation/mobile/widgets/m3_kit.dart';
@@ -19,7 +21,6 @@ import '../../shared/widgets/sitewise_role_menu.dart';
 class MobileTopBar extends StatelessWidget implements PreferredSizeWidget {
   final String title;
   final List<Widget>? actions;
-  final AppCubit appState;
 
   /// Render the Sitewise wordmark instead of the text title (used on Home).
   final bool brandTitle;
@@ -31,7 +32,6 @@ class MobileTopBar extends StatelessWidget implements PreferredSizeWidget {
     super.key,
     required this.title,
     required this.actions,
-    required this.appState,
     this.brandTitle = false,
     this.m3 = false,
   });
@@ -48,6 +48,7 @@ class MobileTopBar extends StatelessWidget implements PreferredSizeWidget {
 
   // ── Classic (admin / owner) ────────────────────────────────────────────────
   Widget _classic(BuildContext context, bool canPop) {
+    final role = context.select<AppViewModel, AppRole>((v) => v.role);
     return AppBar(
       backgroundColor: SitewiseColors.surface,
       foregroundColor: SitewiseColors.ink,
@@ -74,7 +75,7 @@ class MobileTopBar extends StatelessWidget implements PreferredSizeWidget {
             ),
       actions: [
         ...?actions,
-        if (appState.role == AppRole.entrepreneur)
+        if (role == AppRole.entrepreneur)
           InkWell(
             borderRadius: BorderRadius.circular(20),
             onTap: () =>
@@ -94,7 +95,7 @@ class MobileTopBar extends StatelessWidget implements PreferredSizeWidget {
               ),
             ),
           ),
-        SitewiseRoleMenu(appState: appState),
+        const SitewiseRoleMenu(),
         const SizedBox(width: 4),
       ],
     );

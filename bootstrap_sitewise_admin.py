@@ -21,8 +21,8 @@ from supabase.lib.client_options import ClientOptions
 
 # Public project URL and intended one-time Administrator address.
 SUPABASE_URL = "https://lzdpjwmcjbhtkzkqudyt.supabase.co"
-ADMIN_EMAIL = "admin.sitewise1@gmail.com"
-ADMIN_FULL_NAME = "Sitewise Administrator1"
+ADMIN_EMAIL = "sitewise.fyp@gmail.com"
+ADMIN_FULL_NAME = "Sitewise Administrator FYP"
 
 # SHA-256 fingerprint ONLY (not the secret) of the key previously exposed.
 EXPOSED_KEY_SHA256 = (

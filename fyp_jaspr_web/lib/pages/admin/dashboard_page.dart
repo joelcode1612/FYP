@@ -2,13 +2,14 @@ import 'dart:async';
 
 import 'package:jaspr/dom.dart';
 import 'package:jaspr/jaspr.dart';
+import 'package:jaspr_provider_compat/jaspr_provider_compat.dart' as provider;
 import 'package:shared_logic/shared_logic.dart';
 
-import '../../components/bloc.dart';
 import '../../components/letter_reveal.dart';
 import '../../components/ui.dart';
 import '../../data/app_locator.dart';
 import '../../layouts/app_layout.dart';
+import '../../state/admin_view_model.dart';
 
 /// Admin console home, restructured to the bento grid used across the app.
 ///
@@ -33,13 +34,23 @@ class DashboardPage extends StatefulComponent {
   State<DashboardPage> createState() => _DashboardPageState();
 }
 
+/// The four lists behind the KPI numbers, selected as a single value so the
+/// region rebuilds exactly when one of them changes — the `Selector` analogue
+/// of the identity comparisons the previous `buildWhen` predicate made.
+typedef _Counts = ({
+  List<CommercialProperty> queue,
+  List<VirtualTour> pendingTours,
+  List<CommercialProperty> listings,
+  List<SitewiseUser> users,
+});
+
 class _DashboardPageState extends State<DashboardPage> {
-  late final AdminCubit vm;
+  late final AdminViewModel vm;
 
   @override
   void initState() {
     super.initState();
-    vm = AppLocator.newAdminCubit();
+    vm = AppLocator.newAdminViewModel();
     unawaited(vm.loadDashboard());
     // The tours KPI and queue card read pendingTours; without this call they
     // would permanently show 0 (only the verification page loaded tours).
@@ -48,14 +59,14 @@ class _DashboardPageState extends State<DashboardPage> {
 
   @override
   void dispose() {
-    unawaited(vm.close());
+    vm.dispose();
     super.dispose();
   }
 
   @override
   Component build(BuildContext context) {
-    // The cubit never leaves this page, so callbacks close over `vm` directly
-    // (the read style) instead of capturing values from builder state.
+    // The view model never leaves this page, so callbacks close over `vm`
+    // directly (the read style) instead of capturing values from a slice.
     return AppLayout(
       role: AppRole.admin,
       currentRoute: '/admin',
@@ -64,42 +75,48 @@ class _DashboardPageState extends State<DashboardPage> {
       // `.bento-head`. Rendering both produced two competing titles, which
       // the source does not have.
       showPageHead: false,
-      // The outer builder re-renders only the loading/error shells. Data-only
-      // emits (e.g. the late tour counts) are consumed by the region builders
-      // below, so the static heading never rebuilds or replays its
-      // letter-reveal animation. A tours failure is deliberately not surfaced
-      // here: the dashboard data is still valid and the note below explains
-      // that tours are demonstration data.
-      child: CubitBuilder<AdminCubit, AdminState>(
-        cubit: vm,
-        when: (prev, next) =>
-            prev.loading != next.loading ||
-            (next.error != null &&
-                next.listings.isEmpty &&
-                next.users.isEmpty),
-        builder: (context, state) {
-          if (state.loading) return const BentoSkeleton();
-          if (state.error != null) return _error(state.error!);
-          return div(classes: 'stack', [
-            _head(),
-            _kpisRegion(),
-            div(classes: 'bento', [
-              _healthRegion(),
-              _auditCard(),
-              _propertyQueueRegion(),
-              _tourQueueRegion(),
-              _accountQueueRegion(),
-            ]),
-            p(classes: 'stat-note', [
-              Component.text(
-                'Property and account counts are read live from the '
-                'authenticated backend API. 360° tour verification is '
-                'still demonstration data — capture frames exist only on '
-                'mobile, so there is no web source yet.',
+      child: provider.ChangeNotifierProvider<AdminViewModel>.value(
+        value: vm,
+        // The outer selector re-renders only the loading/error shells. Data-only
+        // emits (e.g. the late tour counts) are consumed by the region builders
+        // below, so the static heading never rebuilds or replays its
+        // letter-reveal animation. A tours failure is deliberately not surfaced
+        // here: the dashboard data is still valid and the note below explains
+        // that tours are demonstration data — hence `queueError`, not `error`.
+        child:
+            provider.Selector<
+              AdminViewModel,
+              ({bool loading, bool queueError})
+            >(
+              selector: (context, vm) => (
+                loading: vm.loading,
+                queueError:
+                    vm.error != null && vm.listings.isEmpty && vm.users.isEmpty,
               ),
-            ]),
-          ]);
-        },
+              builder: (context, slice, child) {
+                if (slice.loading) return const BentoSkeleton();
+                if (vm.error != null) return _error(vm.error!);
+                return div(classes: 'stack', [
+                  _head(),
+                  _kpisRegion(),
+                  div(classes: 'bento', [
+                    _healthRegion(),
+                    _auditCard(),
+                    _propertyQueueRegion(),
+                    _tourQueueRegion(),
+                    _accountQueueRegion(),
+                  ]),
+                  p(classes: 'stat-note', [
+                    Component.text(
+                      'Property and account counts are read live from the '
+                      'authenticated backend API. 360° tour verification is '
+                      'still demonstration data — capture frames exist only on '
+                      'mobile, so there is no web source yet.',
+                    ),
+                  ]),
+                ]);
+              },
+            ),
       ),
     );
   }
@@ -118,65 +135,65 @@ class _DashboardPageState extends State<DashboardPage> {
 
   /// KPI row: rebuilt only when one of the four lists behind the numbers
   /// actually changes.
-  Component _kpisRegion() => CubitBuilder<AdminCubit, AdminState>(
-    cubit: vm,
-    when: (prev, next) =>
-        prev.queue != next.queue ||
-        prev.pendingTours != next.pendingTours ||
-        prev.listings != next.listings ||
-        prev.users != next.users,
-    builder: (context, state) => _kpis(state),
+  Component _kpisRegion() => provider.Selector<AdminViewModel, _Counts>(
+    selector: (context, vm) => (
+      queue: vm.queue,
+      pendingTours: vm.pendingTours,
+      listings: vm.listings,
+      users: vm.users,
+    ),
+    builder: (context, counts, child) => _kpis(counts),
   );
 
   /// Verification-health hero: depends on listings only, so a late tours emit
   /// never rebuilds (or restarts the donut transition).
-  Component _healthRegion() => CubitBuilder<AdminCubit, AdminState>(
-    cubit: vm,
-    when: (prev, next) => prev.listings != next.listings,
-    builder: (context, state) => _healthCard(),
-  );
+  Component _healthRegion() =>
+      provider.Selector<AdminViewModel, List<CommercialProperty>>(
+        selector: (context, vm) => vm.listings,
+        builder: (context, listings, child) => _healthCard(),
+      );
 
-  /// Work-queue cards: one scoped builder per card, so each card's count
+  /// Work-queue cards: one scoped selector per card, so each card's count
   /// updates independently and each stays a direct child of the `.bento`
   /// grid.
-  Component _propertyQueueRegion() => CubitBuilder<AdminCubit, AdminState>(
-    cubit: vm,
-    when: (prev, next) => prev.queue != next.queue,
-    builder: (context, state) => _queueCard(
-      'Property verification',
-      state.queue.length,
-      'Review submitted listings against the evidence the owner '
-          'provided.',
-      '/admin/verification',
-      pending: state.queue.length,
-    ),
-  );
+  Component _propertyQueueRegion() =>
+      provider.Selector<AdminViewModel, List<CommercialProperty>>(
+        selector: (context, vm) => vm.queue,
+        builder: (context, queue, child) => _queueCard(
+          'Property verification',
+          queue.length,
+          'Review submitted listings against the evidence the owner '
+              'provided.',
+          '/admin/verification',
+          pending: queue.length,
+        ),
+      );
 
-  Component _tourQueueRegion() => CubitBuilder<AdminCubit, AdminState>(
-    cubit: vm,
-    when: (prev, next) => prev.pendingTours != next.pendingTours,
-    builder: (context, state) => _queueCard(
-      '360° tour verification',
-      state.pendingTours.length,
-      'Confirm the tour belongs to the property and the '
-          'panorama is ready.',
-      '/admin/verification',
-      pending: state.pendingTours.length,
-    ),
-  );
+  Component _tourQueueRegion() =>
+      provider.Selector<AdminViewModel, List<VirtualTour>>(
+        selector: (context, vm) => vm.pendingTours,
+        builder: (context, tours, child) => _queueCard(
+          '360° tour verification',
+          tours.length,
+          'Confirm the tour belongs to the property and the '
+              'panorama is ready.',
+          '/admin/verification',
+          pending: tours.length,
+        ),
+      );
 
-  Component _accountQueueRegion() => CubitBuilder<AdminCubit, AdminState>(
-    cubit: vm,
-    when: (prev, next) => prev.users != next.users,
-    builder: (context, state) => _queueCard(
-      'Account management',
-      state.users.length,
-      'Inspect owner and administrator accounts and their '
-          'status.',
-      '/admin/users',
-      pending: 0,
-    ),
-  );
+  Component _accountQueueRegion() =>
+      provider.Selector<AdminViewModel, List<SitewiseUser>>(
+        selector: (context, vm) => vm.users,
+        builder: (context, users, child) => _queueCard(
+          'Account management',
+          users.length,
+          'Inspect owner and administrator accounts and their '
+              'status.',
+          '/admin/users',
+          pending: 0,
+        ),
+      );
 
   // -------------------------------------------------------------------- head
 
@@ -217,27 +234,27 @@ class _DashboardPageState extends State<DashboardPage> {
 
   // -------------------------------------------------------------------- KPIs
 
-  Component _kpis(AdminState state) {
-    final approved = state.listings
+  Component _kpis(_Counts counts) {
+    final approved = counts.listings
         .where((it) => it.verification == VerificationStatus.verified)
         .length;
     return div(classes: 'bento-kpis', [
       _kpi(
         'Properties awaiting review',
-        '${state.queue.length}',
-        state.queue.isEmpty ? 'Queue clear' : 'Needs a decision',
+        '${counts.queue.length}',
+        counts.queue.isEmpty ? 'Queue clear' : 'Needs a decision',
       ),
       _kpi(
         'Tours awaiting review',
-        '${state.pendingTours.length}',
-        state.pendingTours.isEmpty ? 'Queue clear' : 'Needs a decision',
+        '${counts.pendingTours.length}',
+        counts.pendingTours.isEmpty ? 'Queue clear' : 'Needs a decision',
       ),
       _kpi(
         'Approved listings',
         '$approved',
-        '${state.listings.length} in total',
+        '${counts.listings.length} in total',
       ),
-      _kpi('Accounts', '${state.users.length}', 'Administrators and owners'),
+      _kpi('Accounts', '${counts.users.length}', 'Administrators and owners'),
     ]);
   }
 

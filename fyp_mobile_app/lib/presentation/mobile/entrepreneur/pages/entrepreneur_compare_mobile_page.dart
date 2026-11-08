@@ -1,8 +1,9 @@
-import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:provider/provider.dart';
 import 'package:shared_logic/shared_logic.dart';
 import 'package:flutter/material.dart';
 
 import '../../../../application/services/service_locator.dart';
+import '../../../../application/state/app_view_model.dart';
 import '../../../../core/theme/sitewise_theme.dart';
 import '../../../shared/widgets/sitewise_button.dart';
 import '../../../shared/widgets/sitewise_empty_state.dart';
@@ -16,15 +17,12 @@ import '../../widgets/mobile_suitability_badge.dart';
 /// Mobile compare: stacked comparison cards per property — no desktop table.
 
 class EntrepreneurCompareMobilePage extends StatelessWidget {
-  final AppCubit appState;
-  const EntrepreneurCompareMobilePage({super.key, required this.appState});
+  const EntrepreneurCompareMobilePage({super.key});
 
   @override
   Widget build(BuildContext context) {
-    return BlocBuilder<AppCubit, AppState>(
-      bloc: appState,
-      builder: (ctx, _) => MobileAppShell(
-        appState: appState,
+    return Consumer<AppViewModel>(
+      builder: (ctx, appState, _) => MobileAppShell(
         title: 'Compare',
         currentRoute: '/entrepreneur/compare',
         body: appState.compared.isEmpty

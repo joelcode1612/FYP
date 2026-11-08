@@ -2,13 +2,14 @@ import 'dart:async';
 
 import 'package:jaspr/dom.dart';
 import 'package:jaspr/jaspr.dart';
+import 'package:jaspr_provider_compat/jaspr_provider_compat.dart' as provider;
 import 'package:shared_logic/shared_logic.dart';
 
-import '../../components/bloc.dart';
 import '../../components/letter_reveal.dart';
 import '../../components/ui.dart';
 import '../../data/app_locator.dart';
 import '../../layouts/app_layout.dart';
+import '../../state/owner_view_model.dart';
 
 /// Owner home, restructured to the bento grid used across the app.
 ///
@@ -24,7 +25,7 @@ import '../../layouts/app_layout.dart';
 ///               · 3 step cards ("How listing works")
 /// ```
 ///
-/// Every figure is a live count from [OwnerCubit]; nothing is fabricated.
+/// Every figure is a live count from [OwnerViewModel]; nothing is fabricated.
 @client
 class DashboardPage extends StatefulComponent {
   const DashboardPage({super.key});
@@ -34,18 +35,18 @@ class DashboardPage extends StatefulComponent {
 }
 
 class _DashboardPageState extends State<DashboardPage> {
-  late final OwnerCubit vm;
+  late final OwnerViewModel vm;
 
   @override
   void initState() {
     super.initState();
-    vm = AppLocator.newOwnerCubit();
+    vm = AppLocator.newOwnerViewModel();
     unawaited(vm.load());
   }
 
   @override
   void dispose() {
-    unawaited(vm.close());
+    vm.dispose();
     super.dispose();
   }
 
@@ -60,47 +61,49 @@ class _DashboardPageState extends State<DashboardPage> {
       // layout header and the bento head produced two competing titles,
       // which the source does not have.
       showPageHead: false,
-      // The outer builder re-renders only the loading/error shells; the
+      // The outer selector re-renders only the loading/error shells; the
       // chrome and the static heading never rebuild on a data emit.
-      child: CubitBuilder<OwnerCubit, OwnerState>(
-        cubit: vm,
-        when: (prev, next) =>
-            prev.loading != next.loading || prev.error != next.error,
-        builder: (context, state) {
-          if (state.loading) return const BentoSkeleton();
-          if (state.error != null) return _error(state.error!);
-          return div(classes: 'stack', [
-            _head(),
-            _kpis(),
-            div(classes: 'bento', [
-              _healthCard(),
-              _listingsCard(),
-              _stepCard(
-                'Step 1',
-                'Create the listing',
-                'Title, address, rent, size, type and photos.',
-              ),
-              _stepCard(
-                'Step 2',
-                'Submit for review',
-                'An administrator checks the details and photos.',
-              ),
-              _stepCard(
-                'Step 3',
-                'Publish and add a tour',
-                'Once approved, entrepreneurs can see it and you can '
-                    'submit a 360° tour.',
-              ),
-            ]),
-            p(classes: 'stat-note', [
-              Component.text(
-                'Every figure above is a live count from your saved '
-                'records. Verification status reflects the current state '
-                'of each listing in the record store.',
-              ),
-            ]),
-          ]);
-        },
+      child: provider.ChangeNotifierProvider<OwnerViewModel>.value(
+        value: vm,
+        child:
+            provider.Selector<OwnerViewModel, ({bool loading, String? error})>(
+              selector: (context, vm) => (loading: vm.loading, error: vm.error),
+              builder: (context, slice, child) {
+                if (slice.loading) return const BentoSkeleton();
+                if (slice.error != null) return _error(slice.error!);
+                return div(classes: 'stack', [
+                  _head(),
+                  _kpis(),
+                  div(classes: 'bento', [
+                    _healthCard(),
+                    _listingsCard(),
+                    _stepCard(
+                      'Step 1',
+                      'Create the listing',
+                      'Title, address, rent, size, type and photos.',
+                    ),
+                    _stepCard(
+                      'Step 2',
+                      'Submit for review',
+                      'An administrator checks the details and photos.',
+                    ),
+                    _stepCard(
+                      'Step 3',
+                      'Publish and add a tour',
+                      'Once approved, entrepreneurs can see it and you can '
+                          'submit a 360° tour.',
+                    ),
+                  ]),
+                  p(classes: 'stat-note', [
+                    Component.text(
+                      'Every figure above is a live count from your saved '
+                      'records. Verification status reflects the current state '
+                      'of each listing in the record store.',
+                    ),
+                  ]),
+                ]);
+              },
+            ),
       ),
     );
   }

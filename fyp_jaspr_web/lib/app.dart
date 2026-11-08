@@ -1,10 +1,13 @@
 import 'package:jaspr/jaspr.dart';
+import 'package:jaspr_provider_compat/jaspr_provider_compat.dart' as provider;
 import 'package:jaspr_router/jaspr_router.dart';
 import 'package:shared_logic/shared_logic.dart';
 
+import 'data/app_locator.dart';
 import 'data/auth_service.dart';
 import 'data/ssr_service.dart';
 import 'data/workspaces.dart';
+import 'state/app_view_model.dart';
 import 'pages/auth_callback_page.dart';
 import 'components/ui.dart';
 import 'layouts/marketing_layout.dart';
@@ -65,6 +68,20 @@ import 'pages/owner/tours_page.dart' as o_tours;
 /// * The active role is derived from the URL path, not from mutable client
 ///   state.
 ///
+/// ## State management
+///
+/// The app-wide [AppViewModel] (saved/compare selections, active role, preview
+/// mode) is published here through `ChangeNotifierProvider.value`, so every
+/// route reads the same instance with `context.watch<AppViewModel>()`,
+/// `Consumer` or `Selector` instead of subscribing to a cubit stream. `.value`
+/// is deliberate: the composition root owns the notifier, and Jaspr does not
+/// unmount the tree it renders on the server, so a `create:`-built notifier
+/// would leak a listener per request.
+///
+/// Per-page view models ([OwnerViewModel], [AdminViewModel],
+/// [EntrepreneurViewModel]) are provided by the page that owns their lifetime,
+/// mirroring the mobile app's per-screen lifetimes.
+///
 /// ## Where this router runs
 ///
 /// Entirely **in the browser** (`jaspr: mode: client`): `main.client.dart`
@@ -84,444 +101,450 @@ class SitewiseApp extends StatelessComponent {
 
   @override
   Component build(BuildContext context) {
-    return Router(
-      redirect: (context, state) {
-        final path = Uri.parse(state.location).path;
-        final rolePath = RegExp(
-          r'^/(entrepreneur|owner|admin|agent)(/|$)',
-        ).firstMatch(path);
-        if (rolePath == null) return null;
-        // Anonymous request for a workspace: go to the sign-in screen and keep
-        // the destination. FastAPI stays the authorization authority — every
-        // protected API call is independently verified against the bearer
-        // token, so this only prevents rendering an empty workspace shell.
-        final profile = WebAuth.profile;
-        if (profile == null) {
-          return '/login?next=${Uri.encodeComponent(state.location)}';
-        }
-        final assigned = _canonicalRoleName(profile['role'] as String?);
-        if (assigned == null) {
-          // Unsupported or missing role: fail closed rather than inventing a
-          // destination for a role string the backend did not issue.
-          return '/login';
-        }
-        final requested = rolePath.group(1)!;
-        // Workspace presentation is based on the backend-verified account
-        // role. Client-controlled demo grants cannot authorize another role.
-        // Owner is a verified property capability within entrepreneur, not a
-        // standalone role. Legacy links resolve to My Properties.
-        if (requested == 'owner') {
-          return assigned == 'entrepreneur'
-              ? '/entrepreneur/my-properties'
-              : (_roleNamed(assigned)?.homeRoute ?? '/login');
-        }
-        if (requested == assigned) return null;
-        final role = _roleNamed(requested);
-        if (role != null && Workspaces.canOpen(role)) return null;
-        // Unknown or ungranted: send the account to its own home rather than
-        // inventing a destination for a role string the backend did not issue.
-        final home = _roleNamed(assigned);
-        return home == null ? '/login' : home.homeRoute;
-      },
-      errorBuilder: (context, state) {
-        setStatusCode(context, 404);
-        return _page(
-          const MarketingLayout(
-            child: EmptyState(
-              title: 'Page not found',
-              body: 'This address does not match a Sitewise page.',
-              action: ActionLink('Back to home', href: '/'),
+    return provider.ChangeNotifierProvider<AppViewModel>.value(
+      value: AppLocator.appViewModel,
+      child: Router(
+        redirect: (context, state) {
+          final path = Uri.parse(state.location).path;
+          final rolePath = RegExp(
+            r'^/(entrepreneur|owner|admin|agent)(/|$)',
+          ).firstMatch(path);
+          if (rolePath == null) return null;
+          // Anonymous request for a workspace: go to the sign-in screen and keep
+          // the destination. FastAPI stays the authorization authority — every
+          // protected API call is independently verified against the bearer
+          // token, so this only prevents rendering an empty workspace shell.
+          final profile = WebAuth.profile;
+          if (profile == null) {
+            return '/login?next=${Uri.encodeComponent(state.location)}';
+          }
+          final assigned = _canonicalRoleName(profile['role'] as String?);
+          if (assigned == null) {
+            // Unsupported or missing role: fail closed rather than inventing a
+            // destination for a role string the backend did not issue.
+            return '/login';
+          }
+          final requested = rolePath.group(1)!;
+          // Workspace presentation is based on the backend-verified account
+          // role. Client-controlled demo grants cannot authorize another role.
+          // Owner is a verified property capability within entrepreneur, not a
+          // standalone role. Legacy links resolve to My Properties.
+          if (requested == 'owner') {
+            return assigned == 'entrepreneur'
+                ? '/entrepreneur/my-properties'
+                : (_roleNamed(assigned)?.homeRoute ?? '/login');
+          }
+          if (requested == assigned) return null;
+          final role = _roleNamed(requested);
+          if (role != null && Workspaces.canOpen(role)) return null;
+          // Unknown or ungranted: send the account to its own home rather than
+          // inventing a destination for a role string the backend did not issue.
+          final home = _roleNamed(assigned);
+          return home == null ? '/login' : home.homeRoute;
+        },
+        errorBuilder: (context, state) {
+          setStatusCode(context, 404);
+          return _page(
+            const MarketingLayout(
+              child: EmptyState(
+                title: 'Page not found',
+                body: 'This address does not match a Sitewise page.',
+                action: ActionLink('Back to home', href: '/'),
+              ),
+            ),
+            title: 'Page not found — Sitewise',
+            description: 'This address does not match a Sitewise page.',
+          );
+        },
+        routes: [
+          // --- Public ----------------------------------------------------------
+          Route(
+            path: '/',
+            builder: (context, state) => _page(
+              const LandingPage(),
+              title: 'Sitewise — F&B Location Intelligence',
+              description: kSiteDescription,
             ),
           ),
-          title: 'Page not found — Sitewise',
-          description: 'This address does not match a Sitewise page.',
-        );
-      },
-      routes: [
-        // --- Public ----------------------------------------------------------
-        Route(
-          path: '/',
-          builder: (context, state) => _page(
-            const LandingPage(),
-            title: 'Sitewise — F&B Location Intelligence',
-            description: kSiteDescription,
+          Route(
+            path: '/landing',
+            builder: (context, state) => _page(
+              const LandingPage(),
+              title: 'Sitewise — F&B Location Intelligence',
+              description: kSiteDescription,
+            ),
           ),
-        ),
-        Route(
-          path: '/landing',
-          builder: (context, state) => _page(
-            const LandingPage(),
-            title: 'Sitewise — F&B Location Intelligence',
-            description: kSiteDescription,
+          Route(
+            path: '/login',
+            builder: (context, state) => _page(
+              LoginPage(portal: state.queryParams['portal']),
+              title: 'Sign in — Sitewise',
+              description:
+                  'Sign in to Sitewise to compare F&B commercial property by '
+                  'catchment, competition and affordability.',
+            ),
           ),
-        ),
-        Route(
-          path: '/login',
-          builder: (context, state) => _page(
-            LoginPage(portal: state.queryParams['portal']),
-            title: 'Sign in — Sitewise',
-            description:
-                'Sign in to Sitewise to compare F&B commercial property by '
-                'catchment, competition and affordability.',
+          // Dedicated entry point for the Agent & Admin portal. Renders the same
+          // enhanced sign-in page in staff mode — no second, divergent page.
+          Route(
+            path: '/staff/signin',
+            builder: (context, state) => _page(
+              const LoginPage(portal: 'staff'),
+              title: 'Staff sign-in — Sitewise',
+              description:
+                  'Agent and administrator sign-in. Staff accounts require '
+                  'two-factor authentication.',
+            ),
           ),
-        ),
-        // Dedicated entry point for the Agent & Admin portal. Renders the same
-        // enhanced sign-in page in staff mode — no second, divergent page.
-        Route(
-          path: '/staff/signin',
-          builder: (context, state) => _page(
-            const LoginPage(portal: 'staff'),
-            title: 'Staff sign-in — Sitewise',
-            description:
-                'Agent and administrator sign-in. Staff accounts require '
-                'two-factor authentication.',
+          Route(
+            path: '/auth/callback',
+            builder: (context, state) =>
+                _page(const AuthCallbackPage(), title: 'Signing in — Sitewise'),
           ),
-        ),
-        Route(
-          path: '/auth/callback',
-          builder: (context, state) => _page(
-            const AuthCallbackPage(),
-            title: 'Signing in — Sitewise',
+          Route(
+            path: '/signup',
+            builder: (context, state) => _page(
+              const SignupPage(),
+              title: 'Create an account — Sitewise',
+              description:
+                  'Create a Sitewise entrepreneur account and start comparing '
+                  'F&B commercial properties.',
+            ),
           ),
-        ),
-        Route(
-          path: '/signup',
-          builder: (context, state) => _page(
-            const SignupPage(),
-            title: 'Create an account — Sitewise',
-            description:
-                'Create a Sitewise entrepreneur account and start comparing '
-                'F&B commercial properties.',
+          Route(
+            path: '/forgot',
+            builder: (context, state) => _page(
+              const ForgotPasswordPage(),
+              title: 'Reset password — Sitewise',
+            ),
           ),
-        ),
-        Route(
-          path: '/forgot',
-          builder: (context, state) => _page(
-            const ForgotPasswordPage(),
-            title: 'Reset password — Sitewise',
+          Route(
+            path: '/staff/verify',
+            builder: (context, state) => _page(
+              const StaffVerifyPage(),
+              title: 'Verify your identity — SiteWise',
+              description:
+                  'Enter your current six-digit staff authenticator code.',
+            ),
           ),
-        ),
-        Route(
-          path: '/staff/verify',
-          builder: (context, state) => _page(
-            const StaffVerifyPage(),
-            title: 'Verify your identity — SiteWise',
-            description:
-                'Enter your current six-digit staff authenticator code.',
+          // Mandatory TOTP enrollment for staff accounts (first-time setup and
+          // post-recovery re-enrollment). No public registration, no OAuth.
+          Route(
+            path: '/staff/mfa',
+            builder: (context, state) => _page(
+              const StaffMfaPage(),
+              title: 'Secure your staff account — Sitewise',
+              description:
+                  'Set up the authenticator app required for agent and '
+                  'administrator accounts.',
+            ),
           ),
-        ),
-        // Mandatory TOTP enrollment for staff accounts (first-time setup and
-        // post-recovery re-enrollment). No public registration, no OAuth.
-        Route(
-          path: '/staff/mfa',
-          builder: (context, state) => _page(
-            const StaffMfaPage(),
-            title: 'Secure your staff account — Sitewise',
-            description:
-                'Set up the authenticator app required for agent and '
-                'administrator accounts.',
+          // New-password screen for Supabase recovery / agent-invite links.
+          Route(
+            path: '/reset-password',
+            builder: (context, state) => _page(
+              const ResetPasswordPage(),
+              title: 'Choose a new password — Sitewise',
+            ),
           ),
-        ),
-        // New-password screen for Supabase recovery / agent-invite links.
-        Route(
-          path: '/reset-password',
-          builder: (context, state) => _page(
-            const ResetPasswordPage(),
-            title: 'Choose a new password — Sitewise',
-          ),
-        ),
 
-        // --- Admin -----------------------------------------------------------
-        Route(
-          path: '/admin',
-          builder: (context, state) => _page(
-            const a_dashboard.DashboardPage(),
-            title: 'Admin overview — Sitewise',
-            description: 'Listing, verification and user activity at a glance.',
-          ),
-        ),
-        Route(
-          path: '/admin/users',
-          builder: (context, state) => _page(
-            const a_users.UsersPage(),
-            title: 'Users — Sitewise admin',
-            description: 'Every registered account, its role and its status.',
-          ),
-        ),
-        Route(
-          path: '/admin/agents',
-          builder: (context, state) => _page(
-            const AdminAgentsPage(),
-            title: 'Agents — Sitewise admin',
-            description: 'Issue agent accounts and manage staff access.',
-          ),
-        ),
-        Route(
-          path: '/admin/user-detail',
-          builder: (context, state) => _page(
-            a_user_detail.UserDetailPage(id: state.queryParams['id'] ?? ''),
-            title: 'User detail — Sitewise admin',
-          ),
-        ),
-        Route(
-          path: '/admin/verification',
-          builder: (context, state) => _page(
-            const a_verification.VerificationPage(),
-            title: 'Verification queue — Sitewise admin',
-            description: 'Listing submissions waiting for an administrator.',
-          ),
-        ),
-        Route(
-          path: '/admin/verification-detail',
-          builder: (context, state) => _page(
-            a_verification_detail.VerificationDetailPage(
-              id: state.queryParams['id'] ?? '',
+          // --- Admin -----------------------------------------------------------
+          Route(
+            path: '/admin',
+            builder: (context, state) => _page(
+              const a_dashboard.DashboardPage(),
+              title: 'Admin overview — Sitewise',
+              description:
+                  'Listing, verification and user activity at a glance.',
             ),
-            title: 'Verification detail — Sitewise admin',
           ),
-        ),
-        Route(
-          path: '/admin/listings',
-          builder: (context, state) => _page(
-            const a_listings.ListingsPage(),
-            title: 'Listings — Sitewise admin',
-            description: 'Every listing on the platform and its state.',
-          ),
-        ),
-        Route(
-          path: '/admin/listing-detail',
-          builder: (context, state) => _page(
-            a_listing_detail.ListingDetailPage(
-              id: state.queryParams['id'] ?? '',
+          Route(
+            path: '/admin/users',
+            builder: (context, state) => _page(
+              const a_users.UsersPage(),
+              title: 'Users — Sitewise admin',
+              description: 'Every registered account, its role and its status.',
             ),
-            title: 'Listing detail — Sitewise admin',
           ),
-        ),
-        Route(
-          path: '/admin/profile',
-          builder: (context, state) => _page(
-            const a_profile.ProfilePage(),
-            title: 'Administrator profile — Sitewise',
+          Route(
+            path: '/admin/agents',
+            builder: (context, state) => _page(
+              const AdminAgentsPage(),
+              title: 'Agents — Sitewise admin',
+              description: 'Issue agent accounts and manage staff access.',
+            ),
           ),
-        ),
+          Route(
+            path: '/admin/user-detail',
+            builder: (context, state) => _page(
+              a_user_detail.UserDetailPage(id: state.queryParams['id'] ?? ''),
+              title: 'User detail — Sitewise admin',
+            ),
+          ),
+          Route(
+            path: '/admin/verification',
+            builder: (context, state) => _page(
+              const a_verification.VerificationPage(),
+              title: 'Verification queue — Sitewise admin',
+              description: 'Listing submissions waiting for an administrator.',
+            ),
+          ),
+          Route(
+            path: '/admin/verification-detail',
+            builder: (context, state) => _page(
+              a_verification_detail.VerificationDetailPage(
+                id: state.queryParams['id'] ?? '',
+              ),
+              title: 'Verification detail — Sitewise admin',
+            ),
+          ),
+          Route(
+            path: '/admin/listings',
+            builder: (context, state) => _page(
+              const a_listings.ListingsPage(),
+              title: 'Listings — Sitewise admin',
+              description: 'Every listing on the platform and its state.',
+            ),
+          ),
+          Route(
+            path: '/admin/listing-detail',
+            builder: (context, state) => _page(
+              a_listing_detail.ListingDetailPage(
+                id: state.queryParams['id'] ?? '',
+              ),
+              title: 'Listing detail — Sitewise admin',
+            ),
+          ),
+          Route(
+            path: '/admin/profile',
+            builder: (context, state) => _page(
+              const a_profile.ProfilePage(),
+              title: 'Administrator profile — Sitewise',
+            ),
+          ),
 
-        // --- Owner -----------------------------------------------------------
-        Route(
-          path: '/owner',
-          builder: (context, state) => _page(
-            const o_dashboard.DashboardPage(),
-            title: 'Owner overview — Sitewise',
-            description: 'Your units, tours and enquiries in one place.',
-          ),
-        ),
-        Route(
-          path: '/owner/properties',
-          builder: (context, state) => _page(
-            const o_properties.PropertiesPage(),
-            title: 'Your properties — Sitewise',
-          ),
-        ),
-        Route(
-          path: '/owner/property-detail',
-          builder: (context, state) => _page(
-            o_property_detail.PropertyDetailPage(
-              id: state.queryParams['id'] ?? '',
+          // --- Owner -----------------------------------------------------------
+          Route(
+            path: '/owner',
+            builder: (context, state) => _page(
+              const o_dashboard.DashboardPage(),
+              title: 'Owner overview — Sitewise',
+              description: 'Your units, tours and enquiries in one place.',
             ),
-            title: 'Property — Sitewise owner',
           ),
-        ),
-        Route(
-          path: '/owner/add-property',
-          builder: (context, state) => _page(
-            o_add_property.AddPropertyPage(editingId: state.queryParams['id']),
-            title: 'List a property — Sitewise',
-          ),
-        ),
-        Route(
-          path: '/owner/tours',
-          builder: (context, state) => _page(
-            const o_tours.ToursPage(),
-            title: 'Virtual tours — Sitewise owner',
-          ),
-        ),
-        Route(
-          path: '/owner/tour-preview',
-          builder: (context, state) => _page(
-            o_tour_preview.TourPreviewPage(id: state.queryParams['id'] ?? ''),
-            title: 'Tour preview — Sitewise owner',
-          ),
-        ),
-        Route(
-          path: '/owner/profile',
-          builder: (context, state) => _page(
-            const o_profile.ProfilePage(),
-            title: 'Owner profile — Sitewise',
-          ),
-        ),
-
-        // --- Entrepreneur ----------------------------------------------------
-        Route(
-          path: '/entrepreneur',
-          builder: (context, state) => _page(
-            const e_dashboard.DashboardPage(),
-            title: 'Home — Sitewise',
-            description:
-                'Saved properties, shortlists and recommendations for your '
-                'F&B search.',
-          ),
-        ),
-        Route(
-          path: '/entrepreneur/preferences',
-          builder: (context, state) => _page(
-            const e_preferences.PreferencesPage(),
-            title: 'Search preferences — Sitewise',
-            description:
-                'Budget, floor area and property type used to rank listings.',
-          ),
-        ),
-        Route(
-          path: '/entrepreneur/explore',
-          builder: (context, state) => _page(
-            e_explore.ExplorePage(startInMap: state.queryParams['id'] == 'map'),
-            title: 'Explore commercial properties — Sitewise',
-            description:
-                'Filter F&B commercial property by rent, floor area, type and '
-                'location, then read the surroundings of each unit.',
-          ),
-        ),
-        Route(
-          path: '/entrepreneur/map',
-          builder: (context, state) => _page(
-            e_map.MapPage(initialId: state.queryParams['id']),
-            title: 'Map — Sitewise',
-          ),
-        ),
-        Route(
-          path: '/entrepreneur/explanation',
-          builder: (context, state) => _page(
-            e_explanation.ExplanationPage(
-              propertyId: state.queryParams['property'] ?? '',
+          Route(
+            path: '/owner/properties',
+            builder: (context, state) => _page(
+              const o_properties.PropertiesPage(),
+              title: 'Your properties — Sitewise',
             ),
-            title: 'Why this property — Sitewise',
           ),
-        ),
-        Route(
-          path: '/entrepreneur/property-detail',
-          builder: (context, state) => _page(
-            e_property_detail.PropertyDetailPage(
-              id: state.queryParams['id'] ?? '',
+          Route(
+            path: '/owner/property-detail',
+            builder: (context, state) => _page(
+              o_property_detail.PropertyDetailPage(
+                id: state.queryParams['id'] ?? '',
+              ),
+              title: 'Property — Sitewise owner',
             ),
-            title: 'Property detail — Sitewise',
           ),
-        ),
-        Route(
-          path: '/entrepreneur/tour',
-          builder: (context, state) => _page(
-            e_tour.TourPage(id: state.queryParams['id'] ?? ''),
-            title: '360° tour — Sitewise',
+          Route(
+            path: '/owner/add-property',
+            builder: (context, state) => _page(
+              o_add_property.AddPropertyPage(
+                editingId: state.queryParams['id'],
+              ),
+              title: 'List a property — Sitewise',
+            ),
           ),
-        ),
-        Route(
-          path: '/entrepreneur/recommendations',
-          builder: (context, state) => _page(
-            const e_recommendations.RecommendationsPage(),
-            title: 'Recommendations — Sitewise',
-            description: 'Listings ranked against your stated preferences.',
+          Route(
+            path: '/owner/tours',
+            builder: (context, state) => _page(
+              const o_tours.ToursPage(),
+              title: 'Virtual tours — Sitewise owner',
+            ),
           ),
-        ),
-        Route(
-          path: '/entrepreneur/compare',
-          builder: (context, state) => _page(
-            const ComparePage(),
-            title: 'Compare properties — Sitewise',
+          Route(
+            path: '/owner/tour-preview',
+            builder: (context, state) => _page(
+              o_tour_preview.TourPreviewPage(id: state.queryParams['id'] ?? ''),
+              title: 'Tour preview — Sitewise owner',
+            ),
           ),
-        ),
-        Route(
-          path: '/entrepreneur/saved',
-          builder: (context, state) => _page(
-            const e_saved.SavedPage(),
-            title: 'Saved properties — Sitewise',
+          Route(
+            path: '/owner/profile',
+            builder: (context, state) => _page(
+              const o_profile.ProfilePage(),
+              title: 'Owner profile — Sitewise',
+            ),
           ),
-        ),
-        Route(
-          path: '/entrepreneur/my-properties',
-          builder: (context, state) => _page(
-            const e_my_properties.MyPropertiesPage(),
-            title: 'My Properties — Sitewise',
-            description: 'Properties you register for your own F&B business.',
-          ),
-        ),
-        Route(
-          path: '/entrepreneur/add-property',
-          builder: (context, state) => _page(
-            const e_add_property.AddPropertyPage(),
-            title: 'Register a property — Sitewise',
-          ),
-        ),
-        Route(
-          path: '/entrepreneur/report',
-          builder: (context, state) => _page(
-            e_report.ReportPage(id: state.queryParams['id'] ?? ''),
-            title: 'Assessment report — Sitewise',
-          ),
-        ),
-        Route(
-          path: '/entrepreneur/profile',
-          builder: (context, state) => _page(
-            const e_profile.ProfilePage(),
-            title: 'Your profile — Sitewise',
-          ),
-        ),
 
-        // --- Agent -----------------------------------------------------------
-        // The staff workspace. Reachable only through `Workspaces`; grants now
-        // survive navigation through the selection cookie.
-        Route(
-          path: '/agent',
-          builder: (context, state) => _page(
-            const AgentDashboardPage(),
-            title: 'Agent overview — Sitewise',
-            description: 'Assigned listings, enquiries and performance.',
+          // --- Entrepreneur ----------------------------------------------------
+          Route(
+            path: '/entrepreneur',
+            builder: (context, state) => _page(
+              const e_dashboard.DashboardPage(),
+              title: 'Home — Sitewise',
+              description:
+                  'Saved properties, shortlists and recommendations for your '
+                  'F&B search.',
+            ),
           ),
-        ),
-        Route(
-          path: '/agent/listings',
-          builder: (context, state) => _page(
-            const AgentListingsPage(),
-            title: 'Assigned listings — Sitewise agent',
+          Route(
+            path: '/entrepreneur/preferences',
+            builder: (context, state) => _page(
+              const e_preferences.PreferencesPage(),
+              title: 'Search preferences — Sitewise',
+              description:
+                  'Budget, floor area and property type used to rank listings.',
+            ),
           ),
-        ),
-        Route(
-          path: '/agent/property-detail',
-          builder: (context, state) => _page(
-            AgentPropertyDetailPage(id: state.queryParams['id'] ?? ''),
-            title: 'Listing — Sitewise agent',
+          Route(
+            path: '/entrepreneur/explore',
+            builder: (context, state) => _page(
+              e_explore.ExplorePage(
+                startInMap: state.queryParams['id'] == 'map',
+              ),
+              title: 'Explore commercial properties — Sitewise',
+              description:
+                  'Filter F&B commercial property by rent, floor area, type and '
+                  'location, then read the surroundings of each unit.',
+            ),
           ),
-        ),
-        Route(
-          path: '/agent/enquiries',
-          builder: (context, state) => _page(
-            const AgentEnquiriesPage(),
-            title: 'Enquiries — Sitewise agent',
+          Route(
+            path: '/entrepreneur/map',
+            builder: (context, state) => _page(
+              e_map.MapPage(initialId: state.queryParams['id']),
+              title: 'Map — Sitewise',
+            ),
           ),
-        ),
-        Route(
-          path: '/agent/performance',
-          builder: (context, state) => _page(
-            const AgentPerformancePage(),
-            title: 'Performance — Sitewise agent',
+          Route(
+            path: '/entrepreneur/explanation',
+            builder: (context, state) => _page(
+              e_explanation.ExplanationPage(
+                propertyId: state.queryParams['property'] ?? '',
+              ),
+              title: 'Why this property — Sitewise',
+            ),
           ),
-        ),
-        Route(
-          path: '/agent/profile',
-          builder: (context, state) => _page(
-            const AgentProfilePage(),
-            title: 'Agent profile — Sitewise',
+          Route(
+            path: '/entrepreneur/property-detail',
+            builder: (context, state) => _page(
+              e_property_detail.PropertyDetailPage(
+                id: state.queryParams['id'] ?? '',
+              ),
+              title: 'Property detail — Sitewise',
+            ),
           ),
-        ),
+          Route(
+            path: '/entrepreneur/tour',
+            builder: (context, state) => _page(
+              e_tour.TourPage(id: state.queryParams['id'] ?? ''),
+              title: '360° tour — Sitewise',
+            ),
+          ),
+          Route(
+            path: '/entrepreneur/recommendations',
+            builder: (context, state) => _page(
+              const e_recommendations.RecommendationsPage(),
+              title: 'Recommendations — Sitewise',
+              description: 'Listings ranked against your stated preferences.',
+            ),
+          ),
+          Route(
+            path: '/entrepreneur/compare',
+            builder: (context, state) => _page(
+              const ComparePage(),
+              title: 'Compare properties — Sitewise',
+            ),
+          ),
+          Route(
+            path: '/entrepreneur/saved',
+            builder: (context, state) => _page(
+              const e_saved.SavedPage(),
+              title: 'Saved properties — Sitewise',
+            ),
+          ),
+          Route(
+            path: '/entrepreneur/my-properties',
+            builder: (context, state) => _page(
+              const e_my_properties.MyPropertiesPage(),
+              title: 'My Properties — Sitewise',
+              description: 'Properties you register for your own F&B business.',
+            ),
+          ),
+          Route(
+            path: '/entrepreneur/add-property',
+            builder: (context, state) => _page(
+              const e_add_property.AddPropertyPage(),
+              title: 'Register a property — Sitewise',
+            ),
+          ),
+          Route(
+            path: '/entrepreneur/report',
+            builder: (context, state) => _page(
+              e_report.ReportPage(id: state.queryParams['id'] ?? ''),
+              title: 'Assessment report — Sitewise',
+            ),
+          ),
+          Route(
+            path: '/entrepreneur/profile',
+            builder: (context, state) => _page(
+              const e_profile.ProfilePage(),
+              title: 'Your profile — Sitewise',
+            ),
+          ),
 
-        // Unknown browser routes use errorBuilder above.
-      ],
+          // --- Agent -----------------------------------------------------------
+          // The staff workspace. Reachable only through `Workspaces`; grants now
+          // survive navigation through the selection cookie.
+          Route(
+            path: '/agent',
+            builder: (context, state) => _page(
+              const AgentDashboardPage(),
+              title: 'Agent overview — Sitewise',
+              description: 'Assigned listings, enquiries and performance.',
+            ),
+          ),
+          Route(
+            path: '/agent/listings',
+            builder: (context, state) => _page(
+              const AgentListingsPage(),
+              title: 'Assigned listings — Sitewise agent',
+            ),
+          ),
+          Route(
+            path: '/agent/property-detail',
+            builder: (context, state) => _page(
+              AgentPropertyDetailPage(id: state.queryParams['id'] ?? ''),
+              title: 'Listing — Sitewise agent',
+            ),
+          ),
+          Route(
+            path: '/agent/enquiries',
+            builder: (context, state) => _page(
+              const AgentEnquiriesPage(),
+              title: 'Enquiries — Sitewise agent',
+            ),
+          ),
+          Route(
+            path: '/agent/performance',
+            builder: (context, state) => _page(
+              const AgentPerformancePage(),
+              title: 'Performance — Sitewise agent',
+            ),
+          ),
+          Route(
+            path: '/agent/profile',
+            builder: (context, state) => _page(
+              const AgentProfilePage(),
+              title: 'Agent profile — Sitewise',
+            ),
+          ),
+
+          // Unknown browser routes use errorBuilder above.
+        ],
+      ),
     );
   }
 }
@@ -542,10 +565,7 @@ Component _page(
   required String title,
   String? description,
 }) => Component.fragment([
-  Document.head(
-    title: title,
-    meta: {'description': ?description},
-  ),
+  Document.head(title: title, meta: {'description': ?description}),
   child,
 ]);
 

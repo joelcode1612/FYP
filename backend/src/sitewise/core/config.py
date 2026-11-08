@@ -5,10 +5,13 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     # --- Databases ---------------------------------------------------------
-    # Application database (user profiles, saved properties, preferences).
-    database_url: str = "postgresql+psycopg2://postgres:123456@localhost:5432/sitesense"
-    # Analytics database (DOSM statistics, geospatial features). Read-only by
-    # convention; the ORM never runs create_all or migrations against it.
+    # Both URLs name the same PostgreSQL database: it holds the application
+    # tables (user profiles, saved properties, preferences) and the analytics
+    # layer (DOSM statistics, geospatial features). Startup `create_all` runs
+    # through `database_url`; the analytics engine is only ever used for reads.
+    database_url: str = (
+        "postgresql+psycopg2://postgres:123456@localhost:5432/Final_Location_Analysis"
+    )
     analytics_database_url: str = (
         "postgresql+psycopg2://postgres:123456@localhost:5432/Final_Location_Analysis"
     )

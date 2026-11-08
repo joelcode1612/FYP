@@ -26,7 +26,10 @@ async def lifespan(app: FastAPI):
     try:
         create_db_and_tables()
     except Exception:
-        pass
+        # Fail fast: without the schema every data route would 500 while
+        # /health still answered "ok". The traceback stays server-side.
+        logger.exception("Database startup failed; the API will not start.")
+        raise
     yield
 
 

@@ -1,42 +1,38 @@
 import 'package:bloc/bloc.dart';
 
-import '../../domain/entities/app_role.dart';
 import '../../domain/entities/commercial_property.dart';
 import '../../domain/entities/user.dart';
 import '../../domain/entities/virtual_tour.dart';
 import '../../domain/repositories/admin_repositories.dart';
+import '../controllers/admin_controller.dart';
 import '../services/property_service.dart';
 import '../services/tour_service.dart';
 import '../services/verification_service.dart';
 import '../states/admin_state.dart';
 
-/// Admin dashboard/users/verification flow.
+/// Cubit facade over [AdminController].
 ///
-/// Replaces the Flutter `AdminViewModel`
-/// (`fyp_mobile_app/lib/application/viewmodels/admin_viewmodel.dart`) now that
-/// the admin screens exist in both the Flutter and the Jaspr app — the
-/// query/count rules are business behaviour and must not be duplicated.
-///
-/// Behaviour is a faithful port, including the original's quirks:
-/// `setQuery` only changes view state (filtering is derived at read time),
-/// `loadPendingTours` does not toggle the [loading] flag, and a failed load
-/// surfaces `error` without clearing previously loaded lists.
+/// Every transition lives in the controller; this class only mirrors it into a
+/// `Stream` for callers that still speak cubit. The web app binds the
+/// controller directly through a `ChangeNotifier` and never constructs this,
+/// which is why the query/count rules cannot drift between platforms.
 class AdminCubit extends Cubit<AdminState> {
-  final VerificationService _verification;
-  final PropertyService _properties;
-  final UserRepository _users;
-  final TourService _tours;
+  final AdminController _controller;
 
   AdminCubit({
     required VerificationService verification,
     required PropertyService properties,
     required UserRepository users,
     required TourService tours,
-  }) : _verification = verification,
-       _properties = properties,
-       _users = users,
-       _tours = tours,
-       super(const AdminState());
+  }) : _controller = AdminController(
+         verification: verification,
+         properties: properties,
+         users: users,
+         tours: tours,
+       ),
+       super(const AdminState()) {
+    _controller.addListener(_publish);
+  }
 
   // Read-only projections of the current state, mirroring the field names the
   // Flutter `AdminViewModel` exposed, so existing UI code reads the same
@@ -57,98 +53,42 @@ class AdminCubit extends Cubit<AdminState> {
   String get query => state.query;
 
   /// Listings (including queue items) narrowed by [query].
-  List<CommercialProperty> get filteredListings {
-    if (state.query.isEmpty) return state.listings;
-    final q = state.query.toLowerCase();
-    return state.listings
-        .where(
-          (p) =>
-              '${p.title} ${p.city} ${p.state} ${p.address} '
-                      '${p.propertyType} ${p.ownerId}'
-                  .toLowerCase()
-                  .contains(q),
-        )
-        .toList();
-  }
+  List<CommercialProperty> get filteredListings => _controller.filteredListings;
 
   /// Users narrowed by [query].
-  List<SitewiseUser> get filteredUsers {
-    if (state.query.isEmpty) return state.users;
-    final q = state.query.toLowerCase();
-    return state.users
-        .where(
-          (u) => '${u.name} ${u.email} ${u.role.label} ${u.location}'
-              .toLowerCase()
-              .contains(q),
-        )
-        .toList();
-  }
+  List<SitewiseUser> get filteredUsers => _controller.filteredUsers;
 
   /// Listings per verification status — real counts from [listings].
   int countByStatus(VerificationStatus status) =>
-      state.listings.where((p) => p.verification == status).length;
+      _controller.countByStatus(status);
 
   /// Users marked pending — the real onboarding queue size.
-  int get pendingUsers =>
-      state.users.where((u) => u.status == 'Pending').length;
+  int get pendingUsers => _controller.pendingUsers;
 
-  Future<void> loadDashboard() async {
-    emit(state.copyWith(loading: true, clearError: true));
-    try {
-      final queue = await _verification.queue();
-      final listings = await _properties.listings();
-      final users = await _users.getUsers();
-      emit(
-        state.copyWith(
-          queue: queue,
-          listings: listings,
-          users: users,
-          loading: false,
-        ),
-      );
-    } catch (e) {
-      emit(state.copyWith(error: e.toString(), loading: false));
-    }
+  Future<void> loadDashboard() => _controller.loadDashboard();
+
+  Future<void> loadUsers() => _controller.loadUsers();
+
+  Future<void> loadPendingTours() => _controller.loadPendingTours();
+
+  void setQuery(String value) => _controller.setQuery(value);
+
+  Future<void> approve(String id) => _controller.approve(id);
+
+  Future<void> reject(String id, String reason) => _controller.reject(id, reason);
+
+  Future<void> approveTour(String id) => _controller.approveTour(id);
+
+  Future<void> rejectTour(String id) => _controller.rejectTour(id);
+
+  void _publish(AdminState next) {
+    if (!isClosed) super.emit(next);
   }
 
-  Future<void> loadUsers() async {
-    emit(state.copyWith(loading: true, clearError: true));
-    try {
-      final users = await _users.getUsers();
-      emit(state.copyWith(users: users, loading: false));
-    } catch (e) {
-      emit(state.copyWith(error: e.toString(), loading: false));
-    }
-  }
-
-  Future<void> loadPendingTours() async {
-    try {
-      final pendingTours = await _tours.pendingTours();
-      emit(state.copyWith(pendingTours: pendingTours));
-    } catch (e) {
-      emit(state.copyWith(error: e.toString()));
-    }
-  }
-
-  void setQuery(String value) => emit(state.copyWith(query: value));
-
-  Future<void> approve(String id) async {
-    await _verification.approve(id);
-    await loadDashboard();
-  }
-
-  Future<void> reject(String id, String reason) async {
-    await _verification.reject(id, reason);
-    await loadDashboard();
-  }
-
-  Future<void> approveTour(String id) async {
-    await _tours.approveTour(id);
-    await loadPendingTours();
-  }
-
-  Future<void> rejectTour(String id) async {
-    await _tours.rejectTour(id);
-    await loadPendingTours();
+  @override
+  Future<void> close() {
+    _controller.removeListener(_publish);
+    _controller.dispose();
+    return super.close();
   }
 }

@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:jaspr/dom.dart';
 import 'package:jaspr/jaspr.dart';
 import 'package:shared_logic/shared_logic.dart';
@@ -7,6 +5,7 @@ import 'package:shared_logic/shared_logic.dart';
 import '../../components/ui.dart';
 import '../../data/app_locator.dart';
 import '../../layouts/app_layout.dart';
+import '../../state/entrepreneur_view_model.dart';
 
 /// Web preferences, laid out as the source's `preferences.html`.
 ///
@@ -30,41 +29,69 @@ class PreferencesPage extends StatefulComponent {
 }
 
 class _PreferencesPageState extends State<PreferencesPage> {
-  late final EntrepreneurCubit vm;
+  late final EntrepreneurViewModel vm;
 
-  String _type = AppLocator.preferences.businessType;
-  double _budget = AppLocator.preferences.maxBudgetRm;
-  double _size = AppLocator.preferences.minSizeSqft;
-  bool _saved = false;
+  /// Every control maps 1:1 onto a [BusinessPreferences] field — no shared
+  /// state and no dead handlers, so what the user entered is what gets saved.
+  late String _businessType = AppLocator.preferences.businessType;
+  late String _propertyType = AppLocator.preferences.propertyType;
+  late double _minBudget = AppLocator.preferences.minBudgetRm;
+  late double _budget = AppLocator.preferences.maxBudgetRm;
+  late double _size = AppLocator.preferences.minSizeSqft;
+  late double _maxSize = AppLocator.preferences.maxSizeSqft.isFinite
+      ? AppLocator.preferences.maxSizeSqft
+      : 3000;
+  late String _targetMarket = AppLocator.preferences.requirements.join(', ');
+  String? _savedSummary;
+  bool _saving = false;
 
-  /// Types the recommendation engine can rank. Same vocabulary the source's
-  /// checkpills use, intersected with what the listing set actually contains is
-  /// not possible here without loading listings, so the enum-backed list is used.
+  /// Property types the recommendation engine can rank. Same vocabulary the
+  /// source's checkpills use.
   static const _types = ['Cafe', 'Restaurant', 'Kiosk', 'Bakery', 'Other'];
 
   @override
   void initState() {
     super.initState();
-    vm = AppLocator.newEntrepreneurCubit();
+    vm = AppLocator.newEntrepreneurViewModel();
   }
 
   @override
   void dispose() {
-    unawaited(vm.close());
+    vm.dispose();
     super.dispose();
   }
 
   void _save() {
-    vm.updatePreferences(
-      BusinessPreferences(
-        businessType: _type,
-        maxBudgetRm: _budget,
-        minSizeSqft: _size,
-        preferredAreas: AppLocator.preferences.preferredAreas,
-        seatingModel: AppLocator.preferences.seatingModel,
-      ),
+    if (_saving) return;
+    setState(() => _saving = true);
+    final value = BusinessPreferences(
+      businessType: _businessType.trim(),
+      propertyType: _propertyType,
+      minBudgetRm: _minBudget,
+      maxBudgetRm: _budget,
+      minSizeSqft: _size,
+      maxSizeSqft: _maxSize,
+      // Target market is a single free-text field; it round-trips through the
+      // first requirement entry so the saved value is what the form showed.
+      requirements: _targetMarket.trim().isEmpty
+          ? const []
+          : [_targetMarket.trim()],
+      preferredAreas: AppLocator.preferences.preferredAreas,
+      seatingModel: AppLocator.preferences.seatingModel,
     );
-    setState(() => _saved = true);
+    // The controller applies the value AND the locator persists it (session
+    // singleton + reload-surviving cookie), so the confirmation below states
+    // what the ranking engine will actually read back.
+    vm.updatePreferences(value);
+    AppLocator.persistPreferences(value);
+    setState(() {
+      _saving = false;
+      _savedSummary =
+          '${value.propertyType} · ${value.budgetDisplay} · '
+          '${value.minSizeSqft.toStringAsFixed(0)}–'
+          '${value.maxSizeSqft.toStringAsFixed(0)} sq ft'
+          '${value.requirements.isEmpty ? '' : ' · target: ${value.requirements.first}'}';
+    });
   }
 
   @override
@@ -76,8 +103,8 @@ class _PreferencesPageState extends State<PreferencesPage> {
       eyebrow: 'Recommendations',
       subtitle:
           'These values decide which properties are eligible and how candidates '
-          'are ranked. They are stored with your profile, not with any one '
-          'listing.',
+          'are ranked. They persist in this browser and are used by every '
+          'ranking you see.',
       child: div(classes: 'stack stack--sections', [
         _explainer(),
         _form(),
@@ -133,11 +160,11 @@ class _PreferencesPageState extends State<PreferencesPage> {
       _numberField(
         'Min monthly rent (RM)',
         hint: 'Properties below this are excluded.',
-        value: 1500,
+        value: _minBudget,
         min: 0,
         max: 20000,
         step: 100,
-        onChanged: (_) {},
+        onChanged: (v) => setState(() => _minBudget = v),
       ),
       _numberField(
         'Max monthly rent (RM)',
@@ -160,30 +187,29 @@ class _PreferencesPageState extends State<PreferencesPage> {
       _numberField(
         'Max floor area (sq ft)',
         hint: 'Larger units are excluded.',
-        value: 3000,
+        value: _maxSize,
         min: 200,
         max: 10000,
         step: 100,
-        onChanged: (_) {},
+        onChanged: (v) => setState(() => _maxSize = v),
       ),
     ]),
 
     div(classes: 'frow', [
-      // Property type as checkpills, as in the source. Only one type is modelled
-      // by `BusinessPreferences`, so this is a single-choice group rendered with
-      // radio inputs — the pill shape is the source's, the behaviour is honest.
+      // Property type as checkpills, as in the source. This is the field the
+      // eligibility filter reads (`propertyType`) — single-choice radio group.
       div(classes: 'field', [
         span(classes: 'field__label', [Component.text('Property type')]),
         div(classes: 'chips', [
           for (final t in _types)
-            label(classes: t == _type ? 'checkpill is-on' : 'checkpill', [
+            label(classes: t == _propertyType ? 'checkpill is-on' : 'checkpill', [
               input(
                 attributes: {
                   'type': 'radio',
-                  'name': 'businessType',
-                  if (t == _type) 'checked': '',
+                  'name': 'propertyType',
+                  if (t == _propertyType) 'checked': '',
                 },
-                events: events(onChange: (_) => setState(() => _type = t)),
+                events: events(onChange: (_) => setState(() => _propertyType = t)),
               ),
               span([Component.text(t)]),
             ]),
@@ -193,18 +219,20 @@ class _PreferencesPageState extends State<PreferencesPage> {
         ]),
       ]),
 
+      // Business category describes the entrepreneur's concept; it is stored
+      // separately from the property type instead of overwriting it.
       div(classes: 'field', [
         span(classes: 'field__label', [Component.text('Business category')]),
         input(
           attributes: {
             'type': 'text',
-            'value': _type,
+            'value': _businessType,
             'placeholder': 'e.g. Cafe',
           },
-          events: events<String>(onInput: (v) => _type = v),
+          events: events<String>(onInput: (v) => setState(() => _businessType = v)),
         ),
         span(classes: 'hint', [
-          Component.text('Stored with your profile for reporting context.'),
+          Component.text('Describes your concept; kept with your profile.'),
         ]),
       ]),
 
@@ -213,18 +241,23 @@ class _PreferencesPageState extends State<PreferencesPage> {
         input(
           attributes: {
             'type': 'text',
+            'value': _targetMarket,
             'placeholder': 'e.g. Office workers, students',
           },
+          events: events<String>(onInput: (v) => setState(() => _targetMarket = v)),
         ),
         span(classes: 'hint', [
-          Component.text('Free text kept for your own notes.'),
+          Component.text('Saved with your preferences as a requirement note.'),
         ]),
       ]),
 
       div(classes: 'field', [
         span(classes: 'field__label', [Component.text('\u00a0')]),
         div(classes: 'actions-row', [
-          ActionButton('Save preferences', onClick: _save),
+          ActionButton(
+            _saving ? 'Saving…' : 'Save preferences',
+            onClick: _save,
+          ),
           const ActionLink(
             'See recommendations',
             href: '/entrepreneur/recommendations',
@@ -234,12 +267,12 @@ class _PreferencesPageState extends State<PreferencesPage> {
       ]),
     ]),
 
-    if (_saved)
+    if (_savedSummary != null)
       div(classes: 'notice notice-info', [
-        Component.text(
-          'Preferences saved. Recommendations are now ranked with your new '
-          'criteria.',
-        ),
+        div([
+          Component.text('Preferences saved and in use by your rankings.'),
+          span(classes: 'small muted', [Component.text(' Saved criteria: $_savedSummary')]),
+        ]),
       ]),
   ]);
 

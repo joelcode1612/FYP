@@ -2,14 +2,17 @@ import 'dart:async';
 
 import 'package:jaspr/dom.dart';
 import 'package:jaspr/jaspr.dart';
+import 'package:jaspr_provider_compat/jaspr_provider_compat.dart' as provider;
 import 'package:shared_logic/shared_logic.dart';
 
-import '../../components/bloc.dart';
 import '../../components/filter_panel.dart';
+import '../../components/map_dom.dart';
 import '../../components/property_card.dart';
 import '../../components/ui.dart';
 import '../../data/app_locator.dart';
 import '../../layouts/app_layout.dart';
+import '../../state/app_view_model.dart';
+import '../../state/entrepreneur_view_model.dart';
 
 /// Web explore, laid out as the source's `explore.html` with the `map.html`
 /// section appended — the target serves both source pages from this one route.
@@ -17,23 +20,26 @@ import '../../layouts/app_layout.dart';
 /// ```text
 /// .page-head        "Explore" · "Commercial properties" · description
 /// .filters          keyword · rent/area ranges · type/state/city · verification
-/// count line
+/// count line        + sort control
 /// .pgrid            property cards
 /// section           "Map & surroundings"
 ///   .map-layout     .map-pane (layers + pins + legend) | .analysis (.a-card…)
 /// ```
 ///
-/// The previous version was a split panel (list on the left, map on the right)
-/// with the filter form hidden behind a toggle — a layout from an older mockup,
-/// not this design. The filter form is now always visible, as in the source, and
-/// the map moved into its own labelled section instead of occupying the whole
-/// viewport.
+/// One sequence drives everything: `_results` is the filtered-and-sorted list,
+/// and both the grid and the map read it, so the two can never disagree.
+/// Selecting a pin highlights its card; a card's Locate button centers its pin
+/// and scrolls to the map section.
 ///
-/// Two honesty constraints are unchanged:
+/// Honesty constraints:
 ///  * there is **no map SDK** in either tree, so the surface is the stylised
-///    panel the mobile app uses; only the interaction is real;
-///  * zoom is **real** — it scales the lat/lng projection, so pins genuinely
-///    move and clip.
+///    projection panel the mobile app uses — but the interactions are real:
+///    zoom re-projects every pin, drag pans the view, and dense cells collapse
+///    into count clusters rather than a pile of overlapping pins;
+///  * pins that fall outside the canvas are clipped by the overflow, never
+///    clamped onto unrelated positions;
+///  * where the dataset has no coordinates the map says so instead of plotting
+///    nothing silently.
 @client
 class ExplorePage extends StatefulComponent {
   /// Open scrolled to the map section (route passes `id == 'map'`).
@@ -45,24 +51,51 @@ class ExplorePage extends StatefulComponent {
   State<ExplorePage> createState() => _ExplorePageState();
 }
 
-class _ExplorePageState extends State<ExplorePage> with PreloadStateMixin<ExplorePage> {
-  EntrepreneurCubit? _vm;
+class _ExplorePageState extends State<ExplorePage>
+    with PreloadStateMixin<ExplorePage> {
+  EntrepreneurViewModel? _vm;
 
-  /// Created on first use so the server preload and the browser share one
-  /// cubit instead of fetching the same listings twice.
-  EntrepreneurCubit get vm => _vm ??= AppLocator.newEntrepreneurCubit();
+  /// Created on first use so the server preload and the browser share one view
+  /// model instead of fetching the same listings twice.
+  EntrepreneurViewModel get vm => _vm ??= AppLocator.newEntrepreneurViewModel();
 
-  /// The structured filter, applied on top of the cubit's query results.
+  /// The structured filter, applied on top of the view model's query results.
   PropertyFilter filter = PropertyFilter.empty;
 
-  /// Property chosen from a pin, shown in the map's first analysis card.
+  /// Sort applied after filtering — the grid and the map read the same order.
+  ExploreSort sort = ExploreSort.imported;
+
+  /// Property chosen from a pin, shown in the map popup and highlighted in
+  /// the grid.
   String? selectedId;
+
+  /// Analysis future for the current selection, created once per selection:
+  /// re-creating it on every rebuild (each pan frame, each filter edit) would
+  /// re-request the analysis and flicker the column back to its loading state.
+  Future<LocationAnalysis?>? _analysisFuture;
 
   /// Real zoom factor applied to the pin projection.
   int zoom = 1;
+
+  /// Pan offset in percent of the canvas, added on top of the projection.
+  double panX = 0;
+  double panY = 0;
+
+  // Drag-to-pan bookkeeping.
+  bool _dragging = false;
+  double _dragClientX = 0;
+  double _dragClientY = 0;
+  double _panStartX = 0;
+  double _panStartY = 0;
+
+  Timer? _queryDebounce;
   int _visibleLimit = 24;
 
   static const _zoomLevels = [1, 2, 4];
+
+  /// Cluster cell size as a percent of the canvas: pins landing in the same
+  /// cell collapse into one count pill.
+  static const double _clusterCell = 8.0;
 
   @override
   Future<void> preloadState() => vm.loadExplore();
@@ -75,12 +108,13 @@ class _ExplorePageState extends State<ExplorePage> with PreloadStateMixin<Explor
 
   @override
   void dispose() {
-    final cubit = _vm;
-    if (cubit != null) unawaited(cubit.close());
+    _queryDebounce?.cancel();
+    _vm?.dispose();
     super.dispose();
   }
 
-  List<CommercialProperty> get _results => filter.apply(vm.explore);
+  List<CommercialProperty> get _results =>
+      sortForExplore(filter.apply(vm.explore), sort);
 
   /// Listings that can actually be plotted. A listing with no coordinates would
   /// otherwise land at 0,0 in the projection.
@@ -100,54 +134,105 @@ class _ExplorePageState extends State<ExplorePage> with PreloadStateMixin<Explor
   void _setFilter(PropertyFilter next) => setState(() {
     _visibleLimit = 24;
     filter = next;
-    if (selectedId != null && !_results.any((prop) => prop.id == selectedId)) {
-      selectedId = null;
-    }
+    _clearSelectionIfMissing();
   });
 
   void _reset() => setState(() {
     _visibleLimit = 24;
     filter = PropertyFilter.empty;
     selectedId = null;
+    _analysisFuture = null;
   });
+
+  void _clearSelectionIfMissing() {
+    if (selectedId != null && !_results.any((prop) => prop.id == selectedId)) {
+      selectedId = null;
+      _analysisFuture = null;
+    }
+  }
+
+  void _setSort(ExploreSort next) => setState(() => sort = next);
+
+  void _showAll() => setState(() {
+    zoom = _zoomLevels.first;
+    panX = 0;
+    panY = 0;
+  });
+
+  /// Selects [prop] for the map popup and the grid highlight, making sure the
+  /// highlighted card is rendered past the visible limit.
+  void _select(CommercialProperty prop) => setState(() {
+    selectedId = prop.id;
+    final future = AppLocator.recommendations.analysis(prop.id);
+    // The repository reports unavailable analysis by failing this future. The
+    // FutureBuilder subscribes only on the next rebuild, so without a listener
+    // attached now the error escapes to the zone as uncaught.
+    unawaited(future.then<void>((_) {}, onError: (Object e, StackTrace s) {}));
+    _analysisFuture = future;
+    final index = _results.indexWhere((r) => r.id == prop.id);
+    if (index >= _visibleLimit) _visibleLimit = index + 1;
+  });
+
+  /// Locates a listing on the map: select it, pan the canvas so its pin sits
+  /// centered, then bring the map section into view.
+  void _locate(CommercialProperty prop) {
+    _select(prop);
+    final (left, top) = _project(prop, zoom);
+    setState(() {
+      panX = (50 - left).clamp(-50, 50).toDouble();
+      panY = (50 - top).clamp(-50, 50).toDouble();
+    });
+    Future.delayed(const Duration(milliseconds: 80), () {
+      scrollDomIntoView('map');
+    });
+  }
+
+  void _onQueryChanged(String value) {
+    // The view model refetches and notifies for every query change, which
+    // would flash the whole page per keystroke — settle first.
+    _queryDebounce?.cancel();
+    _queryDebounce = Timer(const Duration(milliseconds: 250), () {
+      vm.setQuery(value);
+    });
+  }
 
   @override
   Component build(BuildContext context) {
-    return CubitBuilder<AppCubit, AppState>(
-      cubit: AppLocator.appCubit,
-      builder: (context, _) {
-        final appCubit = AppLocator.appCubit;
-        return CubitBuilder<EntrepreneurCubit, EntrepreneurState>(
-          cubit: vm,
-          builder: (context, _) {
-            return AppLayout(
-              role: AppRole.entrepreneur,
-              currentRoute: '/entrepreneur/explore',
-              title: 'Commercial properties',
-              eyebrow: 'Explore',
-              subtitle:
-                  'Accepted property records from your imported workbook. Dataset '
-                  'quality checks do not establish current availability or administrator verification.',
-              child: vm.loading
-                  ? const _Loading()
-                  : vm.error != null
-                  ? EmptyState(
-                      title: 'Properties could not load',
-                      body: vm.error!,
-                      action: ActionButton(
-                        'Try again',
-                        onClick: () => vm.loadExplore(),
-                      ),
-                    )
-                  : div(classes: 'stack stack--sections', [
-                      _filterSection(),
-                      _resultsSection(appCubit),
-                      _mapSection(),
-                    ]),
-            );
-          },
-        );
-      },
+    return provider.ChangeNotifierProvider<EntrepreneurViewModel>.value(
+      value: vm,
+      child: provider.Consumer<AppViewModel>(
+        builder: (context, appVm, child) {
+          return provider.Consumer<EntrepreneurViewModel>(
+            builder: (context, model, child) {
+              return AppLayout(
+                role: AppRole.entrepreneur,
+                currentRoute: '/entrepreneur/explore',
+                title: 'Commercial properties',
+                eyebrow: 'Explore',
+                subtitle:
+                    'Accepted property records from your imported workbook. Dataset '
+                    'quality checks do not establish current availability or administrator verification.',
+                child: model.loading
+                    ? const _Loading()
+                    : model.error != null
+                    ? EmptyState(
+                        title: 'Properties could not load',
+                        body: model.error!,
+                        action: ActionButton(
+                          'Try again',
+                          onClick: () => vm.loadExplore(),
+                        ),
+                      )
+                    : div(classes: 'stack stack--sections', [
+                        _filterSection(),
+                        _resultsSection(appVm),
+                        _mapSection(),
+                      ]),
+              );
+            },
+          );
+        },
+      ),
     );
   }
 
@@ -158,14 +243,14 @@ class _ExplorePageState extends State<ExplorePage> with PreloadStateMixin<Explor
     source: vm.explore,
     results: _results,
     query: vm.query,
-    onQueryChanged: vm.setQuery,
+    onQueryChanged: _onQueryChanged,
     onChanged: _setFilter,
     onReset: _reset,
   );
 
   // ------------------------------------------------------------------ results
 
-  Component _resultsSection(AppCubit appCubit) {
+  Component _resultsSection(AppViewModel appVm) {
     final results = _results;
     if (results.isEmpty) {
       return EmptyState(
@@ -179,21 +264,47 @@ class _ExplorePageState extends State<ExplorePage> with PreloadStateMixin<Explor
     }
 
     return div(classes: 'stack stack--md', [
-      p(classes: 'small', [
-        Component.text(
-          '${results.length} ${results.length == 1 ? 'property' : 'properties'} '
-          'match your filters.',
-        ),
+      div(classes: 'explore__results-head', [
+        p(classes: 'small', [
+          Component.text(
+            '${results.length} ${results.length == 1 ? 'property' : 'properties'} '
+            'match your filters.',
+          ),
+        ]),
+        div(classes: 'explore__sort', [
+          span(classes: 'field__label', [Component.text('Sort by')]),
+          select(
+            attributes: const {'aria-label': 'Sort listings'},
+            events: events<List<String>>(
+              onInput: (values) => _setSort(
+                values.isNotEmpty
+                    ? ExploreSort.values.byName(values.first)
+                    : ExploreSort.imported,
+              ),
+            ),
+            [
+              for (final s in ExploreSort.values)
+                option(
+                  value: s.name,
+                  attributes: {if (s == sort) 'selected': ''},
+                  [Component.text(_sortLabel(s))],
+                ),
+            ],
+          ),
+        ]),
       ]),
       div(classes: 'pgrid', [
         for (final p in results.take(_visibleLimit))
           PropertyCard(
             property: p,
             href: '/entrepreneur/property-detail?id=${p.id}',
-            saved: appCubit.isSaved(p.id),
-            compared: appCubit.isCompared(p.id),
-            onToggleSaved: () => appCubit.toggleSaved(p.id),
-            onToggleCompared: () => appCubit.toggleCompared(p.id),
+            selected: p.id == selectedId,
+            anchorId: 'pcard-${p.id}',
+            saved: appVm.isSaved(p.id),
+            compared: appVm.isCompared(p.id),
+            onToggleSaved: () => appVm.toggleSaved(p.id),
+            onToggleCompared: () => appVm.toggleCompared(p.id),
+            onLocate: () => _locate(p),
           ),
       ]),
       if (results.length > _visibleLimit)
@@ -217,10 +328,10 @@ class _ExplorePageState extends State<ExplorePage> with PreloadStateMixin<Explor
           h2(classes: 'title-lg', [Component.text('Map & surroundings')]),
           p(classes: 'small', [
             Component.text(
-              'Select a pin to inspect its surroundings. Each panel states the '
-              'analysis radius and the source of the figure; where a source returned '
-              'nothing we say so — "0 records found" and "data unavailable" are '
-              'different things and are never mixed up.',
+              'Drag to pan, zoom to spread the pins apart, and select a pin to '
+              'inspect its surroundings. Where a source returned nothing we say '
+              'so — "0 records found" and "data unavailable" are different '
+              'things and are never mixed up.',
             ),
           ]),
         ]),
@@ -232,6 +343,7 @@ class _ExplorePageState extends State<ExplorePage> with PreloadStateMixin<Explor
   Component _mapPane() {
     final canZoomIn = zoom < _zoomLevels.last;
     final canZoomOut = zoom > _zoomLevels.first;
+    final pins = _mapPins();
     return div(classes: 'map-pane', [
       div(classes: 'layer-bar', [
         for (final layer in const [
@@ -252,63 +364,75 @@ class _ExplorePageState extends State<ExplorePage> with PreloadStateMixin<Explor
             [Component.text(layer)],
           ),
       ]),
-      div(classes: 'map-canvas', [
-        div(classes: 'visual__grid', []),
-        if (_mappable.isEmpty)
-          span(classes: 'visual__chip', [
-            Component.text('No properties to plot'),
-          ]),
-        for (final p in _mappable)
-          button(
-            classes: p.id == selectedId ? 'map-pin map-pin--active' : 'map-pin',
-            attributes: {
-              'type': 'button',
-              'style': _pinPosition(p, zoom),
-              'title': p.title,
-              'aria-label': '${p.title}, ${_compactRm(p.rentalRm)}',
-            },
-            events: events(onClick: () => setState(() => selectedId = p.id)),
-            [
-              Icon('place', size: 'sm'),
-              span(classes: 'map-pin__price', [
-                Component.text(_compactRm(p.rentalRm)),
+      div(
+        classes: _dragging ? 'map-canvas map-canvas--dragging' : 'map-canvas',
+        events: {
+          'pointerdown': _onPointerDown,
+          'pointermove': _onPointerMove,
+          'pointerup': (_) => _onPointerEnd(),
+          'pointercancel': (_) => _onPointerEnd(),
+          'pointerleave': (_) => _onPointerEnd(),
+        },
+        [
+          div(classes: 'visual__grid', []),
+          if (pins.isEmpty)
+            div(classes: 'explore__map-empty', [
+              Icon('location_off', size: 'lg'),
+              strong([Component.text('Nothing to plot')]),
+              p(classes: 'small', [
+                Component.text(
+                  'None of the matching listings has coordinates in the '
+                  'dataset, so there is nothing to place on the map. The '
+                  'listings above are unaffected.',
+                ),
               ]),
-            ],
-          ),
-        // Zoom is real: it re-projects every pin.
-        div(classes: 'explore__zoom', [
-          button(
-            classes: canZoomIn
-                ? 'explore__zoom-btn'
-                : 'explore__zoom-btn is-disabled',
-            attributes: {'type': 'button', 'aria-label': 'Zoom in'},
-            events: events(
-              onClick: canZoomIn
-                  ? () => setState(
-                      () => zoom = _zoomLevels[_zoomLevels.indexOf(zoom) + 1],
-                    )
-                  : null,
+            ]),
+          ...pins,
+          // Zoom is real: it re-projects every pin.
+          div(classes: 'explore__zoom', [
+            button(
+              classes: canZoomIn
+                  ? 'explore__zoom-btn'
+                  : 'explore__zoom-btn is-disabled',
+              attributes: {'type': 'button', 'aria-label': 'Zoom in'},
+              events: events(
+                onClick: canZoomIn
+                    ? () => setState(
+                        () => zoom = _zoomLevels[_zoomLevels.indexOf(zoom) + 1],
+                      )
+                    : null,
+              ),
+              [Icon('add')],
             ),
-            [Icon('add')],
-          ),
-          button(
-            classes: canZoomOut
-                ? 'explore__zoom-btn'
-                : 'explore__zoom-btn is-disabled',
-            attributes: {'type': 'button', 'aria-label': 'Zoom out'},
-            events: events(
-              onClick: canZoomOut
-                  ? () => setState(
-                      () => zoom = _zoomLevels[_zoomLevels.indexOf(zoom) - 1],
-                    )
-                  : null,
+            button(
+              classes: canZoomOut
+                  ? 'explore__zoom-btn'
+                  : 'explore__zoom-btn is-disabled',
+              attributes: {'type': 'button', 'aria-label': 'Zoom out'},
+              events: events(
+                onClick: canZoomOut
+                    ? () => setState(
+                        () => zoom = _zoomLevels[_zoomLevels.indexOf(zoom) - 1],
+                      )
+                    : null,
+              ),
+              [Icon('remove')],
             ),
-            [Icon('remove')],
-          ),
-        ]),
-        if (zoom > 1)
-          span(classes: 'explore__map-zoom', [Component.text('$zoom×')]),
-      ]),
+            button(
+              classes: 'explore__zoom-btn',
+              attributes: {
+                'type': 'button',
+                'aria-label': 'Show all properties',
+                'title': 'Show all properties',
+              },
+              events: events(onClick: _showAll),
+              [Icon('public')],
+            ),
+          ]),
+          if (zoom > 1)
+            span(classes: 'explore__map-zoom', [Component.text('$zoom×')]),
+        ],
+      ),
       div(classes: 'map-legend', [
         _legendItem('lg-prop', 'Property'),
         _legendItem('lg-comp', 'Competitor'),
@@ -317,6 +441,102 @@ class _ExplorePageState extends State<ExplorePage> with PreloadStateMixin<Explor
         _legendItem('lg-pop', 'Population radius'),
       ]),
     ]);
+  }
+
+  /// Buckets the mappable listings into grid cells of [_clusterCell] percent.
+  /// A cell with a single pin renders that pin; a shared cell renders one
+  /// count cluster instead of a pile of overlapping pins.
+  List<Component> _mapPins() {
+    final cells = <String, List<CommercialProperty>>{};
+    for (final p in _mappable) {
+      final (left, top) = _project(p, zoom);
+      final key =
+          '${(left / _clusterCell).floor()}:${(top / _clusterCell).floor()}';
+      (cells[key] ??= []).add(p);
+    }
+    return [
+      for (final group in cells.values)
+        group.length == 1 ? _pin(group.single) : _cluster(group),
+    ];
+  }
+
+  Component _pin(CommercialProperty p) => button(
+    classes: p.id == selectedId ? 'map-pin map-pin--active' : 'map-pin',
+    attributes: {
+      'type': 'button',
+      'style': _pinStyle(p, zoom, panX, panY),
+      'title': p.title,
+      'aria-label': '${p.title}, ${_compactRm(p.rentalRm)}',
+    },
+    events: events(onClick: () => _select(p)),
+    [
+      Icon('place', size: 'sm'),
+      span(classes: 'map-pin__price', [Component.text(_compactRm(p.rentalRm))]),
+    ],
+  );
+
+  Component _cluster(List<CommercialProperty> group) {
+    final anchor = group.first;
+    final (left, top) = _project(anchor, zoom);
+    final active = group.any((g) => g.id == selectedId);
+    return button(
+      classes: active ? 'map-cluster map-cluster--active' : 'map-cluster',
+      attributes: {
+        'type': 'button',
+        'style':
+            'left:${(left + panX).toStringAsFixed(2)}%;top:${(top + panY).toStringAsFixed(2)}%;',
+        'title': '${group.length} properties share this area',
+        'aria-label':
+            'Cluster of ${group.length} properties; zoom in to separate them',
+      },
+      events: events(onClick: () => _expandCluster(group)),
+      [Component.text('${group.length}')],
+    );
+  }
+
+  void _expandCluster(List<CommercialProperty> group) {
+    if (zoom < _zoomLevels.last) {
+      setState(() => zoom = _zoomLevels[_zoomLevels.indexOf(zoom) + 1]);
+    } else {
+      // At maximum zoom the members stay merged — select the first record
+      // rather than pretending the cluster opened up.
+      _select(group.first);
+    }
+  }
+
+  // Drag-to-pan. The browser-specific coordinate reads live behind the
+  // stub/browser split in `map_dom.dart`; the 3px threshold keeps a pin click
+  // from being misread as a pan.
+  void _onPointerDown(Object e) {
+    setState(() {
+      _dragging = true;
+      _dragClientX = pointerClientX(e);
+      _dragClientY = pointerClientY(e);
+      _panStartX = panX;
+      _panStartY = panY;
+    });
+  }
+
+  void _onPointerMove(Object e) {
+    if (!_dragging) return;
+    final dx = pointerClientX(e) - _dragClientX;
+    final dy = pointerClientY(e) - _dragClientY;
+    if (dx.abs() < 3 && dy.abs() < 3) return;
+    setState(() {
+      // px -> percent of the canvas, clamped so the projection cannot be
+      // dragged arbitrarily far off.
+      panX = (_panStartX + dx / windowInnerWidth() * 100)
+          .clamp(-50, 50)
+          .toDouble();
+      panY = (_panStartY + dy / windowInnerHeight() * 100)
+          .clamp(-50, 50)
+          .toDouble();
+    });
+  }
+
+  void _onPointerEnd() {
+    if (!_dragging) return;
+    setState(() => _dragging = false);
   }
 
   Component _legendItem(String cls, String label) =>
@@ -339,6 +559,7 @@ class _ExplorePageState extends State<ExplorePage> with PreloadStateMixin<Explor
 
   Component _selectedCard(CommercialProperty prop) => div(classes: 'a-card', [
     h3([Component.text(prop.title)]),
+    p(classes: 'meta', [Component.text('#${prop.id} · ${prop.propertyType}')]),
     p(classes: 'what', [
       Component.text(
         '${prop.address}, ${prop.city} · ${prop.rentalDisplay} · '
@@ -357,7 +578,7 @@ class _ExplorePageState extends State<ExplorePage> with PreloadStateMixin<Explor
     ]),
     p([
       ActionLink(
-        'Full details',
+        'View listing',
         href: '/entrepreneur/property-detail?id=${prop.id}',
         variant: 'secondary',
       ),
@@ -366,10 +587,10 @@ class _ExplorePageState extends State<ExplorePage> with PreloadStateMixin<Explor
 
   List<Component> _analysisCards(CommercialProperty? selected) {
     final id = selected?.id;
-    final cards = <Component>[];
+    final future = _analysisFuture;
 
-    if (id == null) {
-      cards.add(
+    if (id == null || future == null) {
+      return [
         div(classes: 'a-card', [
           h3([Component.text('Select a property')]),
           p(classes: 'what', [
@@ -380,18 +601,24 @@ class _ExplorePageState extends State<ExplorePage> with PreloadStateMixin<Explor
             ),
           ]),
         ]),
-      );
-      return cards;
+      ];
     }
 
-    // The cubit loads one analysis at a time, so the column reflects the last
-    // `loadAnalysis` call rather than the pin the user just clicked. Show the
-    // pending state instead of the previous property's numbers.
     return [
       FutureBuilder<LocationAnalysis?>(
-        future: AppLocator.recommendations.analysis(id),
+        future: future,
         builder: (context, snap) {
           if (!snap.hasData) {
+            // A failed request is "no analysis available", not a spinner: the
+            // web tree has no analysis backend and must say so.
+            if (snap.hasError) {
+              return div(classes: 'a-card', [
+                h3([Component.text('Location analysis')]),
+                p(classes: 'what', [
+                  Component.text('No analysis is available for this property.'),
+                ]),
+              ]);
+            }
             return div(classes: 'a-card', [
               div(classes: 'loading', [
                 span(classes: 'spinner', []),
@@ -514,17 +741,37 @@ class _ExplorePageState extends State<ExplorePage> with PreloadStateMixin<Explor
 
   // ------------------------------------------------------------------ helpers
 
-  /// Same projection as the Flutter `SitewiseMapPanel`. Zoom divides the span, so
-  /// a higher zoom spreads the same coordinates further apart; pins that fall
-  /// outside are clipped by the map's overflow rather than clamped to the edge,
-  /// which would pile unrelated properties on top of each other.
-  static String _pinPosition(CommercialProperty prop, int zoom) {
+  /// Same projection as the Flutter `SitewiseMapPanel`. Zoom divides the span,
+  /// so a higher zoom spreads the same coordinates further apart; pan shifts
+  /// the result by a percent of the canvas. Pins that fall outside are clipped
+  /// by the map's overflow rather than clamped to the edge, which would pile
+  /// unrelated properties on top of each other.
+  static (double, double) _project(CommercialProperty prop, int zoom) {
     final x = (prop.longitude - 100.3) / (3.5 / zoom);
     final y = -((prop.latitude - 1.5) / (4.0 / zoom));
-    final left = ((x + 1) / 2 * 100).toStringAsFixed(2);
-    final top = ((1 - y) / 2 * 100).toStringAsFixed(2);
-    return 'left:$left%;top:$top%;';
+    final left = (x + 1) / 2 * 100;
+    final top = (1 - y) / 2 * 100;
+    return (left, top);
   }
+
+  static String _pinStyle(
+    CommercialProperty prop,
+    int zoom,
+    double panX,
+    double panY,
+  ) {
+    final (left, top) = _project(prop, zoom);
+    return 'left:${(left + panX).toStringAsFixed(2)}%;'
+        'top:${(top + panY).toStringAsFixed(2)}%;';
+  }
+
+  static String _sortLabel(ExploreSort s) => switch (s) {
+    ExploreSort.imported => 'Default order',
+    ExploreSort.rentalLow => 'Rent: low to high',
+    ExploreSort.rentalHigh => 'Rent: high to low',
+    ExploreSort.areaLarge => 'Floor area: large first',
+    ExploreSort.areaSmall => 'Floor area: small first',
+  };
 
   static String _scoreTone(double score) {
     if (score >= 75) return 'success';
@@ -544,6 +791,29 @@ class _ExplorePageState extends State<ExplorePage> with PreloadStateMixin<Explor
     }
     return 'RM ${v.toStringAsFixed(0)}';
   }
+}
+
+/// Sort orders for the explore results. `imported` keeps the dataset order the
+/// API returned; the rest sort on real fields only.
+enum ExploreSort { imported, rentalLow, rentalHigh, areaLarge, areaSmall }
+
+/// Applies [sort] to [input]. Dart's sort is not stable, so ties break on id —
+/// the grid and the map read the same deterministic sequence.
+List<CommercialProperty> sortForExplore(
+  List<CommercialProperty> input,
+  ExploreSort sort,
+) {
+  if (sort == ExploreSort.imported) return List.of(input);
+  return [...input]..sort((x, y) {
+    final primary = switch (sort) {
+      ExploreSort.rentalLow => x.rentalRm.compareTo(y.rentalRm),
+      ExploreSort.rentalHigh => y.rentalRm.compareTo(x.rentalRm),
+      ExploreSort.areaLarge => y.sizeSqft.compareTo(x.sizeSqft),
+      ExploreSort.areaSmall => x.sizeSqft.compareTo(y.sizeSqft),
+      ExploreSort.imported => 0,
+    };
+    return primary != 0 ? primary : x.id.compareTo(y.id);
+  });
 }
 
 class _Loading extends StatelessComponent {

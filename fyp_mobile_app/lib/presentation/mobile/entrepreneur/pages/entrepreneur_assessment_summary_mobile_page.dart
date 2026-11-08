@@ -25,19 +25,15 @@ import '../../widgets/m3_kit.dart';
 /// so; this screen never presents the save as production persistence.
 
 class EntrepreneurAssessmentSummaryMobilePage extends StatelessWidget {
-  final AppCubit appState;
-  const EntrepreneurAssessmentSummaryMobilePage({super.key, required this.appState});
+  const EntrepreneurAssessmentSummaryMobilePage({super.key});
 
   @override
   Widget build(BuildContext context) {
     final draft = ServiceLocator.assessmentSession.draft;
     return MobileAppShell(
-      appState: appState,
       title: 'Summary',
       currentRoute: '/entrepreneur/assess',
-      body: draft == null
-          ? _noDraft(context)
-          : _summary(context, draft),
+      body: draft == null ? _noDraft(context) : _summary(context, draft),
     );
   }
 
@@ -53,7 +49,8 @@ class EntrepreneurAssessmentSummaryMobilePage extends StatelessWidget {
         M3EmptyState(
           icon: Icons.assignment_outlined,
           title: 'No assessment in progress',
-          message: 'Start an assessment from a listing or the Assess tab '
+          message:
+              'Start an assessment from a listing or the Assess tab '
               'to reach its summary.',
           actionLabel: 'Your assessments',
           onAction: () => Navigator.of(context).pushNamedAndRemoveUntil(
@@ -196,13 +193,17 @@ class EntrepreneurAssessmentSummaryMobilePage extends StatelessWidget {
         ),
         const SizedBox(height: 18),
         M3PrimaryButton(
-          label: draft.saved ? 'Saved for this session ✓' : 'Save this assessment',
-          icon: draft.saved ? Icons.check_rounded : Icons.bookmark_border_rounded,
+          label: draft.saved
+              ? 'Saved for this session ✓'
+              : 'Save this assessment',
+          icon: draft.saved
+              ? Icons.check_rounded
+              : Icons.bookmark_border_rounded,
           onTap: draft.saved
               ? () => Navigator.of(context).pushNamedAndRemoveUntil(
-                    '/entrepreneur/assess',
-                    (route) => route.isFirst,
-                  )
+                  '/entrepreneur/assess',
+                  (route) => route.isFirst,
+                )
               : () => _save(context),
         ),
         const SizedBox(height: 9),
@@ -229,10 +230,9 @@ class EntrepreneurAssessmentSummaryMobilePage extends StatelessWidget {
         behavior: SnackBarBehavior.floating,
       ),
     );
-    Navigator.of(context).pushNamedAndRemoveUntil(
-      '/entrepreneur/assess',
-      (route) => route.isFirst,
-    );
+    Navigator.of(
+      context,
+    ).pushNamedAndRemoveUntil('/entrepreneur/assess', (route) => route.isFirst);
   }
 }
 
@@ -257,7 +257,9 @@ class _DemandAnalysisCard extends StatelessWidget {
     return FutureBuilder<LocationAnalysis?>(
       future: _load(),
       builder: (context, snap) {
-        final a = snap.connectionState == ConnectionState.done ? snap.data : null;
+        final a = snap.connectionState == ConnectionState.done
+            ? snap.data
+            : null;
         final pending = snap.connectionState != ConnectionState.done;
         return M3Card(
           child: Column(
@@ -276,7 +278,13 @@ class _DemandAnalysisCard extends StatelessWidget {
                       ),
                     ),
                   ),
-                  _statusTag(pending ? 'Checking' : a == null ? 'Unavailable' : 'Sample data'),
+                  _statusTag(
+                    pending
+                        ? 'Checking'
+                        : a == null
+                        ? 'Unavailable'
+                        : 'Sample data',
+                  ),
                 ],
               ),
               const SizedBox(height: 10),
@@ -316,12 +324,12 @@ class _DemandAnalysisCard extends StatelessWidget {
                 const SizedBox(height: 10),
                 M3Tag(label: '${a.competitorCount} competitors'),
                 const SizedBox(height: 6),
-                for (final f in a.factors)
-                  SitewiseFactorRow(factor: f),
+                for (final f in a.factors) SitewiseFactorRow(factor: f),
                 if (AppConfig.usesDemoData) ...[
                   const SizedBox(height: 6),
                   const M3DataNote(
-                    text: 'Analysis is generated from sample data in this '
+                    text:
+                        'Analysis is generated from sample data in this '
                         'build. It is not a live model.',
                   ),
                 ],

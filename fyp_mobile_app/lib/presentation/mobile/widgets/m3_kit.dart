@@ -24,7 +24,7 @@ import '../../../core/theme/sitewise_theme.dart';
 /// | `.card`              | [M3Card]                                  |
 ///
 /// These widgets are deliberately stateless and carry **no data access**; each
-/// screen supplies real values from `ServiceLocator` / `AppCubit`. That keeps
+/// screen supplies real values from `ServiceLocator` / `AppViewModel`. That keeps
 /// the reference's visual language from leaking invented records into the app.
 
 // ── App chrome ────────────────────────────────────────────────────────────────

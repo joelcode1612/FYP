@@ -1,6 +1,8 @@
+import 'package:provider/provider.dart';
 import 'package:shared_logic/shared_logic.dart';
 import 'package:flutter/material.dart';
 
+import '../../../application/state/app_view_model.dart';
 import '../../../core/theme/sitewise_m3.dart';
 import 'mobile_bottom_nav.dart';
 import 'mobile_navigation.dart';
@@ -22,7 +24,6 @@ import 'mobile_topbar.dart';
 /// content). Ignored for the Material 3 shell, which always renders its header.
 
 class MobileAppShell extends StatelessWidget {
-  final AppCubit appState;
   final String title;
   final String currentRoute;
   final Widget body;
@@ -42,7 +43,6 @@ class MobileAppShell extends StatelessWidget {
 
   const MobileAppShell({
     super.key,
-    required this.appState,
     required this.title,
     required this.currentRoute,
     required this.body,
@@ -55,8 +55,11 @@ class MobileAppShell extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final destinations = mobileDestinationsFor(appState.role);
-    final useM3 = m3 ?? (appState.role == AppRole.entrepreneur);
+    // Only the role is observed: the shell must not repaint when a property is
+    // saved or compared.
+    final role = context.select<AppViewModel, AppRole>((v) => v.role);
+    final destinations = mobileDestinationsFor(role);
+    final useM3 = m3 ?? (role == AppRole.entrepreneur);
 
     void go(String route) {
       if (route == currentRoute) return;
@@ -71,7 +74,6 @@ class MobileAppShell extends StatelessWidget {
           ? MobileTopBar(
               title: title,
               actions: actions,
-              appState: appState,
               brandTitle: brandTitle,
               m3: useM3,
             )

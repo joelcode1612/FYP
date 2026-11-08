@@ -10550,3 +10550,125 @@ input[type="range"] {
   .sw-reg-footer { flex-direction: column; align-items: stretch; }
   .sw-reg-footer > div { justify-content: space-between; }
 }
+
+/* ---- Explore results head + sort ----------------------------------------- */
+
+.explore__results-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.explore__results-head p {
+  margin: 0;
+}
+
+.explore__sort {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.explore__sort select {
+  min-height: 36px;
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  background: var(--surface);
+  padding: 6px 10px;
+  color: var(--ink);
+  font-size: 13px;
+  font-family: inherit;
+}
+
+/* ---- Explore map: pan, clusters, empty state ------------------------------ */
+
+/* Drag-to-pan: the canvas owns its gestures. Without `touch-action: none` a
+   touch drag scrolls the page instead of panning the map. */
+.map-canvas {
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+
+.map-canvas--dragging {
+  cursor: grabbing;
+}
+
+/* While panning, pins must not swallow the pointerup that ends the drag. */
+.map-canvas--dragging .map-pin,
+.map-canvas--dragging .map-cluster {
+  pointer-events: none;
+}
+
+.map-cluster {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 34px;
+  height: 34px;
+  padding: 0 10px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--border-strong);
+  background: var(--surface);
+  color: var(--ink);
+  font-family: var(--font-display);
+  font-size: 12.5px;
+  font-weight: 800;
+  box-shadow: var(--shadow-sm);
+  cursor: pointer;
+  z-index: 1;
+}
+
+.map-cluster:hover {
+  border-color: var(--action);
+  color: var(--action);
+  z-index: 2;
+}
+
+/* Same emphasis language as .map-pin--active: the selected listing may be
+   merged into a cluster, and the highlight must follow it there. */
+.map-cluster--active {
+  border-color: var(--danger);
+  color: var(--danger);
+  z-index: 3;
+}
+
+.explore__map-empty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 24px;
+  text-align: center;
+  color: var(--muted);
+  pointer-events: none;
+}
+
+.explore__map-empty .ms {
+  font-size: 30px;
+  color: var(--overline);
+}
+
+.explore__map-empty strong {
+  color: var(--ink);
+  font-size: 15px;
+}
+
+.explore__map-empty p {
+  margin: 0;
+  max-width: 42ch;
+}
+
+/* ---- Explore: selected-card highlight ------------------------------------- */
+
+.pcard--selected {
+  border-color: var(--action);
+  box-shadow: 0 0 0 1px var(--action), var(--shadow);
+}

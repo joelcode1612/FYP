@@ -22,14 +22,11 @@ import '../../widgets/m3_kit.dart';
 /// network or writes persistence.
 
 class EntrepreneurAssessmentSetupMobilePage extends StatefulWidget {
-  final AppCubit appState;
-
   /// Property chosen upstream; empty when the flow is resumed from the hub.
   final String propertyId;
 
   const EntrepreneurAssessmentSetupMobilePage({
     super.key,
-    required this.appState,
     required this.propertyId,
   });
 
@@ -69,9 +66,7 @@ class _EntrepreneurAssessmentSetupMobilePageState
     _concept = draft?.concept.isEmpty == true ? null : draft?.concept;
     _audience = draft?.audience.isEmpty == true ? null : draft?.audience;
     _budget = TextEditingController(
-      text: draft?.budgetRm == null
-          ? ''
-          : draft!.budgetRm!.toStringAsFixed(0),
+      text: draft?.budgetRm == null ? '' : draft!.budgetRm!.toStringAsFixed(0),
     );
     _load();
   }
@@ -144,7 +139,6 @@ class _EntrepreneurAssessmentSetupMobilePageState
   Widget build(BuildContext context) {
     final p = _property;
     return MobileAppShell(
-      appState: widget.appState,
       title: 'New assessment',
       currentRoute: '/entrepreneur/assess',
       body: ListView(
@@ -157,20 +151,20 @@ class _EntrepreneurAssessmentSetupMobilePageState
         children: [
           FlowBackLink(label: 'Assess'),
           const SizedBox(height: 14),
-          Text(
-            'NEW ASSESSMENT / STEP 1 OF 3',
-            style: SitewiseM3Type.eyebrow,
-          ),
+          Text('NEW ASSESSMENT / STEP 1 OF 3', style: SitewiseM3Type.eyebrow),
           const SizedBox(height: 7),
           Semantics(
             header: true,
-            child: Text('Tell us about your business', style: SitewiseM3Type.h1),
+            child: Text(
+              'Tell us about your business',
+              style: SitewiseM3Type.h1,
+            ),
           ),
           const SizedBox(height: 8),
           Text(
             p == null
                 ? 'Your assessment will stay linked to the property you '
-                    'choose.'
+                      'choose.'
                 : 'This assessment will stay linked to ${p.title}.',
             style: SitewiseM3Type.lead,
           ),
@@ -181,14 +175,14 @@ class _EntrepreneurAssessmentSetupMobilePageState
             M3EmptyState(
               icon: Icons.storefront_outlined,
               title: 'No property selected',
-              message: 'Pick a listing first — the assessment is always '
+              message:
+                  'Pick a listing first — the assessment is always '
                   'tied to one property.',
               actionLabel: 'Find a location',
-              onAction: () => Navigator.of(context)
-                  .pushNamedAndRemoveUntil(
-                    '/entrepreneur/explore',
-                    (route) => route.isFirst,
-                  ),
+              onAction: () => Navigator.of(context).pushNamedAndRemoveUntil(
+                '/entrepreneur/explore',
+                (route) => route.isFirst,
+              ),
             )
           else if (_loadingError != null)
             M3Banner(icon: Icons.error_outline_rounded, text: _loadingError!)
@@ -345,7 +339,9 @@ class _ChoiceGrid extends StatelessWidget {
             button: true,
             selected: selected == option,
             child: Material(
-              color: selected == option ? SitewiseM3.primary : SitewiseM3.surface,
+              color: selected == option
+                  ? SitewiseM3.primary
+                  : SitewiseM3.surface,
               borderRadius: BorderRadius.circular(SitewiseM3.radiusPill),
               child: InkWell(
                 borderRadius: BorderRadius.circular(SitewiseM3.radiusPill),
@@ -367,8 +363,9 @@ class _ChoiceGrid extends StatelessWidget {
                     style: TextStyle(
                       fontFamily: kFontFamily,
                       fontSize: 12,
-                      fontWeight:
-                          selected == option ? FontWeight.w700 : FontWeight.w600,
+                      fontWeight: selected == option
+                          ? FontWeight.w700
+                          : FontWeight.w600,
                       color: selected == option
                           ? SitewiseM3.surface
                           : SitewiseM3.ink,
@@ -382,4 +379,3 @@ class _ChoiceGrid extends StatelessWidget {
     );
   }
 }
-

@@ -83,6 +83,37 @@ function authError(code, message, cause) {
   if (cause) diag(code, cause);
   return error;
 }
+
+// Inspects the NON-SECRET metadata of an otpauth://totp provisioning URI:
+// the issuer (query parameter and label prefix) and the account label. The
+// URI itself and its secret parameter are never returned, logged or stored —
+// only these booleans leave this function.
+function inspectTotpUri(uri, expectedEmail) {
+  if (!uri || !/^otpauth:\/\/totp\//i.test(uri)) {
+    return { present: false, parseable: false, issuerOk: false, accountOk: false };
+  }
+  let label = '';
+  let issuerParam = '';
+  try {
+    const parsed = new URL(uri);
+    label = decodeURIComponent((parsed.pathname || '').replace(/^\/+/, ''));
+    issuerParam = (parsed.searchParams.get('issuer') || '').trim();
+  } catch (_) {
+    return { present: true, parseable: false, issuerOk: false, accountOk: false };
+  }
+  // Standard key-URI format: otpauth://totp/<issuer>:<account>?...&issuer=...
+  let labelIssuer = '';
+  let labelAccount = label;
+  const split = label.indexOf(':');
+  if (split >= 0) {
+    labelIssuer = label.slice(0, split).trim();
+    labelAccount = label.slice(split + 1).trim();
+  }
+  const issuerOk = /^sitewise$/i.test(issuerParam) || /^sitewise$/i.test(labelIssuer);
+  const accountOk =
+    !!expectedEmail && labelAccount.toLowerCase() === String(expectedEmail).toLowerCase();
+  return { present: true, parseable: true, issuerOk, accountOk };
+}
 // Staff workspaces that require a completed-MFA (aal2) session to view. The
 // MFA routes themselves (/staff/*) are deliberately excluded so the verify and
 // enrollment screens never redirect to themselves.
@@ -183,19 +214,44 @@ function isStaffRole(role) {
   return STAFF_ROLES.includes(role);
 }
 
+// GoTrue returns TOTP factors with a `factor_type` field; some SDK shapes use
+// `type`. Reading only `.type` made every staff gate treat a verified factor
+// as missing — the post-verification "Verification Unavailable" bug.
+function factorType(factor) {
+  return String((factor && (factor.type || factor.factor_type)) || '').toLowerCase();
+}
+
+// Reads the staff-factor and assurance state from the PERSISTED session
+// itself: `session.user.factors` (populated by Supabase) and the access
+// token's `aal` claim. No extra network round-trips, so every document sees
+// the SAME answer — routing decisions can never flip between /staff/mfa and
+// /staff/verify. This is the same token the FastAPI backend enforces.
+async function sessionStaffState() {
+  try {
+    const { data, error } = await client.auth.getSession();
+    if (error || !data?.session) return { factor: null, aal: null };
+    const factors = data.session.user?.factors || [];
+    const factor = factors.find(f => factorType(f) === 'totp' && f.status === 'verified') || null;
+    let aal = null;
+    try {
+      const payload = JSON.parse(atob(data.session.access_token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
+      aal = payload.aal || null;
+    } catch (_) { /* opaque or unreadable token: treat as aal-unknown */ }
+    return { factor, aal };
+  } catch (_) {
+    return { factor: null, aal: null };
+  }
+}
+
 async function hasVerifiedTotpFactor() {
-  const { data, error } = await client.auth.mfa.listFactors();
-  if (error || !data) throw error || new Error('Could not check authenticator factors.');
-  return !!data.all?.find(f => f.type === 'totp' && f.status === 'verified');
+  const { factor } = await sessionStaffState();
+  return !!factor;
 }
 
 // Staff rule: agents/administrators MUST have a verified TOTP factor. A staff
 // session without one is routed to the enrollment screen instead of a
-// workspace. Entrepreneurs keep MFA optional — never forced here.
-async function staffNeedsEnrollment() {
-  if (!state.profile || !isStaffRole(state.profile.role)) return false;
-  return !(await hasVerifiedTotpFactor());
-}
+// workspace. Entrepreneurs keep MFA optional — never forced here. (The gate
+// itself lives in ensureStaffAssurance(), which reads the persisted session.)
 
 // --- SSR session mirror -------------------------------------------------------
 // The server renders every route before the browser bundle runs, so it cannot
@@ -248,9 +304,12 @@ function clearSessionCookies() {
 // symptom. replace() also keeps transient /login and /auth/callback documents
 // out of history, so Back cannot re-execute the sign-in flow automatically.
 let navigationStarted = false;
-function navigate(url) {
+function navigate(url, reason) {
   if (navigationStarted) return;
   navigationStarted = true;
+  // Development-only breadcrumb: which gate decided to navigate, and where.
+  // URLs only — never tokens, codes or profile contents.
+  diag('navigate', { name: 'Navigation', message: (reason || 'unspecified') + ' -> ' + url });
   location.replace(url);
 }
 
@@ -273,7 +332,7 @@ function goHome() {
   const next = sessionStorage.getItem(nextKey);
   sessionStorage.removeItem(nextKey);
   // Never allow a return URL to bypass the user's server-assigned role.
-  navigate(next && (next === home || next.startsWith(home + '/') || next.startsWith(home + '?')) ? next : home);
+  navigate(next && (next === home || next.startsWith(home + '/') || next.startsWith(home + '?')) ? next : home, 'role-home:' + home);
 }
 
 // Portal context passed by the sign-in forms ('entrepreneur' | 'staff'). It is
@@ -303,16 +362,16 @@ function assertPortalRole(expectedPortal) {
 }
 
 // Single source of truth for the staff MFA gate, reused by sign-in, session
-// restore and token refresh. Returns 'ok' (non-staff, or staff at aal2),
-// 'enroll' (staff without a verified TOTP factor) or 'verify' (staff factor
-// present but this session has not completed the challenge). Fail closed: an
-// assurance check that errors throws rather than being treated as 'ok'.
+// restore and token refresh. Decides ONLY from the persisted session: the
+// token's `aal` claim (what the backend enforces) plus the session's own
+// verified-factor list. Returns 'ok' (non-staff, or staff at aal2), 'enroll'
+// (no verified TOTP factor yet) or 'verify' (factor present, challenge owed).
 async function ensureStaffAssurance() {
   if (!state.profile || !isStaffRole(state.profile.role)) return 'ok';
-  if (await staffNeedsEnrollment()) return 'enroll';
-  const { data: assurance, error } = await client.auth.mfa.getAuthenticatorAssuranceLevel();
-  if (error || !assurance) throw error || new Error('MFA assurance could not be checked.');
-  return assurance.currentLevel === 'aal2' ? 'ok' : 'verify';
+  const { factor, aal } = await sessionStaffState();
+  if (aal === 'aal2') return 'ok'; // verified session — never bounce back here
+  if (!factor) return 'enroll'; // no verified TOTP factor on the account yet
+  return 'verify'; // factor verified, but this session still owes a challenge
 }
 
 // A restored or refreshed session must not leave a staff workspace rendered at
@@ -328,8 +387,8 @@ async function enforceStaffAssurance() {
   } catch (_) {
     status = 'verify'; // fail closed when assurance cannot be confirmed
   }
-  if (status === 'enroll') navigate('/staff/mfa');
-  else if (status === 'verify') navigate('/staff/verify');
+  if (status === 'enroll') navigate('/staff/mfa', 'enforceStaffAssurance:enroll');
+  else if (status === 'verify') navigate('/staff/verify', 'enforceStaffAssurance:verify');
 }
 
 // Route after any successful sign-in: ALWAYS validate the authoritative
@@ -348,11 +407,11 @@ async function finishSignIn(expectedPortal) {
   const status = await ensureStaffAssurance();
   if (status === 'enroll') {
     state.mfaEnrollmentRequired = true;
-    navigate('/staff/mfa');
+    navigate('/staff/mfa', 'finishSignIn:enroll');
     return;
   }
   if (status === 'verify') {
-    navigate('/staff/verify');
+    navigate('/staff/verify', 'finishSignIn:verify');
     return;
   }
   goHome();
@@ -652,17 +711,14 @@ window.sitewiseAuth = {
     if (!isStaffRole(state.profile?.role)) {
       throw authError('mfa_role', 'Staff role is required.', null);
     }
-    const { data: levels, error: levelsError } = await client.auth.mfa.getAuthenticatorAssuranceLevel();
-    if (levelsError || !levels) {
-      throw authError('mfa_assurance', 'MFA assurance check unavailable.', levelsError);
+    // Session-derived state only: the token's aal claim and the session's
+    // verified factor — no per-document network snapshots.
+    const { factor, aal } = await sessionStaffState();
+    if (aal === 'aal2') return 'verified';
+    if (!factor) {
+      navigate('/staff/mfa', 'challengeStart:no-verified-factor');
+      return 'enroll';
     }
-    if (levels.currentLevel === 'aal2') return 'verified';
-    const { data: factors, error: factorsError } = await client.auth.mfa.listFactors();
-    if (factorsError || !factors) {
-      throw authError('mfa_factors', 'Authenticator factors unavailable.', factorsError);
-    }
-    const factor = factors.all?.find(f => f.type === 'totp' && f.status === 'verified');
-    if (!factor) { navigate('/staff/mfa'); return 'enroll'; }
     const challenge = await client.auth.mfa.challenge({ factorId: factor.id });
     if (challenge.error || !challenge.data?.id) {
       throw authError('mfa_challenge', 'Could not start MFA challenge.', challenge.error);
@@ -686,9 +742,13 @@ window.sitewiseAuth = {
       // preserved — it contains no secret material.
       throw authError('mfa_challenge_verify', error?.message || 'Code verification failed.', error);
     }
-    const { data: assurance, error: aalError } = await client.auth.mfa.getAuthenticatorAssuranceLevel();
-    if (aalError || assurance?.currentLevel !== 'aal2') {
-      throw authError('mfa_assurance', 'MFA verification was not confirmed.', aalError);
+    // Confirm the upgraded session straight from the persisted token claim.
+    const { aal: confirmedAal } = await sessionStaffState();
+    if (confirmedAal !== 'aal2') {
+      throw authError('mfa_assurance', 'MFA verification was not confirmed.', {
+        name: 'AssuranceMismatch',
+        message: 'session aal=' + confirmedAal,
+      });
     }
     // Do not redirect here; the UI first displays the provider-backed success state.
     state.mfaRequired = false;
@@ -718,7 +778,7 @@ window.sitewiseAuth = {
     if (await hasVerifiedTotpFactor()) {
       // Returning user: NEVER generate a second QR code and NEVER delete or
       // replace the verified factor. Send them to the challenge screen.
-      navigate('/staff/verify');
+      navigate('/staff/verify', 'enrollStart:already-verified-factor');
       throw authError('mfa_already_enrolled', 'Authenticator already enrolled.', null);
     }
     // Housekeeping: an abandoned earlier enrollment leaves an UNVERIFIED
@@ -729,19 +789,68 @@ window.sitewiseAuth = {
     const { data: existingFactors, error: listError } = await client.auth.mfa.listFactors();
     if (listError) throw authError('mfa_factors', 'Authenticator factors unavailable.', listError);
     for (const stale of existingFactors?.all || []) {
-      if (stale.type === 'totp' && stale.status !== 'verified') {
+      if (factorType(stale) === 'totp' && stale.status !== 'verified') {
         const { error: staleError } = await client.auth.mfa.unenroll({ factorId: stale.id });
         if (staleError) diag('mfaEnrollStart/stale-unverified', staleError); // non-fatal
       }
     }
     const { data, error } = await client.auth.mfa.enroll({
       factorType: 'totp',
+      // The authenticator must display "SiteWise" as the issuer and the
+      // authenticated email as the account. auth-js >= 2.x forwards `issuer`
+      // in the POST /factors body; when the server honours it the
+      // provisioning URI carries otpauth://totp/SiteWise:<email>. When it
+      // does not, GoTrue falls back to the project's Site URL — the
+      // "localhost" label bug — which the metadata validation below detects.
+      issuer: 'SiteWise',
       friendlyName: 'Sitewise Staff',
     });
-    if (error) throw authError('mfa_enroll', 'Could not start the authenticator setup. Please try again.', error);
+    if (error) {
+      // A pre-existing factor collides on the friendly name (422). If the
+      // account already has a verified factor, recover to the challenge
+      // screen instead of failing the setup.
+      if (await hasVerifiedTotpFactor().catch(() => false)) {
+        navigate('/staff/verify', 'enrollStart:self-heal-422');
+        throw authError('mfa_already_enrolled', 'Authenticator already enrolled.', error);
+      }
+      throw authError('mfa_enroll', 'Could not start the authenticator setup. Please try again.', error);
+    }
     state.mfaEnrollFactorId = data.id;
     state.mfaEnrollQr = data.totp?.qr_code || null;
     state.mfaEnrollSecret = data.totp?.secret || null;
+    // Validate the non-secret metadata of the returned provisioning URI
+    // against the authenticated session email. Only booleans are logged —
+    // never the URI, its secret parameter, the QR data or the email itself.
+    const sessionEmail = state.user?.email || state.profile?.email || null;
+    const meta = inspectTotpUri(data.totp?.uri, sessionEmail);
+    diag('mfaEnrollStart/uri-metadata', {
+      name: 'TotpUriMetadata',
+      message:
+        'hasUri=' + meta.present +
+        ' parseable=' + meta.parseable +
+        ' issuerOk=' + meta.issuerOk +
+        ' accountOk=' + meta.accountOk,
+    });
+    if (meta.present && meta.parseable && (!meta.issuerOk || !meta.accountOk)) {
+      // The server generated a wrong issuer/account label (e.g. the project
+      // Site URL leaking in as "localhost"). Roll back the just-created
+      // UNVERIFIED factor so nothing stale or mislabelled remains — verified
+      // factors are never touched here — and fail with an actionable error.
+      // Codes from such a factor would still verify, but the acceptance
+      // criterion is that the authenticator shows SiteWise + the right email.
+      await client.auth.mfa
+        .unenroll({ factorId: data.id })
+        .catch((unenrollError) => diag('mfaEnrollStart/rollback', unenrollError));
+      state.mfaEnrollFactorId = null;
+      state.mfaEnrollQr = null;
+      state.mfaEnrollSecret = null;
+      throw authError(
+        'mfa_enroll_metadata',
+        'The authenticator setup was created with the wrong account identity, so it was not saved. ' +
+          'An administrator must check the Supabase Auth "Site URL" configuration, then retry enrollment.',
+        null,
+      );
+    }
     return { qr: state.mfaEnrollQr, secret: state.mfaEnrollSecret };
   },
   async mfaEnrollVerify(code) {
@@ -763,9 +872,13 @@ window.sitewiseAuth = {
     state.mfaEnrollFactorId = null;
     state.mfaEnrollQr = null;
     state.mfaEnrollSecret = null;
-    const { data: assurance, error: aalError } = await client.auth.mfa.getAuthenticatorAssuranceLevel();
-    if (aalError || assurance?.currentLevel !== 'aal2') {
-      throw authError('mfa_assurance', 'MFA enrollment was not confirmed.', aalError);
+    // Confirm the upgraded session straight from the persisted token claim.
+    const { aal: confirmedAal } = await sessionStaffState();
+    if (confirmedAal !== 'aal2') {
+      throw authError('mfa_assurance', 'MFA enrollment was not confirmed.', {
+        name: 'AssuranceMismatch',
+        message: 'session aal=' + confirmedAal,
+      });
     }
     await profile();
     // UI displays verified success, then invokes complete() to route.

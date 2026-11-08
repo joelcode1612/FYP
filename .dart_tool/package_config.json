@@ -332,12 +332,6 @@
       "languageVersion": "3.10"
     },
     {
-      "name": "flutter_bloc",
-      "rootUri": "file:///C:/Users/Lenovo/AppData/Local/Pub/Cache/hosted/pub.dev/flutter_bloc-9.1.1",
-      "packageUri": "lib/",
-      "languageVersion": "2.14"
-    },
-    {
       "name": "flutter_cube",
       "rootUri": "file:///C:/Users/Lenovo/AppData/Local/Pub/Cache/hosted/pub.dev/flutter_cube-0.1.1",
       "packageUri": "lib/",
@@ -1216,6 +1210,12 @@
     {
       "name": "shared_logic",
       "rootUri": "../shared_logic",
+      "packageUri": "lib/",
+      "languageVersion": "3.12"
+    },
+    {
+      "name": "jaspr_provider_compat",
+      "rootUri": "../jaspr_provider_compat",
       "packageUri": "lib/",
       "languageVersion": "3.12"
     }

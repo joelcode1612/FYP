@@ -5,6 +5,7 @@ import 'package:jaspr/jaspr.dart';
 import 'package:shared_logic/shared_logic.dart';
 
 import '../components/ui.dart';
+import '../state/admin_view_model.dart';
 
 /// Which queue the split renders. `verification` uses the awaiting-review set
 /// (`vm.queue`) and defaults to the Pending tab; `listings` uses every property
@@ -20,10 +21,12 @@ enum ReviewMode { verification, listings }
 ///
 /// The two admin routes (`/admin/verification`, `/admin/listings`) share this
 /// component; only the data source and default tab differ. Local selection and
-/// tab state live here so it survives the `CubitBuilder` rebuilds that happen
-/// when [vm] emits a new state after an approve/reject.
+/// tab state live here so it survives the `Selector`/`Consumer` rebuilds that
+/// happen when [vm] notifies after an approve/reject. The page owns the view
+/// model — it is also published through the page's provider scope, so this
+/// child reads the same instance either way.
 class ReviewSplit extends StatefulComponent {
-  final AdminCubit vm;
+  final AdminViewModel vm;
   final ReviewMode mode;
 
   const ReviewSplit({super.key, required this.vm, required this.mode});

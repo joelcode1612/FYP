@@ -2,12 +2,13 @@ import 'dart:async';
 
 import 'package:jaspr/dom.dart';
 import 'package:jaspr/jaspr.dart';
+import 'package:jaspr_provider_compat/jaspr_provider_compat.dart' as provider;
 import 'package:shared_logic/shared_logic.dart';
 
-import '../../components/bloc.dart';
 import '../../components/ui.dart';
 import '../../data/app_locator.dart';
 import '../../layouts/app_layout.dart';
+import '../../state/owner_view_model.dart';
 
 /// Owner 360° tours, laid out as the source's `sitewise-owner/tours.html`.
 ///
@@ -30,7 +31,7 @@ class ToursPage extends StatefulComponent {
 }
 
 class _ToursPageState extends State<ToursPage> {
-  late final OwnerCubit vm;
+  late final OwnerViewModel vm;
 
   /// One-shot success notice (the Flutter SnackBar equivalent).
   String? _notice;
@@ -41,13 +42,13 @@ class _ToursPageState extends State<ToursPage> {
   @override
   void initState() {
     super.initState();
-    vm = AppLocator.newOwnerCubit();
+    vm = AppLocator.newOwnerViewModel();
     unawaited(vm.load());
   }
 
   @override
   void dispose() {
-    unawaited(vm.close());
+    vm.dispose();
     super.dispose();
   }
 
@@ -72,49 +73,51 @@ class _ToursPageState extends State<ToursPage> {
       subtitle:
           'Each tour is captured for one property. Tours are only visible to '
           'entrepreneurs after an administrator approves them.',
-      // Inside the layout, so submit/delete emits rebuild only the content,
-      // never the chrome.
-      child: CubitBuilder<OwnerCubit, OwnerState>(
-        cubit: vm,
-        builder: (context, _) {
-          return vm.loading
-              ? const _Loading()
-              : div(classes: 'stack stack--md', [
-                  if (_notice != null)
-                    div(classes: 'notice notice-info', [
-                      Component.text(_notice!),
-                    ]),
-                  if (vm.tours.isEmpty)
-                    EmptyState(
-                      title: 'No tours yet',
-                      body:
-                          'Capture a 360° tour for a listing to help '
-                          'entrepreneurs explore remotely. Capture runs in the '
-                          'mobile app, where the camera is available.',
-                      action: const ActionLink(
-                        'View my listings',
-                        href: '/owner/properties',
-                        variant: 'primary',
+      // Inside the layout, so submit/delete notifications rebuild only the
+      // content, never the chrome.
+      child: provider.ChangeNotifierProvider<OwnerViewModel>.value(
+        value: vm,
+        child: provider.Consumer<OwnerViewModel>(
+          builder: (context, vm, child) {
+            return vm.loading
+                ? const _Loading()
+                : div(classes: 'stack stack--md', [
+                    if (_notice != null)
+                      div(classes: 'notice notice-info', [
+                        Component.text(_notice!),
+                      ]),
+                    if (vm.tours.isEmpty)
+                      EmptyState(
+                        title: 'No tours yet',
+                        body:
+                            'Capture a 360° tour for a listing to help '
+                            'entrepreneurs explore remotely. Capture runs in the '
+                            'mobile app, where the camera is available.',
+                        action: const ActionLink(
+                          'View my listings',
+                          href: '/owner/properties',
+                          variant: 'primary',
+                        ),
+                      )
+                    else
+                      div(classes: 'rows', [
+                        for (final tour in vm.tours) _row(tour),
+                      ]),
+                    p(classes: 'owner-note', [
+                      Component.text(
+                        'A tour is captured as a fixed sequence of stations. The '
+                        'station count on each row comes from the tour record, not '
+                        'from a number hardcoded in the interface.',
                       ),
-                    )
-                  else
-                    div(classes: 'rows', [
-                      for (final tour in vm.tours) _row(tour),
                     ]),
-                  p(classes: 'owner-note', [
-                    Component.text(
-                      'A tour is captured as a fixed sequence of stations. The '
-                      'station count on each row comes from the tour record, not '
-                      'from a number hardcoded in the interface.',
-                    ),
-                  ]),
-                  if (_confirming != null)
-                    _ConfirmDialog(
-                      onCancel: () => setState(() => _confirming = null),
-                      onConfirm: () => _delete(_confirming!),
-                    ),
-                ]);
-        },
+                    if (_confirming != null)
+                      _ConfirmDialog(
+                        onCancel: () => setState(() => _confirming = null),
+                        onConfirm: () => _delete(_confirming!),
+                      ),
+                  ]);
+          },
+        ),
       ),
     );
   }

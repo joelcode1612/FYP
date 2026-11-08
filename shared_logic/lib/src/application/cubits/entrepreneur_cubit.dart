@@ -1,36 +1,30 @@
 import 'package:bloc/bloc.dart';
 
-import '../../core/errors/app_failure.dart';
 import '../../domain/entities/commercial_property.dart';
 import '../../domain/entities/location_intelligence.dart';
 import '../../domain/entities/recommendation.dart';
 import '../../domain/usecases/property_usecases.dart';
 import '../../domain/usecases/recommendation_usecases.dart';
+import '../controllers/entrepreneur_controller.dart';
 import '../states/entrepreneur_state.dart';
 import '../usecases/filter_properties.dart';
 
-/// Browsing, search, filtering and recommendation ranking for the entrepreneur
-/// flow.
+/// Cubit facade over [EntrepreneurController].
 ///
-/// Replaces `EntrepreneurViewModel` (Flutter app,
-/// `lib/presentation/shared/viewmodels/entrepreneur_viewmodel.dart`).
+/// Every transition lives in the controller; this class only mirrors it into a
+/// `Stream` for callers that still speak cubit. The web app binds the
+/// controller directly through a `ChangeNotifier` and never constructs this,
+/// which is why the loading/error rules cannot drift between platforms.
 ///
-/// The behaviour is a faithful port, including the original's quirks:
-/// `loadExplore` clears the previous error before starting, and a failure sets
-/// `error` without clearing the previously loaded list.
-///
-/// The one deliberate change is **how dependencies arrive**. The original read
-/// `ServiceLocator.properties`, `ServiceLocator.recommendations` and
-/// `ServiceLocator.preferences` — global mutable statics — which made the
-/// viewmodel impossible to construct with substitutes or test in isolation.
-/// Here the use cases and the initial preferences are constructor parameters, so
-/// each app supplies its own implementations from its own composition root.
+/// The one deliberate change from the original Flutter viewmodel is **how
+/// dependencies arrive**. It read `ServiceLocator.properties`,
+/// `ServiceLocator.recommendations` and `ServiceLocator.preferences` — global
+/// mutable statics — which made it impossible to construct with substitutes or
+/// test in isolation. Here the use cases and the initial preferences are
+/// constructor parameters, so each app supplies its own implementations from
+/// its own composition root.
 class EntrepreneurCubit extends Cubit<EntrepreneurState> {
-  final GetProperties _getProperties;
-  final GetRecommendations _getRecommendations;
-  final GetLocationAnalysis _getLocationAnalysis;
-  final FilterProperties _filterProperties;
-  final void Function(BusinessPreferences preferences)? _onPreferencesUpdated;
+  final EntrepreneurController _controller;
 
   EntrepreneurCubit({
     required GetProperties getProperties,
@@ -39,12 +33,17 @@ class EntrepreneurCubit extends Cubit<EntrepreneurState> {
     required BusinessPreferences preferences,
     FilterProperties filterProperties = const FilterProperties(),
     void Function(BusinessPreferences preferences)? onPreferencesUpdated,
-  }) : _getProperties = getProperties,
-       _getRecommendations = getRecommendations,
-       _getLocationAnalysis = getLocationAnalysis,
-       _filterProperties = filterProperties,
-       _onPreferencesUpdated = onPreferencesUpdated,
-       super(EntrepreneurState(preferences: preferences));
+  }) : _controller = EntrepreneurController(
+         getProperties: getProperties,
+         getRecommendations: getRecommendations,
+         getLocationAnalysis: getLocationAnalysis,
+         preferences: preferences,
+         filterProperties: filterProperties,
+         onPreferencesUpdated: onPreferencesUpdated,
+       ),
+       super(EntrepreneurState(preferences: preferences)) {
+    _controller.addListener(_publish);
+  }
 
   // Read-only projections of the current state, mirroring the field names the
   // Flutter `EntrepreneurViewModel` exposed, so existing UI code reads the same
@@ -67,104 +66,32 @@ class EntrepreneurCubit extends Cubit<EntrepreneurState> {
   BusinessPreferences get prefs => state.preferences;
 
   /// Loads all listings, then applies the current query and filter.
-  Future<void> loadExplore() async {
-    emit(state.copyWith(loading: true, clearError: true));
-    try {
-      final all = await _getProperties();
-      emit(
-        state.copyWith(
-          explore: _filterProperties(
-            properties: all,
-            query: state.query,
-            filter: state.filter,
-          ),
-          loading: false,
-        ),
-      );
-    } catch (e) {
-      emit(
-        state.copyWith(
-          error: readableFailure(
-            e,
-            fallback: 'We could not load listings. Please try again.',
-          ),
-          loading: false,
-        ),
-      );
-    }
-  }
+  Future<void> loadExplore() => _controller.loadExplore();
 
   /// Ranks recommendations against the current preferences.
-  ///
-  /// A failed request must be distinguishable from a genuine empty result, so
-  /// the previous error is cleared on *every* new attempt and on success, and
-  /// the failed list is left untouched rather than rendered as "no matches".
-  Future<void> loadRecommendations() async {
-    emit(state.copyWith(loading: true, clearError: true));
-    try {
-      final ranked = await _getRecommendations(state.preferences);
-      emit(
-        state.copyWith(
-          recommendations: ranked,
-          loading: false,
-          clearError: true,
-        ),
-      );
-    } catch (e) {
-      emit(
-        state.copyWith(
-          error: readableFailure(
-            e,
-            fallback: 'We could not load recommendations. Please try again.',
-          ),
-          loading: false,
-        ),
-      );
-    }
-  }
+  Future<void> loadRecommendations() => _controller.loadRecommendations();
 
   /// Loads the location analysis for one property.
-  Future<void> loadAnalysis(String propertyId) async {
-    emit(state.copyWith(loading: true, clearError: true));
-    try {
-      final analysis = await _getLocationAnalysis(propertyId);
-      emit(state.copyWith(analysis: analysis, loading: false, clearError: true));
-    } catch (e) {
-      emit(
-        state.copyWith(
-          error: readableFailure(
-            e,
-            fallback: 'We could not load the location analysis. Please try again.',
-          ),
-          loading: false,
-        ),
-      );
-    }
+  Future<void> loadAnalysis(String propertyId) =>
+      _controller.loadAnalysis(propertyId);
+
+  void setQuery(String value) => _controller.setQuery(value);
+
+  void setFilter(String value) => _controller.setFilter(value);
+
+  /// Replaces the current preferences. The write-back to the app's preferences
+  /// store stays a callback supplied by the composition root.
+  void updatePreferences(BusinessPreferences value) =>
+      _controller.updatePreferences(value);
+
+  void _publish(EntrepreneurState next) {
+    if (!isClosed) super.emit(next);
   }
 
-  /// Updates the query and re-runs the search. Emitting first matters: the
-  /// filter reads `state.query`, so the new value must be in state before
-  /// [loadExplore] runs.
-  void setQuery(String value) {
-    emit(state.copyWith(query: value));
-    loadExplore();
-  }
-
-  void setFilter(String value) {
-    emit(state.copyWith(filter: value));
-    loadExplore();
-  }
-
-  /// Replaces the current preferences.
-  ///
-  /// The original `EntrepreneurViewModel.updatePreferences` also wrote the new
-  /// value into the app-wide `ServiceLocator.preferences` global, because
-  /// onboarding and other screens read from there. That side effect is
-  /// preserved here through the injected [onPreferencesUpdated] callback (the
-  /// app's composition root supplies the write-back); the cubit itself stays
-  /// free of globals.
-  void updatePreferences(BusinessPreferences value) {
-    emit(state.copyWith(preferences: value));
-    _onPreferencesUpdated?.call(value);
+  @override
+  Future<void> close() {
+    _controller.removeListener(_publish);
+    _controller.dispose();
+    return super.close();
   }
 }

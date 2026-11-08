@@ -2,13 +2,14 @@ import 'dart:async';
 
 import 'package:jaspr/dom.dart';
 import 'package:jaspr/jaspr.dart';
+import 'package:jaspr_provider_compat/jaspr_provider_compat.dart' as provider;
 import 'package:shared_logic/shared_logic.dart';
 
 import '../../components/admin_review_split.dart';
-import '../../components/bloc.dart';
 import '../../components/ui.dart';
 import '../../data/app_locator.dart';
 import '../../layouts/app_layout.dart';
+import '../../state/admin_view_model.dart';
 
 /// Web verification queue, ported to the source `admin/review.html` split
 /// layout: a status-tabbed `.queue` of listings on the left and a detail
@@ -28,19 +29,19 @@ class VerificationPage extends StatefulComponent {
 }
 
 class _VerificationPageState extends State<VerificationPage> {
-  late final AdminCubit vm;
+  late final AdminViewModel vm;
 
   @override
   void initState() {
     super.initState();
-    vm = AppLocator.newAdminCubit();
+    vm = AppLocator.newAdminViewModel();
     unawaited(vm.loadDashboard());
     unawaited(vm.loadPendingTours());
   }
 
   @override
   void dispose() {
-    unawaited(vm.close());
+    vm.dispose();
     super.dispose();
   }
 
@@ -56,28 +57,41 @@ class _VerificationPageState extends State<VerificationPage> {
           'provided. Approval verifies the listing details — it does not '
           'grant permission to operate a food business.',
       // Scoped to the data slices the two sections render, and inside the
-      // layout, so the chrome never rebuilds on a VM emit (the review split
-      // and the tour queue keep their own interaction state).
-      child: CubitBuilder<AdminCubit, AdminState>(
-        cubit: vm,
-        when: (prev, next) =>
-            prev.queue != next.queue ||
-            prev.listings != next.listings ||
-            prev.pendingTours != next.pendingTours,
-        builder: (context, _) => div(classes: 'stack stack--sections', [
-          ReviewSplit(vm: vm, mode: ReviewMode.verification),
-          _TourQueue(vm: vm),
-        ]),
+      // layout, so the chrome never rebuilds on a notification (the review
+      // split and the tour queue keep their own interaction state).
+      child: provider.ChangeNotifierProvider<AdminViewModel>.value(
+        value: vm,
+        child: provider.Selector<AdminViewModel, _ReviewData>(
+          selector: (context, vm) => (
+            queue: vm.queue,
+            listings: vm.listings,
+            pendingTours: vm.pendingTours,
+          ),
+          builder: (context, data, child) =>
+              div(classes: 'stack stack--sections', [
+                ReviewSplit(vm: vm, mode: ReviewMode.verification),
+                _TourQueue(vm: vm),
+              ]),
+        ),
       ),
     );
   }
 }
 
+/// The three lists the review split and the tour queue render together.
+/// Selecting them as one value rebuilds that subtree exactly when the
+/// previous `buildWhen` predicate would have.
+typedef _ReviewData = ({
+  List<CommercialProperty> queue,
+  List<CommercialProperty> listings,
+  List<VirtualTour> pendingTours,
+});
+
 /// Target-only section: tours awaiting verification (no source route).
 /// Owns the approval notice state so approving/rejecting a tour rebuilds only
 /// this card, never the layout or the review split.
 class _TourQueue extends StatefulComponent {
-  final AdminCubit vm;
+  final AdminViewModel vm;
 
   const _TourQueue({required this.vm});
 
@@ -88,7 +102,7 @@ class _TourQueue extends StatefulComponent {
 class _TourQueueState extends State<_TourQueue> {
   String? _success;
 
-  AdminCubit get vm => component.vm;
+  AdminViewModel get vm => component.vm;
 
   Future<void> _approve(String id) async {
     await vm.approveTour(id);
