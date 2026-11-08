@@ -18,4 +18,6 @@ resolution: workspace
 dependencies:
   bloc: ^9.2.1
 dev_dependencies:
-  test: 1.31.1
+  # 1.31.1 requires test_api 0.7.12, but flutter_test (SDK 3.44.6) pins 0.7.11.
+  # Bumping this breaks workspace resolution for both apps.
+  test: 1.31.0
