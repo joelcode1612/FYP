@@ -30,3 +30,11 @@ router.include_router(geospatial.router, prefix="/geospatial", tags=["geospatial
 router.include_router(virtual_tours.router, prefix="/virtual-tours", tags=["virtual_tours"])
 router.include_router(reports.router, prefix="/reports", tags=["reports"])
 router.include_router(statistics.router, prefix="/statistics", tags=["statistics"])
+
+# UPSTREAM M2 RESEARCH FEATURE: disabled by default, no QJ/QG activation.
+# Requires separately reviewed schema migration and authorized instrument
+# version before it may be enabled in a controlled environment.
+from sitewise.core.config import settings
+if settings.m2_upstream_enabled:
+    from sitewise.api.v1 import m2
+    router.include_router(m2.router, prefix="/m2", tags=["m2_upstream"])

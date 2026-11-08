@@ -266,6 +266,19 @@ def require_property_owner(
     return user
 
 
+from sitewise.db.session import get_db
+from sitewise.repositories.m2_repository import (
+    SqlModelM2Repository,
+)
+from sitewise.services.m2_service import M2Service
+
+
+def get_m2_service(
+    session: Annotated[Session, Depends(get_db)],
+) -> M2Service:
+    repository = SqlModelM2Repository(session)
+    return M2Service(repository=repository)
+
 # Convenience aliases for router signatures.
 CurrentUser = Annotated[AuthenticatedUser, Depends(get_current_user)]
 ActiveUser = Annotated[AuthenticatedUser, Depends(get_active_user)]

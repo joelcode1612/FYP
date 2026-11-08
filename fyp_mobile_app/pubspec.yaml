@@ -58,6 +58,12 @@ dependencies:
   http: ^1.6.0
   flutter_secure_storage: ^11.2.0
 
+  # Riverpod: the state container for MVVM feature work (M2 assessment first).
+  # The ViewModel lives in `shared_logic` as a pure-Dart `Notifier`; this
+  # package supplies only the Flutter binding (ConsumerWidget / ProviderScope).
+  # Coexists with flutter_bloc above until the Cubits are migrated.
+  flutter_riverpod: ^3.4.3
+
 # Native asset build options for dartcv4 (opencv_dart). The stitching
 # module (plus its OpenCV dependencies) is required by the 360° panorama
 # pipeline; without it Stitcher has no native implementation.

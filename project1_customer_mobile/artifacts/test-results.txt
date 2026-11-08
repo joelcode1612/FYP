@@ -1,0 +1,45 @@
+00:00 +0: loading C:/Users/HP/OneDrive/Desktop/sport-marketplace/FYP/project1_customer_mobile/test/questionnaire_viewmodel_test.dart
+00:00 +0: C:/Users/HP/OneDrive/Desktop/sport-marketplace/FYP/project1_customer_mobile/test/questionnaire_viewmodel_test.dart: source response-code sets are preserved for all 13 identities
+00:00 +1: C:/Users/HP/OneDrive/Desktop/sport-marketplace/FYP/project1_customer_mobile/test/questionnaire_viewmodel_test.dart: consent gates start and submission is blocked before review
+00:00 +2: C:/Users/HP/OneDrive/Desktop/sport-marketplace/FYP/project1_customer_mobile/test/questionnaire_viewmodel_test.dart: no answer cannot advance required item
+00:00 +3: C:/Users/HP/OneDrive/Desktop/sport-marketplace/FYP/project1_customer_mobile/test/questionnaire_viewmodel_test.dart: invalid response codes and matrix intents are rejected
+00:00 +4: C:/Users/HP/OneDrive/Desktop/sport-marketplace/FYP/project1_customer_mobile/test/questionnaire_viewmodel_test.dart: all 512 Q01 subsets resolve without conflicting exclusive choices
+00:01 +5: C:/Users/HP/OneDrive/Desktop/sport-marketplace/FYP/project1_customer_mobile/test/questionnaire_viewmodel_test.dart: affiliation and terminal choices clear one another
+00:01 +6: C:/Users/HP/OneDrive/Desktop/sport-marketplace/FYP/project1_customer_mobile/test/questionnaire_viewmodel_test.dart: RARELY uses short mock route with Q02 and truthful two-item review
+00:01 +7: C:/Users/HP/OneDrive/Desktop/sport-marketplace/FYP/project1_customer_mobile/test/questionnaire_viewmodel_test.dart: NEVER uses short mock route with Q02 and truthful two-item review
+00:01 +8: C:/Users/HP/OneDrive/Desktop/sport-marketplace/FYP/project1_customer_mobile/test/questionnaire_viewmodel_test.dart: NOT_SURE uses short mock route with Q02 and truthful two-item review
+00:01 +9: C:/Users/HP/OneDrive/Desktop/sport-marketplace/FYP/project1_customer_mobile/test/questionnaire_viewmodel_test.dart: Q04 ZERO excludes Q08 but keeps Q09 future occasions
+00:01 +10: C:/Users/HP/OneDrive/Desktop/sport-marketplace/FYP/project1_customer_mobile/test/questionnaire_viewmodel_test.dart: Q04 CANNOT_REMEMBER excludes Q08 but keeps Q09 future occasions
+00:01 +11: C:/Users/HP/OneDrive/Desktop/sport-marketplace/FYP/project1_customer_mobile/test/questionnaire_viewmodel_test.dart: Q04 PREFER_NOT_TO_ANSWER excludes Q08 but keeps Q09 future occasions
+00:01 +12: C:/Users/HP/OneDrive/Desktop/sport-marketplace/FYP/project1_customer_mobile/test/questionnaire_viewmodel_test.dart: Q04 ONE includes Q08
+00:01 +13: C:/Users/HP/OneDrive/Desktop/sport-marketplace/FYP/project1_customer_mobile/test/questionnaire_viewmodel_test.dart: Q04 TWO_THREE includes Q08
+00:01 +14: C:/Users/HP/OneDrive/Desktop/sport-marketplace/FYP/project1_customer_mobile/test/questionnaire_viewmodel_test.dart: Q04 FOUR_SEVEN includes Q08
+00:01 +15: C:/Users/HP/OneDrive/Desktop/sport-marketplace/FYP/project1_customer_mobile/test/questionnaire_viewmodel_test.dart: Q04 EIGHT_PLUS includes Q08
+00:01 +16: C:/Users/HP/OneDrive/Desktop/sport-marketplace/FYP/project1_customer_mobile/test/questionnaire_viewmodel_test.dart: concept absence blocks stimulus-dependent questions, not past behavior
+00:01 +17: C:/Users/HP/OneDrive/Desktop/sport-marketplace/FYP/project1_customer_mobile/test/questionnaire_viewmodel_test.dart: individual fixture switches suppress only their modules
+00:01 +18: C:/Users/HP/OneDrive/Desktop/sport-marketplace/FYP/project1_customer_mobile/test/questionnaire_viewmodel_test.dart: Q02 0 days does not invent another eligibility threshold
+00:01 +19: C:/Users/HP/OneDrive/Desktop/sport-marketplace/FYP/project1_customer_mobile/test/questionnaire_viewmodel_test.dart: Q06 max three and exclusive clearing
+00:01 +20: C:/Users/HP/OneDrive/Desktop/sport-marketplace/FYP/project1_customer_mobile/test/questionnaire_viewmodel_test.dart: matrix partial is incomplete; each synthetic feature needs its own answer
+00:01 +21: C:/Users/HP/OneDrive/Desktop/sport-marketplace/FYP/project1_customer_mobile/test/questionnaire_viewmodel_test.dart: optional skips remain empty; default ZERO route has 12 shown, 9 answers, 3 skips
+00:01 +22: C:/Users/HP/OneDrive/Desktop/sport-marketplace/FYP/project1_customer_mobile/test/questionnaire_viewmodel_test.dart: positive purchase full route shows 13 without claiming 13 answers
+00:01 +23: C:/Users/HP/OneDrive/Desktop/sport-marketplace/FYP/project1_customer_mobile/test/questionnaire_viewmodel_test.dart: Q04 edit clears excluded Q08 and does not restore stale answer
+00:01 +24: C:/Users/HP/OneDrive/Desktop/sport-marketplace/FYP/project1_customer_mobile/test/questionnaire_viewmodel_test.dart: Q01 edit prunes all hidden downstream answers and retains screen answers
+00:01 +25: C:/Users/HP/OneDrive/Desktop/sport-marketplace/FYP/project1_customer_mobile/test/questionnaire_viewmodel_test.dart: route expansion after review is blocked until unvisited required items answered
+00:01 +26: C:/Users/HP/OneDrive/Desktop/sport-marketplace/FYP/project1_customer_mobile/test/questionnaire_viewmodel_test.dart: optional skipped answer can be edited and counts recomputed
+00:01 +27: C:/Users/HP/OneDrive/Desktop/sport-marketplace/FYP/project1_customer_mobile/test/questionnaire_viewmodel_test.dart: language toggle preserves codes and session navigation
+00:01 +28: C:/Users/HP/OneDrive/Desktop/sport-marketplace/FYP/project1_customer_mobile/test/questionnaire_viewmodel_test.dart: back to welcome and resume preserves exposure and answers; setup freezes after start
+00:01 +29: C:/Users/HP/OneDrive/Desktop/sport-marketplace/FYP/project1_customer_mobile/test/questionnaire_viewmodel_test.dart: reset clears consent, response and exposure history
+00:01 +30: C:/Users/HP/OneDrive/Desktop/sport-marketplace/FYP/project1_customer_mobile/test/questionnaire_viewmodel_test.dart: state and answer collections cannot be externally mutated
+00:03 +31: C:/Users/HP/OneDrive/Desktop/sport-marketplace/FYP/project1_customer_mobile/test/ui_test.dart: (setUpAll)
+00:03 +31: C:/Users/HP/OneDrive/Desktop/sport-marketplace/FYP/project1_customer_mobile/test/ui_test.dart: welcome consent gate, bilingual labels and question selection work
+00:07 +32: C:/Users/HP/OneDrive/Desktop/sport-marketplace/FYP/project1_customer_mobile/test/ui_test.dart: Q05 styled selected option and route-aware review screenshots
+00:09 +33: C:/Users/HP/OneDrive/Desktop/sport-marketplace/FYP/project1_customer_mobile/test/ui_test.dart: welcome at 320x568 with 200% text in en has no overflow
+00:09 +34: C:/Users/HP/OneDrive/Desktop/sport-marketplace/FYP/project1_customer_mobile/test/ui_test.dart: q05 at 320x568 with 200% text in en has no overflow
+00:09 +35: C:/Users/HP/OneDrive/Desktop/sport-marketplace/FYP/project1_customer_mobile/test/ui_test.dart: review at 320x568 with 200% text in en has no overflow
+00:10 +36: C:/Users/HP/OneDrive/Desktop/sport-marketplace/FYP/project1_customer_mobile/test/ui_test.dart: matrix at 320x568 with 200% text in en has no overflow
+00:10 +37: C:/Users/HP/OneDrive/Desktop/sport-marketplace/FYP/project1_customer_mobile/test/ui_test.dart: welcome at 320x568 with 200% text in bm has no overflow
+00:10 +38: C:/Users/HP/OneDrive/Desktop/sport-marketplace/FYP/project1_customer_mobile/test/ui_test.dart: q05 at 320x568 with 200% text in bm has no overflow
+00:10 +39: C:/Users/HP/OneDrive/Desktop/sport-marketplace/FYP/project1_customer_mobile/test/ui_test.dart: review at 320x568 with 200% text in bm has no overflow
+00:10 +40: C:/Users/HP/OneDrive/Desktop/sport-marketplace/FYP/project1_customer_mobile/test/ui_test.dart: matrix at 320x568 with 200% text in bm has no overflow
+00:11 +41: C:/Users/HP/OneDrive/Desktop/sport-marketplace/FYP/project1_customer_mobile/test/ui_test.dart: (tearDownAll)
+00:11 +41: All tests passed!

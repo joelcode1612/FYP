@@ -1,0 +1,10 @@
+{
+  "source_root": "C:\\Users\\HP\\OneDrive\\Desktop\\Project1\\New_Goal",
+  "target_backend": "C:\\Users\\HP\\OneDrive\\Desktop\\sport-marketplace\\FYP\\backend",
+  "status": "CANDIDATE_ONLY",
+  "files": {
+    "reference/a2_router_lib.py": "3470f9609302f855131bbcd2801350d307bb5f0dc6a57f3081c0b562e6948531",
+    "reference/a2_routing_spec_v1.json": "291a622e68859f4191afff36ca04f86c7ef21cd0e5d45f81be38bcc18a8301fc",
+    "reference/CUST_RECOVERY_20261027/CUST03_CORRECTED_QUESTIONNAIRE_AND_ROUTING_CONTRACT.json": "ec2b5494ecf82447076e0d7a2bfb57599a24f049bbcc925a9ecbea6e833bce59"
+  }
+}
