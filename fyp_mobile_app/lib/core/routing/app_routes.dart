@@ -10,6 +10,7 @@ import '../../presentation/mobile/entrepreneur/pages/entrepreneur_assessment_set
 import '../../presentation/mobile/entrepreneur/pages/entrepreneur_assessment_summary_mobile_page.dart';
 import '../../presentation/mobile/entrepreneur/pages/entrepreneur_compare_mobile_page.dart';
 import '../../presentation/mobile/entrepreneur/pages/entrepreneur_evidence_mobile_page.dart';
+import '../../presentation/mobile/entrepreneur/pages/m2_assessment_mobile_page.dart';
 import '../../presentation/mobile/landing/pages/landing_mobile_page.dart';
 import '../../presentation/mobile/entrepreneur/pages/entrepreneur_spaces_mobile_page.dart';
 import '../../presentation/mobile/entrepreneur/pages/entrepreneur_dashboard_mobile_page.dart';
@@ -105,6 +106,9 @@ abstract final class AppRoutes {
           '/entrepreneur/preferences' => EntrepreneurPreferencesMobilePage(
             appState: appState,
           ),
+          // M2 assessment (Riverpod/MVVM feature work — ViewModel lives in
+          // shared_logic, this page is the Flutter view).
+          '/entrepreneur/assessment' => const M2AssessmentMobilePage(),
           '/entrepreneur/explore' => EntrepreneurExploreMobilePage(
             appState: appState,
             startInMap: id == 'map',

@@ -52,6 +52,14 @@ import 'pages/owner/property_detail_page.dart' as o_property_detail;
 import 'pages/owner/tour_preview_page.dart' as o_tour_preview;
 import 'pages/owner/tours_page.dart' as o_tours;
 
+// --- PROJECT1 GEO-DEV-C01 synthetic geography increment (isolated) ---
+// WF-07 route now renders GeoMapPage (synthetic three-coordinate demo).
+import 'geo/geo_page.dart';
+
+// --- PROJECT1 UI/UX prototype (V4) — isolated, additive workstream ---
+import 'prototype/prototype_m2.dart';
+import 'prototype/prototype_report.dart';
+import 'prototype/prototype_ui.dart';
 /// Route table — the Jaspr counterpart to
 /// `lib/core/routing/app_routes.dart` in the Flutter app.
 ///
@@ -514,6 +522,24 @@ class SitewiseApp extends StatelessComponent {
             title: 'Agent profile — Sitewise',
           ),
         ),
+
+        // --- PROJECT1 UI/UX prototype (V4) --------------------------------
+        // Additive routes. They live under `/prototype` so the existing
+        // Flutter-derived app is not overwritten. All data is fictional and
+        // no suitability score is issued.
+        Route(path: '/prototype', builder: (context, state) => const PrototypeHome()),
+        Route(path: '/prototype/wf-01', builder: (context, state) => const PrototypeHome()),
+        Route(path: '/prototype/wf-02', builder: (context, state) => const PrototypeHome()),
+        Route(path: '/prototype/wf-03', builder: (context, state) => const AssessmentPage()),
+        Route(path: '/prototype/wf-04', builder: (context, state) => const M2Page()),
+        Route(path: '/prototype/wf-05', builder: (context, state) => const UnderstandingPage()),
+        Route(path: '/prototype/wf-06', builder: (context, state) => const ResearchPrepPage()),
+        Route(path: '/prototype/wf-07', builder: (context, state) => const GeoMapPage()),
+        Route(path: '/prototype/wf-08', builder: (context, state) => const EvidencePage()),
+        Route(path: '/prototype/wf-09', builder: (context, state) => const ReportPageProto()),
+        Route(path: '/prototype/wf-10', builder: (context, state) => const CustomerPage()),
+        Route(path: '/prototype/wf-11', builder: (context, state) => const ResearchAdminPage()),
+        Route(path: '/prototype/wf-12', builder: (context, state) => const AuditPage()),
 
         // Unknown browser routes use errorBuilder above.
       ],

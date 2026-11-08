@@ -12,11 +12,17 @@ environment:
 # lockfile are shared with the sibling packages.
 resolution: workspace
 
-# Intentionally empty. Everything here is pure Dart; adding a dependency would
-# be the first step toward making this package unusable from one of the two
-# apps (Flutter-only packages break the Jaspr build and vice versa).
+# Pure Dart only. A dependency is acceptable here when it is itself pure Dart
+# and therefore usable from both apps; a Flutter-only or Jaspr-only package
+# would break the other platform's build.
+#
+# `bloc` and `riverpod` both qualify: both are pure Dart. `riverpod` is the
+# state container for the Riverpod/MVVM feature work (M2 assessment first);
+# `bloc` remains for the pre-existing AppCubit/AdminCubit/EntrepreneurCubit/
+# OwnerCubit until those are migrated.
 dependencies:
   bloc: ^9.2.1
+  riverpod: ^3.3.2
 dev_dependencies:
   # 1.31.1 requires test_api 0.7.12, but flutter_test (SDK 3.44.6) pins 0.7.11.
   # Bumping this breaks workspace resolution for both apps.

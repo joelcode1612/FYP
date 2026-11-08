@@ -1,5 +1,6 @@
 import 'package:shared_logic/shared_logic.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/material.dart';
 
 import 'core/routing/app_routes.dart';
@@ -19,7 +20,14 @@ const bool kAssessmentOnly = true;
 const String kAssessmentOnlyRoute = '/entrepreneur/assess';
 
 void main() {
-  runApp(const SitewiseApp(assessmentOnly: kAssessmentOnly));
+  // ProviderScope hosts the Riverpod container for MVVM feature work
+  // (M2 assessment). The pre-existing AppCubit below is unrelated and keeps
+  // working through BlocBuilder. The assessment-only launch switch is kept.
+  runApp(
+    const ProviderScope(
+      child: SitewiseApp(assessmentOnly: kAssessmentOnly),
+    ),
+  );
 }
 
 /// Root widget. Normally boots to the public landing page (`/`); role entry
