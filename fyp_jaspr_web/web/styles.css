@@ -11932,6 +11932,276 @@ input[type="range"] {
 }
 
 /* ==========================================================================
+   SiteWise Admin — Blue Accent Edition (SiteWise_Admin_Blue_DESIGN.md v2.0)
+   --------------------------------------------------------------------------
+   Role-scoped retheme of the Administrator workspace. AppLayout tags the
+   admin shell `app-shell--admin`; EVERY rule below is prefixed with it, so
+   Agent, Entrepreneur and public pages keep reading the shared `.app-shell`
+   theme untouched.
+
+   This block is declared LAST in the file on purpose: the shared dark-shell
+   section re-declares tokens on `.app-shell` and re-skins `.app-shell
+   .app-pill` as a white surface, and those rules must be outranked — not
+   edited in place, which would leak into the other roles.
+   ========================================================================== */
+
+/* --- Core tokens (admin.canvas / panel / accent family) ------------------- */
+
+.app-shell.app-shell--admin {
+  --background: #0d0f1a; /* admin.canvas */
+  --paper: #131623; /* admin.paper */
+  --surface: #1d202e; /* admin.panel */
+  --alt-surface: #272b3b; /* admin.panelRaised */
+  --neutral-wash: #272b3b;
+  --border: #34384b;
+  --border-strong: #494f64;
+
+  --ink: #f9f9fd; /* admin.textPrimary */
+  --text: #e7e9f2; /* admin.textBody */
+  --muted: #acb2c3; /* admin.textMuted */
+  --overline: #7f8598;
+  --overline-text: #acb2c3;
+
+  --action: #4da3ff; /* admin.accent — blue replaces the old blue/green pair */
+  --accent: #4da3ff;
+  --geo-wash: rgba(77, 163, 255, 0.14); /* admin.accentWash */
+  --geo-border: rgba(77, 163, 255, 0.36); /* admin.accentBorder */
+
+  /* Approved/verified intentionally reads blue in Admin (DESIGN.md §2.4);
+     no green survives in this role. */
+  --success: #4da3ff;
+  --success-text: #4da3ff;
+  --success-wash: rgba(77, 163, 255, 0.14);
+
+  --warning: #ffb35c;
+  --warning-wash: rgba(255, 179, 92, 0.15);
+  --danger: #fa7984;
+  --danger-wash: rgba(250, 121, 132, 0.14);
+
+  --hero-surface: #1d202e;
+  --hero-border: #34384b;
+  /* The inverted chip (active nav pill). White pill + dark label per spec. */
+  --contrast-surface: #f9f9fd;
+  --contrast-on-surface: #111521;
+
+  color-scheme: dark;
+  background: var(--background);
+  color: var(--text);
+}
+
+/* --- Floating navigation pill: charcoal, not white ------------------------ */
+
+.app-shell.app-shell--admin .app-pill {
+  /* The shared dark-shell section re-declares LIGHT tokens on `.app-pill`
+     for its descendants (search dialog, avatar menu, notification panel are
+     DOM children of the pill). Re-declare them with the admin values so
+     those popovers stay charcoal instead of flipping back to white. */
+  --background: #1d202e;
+  --surface: #1d202e;
+  --alt-surface: #272b3b;
+  --paper: #131623;
+  --neutral-wash: #272b3b;
+  --border: #34384b;
+  --border-strong: #494f64;
+  --ink: #f9f9fd;
+  --text: #e7e9f2;
+  --muted: #acb2c3;
+  --overline: #7f8598;
+  --overline-text: #acb2c3;
+  --action: #4da3ff;
+  --accent: #4da3ff;
+  --geo-wash: rgba(77, 163, 255, 0.14);
+  --geo-border: rgba(77, 163, 255, 0.36);
+  --success: #4da3ff;
+  --success-text: #4da3ff;
+  --success-wash: rgba(77, 163, 255, 0.14);
+  --warning: #ffb35c;
+  --warning-wash: rgba(255, 179, 92, 0.15);
+  --danger: #fa7984;
+  --danger-wash: rgba(250, 121, 132, 0.14);
+  --contrast-surface: #f9f9fd;
+  --contrast-on-surface: #111521;
+
+  color-scheme: dark;
+  background: #1d202e;
+  border-color: #34384b;
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.3),
+    0 12px 32px rgba(0, 0, 0, 0.35);
+  color: #f9f9fd;
+}
+
+.app-shell.app-shell--admin .app-pill__link {
+  color: #d1d5e1;
+}
+
+.app-shell.app-shell--admin .app-pill__link:hover {
+  background: rgba(255, 255, 255, 0.07);
+  color: #f9f9fd;
+}
+
+.app-shell.app-shell--admin .app-pill__link--active,
+.app-shell.app-shell--admin .app-pill__link--active:hover {
+  background: #f9f9fd;
+  border-color: #f9f9fd;
+  color: #111521;
+}
+
+/* Primary action icons stay blue; search/account controls read as raised
+   charcoal on the charcoal pill. */
+.app-shell.app-shell--admin .app-pill .icon-btn,
+.app-shell.app-shell--admin .app-pill .avatar-menu__trigger,
+.app-shell.app-shell--admin .app-pill .topbar__burger {
+  background: #272b3b;
+  border-color: #494f64;
+  color: #acb2c3;
+}
+
+.app-shell.app-shell--admin .app-pill .icon-btn:hover,
+.app-shell.app-shell--admin .app-pill .avatar-menu__trigger:hover,
+.app-shell.app-shell--admin .app-pill .topbar__burger:hover {
+  background: #303447;
+  border-color: rgba(77, 163, 255, 0.36);
+  color: #f9f9fd;
+}
+
+.app-shell.app-shell--admin .app-pill .avatar {
+  background: #4da3ff;
+  color: #111521;
+}
+
+.app-shell.app-shell--admin .brand:hover {
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.app-shell.app-shell--admin .brand__sub {
+  color: #acb2c3;
+}
+
+/* --- Mobile drawer inherits the panel surface ----------------------------- */
+
+.app-shell.app-shell--admin .sidebar {
+  background: var(--surface);
+}
+
+/* --- Dashboard KPI gradients (DESIGN.md §2.3, §5.1) -----------------------
+   Order matches dashboard_page.dart `_kpis()`: properties, tours, approved,
+   accounts. Gradients belong to these four tiles only. */
+
+.app-shell.app-shell--admin .bento-kpis .kpi:nth-child(1) {
+  background: linear-gradient(115deg, #775bb8, #aa8de4);
+}
+
+.app-shell.app-shell--admin .bento-kpis .kpi:nth-child(2) {
+  background: linear-gradient(115deg, #c84560, #f57f83);
+}
+
+.app-shell.app-shell--admin .bento-kpis .kpi:nth-child(3) {
+  background: linear-gradient(115deg, #2354a9, #3887e4);
+}
+
+.app-shell.app-shell--admin .bento-kpis .kpi:nth-child(4) {
+  background: linear-gradient(115deg, #c57a37, #f1aa62);
+}
+
+.app-shell.app-shell--admin .bento-kpis .kpi :is(.k, .v, .n) {
+  color: #ffffff;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.22);
+}
+
+/* --- Panels ---------------------------------------------------------------- */
+
+.app-shell.app-shell--admin .bento-card,
+.app-shell.app-shell--admin .bento-hero,
+.app-shell.app-shell--admin .panel {
+  background: #1d202e;
+  border-color: #34384b;
+}
+
+/* --- Buttons (DESIGN.md §5.3) ----------------------------------------------
+   Primary becomes the blue fill; the shared dark shell renders it as the
+   inverted white chip, which is the wrong hierarchy for this role. */
+
+.app-shell.app-shell--admin .btn--primary,
+.app-shell.app-shell--admin .btn--accent,
+.app-shell.app-shell--admin .bento-cta,
+.app-shell.app-shell--admin .bento-hero .bento-cta {
+  background: #4da3ff;
+  border-color: #4da3ff;
+  color: #111521;
+}
+
+.app-shell.app-shell--admin .btn--primary:hover,
+.app-shell.app-shell--admin .btn--accent:hover,
+.app-shell.app-shell--admin .bento-cta:hover,
+.app-shell.app-shell--admin .bento-hero .bento-cta:hover {
+  background: #3887e4;
+  border-color: #3887e4;
+  color: #111521;
+}
+
+.app-shell.app-shell--admin .btn,
+.app-shell.app-shell--admin .btn--secondary {
+  background: #272b3b;
+  border-color: #494f64;
+  color: #e7e9f2;
+}
+
+.app-shell.app-shell--admin .btn--secondary:hover {
+  border-color: rgba(77, 163, 255, 0.36);
+  color: #4da3ff;
+}
+
+.app-shell.app-shell--admin .btn--ghost {
+  background: transparent;
+  color: #acb2c3;
+}
+
+.app-shell.app-shell--admin .btn--ghost:hover {
+  background: #303447;
+  color: #f9f9fd;
+  border-color: #494f64;
+}
+
+/* --- Forms (DESIGN.md §5.5) ------------------------------------------------ */
+
+.app-shell.app-shell--admin :is(input, select, textarea) {
+  background: #272b3b;
+  border-color: #494f64;
+  color: #f9f9fd;
+}
+
+.app-shell.app-shell--admin :is(input, select, textarea)::placeholder {
+  color: #acb2c3;
+}
+
+/* --- Tables (DESIGN.md §5.4) ----------------------------------------------- */
+
+.app-shell.app-shell--admin .audit-table thead th {
+  background: #272b3b;
+  color: #acb2c3;
+}
+
+.app-shell.app-shell--admin .audit-table tbody tr:hover td {
+  background: #303447;
+}
+
+/* --- Tabs, chips: selected = blue with dark label (DESIGN.md §5.6) -------- */
+
+.app-shell.app-shell--admin .tab[aria-selected='true'],
+.app-shell.app-shell--admin .ops-chip[aria-pressed='true'] {
+  color: #111521;
+}
+
+/* --- Keyboard focus (admin.focusRing) -------------------------------------- */
+
+.app-shell.app-shell--admin
+  :is(a, button, input, select, textarea, summary):focus-visible {
+  outline: 3px solid #4da3ff;
+  outline-offset: 2px;
+}
+
+/* ==========================================================================
    Location Assessment Workspace
    --------------------------------------------------------------------------
    The web decision-support workflow: five persisted stages, the overall
@@ -12403,4 +12673,87 @@ input[type="range"] {
   .ag-step {
     transition: none;
   }
+}
+
+/* ==========================================================================
+   SiteWise Agent — light landing-palette edition (uploaded DESIGN.md §4)
+   --------------------------------------------------------------------------
+   Role-scoped retheme of the Agent workspace, mirroring the structure of the
+   admin block above. AppLayout tags the agent shell `app-shell--agent`; every
+   rule below is prefixed with it, so Admin, Entrepreneur and public pages keep
+   reading the shared `.app-shell` theme untouched.
+
+   Direction (DESIGN.md §4.4): muted blue canvas + white surfaces + slate text
+   + royal-blue actions. Values are the landing-page tokens of DESIGN.md §4.1
+   (which `:root` already carries) with the brief's border pair #E2E8F0 /
+   #CBD5E1. Declared after the shared dark-shell block so this token re-scope
+   outranks it without editing it.
+   ========================================================================== */
+
+.app-shell.app-shell--agent {
+  --background: #e8eef6; /* DESIGN.md --bg — muted-blue canvas */
+  --paper: #f4f7fb;
+  --surface: #ffffff;
+  --alt-surface: #f8fafc;
+  --neutral-wash: #f1f5f9;
+
+  --ink: #0b0f19;
+  --text: #1e293b;
+  --muted: #64748b;
+  --overline: #94a3b8;
+  --overline-text: #6b7280;
+
+  --border: #e2e8f0;
+  --border-strong: #cbd5e1;
+
+  --action: #1d4ed8; /* royal blue — the Agent interaction colour */
+  --accent: #3b82f6;
+  --geo-wash: #dbeafe;
+  --geo-border: #bfdbfe;
+
+  /* Teal stays a favourable-evidence colour only (DESIGN.md §4.1); it is not
+     the brand or button colour of this workspace. */
+  --success: #0d9488;
+  --success-text: #0f766e;
+  --success-wash: #d1fae5;
+  --warning: #b45309;
+  --warning-wash: #fef3c7;
+  --danger: #dc2626;
+  --danger-wash: #fee2e2;
+
+  --scrim: rgba(15, 23, 42, 0.42);
+  --shadow-sm: 0 12px 32px rgba(15, 23, 42, 0.06);
+  --shadow: 0 24px 80px rgba(15, 23, 42, 0.1);
+  --menu-shadow: 0 16px 48px rgba(15, 23, 42, 0.12);
+  --dialog-shadow: 0 24px 64px rgba(15, 23, 42, 0.14);
+
+  /* Primary buttons read as the dark near-black chip with the blue hover that
+     DESIGN.md §4.3 specifies — the shared `.btn--primary` rule already
+     consumes these two tokens, so no per-component override is needed. */
+  --contrast-surface: #0b0f19;
+  --contrast-on-surface: #ffffff;
+
+  color-scheme: light;
+  background: var(--background);
+  color: var(--text);
+}
+
+/* Royal-blue selected state for the floating nav (DESIGN.md §3: "royal-blue
+   filled pill with white text"). The shared shell renders the active pill in
+   near-black `--ink`, which is the Admin-style hierarchy, not the Agent one.
+   The white pill surface itself is already correct here, so only the active
+   state is overridden. */
+.app-shell.app-shell--agent .app-pill__link--active,
+.app-shell.app-shell--agent .app-pill__link--active:hover {
+  background: var(--action);
+  border-color: var(--action);
+  color: #ffffff;
+}
+
+/* The shared dark shell forces native form controls to the UA dark scheme;
+   on the light Agent canvas they would render as black fields on white
+   cards. The white pill nav re-declares its own light tokens, so this single
+   scoped rule covers page forms and the pill's search field alike. */
+.app-shell.app-shell--agent :is(input, select, textarea) {
+  color-scheme: light;
 }

@@ -19,6 +19,7 @@ request. Every privileged operation is recorded in ``role_change_audit``.
 from __future__ import annotations
 
 import uuid
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, EmailStr, Field
@@ -27,7 +28,12 @@ from sqlmodel import Session
 from sitewise.core.supabase_admin import SupabaseAdminService
 from sitewise.db.models.user import User
 from sitewise.db.session import get_db
-from sitewise.dependencies import AdminMfaUser, AgentMfaUser
+from sitewise.dependencies import (
+    AdminMfaUser,
+    AgentMfaUser,
+    CurrentUser,
+    _staff_mfa_required,
+)
 from sitewise.domain import rbac
 from sitewise.services.user_service import UserService
 
@@ -378,6 +384,209 @@ def list_agents(
 ) -> list[dict]:
     """Agent accounts joined to their company and latest invitation state."""
     return _agent_records(session, _admin_service())
+
+
+# ---------------------------------------------------------------------------
+# Invitation acceptance -> automatic activation (trusted completion step).
+#
+# The invited agent lands on the authorized redirect after the Supabase
+# invite email, sets a password and verifies a TOTP factor. Because the
+# account is still ``pending``, the ordinary ``get_active_user`` chain would
+# reject it (the circular pending-vs-MFA dependency), so this endpoint runs
+# on ``CurrentUser`` - a verified session and a verified local profile -
+# and re-proves every activation precondition SERVER-SIDE before flipping
+# the authoritative status. The frontend flag never activates anything.
+# ---------------------------------------------------------------------------
+
+
+def _structured_error(status_code: int, code: str, message: str) -> HTTPException:
+    """Structured error the web client branches on by ``detail.code``."""
+    return HTTPException(status_code=status_code, detail={"code": code, "message": message})
+
+
+def _parse_supabase_timestamp(value: object) -> datetime | None:
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    except ValueError:
+        return None
+
+
+def _invitation_is_expired(row: dict) -> bool:
+    expires = _parse_supabase_timestamp(row.get("expires_at"))
+    return expires is not None and expires <= datetime.now(timezone.utc)
+
+
+def _newest_invitation(service: SupabaseAdminService, email: str) -> dict | None:
+    rows = service.list_invitations(email)
+    if not rows:
+        return None
+    return sorted(
+        rows, key=lambda row: str(row.get("created_at") or ""), reverse=True
+    )[0]
+
+
+def _has_verified_totp_factor(service: SupabaseAdminService, auth_user_id: str) -> bool:
+    return any(
+        factor.get("status") == "verified"
+        and str(factor.get("factor_type") or factor.get("type") or "").lower() == "totp"
+        for factor in service.admin_list_factors(auth_user_id)
+    )
+
+
+@router.post("/onboarding/complete")
+def complete_onboarding(
+    user: CurrentUser,
+    session: Session = Depends(get_db),
+) -> dict:
+    """Trusted completion of the agent invitation lifecycle.
+
+    Preconditions re-proven here on every call (never trusted from the
+    client): the signed token's subject, an agent role, a signed ``aal2``
+    claim backed by a verified TOTP factor on the identity, Supabase's own
+    invitation-acceptance evidence (``email_confirmed_at``), and ownership
+    plus validity of the invitation row.
+
+    Transitions are idempotent and reconciling: the invitation row moves to
+    ``accepted`` with ``accepted_at``, the authoritative ``public.users``
+    row and the enforcement mirror both move to ``active``, and a single
+    ``role_change_audit`` entry records the real transition. Re-calling the
+    endpoint after a partial failure completes only the missing writes.
+    """
+    if not rbac.has_role(user.role, (rbac.ROLE_AGENT,)):
+        raise _structured_error(
+            403,
+            "onboarding_forbidden",
+            "Onboarding completion requires an invited agent account.",
+        )
+    if user.assurance_level != rbac.REQUIRED_STAFF_AAL:
+        raise _staff_mfa_required()
+
+    service = _admin_service()
+    user_service = UserService(session)
+    email = str(user.email or "").lower()
+
+    # 1. Supabase-verified acceptance evidence: the authoritative proof that
+    # the invited user actually accepted the invite (set a password through
+    # the emailed link) is the confirmation timestamp on the auth identity -
+    # never "the email was sent" or "the invite link was opened".
+    auth_user = service.get_auth_user(str(user.user_id))
+    accepted_at = None
+    if auth_user:
+        accepted_at = auth_user.get("email_confirmed_at") or auth_user.get("confirmed_at")
+    if not accepted_at:
+        raise _structured_error(
+            409,
+            "invitation_not_accepted",
+            "The invitation has not been accepted yet: no confirmed email on "
+            "the identity. Open the invite link and set your password first.",
+        )
+
+    # 2. A verified TOTP factor must exist on the identity - defense in
+    # depth behind the signed aal2 claim on the session token.
+    if not _has_verified_totp_factor(service, str(user.user_id)):
+        raise _structured_error(
+            403,
+            "staff_mfa_required",
+            "Complete multi-factor enrollment and verification before "
+            "finishing onboarding.",
+        )
+
+    # 3. Invitation ownership + validity. A missing invitation row is legal
+    # (the allow_existing workflow grants the role without an invite); an
+    # invitation issued to a DIFFERENT identity never is.
+    invitation = _newest_invitation(service, email)
+    invitation_id = ""
+    state = ""
+    if invitation is not None:
+        invitation_id = str(invitation.get("invitation_id") or "")
+        state = _invitation_state(invitation)
+        invited_for = invitation.get("invited_user_id")
+        if invited_for and str(invited_for) != str(user.user_id):
+            raise _structured_error(
+                403,
+                "invitation_ownership",
+                "This invitation was issued to a different identity.",
+            )
+        if state == "revoked":
+            raise _structured_error(
+                410,
+                "invitation_revoked",
+                "This invitation was revoked. Ask an administrator to send "
+                "a new one.",
+            )
+        if state == "expired" or (
+            state in _OPEN_INVITATION_STATES and _invitation_is_expired(invitation)
+        ):
+            # Lifecycle reconciliation: persist the expired state so the
+            # administrator's directory stops showing a dead invite as open.
+            if state in _OPEN_INVITATION_STATES:
+                service.update_invitation(
+                    invitation_id, {"invitation_status": "expired"}
+                )
+            raise _structured_error(
+                410,
+                "invitation_expired",
+                "This invitation has expired. Ask an administrator to send "
+                "a new one.",
+            )
+
+    # 4. Activation - authoritative identity row first, then the enforcement
+    # mirror, mirroring the ordering of every other status change. Skipped
+    # entirely when the account is already active (idempotent retries).
+    activated = False
+    if user.account_status != rbac.STATUS_ACTIVE:
+        if user.account_status == rbac.STATUS_SUSPENDED:
+            raise _structured_error(
+                403,
+                "onboarding_suspended",
+                "This account is suspended; activation is not possible.",
+            )
+        service.update_identity_profile(
+            user.user_id, {"account_status": rbac.STATUS_ACTIVE}
+        )
+        updated = user_service.update_user(
+            user.user_id, {"account_status": rbac.STATUS_ACTIVE}
+        )
+        if updated is None:  # pragma: no cover - profile read above
+            raise HTTPException(status_code=404, detail="Local profile not found.")
+        service.insert_role_audit(
+            affected_user_id=user.user_id,
+            affected_email=user.email,
+            performed_by_user_id=user.user_id,
+            performed_by_email=user.email,
+            action="staff.onboarding_completed",
+            previous_status=user.account_status,
+            new_status=rbac.STATUS_ACTIVE,
+            details={
+                "invitation_id": invitation_id or None,
+                "email_confirmed_at": str(accepted_at),
+            },
+        )
+        activated = True
+
+    # 5. Invitation close (reconciliation): an open invitation is moved to
+    # ``accepted`` with ``accepted_at`` - also on idempotent retries where
+    # activation already happened, so a partial failure self-heals here.
+    if invitation is not None and state in _OPEN_INVITATION_STATES:
+        service.update_invitation(
+            invitation_id,
+            {
+                "invitation_status": "accepted",
+                "accepted_at": datetime.now(timezone.utc).isoformat(),
+            },
+        )
+        state = "accepted"
+
+    return {
+        "account_status": rbac.STATUS_ACTIVE,
+        "role": user.role,
+        "invitation_id": invitation_id,
+        "invitation_status": state,
+        "email_confirmed_at": str(accepted_at),
+        "activated": activated,
+    }
 
 
 # ---------------------------------------------------------------------------

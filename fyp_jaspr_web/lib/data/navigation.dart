@@ -83,12 +83,10 @@ List<WebDestination> webDestinationsFor(AppRole role) => switch (role) {
       icon: 'business',
       label: 'Assigned Listings',
     ),
-    WebDestination(route: '/agent/enquiries', icon: 'mail', label: 'Enquiries'),
-    WebDestination(
-      route: '/agent/performance',
-      icon: 'monitoring',
-      label: 'Performance',
-    ),
+    // Enquiries and Performance are not part of the approved Agent scope —
+    // nothing server-side stores enquiries or interaction events — so they are
+    // no longer offered as navigation. Their routes stay registered so old
+    // links and the parent-shell mapping keep resolving.
     WebDestination(route: '/agent/profile', icon: 'person', label: 'Profile'),
   ],
   AppRole.owner => const [

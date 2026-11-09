@@ -212,7 +212,13 @@ async function apiRequest(path, method = 'GET', body) {
 // The authoritative profile lives server-side: GET /api/v1/auth/me verifies
 // the bearer token against Supabase, provisions the profile on first sign-in
 // and returns the SERVER-assigned role. No client-submitted role is ever sent.
-async function profile() {
+//
+// loadProfile() is the status-agnostic core: it revalidates the signed
+// identity server-side and stores the authoritative role + account_status.
+// The invitation onboarding paths (MFA enrollment happens while the account
+// is still pending) use it directly; strict profile() adds the active-account
+// gate for sign-in / workspace routing.
+async function loadProfile() {
   const { data: before, error: sessionError } = await client.auth.getSession();
   const identityId = before?.session?.user?.id;
   if (sessionError || !identityId) throw new Error('Sign in to continue.');
@@ -228,18 +234,22 @@ async function profile() {
     clearSessionCookies();
     throw new Error('The authenticated identity changed. Please sign in again.');
   }
-  try {
-    assertActiveAccount(response);
-  } catch (error) {
-    state.profile = null;
-    clearSessionCookies();
-    throw error;
-  }
   state.user = { id: identityId, email: after.session.user.email };
   state.profile = response;
   state.backendAvailable = true;
   state.error = '';
   await syncSessionCookies();
+}
+
+async function profile() {
+  await loadProfile();
+  try {
+    assertActiveAccount(state.profile);
+  } catch (error) {
+    state.profile = null;
+    clearSessionCookies();
+    throw error;
+  }
 }
 
 // The backend's /auth/me is authoritative for role AND account_status. A
@@ -451,7 +461,21 @@ async function enforceStaffAssurance() {
 async function finishSignIn(expectedPortal) {
   // Never choose a workspace using a previously authenticated account's
   // profile. The backend resolves the role from the current signed JWT.
-  await profile();
+  try {
+    await profile();
+  } catch (error) {
+    if (error?.code !== 'account_pending') throw error;
+    // A pending STAFF account (invitation onboarding interrupted after the
+    // password was set) resumes into MFA enrollment / trusted activation
+    // instead of being told an administrator must act. Any other pending
+    // account keeps the original error, and the portal cross-check still
+    // applies before continuing.
+    await loadProfile();
+    if (!isStaffRole(state.profile?.role)) throw error;
+    assertPortalRole(expectedPortal);
+    await finishStaffOnboarding();
+    return;
+  }
   assertActiveAccount(state.profile);
   // Portal/role cross-check BEFORE any MFA step or workspace routing, so a
   // mismatched account stops here with a clear message instead of being sent
@@ -468,6 +492,59 @@ async function finishSignIn(expectedPortal) {
     return;
   }
   goHome();
+}
+
+// Map the trusted backend's structured invitation/onboarding errors to
+// user-safe messages. The backend codes are stable contract (staff.py).
+function invitationFailureMessage(error) {
+  const code = String(error?.code || '');
+  if (code === 'invitation_expired') return 'This invitation has expired. Ask an administrator to send a new one.';
+  if (code === 'invitation_revoked') return 'This invitation was revoked. Ask an administrator to send a new one.';
+  if (code === 'invitation_not_accepted') return 'Your invitation has not been confirmed yet. Open the invite link from your email and set your password first.';
+  if (code === 'invitation_ownership') return 'This invitation was issued to a different account. Please contact a Sitewise administrator.';
+  if (code === 'onboarding_suspended') return 'This account is suspended and cannot be activated. Please contact a Sitewise administrator.';
+  if (code === 'onboarding_forbidden' || code === 'mfa_role') return 'This account cannot complete staff onboarding. Please contact a Sitewise administrator.';
+  if (code === 'staff_mfa_required') return 'Complete multi-factor enrollment and verification before finishing setup.';
+  if (error?.status === 502 || error?.status === 503) return 'The activation service is temporarily unavailable. Please try again in a moment.';
+  return error?.message || 'Your account could not be activated automatically. Please contact a Sitewise administrator.';
+}
+
+// Trusted activation step for a pending STAFF account that has already
+// reached aal2 (password set + TOTP verified). The backend re-proves every
+// precondition server-side; this call never carries client-claimed state.
+async function activatePendingStaff() {
+  try {
+    await apiRequest('/api/v1/staff/onboarding/complete', 'POST', {});
+    await loadProfile(); // refresh the authoritative status (now active)
+  } catch (error) {
+    throw authError(
+      error?.code || 'onboarding_failed',
+      invitationFailureMessage(error),
+      error,
+    );
+  }
+}
+
+// Invitation lifecycle continuation for pending staff accounts. The account
+// is pending by design until the trusted backend activates it, so loadProfile()
+// (not strict profile()) is used throughout. Staff without aal2 go to MFA
+// enrollment; at aal2 the activation endpoint runs and normal routing takes
+// over. The account is NEVER routed into a workspace while pending.
+async function finishStaffOnboarding() {
+  await loadProfile();
+  assertPortalRole('staff');
+  const status = await ensureStaffAssurance();
+  if (status === 'enroll') {
+    state.mfaEnrollmentRequired = true;
+    navigate('/staff/mfa', 'finishStaffOnboarding:enroll');
+    return;
+  }
+  if (status === 'verify') {
+    navigate('/staff/verify', 'finishStaffOnboarding:verify');
+    return;
+  }
+  await activatePendingStaff();
+  await finishSignIn();
 }
 
 // Initialize from the local API's public configuration.
@@ -606,8 +683,28 @@ async function doInitialize() {
       // The API fetch revalidates the current signed identity before a cookie
       // mirror is issued, including when the token refreshes.
       setTimeout(() => {
-        profile()
-          .then(() => enforceStaffAssurance())
+        loadProfile()
+          .then(() => {
+            const p = state.profile;
+            const status = String(p?.account_status || '').toLowerCase();
+            if (p && status === 'pending' && isStaffRole(p.role)) {
+              // Invitation onboarding: a pending staff account keeps its
+              // session for the /staff/* enrollment screens (e.g. across a
+              // token refresh mid-enrollment) but NEVER a workspace document.
+              if (STAFF_WORKSPACE.test(location.pathname)) {
+                navigate('/staff/signin', 'session-refresh:pending-staff');
+              }
+              return undefined;
+            }
+            if (p && status !== 'active') {
+              // Suspended or unknown status keeps the old strict behavior:
+              // the mirror is dropped so nothing renders as signed in.
+              state.profile = null;
+              clearSessionCookies();
+              return undefined;
+            }
+            return enforceStaffAssurance();
+          })
           .catch(() => { state.profile = null; clearSessionCookies(); });
       }, 0);
     }
@@ -740,7 +837,19 @@ async function doComplete(next) {
   // returns the authoritative role + account_status. The old code invented
   // an entrepreneur profile when the API was down, which hid the outage and
   // skipped the pending/suspended checks. Never grant access implicitly.
-  await profile();
+  try {
+    await profile();
+  } catch (error) {
+    if (error?.code !== 'account_pending') throw error;
+    // Invitation acceptance: a pending STAFF account continues into MFA
+    // enrollment and the trusted backend activation instead of being bounced
+    // with "awaiting administrator activation". Any other pending account
+    // (e.g. a public signup) still stops here with the original error.
+    await loadProfile();
+    if (!isStaffRole(state.profile?.role)) throw error;
+    await finishStaffOnboarding();
+    return;
+  }
   await finishSignIn();
 }
 
@@ -796,10 +905,12 @@ window.sitewiseAuth = {
       throw authError('mfa_session', 'Your sign-in session expired. Please sign in again.', sessionError);
     }
     try {
-      await profile();
+      // loadProfile (not strict profile): a pending invited agent must be
+      // able to start a challenge during onboarding, before activation.
+      await loadProfile();
     } catch (error) {
-      // profile() failures are already specific (backend unreachable, account
-      // status, identity change). Preserve the message, tag the stage.
+      // loadProfile failures are already specific (backend unreachable,
+      // identity change). Preserve the message, tag the stage.
       throw authError('mfa_profile:' + (error?.code || 'error'), error?.message || 'Could not verify the account.', error);
     }
     if (!isStaffRole(state.profile?.role)) {
@@ -848,7 +959,9 @@ window.sitewiseAuth = {
     state.mfaRequired = false;
     state.mfaFactorId = null;
     state.mfaChallengeId = null;
-    await profile();
+    // loadProfile (not strict profile): the account may still be pending at
+    // this point in the invitation onboarding - verification must not fail.
+    await loadProfile();
     return true;
   },
   // --- Staff TOTP enrollment ("Secure Your Staff Account") -----------------
@@ -862,7 +975,9 @@ window.sitewiseAuth = {
       throw authError('mfa_session', 'Your sign-in session expired. Please sign in again.', sessionError);
     }
     try {
-      await profile();
+      // loadProfile (not strict profile): pending invited agents enroll MFA
+      // BEFORE the trusted backend activates the account.
+      await loadProfile();
     } catch (error) {
       throw authError('mfa_profile:' + (error?.code || 'error'), error?.message || 'Could not verify the account.', error);
     }
@@ -974,7 +1089,10 @@ window.sitewiseAuth = {
         message: 'session aal=' + confirmedAal,
       });
     }
-    await profile();
+    // loadProfile (not strict profile): the invited agent's account is still
+    // pending right after enrollment verification; activation happens next
+    // through the trusted backend endpoint.
+    await loadProfile();
     // UI displays verified success, then invokes complete() to route.
     return true;
   },
@@ -1002,21 +1120,15 @@ window.sitewiseAuth = {
     const { error } = await client.auth.updateUser({ password });
     if (error) throw error;
     if (context === 'invite') {
-      // Invitation flow (Issue C): the password is set and the account
-      // REMAINS PENDING until an administrator activates it. The invitation
-      // session must not continue as a signed-in session: end THIS device's
-      // session only (never a global sign-out of every device), clear the
-      // SSR mirror, and return the agent to the Staff Sign-in page.
+      // Invitation flow: the password is set, which Supabase records as the
+      // email-confirmation timestamp - the authoritative acceptance evidence.
+      // The lifecycle CONTINUES here instead of ending the session: the agent
+      // proceeds straight into TOTP enrollment and the trusted backend
+      // activation (finishStaffOnboarding). finishStaffOnboarding never
+      // routes a pending account into a workspace; without aal2 it navigates
+      // to /staff/mfa, and at aal2 it activates and signs in.
       sessionStorage.removeItem(PASSWORD_FLOW_KEY);
-      await client.auth.signOut({ scope: 'local' });
-      clearSessionCookies();
-      // One-time display notice consumed by the Staff Sign-in page. Fixed
-      // strings only - no credentials, tokens or account identifiers.
-      sessionStorage.setItem(PASSWORD_NOTICE_KEY, JSON.stringify({
-        title: 'Password successfully created!',
-        body: 'Your SiteWise password has been set successfully. Your account is currently awaiting administrator activation. You can sign in once your account has been activated.',
-      }));
-      navigate('/staff/signin', 'password-set:invite');
+      await finishStaffOnboarding();
       return;
     }
     // Recovery flow (default): an existing ACTIVE account signs straight in

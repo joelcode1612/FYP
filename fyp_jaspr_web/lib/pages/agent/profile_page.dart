@@ -137,8 +137,6 @@ class AgentProfilePage extends StatelessComponent {
       div(classes: 'aside-list', [
         for (final item in const [
           ('Listings', 'View and filter; no edit is authorised.'),
-          ('Enquiries', 'Prototype inbox; nothing is stored.'),
-          ('Performance', 'Catalog arithmetic; no events captured.'),
           ('Owners', 'The dataset records no ownership relation.'),
         ])
           AsideRow(badge: '·', title: item.$1, caption: item.$2),

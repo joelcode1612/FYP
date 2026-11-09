@@ -56,9 +56,7 @@ class AgentDashboardPage extends StatelessComponent {
             _kpis(listings),
             div(classes: 'bento', [
               _portfolioCard(listings),
-              _tasksCard(),
-              _enquiriesCard(),
-              _performanceCard(),
+              _verificationCard(listings),
             ]),
           ]);
         },
@@ -74,7 +72,8 @@ class AgentDashboardPage extends StatelessComponent {
         p(classes: 'muted', [
           Component.text(
             'The listings this agent handles, their review state and what is '
-            'waiting for a response. $count units in the demonstration portfolio.',
+            'waiting for an administrator. $count units in the demonstration '
+            'portfolio.',
           ),
         ]),
       ]),
@@ -83,16 +82,6 @@ class AgentDashboardPage extends StatelessComponent {
           to: '/agent/listings',
           classes: 'bento-cta',
           children: [Component.text('Manage listings')],
-        ),
-        AppLink(
-          to: '/agent/enquiries',
-          classes: 'bento-period',
-          children: [Component.text('Open enquiries')],
-        ),
-        AppLink(
-          to: '/agent/performance',
-          classes: 'bento-period',
-          children: [Component.text('View performance')],
         ),
       ]),
     ]);
@@ -118,9 +107,9 @@ class AgentDashboardPage extends StatelessComponent {
         'Awaiting an administrator',
       ),
       _kpi(
-        'New enquiries',
-        '${demoEnquiries.where((e) => e.status == 'New').length}',
-        'Not stored — see the enquiries page',
+        'Draft or suspended',
+        '${listings.where((l) => l.verification == VerificationStatus.draft || l.verification == VerificationStatus.rejected).length}',
+        'Not live on the public site',
       ),
     ]);
   }
@@ -136,38 +125,38 @@ class AgentDashboardPage extends StatelessComponent {
   Component _portfolioCard(List<CommercialProperty> listings) {
     return div(classes: 'bento-card bento-wide', [
       div(classes: 'bento-card__head', [
-        h3([Component.text('Listings needing attention')]),
+        h3([Component.text('Portfolio overview')]),
         AppLink(
           to: '/agent/listings',
           classes: 'card-note',
-          children: [Component.text('See all')],
+          children: [Component.text('Open in Assigned Listings')],
         ),
       ]),
       DataTable(
         columns: const [
-          DataColumn('Listing'),
+          DataColumn('Property'),
+          DataColumn('Location'),
           DataColumn('Status'),
-          DataColumn('Owner'),
           DataColumn('Rent', numeric: true),
-          DataColumn('Open', actions: true),
+          DataColumn('Detail', actions: true),
         ],
         rows: [
-          for (final property in listings.take(4))
+          for (final property in listings)
             [
               CellIdentity(
                 title: property.title,
-                caption: '${property.city} · ${property.propertyType}',
+                caption: property.propertyType,
               ),
+              Component.text(property.city),
               Pill(
                 AgentRecords.listingLabel(property.verification),
                 tone: AgentRecords.listingTone(property.verification),
               ),
-              Component.text(AgentRecords.ownerLabel(property)),
               Component.text(property.rentalDisplay),
               AppLink(
                 to: '/agent/property-detail?id=${property.id}',
                 classes: 'text-action',
-                children: [Component.text('Open')],
+                children: [Component.text('View')],
               ),
             ],
         ],
@@ -175,89 +164,41 @@ class AgentDashboardPage extends StatelessComponent {
     ]);
   }
 
-  Component _tasksCard() {
-    final tasks = demoTasks();
+  /// Pending property verification, driven by the real catalog states. When
+  /// the queue is empty the panel says so instead of padding itself with rows
+  /// that do not exist — the same honesty rule the old performance card used.
+  Component _verificationCard(List<CommercialProperty> listings) {
+    final pending = listings
+        .where((l) => l.verification == VerificationStatus.pending)
+        .toList();
     return div(classes: 'bento-card', [
       div(classes: 'bento-card__head', [
-        h3([Component.text('Today')]),
-        span(classes: 'card-note', [Component.text('Prototype')]),
+        h3([Component.text('Pending verification')]),
+        span(classes: 'card-note', [
+          Component.text('${pending.length} waiting'),
+        ]),
       ]),
-      div(classes: 'aside-list', [
-        for (var i = 0; i < tasks.length; i++)
-          AsideRow(
-            badge: tasks[i].done ? '✓' : '${i + 1}',
-            tone: tasks[i].done ? 'teal' : 'blue',
-            title: tasks[i].title,
-            caption: tasks[i].detail,
-            end: Pill(tasks[i].status),
-          ),
-      ]),
-      p(classes: 'stat-note', [
-        Component.text(
-          'No task model exists in the domain layer, so these are static rows '
-          'that describe the work the missing storage would create.',
-        ),
-      ]),
-    ]);
-  }
-
-  Component _enquiriesCard() {
-    return div(classes: 'bento-card', [
-      div(classes: 'bento-card__head', [
-        h3([Component.text('Latest enquiries')]),
-        AppLink(
-          to: '/agent/enquiries',
-          classes: 'card-note',
-          children: [Component.text('See all')],
-        ),
-      ]),
-      div(classes: 'aside-list', [
-        for (final enquiry in demoEnquiries.take(3))
-          AsideRow(
-            badge: enquiry.enquirer.substring(0, 1).toUpperCase(),
-            tone: enquiry.status == 'New' ? 'blue' : 'neutral',
-            title: enquiry.enquirer,
-            caption: enquiry.property,
-            end: Pill(
-              enquiry.status,
-              tone: switch (enquiry.status) {
-                'New' => 'action',
-                'Closed' => 'neutral',
-                _ => 'warning',
-              },
+      if (pending.isEmpty)
+        EmptyState(
+          title: 'Nothing awaiting review',
+          body:
+              'No assigned listing currently sits in the pending state, so '
+              'there is no verification queue to work through.',
+        )
+      else
+        div(classes: 'aside-list', [
+          for (final property in pending)
+            AsideRow(
+              badge: '!',
+              tone: 'warning',
+              title: property.title,
+              caption: '${property.city} · ${property.propertyType}',
+              end: Pill(
+                AgentRecords.listingLabel(property.verification),
+                tone: AgentRecords.listingTone(property.verification),
+              ),
             ),
-          ),
-      ]),
-    ]);
-  }
-
-  /// Performance is deliberately empty.
-  ///
-  /// The reference design shows a views chart; nothing in this project records
-  /// an impression or a view, so drawing bars would be inventing the numbers
-  /// the brief forbids. The card states what would have to be captured first.
-  Component _performanceCard() {
-    return div(classes: 'bento-card bento-wide', [
-      div(classes: 'bento-card__head', [
-        h3([Component.text('Listing performance')]),
-        AppLink(
-          to: '/agent/performance',
-          classes: 'card-note',
-          children: [Component.text('Details')],
-        ),
-      ]),
-      EmptyState(
-        title: 'No interaction events are tracked',
-        body:
-            'Impressions, views and contact clicks would need to be stored '
-            'before a funnel can be drawn. Until then this page shows what '
-            'would be measured rather than a chart of numbers that do not '
-            'exist.',
-        action: ActionLink(
-          'See the proposed metrics',
-          href: '/agent/performance',
-        ),
-      ),
+        ]),
     ]);
   }
 }

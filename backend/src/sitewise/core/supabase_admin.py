@@ -81,6 +81,37 @@ def reset_admin_client() -> None:
     _client = None
 
 
+def _normalize_auth_user(raw: Any) -> dict[str, Any]:
+    """Flatten a GoTrue user payload to a dict with a validated UUID ``id``.
+
+    supabase-py returns a ``User`` model (directly from
+    ``invite_user_by_email``, or nested under ``user`` depending on the SDK
+    version), while the documented admin REST endpoint returns a JSON object.
+    The staff API must never index a missing ``id`` off a shape it did not
+    expect, so every shape is flattened and validated here; a malformed
+    payload fails closed with :class:`SupabaseAdminError` (502) instead of a
+    KeyError deep in the router.
+    """
+    if raw is None:
+        raise SupabaseAdminError("Supabase Auth returned no user payload.")
+    if hasattr(raw, "model_dump") and callable(raw.model_dump):
+        raw = raw.model_dump()
+    if isinstance(raw, dict) and isinstance(raw.get("user"), dict):
+        raw = raw["user"]
+    if not isinstance(raw, dict):
+        raise SupabaseAdminError(
+            "Supabase Auth returned an unreadable user payload."
+        )
+    user_id = raw.get("id")
+    try:
+        uuid.UUID(str(user_id))
+    except (TypeError, ValueError) as exc:
+        raise SupabaseAdminError(
+            "Supabase Auth returned a user payload without a valid identity id."
+        ) from exc
+    return {**raw, "id": str(user_id)}
+
+
 def get_admin_service() -> SupabaseAdminService:
     """Seam for building the admin service.
 
@@ -143,7 +174,20 @@ class SupabaseAdminService:
                     "explicit existing-account workflow to grant staff access."
                 ) from exc
             raise SupabaseAdminError(f"Supabase invite failed: {message}") from exc
-        return getattr(invited, "model_dump", lambda: invited)()
+        return _normalize_auth_user(invited)
+
+    def get_auth_user(self, auth_user_id: str) -> dict[str, Any] | None:
+        """Fetch one Supabase Auth user via the documented admin REST endpoint.
+
+        Returns ``None`` when the identity does not exist. The payload is
+        normalized, so ``email_confirmed_at`` / ``confirmed_at`` - the
+        authoritative evidence that an invited user actually accepted the
+        invitation - is readable without knowing the SDK response shape.
+        """
+        data = self._gotrue_admin_json(
+            "GET", f"admin/users/{auth_user_id}", not_found_ok=True
+        )
+        return _normalize_auth_user(data) if data else None
 
     def admin_list_factors(self, auth_user_id: str) -> list[dict[str, Any]]:
         """List MFA factors for a user (documented GoTrue admin endpoint)."""
@@ -159,7 +203,13 @@ class SupabaseAdminService:
         """
         self._gotrue_admin_json("DELETE", f"admin/users/{auth_user_id}/factors/{factor_id}")
 
-    def _gotrue_admin_json(self, method: str, path: str) -> dict[str, Any]:
+    def _gotrue_admin_json(
+        self,
+        method: str,
+        path: str,
+        *,
+        not_found_ok: bool = False,
+    ) -> dict[str, Any]:
         url = f"{settings.supabase_url.rstrip('/')}/auth/v1/{path}"
         headers = {
             "apikey": settings.supabase_secret_key,
@@ -177,6 +227,8 @@ class SupabaseAdminService:
                 "The authentication service is temporarily unavailable."
             ) from exc
         if response.status_code >= 400:
+            if not_found_ok and response.status_code == 404:
+                return {}
             raise SupabaseAdminError(
                 f"GoTrue admin call failed ({response.status_code})."
             )

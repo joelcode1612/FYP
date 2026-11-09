@@ -1,0 +1,68 @@
+<!doctype html>
+<!-- Static markup fixture for probe_agent_theme.js. It mirrors the DOM that
+     AppLayout renders (pill nav, KPI row, bento card, filter tab, input) so the
+     BUILT stylesheet can be injected and its computed styles asserted without a
+     signed-in session. Two shells: the agent one and a plain one that stands in
+     for the shared dark canvas (entrepreneur/owner). -->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Agent theme fixture</title>
+  </head>
+  <body>
+    <div class="app-shell app-shell--agent" id="shell-agent">
+      <div class="app-main">
+        <header class="app-pill">
+          <nav class="app-pill__nav">
+            <a class="app-pill__link" href="#">Dashboard</a>
+            <a class="app-pill__link app-pill__link--active" aria-current="page" href="#"
+              >Assigned Listings</a
+            >
+          </nav>
+        </header>
+        <div class="app-content">
+          <div class="app-content__inner">
+            <div class="bento-kpis">
+              <div class="kpi" id="agent-kpi">
+                <span class="k">Assigned listings</span>
+                <span class="v">6</span>
+                <span class="n">Demonstration portfolio</span>
+              </div>
+            </div>
+            <div class="tabs">
+              <button class="tab" aria-selected="true" id="agent-tab" type="button">
+                Active <span class="tab__count">3</span>
+              </button>
+            </div>
+            <div class="bento">
+              <div class="bento-card" id="agent-card"><h3>Portfolio overview</h3></div>
+            </div>
+            <input id="agent-input" type="text" placeholder="Search…" />
+            <button class="btn btn--primary" id="agent-primary" type="button">Manage listings</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="app-shell" id="shell-plain">
+      <div class="app-main">
+        <header class="app-pill">
+          <nav class="app-pill__nav">
+            <a class="app-pill__link" href="#">Home</a>
+            <a class="app-pill__link app-pill__link--active" aria-current="page" href="#"
+              >Explore</a
+            >
+          </nav>
+        </header>
+        <div class="app-content">
+          <div class="app-content__inner">
+            <div class="bento-kpis">
+              <div class="kpi" id="plain-kpi"><span class="k">K</span><span class="v">1</span></div>
+            </div>
+            <input id="plain-input" type="text" />
+          </div>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>
