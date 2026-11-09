@@ -79,15 +79,15 @@ abstract final class WebAuth {
   static final http.Client _client = IOClient(
     HttpClient()
       ..connectionTimeout = const Duration(seconds: 5)
-      ..findProxy = (uri) =>
-          uri.host == 'localhost' || uri.host == '127.0.0.1'
+      ..findProxy = (uri) => uri.host == 'localhost' || uri.host == '127.0.0.1'
           ? 'DIRECT'
           : HttpClient.findProxyFromEnvironment(uri),
   );
 
   static Future<void> initialize() async {}
 
-  static Future<void> google([bool remember = true]) async => throw StateError(error);
+  static Future<void> google([bool remember = true]) async =>
+      throw StateError(error);
   static Future<void> password(
     String email,
     String password, [
@@ -96,11 +96,15 @@ abstract final class WebAuth {
     String? expectedPortal,
   ]) async => throw StateError(error);
   static Future<String> mfaChallengeStart() async => throw StateError(error);
-  static Future<void> mfaChallengeVerify(String code) async => throw StateError(error);
+  static Future<void> mfaChallengeVerify(String code) async =>
+      throw StateError(error);
   static Future<void> mfaEnrollStart() async => throw StateError(error);
-  static Future<void> mfaEnrollVerify(String code) async => throw StateError(error);
-  static Future<String> resetPassword(String email) async => throw StateError(error);
-  static Future<void> updatePassword(String password) async => throw StateError(error);
+  static Future<void> mfaEnrollVerify(String code) async =>
+      throw StateError(error);
+  static Future<String> resetPassword(String email) async =>
+      throw StateError(error);
+  static Future<void> updatePassword(String password) async =>
+      throw StateError(error);
   static Future<String> signup(
     String email,
     String password,
@@ -124,9 +128,65 @@ abstract final class WebAuth {
     Map<String, dynamic>? body,
   }) async {
     if (!_server) throw StateError(error);
-    // Split any query off the path: `Uri.replace(path:)` would percent-encode
-    // the '?' (→ %3F) and 404 the route. The browser bridge passes the same
-    // string straight to `fetch`, which parses it correctly — mirror that here.
+    final response = await _send(path, method: method, body: body);
+    if (response.statusCode >= 400) {
+      throw StateError(
+        '${response.statusCode} ${response.reasonPhrase ?? ''}'.trim(),
+      );
+    }
+    return _decodeBody(response);
+  }
+
+  /// VM/SSR counterpart of the browser's `requestDetailed`: the failure is
+  /// returned as data (`ok`, `status`, `code`, `message`) so a page can
+  /// distinguish 404 from 401/403 from 5xx without catching and parsing a
+  /// thrown string.
+  static Future<Map<String, dynamic>> requestDetailed(
+    String path, {
+    String method = 'GET',
+    Map<String, dynamic>? body,
+  }) async {
+    if (!_server) {
+      return {
+        'ok': false,
+        'status': null,
+        'code': 'api_unavailable',
+        'message': error,
+      };
+    }
+    final http.Response response;
+    try {
+      response = await _send(path, method: method, body: body);
+    } on Object catch (failure) {
+      return {
+        'ok': false,
+        'status': null,
+        'code': 'network_error',
+        'message': 'The data service could not be reached: $failure',
+      };
+    }
+    if (response.statusCode >= 400) {
+      return {
+        'ok': false,
+        'status': response.statusCode,
+        'code': _errorCode(response),
+        'message':
+            _errorMessage(response) ??
+            response.reasonPhrase ??
+            'Request failed.',
+      };
+    }
+    return {'ok': true, 'body': _decodeBody(response)};
+  }
+
+  /// Split any query off the path: `Uri.replace(path:)` would percent-encode
+  /// the '?' (→ %3F) and 404 the route. The browser bridge passes the same
+  /// string straight to `fetch`, which parses it correctly — mirror that here.
+  static Future<http.Response> _send(
+    String path, {
+    required String method,
+    Map<String, dynamic>? body,
+  }) async {
     final target = Uri.parse(path);
     final uri = _base.replace(
       path: target.path,
@@ -136,20 +196,61 @@ abstract final class WebAuth {
       if (_token != null) 'Authorization': 'Bearer $_token',
       if (body != null) 'Content-Type': 'application/json',
     };
-    final response = await switch (method) {
-      'POST' => _client.post(uri, headers: headers, body: body == null ? null : jsonEncode(body)),
-      'PATCH' => _client.patch(uri, headers: headers, body: body == null ? null : jsonEncode(body)),
+    return switch (method) {
+      'POST' => _client.post(
+        uri,
+        headers: headers,
+        body: body == null ? null : jsonEncode(body),
+      ),
+      'PATCH' => _client.patch(
+        uri,
+        headers: headers,
+        body: body == null ? null : jsonEncode(body),
+      ),
       'DELETE' => _client.delete(uri, headers: headers),
       _ => _client.get(uri, headers: headers),
     }.timeout(const Duration(seconds: 8));
-    if (response.statusCode >= 400) {
-      throw StateError('${response.statusCode} ${response.reasonPhrase ?? ''}'.trim());
-    }
-    // 204 No Content (e.g. DELETE) has an empty body; the browser bridge's
-    // `response.json().catch(() => ({}))` yields {} for it, so match that.
+  }
+
+  /// 204 No Content (e.g. DELETE) has an empty body; the browser bridge's
+  /// `response.json().catch(() => ({}))` yields {} for it, so match that.
+  static Map<String, dynamic> _decodeBody(http.Response response) {
     if (response.bodyBytes.isEmpty) return <String, dynamic>{};
     final decoded = jsonDecode(utf8.decode(response.bodyBytes));
     if (decoded is Map<String, dynamic>) return decoded;
+    // GET /users/ returns a bare array; wrap it so callers see one shape.
     return {'data': decoded};
+  }
+
+  static Map<String, dynamic>? _detail(http.Response response) {
+    if (response.bodyBytes.isEmpty) return null;
+    try {
+      final decoded = jsonDecode(utf8.decode(response.bodyBytes));
+      return decoded is Map<String, dynamic> ? decoded : null;
+    } on Object {
+      return null;
+    }
+  }
+
+  static String? _errorCode(http.Response response) {
+    final detail = _detail(response);
+    if (detail == null) return null;
+    final nested = detail['detail'];
+    if (nested is Map<String, dynamic> && nested['code'] is String) {
+      return nested['code'] as String;
+    }
+    return null;
+  }
+
+  static String? _errorMessage(http.Response response) {
+    final detail = _detail(response);
+    if (detail == null) return null;
+    final nested = detail['detail'];
+    if (nested is String && nested.isNotEmpty) return nested;
+    if (nested is Map<String, dynamic> && nested['message'] is String) {
+      final message = nested['message'] as String;
+      return message.isEmpty ? null : message;
+    }
+    return null;
   }
 }

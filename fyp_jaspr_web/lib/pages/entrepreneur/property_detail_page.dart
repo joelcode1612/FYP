@@ -41,15 +41,53 @@ class _PropertyDetailPageState extends State<PropertyDetailPage> {
   String? _saveMessage;
   bool _compareLinkShown = false;
 
+  /// Saves/removes the shortlist bookmark. A signed-in account persists to
+  /// the server first — the message and the bookmark both state what the
+  /// account actually holds, so a failed request reports itself instead of
+  /// pretending to have saved. A visitor keeps the cookie-backed selection.
+  Future<void> _toggleSaved(String id) async {
+    final notifier = context.read(appNotifierProvider.notifier);
+    if (!AppLocator.isSignedIn) {
+      notifier.toggleSaved(id);
+      final nowSaved = context.read(appNotifierProvider).saved.contains(id);
+      setState(() {
+        _saveMessage = nowSaved
+            ? 'Saved to your shortlist.'
+            : 'Removed from saved.';
+      });
+      return;
+    }
+    final savedNow = context.read(appNotifierProvider).saved.contains(id);
+    final failure = await AppLocator.persistToggleSaved(
+      id,
+      wantSaved: !savedNow,
+    );
+    if (!mounted) return;
+    if (failure != null) {
+      setState(() {
+        _saveMessage =
+            'Could not ${savedNow ? 'remove' : 'save'} — ${failure.message} '
+            'Your shortlist was not changed.';
+      });
+      return;
+    }
+    notifier.toggleSaved(id);
+    setState(() {
+      _saveMessage = savedNow
+          ? 'Removed from your saved properties.'
+          : 'Saved to your shortlist on your account.';
+    });
+  }
+
   @override
   void initState() {
     super.initState();
     Future.microtask(() {
       if (!mounted) return;
       unawaited(
-        context.read(entrepreneurNotifierProvider.notifier).loadAnalysis(
-          component.id,
-        ),
+        context
+            .read(entrepreneurNotifierProvider.notifier)
+            .loadAnalysis(component.id),
       );
     });
   }
@@ -88,20 +126,7 @@ class _PropertyDetailPageState extends State<PropertyDetailPage> {
                   compared: compared.contains(p.id),
                   saveMessage: _saveMessage,
                   compareLinkShown: _compareLinkShown,
-                  onToggleSaved: () {
-                    context
-                        .read(appNotifierProvider.notifier)
-                        .toggleSaved(p.id);
-                    final nowSaved = context
-                        .read(appNotifierProvider)
-                        .saved
-                        .contains(p.id);
-                    setState(() {
-                      _saveMessage = nowSaved
-                          ? 'Saved to your shortlist.'
-                          : 'Removed from saved.';
-                    });
-                  },
+                  onToggleSaved: () => _toggleSaved(p.id),
                   onToggleCompared: () {
                     context
                         .read(appNotifierProvider.notifier)
@@ -110,9 +135,7 @@ class _PropertyDetailPageState extends State<PropertyDetailPage> {
                         .read(appNotifierProvider)
                         .compared
                         .contains(p.id);
-                    setState(
-                      () => _compareLinkShown = nowCompared,
-                    );
+                    setState(() => _compareLinkShown = nowCompared);
                   },
                 );
               },
@@ -305,9 +328,18 @@ class _Detail extends StatelessComponent {
     return section(classes: 'panel', [
       h2([Component.text('Actions')]),
       div(classes: 'actions-row', [
+        // The assessment workspace is the decision-support entry point, so it
+        // leads. One primary action per row: the analysis link drops to
+        // secondary rather than competing with it.
+        ActionLink(
+          'Assess this property',
+          href: '/entrepreneur/assessment?id=${property.id}',
+          icon: 'fact_check',
+        ),
         ActionLink(
           'Explore location analysis',
           href: '/entrepreneur/map?id=${property.id}',
+          variant: 'secondary',
           icon: 'map',
         ),
         ActionLink(

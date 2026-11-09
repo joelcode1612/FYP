@@ -46,6 +46,10 @@ import 'package:sitewise_jaspr_web/pages/agent/property_detail_page.dart'
     deferred as _property_detail_page;
 import 'package:sitewise_jaspr_web/pages/entrepreneur/add_property_page.dart'
     deferred as _add_property_page;
+import 'package:sitewise_jaspr_web/pages/entrepreneur/assessment_history_page.dart'
+    deferred as _assessment_history_page;
+import 'package:sitewise_jaspr_web/pages/entrepreneur/assessment_workspace_page.dart'
+    deferred as _assessment_workspace_page;
 import 'package:sitewise_jaspr_web/pages/entrepreneur/compare_page.dart'
     deferred as _compare_page;
 import 'package:sitewise_jaspr_web/pages/entrepreneur/dashboard_page.dart'
@@ -207,6 +211,17 @@ ClientOptions get defaultClientOptions => ClientOptions(
     'add_property_page': ClientLoader(
       (p) => _add_property_page.AddPropertyPage(),
       loader: _add_property_page.loadLibrary,
+    ),
+    'assessment_history_page': ClientLoader(
+      (p) => _assessment_history_page.AssessmentHistoryPage(),
+      loader: _assessment_history_page.loadLibrary,
+    ),
+    'assessment_workspace_page': ClientLoader(
+      (p) => _assessment_workspace_page.AssessmentWorkspacePage(
+        propertyId: p['propertyId'] as String,
+        stage: p['stage'] as String,
+      ),
+      loader: _assessment_workspace_page.loadLibrary,
     ),
     'compare_page': ClientLoader(
       (p) => _compare_page.ComparePage(),

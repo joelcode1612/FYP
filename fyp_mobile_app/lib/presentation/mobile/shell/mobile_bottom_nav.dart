@@ -102,6 +102,9 @@ class _M3Bar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final safeBottom = MediaQuery.paddingOf(context).bottom;
+    final motion = MediaQuery.disableAnimationsOf(context)
+        ? Duration.zero
+        : SitewiseM3.dockMotion;
 
     return Padding(
       padding: EdgeInsets.only(
@@ -135,7 +138,7 @@ class _M3Bar extends StatelessWidget {
               child: Stack(
                 children: [
                   AnimatedPositioned(
-                    duration: SitewiseM3.dockMotion,
+                    duration: motion,
                     curve: Curves.easeOutCubic,
                     left: activeIndex * slot + (slot - pillWidth) / 2,
                     top: SitewiseM3.dockPillTop,
@@ -201,6 +204,9 @@ class _DockTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final motion = MediaQuery.disableAnimationsOf(context)
+        ? Duration.zero
+        : SitewiseM3.dockMotion;
     return Semantics(
       button: true,
       selected: active,
@@ -215,21 +221,23 @@ class _DockTab extends StatelessWidget {
             SizedBox(
               height: SitewiseM3.dockPillHeight,
               child: AnimatedSlide(
-                duration: SitewiseM3.dockMotion,
+                duration: motion,
                 curve: Curves.easeOutCubic,
                 // Idle glyphs rest below the pill centre; the active one
                 // rises into it.
                 offset: active ? Offset.zero : const Offset(0, 0.12),
                 child: AnimatedScale(
-                  duration: SitewiseM3.dockMotion,
-                  curve: Curves.easeOutBack,
-                  scale: active ? 1.08 : 1,
+                  duration: motion,
+                  curve: Curves.easeOutCubic,
+                  scale: active ? 1.04 : 1,
                   child: TweenAnimationBuilder<Color?>(
-                    duration: SitewiseM3.dockMotion,
+                    duration: motion,
                     curve: Curves.easeOut,
                     tween: ColorTween(
                       begin: SitewiseM3.navInactive,
-                      end: active ? SitewiseM3.navActive : SitewiseM3.navInactive,
+                      end: active
+                          ? SitewiseM3.navActive
+                          : SitewiseM3.navInactive,
                     ),
                     builder: (context, color, child) => SitewiseIcon(
                       destination.icon,
@@ -243,7 +251,7 @@ class _DockTab extends StatelessWidget {
             const SizedBox(height: 2),
             ExcludeSemantics(
               child: AnimatedOpacity(
-                duration: SitewiseM3.dockMotion,
+                duration: motion,
                 curve: Curves.easeOut,
                 opacity: active ? 1 : 0,
                 child: Text(

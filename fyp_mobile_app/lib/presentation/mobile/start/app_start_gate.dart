@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_logic/shared_logic.dart';
+import '../../../core/config/dev_auth_bypass.dart';
 
 import '../../../application/services/service_locator.dart';
 import '../../../core/routing/mobile_role.dart';
@@ -39,11 +40,12 @@ class _AppStartGateState extends ConsumerState<AppStartGate> {
   @override
   void initState() {
     super.initState();
-    // Idempotent: if a route guard already began the restore, this joins it
-    // rather than starting a second one. Deferred because a provider must not
-    // be modified inside the build lifecycle; the splash frame is unconditional.
+
+    // Skip authentication restoration only in Development Demo Mode.
+    if (devAuthBypassEnabled) return;
+
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
+      if (!mounted || devAuthBypassEnabled) return;
       ref.read(authNotifierProvider.notifier).start();
     });
   }
@@ -70,6 +72,15 @@ class _AppStartGateState extends ConsumerState<AppStartGate> {
 
   @override
   Widget build(BuildContext context) {
+    // Development-only: enter the Entrepreneur workspace directly.
+    if (devAuthBypassEnabled) {
+      _go(
+        '/entrepreneur',
+        enterRole: AppRole.entrepreneur,
+      );
+      return _splash();
+    }
+
     final state = ref.watch(authNotifierProvider);
     switch (state.status) {
       case AuthStatus.authenticated:

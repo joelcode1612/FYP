@@ -7,6 +7,7 @@ from fastapi.responses import JSONResponse
 from sitewise.api.v1.router import router as v1_router
 from sitewise.core.config import settings
 from sitewise.core.exceptions import (
+    AssessmentError,
     AuthError,
     ConflictError,
     ForbiddenError,
@@ -57,6 +58,15 @@ async def auth_error_handler(request: Request, exc: SiteWiseError):
     messages are written for clients and carry no token or secret material.
     """
     return JSONResponse(status_code=exc.status_code, content={"detail": str(exc)})
+
+
+@app.exception_handler(AssessmentError)
+async def assessment_error_handler(request: Request, exc: AssessmentError):
+    """Structured assessment failures: the browser bridge reads detail.code."""
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"detail": {"code": exc.code, "message": str(exc)}},
+    )
 
 
 @app.exception_handler(SupabaseAdminError)

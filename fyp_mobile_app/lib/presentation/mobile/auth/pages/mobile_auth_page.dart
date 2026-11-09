@@ -15,6 +15,10 @@ import '../widgets/auth_terms_row.dart';
 
 /// Mobile authentication feature: Log In / Sign Up in one screen.
 ///
+/// The mode is chosen by the `/auth` route argument and by the inline account
+/// link at the foot of the form. The header is brand-only: there is no return
+/// control and no top Log In / Sign Up switch.
+///
 /// Presentation only — every credential call goes through the shared
 /// [AuthNotifier], which drives the auth state machine and the Supabase
 /// repository. This screen
@@ -158,16 +162,6 @@ class _MobileAuthPageState extends ConsumerState<MobileAuthPage> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    AuthTabs(
-                      tab: _tab,
-                      onChanged: (v) {
-                        if (busy) return;
-                        setState(() {
-                          _tab = v;
-                          _fieldError = null;
-                        });
-                      },
-                    ),
                     const SizedBox(height: 22),
                     Text(
                       isLogin ? 'Welcome Back' : 'Create your account',
@@ -357,29 +351,19 @@ class _MobileAuthPageState extends ConsumerState<MobileAuthPage> {
     );
   }
 
+  /// Brand-only header. The return control was removed deliberately: this is
+  /// a root destination reached from the start gate, landing and onboarding,
+  /// so there is no previous screen to return to. The 40px box preserves the
+  /// header height and keeps the wordmark centred as before.
   Widget _header() {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 4, 12, 2),
-      child: Row(
-        children: [
-          Material(
-            color: Colors.white,
-            shape: const CircleBorder(),
-            child: InkWell(
-              customBorder: const CircleBorder(),
-              onTap: () => Navigator.of(context).maybePop(),
-              child: const SizedBox(
-                width: 40,
-                height: 40,
-                child: Icon(Icons.arrow_back_rounded, size: 19),
-              ),
-            ),
-          ),
-          const Spacer(),
-          const SitewiseBrand(),
-          const Spacer(),
-          const SizedBox(width: 40),
-        ],
+    return const Padding(
+      padding: EdgeInsets.fromLTRB(12, 4, 12, 2),
+      child: SizedBox(
+        height: 40,
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [SitewiseBrand()],
+        ),
       ),
     );
   }

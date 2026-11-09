@@ -6,17 +6,13 @@ import '../../presentation/mobile/auth/pages/mobile_auth_page.dart';
 import '../../presentation/mobile/auth/widgets/auth_tabs.dart';
 import '../../presentation/mobile/onboarding/pages/onboarding_flow_page.dart';
 import '../../presentation/mobile/start/app_start_gate.dart';
-import '../../presentation/mobile/entrepreneur/pages/entrepreneur_assess_mobile_page.dart';
+import '../../presentation/mobile/shell/entrepreneur_tab_host.dart';
 import '../../presentation/mobile/entrepreneur/pages/entrepreneur_assessment_setup_mobile_page.dart';
 import '../../presentation/mobile/entrepreneur/pages/entrepreneur_assessment_summary_mobile_page.dart';
 import '../../presentation/mobile/entrepreneur/pages/entrepreneur_compare_mobile_page.dart';
 import '../../presentation/mobile/entrepreneur/pages/entrepreneur_evidence_mobile_page.dart';
 import '../../presentation/mobile/landing/pages/landing_mobile_page.dart';
-import '../../presentation/mobile/entrepreneur/pages/entrepreneur_spaces_mobile_page.dart';
-import '../../presentation/mobile/entrepreneur/pages/entrepreneur_dashboard_mobile_page.dart';
-import '../../presentation/mobile/entrepreneur/pages/entrepreneur_explore_mobile_page.dart';
 import '../../presentation/mobile/entrepreneur/pages/entrepreneur_preferences_mobile_page.dart';
-import '../../presentation/mobile/entrepreneur/pages/entrepreneur_profile_mobile_page.dart';
 import '../../presentation/mobile/entrepreneur/pages/entrepreneur_property_detail_mobile_page.dart';
 import '../../presentation/mobile/entrepreneur/pages/entrepreneur_recommendations_mobile_page.dart';
 import '../../presentation/mobile/entrepreneur/pages/entrepreneur_report_mobile_page.dart';
@@ -113,16 +109,16 @@ abstract final class AppRoutes {
       // Entrepreneur
       '/entrepreneur' => (
         RouteAccess.workspace,
-        () => const EntrepreneurDashboardMobilePage(),
+        () => const EntrepreneurTabHost(initialRoute: '/entrepreneur'),
       ),
       // Material 3 five-tab workspace: Assess and Spaces.
       '/entrepreneur/assess' => (
         RouteAccess.workspace,
-        () => const EntrepreneurAssessMobilePage(),
+        () => const EntrepreneurTabHost(initialRoute: '/entrepreneur/assess'),
       ),
       '/entrepreneur/spaces' => (
         RouteAccess.workspace,
-        () => const EntrepreneurSpacesMobilePage(),
+        () => const EntrepreneurTabHost(initialRoute: '/entrepreneur/spaces'),
       ),
       '/entrepreneur/preferences' => (
         RouteAccess.workspace,
@@ -130,8 +126,9 @@ abstract final class AppRoutes {
       ),
       '/entrepreneur/explore' => (
         RouteAccess.workspace,
-        () => EntrepreneurExploreMobilePage(
-          startInMap: settings.arguments == 'map',
+        () => EntrepreneurTabHost(
+          initialRoute: '/entrepreneur/explore',
+          initialArguments: settings.arguments,
         ),
       ),
       '/entrepreneur/property-detail' => (
@@ -182,7 +179,7 @@ abstract final class AppRoutes {
       ),
       '/entrepreneur/profile' => (
         RouteAccess.workspace,
-        () => const EntrepreneurProfileMobilePage(),
+        () => const EntrepreneurTabHost(initialRoute: '/entrepreneur/profile'),
       ),
       // Unknown deep links get a dedicated not-found destination instead of a
       // silent dashboard fallback: the user sees what failed and how to leave.

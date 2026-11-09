@@ -71,6 +71,10 @@ void main() {
     expect(find.text('Welcome Back'), findsOneWidget);
     expect(find.textContaining('Find the right F&B location'), findsNothing);
     expect(find.text('Skip for now'), findsNothing);
+    // The header is brand-only: no return control and no top mode switch.
+    expect(find.byIcon(Icons.arrow_back_rounded), findsNothing);
+    expect(find.text('Log In'), findsNothing);
+    expect(find.text('Sign Up'), findsNothing);
   });
 
   // TEST 2 — onboarding is gated behind a session: a signed-in first-time
@@ -243,7 +247,11 @@ void main() {
 
     await tester.pumpWidget(app());
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Sign Up'));
+    // The top Log In / Sign Up switch is gone; the inline account link at the
+    // foot of the form is the in-screen way to reach registration.
+    await tester.ensureVisible(find.text('Sign up'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Sign up'));
     await tester.pumpAndSettle();
 
     expect(find.text('Full name'), findsOneWidget);

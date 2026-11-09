@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:google_sign_in/google_sign_in.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_logic/shared_logic.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -106,6 +107,16 @@ class SupabaseAuthRepository implements AuthRepository {
   final IdentityProbe _probe;
   final GoTrueClient Function() _auth;
 
+  // OAuth client IDs are public identifiers; the CLIENT SECRET must never
+  // appear in the app or its dart-defines.
+  static const String _googleWebClientId =
+      String.fromEnvironment('GOOGLE_WEB_CLIENT_ID');
+  static const String _googleIosClientId =
+      String.fromEnvironment('GOOGLE_IOS_CLIENT_ID');
+
+  // google_sign_in v7 initialization must complete before authenticate().
+  Future<void>? _googleInitialization;
+
   /// Supabase calls had no timeout at all, so an unreachable auth host left
   /// the button spinning forever. The identity probe already used 15s; the
   /// credential calls get the same ceiling with a message that says what
@@ -203,12 +214,84 @@ class SupabaseAuthRepository implements AuthRepository {
 
   @override
   Future<SitewiseUser> signInWithProvider(AuthProvider provider) async {
-    // Mobile has no OAuth link handler yet, so a federated sign-in cannot be
-    // completed honestly here. It says so rather than fabricating a session.
-    throw AuthFailure(
-      'Sign in with ${provider.name.toUpperCase()} is not available in the '
-      'mobile app yet. Use your email and password instead.',
-    );
+    if (provider != AuthProvider.google) {
+      throw const _GoogleLoginFailure(
+        'This sign-in provider is not yet supported on mobile.',
+      );
+    }
+    if (!Platform.isAndroid && !Platform.isIOS) {
+      throw const _GoogleLoginFailure(
+        'Native Google sign-in is available on Android and iOS only.',
+      );
+    }
+    if (_googleWebClientId.isEmpty ||
+        (Platform.isIOS && _googleIosClientId.isEmpty)) {
+      throw const _GoogleLoginFailure(
+        'Google login is not configured for this build.',
+      );
+    }
+
+    try {
+      _googleInitialization ??= GoogleSignIn.instance.initialize(
+        serverClientId: _googleWebClientId,
+        clientId: Platform.isIOS ? _googleIosClientId : null,
+      );
+      await _guard(
+        _googleInitialization!,
+        'Google sign-in could not be initialized.',
+      );
+
+      // This is a native SDK flow. Do NOT set detectSessionInUri=true just to
+      // support it: Supabase receives an ID token, not a deep-link callback.
+      final account = await GoogleSignIn.instance.authenticate();
+      final idToken = account.authentication.idToken;
+      if (idToken == null || idToken.isEmpty) {
+        throw const _GoogleLoginFailure(
+          'Google did not return an identity token. Please try again.',
+        );
+      }
+
+      // Supabase's Google exchange expects the Google access token as well.
+      // Requesting scopes remains within the button-triggered interaction.
+      const scopes = <String>['email'];
+      final authorization =
+          await account.authorizationClient.authorizationForScopes(scopes) ??
+          await account.authorizationClient.authorizeScopes(scopes);
+
+      final response = await _guard(
+        _client.signInWithIdToken(
+          provider: OAuthProvider.google,
+          idToken: idToken,
+          accessToken: authorization.accessToken,
+        ),
+        'Supabase did not complete Google sign-in.',
+      );
+
+      // Preserve the existing fail-closed FastAPI /api/v1/auth/me role check.
+      // No screen is opened on the strength of a Google identity token alone.
+      return _authorizeWithSession(response, fallbackEmail: account.email);
+    } on GoogleSignInException catch (error) {
+      if (error.code == GoogleSignInExceptionCode.canceled) {
+        throw const _GoogleLoginFailure(
+          'Google sign-in was canceled. You can try again.',
+        );
+      }
+      throw const _GoogleLoginFailure(
+        'Google sign-in failed. Check your connection and app configuration.',
+      );
+    } on AuthException catch (error) {
+      // Generic email-password error mapping would mislabel a rejected
+      // Google ID token as an invalid password.
+      if (error.statusCode == '400') {
+        throw const _GoogleLoginFailure(
+          'Supabase rejected the Google login. Check the Google provider '
+          'and OAuth client ID configuration.',
+        );
+      }
+      throw mapSupabaseError(error);
+    } on SocketException {
+      throw const NetworkFailure();
+    }
   }
 
   @override
@@ -404,4 +487,12 @@ AppFailure mapSupabaseError(AuthException error, {String? email}) {
     return const NetworkFailure();
   }
   return const AuthFailure('Sign in failed. Please try again.');
+}
+
+/// Safe, user-facing native SDK errors; never surface token/SDK raw details.
+class _GoogleLoginFailure extends AuthFailure {
+  const _GoogleLoginFailure(super.message);
+
+  @override
+  String get userMessage => message;
 }

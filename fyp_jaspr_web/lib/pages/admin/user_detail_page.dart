@@ -66,7 +66,11 @@ class UserDetailPage extends StatelessComponent {
       div(classes: 'grid-2', [
         div(classes: 'card', [
           div(classes: 'row', [
-            span(classes: 'avatar', [Component.text(user.name[0])]),
+            // An account can exist with an empty name; indexing [0] would
+            // throw and take the whole page down.
+            span(classes: 'avatar', [
+              Component.text(user.name.isEmpty ? '?' : user.name[0]),
+            ]),
             div(classes: 'grow stack', [
               span(classes: 'title', [Component.text(user.name)]),
               span(classes: 'body', [Component.text(user.email)]),

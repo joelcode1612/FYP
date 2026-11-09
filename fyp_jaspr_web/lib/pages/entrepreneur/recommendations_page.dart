@@ -6,6 +6,7 @@ import 'package:jaspr_riverpod/jaspr_riverpod.dart';
 import 'package:shared_logic/shared_logic.dart';
 
 import '../../components/ui.dart';
+import '../../data/app_locator.dart';
 import '../../layouts/app_layout.dart';
 
 /// Web recommendations ("Your shortlist"), laid out as the source's
@@ -29,6 +30,25 @@ class RecommendationsPage extends StatefulComponent {
 }
 
 class _RecommendationsPageState extends State<RecommendationsPage> {
+  /// Saves/removes a shortlist property. A signed-in account persists to the
+  /// server first and the shortlist only moves once the server accepted the
+  /// change; a visitor keeps the cookie-backed selection. On a failed request
+  /// nothing changes.
+  Future<void> _toggleSaved(String id) async {
+    final notifier = context.read(appNotifierProvider.notifier);
+    if (!AppLocator.isSignedIn) {
+      notifier.toggleSaved(id);
+      return;
+    }
+    final savedNow = context.read(appNotifierProvider).saved.contains(id);
+    final failure = await AppLocator.persistToggleSaved(
+      id,
+      wantSaved: !savedNow,
+    );
+    if (failure != null) return;
+    notifier.toggleSaved(id);
+  }
+
   @override
   void initState() {
     super.initState();
@@ -137,12 +157,16 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
             href: '/entrepreneur/property-detail?id=$id',
             variant: 'primary',
           ),
+          ActionLink(
+            'Assess',
+            href: '/entrepreneur/assessment?id=$id',
+            variant: 'secondary',
+          ),
           ActionButton(
             saved.contains(id) ? 'Saved' : 'Save',
             variant: 'secondary',
             icon: saved.contains(id) ? 'bookmark' : 'bookmark_border',
-            onClick: () =>
-                context.read(appNotifierProvider.notifier).toggleSaved(id),
+            onClick: () => _toggleSaved(id),
           ),
           ActionButton(
             compared.contains(id) ? 'In compare' : 'Compare',

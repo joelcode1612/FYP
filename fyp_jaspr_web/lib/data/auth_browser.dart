@@ -36,22 +36,31 @@ extension type _AuthBridge(JSObject _) implements JSObject {
     JSString method,
     JSString body,
   );
+  external JSPromise<JSString> requestDetailed(
+    JSString path,
+    JSString method,
+    JSString body,
+  );
 }
 
 abstract final class WebAuth {
   static Map<String, dynamic> get _state =>
       jsonDecode(_bridge.snapshot().toDart) as Map<String, dynamic>;
   static bool get configured => _state['configured'] == true;
+
   /// True when the last password sign-in returned a TOTP MFA challenge that
   /// still needs the verification code. The staff form reveals its code field
   /// on this signal rather than showing it unprompted.
   static bool get mfaRequired => _state['mfaRequired'] == true;
+
   /// True when the signed-in staff account has no verified TOTP factor and is
   /// therefore required to complete the enrollment screen first.
   static bool get mfaEnrollmentRequired =>
       _state['mfaEnrollmentRequired'] == true;
+
   /// Supabase-generated QR code (SVG data URI) for TOTP enrollment.
   static String? get mfaEnrollQr => _state['mfaEnrollQr'] as String?;
+
   /// TOTP secret for manual authenticator entry (shown only to the enrolling
   /// user during setup; never persisted server-side by Sitewise).
   static String? get mfaEnrollSecret => _state['mfaEnrollSecret'] as String?;
@@ -129,8 +138,8 @@ abstract final class WebAuth {
     String email,
     String password,
     String name,
-  ) async =>
-      (await _bridge.signup(email.toJS, password.toJS, name.toJS).toDart).toDart;
+  ) async => (await _bridge.signup(email.toJS, password.toJS, name.toJS).toDart)
+      .toDart;
   static Future<void> complete([String? next]) async {
     await _bridge.complete((next ?? '').toJS).toDart;
   }
@@ -158,5 +167,41 @@ abstract final class WebAuth {
     // so callers see one shape on both platforms (a Map cast would throw here).
     if (decoded is Map<String, dynamic>) return decoded;
     return {'data': decoded};
+  }
+
+  /// Same call as [request], but the failure arrives as data instead of a
+  /// thrown error.
+  ///
+  /// Dart 3.12 has no way to read `.status` / `.code` off a rejected JS
+  /// promise (`dart:js_interop` exposes no exception type), and the assessment
+  /// workspace has to tell "record not found" (404) from "not authorised"
+  /// (401/403) from "the service failed" (5xx) in order to render the right
+  /// state. Returns `{'ok': true, 'body': ...}` or
+  /// `{'ok': false, 'status': int?, 'code': String?, 'message': String}`.
+  static Future<Map<String, dynamic>> requestDetailed(
+    String path, {
+    String method = 'GET',
+    Map<String, dynamic>? body,
+  }) async {
+    final decoded =
+        jsonDecode(
+              (await _bridge
+                      .requestDetailed(
+                        path.toJS,
+                        method.toJS,
+                        (body == null ? '' : jsonEncode(body)).toJS,
+                      )
+                      .toDart)
+                  .toDart,
+            )
+            as Map<String, dynamic>;
+    if (decoded['ok'] != true) return decoded;
+    final payload = decoded['body'];
+    if (payload is Map<String, dynamic>) return {'ok': true, 'body': payload};
+    // Bare arrays are wrapped exactly as `request` wraps them.
+    return {
+      'ok': true,
+      'body': {'data': payload},
+    };
   }
 }

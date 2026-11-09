@@ -35,5 +35,9 @@ Future<void> main() async {
     // submits, and protected workspaces redirect to /login (fail closed).
   }
 
+  // A signed-in account's saved shortlist comes from the server, not the
+  // cookie — merged before mount so the first frame already shows it.
+  await AppLocator.mergeAccountSaved();
+
   runApp(const SitewiseApp());
 }

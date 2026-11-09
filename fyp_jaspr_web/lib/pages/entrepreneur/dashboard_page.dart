@@ -6,6 +6,8 @@ import 'package:jaspr_riverpod/jaspr_riverpod.dart';
 import 'package:shared_logic/shared_logic.dart';
 
 import '../../components/ui.dart';
+import '../../data/assessment_api.dart';
+import '../../data/assessment_format.dart';
 import '../../layouts/app_layout.dart';
 
 /// Web entrepreneur home, restructured to the reference
@@ -42,7 +44,9 @@ class _DashboardPageState extends State<DashboardPage> {
     Future.microtask(() {
       if (!mounted) return;
       unawaited(
-        context.read(entrepreneurNotifierProvider.notifier).loadRecommendations(),
+        context
+            .read(entrepreneurNotifierProvider.notifier)
+            .loadRecommendations(),
       );
     });
   }
@@ -58,7 +62,9 @@ class _DashboardPageState extends State<DashboardPage> {
   @override
   Component build(BuildContext context) {
     final state = context.watch(entrepreneurNotifierProvider);
-    final saved = context.watch(appNotifierProvider.select((state) => state.saved));
+    final saved = context.watch(
+      appNotifierProvider.select((state) => state.saved),
+    );
     return AppLayout(
       role: AppRole.entrepreneur,
       currentRoute: '/entrepreneur',
@@ -73,6 +79,10 @@ class _DashboardPageState extends State<DashboardPage> {
           : div(classes: 'stack stack--sections sw-home', [
               _hero(),
               _actionCenter(state, saved),
+              // Compact overview of the most recently updated saved
+              // assessment. It loads on its own so a slow or failed read
+              // never holds up the rest of the dashboard.
+              const _CurrentAssessment(),
               _kpis(saved, state),
               p(classes: 'stat-note', [
                 Component.text(
@@ -98,7 +108,9 @@ class _DashboardPageState extends State<DashboardPage> {
         'Try again',
         variant: 'secondary',
         onClick: () => unawaited(
-          context.read(entrepreneurNotifierProvider.notifier).loadRecommendations(),
+          context
+              .read(entrepreneurNotifierProvider.notifier)
+              .loadRecommendations(),
         ),
       ),
     ]);
@@ -874,4 +886,201 @@ class _Loading extends StatelessComponent {
   @override
   Component build(BuildContext context) =>
       p(classes: 'body muted', [Component.text('Loading…')]);
+}
+
+/// The most recently updated saved assessment, as a compact overview card.
+///
+/// Deliberately a summary: property, location, real progress, the stage the
+/// record actually reached, its status and one Continue action. The five-stage
+/// detail lives in the workspace, and the full list lives in the history page,
+/// so the dashboard stays an overview rather than becoming a second workspace.
+///
+/// Every figure is read from `GET /api/v1/assessments/me/current`. The backend
+/// resolves "most recently updated" when several assessments exist, so this
+/// card never picks a record by its own rule and never invents one when the
+/// entrepreneur has not started an assessment.
+///
+/// Not annotated `@client`: Jaspr allows one per library and `DashboardPage`
+/// already carries it. A nested `StatefulComponent` inside a hydrated `@client`
+/// subtree is still interactive — the same pattern as `_Directory` in
+/// `pages/admin/users_page.dart`.
+class _CurrentAssessment extends StatefulComponent {
+  const _CurrentAssessment();
+
+  @override
+  State<_CurrentAssessment> createState() => _CurrentAssessmentState();
+}
+
+class _CurrentAssessmentState extends State<_CurrentAssessment> {
+  static const _api = AssessmentApi();
+
+  late Future<ApiResult<AssessmentRecord?>> _future = _api.current();
+
+  void _reload() => setState(() => _future = _api.current());
+
+  @override
+  Component build(BuildContext context) {
+    return FutureBuilder<ApiResult<AssessmentRecord?>>(
+      future: _future,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState != ConnectionState.done) {
+          return _frame(const Skeleton(variant: 'row', count: 3));
+        }
+        final result = snapshot.data;
+        if (result == null) return _frame(_inlineError('No response.', null));
+        if (!result.ok) {
+          return _frame(
+            _inlineError(result.failure!.message, result.failure!.kind),
+          );
+        }
+        final record = result.value;
+        if (record == null) return _frame(_empty());
+        return _frame(_summary(record));
+      },
+    );
+  }
+
+  /// The shared card frame, so loading, empty, error and summary states all
+  /// occupy the same place in the page and the layout never jumps.
+  Component _frame(Component body) =>
+      section(classes: 'sw-home-action-center', [
+        div(classes: 'sw-home-current', [
+          div(classes: 'sw-home-row sw-home-study-head', [
+            span(classes: 'sw-home-kicker', [
+              Component.text('CURRENT ASSESSMENT'),
+            ]),
+            AppLink(
+              to: '/entrepreneur/assessments',
+              classes: 'sw-home-detail',
+              children: [Component.text('View all assessments')],
+            ),
+          ]),
+          body,
+        ]),
+      ]);
+
+  Component _empty() => div(classes: 'sw-home-empty', [
+    Icon('fact_check', size: 'lg'),
+    p(classes: 'sw-home-detail', [
+      Component.text(
+        'No assessment started yet. Open a property and begin the '
+        'five-stage location assessment — it is saved to your account as '
+        'you go, so you can leave it part-finished.',
+      ),
+    ]),
+    AppLink(
+      to: '/entrepreneur/explore',
+      classes: 'sw-home-primary',
+      children: [
+        Component.text('Find a property to assess '),
+        span(attributes: const {'aria-hidden': 'true'}, [Component.text('→')]),
+      ],
+    ),
+  ]);
+
+  /// A failure here is contained: the rest of the dashboard is still usable,
+  /// so this renders a short notice with a retry rather than an error page.
+  /// An expired session says so instead of pretending there are no records.
+  Component _inlineError(String message, AssessmentFailureKind? kind) {
+    final signedOut = kind == AssessmentFailureKind.unauthorized;
+    return div(classes: 'sw-home-empty', [
+      Icon(signedOut ? 'lock' : 'error', size: 'lg'),
+      p(classes: 'sw-home-detail', [
+        Component.text(
+          signedOut
+              ? 'Your session is not authorised to read assessments. Sign in '
+                    'again to see your saved progress.'
+              : 'The current assessment could not be loaded. $message',
+        ),
+      ]),
+      if (signedOut)
+        AppLink(
+          to: '/login',
+          classes: 'sw-home-primary',
+          children: [Component.text('Go to sign in')],
+        )
+      else
+        ActionButton('Try again', variant: 'secondary', onClick: _reload),
+    ]);
+  }
+
+  Component _summary(AssessmentRecord record) {
+    final property = record.property;
+    final stage = record.stageByKey(record.currentStageKey);
+    return div(classes: 'stack stack--xs', [
+      // A listing that left the catalogue is named as such; no title is
+      // invented for it and the id is still shown so the row is traceable.
+      h3([
+        Component.text(property?.title ?? 'Listing no longer in the catalogue'),
+      ]),
+      p(classes: 'sw-home-detail', [
+        Component.text(
+          property == null
+              ? 'Property ${record.propertyId}'
+              : '${property.address}, ${property.city}',
+        ),
+      ]),
+      div(classes: 'chips', [
+        StatusBadge(
+          record.isCompleted ? 'Completed' : 'In progress',
+          tone: record.isCompleted ? 'success' : 'action',
+        ),
+        if (record.reportAvailable)
+          const StatusBadge('Report available', tone: 'success'),
+      ]),
+      div(classes: 'sw-home-progress-copy', [
+        span([
+          Component.text(
+            record.isCompleted
+                ? 'All ${record.totalStages} stages recorded'
+                : 'Stage ${record.currentStage} of ${record.totalStages}'
+                      '${stage == null ? '' : ' — ${stage.title}'}',
+          ),
+        ]),
+        strong([Component.text('${record.progressPercent}%')]),
+      ]),
+      div(
+        classes: 'sw-home-progress-track',
+        attributes: {
+          'role': 'progressbar',
+          'aria-label': 'Assessment progress',
+          'aria-valuenow': '${record.progressPercent}',
+          'aria-valuemin': '0',
+          'aria-valuemax': '100',
+        },
+        [
+          span(
+            styles: Styles(
+              raw: {'width': '${record.progressPercent.clamp(0, 100)}%'},
+            ),
+            [],
+          ),
+        ],
+      ),
+      div(classes: 'sw-home-row sw-home-study-bottom', [
+        span([
+          Component.text(
+            record.updatedAt == null
+                ? 'Last updated not recorded'
+                : 'Last updated ${assessmentStamp(record.updatedAt!)}',
+          ),
+        ]),
+        AppLink(
+          to: '/entrepreneur/assessment?id=${record.propertyId}',
+          classes: 'sw-home-primary',
+          children: [
+            Component.text(
+              record.isCompleted
+                  ? 'Review assessment '
+                  : 'Continue assessment ',
+            ),
+            span(
+              attributes: const {'aria-hidden': 'true'},
+              [Component.text('→')],
+            ),
+          ],
+        ),
+      ]),
+    ]);
+  }
 }

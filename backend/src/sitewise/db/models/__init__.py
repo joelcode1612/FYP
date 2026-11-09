@@ -1,5 +1,6 @@
 from .address import Address
 from .ai_explanation import AiExplanation
+from .assessment import Assessment
 from .district_demographic import DistrictDemographic
 from .entrepreneur_preferences import EntrepreneurPreferences
 from .favourite_property import FavouriteProperty
@@ -17,6 +18,7 @@ from .virtual_tour import VirtualTour
 __all__ = [
     "Address",
     "AiExplanation",
+    "Assessment",
     "DistrictDemographic",
     "EntrepreneurPreferences",
     "FavouriteProperty",

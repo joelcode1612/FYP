@@ -279,6 +279,20 @@ class SupabaseAdminService:
         result = query.order("created_at", desc=True).limit(200).execute()
         return list(result.data or [])
 
+    def get_invitation(self, invitation_id: str) -> dict[str, Any] | None:
+        """Read one invitation row before a state-changing admin action."""
+        try:
+            result = (
+                self.client.table("staff_invitations")
+                .select("*")
+                .eq("invitation_id", str(invitation_id))
+                .limit(1)
+                .execute()
+            )
+        except Exception as exc:
+            raise SupabaseAdminError(f"Invitation lookup failed: {exc}") from exc
+        return (result.data or [None])[0]
+
     # ------------------------------------------------------------------
     # Role-change audit
     # ------------------------------------------------------------------
@@ -333,6 +347,95 @@ class SupabaseAdminService:
     # ------------------------------------------------------------------
     # Agent profiles + listing assignment + verification (existing tables)
     # ------------------------------------------------------------------
+
+    def list_companies(self) -> list[dict[str, Any]]:
+        """Return the existing ``public.company`` rows.
+
+        Only the two columns the rest of this codebase already relies on
+        (``company_id`` / ``company_name`` from :meth:`resolve_company`) are
+        projected into the API. ``select("*")`` is used on the wire so the
+        query stays valid if the live table carries additional columns; no
+        column is invented here.
+        """
+        try:
+            result = (
+                self.client.table("company")
+                .select("*")
+                .order("company_name")
+                .execute()
+            )
+        except Exception as exc:
+            raise SupabaseAdminError(f"Company directory query failed: {exc}") from exc
+        companies: list[dict[str, Any]] = []
+        for row in result.data or []:
+            raw_id = row.get("company_id")
+            if raw_id is None:
+                continue
+            companies.append(
+                {
+                    "company_id": int(raw_id),
+                    "company_name": str(row.get("company_name") or "").strip(),
+                }
+            )
+        return companies
+
+    def get_company(self, company_id: int) -> dict[str, Any] | None:
+        """Look up one ``public.company`` row by its primary key."""
+        try:
+            result = (
+                self.client.table("company")
+                .select("*")
+                .eq("company_id", int(company_id))
+                .limit(1)
+                .execute()
+            )
+        except Exception as exc:
+            raise SupabaseAdminError(f"Company lookup failed: {exc}") from exc
+        for row in result.data or []:
+            return {
+                "company_id": int(row["company_id"]),
+                "company_name": str(row.get("company_name") or "").strip(),
+            }
+        return None
+
+    def create_company(self, company_name: str) -> dict[str, Any]:
+        """Register a company in the existing ``public.company`` table.
+
+        Exact-name duplicates are refused rather than silently creating two
+        near-identical rows: the caller can then pick the existing
+        ``company_id`` from the directory. No new columns or tables.
+        """
+        name = company_name.strip()
+        if not name:
+            raise SupabaseAdminError("A company name is required.")
+        try:
+            found = (
+                self.client.table("company")
+                .select("company_id,company_name")
+                .eq("company_name", name)
+                .limit(1)
+                .execute()
+            )
+            if found.data:
+                raise ConflictError(
+                    "A company with this name already exists. Select it from "
+                    "the existing company directory instead."
+                )
+            created = (
+                self.client.table("company")
+                .insert({"company_name": name})
+                .execute()
+            )
+        except ConflictError:
+            raise
+        except Exception as exc:
+            raise SupabaseAdminError(f"Company registration failed: {exc}") from exc
+        for row in created.data or []:
+            return {
+                "company_id": int(row["company_id"]),
+                "company_name": str(row.get("company_name") or name).strip(),
+            }
+        raise SupabaseAdminError("Company registration returned no row.")
 
     def resolve_company(self, company_name: str | None) -> int | None:
         """Return the ``company`` id for a name, creating the row if new."""

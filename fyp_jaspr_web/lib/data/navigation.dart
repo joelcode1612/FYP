@@ -119,6 +119,14 @@ List<WebDestination> webDestinationsFor(AppRole role) => switch (role) {
       icon: 'auto_awesome',
       label: 'Recommendations',
     ),
+    // Saved location assessments. The workspace itself is a drill-in from a
+    // property, so it has no nav entry of its own; this is where the records
+    // are collected and reopened.
+    WebDestination(
+      route: '/entrepreneur/assessments',
+      icon: 'fact_check',
+      label: 'Assessments',
+    ),
     WebDestination(
       route: '/entrepreneur/compare',
       icon: 'compare_arrows',
@@ -151,6 +159,7 @@ String parentShellRoute(String route) {
   const parents = {
     '/entrepreneur/preferences': '/entrepreneur',
     '/entrepreneur/property-detail': '/entrepreneur/explore',
+    '/entrepreneur/assessment': '/entrepreneur/explore',
     '/entrepreneur/tour': '/entrepreneur/explore',
     '/entrepreneur/report': '/entrepreneur/explore',
     '/entrepreneur/explanation': '/entrepreneur/recommendations',
@@ -161,7 +170,6 @@ String parentShellRoute(String route) {
     '/admin/listing-detail': '/admin/listings',
     '/admin/agent-detail': '/admin/agents',
     '/agent/property-detail': '/agent/listings',
-    '/agent/enquiry-detail': '/agent/enquiries',
     '/owner/property-detail': '/owner/properties',
     '/owner/tour-preview': '/owner/tours',
     '/owner/capture': '/owner/tours',

@@ -40,17 +40,33 @@ router = APIRouter()
 
 
 class CreateAgentRequest(BaseModel):
-    """Step 1 of the confirmed workflow: the administrator supplies identity
-    information only - never a password (the agent sets their own via the
-    Supabase invite email)."""
+    """Final step of the confirmed workflow: the administrator supplies
+    identity information only - never a password (the agent sets their own
+    via the Supabase invite email).
+
+    ``company_id`` is the preferred, unambiguous assignment produced by the
+    four-step wizard. ``company_name`` remains accepted for older clients;
+    when both are sent the explicit id wins.
+    """
 
     full_name: str = Field(min_length=1, max_length=120)
     email: EmailStr
     phone_number: str | None = Field(default=None, max_length=20)
+    company_id: int | None = Field(default=None, ge=1)
     company_name: str | None = Field(default=None, max_length=120)
     # Explicit opt-in for emails that already belong to a Supabase identity.
     # Matching emails never upgrade roles automatically.
     allow_existing: bool = False
+
+
+class CreateCompanyRequest(BaseModel):
+    """Registration of a row in the existing ``public.company`` table.
+
+    Only ``company_name`` is writable: the live table has no ``company_type``
+    column, and inventing one here would fail against the real schema.
+    """
+
+    company_name: str = Field(min_length=1, max_length=120)
 
 
 class UpdateAgentStatusRequest(BaseModel):
@@ -98,6 +114,111 @@ def _mirror_payload(user: User) -> dict:
     }
 
 
+# The two states protected by the ``staff_invitations_one_open_per_email``
+# unique partial index. Mirrored here so an invitation is never issued twice
+# for the same address, and so revoking one genuinely frees the address.
+_OPEN_INVITATION_STATES = ("pending", "sent")
+
+
+def _invitation_state(row: dict) -> str:
+    return str(row.get("invitation_status") or row.get("status") or "").lower()
+
+
+def _iso(value: object) -> str:
+    """ISO-8601 for a datetime column, empty string when the mirror has none."""
+    formatter = getattr(value, "isoformat", None)
+    return formatter() if callable(formatter) else ""
+
+
+def _latest_invitations(service: SupabaseAdminService) -> dict[str, dict]:
+    """Newest invitation per email, keyed by the lower-cased address."""
+    rows = service.list_invitations()
+    ordered = sorted(rows, key=lambda row: str(row.get("created_at") or ""), reverse=True)
+    latest: dict[str, dict] = {}
+    for row in ordered:
+        email = str(row.get("invited_email") or "").lower()
+        if email and email not in latest:
+            latest[email] = row
+    return latest
+
+
+def _company_index(service: SupabaseAdminService) -> dict[int, str]:
+    """``company_id -> company_name`` for the existing company rows."""
+    return {
+        int(company["company_id"]): str(company.get("company_name") or "")
+        for company in service.list_companies()
+        if company.get("company_id") is not None
+    }
+
+
+def _agent_records(session: Session, service: SupabaseAdminService) -> list[dict]:
+    """The single source of rows shared by the roster and the summary tiles.
+
+    Both endpoints must agree on what an "agent" is, so the count in a KPI can
+    never drift from the directory underneath it. Company names and invitation
+    states are joined server-side from the real tables, not derived in the
+    browser.
+    """
+    by_user: dict[str, dict] = {}
+    for agent in service.list_agent_profiles():
+        uid = agent.get("user_id")
+        if uid:
+            by_user[str(uid)] = agent
+    companies = _company_index(service)
+    invitations = _latest_invitations(service)
+    records: list[dict] = []
+    for profile in UserService(session).list_users(limit=500):
+        if not rbac.has_role(profile.role, (rbac.ROLE_AGENT,)):
+            continue
+        uid = str(profile.user_id)
+        agent_profile = by_user.get(uid)
+        raw_company_id = (agent_profile or {}).get("company_id")
+        company_id = None
+        if raw_company_id is not None:
+            try:
+                company_id = int(raw_company_id)
+            except (TypeError, ValueError):
+                company_id = None
+        invitation = invitations.get(str(profile.email or "").lower()) or {}
+        records.append(
+            {
+                **_mirror_payload(profile),
+                "created_at": _iso(profile.created_at),
+                "agent_profile": agent_profile,
+                "company_id": company_id,
+                "company_name": companies.get(company_id, "") if company_id else "",
+                "invitation_status": _invitation_state(invitation),
+                "invitation_id": str(invitation.get("invitation_id") or ""),
+            }
+        )
+    return records
+
+
+def _resolve_assignment(
+    service: SupabaseAdminService,
+    payload: CreateAgentRequest,
+) -> tuple[int | None, str]:
+    """Resolve the wizard's company choice to a real ``public.company`` id.
+
+    An explicit ``company_id`` is verified before anything is provisioned, so
+    a stale selection fails with a readable 404 instead of silently creating
+    an agent profile with a dangling foreign key. The legacy ``company_name``
+    path keeps its existing create-if-missing behaviour for older clients.
+    """
+    if payload.company_id is not None:
+        company = service.get_company(payload.company_id)
+        if company is None:
+            raise HTTPException(
+                status_code=404,
+                detail=(
+                    "The selected company no longer exists. Refresh the "
+                    "company directory and choose again."
+                ),
+            )
+        return int(company["company_id"]), str(company.get("company_name") or "")
+    return service.resolve_company(payload.company_name), (payload.company_name or "").strip()
+
+
 # ---------------------------------------------------------------------------
 # Step 1-3 of the confirmed workflow: administrator creates the agent account
 # and Supabase emails the native password-setup (invite) link.
@@ -135,6 +256,29 @@ def create_agent(
             detail=(
                 "A different local identity already uses this email. "
                 "Administrator identity reconciliation is required."
+            ),
+        )
+    # Duplicate guards run BEFORE any privileged identity write. The database
+    # already has a unique partial index over open invitations, but failing
+    # here gives the administrator an actionable sentence instead of a
+    # provider-level 422 from Supabase Auth.
+    if local_profile is not None and rbac.has_role(local_profile.role, (rbac.ROLE_AGENT,)):
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "An agent account already exists for this email. Manage it "
+                "from the agent directory instead of inviting it again."
+            ),
+        )
+    if any(
+        _invitation_state(row) in _OPEN_INVITATION_STATES
+        for row in service.list_invitations(email)
+    ):
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "An open invitation already exists for this email. Revoke it "
+                "in the invitations table before issuing a new one."
             ),
         )
 
@@ -181,7 +325,7 @@ def create_agent(
 
     # Agent profile in the existing public.agent table (links auth identity
     # to listing assignments via agent.user_id).
-    company_id = service.resolve_company(payload.company_name)
+    company_id, company_name = _resolve_assignment(service, payload)
     agent_profile = service.create_agent_profile(
         user_id=auth_user_id,
         agent_name=payload.full_name,
@@ -220,7 +364,9 @@ def create_agent(
         "account_status": rbac.STATUS_PENDING,
         "invited": invited,
         "invitation": invitation,
+        "invitation_status": _invitation_state(invitation or {}),
         "agent_profile": agent_profile,
+        "company": {"company_id": company_id, "company_name": company_name},
         "mirror": _mirror_payload(mirror),
     }
 
@@ -230,27 +376,73 @@ def list_agents(
     admin: AdminMfaUser,
     session: Session = Depends(get_db),
 ) -> list[dict]:
-    """All agent accounts with their account status and agent profile."""
+    """Agent accounts joined to their company and latest invitation state."""
+    return _agent_records(session, _admin_service())
+
+
+# ---------------------------------------------------------------------------
+# Company directory + registration (existing public.company table)
+# ---------------------------------------------------------------------------
+
+
+@router.get("/companies")
+def list_companies(admin: AdminMfaUser) -> list[dict]:
+    """Existing companies for the invitation wizard's assignment step."""
+    return _admin_service().list_companies()
+
+
+@router.post("/companies", status_code=201)
+def create_company(
+    payload: CreateCompanyRequest,
+    admin: AdminMfaUser,
+) -> dict:
+    """Register a company so its real ``company_id`` can be assigned."""
     service = _admin_service()
-    agents = service.list_agent_profiles()
-    by_user: dict[str, dict] = {}
-    for agent in agents:
-        uid = agent.get("user_id")
-        if uid:
-            by_user[str(uid)] = agent
-    profiles = UserService(session).list_users(limit=500)
-    result = []
-    for profile in profiles:
-        if not rbac.has_role(profile.role, (rbac.ROLE_AGENT,)):
-            continue
-        uid = str(profile.user_id)
-        result.append(
-            {
-                **_mirror_payload(profile),
-                "agent_profile": by_user.get(uid),
-            }
-        )
-    return result
+    company = service.create_company(payload.company_name)
+    service.insert_role_audit(
+        affected_user_id=None,
+        affected_email=None,
+        performed_by_user_id=admin.user_id,
+        performed_by_email=admin.email,
+        action="company.registered",
+        details={
+            "company_id": company["company_id"],
+            "company_name": company["company_name"],
+        },
+    )
+    return company
+
+
+@router.get("/summary")
+def staff_summary(
+    admin: AdminMfaUser,
+    session: Session = Depends(get_db),
+) -> dict:
+    """Backend-driven KPI values for the agent management page.
+
+    Every figure is computed from the same live records as the directory,
+    company list and invitations table — no client-side sample numbers.
+    """
+    service = _admin_service()
+    agents = _agent_records(session, service)
+    invitations = service.list_invitations()
+    return {
+        "total_agents": len(agents),
+        "active_agents": sum(
+            1 for a in agents if a["account_status"] == rbac.STATUS_ACTIVE
+        ),
+        "pending_agents": sum(
+            1 for a in agents if a["account_status"] == rbac.STATUS_PENDING
+        ),
+        "suspended_agents": sum(
+            1 for a in agents if a["account_status"] == rbac.STATUS_SUSPENDED
+        ),
+        "open_invitations": sum(
+            1 for i in invitations if _invitation_state(i) in _OPEN_INVITATION_STATES
+        ),
+        "invitations": len(invitations),
+        "companies": len(service.list_companies()),
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -351,6 +543,46 @@ def mfa_recovery(
 @router.get("/invitations")
 def list_invitations(admin: AdminMfaUser) -> list[dict]:
     return _admin_service().list_invitations()
+
+
+@router.post("/invitations/{invitation_id}/revoke")
+def revoke_invitation(
+    invitation_id: uuid.UUID,
+    admin: AdminMfaUser,
+) -> dict:
+    """Close an open invitation so the address can be invited again.
+
+    The Supabase identity is NOT deleted and no email is sent: the partial
+    unique index over ``pending`` / ``sent`` invitations is simply released.
+    A closed or unknown invitation is refused rather than silently rewritten.
+    """
+    service = _admin_service()
+    invitation = service.get_invitation(str(invitation_id))
+    if invitation is None:
+        raise HTTPException(status_code=404, detail="Invitation not found.")
+    state = _invitation_state(invitation)
+    if state not in _OPEN_INVITATION_STATES:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Only open invitations can be revoked (current state: {state or 'unknown'}).",
+        )
+    service.update_invitation(str(invitation_id), {"invitation_status": "revoked"})
+    service.insert_role_audit(
+        # The audit table's affected_user_id has an FK to public.users; an
+        # invitation may reference an auth identity with no mirror row, so the
+        # id is recorded in details instead of forcing a broken foreign key.
+        affected_user_id=None,
+        affected_email=invitation.get("invited_email"),
+        performed_by_user_id=admin.user_id,
+        performed_by_email=admin.email,
+        action="staff.invitation_revoked",
+        details={
+            "invitation_id": str(invitation_id),
+            "previous_status": state,
+            "invited_user_id": invitation.get("invited_user_id"),
+        },
+    )
+    return {**invitation, "invitation_status": "revoked"}
 
 
 @router.get("/audit")

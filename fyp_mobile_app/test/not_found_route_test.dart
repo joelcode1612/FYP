@@ -105,23 +105,26 @@ void main() {
   // The mobile assessment flow is data collection and stays separate from the
   // web decision-support workspace. These routes and their tab mapping are a
   // regression guard: the not-found change must not rename or drop any of them.
-  test('every mobile assessment route stays registered under the Assess tab', () {
-    const assessmentRoutes = {
-      '/entrepreneur/assess',
-      '/entrepreneur/assessment-setup',
-      '/entrepreneur/assessment-evidence',
-      '/entrepreneur/assessment-summary',
-      '/entrepreneur/report',
-    };
-    for (final path in assessmentRoutes) {
-      expect(
-        AppRoutes.onGenerateRoute(RouteSettings(name: path)),
-        isNotNull,
-        reason: '$path must remain a registered route',
-      );
-      expect(parentShellRoute(path), '/entrepreneur/assess');
-    }
-  });
+  test(
+    'every mobile assessment route stays registered under the Assess tab',
+    () {
+      const assessmentRoutes = {
+        '/entrepreneur/assess',
+        '/entrepreneur/assessment-setup',
+        '/entrepreneur/assessment-evidence',
+        '/entrepreneur/assessment-summary',
+        '/entrepreneur/report',
+      };
+      for (final path in assessmentRoutes) {
+        expect(
+          AppRoutes.onGenerateRoute(RouteSettings(name: path)),
+          isNotNull,
+          reason: '$path must remain a registered route',
+        );
+        expect(parentShellRoute(path), '/entrepreneur/assess');
+      }
+    },
+  );
 
   test('parentShellRoute normalises a query string before lookup', () {
     expect(

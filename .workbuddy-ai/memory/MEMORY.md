@@ -91,3 +91,26 @@
   migration §4/§5 has the SECURITY DEFINER fix, live DB differs), and public
   signup fails 500 "Error sending confirmation email" (SMTP unconfigured).
   Only 1 real auth user exists — never modify it for tests.
+
+## Mobile auth screen (since 2026-11-09)
+
+- `fyp_mobile_app/lib/presentation/mobile/auth/pages/mobile_auth_page.dart` is
+  brand-only at the top: NO back arrow and NO top `Log In / Sign Up` switch
+  (explicit user request). Mode still lives in `_tab` / `AuthTab` (enum defined
+  in `widgets/auth_tabs.dart`, which also still exports the now-unused
+  `AuthTabs` widget). Mode is selected by `/auth` route arguments
+  (`'login' | 'signUp'`, see `core/routing/app_routes.dart`) and by the inline
+  account link at the foot of the form. Do not reintroduce the top toggle
+  without asking.
+- `test/widget_test.dart` TEST 10 reaches registration via the inline
+  `find.text('Sign up')` link (with `ensureVisible`), not `find.text('Sign Up')`.
+
+## Flutter verification (2026-11-09)
+
+- `flutter test` in `fyp_mobile_app` fails with "Unable to connect to
+  flutter_tester process: WebSocketException: Invalid WebSocket upgrade
+  request" when proxy env vars are set. Run with
+  `env -u HTTP_PROXY -u HTTPS_PROXY -u http_proxy -u https_proxy -u ALL_PROXY
+  -u all_proxy flutter test test/widget_test.dart` (23 tests pass, ~26s).
+- `dart analyze` works without the proxy workaround; the only warning is a
+  pre-existing unused import in `lib/core/routing/auth_route_guard.dart`.

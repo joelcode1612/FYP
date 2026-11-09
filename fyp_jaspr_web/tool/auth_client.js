@@ -1081,6 +1081,36 @@ window.sitewiseAuth = {
     if (!client) throw new Error(state.error || 'The Sitewise API is unavailable.');
     return JSON.stringify(await apiRequest(path, method, body ? JSON.parse(body) : null));
   },
+  // Same call as `request`, but the outcome travels back as data instead of a
+  // thrown JS error. Dart cannot reliably read `err.status` / `err.code` off a
+  // rejected promise, and the workspace needs the HTTP status to tell "record
+  // not found" from "not authorised" from "the service failed". Nothing is
+  // swallowed: every failure still carries the backend's own message.
+  async requestDetailed(path, method, body) {
+    await ready;
+    if (!client) {
+      return JSON.stringify({
+        ok: false,
+        status: null,
+        code: 'api_unavailable',
+        message: state.error || 'The Sitewise API is unavailable.',
+      });
+    }
+    try {
+      const payload = await apiRequest(path, method, body ? JSON.parse(body) : null);
+      return JSON.stringify({ ok: true, body: payload });
+    } catch (err) {
+      diag('requestDetailed', err);
+      return JSON.stringify({
+        ok: false,
+        status: typeof err?.status === 'number' ? err.status : null,
+        code: typeof err?.code === 'string' ? err.code : null,
+        message: typeof err?.message === 'string' && err.message
+          ? err.message
+          : 'The data service could not complete this request.',
+      });
+    }
+  },
 };
 
 

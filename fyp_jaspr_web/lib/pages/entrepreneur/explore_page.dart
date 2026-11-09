@@ -170,6 +170,25 @@ class _ExplorePageState extends State<ExplorePage> {
     if (index >= _visibleLimit) _visibleLimit = index + 1;
   });
 
+  /// Saves/removes a shortlist property. A signed-in account persists to the
+  /// server first and the shortlist only moves once the server accepted the
+  /// change, so what the bookmark shows is what the account holds. A visitor
+  /// keeps the cookie-backed selection. On a failed request nothing changes.
+  Future<void> _toggleSaved(String id) async {
+    final notifier = context.read(appNotifierProvider.notifier);
+    if (!AppLocator.isSignedIn) {
+      notifier.toggleSaved(id);
+      return;
+    }
+    final savedNow = context.read(appNotifierProvider).saved.contains(id);
+    final failure = await AppLocator.persistToggleSaved(
+      id,
+      wantSaved: !savedNow,
+    );
+    if (failure != null) return;
+    notifier.toggleSaved(id);
+  }
+
   /// Locates a listing on the map: select it, pan the canvas so its pin sits
   /// centered, then bring the map section into view.
   void _locate(CommercialProperty prop) {
@@ -292,12 +311,12 @@ class _ExplorePageState extends State<ExplorePage> {
           PropertyCard(
             property: p,
             href: '/entrepreneur/property-detail?id=${p.id}',
+            assessHref: '/entrepreneur/assessment?id=${p.id}',
             selected: p.id == selectedId,
             anchorId: 'pcard-${p.id}',
             saved: saved.contains(p.id),
             compared: compared.contains(p.id),
-            onToggleSaved: () =>
-                context.read(appNotifierProvider.notifier).toggleSaved(p.id),
+            onToggleSaved: () => _toggleSaved(p.id),
             onToggleCompared: () =>
                 context.read(appNotifierProvider.notifier).toggleCompared(p.id),
             onLocate: () => _locate(p),

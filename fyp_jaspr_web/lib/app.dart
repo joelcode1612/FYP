@@ -17,6 +17,9 @@ import 'pages/forgot_password_page.dart';
 import 'pages/staff_mfa_page.dart';
 import 'pages/staff_verify_page.dart';
 import 'pages/reset_password_page.dart';
+import 'pages/entrepreneur/assessment_history_page.dart'
+    as e_assessment_history;
+import 'pages/entrepreneur/assessment_workspace_page.dart' as e_assessment;
 import 'pages/entrepreneur/compare_page.dart';
 import 'pages/entrepreneur/dashboard_page.dart' as e_dashboard;
 import 'pages/entrepreneur/my_properties_page.dart' as e_my_properties;
@@ -532,6 +535,34 @@ class SitewiseApp extends StatelessComponent {
             builder: (context, state) => _page(
               e_report.ReportPage(id: state.queryParams['id'] ?? ''),
               title: 'Assessment report — Sitewise',
+            ),
+          ),
+          // Web decision-support workspace. `?id=` is the same catalogue
+          // property id Explore, Property detail and Saved already pass;
+          // `?stage=` optionally opens one of the two in-page stage panels.
+          // The Flutter mobile assessment is a separate data-collection
+          // workflow and never routes here.
+          Route(
+            path: '/entrepreneur/assessment',
+            builder: (context, state) => _page(
+              e_assessment.AssessmentWorkspacePage(
+                propertyId: state.queryParams['id'] ?? '',
+                stage: state.queryParams['stage'] ?? '',
+              ),
+              title: 'Location Assessment Workspace — Sitewise',
+              description:
+                  'A five-stage assessment of one commercial property, saved '
+                  'to your account as you go.',
+            ),
+          ),
+          Route(
+            path: '/entrepreneur/assessments',
+            builder: (context, state) => _page(
+              const e_assessment_history.AssessmentHistoryPage(),
+              title: 'Assessment history — Sitewise',
+              description:
+                  'Every location assessment saved to your account, with its '
+                  'real progress and report availability.',
             ),
           ),
           Route(

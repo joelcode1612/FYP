@@ -5,6 +5,8 @@ import 'package:shared_logic/shared_logic.dart';
 
 import 'admin_api.dart';
 import 'api_property_repository.dart';
+import 'assessment_api.dart';
+import 'auth_service.dart';
 import 'ui_store.dart';
 import 'web_api_client.dart';
 import 'workspaces.dart';
@@ -14,8 +16,8 @@ import 'workspaces.dart';
 ///
 /// Properties come from the authenticated local API. User identity comes from
 /// Supabase; unsupported analysis throws an explicit unavailable-data error.
-/// Saved/compare selections and preferences remain local to this browser
-/// session.
+/// A signed-in account's saved list and preferences live on the server; a
+/// visitor's selections stay in this browser session.
 ///
 /// All shared state flows through the Riverpod providers from `shared_logic`;
 /// [webOverrides] is the one place that points them at the services this
@@ -117,12 +119,62 @@ abstract final class AppLocator {
   }
 
   /// Persists only UI selections, never authorization grants.
+  ///
+  /// A signed-in account's saved list lives on the server, not in this
+  /// browser: writing it here would resurrect removed properties on the next
+  /// boot (the boot merge unions the cookie with the account list). Compare
+  /// selections stay cookie-persisted for everyone.
   static void persistUiState(AppState state) {
     UiStore.write((
-      saved: state.saved,
+      saved: WebAuth.profile != null ? const {} : state.saved,
       compared: state.compared,
       roles: Workspaces.granted,
     ));
+  }
+
+  /// Whether the current visitor holds a verified session.
+  static bool get isSignedIn => WebAuth.profile != null;
+
+  /// Persists one saved-shortlist toggle for a signed-in account.
+  ///
+  /// Returns null only when the server accepted the change — the caller may
+  /// then update its local shortlist. A failure returns the reason and the
+  /// caller must change nothing, so what the shortlist shows is always what
+  /// the account holds. Visitors never reach this: their shortlist is
+  /// cookie-persisted locally and needs no round trip.
+  static Future<AssessmentFailure?> persistToggleSaved(
+    String propertyRef, {
+    required bool wantSaved,
+  }) async {
+    const api = AssessmentApi();
+    final result = wantSaved
+        ? await api.saveProperty(propertyRef)
+        : await api.unsaveProperty(propertyRef);
+    return result.ok ? null : result.failure;
+  }
+
+  /// Unions the signed-in account's saved properties into [uiSeed], so the
+  /// first frame after boot already shows the account's shortlist.
+  ///
+  /// Called once from the browser entrypoint after the session is resolved.
+  /// For a visitor with no session this is a no-op — their shortlist is the
+  /// cookie's. A failed or timed-out read keeps the cookie state and reports
+  /// nothing: the shortlist still works from the previous boot's selection.
+  /// Delisted refs (the server's `unresolved`) are excluded so dead entries
+  /// never re-enter the shortlist.
+  static Future<void> mergeAccountSaved() async {
+    if (WebAuth.profile == null) return;
+    try {
+      final result = await const AssessmentApi().savedProperties().timeout(
+        const Duration(seconds: 3),
+      );
+      if (!result.ok) return;
+      final refs = result.value!.resolvedRefs();
+      if (refs.isEmpty) return;
+      uiSeed = uiSeed.copyWith(saved: {...uiSeed.saved, ...refs});
+    } on Object {
+      // Boot must not stall on a dead API; the cookie selection stands.
+    }
   }
 
   /// Compatibility shim; authorization grants are never persisted.

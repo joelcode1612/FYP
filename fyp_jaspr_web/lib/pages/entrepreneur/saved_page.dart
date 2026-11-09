@@ -25,6 +25,26 @@ import '../../layouts/app_layout.dart';
 class SavedPage extends StatelessComponent {
   const SavedPage({super.key});
 
+  /// Saves/removes a shortlist property. A signed-in account persists to the
+  /// server first and the shortlist only moves once the server accepted the
+  /// change; a visitor keeps the cookie-backed selection. On a failed request
+  /// nothing changes. The notifier is read before the await so a rebuild
+  /// while the request is in flight cannot strand the call.
+  Future<void> _toggleSaved(BuildContext context, String id) async {
+    final notifier = context.read(appNotifierProvider.notifier);
+    if (!AppLocator.isSignedIn) {
+      notifier.toggleSaved(id);
+      return;
+    }
+    final savedNow = context.read(appNotifierProvider).saved.contains(id);
+    final failure = await AppLocator.persistToggleSaved(
+      id,
+      wantSaved: !savedNow,
+    );
+    if (failure != null) return;
+    notifier.toggleSaved(id);
+  }
+
   @override
   Component build(BuildContext context) {
     final saved = context.watch(appNotifierProvider.select((app) => app.saved));
@@ -46,7 +66,8 @@ class SavedPage extends StatelessComponent {
             title: 'No favourites yet',
             body:
                 'Save a property while browsing to keep it here. Saved '
-                'items are held for this session and can be removed again '
+                'items are kept with your account when you are signed in, '
+                'or for this session otherwise, and can be removed again '
                 'from this page.',
             action: const ActionLink(
               'Browse properties',
@@ -68,9 +89,7 @@ class SavedPage extends StatelessComponent {
                   .where((property) => saved.contains(property.id))
                   .toList();
               final liveIds = live.map((property) => property.id).toSet();
-              final gone = saved
-                  .where((id) => !liveIds.contains(id))
-                  .toList();
+              final gone = saved.where((id) => !liveIds.contains(id)).toList();
 
               return div(classes: 'stack stack--sections', [
                 p(classes: 'small', [
@@ -95,13 +114,12 @@ class SavedPage extends StatelessComponent {
                     for (final property in live)
                       PropertyCard(
                         property: property,
-                        href:
-                            '/entrepreneur/property-detail?id=${property.id}',
+                        href: '/entrepreneur/property-detail?id=${property.id}',
+                        assessHref:
+                            '/entrepreneur/assessment?id=${property.id}',
                         saved: true,
                         compared: compared.contains(property.id),
-                        onToggleSaved: () => context
-                            .read(appNotifierProvider.notifier)
-                            .toggleSaved(property.id),
+                        onToggleSaved: () => _toggleSaved(context, property.id),
                         onToggleCompared: () => context
                             .read(appNotifierProvider.notifier)
                             .toggleCompared(property.id),
@@ -132,9 +150,7 @@ class SavedPage extends StatelessComponent {
                             'Remove from favourites',
                             variant: 'secondary',
                             icon: 'delete',
-                            onClick: () => context
-                                .read(appNotifierProvider.notifier)
-                                .toggleSaved(id),
+                            onClick: () => _toggleSaved(context, id),
                           ),
                         ]),
                     ]),

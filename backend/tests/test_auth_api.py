@@ -5,6 +5,7 @@ ownership tests (spec 15 - authorization tests)."""
 import uuid
 
 import pytest
+from sqlalchemy import text
 
 from .conftest import TEST_EMAIL_DOMAIN, make_token, register_user_id
 
@@ -13,8 +14,11 @@ from .conftest import TEST_EMAIL_DOMAIN, make_token, register_user_id
 def identity(client, cleanup_users):
     """A provisioned user (hit /auth/me once) and its bearer token."""
     sub = str(uuid.uuid4())
-    token = make_token(sub=sub, email=f"owner-{sub[:8]}@{TEST_EMAIL_DOMAIN}",
-                       role_claims={"full_name": "RBAC Tester"})
+    token = make_token(
+        sub=sub,
+        email=f"owner-{sub[:8]}@{TEST_EMAIL_DOMAIN}",
+        role_claims={"full_name": "RBAC Tester"},
+    )
     response = client.get("/api/v1/auth/me", headers={"Authorization": f"Bearer {token}"})
     assert response.status_code == 200, response.text
     register_user_id(cleanup_users, uuid.UUID(sub))
@@ -23,6 +27,28 @@ def identity(client, cleanup_users):
 
 def auth(token):
     return {"Authorization": f"Bearer {token}"}
+
+
+@pytest.fixture(autouse=True)
+def cleanup_favourites(cleanup_users):
+    """Delete this test's favourite rows before its user rows are removed.
+
+    Requesting ``cleanup_users`` pins the teardown order: favourites first,
+    then users, so the foreign key is never violated.
+    """
+    yield
+    if not cleanup_users:
+        return
+    from sqlmodel import Session
+
+    from sitewise.db.session import engine
+
+    with Session(engine) as session:
+        session.execute(
+            text("DELETE FROM favorite_property WHERE user_id = ANY(:ids)"),
+            {"ids": list(cleanup_users)},
+        )
+        session.commit()
 
 
 # ---------------------------------------------------------------- /auth/me
@@ -135,9 +161,7 @@ def test_user_creation_endpoint_is_gone(client, identity):
 
 def test_admin_routes_reject_non_admin(client, identity):
     other = str(uuid.uuid4())
-    r = client.get(
-        f"/api/v1/users/{other}", headers=auth(identity["token"])
-    )
+    r = client.get(f"/api/v1/users/{other}", headers=auth(identity["token"]))
     assert r.status_code == 403
 
 
@@ -147,31 +171,53 @@ def test_admin_routes_reject_non_admin(client, identity):
 def test_saved_property_ownership(client, identity, cleanup_users):
     """A client cannot save into another user's list, and cannot read theirs."""
     foreign_id = str(uuid.uuid4())
+    # A favourite row references users, so the foreign account must be a real
+    # provisioned user, not just a cleanup registry entry.
+    foreign_token = make_token(
+        sub=foreign_id,
+        email=f"foreign-{foreign_id[:8]}@{TEST_EMAIL_DOMAIN}",
+        role_claims={"full_name": "Foreign Tester"},
+    )
+    assert client.get("/api/v1/auth/me", headers=auth(foreign_token)).status_code == 200
     register_user_id(cleanup_users, uuid.UUID(foreign_id))
 
-    # POST forces the owner to the authenticated identity even if a foreign
-    # user_id is submitted.
+    from sqlmodel import Session
+
+    from sitewise.db.session import engine
+
+    with Session(engine) as session:
+        ref = session.execute(
+            text("SELECT id FROM sitewise_app.properties ORDER BY id LIMIT 1")
+        ).scalar()
+    assert ref
+
+    # The request body has no owner field at all: the owning user comes from
+    # the verified token, so a foreign user_id cannot even be submitted.
     r = client.post(
         "/api/v1/saved-properties/",
         headers=auth(identity["token"]),
-        json={"user_id": foreign_id, "property_id": 1},
+        json={"user_id": foreign_id, "property_ref": ref},
     )
-    # Property id 1 does not exist in the dev dataset; a 404 here still proves
-    # the request reached ownership logic. Accept 201 when the dataset has it.
-    assert r.status_code in (201, 404)
-    if r.status_code == 201:
-        assert r.json()["user_id"] == identity["profile"]["user_id"]
-        fav_id = r.json()["favorite_id"]
-        # Reading the foreign user's list is forbidden.
-        r2 = client.get(
-            f"/api/v1/saved-properties/user/{foreign_id}", headers=auth(identity["token"])
+    assert r.status_code in (200, 201)
+    assert r.json()["property_ref"] == ref
+    # Reading the foreign user's list is forbidden.
+    r2 = client.get(f"/api/v1/saved-properties/user/{foreign_id}", headers=auth(identity["token"]))
+    assert r2.status_code == 403
+
+    # Deleting someone else's favourite is forbidden: the foreign account
+    # holds a row, and the caller may not remove it by row id.
+    foreign_fav = str(uuid.uuid4())
+    with Session(engine) as session:
+        session.execute(
+            text(
+                "INSERT INTO favorite_property (favorite_id, user_id, property_id, created_at)"
+                " VALUES (:fid, :uid, :ref, now())"
+            ),
+            {"fid": foreign_fav, "uid": foreign_id, "ref": ref},
         )
-        assert r2.status_code == 403
-        # Deleting someone else's favourite is forbidden.
-        r3 = client.delete(
-            f"/api/v1/saved-properties/{fav_id}", headers=auth(identity["token"])
-        )
-        assert r3.status_code in (403, 404)
+        session.commit()
+    r3 = client.delete(f"/api/v1/saved-properties/{foreign_fav}", headers=auth(identity["token"]))
+    assert r3.status_code == 403
 
 
 # ------------------------------------------------- property management RBAC

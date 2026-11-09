@@ -55,6 +55,7 @@ dependencies:
   # shared controllers stay framework-free underneath.
   flutter_riverpod: ^3.3.2
   supabase_flutter: ^2.18.3
+  google_sign_in: ^7.2.0
   http: ^1.6.0
   flutter_secure_storage: ^11.2.0
 

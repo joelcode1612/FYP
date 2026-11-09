@@ -1,7 +1,7 @@
 <component name="ProjectRunConfigurationManager">
   <configuration default="false" name="main.dart" type="FlutterRunConfigurationType" factoryName="Flutter">
+    <option name="additionalArgs" value="--dart-define-from-file=C:\Users\Lenovo\AndroidStudioProjects\FYP\fyp_mobile_app\config\dev.env" />
     <option name="filePath" value="$PROJECT_DIR$/fyp_mobile_app/lib/main.dart" />
-    <option name="additionalArgs" value="--dart-define-from-file=$PROJECT_DIR$/fyp_mobile_app/config/sitewise_dev.env" />
-    <method />
+    <method v="2" />
   </configuration>
 </component>
