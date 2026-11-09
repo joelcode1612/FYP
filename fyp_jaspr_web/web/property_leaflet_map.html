@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>SiteWise property catchment map</title>
+  <!-- Self-hosted Leaflet 1.9.4 (same vendored copy the Explore map uses);
+       no CDN dependency and no API key. -->
+  <link rel="stylesheet" href="/vendor/leaflet/leaflet.css" />
+  <style>
+    html,body{margin:0;height:100%;font-family:Inter,system-ui,-apple-system,Segoe UI,Arial,sans-serif;background:#edf2f9;color:#172b4d}
+    .layout{display:flex;flex-direction:column;height:100%;min-height:0}
+    .toolbar{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;padding:8px 12px;background:#fff;border-bottom:1px solid #dce5f0}
+    .toolbar strong{font-size:12px;font-weight:800}.toolbar span{font-size:11px;color:#64748b}
+    .tabs{display:flex;gap:4px}.tabs button{background:#f7f9fd;border:1px solid #d5dfed;border-radius:7px;padding:6px 10px;color:#36516e;font:inherit;font-weight:700;font-size:11px;cursor:pointer}
+    .tabs button[aria-pressed=true]{background:#1d4ed8;color:#fff;border-color:#1d4ed8}
+    #map{flex:1;min-height:150px;width:100%}
+    .footer{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;padding:6px 12px;background:#fff;border-top:1px solid #dce5f0;color:#52667c;font-size:10.5px}
+    .key{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:4px;vertical-align:middle}.key.a{background:#1d4ed8}.key.b{background:#0f9d86}.key.c{background:#8a6bc7}
+    .notice{font-size:11px;padding:8px 12px;background:#fff4d9;color:#775216;border-bottom:1px solid #f0dda7}
+    .leaflet-popup-content{max-width:260px;overflow-wrap:anywhere;font-size:12px;line-height:1.5}.leaflet-container{font-family:inherit}
+    @media (max-width:460px){.toolbar{padding:6px 8px}.toolbar strong{font-size:11px}.tabs button{padding:5px 8px}}
+  </style>
+</head>
+<body>
+  <div class="layout">
+    <div class="toolbar"><div><strong>Property location</strong><span id="location-id"></span></div>
+      <div class="tabs" role="group" aria-label="Catchment radius">
+        <button type="button" data-radius="500" aria-pressed="false">500 m</button>
+        <button type="button" data-radius="1000" aria-pressed="false">1 km</button>
+        <button type="button" data-radius="both" aria-pressed="true">Both</button>
+      </div>
+    </div>
+    <div class="notice" id="map-alert" hidden></div>
+    <div id="map" role="region" aria-label="Leaflet interactive property map with catchment circles"></div>
+    <div class="footer"><div><span class="key a"></span>Selected unit &nbsp; <span class="key b"></span>0–500 m &nbsp; <span class="key c"></span>500 m–1 km</div><span id="nearby-label">Loading reference properties…</span></div>
+  </div>
+  <script src="/vendor/leaflet/leaflet.js"></script>
+  <script defer src="/property_leaflet_map.js"></script>
+</body>
+</html>

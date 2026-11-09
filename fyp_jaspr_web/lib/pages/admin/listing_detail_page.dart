@@ -1,52 +1,106 @@
+import 'dart:async';
+
 import 'package:jaspr/dom.dart';
 import 'package:jaspr/jaspr.dart';
+import 'package:jaspr_riverpod/jaspr_riverpod.dart';
 import 'package:shared_logic/shared_logic.dart';
 
 import '../../components/ui.dart';
-import '../../data/app_locator.dart';
+import '../../components/verification_detail_view.dart';
 import '../../layouts/app_layout.dart';
 
-/// Web listing detail: facts on the left, a static location panel on the right.
+/// Standalone listing verification detail (`/admin/listing-detail?id=…`).
 ///
-/// Ported from `admin_listing_detail_web_page.dart`. The Flutter page shows a
-/// `SitewiseMapPanel` (a stylised painter, not a real map SDK); here the map
-/// area is a static, clearly-labelled placeholder built from the existing
-/// `visual visual--map` classes, with the pin coordinates kept visible.
+/// Loads the same backend detail the review split uses
+/// (`/api/v1/staff/properties/{id}/verification`) and renders the shared
+/// [VerificationDetailView] — documents, per-dimension decisions and audit
+/// history — with a back link into the queue. The legacy
+/// `/admin/verification-detail` path redirects here with the id preserved.
 @client
-class ListingDetailPage extends StatelessComponent {
+class ListingDetailPage extends StatefulComponent {
   final String id;
 
   const ListingDetailPage({super.key, required this.id});
 
   @override
+  State<ListingDetailPage> createState() => _ListingDetailPageState();
+}
+
+class _ListingDetailPageState extends State<ListingDetailPage> {
+  String _loadedId = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _load(component.id);
+  }
+
+  void _load(String id) {
+    if (id.isEmpty) return;
+    _loadedId = id;
+    Future.microtask(() {
+      if (!mounted) return;
+      unawaited(
+        context.read(adminNotifierProvider.notifier).loadReviewDetail(id),
+      );
+    });
+  }
+
+  AdminNotifier get _notifier => context.read(adminNotifierProvider.notifier);
+
+  @override
   Component build(BuildContext context) {
+    if (component.id.isEmpty) return _page(_notFound());
+
+    final (detail, error, loading) = context.watch(
+      adminNotifierProvider.select(
+        (state) => (state.reviewDetail, state.error, state.loading),
+      ),
+    );
+
+    // Stale-guard: only render a detail that belongs to this id — a slower
+    // earlier request must not show through after a quick id change.
+    final matches =
+        detail != null && '${detail.property.propertyId}' == _loadedId;
+
+    return _page(
+      matches
+          ? div(classes: 'stack stack--sections', [
+              const ActionLink(
+                'Back to listings',
+                href: '/admin/listings',
+                variant: 'ghost',
+                icon: 'arrow_back',
+              ),
+              const VerificationDetailView(),
+            ])
+          : div(classes: 'card stack', [
+              if (error != null && !loading) ...[
+                span(classes: 'title', [Component.text('Could not load')]),
+                p(classes: 'body muted', [Component.text(error)]),
+                ActionButton(
+                  'Try again',
+                  onClick: () =>
+                      unawaited(_notifier.loadReviewDetail(_loadedId)),
+                  variant: 'secondary',
+                ),
+              ] else
+                p(classes: 'body muted', [const Component.text('Loading…')]),
+            ]),
+    );
+  }
+
+  Component _page(Component child) {
     return AppLayout(
       role: AppRole.admin,
       currentRoute: '/admin/listings',
       title: 'Listing detail',
       eyebrow: 'Verification',
       subtitle:
-          'A single listing as submitted, with the details you need to decide whether it should be verified.',
-      child: id.isEmpty
-          ? _notFound()
-          : FutureBuilder<CommercialProperty?>(
-              future: AppLocator.properties.detail(id),
-              builder: (context, snap) {
-                if (snap.connectionState == ConnectionState.done &&
-                    snap.data == null) {
-                  return _notFound();
-                }
-                if (!snap.hasData) return _loading();
-                return _body(snap.data!);
-              },
-            ),
+          'One listing as submitted, with the evidence and history you need '
+          'to decide each dimension independently.',
+      child: child,
     );
-  }
-
-  Component _loading() {
-    return div(classes: 'card', [
-      p(classes: 'body muted', [Component.text('Loading…')]),
-    ]);
   }
 
   Component _notFound() {
@@ -62,69 +116,6 @@ class ListingDetailPage extends StatelessComponent {
         href: '/admin/listings',
         variant: 'secondary',
       ),
-    ]);
-  }
-
-  Component _body(CommercialProperty property) {
-    return div(classes: 'grid-2', [
-      div(classes: 'card stack', [
-        div(classes: 'row', [
-          span(classes: 'grow title', [Component.text(property.title)]),
-          Pill(
-            property.verification.label,
-            tone: toneForVerification(property.verification),
-          ),
-        ]),
-        p(classes: 'body', [
-          Component.text(
-            '${property.address}, ${property.postcode} '
-            '${property.city}, ${property.state}',
-          ),
-        ]),
-        div(classes: 'body', [
-          Component.text(
-            'RM${property.rentalRm.toStringAsFixed(0)} / '
-            '${property.sizeSqft.toStringAsFixed(0)} sq ft · '
-            '${property.propertyType}',
-          ),
-        ]),
-      ]),
-      _MapPanel(property: property),
-    ]);
-  }
-}
-
-/// Static stand-in for the Flutter `SitewiseMapPanel`. The painter it used is
-/// Flutter-only; this keeps the pin label and coordinates visible and clearly
-/// marks the area as a non-interactive preview.
-class _MapPanel extends StatelessComponent {
-  final CommercialProperty property;
-
-  const _MapPanel({required this.property});
-
-  @override
-  Component build(BuildContext context) {
-    return div(classes: 'card stack', [
-      span(classes: 'overline', [Component.text('Location')]),
-      div(classes: 'visual visual--map', [
-        div(classes: 'visual__grid', []),
-        span(classes: 'visual__pin', []),
-        span(classes: 'visual__chip', [
-          Icon('location_on', size: 'sm'),
-          Component.text(property.title),
-        ]),
-      ]),
-      div(classes: 'small muted', [
-        Component.text(
-          '${property.latitude.toStringAsFixed(4)}, '
-          '${property.longitude.toStringAsFixed(4)} · Klang Valley & beyond',
-        ),
-      ]),
-      div(classes: 'tiny muted', [
-        Component.text(
-          'Map preview — interactive map view requires the mobile app.',
-        ),
-      ]),
     ]);
   }
 }

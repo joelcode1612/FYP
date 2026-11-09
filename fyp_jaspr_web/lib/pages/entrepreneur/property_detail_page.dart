@@ -6,7 +6,10 @@ import 'package:jaspr_riverpod/jaspr_riverpod.dart';
 import 'package:shared_logic/shared_logic.dart';
 
 import '../../components/ui.dart';
+import '../../components/location_evidence_panel.dart';
+import '../../components/property_leaflet_map.dart';
 import '../../data/app_locator.dart';
+import '../../data/location_evidence_api.dart';
 import '../../layouts/app_layout.dart';
 
 /// Web property detail, laid out as the source's `property.html`.
@@ -40,6 +43,45 @@ class PropertyDetailPage extends StatefulComponent {
 class _PropertyDetailPageState extends State<PropertyDetailPage> {
   String? _saveMessage;
   bool _compareLinkShown = false;
+
+  /// The listing load, created once per id so a rebuild never re-requests it.
+  ///
+  /// Resolution order: the catalogue first (`EP-xxxxx` ids — the id space the
+  /// saved-list and assessment backends require), then, for numeric ids, the
+  /// live Explore detail (`/explore/properties/{id}`, the
+  /// `fyp.rental_properties` universe). Unknown ids resolve to null and the
+  /// page renders its not-found state; nothing is fabricated in between.
+  Future<PropertyDetailLoad?>? _detailFuture;
+
+  /// Source-backed location evidence (`/catalog/properties/{id}/evidence`).
+  /// Only catalogue ids carry the subject-feature evidence API; a numeric
+  /// rental id gets the honest "no verified mapping" state instead of an
+  /// unverified cross-dataset join.
+  Future<PropertyEvidence>? _evidenceFuture;
+
+  Future<PropertyDetailLoad?> _load(String id) async {
+    final catalog = await AppLocator.properties.detail(id);
+    if (catalog != null) {
+      return PropertyDetailLoad(
+        property: catalog,
+        imageUrls: catalog.imageUrls,
+        source: 'catalog',
+      );
+    }
+    if (int.tryParse(id) != null) {
+      try {
+        final detail = await AppLocator.exploreRepo.detail(id);
+        return PropertyDetailLoad(
+          property: detail.property,
+          imageUrls: [for (final photo in detail.photos) photo.url],
+          source: 'explore',
+        );
+      } on Object {
+        return null; // Unknown or unpublished numeric id → not found.
+      }
+    }
+    return null;
+  }
 
   /// Saves/removes the shortlist bookmark. A signed-in account persists to
   /// the server first — the message and the bookmark both state what the
@@ -82,14 +124,20 @@ class _PropertyDetailPageState extends State<PropertyDetailPage> {
   @override
   void initState() {
     super.initState();
-    Future.microtask(() {
-      if (!mounted) return;
-      unawaited(
-        context
-            .read(entrepreneurNotifierProvider.notifier)
-            .loadAnalysis(component.id),
+    final id = component.id;
+    if (id.isNotEmpty) {
+      _detailFuture = _load(id);
+      _evidenceFuture = LocationEvidenceApi.load(
+        id,
+        catalog: int.tryParse(id) == null,
       );
-    });
+      Future.microtask(() {
+        if (!mounted) return;
+        unawaited(
+          context.read(entrepreneurNotifierProvider.notifier).loadAnalysis(id),
+        );
+      });
+    }
   }
 
   @override
@@ -109,8 +157,8 @@ class _PropertyDetailPageState extends State<PropertyDetailPage> {
       showPageHead: false,
       child: component.id.isEmpty
           ? const _NotFound()
-          : FutureBuilder<CommercialProperty?>(
-              future: AppLocator.properties.detail(component.id),
+          : FutureBuilder<PropertyDetailLoad?>(
+              future: _detailFuture,
               builder: (c, snap) {
                 if (snap.connectionState != ConnectionState.done) {
                   return const _Loading();
@@ -118,10 +166,14 @@ class _PropertyDetailPageState extends State<PropertyDetailPage> {
                 // `hasData` is false for both "pending" and "completed
                 // with null", so the null case needs its own branch —
                 // otherwise an unknown id spins forever.
-                final p = snap.data;
-                if (p == null) return const _NotFound();
+                final load = snap.data;
+                if (load == null) return const _NotFound();
+                final p = load.property;
                 return _Detail(
                   property: p,
+                  imageUrls: load.imageUrls,
+                  source: load.source,
+                  evidenceFuture: _evidenceFuture,
                   saved: saved.contains(p.id),
                   compared: compared.contains(p.id),
                   saveMessage: _saveMessage,
@@ -144,8 +196,32 @@ class _PropertyDetailPageState extends State<PropertyDetailPage> {
   }
 }
 
+/// One resolved detail load: the entity plus the photo urls the backend
+/// served for it. [source] is the id universe that answered — 'catalog' for
+/// the imported workbook, 'explore' for the approved-and-published
+/// `fyp.rental_properties` rows — shown as provenance, never mixed up.
+class PropertyDetailLoad {
+  final CommercialProperty property;
+  final List<String> imageUrls;
+  final String source;
+
+  const PropertyDetailLoad({
+    required this.property,
+    required this.imageUrls,
+    required this.source,
+  });
+}
+
 class _Detail extends StatelessComponent {
   final CommercialProperty property;
+
+  /// Photo URLs the backend returned for this listing; empty is a genuine
+  /// "no photographs" state.
+  final List<String> imageUrls;
+  final String source;
+
+  /// Evidence load for the preview panel; null only when the page has no id.
+  final Future<PropertyEvidence>? evidenceFuture;
   final bool saved;
   final bool compared;
   final String? saveMessage;
@@ -155,6 +231,9 @@ class _Detail extends StatelessComponent {
 
   const _Detail({
     required this.property,
+    required this.imageUrls,
+    required this.source,
+    required this.evidenceFuture,
     required this.saved,
     required this.compared,
     required this.onToggleSaved,
@@ -179,7 +258,7 @@ class _Detail extends StatelessComponent {
 
   @override
   Component build(BuildContext context) {
-    return div([
+    return div(classes: 'sw-pd', [
       PageHead(
         eyebrow: 'Property',
         title: property.title,
@@ -189,44 +268,99 @@ class _Detail extends StatelessComponent {
             'Verification: ${property.verification.label.toLowerCase()}',
             tone: toneForVerification(property.verification),
           ),
-          StatusBadge(
-            'Suitability: ${property.suitabilityScore.toStringAsFixed(0)}/100',
-            tone: _scoreTone(property.suitabilityScore),
-          ),
+          // The suitability badge renders only when a research score exists —
+          // printing 0/100 would present "not calculated" as a measured value.
+          if (property.hasSuitabilityScore)
+            StatusBadge(
+              'Suitability: ${property.suitabilityScore.toStringAsFixed(0)}/100',
+              tone: _scoreTone(property.suitabilityScore),
+            ),
         ],
       ),
-      div(classes: 'detail-grid', [
-        // --- Left column ---------------------------------------------------
-        div(classes: 'analysis', [
+      div(classes: 'sw-pd__layout', [
+        // --- Main column: facts and source-backed analysis -------------------
+        div(classes: 'sw-pd__main', [
           _galleryPanel(),
           _listingPanel(),
+          LocationEvidencePreview(
+            future: evidenceFuture,
+            propertyId: property.id,
+          ),
           _descriptionPanel(),
         ]),
-
-        // --- Right column --------------------------------------------------
-        div(classes: 'analysis', [
-          _actionsPanel(),
+        // --- Side column: score, map, actions, caveats ------------------------
+        div(classes: 'sw-pd__side', [
+          _scorePanel(),
           _mapPanel(),
+          _actionsPanel(),
           _notShownPanel(),
         ]),
       ]),
     ]);
   }
 
+  // ------------------------------------------------------- imported score
+
+  Component _scorePanel() {
+    // The gauge renders only when a research score exists — an absent score
+    // must never present as a 0/100 measurement.
+    final available = property.hasSuitabilityScore;
+    final clamped = property.suitabilityScore.clamp(0.0, 100.0);
+    return section(classes: 'panel sw-pd__score-panel', [
+      span(classes: 'sw-pd__eyebrow', [Component.text('PROPERTY SCORE')]),
+      h2([Component.text('Location suitability index')]),
+      if (available) ...[
+        div(classes: 'sw-pd__score-row', [
+          strong(classes: 'sw-pd__score-number', [
+            Component.text(property.suitabilityScore.toStringAsFixed(0)),
+          ]),
+          span(classes: 'sw-pd__score-max', [Component.text('/ 100')]),
+        ]),
+        div(classes: 'sw-pd__score-track', [
+          div(
+            classes: 'sw-pd__score-fill',
+            attributes: {'style': 'width:${clamped.toStringAsFixed(1)}%'},
+            [],
+          ),
+        ]),
+        p(classes: 'sw-pd__footnote', [
+          Component.text(
+            'Imported research index. This is not a calibrated PU '
+            'business-success probability or a personalized recommendation '
+            'score.',
+          ),
+        ]),
+      ] else
+        p(classes: 'small', [
+          Component.text(
+            'No measured suitability index is available for this listing.',
+          ),
+        ]),
+      ActionLink(
+        'View measured analysis',
+        href:
+            '/entrepreneur/property-analysis?id=${Uri.encodeComponent(property.id)}',
+        variant: 'secondary',
+        icon: 'analytics',
+      ),
+    ]);
+  }
+
   // ------------------------------------------------------------------ gallery
 
   Component _galleryPanel() {
-    // The target ships no listing photographs — the source's `coverImage` has no
-    // counterpart in `CommercialProperty`. Three styled placeholder tiles keep
-    // the gallery's grid and box, and the caption says what they are.
+    // Photo URLs come from the backend's own records (property_photos for the
+    // explore universe, the catalogue image_url otherwise). No URL is a real
+    // state — the caption says so rather than styling a placeholder as data.
+    final url = imageUrls.isNotEmpty ? imageUrls.first : property.imageUrl;
     return section(classes: 'panel', [
       h2([Component.text('Gallery')]),
       div(classes: 'gallery', [
-        if (property.imageUrl != null)
+        if (url != null)
           Component.element(
             tag: 'img',
             attributes: {
-              'src': property.imageUrl!,
+              'src': url,
               'alt': property.title,
               'loading': 'lazy',
               'referrerpolicy': 'no-referrer',
@@ -238,9 +372,10 @@ class _Detail extends StatelessComponent {
       ]),
       p(classes: 'disclaimer', [
         Component.text(
-          property.imageUrl == null
+          url == null
               ? 'No image URL is available for this property.'
-              : 'Source listing image from the imported workbook. Availability depends on the original image host.',
+              : 'Source listing image. Availability depends on the original '
+                    'image host.',
         ),
       ]),
     ]);
@@ -266,11 +401,28 @@ class _Detail extends StatelessComponent {
           _adminVerified ? admin : owner,
         ),
         _row('Property type', property.propertyType, owner),
+        // Observed availability from the backend record when it exists;
+        // "Not recorded" is the honest fallback — never an invented status.
         _row(
           'Availability',
-          _adminVerified ? 'Available' : 'Pending verification',
-          _adminVerified ? admin : owner,
+          property.availability ?? 'Not recorded',
+          property.availability != null && _adminVerified ? admin : owner,
         ),
+        if (property.tenure != null) _row('Tenure', property.tenure!, owner),
+        if (property.furnishing != null)
+          _row('Furnishing', property.furnishing!, owner),
+        if (property.floorLevel != null)
+          _row('Floor level', property.floorLevel!, owner),
+        if (property.bathrooms != null)
+          _row('Bathrooms', '${property.bathrooms}', owner),
+        if (property.isFnbSuitable != null)
+          _row('F&B suitable', property.isFnbSuitable! ? 'Yes' : 'No', owner),
+        if (property.hasParking != null)
+          _row('Parking', property.hasParking! ? 'Yes' : 'No', owner),
+        if (property.isCornerLot != null)
+          _row('Corner lot', property.isCornerLot! ? 'Yes' : 'No', owner),
+        if (property.isFreehold != null)
+          _row('Freehold', property.isFreehold! ? 'Yes' : 'No', owner),
         _row(
           'Rental efficiency',
           'RM${property.rentalPerSqft.toStringAsFixed(2)} / sq ft',
@@ -278,8 +430,15 @@ class _Detail extends StatelessComponent {
         ),
         _row(
           'Coordinates',
-          '${property.latitude.toStringAsFixed(4)}, '
-              '${property.longitude.toStringAsFixed(4)}',
+          property.hasCoordinates
+              ? '${property.latitude.toStringAsFixed(4)}, '
+                    '${property.longitude.toStringAsFixed(4)}'
+              : 'Not recorded',
+          owner,
+        ),
+        _row(
+          'Research link',
+          property.hasResearchLink ? 'Verified' : 'None',
           owner,
         ),
         _row(
@@ -300,17 +459,17 @@ class _Detail extends StatelessComponent {
   // -------------------------------------------------------------- description
 
   Component _descriptionPanel() {
+    // The backend's own description takes precedence; the composed summary is
+    // the fallback and derives only from fields actually present.
+    final description = (property.description?.trim().isNotEmpty ?? false)
+        ? property.description!
+        : '${property.title} is a ${property.propertyType.toLowerCase()} of '
+              '${property.sizeSqft.toStringAsFixed(0)} sq ft in '
+              '${property.city}, ${property.state}, offered at '
+              '${property.rentalDisplay} per month.';
     return section(classes: 'panel', [
       h2([Component.text('Description')]),
-      p(classes: 'body', [
-        Component.text(
-          '${property.title} is a ${property.propertyType.toLowerCase()} of '
-          '${property.sizeSqft.toStringAsFixed(0)} sq ft in ${property.city}, '
-          '${property.state}, offered at ${property.rentalDisplay} per month. '
-          'The listing record is owner-supplied; verification is performed by an '
-          'administrator before it appears as available.',
-        ),
-      ]),
+      p(classes: 'body', [Component.text(description)]),
       if (property.requirements.isNotEmpty || property.tags.isNotEmpty)
         div(classes: 'chips', [
           for (final r in property.requirements)
@@ -318,7 +477,11 @@ class _Detail extends StatelessComponent {
           for (final t in property.tags)
             span(classes: 'tag det', [Component.text(t)]),
         ]),
-      span(classes: 'prov prov-owner', [Component.text('Owner provided')]),
+      span(classes: 'prov prov-owner', [
+        Component.text(
+          source == 'explore' ? 'Explore listing' : 'Owner provided',
+        ),
+      ]),
     ]);
   }
 
@@ -338,9 +501,16 @@ class _Detail extends StatelessComponent {
         ),
         ActionLink(
           'Explore location analysis',
-          href: '/entrepreneur/map?id=${property.id}',
+          href: '/entrepreneur/explore?id=${property.id}',
           variant: 'secondary',
           icon: 'map',
+        ),
+        ActionLink(
+          'Full property analysis',
+          href:
+              '/entrepreneur/property-analysis?id=${Uri.encodeComponent(property.id)}',
+          variant: 'secondary',
+          icon: 'analytics',
         ),
         ActionLink(
           'Why this score',
@@ -386,51 +556,24 @@ class _Detail extends StatelessComponent {
 
   // ---------------------------------------------------------------------- map
 
-  Component _mapPanel() {
-    // One pin, positioned by the same projection the explore map uses. The
-    // surface is the stylised panel — no map SDK exists in either tree.
-    final x = ((property.longitude - 100.3) / 3.5).clamp(-0.9, 0.9);
-    final y = -((property.latitude - 1.5) / 4.0).clamp(-0.9, 0.9);
-    final left = ((x + 1) / 2 * 100).toStringAsFixed(1);
-    final top = ((1 - y) / 2 * 100).toStringAsFixed(1);
-
-    return section(classes: 'panel', [
-      h2([Component.text('Map location')]),
-      div(classes: 'map-pane', [
-        div(classes: 'map-canvas', [
-          div(classes: 'visual__grid', []),
-          span(
-            classes: 'map-pin map-pin--active',
-            attributes: {
-              'style': 'left:$left%;top:$top%;',
-              'title': property.title,
-            },
-            [
-              Icon('place', size: 'sm'),
-              span(classes: 'map-pin__price', [Component.text(property.city)]),
-            ],
-          ),
-        ]),
-        div(classes: 'map-legend', [
-          span([
-            span(classes: 'lg lg-prop', []),
-            Component.text('This property'),
-          ]),
-          span([
-            span(classes: 'lg lg-comp', []),
-            Component.text('Competitors'),
-          ]),
-          span([span(classes: 'lg lg-transit', []), Component.text('Transit')]),
-        ]),
-      ]),
-      p(classes: 'small', [
-        Component.text(
-          'Stylised Klang Valley projection. Interactive tiles require the '
-          'mobile app; the pin marks the listing coordinates.',
-        ),
-      ]),
-    ]);
-  }
+  Component _mapPanel() => section(classes: 'panel sw-pd__map-panel', [
+    h2([Component.text('Map & nearby properties')]),
+    PropertyLeafletMap(property: property, height: 330),
+    p(classes: 'sw-pd__footnote', [
+      Component.text(
+        'Interactive Leaflet map, CARTO/OSM tiles, 500 m and 1 km straight-line '
+        'catchments. Nearby pins are the 955 research reference properties, not '
+        'F&B competitors. Coordinates can be approximate.',
+      ),
+    ]),
+    ActionLink(
+      'Open full location analysis',
+      href:
+          '/entrepreneur/property-analysis?id=${Uri.encodeComponent(property.id)}',
+      variant: 'secondary',
+      icon: 'map',
+    ),
+  ]);
 
   // ----------------------------------------------------------- not shown list
 

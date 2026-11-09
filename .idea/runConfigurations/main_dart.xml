@@ -1,7 +1,13 @@
 <component name="ProjectRunConfigurationManager">
   <configuration default="false" name="main.dart" type="FlutterRunConfigurationType" factoryName="Flutter">
-    <option name="additionalArgs" value="--dart-define-from-file=C:\Users\Lenovo\AndroidStudioProjects\FYP\fyp_mobile_app\config\dev.env" />
+    <!-- Dev launch: the attached physical device is arm64-v8a only. Building
+         armeabi-v7a + x86_64 engine snapshots triples the debug APK and the
+         install/transfer time for no benefit. Release builds are unaffected. -->
+    <option name="additionalArgs" value="--target-platform=android-arm64 --dart-define-from-file=C:\Users\Lenovo\AndroidStudioProjects\FYP\fyp_mobile_app\config\dev.env" />
     <option name="filePath" value="$PROJECT_DIR$/fyp_mobile_app/lib/main.dart" />
+    <!-- Pin the IDE's "Start paused" checkbox off: it made flutter run wait
+         for a debugger attach before the first frame on every cold start. -->
+    <option name="startPaused" value="false" />
     <method v="2" />
   </configuration>
 </component>

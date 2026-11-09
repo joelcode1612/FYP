@@ -1,7 +1,9 @@
 import '../../core/errors/app_failure.dart';
 import '../../domain/entities/commercial_property.dart';
+import '../../domain/entities/explore.dart';
 import '../../domain/entities/location_intelligence.dart';
 import '../../domain/entities/recommendation.dart';
+import '../../domain/repositories/explore_repository.dart';
 import '../../domain/usecases/property_usecases.dart';
 import '../../domain/usecases/recommendation_usecases.dart';
 import '../states/entrepreneur_state.dart';
@@ -15,15 +17,43 @@ import 'state_controller.dart';
 /// `EntrepreneurViewModel` is a thin adapter over the same instance, so the
 /// loading/error transitions below are written exactly once.
 ///
-/// The behaviour is a faithful port of the cubit, including its documented
-/// quirks: `loadExplore` clears the previous error before starting, and a
-/// failure sets `error` without clearing the previously loaded list.
+/// Two data paths, one state owner:
+///
+///  * **Server-driven** — when the composition root supplies an
+///    [ExploreRepository], [loadExplore] runs a real `/explore/properties`
+///    search (server-side filtering, sorting and pagination) and
+///    [loadMore] appends pages. [exploreTotal]/[exploreHasMore] carry the
+///    server's paging metadata.
+///  * **Client-driven** — otherwise [loadExplore] loads the full listing set
+///    once and [FilterProperties] applies the query/filter locally. This is
+///    the demo-data path and the web catalogue path.
+///
+/// Race safety: every asynchronous load carries a sequence number, so a slow
+/// response triggered by an earlier query can never overwrite the results of
+/// a newer one, and a disposed controller never publishes. Analysis loads
+/// additionally drop responses whose property id no longer matches the latest
+/// request.
+///
+/// The behaviour is a faithful port of the original cubit, including its
+/// documented quirks: `loadExplore` clears the previous error before starting,
+/// and a failure sets `error` without clearing the previously loaded list.
 class EntrepreneurController extends StateController<EntrepreneurState> {
   final GetProperties _getProperties;
   final GetRecommendations _getRecommendations;
   final GetLocationAnalysis _getLocationAnalysis;
   final FilterProperties _filterProperties;
+  final ExploreRepository? _exploreRepository;
   final void Function(BusinessPreferences preferences)? _onPreferencesUpdated;
+
+  /// Monotonic guards against stale asynchronous responses.
+  int _exploreSeq = 0;
+  int _analysisSeq = 0;
+
+  /// Rows fetched from the server for the CURRENT search, before the
+  /// client-side filter may have trimmed them. The pagination offset must
+  /// count raw server rows — using the post-filtered list length would skip
+  /// rows whenever the filter removes any.
+  int _serverFetched = 0;
 
   EntrepreneurController({
     required GetProperties getProperties,
@@ -31,10 +61,12 @@ class EntrepreneurController extends StateController<EntrepreneurState> {
     required GetLocationAnalysis getLocationAnalysis,
     required BusinessPreferences preferences,
     FilterProperties filterProperties = const FilterProperties(),
+    ExploreRepository? exploreRepository,
     void Function(BusinessPreferences preferences)? onPreferencesUpdated,
   }) : _getProperties = getProperties,
        _getRecommendations = getRecommendations,
        _getLocationAnalysis = getLocationAnalysis,
+       _exploreRepository = exploreRepository,
        _filterProperties = filterProperties,
        _onPreferencesUpdated = onPreferencesUpdated,
        super(EntrepreneurState(preferences: preferences));
@@ -55,11 +87,73 @@ class EntrepreneurController extends StateController<EntrepreneurState> {
 
   BusinessPreferences get prefs => state.preferences;
 
-  /// Loads all listings, then applies the current query and filter.
+  /// Whether [loadExplore]/[loadMore] run real server searches.
+  bool get isServerDriven => _exploreRepository != null;
+
+  /// True while another page of the current server search is in flight.
+  bool get _isLoadingMore => state.listRefreshing && state.explore.isNotEmpty;
+
+  /// Loads listings, then applies the current query and filter.
+  ///
+  /// The first call of a session shows the loading surface ([loading]);
+  /// subsequent re-runs (filter edits, query changes) refresh in place with
+  /// the previous results still visible.
   Future<void> loadExplore() async {
-    setState(state.copyWith(loading: true, clearError: true));
+    final firstLoad = state.explore.isEmpty && !state.listRefreshing;
+    final seq = ++_exploreSeq;
+    setState(
+      state.copyWith(
+        loading: firstLoad,
+        listRefreshing: !firstLoad,
+        clearError: true,
+      ),
+    );
     try {
+      final repo = _exploreRepository;
+      if (repo != null) {
+        // The free-text filter string is a client-side vocabulary (matches
+        // type OR city), so it is deliberately NOT sent as a server
+        // parameter — [FilterProperties] applies it to the fetched page, and
+        // pagination counts raw server rows via [_serverFetched].
+        _serverFetched = 0;
+        final page = await repo.search(
+          ExploreQuery.fromCriteria(query: state.query, limit: 24),
+        );
+        if (seq != _exploreSeq || isDisposed) return;
+        _serverFetched = page.items.length;
+        // The client-side filter still runs over the server page: it is the
+        // single definition of "matches" and costs nothing on an
+        // already-filtered page.
+        setState(
+          state.copyWith(
+            explore: _filterProperties(
+              properties: page.items,
+              query: state.query,
+              filter: state.filter,
+            ),
+            exploreTotal: page.total,
+            exploreHasMore: page.hasMore,
+            loading: false,
+            listRefreshing: false,
+            clearError: true,
+          ),
+        );
+        // Facets are fetched once per session; a failure leaves the current
+        // (possibly derived) options untouched rather than failing the page.
+        if (state.filterOptions == null) {
+          try {
+            final options = await repo.filterOptions();
+            if (seq == _exploreSeq && !isDisposed) {
+              setState(state.copyWith(filterOptions: options));
+            }
+          } on Object {
+            // Facets are enhancement data; the search result stands alone.
+          }
+        }
+        return;
+      }
       final all = await _getProperties();
+      if (seq != _exploreSeq || isDisposed) return;
       setState(
         state.copyWith(
           explore: _filterProperties(
@@ -68,9 +162,12 @@ class EntrepreneurController extends StateController<EntrepreneurState> {
             filter: state.filter,
           ),
           loading: false,
+          listRefreshing: false,
+          clearError: true,
         ),
       );
     } catch (e) {
+      if (seq != _exploreSeq || isDisposed) return;
       setState(
         state.copyWith(
           error: readableFailure(
@@ -78,6 +175,58 @@ class EntrepreneurController extends StateController<EntrepreneurState> {
             fallback: 'We could not load listings. Please try again.',
           ),
           loading: false,
+          listRefreshing: false,
+        ),
+      );
+    }
+  }
+
+  /// Appends the next page of the current server search. No-op on the
+  /// client-driven path (its full listing is already loaded) and while a
+  /// page is already in flight, so double taps cannot duplicate rows.
+  Future<void> loadMore() async {
+    final repo = _exploreRepository;
+    if (repo == null || !state.exploreHasMore || _isLoadingMore) return;
+    final seq = ++_exploreSeq;
+    setState(state.copyWith(listRefreshing: true));
+    try {
+      final page = await repo.search(
+        ExploreQuery.fromCriteria(
+          query: state.query,
+          limit: 24,
+          offset: _serverFetched,
+        ),
+      );
+      if (seq != _exploreSeq || isDisposed) return;
+      _serverFetched += page.items.length;
+      final existingIds = state.explore.map((p) => p.id).toSet();
+      setState(
+        state.copyWith(
+          explore: [
+            ...state.explore,
+            // A server-side race between search and refresh can resend a row;
+            // the visible list must never show it twice.
+            for (final p in _filterProperties(
+              properties: page.items,
+              query: state.query,
+              filter: state.filter,
+            ))
+              if (!existingIds.contains(p.id)) p,
+          ],
+          exploreTotal: page.total,
+          exploreHasMore: page.hasMore,
+          listRefreshing: false,
+        ),
+      );
+    } catch (e) {
+      if (seq != _exploreSeq || isDisposed) return;
+      setState(
+        state.copyWith(
+          error: readableFailure(
+            e,
+            fallback: 'We could not load more listings. Please try again.',
+          ),
+          listRefreshing: false,
         ),
       );
     }
@@ -92,6 +241,7 @@ class EntrepreneurController extends StateController<EntrepreneurState> {
     setState(state.copyWith(loading: true, clearError: true));
     try {
       final ranked = await _getRecommendations(state.preferences);
+      if (isDisposed) return;
       setState(
         state.copyWith(
           recommendations: ranked,
@@ -100,6 +250,7 @@ class EntrepreneurController extends StateController<EntrepreneurState> {
         ),
       );
     } catch (e) {
+      if (isDisposed) return;
       setState(
         state.copyWith(
           error: readableFailure(
@@ -113,21 +264,41 @@ class EntrepreneurController extends StateController<EntrepreneurState> {
   }
 
   /// Loads the location analysis for one property.
+  ///
+  /// Runs on its own loading flag ([analysisLoading]) so an in-flight
+  /// analysis never blocks or blanks the Explore list. A response that
+  /// arrives after a newer analysis request started (or after disposal) is
+  /// dropped, never published.
   Future<void> loadAnalysis(String propertyId) async {
-    setState(state.copyWith(loading: true, clearError: true));
+    final seq = ++_analysisSeq;
+    setState(
+      state.copyWith(
+        analysisLoading: true,
+        analysisPropertyId: propertyId,
+        clearAnalysisError: true,
+      ),
+    );
     try {
       final analysis = await _getLocationAnalysis(propertyId);
-      setState(
-        state.copyWith(analysis: analysis, loading: false, clearError: true),
-      );
-    } catch (e) {
+      if (seq != _analysisSeq || isDisposed) return;
       setState(
         state.copyWith(
-          error: readableFailure(
+          analysis: analysis,
+          analysisLoading: false,
+          analysisPropertyId: propertyId,
+          clearAnalysisError: true,
+        ),
+      );
+    } catch (e) {
+      if (seq != _analysisSeq || isDisposed) return;
+      setState(
+        state.copyWith(
+          analysisError: readableFailure(
             e,
-            fallback: 'We could not load the location analysis. Please try again.',
+            fallback:
+                'We could not load the location analysis. Please try again.',
           ),
-          loading: false,
+          analysisLoading: false,
         ),
       );
     }

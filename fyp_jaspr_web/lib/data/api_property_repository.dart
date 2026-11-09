@@ -4,29 +4,11 @@ import 'auth_service.dart';
 class ApiPropertyRepository implements PropertyRepository {
   Future<List<CommercialProperty>>? _cached;
 
-  static CommercialProperty fromJson(
-    Map<String, dynamic> row,
-  ) => CommercialProperty(
-    id: row['id'] as String,
-    title: row['title'] as String,
-    address: row['address'] as String,
-    city: row['city'] as String? ?? '',
-    state: row['state'] as String,
-    postcode: row['postcode'] as String? ?? '',
-    rentalRm: (row['rental_rm'] as num).toDouble(),
-    sizeSqft: (row['size_sqft'] as num).toDouble(),
-    latitude: (row['latitude'] as num).toDouble(),
-    longitude: (row['longitude'] as num).toDouble(),
-    propertyType: row['property_type'] as String,
-    // Dataset quality checks are not administrator verification of a listing.
-    verification: VerificationStatus.pending,
-    suitabilityScore: (row['suitability_score'] as num).toDouble(),
-    ownerId: '',
-    hasTour: false,
-    imageUrl: row['image_url'] as String?,
-    sourceUrl: row['source_url'] as String?,
-    tags: ['Imported dataset', 'Quality: ${row['dataset_validation']}'],
-  );
+  /// Shared mapping lives in `shared_logic` ([CatalogPropertyMapper]); this
+  /// static forwarder stays for the assessment workspace, which decodes
+  /// catalogue rows through the same mapper.
+  static CommercialProperty fromJson(Map<String, dynamic> row) =>
+      CatalogPropertyMapper.fromJson(row);
 
   @override
   Future<List<CommercialProperty>> getProperties() async {
@@ -57,10 +39,16 @@ class ApiPropertyRepository implements PropertyRepository {
 
   @override
   Future<CommercialProperty?> getPropertyById(String id) async {
-    for (final property in await getProperties()) {
-      if (property.id == id) return property;
+    // Single-record read: scanning the paged catalogue for one id wasted up
+    // to 2,126 rows per detail view and drift-prone against live imports.
+    // A 404 (unknown/unpublished id) or any other failure throws from the
+    // bridge; callers treat every throw as "not found" — the same contract
+    // as before, without the scan.
+    try {
+      return fromJson(await WebAuth.request('/api/v1/catalog/properties/$id'));
+    } on Object {
+      return null;
     }
-    return null;
   }
 
   @override

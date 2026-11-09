@@ -1,88 +1,59 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:shared_logic/shared_logic.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'application/providers.dart';
+import 'core/bootstrap/app_bootstrap.dart';
+import 'core/bootstrap/startup_trace.dart';
 import 'core/config/mobile_config.dart';
 import 'core/routing/app_routes.dart';
 import 'core/theme/sitewise_theme.dart';
-import 'data/datasources/local/secure_session_local_storage.dart';
 
-/// Guards against a second call (hot restart, tests, embedding) because
-/// `Supabase.initialize()` is not idempotent.
-bool _supabaseBootAttempted = false;
-
-/// Boots the app only after the identity layer has had its chance to come up.
+/// Composition root.
 ///
-/// Supabase is initialised here and nowhere else, so exactly one process can
-/// ever restore a session. A build without credentials starts anyway: the
-/// repository then reports the service as unavailable and the startup gate
-/// shows a retry screen instead of granting access. The difference now is that
-/// the reason is recorded in [MobileConfig] and shown to the user instead of
-/// being silently swallowed.
+/// Startup ordering was changed to remove a ~60 s blank screen on the
+/// physical device. Previously `main()` awaited `Supabase.initialize()`
+/// BEFORE `runApp`, so nothing was painted until the SDK (and the
+/// Keystore-backed session store) finished. Device logcat for the 21:53 run
+/// showed `Start proc` -> engine connected -> `Supabase init completed`
+/// ~56 s later -> `Displayed ... +59s772ms`.
+///
+/// Now:
+///   1. [AppBootstrap.start] kicks off the SINGLE Supabase initialization
+///      without awaiting it, so it overlaps the first frame;
+///   2. [runApp] mounts [AppStartGate] immediately — the branded splash is
+///      visible within the first frame rather than after a minute;
+///   3. [BootstrapAwareAuthService] (installed by [sitewiseOverrides]) makes
+///      every session read await the same memoised bootstrap future, and
+///      [AppStartGate] keeps the splash up until the shared [AuthNotifier]
+///      has resolved the session.
+///
+/// No access is granted early: a workspace route still requires the FastAPI
+/// `/api/v1/auth/me` verification inside `SupabaseAuthRepository`, and any
+/// bootstrap/network failure fails closed to Sign In with a Retry action.
+/// Supabase is still initialized exactly once and the persisted session is
+/// still held in `SecureSessionLocalStorage` (Keystore/Keychain).
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await _initializeSupabase();
-  // Booleans and host names only — never key material.
+  StartupTrace.start();
+
+  // Development-only first-frame marker. Registered before runApp so it fires
+  // at the end of the first frame the app actually paints.
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    StartupTrace.mark('first_frame');
+    StartupTrace.report('first_frame');
+  });
+
+  // Fire-and-forget, memoised, exactly once. Starts before runApp so the
+  // initialization overlaps frame production instead of following it.
+  AppBootstrap.start();
+
+  // Booleans and host names only — never key material. Runtime readiness is
+  // logged again by AppBootstrap when the initialization completes.
   debugPrint(MobileConfig.statusLine);
+
   runApp(
-    ProviderScope(
-      overrides: sitewiseOverrides(),
-      child: const SitewiseApp(),
-    ),
+    ProviderScope(overrides: sitewiseOverrides(), child: const SitewiseApp()),
   );
-}
-
-Future<void> _initializeSupabase() async {
-  if (_supabaseBootAttempted) return;
-  _supabaseBootAttempted = true;
-
-  if (!AppConfig.hasSupabase) {
-    MobileConfig.initializationError =
-        'Supabase credentials were not supplied to this build.';
-    return;
-  }
-  // Refuse to ship a secret/service-role key in a client binary.
-  if (MobileConfig.hasUnsafeKey) {
-    MobileConfig.initializationError =
-        'A secret key was supplied where the publishable key belongs.';
-    return;
-  }
-  if (!MobileConfig.supabaseUrlLooksValid) {
-    MobileConfig.initializationError =
-        'SUPABASE_URL is not a valid HTTPS URL.';
-    return;
-  }
-
-  try {
-    await Supabase.initialize(
-      url: AppConfig.supabaseUrl,
-      publishableKey: AppConfig.supabaseAnonKey,
-      authOptions: FlutterAuthClientOptions(
-        // Tokens live in the Keystore/Keychain, not in plaintext app storage.
-        localStorage: SecureSessionLocalStorage(),
-        // Persisted sessions are restored by AuthNotifier.start() ->
-        // currentUser() -> _client.currentSession, then re-verified against
-        // FastAPI /api/v1/auth/me before any workspace is opened.
-        persistSession: true,
-        autoRefreshToken: true,
-        authFlowType: AuthFlowType.pkce,
-        // Mobile registers no OAuth link handler, so accepting an auth
-        // deep link here would be a promise this build cannot keep.
-        detectSessionInUri: false,
-      ),
-    );
-    MobileConfig.supabaseInitialized = true;
-    MobileConfig.initializationError = null;
-  } on Object {
-    // Do not log the exception: Supabase errors can echo request data. The
-    // repository still fails closed and the blocking view explains the state.
-    MobileConfig.supabaseInitialized = false;
-    MobileConfig.initializationError =
-        'Supabase initialization failed. Check the project URL and '
-        'publishable key.';
-  }
 }
 
 /// Root widget. Authentication comes first: '/' is the startup gate, which

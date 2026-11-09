@@ -64,9 +64,16 @@ class EntrepreneurSpacesMobilePage extends ConsumerWidget {
           ),
           const SizedBox(height: 16),
           M3PrimaryButton(
-            label: 'Explore properties',
-            onTap: () =>
-                Navigator.of(context).pushNamed('/entrepreneur/explore'),
+            label: 'Preview Add Property',
+            onTap: () => Navigator.of(context)
+                .pushNamed('/entrepreneur/add-property'),
+          ),
+          const SizedBox(height: 8),
+          OutlinedButton.icon(
+            onPressed: () => Navigator.of(context)
+                .pushNamed('/entrepreneur/explore'),
+            icon: const Icon(Icons.search_rounded),
+            label: const Text('Explore properties'),
           ),
           M3SectionRow(
             title: 'Property records',

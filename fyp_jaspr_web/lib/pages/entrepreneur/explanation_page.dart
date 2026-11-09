@@ -229,7 +229,7 @@ class _ExplanationBody extends StatelessComponent {
               ),
               ActionLink(
                 'Map & surroundings',
-                href: '/entrepreneur/map?id=${property.id}',
+                href: '/entrepreneur/explore?id=${property.id}',
                 variant: 'secondary',
               ),
               ActionLink(

@@ -1,5 +1,6 @@
-import 'package:shared_logic/shared_logic.dart';
 import 'dart:typed_data';
+
+import 'package:shared_logic/shared_logic.dart';
 
 import 'package:flutter/material.dart';
 import 'package:panorama/panorama.dart';
@@ -26,6 +27,24 @@ class _MobileTourViewerState extends State<MobileTourViewer> {
   void _go(int i) =>
       setState(() => scene = i.clamp(0, widget.tour.sceneCount - 1));
 
+  /// Cached panorama read: the file is read once per path, so rebuilds from
+  /// scene switches and control taps never re-read it. A timeout bounds the
+  /// wait; a null result renders the honest retry state instead of a spinner
+  /// that never ends.
+  String? _cachedPanoPath;
+  Future<Uint8List?>? _cachedPanoFuture;
+
+  Future<Uint8List?> _panoFutureFor(String path) {
+    if (_cachedPanoPath != path) {
+      _cachedPanoPath = path;
+      _cachedPanoFuture = readPanoramaBytes(path).timeout(
+        const Duration(seconds: 8),
+        onTimeout: () => null,
+      );
+    }
+    return _cachedPanoFuture!;
+  }
+
   /// Real equirectangular panorama (when the tour has a generated file).
   Widget _panoBox(String path) {
     return Container(
@@ -38,12 +57,38 @@ class _MobileTourViewerState extends State<MobileTourViewer> {
       child: ClipRRect(
         borderRadius: BorderRadius.circular(16),
         child: FutureBuilder<Uint8List?>(
-          future: readPanoramaBytes(path),
+          future: _panoFutureFor(path),
           builder: (c, snap) {
-            if (!snap.hasData || snap.data == null) {
+            if (snap.connectionState != ConnectionState.done) {
               return const Center(child: CircularProgressIndicator());
             }
-            return Panorama(child: Image.memory(snap.data!));
+            final bytes = snap.data;
+            if (bytes == null) {
+              return Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(
+                      Icons.image_not_supported_outlined,
+                      color: Colors.white70,
+                    ),
+                    const SizedBox(height: 8),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 24),
+                      child: Text(
+                        'Panorama unavailable. Re-generate it from the tour preview.',
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          color: Colors.white70,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }
+            return Panorama(child: Image.memory(bytes));
           },
         ),
       ),

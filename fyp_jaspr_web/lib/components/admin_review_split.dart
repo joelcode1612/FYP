@@ -5,349 +5,420 @@ import 'package:jaspr/jaspr.dart';
 import 'package:jaspr_riverpod/jaspr_riverpod.dart';
 import 'package:shared_logic/shared_logic.dart';
 
-import '../components/ui.dart';
-
-/// Which queue the split renders. `verification` uses the awaiting-review set
-/// (`state.queue`) and defaults to the Pending tab; `listings` uses every
-/// property (`state.listings`) and defaults to All.
-enum ReviewMode { verification, listings }
+import 'ui.dart';
+import 'verification_detail_view.dart';
 
 /// Master-detail review surface, ported from the source `admin/review.html`.
 ///
-/// Structure is the source's exactly: a `.split` with a `.panel` queue on the
-/// left (`.tabs` status filter + `.queue` of `.queue-item`s) and a detail
-/// `.panel` on the right (`.evidence` grid, description, photos, verification
-/// evidence `.kv`, the regulatory `.owner-note`, and a `.decision-bar`).
+/// The queue is the backend's SQL projection (`GET /api/v1/staff/properties/`):
+/// every tab, search term, sort and page turn composes into
+/// [VerificationQueueFilters] and the server answers with one page plus
+/// faceted per-dimension counts. Nothing is filtered client-side — what the
+/// table shows is exactly what the database matched.
 ///
-/// The two admin routes (`/admin/verification`, `/admin/listings`) share this
-/// component; only the data source and default tab differ. Local selection and
-/// tab state live here so it survives the rebuilds that happen when the admin
-/// notifier publishes after an approve/reject; the split watches only the
-/// three lists it renders, so unrelated admin transitions do not rebuild it.
+/// The left panel renders the queue; the right panel embeds the shared
+/// [VerificationDetailView] for the selected property. Decisions, busy flags
+/// and success notices all live in the shared admin controller.
 class ReviewSplit extends StatefulComponent {
-  final ReviewMode mode;
-
-  const ReviewSplit({super.key, required this.mode});
+  const ReviewSplit({super.key});
 
   @override
   State<ReviewSplit> createState() => _ReviewSplitState();
 }
 
-/// The lists the split renders, selected as one value so the rebuild trigger
-/// mirrors the old Selector scope.
+/// The slice of [AdminState] the split renders, selected as one value so the
+/// rebuild trigger mirrors the old Selector scope.
 typedef _ReviewData = ({
-  List<CommercialProperty> queue,
-  List<CommercialProperty> listings,
-  List<SitewiseUser> users,
+  VerificationQueuePage? page,
+  VerificationQueueFilters filters,
+  VerificationDetail? detail,
+  String? busy,
+  String? notice,
+  String? error,
+  bool loading,
 });
 
 class _ReviewSplitState extends State<ReviewSplit> {
+  /// Which dimension's status tabs the queue is faceted by.
+  VerificationDimension _dimension = VerificationDimension.listing;
   String? _selectedId;
-  VerificationStatus? _tab;
-  bool _rejecting = false;
-  String _reason = '';
+  String _query = '';
 
   @override
   void initState() {
     super.initState();
-    _tab = component.mode == ReviewMode.verification
-        ? VerificationStatus.pending
-        : null;
+    Future.microtask(() {
+      if (!mounted) return;
+      unawaited(
+        context.read(adminNotifierProvider.notifier).loadReviewPage(),
+      );
+    });
   }
 
-  List<CommercialProperty> _itemsOf(_ReviewData data) =>
-      component.mode == ReviewMode.verification ? data.queue : data.listings;
+  AdminNotifier get _notifier => context.read(adminNotifierProvider.notifier);
 
-  List<CommercialProperty> _visibleOf(_ReviewData data) {
-    final list = _itemsOf(data);
-    if (_tab == null) return list;
-    return list.where((prop) => prop.verification == _tab).toList();
+  // --- Filter actions -------------------------------------------------------
+
+  void _setStatus(PropertyVerificationStatus? status) {
+    final current = _notifier.reviewFilters;
+    final next = _dimension == VerificationDimension.listing
+        ? current.copyWith(
+            listingStatus: status,
+            clearListingStatus: status == null,
+            offset: 0,
+          )
+        : current.copyWith(
+            ownershipStatus: status,
+            clearOwnershipStatus: status == null,
+            offset: 0,
+          );
+    unawaited(_notifier.setReviewFilters(next));
   }
 
-  CommercialProperty? _find(String id, _ReviewData data) {
-    try {
-      return data.listings.firstWhere((prop) => prop.id == id);
-    } on StateError {
-      // not in the all-listings set (e.g. removed) — try the queue.
-    }
-    try {
-      return data.queue.firstWhere((prop) => prop.id == id);
-    } on StateError {
-      return null;
-    }
-  }
-
-  /// The property shown on the right. Honours an explicit selection even when it
-  /// has left the filtered queue (after an approve it stays visible, now
-  /// verified), falling back to the first visible item when nothing is picked.
-  CommercialProperty? _selectedOf(_ReviewData data) {
-    if (_selectedId != null) {
-      final picked = _find(_selectedId!, data);
-      if (picked != null) return picked;
-    }
-    final visible = _visibleOf(data);
-    return visible.isNotEmpty ? visible.first : null;
-  }
-
-  String _ownerText(CommercialProperty prop, _ReviewData data) {
-    final owner = _ownerOf(prop, data);
-    final who = owner?.name ?? prop.city;
-    return '$who · ${prop.rentalDisplay}';
-  }
-
-  SitewiseUser? _ownerOf(CommercialProperty prop, _ReviewData data) {
-    for (final u in data.users) {
-      if (u.id == prop.ownerId) return u;
-    }
-    return null;
-  }
-
-  Future<void> _approve(String id) async {
-    await context.read(adminNotifierProvider.notifier).approve(id);
-    if (mounted) setState(() {});
-  }
-
-  Future<void> _reject(String id) async {
-    final reason = _reason.trim();
-    if (reason.length < 8) {
-      if (mounted) setState(() {});
-      return;
-    }
-    await context.read(adminNotifierProvider.notifier).reject(id, reason);
-    if (mounted) {
-      setState(() {
-        _rejecting = false;
-        _reason = '';
-      });
-    }
-  }
-
-  Component _queueItem(CommercialProperty prop, _ReviewData data) {
-    final active = _selectedOf(data)?.id == prop.id;
-    return button(
-      classes: 'queue-item${active ? ' is-active' : ''}',
-      attributes: {'type': 'button'},
-      events: events(onClick: () => setState(() => _selectedId = prop.id)),
-      [
-        // `coverImage` is mobile-only and absent from the entity, so the source
-        // thumbnail degrades to the `.shot` placeholder (styles.css).
-        div(classes: 'shot', [const Icon('image', size: 'sm')]),
-        div([
-          h4([Component.text(prop.title)]),
-          p([Component.text(_ownerText(prop, data))]),
-        ]),
-        div(classes: 'queue-item__meta', [
-          StatusBadge.forVerification(prop.verification),
-        ]),
-      ],
+  void _applyQuery() {
+    final q = _query.trim();
+    final next = _notifier.reviewFilters.copyWith(
+      q: q,
+      clearQ: q.isEmpty,
+      offset: 0,
     );
+    unawaited(_notifier.setReviewFilters(next));
   }
 
-  Component _ev(String label, String value) => div(classes: 'ev', [
-    h5([Component.text(label)]),
-    p([Component.text(value)]),
-  ]);
-
-  Component _missing(String text) =>
-      span(classes: 'v-missing', [Component.text(text)]);
-
-  Component _detail(CommercialProperty prop, _ReviewData data) {
-    final owner = _ownerOf(prop, data);
-    final ownerLine = owner != null
-        ? '${owner.name} · ${owner.email}'
-        : prop.ownerId;
-
-    return div(classes: 'panel', [
-      div(classes: 'detail-head', [
-        div([
-          h2([Component.text(prop.title)]),
-          p([Component.text(prop.address)]),
-        ]),
-        div(classes: 'queue-item__meta', [
-          StatusBadge.forVerification(prop.verification),
-        ]),
-      ]),
-
-      // Evidence grid — only the fields the entity actually carries.
-      div(classes: 'evidence', [
-        _ev('Monthly rent', prop.rentalDisplay),
-        _ev('Floor area', '${prop.sizeSqft.toStringAsFixed(0)} sq ft'),
-        _ev('Property type', prop.propertyType),
-        _ev('Parking / condition', 'Not provided'),
-        _ev('Availability', 'Not provided'),
-        _ev('Owner', ownerLine),
-      ]),
-
-      h3(classes: 'detail-h', [Component.text('Description')]),
-      p(classes: 'detail-p', [Component.text('Not provided')]),
-
-      h3(classes: 'detail-h', [Component.text('Photos')]),
-      div(classes: 'thumbs', [
-        for (var i = 0; i < 3; i++)
-          div(classes: 'shot', [const Icon('image', size: 'sm')]),
-      ]),
-      p(classes: 'detail-p', [
-        Component.text(
-          'Photos are captured on the mobile app and are not available here. '
-          'Submitters attach them to the listing record.',
-        ),
-      ]),
-
-      h3(classes: 'detail-h', [Component.text('Verification evidence')]),
-      dl(classes: 'kv', [
-        div([
-          dt([Component.text('Verification')]),
-          dd([StatusBadge.forVerification(prop.verification)]),
-        ]),
-        div([
-          dt([Component.text('Evidence reference')]),
-          dd([_missing('Not provided')]),
-        ]),
-        div([
-          dt([Component.text('Verified at')]),
-          dd([
-            prop.verification == VerificationStatus.verified
-                ? const Component.text('—')
-                : _missing('Not verified'),
-          ]),
-        ]),
-      ]),
-      p(classes: 'owner-note', [
-        Component.text(
-          'Regulatory status stays UNKNOWN after a listing review. Approving a '
-          'listing verifies what the owner submitted; it does not confirm '
-          'licensing, extraction or venting capacity with the local authority.',
-        ),
-      ]),
-
-      _decisionBar(prop),
-      if (_rejecting) _rejectForm(),
-    ]);
+  void _setSort(String sort) {
+    final next = _notifier.reviewFilters.copyWith(sort: sort, offset: 0);
+    unawaited(_notifier.setReviewFilters(next));
   }
 
-  Component _decisionBar(CommercialProperty prop) {
-    if (prop.verification == VerificationStatus.pending) {
-      return div(classes: 'decision-bar', [
-        ActionButton(
-          'Approve listing',
-          onClick: () => unawaited(_approve(prop.id)),
-        ),
-        ActionButton(
-          'Reject with reason',
-          variant: 'secondary',
-          onClick: () => setState(() => _rejecting = true),
-        ),
-      ]);
-    }
-    return div(classes: 'decision-bar', [
-      div(classes: 'notice notice--info', [
-        Component.text(
-          'This listing is ${prop.verification.label}. Publication and removal '
-          'are managed through the owner workspace.',
-        ),
-      ]),
-    ]);
-  }
-
-  Component _rejectForm() => div(classes: 'reject-form stack', [
-    Field(
-      labelText: 'Reason shown to the owner',
-      hint: 'Minimum 8 characters.',
-      child: textarea(
-        [],
-        attributes: {
-          'rows': '3',
-          'placeholder': 'Why is this listing being rejected?',
-          'aria-label': 'Rejection reason',
-        },
-        events: events<String>(onInput: (v) => _reason = v),
-      ),
-    ),
-    div(classes: 'row', [
-      ActionButton(
-        'Confirm reject',
-        onClick: () => unawaited(_reject(_selectedId!)),
-      ),
-      ActionButton(
-        'Cancel',
-        variant: 'secondary',
-        onClick: () => setState(() {
-          _rejecting = false;
-          _reason = '';
-        }),
-      ),
-    ]),
-    if (_reason.trim().length < 8)
-      p(classes: 'field__error', [
-        Component.text('Add at least 8 characters before rejecting.'),
-      ]),
-  ]);
-
-  Component _tabs() {
-    final defs = <Map<String, Object?>>[
-      {'value': VerificationStatus.pending, 'label': 'Pending'},
-      {'value': VerificationStatus.verified, 'label': 'Verified'},
-      {'value': VerificationStatus.rejected, 'label': 'Rejected'},
-      {'value': null, 'label': 'All'},
-    ];
-    return div(
-      classes: 'tabs',
-      attributes: {'role': 'tablist'},
-      [
-        for (final d in defs)
-          button(
-            classes: 'tab',
-            attributes: {
-              'type': 'button',
-              'role': 'tab',
-              'aria-selected': (_tab == d['value']).toString(),
-            },
-            events: events(
-              onClick: () =>
-                  setState(() => _tab = d['value'] as VerificationStatus?),
-            ),
-            [Component.text(d['label'] as String)],
-          ),
-      ],
+  void _toggleOrder() {
+    final current = _notifier.reviewFilters;
+    final next = current.copyWith(
+      order: current.order == 'asc' ? 'desc' : 'asc',
+      offset: 0,
     );
+    unawaited(_notifier.setReviewFilters(next));
   }
+
+  void _turnPage(int delta) {
+    final current = _notifier.reviewFilters;
+    final target = current.offset + delta;
+    if (target < 0) return;
+    unawaited(_notifier.setReviewFilters(current.copyWith(offset: target)));
+  }
+
+  void _resetFilters() {
+    setState(() => _query = '');
+    unawaited(_notifier.setReviewFilters(const VerificationQueueFilters()));
+  }
+
+  void _select(String propertyId) {
+    setState(() => _selectedId = propertyId);
+    unawaited(_notifier.loadReviewDetail(propertyId));
+  }
+
+  // --- Build ----------------------------------------------------------------
 
   @override
   Component build(BuildContext context) {
     final data = context.watch(
       adminNotifierProvider.select(
-        (state) => (queue: state.queue, listings: state.listings, users: state.users),
+        (state) => (
+          page: state.reviewPage,
+          filters: state.reviewFilters,
+          detail: state.reviewDetail,
+          busy: state.busyAction,
+          notice: state.reviewNotice,
+          error: state.error,
+          loading: state.loading,
+        ),
       ),
     );
-    final visible = _visibleOf(data);
-    final count = visible.length;
-    final noun = 'listing';
-    final selected = _selectedOf(data);
 
-    return div([
-      _tabs(),
+    final items = data.page?.items ?? const <VerificationQueueRow>[];
+    // Default the selection to the first row once a page arrives; the detail
+    // load happens in a microtask so build stays side-effect free.
+    if (_selectedId == null && items.isNotEmpty) {
+      final first = '${items.first.propertyId}';
+      Future.microtask(() {
+        if (!mounted || _selectedId != null) return;
+        _select(first);
+      });
+    }
+
+    final detailMatches = data.detail != null &&
+        '${data.detail!.property.propertyId}' == _selectedId;
+
+    return div(classes: 'stack', [
+      if (data.notice != null)
+        div(classes: 'notice notice-info row', [
+          span(classes: 'grow', [Component.text(data.notice!)]),
+          ActionButton(
+            'Dismiss',
+            variant: 'ghost',
+            onClick: () => _notifier.clearReviewNotice(),
+          ),
+        ]),
+      if (data.error != null)
+        div(classes: 'notice notice-danger row', [
+          span(classes: 'grow', [Component.text(data.error!)]),
+        ]),
+      _toolbar(data),
+      _tabs(data),
       div(classes: 'split', [
         div(classes: 'panel', [
-          h2([Component.text('$count ${count == 1 ? noun : '${noun}s'}')]),
-          if (visible.isEmpty)
+          h2([Component.text(_countLine(data))]),
+          if (items.isEmpty)
             EmptyState(
-              title: 'Queue is empty',
-              body: 'Nothing is waiting in this state.',
+              title: data.loading ? 'Loading…' : 'Queue is empty',
+              body: data.loading
+                  ? 'Fetching the review queue from the server.'
+                  : 'No listing matches the current filters.',
             )
           else
             div(classes: 'queue', [
-              for (final item in visible) _queueItem(item, data),
+              for (final item in items) _queueItem(item, data),
             ]),
+          _pager(data),
         ]),
         div([
-          selected != null
-              ? _detail(selected, data)
-              : EmptyState(
-                  title: 'Select a listing',
-                  body: 'Choose a listing on the left to review its evidence.',
-                ),
+          if (_selectedId == null)
+            const EmptyState(
+              title: 'Select a listing',
+              body: 'Choose a listing on the left to review its evidence.',
+            )
+          else if (detailMatches)
+            const VerificationDetailView()
+          else
+            div(classes: 'card', [
+              p(classes: 'body muted', [const Component.text('Loading…')]),
+            ]),
         ]),
       ]),
+    ]);
+  }
+
+  Component _toolbar(_ReviewData data) {
+    final filters = data.filters;
+    return div(classes: 'toolbar row', [
+      div(classes: 'grow', [
+        input(
+          type: InputType.search,
+          attributes: {
+            'value': _query,
+            'placeholder': 'Search title, address or company…',
+            'aria-label': 'Search the review queue',
+          },
+          events: events<String>(
+            onInput: (value) => setState(() => _query = value),
+          ),
+        ),
+      ]),
+      _dropdown(
+        'Sort by',
+        filters.sort,
+        const {
+          'submitted_at': 'Submission date',
+          'updated_at': 'Last update',
+          'title': 'Title',
+          'price': 'Rent',
+        },
+        _setSort,
+      ),
+      ActionButton(
+        filters.order == 'asc' ? 'Ascending' : 'Descending',
+        onClick: data.busy == null ? _toggleOrder : null,
+        variant: 'secondary',
+        icon: filters.order == 'asc' ? 'arrow_upward' : 'arrow_downward',
+      ),
+      ActionButton('Search', onClick: _applyQuery, icon: 'search'),
+      if (!filters.isPristine)
+        ActionButton('Clear filters', onClick: _resetFilters, variant: 'ghost'),
+    ]);
+  }
+
+  Component _dropdown(
+    String label,
+    String value,
+    Map<String, String> options,
+    void Function(String) onChanged,
+  ) {
+    return select(
+      attributes: {'aria-label': label},
+      events: events<List<String>>(
+        onInput: (values) => onChanged(values.isEmpty ? '' : values.first),
+      ),
+      [
+        for (final entry in options.entries)
+          option(
+            value: entry.key,
+            attributes: value == entry.key ? const {'selected': ''} : null,
+            [Component.text(entry.value)],
+          ),
+      ],
+    );
+  }
+
+  /// Status tabs for the active dimension, with the backend's faceted counts
+  /// (each dimension counted without its own status filter applied).
+  Component _tabs(_ReviewData data) {
+    final page = data.page;
+    final active = _dimension == VerificationDimension.listing
+        ? data.filters.listingStatus
+        : data.filters.ownershipStatus;
+
+    final defs = <(PropertyVerificationStatus?, String, int?)>[
+      (null, 'All', page?.total),
+      (
+        PropertyVerificationStatus.pending,
+        'Awaiting review',
+        page?.countOf(_dimension, PropertyVerificationStatus.pending),
+      ),
+      (
+        PropertyVerificationStatus.underReview,
+        'Under review',
+        page?.countOf(_dimension, PropertyVerificationStatus.underReview),
+      ),
+      (
+        PropertyVerificationStatus.verified,
+        'Verified',
+        page?.countOf(_dimension, PropertyVerificationStatus.verified),
+      ),
+      (
+        PropertyVerificationStatus.rejected,
+        'Rejected',
+        page?.countOf(_dimension, PropertyVerificationStatus.rejected),
+      ),
+      (
+        PropertyVerificationStatus.informationRequested,
+        'Information requested',
+        page?.countOf(
+          _dimension,
+          PropertyVerificationStatus.informationRequested,
+        ),
+      ),
+    ];
+
+    return div(
+      classes: 'tabs row',
+      attributes: {'role': 'tablist'},
+      [
+        for (final dimension in VerificationDimension.values)
+          button(
+            classes: 'tab${_dimension == dimension ? ' is-active' : ''}',
+            attributes: {
+              'type': 'button',
+              'role': 'tab',
+              'aria-selected': (_dimension == dimension).toString(),
+            },
+            events: events(
+              onClick: () => setState(() => _dimension = dimension),
+            ),
+            [Component.text(dimension.label)],
+          ),
+        span(classes: 'grow', []),
+        for (final (status, label, count) in defs)
+          button(
+            classes: 'tab${active == status ? ' is-active' : ''}',
+            attributes: {
+              'type': 'button',
+              'role': 'tab',
+              'aria-selected': (active == status).toString(),
+            },
+            events: events(onClick: () => _setStatus(status)),
+            [Component.text(count == null ? label : '$label ($count)')],
+          ),
+      ],
+    );
+  }
+
+  String _countLine(_ReviewData data) {
+    final page = data.page;
+    if (page == null) return 'Loading the queue…';
+    final total = page.total;
+    final from = total == 0 ? 0 : page.offset + 1;
+    final to = (page.offset + page.limit).clamp(0, total);
+    return '$total ${total == 1 ? 'listing' : 'listings'}'
+        '${total > page.limit ? ' · showing $from–$to' : ''}';
+  }
+
+  Component _queueItem(VerificationQueueRow item, _ReviewData data) {
+    final active = _selectedId == '${item.propertyId}';
+    return button(
+      classes: 'queue-item${active ? ' is-active' : ''}',
+      attributes: {'type': 'button'},
+      events: events(onClick: () => _select('${item.propertyId}')),
+      [
+        div(classes: 'shot', [const Icon('apartment', size: 'sm')]),
+        div([
+          h4([Component.text(item.displayName)]),
+          _queueMetaLine(item),
+        ]),
+        div(classes: 'queue-item__meta stack', [
+          for (final dimension in VerificationDimension.values)
+            _rowPill(
+              dimension == VerificationDimension.listing
+                  ? item.listingStatus
+                  : item.ownershipStatus,
+            ),
+          if (item.publicationEligible) const Pill('Live', tone: 'success'),
+        ]),
+      ],
+    );
+  }
+
+  /// Meta line under the queue title. Company and city stay muted text; the
+  /// monthly rent is its own `.queue-item__rent` span so the Admin stylesheet
+  /// can give the scannable datum ink weight instead of burying it in the
+  /// muted line (the classes render as plain inline text without that CSS).
+  Component _queueMetaLine(VerificationQueueRow item) {
+    final prefix = [
+      if (item.companyName != null) item.companyName!,
+      if (item.city != null) item.city!,
+    ].join(' · ');
+    return p([
+      if (prefix.isNotEmpty) Component.text(prefix),
+      if (item.monthlyRent != null) ...[
+        if (prefix.isNotEmpty)
+          span(classes: 'queue-item__sep', [const Component.text(' · ')]),
+        span(
+          classes: 'queue-item__rent',
+          [Component.text('RM${item.monthlyRent!.toStringAsFixed(0)}')],
+        ),
+      ],
+    ]);
+  }
+
+  Component _rowPill(PropertyVerificationStatus status) => Pill(
+    status.label,
+    tone: switch (status) {
+      PropertyVerificationStatus.verified => 'success',
+      PropertyVerificationStatus.pending => 'warning',
+      PropertyVerificationStatus.underReview => 'action',
+      PropertyVerificationStatus.rejected => 'danger',
+      PropertyVerificationStatus.informationRequested => 'warning',
+      PropertyVerificationStatus.notSubmitted => 'neutral',
+    },
+  );
+
+  Component _pager(_ReviewData data) {
+    final page = data.page;
+    if (page == null || page.total <= page.limit) {
+      return Component.fragment([]);
+    }
+    final filters = data.filters;
+    final hasPrev = filters.offset > 0;
+    final hasNext = filters.offset + page.limit < page.total;
+    return div(classes: 'row', [
+      ActionButton(
+        'Previous',
+        onClick: hasPrev ? () => _turnPage(-page.limit) : null,
+        variant: 'secondary',
+      ),
+      ActionButton(
+        'Next',
+        onClick: hasNext ? () => _turnPage(page.limit) : null,
+        variant: 'secondary',
+      ),
     ]);
   }
 }

@@ -36,6 +36,37 @@ enum AuthStatus {
   bool get isActiveSession => this == AuthStatus.authenticated;
 }
 
+/// WHY an [AuthStatus.error] happened.
+///
+/// The status alone only says "verification failed". Screens need to know
+/// whether the build is misconfigured, the host is unreachable, the request
+/// timed out, TLS failed, or the backend answered with an error — otherwise
+/// every problem is reported as the same generic "service unavailable" and a
+/// developer cannot act on it. Values carry no SDK/HTTP/credential detail,
+/// so they are safe to branch on in the UI.
+enum AuthErrorKind {
+  /// No failure, or a non-error status.
+  none,
+
+  /// Compile-time configuration missing or invalid (Supabase defines).
+  configuration,
+
+  /// Connection refused, DNS failure, no route, or missing INTERNET access.
+  connectivity,
+
+  /// The request reached its timeout ceiling.
+  timeout,
+
+  /// TLS handshake or certificate failure.
+  tls,
+
+  /// Backend 5xx, unreadable profile, or an unavailable identity service.
+  server,
+
+  /// Anything else; still fails closed.
+  unknown,
+}
+
 /// Immutable snapshot of the shared authentication state.
 ///
 /// One instance is published app-wide by [AuthCubit] so startup, the auth
@@ -54,11 +85,15 @@ class AuthState {
   /// The address a pending confirmation or recovery refers to.
   final String? email;
 
+  /// Classification of an [AuthStatus.error]. [AuthErrorKind.none] elsewhere.
+  final AuthErrorKind errorKind;
+
   const AuthState({
     this.status = AuthStatus.initializing,
     this.user,
     this.message,
     this.email,
+    this.errorKind = AuthErrorKind.none,
   });
 
   static const AuthState initializing = AuthState(
@@ -79,12 +114,14 @@ class AuthState {
       other.status == status &&
       other.user == user &&
       other.message == message &&
-      other.email == email;
+      other.email == email &&
+      other.errorKind == errorKind;
 
   @override
-  int get hashCode => Object.hash(status, user, message, email);
+  int get hashCode => Object.hash(status, user, message, email, errorKind);
 
   @override
   String toString() =>
-      'AuthState(${status.name}, user: ${user?.email}, message: $message)';
+      'AuthState(${status.name}, user: ${user?.email}, message: $message, '
+      'errorKind: ${errorKind.name})';
 }

@@ -1,6 +1,7 @@
 import 'package:riverpod/riverpod.dart';
 
 import '../../domain/entities/commercial_property.dart';
+import '../../domain/entities/explore.dart';
 import '../../domain/entities/location_intelligence.dart';
 import '../../domain/entities/recommendation.dart';
 import '../controllers/entrepreneur_controller.dart';
@@ -26,6 +27,7 @@ class EntrepreneurNotifier extends Notifier<EntrepreneurState> {
       getRecommendations: ref.watch(getRecommendationsProvider),
       getLocationAnalysis: ref.watch(getLocationAnalysisProvider),
       preferences: ref.watch(businessPreferencesProvider),
+      exploreRepository: ref.watch(exploreRepositoryProvider),
       onPreferencesUpdated: ref.watch(onPreferencesUpdatedProvider),
     );
     _controller.addListener(_publish);
@@ -42,9 +44,31 @@ class EntrepreneurNotifier extends Notifier<EntrepreneurState> {
   // immutable [EntrepreneurState].
   bool get loading => state.loading;
 
+  /// In-place refresh signal: a filter/query re-run is in flight while the
+  /// previous results stay visible.
+  bool get listRefreshing => state.listRefreshing;
+
+  /// A location analysis is in flight (does not touch [loading]).
+  bool get analysisLoading => state.analysisLoading;
+
   String? get error => state.error;
 
+  /// Analysis failures are separate from list errors.
+  String? get analysisError => state.analysisError;
+
+  /// The property the current/in-flight analysis belongs to.
+  String? get analysisPropertyId => state.analysisPropertyId;
+
   List<CommercialProperty> get explore => state.explore;
+
+  /// Server-reported total for the current search, when server-driven.
+  int? get exploreTotal => state.exploreTotal;
+
+  /// True when [loadMore] can fetch another page (server-driven only).
+  bool get exploreHasMore => state.exploreHasMore;
+
+  /// Database-backed filter facets when an [ExploreRepository] is wired.
+  ExploreFilterOptions? get filterOptions => state.filterOptions;
 
   List<PropertyRecommendation> get recommendations => state.recommendations;
 
@@ -56,13 +80,18 @@ class EntrepreneurNotifier extends Notifier<EntrepreneurState> {
 
   BusinessPreferences get prefs => state.preferences;
 
-  /// Loads all listings, then applies the current query and filter.
+  /// Loads listings: a real server search when an ExploreRepository is wired,
+  /// otherwise the client-filtered full listing.
   Future<void> loadExplore() => _controller.loadExplore();
+
+  /// Appends the next server page. No-op on the client-driven path.
+  Future<void> loadMore() => _controller.loadMore();
 
   /// Ranks recommendations against the current preferences.
   Future<void> loadRecommendations() => _controller.loadRecommendations();
 
-  /// Loads the location analysis for one property.
+  /// Loads the location analysis for one property. Runs on its own loading
+  /// flag; an in-flight analysis never blocks the Explore list.
   Future<void> loadAnalysis(String propertyId) =>
       _controller.loadAnalysis(propertyId);
 

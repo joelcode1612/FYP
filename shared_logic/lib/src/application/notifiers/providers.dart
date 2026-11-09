@@ -3,11 +3,15 @@ import 'package:riverpod/riverpod.dart';
 import '../../domain/entities/app_role.dart';
 import '../../domain/entities/recommendation.dart';
 import '../../domain/repositories/admin_repositories.dart';
+import '../../domain/repositories/explore_repository.dart';
+import '../../domain/repositories/property_verification_repository.dart';
+import '../../domain/repositories/saved_properties_repository.dart';
 import '../../domain/usecases/property_usecases.dart';
 import '../../domain/usecases/recommendation_usecases.dart';
 import '../states/app_state.dart';
 import '../services/auth_service.dart';
 import '../services/property_service.dart';
+import '../services/property_verification_service.dart';
 import '../services/tour_service.dart';
 import '../services/verification_service.dart';
 
@@ -56,6 +60,22 @@ final businessPreferencesProvider = Provider<BusinessPreferences>(
   ),
 );
 
+/// Optional server-driven Explore source (`/api/v1/explore/*`, the
+/// `fyp.rental_properties` universe). Null — the default — keeps the
+/// client-driven path: the full listing loads once and filters run locally
+/// (demo data, and the web catalogue whose `EP-xxxxx` ids the saved-list and
+/// assessment backends require). Overriding this swaps [loadExplore] to real
+/// server-side filtering, sorting and pagination.
+final exploreRepositoryProvider = Provider<ExploreRepository?>((ref) => null);
+
+/// Optional authenticated saved-property shortlist
+/// (`/api/v1/saved-properties`, catalogue refs). Null — the default — keeps
+/// the device-local selection each app already owns. Composition roots wire
+/// this where the signed-in account's shortlist lives on the server.
+final savedPropertiesRepositoryProvider = Provider<SavedPropertiesRepository?>(
+  (ref) => null,
+);
+
 /// Write-back hook fired when the entrepreneur updates their preferences.
 /// The composition root decides where preferences persist (local file on
 /// mobile, nothing on web).
@@ -79,6 +99,27 @@ final verificationServiceProvider = Provider<VerificationService>(
   (ref) => throw UnimplementedError(
     'verificationServiceProvider must be overridden at the composition root.',
   ),
+);
+
+/// Optional live unified property-verification workflow (`/api/v1/properties/
+/// ...verification`, `/api/v1/staff/properties/...`). Null — the default —
+/// keeps the demo verification queue; the composition roots wire it where
+/// the authenticated API client lives.
+final propertyVerificationRepositoryProvider =
+    Provider<PropertyVerificationRepository?>((ref) => null);
+
+final propertyVerificationServiceProvider = Provider<PropertyVerificationService?>(
+  (ref) {
+    final repo = ref.watch(propertyVerificationRepositoryProvider);
+    return repo == null ? null : PropertyVerificationService(repo);
+  },
+);
+
+final adminPropertyReviewServiceProvider = Provider<AdminPropertyReviewService?>(
+  (ref) {
+    final repo = ref.watch(propertyVerificationRepositoryProvider);
+    return repo == null ? null : AdminPropertyReviewService(repo);
+  },
 );
 
 final userRepositoryProvider = Provider<UserRepository>(

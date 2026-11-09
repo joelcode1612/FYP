@@ -143,7 +143,49 @@ class AuthUnavailableFailure extends AuthFailure {
 
   @override
   String get userMessage =>
-      'Sitewise could not reach the sign-in service. No access was granted — check your connection and try again.';
+      'Sitewise could not reach the sign-in service — check your connection and try again.';
+}
+
+/// A BUILD problem, not an outage: `Supabase.initialize()` never ran because
+/// this Flutter binary was launched without its compile-time defines.
+/// Starting the backend launcher cannot change a compiled-in value, so the UI
+/// must say so instead of blaming the network.
+class AuthConfigurationFailure extends AuthUnavailableFailure {
+  const AuthConfigurationFailure([
+    super.message = 'This build has no sign-in configuration.',
+  ]);
+
+  @override
+  String get userMessage =>
+      'This build has no sign-in configuration. Start Flutter with '
+      '--dart-define-from-file=fyp_mobile_app/config/dev.env — starting '
+      'run-sitewise.cmd alone cannot supply Dart compile-time values.';
+}
+
+/// A request that reached the timeout ceiling. Distinct from a refused
+/// connection (host not listening) and from a server-side 5xx.
+class AuthTimeoutFailure extends AuthUnavailableFailure {
+  const AuthTimeoutFailure([
+    super.message = 'The SiteWise service took too long to respond.',
+  ]);
+
+  @override
+  String get userMessage =>
+      'The SiteWise service took too long to respond. Check that '
+      'run-sitewise.cmd is running, then try again.';
+}
+
+/// TLS handshake / certificate failure. Grouping this with "no internet"
+/// hides certificate and HTTPS/HTTP mismatches from the developer.
+class AuthTlsFailure extends AuthUnavailableFailure {
+  const AuthTlsFailure([
+    super.message = 'The secure connection could not be established.',
+  ]);
+
+  @override
+  String get userMessage =>
+      'A secure connection to the SiteWise service could not be established. '
+      'Check the API URL scheme and certificate.';
 }
 
 /// Converts *any* thrown object into a readable, non-technical message.

@@ -12757,3 +12757,327 @@ input[type="range"] {
 .app-shell.app-shell--agent :is(input, select, textarea) {
   color-scheme: light;
 }
+
+/* ==========================================================================
+   Entrepreneur dashboard — workspace home restructure (mockup: welcome
+   header, 4-KPI row, Current Assessment card, Quick Actions, Recent
+   Assessments). Scoped `.sw-dash-*` classes only; hardcoded surfaces mirror
+   the neighbouring `.sw-home-*` block (same white-card palette on the
+   entrepreneur shell). No shared tokens are re-themed.
+   ========================================================================== */
+.sw-dash-head { margin-top: 6px; }
+.sw-dash-head :is(h1, p) { margin: 0; }
+.sw-dash-kicker { font-size: 11px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; color: #1d4ed8; } /* DESIGN.md §4.2: eyebrows are compact, bold, uppercase, blue */
+.sw-dash-title { font-family: 'Archivo', Inter, system-ui, sans-serif; font-size: clamp(24px, 2.6vw, 30px); font-weight: 800; letter-spacing: -.03em; line-height: 1.15; color: #0b0f19; margin-top: 8px !important; }
+.sw-dash-wave { margin-left: 8px; }
+.sw-dash-sub { font-size: 13.5px; line-height: 1.5; color: #52627a; margin-top: 6px !important; }
+
+.sw-dash-section { margin-top: 34px; }
+.sw-dash-section-head { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin: 0 0 14px; }
+.sw-dash-section-head h2 { font-family: 'Archivo', Inter, system-ui, sans-serif; font-size: 18px; font-weight: 800; letter-spacing: -.02em; color: #0b0f19; margin: 0; }
+.sw-dash-viewall { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 800; color: #1d4ed8; text-decoration: none; white-space: nowrap; }
+.sw-dash-viewall:hover { text-decoration: underline; }
+
+.sw-dash-quick-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+.sw-dash-quick { display: flex; flex-direction: column; gap: 10px; background: #fff; border: 1px solid #e2e8f0; border-radius: 16px; padding: 16px; text-decoration: none; color: inherit; transition: border-color .15s cubic-bezier(.2,.8,.2,1), transform .15s cubic-bezier(.2,.8,.2,1); }
+.sw-dash-quick:hover { border-color: #1d4ed8; transform: translateY(-1px); }
+.sw-dash-quick:focus-visible { outline: 3px solid #3b82f6; outline-offset: 2px; }
+.sw-dash-quick-tile { width: 38px; height: 38px; border-radius: 10px; display: grid; place-items: center; background: rgba(29,78,216,.08); color: #1d4ed8; }
+.sw-dash-quick strong { font-size: 13.5px; font-weight: 800; color: #0b0f19; }
+.sw-dash-quick small { font-size: 12px; line-height: 1.5; color: #64748b; }
+
+.sw-dash-ca { display: flex; gap: 18px; align-items: flex-start; background: #fff; border: 1px solid #dbe3ef; border-radius: 18px; padding: 20px; color: #1e293b; } /* DESIGN.md §4.3: recommendation-card radius ≈18px */
+.sw-dash-ca :is(h3, p) { margin: 0; }
+.sw-dash-ca-empty { flex: 1; }
+.sw-dash-thumb { width: 120px; height: 88px; flex: 0 0 120px; border-radius: 10px; overflow: hidden; background: #eef2f7; display: grid; place-items: center; color: #94a3b8; border: 1px solid #e2e8f0; }
+.sw-dash-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.sw-dash-ca-body { flex: 1; min-width: 0; }
+.sw-dash-ca-body h3 { font-family: 'Archivo', Inter, system-ui, sans-serif; font-size: 17px; font-weight: 800; letter-spacing: -.02em; color: #0b0f19; }
+.sw-dash-ca-loc { display: inline-flex; align-items: center; gap: 5px; font-size: 12.5px; color: #64748b; margin-top: 5px !important; }
+.sw-dash-stage-row { display: flex; align-items: center; gap: 9px; margin-top: 13px; font-size: 12.5px; color: #52627a; flex-wrap: wrap; }
+.sw-dash-ca-actions { display: flex; justify-content: flex-end; margin-top: 16px; }
+
+.sw-dash-recent { background: #fff; border: 1px solid #e2e8f0; border-radius: 18px; overflow: hidden; } /* DESIGN.md §4.3: recommendation-card radius ≈18px */
+.sw-dash-rrow { display: flex; align-items: center; gap: 14px; padding: 13px 16px; border-bottom: 1px solid #edf1f7; text-decoration: none; color: inherit; transition: background-color .15s cubic-bezier(.2,.8,.2,1); }
+.sw-dash-rrow:last-child { border-bottom: 0; }
+.sw-dash-rrow:hover { background: #f8fafc; }
+.sw-dash-rrow:focus-visible { outline: 3px solid #3b82f6; outline-offset: -3px; }
+.sw-dash-rrow .sw-dash-thumb { width: 64px; height: 48px; flex: 0 0 64px; }
+.sw-dash-rrow-copy { flex: 1; min-width: 0; }
+.sw-dash-rrow-copy strong { display: block; font-size: 13px; font-weight: 800; color: #0b0f19; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sw-dash-rrow-copy small { display: block; font-size: 11.5px; color: #64748b; margin-top: 2px; }
+.sw-dash-rrow-track { width: 130px; flex: 0 0 130px; height: 6px; border-radius: 99px; background: #e6ecf5; overflow: hidden; }
+.sw-dash-rrow-track span { display: block; height: 100%; background: #1d4ed8; border-radius: inherit; }
+.sw-dash-rrow-track--done span { background: #0d9488; }
+.sw-dash-rrow-pct { width: 40px; flex: 0 0 40px; text-align: right; font-size: 12px; font-weight: 800; color: #0b0f19; font-variant-numeric: tabular-nums; }
+.sw-dash-rrow .ms { color: #94a3b8; }
+
+@media (max-width: 900px) {
+  .sw-dash-quick-grid { grid-template-columns: 1fr; }
+  .sw-dash-ca { flex-direction: column; }
+  .sw-dash-thumb { width: 100%; height: 150px; flex-basis: auto; }
+  .sw-dash-rrow-track { display: none; }
+}
+
+/* Entrepreneur workspace — light shell. The shared `.app-shell` is a dark,
+   near-black surface; the entrepreneur role now reads as the white/light
+   workspace (same proven token re-scope as the Agent block above, so the
+   dark admin shell, the agent scope and the public pages are untouched). */
+.app-shell.app-shell--entrepreneur {
+  /* DESIGN.md §4.1: --bg #E8EEF6 is the muted-blue presentation background
+     and --paper #F4F7FB the site canvas; cards stay pure white (--surface). */
+  --background: #e8eef6;
+  --paper: #f4f7fb;
+  --surface: #ffffff;
+  --alt-surface: #f8fafc;
+  --neutral-wash: #f1f5f9;
+
+  --ink: #0b0f19;
+  --text: #1e293b;
+  --muted: #64748b;
+  --overline: #94a3b8;
+  --overline-text: #6b7280;
+
+  --border: #e2e8f0;
+  --border-strong: #cbd5e1;
+
+  --action: #1d4ed8; /* royal blue — entrepreneur interaction colour */
+  --accent: #3b82f6;
+  --geo-wash: #dbeafe;
+  --geo-border: #bfdbfe;
+
+  --success: #0d9488;
+  --success-text: #0f766e;
+  --success-wash: #d1fae5;
+  --warning: #b45309;
+  --warning-wash: #fef3c7;
+  --danger: #dc2626;
+  --danger-wash: #fee2e2;
+
+  --scrim: rgba(15, 23, 42, 0.42);
+  --shadow-sm: 0 12px 32px rgba(15, 23, 42, 0.06);
+  --shadow: 0 24px 80px rgba(15, 23, 42, 0.1);
+  --menu-shadow: 0 16px 48px rgba(15, 23, 42, 0.12);
+  --dialog-shadow: 0 24px 64px rgba(15, 23, 42, 0.14);
+
+  /* Primary buttons read as the dark chip with the blue hover, exactly as in
+     the agent scope — the shared `.btn--primary` consumes these tokens. */
+  --contrast-surface: #0b0f19;
+  --contrast-on-surface: #ffffff;
+
+  color-scheme: light;
+  background: var(--background);
+  color: var(--text);
+}
+
+/* The nav pill is white on this shell, with dark text; the shared shell's
+   near-black chrome (border/background inheritance from the dark tokens) is
+   re-scoped by the token block above. Only the ACTIVE pill state needs an
+   explicit override, mirroring the agent rule. */
+.app-shell.app-shell--entrepreneur .app-pill__link--active,
+.app-shell.app-shell--entrepreneur .app-pill__link--active:hover {
+  background: var(--action);
+  border-color: var(--action);
+  color: #ffffff;
+}
+
+/* The shared dark shell forces native form controls to the UA dark scheme;
+   on the light entrepreneur canvas they would render as black fields on
+   white cards. */
+.app-shell.app-shell--entrepreneur :is(input, select, textarea) {
+  color-scheme: light;
+}
+
+/* ==========================================================================
+   Review queue legibility (Admin Listings · ReviewSplit)
+   --------------------------------------------------------------------------
+   The queue rows previously sat on the same surface as the panel with a
+   selection ring tuned for light pages (rgba(29,78,216,0.1) — invisible on
+   charcoal), the toolbar rendered with `.row`'s zero default gap, and the
+   rent was buried in the muted meta line. Scoped to `.app-shell--admin`:
+   ReviewSplit is admin-only, so no other role's pages move. Every value
+   comes from the admin token family (canvas #0d0f1a, panel #1d202e,
+   raised #272b3b, accent #4da3ff).
+   ========================================================================== */
+
+/* Toolbar: space the search field and its actions, and separate the row
+   from the status tabs below (`.row` defaults to gap: 0). */
+.app-shell.app-shell--admin .toolbar {
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+/* Pager: unglue Previous/Next (direct `.row` child of the queue panel). */
+.app-shell.app-shell--admin .panel > .row {
+  gap: 10px;
+}
+
+/* Rows: raise each listing off the panel so records read as separate
+   cards, and widen the hit target slightly (12px padding, 12px gaps). */
+.app-shell.app-shell--admin .queue {
+  gap: 10px;
+}
+
+.app-shell.app-shell--admin .queue-item {
+  padding: 12px 14px;
+  gap: 12px;
+  background: #232736;
+  border-color: #3b4055;
+}
+
+.app-shell.app-shell--admin .queue-item:hover {
+  background: #272b3b;
+  border-color: rgba(77, 163, 255, 0.55);
+}
+
+.app-shell.app-shell--admin .queue-item.is-active {
+  background: #2c3245;
+  border-color: #4da3ff;
+  box-shadow:
+    0 0 0 2px rgba(77, 163, 255, 0.32),
+    0 8px 20px rgba(0, 0, 0, 0.35);
+}
+
+/* Type: title up to 14px, meta to 12px with a lighter tone on charcoal. */
+.app-shell.app-shell--admin .queue-item h4 {
+  font-size: 14px;
+  letter-spacing: -0.01em;
+}
+
+.app-shell.app-shell--admin .queue-item p {
+  font-size: 12px;
+  line-height: 1.55;
+  color: #b9bfd1;
+}
+
+/* Rent is the scannable datum — pulled out of the muted meta text by
+   `admin_review_split.dart` into its own span; here it earns ink weight. */
+.app-shell.app-shell--admin .queue-item__rent {
+  color: #f9f9fd;
+  font-weight: 800;
+}
+
+.app-shell.app-shell--admin .queue-item__sep {
+  color: #7f8598;
+}
+
+.app-shell.app-shell--admin .queue-item .shot {
+  height: 48px;
+  background: #303447;
+}
+
+/* Status chips: right-aligned stack, slightly tighter chips. */
+.app-shell.app-shell--admin .queue-item__meta {
+  gap: 6px;
+}
+
+.app-shell.app-shell--admin .queue-item__meta .st {
+  padding: 3px 10px;
+}
+
+/* ==========================================================================
+   Global breadcrumbs (AppLayout · .app-crumbs)
+   Royal-blue links matching the light workspaces' action colour; the trail
+   is re-tinted for the dark admin and owner shells below. Long labels
+   truncate with an ellipsis rather than wrapping the pill nav's content
+   column; on small screens the budget shrinks with the viewport.
+   ========================================================================== */
+
+.app-crumbs {
+  margin: 0 0 10px;
+  min-width: 0;
+}
+
+.app-crumbs__list {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.app-crumbs__item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.app-crumbs__link,
+.app-crumbs__current {
+  font-size: 12.5px;
+  line-height: 1.4;
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-crumbs__link {
+  color: #1d4ed8;
+  font-weight: 500;
+  text-decoration: none;
+}
+
+.app-crumbs__link:hover,
+.app-crumbs__link:focus-visible {
+  color: #1d4ed8;
+  text-decoration: underline;
+}
+
+.app-crumbs__sep {
+  color: var(--border, #cbd5e1);
+  font-size: 13px;
+  line-height: 1;
+  flex: none;
+}
+
+.app-crumbs__current {
+  color: var(--ink, #0b0f19);
+  font-weight: 600;
+}
+
+/* Dark admin shell (navy/charcoal): lighten links and ink for contrast. */
+.app-shell--admin .app-crumbs__link {
+  color: #8ab4f8;
+}
+.app-shell--admin .app-crumbs__link:hover,
+.app-shell--admin .app-crumbs__link:focus-visible {
+  color: #a7c5fa;
+}
+.app-shell--admin .app-crumbs__current {
+  color: #e6edf7;
+}
+.app-shell--admin .app-crumbs__sep {
+  color: rgba(230, 237, 247, 0.35);
+}
+
+/* Plain shared dark shell (owner role renders without a role-scope class). */
+.app-shell:not(.app-shell--admin):not(.app-shell--agent):not(
+    .app-shell--entrepreneur
+  )
+  .app-crumbs__link {
+  color: #8ab4f8;
+}
+.app-shell:not(.app-shell--admin):not(.app-shell--agent):not(
+    .app-shell--entrepreneur
+  )
+  .app-crumbs__current {
+  color: #e6edf7;
+}
+.app-shell:not(.app-shell--admin):not(.app-shell--agent):not(
+    .app-shell--entrepreneur
+  )
+  .app-crumbs__sep {
+  color: rgba(230, 237, 247, 0.35);
+}
+
+@media (max-width: 700px) {
+  .app-crumbs__link,
+  .app-crumbs__current {
+    max-width: 150px;
+  }
+}

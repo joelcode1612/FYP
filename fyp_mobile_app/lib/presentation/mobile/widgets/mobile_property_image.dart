@@ -2,14 +2,19 @@ import 'package:shared_logic/shared_logic.dart';
 import 'package:flutter/material.dart';
 
 import '../../../core/theme/sitewise_theme.dart';
+import 'sitewise_network_image.dart';
 
 /// Property imagery for the mobile tree.
 ///
-/// The domain model carries no image URLs yet (demo-data mode), so this renders
-/// a deterministic, on-brand *placeholder* of a commercial shoplot facade —
-/// never a broken-image icon and never a residential photo. When the repository
-/// starts returning image URLs, swap the body of [build] for an `Image.network`
-/// with this same box as the error/placeholder fallback; callers are unaffected.
+/// When the property record carries a backend image URL (live Explore mode,
+/// catalogue `image_url` or `fyp.property_photos`), it renders through
+/// [SitewiseNetworkImage] — placeholder while loading, bounded backoff
+/// retries, and the on-brand painted shoplot as the permanent fallback. The
+/// painted placeholder is also the loading surface, so a slow network never
+/// collapses the card layout.
+///
+/// Demo-data records carry no URL and render the deterministic shoplot
+/// exactly as before — never a broken-image icon.
 
 class MobilePropertyImage extends StatelessWidget {
   final CommercialProperty property;
@@ -41,60 +46,88 @@ class MobilePropertyImage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final radius = borderRadius ?? BorderRadius.circular(12);
+    // First backend-served URL wins: the detail photo list (primary first),
+    // then the row's own primary image, then the catalogue's single URL.
+    String? networkUrl;
+    for (final candidate in property.imageUrls) {
+      if (candidate.trim().isNotEmpty) {
+        networkUrl = candidate;
+        break;
+      }
+    }
+    networkUrl ??= property.imageUrl?.trim().isNotEmpty == true
+        ? property.imageUrl
+        : null;
+    final painted = _paintedSurface(badge);
     return ClipRRect(
       borderRadius: radius,
       child: SizedBox(
         width: width,
         height: height,
-        child: DecoratedBox(
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              colors: _palette,
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ),
-          ),
-          child: Stack(
-            fit: StackFit.expand,
-            children: [
-              CustomPaint(painter: _ShopfrontPainter(_palette.last)),
-              if (badge != null)
-                Positioned(
-                  left: 8,
-                  bottom: 8,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 4,
-                    ),
-                    decoration: BoxDecoration(
-                      color: SitewiseColors.surface.withValues(alpha: 0.92),
-                      borderRadius: BorderRadius.circular(999),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Icon(
-                          Icons.threesixty_rounded,
-                          size: 12,
-                          color: SitewiseColors.action,
-                        ),
-                        const SizedBox(width: 4),
-                        Text(
-                          badge!,
-                          style: const TextStyle(
-                            fontSize: 10,
-                            fontWeight: FontWeight.w700,
-                            color: SitewiseColors.ink,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-            ],
-          ),
+        child: networkUrl == null
+            ? painted
+            : SitewiseNetworkImage(
+                url: networkUrl,
+                width: width,
+                height: height,
+                semanticLabel: property.title,
+                // The painted shoplot doubles as the loading placeholder and
+                // the permanent fallback, so the card never flashes empty.
+                placeholder: painted,
+                fallback: painted,
+              ),
+      ),
+    );
+  }
+
+  Widget _paintedSurface(String? badge) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: _palette,
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
         ),
+      ),
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          CustomPaint(painter: _ShopfrontPainter(_palette.last)),
+          if (badge != null)
+            Positioned(
+              left: 8,
+              bottom: 8,
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 8,
+                  vertical: 4,
+                ),
+                decoration: BoxDecoration(
+                  color: SitewiseColors.surface.withValues(alpha: 0.92),
+                  borderRadius: BorderRadius.circular(999),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(
+                      Icons.threesixty_rounded,
+                      size: 12,
+                      color: SitewiseColors.action,
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      badge,
+                      style: const TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w700,
+                        color: SitewiseColors.ink,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+        ],
       ),
     );
   }

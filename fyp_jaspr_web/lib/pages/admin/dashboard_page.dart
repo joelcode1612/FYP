@@ -179,7 +179,7 @@ class _PropertyQueueRegion extends StatelessComponent {
       'Property verification',
       queue.length,
       'Review submitted listings against the evidence the owner provided.',
-      '/admin/verification',
+      '/admin/listings',
       pending: queue.length,
     );
   }
@@ -197,7 +197,7 @@ class _TourQueueRegion extends StatelessComponent {
       '360° tour verification',
       tours.length,
       'Confirm the tour belongs to the property and the panorama is ready.',
-      '/admin/verification',
+      '/admin/listings',
       pending: tours.length,
     );
   }
@@ -242,7 +242,7 @@ class _Head extends StatelessComponent {
       ]),
       div(classes: 'bh-actions', [
         AppLink(
-          to: '/admin/verification',
+          to: '/admin/listings',
           classes: 'bento-cta',
           children: [Component.text('Review queue')],
         ),
@@ -355,7 +355,7 @@ Component _healthCard(List<CommercialProperty> listings) {
       ),
     ]),
     AppLink(
-      to: '/admin/verification',
+      to: '/admin/listings',
       classes: 'bento-cta',
       children: [Component.text('Open verification queue')],
     ),

@@ -41,6 +41,24 @@ extension type _AuthBridge(JSObject _) implements JSObject {
     JSString method,
     JSString body,
   );
+
+  /// Multipart upload through the session-aware bridge: [fieldsJson] holds
+  /// the plain form fields, [fileField]/[filename]/[contentType] describe the
+  /// file and [base64] carries its bytes. Returns the response body
+  /// JSON-encoded, like [request].
+  external JSPromise<JSString> requestMultipart(
+    JSString path,
+    JSString fieldsJson,
+    JSString fileField,
+    JSString filename,
+    JSString contentType,
+    JSString base64,
+  );
+
+  /// Authenticated binary GET. Returns JSON
+  /// `{ok, status, contentType, dataBase64, message}` so the failure mode
+  /// reaches Dart as data instead of an opaque JS exception.
+  external JSPromise<JSString> download(JSString path);
 }
 
 abstract final class WebAuth {
@@ -167,6 +185,52 @@ abstract final class WebAuth {
     // so callers see one shape on both platforms (a Map cast would throw here).
     if (decoded is Map<String, dynamic>) return decoded;
     return {'data': decoded};
+  }
+
+  /// Multipart upload through the session bridge (verification evidence).
+  /// Bytes travel base64-encoded across the Dart/JS boundary; the bridge
+  /// rebuilds the FormData so the access token never leaves it.
+  static Future<Map<String, dynamic>> requestMultipart(
+    String path, {
+    required Map<String, String> fields,
+    required String fileField,
+    required String filename,
+    required List<int> bytes,
+    required String contentType,
+  }) async {
+    final decoded = jsonDecode(
+      (await _bridge
+              .requestMultipart(
+                path.toJS,
+                jsonEncode(fields).toJS,
+                fileField.toJS,
+                filename.toJS,
+                contentType.toJS,
+                base64Encode(bytes).toJS,
+              )
+              .toDart)
+          .toDart,
+    );
+    if (decoded is Map<String, dynamic>) return decoded;
+    return {'data': decoded};
+  }
+
+  /// Authenticated binary GET (verification-document download). Throws with
+  /// the backend's message on failure, mirroring [request]'s contract.
+  static Future<List<int>> download(String path) async {
+    final decoded =
+        jsonDecode(
+              (await _bridge.download(path.toJS).toDart).toDart,
+            )
+            as Map<String, dynamic>;
+    if (decoded['ok'] == true && decoded['dataBase64'] is String) {
+      return base64Decode(base64Url.normalize(decoded['dataBase64'] as String));
+    }
+    throw StateError(
+      decoded['message'] is String && (decoded['message'] as String).isNotEmpty
+          ? decoded['message'] as String
+          : 'The document could not be downloaded.',
+    );
   }
 
   /// Same call as [request], but the failure arrives as data instead of a

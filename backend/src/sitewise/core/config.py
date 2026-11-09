@@ -24,6 +24,13 @@ class Settings(BaseSettings):
         "http://127.0.0.1:3000"
     )
 
+    # Private document storage for property verification evidence. Files live
+    # OUTSIDE any web-served directory and are streamed only through the
+    # authenticated download endpoint. Empty => `<repo>/backend/var/
+    # verification-documents` is used.
+    verification_storage_dir: str = ""
+    verification_max_upload_mb: int = 10
+
     # --- Supabase authentication ------------------------------------------
     # Identity provider. Registration/login happen in the frontend through the
     # Supabase SDK; this backend only VERIFIES the issued access tokens.

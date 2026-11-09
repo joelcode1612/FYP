@@ -26,10 +26,10 @@ import 'pages/entrepreneur/my_properties_page.dart' as e_my_properties;
 import 'pages/entrepreneur/add_property_page.dart' as e_add_property;
 import 'pages/entrepreneur/explanation_page.dart' as e_explanation;
 import 'pages/entrepreneur/explore_page.dart' as e_explore;
-import 'pages/entrepreneur/map_page.dart' as e_map;
 import 'pages/entrepreneur/preferences_page.dart' as e_preferences;
 import 'pages/entrepreneur/profile_page.dart' as e_profile;
 import 'pages/entrepreneur/property_detail_page.dart' as e_property_detail;
+import 'pages/entrepreneur/property_analysis_page.dart' as e_property_analysis;
 import 'pages/entrepreneur/recommendations_page.dart' as e_recommendations;
 import 'pages/entrepreneur/report_page.dart' as e_report;
 import 'pages/entrepreneur/saved_page.dart' as e_saved;
@@ -46,13 +46,10 @@ import 'pages/admin/campaigns_page.dart' as a_campaigns;
 import 'pages/admin/dashboard_page.dart' as a_dashboard;
 import 'pages/admin/listing_detail_page.dart' as a_listing_detail;
 import 'pages/admin/listings_page.dart' as a_listings;
-import 'pages/admin/ownership_page.dart' as a_ownership;
 import 'pages/admin/profile_page.dart' as a_profile;
 import 'pages/admin/surveys_page.dart' as a_surveys;
 import 'pages/admin/user_detail_page.dart' as a_user_detail;
 import 'pages/admin/users_page.dart' as a_users;
-import 'pages/admin/verification_detail_page.dart' as a_verification_detail;
-import 'pages/admin/verification_page.dart' as a_verification;
 import 'pages/owner/add_property_page.dart' as o_add_property;
 import 'pages/owner/dashboard_page.dart' as o_dashboard;
 import 'pages/owner/profile_page.dart' as o_profile;
@@ -112,6 +109,18 @@ class SitewiseApp extends StatelessComponent {
       child: Router(
         redirect: (context, state) {
           final path = Uri.parse(state.location).path;
+          // Retired verification pages (consolidated into Admin Listings and
+          // its detail): old links land on the unified review queue, keeping
+          // the listing id where one was present.
+          if (path == '/admin/ownership' || path == '/admin/verification') {
+            return '/admin/listings';
+          }
+          if (path == '/admin/verification-detail') {
+            final id = Uri.parse(state.location).queryParameters['id'];
+            return (id == null || id.isEmpty)
+                ? '/admin/listings'
+                : '/admin/listing-detail?id=${Uri.encodeComponent(id)}';
+          }
           final rolePath = RegExp(
             r'^/(entrepreneur|owner|admin|agent)(/|$)',
           ).firstMatch(path);
@@ -293,16 +302,6 @@ class SitewiseApp extends StatelessComponent {
           // suite. Agent management keeps its pre-existing `/admin/agents`
           // route and page class, so no bookmarked URL is replaced.
           Route(
-            path: '/admin/ownership',
-            builder: (context, state) => _page(
-              const a_ownership.AdminOwnershipPage(),
-              title: 'Ownership reviews — Sitewise admin',
-              description:
-                  'Owner-linked listings awaiting a recorded decision, from '
-                  'the live catalogue.',
-            ),
-          ),
-          Route(
             path: '/admin/campaigns',
             builder: (context, state) => _page(
               const a_campaigns.AdminCampaignsPage(),
@@ -332,23 +331,6 @@ class SitewiseApp extends StatelessComponent {
             ),
           ),
           Route(
-            path: '/admin/verification',
-            builder: (context, state) => _page(
-              const a_verification.VerificationPage(),
-              title: 'Verification queue — Sitewise admin',
-              description: 'Listing submissions waiting for an administrator.',
-            ),
-          ),
-          Route(
-            path: '/admin/verification-detail',
-            builder: (context, state) => _page(
-              a_verification_detail.VerificationDetailPage(
-                id: state.queryParams['id'] ?? '',
-              ),
-              title: 'Verification detail — Sitewise admin',
-            ),
-          ),
-          Route(
             path: '/admin/listings',
             builder: (context, state) => _page(
               const a_listings.ListingsPage(),
@@ -358,12 +340,19 @@ class SitewiseApp extends StatelessComponent {
           ),
           Route(
             path: '/admin/listing-detail',
-            builder: (context, state) => _page(
-              a_listing_detail.ListingDetailPage(
-                id: state.queryParams['id'] ?? '',
-              ),
-              title: 'Listing detail — Sitewise admin',
-            ),
+            builder: (context, state) {
+              final id = state.queryParams['id'] ?? '';
+              // Keyed by id: navigating between two detail pages must rebuild
+              // the state (jaspr reuses the State when the runtime type and
+              // position match, and has no didUpdateWidget hook).
+              return _page(
+                a_listing_detail.ListingDetailPage(
+                  key: ValueKey('listing-detail-$id'),
+                  id: id,
+                ),
+                title: 'Listing detail — Sitewise admin',
+              );
+            },
           ),
           Route(
             path: '/admin/profile',
@@ -449,24 +438,44 @@ class SitewiseApp extends StatelessComponent {
                   'Budget, floor area and property type used to rank listings.',
             ),
           ),
+          // Combined Explore: filters → Leaflet map + listings → radius →
+          // nearby + transport. `?id=map` scrolls to the map section (legacy
+          // deep link); any other `?id=` preselects that property on entry.
+          // Keyed by id so navigating between two preselected entries rebuilds
+          // the state (jaspr reuses the State when type and position match).
           Route(
             path: '/entrepreneur/explore',
-            builder: (context, state) => _page(
-              e_explore.ExplorePage(
-                startInMap: state.queryParams['id'] == 'map',
-              ),
-              title: 'Explore commercial properties — Sitewise',
-              description:
-                  'Filter F&B commercial property by rent, floor area, type and '
-                  'location, then read the surroundings of each unit.',
-            ),
+            builder: (context, state) {
+              final id = state.queryParams['id'];
+              return _page(
+                e_explore.ExplorePage(
+                  key: ValueKey('explore-${id ?? ''}'),
+                  startInMap: id == 'map',
+                  initialPropertyId: (id == null || id == 'map') ? null : id,
+                ),
+                title: 'Explore commercial properties — Sitewise',
+                description:
+                    'Filter F&B commercial property by rent, floor area, type and '
+                    'location, then read the surroundings of each unit.',
+              );
+            },
           ),
+          // Backward compatibility: the retired standalone map screen now
+          // resolves to the combined Explore page with the property (when one
+          // was linked) preselected, so old links never break.
           Route(
             path: '/entrepreneur/map',
-            builder: (context, state) => _page(
-              e_map.MapPage(initialId: state.queryParams['id']),
-              title: 'Map — Sitewise',
-            ),
+            builder: (context, state) {
+              final id = state.queryParams['id'];
+              return _page(
+                e_explore.ExplorePage(
+                  key: ValueKey('explore-map-${id ?? ''}'),
+                  startInMap: true,
+                  initialPropertyId: (id == null || id == 'map') ? null : id,
+                ),
+                title: 'Explore commercial properties — Sitewise',
+              );
+            },
           ),
           Route(
             path: '/entrepreneur/explanation',
@@ -484,6 +493,24 @@ class SitewiseApp extends StatelessComponent {
                 id: state.queryParams['id'] ?? '',
               ),
               title: 'Property detail — Sitewise',
+            ),
+          ),
+          // Source-backed evidence drill-down (Q1–Q5 perspectives) for one
+          // catalogue property; keyed by id so navigating between two
+          // properties rebuilds the futures instead of showing stale data.
+          Route(
+            path: '/entrepreneur/property-analysis',
+            builder: (context, state) => _page(
+              e_property_analysis.PropertyAnalysisPage(
+                key: ValueKey(
+                  'property-analysis-${state.queryParams['id'] ?? ''}',
+                ),
+                id: state.queryParams['id'] ?? '',
+              ),
+              title: 'Location analysis — Sitewise',
+              description:
+                  'Source-backed property competition, accessibility, customer '
+                  'demand, built environment and price context.',
             ),
           ),
           Route(

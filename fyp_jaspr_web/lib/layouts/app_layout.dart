@@ -1,8 +1,10 @@
 import 'package:jaspr/dom.dart';
 import 'package:jaspr/jaspr.dart';
 
+import '../components/app_breadcrumbs.dart';
 import '../components/topbar_controls.dart';
 import '../components/ui.dart';
+import '../data/breadcrumb_routes.dart';
 import '../data/navigation.dart';
 import '../data/site_content.dart';
 
@@ -61,6 +63,11 @@ class AppLayout extends StatefulComponent {
   /// source does not have.
   final bool showPageHead;
 
+  /// Set to false when the page renders its own breadcrumb trail inside the
+  /// content (the property-registration wizard's styled `sw-reg-breadcrumb`),
+  /// so the reader never sees two trails for one page.
+  final bool showBreadcrumbs;
+
   final Component child;
 
   const AppLayout({
@@ -72,6 +79,7 @@ class AppLayout extends StatefulComponent {
     this.eyebrow,
     this.actions = const [],
     this.showPageHead = true,
+    this.showBreadcrumbs = true,
     required this.child,
   });
 
@@ -94,15 +102,17 @@ class _AppLayoutState extends State<AppLayout> {
     final selected = parentShellRoute(component.currentRoute);
 
     // Role-scoped theming hooks. The Administrator workspace carries its own
-    // navy/charcoal "Blue Accent" theme (SiteWise_Admin_Blue_DESIGN.md) and the
-    // Agent workspace the light landing-page palette (DESIGN.md §4). The extra
-    // classes let the stylesheet retheme each shell without touching the other
-    // roles or the public styling, which keep reading the shared `.app-shell`
-    // tokens.
+    // navy/charcoal "Blue Accent" theme (SiteWise_Admin_Blue_DESIGN.md), the
+    // Agent workspace the light landing-page palette (DESIGN.md §4), and the
+    // Entrepreneur workspace the same light palette (the dark shared shell
+    // was replaced by a white one on request). The extra classes let the
+    // stylesheet retheme each shell without touching the other roles or the
+    // public styling, which keep reading the shared `.app-shell` tokens.
     return div(
       classes: switch (component.role) {
         AppRole.admin => 'app-shell app-shell--admin',
         AppRole.agent => 'app-shell app-shell--agent',
+        AppRole.entrepreneur => 'app-shell app-shell--entrepreneur',
         _ => 'app-shell',
       },
       [
@@ -174,6 +184,19 @@ class _AppLayoutState extends State<AppLayout> {
           // --- Page ----------------------------------------------------------
           div(classes: 'app-content', [
             div(classes: 'app-content__inner', [
+              // Global breadcrumb trail, straight below the pill nav on every
+              // authenticated page. The hierarchy comes from the centralised
+              // registry (breadcrumb_routes.dart) keyed by this page's
+              // `currentRoute`; short trails (the workspace home) render
+              // nothing.
+              if (component.showBreadcrumbs)
+                AppBreadcrumbs(
+                  breadcrumbTrailFor(
+                    role: component.role,
+                    currentRoute: component.currentRoute,
+                    pageTitle: component.title,
+                  ),
+                ),
               if (component.showPageHead)
                 PageHead(
                   title: component.title,

@@ -28,6 +28,25 @@ class TourPreviewMobilePage extends StatefulWidget {
 class _TourPreviewMobilePageState extends State<TourPreviewMobilePage> {
   late final TourPreviewViewModel vm;
 
+  /// Cached file reads, one future per path. Without this, every rebuild of
+  /// the preview (regeneration stages, button state changes) re-read every
+  /// frame file and the panorama from disk — the "repeated image downloads"
+  /// failure mode. A change of path (retake, regenerate) starts a new read.
+  final Map<String, Future<Uint8List?>> _bytesCache = {};
+
+  Future<Uint8List?> _bytesFor(String path) => _bytesCache.putIfAbsent(
+    path,
+    () => readImageBytes(path).timeout(
+      const Duration(seconds: 8),
+      onTimeout: () => null,
+    ),
+  );
+
+  /// A retake or regeneration overwrites the files in place; dropping the
+  /// cached reads is what makes the preview show the NEW image instead of a
+  /// stale one after a successful update.
+  void _invalidateImageCaches() => _bytesCache.clear();
+
   @override
   void initState() {
     super.initState();
@@ -98,7 +117,12 @@ class _TourPreviewMobilePageState extends State<TourPreviewMobilePage> {
                     SitewiseSecondaryButton(
                       label: 'Regenerate panorama',
                       icon: Icons.auto_awesome,
-                      onPressed: vm.generating ? null : () => vm.regenerate(),
+                      onPressed: vm.generating
+                          ? null
+                          : () {
+                              _invalidateImageCaches();
+                              vm.regenerate();
+                            },
                     ),
                     const SizedBox(height: 8),
                     if (vm.tour!.status == VirtualTourStatus.ready ||
@@ -225,12 +249,21 @@ class _TourPreviewMobilePageState extends State<TourPreviewMobilePage> {
       child: SizedBox(
         height: 300,
         child: FutureBuilder<Uint8List?>(
-          future: readPanoramaBytes(path),
+          future: _bytesFor(path),
           builder: (c, snap) {
-            if (!snap.hasData || snap.data == null) {
+            if (snap.connectionState != ConnectionState.done) {
               return const Center(child: CircularProgressIndicator());
             }
-            return Panorama(child: Image.memory(snap.data!));
+            final bytes = snap.data;
+            if (bytes == null) {
+              return const Center(
+                child: Text(
+                  'Panorama file unavailable. Try regenerating it.',
+                  style: TextStyle(color: SitewiseColors.muted, fontSize: 12),
+                ),
+              );
+            }
+            return Panorama(child: Image.memory(bytes));
           },
         ),
       ),
@@ -267,10 +300,20 @@ class _TourPreviewMobilePageState extends State<TourPreviewMobilePage> {
               children: [
                 Expanded(
                   child: FutureBuilder<Uint8List?>(
-                    future: readImageBytes(f.imagePath),
-                    builder: (cc, snap) => snap.data == null
-                        ? const Icon(Icons.image_outlined)
-                        : Image.memory(snap.data!, fit: BoxFit.cover),
+                    future: _bytesFor(f.imagePath),
+                    builder: (cc, snap) {
+                      if (snap.connectionState != ConnectionState.done) {
+                        return const Icon(Icons.image_outlined);
+                      }
+                      final bytes = snap.data;
+                      if (bytes == null) {
+                        return const Icon(
+                          Icons.image_not_supported_outlined,
+                          color: SitewiseColors.muted,
+                        );
+                      }
+                      return Image.memory(bytes, fit: BoxFit.cover);
+                    },
                   ),
                 ),
                 Padding(
@@ -293,6 +336,7 @@ class _TourPreviewMobilePageState extends State<TourPreviewMobilePage> {
   Future<void> _retake(int index) async {
     final tour = vm.tour;
     if (tour == null) return;
+    _invalidateImageCaches();
     await vm.retakeFrame(index, tour.propertyId);
     if (mounted) {
       Navigator.of(context).pushNamed('/capture', arguments: tour.propertyId);

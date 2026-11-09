@@ -6,6 +6,8 @@
 
 import 'package:jaspr/client.dart';
 
+import 'package:sitewise_jaspr_web/components/verification_detail_view.dart'
+    deferred as _verification_detail_view;
 import 'package:sitewise_jaspr_web/pages/admin/activity_page.dart'
     deferred as _activity_page;
 import 'package:sitewise_jaspr_web/pages/admin/agents_page.dart'
@@ -18,8 +20,6 @@ import 'package:sitewise_jaspr_web/pages/admin/listing_detail_page.dart'
     deferred as _listing_detail_page;
 import 'package:sitewise_jaspr_web/pages/admin/listings_page.dart'
     deferred as _listings_page;
-import 'package:sitewise_jaspr_web/pages/admin/ownership_page.dart'
-    deferred as _ownership_page;
 import 'package:sitewise_jaspr_web/pages/admin/profile_page.dart'
     deferred as _profile_page;
 import 'package:sitewise_jaspr_web/pages/admin/surveys_page.dart'
@@ -28,10 +28,6 @@ import 'package:sitewise_jaspr_web/pages/admin/user_detail_page.dart'
     deferred as _user_detail_page;
 import 'package:sitewise_jaspr_web/pages/admin/users_page.dart'
     deferred as _users_page;
-import 'package:sitewise_jaspr_web/pages/admin/verification_detail_page.dart'
-    deferred as _verification_detail_page;
-import 'package:sitewise_jaspr_web/pages/admin/verification_page.dart'
-    deferred as _verification_page;
 import 'package:sitewise_jaspr_web/pages/agent/dashboard_page.dart'
     deferred as _agent_dashboard_page;
 import 'package:sitewise_jaspr_web/pages/agent/enquiries_page.dart'
@@ -58,14 +54,14 @@ import 'package:sitewise_jaspr_web/pages/entrepreneur/explanation_page.dart'
     deferred as _explanation_page;
 import 'package:sitewise_jaspr_web/pages/entrepreneur/explore_page.dart'
     deferred as _explore_page;
-import 'package:sitewise_jaspr_web/pages/entrepreneur/map_page.dart'
-    deferred as _map_page;
 import 'package:sitewise_jaspr_web/pages/entrepreneur/my_properties_page.dart'
     deferred as _my_properties_page;
 import 'package:sitewise_jaspr_web/pages/entrepreneur/preferences_page.dart'
     deferred as _preferences_page;
 import 'package:sitewise_jaspr_web/pages/entrepreneur/profile_page.dart'
     deferred as _entrepreneur_profile_page;
+import 'package:sitewise_jaspr_web/pages/entrepreneur/property_analysis_page.dart'
+    deferred as _property_analysis_page;
 import 'package:sitewise_jaspr_web/pages/entrepreneur/property_detail_page.dart'
     deferred as _entrepreneur_property_detail_page;
 import 'package:sitewise_jaspr_web/pages/entrepreneur/recommendations_page.dart'
@@ -125,6 +121,10 @@ import 'package:sitewise_jaspr_web/pages/staff_verify_page.dart'
 /// ```
 ClientOptions get defaultClientOptions => ClientOptions(
   clients: {
+    'verification_detail_view': ClientLoader(
+      (p) => _verification_detail_view.VerificationDetailView(),
+      loader: _verification_detail_view.loadLibrary,
+    ),
     'activity_page': ClientLoader(
       (p) => _activity_page.AdminActivityPage(),
       loader: _activity_page.loadLibrary,
@@ -149,10 +149,6 @@ ClientOptions get defaultClientOptions => ClientOptions(
       (p) => _listings_page.ListingsPage(),
       loader: _listings_page.loadLibrary,
     ),
-    'ownership_page': ClientLoader(
-      (p) => _ownership_page.AdminOwnershipPage(),
-      loader: _ownership_page.loadLibrary,
-    ),
     'profile_page': ClientLoader(
       (p) => _profile_page.ProfilePage(),
       loader: _profile_page.loadLibrary,
@@ -168,16 +164,6 @@ ClientOptions get defaultClientOptions => ClientOptions(
     'users_page': ClientLoader(
       (p) => _users_page.UsersPage(),
       loader: _users_page.loadLibrary,
-    ),
-    'verification_detail_page': ClientLoader(
-      (p) => _verification_detail_page.VerificationDetailPage(
-        id: p['id'] as String,
-      ),
-      loader: _verification_detail_page.loadLibrary,
-    ),
-    'verification_page': ClientLoader(
-      (p) => _verification_page.VerificationPage(),
-      loader: _verification_page.loadLibrary,
     ),
     'agent/dashboard_page': ClientLoader(
       (p) => _agent_dashboard_page.AgentDashboardPage(),
@@ -238,12 +224,11 @@ ClientOptions get defaultClientOptions => ClientOptions(
       loader: _explanation_page.loadLibrary,
     ),
     'explore_page': ClientLoader(
-      (p) => _explore_page.ExplorePage(startInMap: p['startInMap'] as bool),
+      (p) => _explore_page.ExplorePage(
+        startInMap: p['startInMap'] as bool,
+        initialPropertyId: p['initialPropertyId'] as String?,
+      ),
       loader: _explore_page.loadLibrary,
-    ),
-    'map_page': ClientLoader(
-      (p) => _map_page.MapPage(initialId: p['initialId'] as String?),
-      loader: _map_page.loadLibrary,
     ),
     'my_properties_page': ClientLoader(
       (p) => _my_properties_page.MyPropertiesPage(),
@@ -256,6 +241,11 @@ ClientOptions get defaultClientOptions => ClientOptions(
     'entrepreneur/profile_page': ClientLoader(
       (p) => _entrepreneur_profile_page.ProfilePage(),
       loader: _entrepreneur_profile_page.loadLibrary,
+    ),
+    'property_analysis_page': ClientLoader(
+      (p) =>
+          _property_analysis_page.PropertyAnalysisPage(id: p['id'] as String),
+      loader: _property_analysis_page.loadLibrary,
     ),
     'entrepreneur/property_detail_page': ClientLoader(
       (p) => _entrepreneur_property_detail_page.PropertyDetailPage(

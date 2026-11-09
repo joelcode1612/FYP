@@ -4,9 +4,19 @@ import '../models/commercial_property_model.dart';
 
 /// DTO/model ↔ entity conversions. All mapping lives here — never in pages.
 abstract final class PropertyMapper {
-  static CommercialProperty fromDto(PropertyDto dto, {String? id}) =>
+  /// Builds a DRAFT entity from an outbound [PropertyDto].
+  ///
+  /// Draft semantics, deliberately strict:
+  ///  * the id must come from [dto] or [id]. A locally generated placeholder
+  ///    id is NEVER fabricated — a draft without a server (or caller) id is a
+  ///    programming error and throws, because a made-up id would silently
+  ///    fork the record once the backend assigns the real one;
+  ///  * the suitability score stays 0 with [CommercialProperty
+  ///    .hasSuitabilityScore] false — no score exists before assessment, and
+  ///    the old hardcoded 50 was a fabricated value.
+  static CommercialProperty fromDto(PropertyDto dto, {required String id}) =>
       CommercialProperty(
-        id: id ?? dto.id ?? 'p-${DateTime.now().millisecondsSinceEpoch}',
+        id: dto.id ?? id,
         title: dto.title,
         address: dto.address,
         city: dto.city,
@@ -19,7 +29,8 @@ abstract final class PropertyMapper {
         longitude: dto.longitude,
         propertyType: dto.propertyType,
         verification: VerificationStatus.draft,
-        suitabilityScore: 50,
+        suitabilityScore: 0,
+        hasSuitabilityScore: false,
         ownerId: dto.ownerId,
         hasTour: false,
       );

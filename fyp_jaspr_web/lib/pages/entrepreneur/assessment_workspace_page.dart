@@ -3,6 +3,7 @@ import 'package:jaspr/jaspr.dart';
 import 'package:jaspr_riverpod/jaspr_riverpod.dart';
 import 'package:shared_logic/shared_logic.dart';
 
+import '../../components/assessment_journey_stepper.dart';
 import '../../components/ui.dart';
 import '../../data/app_locator.dart';
 import '../../data/assessment_api.dart';
@@ -556,9 +557,25 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
       ],
       child: div(classes: 'stack stack--sections', [
         _crumbs(),
+
         if (_notice != null) _successNotice(_notice!),
+
         if (_writeError != null) _errorNotice(_writeError!),
+
+        // Five-stage horizontal tracker from uploaded UI
+        AssessmentJourneyStepper(
+          record: record,
+          busy: _busy,
+          onOpenStage: (stageKey) {
+            if (_openStage != stageKey) {
+              _toggleStage(stageKey);
+            }
+          },
+        ),
+
+        // Existing progress and assessment content
         _ProgressPanel(record: record),
+
         div(classes: 'asw-grid', [
           div(classes: 'stack stack--md', [
             for (final stage in record.stages) ...[
@@ -1409,7 +1426,7 @@ class _SelectedPropertyPanel extends StatelessComponent {
         ),
         ActionLink(
           'Map & surroundings',
-          href: '/entrepreneur/map?id=${property.id}',
+          href: '/entrepreneur/explore?id=${property.id}',
           variant: 'ghost',
         ),
       ]),

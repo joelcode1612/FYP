@@ -7,6 +7,7 @@ import 'package:http/http.dart' as http;
 import 'package:shared_logic/shared_logic.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../core/bootstrap/startup_trace.dart';
 import '../../core/config/mobile_endpoints.dart';
 
 /// Server-side identity lookup used to confirm what a local session claims.
@@ -17,8 +18,11 @@ import '../../core/config/mobile_endpoints.dart';
 abstract class IdentityProbe {
   /// Returns the decoded `/api/v1/auth/me` payload for [accessToken].
   ///
-  /// Throws [SessionExpiredFailure] on 401, [AccountInactiveFailure] on 403
-  /// and [AuthUnavailableFailure] on 5xx or an unreachable host.
+  /// Throws [SessionExpiredFailure] on 401, [AccountInactiveFailure] on 403,
+  /// [AuthUnavailableFailure] on 5xx / an unreadable profile, [NetworkFailure]
+  /// on a refused connection, [AuthTimeoutFailure] on a timeout and
+  /// [AuthTlsFailure] on a TLS handshake failure. Each class maps to its own
+  /// UI state, so a wrong port is never reported as a server outage.
   Future<Map<String, dynamic>> fetch(String accessToken);
 }
 
@@ -31,7 +35,13 @@ class HttpIdentityProbe implements IdentityProbe {
   final Uri _endpoint;
 
   @override
-  Future<Map<String, dynamic>> fetch(String accessToken) async {
+  Future<Map<String, dynamic>> fetch(String accessToken) =>
+      StartupTrace.measure('identity_verification', () => _fetch(accessToken));
+
+  /// The verification logic is deliberately kept out of the timing wrapper:
+  /// exception mapping and the fail-closed status-code switch must stay
+  /// byte-for-byte equivalent to the untimed implementation.
+  Future<Map<String, dynamic>> _fetch(String accessToken) async {
     http.Response response;
     try {
       response = await _client
@@ -44,11 +54,18 @@ class HttpIdentityProbe implements IdentityProbe {
           )
           .timeout(const Duration(seconds: 15));
     } on TimeoutException {
-      throw const AuthUnavailableFailure(
-        'The Sitewise server took too long to respond.',
-      );
+      throw const AuthTimeoutFailure();
     } on SocketException {
+      // Connection refused, DNS failure, no route to host, or Android
+      // blocking cleartext HTTP / lacking INTERNET. All are connectivity
+      // problems — never "the backend returned an error".
       throw const NetworkFailure();
+    } on HandshakeException {
+      throw const AuthTlsFailure();
+    } on TlsException {
+      // Also covers CertificateException (a TlsException subtype), so there
+      // is deliberately no separate `on CertificateException` clause.
+      throw const AuthTlsFailure();
     } on http.ClientException {
       throw const NetworkFailure();
     }
@@ -74,8 +91,10 @@ class HttpIdentityProbe implements IdentityProbe {
           'Sitewise could not verify your credentials right now.',
         );
       default:
-        throw AuthUnavailableFailure(
-          'The identity service responded with status ${response.statusCode}.',
+        // Do not echo an HTTP status into the UI. The server-side log has the
+        // detail; the client only needs to know the check did not complete.
+        throw const AuthUnavailableFailure(
+          'The identity service could not complete the check.',
         );
     }
   }
@@ -109,10 +128,12 @@ class SupabaseAuthRepository implements AuthRepository {
 
   // OAuth client IDs are public identifiers; the CLIENT SECRET must never
   // appear in the app or its dart-defines.
-  static const String _googleWebClientId =
-      String.fromEnvironment('GOOGLE_WEB_CLIENT_ID');
-  static const String _googleIosClientId =
-      String.fromEnvironment('GOOGLE_IOS_CLIENT_ID');
+  static const String _googleWebClientId = String.fromEnvironment(
+    'GOOGLE_WEB_CLIENT_ID',
+  );
+  static const String _googleIosClientId = String.fromEnvironment(
+    'GOOGLE_IOS_CLIENT_ID',
+  );
 
   // google_sign_in v7 initialization must complete before authenticate().
   Future<void>? _googleInitialization;
@@ -124,9 +145,12 @@ class SupabaseAuthRepository implements AuthRepository {
   static const Duration _authTimeout = Duration(seconds: 15);
 
   Future<T> _guard<T>(Future<T> future, String timeoutMessage) =>
-      future.timeout(_authTimeout, onTimeout: () async {
-        throw AuthUnavailableFailure(timeoutMessage);
-      });
+      future.timeout(
+        _authTimeout,
+        onTimeout: () async {
+          throw AuthTimeoutFailure(timeoutMessage);
+        },
+      );
 
   /// Fails closed when `Supabase.initialize()` never ran — an unconfigured
   /// build must report an unavailable service, not an empty session that a
@@ -135,10 +159,10 @@ class SupabaseAuthRepository implements AuthRepository {
     try {
       return _auth();
     } on Object {
-      throw const AuthUnavailableFailure(
-        'This build has no sign-in service configured. Set SUPABASE_URL and '
-        'SUPABASE_PUBLISHABLE_KEY before running the app.',
-      );
+      // A CONFIGURATION failure, not a network outage. `main.dart` skips
+      // Supabase.initialize() when the compile-time defines are absent, and
+      // starting run-sitewise.cmd cannot inject values into a compiled app.
+      throw const AuthConfigurationFailure();
     }
   }
 
@@ -192,14 +216,11 @@ class SupabaseAuthRepository implements AuthRepository {
         _client.signUp(
           email: normalized,
           password: password,
-          data: {
-            if (name != null && name.isNotEmpty) 'full_name': name,
-          },
-          emailRedirectTo: MobileEndpoints.emailConfirmationRedirect
-              .toString(),
+          data: {if (name != null && name.isNotEmpty) 'full_name': name},
+          emailRedirectTo: MobileEndpoints.emailConfirmationRedirect.toString(),
         ),
         'Creating the account took too long. Check your connection and try '
-            'again.',
+        'again.',
       );
     } on AuthException catch (error) {
       throw mapSupabaseError(error, email: normalized);
@@ -232,10 +253,12 @@ class SupabaseAuthRepository implements AuthRepository {
     }
 
     try {
-      _googleInitialization ??= GoogleSignIn.instance.initialize(
-        serverClientId: _googleWebClientId,
-        clientId: Platform.isIOS ? _googleIosClientId : null,
-      );
+      // ??= alone would cache a FAILED initialization forever: one transient
+      // failure would permanently disable the Google button for the whole
+      // process. _initializeGoogleSignIn() clears the slot on failure so the
+      // next tap retries cleanly. Cancellation arrives later, from
+      // authenticate(), and never touches this slot.
+      _googleInitialization ??= _initializeGoogleSignIn();
       await _guard(
         _googleInitialization!,
         'Google sign-in could not be initialized.',
@@ -305,8 +328,7 @@ class SupabaseAuthRepository implements AuthRepository {
         _client.resetPasswordForEmail(
           normalized,
           redirectTo:
-              redirectTo ??
-              MobileEndpoints.passwordRecoveryRedirect.toString(),
+              redirectTo ?? MobileEndpoints.passwordRecoveryRedirect.toString(),
         ),
         'The reset request took too long. Check your connection and try again.',
       );
@@ -331,6 +353,21 @@ class SupabaseAuthRepository implements AuthRepository {
   }
 
   // --- internals -----------------------------------------------------------
+
+  /// One-time google_sign_in SDK initialization whose FAILURE is retryable:
+  /// a failed first attempt clears the cached slot so the next button press
+  /// starts a fresh initialization instead of re-awaiting a dead future.
+  Future<void> _initializeGoogleSignIn() async {
+    try {
+      await GoogleSignIn.instance.initialize(
+        serverClientId: _googleWebClientId,
+        clientId: Platform.isIOS ? _googleIosClientId : null,
+      );
+    } on Object {
+      _googleInitialization = null;
+      rethrow;
+    }
+  }
 
   Future<SitewiseUser> _authorizeWithSession(
     AuthResponse response, {
@@ -362,7 +399,8 @@ class SupabaseAuthRepository implements AuthRepository {
       );
     }
 
-    final status = (profile['account_status'] as String?)?.trim().toLowerCase() ?? '';
+    final status =
+        (profile['account_status'] as String?)?.trim().toLowerCase() ?? '';
     if (status != 'active') {
       throw AccountInactiveFailure(
         status: status.isEmpty ? 'unknown' : status,

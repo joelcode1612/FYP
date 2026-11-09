@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../shell/mobile_app_shell.dart';
+
 /// SiteWise Add Property — Flutter mobile presentation preview.
 ///
 /// This is a self-contained, presentation-only screen. It recreates the
@@ -191,8 +193,9 @@ class _SitewiseAddPropertyMobilePreviewState
         ),
         fontFamily: 'Archivo',
       ),
-      child: Scaffold(
-        backgroundColor: _background,
+      child: MobileAppShell(
+        title: 'Add property',
+        currentRoute: '/entrepreneur/add-property',
         body: SafeArea(
           child: LayoutBuilder(
             builder: (context, constraints) {
@@ -204,8 +207,8 @@ class _SitewiseAddPropertyMobilePreviewState
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: <Widget>[
-                        _buildMobileNavbar(),
-                        const SizedBox(height: 22),
+                        // The shared MobileAppShell provides the real
+                        // SiteWise top bar and floating bottom dock.
                         _buildBreadcrumb(),
                         const SizedBox(height: 18),
                         _buildPageHeading(),
@@ -225,80 +228,6 @@ class _SitewiseAddPropertyMobilePreviewState
             },
           ),
         ),
-      ),
-    );
-  }
-
-  Widget _buildMobileNavbar() {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(17),
-        border: Border.all(color: _border),
-        boxShadow: const <BoxShadow>[
-          BoxShadow(
-            color: Color(0x0D101828),
-            blurRadius: 18,
-            offset: Offset(0, 5),
-          ),
-        ],
-      ),
-      child: Row(
-        children: <Widget>[
-          Container(
-            width: 36,
-            height: 36,
-            decoration: BoxDecoration(
-              color: _brand,
-              borderRadius: BorderRadius.circular(11),
-              boxShadow: const <BoxShadow>[
-                BoxShadow(color: Color(0x1C2F6FED), blurRadius: 0, spreadRadius: 3),
-              ],
-            ),
-            child: const Icon(
-              Icons.diamond_outlined,
-              color: Colors.white,
-              size: 22,
-            ),
-          ),
-          const SizedBox(width: 10),
-          const Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
-                Text(
-                  'SiteWise',
-                  style: TextStyle(
-                    color: _ink,
-                    fontWeight: FontWeight.w800,
-                    fontSize: 15,
-                    height: 1.05,
-                  ),
-                ),
-                SizedBox(height: 3),
-                Text(
-                  'ENTREPRENEUR WORKSPACE',
-                  style: TextStyle(
-                    color: _muted,
-                    fontSize: 7,
-                    letterSpacing: 0.8,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          Container(
-            width: 43,
-            height: 43,
-            decoration: BoxDecoration(
-              border: Border.all(color: _border),
-              borderRadius: BorderRadius.circular(13),
-            ),
-            child: const Icon(Icons.menu_rounded, color: _ink, size: 23),
-          ),
-        ],
       ),
     );
   }

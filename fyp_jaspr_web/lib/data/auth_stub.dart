@@ -137,6 +137,52 @@ abstract final class WebAuth {
     return _decodeBody(response);
   }
 
+  /// VM counterpart of the browser multipart upload: builds the multipart
+  /// body with `package:http` and the request's own token.
+  static Future<Map<String, dynamic>> requestMultipart(
+    String path, {
+    required Map<String, String> fields,
+    required String fileField,
+    required String filename,
+    required List<int> bytes,
+    required String contentType,
+  }) async {
+    if (!_server) throw StateError(error);
+    final uri = _base.replace(path: Uri.parse(path).path);
+    final request = http.MultipartRequest('POST', uri)
+      ..fields.addAll(fields)
+      ..files.add(
+        http.MultipartFile.fromBytes(
+          fileField,
+          bytes,
+          filename: filename,
+        ),
+      );
+    if (_token != null) {
+      request.headers['Authorization'] = 'Bearer $_token';
+    }
+    final streamed = await _client.send(request).timeout(
+      const Duration(seconds: 15),
+    );
+    final response = await http.Response.fromStream(streamed);
+    if (response.statusCode >= 400) {
+      throw StateError(_errorMessage(response) ?? 'The upload was rejected.');
+    }
+    return _decodeBody(response);
+  }
+
+  /// VM counterpart of the browser binary download.
+  static Future<List<int>> download(String path) async {
+    final response = await _send(path, method: 'GET');
+    if (response.statusCode >= 400) {
+      throw StateError(
+        _errorMessage(response) ??
+            '${response.statusCode} ${response.reasonPhrase ?? ''}'.trim(),
+      );
+    }
+    return response.bodyBytes;
+  }
+
   /// VM/SSR counterpart of the browser's `requestDetailed`: the failure is
   /// returned as data (`ok`, `status`, `code`, `message`) so a page can
   /// distinguish 404 from 401/403 from 5xx without catching and parsing a

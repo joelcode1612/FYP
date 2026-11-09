@@ -47,6 +47,10 @@ class AuthNotifier extends Notifier<AuthState> {
   Future<void> retry() => _restore();
 
   Future<void> _restore() async {
+    // One restore at a time: two rapid Retry taps (or the gate and the auth
+    // screen both triggering) must not race two /auth/me requests against
+    // each other. The in-flight call's result is the one that lands.
+    if (_starting) return;
     _starting = true;
     _started = true;
     state = AuthState.initializing;
@@ -68,19 +72,24 @@ class AuthNotifier extends Notifier<AuthState> {
       await _invalidate(
         AuthState(status: AuthStatus.sessionExpired, message: failure.userMessage),
       );
-    } on AuthUnavailableFailure catch (failure) {
-      _publish(AuthState(status: AuthStatus.error, message: failure.userMessage));
+    } on AuthConfigurationFailure catch (failure) {
+      _publish(_error(AuthErrorKind.configuration, failure.userMessage));
+    } on AuthTlsFailure catch (failure) {
+      _publish(_error(AuthErrorKind.tls, failure.userMessage));
+    } on AuthTimeoutFailure catch (failure) {
+      _publish(_error(AuthErrorKind.timeout, failure.userMessage));
     } on NetworkFailure catch (failure) {
-      _publish(AuthState(status: AuthStatus.error, message: failure.userMessage));
+      _publish(_error(AuthErrorKind.connectivity, failure.userMessage));
+    } on AuthUnavailableFailure catch (failure) {
+      _publish(_error(AuthErrorKind.server, failure.userMessage));
     } on AppFailure catch (failure) {
-      _publish(AuthState(status: AuthStatus.error, message: failure.userMessage));
+      _publish(_error(AuthErrorKind.unknown, failure.userMessage));
     } catch (_) {
+      // "No access was granted" is owned by the screens that render the
+      // unavailable state (each phrases it with its own retry guidance), so
+      // this fallback states only the cause and never duplicates it.
       _publish(
-        const AuthState(
-          status: AuthStatus.error,
-          message:
-              'Sitewise could not verify your session. No access was granted.',
-        ),
+        _error(AuthErrorKind.unknown, 'Sitewise could not verify your session.'),
       );
     } finally {
       _starting = false;
@@ -169,12 +178,30 @@ class AuthNotifier extends Notifier<AuthState> {
         );
       }
       return false;
-    } on AuthUnavailableFailure catch (failure) {
+    } on AuthConfigurationFailure catch (failure) {
       if (ref.mounted) {
         _publish(
-          AuthState(
-            status: AuthStatus.error,
-            message: failure.userMessage,
+          _error(
+            AuthErrorKind.configuration,
+            failure.userMessage,
+            email: pendingEmail,
+          ),
+        );
+      }
+      return false;
+    } on AuthTlsFailure catch (failure) {
+      if (ref.mounted) {
+        _publish(
+          _error(AuthErrorKind.tls, failure.userMessage, email: pendingEmail),
+        );
+      }
+      return false;
+    } on AuthTimeoutFailure catch (failure) {
+      if (ref.mounted) {
+        _publish(
+          _error(
+            AuthErrorKind.timeout,
+            failure.userMessage,
             email: pendingEmail,
           ),
         );
@@ -183,9 +210,20 @@ class AuthNotifier extends Notifier<AuthState> {
     } on NetworkFailure catch (failure) {
       if (ref.mounted) {
         _publish(
-          AuthState(
-            status: AuthStatus.error,
-            message: failure.userMessage,
+          _error(
+            AuthErrorKind.connectivity,
+            failure.userMessage,
+            email: pendingEmail,
+          ),
+        );
+      }
+      return false;
+    } on AuthUnavailableFailure catch (failure) {
+      if (ref.mounted) {
+        _publish(
+          _error(
+            AuthErrorKind.server,
+            failure.userMessage,
             email: pendingEmail,
           ),
         );
@@ -206,10 +244,9 @@ class AuthNotifier extends Notifier<AuthState> {
     } catch (_) {
       if (ref.mounted) {
         _publish(
-          AuthState(
-            status: AuthStatus.error,
-            message:
-                'Sitewise could not complete that request. Please try again.',
+          _error(
+            AuthErrorKind.unknown,
+            'Sitewise could not complete that request. Please try again.',
             email: pendingEmail,
           ),
         );
@@ -219,6 +256,16 @@ class AuthNotifier extends Notifier<AuthState> {
       _busy = false;
     }
   }
+
+  /// Builds a fail-closed error state that also says WHICH component failed.
+  /// The message is always a safe, user-facing sentence from [AppFailure].
+  AuthState _error(AuthErrorKind kind, String message, {String? email}) =>
+      AuthState(
+        status: AuthStatus.error,
+        message: message,
+        errorKind: kind,
+        email: email,
+      );
 
   void _publish(AuthState next) {
     if (ref.mounted) state = next;

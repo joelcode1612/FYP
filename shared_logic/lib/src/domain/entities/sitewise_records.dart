@@ -1,23 +1,3 @@
-import 'commercial_property.dart';
-
-/// A verification decision record. Surfaced in the owner verification-status
-/// timeline and the admin verification detail page.
-class PropertyVerification {
-  final String propertyId;
-  final VerificationStatus status;
-  final String? reason;
-  final DateTime updatedAt;
-  final String decidedBy;
-
-  const PropertyVerification({
-    required this.propertyId,
-    required this.status,
-    this.reason,
-    required this.updatedAt,
-    this.decidedBy = 'Sitewise review team',
-  });
-}
-
 /// Device-local shortlist entry.
 class SavedProperty {
   final String propertyId;
