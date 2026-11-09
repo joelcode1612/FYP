@@ -5,6 +5,7 @@ import '../../../../application/services/assessment_session.dart';
 import '../../../../application/services/service_locator.dart';
 import '../../../../core/theme/sitewise_m3.dart';
 import '../../../../core/theme/sitewise_theme.dart';
+import '../../../../core/routing/app_routes.dart';
 import '../../shell/mobile_app_shell.dart';
 import '../../widgets/m3_kit.dart';
 import '../../../shared/widgets/sitewise_bottom_sheet.dart';
@@ -42,6 +43,13 @@ class EntrepreneurAssessMobilePage extends StatelessWidget {
               const SizedBox(width: 10),
               _NewAssessmentButton(onStart: () => _startNew(context)),
             ],
+          ),
+          const SizedBox(height: 16),
+          OutlinedButton.icon(
+            onPressed: () =>
+                Navigator.of(context).pushNamed(AppRoutes.assessmentHome),
+            icon: const Icon(Icons.quiz_outlined),
+            label: const Text('Customer questionnaire preview'),
           ),
           const SizedBox(height: 16),
           Row(

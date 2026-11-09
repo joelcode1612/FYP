@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
 
 import 'auth_route_guard.dart';
+import '../../features/assessment/view/home_screen.dart';
+import '../../features/assessment/view/assessment_draft_loader.dart';
+import '../../features/assessment/view/questionnaire_screen.dart';
+import '../../features/assessment/view/review_screen.dart';
 import '../../presentation/mobile/auth/pages/forgot_password_mobile_page.dart';
 import '../../presentation/mobile/auth/pages/mobile_auth_page.dart';
 import '../../presentation/mobile/auth/widgets/auth_tabs.dart';
@@ -52,6 +56,9 @@ String parentShellRoute(String route) {
     '/entrepreneur/assessment-setup': '/entrepreneur/assess',
     '/entrepreneur/assessment-evidence': '/entrepreneur/assess',
     '/entrepreneur/assessment-summary': '/entrepreneur/assess',
+    AppRoutes.assessmentHome: '/entrepreneur/assess',
+    AppRoutes.assessmentQuestionnaire: '/entrepreneur/assess',
+    AppRoutes.assessmentReview: '/entrepreneur/assess',
     // The 360° capture and preview flow is role-neutral shared work; it is
     // entered from a property tour, so it highlights the Listing tab.
     '/capture': '/entrepreneur/explore',
@@ -67,6 +74,10 @@ String parentShellRoute(String route) {
 }
 
 abstract final class AppRoutes {
+  static const assessmentHome = '/entrepreneur/customer-assessments';
+  static const assessmentQuestionnaire = '$assessmentHome/questionnaire';
+  static const assessmentReview = '$assessmentHome/review';
+
   /// Every route is generated behind [AuthGuard] except the public ones, so a
   /// manual `pushNamed`, a restored deep link and an expired session all
   /// reach the same decision — `AppStartGate` alone could never cover them.
@@ -123,6 +134,18 @@ abstract final class AppRoutes {
       '/entrepreneur/spaces' => (
         RouteAccess.workspace,
         () => const EntrepreneurSpacesMobilePage(),
+      ),
+      assessmentHome => (RouteAccess.workspace, () => const HomeScreen()),
+      assessmentQuestionnaire || assessmentReview => (
+        RouteAccess.workspace,
+        () => AssessmentDraftLoader(
+          assessmentId: settings.arguments is String
+              ? settings.arguments as String
+              : '',
+          builder: (id) => settings.name == assessmentReview
+              ? ReviewScreen(assessmentId: id)
+              : QuestionnaireScreen(assessmentId: id),
+        ),
       ),
       '/entrepreneur/preferences' => (
         RouteAccess.workspace,
