@@ -46,6 +46,7 @@ from sitewise.ml.selected_pu_integration import (
     explain_selected_payload,
 )
 from sitewise.repositories.generated_recommendation_store import (
+    DatabaseRecommendationStore,
     GeneratedRecommendationStore,
     generated_recommendation_store,
 )
@@ -74,8 +75,10 @@ LIMITATIONS: tuple[str, ...] = (
         "verification fyp.rental_properties rows are excluded entirely."
     ),
     (
-        "Generated results are held in a process-local store (no DB migration) and "
-        "do not survive a process restart or cross a uvicorn worker boundary."
+        "Generated results persist in PostgreSQL (recommendation_result, one "
+        "row per ranked property with its payload and preference snapshot "
+        "context) and survive restarts and worker boundaries; the process-local "
+        "store remains available only for isolated tests."
     ),
 )
 
@@ -108,13 +111,16 @@ class RecommendationGenerationService:
         self,
         app_session: Session,
         analytics_session: Session,
-        store: GeneratedRecommendationStore | None = None,
+        store: GeneratedRecommendationStore | DatabaseRecommendationStore | None = None,
     ):
         self.app_session = app_session
         self.analytics_session = analytics_session
         self.preferences = PreferencesService(app_session)
         self.candidates = RecommendationCandidateRepository(analytics_session)
-        self.store = store or generated_recommendation_store
+        # Default to the DURABLE PostgreSQL store: generated batches must
+        # survive a backend restart and cross uvicorn worker boundaries
+        # (Phase 5). The process-local store remains injectable for tests.
+        self.store = store if store is not None else DatabaseRecommendationStore(app_session)
 
     # ------------------------------------------------------------- generation
     def generate(
@@ -264,9 +270,9 @@ class RecommendationGenerationService:
             "batch": batch,
             "note": (
                 None if batch else
-                "No generated batch in this process yet. Call POST "
-                "/api/v1/recommendations/generate. Results are process-local "
-                "and expire; regenerate after a restart."
+                "No generated batch stored yet for this account. Call POST "
+                "/api/v1/recommendations/generate. Results persist in "
+                "PostgreSQL and remain available after a restart."
             ),
         }
 

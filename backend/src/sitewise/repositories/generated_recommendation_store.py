@@ -1,36 +1,40 @@
-"""Process-local, ownership-scoped store for generated recommendation results.
+"""Persistence for generated recommendation results.
 
-Why no migration
-================
-The existing persistence model ``RecommendationResult`` is inspected before
-proposing any schema change. It has:
+Two interchangeable stores with one surface
+===========================================
 
-* ``property_id: int`` - a legacy FK to ``public.property``, retired by
-  migration 0005. The recommendation catalogue IDs are TEXT (``MD-00510``,
-  ``EP-01051``) and cannot be stored there without redefining the column.
-* ``score: Decimal(8,5)`` and ``ranking: int`` only - no room for the
-  component breakdown, cautions, verification status or SHAP provenance the
-  new response contract requires.
+``GeneratedRecommendationStore``
+    Thread-safe, process-local store (5,000 entries, 24 h TTL). Kept for
+    isolated unit tests and as the historical fallback; it does NOT survive a
+    restart and does not cross a uvicorn worker boundary.
 
-Creating a new table (or widening that one) is NOT necessary to make the
-pipeline work and would touch unrelated database functionality, which this
-integration was explicitly told not to do. Generated results are therefore
-kept in this store instead. No DB table, column, migration or ORM model is
-added or changed.
+``DatabaseRecommendationStore``
+    PostgreSQL-backed store on the ``recommendation_result`` table. This is
+    the production store: batches survive backend restarts and are visible to
+    every worker.
 
-Contract and limitations
-========================
+Why the legacy table is reused (Phase 5 decision)
+=================================================
+``recommendation_result`` existed with an INTEGER ``property_id`` that was a
+foreign key into ``public.property`` - a table retired by migration 0005. The
+recommendation pipeline's property ids are TEXT (``MD-00510``, ``EP-01051``)
+and must never be forced through an integer key. The table was EMPTY, so
+migration 0008 (``scripts/apply_recommendation_persistence_migration.py``)
+retypes the column to TEXT - the same precedent as migration
+``0002_saved_property_refs`` - and adds ``batch_id``, typed score columns,
+``payload`` (the full result contract as JSONB) and ``shap``. No parallel
+table was created; no data was lost.
+
+Contract (both stores)
+======================
 * Every read is scoped by ``user_id`` taken from the authenticated identity.
   A result owned by another user is indistinguishable from a missing one
   (``None`` -> 404), so the endpoint cannot be used to enumerate results.
-* Entries expire after ``ttl_hours`` and the total is capped. This is
-  deliberately EPHEMERAL: a process restart, or a different uvicorn worker,
-  will not see another worker's results. ``POST /generate`` is cheap and the
-  full ranked payload is returned immediately, so a client can always
-  regenerate. If durable, cross-worker history is required, that is a
-  separate product decision needing a real schema migration.
 * Nothing here fabricates scores. It only stores the results the scoring
   engine actually produced.
+* ``DatabaseRecommendationStore`` has no TTL and no bulk wipe: generated
+  history is durable. Rows are removed with their owner (``users`` ON DELETE
+  CASCADE).
 """
 from __future__ import annotations
 
@@ -39,7 +43,13 @@ import threading
 import uuid
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from decimal import Decimal
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:  # avoids an import cycle at module load in tests
+    from sqlmodel import Session
+
+    from sitewise.db.models.recommendation_result import RecommendationResult
 
 
 def _now() -> datetime:
@@ -201,3 +211,176 @@ class GeneratedRecommendationStore:
 
 #: Shared per-process instance. Injectable into the service for tests.
 generated_recommendation_store = GeneratedRecommendationStore()
+
+
+# ---------------------------------------------------------------------------
+# Durable PostgreSQL store (Phase 5)
+# ---------------------------------------------------------------------------
+
+
+class DatabaseRecommendationStore:
+    """PostgreSQL-backed store with the same surface as the in-memory one.
+
+    Replaces the process-local store on the request path: batches survive
+    backend restarts and are visible to every uvicorn worker. Ownership
+    semantics are identical - every read is scoped by ``user_id``, so a
+    foreign result is indistinguishable from a missing one.
+    """
+
+    def __init__(self, session: "Session"):
+        self.session = session
+
+    # ---------------------------------------------------------------- writes
+    def save_batch(
+        self, user_id: uuid.UUID, payloads: list[dict[str, Any]]
+    ) -> dict[str, Any]:
+        """Insert one ranked batch in a single transaction."""
+        from sitewise.db.models.recommendation_result import RecommendationResult
+
+        batch_id = uuid.uuid4()
+        created_at = _now()
+        results: list[dict[str, Any]] = []
+        rows: list["RecommendationResult"] = []
+
+        for payload in payloads:
+            result_id = uuid.uuid4()
+            stored = copy.deepcopy(payload)
+            stored["result_id"] = str(result_id)
+            stored["batch_id"] = str(batch_id)
+            stored["generated_at"] = created_at.isoformat()
+            results.append(stored)
+
+            personalisation = stored.get("personalisation") or {}
+            model = stored.get("model") or {}
+            final = stored.get("final_recommendation") or {}
+            preference = personalisation.get("preference_match_score")
+            rows.append(
+                RecommendationResult(
+                    result_id=result_id,
+                    user_id=user_id,
+                    property_id=str(stored.get("property_id") or ""),
+                    score=Decimal(str(final.get("score", "0"))),
+                    ranking=final.get("rank"),
+                    created_at=created_at,
+                    batch_id=batch_id,
+                    pu_association_score=Decimal(str(model.get("association_score", "0"))),
+                    preference_match_score=(
+                        None if preference is None else Decimal(str(preference))
+                    ),
+                    scoring_version=personalisation.get("config_version"),
+                    model_name=model.get("name"),
+                    payload=stored,
+                    shap=None,
+                )
+            )
+
+        self.session.add_all(rows)
+        self.session.commit()
+        return {
+            "batch_id": str(batch_id),
+            "generated_at": created_at.isoformat(),
+            "result_count": len(results),
+            "results": results,
+        }
+
+    def attach_shap(
+        self,
+        result_id: uuid.UUID,
+        user_id: uuid.UUID,
+        shap_payload: dict[str, Any],
+        status: dict[str, Any],
+    ) -> dict[str, Any] | None:
+        """Persist a resolved SHAP explanation on an owned result."""
+        from sqlalchemy import select
+
+        from sitewise.db.models.recommendation_result import RecommendationResult
+
+        row = self.session.execute(
+            select(RecommendationResult).where(
+                RecommendationResult.result_id == result_id,
+                RecommendationResult.user_id == user_id,
+            )
+        ).scalars().first()
+        if row is None:
+            return None
+        row.shap = {
+            "shap": copy.deepcopy(shap_payload),
+            "shap_status": copy.deepcopy(status),
+        }
+        payload = dict(row.payload or {})
+        explanation = dict(payload.get("explanation") or {})
+        explanation["shap"] = copy.deepcopy(shap_payload)
+        explanation["shap_status"] = copy.deepcopy(status)
+        row.payload = {**payload, "explanation": explanation}
+        self.session.add(row)
+        self.session.commit()
+        return copy.deepcopy(row.payload)
+
+    # ----------------------------------------------------------------- reads
+    def _owned_row(self, result_id: uuid.UUID, user_id: uuid.UUID):
+        from sqlalchemy import select
+
+        from sitewise.db.models.recommendation_result import RecommendationResult
+
+        return self.session.execute(
+            select(RecommendationResult).where(
+                RecommendationResult.result_id == result_id,
+                RecommendationResult.user_id == user_id,
+            )
+        ).scalars().first()
+
+    def get(self, result_id: uuid.UUID, user_id: uuid.UUID) -> dict[str, Any] | None:
+        row = self._owned_row(result_id, user_id)
+        return copy.deepcopy(row.payload) if row and row.payload else None
+
+    def shap_of(
+        self, result_id: uuid.UUID, user_id: uuid.UUID
+    ) -> dict[str, Any] | None:
+        row = self._owned_row(result_id, user_id)
+        if row is None or not row.shap:
+            return None
+        return copy.deepcopy(row.shap.get("shap"))
+
+    def latest(self, user_id: uuid.UUID) -> dict[str, Any] | None:
+        """The user's most recent batch, ranked first - durable across restarts."""
+        from sqlalchemy import select
+
+        from sitewise.db.models.recommendation_result import RecommendationResult
+
+        latest_batch = self.session.execute(
+            select(RecommendationResult.batch_id)
+            .where(RecommendationResult.user_id == user_id)
+            .order_by(
+                RecommendationResult.created_at.desc(), RecommendationResult.result_id
+            )
+            .limit(1)
+        ).scalars().first()
+        if latest_batch is None:
+            return None
+        rows = self.session.execute(
+            select(RecommendationResult)
+            .where(
+                RecommendationResult.user_id == user_id,
+                RecommendationResult.batch_id == latest_batch,
+            )
+            .order_by(
+                RecommendationResult.ranking.nulls_last(), RecommendationResult.result_id
+            )
+        ).scalars().all()
+        payloads = [copy.deepcopy(row.payload) for row in rows if row.payload]
+        if not payloads:
+            return None
+        return {
+            "batch_id": str(latest_batch),
+            "generated_at": payloads[0].get("generated_at"),
+            "result_count": len(payloads),
+            "results": payloads,
+        }
+
+    def clear(self) -> None:
+        """Durable store: never bulk-deletes history.
+
+        The in-memory store's ``clear`` is a test seam. Tests using the
+        database store clean up per user via the ``users`` ON DELETE CASCADE.
+        """
+        return None
