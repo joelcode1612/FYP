@@ -18,4 +18,4 @@ def test_openapi():
     client = TestClient(app)
     resp = client.get("/openapi.json")
     assert resp.status_code == 200
-    assert "/api/v1/properties/" in resp.json()["paths"]
+    assert "/api/v1/properties/listings/mine" in resp.json()["paths"]

@@ -23,7 +23,6 @@ from .property_verification import (
     VerificationDocument,
 )
 from .recommendation_result import RecommendationResult
-from .rental_property import RentalProperty
 from .user import User
 from .user_tokens import UserTokens
 from .virtual_tour import VirtualTour
@@ -48,7 +47,6 @@ __all__ = [
     "PropertyPhoto",
     "PropertyVerification",
     "RecommendationResult",
-    "RentalProperty",
     "User",
     "UserTokens",
     "VerificationAudit",

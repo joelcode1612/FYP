@@ -1,0 +1,50 @@
+{
+  "captured_at": "2026-11-10T13:47:01.656353+00:00",
+  "database": "localhost:5432/Final_Location_Analysis",
+  "public_property_row_count": 0,
+  "create_table_ddl": "\nCREATE TABLE public.property (\n    property_id integer NOT NULL,\n    address_id uuid,\n    district_id character varying(50),\n    user_id uuid,\n    company_name character varying(255),\n    normalized_address character varying(255),\n    property_type_normalized character varying(100),\n    tenure character varying(50),\n    floor_level character varying(50),\n    unit_position character varying(50),\n    built_up_area_sqft numeric,\n    land_area_sqft numeric,\n    frontage_ft numeric,\n    depth_ft numeric,\n    facing_direction character varying(50),\n    bathroom_count integer,\n    parking_spaces integer,\n    title character varying(255),\n    description text,\n    status character varying(50),\n    price numeric,\n    bedrooms integer,\n    year_built integer,\n    CONSTRAINT property_pkey PRIMARY KEY (property_id),\n    CONSTRAINT property_address_id_fkey FOREIGN KEY (address_id)\n        REFERENCES public.address (address_id),\n    CONSTRAINT property_district_id_fkey FOREIGN KEY (district_id)\n        REFERENCES public.district_demographic (district_id),\n    CONSTRAINT property_user_id_fkey FOREIGN KEY (user_id)\n        REFERENCES public.users (user_id)\n)\n",
+  "child_fk_constraints": {
+    "ai_explanation_property_id_fkey": {
+      "child": "ai_explanation",
+      "definition": "FOREIGN KEY (property_id) REFERENCES property(property_id)"
+    },
+    "nearby_competitor_property_id_fkey": {
+      "child": "nearby_competitor",
+      "definition": "FOREIGN KEY (property_id) REFERENCES property(property_id)"
+    },
+    "property_feature_property_id_fkey": {
+      "child": "property_feature",
+      "definition": "FOREIGN KEY (property_id) REFERENCES property(property_id)"
+    },
+    "property_foot_traffic_property_id_fkey": {
+      "child": "property_foot_traffic",
+      "definition": "FOREIGN KEY (property_id) REFERENCES property(property_id)"
+    },
+    "property_geospatial_feature_property_id_fkey": {
+      "child": "property_geospatial_feature",
+      "definition": "FOREIGN KEY (property_id) REFERENCES property(property_id)"
+    },
+    "property_photo_property_id_fkey": {
+      "child": "property_photo",
+      "definition": "FOREIGN KEY (property_id) REFERENCES property(property_id)"
+    },
+    "recommendation_result_property_id_fkey": {
+      "child": "recommendation_result",
+      "definition": "FOREIGN KEY (property_id) REFERENCES property(property_id)"
+    },
+    "virtual_tour_property_id_fkey": {
+      "child": "virtual_tour",
+      "definition": "FOREIGN KEY (property_id) REFERENCES property(property_id)"
+    }
+  },
+  "row_counts": {
+    "ai_explanation": 0,
+    "nearby_competitor": 0,
+    "property_feature": 0,
+    "property_foot_traffic": 0,
+    "property_geospatial_feature": 0,
+    "property_photo": 0,
+    "recommendation_result": 0,
+    "virtual_tour": 0
+  }
+}

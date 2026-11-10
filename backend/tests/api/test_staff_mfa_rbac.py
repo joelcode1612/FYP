@@ -204,7 +204,10 @@ def test_password_only_admin_cannot_use_property_owner_admin_exception(
     _, token = _mirror(cleanup_users, role="admin", aal="aal1")
 
     response = client.get(
-        "/api/v1/properties/mine",
+        # The legacy /properties/mine (public.property) was retired with
+        # migration 0005; the owner surface is now the canonical listings
+        # endpoint, guarded by the same property-owner dependency.
+        "/api/v1/properties/listings/mine",
         headers=auth(token),
     )
 

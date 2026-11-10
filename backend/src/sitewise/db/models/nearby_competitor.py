@@ -10,7 +10,7 @@ class NearbyCompetitor(SQLModel, table=True):
     __tablename__ = "nearby_competitor"
 
     competitor_id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
-    property_id: int = Field(foreign_key="property.property_id")
+    property_id: int = Field()  # legacy FK to public.property retired by migration 0005
     name: str = Field(max_length=255)
     address: Optional[str] = None
     distance: Optional[Decimal] = None

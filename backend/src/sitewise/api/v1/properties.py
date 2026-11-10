@@ -1,14 +1,12 @@
-from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from pydantic import BaseModel, Field
 from sqlalchemy import text
 from sqlmodel import Session
 
 from sitewise.core.exceptions import ForbiddenError
-from sitewise.db.models.rental_property import RentalProperty
 from sitewise.db.session import get_db
-from sitewise.dependencies import ActiveUser, AuthenticatedUser, require_property_owner
+from sitewise.dependencies import AuthenticatedUser, require_property_owner
 from sitewise.domain import rbac
 from sitewise.repositories.fyp_property_repository import FypPropertyRepository
 from sitewise.services.address_validation_service import (
@@ -16,105 +14,19 @@ from sitewise.services.address_validation_service import (
     AddressValidationUnavailable,
     validate_address,
 )
-from sitewise.services.property_service import PropertyService
 
 router = APIRouter()
 
 
-def _assert_can_mutate(prop: RentalProperty, current: AuthenticatedUser) -> None:
-    """Ownership rule: a listing may be mutated by its owner or an administrator.
-
-    Agents manage listings only through separately authorized flows, never by
-    writing arbitrary property rows (see domain/rbac.py).
-    """
-    if prop.user_id is None:
-        # Legacy row without an owning identity: only administrators may touch it.
-        if not rbac.can_administer_users(current.role):
-            raise ForbiddenError("This listing has no owner assigned; it is admin-managed.")
-        return
-    if prop.user_id != current.user_id and not rbac.can_administer_users(current.role):
-        raise ForbiddenError("You can only manage your own property listings.")
-
-
-@router.get("/")
-def list_properties(offset: int = 0, limit: int = 100, session: Session = Depends(get_db)):
-    """Public catalogue read (browse is unauthenticated by design)."""
-    return PropertyService(session).list_properties(offset, limit)
-
-
-@router.get("/mine")
-def list_own_properties(
-    session: Session = Depends(get_db),
-    current: AuthenticatedUser = Depends(require_property_owner),
-):
-    """The authenticated owner's own listings."""
-    from sqlmodel import select
-
-    rows = session.exec(
-        select(RentalProperty).where(RentalProperty.user_id == current.user_id)
-    ).all()
-    return rows
-
-
-@router.get("/{property_id}")
-def get_property(property_id: int, session: Session = Depends(get_db)):
-    prop = PropertyService(session).get_property(property_id)
-    if not prop:
-        raise HTTPException(status_code=404, detail="Property not found")
-    return prop
-
-
-@router.post("/", status_code=201)
-def create_property(
-    prop: RentalProperty,
-    session: Session = Depends(get_db),
-    current: AuthenticatedUser = Depends(require_property_owner),
-):
-    """Create a listing. Ownership is stamped from the verified identity."""
-    prop.user_id = current.user_id
-    return PropertyService(session).create_property(prop)
-
-
-@router.patch("/{property_id}")
-def update_property(
-    property_id: int,
-    data: dict,
-    session: Session = Depends(get_db),
-    current: AuthenticatedUser = Depends(require_property_owner),
-):
-    prop = PropertyService(session).get_property(property_id)
-    if not prop:
-        raise HTTPException(status_code=404, detail="Property not found")
-    _assert_can_mutate(prop, current)
-    # Ownership is identity-controlled; a client cannot transfer a listing.
-    data.pop("user_id", None)
-    result = PropertyService(session).update_property(property_id, data)
-    if not result:
-        raise HTTPException(status_code=404, detail="Property not found")
-    return result
-
-
-@router.delete("/{property_id}", status_code=204)
-def delete_property(
-    property_id: int,
-    session: Session = Depends(get_db),
-    current: AuthenticatedUser = Depends(require_property_owner),
-):
-    prop = PropertyService(session).get_property(property_id)
-    if not prop:
-        raise HTTPException(status_code=404, detail="Property not found")
-    _assert_can_mutate(prop, current)
-    PropertyService(session).delete_property(property_id)
-    return None
-
-
 # ---------------------------------------------------------------------------
-# Owner-submitted listings (fyp.rental_properties)
+# Owner-submitted listings (fyp.rental_properties) — the ONLY operational
+# property-write workflow.
 #
-# The legacy ``POST /`` above writes ``public.property`` (no coordinates, not
-# read by Explore). Owner submissions therefore use these endpoints, which
-# write the table the rest of the product reads and always start as
-# ``pending`` + unpublished.
+# The legacy CRUD endpoints that wrote ``public.property`` were retired with
+# migration 0005: the legacy table was empty, unused by any live client, and
+# its removal leaves ``fyp.rental_properties`` as the single canonical
+# operational property source (read by Explore, drafts, verification, admin
+# review and photos). No duplicate write path remains.
 # ---------------------------------------------------------------------------
 
 
@@ -190,8 +102,231 @@ def list_own_listings(
     session: Session = Depends(get_db),
     current: AuthenticatedUser = Depends(require_property_owner),
 ):
-    """The authenticated owner's submissions (newest first)."""
+    """The authenticated owner's submissions, drafts included (newest first)."""
     return {"data": FypPropertyRepository(session).owner_listings(current.user_id)}
+
+
+# ---------------------------------------------------------------------------
+# Owner draft lifecycle (Add Property wizard)
+#
+# Drafts persist in fyp.rental_properties with verification_status='draft'
+# and is_published=false: invisible to Explore, absent from the admin queue,
+# resumable across sessions. Submission goes through the EXISTING property
+# verification workflow (property_verification.py), which after migration
+# 0004 is bound to this same table.
+# ---------------------------------------------------------------------------
+
+
+class OwnerDraftRequest(BaseModel):
+    """Partial Add-Property payload. Drafts may omit everything except a
+    name (draft creation); updates may omit any field. Final submission
+    re-validates completeness server-side."""
+
+    name: str | None = Field(default=None, min_length=1, max_length=160)
+    property_type: str | None = Field(default=None, max_length=60)
+    description: str | None = Field(default=None, max_length=4000)
+    address: str | None = Field(default=None, max_length=300)
+    city: str | None = Field(default=None, max_length=80)
+    state: str | None = Field(default=None, max_length=80)
+    latitude: float | None = Field(default=None, ge=-90, le=90)
+    longitude: float | None = Field(default=None, ge=-180, le=180)
+    rental_price: float | None = Field(default=None, gt=0, le=10_000_000)
+    size_sqft: float | None = Field(default=None, gt=0, le=10_000_000)
+    availability: str | None = Field(default=None, max_length=60)
+    floor_level: str | None = Field(default=None, max_length=60)
+    frontage_ft: float | None = Field(default=None, ge=0, le=10_000)
+    has_parking: bool = False
+    is_fnb_suitable: bool = False
+
+
+def _owned_listing_or_error(
+    repo: FypPropertyRepository, property_id: int, current: AuthenticatedUser
+) -> dict:
+    listing = repo.owner_listing(property_id)
+    if listing is None:
+        raise HTTPException(status_code=404, detail="Property not found.")
+    owner = listing.get("owner_user_id")
+    is_admin = rbac.can_administer_users(current.role)
+    if not is_admin and (owner is None or str(owner) != str(current.user_id)):
+        raise ForbiddenError("You can only manage your own property listings.")
+    return listing
+
+
+@router.post("/listings/drafts", status_code=201)
+def create_owner_draft(
+    payload: OwnerDraftRequest,
+    session: Session = Depends(get_db),
+    current: AuthenticatedUser = Depends(require_property_owner),
+):
+    """Persist a NEW draft. The owner identity comes from the verified token;
+    the database assigns the persistent id; the draft stays unpublished and
+    outside the admin queue."""
+    if not (payload.name or "").strip():
+        raise HTTPException(
+            status_code=422, detail="A draft property needs at least a name."
+        )
+    repo = FypPropertyRepository(session)
+    row = repo.create_owner_draft(
+        owner_user_id=current.user_id, payload=payload.model_dump()
+    )
+    return {
+        "data": row,
+        "meta": {
+            "verification_status": row["verification_status"],
+            "is_published": row["is_published"],
+            "note": "Draft saved. Submit for verification when complete.",
+        },
+    }
+
+
+@router.get("/listings/{property_id}")
+def get_own_listing(
+    property_id: int,
+    session: Session = Depends(get_db),
+    current: AuthenticatedUser = Depends(require_property_owner),
+):
+    """One owned listing (any status) with its photos — the resume-a-draft
+    read. Another owner's draft is 403, never leaked."""
+    repo = FypPropertyRepository(session)
+    listing = _owned_listing_or_error(repo, property_id, current)
+    return {"data": {**listing, "photos": repo.listing_photos(property_id)}}
+
+
+@router.patch("/listings/{property_id}")
+def update_own_listing(
+    property_id: int,
+    payload: OwnerDraftRequest,
+    session: Session = Depends(get_db),
+    current: AuthenticatedUser = Depends(require_property_owner),
+):
+    """Update an owned draft. Editing is blocked once a submission is
+    awaiting review (pending/under_review/verified) so submitted evidence
+    cannot be invalidated; draft, rejected and corrections-requested states
+    remain editable, and a repeat save updates the SAME row."""
+    from sitewise.db.models.property_verification import can_resubmit
+    from sitewise.services.property_verification_service import verification_row
+
+    repo = FypPropertyRepository(session)
+    _owned_listing_or_error(repo, property_id, current)
+    verification = verification_row(session, property_id)
+    editable = verification is None or can_resubmit(
+        verification.listing_status, verification.ownership_status
+    )
+    if not editable:
+        raise HTTPException(
+            status_code=409,
+            detail="This property is awaiting or has passed review; "
+            "its details can no longer be edited.",
+        )
+    fields = payload.model_dump(exclude_unset=True)
+    if fields.get("name") is None:
+        # A null name must not null out the NOT NULL column: keep the
+        # existing draft name.
+        fields.pop("name", None)
+    row = repo.update_owner_listing(property_id, fields)
+    if row is None:
+        raise HTTPException(status_code=404, detail="Property not found.")
+    return {"data": row}
+
+
+# ---------------------------------------------------------------------------
+# Property photos (display media — public bucket, permanent URLs)
+# ---------------------------------------------------------------------------
+
+
+@router.post("/listings/{property_id}/photos", status_code=201)
+async def upload_listing_photo(
+    property_id: int,
+    file: UploadFile = File(...),  # noqa: B008 - FastAPI dependency idiom
+    caption: str = Form(default=""),  # noqa: B008
+    is_primary: bool = Form(default=False),  # noqa: B008
+    session: Session = Depends(get_db),
+    current: AuthenticatedUser = Depends(require_property_owner),
+):
+    """Upload one property photo (JPG/PNG/WebP, <= 8 MB) to public storage
+    and persist its permanent URL on the listing. The bytes are uploaded
+    BEFORE the row insert, so a failed upload never leaves a dangling row
+    and the draft stays intact."""
+    from sitewise.db.models.property_verification import can_resubmit
+    from sitewise.services import photo_storage
+    from sitewise.services.photo_storage import (
+        PhotoRejected,
+        PhotoStorageUnavailable,
+    )
+    from sitewise.services.property_verification_service import verification_row
+
+    repo = FypPropertyRepository(session)
+    _owned_listing_or_error(repo, property_id, current)
+    verification = verification_row(session, property_id)
+    editable = verification is None or can_resubmit(
+        verification.listing_status, verification.ownership_status
+    )
+    if not editable:
+        raise HTTPException(
+            status_code=409,
+            detail="This property is awaiting or has passed review; "
+            "photos can no longer be changed.",
+        )
+    data = await file.read()
+    try:
+        ext = photo_storage.validate_photo(
+            file.filename or "", file.content_type or "", len(data)
+        )
+        url = photo_storage.save_photo(data, ext, file.content_type or "")
+    except PhotoRejected as exc:
+        raise HTTPException(
+            status_code=413 if exc.oversized else 422, detail=str(exc)
+        ) from exc
+    except PhotoStorageUnavailable as exc:
+        # 503 with the exact reason; the draft is untouched.
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    photo = repo.add_listing_photo(
+        property_id, url, (caption or "").strip()[:200], is_primary
+    )
+    return {"data": photo}
+
+
+@router.get("/listings/{property_id}/photos")
+def list_listing_photos(
+    property_id: int,
+    session: Session = Depends(get_db),
+    current: AuthenticatedUser = Depends(require_property_owner),
+):
+    repo = FypPropertyRepository(session)
+    _owned_listing_or_error(repo, property_id, current)
+    return {"data": repo.listing_photos(property_id)}
+
+
+@router.delete("/listings/{property_id}/photos/{photo_id}", status_code=200)
+def delete_listing_photo(
+    property_id: int,
+    photo_id: int,
+    session: Session = Depends(get_db),
+    current: AuthenticatedUser = Depends(require_property_owner),
+):
+    from sitewise.services import photo_storage
+
+    repo = FypPropertyRepository(session)
+    _owned_listing_or_error(repo, property_id, current)
+    deleted = repo.delete_listing_photo(property_id, photo_id)
+    if deleted is None:
+        raise HTTPException(status_code=404, detail="Photo not found.")
+    photo_storage.delete_photo(deleted["url"])
+    return {"data": {"deleted": photo_id}}
+
+
+@router.post("/listings/{property_id}/photos/{photo_id}/primary")
+def set_primary_listing_photo(
+    property_id: int,
+    photo_id: int,
+    session: Session = Depends(get_db),
+    current: AuthenticatedUser = Depends(require_property_owner),
+):
+    repo = FypPropertyRepository(session)
+    _owned_listing_or_error(repo, property_id, current)
+    if not repo.set_primary_listing_photo(property_id, photo_id):
+        raise HTTPException(status_code=404, detail="Photo not found.")
+    return {"data": repo.listing_photos(property_id)}
 
 
 @router.post("/listings/{property_id}/enrich")
