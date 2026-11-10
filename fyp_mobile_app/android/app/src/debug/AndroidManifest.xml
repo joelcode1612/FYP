@@ -4,4 +4,13 @@
          to allow setting breakpoints, to provide hot reload, etc.
     -->
     <uses-permission android:name="android.permission.INTERNET"/>
+
+    <!-- DEBUG-ONLY cleartext allowance. Local development reaches the
+         SiteWise API over plain HTTP at http://<PC-LAN-IP>:8090. Android 9+
+         blocks cleartext HTTP by default, which turns every call — including
+         the /api/v1/auth/me startup verification — into a SocketException and
+         makes sign-in impossible even with a reachable server. This attribute
+         is merged into the application node only for debug builds; release
+         builds inherit the secure platform default (HTTPS only). -->
+    <application android:usesCleartextTraffic="true"/>
 </manifest>

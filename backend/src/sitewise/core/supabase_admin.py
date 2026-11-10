@@ -81,6 +81,37 @@ def reset_admin_client() -> None:
     _client = None
 
 
+def _normalize_auth_user(raw: Any) -> dict[str, Any]:
+    """Flatten a GoTrue user payload to a dict with a validated UUID ``id``.
+
+    supabase-py returns a ``User`` model (directly from
+    ``invite_user_by_email``, or nested under ``user`` depending on the SDK
+    version), while the documented admin REST endpoint returns a JSON object.
+    The staff API must never index a missing ``id`` off a shape it did not
+    expect, so every shape is flattened and validated here; a malformed
+    payload fails closed with :class:`SupabaseAdminError` (502) instead of a
+    KeyError deep in the router.
+    """
+    if raw is None:
+        raise SupabaseAdminError("Supabase Auth returned no user payload.")
+    if hasattr(raw, "model_dump") and callable(raw.model_dump):
+        raw = raw.model_dump()
+    if isinstance(raw, dict) and isinstance(raw.get("user"), dict):
+        raw = raw["user"]
+    if not isinstance(raw, dict):
+        raise SupabaseAdminError(
+            "Supabase Auth returned an unreadable user payload."
+        )
+    user_id = raw.get("id")
+    try:
+        uuid.UUID(str(user_id))
+    except (TypeError, ValueError) as exc:
+        raise SupabaseAdminError(
+            "Supabase Auth returned a user payload without a valid identity id."
+        ) from exc
+    return {**raw, "id": str(user_id)}
+
+
 def get_admin_service() -> SupabaseAdminService:
     """Seam for building the admin service.
 
@@ -143,7 +174,20 @@ class SupabaseAdminService:
                     "explicit existing-account workflow to grant staff access."
                 ) from exc
             raise SupabaseAdminError(f"Supabase invite failed: {message}") from exc
-        return getattr(invited, "model_dump", lambda: invited)()
+        return _normalize_auth_user(invited)
+
+    def get_auth_user(self, auth_user_id: str) -> dict[str, Any] | None:
+        """Fetch one Supabase Auth user via the documented admin REST endpoint.
+
+        Returns ``None`` when the identity does not exist. The payload is
+        normalized, so ``email_confirmed_at`` / ``confirmed_at`` - the
+        authoritative evidence that an invited user actually accepted the
+        invitation - is readable without knowing the SDK response shape.
+        """
+        data = self._gotrue_admin_json(
+            "GET", f"admin/users/{auth_user_id}", not_found_ok=True
+        )
+        return _normalize_auth_user(data) if data else None
 
     def admin_list_factors(self, auth_user_id: str) -> list[dict[str, Any]]:
         """List MFA factors for a user (documented GoTrue admin endpoint)."""
@@ -159,7 +203,13 @@ class SupabaseAdminService:
         """
         self._gotrue_admin_json("DELETE", f"admin/users/{auth_user_id}/factors/{factor_id}")
 
-    def _gotrue_admin_json(self, method: str, path: str) -> dict[str, Any]:
+    def _gotrue_admin_json(
+        self,
+        method: str,
+        path: str,
+        *,
+        not_found_ok: bool = False,
+    ) -> dict[str, Any]:
         url = f"{settings.supabase_url.rstrip('/')}/auth/v1/{path}"
         headers = {
             "apikey": settings.supabase_secret_key,
@@ -177,6 +227,8 @@ class SupabaseAdminService:
                 "The authentication service is temporarily unavailable."
             ) from exc
         if response.status_code >= 400:
+            if not_found_ok and response.status_code == 404:
+                return {}
             raise SupabaseAdminError(
                 f"GoTrue admin call failed ({response.status_code})."
             )
@@ -279,6 +331,20 @@ class SupabaseAdminService:
         result = query.order("created_at", desc=True).limit(200).execute()
         return list(result.data or [])
 
+    def get_invitation(self, invitation_id: str) -> dict[str, Any] | None:
+        """Read one invitation row before a state-changing admin action."""
+        try:
+            result = (
+                self.client.table("staff_invitations")
+                .select("*")
+                .eq("invitation_id", str(invitation_id))
+                .limit(1)
+                .execute()
+            )
+        except Exception as exc:
+            raise SupabaseAdminError(f"Invitation lookup failed: {exc}") from exc
+        return (result.data or [None])[0]
+
     # ------------------------------------------------------------------
     # Role-change audit
     # ------------------------------------------------------------------
@@ -333,6 +399,95 @@ class SupabaseAdminService:
     # ------------------------------------------------------------------
     # Agent profiles + listing assignment + verification (existing tables)
     # ------------------------------------------------------------------
+
+    def list_companies(self) -> list[dict[str, Any]]:
+        """Return the existing ``public.company`` rows.
+
+        Only the two columns the rest of this codebase already relies on
+        (``company_id`` / ``company_name`` from :meth:`resolve_company`) are
+        projected into the API. ``select("*")`` is used on the wire so the
+        query stays valid if the live table carries additional columns; no
+        column is invented here.
+        """
+        try:
+            result = (
+                self.client.table("company")
+                .select("*")
+                .order("company_name")
+                .execute()
+            )
+        except Exception as exc:
+            raise SupabaseAdminError(f"Company directory query failed: {exc}") from exc
+        companies: list[dict[str, Any]] = []
+        for row in result.data or []:
+            raw_id = row.get("company_id")
+            if raw_id is None:
+                continue
+            companies.append(
+                {
+                    "company_id": int(raw_id),
+                    "company_name": str(row.get("company_name") or "").strip(),
+                }
+            )
+        return companies
+
+    def get_company(self, company_id: int) -> dict[str, Any] | None:
+        """Look up one ``public.company`` row by its primary key."""
+        try:
+            result = (
+                self.client.table("company")
+                .select("*")
+                .eq("company_id", int(company_id))
+                .limit(1)
+                .execute()
+            )
+        except Exception as exc:
+            raise SupabaseAdminError(f"Company lookup failed: {exc}") from exc
+        for row in result.data or []:
+            return {
+                "company_id": int(row["company_id"]),
+                "company_name": str(row.get("company_name") or "").strip(),
+            }
+        return None
+
+    def create_company(self, company_name: str) -> dict[str, Any]:
+        """Register a company in the existing ``public.company`` table.
+
+        Exact-name duplicates are refused rather than silently creating two
+        near-identical rows: the caller can then pick the existing
+        ``company_id`` from the directory. No new columns or tables.
+        """
+        name = company_name.strip()
+        if not name:
+            raise SupabaseAdminError("A company name is required.")
+        try:
+            found = (
+                self.client.table("company")
+                .select("company_id,company_name")
+                .eq("company_name", name)
+                .limit(1)
+                .execute()
+            )
+            if found.data:
+                raise ConflictError(
+                    "A company with this name already exists. Select it from "
+                    "the existing company directory instead."
+                )
+            created = (
+                self.client.table("company")
+                .insert({"company_name": name})
+                .execute()
+            )
+        except ConflictError:
+            raise
+        except Exception as exc:
+            raise SupabaseAdminError(f"Company registration failed: {exc}") from exc
+        for row in created.data or []:
+            return {
+                "company_id": int(row["company_id"]),
+                "company_name": str(row.get("company_name") or name).strip(),
+            }
+        raise SupabaseAdminError("Company registration returned no row.")
 
     def resolve_company(self, company_name: str | None) -> int | None:
         """Return the ``company`` id for a name, creating the row if new."""

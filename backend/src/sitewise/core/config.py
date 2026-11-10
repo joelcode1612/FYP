@@ -25,6 +25,13 @@ class Settings(BaseSettings):
         "http://127.0.0.1:3000"
     )
 
+    # Private document storage for property verification evidence. Files live
+    # OUTSIDE any web-served directory and are streamed only through the
+    # authenticated download endpoint. Empty => `<repo>/backend/var/
+    # verification-documents` is used.
+    verification_storage_dir: str = ""
+    verification_max_upload_mb: int = 10
+
     # --- M2 upstream research feature (CORRECTIVE R16 / P0-01) -------------
     # Feature flag referenced by api/v1/router.py:38. Intended as a DEFAULT-OFF
     # gate: the opt-in /m2 router is only registered when this is explicitly

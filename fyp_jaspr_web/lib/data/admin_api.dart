@@ -15,9 +15,13 @@
 /// | Method | Path                                    | Used by |
 /// |--------|-----------------------------------------|---------|
 /// | GET    | `/api/v1/staff/agents`                  | Agent management directory |
-/// | POST   | `/api/v1/staff/agents`                  | Invite dialog |
+/// | POST   | `/api/v1/staff/agents`                  | Invite wizard (final step) |
 /// | PATCH  | `/api/v1/staff/agents/{id}/status`      | Suspend / reactivate |
+/// | GET    | `/api/v1/staff/summary`                 | Backend-computed KPI values |
+/// | GET    | `/api/v1/staff/companies`               | Company directory |
+/// | POST   | `/api/v1/staff/companies`               | Register a company |
 /// | GET    | `/api/v1/staff/invitations`             | Invitation table |
+/// | POST   | `/api/v1/staff/invitations/{id}/revoke` | Close an open invitation |
 /// | GET    | `/api/v1/staff/audit`                   | System activity timeline |
 /// | GET    | `/api/v1/properties/`                   | Ownership review queue |
 ///
@@ -47,6 +51,18 @@ class StaffAgent {
   /// `""` when the agent has no linked `company` row.
   final String companyId;
 
+  /// Joined server-side from `public.company`; `""` when unassigned.
+  final String companyName;
+
+  /// Local enforcement-mirror timestamp, ISO-8601 (may be `""`).
+  final String createdAt;
+
+  /// Latest `staff_invitations.invitation_status` for this address.
+  /// `""` when no invitation record exists.
+  final String invitationStatus;
+
+  final String invitationId;
+
   const StaffAgent({
     required this.userId,
     required this.fullName,
@@ -56,10 +72,18 @@ class StaffAgent {
     required this.status,
     required this.agentId,
     required this.companyId,
+    required this.companyName,
+    required this.createdAt,
+    required this.invitationStatus,
+    required this.invitationId,
   });
 
   factory StaffAgent.fromJson(Map<String, dynamic> row) {
     final profile = row['agent_profile'];
+    final company = row['company'];
+    final companyId = row['company_id'] ??
+        (profile is Map<String, dynamic> ? profile['company_id'] : null) ??
+        (company is Map<String, dynamic> ? company['company_id'] : null);
     return StaffAgent(
       userId: '${row['user_id'] ?? ''}',
       fullName: '${row['full_name'] ?? ''}'.trim(),
@@ -70,9 +94,13 @@ class StaffAgent {
       agentId: profile is Map<String, dynamic>
           ? '${profile['agent_id'] ?? ''}'
           : '',
-      companyId: profile is Map<String, dynamic>
-          ? '${profile['company_id'] ?? ''}'
-          : '',
+      companyId: companyId == null ? '' : '$companyId',
+      companyName: company is Map<String, dynamic>
+          ? '${company['company_name'] ?? ''}'.trim()
+          : '${row['company_name'] ?? ''}'.trim(),
+      createdAt: '${row['created_at'] ?? ''}',
+      invitationStatus: '${row['invitation_status'] ?? ''}',
+      invitationId: '${row['invitation_id'] ?? ''}',
     );
   }
 
@@ -88,23 +116,99 @@ class StaffAgent {
 /// table `select("*")` verbatim), so an added or renamed column can never
 /// break the table render.
 class StaffInvitation {
+  final String invitationId;
   final String email;
   final String status;
   final String createdAt;
+  final String sentAt;
+  final String expiresAt;
   final String invitedById;
+  final String invitedUserId;
 
   const StaffInvitation({
+    required this.invitationId,
     required this.email,
     required this.status,
     required this.createdAt,
+    required this.sentAt,
+    required this.expiresAt,
     required this.invitedById,
+    required this.invitedUserId,
   });
 
   factory StaffInvitation.fromJson(Map<String, dynamic> row) => StaffInvitation(
+    invitationId: '${row['invitation_id'] ?? ''}',
     email: '${row['invited_email'] ?? row['email'] ?? ''}',
-    status: '${row['status'] ?? ''}',
+    // The live column is `invitation_status`; `status` is kept only as a
+    // defensive fallback for an older deployment shape.
+    status: '${row['invitation_status'] ?? row['status'] ?? ''}',
     createdAt: '${row['created_at'] ?? ''}',
+    sentAt: '${row['sent_at'] ?? ''}',
+    expiresAt: '${row['expires_at'] ?? ''}',
     invitedById: '${row['invited_by_user_id'] ?? ''}',
+    invitedUserId: '${row['invited_user_id'] ?? ''}',
+  );
+
+  /// Matches the backend's `staff_invitations_one_open_per_email` index.
+  bool get isOpen =>
+      status.toLowerCase() == 'pending' || status.toLowerCase() == 'sent';
+}
+
+/// One row of `GET /api/v1/staff/companies` (`public.company`).
+///
+/// The live table exposes `company_id` and `company_name` only — no
+/// `company_type` column exists, so none is invented here.
+class CompanyRecord {
+  final int id;
+  final String name;
+
+  const CompanyRecord({required this.id, required this.name});
+
+  factory CompanyRecord.fromJson(Map<String, dynamic> row) => CompanyRecord(
+    id: (row['company_id'] as num?)?.toInt() ?? 0,
+    name: '${row['company_name'] ?? ''}'.trim(),
+  );
+}
+
+/// `GET /api/v1/staff/summary` — counts computed by FastAPI from the same
+/// live rows that feed the directory, company list and invitations table.
+class StaffSummary {
+  final int totalAgents;
+  final int activeAgents;
+  final int pendingAgents;
+  final int suspendedAgents;
+  final int openInvitations;
+  final int invitations;
+  final int companies;
+
+  const StaffSummary({
+    required this.totalAgents,
+    required this.activeAgents,
+    required this.pendingAgents,
+    required this.suspendedAgents,
+    required this.openInvitations,
+    required this.invitations,
+    required this.companies,
+  });
+
+  static const empty = StaffSummary(
+    totalAgents: 0,
+    activeAgents: 0,
+    pendingAgents: 0,
+    suspendedAgents: 0,
+    openInvitations: 0,
+    invitations: 0,
+    companies: 0,
+  );
+
+  factory StaffSummary.fromJson(Map<String, dynamic> row) => StaffSummary(
+    totalAgents: (row['total_agents'] as num?)?.toInt() ?? 0,
+    activeAgents: (row['active_agents'] as num?)?.toInt() ?? 0,
+    pendingAgents: (row['pending_agents'] as num?)?.toInt() ?? 0,
+    suspendedAgents: (row['suspended_agents'] as num?)?.toInt() ?? 0,
+    openInvitations: (row['open_invitations'] as num?)?.toInt() ?? 0,
+    invitations: (row['invitations'] as num?)?.toInt() ?? 0,
+    companies: (row['companies'] as num?)?.toInt() ?? 0,
   );
 }
 
@@ -240,6 +344,17 @@ class AdminApi {
     return const [];
   }
 
+  /// Single-object responses (summary, newly registered company) may arrive
+  /// wrapped the same way an array does, or as a bare object.
+  static Map<String, dynamic> _object(dynamic payload) {
+    if (payload is Map<String, dynamic>) {
+      final data = payload['data'];
+      if (data is Map<String, dynamic>) return data;
+      return payload;
+    }
+    return const <String, dynamic>{};
+  }
+
   // --- Agent management -----------------------------------------------------
 
   /// `GET /api/v1/staff/agents` — accounts whose role is `agent`.
@@ -255,10 +370,14 @@ class AdminApi {
   /// renders it verbatim (notably the 409 that asks for
   /// `allowExisting: true` before an existing account may receive staff
   /// access).
+  /// [companyId] is the wizard's preserved `company_id`. When it is null the
+  /// legacy [companyName] path remains available for older callers; the
+  /// backend verifies the id against `public.company` before provisioning.
   Future<Map<String, dynamic>> createAgent({
     required String fullName,
     required String email,
     String? phoneNumber,
+    int? companyId,
     String? companyName,
     bool allowExisting = false,
   }) {
@@ -270,7 +389,9 @@ class AdminApi {
         'email': email,
         if (phoneNumber != null && phoneNumber.isNotEmpty)
           'phone_number': phoneNumber,
-        if (companyName != null && companyName.isNotEmpty)
+        if (companyId != null)
+          'company_id': companyId
+        else if (companyName != null && companyName.isNotEmpty)
           'company_name': companyName,
         'allow_existing': allowExisting,
       },
@@ -291,6 +412,37 @@ class AdminApi {
   Future<List<StaffInvitation>> listInvitations() async {
     final payload = await WebAuth.request('/api/v1/staff/invitations');
     return _rows(payload).map(StaffInvitation.fromJson).toList(growable: false);
+  }
+
+  /// `POST /api/v1/staff/invitations/{id}/revoke` — closes an open invite so
+  /// its address can be used again. The server refuses closed/unknown ids.
+  Future<Map<String, dynamic>> revokeInvitation(String invitationId) =>
+      WebAuth.request(
+        '/api/v1/staff/invitations/${Uri.encodeComponent(invitationId)}/revoke',
+        method: 'POST',
+      );
+
+  /// `GET /api/v1/staff/summary` — all KPI numbers come from FastAPI.
+  Future<StaffSummary> summary() async {
+    final payload = await WebAuth.request('/api/v1/staff/summary');
+    return StaffSummary.fromJson(_object(payload));
+  }
+
+  /// `GET /api/v1/staff/companies` — the existing `public.company` rows.
+  Future<List<CompanyRecord>> listCompanies() async {
+    final payload = await WebAuth.request('/api/v1/staff/companies');
+    return _rows(payload).map(CompanyRecord.fromJson).toList(growable: false);
+  }
+
+  /// `POST /api/v1/staff/companies` — register a company and return its real
+  /// id. Duplicate names are rejected by the server with 409.
+  Future<CompanyRecord> createCompany(String name) async {
+    final payload = await WebAuth.request(
+      '/api/v1/staff/companies',
+      method: 'POST',
+      body: {'company_name': name},
+    );
+    return CompanyRecord.fromJson(_object(payload));
   }
 
   // --- System activity ------------------------------------------------------

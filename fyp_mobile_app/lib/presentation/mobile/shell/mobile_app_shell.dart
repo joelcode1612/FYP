@@ -3,6 +3,7 @@ import 'package:shared_logic/shared_logic.dart';
 import 'package:flutter/material.dart';
 
 import '../../../core/theme/sitewise_m3.dart';
+import 'entrepreneur_tab_scope.dart';
 import 'mobile_bottom_nav.dart';
 import 'mobile_navigation.dart';
 import 'mobile_topbar.dart';
@@ -54,6 +55,14 @@ class MobileAppShell extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    // Top-level tabs share one persistent Scaffold in EntrepreneurTabHost.
+    // Only their content is rendered here; detail pages still get a full
+    // MobileAppShell (and keep their existing back affordance).
+    final tabScope = EntrepreneurTabScope.maybeOf(context);
+    if (tabScope != null && EntrepreneurTabScope.isTabRoute(currentRoute)) {
+      return body;
+    }
+
     // Only the role is observed: the shell must not repaint when a property is
     // saved or compared.
     final role = ref.watch(appNotifierProvider.select((s) => s.role));

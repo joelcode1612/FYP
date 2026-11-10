@@ -1,6 +1,7 @@
 import 'package:riverpod/riverpod.dart';
 
 import '../../domain/entities/commercial_property.dart';
+import '../../domain/entities/property_verification.dart';
 import '../../domain/entities/user.dart';
 import '../../domain/entities/virtual_tour.dart';
 import '../controllers/admin_controller.dart';
@@ -22,6 +23,7 @@ class AdminNotifier extends Notifier<AdminState> {
       properties: ref.watch(propertyServiceProvider),
       users: ref.watch(userRepositoryProvider),
       tours: ref.watch(tourServiceProvider),
+      reviews: ref.watch(adminPropertyReviewServiceProvider),
     );
     _controller.addListener(_publish);
     ref.onDispose(() {
@@ -77,6 +79,59 @@ class AdminNotifier extends Notifier<AdminState> {
   Future<void> approveTour(String id) => _controller.approveTour(id);
 
   Future<void> rejectTour(String id) => _controller.rejectTour(id);
+
+  // -- Unified property-verification review workspace -----------------------
+
+  VerificationQueuePage? get reviewPage => state.reviewPage;
+
+  VerificationQueueFilters get reviewFilters => state.reviewFilters;
+
+  VerificationDetail? get reviewDetail => state.reviewDetail;
+
+  String? get busyAction => state.busyAction;
+
+  String? get reviewNotice => state.reviewNotice;
+
+  /// Faceted server-side count for one dimension/status pair.
+  int? reviewCountOf(
+    VerificationDimension dimension,
+    PropertyVerificationStatus status,
+  ) => _controller.reviewCountOf(dimension, status);
+
+  Future<void> loadReviewPage({VerificationQueueFilters? filters}) =>
+      _controller.loadReviewPage(filters: filters);
+
+  Future<void> setReviewFilters(VerificationQueueFilters filters) =>
+      _controller.setReviewFilters(filters);
+
+  Future<void> loadReviewDetail(String propertyId) =>
+      _controller.loadReviewDetail(propertyId);
+
+  void closeReviewDetail() => _controller.closeReviewDetail();
+
+  void clearReviewNotice() => _controller.clearReviewNotice();
+
+  Future<void> startDimensionReview(
+    String propertyId,
+    VerificationDimension dimension,
+  ) => _controller.startDimensionReview(propertyId, dimension);
+
+  Future<void> approveDimension(
+    String propertyId,
+    VerificationDimension dimension,
+  ) => _controller.approveDimension(propertyId, dimension);
+
+  Future<void> rejectDimension(
+    String propertyId,
+    VerificationDimension dimension,
+    String reason,
+  ) => _controller.rejectDimension(propertyId, dimension, reason);
+
+  Future<void> requestInformation(
+    String propertyId,
+    VerificationDimension dimension,
+    String note,
+  ) => _controller.requestInformation(propertyId, dimension, note);
 
   void _publish(AdminState next) => state = next;
 }

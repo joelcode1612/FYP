@@ -24,13 +24,18 @@
   FIRST with `cd fyp_jaspr_web/tool && npm run build-auth` (esbuild ->
   `web/auth_bundle.js`); otherwise the old bundle ships. Then `jaspr build`
   copies `web/` into `build/jaspr`.
-- Verify (SSR): the build is server-rendered (`jaspr: mode: server`), so every
-  deep route returns real HTML. Start `build/jaspr/app.exe` with `PORT=8090`
-  `SITEWISE_API_BASE=http://127.0.0.1:8000`, or use `.\serve` (dev mode) —
-  a plain `python -m http.server` 404s deep routes. Run probes with
+- Verify (2026-11-09 CORRECTION — the app is now CLIENT-rendered): pubspec has
+  `jaspr: mode: client` (since commit "joel9"), so `jaspr build` emits static
+  files and NO `build/jaspr/app.exe`. Deep routes resolve client-side
+  (`lib/app.dart` Router.redirect: anonymous /agent -> /login?next=…); the
+  old SSR guidance (app.exe, mode: server) is obsolete. To verify the build,
+  serve it with SPA fallback: `PORT=8090 node tool/dev_static_server.js`,
+  then run probes with
   NODE_PATH=C:/Users/Lenovo/.workbuddy-ai/binaries/node/workspace/node_modules
   (playwright-core lives in the managed node workspace, NOT fyp_jaspr_web/
-  node_modules which only has esbuild). Playwright chromium at
+  node_modules which only has esbuild). Launch chromium with
+  `args: ['--no-proxy-server']` or page.goto to 127.0.0.1 times out (proxy
+  intercepts loopback). Playwright chromium at
   `C:/Users/Lenovo/AppData/Local/ms-playwright/chromium-1248/...`.
 - Verification probes (BASE=http://127.0.0.1:8090):
   `tool/probe_backend_integration.js` (43 checks: same-origin proxy, no
@@ -91,3 +96,55 @@
   migration §4/§5 has the SECURITY DEFINER fix, live DB differs), and public
   signup fails 500 "Error sending confirmation email" (SMTP unconfigured).
   Only 1 real auth user exists — never modify it for tests.
+
+## Mobile auth screen (since 2026-11-09)
+
+- `fyp_mobile_app/lib/presentation/mobile/auth/pages/mobile_auth_page.dart` is
+  brand-only at the top: NO back arrow and NO top `Log In / Sign Up` switch
+  (explicit user request). Mode still lives in `_tab` / `AuthTab` (enum defined
+  in `widgets/auth_tabs.dart`, which also still exports the now-unused
+  `AuthTabs` widget). Mode is selected by `/auth` route arguments
+  (`'login' | 'signUp'`, see `core/routing/app_routes.dart`) and by the inline
+  account link at the foot of the form. Do not reintroduce the top toggle
+  without asking.
+- `test/widget_test.dart` TEST 10 reaches registration via the inline
+  `find.text('Sign up')` link (with `ensureVisible`), not `find.text('Sign Up')`.
+
+## Flutter verification (2026-11-09)
+
+- `flutter test` in `fyp_mobile_app` fails with "Unable to connect to
+  flutter_tester process: WebSocketException: Invalid WebSocket upgrade
+  request" when proxy env vars are set. Run with
+  `env -u HTTP_PROXY -u HTTPS_PROXY -u http_proxy -u https_proxy -u ALL_PROXY
+  -u all_proxy flutter test test/widget_test.dart` (23 tests pass, ~26s).
+- `dart analyze` works without the proxy workaround; the only warning is a
+  pre-existing unused import in `lib/core/routing/auth_route_guard.dart`.
+
+## Jaspr web role-scoped themes (2026-11-09)
+
+- `AppLayout` (fyp_jaspr_web/lib/layouts/app_layout.dart) tags the shell per
+  role: `app-shell--admin` (navy/charcoal Blue Accent, a parallel session's
+  work), `app-shell--agent` (light DESIGN.md palette), else shared dark
+  `.app-shell`. NEVER retheme by editing the shared `:root`/`.app-shell`
+  blocks — add a scoped `.app-shell.app-shell--<role>` token re-scope at the
+  END of web/styles.css (precedent: admin block at ~11933, `.app-shell:has(.sw-reg)`).
+- Agent tokens: #E8EEF6 canvas / #F4F7FB paper / #FFF surfaces / #E2E8F0+
+  #CBD5E1 borders / #0B0F19 ink / #1E293B text / #64748B muted / #1D4ED8
+  action / #3B82F6 accent; teal #0D9488 only for favourable status. Agent
+  active nav pill = royal blue (override of the shared near-black chip);
+  inputs need `color-scheme: light` (shared shell forces dark UA controls);
+  `.btn--primary` flips automatically via `--contrast-surface: #0b0f19`.
+- Agent scope decisions: Enquiries + Performance removed from nav and from
+  dashboard (KPI replaced by "Draft or suspended"; performance/enquiries/task
+  cards replaced by a real "Pending verification" panel). Routes stay
+  registered; `demoEnquiries`/`demoTasks` stay in agent_records.dart (used by
+  the still-routed pages / no business-logic deletion).
+- Verify with `tool/probe_agent_theme.js` (BASE=http://127.0.0.1:8090, static
+  server via `tool/dev_static_server.js`): 22 checks — client guard redirect,
+  landing isolation, and computed styles of a fixture
+  (`tool/agent_theme_fixture.html`) against the BUILT styles.css. Wait ≥600ms
+  after injecting the 330KB stylesheet or computed colors race mid-parse.
+- Concurrent sessions edit this repo live — re-read (git status + sed/grep)
+  immediately before every Edit; a mid-task commit once changed app_layout.dart
+  under me.
+

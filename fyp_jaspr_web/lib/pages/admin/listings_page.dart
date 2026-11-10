@@ -1,38 +1,20 @@
-import 'dart:async';
-
 import 'package:jaspr/dom.dart';
 import 'package:jaspr/jaspr.dart';
-import 'package:jaspr_riverpod/jaspr_riverpod.dart';
-import 'package:shared_logic/shared_logic.dart';
+import 'package:shared_logic/shared_logic.dart' show AppRole;
 
 import '../../components/admin_review_split.dart';
 import '../../layouts/app_layout.dart';
 
 /// Web listings, ported to the source `admin/review.html` split layout.
 ///
-/// The source review design is one page: a status-tabbed `.queue` on the left
-/// and a detail `.panel` on the right. This route shows every property
-/// (all listings, default tab All); `/admin/verification` shows the
-/// awaiting-review subset (default tab Pending). Both share [ReviewSplit].
+/// The queue is the server's unified verification projection: search, the
+/// per-dimension status facets, sorting and pagination all run against
+/// `/api/v1/staff/properties/`, and the detail column loads
+/// `/api/v1/staff/properties/{id}/verification` for the selected listing.
+/// The old `/admin/verification` and `/admin/ownership` routes redirect here.
 @client
-class ListingsPage extends StatefulComponent {
+class ListingsPage extends StatelessComponent {
   const ListingsPage({super.key});
-
-  @override
-  State<ListingsPage> createState() => _ListingsPageState();
-}
-
-class _ListingsPageState extends State<ListingsPage> {
-  @override
-  void initState() {
-    super.initState();
-    Future.microtask(() {
-      if (!mounted) return;
-      unawaited(
-        context.read(adminNotifierProvider.notifier).loadDashboard(),
-      );
-    });
-  }
 
   @override
   Component build(BuildContext context) {
@@ -45,13 +27,13 @@ class _ListingsPageState extends State<ListingsPage> {
       eyebrow: 'Verification',
       subtitle:
           'Every commercial property on the platform, across all owners. '
-          'Open a listing to review its details or decide whether it '
-          'should be verified.',
+          'Review each listing and its ownership evidence as two independent '
+          'decisions.',
       // ReviewSplit scopes its own watches, so the chrome never rebuilds on a
       // notification.
       child: const div(
         classes: 'stack stack--sections',
-        [ReviewSplit(mode: ReviewMode.listings)],
+        [ReviewSplit()],
       ),
     );
   }

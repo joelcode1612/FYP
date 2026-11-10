@@ -12,12 +12,13 @@ import '../../../shared/widgets/sitewise_bottom_sheet.dart';
 
 /// **Assess** — the third tab of the consolidated five-tab navigation.
 ///
-/// Option A assessment hub: the in-session draft (if any) with its progress,
+/// Option A assessment hub: the active draft (if any) with its progress,
 /// a New action that opens the property picker, and honest state labels.
-/// There is **no persisted assessment entity** in this app, so every record
-/// shown here is explicitly marked session-only, and the draft store
-/// ([AssessmentSessionStore]) keeps a single active assessment — reopening an
-/// existing one resumes it instead of creating a duplicate.
+/// There is **no persisted assessment entity on the backend** in this app, so
+/// there is no assessment history — but the single active draft
+/// ([AssessmentSessionStore]) IS written through to device storage under the
+/// signed-in account, so an interrupted app resumes it. Reopening an existing
+/// one resumes it instead of creating a duplicate.
 
 class EntrepreneurAssessMobilePage extends StatelessWidget {
   const EntrepreneurAssessMobilePage({super.key});
@@ -64,14 +65,14 @@ class EntrepreneurAssessMobilePage extends StatelessWidget {
               Expanded(
                 child: _SessionMetric(
                   value: draft?.saved == true ? '1' : '0',
-                  label: 'Saved this session',
+                  label: 'Saved',
                 ),
               ),
             ],
           ),
           const M3SectionRow(
             title: 'Recent activity',
-            overline: 'THIS SESSION',
+            overline: 'ON THIS DEVICE',
           ),
           if (draft == null)
             M3EmptyState(
@@ -89,7 +90,8 @@ class EntrepreneurAssessMobilePage extends StatelessWidget {
           ],
           const M3Banner(
             text:
-                'Assessments are kept for this session only. Nothing is '
+                'Your active draft is kept on this device for the signed-in '
+                'account, so you can pick up where you left off. Nothing is '
                 'stored as history yet.',
           ),
           const M3DataNote(

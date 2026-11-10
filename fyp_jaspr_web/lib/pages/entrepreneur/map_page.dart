@@ -42,7 +42,38 @@ class _MapPageState extends State<MapPage> {
   String? selectedId;
   int zoom = 1;
 
+  /// Analysis future for the current selection, created once per selection.
+  /// Recreating it per rebuild (every pan/zoom frame) would re-request the
+  /// live analysis endpoint and flicker the column back to its loading state.
+  /// A null result means "no analysis available", never an error.
+  Future<LocationAnalysis?>? _analysisFuture;
+
+  /// The applied proximity radius for the nearby-properties panel. 500 m and
+  /// 1 km are the documented research radii.
+  int radiusM = 1000;
+
   static const _zoomLevels = [1, 2, 4];
+  static const _radiusChoices = [500, 1000];
+
+  void _select(String id) {
+    setState(() {
+      selectedId = id;
+      final selected = _selected;
+      _analysisFuture = selected == null ? null : _analysisFor(selected.id);
+    });
+  }
+
+  /// Loads the analysis for one property. An unavailable analysis becomes a
+  /// null result (rendered as "not available") rather than an escaping zone
+  /// error — the FutureBuilder subscribes a tick after the future is created,
+  /// so an unhandled failure would otherwise be uncaught.
+  Future<LocationAnalysis?> _analysisFor(String id) async {
+    try {
+      return await AppLocator.recommendations.analysis(id);
+    } on Object {
+      return null;
+    }
+  }
 
   @override
   void initState() {
@@ -170,7 +201,7 @@ class _MapPageState extends State<MapPage> {
               'title': p.title,
               'aria-label': '${p.title}, ${_compactRm(p.rentalRm)}',
             },
-            events: events(onClick: () => setState(() => selectedId = p.id)),
+            events: events(onClick: () => _select(p.id)),
             [
               Icon('place', size: 'sm'),
               span(classes: 'map-pin__price', [
@@ -238,8 +269,9 @@ class _MapPageState extends State<MapPage> {
 
     return div(classes: 'analysis', [
       _selectedCard(selected),
-      FutureBuilder<LocationAnalysis>(
-        future: AppLocator.recommendations.analysis(selected.id),
+      _nearbyCard(selected),
+      FutureBuilder<LocationAnalysis?>(
+        future: _analysisFuture,
         builder: (context, snap) {
           if (snap.connectionState != ConnectionState.done) {
             return div(classes: 'a-card', [
@@ -249,7 +281,8 @@ class _MapPageState extends State<MapPage> {
               ]),
             ]);
           }
-          if (!snap.hasData) {
+          final analysis = snap.data;
+          if (analysis == null) {
             return div(classes: 'a-card', [
               h3([Component.text('Location analysis')]),
               p(classes: 'what', [
@@ -259,9 +292,74 @@ class _MapPageState extends State<MapPage> {
               ]),
             ]);
           }
-          return div(classes: 'stack stack--sm', _cardsFor(snap.data!));
+          return div(classes: 'stack stack--sm', _cardsFor(analysis));
         },
       ),
+    ]);
+  }
+
+  /// Proximity panel: nearby COMMERCIAL PROPERTIES from the loaded listing
+  /// set, ranked around the selection with pure-Dart great-circle distances.
+  ///
+  /// This is a different dataset from the F&B competitor research counts
+  /// above — these are real listings the entrepreneur can open. Distances are
+  /// straight-line estimates (no routing engine exists), and the label says
+  /// so. Properties without coordinates are excluded, never placed at an
+  /// invented distance.
+  Component _nearbyCard(CommercialProperty selected) {
+    final nearby = NearbyProperties.of(
+      center: selected,
+      candidates: _model.explore,
+      radiusM: radiusM,
+    );
+    return div(classes: 'a-card', [
+      h3([Component.text('Nearby properties')]),
+      p(classes: 'what', [
+        Component.text(
+          'Other approved listings around this property. Straight-line '
+          'distance only — walking or driving distance is not available.',
+        ),
+      ]),
+      div(classes: 'chips', [
+        for (final r in _radiusChoices)
+          button(
+            classes: radiusM == r ? 'tag det' : 'tag ml',
+            attributes: {
+              'type': 'button',
+              'aria-pressed': radiusM == r ? 'true' : 'false',
+            },
+            events: events(onClick: () => setState(() => radiusM = r)),
+            [Component.text(r >= 1000 ? '${r ~/ 1000} km' : '$r m')],
+          ),
+      ]),
+      div(classes: 'stat-row', [
+        div(classes: 'stat', [
+          strong([Component.text('${nearby.within500m.length}')]),
+          span([Component.text('Within 500 m')]),
+        ]),
+        div(classes: 'stat', [
+          strong([Component.text('${nearby.within1km.length}')]),
+          span([Component.text('Within 1 km')]),
+        ]),
+      ]),
+      if (nearby.selected.isEmpty)
+        p(classes: 'what', [
+          Component.text(
+            'No other listing falls inside the selected radius. That is a '
+            'genuine empty result — properties without coordinates are '
+            'excluded, not hidden at a made-up distance.',
+          ),
+        ])
+      else
+        ul([
+          for (final n in nearby.selected.take(8))
+            li([
+              Component.text(
+                '${n.property.title} — ${n.distanceLabel} '
+                '(straight-line) · ${n.property.rentalDisplay}',
+              ),
+            ]),
+        ]),
     ]);
   }
 
@@ -278,10 +376,13 @@ class _MapPageState extends State<MapPage> {
         'Verification: ${prop.verification.label.toLowerCase()}',
         tone: toneForVerification(prop.verification),
       ),
-      StatusBadge(
-        'Suitability: ${prop.suitabilityScore.toStringAsFixed(0)}/100',
-        tone: _scoreTone(prop.suitabilityScore),
-      ),
+      // The suitability badge renders only when a research score exists —
+      // printing 0/100 would present "not calculated" as a measured value.
+      if (prop.hasSuitabilityScore)
+        StatusBadge(
+          'Suitability: ${prop.suitabilityScore.toStringAsFixed(0)}/100',
+          tone: _scoreTone(prop.suitabilityScore),
+        ),
     ]),
     div(classes: 'actions-row', [
       ActionLink(

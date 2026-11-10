@@ -1,5 +1,4 @@
 import uuid
-from typing import Optional
 
 from sqlmodel import Session, select
 
@@ -16,16 +15,25 @@ class FavouriteRepository:
         self.session.refresh(fav)
         return fav
 
-    def get_by_id(self, favorite_id: uuid.UUID) -> Optional[FavouriteProperty]:
+    def get_by_id(self, favorite_id: uuid.UUID) -> FavouriteProperty | None:
         return self.session.get(FavouriteProperty, favorite_id)
 
     def get_by_user_id(self, user_id: uuid.UUID) -> list[FavouriteProperty]:
         statement = select(FavouriteProperty).where(FavouriteProperty.user_id == user_id)
         return list(self.session.exec(statement).all())
 
-    def get_by_property_id(self, property_id: int) -> list[FavouriteProperty]:
+    def get_by_property_id(self, property_id: str) -> list[FavouriteProperty]:
         statement = select(FavouriteProperty).where(FavouriteProperty.property_id == property_id)
         return list(self.session.exec(statement).all())
+
+    def get_by_user_and_property(
+        self, user_id: uuid.UUID, property_id: str
+    ) -> FavouriteProperty | None:
+        statement = select(FavouriteProperty).where(
+            FavouriteProperty.user_id == user_id,
+            FavouriteProperty.property_id == property_id,
+        )
+        return self.session.exec(statement).first()
 
     def delete(self, favorite_id: uuid.UUID) -> bool:
         fav = self.get_by_id(favorite_id)

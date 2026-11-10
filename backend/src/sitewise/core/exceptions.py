@@ -65,3 +65,21 @@ class ModelUnavailableError(SiteWiseError):
     """
 
     status_code = 503
+
+
+class AssessmentError(SiteWiseError):
+    """A web assessment operation could not be applied to the stored record.
+
+    Carries a machine-readable ``code`` alongside the client-facing message so
+    the workspace can branch on the cause (stage order, missing evidence,
+    unavailable model) without parsing prose. Defaults to 409 because the
+    usual cause is a conflict with the assessment's persisted state.
+    """
+
+    status_code = 409
+
+    def __init__(self, message: str, *, code: str, status_code: int | None = None):
+        super().__init__(message)
+        self.code = code
+        if status_code is not None:
+            self.status_code = status_code

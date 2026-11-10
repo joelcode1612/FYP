@@ -37,4 +37,24 @@ class WebApiClient implements ApiClient {
   @override
   Future<Map<String, dynamic>> delete(String path) =>
       WebAuth.request(path, method: 'DELETE');
+
+  @override
+  Future<Map<String, dynamic>> uploadMultipart(
+    String path, {
+    required Map<String, String> fields,
+    required String fileField,
+    required String filename,
+    required List<int> bytes,
+    required String contentType,
+  }) => WebAuth.requestMultipart(
+    path,
+    fields: fields,
+    fileField: fileField,
+    filename: filename,
+    bytes: bytes,
+    contentType: contentType,
+  );
+
+  @override
+  Future<List<int>> downloadBinary(String path) => WebAuth.download(path);
 }

@@ -17,6 +17,21 @@ abstract class ApiClient {
   Future<Map<String, dynamic>> patch(String path, Map<String, dynamic> body);
 
   Future<Map<String, dynamic>> delete(String path);
+
+  /// Multipart form upload (used by the verification-evidence endpoint).
+  /// [fields] are sent as plain form fields, [fileField] carries the bytes.
+  Future<Map<String, dynamic>> uploadMultipart(
+    String path, {
+    required Map<String, String> fields,
+    required String fileField,
+    required String filename,
+    required List<int> bytes,
+    required String contentType,
+  });
+
+  /// Authenticated binary GET (used by the verification-document download
+  /// endpoint); a non-2xx response throws with the backend's message.
+  Future<List<int>> downloadBinary(String path);
 }
 
 /// Thrown when code calls the network while [AppConfig.usesDemoData].

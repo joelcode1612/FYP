@@ -4,4 +4,9 @@
          to allow setting breakpoints, to provide hot reload, etc.
     -->
     <uses-permission android:name="android.permission.INTERNET"/>
+
+    <!-- PROFILE-ONLY cleartext allowance, same rationale as the debug
+         manifest: `flutter run --profile` against a local HTTP API needs it.
+         Release builds inherit the secure platform default (HTTPS only). -->
+    <application android:usesCleartextTraffic="true"/>
 </manifest>

@@ -219,13 +219,15 @@ class EntrepreneurAssessmentSummaryMobilePage extends StatelessWidget {
     );
   }
 
-  /// Session-only save, stated as such at the moment it happens.
+  /// Save marks the draft's final step. With write-through persistence the
+  /// step is stored on this device for the signed-in account — stated honestly:
+  /// device draft, not backend history.
   void _save(BuildContext context) {
     ServiceLocator.assessmentSession.markSaved();
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
         content: Text(
-          'Saved for this session. Nothing is stored permanently yet.',
+          'Draft saved on this device. It is not sent to the backend yet.',
         ),
         behavior: SnackBarBehavior.floating,
       ),
@@ -238,14 +240,25 @@ class EntrepreneurAssessmentSummaryMobilePage extends StatelessWidget {
 
 /// Demand analysis exactly as the repository provides it: real fields when
 /// the analysis resolves, an explicit Unavailable card when it does not.
-class _DemandAnalysisCard extends StatelessWidget {
+///
+/// Stateful only to hold ONE request per card instance (§7): the future is
+/// created in initState, so parent rebuilds (snackbars, focus changes) can
+/// never refire the network call.
+class _DemandAnalysisCard extends StatefulWidget {
   final String propertyId;
 
   const _DemandAnalysisCard({required this.propertyId});
 
+  @override
+  State<_DemandAnalysisCard> createState() => _DemandAnalysisCardState();
+}
+
+class _DemandAnalysisCardState extends State<_DemandAnalysisCard> {
+  late final Future<LocationAnalysis?> _future = _load();
+
   Future<LocationAnalysis?> _load() async {
     try {
-      return await ServiceLocator.recommendations.analysis(propertyId);
+      return await ServiceLocator.recommendations.analysis(widget.propertyId);
     } catch (_) {
       // No demand evidence for this property — the UI shows Unavailable.
       return null;
@@ -255,7 +268,7 @@ class _DemandAnalysisCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return FutureBuilder<LocationAnalysis?>(
-      future: _load(),
+      future: _future,
       builder: (context, snap) {
         final a = snap.connectionState == ConnectionState.done
             ? snap.data

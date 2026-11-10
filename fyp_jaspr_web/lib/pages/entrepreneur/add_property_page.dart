@@ -210,6 +210,9 @@ class _AddPropertyPageState extends State<AddPropertyPage> {
       currentRoute: '/entrepreneur/add-property',
       title: 'Register a property',
       showPageHead: false,
+      // The wizard hero renders its own styled `sw-reg-breadcrumb` below;
+      // the global AppLayout trail is suppressed so the page never shows two.
+      showBreadcrumbs: false,
       child: div(classes: 'stack stack--sections sw-reg', [
         div(classes: 'sw-reg-breadcrumb', [
           AppLink(

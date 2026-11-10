@@ -39,31 +39,13 @@ List<WebDestination> webDestinationsFor(AppRole role) => switch (role) {
     // `people`, not `group`: the mobile bottom nav uses Icons.people_outline,
     // and Material Symbols renders `group` and `people` as different glyphs.
     WebDestination(route: '/admin/users', icon: 'people', label: 'Users'),
-    // The five-screen operations suite: Ownership → Agents → Verification →
-    // Campaigns → Activity → Surveys. Kept as separate sidebar/pill entries
-    // (no merged mega-menu), because each screen has its own route and its
-    // own audience among the admin tabs.
-    WebDestination(
-      route: '/admin/ownership',
-      icon: 'fact_check',
-      label: 'Ownership',
-    ),
+    // The unified operations pages: Listings (verification review) → Agents →
+    // Surveys. Kept as separate sidebar/pill entries (no merged mega-menu),
+    // because each screen has its own route and its own audience among the
+    // admin tabs. Campaigns and Activity are no longer offered in the navbar —
+    // their routes, pages and the audit logging they read stay fully
+    // functional for direct links.
     WebDestination(route: '/admin/agents', icon: 'badge', label: 'Agents'),
-    WebDestination(
-      route: '/admin/verification',
-      icon: 'verified',
-      label: 'Verification',
-    ),
-    WebDestination(
-      route: '/admin/campaigns',
-      icon: 'campaign',
-      label: 'Campaigns',
-    ),
-    WebDestination(
-      route: '/admin/activity',
-      icon: 'history',
-      label: 'Activity',
-    ),
     WebDestination(
       route: '/admin/surveys',
       icon: 'how_to_vote',
@@ -83,12 +65,10 @@ List<WebDestination> webDestinationsFor(AppRole role) => switch (role) {
       icon: 'business',
       label: 'Assigned Listings',
     ),
-    WebDestination(route: '/agent/enquiries', icon: 'mail', label: 'Enquiries'),
-    WebDestination(
-      route: '/agent/performance',
-      icon: 'monitoring',
-      label: 'Performance',
-    ),
+    // Enquiries and Performance are not part of the approved Agent scope —
+    // nothing server-side stores enquiries or interaction events — so they are
+    // no longer offered as navigation. Their routes stay registered so old
+    // links and the parent-shell mapping keep resolving.
     WebDestination(route: '/agent/profile', icon: 'person', label: 'Profile'),
   ],
   AppRole.owner => const [
@@ -113,11 +93,13 @@ List<WebDestination> webDestinationsFor(AppRole role) => switch (role) {
       icon: 'explore',
       label: 'Explore',
     ),
-    WebDestination(route: '/entrepreneur/map', icon: 'map', label: 'Map'),
+    // Saved location assessments. The workspace itself is a drill-in from a
+    // property, so it has no nav entry of its own; this is where the records
+    // are collected and reopened.
     WebDestination(
-      route: '/entrepreneur/recommendations',
-      icon: 'auto_awesome',
-      label: 'Recommendations',
+      route: '/entrepreneur/assessments',
+      icon: 'fact_check',
+      label: 'Assessments',
     ),
     WebDestination(
       route: '/entrepreneur/compare',
@@ -149,19 +131,25 @@ List<WebDestination> webDestinationsFor(AppRole role) => switch (role) {
 /// still shows where you are when you drill into a record.
 String parentShellRoute(String route) {
   const parents = {
-    '/entrepreneur/preferences': '/entrepreneur',
+    // Preferences is a drill-in from "Profile & preferences" (and from the
+    // shortlist), not a child of Home. Mapping it to '/entrepreneur' lit up the
+    // Home pill while the preferences form was on screen.
+    '/entrepreneur/preferences': '/entrepreneur/profile',
+    // The retired standalone map screen resolves to the combined Explore page,
+    // so a back/refresh on an old map link still lights the Explore pill.
+    '/entrepreneur/map': '/entrepreneur/explore',
     '/entrepreneur/property-detail': '/entrepreneur/explore',
+    '/entrepreneur/property-analysis': '/entrepreneur/explore',
+    '/entrepreneur/assessment': '/entrepreneur/explore',
     '/entrepreneur/tour': '/entrepreneur/explore',
     '/entrepreneur/report': '/entrepreneur/explore',
     '/entrepreneur/explanation': '/entrepreneur/recommendations',
     '/entrepreneur/my-properties': '/entrepreneur/my-properties',
     '/entrepreneur/add-property': '/entrepreneur/my-properties',
     '/admin/user-detail': '/admin/users',
-    '/admin/verification-detail': '/admin/verification',
     '/admin/listing-detail': '/admin/listings',
     '/admin/agent-detail': '/admin/agents',
     '/agent/property-detail': '/agent/listings',
-    '/agent/enquiry-detail': '/agent/enquiries',
     '/owner/property-detail': '/owner/properties',
     '/owner/tour-preview': '/owner/tours',
     '/owner/capture': '/owner/tours',
@@ -194,6 +182,7 @@ String titleForRoute(String route) {
   final names = const {
     '/entrepreneur/preferences': 'Preferences',
     '/entrepreneur/property-detail': 'Property',
+    '/entrepreneur/property-analysis': 'Location analysis',
     '/entrepreneur/tour': '360° Tour',
     '/entrepreneur/report': 'Suitability Report',
     '/entrepreneur/explanation': 'Why this score',

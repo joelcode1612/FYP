@@ -5,6 +5,8 @@ import 'package:shared_logic/shared_logic.dart';
 
 import 'admin_api.dart';
 import 'api_property_repository.dart';
+import 'assessment_api.dart';
+import 'auth_service.dart';
 import 'ui_store.dart';
 import 'web_api_client.dart';
 import 'workspaces.dart';
@@ -14,8 +16,8 @@ import 'workspaces.dart';
 ///
 /// Properties come from the authenticated local API. User identity comes from
 /// Supabase; unsupported analysis throws an explicit unavailable-data error.
-/// Saved/compare selections and preferences remain local to this browser
-/// session.
+/// A signed-in account's saved list and preferences live on the server; a
+/// visitor's selections stay in this browser session.
 ///
 /// All shared state flows through the Riverpod providers from `shared_logic`;
 /// [webOverrides] is the one place that points them at the services this
@@ -37,6 +39,29 @@ abstract final class AppLocator {
   );
   static final TourRepositoryImpl tourRepo = TourRepositoryImpl();
 
+  /// Live Explore surface over `/api/v1/explore/*` (the `fyp.rental_properties`
+  /// universe, approved + published rows). Consumed for location analysis,
+  /// competitor/demand lookups and the numeric-id detail fallback — NOT as the
+  /// Explore listing source, because the saved-list and assessment backends
+  /// validate against the CATALOGUE id space (`EP-xxxxx`) and a numeric id
+  /// would 404 on save/assess. That contract gap keeps the listing on the
+  /// catalogue repository; switching it requires a backend change first.
+  static final ExploreRepository exploreRepo = ApiExploreRepository(
+    const WebApiClient(),
+  );
+
+  /// The signed-in account's server-side saved shortlist (catalogue refs).
+  /// Replaces the duplicated save/unsave calls the old [AssessmentApi] made —
+  /// same endpoints, one shared implementation.
+  static final SavedPropertiesRepository savedPropertiesRepo =
+      ApiSavedPropertiesRepository(const WebApiClient());
+
+  /// The unified listing/ownership verification workflow — submitter actions
+  /// and the admin review queue both ride this one repository over
+  /// `/api/v1/properties/verification/*` and `/api/v1/staff/properties/*`.
+  static final PropertyVerificationRepository propertyVerificationRepo =
+      ApiPropertyVerificationRepository(const WebApiClient());
+
   /// Staff/audit/properties reads and writes for the five administrator
   /// operations pages (Ownership, Agents, Campaigns, Activity, Surveys).
   /// Stateless: one shared const instance. Campaigns and Surveys deliberately
@@ -45,14 +70,25 @@ abstract final class AppLocator {
 
   // --- Application services (shared orchestration) --------------------------
   static final PropertyService properties = PropertyService(propertyRepo);
+
+  /// Ranking and analysis on one service. Analysis goes through the live
+  /// intelligence repository (`/explore/analysis`) via the shared adapter —
+  /// the catalogue ranking repository itself can only report unavailability,
+  /// which used to leave the Explore analysis column permanently empty.
   static final RecommendationService recommendations = RecommendationService(
-    recommendationRepo,
+    IntelligenceBackedRecommendationRepository(
+      recommendationRepo,
+      intelligenceRepo,
+    ),
   );
 
   /// Explanation + location intelligence live on their own repository in
   /// `shared_logic`; the recommendation repository only serves rankings.
+  /// The live repository reads the authenticated backend `/explore/analysis`
+  /// endpoint (fyp.rental_properties + research schemas via the cross-universe
+  /// `ref` resolution) instead of throwing for every property.
   static final LocationIntelligenceRepository intelligenceRepo =
-      UnavailableIntelligenceRepository();
+      ApiLocationIntelligenceRepository(const WebApiClient());
   static final LocationIntelligenceService intelligence =
       LocationIntelligenceService(intelligenceRepo);
 
@@ -117,12 +153,70 @@ abstract final class AppLocator {
   }
 
   /// Persists only UI selections, never authorization grants.
+  ///
+  /// A signed-in account's saved list lives on the server, not in this
+  /// browser: writing it here would resurrect removed properties on the next
+  /// boot (the boot merge unions the cookie with the account list). Compare
+  /// selections stay cookie-persisted for everyone.
   static void persistUiState(AppState state) {
     UiStore.write((
-      saved: state.saved,
+      saved: WebAuth.profile != null ? const {} : state.saved,
       compared: state.compared,
       roles: Workspaces.granted,
     ));
+  }
+
+  /// Whether the current visitor holds a verified session.
+  static bool get isSignedIn => WebAuth.profile != null;
+
+  /// Persists one saved-shortlist toggle for a signed-in account.
+  ///
+  /// Returns null only when the server accepted the change — the caller may
+  /// then update its local shortlist. A failure returns the reason and the
+  /// caller must change nothing, so what the shortlist shows is always what
+  /// the account holds. Visitors never reach this: their shortlist is
+  /// cookie-persisted locally and needs no round trip.
+  static Future<AssessmentFailure?> persistToggleSaved(
+    String propertyRef, {
+    required bool wantSaved,
+  }) async {
+    try {
+      if (wantSaved) {
+        await savedPropertiesRepo.save(propertyRef);
+      } else {
+        await savedPropertiesRepo.unsave(propertyRef);
+      }
+      return null;
+    } on Object {
+      // The bridge throws without a status code, so the caller gets the same
+      // service-failure treatment the AssessmentApi path gave — the shortlist
+      // must not move on an unconfirmed change.
+      return const AssessmentFailure(
+        message: 'The data service could not complete this request.',
+      );
+    }
+  }
+
+  /// Unions the signed-in account's saved properties into [uiSeed], so the
+  /// first frame after boot already shows the account's shortlist.
+  ///
+  /// Called once from the browser entrypoint after the session is resolved.
+  /// For a visitor with no session this is a no-op — their shortlist is the
+  /// cookie's. A failed or timed-out read keeps the cookie state and reports
+  /// nothing: the shortlist still works from the previous boot's selection.
+  /// Delisted refs (the server's `unresolved`) are excluded so dead entries
+  /// never re-enter the shortlist.
+  static Future<void> mergeAccountSaved() async {
+    if (WebAuth.profile == null) return;
+    try {
+      final refs = await savedPropertiesRepo
+          .savedRefs()
+          .timeout(const Duration(seconds: 3));
+      if (refs.isEmpty) return;
+      uiSeed = uiSeed.copyWith(saved: {...uiSeed.saved, ...refs});
+    } on Object {
+      // Boot must not stall on a dead API; the cookie selection stands.
+    }
   }
 
   /// Compatibility shim; authorization grants are never persisted.
@@ -131,6 +225,10 @@ abstract final class AppLocator {
   /// Points every composition-required provider from `shared_logic` at this
   /// app's implementations. Reading an un-overridden provider fails loudly by
   /// contract, so this list must stay complete.
+  ///
+  /// `exploreRepositoryProvider` is deliberately NOT overridden: the
+  /// entrepreneur state's listing path must stay on the catalogue id space
+  /// (see [exploreRepo]).
   static List<Override> webOverrides() => [
     appInitialStateProvider.overrideWithValue(uiSeed),
     businessPreferencesProvider.overrideWithValue(preferences),
@@ -139,8 +237,20 @@ abstract final class AppLocator {
     getRecommendationsProvider.overrideWithValue(
       GetRecommendations(recommendationRepo),
     ),
+    // Analysis must come from the live intelligence repository
+    // (/explore/analysis), not from the ranking repository whose analysis
+    // member can only report unavailability.
     getLocationAnalysisProvider.overrideWithValue(
-      GetLocationAnalysis(recommendationRepo),
+      GetLocationAnalysis(
+        IntelligenceBackedRecommendationRepository(
+          recommendationRepo,
+          intelligenceRepo,
+        ),
+      ),
+    ),
+    savedPropertiesRepositoryProvider.overrideWithValue(savedPropertiesRepo),
+    propertyVerificationRepositoryProvider.overrideWithValue(
+      propertyVerificationRepo,
     ),
     propertyServiceProvider.overrideWithValue(properties),
     tourServiceProvider.overrideWithValue(tourService),

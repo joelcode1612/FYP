@@ -29,12 +29,21 @@ class ProfilePage extends StatefulComponent {
 }
 
 class _ProfilePageState extends State<ProfilePage> {
+  /// The last server-confirmed values. `WebAuth.profile` is not refreshed by a
+  /// PATCH, so Discard needs its own baseline: without it, discarding after a
+  /// successful save would restore the pre-save text and make stored data look
+  /// like an unsaved edit.
+  late String _savedConcept;
+  late String _savedPhone;
+
   late String _concept;
   late String _phone;
   late String _email;
   bool _saving = false;
   String? _savedMessage;
   String? _errorMessage;
+  String? _conceptError;
+  String? _phoneError;
 
   @override
   void initState() {
@@ -42,13 +51,32 @@ class _ProfilePageState extends State<ProfilePage> {
     // The identity comes from the backend-verified profile (GET /auth/me) —
     // never a hardcoded demo account. Missing values degrade to blanks.
     final profile = WebAuth.profile ?? <String, dynamic>{};
-    _concept = (profile['full_name'] as String?) ?? '';
-    _phone = (profile['phone_number'] as String?) ?? '';
+    _savedConcept = (profile['full_name'] as String?) ?? '';
+    _savedPhone = (profile['phone_number'] as String?) ?? '';
+    _concept = _savedConcept;
+    _phone = _savedPhone;
     _email = (profile['email'] as String?) ?? '';
+  }
+
+  bool get _dirty => _concept != _savedConcept || _phone != _savedPhone;
+
+  /// `phone_number` is `max_length=20` in `db/models/user.py`; checking it here
+  /// turns a database rejection into a readable field error.
+  bool _validate() {
+    final name = _concept.trim();
+    final phone = _phone.trim();
+    setState(() {
+      _conceptError = name.isEmpty ? 'A concept name is required.' : null;
+      _phoneError = phone.length > 20
+          ? 'A contact number must be 20 characters or fewer.'
+          : null;
+    });
+    return _conceptError == null && _phoneError == null;
   }
 
   Future<void> _save() async {
     if (_saving) return;
+    if (!_validate()) return;
     setState(() {
       _saving = true;
       _savedMessage = null;
@@ -58,17 +86,19 @@ class _ProfilePageState extends State<ProfilePage> {
       // PATCH /api/v1/users/me: the server persists the permitted fields and
       // echoes the updated profile back, so the confirmation below is backed
       // by the stored row — not local widget state.
-      await WebAuth.request(
+      final response = await WebAuth.request(
         '/api/v1/users/me',
         method: 'PATCH',
-        body: {
-          'full_name': _concept.trim(),
-          'phone_number': _phone.trim(),
-        },
+        body: {'full_name': _concept.trim(), 'phone_number': _phone.trim()},
       );
       if (!mounted) return;
       setState(() {
         _saving = false;
+        // Re-baseline from what the server stored, not from what was typed.
+        _savedConcept = (response['full_name'] as String?) ?? _concept.trim();
+        _savedPhone = (response['phone_number'] as String?) ?? _phone.trim();
+        _concept = _savedConcept;
+        _phone = _savedPhone;
         _savedMessage =
             'Profile saved. Your account name and contact number are stored.';
       });
@@ -76,20 +106,22 @@ class _ProfilePageState extends State<ProfilePage> {
       if (!mounted) return;
       setState(() {
         _saving = false;
+        // What was typed is kept, so a failed save costs no re-entry.
         _errorMessage =
-            'Your profile could not be saved. Please check your connection '
-            'and try again.';
+            'Your profile could not be saved. Nothing was changed on the '
+            'server — check your connection and try again.';
       });
     }
   }
 
   void _discard() {
     setState(() {
-      final profile = WebAuth.profile ?? <String, dynamic>{};
-      _concept = (profile['full_name'] as String?) ?? '';
-      _phone = (profile['phone_number'] as String?) ?? '';
+      _concept = _savedConcept;
+      _phone = _savedPhone;
       _savedMessage = null;
       _errorMessage = null;
+      _conceptError = null;
+      _phoneError = null;
     });
   }
 
@@ -110,11 +142,7 @@ class _ProfilePageState extends State<ProfilePage> {
           div(classes: 'field', [
             span(classes: 'field__label', [Component.text('Email address')]),
             input(
-              attributes: {
-                'type': 'email',
-                'value': _email,
-                'readonly': '',
-              },
+              attributes: {'type': 'email', 'value': _email, 'readonly': ''},
             ),
             span(classes: 'hint', [
               Component.text('Email changes go through account recovery.'),
@@ -123,12 +151,27 @@ class _ProfilePageState extends State<ProfilePage> {
           div(classes: 'field', [
             span(classes: 'field__label', [Component.text('Concept name')]),
             input(
-              attributes: {'type': 'text', 'value': _concept},
-              events: events<String>(onInput: (v) => setState(() => _concept = v)),
+              attributes: {
+                'type': 'text',
+                'value': _concept,
+                if (_conceptError != null) 'aria-invalid': 'true',
+                if (_conceptError != null)
+                  'aria-describedby': 'concept-name-error',
+              },
+              events: events<String>(
+                onInput: (v) => setState(() => _concept = v),
+              ),
             ),
-            span(classes: 'hint', [
-              Component.text('Saved to your account as your display name.'),
-            ]),
+            if (_conceptError != null)
+              span(
+                classes: 'field__error',
+                attributes: const {'id': 'concept-name-error'},
+                [Component.text(_conceptError!)],
+              )
+            else
+              span(classes: 'hint', [
+                Component.text('Saved to your account as your display name.'),
+              ]),
           ]),
           div(classes: 'field', [
             span(classes: 'field__label', [Component.text('Contact number')]),
@@ -137,19 +180,33 @@ class _ProfilePageState extends State<ProfilePage> {
                 'type': 'tel',
                 'value': _phone,
                 'placeholder': '+60 12 345 6789',
+                if (_phoneError != null) 'aria-invalid': 'true',
+                if (_phoneError != null) 'aria-describedby': 'contact-error',
               },
-              events: events<String>(onInput: (v) => setState(() => _phone = v)),
+              events: events<String>(
+                onInput: (v) => setState(() => _phone = v),
+              ),
             ),
+            if (_phoneError != null)
+              span(
+                classes: 'field__error',
+                attributes: const {'id': 'contact-error'},
+                [Component.text(_phoneError!)],
+              )
+            else
+              span(classes: 'hint', [
+                Component.text('Optional. Up to 20 characters.'),
+              ]),
           ]),
           div(classes: 'actions-row', [
             ActionButton(
               _saving ? 'Saving…' : 'Save profile',
-              onClick: _save,
+              onClick: _saving ? null : _save,
             ),
             ActionButton(
               'Discard changes',
               variant: 'secondary',
-              onClick: _discard,
+              onClick: (_saving || !_dirty) ? null : _discard,
             ),
           ]),
           if (_savedMessage != null)

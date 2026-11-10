@@ -54,6 +54,13 @@ class PropertyCard extends StatelessComponent {
   /// DOM id for the article, so map interactions can scroll to the card.
   final String? anchorId;
 
+  /// Assessment workspace route for this property, including `?id=`.
+  ///
+  /// Opt-in and null by default, so cards that are not assessment entry points
+  /// render exactly as before. The link only navigates — it never creates a
+  /// record — so the workspace decides whether to resume or start.
+  final String? assessHref;
+
   const PropertyCard({
     super.key,
     required this.property,
@@ -66,6 +73,7 @@ class PropertyCard extends StatelessComponent {
     this.selected = false,
     this.onLocate,
     this.anchorId,
+    this.assessHref,
   });
 
   @override
@@ -153,6 +161,15 @@ class PropertyCard extends StatelessComponent {
               classes: 'btn sm btn--primary',
               children: [Component.text('View details')],
             ),
+            if (assessHref != null)
+              AppLink(
+                to: assessHref!,
+                classes: 'btn sm',
+                attributes: {
+                  'aria-label': 'Assess ${property.title} for your business',
+                },
+                children: [Component.text('Assess')],
+              ),
             if (onLocate != null)
               button(
                 classes: 'btn sm',

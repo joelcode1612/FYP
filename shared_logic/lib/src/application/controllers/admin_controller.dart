@@ -1,9 +1,12 @@
 import '../../domain/entities/app_role.dart';
 import '../../domain/entities/commercial_property.dart';
+import '../../domain/entities/property_verification.dart';
 import '../../domain/entities/user.dart';
 import '../../domain/entities/virtual_tour.dart';
 import '../../domain/repositories/admin_repositories.dart';
+import '../../core/network/api_client.dart';
 import '../services/property_service.dart';
+import '../services/property_verification_service.dart';
 import '../services/tour_service.dart';
 import '../services/verification_service.dart';
 import '../states/admin_state.dart';
@@ -25,15 +28,21 @@ class AdminController extends StateController<AdminState> {
   final UserRepository _users;
   final TourService _tours;
 
+  /// Live unified property-verification review workspace. `null` in
+  /// demo-data builds, where the workspace is unavailable by design.
+  final AdminPropertyReviewService? _reviews;
+
   AdminController({
     required VerificationService verification,
     required PropertyService properties,
     required UserRepository users,
     required TourService tours,
+    AdminPropertyReviewService? reviews,
   }) : _verification = verification,
        _properties = properties,
        _users = users,
        _tours = tours,
+       _reviews = reviews,
        super(const AdminState());
 
   bool get loading => state.loading;
@@ -144,4 +153,165 @@ class AdminController extends StateController<AdminState> {
     await _tours.rejectTour(id);
     await loadPendingTours();
   }
+
+  // -- Unified property-verification review workspace -----------------------
+
+  VerificationQueuePage? get reviewPage => state.reviewPage;
+
+  VerificationQueueFilters get reviewFilters => state.reviewFilters;
+
+  VerificationDetail? get reviewDetail => state.reviewDetail;
+
+  String? get busyAction => state.busyAction;
+
+  String? get reviewNotice => state.reviewNotice;
+
+  /// Faceted status count for one dimension, straight from the last loaded
+  /// server page (`null` = that status has no entry server-side).
+  int? reviewCountOf(
+    VerificationDimension dimension,
+    PropertyVerificationStatus status,
+  ) => state.reviewPage?.countOf(dimension, status);
+
+  bool get _reviewUnavailable => _reviews == null;
+
+  void _setReviewError(Object e) =>
+      setState(state.copyWith(error: e.toString()));
+
+  /// Loads (or reloads) one queue page with the current filters. When
+  /// [filters] is given it replaces the stored ones and the offset resets.
+  Future<void> loadReviewPage({VerificationQueueFilters? filters}) async {
+    if (_reviewUnavailable) {
+      _setReviewError(const DemoModeFailure());
+      return;
+    }
+    final effective =
+        (filters ?? state.reviewFilters).copyWith(
+          offset: filters != null ? 0 : state.reviewFilters.offset,
+        );
+    setState(
+      state.copyWith(
+        loading: true,
+        clearError: true,
+        reviewFilters: effective,
+      ),
+    );
+    try {
+      final page = await _reviews!.queue(effective);
+      setState(state.copyWith(reviewPage: page, loading: false));
+    } catch (e) {
+      setState(state.copyWith(error: e.toString(), loading: false));
+    }
+  }
+
+  /// Applies new filters (or pagination) and reloads the queue page.
+  Future<void> setReviewFilters(VerificationQueueFilters filters) async {
+    if (_reviewUnavailable) {
+      _setReviewError(const DemoModeFailure());
+      return;
+    }
+    final previous = state.reviewFilters;
+    setState(state.copyWith(reviewFilters: filters, clearError: true));
+    try {
+      final page = await _reviews!.queue(filters);
+      setState(state.copyWith(reviewPage: page));
+    } catch (e) {
+      // Keep the applied filters visible; the error names the failure.
+      setState(state.copyWith(error: e.toString()));
+      await loadReviewPage(filters: previous);
+    }
+  }
+
+  Future<void> loadReviewDetail(String propertyId) async {
+    if (_reviewUnavailable) {
+      _setReviewError(const DemoModeFailure());
+      return;
+    }
+    setState(state.copyWith(loading: true, clearError: true));
+    try {
+      final detail = await _reviews!.detail(propertyId);
+      setState(state.copyWith(reviewDetail: detail, loading: false));
+    } catch (e) {
+      setState(
+        state.copyWith(
+          error: e.toString(),
+          loading: false,
+          clearReviewDetail: true,
+        ),
+      );
+    }
+  }
+
+  void closeReviewDetail() =>
+      setState(state.copyWith(clearReviewDetail: true));
+
+  void clearReviewNotice() =>
+      setState(state.copyWith(clearReviewNotice: true));
+
+  /// Runs one review operation with busy/notice handling, then refreshes
+  /// the queue page (and the open detail, if any).
+  Future<void> _runReview(
+    String busyLabel,
+    Future<Object?> Function(AdminPropertyReviewService reviews) operation,
+    String Function(Object? result) noticeFor,
+  ) async {
+    if (_reviewUnavailable) {
+      _setReviewError(const DemoModeFailure());
+      return;
+    }
+    setState(state.copyWith(busyAction: busyLabel, clearError: true));
+    try {
+      final result = await operation(_reviews!);
+      setState(
+        state.copyWith(
+          clearBusyAction: true,
+          reviewNotice: noticeFor(result),
+        ),
+      );
+      await loadReviewPage();
+      if (state.reviewDetail != null) {
+        await loadReviewDetail('${state.reviewDetail!.property.propertyId}');
+      }
+    } catch (e) {
+      setState(state.copyWith(error: e.toString(), clearBusyAction: true));
+    }
+  }
+
+  Future<void> startDimensionReview(
+    String propertyId,
+    VerificationDimension dimension,
+  ) => _runReview(
+    'Start review',
+    (reviews) => reviews.startReview(propertyId, dimension),
+    (_) => '${dimension.label}: review started.',
+  );
+
+  Future<void> approveDimension(
+    String propertyId,
+    VerificationDimension dimension,
+  ) => _runReview(
+    'Approve',
+    (reviews) => reviews.approve(propertyId, dimension),
+    (_) => '${dimension.label}: approved.',
+  );
+
+  Future<void> rejectDimension(
+    String propertyId,
+    VerificationDimension dimension,
+    String reason,
+  ) => _runReview(
+    'Reject',
+    (reviews) => reviews.reject(propertyId, dimension, reason),
+    (_) => '${dimension.label}: rejected.',
+  );
+
+  Future<void> requestInformation(
+    String propertyId,
+    VerificationDimension dimension,
+    String note,
+  ) => _runReview(
+    'Request information',
+    (reviews) => reviews.requestInformation(propertyId, dimension, note),
+    (_) => '${dimension.label}: information requested.',
+  );
 }

@@ -91,6 +91,18 @@ class FakeSupabaseAdmin:
             return [i for i in self.invitations if i["invited_email"] == email]
         return list(self.invitations)
 
+    def get_invitation(self, invitation_id: str) -> dict | None:
+        for row in self.invitations:
+            if row["invitation_id"] == str(invitation_id):
+                return dict(row)
+        return None
+
+    def update_invitation(self, invitation_id: str, data: dict) -> None:
+        for row in self.invitations:
+            if row["invitation_id"] == str(invitation_id):
+                row.update(data)
+                return
+
     def insert_role_audit(self, *, affected_user_id, affected_email=None, performed_by_user_id,
                           performed_by_email, action: str, previous_role=None, new_role=None,
                           previous_status=None, new_status=None, details=None) -> dict:
@@ -124,6 +136,32 @@ class FakeSupabaseAdmin:
             self.companies[company_name] = self._next_company_id
             self._next_company_id += 1
         return self.companies[company_name]
+
+    def list_companies(self) -> list[dict]:
+        return [
+            {"company_id": cid, "company_name": name}
+            for name, cid in sorted(self.companies.items(), key=lambda kv: kv[1])
+        ]
+
+    def get_company(self, company_id: int) -> dict | None:
+        for name, cid in self.companies.items():
+            if cid == int(company_id):
+                return {"company_id": cid, "company_name": name}
+        return None
+
+    def create_company(self, company_name: str) -> dict:
+        from sitewise.core.exceptions import ConflictError
+
+        name = company_name.strip()
+        if name in self.companies:
+            raise ConflictError(
+                "A company with this name already exists. Select it from "
+                "the existing company directory instead."
+            )
+        cid = self._next_company_id
+        self._next_company_id += 1
+        self.companies[name] = cid
+        return {"company_id": cid, "company_name": name}
 
     def create_agent_profile(self, *, user_id, agent_name: str, company_id: int | None = None) -> dict:
         row = {"agent_id": self._next_agent_id, "agent_name": agent_name,

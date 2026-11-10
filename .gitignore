@@ -68,3 +68,7 @@ htmlcov/
 .dart_tool/
 .flutter-plugins
 .flutter-plugins-dependencies
+
+# Force ignore all dart_tool and build folders anywhere in the workspace
+**/.dart_tool/
+**/build/

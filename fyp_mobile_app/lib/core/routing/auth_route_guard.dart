@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_logic/shared_logic.dart';
-
 import '../../presentation/mobile/start/auth_blocking_views.dart';
 import 'mobile_role.dart';
 
@@ -111,6 +110,9 @@ class _AuthGuardState extends ConsumerState<AuthGuard> {
     // authority here instead of leaving a guarded screen mounted.
     final state = ref.watch(authNotifierProvider);
     if (widget.access == RouteAccess.public) return widget.builder(context);
+    // if (widget.access == RouteAccess.public) {
+    //   return widget.builder(context);
+    // }
 
     switch (state.status) {
       case AuthStatus.authenticated:

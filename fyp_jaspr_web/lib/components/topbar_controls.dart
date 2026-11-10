@@ -237,7 +237,7 @@ class NotificationControlState extends State<NotificationControl> {
               title: p.title,
               subtitle: '${p.city} · ${p.rentalDisplay}',
               id: p.id,
-              route: '/admin/verification-detail',
+              route: '/admin/listing-detail',
             ),
         ];
       case AppRole.owner:

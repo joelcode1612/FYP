@@ -1,27 +1,32 @@
-import 'dart:async';
-
 import 'package:jaspr/dom.dart';
 import 'package:jaspr/jaspr.dart';
 import 'package:jaspr_riverpod/jaspr_riverpod.dart';
 import 'package:shared_logic/shared_logic.dart';
 
 import '../../components/ui.dart';
+import '../../data/assessment_api.dart';
+import '../../data/api_property_repository.dart';
+import '../../data/auth_service.dart';
 import '../../layouts/app_layout.dart';
 
-/// Web entrepreneur home, restructured to the reference
-/// `SiteWise_Location_Hero_Integrated.html`:
+/// Web entrepreneur home, restructured to the workspace-home mockup:
 ///
-///   ┌─────────────────────────────────────┐
-///   │ Location hero  (headline + map)      │
-///   │ Workspace action center              │
-///   │ 4-KPI grid                           │
-///   └─────────────────────────────────────┘
+/// ```text
+/// ┌──────────────────────────────────────────┐
+/// │ Welcome back, NAME 👋 + subtitle          │
+/// │ 4-KPI row (catalogue / saved / asmts /   │
+/// │           reports)                        │
+/// │ Current Assessment card (thumbnail,      │
+/// │   progress, current stage, Continue)     │
+/// │ Quick Actions (3 cards)                  │
+/// │ Recent Assessments (rows + View All)     │
+/// └──────────────────────────────────────────┘
+/// ```
 ///
-/// The reference is a blue / Archivo Tailwind prototype. It is used as a
-/// *structural* and *visual* reference only — the app's own token system
-/// (`--action #1d4ed8`, `--success #0d9488`, Archivo) already matches it, so
-/// nothing is re-themed. Every figure is a live count, the loaded
-/// recommendation set, or an honest zero — no fabricated "sample study".
+/// Every figure is live: the catalogue read, the account's saved shortlist,
+/// and the persisted assessment history (`GET /api/v1/assessments/me`) — or
+/// an honest zero / em dash. Nothing from the mockup's sample numbers
+/// (12 / 4 / 2 / 1, "Alex", "Taman Universiti Shoplot") is fabricated here.
 @client
 class DashboardPage extends StatefulComponent {
   const DashboardPage({super.key});
@@ -31,814 +36,166 @@ class DashboardPage extends StatefulComponent {
 }
 
 class _DashboardPageState extends State<DashboardPage> {
-  /// Illustrative catchment radius — purely presentational, mirrors the
-  /// reference's 500 m / 1 km toggle. No real geodata is shown.
-  int _radiusIndex = 0;
-  static const _radii = [500, 1000];
+  /// One parallel load for everything the KPI row and the Recent Assessments
+  /// list need. The Current Assessment card keeps its own loader so a slow
+  /// read never holds up the rest of the dashboard.
+  late Future<HomeStats> _stats = _loadStats();
 
-  @override
-  void initState() {
-    super.initState();
-    Future.microtask(() {
-      if (!mounted) return;
-      unawaited(
-        context.read(entrepreneurNotifierProvider.notifier).loadRecommendations(),
-      );
-    });
+  Future<HomeStats> _loadStats() async {
+    final history = await const AssessmentApi().history(limit: 50);
+    if (!history.ok) {
+      return HomeStats(failure: history.failure);
+    }
+    final rows = history.value!.items;
+    // The catalogue count is auxiliary: a failed read shows an em dash on one
+    // KPI instead of failing the whole dashboard.
+    int? catalogue;
+    try {
+      catalogue = (await ApiPropertyRepository().getProperties()).length;
+    } on Object {
+      catalogue = null;
+    }
+    return HomeStats(
+      assessments: history.value!.total,
+      reports: rows.where((r) => r.reportAvailable).length,
+      recent: rows.take(4).toList(),
+      catalogueCount: catalogue,
+    );
   }
 
-  bool _prefsSet(EntrepreneurState state) {
-    final p = state.preferences;
-    return p.businessType.isNotEmpty ||
-        p.preferredLocation.isNotEmpty ||
-        p.maxBudgetRm > 0 ||
-        p.minSizeSqft > 0;
+  void _reload() => setState(() => _stats = _loadStats());
+
+  /// First word of the backend-verified profile name — never a hardcoded
+  /// demo identity. An empty name degrades to a plain welcome.
+  String get _welcomeName {
+    final profile = WebAuth.profile;
+    final raw =
+        ((profile?['full_name'] ?? profile?['name']) as String?)?.trim() ?? '';
+    if (raw.isEmpty) return '';
+    return raw.split(RegExp(r'\s+')).first;
   }
 
   @override
   Component build(BuildContext context) {
-    final state = context.watch(entrepreneurNotifierProvider);
-    final saved = context.watch(appNotifierProvider.select((state) => state.saved));
+    final saved = context.watch(
+      appNotifierProvider.select((state) => state.saved),
+    );
+    final name = _welcomeName;
     return AppLayout(
       role: AppRole.entrepreneur,
       currentRoute: '/entrepreneur',
       title: 'Home',
-      // The reference's first element is the hero itself — there is no
-      // separate page-title band above it.
+      // The welcome header is the page's own first element — no separate
+      // page-title band above it.
       showPageHead: false,
-      child: state.loading
-          ? const _Loading()
-          : state.error != null
-          ? _error(state.error!)
-          : div(classes: 'stack stack--sections sw-home', [
-              _hero(),
-              _actionCenter(state, saved),
-              _kpis(saved, state),
-              p(classes: 'stat-note', [
-                Component.text(
-                  'Recommendations, saved selections and preferences '
-                  'come from your session. The location preview and '
-                  'catchment ring are illustrative only — no live map '
-                  'or measured demand is shown. Scores are relative '
-                  'decision-support indicators, not a probability of '
-                  'business success.',
-                ),
-              ]),
-            ]),
-    );
-  }
-
-  // -------------------------------------------------------------------- error
-
-  Component _error(String message) {
-    return div(classes: 'card stack', [
-      span(classes: 'title', [Component.text('Something went wrong')]),
-      p(classes: 'body', [Component.text(message)]),
-      ActionButton(
-        'Try again',
-        variant: 'secondary',
-        onClick: () => unawaited(
-          context.read(entrepreneurNotifierProvider.notifier).loadRecommendations(),
-        ),
-      ),
-    ]);
-  }
-
-  // --------------------------------------------------------------------- hero
-
-  Component _hero() {
-    final radius = _radii[_radiusIndex];
-    return section(classes: 'sw-lh-hero', [
-      div(classes: 'sw-lh-grid', [
-        div(classes: 'sw-lh-copy', [
-          p(classes: 'sw-lh-eyebrow', [
-            span(
-              classes: 'sw-lh-eyebrow-rule',
-              attributes: const {'aria-hidden': 'true'},
-              [],
-            ),
-            Component.text('F&B LOCATION INTELLIGENCE'),
-          ]),
-          h1(classes: 'sw-lh-title', [
-            Component.text('Is this location worth the '),
-            em([Component.text('lease?')]),
-          ]),
-          p(classes: 'sw-lh-lead', [
-            Component.text(
-              'Before you commit to a commercial space, understand the rent, the '
-              'surrounding area and how well the property fits your F&B business.',
-            ),
-          ]),
-          div(classes: 'sw-lh-actions', [
-            AppLink(
-              to: '/entrepreneur/recommendations',
-              classes: 'sw-lh-button sw-lh-button-primary',
-              children: [Component.text('Assess a location'), _arrow()],
-            ),
-            AppLink(
-              to: '/entrepreneur/explore',
-              classes: 'sw-lh-button sw-lh-button-secondary',
-              children: [Component.text('Explore properties'), _arrow()],
-            ),
-          ]),
-          p(classes: 'sw-lh-caveat', [
-            Icon('info', size: 'sm'),
-            Component.text(
-              'Inspect evidence and outstanding checks before you sign. Location '
-              'analysis is decision support, not a guarantee of business success.',
-            ),
-          ]),
-        ]),
-        div(classes: 'sw-lh-visual', [_mapFrame(radius)]),
-      ]),
-      _builtFor(),
-    ]);
-  }
-
-  Component _arrow() => svg(
-    attributes: {
-      'viewBox': '0 0 24 24',
-      'width': '17',
-      'height': '17',
-      'fill': 'none',
-      'stroke': 'currentColor',
-      'stroke-width': '2',
-      'stroke-linecap': 'round',
-      'stroke-linejoin': 'round',
-      'aria-hidden': 'true',
-    },
-    [
-      path(attributes: {'d': 'M5 12h14M13 6l6 6-6 6'}, []),
-    ],
-  );
-
-  /// Illustrative neighbourhood preview built from CSS (no SVG namespace, no
-  /// live geodata). The 500 m / 1 km toggle only scales the drawn ring.
-  Component _mapFrame(int radius) {
-    return div(classes: 'sw-lh-map-frame', [
-      div(classes: 'sw-lh-map-head', [
-        span(
-          classes: 'sw-lh-window-dots',
-          attributes: const {'aria-hidden': 'true'},
-          [i([]), i([]), i([])],
-        ),
-        span(classes: 'sw-lh-map-headname', [
-          Icon('place', size: 'sm'),
-          Component.text('SITEWISE '),
-          span(classes: 'sw-lh-map-headsub', [
-            Component.text('/ NEIGHBOURHOOD VIEW'),
-          ]),
-        ]),
-        span(classes: 'sw-lh-demo-mark', [Component.text('ILLUSTRATIVE')]),
-      ]),
-      div(classes: 'sw-lh-map-body', [
-        _mapSvg(),
-        div(classes: 'sw-lh-map-key', [
-          _keyDot('sw-lh-key-dot-blue', 'Property'),
-          _keyDot('sw-lh-key-dot-green', 'Nearby F&B'),
-          _keyDot('sw-lh-key-dot-dark', 'Other places'),
-        ]),
-        div(
-          classes: 'sw-lh-map-switch',
-          attributes: const {'role': 'group'},
-          [
-            button(
-              classes: _radiusIndex == 0 ? 'sw-lh-radius-selected' : '',
-              attributes: {
-                'type': 'button',
-                'aria-pressed': _radiusIndex == 0 ? 'true' : 'false',
-              },
-              events: events(onClick: () => setState(() => _radiusIndex = 0)),
-              [Component.text('500 m')],
-            ),
-            button(
-              classes: _radiusIndex == 1 ? 'sw-lh-radius-selected' : '',
-              attributes: {
-                'type': 'button',
-                'aria-pressed': _radiusIndex == 1 ? 'true' : 'false',
-              },
-              events: events(onClick: () => setState(() => _radiusIndex = 1)),
-              [Component.text('1 km')],
-            ),
-          ],
-        ),
-        span(
-          classes: 'sw-lh-map-bottomnote',
-          attributes: const {'role': 'status'},
-          [
-            Component.text(
-              'Schematic catchment · ${radius == 500 ? '500 m' : '1 km'} '
-              'illustration',
-            ),
-          ],
-        ),
-      ]),
-      p(classes: 'sw-lh-map-foot', [
-        Component.text(
-          'Location preview for demonstration only. No live map or measured '
-          'catchment is displayed.',
-        ),
-      ]),
-    ]);
-  }
-
-  /// Illustrative neighbourhood preview built as a real inline SVG — no live
-  /// geodata. Mirrors the reference's patterned street grid, catchment ring,
-  /// coloured pins and "Sample location" label. The 500 m / 1 km toggle only
-  /// scales the drawn catchment ring (the reference draws a single 140-px ring).
-  Component _mapSvg() {
-    final ringR = _radiusIndex == 1 ? 190 : 140;
-    const cx = '308';
-    const cy = '210';
-    return svg(
-      viewBox: '0 0 600 410',
-      attributes: const {
-        'role': 'img',
-        'aria-labelledby': 'sw-lh-map-title sw-lh-map-desc',
-        'preserveAspectRatio': 'xMidYMid slice',
-      },
-      [
-        Component.element(
-          tag: 'title',
-          attributes: const {'id': 'sw-lh-map-title'},
-          children: [Component.text('Illustrative neighbourhood catchment')],
-        ),
-        Component.element(
-          tag: 'desc',
-          attributes: const {'id': 'sw-lh-map-desc'},
-          children: [
-            Component.text(
-              'A schematic street grid with a sample commercial property at the '
-              'centre, plus surrounding cafe, transit and amenity markers. This '
-              'is not a live geographic map.',
-            ),
-          ],
-        ),
-        Component.element(
-          tag: 'defs',
-          children: [
-            Component.element(
-              tag: 'pattern',
-              attributes: {
-                'id': 'sw-lh-small-blocks',
-                'width': '56',
-                'height': '54',
-                'patternUnits': 'userSpaceOnUse',
-                'patternTransform': 'rotate(-8)',
-              },
-              children: [
-                Component.element(
-                  tag: 'rect',
-                  attributes: {
-                    'x': '0',
-                    'y': '0',
-                    'width': '56',
-                    'height': '54',
-                    'fill': '#f4f7fa',
-                  },
-                ),
-                Component.element(
-                  tag: 'path',
-                  attributes: {
-                    'd': 'M0 0H56M0 0V54',
-                    'fill': 'none',
-                    'stroke': '#e0e6ec',
-                    'stroke-width': '2',
-                  },
-                ),
-                Component.element(
-                  tag: 'path',
-                  attributes: {
-                    'd': 'M29 0V54M0 26H56',
-                    'fill': 'none',
-                    'stroke': '#e8edf1',
-                    'stroke-width': '1',
-                  },
-                ),
-              ],
-            ),
-          ],
-        ),
-        Component.element(
-          tag: 'rect',
-          attributes: {
-            'width': '600',
-            'height': '410',
-            'fill': 'url(#sw-lh-small-blocks)',
+      child: div(classes: 'stack stack--sections sw-dash', [
+        _head(name),
+        FutureBuilder<HomeStats>(
+          future: _stats,
+          builder: (context, snapshot) {
+            if (snapshot.connectionState != ConnectionState.done) {
+              return const Skeleton(variant: 'block', count: 3);
+            }
+            final stats = snapshot.data;
+            if (stats == null) {
+              return _statsError('No response from the data service.');
+            }
+            if (stats.failure != null) {
+              return _statsError(stats.failure!.message);
+            }
+            return div(classes: 'stack stack--sections', [
+              _kpis(stats, saved),
+              // Compact overview of the most recently updated saved
+              // assessment. It loads on its own so a slow or failed read
+              // never holds up the rest of the dashboard.
+              const _CurrentAssessment(),
+              _quickActions(saved),
+              _recent(stats.recent),
+            ]);
           },
         ),
-        Component.element(
-          tag: 'g',
-          attributes: {
-            'stroke': '#ffffff',
-            'stroke-linecap': 'round',
-            'fill': 'none',
-          },
-          children: [
-            Component.element(
-              tag: 'path',
-              attributes: {
-                'd': 'M-30 70C145 93 185 96 344 83S526 63 627 49',
-                'stroke-width': '20',
-              },
-            ),
-            Component.element(
-              tag: 'path',
-              attributes: {
-                'd': 'M-27 266C137 248 213 263 340 255S533 264 627 233',
-                'stroke-width': '17',
-              },
-            ),
-            Component.element(
-              tag: 'path',
-              attributes: {
-                'd': 'M116 -35C142 77 154 160 150 265S160 363 157 440',
-                'stroke-width': '21',
-              },
-            ),
-            Component.element(
-              tag: 'path',
-              attributes: {
-                'd': 'M392 -40C411 83 398 155 418 247S419 363 429 447',
-                'stroke-width': '19',
-              },
-            ),
-            Component.element(
-              tag: 'path',
-              attributes: {
-                'd': 'M-30 350C159 329 234 337 326 345S530 350 618 364',
-                'stroke-width': '11',
-              },
-            ),
-          ],
-        ),
-        Component.element(
-          tag: 'g',
-          attributes: {
-            'stroke': '#d5dce4',
-            'stroke-width': '1',
-            'fill': 'none',
-            'opacity': '.72',
-          },
-          children: [
-            Component.element(
-              tag: 'path',
-              attributes: {'d': 'M-30 70C145 93 185 96 344 83S526 63 627 49'},
-            ),
-            Component.element(
-              tag: 'path',
-              attributes: {
-                'd': 'M-27 266C137 248 213 263 340 255S533 264 627 233',
-              },
-            ),
-            Component.element(
-              tag: 'path',
-              attributes: {
-                'd': 'M116 -35C142 77 154 160 150 265S160 363 157 440',
-              },
-            ),
-            Component.element(
-              tag: 'path',
-              attributes: {
-                'd': 'M392 -40C411 83 398 155 418 247S419 363 429 447',
-              },
-            ),
-          ],
-        ),
-        Component.element(
-          tag: 'g',
-          attributes: {
-            'fill': '#99a7b7',
-            'font-family': 'Arial, sans-serif',
-            'font-size': '11',
-            'font-weight': '600',
-            'opacity': '.93',
-          },
-          children: [
-            Component.element(
-              tag: 'text',
-              attributes: {
-                'x': '28',
-                'y': '78',
-                'transform': 'rotate(7 28 78)',
-              },
-              children: [Component.text('Market Street')],
-            ),
-            Component.element(
-              tag: 'text',
-              attributes: {
-                'x': '401',
-                'y': '82',
-                'transform': 'rotate(-8 401 82)',
-              },
-              children: [Component.text('Commercial Avenue')],
-            ),
-            Component.element(
-              tag: 'text',
-              attributes: {
-                'x': '35',
-                'y': '253',
-                'transform': 'rotate(-5 35 253)',
-              },
-              children: [Component.text('Station Road')],
-            ),
-            Component.element(
-              tag: 'text',
-              attributes: {
-                'x': '439',
-                'y': '269',
-                'transform': 'rotate(-6 439 269)',
-              },
-              children: [Component.text('Jalan Utama')],
-            ),
-            Component.element(
-              tag: 'text',
-              attributes: {
-                'x': '146',
-                'y': '159',
-                'transform': 'rotate(82 146 159)',
-              },
-              children: [Component.text('Retail Walk')],
-            ),
-            Component.element(
-              tag: 'text',
-              attributes: {
-                'x': '395',
-                'y': '144',
-                'transform': 'rotate(80 395 144)',
-              },
-              children: [Component.text('Main Street')],
-            ),
-            Component.element(
-              tag: 'text',
-              attributes: {'x': '42', 'y': '354'},
-              children: [Component.text('Neighbourhood Lane')],
-            ),
-          ],
-        ),
-        Component.element(
-          tag: 'circle',
-          attributes: {
-            'cx': cx,
-            'cy': cy,
-            'r': '$ringR',
-            'fill': 'rgba(29,78,216,.07)',
-            'stroke': '#3b82f6',
-            'stroke-width': '2',
-            'stroke-opacity': '.75',
-          },
-        ),
-        Component.element(
-          tag: 'circle',
-          attributes: {
-            'cx': cx,
-            'cy': cy,
-            'r': '18',
-            'fill': '#fff',
-            'stroke': '#cbd9f2',
-            'stroke-width': '1.5',
-          },
-        ),
-        Component.element(
-          tag: 'path',
-          attributes: {
-            'd':
-                'M308 174c-11 0-19 9-19 20 0 14 19 32 19 32s19-18 19-32c0-11-8-20-19-20z',
-            'fill': '#1d4ed8',
-            'stroke': '#ffffff',
-            'stroke-width': '2.5',
-          },
-        ),
-        Component.element(
-          tag: 'circle',
-          attributes: {'cx': '308', 'cy': '194', 'r': '6', 'fill': '#fff'},
-        ),
-        Component.element(
-          tag: 'g',
-          children: [
-            Component.element(
-              tag: 'circle',
-              attributes: {
-                'cx': '217',
-                'cy': '146',
-                'r': '6',
-                'fill': '#0d9488',
-                'stroke': '#fff',
-                'stroke-width': '3',
-              },
-            ),
-            Component.element(
-              tag: 'circle',
-              attributes: {
-                'cx': '376',
-                'cy': '122',
-                'r': '6',
-                'fill': '#0d9488',
-                'stroke': '#fff',
-                'stroke-width': '3',
-              },
-            ),
-            Component.element(
-              tag: 'circle',
-              attributes: {
-                'cx': '424',
-                'cy': '250',
-                'r': '6',
-                'fill': '#0d9488',
-                'stroke': '#fff',
-                'stroke-width': '3',
-              },
-            ),
-            Component.element(
-              tag: 'circle',
-              attributes: {
-                'cx': '251',
-                'cy': '296',
-                'r': '6',
-                'fill': '#0d9488',
-                'stroke': '#fff',
-                'stroke-width': '3',
-              },
-            ),
-            Component.element(
-              tag: 'circle',
-              attributes: {
-                'cx': '366',
-                'cy': '311',
-                'r': '6',
-                'fill': '#1e293b',
-                'stroke': '#fff',
-                'stroke-width': '3',
-              },
-            ),
-            Component.element(
-              tag: 'circle',
-              attributes: {
-                'cx': '182',
-                'cy': '229',
-                'r': '6',
-                'fill': '#1e293b',
-                'stroke': '#fff',
-                'stroke-width': '3',
-              },
-            ),
-          ],
-        ),
-        Component.element(
-          tag: 'g',
-          attributes: {
-            'font-family': 'Arial, sans-serif',
-            'font-size': '11',
-            'font-weight': '700',
-            'fill': '#24334c',
-          },
-          children: [
-            Component.element(
-              tag: 'rect',
-              attributes: {
-                'x': '326',
-                'y': '175',
-                'width': '116',
-                'height': '27',
-                'rx': '7',
-                'fill': '#fff',
-                'stroke': '#d8e1ee',
-              },
-            ),
-            Component.element(
-              tag: 'text',
-              attributes: {'x': '338', 'y': '192'},
-              children: [Component.text('Sample location')],
-            ),
-          ],
-        ),
-      ],
-    );
-  }
-
-  Component _keyDot(String cls, String label) => span([
-    i(classes: cls, attributes: const {'aria-hidden': 'true'}, []),
-    Component.text(label),
-  ]);
-
-  Component _builtFor() => div(
-    classes: 'sw-lh-built-for',
-    attributes: const {'aria-label': 'F&B businesses supported'},
-    [
-      span(classes: 'sw-lh-built-caption', [Component.text('BUILT FOR')]),
-      _builtItem('local_cafe', 'Cafés'),
-      _builtItem('restaurant', 'Restaurants'),
-      _builtItem('bakery_dining', 'Bakeries'),
-      _builtItem('takeout_dining', 'Takeaway'),
-      _builtItem('store', 'Cloud kitchens'),
-    ],
-  );
-
-  Component _builtItem(String icon, String label) =>
-      span([Icon(icon, size: 'sm'), Component.text(label)]);
-
-  // ---------------------------------------------------------- action center
-
-  Component _actionCenter(EntrepreneurState state, Set<String> saved) {
-    final recs = state.recommendations;
-    final top = recs.isNotEmpty
-        ? recs.reduce((r1, r2) => r1.score > r2.score ? r1 : r2)
-        : null;
-
-    return section(classes: 'sw-home-action-center', [
-      div(classes: 'sw-home-action-heading', [
-        div([
-          p(classes: 'sw-home-kicker', [Component.text('YOUR WORKSPACE')]),
-          h2([Component.text('Continue where you left off')]),
-          p([
-            Component.text(
-              'Pick up an assessment, review your shortlist, or start a new '
-              'property search.',
-            ),
-          ]),
-        ]),
-        span(classes: 'sw-home-demo-pill', [
+        // DESIGN.md §17: a concise, visible disclaimer near decision-support
+        // output. Progress percentages here are server-derived stage counts,
+        // never model scores, and this note keeps that boundary explicit.
+        p(classes: 'stat-note', [
           Component.text(
-            _prefsSet(state) ? 'Preferences saved' : 'Set preferences',
+            'Sitewise supports location decision-making. Assessments and '
+            'recommendations do not guarantee business success or confirm '
+            'regulatory approval. Verify important property and licensing '
+            'information independently.',
           ),
         ]),
       ]),
-      div(classes: 'sw-home-action-grid', [
-        // Latest shortlist card — real top recommendation, no sample study.
-        div(classes: 'sw-home-current', [
-          div(classes: 'sw-home-row sw-home-study-head', [
-            span(classes: 'sw-home-kicker', [
-              Component.text('LATEST SHORTLIST'),
-            ]),
-            if (top != null)
-              span(classes: 'sw-home-status', [
-                span(
-                  classes: 'sw-home-status-dot',
-                  attributes: const {'aria-hidden': 'true'},
-                  [],
-                ),
-                Component.text('${recs.length} ranked'),
-              ]),
-          ]),
-          if (top == null)
-            _emptyStudy()
-          else ...[
-            h3([Component.text(top.property.title)]),
-            p(classes: 'sw-home-detail', [
-              Component.text(
-                '${top.property.address} · '
-                'RM${top.property.rentalRm.toStringAsFixed(0)}',
-              ),
-            ]),
-            div(classes: 'sw-home-progress-copy', [
-              span([Component.text('Match score')]),
-              strong([Component.text(top.score.toStringAsFixed(2))]),
-            ]),
-            div(
-              classes: 'sw-home-progress-track',
-              attributes: const {
-                'role': 'progressbar',
-                'aria-label': 'Top match score',
-              },
-              [
-                span(
-                  styles: Styles(
-                    raw: {
-                      'width':
-                          '${((top.score / 1).clamp(0, 1) * 100).round()}%',
-                    },
-                  ),
-                  [],
-                ),
-              ],
-            ),
-            div(classes: 'sw-home-row sw-home-study-bottom', [
-              span([Component.text('Top of ${recs.length} recommendations')]),
-              AppLink(
-                to: '/entrepreneur/recommendations',
-                classes: 'sw-home-primary',
-                children: [
-                  Component.text('Review recommendations '),
-                  span(
-                    attributes: const {'aria-hidden': 'true'},
-                    [Component.text('→')],
-                  ),
-                ],
-              ),
-            ]),
-          ],
+    );
+  }
+
+  // ------------------------------------------------------------------- head
+
+  Component _head(String name) {
+    return header(classes: 'sw-dash-head', [
+      p(classes: 'sw-dash-kicker', [
+        Component.text('Entrepreneur Workspace'),
+      ]),
+      h1(classes: 'sw-dash-title', [
+        Component.text(name.isEmpty ? 'Welcome back' : 'Welcome back, $name'),
+        span(classes: 'sw-dash-wave', attributes: const {'aria-hidden': 'true'}, [
+          Component.text('👋'),
         ]),
-        // Next actions shortcuts.
-        section(classes: 'sw-home-next', [
-          div(classes: 'sw-home-next-heading', [
-            h3([Component.text('Your next actions')]),
-            span([Component.text('3 shortcuts')]),
-          ]),
-          div(classes: 'sw-home-actions', [
-            _actionButton(
-              'bookmark',
-              'Review saved locations',
-              saved.isEmpty
-                  ? 'No favourites saved yet'
-                  : '${saved.length} ${saved.length == 1 ? 'property' : 'properties'} shortlisted',
-              '/entrepreneur/saved',
-            ),
-            _actionButton(
-              'storefront',
-              'Manage my properties',
-              'Register or review your own listings',
-              '/entrepreneur/my-properties',
-            ),
-            _actionButton(
-              'tune',
-              'Refine business requirements',
-              'Adjust your concept, rent and space preferences',
-              _prefsSet(state)
-                  ? '/entrepreneur/recommendations'
-                  : '/entrepreneur/preferences',
-            ),
-          ]),
-        ]),
+      ]),
+      p(classes: 'sw-dash-sub', [
+        Component.text(
+          'Find, assess and choose the right commercial location for your '
+          'business.',
+        ),
       ]),
     ]);
   }
 
-  Component _emptyStudy() => div(classes: 'sw-home-empty', [
-    Icon('search', size: 'lg'),
-    p(classes: 'sw-home-detail', [
-      Component.text(
-        'No recommendations yet. Set your preferences to generate a '
-        'ranked shortlist.',
-      ),
-    ]),
-    AppLink(
-      to: '/entrepreneur/preferences',
-      classes: 'sw-home-primary',
-      children: [
-        Component.text('Set your preferences '),
-        span(attributes: const {'aria-hidden': 'true'}, [Component.text('→')]),
-      ],
-    ),
-  ]);
-
-  Component _actionButton(
-    String icon,
-    String title,
-    String hint,
-    String href,
-  ) => AppLink(
-    to: href,
-    classes: 'sw-home-action',
-    children: [
-      span(classes: 'sw-home-action-symbol', [Icon(icon, size: 'md')]),
-      span(classes: 'sw-home-action-copy', [
-        strong([Component.text(title)]),
-        small([Component.text(hint)]),
-      ]),
-      span(
-        classes: 'sw-home-action-arrow',
-        attributes: const {'aria-hidden': 'true'},
-        [Component.text('→')],
-      ),
-    ],
-  );
+  Component _statsError(String message) {
+    return div(classes: 'card stack', [
+      span(classes: 'title', [Component.text('Something went wrong')]),
+      p(classes: 'body', [Component.text(message)]),
+      ActionButton('Try again', variant: 'secondary', onClick: _reload),
+    ]);
+  }
 
   // -------------------------------------------------------------------- KPIs
 
-  Component _kpis(Set<String> saved, EntrepreneurState state) {
-    final recs = state.recommendations.length;
+  Component _kpis(HomeStats stats, Set<String> saved) {
     return div(classes: 'sw-kpi-grid', [
       _kpi(
-        'auto_awesome',
+        'place',
         '#1d4ed8',
-        'Recommendations',
-        '$recs',
-        'Ranked matches',
-        '/entrepreneur/recommendations',
+        'Explore Properties',
+        stats.catalogueCount == null
+            ? '—'
+            : '${stats.catalogueCount}',
+        'Commercial listings',
+        '/entrepreneur/explore',
       ),
       _kpi(
         'bookmark',
-        '#059669',
-        'Saved favourites',
+        '#7c3aed',
+        'Saved Properties',
         '${saved.length}',
         saved.length == 1 ? 'Property shortlisted' : 'Properties shortlisted',
         '/entrepreneur/saved',
       ),
       _kpi(
-        'tune',
-        '#e11d48',
-        'Preferences',
-        _prefsSet(state) ? 'Set' : '—',
-        _prefsSet(state) ? 'Up to date' : 'Set them to get matches',
-        '/entrepreneur/preferences',
+        'fact_check',
+        '#059669',
+        'Assessments',
+        '${stats.assessments}',
+        'Started by you',
+        '/entrepreneur/assessments',
       ),
       _kpi(
-        'history',
+        'description',
         '#475569',
-        'Assessment runs',
-        '0',
-        'None yet',
-        '/entrepreneur/recommendations',
+        'Reports',
+        '${stats.reports}',
+        stats.reports == 1 ? 'Report ready' : 'Reports ready',
+        '/entrepreneur/assessments',
       ),
     ]);
   }
@@ -866,12 +223,355 @@ class _DashboardPageState extends State<DashboardPage> {
       div(classes: 'kpi-note', [Component.text(note)]),
     ],
   );
+
+  // ------------------------------------------------------------ quick actions
+
+  Component _quickActions(Set<String> saved) {
+    return section(classes: 'sw-dash-section', [
+      div(classes: 'sw-dash-section-head', [
+        h2([Component.text('Quick Actions')]),
+      ]),
+      div(classes: 'sw-dash-quick-grid', [
+        _quick(
+          'search',
+          'Explore Properties',
+          'Discover commercial properties in your area.',
+          '/entrepreneur/explore',
+        ),
+        _quick(
+          'auto_awesome',
+          'View Recommendations',
+          'See properties matched to your preferences.',
+          '/entrepreneur/recommendations',
+        ),
+        _quick(
+          'bookmark',
+          'Saved Properties',
+          saved.isEmpty
+              ? 'Review your shortlisted properties.'
+              : 'Review your ${saved.length} shortlisted '
+                    '${saved.length == 1 ? 'property' : 'properties'}.',
+          '/entrepreneur/saved',
+        ),
+      ]),
+    ]);
+  }
+
+  Component _quick(String icon, String title, String hint, String href) =>
+      AppLink(
+        to: href,
+        classes: 'sw-dash-quick',
+        children: [
+          span(classes: 'sw-dash-quick-tile', [Icon(icon, size: 'md')]),
+          strong([Component.text(title)]),
+          small([Component.text(hint)]),
+        ],
+      );
+
+  // ------------------------------------------------------- recent assessments
+
+  Component _recent(List<AssessmentRecord> rows) {
+    return section(classes: 'sw-dash-section', [
+      div(classes: 'sw-dash-section-head', [
+        h2([Component.text('Recent Assessments')]),
+        AppLink(
+          to: '/entrepreneur/assessments',
+          classes: 'sw-dash-viewall',
+          children: [
+            Component.text('View All'),
+            span(attributes: const {'aria-hidden': 'true'}, [
+              Component.text('→'),
+            ]),
+          ],
+        ),
+      ]),
+      if (rows.isEmpty)
+        div(classes: 'sw-dash-recent', [
+          div(classes: 'sw-home-empty', [
+            Icon('fact_check', size: 'lg'),
+            p(classes: 'sw-home-detail', [
+              Component.text(
+                'No assessments yet. Open a property and begin the five-stage '
+                'location assessment — it is saved to your account as you go.',
+              ),
+            ]),
+            AppLink(
+              to: '/entrepreneur/explore',
+              classes: 'sw-home-primary',
+              children: [
+                Component.text('Find a property to assess '),
+                span(attributes: const {'aria-hidden': 'true'}, [
+                  Component.text('→'),
+                ]),
+              ],
+            ),
+          ]),
+        ])
+      else
+        div(classes: 'sw-dash-recent', [
+          for (final record in rows) _recentRow(record),
+        ]),
+    ]);
+  }
+
+  Component _recentRow(AssessmentRecord record) {
+    final property = record.property;
+    final place = property == null
+        ? 'Property ${record.propertyId}'
+        : [
+            property.city,
+            property.state,
+          ].where((part) => part.trim().isNotEmpty).join(', ');
+    final pct = record.progressPercent.clamp(0, 100);
+    return AppLink(
+      to: '/entrepreneur/assessment?id=${record.propertyId}',
+      classes: 'sw-dash-rrow',
+      children: [
+        _thumb(property?.imageUrl, property == null),
+        span(classes: 'sw-dash-rrow-copy', [
+          strong([
+            Component.text(
+              property?.title ?? 'Listing no longer in the catalogue',
+            ),
+          ]),
+          small([Component.text(place)]),
+        ]),
+        StatusBadge(
+          record.isCompleted ? 'Completed' : 'In progress',
+          tone: record.isCompleted ? 'success' : 'action',
+        ),
+        span(classes: 'sw-dash-rrow-track${record.isCompleted ? ' sw-dash-rrow-track--done' : ''}', [
+          span(
+            styles: Styles(raw: {'width': '$pct%'}),
+            [],
+          ),
+        ]),
+        span(classes: 'sw-dash-rrow-pct', [Component.text('$pct%')]),
+        Icon('chevron_right', size: 'sm'),
+      ],
+    );
+  }
+
+  /// Listing photo when the catalogue has one; a neutral placeholder tile
+  /// when it does not (a removed listing shows an icon, never a fake photo).
+  Component _thumb(String? imageUrl, bool removed) {
+    final url = imageUrl;
+    if (url == null || url.isEmpty) {
+      return div(classes: 'sw-dash-thumb', [
+        Icon(removed ? 'storefront' : 'image', size: 'md'),
+      ]);
+    }
+    return div(classes: 'sw-dash-thumb', [
+      img(
+        src: url,
+        alt: 'Property photo',
+        width: 120,
+        height: 88,
+        attributes: const {'loading': 'lazy'},
+      ),
+    ]);
+  }
 }
 
-class _Loading extends StatelessComponent {
-  const _Loading();
+/// Everything the KPI row and Recent Assessments section need, from one
+/// parallel backend read. `catalogueCount == null` means the catalogue read
+/// failed and the card shows an em dash rather than a fabricated zero.
+class HomeStats {
+  final AssessmentFailure? failure;
+  final int assessments;
+  final int reports;
+  final List<AssessmentRecord> recent;
+  final int? catalogueCount;
+
+  const HomeStats({
+    this.failure,
+    this.assessments = 0,
+    this.reports = 0,
+    this.recent = const [],
+    this.catalogueCount,
+  });
+}
+
+/// The most recently updated saved assessment, restyled to the mockup's
+/// "Current Assessment" card: photo, title, location, progress bar with
+/// "N of 5 stages completed", the current stage as a pill, and one Continue
+/// action.
+///
+/// Every figure is read from `GET /api/v1/assessments/me/current`. The backend
+/// resolves "most recently updated" when several assessments exist, so this
+/// card never picks a record by its own rule and never invents one when the
+/// entrepreneur has not started an assessment.
+///
+/// Not annotated `@client`: Jaspr allows one per library and `DashboardPage`
+/// already carries it. A nested `StatefulComponent` inside a hydrated `@client`
+/// subtree is still interactive — the same pattern as `_Directory` in
+/// `pages/admin/users_page.dart`.
+class _CurrentAssessment extends StatefulComponent {
+  const _CurrentAssessment();
 
   @override
-  Component build(BuildContext context) =>
-      p(classes: 'body muted', [Component.text('Loading…')]);
+  State<_CurrentAssessment> createState() => _CurrentAssessmentState();
+}
+
+class _CurrentAssessmentState extends State<_CurrentAssessment> {
+  static const _api = AssessmentApi();
+
+  late Future<ApiResult<AssessmentRecord?>> _future = _api.current();
+
+  void _reload() => setState(() => _future = _api.current());
+
+  @override
+  Component build(BuildContext context) {
+    return FutureBuilder<ApiResult<AssessmentRecord?>>(
+      future: _future,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState != ConnectionState.done) {
+          return _frame(const Skeleton(variant: 'row', count: 3));
+        }
+        final result = snapshot.data;
+        if (result == null) return _frame(_inlineError('No response.', null));
+        if (!result.ok) {
+          return _frame(
+            _inlineError(result.failure!.message, result.failure!.kind),
+          );
+        }
+        final record = result.value;
+        if (record == null) return _frame(_empty());
+        return _frame(_summary(record));
+      },
+    );
+  }
+
+  /// The shared card frame, so loading, empty, error and summary states all
+  /// occupy the same place in the page and the layout never jumps.
+  Component _frame(Component body) => section(classes: 'sw-dash-section', [
+    div(classes: 'sw-dash-section-head', [
+      h2([Component.text('Current Assessment')]),
+      AppLink(
+        to: '/entrepreneur/assessments',
+        classes: 'sw-dash-viewall',
+        children: [
+          Component.text('View all assessments'),
+          span(attributes: const {'aria-hidden': 'true'}, [
+            Component.text('→'),
+          ]),
+        ],
+      ),
+    ]),
+    div(classes: 'sw-dash-ca', [body]),
+  ]);
+
+  Component _empty() => div(classes: 'sw-home-empty sw-dash-ca-empty', [
+    Icon('fact_check', size: 'lg'),
+    p(classes: 'sw-home-detail', [
+      Component.text(
+        'No assessment started yet. Open a property and begin the '
+        'five-stage location assessment — it is saved to your account as '
+        'you go, so you can leave it part-finished.',
+      ),
+    ]),
+    AppLink(
+      to: '/entrepreneur/explore',
+      classes: 'sw-home-primary',
+      children: [
+        Component.text('Find a property to assess '),
+        span(attributes: const {'aria-hidden': 'true'}, [Component.text('→')]),
+      ],
+    ),
+  ]);
+
+  /// A failure here is contained: the rest of the dashboard is still usable,
+  /// so this renders a short notice with a retry rather than an error page.
+  /// An expired session says so instead of pretending there are no records.
+  Component _inlineError(String message, AssessmentFailureKind? kind) {
+    final signedOut = kind == AssessmentFailureKind.unauthorized;
+    return div(classes: 'sw-home-empty sw-dash-ca-empty', [
+      Icon(signedOut ? 'lock' : 'error', size: 'lg'),
+      p(classes: 'sw-home-detail', [
+        Component.text(
+          signedOut
+              ? 'Your session is not authorised to read assessments. Sign in '
+                    'again to see your saved progress.'
+              : 'The current assessment could not be loaded. $message',
+        ),
+      ]),
+      if (signedOut)
+        AppLink(
+          to: '/login',
+          classes: 'sw-home-primary',
+          children: [Component.text('Go to sign in')],
+        )
+      else
+        ActionButton('Try again', variant: 'secondary', onClick: _reload),
+    ]);
+  }
+
+  Component _summary(AssessmentRecord record) {
+    final property = record.property;
+    final stage = record.stageByKey(record.currentStageKey);
+    final pct = record.progressPercent.clamp(0, 100);
+    return div(classes: 'sw-dash-ca-body', [
+      h3([
+        Component.text(property?.title ?? 'Listing no longer in the catalogue'),
+      ]),
+      p(classes: 'sw-dash-ca-loc', [
+        Icon('place', size: 'sm'),
+        Component.text(
+          property == null
+              ? 'Property ${record.propertyId}'
+              : [property.address, property.city]
+                    .where((part) => part.trim().isNotEmpty)
+                    .join(', '),
+        ),
+      ]),
+      div(classes: 'sw-home-progress-copy', [
+        span([
+          Component.text(
+            record.isCompleted
+                ? 'All ${record.totalStages} stages completed'
+                : '${record.completedStages} of ${record.totalStages} stages '
+                      'completed',
+          ),
+        ]),
+        strong([Component.text('$pct%')]),
+      ]),
+      div(
+        classes: 'sw-home-progress-track',
+        attributes: {
+          'role': 'progressbar',
+          'aria-label': 'Assessment progress',
+          'aria-valuenow': '$pct',
+          'aria-valuemin': '0',
+          'aria-valuemax': '100',
+        },
+        [
+          span(
+            styles: Styles(raw: {'width': '$pct%'}),
+            [],
+          ),
+        ],
+      ),
+      div(classes: 'sw-dash-stage-row', [
+        span([Component.text('Current Stage:')]),
+        StatusBadge(
+          stage?.title ?? (record.isCompleted ? 'Completed' : 'In progress'),
+          tone: record.isCompleted ? 'success' : 'action',
+        ),
+      ]),
+      div(classes: 'sw-dash-ca-actions', [
+        AppLink(
+          to: '/entrepreneur/assessment?id=${record.propertyId}',
+          classes: 'sw-home-primary',
+          children: [
+            Component.text(
+              record.isCompleted ? 'Review Assessment' : 'Continue Assessment',
+            ),
+            span(attributes: const {'aria-hidden': 'true'}, [
+              Component.text(' →'),
+            ]),
+          ],
+        ),
+      ]),
+    ]);
+  }
 }

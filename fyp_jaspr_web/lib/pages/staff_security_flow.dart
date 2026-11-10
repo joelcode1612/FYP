@@ -21,6 +21,7 @@ class StaffSecurityFlow extends StatefulComponent {
 enum _Screen {
   loading, verify, enroll, invalid, expired, success,
   unavailable, sessionExpired, roleDenied, accountBlocked,
+  invitationExpired, invitationRevoked,
 }
 
 class _StaffSecurityFlowState extends State<StaffSecurityFlow> {
@@ -104,6 +105,16 @@ class _StaffSecurityFlowState extends State<StaffSecurityFlow> {
       'identity changed',
     ])) {
       return _Screen.sessionExpired;
+    }
+    // Invitation lifecycle (trusted backend activation failures - fixed,
+    // backend-crafted user-safe messages, matched most-specific-first).
+    if (has(['invitation has expired'])) return _Screen.invitationExpired;
+    if (has(['invitation was revoked'])) return _Screen.invitationRevoked;
+    if (has([
+      'invitation has not been confirmed',
+      'invitation belongs to a different account',
+    ])) {
+      return _Screen.accountBlocked;
     }
     // Portal / role violations.
     if (has([
@@ -191,13 +202,38 @@ class _StaffSecurityFlowState extends State<StaffSecurityFlow> {
     _redirectTimer = Timer(const Duration(milliseconds: 1600), () async {
       try {
         await WebAuth.complete();
-      } catch (_) {
-        if (mounted) {
-          setState(() {
-            _screen = _Screen.unavailable;
-            _message = 'Your code was verified, but your staff workspace could not load. Try again.';
-          });
-        }
+      } catch (error) {
+        if (!mounted) return;
+        // Completion includes the trusted invitation activation, so a
+        // verified code can still fail with a lifecycle outcome: the
+        // invitation was expired/revoked in the meantime, or the activation
+        // service is down. These get their own actionable states instead of
+        // one generic "workspace could not load" message.
+        final type = _classify(error);
+        setState(() {
+          _screen = switch (type) {
+            // A code misclassification here is really a completion failure,
+            // not a wrong code: keep the user on a retryable utility card.
+            _Screen.invalid || _Screen.expired || _Screen.enroll ||
+            _Screen.verify || _Screen.success || _Screen.loading =>
+              _Screen.unavailable,
+            _ => type,
+          };
+          _message = switch (type) {
+            _Screen.invitationExpired =>
+              'This invitation has expired. Ask an administrator to send a new invitation, then sign in again.',
+            _Screen.invitationRevoked =>
+              'This invitation was revoked. Ask an administrator to send a new invitation.',
+            _Screen.accountBlocked =>
+              'Your account is not active. Contact a Sitewise administrator before signing in.',
+            _Screen.sessionExpired =>
+              'Your sign-in session has expired. Please sign in again.',
+            _Screen.roleDenied =>
+              'This account does not have Agent or Administrator access.',
+            _ =>
+              'Your code was verified, but your staff workspace could not load. Try again.',
+          };
+        });
       }
     });
   }
@@ -318,14 +354,18 @@ class _StaffSecurityFlowState extends State<StaffSecurityFlow> {
   ]);
 
   Component _utilityCard() {
-    final isRoleIssue =
-        _screen == _Screen.roleDenied || _screen == _Screen.accountBlocked;
+    final isRoleIssue = _screen == _Screen.roleDenied ||
+        _screen == _Screen.accountBlocked ||
+        _screen == _Screen.invitationExpired ||
+        _screen == _Screen.invitationRevoked;
     return div(classes: 'smfa-card smfa-result', [
       _titleIcon(
         switch (_screen) {
           _Screen.sessionExpired => 'lock_clock',
           _Screen.roleDenied => 'badge',
           _Screen.accountBlocked => 'lock_person',
+          _Screen.invitationExpired => 'event_busy',
+          _Screen.invitationRevoked => 'block',
           _ => 'wifi_off',
         },
         'amber',
@@ -335,6 +375,8 @@ class _StaffSecurityFlowState extends State<StaffSecurityFlow> {
           _Screen.sessionExpired => 'Session Expired',
           _Screen.roleDenied => 'Staff Access Only',
           _Screen.accountBlocked => 'Account Not Active',
+          _Screen.invitationExpired => 'Invitation Expired',
+          _Screen.invitationRevoked => 'Invitation Revoked',
           _ => 'Verification Unavailable',
         }),
       ]),

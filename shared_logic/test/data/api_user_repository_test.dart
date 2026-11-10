@@ -173,4 +173,17 @@ class _FakeApiClient implements ApiClient {
 
   @override
   Future<Map<String, dynamic>> delete(String path) => throw UnimplementedError();
+
+  @override
+  Future<Map<String, dynamic>> uploadMultipart(
+    String path, {
+    required Map<String, String> fields,
+    required String fileField,
+    required String filename,
+    required List<int> bytes,
+    required String contentType,
+  }) => throw UnimplementedError();
+
+  @override
+  Future<List<int>> downloadBinary(String path) => throw UnimplementedError();
 }

@@ -2,9 +2,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_logic/shared_logic.dart';
 import 'package:flutter/material.dart';
 
+import '../../../../core/config/mobile_config.dart';
 import '../../../../core/routing/auth_route_guard.dart';
 import '../../../../core/routing/mobile_role.dart';
 import '../../../../core/theme/sitewise_theme.dart';
+import '../../../../application/services/service_locator.dart';
 import '../../../shared/widgets/sitewise_brand.dart';
 import '../../../shared/widgets/sitewise_cta_button.dart';
 import '../../../shared/widgets/sitewise_icon.dart';
@@ -14,6 +16,10 @@ import '../widgets/auth_tabs.dart';
 import '../widgets/auth_terms_row.dart';
 
 /// Mobile authentication feature: Log In / Sign Up in one screen.
+///
+/// The mode is chosen by the `/auth` route argument and by the inline account
+/// link at the foot of the form. The header is brand-only: there is no return
+/// control and no top Log In / Sign Up switch.
 ///
 /// Presentation only — every credential call goes through the shared
 /// [AuthNotifier], which drives the auth state machine and the Supabase
@@ -45,9 +51,22 @@ class _MobileAuthPageState extends ConsumerState<MobileAuthPage> {
   bool _terms = false;
   String? _fieldError;
 
+  /// Set once a workspace entry navigation has been queued for this page
+  /// instance, so a Retry that restores a saved session and a manual sign-in
+  /// can never both trigger a push.
+  bool _enteredWorkspace = false;
+
   @override
   void initState() {
     super.initState();
+    // §5/§4: the remembered address (device scope, never a secret) is
+    // rehydrated so a failed or interrupted sign-in does not cost retyping.
+    // Passwords are deliberately NOT persisted anywhere.
+    ServiceLocator.drafts.loadDraftEmail().then((email) {
+      if (!mounted || email == null || email.isEmpty) return;
+      if (_email.text.isNotEmpty) return; // never clobber live typing
+      _email.text = email;
+    });
     // The cold-start gate normally does this first; calling it again is a
     // no-op, so a direct jump to /auth still resolves an existing session.
     // Deferred because the notifier publishes synchronously and initState
@@ -100,6 +119,11 @@ class _MobileAuthPageState extends ConsumerState<MobileAuthPage> {
     if (!_validate()) return;
     final email = _email.text.trim();
     final pass = _password.text;
+    // §5: remember the address BEFORE the request — a failed sign-in (wrong
+    // password, unreachable service) must not cost retyping it. The address
+    // is the only credential-adjacent value persisted, and it is not a
+    // secret; the password never leaves the controller.
+    ServiceLocator.drafts.saveDraftEmail(email);
     final auth = ref.read(authNotifierProvider.notifier);
     final ok = _tab == AuthTab.login
         ? await auth.signIn(email: email, password: pass)
@@ -127,10 +151,15 @@ class _MobileAuthPageState extends ConsumerState<MobileAuthPage> {
   /// backend profile, never from this screen, so a web-only account is turned
   /// away here instead of being routed into a dashboard that does not exist.
   void _enterWorkspace(SitewiseUser user) {
+    if (_enteredWorkspace) return;
+    _enteredWorkspace = true;
     final home = mobileHomeRouteFor(user.role);
     ref.read(appNotifierProvider.notifier).setRole(user.role);
     if (home == null) {
-      setState(() => _fieldError = mobileUnsupportedRoleMessage(user.role));
+      setState(() {
+        _enteredWorkspace = false;
+        _fieldError = mobileUnsupportedRoleMessage(user.role);
+      });
       return;
     }
     final pending = AuthPendingDestination.takeFor(user.role);
@@ -146,6 +175,17 @@ class _MobileAuthPageState extends ConsumerState<MobileAuthPage> {
     // pending-address change — and never while the user is just typing.
     final state = ref.watch(authNotifierProvider);
     final busy = state.status == AuthStatus.authenticating;
+    // A Retry that restores a saved session (the backend was briefly
+    // unreachable at startup) must carry the user onward exactly like a fresh
+    // sign-in does — the manual _submit/_provider paths already navigate, so
+    // those transitions are skipped here.
+    ref.listen<AuthState>(authNotifierProvider, (previous, next) {
+      if (next.status != AuthStatus.authenticated) return;
+      if (previous?.status == AuthStatus.authenticating) return;
+      if (!mounted) return;
+      final user = next.user;
+      if (user != null) _enterWorkspace(user);
+    });
     return Scaffold(
       backgroundColor: SitewiseColors.background,
       body: SafeArea(
@@ -158,16 +198,6 @@ class _MobileAuthPageState extends ConsumerState<MobileAuthPage> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    AuthTabs(
-                      tab: _tab,
-                      onChanged: (v) {
-                        if (busy) return;
-                        setState(() {
-                          _tab = v;
-                          _fieldError = null;
-                        });
-                      },
-                    ),
                     const SizedBox(height: 22),
                     Text(
                       isLogin ? 'Welcome Back' : 'Create your account',
@@ -300,19 +330,39 @@ class _MobileAuthPageState extends ConsumerState<MobileAuthPage> {
                     const SizedBox(height: 18),
                     const AuthDividerText(),
                     const SizedBox(height: 11),
-                    AuthProviderButton(
-                      provider: AuthProvider.apple,
-                      onPressed: busy
-                          ? null
-                          : () => _provider(AuthProvider.apple),
-                    ),
-                    const SizedBox(height: 9),
+                    // Mobile supports Google and email/password only. The
+                    // Apple button was removed: this build registers no
+                    // Apple OAuth flow, so the control could only fail.
                     AuthProviderButton(
                       provider: AuthProvider.google,
                       onPressed: busy
                           ? null
                           : () => _provider(AuthProvider.google),
                     ),
+                    // Retry for the non-blocking "service unavailable" state:
+                    // re-runs the session verification without discarding the
+                    // saved session, so a restored session continues onward
+                    // automatically (see the listener above).
+                    if (state.status == AuthStatus.error) ...[
+                      const SizedBox(height: 6),
+                      Center(
+                        child: TextButton(
+                          onPressed: busy
+                              ? null
+                              : () => ref
+                                    .read(authNotifierProvider.notifier)
+                                    .retry(),
+                          child: const Text(
+                            'Retry connection check',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: SitewiseColors.action,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
                     const SizedBox(height: 15),
                     Center(
                       child: Wrap(
@@ -357,29 +407,19 @@ class _MobileAuthPageState extends ConsumerState<MobileAuthPage> {
     );
   }
 
+  /// Brand-only header. The return control was removed deliberately: this is
+  /// a root destination reached from the start gate, landing and onboarding,
+  /// so there is no previous screen to return to. The 40px box preserves the
+  /// header height and keeps the wordmark centred as before.
   Widget _header() {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 4, 12, 2),
-      child: Row(
-        children: [
-          Material(
-            color: Colors.white,
-            shape: const CircleBorder(),
-            child: InkWell(
-              customBorder: const CircleBorder(),
-              onTap: () => Navigator.of(context).maybePop(),
-              child: const SizedBox(
-                width: 40,
-                height: 40,
-                child: Icon(Icons.arrow_back_rounded, size: 19),
-              ),
-            ),
-          ),
-          const Spacer(),
-          const SitewiseBrand(),
-          const Spacer(),
-          const SizedBox(width: 40),
-        ],
+    return const Padding(
+      padding: EdgeInsets.fromLTRB(12, 4, 12, 2),
+      child: SizedBox(
+        height: 40,
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [SitewiseBrand()],
+        ),
       ),
     );
   }
@@ -438,12 +478,39 @@ class _Notice extends StatelessWidget {
           body: state.message ?? 'Please sign in again.',
         );
       case AuthStatus.error:
+        // The notifier now says WHICH component failed. A build without
+        // --dart-define values is a compile-time problem, not an internet
+        // outage; retrying it can never help, so it gets its own notice.
+        final reason =
+            state.message ?? 'Sitewise could not reach the sign-in service.';
+        if (state.errorKind == AuthErrorKind.configuration) {
+          return _NoticeContent(
+            tone: _NoticeTone.warning,
+            title: 'Sign-in is not configured in this build',
+            body: <String>[
+              reason,
+              if (MobileConfig.problems.isNotEmpty)
+                MobileConfig.problems.join('\n'),
+              'Start the backend and the app separately: '
+              '.\\run-sitewise.cmd starts FastAPI; Flutter needs its own '
+              '--dart-define-from-file=fyp_mobile_app/config/dev.env.',
+            ].join('\n\n'),
+          );
+        }
+        final diagnostics = <String>[
+          'API endpoint: ${MobileConfig.apiEndpoint} '
+          '(mode: ${MobileConfig.hostMode}).',
+          ...MobileConfig.problems,
+          for (final hint in MobileConfig.hints)
+            if (hint.contains('LAN IP') || hint.contains('adb reverse')) hint,
+        ];
         return _NoticeContent(
           tone: _NoticeTone.error,
-          title: 'Sign-in service unavailable',
+          title: _errorTitle(state.errorKind),
           body:
-              '${state.message ?? 'Sitewise could not reach the sign-in service.'} '
-              'No access was granted.',
+              '$reason No access was granted. If you were signed in, your '
+              'saved session is intact — tap "Retry connection check" once '
+              'the service is reachable.\n\n${diagnostics.join('\n')}',
         );
       default:
         // Wrong credentials and duplicate emails keep the user on this form;
@@ -460,6 +527,16 @@ class _Notice extends StatelessWidget {
         );
     }
   }
+
+  /// Component-specific titles. A configuration problem never reaches here
+  /// (it has its own warning card), and no raw error text is used.
+  static String _errorTitle(AuthErrorKind kind) => switch (kind) {
+    AuthErrorKind.connectivity => 'Cannot reach the SiteWise backend',
+    AuthErrorKind.timeout => 'The SiteWise backend timed out',
+    AuthErrorKind.tls => 'Secure connection failed',
+    AuthErrorKind.unknown => 'Could not verify sign-in',
+    _ => 'Sign-in service unavailable',
+  };
 }
 
 class _NoticeContent {

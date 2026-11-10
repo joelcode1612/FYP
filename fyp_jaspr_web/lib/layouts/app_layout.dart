@@ -1,8 +1,10 @@
 import 'package:jaspr/dom.dart';
 import 'package:jaspr/jaspr.dart';
 
+import '../components/app_breadcrumbs.dart';
 import '../components/topbar_controls.dart';
 import '../components/ui.dart';
+import '../data/breadcrumb_routes.dart';
 import '../data/navigation.dart';
 import '../data/site_content.dart';
 
@@ -61,6 +63,11 @@ class AppLayout extends StatefulComponent {
   /// source does not have.
   final bool showPageHead;
 
+  /// Set to false when the page renders its own breadcrumb trail inside the
+  /// content (the property-registration wizard's styled `sw-reg-breadcrumb`),
+  /// so the reader never sees two trails for one page.
+  final bool showBreadcrumbs;
+
   final Component child;
 
   const AppLayout({
@@ -72,6 +79,7 @@ class AppLayout extends StatefulComponent {
     this.eyebrow,
     this.actions = const [],
     this.showPageHead = true,
+    this.showBreadcrumbs = true,
     required this.child,
   });
 
@@ -93,85 +101,115 @@ class _AppLayoutState extends State<AppLayout> {
     // does not leave the nav with nothing selected.
     final selected = parentShellRoute(component.currentRoute);
 
-    return div(classes: 'app-shell', [
-      if (_navOpen)
-        // Scrim. `aria-hidden` because it is a dismissal surface, not content —
-        // the equivalent content already exists in the drawer underneath.
-        div(
-          classes: 'scrim',
-          attributes: const {'aria-hidden': 'true'},
-          events: events(onClick: _closeNav),
-          [],
-        ),
-
-      // Mobile drawer. Hidden above 900px by CSS; the pill nav is the desktop
-      // and wide-tablet navigation.
-      _Sidebar(
-        role: component.role,
-        currentRoute: component.currentRoute,
-        open: _navOpen,
-      ),
-
-      div(classes: 'app-main', [
-        // --- The pill nav -------------------------------------------------
-        header(classes: 'app-pill', [
-          // Burger — hidden above 900px by CSS, so wide screens get the inline
-          // links instead.
-          button(
-            classes: 'topbar__burger',
-            attributes: {
-              'type': 'button',
-              'aria-label': _navOpen ? 'Close navigation' : 'Open navigation',
-              'aria-expanded': _navOpen ? 'true' : 'false',
-              'aria-controls': 'app-sidebar',
-            },
-            events: events(onClick: () => setState(() => _navOpen = !_navOpen)),
-            [Icon(_navOpen ? 'close' : 'menu')],
+    // Role-scoped theming hooks. The Administrator workspace carries its own
+    // navy/charcoal "Blue Accent" theme (SiteWise_Admin_Blue_DESIGN.md), the
+    // Agent workspace the light landing-page palette (DESIGN.md §4), and the
+    // Entrepreneur workspace the same light palette (the dark shared shell
+    // was replaced by a white one on request). The extra classes let the
+    // stylesheet retheme each shell without touching the other roles or the
+    // public styling, which keep reading the shared `.app-shell` tokens.
+    return div(
+      classes: switch (component.role) {
+        AppRole.admin => 'app-shell app-shell--admin',
+        AppRole.agent => 'app-shell app-shell--agent',
+        AppRole.entrepreneur => 'app-shell app-shell--entrepreneur',
+        _ => 'app-shell',
+      },
+      [
+        if (_navOpen)
+          // Scrim. `aria-hidden` because it is a dismissal surface, not content —
+          // the equivalent content already exists in the drawer underneath.
+          div(
+            classes: 'scrim',
+            attributes: const {'aria-hidden': 'true'},
+            events: events(onClick: _closeNav),
+            [],
           ),
 
-          Brand(subtitle: workspaceLabelFor(component.role)),
+        // Mobile drawer. Hidden above 900px by CSS; the pill nav is the desktop
+        // and wide-tablet navigation.
+        _Sidebar(
+          role: component.role,
+          currentRoute: component.currentRoute,
+          open: _navOpen,
+        ),
 
-          nav(classes: 'app-pill__nav', [
-            for (final d in destinations)
-              AppLink(
-                to: d.route,
-                // `aria-current="page"` is the standard way to tell assistive
-                // technology which entry is the current one; without it the
-                // active item is communicated by colour alone.
-                attributes: d.route == selected
-                    ? const {'aria-current': 'page'}
-                    : null,
-                classes: d.route == selected
-                    ? 'app-pill__link app-pill__link--active'
-                    : 'app-pill__link',
-                // The source's pill row carries labels only. Icons were removed
-                // because the scrollable row flex-shrank them to zero width, and
-                // because `threesixty` is not a Material Symbols ligature — it
-                // rendered the literal word.
-                children: [Component.text(d.label)],
+        div(classes: 'app-main', [
+          // --- The pill nav -------------------------------------------------
+          header(classes: 'app-pill', [
+            // Burger — hidden above 900px by CSS, so wide screens get the inline
+            // links instead.
+            button(
+              classes: 'topbar__burger',
+              attributes: {
+                'type': 'button',
+                'aria-label': _navOpen ? 'Close navigation' : 'Open navigation',
+                'aria-expanded': _navOpen ? 'true' : 'false',
+                'aria-controls': 'app-sidebar',
+              },
+              events: events(
+                onClick: () => setState(() => _navOpen = !_navOpen),
               ),
+              [Icon(_navOpen ? 'close' : 'menu')],
+            ),
+
+            Brand(subtitle: workspaceLabelFor(component.role)),
+
+            nav(classes: 'app-pill__nav', [
+              for (final d in destinations)
+                AppLink(
+                  to: d.route,
+                  // `aria-current="page"` is the standard way to tell assistive
+                  // technology which entry is the current one; without it the
+                  // active item is communicated by colour alone.
+                  attributes: d.route == selected
+                      ? const {'aria-current': 'page'}
+                      : null,
+                  classes: d.route == selected
+                      ? 'app-pill__link app-pill__link--active'
+                      : 'app-pill__link',
+                  // The source's pill row carries labels only. Icons were removed
+                  // because the scrollable row flex-shrank them to zero width, and
+                  // because `threesixty` is not a Material Symbols ligature — it
+                  // rendered the literal word.
+                  children: [Component.text(d.label)],
+                ),
+            ]),
+
+            div(classes: 'app-pill__right', [
+              TopbarControls(role: component.role),
+            ]),
           ]),
 
-          div(classes: 'app-pill__right', [
-            TopbarControls(role: component.role),
+          // --- Page ----------------------------------------------------------
+          div(classes: 'app-content', [
+            div(classes: 'app-content__inner', [
+              // Global breadcrumb trail, straight below the pill nav on every
+              // authenticated page. The hierarchy comes from the centralised
+              // registry (breadcrumb_routes.dart) keyed by this page's
+              // `currentRoute`; short trails (the workspace home) render
+              // nothing.
+              if (component.showBreadcrumbs)
+                AppBreadcrumbs(
+                  breadcrumbTrailFor(
+                    role: component.role,
+                    currentRoute: component.currentRoute,
+                    pageTitle: component.title,
+                  ),
+                ),
+              if (component.showPageHead)
+                PageHead(
+                  title: component.title,
+                  description: component.subtitle,
+                  eyebrow: component.eyebrow,
+                  actions: component.actions,
+                ),
+              component.child,
+            ]),
           ]),
         ]),
-
-        // --- Page ----------------------------------------------------------
-        div(classes: 'app-content', [
-          div(classes: 'app-content__inner', [
-            if (component.showPageHead)
-              PageHead(
-                title: component.title,
-                description: component.subtitle,
-                eyebrow: component.eyebrow,
-                actions: component.actions,
-              ),
-            component.child,
-          ]),
-        ]),
-      ]),
-    ]);
+      ],
+    );
   }
 }
 

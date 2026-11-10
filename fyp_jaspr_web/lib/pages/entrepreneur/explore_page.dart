@@ -1,10 +1,12 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:jaspr/dom.dart';
 import 'package:jaspr/jaspr.dart';
 import 'package:jaspr_riverpod/jaspr_riverpod.dart';
 import 'package:shared_logic/shared_logic.dart';
 
+import '../../components/combined_explore_dom.dart';
 import '../../components/filter_panel.dart';
 import '../../components/map_dom.dart';
 import '../../components/property_card.dart';
@@ -12,38 +14,44 @@ import '../../components/ui.dart';
 import '../../data/app_locator.dart';
 import '../../layouts/app_layout.dart';
 
-/// Web explore, laid out as the source's `explore.html` with the `map.html`
-/// section appended — the target serves both source pages from this one route.
+/// Combined SiteWise Entrepreneur Explore page.
 ///
-/// ```text
-/// .page-head        "Explore" · "Commercial properties" · description
-/// .filters          keyword · rent/area ranges · type/state/city · verification
-/// count line        + sort control
-/// .pgrid            property cards
-/// section           "Map & surroundings"
-///   .map-layout     .map-pane (layers + pins + legend) | .analysis (.a-card…)
-/// ```
+/// Layout: filter controls across the top, then a real Leaflet map on the left
+/// and commercial-property listings on the right. One FastAPI-backed inventory
+/// drives both views. Selecting a property activates a 500 m / 1 km catchment.
 ///
-/// One sequence drives everything: `_results` is the filtered-and-sorted list,
-/// and both the grid and the map read it, so the two can never disagree.
-/// Selecting a pin highlights its card; a card's Locate button centers its pin
-/// and scrolls to the map section.
+/// Data flow (PostgreSQL → FastAPI → shared_logic → Riverpod → this page →
+/// Leaflet): the inventory is the authenticated catalogue repository
+/// (`/api/v1/catalog/properties` via [ApiPropertyRepository]) surfaced through
+/// `entrepreneurNotifierProvider`. The browser bridge in
+/// `combined_explore_dom.dart` only forwards a selected property id back into
+/// Dart — every record, filter, radius and distance lives in Dart/shared_logic
+/// state, and the JS layer never holds data of its own.
 ///
-/// Honesty constraints:
-///  * there is **no map SDK** in either tree, so the surface is the stylised
-///    projection panel the mobile app uses — but the interactions are real:
-///    zoom re-projects every pin, drag pans the view, and dense cells collapse
-///    into count clusters rather than a pile of overlapping pins;
-///  * pins that fall outside the canvas are clipped by the overflow, never
-///    clamped onto unrelated positions;
-///  * where the dataset has no coordinates the map says so instead of plotting
-///    nothing silently.
+/// Nearby commercial properties are computed with the shared great-circle
+/// helper ([GeoUtils.haversineMeters]) over the already-loaded filtered set —
+/// the same validated Haversine the mobile app uses — and are a DIFFERENT
+/// dataset from the F&B competitor research counts, which stay on their own
+/// analysis endpoint and are never shown as property counts.
+///
+/// The optional public-transport layer fetches OpenStreetMap/Overpass records
+/// from the browser only after a user opts in (cached, user-initiated, honest
+/// empty/error states); OSM stops are NOT live service schedules.
 @client
 class ExplorePage extends StatefulComponent {
-  /// Open scrolled to the map section (route passes `id == 'map'`).
+  /// Retained for existing app.dart route compatibility: `?id=map` scrolls to
+  /// the map section, and the legacy `/entrepreneur/map` route reuses this
+  /// page with [startInMap] set.
   final bool startInMap;
 
-  const ExplorePage({super.key, this.startInMap = false});
+  /// Property id from `?id=` to preselect (marker + circle + listing).
+  final String? initialPropertyId;
+
+  const ExplorePage({
+    super.key,
+    this.startInMap = false,
+    this.initialPropertyId,
+  });
 
   @override
   State<ExplorePage> createState() => _ExplorePageState();
@@ -55,52 +63,38 @@ class _ExplorePageState extends State<ExplorePage> {
   /// inside it.
   EntrepreneurState get _model => context.read(entrepreneurNotifierProvider);
 
-  /// The structured filter, applied on top of the view model's query results.
   PropertyFilter filter = PropertyFilter.empty;
-
-  /// Sort applied after filtering — the grid and the map read the same order.
   ExploreSort sort = ExploreSort.imported;
 
-  /// Property chosen from a pin, shown in the map popup and highlighted in
-  /// the grid.
+  /// Selected property id (marker click, card Locate, or `?id=`).
   String? selectedId;
 
-  /// Analysis future for the current selection, created once per selection:
-  /// re-creating it on every rebuild (each pan frame, each filter edit) would
-  /// re-request the analysis and flicker the column back to its loading state.
-  Future<LocationAnalysis?>? _analysisFuture;
-
-  /// Real zoom factor applied to the pin projection.
-  int zoom = 1;
-
-  /// Pan offset in percent of the canvas, added on top of the projection.
-  double panX = 0;
-  double panY = 0;
-
-  // Drag-to-pan bookkeeping.
-  bool _dragging = false;
-  double _dragClientX = 0;
-  double _dragClientY = 0;
-  double _panStartX = 0;
-  double _panStartY = 0;
-
+  /// Applied catchment radius. 500 m and 1 km are the documented research
+  /// radii; the 1 km count CONTAINS the 500 m ring.
+  int radiusM = 1000;
+  bool showTransport = false;
+  int visibleLimit = 24;
   Timer? _queryDebounce;
-  int _visibleLimit = 24;
-
-  static const _zoomLevels = [1, 2, 4];
-
-  /// Cluster cell size as a percent of the canvas: pins landing in the same
-  /// cell collapse into one count pill.
-  static const double _clusterCell = 8.0;
+  Future<LocationAnalysis?>? _analysisFuture;
 
   @override
   void initState() {
     super.initState();
+    final initialId = component.initialPropertyId;
+    if (initialId != null && initialId.isNotEmpty) {
+      selectedId = initialId;
+      _analysisFuture = _readAnalysis(initialId);
+    }
     Future.microtask(() {
       if (!mounted) return;
       unawaited(
         context.read(entrepreneurNotifierProvider.notifier).loadExplore(),
       );
+      if (component.startInMap) {
+        Future.delayed(const Duration(milliseconds: 400), () {
+          if (mounted) scrollDomIntoView('swcx-map-section');
+        });
+      }
     });
   }
 
@@ -110,87 +104,157 @@ class _ExplorePageState extends State<ExplorePage> {
     super.dispose();
   }
 
-  List<CommercialProperty> get _results =>
+  /// The inventory is provided by the existing FastAPI catalogue repository,
+  /// not a hardcoded JavaScript array or an Excel-only snapshot.
+  List<CommercialProperty> get _filtered =>
       sortForExplore(filter.apply(_model.explore), sort);
 
-  /// Listings that can actually be plotted. A listing with no coordinates would
-  /// otherwise land at 0,0 in the projection.
-  List<CommercialProperty> get _mappable => _results
-      .where((prop) => prop.latitude != 0 || prop.longitude != 0)
-      .toList();
+  /// Coordinates usable for plotting and distance math. The (0, 0) pair is
+  /// this codebase's "no coordinates" sentinel; a listing without coordinates
+  /// is skipped, never placed at an invented location.
+  static bool _validPoint(CommercialProperty p) =>
+      p.latitude.isFinite &&
+      p.longitude.isFinite &&
+      p.latitude.abs() <= 90 &&
+      p.longitude.abs() <= 180 &&
+      p.hasCoordinates;
 
-  CommercialProperty? get _selected {
+  /// Great-circle distance in metres from the shared_logic helper — the same
+  /// implementation the mobile app uses. This is NOT a walking or driving
+  /// route, and every UI label says so.
+  static double? _metres(CommercialProperty a, CommercialProperty b) =>
+      GeoUtils.haversineMeters(
+        a.latitude,
+        a.longitude,
+        b.latitude,
+        b.longitude,
+      );
+
+  CommercialProperty? get _center {
     final id = selectedId;
     if (id == null) return null;
-    for (final p in _results) {
-      if (p.id == id) return p;
+    for (final property in _filtered) {
+      if (property.id == id && _validPoint(property)) return property;
     }
     return null;
   }
 
-  void _setFilter(PropertyFilter next) => setState(() {
-    _visibleLimit = 24;
-    filter = next;
-    _clearSelectionIfMissing();
-  });
+  /// Radius limits the property LIST, not the background map inventory.
+  /// Keeping other pins visible lets a user choose a different center.
+  List<CommercialProperty> get _listed {
+    final center = _center;
+    if (center == null) return _filtered;
+    final matches = _filtered
+        .where(
+          (candidate) =>
+              candidate.id == center.id ||
+              (_validPoint(candidate) &&
+                  (_metres(center, candidate) ?? double.infinity) <= radiusM),
+        )
+        .toList();
+    if (sort == ExploreSort.imported) {
+      matches.sort(
+        (left, right) => (_metres(center, left) ?? double.infinity).compareTo(
+          _metres(center, right) ?? double.infinity,
+        ),
+      );
+    }
+    return matches;
+  }
 
-  void _reset() => setState(() {
-    _visibleLimit = 24;
-    filter = PropertyFilter.empty;
-    selectedId = null;
-    _analysisFuture = null;
-  });
+  /// Other listings within [limitM] of [center] — the selection itself is
+  /// never counted as its own neighbour, and records without usable
+  /// coordinates are excluded rather than placed at a made-up distance.
+  int _nearbyCount(CommercialProperty center, int limitM) => _filtered
+      .where(
+        (candidate) =>
+            candidate.id != center.id &&
+            _validPoint(candidate) &&
+            (_metres(center, candidate) ?? double.infinity) <= limitM,
+      )
+      .length;
 
-  void _clearSelectionIfMissing() {
-    if (selectedId != null && !_results.any((prop) => prop.id == selectedId)) {
-      selectedId = null;
-      _analysisFuture = null;
+  Future<LocationAnalysis?> _readAnalysis(String propertyId) async {
+    try {
+      return await AppLocator.recommendations.analysis(propertyId);
+    } on Object {
+      return null; // Unavailable analysis must not break the map or listings.
     }
   }
 
-  void _setSort(ExploreSort next) => setState(() => sort = next);
-
-  void _showAll() => setState(() {
-    zoom = _zoomLevels.first;
-    panX = 0;
-    panY = 0;
-  });
-
-  /// Selects [prop] for the map popup and the grid highlight, making sure the
-  /// highlighted card is rendered past the visible limit.
-  void _select(CommercialProperty prop) => setState(() {
-    selectedId = prop.id;
-    final future = AppLocator.recommendations.analysis(prop.id);
-    // The repository reports unavailable analysis by failing this future. The
-    // FutureBuilder subscribes only on the next rebuild, so without a listener
-    // attached now the error escapes to the zone as uncaught.
-    unawaited(future.then<void>((_) {}, onError: (Object e, StackTrace s) {}));
-    _analysisFuture = future;
-    final index = _results.indexWhere((r) => r.id == prop.id);
-    if (index >= _visibleLimit) _visibleLimit = index + 1;
-  });
-
-  /// Locates a listing on the map: select it, pan the canvas so its pin sits
-  /// centered, then bring the map section into view.
-  void _locate(CommercialProperty prop) {
-    _select(prop);
-    final (left, top) = _project(prop, zoom);
+  void _choose(CommercialProperty property, {bool scrollToMap = false}) {
+    if (!_validPoint(property)) return;
     setState(() {
-      panX = (50 - left).clamp(-50, 50).toDouble();
-      panY = (50 - top).clamp(-50, 50).toDouble();
+      if (selectedId != property.id) {
+        _analysisFuture = _readAnalysis(property.id);
+      }
+      selectedId = property.id;
+      visibleLimit = 24;
     });
-    Future.delayed(const Duration(milliseconds: 80), () {
-      scrollDomIntoView('map');
+    if (scrollToMap) {
+      Future.delayed(const Duration(milliseconds: 40), () {
+        if (mounted) scrollDomIntoView('swcx-map-section');
+      });
+    }
+  }
+
+  void _clearCenter() => setState(() {
+    selectedId = null;
+    _analysisFuture = null;
+    showTransport = false;
+    visibleLimit = 24;
+  });
+
+  void _changeFilter(PropertyFilter value) => setState(() {
+    filter = value;
+    visibleLimit = 24;
+    // Never retain a selected property excluded by the new filters.
+    if (_center == null) {
+      selectedId = null;
+      _analysisFuture = null;
+      showTransport = false;
+    }
+  });
+
+  void _reset() {
+    _queryDebounce?.cancel();
+    setState(() {
+      filter = PropertyFilter.empty;
+      sort = ExploreSort.imported;
+      radiusM = 1000;
+      selectedId = null;
+      showTransport = false;
+      _analysisFuture = null;
+      visibleLimit = 24;
+    });
+    // The keyword lives in the shared EntrepreneurController, not this widget.
+    // Clear it too so Clear filters really restores the complete catalogue.
+    context.read(entrepreneurNotifierProvider.notifier).setQuery('');
+  }
+
+  void _queryChanged(String value) {
+    _queryDebounce?.cancel();
+    _queryDebounce = Timer(const Duration(milliseconds: 300), () {
+      if (!mounted) return;
+      context.read(entrepreneurNotifierProvider.notifier).setQuery(value);
     });
   }
 
-  void _onQueryChanged(String value) {
-    // The notifier refetches and notifies for every query change, which
-    // would flash the whole page per keystroke — settle first.
-    _queryDebounce?.cancel();
-    _queryDebounce = Timer(const Duration(milliseconds: 250), () {
-      context.read(entrepreneurNotifierProvider.notifier).setQuery(value);
-    });
+  /// Saves/removes a shortlist property. A signed-in account persists to the
+  /// server first and the shortlist only moves once the server accepted the
+  /// change; a visitor keeps the cookie-backed selection.
+  Future<void> _toggleSaved(String id) async {
+    final notifier = context.read(appNotifierProvider.notifier);
+    if (!AppLocator.isSignedIn) {
+      notifier.toggleSaved(id);
+      return;
+    }
+    final current = context.read(appNotifierProvider).saved.contains(id);
+    final failure = await AppLocator.persistToggleSaved(
+      id,
+      wantSaved: !current,
+    );
+    if (failure == null && mounted) notifier.toggleSaved(id);
   }
 
   @override
@@ -204,11 +268,11 @@ class _ExplorePageState extends State<ExplorePage> {
     return AppLayout(
       role: AppRole.entrepreneur,
       currentRoute: '/entrepreneur/explore',
-      title: 'Commercial properties',
-      eyebrow: 'Explore',
+      title: 'Explore commercial properties',
+      eyebrow: 'Property discovery',
       subtitle:
-          'Accepted property records from your imported workbook. Dataset '
-          'quality checks do not establish current availability or administrator verification.',
+          'Search rental listings, view their locations, and examine the '
+          'surrounding 500 m or 1 km catchment. Source coordinates may be approximate.',
       child: state.loading
           ? const _Loading()
           : state.error != null
@@ -222,575 +286,442 @@ class _ExplorePageState extends State<ExplorePage> {
                     .loadExplore(),
               ),
             )
-          : div(classes: 'stack stack--sections', [
-              _filterSection(),
-              _resultsSection(saved, compared),
-              _mapSection(),
+          : div(classes: 'swcx-page', [
+              _filterHeader(),
+              _toolbar(),
+              div(classes: 'swcx-layout', [
+                div(classes: 'swcx-map-column', [_mapPanel()]),
+                div(classes: 'swcx-list-column', [
+                  _listingPanel(saved, compared),
+                ]),
+              ]),
+              if (_center != null) _insightsPanel(),
             ]),
     );
   }
 
-  // -------------------------------------------------------------- filter form
-
-  Component _filterSection() => FilterPanel(
-    filter: filter,
-    source: _model.explore,
-    results: _results,
-    query: _model.query,
-    onQueryChanged: _onQueryChanged,
-    onChanged: _setFilter,
-    onReset: _reset,
-  );
-
-  // ------------------------------------------------------------------ results
-
-  Component _resultsSection(Set<String> saved, Set<String> compared) {
-    final results = _results;
-    if (results.isEmpty) {
-      return EmptyState(
-        title: 'No properties match these filters',
-        body:
-            'No approved listing satisfies every active criterion. Widen your '
-            'budget or floor-area range, remove a property type, or clear all '
-            'filters to see everything available.',
-        action: ActionButton('Clear all filters', onClick: _reset),
-      );
-    }
-
-    return div(classes: 'stack stack--md', [
-      div(classes: 'explore__results-head', [
-        p(classes: 'small', [
-          Component.text(
-            '${results.length} ${results.length == 1 ? 'property' : 'properties'} '
-            'match your filters.',
-          ),
-        ]),
-        div(classes: 'explore__sort', [
-          span(classes: 'field__label', [Component.text('Sort by')]),
-          select(
-            attributes: const {'aria-label': 'Sort listings'},
-            events: events<List<String>>(
-              onInput: (values) => _setSort(
-                values.isNotEmpty
-                    ? ExploreSort.values.byName(values.first)
-                    : ExploreSort.imported,
-              ),
-            ),
-            [
-              for (final s in ExploreSort.values)
-                option(
-                  value: s.name,
-                  attributes: {if (s == sort) 'selected': ''},
-                  [Component.text(_sortLabel(s))],
-                ),
-            ],
-          ),
-        ]),
+  Component _filterHeader() => section(classes: 'swcx-filters', [
+    div(classes: 'swcx-section-title', [
+      div([
+        span(classes: 'eyebrow', [Component.text('SEARCH & FILTER')]),
+        h2([Component.text('Find the right commercial space')]),
       ]),
-      div(classes: 'pgrid', [
-        for (final p in results.take(_visibleLimit))
-          PropertyCard(
-            property: p,
-            href: '/entrepreneur/property-detail?id=${p.id}',
-            selected: p.id == selectedId,
-            anchorId: 'pcard-${p.id}',
-            saved: saved.contains(p.id),
-            compared: compared.contains(p.id),
-            onToggleSaved: () =>
-                context.read(appNotifierProvider.notifier).toggleSaved(p.id),
-            onToggleCompared: () =>
-                context.read(appNotifierProvider.notifier).toggleCompared(p.id),
-            onLocate: () => _locate(p),
-          ),
-      ]),
-      if (results.length > _visibleLimit)
-        ActionButton(
-          'Show more properties',
-          onClick: () => setState(() => _visibleLimit += 24),
+      p(classes: 'small', [
+        Component.text(
+          'Filters apply to the same records shown on the map and in the property list.',
         ),
+      ]),
+    ]),
+    FilterPanel(
+      filter: filter,
+      source: _model.explore,
+      results: _listed,
+      query: _model.query,
+      onQueryChanged: _queryChanged,
+      onChanged: _changeFilter,
+      onReset: _reset,
+    ),
+  ]);
+
+  Component _toolbar() {
+    final center = _center;
+    return div(classes: 'swcx-toolbar', [
+      div(classes: 'swcx-toolbar-copy', [
+        strong([
+          Component.text(
+            center == null
+                ? 'Select a property to inspect its surroundings'
+                : 'Exploring ${center.title}',
+          ),
+        ]),
+        span([
+          Component.text(
+            center == null
+                ? '${_filtered.length} matching commercial property records'
+                : '${_nearbyCount(center, 500)} other listings ≤500 m · '
+                      '${_nearbyCount(center, 1000)} other listings ≤1 km',
+          ),
+        ]),
+      ]),
+      div(classes: 'swcx-tools', [
+        span(classes: 'swcx-tools-label', [Component.text('Radius')]),
+        for (final metres in const [500, 1000])
+          button(
+            classes: radiusM == metres
+                ? 'swcx-tool swcx-tool--active'
+                : 'swcx-tool',
+            attributes: {
+              'type': 'button',
+              'aria-pressed': radiusM == metres ? 'true' : 'false',
+              'aria-label':
+                  'Select ${metres == 500 ? '500 metres' : '1 kilometre'} radius',
+            },
+            events: events(
+              onClick: () => setState(() {
+                radiusM = metres;
+                visibleLimit = 24;
+              }),
+            ),
+            [Component.text(metres == 500 ? '500 m' : '1 km')],
+          ),
+        button(
+          classes: showTransport ? 'swcx-tool swcx-tool--active' : 'swcx-tool',
+          attributes: {
+            'type': 'button',
+            'aria-pressed': showTransport ? 'true' : 'false',
+            if (center == null) 'disabled': '',
+            'title': center == null
+                ? 'Select a property before loading nearby transport stops'
+                : 'Show OpenStreetMap-recorded public transport stops',
+          },
+          events: events(
+            onClick: () {
+              if (_center != null) {
+                setState(() => showTransport = !showTransport);
+              }
+            },
+          ),
+          [Icon('directions_bus', size: 'sm'), Component.text('Transport')],
+        ),
+        if (center != null)
+          button(
+            classes: 'swcx-tool',
+            attributes: const {'type': 'button'},
+            events: events(onClick: _clearCenter),
+            [Component.text('Show all')],
+          ),
+      ]),
     ]);
   }
 
-  // ---------------------------------------------------------------------- map
-
-  Component _mapSection() {
-    final selected = _selected;
+  Component _mapPanel() {
+    final center = _center;
+    // Map contains the full FILTERED property set. Radius membership controls
+    // marker appearance and the list. The chosen center remains selectable.
+    final json = jsonEncode({
+      'selectedId': center?.id,
+      'radiusM': radiusM,
+      'showTransport': showTransport && center != null,
+      'properties': [
+        for (final p in _filtered)
+          if (_validPoint(p))
+            {
+              'id': p.id,
+              'title': p.title,
+              'address': '${p.address}, ${p.city}',
+              'lat': p.latitude,
+              'lon': p.longitude,
+              'rentRm': p.rentalRm,
+              'nearby':
+                  center != null &&
+                  (p.id == center.id ||
+                      (_metres(center, p) ?? double.infinity) <= radiusM),
+            },
+      ],
+    });
     return section(
-      classes: 'stack stack--md',
-      attributes: const {'id': 'map'},
+      classes: 'swcx-map-panel',
+      attributes: const {'id': 'swcx-map-section'},
       [
-        div(classes: 'stack', [
-          span(classes: 'eyebrow', [Component.text('Location analysis')]),
-          h2(classes: 'title-lg', [Component.text('Map & surroundings')]),
+        div(classes: 'swcx-panel-head', [
+          div([
+            span(classes: 'eyebrow', [
+              Component.text('INTERACTIVE PROPERTY MAP'),
+            ]),
+            h2([Component.text('Map & surroundings')]),
+          ]),
+          span(classes: 'swcx-map-counter', [
+            Component.text('${_filtered.where(_validPoint).length} mapped'),
+          ]),
+        ]),
+        div(
+          classes: 'swcx-map-canvas',
+          attributes: {
+            'id': 'swcx-leaflet',
+            'data-state': json,
+            'role': 'region',
+            'aria-label': 'Interactive commercial property map',
+          },
+          [],
+        ),
+        // JS only forwards the selected property ID. All data and state remain in Dart.
+        button(
+          classes: 'swcx-hidden-bridge',
+          attributes: const {
+            'id': 'swcx-selection-bridge',
+            'type': 'button',
+            'tabindex': '-1',
+            'aria-hidden': 'true',
+          },
+          events: events(
+            onClick: () {
+              final id = selectedCombinedExplorePropertyId();
+              if (id == null) return;
+              for (final p in _filtered) {
+                if (p.id == id) {
+                  _choose(p);
+                  return;
+                }
+              }
+            },
+          ),
+          [],
+        ),
+        div(classes: 'swcx-map-foot', [
+          div(classes: 'swcx-map-legend', [
+            span([
+              i(classes: 'swcx-dot swcx-dot--selected', []),
+              Component.text('Selected'),
+            ]),
+            span([
+              i(classes: 'swcx-dot swcx-dot--near', []),
+              Component.text('Within radius'),
+            ]),
+            span([
+              i(classes: 'swcx-dot swcx-dot--other', []),
+              Component.text('Other listings'),
+            ]),
+            span([
+              i(classes: 'swcx-dot swcx-dot--transport', []),
+              Component.text('Transport'),
+            ]),
+          ]),
           p(classes: 'small', [
             Component.text(
-              'Drag to pan, zoom to spread the pins apart, and select a pin to '
-              'inspect its surroundings. Where a source returned nothing we say '
-              'so — "0 records found" and "data unavailable" are different '
-              'things and are never mixed up.',
+              'Distances are straight-line estimates from catalogue coordinates, '
+              'not travel times. 500 m is included in the 1 km total.',
             ),
           ]),
         ]),
-        div(classes: 'map-layout', [_mapPane(), _analysisColumn(selected)]),
+        div(classes: 'swcx-transport-block', [
+          div(classes: 'swcx-transport-heading', [
+            h3([Component.text('Nearby public transport')]),
+            span([Component.text('OpenStreetMap · not real-time')]),
+          ]),
+          p(
+            classes: 'swcx-transport-status',
+            attributes: const {
+              'id': 'swcx-transport-status',
+              'aria-live': 'polite',
+            },
+            [
+              Component.text(
+                center == null
+                    ? 'Select a property, then turn on Transport.'
+                    : showTransport
+                    ? 'Checking mapped stops near this property…'
+                    : 'Turn on Transport to load available map records.',
+              ),
+            ],
+          ),
+          div(
+            classes: 'swcx-transport-results',
+            attributes: const {'id': 'swcx-transport-results'},
+            [],
+          ),
+        ]),
       ],
     );
   }
 
-  Component _mapPane() {
-    final canZoomIn = zoom < _zoomLevels.last;
-    final canZoomOut = zoom > _zoomLevels.first;
-    final pins = _mapPins();
-    return div(classes: 'map-pane', [
-      div(classes: 'layer-bar', [
-        for (final layer in const [
-          'Nearby F&B competitors',
-          'Demand generators',
-          'Transport',
-          'Population radius',
-        ])
-          button(
-            classes: 'layer-toggle',
-            attributes: {
-              'type': 'button',
-              'aria-pressed': layer == 'Nearby F&B competitors'
-                  ? 'true'
-                  : 'false',
-            },
-            events: events(onClick: () => _toastLayer(layer)),
-            [Component.text(layer)],
-          ),
+  Component _listingPanel(Set<String> saved, Set<String> compared) {
+    final results = _listed;
+    return section(classes: 'swcx-list-panel', [
+      div(classes: 'swcx-panel-head', [
+        div([
+          span(classes: 'eyebrow', [Component.text('COMMERCIAL PROPERTIES')]),
+          h2([
+            Component.text(
+              _center == null
+                  ? 'Property listings'
+                  : 'Properties within ${radiusM == 500 ? '500 m' : '1 km'}',
+            ),
+          ]),
+        ]),
+        span(classes: 'swcx-map-counter', [
+          Component.text('${results.length} listed'),
+        ]),
       ]),
-      div(
-        classes: _dragging ? 'map-canvas map-canvas--dragging' : 'map-canvas',
-        events: {
-          'pointerdown': _onPointerDown,
-          'pointermove': _onPointerMove,
-          'pointerup': (_) => _onPointerEnd(),
-          'pointercancel': (_) => _onPointerEnd(),
-          'pointerleave': (_) => _onPointerEnd(),
-        },
-        [
-          div(classes: 'visual__grid', []),
-          if (pins.isEmpty)
-            div(classes: 'explore__map-empty', [
-              Icon('location_off', size: 'lg'),
-              strong([Component.text('Nothing to plot')]),
-              p(classes: 'small', [
+      div(classes: 'swcx-list-sort', [
+        span(classes: 'field__label', [Component.text('Sort by')]),
+        select(
+          attributes: const {'aria-label': 'Sort commercial properties'},
+          events: events<List<String>>(
+            onInput: (values) => setState(() {
+              sort = values.isEmpty
+                  ? ExploreSort.imported
+                  : ExploreSort.values.byName(values.first);
+              visibleLimit = 24;
+            }),
+          ),
+          [
+            for (final value in ExploreSort.values)
+              option(
+                value: value.name,
+                attributes: {if (value == sort) 'selected': ''},
+                [Component.text(_sortLabel(value))],
+              ),
+          ],
+        ),
+      ]),
+      if (results.isEmpty)
+        div(classes: 'swcx-list-empty', [
+          Icon('search_off', size: 'lg'),
+          h3([Component.text('No matching properties')]),
+          p([Component.text('Try another radius or clear some filters.')]),
+          ActionButton('Clear filters', onClick: _reset),
+        ])
+      else
+        div(classes: 'swcx-list-scroll', [
+          div(classes: 'pgrid swcx-property-grid', [
+            for (final p in results.take(visibleLimit))
+              PropertyCard(
+                property: p,
+                href:
+                    '/entrepreneur/property-detail?id=${Uri.encodeComponent(p.id)}',
+                assessHref:
+                    '/entrepreneur/assessment?id=${Uri.encodeComponent(p.id)}',
+                anchorId: 'swcx-property-${p.id}',
+                selected: p.id == selectedId,
+                saved: saved.contains(p.id),
+                compared: compared.contains(p.id),
+                onLocate: () => _choose(p, scrollToMap: true),
+                onToggleSaved: () => _toggleSaved(p.id),
+                onToggleCompared: () => context
+                    .read(appNotifierProvider.notifier)
+                    .toggleCompared(p.id),
+              ),
+          ]),
+          if (results.length > visibleLimit)
+            ActionButton(
+              'Show more properties',
+              onClick: () => setState(() {
+                visibleLimit += 24;
+              }),
+            ),
+        ]),
+    ]);
+  }
+
+  Component _insightsPanel() {
+    final center = _center;
+    if (center == null) return const div([]);
+    final nearby500 = _nearbyCount(center, 500);
+    final nearby1km = _nearbyCount(center, 1000);
+    return section(classes: 'swcx-insights', [
+      div(classes: 'swcx-panel-head', [
+        div([
+          span(classes: 'eyebrow', [Component.text('PROPERTY CONTEXT')]),
+          h2([Component.text('Selected property information')]),
+        ]),
+        ActionLink(
+          'Assess this property',
+          href: '/entrepreneur/assessment?id=${Uri.encodeComponent(center.id)}',
+        ),
+      ]),
+      div(classes: 'swcx-insights-layout', [
+        div(classes: 'swcx-selected-card', [
+          h3([Component.text(center.title)]),
+          p([
+            Component.text(
+              '${center.address}, ${center.city}, ${center.state}',
+            ),
+          ]),
+          dl(classes: 'swcx-facts', [
+            div([
+              dt([Component.text('Monthly rent')]),
+              dd([Component.text(center.rentalDisplay)]),
+            ]),
+            div([
+              dt([Component.text('Floor area')]),
+              dd([
+                Component.text('${center.sizeSqft.toStringAsFixed(0)} sq ft'),
+              ]),
+            ]),
+            div([
+              dt([Component.text('Property type')]),
+              dd([Component.text(center.propertyType)]),
+            ]),
+            div([
+              dt([Component.text('Property ID')]),
+              dd([Component.text(center.id)]),
+            ]),
+            div([
+              dt([Component.text('Verification')]),
+              dd([Component.text(center.verification.label)]),
+            ]),
+            div([
+              dt([Component.text('Surrounding listings')]),
+              dd([
                 Component.text(
-                  'None of the matching listings has coordinates in the '
-                  'dataset, so there is nothing to place on the map. The '
-                  'listings above are unaffected.',
+                  '$nearby500 within 500 m · '
+                  '${nearby1km - nearby500} more in the 500 m–1 km ring',
                 ),
               ]),
             ]),
-          ...pins,
-          // Zoom is real: it re-projects every pin.
-          div(classes: 'explore__zoom', [
-            button(
-              classes: canZoomIn
-                  ? 'explore__zoom-btn'
-                  : 'explore__zoom-btn is-disabled',
-              attributes: {'type': 'button', 'aria-label': 'Zoom in'},
-              events: events(
-                onClick: canZoomIn
-                    ? () => setState(
-                        () => zoom = _zoomLevels[_zoomLevels.indexOf(zoom) + 1],
-                      )
-                    : null,
-              ),
-              [Icon('add')],
-            ),
-            button(
-              classes: canZoomOut
-                  ? 'explore__zoom-btn'
-                  : 'explore__zoom-btn is-disabled',
-              attributes: {'type': 'button', 'aria-label': 'Zoom out'},
-              events: events(
-                onClick: canZoomOut
-                    ? () => setState(
-                        () => zoom = _zoomLevels[_zoomLevels.indexOf(zoom) - 1],
-                      )
-                    : null,
-              ),
-              [Icon('remove')],
-            ),
-            button(
-              classes: 'explore__zoom-btn',
-              attributes: {
-                'type': 'button',
-                'aria-label': 'Show all properties',
-                'title': 'Show all properties',
-              },
-              events: events(onClick: _showAll),
-              [Icon('public')],
-            ),
           ]),
-          if (zoom > 1)
-            span(classes: 'explore__map-zoom', [Component.text('$zoom×')]),
-        ],
-      ),
-      div(classes: 'map-legend', [
-        _legendItem('lg-prop', 'Property'),
-        _legendItem('lg-comp', 'Competitor'),
-        _legendItem('lg-demand', 'Demand generator'),
-        _legendItem('lg-transit', 'Transport'),
-        _legendItem('lg-pop', 'Population radius'),
-      ]),
-    ]);
-  }
-
-  /// Buckets the mappable listings into grid cells of [_clusterCell] percent.
-  /// A cell with a single pin renders that pin; a shared cell renders one
-  /// count cluster instead of a pile of overlapping pins.
-  List<Component> _mapPins() {
-    final cells = <String, List<CommercialProperty>>{};
-    for (final p in _mappable) {
-      final (left, top) = _project(p, zoom);
-      final key =
-          '${(left / _clusterCell).floor()}:${(top / _clusterCell).floor()}';
-      (cells[key] ??= []).add(p);
-    }
-    return [
-      for (final group in cells.values)
-        group.length == 1 ? _pin(group.single) : _cluster(group),
-    ];
-  }
-
-  Component _pin(CommercialProperty p) => button(
-    classes: p.id == selectedId ? 'map-pin map-pin--active' : 'map-pin',
-    attributes: {
-      'type': 'button',
-      'style': _pinStyle(p, zoom, panX, panY),
-      'title': p.title,
-      'aria-label': '${p.title}, ${_compactRm(p.rentalRm)}',
-    },
-    events: events(onClick: () => _select(p)),
-    [
-      Icon('place', size: 'sm'),
-      span(classes: 'map-pin__price', [Component.text(_compactRm(p.rentalRm))]),
-    ],
-  );
-
-  Component _cluster(List<CommercialProperty> group) {
-    final anchor = group.first;
-    final (left, top) = _project(anchor, zoom);
-    final active = group.any((g) => g.id == selectedId);
-    return button(
-      classes: active ? 'map-cluster map-cluster--active' : 'map-cluster',
-      attributes: {
-        'type': 'button',
-        'style':
-            'left:${(left + panX).toStringAsFixed(2)}%;top:${(top + panY).toStringAsFixed(2)}%;',
-        'title': '${group.length} properties share this area',
-        'aria-label':
-            'Cluster of ${group.length} properties; zoom in to separate them',
-      },
-      events: events(onClick: () => _expandCluster(group)),
-      [Component.text('${group.length}')],
-    );
-  }
-
-  void _expandCluster(List<CommercialProperty> group) {
-    if (zoom < _zoomLevels.last) {
-      setState(() => zoom = _zoomLevels[_zoomLevels.indexOf(zoom) + 1]);
-    } else {
-      // At maximum zoom the members stay merged — select the first record
-      // rather than pretending the cluster opened up.
-      _select(group.first);
-    }
-  }
-
-  // Drag-to-pan. The browser-specific coordinate reads live behind the
-  // stub/browser split in `map_dom.dart`; the 3px threshold keeps a pin click
-  // from being misread as a pan.
-  void _onPointerDown(Object e) {
-    setState(() {
-      _dragging = true;
-      _dragClientX = pointerClientX(e);
-      _dragClientY = pointerClientY(e);
-      _panStartX = panX;
-      _panStartY = panY;
-    });
-  }
-
-  void _onPointerMove(Object e) {
-    if (!_dragging) return;
-    final dx = pointerClientX(e) - _dragClientX;
-    final dy = pointerClientY(e) - _dragClientY;
-    if (dx.abs() < 3 && dy.abs() < 3) return;
-    setState(() {
-      // px -> percent of the canvas, clamped so the projection cannot be
-      // dragged arbitrarily far off.
-      panX = (_panStartX + dx / windowInnerWidth() * 100)
-          .clamp(-50, 50)
-          .toDouble();
-      panY = (_panStartY + dy / windowInnerHeight() * 100)
-          .clamp(-50, 50)
-          .toDouble();
-    });
-  }
-
-  void _onPointerEnd() {
-    if (!_dragging) return;
-    setState(() => _dragging = false);
-  }
-
-  Component _legendItem(String cls, String label) =>
-      span([span(classes: 'lg $cls', []), Component.text(label)]);
-
-  void _toastLayer(String layer) {
-    // Layer toggles are presentation-only in the source too: no tile layer is
-    // fetched. Selecting the property pin is what drives the analysis column.
-    setState(() {});
-  }
-
-  // ----------------------------------------------------------- analysis column
-
-  Component _analysisColumn(CommercialProperty? selected) {
-    return div(classes: 'analysis', [
-      if (selected != null) _selectedCard(selected),
-      ..._analysisCards(selected),
-    ]);
-  }
-
-  Component _selectedCard(CommercialProperty prop) => div(classes: 'a-card', [
-    h3([Component.text(prop.title)]),
-    p(classes: 'meta', [Component.text('#${prop.id} · ${prop.propertyType}')]),
-    p(classes: 'what', [
-      Component.text(
-        '${prop.address}, ${prop.city} · ${prop.rentalDisplay} · '
-        '${prop.sizeSqft.toStringAsFixed(0)} sq ft',
-      ),
-    ]),
-    div(classes: 'chips', [
-      StatusBadge(
-        'Verification: ${prop.verification.label.toLowerCase()}',
-        tone: toneForVerification(prop.verification),
-      ),
-      StatusBadge(
-        'Suitability: ${prop.suitabilityScore.toStringAsFixed(0)}/100',
-        tone: _scoreTone(prop.suitabilityScore),
-      ),
-    ]),
-    p([
-      ActionLink(
-        'View listing',
-        href: '/entrepreneur/property-detail?id=${prop.id}',
-        variant: 'secondary',
-      ),
-    ]),
-  ]);
-
-  List<Component> _analysisCards(CommercialProperty? selected) {
-    final id = selected?.id;
-    final future = _analysisFuture;
-
-    if (id == null || future == null) {
-      return [
-        div(classes: 'a-card', [
-          h3([Component.text('Select a property')]),
-          p(classes: 'what', [
-            Component.text(
-              'Choose a pin on the map to load its location analysis: population, '
-              'nearby competitors, accessibility and the indicators used for '
-              'scoring.',
-            ),
-          ]),
+          ActionLink(
+            'View full property details',
+            href:
+                '/entrepreneur/property-detail?id=${Uri.encodeComponent(center.id)}',
+            variant: 'secondary',
+          ),
         ]),
-      ];
-    }
-
-    return [
-      FutureBuilder<LocationAnalysis?>(
-        future: future,
-        builder: (context, snap) {
-          if (!snap.hasData) {
-            // A failed request is "no analysis available", not a spinner: the
-            // web tree has no analysis backend and must say so.
-            if (snap.hasError) {
-              return div(classes: 'a-card', [
-                h3([Component.text('Location analysis')]),
-                p(classes: 'what', [
-                  Component.text('No analysis is available for this property.'),
+        div(classes: 'swcx-analysis-card', [
+          h3([Component.text('Location intelligence')]),
+          FutureBuilder<LocationAnalysis?>(
+            future: _analysisFuture,
+            builder: (context, snap) {
+              if (snap.connectionState != ConnectionState.done) {
+                return p([Component.text('Loading location intelligence…')]);
+              }
+              final analysis = snap.data;
+              if (analysis == null) {
+                return p([
+                  Component.text(
+                    'No analysis is available for this listing. The map and nearby '
+                    'property counts remain available.',
+                  ),
+                ]);
+              }
+              return div(classes: 'swcx-analysis-content', [
+                p([Component.text('Verdict: ${analysis.verdict}')]),
+                p([
+                  Component.text(
+                    'F&B competitor count (analysis source): '
+                    '${analysis.competitorCount}',
+                  ),
                 ]),
+                if (analysis.demandSummary.isNotEmpty)
+                  p([Component.text(analysis.demandSummary)]),
+                if (analysis.factors.isNotEmpty)
+                  ul([
+                    for (final factor in analysis.factors.take(5))
+                      li([Component.text('${factor.name}: ${factor.rating}')]),
+                  ]),
               ]);
-            }
-            return div(classes: 'a-card', [
-              div(classes: 'loading', [
-                span(classes: 'spinner', []),
-                Component.text('Loading location analysis…'),
-              ]),
-            ]);
-          }
-          final a = snap.data;
-          if (a == null) {
-            return div(classes: 'a-card', [
-              h3([Component.text('Location analysis')]),
-              p(classes: 'what', [
-                Component.text('No analysis is available for this property.'),
-              ]),
-            ]);
-          }
-          return div(classes: 'analysis', _cardsFor(a));
-        },
-      ),
-    ];
-  }
-
-  List<Component> _cardsFor(LocationAnalysis a) {
-    final factors = a.factors;
-    return [
-      // --- Suitability -----------------------------------------------------
-      div(classes: 'a-card', [
-        h3([Component.text('Suitability')]),
-        p(classes: 'what', [
-          Component.text(
-            'A relative decision-support indicator built from the factors below. '
-            'It is not a probability of success or a revenue forecast.',
+            },
           ),
-        ]),
-        div(classes: 'stat-row', [
-          div(classes: 'stat', [
-            strong([Component.text(a.suitabilityScore.toStringAsFixed(0))]),
-            span([Component.text('Out of 100')]),
-          ]),
-          div(classes: 'stat', [
-            strong([Component.text(a.verdict)]),
-            span([Component.text('Verdict')]),
-          ]),
-        ]),
-        p(classes: 'meta', [
-          Component.text('Computed from the indicators listed at the end. '),
-          span(classes: 'prov prov-demo', [Component.text('Demo value')]),
-        ]),
-      ]),
-
-      // --- Nearby competitors ----------------------------------------------
-      div(classes: 'a-card', [
-        h3([Component.text('Nearby F&B competitors')]),
-        p(classes: 'what', [
-          Component.text(
-            'Other food and drink operators close to this property. Higher '
-            'density means more competition for the same catchment.',
-          ),
-        ]),
-        div(classes: 'stat-row', [
-          div(classes: 'stat', [
-            strong([Component.text('${a.competitorCount}')]),
-            span([Component.text('Records nearby')]),
-          ]),
-          div(classes: 'stat', [
-            strong([Component.text(a.competitorCount == 0 ? '0' : 'Measured')]),
-            span([Component.text('Density')]),
-          ]),
-        ]),
-        p(classes: 'what', [Component.text(a.demandSummary)]),
-        p(classes: 'meta', [
-          Component.text(
-            'Method: nearby F&B records within the analysis radius. ',
-          ),
-          span(classes: 'prov prov-demo', [Component.text('Demo value')]),
-        ]),
-      ]),
-
-      // --- Socioeconomic ----------------------------------------------------
-      if (a.socioeconomicSummary.isNotEmpty)
-        div(classes: 'a-card', [
-          h3([Component.text('Socioeconomic context')]),
-          p(classes: 'what', [
+          p(classes: 'small', [
             Component.text(
-              'How densely populated the area is and what households there earn.',
+              'Competition is a separate F&B dataset; the map radius above '
+              'counts commercial property listings only.',
             ),
           ]),
-          p(classes: 'body', [Component.text(a.socioeconomicSummary)]),
-          p(classes: 'meta', [
-            Component.text('Source: DOSM household income survey · '),
-            span(classes: 'prov prov-demo', [Component.text('Demo value')]),
-          ]),
         ]),
-
-      // --- Indicators used for scoring --------------------------------------
-      if (factors.isNotEmpty)
-        div(classes: 'a-card', [
-          h3([Component.text('Location indicators used for scoring')]),
-          p(classes: 'what', [
-            Component.text(
-              'Exactly the spatial values that were passed to the recommendation '
-              'engine for this property.',
-            ),
-          ]),
-          ul([
-            for (final f in factors)
-              li([
-                Component.text(
-                  '${f.name} — ${f.score.toStringAsFixed(0)}/100 · ${f.rating}',
-                ),
-              ]),
-          ]),
-          p(classes: 'meta', [
-            Component.text('${factors.length} indicators · '),
-            span(classes: 'prov prov-model', [Component.text('Model output')]),
-          ]),
-        ]),
-    ];
+      ]),
+    ]);
   }
 
-  // ------------------------------------------------------------------ helpers
-
-  /// Same projection as the Flutter `SitewiseMapPanel`. Zoom divides the span,
-  /// so a higher zoom spreads the same coordinates further apart; pan shifts
-  /// the result by a percent of the canvas. Pins that fall outside are clipped
-  /// by the map's overflow rather than clamped to the edge, which would pile
-  /// unrelated properties on top of each other.
-  static (double, double) _project(CommercialProperty prop, int zoom) {
-    final x = (prop.longitude - 100.3) / (3.5 / zoom);
-    final y = -((prop.latitude - 1.5) / (4.0 / zoom));
-    final left = (x + 1) / 2 * 100;
-    final top = (1 - y) / 2 * 100;
-    return (left, top);
-  }
-
-  static String _pinStyle(
-    CommercialProperty prop,
-    int zoom,
-    double panX,
-    double panY,
-  ) {
-    final (left, top) = _project(prop, zoom);
-    return 'left:${(left + panX).toStringAsFixed(2)}%;'
-        'top:${(top + panY).toStringAsFixed(2)}%;';
-  }
-
-  static String _sortLabel(ExploreSort s) => switch (s) {
-    ExploreSort.imported => 'Default order',
+  static String _sortLabel(ExploreSort value) => switch (value) {
+    ExploreSort.imported => 'Default / nearest when selected',
     ExploreSort.rentalLow => 'Rent: low to high',
     ExploreSort.rentalHigh => 'Rent: high to low',
     ExploreSort.areaLarge => 'Floor area: large first',
     ExploreSort.areaSmall => 'Floor area: small first',
   };
-
-  static String _scoreTone(double score) {
-    if (score >= 75) return 'success';
-    if (score >= 55) return 'action';
-    if (score >= 40) return 'warning';
-    return 'danger';
-  }
-
-  /// `7000` -> `RM 7k`. Compact enough for a map label.
-  static String _compactRm(double v) {
-    if (v >= 1000) {
-      final k = v / 1000;
-      final text = k == k.roundToDouble()
-          ? k.toStringAsFixed(0)
-          : k.toStringAsFixed(1);
-      return 'RM ${text}k';
-    }
-    return 'RM ${v.toStringAsFixed(0)}';
-  }
 }
 
-/// Sort orders for the explore results. `imported` keeps the dataset order the
-/// API returned; the rest sort on real fields only.
 enum ExploreSort { imported, rentalLow, rentalHigh, areaLarge, areaSmall }
 
 /// Applies [sort] to [input]. Dart's sort is not stable, so ties break on id —
@@ -800,15 +731,15 @@ List<CommercialProperty> sortForExplore(
   ExploreSort sort,
 ) {
   if (sort == ExploreSort.imported) return List.of(input);
-  return [...input]..sort((x, y) {
-    final primary = switch (sort) {
-      ExploreSort.rentalLow => x.rentalRm.compareTo(y.rentalRm),
-      ExploreSort.rentalHigh => y.rentalRm.compareTo(x.rentalRm),
-      ExploreSort.areaLarge => y.sizeSqft.compareTo(x.sizeSqft),
-      ExploreSort.areaSmall => x.sizeSqft.compareTo(y.sizeSqft),
+  return [...input]..sort((left, right) {
+    final score = switch (sort) {
       ExploreSort.imported => 0,
+      ExploreSort.rentalLow => left.rentalRm.compareTo(right.rentalRm),
+      ExploreSort.rentalHigh => right.rentalRm.compareTo(left.rentalRm),
+      ExploreSort.areaLarge => right.sizeSqft.compareTo(left.sizeSqft),
+      ExploreSort.areaSmall => left.sizeSqft.compareTo(right.sizeSqft),
     };
-    return primary != 0 ? primary : x.id.compareTo(y.id);
+    return score == 0 ? left.id.compareTo(right.id) : score;
   });
 }
 
@@ -818,6 +749,6 @@ class _Loading extends StatelessComponent {
   @override
   Component build(BuildContext context) => div(classes: 'loading', [
     span(classes: 'spinner', []),
-    Component.text('Loading listings…'),
+    Component.text('Loading commercial properties…'),
   ]);
 }

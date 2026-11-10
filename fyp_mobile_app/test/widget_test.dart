@@ -71,6 +71,10 @@ void main() {
     expect(find.text('Welcome Back'), findsOneWidget);
     expect(find.textContaining('Find the right F&B location'), findsNothing);
     expect(find.text('Skip for now'), findsNothing);
+    // The header is brand-only: no return control and no top mode switch.
+    expect(find.byIcon(Icons.arrow_back_rounded), findsNothing);
+    expect(find.text('Log In'), findsNothing);
+    expect(find.text('Sign Up'), findsNothing);
   });
 
   // TEST 2 — onboarding is gated behind a session: a signed-in first-time
@@ -243,7 +247,11 @@ void main() {
 
     await tester.pumpWidget(app());
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Sign Up'));
+    // The top Log In / Sign Up switch is gone; the inline account link at the
+    // foot of the form is the in-screen way to reach registration.
+    await tester.ensureVisible(find.text('Sign up'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Sign up'));
     await tester.pumpAndSettle();
 
     expect(find.text('Full name'), findsOneWidget);
@@ -363,9 +371,12 @@ void main() {
     expect(find.text('Welcome to Sitewise.'), findsNothing);
   });
 
-  // TEST 15 — the backend being unreachable withholds access and offers a
-  // retry rather than a silent sign-in.
-  testWidgets('unreachable sign-in service blocks access and offers retry', (
+  // TEST 15 — the backend being unreachable during startup does NOT trap the
+  // user on a blocking screen: the Sign In screen stays reachable with a
+  // non-blocking warning and a Retry action, and no workspace is painted.
+  // A successful Retry re-verifies the (preserved) session and enters the
+  // workspace just like a fresh sign-in.
+  testWidgets('unreachable sign-in service keeps Sign In reachable with retry', (
     tester,
   ) async {
     _useMobileSurface(tester);
@@ -375,13 +386,17 @@ void main() {
     await tester.pumpWidget(app());
     await tester.pumpAndSettle();
 
+    // Startup lands on the Sign In screen, not a full-screen block.
+    expect(find.text('Welcome Back'), findsOneWidget);
     expect(find.textContaining('could not reach'), findsOneWidget);
-    expect(find.text('Retry'), findsOneWidget);
+    expect(find.text('Retry connection check'), findsOneWidget);
     expect(find.text('Welcome to Sitewise.'), findsNothing);
 
     auth.restoreFailure = null;
     auth.user = testUser();
-    await tester.tap(find.text('Retry'));
+    await tester.ensureVisible(find.text('Retry connection check'));
+    await tester.pump();
+    await tester.tap(find.text('Retry connection check'));
     await tester.pumpAndSettle();
 
     expect(find.text('Welcome to Sitewise.'), findsOneWidget);
