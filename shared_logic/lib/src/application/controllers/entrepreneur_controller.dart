@@ -93,6 +93,14 @@ class EntrepreneurController extends StateController<EntrepreneurState> {
   /// True while another page of the current server search is in flight.
   bool get _isLoadingMore => state.listRefreshing && state.explore.isNotEmpty;
 
+  /// The server query for one page: the stored criteria (filters, sort,
+  /// page size) with the live free-text query and pagination offset applied.
+  /// The free-text filter string stays a client-side vocabulary (it matches
+  /// type OR city via [FilterProperties]), so it is deliberately NOT sent as
+  /// a server parameter beyond the backend's own `q` search.
+  ExploreQuery _serverQuery({required int offset}) =>
+      state.exploreCriteria.copyWith(query: state.query, offset: offset);
+
   /// Loads listings, then applies the current query and filter.
   ///
   /// The first call of a session shows the loading surface ([loading]);
@@ -111,24 +119,21 @@ class EntrepreneurController extends StateController<EntrepreneurState> {
     try {
       final repo = _exploreRepository;
       if (repo != null) {
-        // The free-text filter string is a client-side vocabulary (matches
-        // type OR city), so it is deliberately NOT sent as a server
-        // parameter — [FilterProperties] applies it to the fetched page, and
-        // pagination counts raw server rows via [_serverFetched].
         _serverFetched = 0;
-        final page = await repo.search(
-          ExploreQuery.fromCriteria(query: state.query, limit: 24),
-        );
+        final page = await repo.search(_serverQuery(offset: 0));
         if (seq != _exploreSeq || isDisposed) return;
         _serverFetched = page.items.length;
-        // The client-side filter still runs over the server page: it is the
-        // single definition of "matches" and costs nothing on an
-        // already-filtered page.
+        // The server already applied the free-text `q` against
+        // name/address/city/type; re-checking it here would drop rows the
+        // server matched on a field the client predicate does not know (e.g.
+        // property type). The predicate runs with an empty query, keeping
+        // only the string-vocabulary filter — which stays 'All' on this
+        // path — as a final consistency pass.
         setState(
           state.copyWith(
             explore: _filterProperties(
               properties: page.items,
-              query: state.query,
+              query: '',
               filter: state.filter,
             ),
             exploreTotal: page.total,
@@ -136,6 +141,7 @@ class EntrepreneurController extends StateController<EntrepreneurState> {
             loading: false,
             listRefreshing: false,
             clearError: true,
+            clearExploreFailure: true,
           ),
         );
         // Facets are fetched once per session; a failure leaves the current
@@ -174,6 +180,7 @@ class EntrepreneurController extends StateController<EntrepreneurState> {
             e,
             fallback: 'We could not load listings. Please try again.',
           ),
+          exploreFailure: e,
           loading: false,
           listRefreshing: false,
         ),
@@ -190,13 +197,7 @@ class EntrepreneurController extends StateController<EntrepreneurState> {
     final seq = ++_exploreSeq;
     setState(state.copyWith(listRefreshing: true));
     try {
-      final page = await repo.search(
-        ExploreQuery.fromCriteria(
-          query: state.query,
-          limit: 24,
-          offset: _serverFetched,
-        ),
-      );
+      final page = await repo.search(_serverQuery(offset: _serverFetched));
       if (seq != _exploreSeq || isDisposed) return;
       _serverFetched += page.items.length;
       final existingIds = state.explore.map((p) => p.id).toSet();
@@ -208,7 +209,7 @@ class EntrepreneurController extends StateController<EntrepreneurState> {
             // the visible list must never show it twice.
             for (final p in _filterProperties(
               properties: page.items,
-              query: state.query,
+              query: '',
               filter: state.filter,
             ))
               if (!existingIds.contains(p.id)) p,
@@ -216,6 +217,8 @@ class EntrepreneurController extends StateController<EntrepreneurState> {
           exploreTotal: page.total,
           exploreHasMore: page.hasMore,
           listRefreshing: false,
+          clearError: true,
+          clearExploreFailure: true,
         ),
       );
     } catch (e) {
@@ -226,6 +229,7 @@ class EntrepreneurController extends StateController<EntrepreneurState> {
             e,
             fallback: 'We could not load more listings. Please try again.',
           ),
+          exploreFailure: e,
           listRefreshing: false,
         ),
       );
@@ -306,9 +310,26 @@ class EntrepreneurController extends StateController<EntrepreneurState> {
 
   /// Updates the query and re-runs the search. Applying the new state first
   /// matters: the filter reads `state.query`, so the value must be visible
-  /// before [loadExplore] runs.
+  /// before [loadExplore] runs. The server criteria object is kept in sync
+  /// so the next page request carries the same term.
   void setQuery(String value) {
-    setState(state.copyWith(query: value));
+    setState(
+      state.copyWith(
+        query: value,
+        exploreCriteria: state.exploreCriteria.copyWith(query: value),
+      ),
+    );
+    loadExplore();
+  }
+
+  /// Replaces the server-driven search criteria (filters, sort, page size)
+  /// and re-runs the search from the first page. Pagination resets because
+  /// [_serverQuery] derives every request from this object. The demo /
+  /// client-driven path ignores the criteria (its full listing is already
+  /// in memory) but still stores them so a later live wiring inherits the
+  /// last chosen filters.
+  void setExploreCriteria(ExploreQuery criteria) {
+    setState(state.copyWith(exploreCriteria: criteria));
     loadExplore();
   }
 

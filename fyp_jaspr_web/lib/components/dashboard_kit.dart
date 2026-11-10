@@ -192,6 +192,12 @@ class SitewiseDialog extends StatelessComponent {
   /// columns that no amount of scrolling inside the card can reach.
   final bool wide;
 
+  /// Extra class appended to the `.dialog` panel, letting one caller widen or
+  /// restructure a single dialog (e.g. the agents invitation wizard) without
+  /// resizing every `dialog--wide` modal. Optional; defaults to no extra class
+  /// so the shared API stays backward compatible.
+  final String? panelClass;
+
   const SitewiseDialog({
     super.key,
     required this.title,
@@ -200,20 +206,29 @@ class SitewiseDialog extends StatelessComponent {
     this.actions = const [],
     this.ariaLabel,
     this.wide = false,
+    this.panelClass,
   });
 
   @override
   Component build(BuildContext context) {
     return div(classes: 'overlay', events: events(onClick: onClose), [
       div(
-        classes: wide ? 'dialog dialog--wide' : 'dialog',
+        classes: [
+          wide ? 'dialog dialog--wide' : 'dialog',
+          ?panelClass,
+        ].join(' '),
         attributes: {
           'role': 'dialog',
           'aria-modal': 'true',
           'aria-label': ariaLabel ?? title,
         },
         events: {
-          ...events(onClick: () {}),
+          // Clicks inside the panel must never reach the overlay's own
+          // onClick (which closes the dialog): without stopPropagation, any
+          // click on a chip, checkbox or input inside a dialog dismissed it.
+          'click': (event) {
+            event.stopPropagation();
+          },
           'keydown': (event) {
             // The event is a JS-interop value: reading `.key` through
             // `dynamic` throws in the release bundle ("... is not a

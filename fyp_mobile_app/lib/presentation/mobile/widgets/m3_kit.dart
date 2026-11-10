@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import '../../../core/theme/sitewise_m3.dart';
 import '../../../core/theme/sitewise_theme.dart';
+import '../shell/entrepreneur_tab_scope.dart';
 
 /// Reusable presentational pieces for the Material 3 entrepreneur workspace.
 ///
@@ -872,7 +873,9 @@ List<Widget> m3HeaderActions(
   M3CircleButton(
     icon: Icons.person_outline_rounded,
     tooltip: 'Profile',
-    onTap: () => Navigator.of(context).pushNamed('/entrepreneur/profile'),
+    // Switch to the Profile tab inside the persistent host instead of
+    // pushing a second workspace route (which showed a stray back arrow).
+    onTap: () => EntrepreneurTabScope.open(context, '/entrepreneur/profile'),
   ),
 ];
 

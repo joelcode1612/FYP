@@ -77,6 +77,10 @@ class _ExplorePageState extends State<ExplorePage> {
   Timer? _queryDebounce;
   Future<LocationAnalysis?>? _analysisFuture;
 
+  // Per-property request guard: a second tap cannot reverse a pending save.
+  final Set<String> _savingPropertyIds = <String>{};
+  String? _saveError;
+
   @override
   void initState() {
     super.initState();
@@ -106,18 +110,37 @@ class _ExplorePageState extends State<ExplorePage> {
 
   /// The inventory is provided by the existing FastAPI catalogue repository,
   /// not a hardcoded JavaScript array or an Excel-only snapshot.
-  List<CommercialProperty> get _filtered =>
-      sortForExplore(filter.apply(_model.explore), sort);
+  // Filter/sort once per source list + criteria instead of repeating the
+  // O(n log n) work for the toolbar, map, cards and filter panel each build.
+  List<CommercialProperty>? _filteredMemo;
+  List<CommercialProperty>? _filteredSource;
+  PropertyFilter? _filteredCriteria;
+  ExploreSort? _filteredSort;
+
+  List<CommercialProperty> get _filtered {
+    final source = _model.explore;
+    if (identical(source, _filteredSource) &&
+        identical(filter, _filteredCriteria) &&
+        sort == _filteredSort &&
+        _filteredMemo != null) {
+      return _filteredMemo!;
+    }
+    final result = sortForExplore(filter.apply(source), sort);
+    _filteredSource = source;
+    _filteredCriteria = filter;
+    _filteredSort = sort;
+    return _filteredMemo = result;
+  }
 
   /// Coordinates usable for plotting and distance math. The (0, 0) pair is
   /// this codebase's "no coordinates" sentinel; a listing without coordinates
   /// is skipped, never placed at an invented location.
   static bool _validPoint(CommercialProperty p) =>
       p.latitude.isFinite &&
-      p.longitude.isFinite &&
-      p.latitude.abs() <= 90 &&
-      p.longitude.abs() <= 180 &&
-      p.hasCoordinates;
+          p.longitude.isFinite &&
+          p.latitude.abs() <= 90 &&
+          p.longitude.abs() <= 180 &&
+          p.hasCoordinates;
 
   /// Great-circle distance in metres from the shared_logic helper — the same
   /// implementation the mobile app uses. This is NOT a walking or driving
@@ -147,14 +170,14 @@ class _ExplorePageState extends State<ExplorePage> {
     final matches = _filtered
         .where(
           (candidate) =>
-              candidate.id == center.id ||
-              (_validPoint(candidate) &&
-                  (_metres(center, candidate) ?? double.infinity) <= radiusM),
-        )
+      candidate.id == center.id ||
+          (_validPoint(candidate) &&
+              (_metres(center, candidate) ?? double.infinity) <= radiusM),
+    )
         .toList();
     if (sort == ExploreSort.imported) {
       matches.sort(
-        (left, right) => (_metres(center, left) ?? double.infinity).compareTo(
+            (left, right) => (_metres(center, left) ?? double.infinity).compareTo(
           _metres(center, right) ?? double.infinity,
         ),
       );
@@ -168,10 +191,10 @@ class _ExplorePageState extends State<ExplorePage> {
   int _nearbyCount(CommercialProperty center, int limitM) => _filtered
       .where(
         (candidate) =>
-            candidate.id != center.id &&
-            _validPoint(candidate) &&
-            (_metres(center, candidate) ?? double.infinity) <= limitM,
-      )
+    candidate.id != center.id &&
+        _validPoint(candidate) &&
+        (_metres(center, candidate) ?? double.infinity) <= limitM,
+  )
       .length;
 
   Future<LocationAnalysis?> _readAnalysis(String propertyId) async {
@@ -240,21 +263,52 @@ class _ExplorePageState extends State<ExplorePage> {
     });
   }
 
-  /// Saves/removes a shortlist property. A signed-in account persists to the
-  /// server first and the shortlist only moves once the server accepted the
-  /// change; a visitor keeps the cookie-backed selection.
+  /// Persists an authenticated save/unsave before changing UI state.
+  /// The in-flight guard prevents double taps and concurrent requests for the
+  /// same property. Visitors keep their existing session-only shortlist.
   Future<void> _toggleSaved(String id) async {
+    if (_savingPropertyIds.contains(id)) return;
     final notifier = context.read(appNotifierProvider.notifier);
     if (!AppLocator.isSignedIn) {
       notifier.toggleSaved(id);
+      if (_saveError != null && mounted) {
+        setState(() => _saveError = null);
+      }
       return;
     }
-    final current = context.read(appNotifierProvider).saved.contains(id);
-    final failure = await AppLocator.persistToggleSaved(
-      id,
-      wantSaved: !current,
-    );
-    if (failure == null && mounted) notifier.toggleSaved(id);
+
+    final wasSaved = context.read(appNotifierProvider).saved.contains(id);
+    setState(() {
+      _savingPropertyIds.add(id);
+      _saveError = null;
+    });
+    try {
+      final failure = await AppLocator.persistToggleSaved(
+        id,
+        wantSaved: !wasSaved,
+      );
+      if (!mounted) return;
+      if (failure != null) {
+        setState(() {
+          _saveError = 'Could not ${wasSaved ? 'remove' : 'save'} property '
+              '$id. ${failure.message} Please retry.';
+        });
+        return;
+      }
+      // The request was accepted. Flip only this property once.
+      notifier.toggleSaved(id);
+    } catch (_) {
+      // Avoid exposing raw server exceptions in the UI.
+      if (mounted) {
+        setState(() {
+          _saveError = 'Could not update saved property $id. '
+              'Please check your connection and retry.';
+        });
+      }
+    } finally {
+      _savingPropertyIds.remove(id);
+      if (mounted) setState(() {});
+    }
   }
 
   @override
@@ -271,32 +325,32 @@ class _ExplorePageState extends State<ExplorePage> {
       title: 'Explore commercial properties',
       eyebrow: 'Property discovery',
       subtitle:
-          'Search rental listings, view their locations, and examine the '
+      'Search rental listings, view their locations, and examine the '
           'surrounding 500 m or 1 km catchment. Source coordinates may be approximate.',
       child: state.loading
           ? const _Loading()
           : state.error != null
           ? EmptyState(
-              title: 'Properties could not load',
-              body: state.error!,
-              action: ActionButton(
-                'Try again',
-                onClick: () => context
-                    .read(entrepreneurNotifierProvider.notifier)
-                    .loadExplore(),
-              ),
-            )
+        title: 'Properties could not load',
+        body: state.error!,
+        action: ActionButton(
+          'Try again',
+          onClick: () => context
+              .read(entrepreneurNotifierProvider.notifier)
+              .loadExplore(),
+        ),
+      )
           : div(classes: 'swcx-page', [
-              _filterHeader(),
-              _toolbar(),
-              div(classes: 'swcx-layout', [
-                div(classes: 'swcx-map-column', [_mapPanel()]),
-                div(classes: 'swcx-list-column', [
-                  _listingPanel(saved, compared),
-                ]),
-              ]),
-              if (_center != null) _insightsPanel(),
-            ]),
+        _filterHeader(),
+        _toolbar(),
+        div(classes: 'swcx-layout', [
+          div(classes: 'swcx-map-column', [_mapPanel()]),
+          div(classes: 'swcx-list-column', [
+            _listingPanel(saved, compared),
+          ]),
+        ]),
+        if (_center != null) _insightsPanel(),
+      ]),
     );
   }
 
@@ -339,7 +393,7 @@ class _ExplorePageState extends State<ExplorePage> {
             center == null
                 ? '${_filtered.length} matching commercial property records'
                 : '${_nearbyCount(center, 500)} other listings ≤500 m · '
-                      '${_nearbyCount(center, 1000)} other listings ≤1 km',
+                '${_nearbyCount(center, 1000)} other listings ≤1 km',
           ),
         ]),
       ]),
@@ -354,7 +408,7 @@ class _ExplorePageState extends State<ExplorePage> {
               'type': 'button',
               'aria-pressed': radiusM == metres ? 'true' : 'false',
               'aria-label':
-                  'Select ${metres == 500 ? '500 metres' : '1 kilometre'} radius',
+              'Select ${metres == 500 ? '500 metres' : '1 kilometre'} radius',
             },
             events: events(
               onClick: () => setState(() {
@@ -413,7 +467,7 @@ class _ExplorePageState extends State<ExplorePage> {
               'lon': p.longitude,
               'rentRm': p.rentalRm,
               'nearby':
-                  center != null &&
+              center != null &&
                   (p.id == center.id ||
                       (_metres(center, p) ?? double.infinity) <= radiusM),
             },
@@ -489,7 +543,7 @@ class _ExplorePageState extends State<ExplorePage> {
           p(classes: 'small', [
             Component.text(
               'Distances are straight-line estimates from catalogue coordinates, '
-              'not travel times. 500 m is included in the 1 km total.',
+                  'not travel times. 500 m is included in the 1 km total.',
             ),
           ]),
         ]),
@@ -542,6 +596,23 @@ class _ExplorePageState extends State<ExplorePage> {
           Component.text('${results.length} listed'),
         ]),
       ]),
+      if (_saveError != null)
+        div(
+          classes: 'swcx-save-error',
+          attributes: const {'role': 'alert'},
+          [
+            p([Component.text(_saveError!)]),
+            button(
+              classes: 'swcx-save-error__dismiss',
+              attributes: const {
+                'type': 'button',
+                'aria-label': 'Dismiss save error',
+              },
+              events: events(onClick: () => setState(() => _saveError = null)),
+              [Component.text('Dismiss')],
+            ),
+          ],
+        ),
       div(classes: 'swcx-list-sort', [
         span(classes: 'field__label', [Component.text('Sort by')]),
         select(
@@ -578,13 +649,14 @@ class _ExplorePageState extends State<ExplorePage> {
               PropertyCard(
                 property: p,
                 href:
-                    '/entrepreneur/property-detail?id=${Uri.encodeComponent(p.id)}',
+                '/entrepreneur/property-detail?id=${Uri.encodeComponent(p.id)}',
                 assessHref:
-                    '/entrepreneur/assessment?id=${Uri.encodeComponent(p.id)}',
+                '/entrepreneur/assessment?id=${Uri.encodeComponent(p.id)}',
                 anchorId: 'swcx-property-${p.id}',
                 selected: p.id == selectedId,
                 saved: saved.contains(p.id),
                 compared: compared.contains(p.id),
+                saving: _savingPropertyIds.contains(p.id),
                 onLocate: () => _choose(p, scrollToMap: true),
                 onToggleSaved: () => _toggleSaved(p.id),
                 onToggleCompared: () => context
@@ -655,7 +727,7 @@ class _ExplorePageState extends State<ExplorePage> {
               dd([
                 Component.text(
                   '$nearby500 within 500 m · '
-                  '${nearby1km - nearby500} more in the 500 m–1 km ring',
+                      '${nearby1km - nearby500} more in the 500 m–1 km ring',
                 ),
               ]),
             ]),
@@ -663,7 +735,7 @@ class _ExplorePageState extends State<ExplorePage> {
           ActionLink(
             'View full property details',
             href:
-                '/entrepreneur/property-detail?id=${Uri.encodeComponent(center.id)}',
+            '/entrepreneur/property-detail?id=${Uri.encodeComponent(center.id)}',
             variant: 'secondary',
           ),
         ]),
@@ -680,7 +752,7 @@ class _ExplorePageState extends State<ExplorePage> {
                 return p([
                   Component.text(
                     'No analysis is available for this listing. The map and nearby '
-                    'property counts remain available.',
+                        'property counts remain available.',
                   ),
                 ]);
               }
@@ -689,7 +761,7 @@ class _ExplorePageState extends State<ExplorePage> {
                 p([
                   Component.text(
                     'F&B competitor count (analysis source): '
-                    '${analysis.competitorCount}',
+                        '${analysis.competitorCount}',
                   ),
                 ]),
                 if (analysis.demandSummary.isNotEmpty)
@@ -705,7 +777,7 @@ class _ExplorePageState extends State<ExplorePage> {
           p(classes: 'small', [
             Component.text(
               'Competition is a separate F&B dataset; the map radius above '
-              'counts commercial property listings only.',
+                  'counts commercial property listings only.',
             ),
           ]),
         ]),
@@ -727,9 +799,9 @@ enum ExploreSort { imported, rentalLow, rentalHigh, areaLarge, areaSmall }
 /// Applies [sort] to [input]. Dart's sort is not stable, so ties break on id —
 /// the grid and the map read the same deterministic sequence.
 List<CommercialProperty> sortForExplore(
-  List<CommercialProperty> input,
-  ExploreSort sort,
-) {
+    List<CommercialProperty> input,
+    ExploreSort sort,
+    ) {
   if (sort == ExploreSort.imported) return List.of(input);
   return [...input]..sort((left, right) {
     final score = switch (sort) {

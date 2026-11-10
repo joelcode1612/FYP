@@ -119,8 +119,13 @@ class MobilePropertyCard extends StatelessWidget {
                         const SizedBox(height: 2),
                         _locationRow(),
                         const SizedBox(height: 8),
+                        // The explore projection maps SQL NULL rent/size to
+                        // 0; a real listing never rents for RM 0, so zero is
+                        // rendered as "not listed" rather than a fake price.
                         Text(
-                          '${property.rentalDisplay} / month',
+                          property.rentalRm > 0
+                              ? '${property.rentalDisplay} / month'
+                              : 'Rent on request',
                           style: const TextStyle(
                             fontSize: 15,
                             fontWeight: FontWeight.w800,
@@ -132,22 +137,35 @@ class MobilePropertyCard extends StatelessWidget {
                         const SizedBox(height: 10),
                         Row(
                           children: [
-                            MobileSuitabilityBadge(
-                              score: property.suitabilityScore,
-                              compact: true,
-                            ),
-                            const SizedBox(width: 5),
-                            const Expanded(
-                              child: Text(
-                                'Suitability',
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                  fontSize: 10.5,
-                                  color: SitewiseColors.muted,
+                            if (property.hasSuitabilityScore) ...[
+                              MobileSuitabilityBadge(
+                                score: property.suitabilityScore,
+                                compact: true,
+                              ),
+                              const SizedBox(width: 5),
+                              const Expanded(
+                                child: Text(
+                                  'Suitability',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    fontSize: 10.5,
+                                    color: SitewiseColors.muted,
+                                  ),
                                 ),
                               ),
-                            ),
+                            ] else
+                              const Expanded(
+                                child: Text(
+                                  'Suitability: not scored yet',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    fontSize: 10.5,
+                                    color: SitewiseColors.muted,
+                                  ),
+                                ),
+                              ),
                             if (property.verification ==
                                 VerificationStatus.verified)
                               SitewiseStatusBadge.forVerification(
@@ -204,7 +222,9 @@ class MobilePropertyCard extends StatelessWidget {
       ),
       const SizedBox(width: 3),
       Text(
-        '${property.sizeSqft.toStringAsFixed(0)} sq ft',
+        property.sizeSqft > 0
+            ? '${property.sizeSqft.toStringAsFixed(0)} sq ft'
+            : 'Size not listed',
         style: const TextStyle(fontSize: 11.5, color: SitewiseColors.muted),
       ),
       const Padding(

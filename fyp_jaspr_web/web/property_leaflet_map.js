@@ -19,10 +19,16 @@
     nearbyLabel.textContent = 'Map unavailable';
     return;
   }
+  const cartoKey = window.SITEWISE_MAP_CONFIG?.cartoBasemapsKey;
+  if (!cartoKey) {
+    showAlert('CARTO basemap key missing. Generate map-config.js and rebuild SiteWise.');
+    nearbyLabel.textContent = 'Map unavailable';
+    return;
+  }
   document.getElementById('location-id').textContent = ` · ${propertyId}`;
 
   const map = L.map('map', { zoomControl:true, preferCanvas:true, minZoom:5, maxZoom:19 });
-  const tile = L.tileLayer('https://basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png', {
+  const tile = L.tileLayer('https://basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png?key=' + encodeURIComponent(cartoKey), {
     maxZoom:20,
     attribution:'&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/" target="_blank" rel="noopener">CARTO</a>'
   }).addTo(map);

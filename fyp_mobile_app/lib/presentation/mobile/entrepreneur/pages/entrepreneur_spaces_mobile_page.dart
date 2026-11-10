@@ -5,6 +5,7 @@ import 'package:shared_logic/shared_logic.dart';
 import '../../../../application/services/service_locator.dart';
 import '../../../../core/theme/sitewise_m3.dart';
 import '../../../../core/theme/sitewise_theme.dart';
+import '../../shell/entrepreneur_tab_scope.dart';
 import '../../shell/mobile_app_shell.dart';
 import '../../widgets/m3_kit.dart';
 
@@ -70,8 +71,10 @@ class EntrepreneurSpacesMobilePage extends ConsumerWidget {
           ),
           const SizedBox(height: 8),
           OutlinedButton.icon(
-            onPressed: () => Navigator.of(context)
-                .pushNamed('/entrepreneur/explore'),
+            onPressed: () => EntrepreneurTabScope.open(
+              context,
+              '/entrepreneur/explore',
+            ),
             icon: const Icon(Icons.search_rounded),
             label: const Text('Explore properties'),
           ),
@@ -88,7 +91,7 @@ class EntrepreneurSpacesMobilePage extends ConsumerWidget {
                   'appear here as a space record.',
               actionLabel: 'Browse listings',
               onAction: () =>
-                  Navigator.of(context).pushNamed('/entrepreneur/explore'),
+                  EntrepreneurTabScope.open(context, '/entrepreneur/explore'),
             )
           else
             FutureBuilder<List<CommercialProperty>>(

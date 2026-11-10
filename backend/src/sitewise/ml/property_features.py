@@ -227,3 +227,49 @@ class PropertyFeatureRepository:
             analysis_status=sf.get("analysis_status"),
             flags=sorted(set(flags)),
         )
+
+    def background(
+        self, required_features: list[str], *, limit: int = 50
+    ) -> list[dict[str, float]]:
+        """Real reference rows for SHAP, with the exact training features.
+
+        Only analysed unlabeled subjects whose every required feature resolves
+        numerically are returned. Rows with a gap are skipped rather than
+        zero-filled, because a synthetic background changes the baseline and
+        would make the explanation describe a property that does not exist.
+        """
+        if not required_features:
+            return []
+        cap = max(1, min(int(limit), 100))
+        rows = _rows(
+            self.session,
+            """
+            SELECT to_jsonb(f) AS doc
+            FROM sitewise_analytics.subject_features f
+            WHERE btrim(f.sample_class) = 'U'
+              AND f.analysis_status = 'COMPLETED'
+            ORDER BY f.imported_at DESC NULLS LAST
+            LIMIT :scan
+            """,
+            # Over-scan: many rows are incomplete, so read more than we keep.
+            {"scan": cap * 6},
+        )
+        out: list[dict[str, float]] = []
+        for row in rows:
+            doc = dict(row["doc"] or {})
+            extra = doc.get("other_features") or {}
+            if not isinstance(extra, dict):
+                extra = {}
+            merged: dict[str, Any] = {**doc, **extra}
+            values: dict[str, float] = {}
+            for name in required_features:
+                number = _numeric(merged.get(name))
+                if number is None:
+                    values = {}
+                    break
+                values[name] = number
+            if values:
+                out.append(values)
+            if len(out) >= cap:
+                break
+        return out

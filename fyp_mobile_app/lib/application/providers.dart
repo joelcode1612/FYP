@@ -28,6 +28,23 @@ import 'services/service_locator.dart';
 List<Override> sitewiseOverrides({AuthService? auth}) {
   final resolvedAuth =
       auth ?? BootstrapAwareAuthService(ServiceLocator.auth.repo);
+
+  // Riverpod asserts ("Tried to override a provider twice within the same
+  // container") when one provider appears twice in this list, so every
+  // provider must have EXACTLY ONE override here. The live build therefore
+  // switches the repository behind [GetLocationAnalysis] instead of adding a
+  // second override in the live-only block below: `/explore/analysis` resolves
+  // BOTH id universes (numeric `fyp.rental_properties` ids and
+  // `EP-xxxxx`/`MD-xxxxx` catalogue refs), so "Assess this property" works
+  // for live listings. Ranking stays on the demo recommendation repository —
+  // the recommendation module is out of scope for this integration.
+  final RecommendationRepository analysisRepository = MobileConfig.usesLiveApi
+      ? IntelligenceBackedRecommendationRepository(
+          ServiceLocator.recommendationRepo,
+          ApiLocationIntelligenceRepository(ServiceLocator.apiClient),
+        )
+      : ServiceLocator.recommendationRepo;
+
   return [
     authServiceProvider.overrideWithValue(resolvedAuth),
     getPropertiesProvider.overrideWithValue(
@@ -37,7 +54,7 @@ List<Override> sitewiseOverrides({AuthService? auth}) {
       GetRecommendations(ServiceLocator.recommendationRepo),
     ),
     getLocationAnalysisProvider.overrideWithValue(
-      GetLocationAnalysis(ServiceLocator.recommendationRepo),
+      GetLocationAnalysis(analysisRepository),
     ),
     // Lazy read, not `overrideWithValue`: [ServiceLocator.preferences] is
     // rehydrated from the draft store AFTER the override list is built (during
@@ -64,6 +81,10 @@ List<Override> sitewiseOverrides({AuthService? auth}) {
       savedPropertiesRepositoryProvider.overrideWithValue(
         ApiSavedPropertiesRepository(ServiceLocator.apiClient),
       ),
+      // [getLocationAnalysisProvider] is deliberately absent here: its single
+      // override above already selected the live-backed [analysisRepository].
+      // Re-adding it would trip Riverpod's duplicate-override assertion and
+      // red-screen the app before the first frame.
     ],
   ];
 }

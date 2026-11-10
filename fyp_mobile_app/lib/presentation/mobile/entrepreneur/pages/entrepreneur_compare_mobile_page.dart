@@ -7,6 +7,7 @@ import '../../../../core/theme/sitewise_theme.dart';
 import '../../../shared/widgets/sitewise_button.dart';
 import '../../../shared/widgets/sitewise_empty_state.dart';
 import '../../../shared/widgets/sitewise_secondary_button.dart';
+import '../../shell/entrepreneur_tab_scope.dart';
 import '../../shell/mobile_app_shell.dart';
 import '../../widgets/mobile_property_image.dart';
 import '../../widgets/mobile_section_header.dart';
@@ -31,7 +32,7 @@ class EntrepreneurCompareMobilePage extends ConsumerWidget {
                 message: 'Add up to 3 properties from Explore or Recommended.',
                 actionLabel: 'Explore properties',
                 onAction: () =>
-                    Navigator.of(context).pushNamed('/entrepreneur/explore'),
+                    EntrepreneurTabScope.open(context, '/entrepreneur/explore'),
               )
             : FutureBuilder<List<CommercialProperty>>(
                 future: ServiceLocator.properties.listings(),

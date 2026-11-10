@@ -15,16 +15,22 @@ class MobilePropertyFilter {
   final double? minSizeSqft;
   final bool verifiedOnly;
 
+  /// Listing availability facet (`GET /explore/options`), applied server-side
+  /// in live mode. Null = any. Demo mode matches the field locally.
+  final String? availability;
+
   const MobilePropertyFilter({
     this.propertyType = allTypes,
     this.city = allAreas,
     this.maxBudgetRm,
     this.minSizeSqft,
     this.verifiedOnly = false,
+    this.availability,
   });
 
   static const String allTypes = 'All';
   static const String allAreas = 'All areas';
+  static const String anyAvailability = 'Any';
 
   static const MobilePropertyFilter empty = MobilePropertyFilter();
 
@@ -33,7 +39,8 @@ class MobilePropertyFilter {
       city != allAreas ||
       maxBudgetRm != null ||
       minSizeSqft != null ||
-      verifiedOnly;
+      verifiedOnly ||
+      (availability != null && availability != anyAvailability);
 
   int get activeCount {
     var n = 0;
@@ -42,6 +49,7 @@ class MobilePropertyFilter {
     if (maxBudgetRm != null) n++;
     if (minSizeSqft != null) n++;
     if (verifiedOnly) n++;
+    if (availability != null && availability != anyAvailability) n++;
     return n;
   }
 
@@ -52,6 +60,11 @@ class MobilePropertyFilter {
     if (city != allAreas && p.city != city) return false;
     if (maxBudgetRm != null && p.rentalRm > maxBudgetRm!) return false;
     if (minSizeSqft != null && p.sizeSqft < minSizeSqft!) return false;
+    if (availability != null &&
+        availability != anyAvailability &&
+        p.availability != availability) {
+      return false;
+    }
     if (verifiedOnly && p.verification != VerificationStatus.verified) {
       return false;
     }
@@ -66,12 +79,17 @@ class MobilePropertyFilter {
     double? minSizeSqft,
     bool clearMinSize = false,
     bool? verifiedOnly,
+    String? availability,
+    bool clearAvailability = false,
   }) => MobilePropertyFilter(
     propertyType: propertyType ?? this.propertyType,
     city: city ?? this.city,
     maxBudgetRm: clearMaxBudget ? null : (maxBudgetRm ?? this.maxBudgetRm),
     minSizeSqft: clearMinSize ? null : (minSizeSqft ?? this.minSizeSqft),
     verifiedOnly: verifiedOnly ?? this.verifiedOnly,
+    availability: clearAvailability
+        ? null
+        : (availability ?? this.availability),
   );
 }
 
@@ -79,6 +97,12 @@ class MobilePropertyFilter {
 ///
 /// Returns the applied filter, [MobilePropertyFilter.empty] when the user taps
 /// Clear, or `null` when dismissed without applying.
+///
+/// [availability] supplies the server's availability facet; when null the
+/// availability row is not shown (a chip whose rule cannot apply to the
+/// dataset must not be offered). [showVerifiedToggle] hides the
+/// "verified only" switch where every served row is already approved —
+/// the live explore dataset — so the toggle can never pretend to filter.
 Future<MobilePropertyFilter?> showMobilePropertyFilterSheet(
   BuildContext context, {
   required MobilePropertyFilter current,
@@ -86,6 +110,8 @@ Future<MobilePropertyFilter?> showMobilePropertyFilterSheet(
   required List<String> cities,
   double budgetCeiling = 15000,
   double sizeCeiling = 3000,
+  bool showVerifiedToggle = true,
+  List<String>? availability,
 }) {
   return showSitewiseBottomSheet<MobilePropertyFilter>(
     context,
@@ -96,6 +122,8 @@ Future<MobilePropertyFilter?> showMobilePropertyFilterSheet(
       cities: cities,
       budgetCeiling: budgetCeiling,
       sizeCeiling: sizeCeiling,
+      showVerifiedToggle: showVerifiedToggle,
+      availability: availability,
     ),
   );
 }
@@ -106,6 +134,8 @@ class _FilterSheetBody extends StatefulWidget {
   final List<String> cities;
   final double budgetCeiling;
   final double sizeCeiling;
+  final bool showVerifiedToggle;
+  final List<String>? availability;
 
   const _FilterSheetBody({
     required this.initial,
@@ -113,6 +143,8 @@ class _FilterSheetBody extends StatefulWidget {
     required this.cities,
     required this.budgetCeiling,
     required this.sizeCeiling,
+    this.showVerifiedToggle = true,
+    this.availability,
   });
 
   @override
@@ -144,6 +176,25 @@ class _FilterSheetBodyState extends State<_FilterSheetBody> {
           selected: draft.city,
           onPick: (v) => setState(() => draft = draft.copyWith(city: v)),
         ),
+        if (widget.availability != null &&
+            widget.availability!.isNotEmpty) ...[
+          const SizedBox(height: 18),
+          _groupLabel('Availability'),
+          _chipWrap(
+            options: [
+              MobilePropertyFilter.anyAvailability,
+              ...widget.availability!,
+            ],
+            selected: draft.availability ?? MobilePropertyFilter.anyAvailability,
+            onPick: (v) => setState(
+              () => draft = draft.copyWith(
+                availability: v == MobilePropertyFilter.anyAvailability
+                    ? null
+                    : v,
+              ),
+            ),
+          ),
+        ],
         const SizedBox(height: 18),
         _sliderRow(
           label: 'Max monthly rent',
@@ -187,20 +238,21 @@ class _FilterSheetBodyState extends State<_FilterSheetBody> {
             draft = draft.copyWith(minSizeSqft: v);
           }),
         ),
-        SwitchListTile.adaptive(
-          contentPadding: EdgeInsets.zero,
-          value: draft.verifiedOnly,
-          title: const Text(
-            'Verified properties only',
-            style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+        if (widget.showVerifiedToggle)
+          SwitchListTile.adaptive(
+            contentPadding: EdgeInsets.zero,
+            value: draft.verifiedOnly,
+            title: const Text(
+              'Verified properties only',
+              style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+            ),
+            subtitle: const Text(
+              'Show only listings reviewed by Sitewise',
+              style: TextStyle(fontSize: 11.5),
+            ),
+            onChanged: (v) =>
+                setState(() => draft = draft.copyWith(verifiedOnly: v)),
           ),
-          subtitle: const Text(
-            'Show only listings reviewed by Sitewise',
-            style: TextStyle(fontSize: 11.5),
-          ),
-          onChanged: (v) =>
-              setState(() => draft = draft.copyWith(verifiedOnly: v)),
-        ),
         const SizedBox(height: 8),
         Row(
           children: [

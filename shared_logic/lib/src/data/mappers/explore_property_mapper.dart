@@ -128,23 +128,34 @@ abstract final class ExplorePropertyMapper {
   /// Competitor rows (`fnb_a.fnb_outlet` projection).
   static NearbyOutlets outlets(Map<String, dynamic> response) {
     final meta = (response['meta'] as Map?)?.cast<String, dynamic>() ?? const {};
+    final rawCounts = (meta['counts'] as Map?)?.cast<String, dynamic>() ?? const {};
     return NearbyOutlets(
       available: meta['available'] == true,
       radiusM: _i(meta['radius_m']) ?? 500,
+      counts: {
+        for (final entry in rawCounts.entries)
+          if (entry.value is num) entry.key: (entry.value as num).toInt(),
+      },
       outlets: [
         for (final row
             in (response['data'] as List? ?? const [])
                 .whereType<Map<String, dynamic>>())
           NearbyOutlet(
-            outletKey: '${row['outlet_key']}',
-            name: _s(row['outlet_name']),
-            category: _s(row['outlet_category']),
+            // Normalized keys first, legacy keys as the fallback so the same
+            // mapper still reads responses from a pre-source-mode backend.
+            outletKey: '${row['competitor_key'] ?? row['outlet_key']}',
+            name: _s(row['name'] ?? row['outlet_name']),
+            category: _s(row['category'] ?? row['outlet_category']),
             brand: _s(row['brand']),
-            streetAddress: _s(row['addr_street']),
-            city: _s(row['addr_city']),
+            streetAddress: _s(row['street_address'] ?? row['addr_street']),
+            city: _s(row['city'] ?? row['addr_city']),
             latitude: _d(row['latitude']),
             longitude: _d(row['longitude']),
             distanceM: _d(row['distance_m']) ?? 0,
+            provider: _s(row['provider']),
+            operatingStatus: _s(row['operating_status']),
+            sourceLicence: _s(row['source_licence']),
+            sourceSnapshot: _s(row['source_snapshot']),
           ),
       ],
     );

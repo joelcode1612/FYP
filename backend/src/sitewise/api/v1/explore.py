@@ -116,19 +116,32 @@ def explore_competitors(
     session=DbSession,
     radius_m: int = Query(default=500),
     limit: int = Query(default=50, ge=1, le=100),
+    source: str = Query(
+        default="osm",
+        description="Competitor source: osm (default), overture, or merged.",
+    ),
 ) -> dict:
     """Actual competitor outlets (name, category, distance) within radius.
 
-    Live PostGIS lookup on ``fnb_a.fnb_outlet``; ``available: false`` with an
-    empty list when the property has no coordinates — an honest state, not a
-    fabricated count.
+    ``source=osm`` keeps the original behaviour (OpenStreetMap only).
+    ``overture`` reads ``fnb_a.overture_places``; ``merged`` combines both and
+    removes Overture rows already MATCHed to an OSM outlet, so a business is
+    never listed twice. ``meta.counts`` reports the raw per-provider numbers
+    next to the deduplicated merged count.
     """
+    repo = FypPropertyRepository(session)
     try:
-        return FypPropertyRepository(session).list_competitors(
-            property_id, radius_m=radius_m, limit=limit
+        result = repo.list_competitors(
+            property_id, radius_m=radius_m, limit=limit, source=source
         )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+    coords = repo._coords(property_id)
+    if coords is not None:
+        result["meta"]["counts"] = repo.competitor_counts_by_source(
+            coords[0], coords[1], radius_m=radius_m
+        )
+    return result
 
 
 @router.get("/properties/{property_id}/demand-generators")

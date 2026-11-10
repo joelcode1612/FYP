@@ -299,3 +299,194 @@ def test_role_change_via_users_endpoint_is_audited(client, cleanup_users, fake_a
                       json={"role": "administrator"})
     assert r2.status_code == 200
     assert r2.json()["role"] == "admin"
+
+
+# ---------------------------------------------------------------------------
+# Regression: role_change_audit live-column mapping + audit-failure semantics
+#
+# The LIVE role_change_audit table exposes user_id_affected /
+# affected_email_snapshot / changed_by_user_id / entity_type / entity_id /
+# action / action_status / old_role / new_role / old_account_status /
+# new_account_status / details (non-nullable jsonb). Writing the historical
+# field names fails with PostgREST PGRST204 — the confirmed root cause of
+# both "cannot invite an agent" and "Suspend produces an error".
+# ---------------------------------------------------------------------------
+
+
+def test_audit_payload_targets_live_role_change_audit_columns():
+    """insert_role_audit must write the LIVE column names and always carry a
+    details object (non-nullable jsonb)."""
+    from sitewise.core.supabase_admin import SupabaseAdminService
+
+    payload = SupabaseAdminService._audit_payload(
+        affected_user_id=uuid.UUID("00000000-0000-0000-0000-000000000001"),
+        affected_email="agent@staff.example",
+        performed_by_user_id=uuid.UUID("00000000-0000-0000-0000-000000000002"),
+        performed_by_email="admin@staff.example",
+        action="staff.suspended",
+        previous_status="active",
+        new_status="suspended",
+        details={"reason": "probe"},
+    )
+    assert payload["user_id_affected"] == "00000000-0000-0000-0000-000000000001"
+    assert payload["changed_by_user_id"] == "00000000-0000-0000-0000-000000000002"
+    assert payload["affected_email_snapshot"] == "agent@staff.example"
+    assert payload["entity_id"] == "00000000-0000-0000-0000-000000000001"
+    assert payload["old_account_status"] == "active"
+    assert payload["new_account_status"] == "suspended"
+    assert payload["entity_type"] == "user"
+    assert payload["action"] == "staff.suspended"
+    assert payload["action_status"] == "success"
+    assert payload["details"]["performed_by_email"] == "admin@staff.example"
+    assert payload["details"]["reason"] == "probe"
+    # Historical (nonexistent) column names must never be sent.
+    for legacy in (
+        "affected_user_id",
+        "affected_email",
+        "performed_by_user_id",
+        "performed_by_email",
+        "previous_role",
+        "previous_status",
+        "new_status",
+        "new_role" if False else "previous_status",
+    ):
+        assert legacy not in payload
+
+
+def test_audit_payload_for_company_registration_omits_user_entity_id():
+    """entity_id is uuid-typed; a company registration has no affected user,
+    so the company id stays inside details instead of breaking the FK."""
+    from sitewise.core.supabase_admin import SupabaseAdminService
+
+    payload = SupabaseAdminService._audit_payload(
+        affected_user_id=None,
+        affected_email=None,
+        performed_by_user_id=uuid.UUID("00000000-0000-0000-0000-000000000002"),
+        performed_by_email="admin@staff.example",
+        action="company.registered",
+        entity_type="company",
+        details={"company_id": 3},
+    )
+    assert "entity_id" not in payload
+    assert "user_id_affected" not in payload
+    assert payload["entity_type"] == "company"
+    assert payload["details"]["company_id"] == 3
+
+
+def test_audit_read_maps_live_row_to_wire_contract():
+    """GET /staff/audit normalizes live rows to the shape the Jaspr activity
+    table reads (affected_email / performed_by_email / created_at ...)."""
+    from sitewise.core.supabase_admin import SupabaseAdminService
+
+    wire = SupabaseAdminService._audit_wire({
+        "audit_id": 1,
+        "user_id_affected": "00000000-0000-0000-0000-000000000001",
+        "affected_email_snapshot": "agent@staff.example",
+        "changed_by_user_id": "00000000-0000-0000-0000-000000000002",
+        "entity_type": "user",
+        "entity_id": "00000000-0000-0000-0000-000000000001",
+        "action": "staff.suspended",
+        "action_status": "success",
+        "old_account_status": "active",
+        "new_account_status": "suspended",
+        "details": {"performed_by_email": "admin@staff.example"},
+        "changed_at": "2026-11-10T00:00:00+00:00",
+    })
+    assert wire["affected_email"] == "agent@staff.example"
+    assert wire["affected_user_id"] == "00000000-0000-0000-0000-000000000001"
+    assert wire["performed_by_email"] == "admin@staff.example"
+    assert wire["created_at"] == "2026-11-10T00:00:00+00:00"
+    assert wire["previous_status"] == "active"
+    assert wire["new_status"] == "suspended"
+    assert wire["action"] == "staff.suspended"
+
+
+def test_invite_succeeds_when_audit_write_fails(client, cleanup_users, fake_admin, monkeypatch):
+    """Partial-failure contract: the Supabase invite, the identity rows and
+    the mirror are all committed BEFORE the audit write. An audit failure must
+    not turn a sent invitation into a 502 — the response says so truthfully."""
+    from sitewise.core.supabase_admin import SupabaseAdminError
+
+    admin_sub, admin_token = _admin_token(client, cleanup_users)
+    fake_admin.companies["AuditCo"] = 1
+
+    def broken(**kwargs):
+        raise SupabaseAdminError("Audit write failed: simulated live failure")
+
+    monkeypatch.setattr(fake_admin, "insert_role_audit", broken)
+    body = {
+        **CREATE_BODY,
+        "email": f"audit-fail-{uuid.uuid4().hex[:8]}@staff.example",
+        "company_id": 1,
+    }
+    r = client.post("/api/v1/staff/agents", headers=auth(admin_token), json=body)
+    assert r.status_code == 201, r.text
+    assert r.json()["invited"] is True
+    assert r.json()["audit_recorded"] is False
+    assert r.json()["company"]["company_id"] == 1
+    _track_agent(cleanup_users, r.json())
+    # The invitation itself was still recorded (it precedes the audit write).
+    assert any(i["invited_email"] == body["email"] for i in fake_admin.invitations)
+
+
+def test_suspend_succeeds_when_audit_write_fails(client, cleanup_users, fake_admin, monkeypatch):
+    """Suspension commits identity + mirror before the audit write; an audit
+    failure must report the change as applied (audit_recorded=false), not as
+    an error that invites a retry against an already-suspended account."""
+    from sitewise.core.supabase_admin import SupabaseAdminError
+
+    admin_sub, admin_token = _admin_token(client, cleanup_users)
+    r = client.post("/api/v1/staff/agents", headers=auth(admin_token), json=CREATE_BODY)
+    assert r.status_code == 201, r.text
+    agent_user_id = r.json()["agent_user_id"]
+    _track_agent(cleanup_users, r.json())
+
+    def broken(**kwargs):
+        raise SupabaseAdminError("Audit write failed: simulated live failure")
+
+    monkeypatch.setattr(fake_admin, "insert_role_audit", broken)
+    r2 = client.patch(
+        f"/api/v1/staff/agents/{agent_user_id}/status",
+        headers=auth(admin_token),
+        json={"account_status": "suspended"},
+    )
+    assert r2.status_code == 200, r2.text
+    assert r2.json()["audit_recorded"] is False
+    assert r2.json()["account_status"] == "suspended"
+    # Both real writes committed: authoritative identity row + mirror.
+    assert fake_admin.identity[agent_user_id]["account_status"] == "suspended"
+    mirror = client.get(
+        "/api/v1/auth/me", headers=auth(make_token(
+            sub=agent_user_id, email=CREATE_BODY["email"]))
+    )
+    # /auth/me deliberately stays reachable (status visibility), so the real
+    # enforcement probe is a PROTECTED staff endpoint: a suspended agent must
+    # be rejected by get_active_user even with a full aal2 staff token.
+    suspended_token = make_token(
+        sub=agent_user_id, email=CREATE_BODY["email"], aal="aal2",
+        amr=[{"method": "password"}, {"method": "totp"}])
+    blocked = client.get("/api/v1/staff/me/listings", headers=auth(suspended_token))
+    assert blocked.status_code == 403
+    assert "suspended" in str(blocked.json()["detail"]).lower()
+
+
+def test_suspend_with_invalid_agent_id_is_rejected(client, cleanup_users, fake_admin):
+    """A malformed uuid fails validation with a meaningful 422, not a crash."""
+    admin_sub, admin_token = _admin_token(client, cleanup_users)
+    r = client.patch(
+        "/api/v1/staff/agents/not-a-uuid/status",
+        headers=auth(admin_token),
+        json={"account_status": "suspended"},
+    )
+    assert r.status_code == 422
+
+
+def test_suspend_unknown_agent_returns_meaningful_404(client, cleanup_users, fake_admin):
+    admin_sub, admin_token = _admin_token(client, cleanup_users)
+    r = client.patch(
+        f"/api/v1/staff/agents/{uuid.uuid4()}/status",
+        headers=auth(admin_token),
+        json={"account_status": "suspended"},
+    )
+    assert r.status_code == 404
+    assert "User not found" in r.json()["detail"]

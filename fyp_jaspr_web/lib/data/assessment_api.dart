@@ -228,6 +228,15 @@ final class AssessmentRecord {
   /// The saved business requirements, or null when stage 2 has not been saved.
   final Map<String, dynamic>? requirements;
 
+  /// 0 = nothing saved, 1 = legacy criteria form, 2 = eight-question form.
+  ///
+  /// The workspace uses this to show a "saved before the questionnaire
+  /// existed" notice instead of reinterpreting old answers.
+  final int requirementsVersion;
+
+  /// The two numbers a v1 record can honestly answer for the v2 questions.
+  final Map<String, dynamic>? requirementsLegacyView;
+
   final List<AssessmentStage> stages;
   final AssessmentCapabilities capabilities;
   final AssessmentNextAction nextAction;
@@ -249,6 +258,8 @@ final class AssessmentRecord {
     required this.progressPercent,
     required this.reportAvailable,
     required this.requirements,
+    required this.requirementsVersion,
+    this.requirementsLegacyView,
     required this.stages,
     required this.capabilities,
     required this.nextAction,
@@ -279,6 +290,9 @@ final class AssessmentRecord {
       progressPercent: (json['progress_percent'] as num).toInt(),
       reportAvailable: json['report_available'] == true,
       requirements: (json['requirements'] as Map?)?.cast<String, dynamic>(),
+      requirementsVersion: (json['requirements_version'] as num?)?.toInt() ?? 0,
+      requirementsLegacyView:
+          (json['requirements_legacy_view'] as Map?)?.cast<String, dynamic>(),
       stages: [
         for (final stage in (json['stages'] as List? ?? const []))
           AssessmentStage.fromJson((stage as Map).cast<String, dynamic>()),

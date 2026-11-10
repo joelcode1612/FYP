@@ -7,9 +7,10 @@ import 'package:fyp/data/datasources/local/draft_local_data_source.dart';
 
 /// Regression tests for the mobile persistent-form-state wiring (Task B §4).
 ///
-/// Written but NOT executed — the brief forbids running tests in this task.
-/// They pin: user-scoped isolation, write-through on every draft mutation,
-/// clear-on-discard-only (never on failure), and the never-store-secrets rule.
+/// They pin: user-scoped isolation for account drafts, the intentionally
+/// device-scoped remembered sign-in address, write-through on every draft
+/// mutation, clear-on-discard-only (never on failure), and the
+/// never-store-secrets rule.
 void main() {
   CommercialProperty property(String id) => CommercialProperty(
         id: id,
@@ -30,16 +31,32 @@ void main() {
       );
 
   group('ApplicationDraftRepository (InMemoryDraftLocalDataSource)', () {
-    test('drafts are isolated per account namespace', () async {
+    test('account-scoped drafts are isolated per account namespace', () async {
+      final local = InMemoryDraftLocalDataSource();
+      final repo = ApplicationDraftRepository(local);
+
+      repo.setAccount('user-a');
+      await repo.savePreferences(DemoData.defaultPreferences);
+      expect(await repo.loadPreferences(), isNotNull);
+
+      repo.setAccount('user-b');
+      expect(await repo.loadPreferences(), isNull,
+          reason: 'user-b must never see user-a drafts');
+      repo.setAccount('user-a');
+      expect(await repo.loadPreferences(), isNotNull,
+          reason: 'switching back must restore user-a drafts');
+    });
+
+    test('the remembered sign-in address is device-scoped by design', () async {
       final local = InMemoryDraftLocalDataSource();
       final repo = ApplicationDraftRepository(local);
 
       repo.setAccount('user-a');
       await repo.saveDraftEmail('a@example.com');
       repo.setAccount('user-b');
-      expect(await repo.loadDraftEmail(), isNull,
-          reason: 'user-b must never see user-a drafts');
-      repo.setAccount('user-a');
+      // A remembered address is a device convenience, not an account secret:
+      // `saveDraftEmail`/`loadDraftEmail` deliberately use the `device`
+      // namespace, so it is intentionally shared across accounts.
       expect(await repo.loadDraftEmail(), 'a@example.com');
     });
 

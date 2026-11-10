@@ -70,6 +70,19 @@ class EntrepreneurNotifier extends Notifier<EntrepreneurState> {
   /// Database-backed filter facets when an [ExploreRepository] is wired.
   ExploreFilterOptions? get filterOptions => state.filterOptions;
 
+  /// The criteria (filters, sort, page size) currently driving the
+  /// server-driven search. Meaningful only when [isServerDriven].
+  ExploreQuery get exploreCriteria => state.exploreCriteria;
+
+  /// True when [loadExplore]/[loadMore] run real server searches.
+  bool get isServerDriven => state.filterOptions != null ||
+      state.exploreTotal != null || _controller.isServerDriven;
+
+  /// The classified failure behind [error] (connection / session / server /
+  /// contract), for UIs that distinguish the states. Null when there is no
+  /// error or the failure carried no classification.
+  Object? get exploreFailure => state.exploreFailure;
+
   List<PropertyRecommendation> get recommendations => state.recommendations;
 
   LocationAnalysis? get analysis => state.analysis;
@@ -98,6 +111,11 @@ class EntrepreneurNotifier extends Notifier<EntrepreneurState> {
   void setQuery(String value) => _controller.setQuery(value);
 
   void setFilter(String value) => _controller.setFilter(value);
+
+  /// Replaces the server-driven search criteria (filters, sort, page size)
+  /// and re-runs the search from the first page.
+  void setExploreCriteria(ExploreQuery criteria) =>
+      _controller.setExploreCriteria(criteria);
 
   /// Replaces the current preferences. The write-back to the app's preferences
   /// store stays a callback supplied by the composition root.

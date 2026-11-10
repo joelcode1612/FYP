@@ -13,7 +13,7 @@ from __future__ import annotations
 import uuid
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 from sqlmodel import Session
 
@@ -21,7 +21,10 @@ from sitewise.core.exceptions import AssessmentError
 from sitewise.db.analytics_session import get_analytics_db
 from sitewise.db.session import get_db
 from sitewise.dependencies import AuthenticatedUser, require_entrepreneur
+from sitewise.repositories.catalog_repository import CatalogRepository
 from sitewise.services.assessment_service import AssessmentService
+from sitewise.services.explanation_service import ExplanationService
+from sitewise.services.report_service import ReportService
 
 router = APIRouter()
 
@@ -148,3 +151,69 @@ def update_assessment(
         complete_stage=body.complete_stage,
     )
     return {"assessment": service.payload(assessment)}
+
+
+@router.post("/{assessment_id}/explanation")
+def explain_assessment(
+    assessment_id: uuid.UUID,
+    session: AppSession,
+    analytics: AnalyticsSession,
+    user: EntrepreneurUser,
+) -> dict:
+    """Genuine SHAP for this assessment's property, then confirm the stage.
+
+    The stage is only recorded after an explanation that reconstructs the
+    model output exists. A missing artifact, missing ``shap`` package, missing
+    features or an additive-inconsistency all raise a coded error instead of
+    returning placeholder values, so Stage 4 can never be marked complete on
+    unverified output.
+    """
+    service = _service(session, analytics)
+    assessment = service.get_owned(assessment_id, user.user_id)
+    payload = ExplanationService(session, analytics).explain_assessment(assessment)
+    assessment = service.update(assessment, complete_stage="ai_explanation")
+    return {
+        "explanation": payload,
+        "assessment": service.payload(assessment),
+    }
+
+
+@router.get("/{assessment_id}/report")
+def assessment_report(
+    assessment_id: uuid.UUID,
+    session: AppSession,
+    analytics: AnalyticsSession,
+    user: EntrepreneurUser,
+) -> dict:
+    """The five-stage report for this assessment.
+
+    Assembled from the persisted record, the property report, the analysed
+    evidence and the stored SHAP explanation. Sections without backing data
+    report ``available: false`` with a reason; the report is never padded with
+    invented evidence.
+    """
+    service = _service(session, analytics)
+    assessment = service.get_owned(assessment_id, user.user_id)
+    record = service.payload(assessment)
+
+    property_report = None
+    try:
+        property_report = ReportService(session).generate_property_report(
+            assessment.property_id
+        )
+    except HTTPException:
+        # The listing left the published catalogue; the report says so rather
+        # than failing the whole request.
+        property_report = None
+
+    evidence = CatalogRepository(analytics).get_evidence(assessment.property_id)
+    explanation = ExplanationService(
+        session, analytics
+    ).latest_for_assessment(assessment)
+
+    return ReportService(session).generate_assessment_report(
+        assessment=record,
+        property_report=property_report,
+        explanation=explanation,
+        evidence=evidence,
+    )

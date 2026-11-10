@@ -5,6 +5,7 @@ import '../../../../application/services/assessment_session.dart';
 import '../../../../application/services/service_locator.dart';
 import '../../../../core/theme/sitewise_m3.dart';
 import '../../../../core/theme/sitewise_theme.dart';
+import '../../shell/entrepreneur_tab_scope.dart';
 import '../../shell/mobile_app_shell.dart';
 import '../../widgets/m3_kit.dart';
 import '../../../shared/widgets/sitewise_bottom_sheet.dart';
@@ -75,7 +76,7 @@ class EntrepreneurAssessMobilePage extends StatelessWidget {
                   'New button, to assess it for your business.',
               actionLabel: 'Find a location',
               onAction: () =>
-                  Navigator.of(context).pushNamed('/entrepreneur/explore'),
+                  EntrepreneurTabScope.open(context, '/entrepreneur/explore'),
             )
           else ...[
             _DraftCard(draft: draft, onOpen: () => _openDraft(context, draft)),

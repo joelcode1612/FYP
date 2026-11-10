@@ -77,14 +77,57 @@ void main() {
       expect(container.read(authNotifierProvider).isAuthenticated, isFalse);
     });
 
-    test('an expired session is dropped so a restart cannot re-offer it',
+    test('a stale saved session at cold start opens a clean Sign In form',
         () async {
       repo.user = testUser();
       repo.restoreFailure = const SessionExpiredFailure();
       await container.read(authNotifierProvider.notifier).start();
-      expect(container.read(authNotifierProvider).status, AuthStatus.sessionExpired);
+      // Nobody has signed in in this process yet, so a 401 from the passive
+      // startup check means "no usable session" — not an error the user must
+      // be warned about. The stale credentials are still dropped (fail closed).
+      expect(
+        container.read(authNotifierProvider).status,
+        AuthStatus.unauthenticated,
+      );
+      expect(container.read(authNotifierProvider).message, isNull);
+      expect(container.read(authNotifierProvider).isAuthenticated, isFalse);
       expect(repo.signOutCalls, 1);
       expect(repo.user, isNull);
+    });
+
+    test('a 401 after a verified session is still a genuine expiry', () async {
+      repo.user = testUser();
+      await container.read(authNotifierProvider.notifier).start();
+      expect(
+        container.read(authNotifierProvider).status,
+        AuthStatus.authenticated,
+      );
+
+      repo.restoreFailure = const SessionExpiredFailure();
+      await container.read(authNotifierProvider.notifier).retry();
+      expect(
+        container.read(authNotifierProvider).status,
+        AuthStatus.sessionExpired,
+      );
+      expect(container.read(authNotifierProvider).user, isNull);
+      expect(container.read(authNotifierProvider).message, isNotNull);
+      expect(repo.signOutCalls, 1);
+    });
+
+    test('a stale token after an explicit sign-out is not an expiry', () async {
+      await container.read(authNotifierProvider.notifier).signIn(
+        email: 'sarah@artisanbrew.my',
+        password: 'secret123',
+      );
+      await container.read(authNotifierProvider.notifier).signOut();
+
+      repo.restoreFailure = const SessionExpiredFailure();
+      await container.read(authNotifierProvider.notifier).retry();
+      expect(
+        container.read(authNotifierProvider).status,
+        AuthStatus.unauthenticated,
+      );
+      expect(container.read(authNotifierProvider).message, isNull);
     });
 
     test('a suspended profile at restore reports account inactive', () async {
@@ -357,6 +400,59 @@ void main() {
       await expectLater(
         probe.fetch('t'),
         throwsA(isA<AuthUnavailableFailure>()),
+      );
+    });
+  });
+
+  group('stale refresh-token classification', () {
+    test('a rejected refresh token means there is no session to restore', () {
+      expect(
+        isRejectedRefreshError(
+          const AuthApiException(
+            'Invalid Refresh Token',
+            statusCode: '400',
+            code: 'refresh_token_not_found',
+          ),
+        ),
+        isTrue,
+      );
+      expect(isRejectedRefreshError(AuthSessionMissingException()), isTrue);
+      expect(
+        isRejectedRefreshError(
+          const AuthException('invalid jwt', statusCode: '401'),
+        ),
+        isTrue,
+      );
+      expect(
+        isRejectedRefreshError(
+          const AuthException(
+            'expired',
+            statusCode: '403',
+            code: 'session_expired',
+          ),
+        ),
+        isTrue,
+      );
+    });
+
+    test('a retryable or unknown refresh failure is a connectivity problem',
+        () {
+      // gotrue KEEPS the session for these, so silently signing the user out
+      // would be wrong; the notifier must offer Retry instead.
+      expect(
+        isRejectedRefreshError(
+          AuthRetryableFetchException(statusCode: '500'),
+        ),
+        isFalse,
+      );
+      expect(
+        isRejectedRefreshError(
+          AuthUnknownException(
+            message: 'decode failed',
+            originalError: Object(),
+          ),
+        ),
+        isFalse,
       );
     });
   });

@@ -7,7 +7,7 @@ import '../../presentation/mobile/auth/widgets/auth_tabs.dart';
 import '../../presentation/mobile/onboarding/pages/onboarding_flow_page.dart';
 import '../../presentation/mobile/start/app_start_gate.dart';
 import '../../presentation/mobile/shell/entrepreneur_tab_host.dart';
-import '../../presentation/mobile/entrepreneur/pages/entrepreneur_assessment_setup_mobile_page.dart';
+import '../../presentation/mobile/entrepreneur/pages/entrepreneur_assessment_questions_mobile_page.dart';
 import '../../presentation/mobile/entrepreneur/pages/entrepreneur_assessment_summary_mobile_page.dart';
 import '../../presentation/mobile/entrepreneur/pages/entrepreneur_compare_mobile_page.dart';
 import '../../presentation/mobile/entrepreneur/pages/entrepreneur_evidence_mobile_page.dart';
@@ -171,7 +171,7 @@ abstract final class AppRoutes {
       // property id as arguments; the later steps read the session draft.
       '/entrepreneur/assessment-setup' => (
         RouteAccess.workspace,
-        () => EntrepreneurAssessmentSetupMobilePage(
+        () => EntrepreneurAssessmentQuestionsPage(
           propertyId: settings.arguments as String? ?? '',
         ),
       ),

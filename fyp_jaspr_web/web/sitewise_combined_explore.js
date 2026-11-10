@@ -19,6 +19,7 @@
   let map = null;
   let root = null;
   let markerLayer = null;
+  const propertyMarkers = new Map(); // cached by stable catalogue ID
   let transportLayer = null;
   let radiusCircle = null;
   let previousState = '';
@@ -61,6 +62,7 @@
     map = null;
     root = null;
     markerLayer = null;
+    propertyMarkers.clear();
     transportLayer = null;
     radiusCircle = null;
     previousState = '';
@@ -80,12 +82,19 @@
       mapUnavailable(el, 'The map library could not load. Property search and listings remain available.');
       return false;
     }
+    const cartoKey = window.SITEWISE_MAP_CONFIG?.cartoBasemapsKey;
+    if (!cartoKey) {
+      mapUnavailable(el, 'CARTO basemap key missing. Generate map-config.js and rebuild SiteWise.');
+      return false;
+    }
     try {
       map = L.map(el, { zoomControl: true, preferCanvas: true, scrollWheelZoom: false })
         .setView(DEFAULT, 11);
-      L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+      L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png?key=' + encodeURIComponent(cartoKey), {
         subdomains: 'abcd', maxZoom: 19,
         attribution: '&copy; OpenStreetMap contributors &copy; CARTO',
+      }).on('tileerror', () => {
+        mapUnavailable(el, 'CARTO tiles could not load. Check key restrictions and network requests.');
       }).addTo(map);
       markerLayer = (typeof L.markerClusterGroup === 'function')
         ? L.markerClusterGroup({ maxClusterRadius: 42, showCoverageOnHover: false })
@@ -133,26 +142,55 @@
     const center = points.find(p => String(p.id) === selectedId) || null;
     const radiusM = Number(data.radiusM) === 500 ? 500 : 1000;
 
-    markerLayer.clearLayers();
+    // Diff by ID: UI updates must not destroy and reconstruct all markers.
     if (radiusCircle) {
       map.removeLayer(radiusCircle);
       radiusCircle = null;
     }
 
+    const activeIds = new Set();
     const bounds = [];
     for (const p of points) {
-      const selected = String(p.id) === selectedId;
-      const marker = L.marker([Number(p.lat), Number(p.lon)], {
-        title: String(p.title || p.id),
-        icon: propertyIcon(selected, Boolean(p.nearby)),
-      });
-      marker.bindPopup(`<div class="swcx-popup"><strong>${escapeHtml(p.title || p.id)}</strong>` +
-        `<small>${escapeHtml(p.address || '')}</small>` +
-        `<small>RM ${Number(p.rentRm || 0).toLocaleString('en-MY')}/month</small>` +
-        `<a href="/entrepreneur/property-detail?id=${encodeURIComponent(String(p.id))}">View details</a></div>`);
-      marker.on('click', () => pickProperty(p.id));
-      markerLayer.addLayer(marker);
+      const id = String(p.id);
+      const selected = id === selectedId;
+      const nearby = Boolean(p.nearby);
+      const state = selected ? 'selected' : nearby ? 'near' : 'other';
+      const signature = JSON.stringify([
+        Number(p.lat), Number(p.lon), p.title, p.address, p.rentRm,
+      ]);
+      activeIds.add(id);
+      let entry = propertyMarkers.get(id);
+
+      if (!entry || entry.signature !== signature) {
+        if (entry) markerLayer.removeLayer(entry.marker);
+        const marker = L.marker([Number(p.lat), Number(p.lon)], {
+          title: String(p.title || p.id),
+          icon: propertyIcon(selected, nearby),
+        });
+        marker.bindPopup('<div class="swcx-popup"><strong>' +
+          escapeHtml(p.title || p.id) + '</strong>' +
+          '<small>' + escapeHtml(p.address || '') + '</small>' +
+          '<small>RM ' + Number(p.rentRm || 0).toLocaleString('en-MY') +
+          '/month</small>' +
+          '<a href="/entrepreneur/property-detail?id=' +
+          encodeURIComponent(id) + '">View details</a></div>');
+        marker.on('click', () => pickProperty(id));
+        markerLayer.addLayer(marker);
+        entry = { marker, signature, state };
+        propertyMarkers.set(id, entry);
+      } else if (entry.state !== state) {
+        entry.marker.setIcon(propertyIcon(selected, nearby));
+        entry.state = state;
+      }
       bounds.push([Number(p.lat), Number(p.lon)]);
+    }
+
+    // Remove only the markers excluded by current search/filter criteria.
+    for (const [id, entry] of propertyMarkers) {
+      if (!activeIds.has(id)) {
+        markerLayer.removeLayer(entry.marker);
+        propertyMarkers.delete(id);
+      }
     }
 
     if (center) {

@@ -27,10 +27,22 @@ class EntrepreneurTabScope extends InheritedWidget {
   /// Use for in-page shortcuts to other primary tabs. If no tab host exists,
   /// fall back to the existing named-route system (for deep links/detail UI).
   /// Normal property detail and assessment destinations are always pushed.
+  ///
+  /// The fallback never *pushes* a tab route: the route table maps every tab
+  /// route to a fresh [EntrepreneurTabHost], so a push would stack a second
+  /// full workspace (double bottom bar + a spurious back arrow that pops the
+  /// user out of nowhere). Instead the stack is unwound to the workspace root
+  /// and that root is replaced with a host opened on the requested tab.
   static void open(BuildContext context, String route, {Object? arguments}) {
     final host = maybeOf(context);
     if (host != null && arguments == null && isTabRoute(route)) {
       host.onTabSelected(route);
+      return;
+    }
+    if (arguments == null && isTabRoute(route)) {
+      final nav = Navigator.of(context);
+      nav.popUntil((r) => r.isFirst);
+      nav.pushReplacementNamed(route);
       return;
     }
     Navigator.of(context).pushNamed(route, arguments: arguments);

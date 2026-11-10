@@ -91,6 +91,7 @@ class ExploreQuery {
     String? state,
     String? city,
     String? propertyType,
+    String? availability,
     double? minPrice,
     double? maxPrice,
     double? minSize,
@@ -107,6 +108,8 @@ class ExploreQuery {
         (propertyType == null || propertyType == 'Any' || propertyType.isEmpty)
         ? null
         : propertyType,
+    availability:
+        (availability == null || availability.isEmpty) ? null : availability,
     minPrice: minPrice,
     maxPrice: maxPrice,
     minSize: minSize,
@@ -301,6 +304,17 @@ class NearbyOutlet {
   final double? longitude;
   final double distanceM;
 
+  /// `openstreetmap` or `overture` — which provider supplied this record.
+  final String? provider;
+
+  /// `unknown` when the provider cannot establish it (Overture's
+  /// `operating_status` is NULL for essentially every row in this release).
+  final String? operatingStatus;
+
+  /// Provider licence + dataset snapshot, preserved for attribution.
+  final String? sourceLicence;
+  final String? sourceSnapshot;
+
   const NearbyOutlet({
     required this.outletKey,
     required this.distanceM,
@@ -311,6 +325,10 @@ class NearbyOutlet {
     this.city,
     this.latitude,
     this.longitude,
+    this.provider,
+    this.operatingStatus,
+    this.sourceLicence,
+    this.sourceSnapshot,
   });
 }
 
@@ -322,11 +340,20 @@ class NearbyOutlets {
   final int radiusM;
   final List<NearbyOutlet> outlets;
 
+  /// `meta.counts` from the backend: `osm`, `overture_raw`,
+  /// `overture_unique`, `merged` and `duplicates_removed` for the radius.
+  /// Empty when the backend did not report them (older response).
+  final Map<String, int> counts;
+
   const NearbyOutlets({
     required this.available,
     required this.radiusM,
     this.outlets = const [],
+    this.counts = const {},
   });
+
+  /// The deduplicated number a user should see (falls back to the list length).
+  int? get mergedCount => counts['merged'];
 }
 
 /// One demand generator (mall, transit hub, office cluster…) from

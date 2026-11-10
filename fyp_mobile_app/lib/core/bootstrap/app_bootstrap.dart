@@ -27,10 +27,23 @@ import 'startup_trace.dart';
 /// or network failure fails closed into the Sign In screen with a retry.
 abstract final class AppBootstrap {
   static Future<void>? _pending;
+  static bool _completed = false;
 
-  /// Idempotent. Never throws — failures are recorded in [MobileConfig] and
-  /// surfaced as a typed configuration failure by the repository.
-  static Future<void> get ready => _pending ??= _initialize();
+  /// Idempotent, and safe across async zones. Never throws — failures are
+  /// recorded in [MobileConfig] and surfaced as a typed configuration failure
+  /// by the repository.
+  ///
+  /// Callers that arrive WHILE initialization is running share the single
+  /// in-flight future (so `Supabase.initialize()` can only run once). Once it
+  /// has finished we return a fresh already-completed future created in the
+  /// caller's own zone. That matters for Flutter widget tests: a Future born
+  /// in one test's `FakeAsync` zone can never complete a listener added from
+  /// the next test's zone, which otherwise leaves the startup gate waiting on
+  /// a dead future and its splash animating forever.
+  static Future<void> get ready {
+    if (_completed) return Future<void>.value();
+    return _pending ??= _initialize();
+  }
 
   /// Kicks initialization off without waiting for it. Safe to call repeatedly
   /// (hot restart, tests, embedding): the memoised future is shared.
@@ -97,6 +110,9 @@ abstract final class AppBootstrap {
       // in main) because the runtime init flag is only meaningful now.
       debugPrint(MobileConfig.statusLine);
       StartupTrace.report('bootstrap');
+      // From here on [ready] hands out a zone-local completed future instead
+      // of the memoised one. Initialization still happened exactly once.
+      _completed = true;
     }
   }
 }

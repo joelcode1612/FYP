@@ -50,7 +50,7 @@ class PropertyLeafletMap extends StatelessComponent {
         'title':
             'Interactive map of ${property.title} with 500 metre and 1 kilometre catchments',
         'loading': 'lazy',
-        'referrerpolicy': 'no-referrer',
+        'referrerpolicy': 'strict-origin-when-cross-origin',
         'style': 'width:100%;height:${height}px;border:0;display:block;',
       },
     );

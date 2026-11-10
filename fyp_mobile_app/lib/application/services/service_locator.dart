@@ -70,11 +70,17 @@ abstract final class ServiceLocator {
 
   static BusinessPreferences preferences = DemoData.defaultPreferences;
 
+  /// Production draft store. Kept as the reset target for widget tests, which
+  /// swap [drafts] for an in-memory implementation because the file store
+  /// needs a platform channel that the test binding does not answer.
+  static final ApplicationDraftRepository productionDrafts =
+      ApplicationDraftRepository(FileDraftLocalDataSource());
+
   /// User-scoped draft persistence (preferences, assessment draft, remembered
   /// sign-in address). Non-sensitive data only — never passwords or tokens.
-  static final ApplicationDraftRepository drafts = ApplicationDraftRepository(
-    FileDraftLocalDataSource(),
-  );
+  /// Non-final so tests can inject a fake data source, exactly as they do for
+  /// [onboardingRepo] and [auth].
+  static ApplicationDraftRepository drafts = productionDrafts;
 
   /// Single assessment draft. Every mutation is written through to
   /// [drafts] (§4 of the brief), so an interrupted app resumes the flow
@@ -100,11 +106,25 @@ abstract final class ServiceLocator {
         },
       );
 
+  /// Upper bound on the boot-time draft read.
+  ///
+  /// `path_provider` answers through a platform channel. If that channel is
+  /// unavailable (widget tests, an unsupported platform, a stuck plugin) the
+  /// read can stay pending forever, and the startup gate — which deliberately
+  /// holds the splash until drafts are rehydrated — would never navigate.
+  /// Drafts are best-effort convenience data, so a stalled read must degrade
+  /// to session-only state instead of blocking the app.
+  static const Duration draftRestoreTimeout = Duration(seconds: 2);
+
   /// Boot-time draft restore. Runs once after the locator is first touched:
   /// rehydrates the entrepreneur's saved preferences and any in-progress
-  /// assessment draft. Never throws — a corrupt or missing draft degrades to
+  /// assessment draft. Never throws and always completes within
+  /// [draftRestoreTimeout] — a corrupt, missing or stalled draft degrades to
   /// the previous session-only behaviour, it must not block startup.
-  static Future<void> restoreDrafts() async {
+  static Future<void> restoreDrafts() =>
+      _restoreDrafts().timeout(draftRestoreTimeout, onTimeout: () {});
+
+  static Future<void> _restoreDrafts() async {
     try {
       final saved = await drafts.loadPreferences();
       if (saved != null && saved.businessType.isNotEmpty) {

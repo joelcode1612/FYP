@@ -91,6 +91,10 @@ class _EntrepreneurTabHostState extends State<EntrepreneurTabHost> {
           actions: const [],
           brandTitle: _selectedIndex == 0,
           m3: true,
+          // Root workspace: the five tabs are top-level destinations, so the
+          // header must never offer a back arrow that pops the whole
+          // workspace (system back already returns to Home via PopScope).
+          showBack: false,
         ),
         body: IndexedStack(
           index: _selectedIndex,

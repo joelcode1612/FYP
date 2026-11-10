@@ -39,6 +39,8 @@ class PropertyCard extends StatelessComponent {
 
   final bool saved;
   final bool compared;
+  /// True while the owner page is waiting for the save/unsave API response.
+  final bool saving;
   final void Function()? onToggleSaved;
   final void Function()? onToggleCompared;
 
@@ -67,6 +69,7 @@ class PropertyCard extends StatelessComponent {
     required this.href,
     this.saved = false,
     this.compared = false,
+    this.saving = false,
     this.onToggleSaved,
     this.onToggleCompared,
     this.rankBanner,
@@ -182,21 +185,41 @@ class PropertyCard extends StatelessComponent {
               ),
             if (onToggleSaved != null)
               button(
-                classes: saved ? 'btn sm icon-btn is-saved' : 'btn sm icon-btn',
+                // Text buttons must not inherit the 38px circular .icon-btn.
+                classes: saved
+                    ? 'btn sm pcard-toggle is-saved'
+                    : 'btn sm pcard-toggle',
                 attributes: {
                   'type': 'button',
                   'aria-pressed': saved ? 'true' : 'false',
-                  'aria-label': saved ? 'Remove from saved' : 'Save property',
+                  'aria-busy': saving ? 'true' : 'false',
+                  'aria-label': saving
+                      ? (saved ? 'Removing saved property' : 'Saving property')
+                      : (saved ? 'Remove from saved' : 'Save property'),
+                  if (saving) 'disabled': '',
                 },
-                events: events(onClick: onToggleSaved!),
-                [Component.text(saved ? 'Saved' : 'Save')],
+                events: events(onClick: () {
+                  if (!saving) onToggleSaved?.call();
+                }),
+                [
+                  Component.text(
+                    saving
+                        ? (saved ? 'Removing…' : 'Saving…')
+                        : (saved ? 'Saved' : 'Save'),
+                  ),
+                ],
               ),
             if (onToggleCompared != null)
               button(
-                classes: compared ? 'btn sm icon-btn is-on' : 'btn sm icon-btn',
+                classes: compared
+                    ? 'btn sm pcard-toggle is-on'
+                    : 'btn sm pcard-toggle',
                 attributes: {
                   'type': 'button',
                   'aria-pressed': compared ? 'true' : 'false',
+                  'aria-label': compared
+                      ? 'Remove property from comparison'
+                      : 'Add property to comparison',
                 },
                 events: events(onClick: onToggleCompared!),
                 [Component.text(compared ? 'In compare' : 'Compare')],

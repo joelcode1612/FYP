@@ -3,8 +3,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_logic/shared_logic.dart';
 import 'package:fyp/application/providers.dart';
+import 'package:fyp/application/services/draft_repository.dart';
 import 'package:fyp/application/services/service_locator.dart';
+import 'package:fyp/core/config/mobile_config.dart';
 import 'package:fyp/core/routing/auth_route_guard.dart';
+import 'package:fyp/data/datasources/local/draft_local_data_source.dart';
 import 'package:fyp/data/datasources/local/onboarding_local_data_source.dart';
 import 'package:fyp/data/repositories/onboarding_repository_impl.dart';
 import 'package:fyp/data/repositories/supabase_auth_repository.dart';
@@ -36,15 +39,21 @@ void main() {
   /// The production tree over the freshly swapped composition root:
   /// [sitewiseOverrides] reads [ServiceLocator.auth] at call time, so the
   /// fake repository installed by [setUp] is what the scope points at.
-  Widget app() => ProviderScope(
-    overrides: sitewiseOverrides(),
-    child: const SitewiseApp(),
-  );
+  Widget app() =>
+      ProviderScope(overrides: sitewiseOverrides(), child: const SitewiseApp());
 
   setUp(() {
     auth = FakeAuthRepository();
     useOnboarding();
     ServiceLocator.auth = AuthService(auth);
+    // The startup gate awaits the boot-time draft restore. The file-backed
+    // store asks path_provider through a platform channel that a widget test
+    // never answers, so the restore would never complete and the gate would
+    // hold its animating splash forever. An in-memory store keeps the real
+    // gate code under test without faking the app's behaviour.
+    ServiceLocator.drafts = ApplicationDraftRepository(
+      InMemoryDraftLocalDataSource(),
+    );
     AuthPendingDestination.clear();
   });
 
@@ -53,10 +62,46 @@ void main() {
       FileOnboardingLocalDataSource(),
     );
     // Back to the production wiring so a later test file cannot inherit a
-    // fake session.
+    // fake session or an in-memory draft store.
+    ServiceLocator.drafts = ServiceLocator.productionDrafts;
     ServiceLocator.auth = AuthService(SupabaseAuthRepository());
     ServiceLocator.assessmentSession.discard();
     AuthPendingDestination.clear();
+  });
+
+  // Regression guard: a live-API build once listed TWO overrides for
+  // getLocationAnalysisProvider, and Riverpod red-screened the app with
+  // "Tried to override a provider twice within the same container" before the
+  // first frame. Constructing the container is what triggers that assertion.
+  // Run this test with SUPABASE_URL / SUPABASE_PUBLISHABLE_KEY dart-defines to
+  // exercise the live branch as well as the default demo branch.
+  test('composition root overrides each provider at most once', () {
+    // The live-mode verification run passes VERIFY_LIVE=true together with
+    // SUPABASE_URL / SUPABASE_PUBLISHABLE_KEY. Without this guard a mistyped
+    // define would silently reduce that run to a second demo-mode check and
+    // the crashing branch would go untested.
+    const verifyLive = bool.fromEnvironment('VERIFY_LIVE');
+    if (verifyLive) {
+      expect(
+        MobileConfig.usesLiveApi,
+        isTrue,
+        reason: 'live run must compile with valid Supabase defines',
+      );
+    }
+
+    final container = ProviderContainer(overrides: sitewiseOverrides());
+    addTearDown(container.dispose);
+
+    final analysis = container.read(getLocationAnalysisProvider);
+    expect(analysis, isA<GetLocationAnalysis>());
+    // The single override must still select the correct repository: demo
+    // ranking locally, live ranking plus API-backed location intelligence.
+    expect(
+      analysis.repo,
+      MobileConfig.usesLiveApi
+          ? isA<IntelligenceBackedRecommendationRepository>()
+          : isA<RecommendationRepositoryImpl>(),
+    );
   });
 
   // TEST 1 — authentication comes first: a signed-out launch shows Sign In,
@@ -274,9 +319,7 @@ void main() {
 
   // TEST 11 — validation is real: an address that is not an email never
   // reaches the repository.
-  testWidgets('invalid email is rejected before any auth call', (
-    tester,
-  ) async {
+  testWidgets('invalid email is rejected before any auth call', (tester) async {
     _useMobileSurface(tester);
     useOnboarding(completed: true);
 
@@ -376,34 +419,39 @@ void main() {
   // non-blocking warning and a Retry action, and no workspace is painted.
   // A successful Retry re-verifies the (preserved) session and enters the
   // workspace just like a fresh sign-in.
-  testWidgets('unreachable sign-in service keeps Sign In reachable with retry', (
-    tester,
-  ) async {
-    _useMobileSurface(tester);
-    useOnboarding(completed: true);
-    auth.restoreFailure = const AuthUnavailableFailure();
+  testWidgets(
+    'unreachable sign-in service keeps Sign In reachable with retry',
+    (tester) async {
+      _useMobileSurface(tester);
+      useOnboarding(completed: true);
+      auth.restoreFailure = const AuthUnavailableFailure();
 
-    await tester.pumpWidget(app());
-    await tester.pumpAndSettle();
+      await tester.pumpWidget(app());
+      await tester.pumpAndSettle();
 
-    // Startup lands on the Sign In screen, not a full-screen block.
-    expect(find.text('Welcome Back'), findsOneWidget);
-    expect(find.textContaining('could not reach'), findsOneWidget);
-    expect(find.text('Retry connection check'), findsOneWidget);
-    expect(find.text('Welcome to Sitewise.'), findsNothing);
+      // Startup lands on the Sign In screen, not a full-screen block.
+      expect(find.text('Welcome Back'), findsOneWidget);
+      expect(find.textContaining('could not reach'), findsOneWidget);
+      expect(find.text('Retry connection check'), findsOneWidget);
+      expect(find.text('Welcome to Sitewise.'), findsNothing);
 
-    auth.restoreFailure = null;
-    auth.user = testUser();
-    await tester.ensureVisible(find.text('Retry connection check'));
-    await tester.pump();
-    await tester.tap(find.text('Retry connection check'));
-    await tester.pumpAndSettle();
+      auth.restoreFailure = null;
+      auth.user = testUser();
+      await tester.ensureVisible(find.text('Retry connection check'));
+      await tester.pump();
+      await tester.tap(find.text('Retry connection check'));
+      await tester.pumpAndSettle();
 
-    expect(find.text('Welcome to Sitewise.'), findsOneWidget);
-  });
+      expect(find.text('Welcome to Sitewise.'), findsOneWidget);
+    },
+  );
 
-  // TEST 16 — an expired stored session is cleared and sent back to Sign In.
-  testWidgets('expired session at restart redirects to sign in', (
+  // TEST 16 — a stale session found during a passive cold-start check is
+  // dropped (fail closed) but must NOT produce a "Session expired" warning on
+  // a Sign In screen the user has never left. Nobody signed in yet in this
+  // process, so there is nothing to warn about. See auth_flow_test.dart for
+  // the complementary case: a 401 AFTER a verified session is still reported.
+  testWidgets('stale session at cold start opens a clean Sign In form', (
     tester,
   ) async {
     _useMobileSurface(tester);
@@ -415,7 +463,9 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Welcome Back'), findsOneWidget);
-    expect(find.textContaining('session has expired'), findsOneWidget);
+    expect(find.textContaining('session has expired'), findsNothing);
+    expect(find.text('Session expired'), findsNothing);
+    expect(find.text('Sign-in service unavailable'), findsNothing);
     expect(find.text('Welcome to Sitewise.'), findsNothing);
     expect(auth.signOutCalls, 1, reason: 'an invalid session must be dropped');
   });
@@ -600,70 +650,42 @@ void main() {
   // Assess This Property → setup → evidence → summary → save, with the
   // property staying linked the whole way and the hub showing the
   // session-only record afterwards.
-  testWidgets('assessment journey keeps the property link end to end', (
-    tester,
-  ) async {
-    _useMobileSurface(tester);
-    useOnboarding(completed: true);
-    auth.user = testUser();
+  testWidgets(
+    'assessment opens the eight-question flow for the chosen property',
+    (tester) async {
+      _useMobileSurface(tester);
+      useOnboarding(completed: true);
+      auth.user = testUser();
 
-    Future<void> scrollTo(Finder finder) async {
+      await tester.pumpWidget(app());
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Listing'));
+      await tester.pumpAndSettle();
+      expect(find.text('Find a location'), findsOneWidget);
+
+      // Open the first real repository listing and enter the assessment.
+      await tester.tap(find.byType(MobilePropertyCard).first);
+      await tester.pumpAndSettle();
+      final assessButton = find.text('Assess this property');
       await tester.dragUntilVisible(
-        finder,
+        assessButton,
         find.byType(ListView).first,
         const Offset(0, -250),
       );
       await tester.pumpAndSettle();
-    }
+      await tester.tap(assessButton);
+      await tester.pumpAndSettle();
 
-    await tester.pumpWidget(app());
-    await tester.pumpAndSettle();
-
-    await tester.tap(find.text('Listing'));
-    await tester.pumpAndSettle();
-    expect(find.text('Find a location'), findsOneWidget);
-
-    // Open the first real repository listing.
-    await tester.tap(find.byType(MobilePropertyCard).first);
-    await tester.pumpAndSettle();
-    final assessButton = find.text('Assess this property');
-    await scrollTo(assessButton);
-    await tester.tap(assessButton);
-    await tester.pumpAndSettle();
-
-    // Setup: the property arrived via route arguments — the screen shows the
-    // link without asking for the property again.
-    expect(find.text('Tell us about your business'), findsOneWidget);
-    expect(find.text('NEW ASSESSMENT / STEP 1 OF 3'), findsOneWidget);
-    await tester.tap(find.text('Specialty café'));
-    await tester.pumpAndSettle();
-    await tester.enterText(find.byType(TextField), '8500');
-    await tester.pumpAndSettle();
-    await scrollTo(find.text('Residents'));
-    await tester.tap(find.text('Residents'));
-    await tester.pumpAndSettle();
-    await scrollTo(find.text('Continue to evidence matching'));
-    await tester.tap(find.text('Continue to evidence matching'));
-    await tester.pumpAndSettle();
-
-    // Evidence: honest states only — no fabricated campaign matching.
-    expect(find.text('Evidence matching'), findsOneWidget);
-    expect(find.text('Property linked'), findsOneWidget);
-    expect(find.text('Survey evidence requires backend check'), findsOneWidget);
-    await scrollTo(find.text('View assessment summary'));
-    await tester.tap(find.text('View assessment summary'));
-    await tester.pumpAndSettle();
-
-    // Summary: repository analysis (or its explicit absence), never invented.
-    expect(find.text('Assessment summary'), findsOneWidget);
-    expect(find.text('Demand analysis'), findsOneWidget);
-    final saveButton = find.text('Save this assessment');
-    await scrollTo(saveButton);
-    await tester.tap(saveButton);
-    await tester.pumpAndSettle();
-
-    // Back on the hub: one session record, explicitly session-scoped.
-    expect(find.text('Saved in this session'), findsOneWidget);
-    expect(find.textContaining('Specialty café'), findsOneWidget);
-  });
+      // The property id travels as the route argument. The questionnaire now
+      // persists to the backend, so with no service reachable in a widget test
+      // the page reports the real blocker instead of inventing an assessment
+      // record and accepting answers that could never be saved.
+      expect(
+        find.text('Assessment unavailable'),
+        findsOneWidget,
+        reason: 'no backend record means no questionnaire to answer',
+      );
+    },
+  );
 }

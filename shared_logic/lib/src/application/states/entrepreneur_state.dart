@@ -55,6 +55,20 @@ class EntrepreneurState {
   /// composition root supplied a server-driven Explore repository.
   final ExploreFilterOptions? filterOptions;
 
+  /// Filter, sort and page-size criteria for the server-driven Explore
+  /// search. The free-text query is still owned by [query] (kept in sync by
+  /// the controller) so the demo/client-driven path is untouched; on the
+  /// server path this object is what actually reaches
+  /// `GET /explore/properties`. Default `const ExploreQuery()` = newest
+  /// first, page of 24, no constraints.
+  final ExploreQuery exploreCriteria;
+
+  /// The raw failure object behind [error], for UIs that need to classify
+  /// the failure (connection refused vs expired session vs server error vs
+  /// malformed contract) instead of showing one generic message. Null when
+  /// [error] is null or was produced without a classified failure.
+  final Object? exploreFailure;
+
   final List<PropertyRecommendation> recommendations;
   final LocationAnalysis? analysis;
 
@@ -77,6 +91,8 @@ class EntrepreneurState {
     this.exploreTotal,
     this.exploreHasMore = false,
     this.filterOptions,
+    this.exploreCriteria = const ExploreQuery(),
+    this.exploreFailure,
     this.recommendations = const [],
     this.analysis,
     this.query = '',
@@ -97,6 +113,9 @@ class EntrepreneurState {
     bool clearExploreTotal = false,
     bool? exploreHasMore,
     ExploreFilterOptions? filterOptions,
+    ExploreQuery? exploreCriteria,
+    Object? exploreFailure,
+    bool clearExploreFailure = false,
     List<PropertyRecommendation>? recommendations,
     LocationAnalysis? analysis,
     String? query,
@@ -121,6 +140,10 @@ class EntrepreneurState {
           : (exploreTotal ?? this.exploreTotal),
       exploreHasMore: exploreHasMore ?? this.exploreHasMore,
       filterOptions: filterOptions ?? this.filterOptions,
+      exploreCriteria: exploreCriteria ?? this.exploreCriteria,
+      exploreFailure: clearExploreFailure
+          ? null
+          : (exploreFailure ?? this.exploreFailure),
       recommendations: recommendations ?? this.recommendations,
       analysis: analysis ?? this.analysis,
       query: query ?? this.query,

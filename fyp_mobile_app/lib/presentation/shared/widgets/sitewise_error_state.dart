@@ -7,11 +7,15 @@ class SitewiseErrorState extends StatelessWidget {
   final String title;
   final VoidCallback? onRetry;
 
+  /// Optional classification icon (connection / session / server).
+  final IconData icon;
+
   const SitewiseErrorState({
     super.key,
     required this.message,
     this.title = 'Something went wrong',
     this.onRetry,
+    this.icon = Icons.error_outline,
   });
 
   @override
@@ -22,8 +26,8 @@ class SitewiseErrorState extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(
-              Icons.error_outline,
+            Icon(
+              icon,
               size: 48,
               color: SitewiseColors.danger,
             ),

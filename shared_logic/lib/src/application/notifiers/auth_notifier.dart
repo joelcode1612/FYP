@@ -28,6 +28,19 @@ class AuthNotifier extends Notifier<AuthState> {
   bool _starting = false;
   bool _busy = false;
 
+  /// Whether a backend-verified session is held (or was just held) in this
+  /// process, and has not since been signed out or invalidated.
+  ///
+  /// FastAPI correctly answers 401 to an invalid bearer. On a cold start that
+  /// only means the token left in Keystore is stale (expired, revoked, or
+  /// minted for another project) — nobody has signed in yet, so showing a
+  /// "Session expired" warning on the Sign In screen is confusing and wrong.
+  /// A 401 after a real sign-in, or while a verified session was active, IS a
+  /// genuine expiry and must still be reported. [signOut] and [_invalidate]
+  /// reset the flag so an explicit sign-out is never mislabelled as an expiry.
+  /// See [_restore].
+  bool _hadAuthenticatedSession = false;
+
   @override
   AuthState build() {
     _auth = ref.watch(authServiceProvider);
@@ -57,6 +70,7 @@ class AuthNotifier extends Notifier<AuthState> {
     try {
       final user = await _auth.currentUser();
       if (!ref.mounted) return;
+      _hadAuthenticatedSession = user != null;
       state = user == null
           ? const AuthState(status: AuthStatus.unauthenticated)
           : AuthState(status: AuthStatus.authenticated, user: user);
@@ -69,8 +83,18 @@ class AuthNotifier extends Notifier<AuthState> {
         ),
       );
     } on SessionExpiredFailure catch (failure) {
+      // A 401 from a passive cold-start restore is "no usable session", not
+      // an error the user caused. Drop the stale credentials (fail closed)
+      // and open a clean Sign In form with no warning card. Once a session
+      // HAS been verified in this process, the same 401 is a real expiry and
+      // is reported as before.
       await _invalidate(
-        AuthState(status: AuthStatus.sessionExpired, message: failure.userMessage),
+        _hadAuthenticatedSession
+            ? AuthState(
+                status: AuthStatus.sessionExpired,
+                message: failure.userMessage,
+              )
+            : const AuthState(status: AuthStatus.unauthenticated),
       );
     } on AuthConfigurationFailure catch (failure) {
       _publish(_error(AuthErrorKind.configuration, failure.userMessage));
@@ -121,6 +145,7 @@ class AuthNotifier extends Notifier<AuthState> {
 
   /// Ends the session and returns to [AuthStatus.unauthenticated].
   Future<void> signOut() async {
+    _hadAuthenticatedSession = false;
     try {
       await _auth.signOut();
     } on AppFailure {
@@ -154,6 +179,7 @@ class AuthNotifier extends Notifier<AuthState> {
     try {
       final user = await request();
       if (!ref.mounted) return false;
+      _hadAuthenticatedSession = true;
       state = AuthState(status: AuthStatus.authenticated, user: user);
       return true;
     } on EmailConfirmationRequiredFailure catch (failure) {
@@ -273,6 +299,7 @@ class AuthNotifier extends Notifier<AuthState> {
 
   /// Drops an unusable session so a restart cannot re-offer it.
   Future<void> _invalidate(AuthState next) async {
+    _hadAuthenticatedSession = false;
     try {
       await _auth.signOut();
     } catch (_) {

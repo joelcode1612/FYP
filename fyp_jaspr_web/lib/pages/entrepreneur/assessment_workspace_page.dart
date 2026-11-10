@@ -593,7 +593,11 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
               ),
               if (_openStage == stage.key &&
                   stage.key == 'business_requirements')
-                _requirementsPanel(record),
+                // A record saved before the questionnaire existed keeps its
+                // own legacy editor; a v2 record gets the eight questions.
+                record.requirementsVersion == 1
+                    ? _legacyRequirementsPanel(record)
+                    : _questionnairePanel(record),
               if (_openStage == stage.key && stage.key == 'location_evidence')
                 _evidencePanel(record),
             ],
@@ -667,9 +671,366 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
         ]),
       ]);
 
+  // ------------------------------------------- stage 2: eight-question flow
+
+  /// One business-preference question.
+  ///
+  /// `kind` is `single`, `multi` or `number`; `options` are (token, label)
+  /// pairs. Tokens are what the backend validates, so a label can change
+  /// without rewriting a saved answer.
+  static const List<
+    ({String id, String prompt, String help, String kind, List<(String, String)> options})
+  >
+  _questions = [
+    (
+      id: 'fnb_concept',
+      prompt: 'What kind of F&B business are you opening?',
+      help: 'Your concept shapes how the competition figures are read.',
+      kind: 'single',
+      options: [
+        ('cafe_coffee_shop', 'Café / Coffee Shop'),
+        ('restaurant', 'Restaurant'),
+        ('bakery_dessert_shop', 'Bakery / Dessert Shop'),
+        ('fast_food_quick_service', 'Fast Food / Quick Service'),
+        ('beverage_shop_kiosk', 'Beverage Shop / Kiosk'),
+        ('other_fnb', 'Other F&B'),
+      ],
+    ),
+    (
+      id: 'service_model',
+      prompt: 'How will you serve customers?',
+      help: 'Dine-in, takeaway and delivery place different demands on a site.',
+      kind: 'single',
+      options: [
+        ('dine_in', 'Dine-in'),
+        ('takeaway_quick_service', 'Takeaway / Quick Service'),
+        ('delivery_focused', 'Delivery Focused'),
+        ('hybrid', 'Hybrid'),
+      ],
+    ),
+    (
+      id: 'target_customers',
+      prompt: 'Who are your target customers?',
+      help: 'Select every group that matters. At least one is required.',
+      kind: 'multi',
+      options: [
+        ('nearby_residents', 'Nearby Residents'),
+        ('office_workers', 'Office Workers'),
+        ('students', 'Students'),
+        ('commuters', 'Commuters'),
+        ('general_public', 'General Public'),
+      ],
+    ),
+    (
+      id: 'recommendation_priority',
+      prompt: 'What matters most when choosing the location?',
+      help: 'This is the priority the assessment is read against.',
+      kind: 'single',
+      options: [
+        ('high_customer_demand', 'High Customer Demand'),
+        ('affordable_operating_location', 'Affordable Operating Location'),
+        ('easy_customer_accessibility', 'Easy Customer Accessibility'),
+        ('favorable_competition', 'Favorable Competition'),
+        ('balanced_suitability', 'Balanced Suitability'),
+      ],
+    ),
+    (
+      id: 'target_price_segment',
+      prompt: 'How is your menu priced?',
+      help: 'Price positioning informs how competitor density is interpreted.',
+      kind: 'single',
+      options: [
+        ('budget_friendly', 'Budget-Friendly'),
+        ('mid_range', 'Mid-Range'),
+        ('premium', 'Premium'),
+        ('mixed_price_range', 'Mixed Price Range'),
+      ],
+    ),
+    (
+      id: 'customer_access_mode',
+      prompt: 'How will most customers reach you?',
+      help: 'Checked against the transport measurements the analysis holds.',
+      kind: 'single',
+      options: [
+        ('walking', 'Walking'),
+        ('public_transportation', 'Public Transportation'),
+        ('private_vehicle', 'Private Vehicle'),
+        ('mixed_transportation', 'Mixed Transportation'),
+      ],
+    ),
+    (
+      id: 'max_monthly_rent_myr',
+      prompt: 'What is your maximum monthly rental?',
+      help: 'In MYR. Must be greater than zero; compared with the asking rent.',
+      kind: 'number',
+      options: [],
+    ),
+    (
+      id: 'min_floor_area_sqft',
+      prompt: 'What is the smallest floor area you can operate in?',
+      help: 'In square feet. Must be greater than zero; compared with the listing.',
+      kind: 'number',
+      options: [],
+    ),
+  ];
+
+  /// Answers keyed by question id. Numbers are stored as text while typing and
+  /// parsed only when the step is validated.
+  final Map<String, dynamic> _answers = <String, dynamic>{};
+  int _answerStep = 0;
+  String? _answerError;
+  bool _answersSeeded = false;
+
+  void _seedAnswers() {
+    if (_answersSeeded) return;
+    _answersSeeded = true;
+    final stored = _record?.requirements;
+    final legacy = _record?.requirementsLegacyView;
+    for (final q in _questions) {
+      final value = stored?[q.id] ?? legacy?[q.id];
+      if (value == null) continue;
+      if (q.kind == 'multi' && value is List) {
+        _answers[q.id] = [for (final item in value) '$item'];
+      } else if (q.kind == 'number' && value is num) {
+        _answers[q.id] = value == value.roundToDouble()
+            ? value.toStringAsFixed(0)
+            : '$value';
+      } else if (value is String) {
+        _answers[q.id] = value;
+      }
+    }
+  }
+
+  bool _stepValid(String kind, Object? value) {
+    switch (kind) {
+      case 'multi':
+        return value is List && value.isNotEmpty;
+      case 'number':
+        final parsed = double.tryParse('${value ?? ''}');
+        return parsed != null && parsed.isFinite && parsed > 0;
+      default:
+        return value is String && value.isNotEmpty;
+    }
+  }
+
+  Map<String, dynamic> _answersPayload() => {
+    for (final q in _questions)
+      q.id: q.kind == 'number'
+          ? double.parse('${_answers[q.id]}')
+          : _answers[q.id],
+  };
+
+  Future<void> _saveAnswers(
+    AssessmentRecord record, {
+    bool completeStage = false,
+  }) async {
+    if (_busy) return;
+    final firstInvalid = _questions.indexWhere(
+      (q) => !_stepValid(q.kind, _answers[q.id]),
+    );
+    if (firstInvalid >= 0) {
+      setState(() {
+        _answerStep = firstInvalid;
+        _answerError = 'Answer this question before saving.';
+      });
+      return;
+    }
+    setState(() {
+      _busy = true;
+      _answerError = null;
+      _writeError = null;
+      _notice = null;
+    });
+    final payload = _answersPayload();
+    final result = completeStage
+        ? await _api.saveRequirementsAndComplete(
+            record.assessmentId,
+            payload,
+            'business_requirements',
+          )
+        : await _api.saveRequirements(record.assessmentId, payload);
+    if (!mounted) return;
+    if (!result.ok) {
+      setState(() {
+        _busy = false;
+        _writeError = result.failure;
+      });
+      return;
+    }
+    final updated = result.value!;
+    setState(() {
+      _busy = false;
+      _record = updated;
+      _future = Future.value(_Started(updated));
+      _notice = completeStage
+          ? 'Your eight answers are saved and stage 2 is recorded as '
+                'complete. ${updated.completedStages} of '
+                '${updated.totalStages} stages done.'
+          : 'Your answers were saved to this assessment.';
+    });
+  }
+
+  /// One question at a time, with a progress bar and Previous/Next.
+  Component _questionnairePanel(AssessmentRecord record) {
+    _seedAnswers();
+    final index = _answerStep.clamp(0, _questions.length - 1);
+    final q = _questions[index];
+    final isLast = index == _questions.length - 1;
+    final value = _answers[q.id];
+    final progress = ((index + 1) / _questions.length * 100).round();
+
+    return section(classes: 'panel asw-inline', [
+      div(classes: 'panel__head', [
+        span(classes: 'panel__title', [
+          Component.text('Business preferences'),
+        ]),
+        span(classes: 'small asw-muted', [
+          Component.text('Question ${index + 1} of ${_questions.length}'),
+        ]),
+      ]),
+      div(classes: 'panel__body stack stack--md', [
+        div(
+          attributes: {
+            'style':
+                'height:6px;border-radius:999px;background:#E2E8F0;overflow:hidden;',
+          },
+          [
+            div(
+              attributes: {
+                'style':
+                    'height:100%;width:$progress%;'
+                    'background:#1D4ED8;transition:width .2s ease;',
+              },
+              const [],
+            ),
+          ],
+        ),
+        h3(classes: 'asw-q__prompt', [Component.text(q.prompt)]),
+        p(classes: 'asw-note', [Component.text(q.help)]),
+        if (q.kind == 'number')
+          Field(
+            labelText: q.id == 'max_monthly_rent_myr'
+                ? 'Maximum monthly rental (RM)'
+                : 'Minimum floor area (sq ft)',
+            error: _answerError,
+            hint: 'Enter a number greater than zero.',
+            child: input(
+              attributes: {
+                'type': 'number',
+                'min': '1',
+                'step': '1',
+                'value': '${value ?? ''}',
+              },
+              events: events<String>(
+                onInput: (v) => setState(() {
+                  _answers[q.id] = v;
+                  _answerError = null;
+                }),
+              ),
+            ),
+          )
+        else
+          div(classes: 'chips', [
+            for (final (token, caption) in q.options)
+              label(
+                classes: _isPicked(q, token) ? 'checkpill is-on' : 'checkpill',
+                [
+                  input(
+                    attributes: {
+                      'type': q.kind == 'multi' ? 'checkbox' : 'radio',
+                      'name': 'aswQ${q.id}',
+                      if (_isPicked(q, token)) 'checked': '',
+                    },
+                    events: events(
+                      onChange: (_) => setState(() {
+                        _toggleAnswer(q, token);
+                        _answerError = null;
+                      }),
+                    ),
+                  ),
+                  span([Component.text(caption)]),
+                ],
+              ),
+          ]),
+        if (_answerError != null)
+          div(classes: 'notice notice-warn', [
+            Component.text(_answerError!),
+          ]),
+        div(classes: 'actions-row', [
+          ActionButton(
+            'Previous',
+            variant: 'ghost',
+            onClick: index == 0
+                ? null
+                : () => setState(() {
+                    _answerStep = index - 1;
+                    _answerError = null;
+                  }),
+          ),
+          if (isLast)
+            ActionButton(
+              _busy ? 'Saving…' : 'Save and complete stage 2',
+              onClick: _busy ? null : () => _saveAnswers(record, completeStage: true),
+            )
+          else
+            ActionButton(
+              'Next',
+              onClick: () {
+                if (!_stepValid(q.kind, _answers[q.id])) {
+                  setState(
+                    () => _answerError = 'Answer this question to continue.',
+                  );
+                  return;
+                }
+                setState(() {
+                  _answerStep = index + 1;
+                  _answerError = null;
+                });
+              },
+            ),
+          ActionButton(
+            'Save answers only',
+            variant: 'secondary',
+            onClick: _busy ? null : () => _saveAnswers(record),
+          ),
+        ]),
+      ]),
+    ]);
+  }
+
+  bool _isPicked(
+    ({String id, String prompt, String help, String kind, List<(String, String)> options}) q,
+    String token,
+  ) {
+    final value = _answers[q.id];
+    if (q.kind == 'multi') {
+      return value is List && value.contains(token);
+    }
+    return value == token;
+  }
+
+  void _toggleAnswer(
+    ({String id, String prompt, String help, String kind, List<(String, String)> options}) q,
+    String token,
+  ) {
+    if (q.kind == 'multi') {
+      final current = [
+        for (final item in (_answers[q.id] as List? ?? const [])) '$item',
+      ];
+      if (current.contains(token)) {
+        current.remove(token);
+      } else {
+        current.add(token);
+      }
+      _answers[q.id] = current;
+      return;
+    }
+    _answers[q.id] = token;
+  }
+
   // ------------------------------------------------------------- stage 2 body
 
-  Component _requirementsPanel(AssessmentRecord record) {
+  Component _legacyRequirementsPanel(AssessmentRecord record) {
     _seedDraft();
     final draft = _draft;
     if (draft == null) return const span([]);

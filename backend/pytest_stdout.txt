@@ -1,0 +1,3 @@
+........................................................................ [ 36%]
+........................................................................ [ 72%]
+......................................................                   [100%][safe-delete][SAFE_DELETE_BULK_GUARD_ERROR] failed to acquire lock: EPERM: operation not permitted, mkdir 'C:\Users\Lenovo\AppData\Local\Temp\codebuddy-safe-delete-bulk\fbcdecf66242f481072aa12d1b0c8f5750aac2a02df7eef117debd6579a28899\.lock'
