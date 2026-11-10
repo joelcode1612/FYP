@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import copy
 import csv
+import hashlib
 import json
 import math
 import threading
@@ -123,6 +124,30 @@ class RecommendationGenerationService:
         self.store = store if store is not None else DatabaseRecommendationStore(app_session)
 
     # ------------------------------------------------------------- generation
+    @staticmethod
+    def _inputs_hash(
+        profile: Any, limit: int, state: str | None, property_ids: list[str] | None
+    ) -> str:
+        """Stable hash of every input that can change the ranked output.
+
+        Covers the normalised preference profile, the request filters and the
+        scoring configuration version - a preference edit, a different limit
+        or a new scoring version all produce a different hash, so a cached
+        batch can never be served for changed inputs.
+        """
+        material = json.dumps(
+            {
+                "profile": profile.as_dict(),
+                "limit": limit,
+                "state": state,
+                "property_ids": sorted(property_ids or []),
+                "scoring_version": SCORING_CONFIG.version,
+            },
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+        return hashlib.sha256(material.encode("utf-8")).hexdigest()
+
     def generate(
         self,
         user_id: uuid.UUID,
@@ -137,11 +162,22 @@ class RecommendationGenerationService:
         for regenerating an explanation for one known property). It can only
         RESTRICT the eligible set - it never adds a property that failed the
         repository's verification / availability exclusions.
+
+        If nothing that influences the output has changed since the user's
+        most recent batch (preferences, filters, scoring version), the stored
+        batch is returned without recomputing (``reused_existing_batch``).
         """
         limit = max(1, min(int(limit), 100))
         payload = self.preferences.payload(user_id)
         stored = payload.get("preferences")
         profile = preference_profile_from(stored)
+        inputs_hash = self._inputs_hash(profile, limit, state, property_ids)
+
+        existing = self.store.latest(user_id)
+        if existing and existing.get("results"):
+            first = existing["results"][0]
+            if first.get("generation_inputs_hash") == inputs_hash:
+                return self._reused_response(user_id, existing, profile, stored, payload)
 
         rows = self.candidates.list_candidates(
             max_rent=profile.max_rent_myr,
@@ -174,13 +210,38 @@ class RecommendationGenerationService:
 
         ranked = rank_candidates(scored)
         top = ranked[:limit]
-        batch = self.store.save_batch(user_id, [item.as_dict() for item in top])
+        candidate_summary = {
+            "catalogue_rows_read": len(rows),
+            "eligible": len(ranked),
+            "returned": len(top),
+            "rejected": len(rows) - len(ranked),
+            "rejection_reasons": dict(sorted(rejections.items())),
+            "pre_filters": {
+                "max_rent_myr": profile.max_rent_myr,
+                "min_floor_area_sqft": profile.min_floor_area_sqft,
+                "state": state,
+                "property_ids": sorted(shortlist) if shortlist is not None else None,
+            },
+            "limit": limit,
+            "ranking": "final_score desc, preference_match_score desc, "
+                       "pu_association_score desc, property_id asc",
+        }
+        payloads = []
+        for item in top:
+            item_dict = item.as_dict()
+            # Batch-level provenance travels on every stored row so an
+            # unchanged-input reuse can reconstruct the full response.
+            item_dict["generation_inputs_hash"] = inputs_hash
+            item_dict["batch_summary"] = candidate_summary
+            payloads.append(item_dict)
+        batch = self.store.save_batch(user_id, payloads)
 
         return {
             "user_id": str(user_id),
             "batch_id": batch["batch_id"],
             "generated_at": batch["generated_at"],
             "status": "ok" if top else "no_eligible_properties",
+            "reused_existing_batch": False,
             "preferences": {
                 "saved": bool(stored),
                 "updated_at": payload.get("updated_at"),
@@ -239,23 +300,96 @@ class RecommendationGenerationService:
                 ],
             },
             "scoring": SCORING_CONFIG.as_dict(),
-            "candidate_summary": {
-                "catalogue_rows_read": len(rows),
-                "eligible": len(ranked),
-                "returned": len(top),
-                "rejected": len(rows) - len(ranked),
-                "rejection_reasons": dict(sorted(rejections.items())),
-                "pre_filters": {
-                    "max_rent_myr": profile.max_rent_myr,
-                    "min_floor_area_sqft": profile.min_floor_area_sqft,
-                    "state": state,
-                    "property_ids": sorted(shortlist) if shortlist is not None else None,
-                },
-                "limit": limit,
-                "ranking": "final_score desc, preference_match_score desc, "
-                           "pu_association_score desc, property_id asc",
-            },
+            "candidate_summary": candidate_summary,
             "results": batch["results"],
+            "explanation_endpoint": (
+                "GET /api/v1/recommendations/{result_id}/explanation"
+            ),
+            "limitations": list(LIMITATIONS),
+        }
+
+    def _reused_response(
+        self,
+        user_id: uuid.UUID,
+        existing: dict[str, Any],
+        profile: Any,
+        stored: dict[str, Any] | None,
+        payload: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Return the stored batch unchanged when no input hash changed.
+
+        Identical response shape to a fresh generation except
+        ``reused_existing_batch`` is True and no catalogue scan or scoring
+        pass runs.
+        """
+        results = existing["results"]
+        first = results[0]
+        return {
+            "user_id": str(user_id),
+            "batch_id": existing["batch_id"],
+            "generated_at": existing["generated_at"],
+            "status": "ok" if results else "no_eligible_properties",
+            "reused_existing_batch": True,
+            "preferences": {
+                "saved": bool(stored),
+                "updated_at": payload.get("updated_at"),
+                "profile": profile.as_dict(),
+                "note": (
+                    None if stored else
+                    "No saved preferences. Only components measurable from the "
+                    "property's own verified features were scored; all "
+                    "preference-dependent components are reported as unknown, "
+                    "never as zero."
+                ),
+            },
+            "model": {
+                "name": "pu_model",
+                "artifact": "PU_model.joblib",
+                "research_only": True,
+                "used_for_ranking": True,
+                "score_source": (
+                    "sitewise_app.properties.source_data.research_p_association_score "
+                    "(stored output of the original PU model on the 47-feature baseline)"
+                ),
+                "score_meaning": (
+                    "Uncalibrated association with the observed-positive F&B "
+                    "sample class; NOT a probability of commercial success."
+                ),
+                "selected_alternative": {
+                    "name": SELECTED_MODEL_NAME,
+                    "role": "optional alternate Layer 1 PU research model",
+                    "used_for_ranking": False,
+                    "endpoints": [
+                        "GET /api/v1/ml/selected/model",
+                        "GET /api/v1/ml/selected/properties/{property_id}/prediction",
+                        "GET /api/v1/ml/selected/properties/{property_id}/explanation",
+                    ],
+                },
+            },
+            "layer2": {
+                "engine": "rule_based",
+                "trained_recommender": False,
+                "status": (
+                    "No genuine trained Layer 2 recommender.joblib was found in "
+                    "the repository or the supplied training/SHAP packages. None "
+                    "was fabricated; a transparent versioned scoring engine is used."
+                ),
+                "training_data_needed": [
+                    "Per-entrepreneur preference snapshots linked to a decision",
+                    (
+                        "Observed outcomes (shortlist, viewing, lease signed, outlet "
+                        "survival/revenue) with explicit negative feedback"
+                    ),
+                    "Consent, de-identification and a time-based train/test split",
+                    (
+                        "Offline evaluation (NDCG / MAP / CTR calibration) before "
+                        "replacing the research baseline weights"
+                    ),
+                ],
+            },
+            "scoring": SCORING_CONFIG.as_dict(),
+            "candidate_summary": first.get("batch_summary") or {},
+            "results": results,
             "explanation_endpoint": (
                 "GET /api/v1/recommendations/{result_id}/explanation"
             ),
