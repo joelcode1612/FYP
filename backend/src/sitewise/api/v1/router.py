@@ -13,6 +13,7 @@ from sitewise.api.v1 import (
     recommendations,
     reports,
     saved_properties,
+    selected_pu_routes,
     staff,
     statistics,
     suitability,
@@ -59,3 +60,9 @@ router.include_router(statistics.router, prefix="/statistics", tags=["statistics
 router.include_router(explore.router, prefix="/explore", tags=["explore"])
 # PU model coverage/prediction reporting (implemented; was never registered).
 router.include_router(ml_predictions.router, prefix="/ml", tags=["ml_predictions"])
+# Additive OPTIONAL selected research PU model (Layer-1 alternate). Mounted
+# BESIDE the default /ml routes — nothing existing is replaced. Same
+# authentication dependency, same read-only analytics connection.
+router.include_router(
+    selected_pu_routes.router, prefix="/ml/selected", tags=["ml_selected"]
+)
