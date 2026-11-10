@@ -399,6 +399,9 @@ class PropertyCandidate:
     data_completeness_pct: float | None = None
     coordinate_quality: str | None = None
     reference_coverage: str | None = None
+    #: Verified mapping to the commercial listing entity (bigint) the
+    # explore/detail routes navigate with; ``None`` = research-only row.
+    listing_ref: dict | None = None
     verification: dict = field(default_factory=dict)
 
     @classmethod
@@ -958,6 +961,7 @@ class ScoredCandidate:
                 "latitude": self.candidate.latitude,
                 "longitude": self.candidate.longitude,
                 "image_url": self.candidate.image_url,
+                "listing_ref": self.candidate.listing_ref,
                 "verification": self.candidate.verification,
             },
             "model": {

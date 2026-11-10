@@ -81,8 +81,19 @@ SELECT
     p.image_url                  AS image_url,
     p.source_data                AS source_data,
     to_jsonb(sf)                 AS subject_doc,
-    to_jsonb(pop)                AS population_doc
+    to_jsonb(pop)                AS population_doc,
+    link.listing_id              AS listing_id,
+    link.detail_available        AS listing_detail_available
 FROM sitewise_app.properties p
+LEFT JOIN LATERAL (
+    SELECT l.property_id AS listing_id,
+           (rp.is_published AND rp.verification_status = 'approved') AS detail_available
+    FROM fyp.property_subject_links l
+    JOIN fyp.rental_properties rp ON rp.id = l.property_id
+    WHERE l.sitewise_property_id = p.id
+      AND l.match_verified IS TRUE
+    LIMIT 1
+) link ON TRUE
 LEFT JOIN LATERAL (
     SELECT f.*
     FROM sitewise_analytics.subject_features f
@@ -316,4 +327,28 @@ class RecommendationCandidateRepository:
                 ),
                 "excludes": "fyp.rental_properties rows with verification_status='pending'",
             },
+            # Verified mapping to the commercial listing entity (bigint) the
+            # explore/detail routes navigate with. ``None`` means NO verified
+            # link exists - the row stays research-catalogue-only and the
+            # client must not guess a numeric id. ``detail_available`` mirrors
+            # the explore policy (approved + published only): every imported
+            # catalogue listing is verification_status='pending', so detail
+            # navigation is explicitly reported unavailable rather than 404ing
+            # the client after a click.
+            "listing_ref": (
+                {
+                    "listing_id": int(raw["listing_id"]),
+                    "match_verified": True,
+                    "detail_available": bool(raw.get("listing_detail_available")),
+                    "detail_note": (
+                        "Listing exists and is identity-verified, but is NOT "
+                        "approved+published; GET /explore/properties/{listing_id} "
+                        "stays 404 until an administrator publishes it."
+                    )
+                    if not bool(raw.get("listing_detail_available"))
+                    else None,
+                }
+                if raw.get("listing_id") is not None
+                else None
+            ),
         }
