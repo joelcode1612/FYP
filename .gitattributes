@@ -1,0 +1,4 @@
+# These source-evidence files have pinned byte lengths and SHA-256 hashes.
+# Preserve their committed bytes on Windows as well as Unix checkouts.
+fyp_jaspr_web/web/data/administrative_1_state.geojson -text
+fyp_jaspr_web/web/data/administrative_2_district.geojson -text
