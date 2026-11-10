@@ -9,6 +9,7 @@ import '../../presentation/mobile/start/app_start_gate.dart';
 import '../../presentation/mobile/shell/entrepreneur_tab_host.dart';
 import '../../presentation/mobile/entrepreneur/pages/entrepreneur_assessment_questions_mobile_page.dart';
 import '../../presentation/mobile/entrepreneur/pages/entrepreneur_assessment_summary_mobile_page.dart';
+import '../../presentation/mobile/entrepreneur/pages/entrepreneur_ai_recommendations_mobile_page.dart';
 import '../../presentation/mobile/entrepreneur/pages/entrepreneur_compare_mobile_page.dart';
 import '../../presentation/mobile/entrepreneur/pages/entrepreneur_evidence_mobile_page.dart';
 import '../../presentation/mobile/landing/pages/landing_mobile_page.dart';
@@ -155,6 +156,12 @@ abstract final class AppRoutes {
       '/entrepreneur/recommendations' => (
         RouteAccess.workspace,
         () => const EntrepreneurRecommendationsMobilePage(),
+      ),
+      // AI recommendations: the personalised Layer 2/3 pipeline (saved
+      // preferences + durable batches + SHAP-backed explanations).
+      '/entrepreneur/ai-recommendations' => (
+        RouteAccess.workspace,
+        () => const EntrepreneurAiRecommendationsMobilePage(),
       ),
       '/entrepreneur/compare' => (
         RouteAccess.workspace,
