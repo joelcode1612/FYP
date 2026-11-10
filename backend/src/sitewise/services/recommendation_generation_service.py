@@ -500,7 +500,10 @@ class RecommendationGenerationService:
                 "reason": f"Selected PU model could not be loaded: {exc}",
             }
 
-        cache_key = f"{SELECTED_MODEL_NAME}:{property_id}"
+        # The cache key includes the model version so replacing the artifact
+        # invalidates every cached explanation (safe invalidation); failures
+        # are never cached, so a transient problem can recover.
+        cache_key = f"{SELECTED_MODEL_NAME}:{loaded.meta.get('model_version')}:{property_id}"
         with _SHAP_CACHE_LOCK:
             hit = _SHAP_CACHE.get(cache_key)
         if hit is not None:
