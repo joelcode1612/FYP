@@ -7,6 +7,7 @@ from sitewise.api.v1 import (
     explore,
     geospatial,
     ml_predictions,
+    personalised_recommendations,
     preferences,
     properties,
     property_verification,
@@ -39,6 +40,14 @@ router.include_router(
 router.include_router(users.router, prefix="/users", tags=["users"])
 router.include_router(staff.router, prefix="/staff", tags=["staff"])
 router.include_router(recommendations.router, prefix="/recommendations", tags=["recommendations"])
+# Layer 2/3 personalised pipeline. Separate router so the existing
+# recommendations module (and its in-progress /search, /facets work) is never
+# modified. Registered AFTER it: existing static paths keep priority.
+router.include_router(
+    personalised_recommendations.router,
+    prefix="/recommendations",
+    tags=["recommendations_personalised"],
+)
 # Web Location Assessment Workspace (decision-support). Mobile data collection
 # keeps its own session store and does not use these routes.
 router.include_router(assessments.router, prefix="/assessments", tags=["assessments"])
