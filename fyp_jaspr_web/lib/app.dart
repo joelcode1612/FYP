@@ -25,6 +25,7 @@ import 'pages/entrepreneur/dashboard_page.dart' as e_dashboard;
 import 'pages/entrepreneur/my_properties_page.dart' as e_my_properties;
 import 'pages/entrepreneur/add_property_page.dart' as e_add_property;
 import 'pages/entrepreneur/explanation_page.dart' as e_explanation;
+import 'pages/entrepreneur/ai_recommendations_page.dart' as e_ai;
 import 'pages/entrepreneur/explore_page.dart' as e_explore;
 import 'pages/entrepreneur/preferences_page.dart' as e_preferences;
 import 'pages/entrepreneur/profile_page.dart' as e_profile;
@@ -484,6 +485,17 @@ class SitewiseApp extends StatelessComponent {
                 propertyId: state.queryParams['property'] ?? '',
               ),
               title: 'Why this property — Sitewise',
+            ),
+          ),
+          // AI recommendations: the personalised Layer 2/3 pipeline
+          // (saved preferences, durable batches, optional SHAP section).
+          Route(
+            path: '/entrepreneur/ai-recommendations',
+            builder: (context, state) => _page(
+              e_ai.AiRecommendationsPage(
+                resultId: state.queryParams['result'] ?? '',
+              ),
+              title: 'AI recommendations — Sitewise',
             ),
           ),
           Route(

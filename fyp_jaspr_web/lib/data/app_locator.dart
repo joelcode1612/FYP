@@ -56,6 +56,14 @@ abstract final class AppLocator {
   static final SavedPropertiesRepository savedPropertiesRepo =
       ApiSavedPropertiesRepository(const WebApiClient());
 
+  /// The personalised Layer 2/3 pipeline (`/recommendations/generate`,
+  /// `/recommendations/me/generated`, `/recommendations/{id}/explanation`).
+  /// Ownership always comes from the authenticated session; no user id is
+  /// ever sent by this app.
+  static final ApiPersonalisedRecommendationRepository
+      personalisedRecommendations =
+      ApiPersonalisedRecommendationRepository(const WebApiClient());
+
   /// The assessment Stage 1 selector's data source: the account's own saved
   /// properties, each resolved against the catalogue so the page can show real
   /// listing details. One use case, one saved-list read, one catalogue read
