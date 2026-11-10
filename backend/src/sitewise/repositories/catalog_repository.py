@@ -1,9 +1,15 @@
 """Read-only access to the imported property catalogue and its analysed evidence.
 
-The catalogue (``sitewise_app.properties``, 2,126 rows) and the geospatial
-feature table (``sitewise_analytics.subject_features``) are populated by the
-import/analysis pipeline, not by this API. Everything here is a SELECT against
-those tables through the analytics session; nothing writes to them.
+The catalogue (``sitewise_app.properties``, 955 rows) and the geospatial
+feature table (``sitewise_analytics.subject_features``, 1,849 rows) are
+populated by the import/analysis pipeline, not by this API. Everything here is
+a SELECT against those tables through the analytics session; nothing writes to
+them.
+
+``suitability_score`` is the workbook's uncalibrated P-versus-U association
+score rescaled to 0-100. It is a relative ranking input, never a calibrated
+probability of business success; the raw value and its ``score_type`` stay in
+``source_data``.
 
 Evidence is returned as labelled metrics with an explicit per-metric status so
 a genuine ``0`` (no bus stops mapped within the walk buffer) is never rendered

@@ -41,6 +41,12 @@ class MobileAppShell extends ConsumerWidget {
   /// automatically for the entrepreneur role.
   final bool? m3;
 
+  /// Force the header's back affordance on or off. When null (default) the
+  /// arrow follows [Navigator.canPop]. Screens that are reached from the
+  /// persistent tab dock (and therefore must not pop the workspace away)
+  /// pass `false`.
+  final bool? showBack;
+
   const MobileAppShell({
     super.key,
     required this.title,
@@ -51,6 +57,7 @@ class MobileAppShell extends ConsumerWidget {
     this.brandTitle = false,
     this.embeddedHeader = false,
     this.m3,
+    this.showBack,
   });
 
   @override
@@ -84,6 +91,7 @@ class MobileAppShell extends ConsumerWidget {
               actions: actions,
               brandTitle: brandTitle,
               m3: useM3,
+              showBack: showBack,
             )
           : null,
       body: !showTopBar ? SafeArea(bottom: false, child: body) : body,

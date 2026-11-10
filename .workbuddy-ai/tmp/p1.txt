@@ -1,0 +1,8 @@
+============================= test session starts =============================
+platform win32 -- Python 3.13.14, pytest-9.2.0, pluggy-1.7.0
+rootdir: C:\Users\Lenovo\AndroidStudioProjects\FYP\backend
+configfile: pyproject.toml
+plugins: anyio-4.16.0
+collected 1 item
+
+tests\api\test_property_verification_api.py F[safe-delete][SAFE_DELETE_BULK_GUARD_ERROR] failed to acquire lock: EPERM: operation not permitted, mkdir 'C:\Users\Lenovo\AppData\Local\Temp\codebuddy-safe-delete-bulk\639d34f4fa9fb9d06c83eeed759b593061246d790517e73d0ba895d6d536dba2\.lock'

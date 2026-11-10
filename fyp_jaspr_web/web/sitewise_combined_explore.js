@@ -59,6 +59,9 @@
   function destroy() {
     abortTransitRequest();
     if (map) { try { map.remove(); } catch (_) { /* detached node */ } }
+    // The panes live inside the mount element, which this script owns.
+    const mount = root ? root.querySelector(':scope > .swcx-map-mount') : null;
+    if (mount) mount.remove();
     map = null;
     root = null;
     markerLayer = null;
@@ -77,6 +80,23 @@
     e.textContent = message;
     el.appendChild(e);
   }
+  // Leaflet must not mount on the framework-rendered element. The page is a
+  // Jaspr client component, and every re-render rewrites the `class` attribute
+  // of the elements it owns. That strips the `leaflet-container` class Leaflet
+  // adds at init; without it the app-wide `img { max-width: 100% }` rule
+  // (styles.css) collapses each tile to 0px width and the basemap disappears
+  // while the markers keep painting. Mounting on a child the framework never
+  // renders keeps Leaflet's classes, its clipping and its tile sizing intact
+  // across re-renders.
+  function mountFor(host) {
+    let mount = host.querySelector(':scope > .swcx-map-mount');
+    if (!mount) {
+      mount = document.createElement('div');
+      mount.className = 'swcx-map-mount';
+      host.appendChild(mount);
+    }
+    return mount;
+  }
   function initialize(el) {
     if (typeof window.L === 'undefined') {
       mapUnavailable(el, 'The map library could not load. Property search and listings remain available.');
@@ -88,8 +108,16 @@
       return false;
     }
     try {
-      map = L.map(el, { zoomControl: true, preferCanvas: true, scrollWheelZoom: false })
-        .setView(DEFAULT, 11);
+      map = L.map(mountFor(el), {
+        zoomControl: true,
+        preferCanvas: true,
+        // Google-Maps-like wheel behaviour: the pointer is the zoom anchor and
+        // one wheel notch advances one level. 100px per level damps trackpad
+        // bursts without making a mouse wheel feel unresponsive.
+        scrollWheelZoom: true,
+        wheelDebounceTime: 40,
+        wheelPxPerZoomLevel: 100,
+      }).setView(DEFAULT, 11);
       L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png?key=' + encodeURIComponent(cartoKey), {
         subdomains: 'abcd', maxZoom: 19,
         attribution: '&copy; OpenStreetMap contributors &copy; CARTO',

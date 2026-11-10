@@ -39,6 +39,17 @@ abstract final class ServiceLocator {
   /// demo build never touches the network through it.
   static final MobileApiClient apiClient = MobileApiClient();
 
+  /// Owner Add-Property lifecycle (PostgreSQL drafts, photos, My Properties).
+  /// Non-final so widget tests can substitute an in-memory fake; a demo build
+  /// never calls it because the Add Property page gates on the live config.
+  static ApiOwnerListingRepository ownerListings =
+      ApiOwnerListingRepository(apiClient);
+
+  /// The existing property-verification transport (evidence upload, submit,
+  /// status) — the SAME subsystem the Admin review queue reads.
+  static ApiPropertyVerificationRepository propertyVerification =
+      ApiPropertyVerificationRepository(apiClient);
+
   /// Mobile first-run onboarding persistence. Non-final so tests can swap in
   /// [InMemoryOnboardingLocalDataSource].
   static OnboardingRepositoryImpl onboardingRepo = OnboardingRepositoryImpl(

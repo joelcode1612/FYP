@@ -102,7 +102,7 @@ class Brand extends StatelessComponent {
             tag: 'img',
             classes: 'brand__mark-img',
             attributes: {
-              'src': 'assets/sitewise-mark-64.png',
+              'src': '/assets/sitewise-mark-64.png',
               'alt': 'Sitewise',
               'width': '24',
               'height': '24',

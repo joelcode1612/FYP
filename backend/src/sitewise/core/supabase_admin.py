@@ -33,7 +33,6 @@ from typing import Any
 
 import httpx
 from supabase import Client, create_client
-from supabase_auth.types import InviteUserByEmailOptions
 
 from sitewise.core.config import settings
 from sitewise.core.exceptions import (
@@ -160,10 +159,13 @@ class SupabaseAdminService:
         one-time code, and sets a password. No custom token is generated and
         no password is ever created or viewed by an administrator.
         """
-        options = InviteUserByEmailOptions(
-            data={"full_name": full_name, **({"phone_number": phone_number} if phone_number else {})},
-            redirect_to=settings.staff_invite_redirect,
-        )
+        options = {
+            "data": {
+                "full_name": full_name,
+                **({"phone_number": phone_number} if phone_number else {}),
+            },
+            "redirect_to": settings.staff_invite_redirect,
+        }
         try:
             invited = self.client.auth.admin.invite_user_by_email(email, options=options)
         except Exception as exc:
@@ -190,9 +192,31 @@ class SupabaseAdminService:
         return _normalize_auth_user(data) if data else None
 
     def admin_list_factors(self, auth_user_id: str) -> list[dict[str, Any]]:
-        """List MFA factors for a user (documented GoTrue admin endpoint)."""
-        data = self._gotrue_admin_json("GET", f"admin/users/{auth_user_id}/factors")
-        return list(data.get("factors", []))
+        """Retrieve MFA factors for a Supabase Auth user."""
+
+        data = self._gotrue_admin_json(
+            "GET",
+            f"admin/users/{auth_user_id}/factors"
+        )
+
+        if isinstance(data, list):
+            factors = data
+
+        elif isinstance(data, dict):
+            factors = data.get("factors", [])
+
+        else:
+            raise ValueError(
+                f"Unexpected MFA response type: {type(data).__name__}"
+            )
+
+        if not isinstance(factors, list):
+            raise ValueError("MFA factors must be a list")
+
+        if not all(isinstance(factor, dict) for factor in factors):
+            raise ValueError("MFA factors contain an invalid record")
+
+        return factors
 
     def admin_delete_factor(self, auth_user_id: str, factor_id: str) -> None:
         """Delete an MFA factor (administrator-supervised recovery).

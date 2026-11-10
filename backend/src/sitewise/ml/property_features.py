@@ -43,6 +43,7 @@ class PropertyFeatureBundle:
             "subject_id": self.subject_id,
             "feature_count": len(self.values),
             "available_features": self.available_features,
+            "values": self.values,
             "missing_features": self.missing_features,
             "value_sources": self.value_sources,
             "analysis_status": self.analysis_status,

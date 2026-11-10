@@ -178,6 +178,27 @@ def explain_assessment(
     }
 
 
+@router.get("/{assessment_id}/explanation")
+def get_assessment_explanation(
+    assessment_id: uuid.UUID,
+    session: AppSession,
+    analytics: AnalyticsSession,
+    user: EntrepreneurUser,
+) -> dict:
+    """Read the persisted validated explanation; never compute or advance.
+
+    ``{"explanation": null}`` means Stage 4 has not produced one yet. The Full
+    Analysis page shows that honest state instead of calling the POST, which
+    would run permutation SHAP and confirm a stage as a side effect.
+    """
+    service = _service(session, analytics)
+    assessment = service.get_owned(assessment_id, user.user_id)
+    explanation = ExplanationService(
+        session, analytics
+    ).latest_for_assessment(assessment)
+    return {"explanation": explanation}
+
+
 @router.get("/{assessment_id}/report")
 def assessment_report(
     assessment_id: uuid.UUID,

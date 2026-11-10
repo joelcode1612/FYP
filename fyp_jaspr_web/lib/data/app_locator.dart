@@ -56,6 +56,16 @@ abstract final class AppLocator {
   static final SavedPropertiesRepository savedPropertiesRepo =
       ApiSavedPropertiesRepository(const WebApiClient());
 
+  /// The assessment Stage 1 selector's data source: the account's own saved
+  /// properties, each resolved against the catalogue so the page can show real
+  /// listing details. One use case, one saved-list read, one catalogue read
+  /// per distinct ref — and never the browser-session mock list.
+  static final GetAssessmentSelectableProperties
+  assessmentSelectableProperties = GetAssessmentSelectableProperties(
+    savedPropertiesRepo,
+    propertyRepo,
+  );
+
   /// The unified listing/ownership verification workflow — submitter actions
   /// and the admin review queue both ride this one repository over
   /// `/api/v1/properties/verification/*` and `/api/v1/staff/properties/*`.
@@ -91,6 +101,17 @@ abstract final class AppLocator {
       ApiLocationIntelligenceRepository(const WebApiClient());
   static final LocationIntelligenceService intelligence =
       LocationIntelligenceService(intelligenceRepo);
+
+  /// Read-only research-ML surface for the Full Analysis page: the selected
+  /// artifact's metadata/taxonomy, the P/U association score and the per-
+  /// feature coverage diagnostic over `/api/v1/ml/*`. Transport only — the
+  /// backend resolves features and runs the saved model; this never scores.
+  /// The persisted SHAP explanation and target matching are read through
+  /// [AssessmentApi] (assessment-scoped), not here, so this page can never
+  /// trigger the POST that computes SHAP or advances a stage.
+  static final PuPredictionRepository puPredictions = ApiPuPredictionRepository(
+    const WebApiClient(),
+  );
 
   static final VerificationService verification = VerificationService(
     verificationRepo,
@@ -209,9 +230,9 @@ abstract final class AppLocator {
   static Future<void> mergeAccountSaved() async {
     if (WebAuth.profile == null) return;
     try {
-      final refs = await savedPropertiesRepo
-          .savedRefs()
-          .timeout(const Duration(seconds: 3));
+      final refs = await savedPropertiesRepo.savedRefs().timeout(
+        const Duration(seconds: 3),
+      );
       if (refs.isEmpty) return;
       uiSeed = uiSeed.copyWith(saved: {...uiSeed.saved, ...refs});
     } on Object {

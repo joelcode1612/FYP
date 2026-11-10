@@ -116,7 +116,7 @@ class SavedPage extends StatelessComponent {
                         property: property,
                         href: '/entrepreneur/property-detail?id=${property.id}',
                         assessHref:
-                            '/entrepreneur/assessment?id=${property.id}',
+                            '/entrepreneur/assessments?id=${property.id}',
                         saved: true,
                         compared: compared.contains(property.id),
                         onToggleSaved: () => _toggleSaved(context, property.id),

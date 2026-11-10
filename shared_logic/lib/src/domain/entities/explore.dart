@@ -44,6 +44,23 @@ class ExploreQuery {
   /// `true` sends `fnb_suitable=true`, restricting to rows where
   /// `is_fnb_suitable = 1`.
   final bool fnbSuitable;
+
+  /// Spatial default filter. When `true`, the request carries
+  /// `min_nearby_properties` + `nearby_radius_m`: only listings with at
+  /// least [minNearbyProperties] OTHER approved+published listings within
+  /// [nearbyRadiusM] (geodesic PostGIS metres) come back, and every row
+  /// carries its real `nearbyPropertyCount`. `false` keeps the wire format
+  /// identical to the pre-filter API.
+  final bool nearbyOnly;
+
+  /// Neighbour threshold for [nearbyOnly]. The product default is 3
+  /// ("3+ properties nearby").
+  final int minNearbyProperties;
+
+  /// Geodesic radius in metres for [nearbyOnly]. The backend accepts only
+  /// (250, 500, 1000); 500 m is the product default.
+  final int nearbyRadiusM;
+
   final ExploreSortOption sort;
   final int limit;
   final int offset;
@@ -59,10 +76,25 @@ class ExploreQuery {
     this.minSize,
     this.maxSize,
     this.fnbSuitable = false,
+    this.nearbyOnly = false,
+    this.minNearbyProperties = 3,
+    this.nearbyRadiusM = 500,
     this.sort = ExploreSortOption.newest,
     this.limit = 24,
     this.offset = 0,
-  });
+  }) : assert(
+         minNearbyProperties >= 1,
+         'minNearbyProperties must be >= 1 (backend rejects 0 with 422)',
+       ),
+             assert(
+        // A constant-expression comparison, not `const [..].contains(..)`:
+        // a method invocation is not a potentially-constant expression, so
+        // the list form fails to compile in a const constructor initializer.
+        nearbyRadiusM == 250 ||
+            nearbyRadiusM == 500 ||
+            nearbyRadiusM == 1000,
+        'nearbyRadiusM must be one of (250, 500, 1000) — backend whitelist',
+      );
 
   /// The first page for these criteria.
   ExploreQuery firstPage() => copyWith(offset: 0);
@@ -97,6 +129,9 @@ class ExploreQuery {
     double? minSize,
     double? maxSize,
     bool fnbSuitable = false,
+    bool nearbyOnly = false,
+    int minNearbyProperties = 3,
+    int nearbyRadiusM = 500,
     ExploreSortOption sort = ExploreSortOption.newest,
     int limit = 24,
     int offset = 0,
@@ -115,6 +150,9 @@ class ExploreQuery {
     minSize: minSize,
     maxSize: maxSize,
     fnbSuitable: fnbSuitable,
+    nearbyOnly: nearbyOnly,
+    minNearbyProperties: minNearbyProperties,
+    nearbyRadiusM: nearbyRadiusM,
     sort: sort,
     limit: limit,
     offset: offset,
@@ -135,6 +173,9 @@ class ExploreQuery {
     double? maxSize,
     bool clearMaxSize = false,
     bool? fnbSuitable,
+    bool? nearbyOnly,
+    int? minNearbyProperties,
+    int? nearbyRadiusM,
     ExploreSortOption? sort,
     int? limit,
     int? offset,
@@ -149,6 +190,9 @@ class ExploreQuery {
     minSize: clearMinSize ? null : (minSize ?? this.minSize),
     maxSize: clearMaxSize ? null : (maxSize ?? this.maxSize),
     fnbSuitable: fnbSuitable ?? this.fnbSuitable,
+    nearbyOnly: nearbyOnly ?? this.nearbyOnly,
+    minNearbyProperties: minNearbyProperties ?? this.minNearbyProperties,
+    nearbyRadiusM: nearbyRadiusM ?? this.nearbyRadiusM,
     sort: sort ?? this.sort,
     limit: limit ?? this.limit,
     offset: offset ?? this.offset,
@@ -167,6 +211,10 @@ class ExploreQuery {
     if (minSize != null) 'min_size': _num(minSize!),
     if (maxSize != null) 'max_size': _num(maxSize!),
     if (fnbSuitable) 'fnb_suitable': 'true',
+    if (nearbyOnly) ...{
+      'min_nearby_properties': '$minNearbyProperties',
+      'nearby_radius_m': '$nearbyRadiusM',
+    },
     'sort': sort.wire,
     'limit': '$limit',
     'offset': '$offset',

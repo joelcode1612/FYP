@@ -1,0 +1,28 @@
+{
+  "captured_at": "2026-11-10T08:48:55.661635+00:00",
+  "database": "localhost:5432/Final_Location_Analysis",
+  "row_counts": {
+    "property_verification": 0,
+    "verification_document": 0,
+    "verification_audit": 0,
+    "fyp.rental_properties": 1182
+  },
+  "fk_constraints_before": {
+    "property_verification": {
+      "property_verification_property_id_fkey": "FOREIGN KEY (property_id) REFERENCES property(property_id)",
+      "property_verification_reviewed_by_fkey": "FOREIGN KEY (reviewed_by) REFERENCES users(user_id)",
+      "property_verification_submitted_by_fkey": "FOREIGN KEY (submitted_by) REFERENCES users(user_id)"
+    },
+    "verification_document": {
+      "verification_document_property_id_fkey": "FOREIGN KEY (property_id) REFERENCES property(property_id)",
+      "verification_document_uploaded_by_fkey": "FOREIGN KEY (uploaded_by) REFERENCES users(user_id)",
+      "verification_document_verification_id_fkey": "FOREIGN KEY (verification_id) REFERENCES property_verification(verification_id)"
+    },
+    "verification_audit": {
+      "verification_audit_admin_user_id_fkey": "FOREIGN KEY (admin_user_id) REFERENCES users(user_id)",
+      "verification_audit_property_id_fkey": "FOREIGN KEY (property_id) REFERENCES property(property_id)",
+      "verification_audit_verification_id_fkey": "FOREIGN KEY (verification_id) REFERENCES property_verification(verification_id)"
+    }
+  },
+  "rental_properties_status_check_before": "CHECK (((verification_status)::text = ANY ((ARRAY['pending'::character varying, 'approved'::character varying, 'rejected'::character varying])::text[])))"
+}

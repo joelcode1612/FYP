@@ -54,7 +54,7 @@ class _SiteTopbarState extends State<SiteTopbar> {
                   tag: 'img',
                   classes: 'brand-icon-img',
                   attributes: const {
-                    'src': 'assets/sitewise-mark-64.png',
+                    'src': '/assets/sitewise-mark-64.png',
                     'alt': 'Sitewise',
                     'width': '26',
                     'height': '26',

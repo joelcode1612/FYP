@@ -3954,6 +3954,16 @@ a.card:hover {
   font-weight: 600;
 }
 
+/* 500 m cluster-rule count ("N other commercial properties within 500 m").
+   Muted metadata line, same weight family as the attrs row above it. Uses
+   theme vars so it stays legible in every role-scoped shell. */
+.pcard .pcard-nearby {
+  margin: 4px 0 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
 .pcard .badges {
   display: flex;
   gap: 5px;
@@ -13230,5 +13240,128 @@ input[type="range"] {
 @media (max-width: 900px) {
   .ag-invite-form {
     grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* ==========================================================================
+   Assessment Stage 1 — the saved-property selector
+   --------------------------------------------------------------------------
+   Stage 1 of the assessment workspace: the entrepreneur's own saved
+   properties, each selectable as a radio card. It reuses the workspace's
+   tokens (royal-blue action, white surfaces, hairline borders, 8px spacing
+   rhythm) and introduces no new colour or scale.
+   ========================================================================== */
+
+.asw-select {
+  display: grid;
+  gap: var(--sm);
+}
+
+.asw-select-card {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: var(--md);
+  padding: var(--md);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  cursor: pointer;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.asw-select-card:hover {
+  border-color: var(--border-strong);
+}
+
+.asw-select-card.is-selected {
+  border-color: var(--action);
+  box-shadow: 0 0 0 1px var(--action);
+  background: var(--neutral-wash);
+}
+
+.asw-select-card:focus-within {
+  outline: 2px solid var(--action);
+  outline-offset: 2px;
+}
+
+/* A saved ref whose listing could not be resolved: shown, never selectable. */
+.asw-select-card--unavailable {
+  cursor: not-allowed;
+  background: var(--neutral-wash);
+}
+
+.asw-select-card input[type='radio'] {
+  width: 18px;
+  height: 18px;
+  margin: 2px 0 0;
+  accent-color: var(--action);
+}
+
+.asw-select-card__body {
+  display: grid;
+  grid-template-columns: 132px minmax(0, 1fr);
+  gap: var(--md);
+  align-items: start;
+  min-width: 0;
+}
+
+.asw-select-card__img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+/* No placeholder photograph: the style guide forbids one, and a fake image
+   would misrepresent a listing that has none. */
+.asw-select-card__noimg {
+  display: grid;
+  place-items: center;
+  aspect-ratio: 4 / 3;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--neutral-wash);
+  color: var(--muted);
+}
+
+.asw-select-card__main {
+  display: grid;
+  gap: var(--xs);
+  min-width: 0;
+}
+
+.asw-select-card__title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sm);
+  flex-wrap: wrap;
+}
+
+.asw-select-card__title {
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--ink);
+}
+
+.asw-select__actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--md);
+  flex-wrap: wrap;
+}
+
+@media (max-width: 760px) {
+  .asw-select-card__body {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .asw-select-card__img,
+  .asw-select-card__noimg {
+    max-width: 220px;
   }
 }

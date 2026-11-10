@@ -80,6 +80,7 @@ const FIXTURE_HTML = `<!DOCTYPE html>
         aria-hidden="true" style="display:none"></button>
 <p id="swcx-transport-status" aria-live="polite"></p>
 <div id="swcx-transport-results"></div>
+<script src="/map-config.js"></script>
 <script src="/vendor/leaflet/leaflet.js"></script>
 <script src="/vendor/leaflet/leaflet.markercluster.js"></script>
 <script src="/sitewise_combined_explore.js"></script>
@@ -94,6 +95,7 @@ const FIXTURE_HTML = `<!DOCTYPE html>
     typeof window.L.markerClusterGroup === 'function';
   const settle = (ms) => new Promise((r) => setTimeout(r, ms));
   (async () => {
+   try {
     await settle(1200); // boot + MutationObserver-driven first render
     results.mapInitialized =
       !!document.querySelector('#swcx-leaflet .leaflet-pane');
@@ -115,7 +117,45 @@ const FIXTURE_HTML = `<!DOCTYPE html>
     results.transportStatus =
       document.getElementById('swcx-transport-status').textContent.trim();
     results.mapError = !!document.querySelector('.swcx-map-error');
+
+    // --- regression: the framework must not own Leaflet's container --------
+    // Jaspr rewrites the class attribute of every element it renders. If
+    // Leaflet mounts on that element, the rewrite strips leaflet-container
+    // and the app-wide img { max-width: 100% } rule collapses every tile to
+    // 0px, leaving a blank basemap behind live markers.
+    const host = document.getElementById('swcx-leaflet');
+    const mount = host.querySelector(':scope > .swcx-map-mount');
+    results.mountIsChild = !!mount && mount.classList.contains('leaflet-container');
+    results.hostHasNoLeafletClass = !host.classList.contains('leaflet-container');
+    const tileWidth = () => {
+      const t = document.querySelector('#swcx-leaflet img.leaflet-tile');
+      return t ? Math.round(t.getBoundingClientRect().width) : 0;
+    };
+    results.tileWidthBeforeRewrite = tileWidth();
+    host.setAttribute('class', 'swcx-map-canvas');
+    await settle(250);
+    results.tileWidthAfterRewrite = tileWidth();
+    results.panesAfterRewrite =
+      document.querySelectorAll('#swcx-leaflet .leaflet-pane').length;
+
+    // --- regression: wheel over the map zooms (Google-Maps-like) ----------
+    const zoomSet = () => [...new Set(
+      [...document.querySelectorAll('#swcx-leaflet img.leaflet-tile')]
+        .map((t) => Number((t.src.split('light_all/')[1] || '').split('/')[0]))
+        .filter((n) => Number.isFinite(n) && n > 0),
+    )].sort((a, b) => a - b);
+    results.zoomBeforeWheel = zoomSet();
+    mount.dispatchEvent(new WheelEvent('wheel', {
+      deltaY: -120, deltaMode: 0, bubbles: true, cancelable: true,
+      clientX: 450, clientY: 275,
+    }));
+    await settle(900);
+    results.zoomAfterWheel = zoomSet();
+   } catch (e) {
+    results.error = String((e && e.stack) || e);
+   } finally {
     results.done = true;
+   }
   })();
 </script>
 </body></html>`;
@@ -181,6 +221,7 @@ const FIXTURE_HTML = `<!DOCTYPE html>
       timeout: 15000,
     });
     const r = await fixturePage.evaluate('window.__results');
+    if (r.error) console.log('  fixture error: ' + String(r.error).slice(0, 400));
 
     check('Leaflet library loaded from vendored files', r.leafletLoaded);
     check('marker clustering plugin available', r.clusterLoaded);
@@ -200,6 +241,31 @@ const FIXTURE_HTML = `<!DOCTYPE html>
       `"${r.transportStatus.slice(0, 60)}"`,
     );
     check('no map-level error banner', !r.mapError);
+    check(
+      'Leaflet mounts on a child element, not the framework canvas',
+      r.mountIsChild,
+    );
+    check('framework canvas carries no Leaflet class', r.hostHasNoLeafletClass);
+    check(
+      'tiles render at full size',
+      r.tileWidthBeforeRewrite === 256,
+      `${r.tileWidthBeforeRewrite}px`,
+    );
+    check(
+      'tiles survive a framework class rewrite',
+      r.tileWidthAfterRewrite === 256,
+      `${r.tileWidthAfterRewrite}px`,
+    );
+    check(
+      'map panes survive a framework class rewrite',
+      r.panesAfterRewrite > 0,
+      `${r.panesAfterRewrite} panes`,
+    );
+    check(
+      'wheel over the map zooms (Google-Maps-like)',
+      (r.zoomAfterWheel || []).some((z) => !(r.zoomBeforeWheel || []).includes(z)),
+      `${JSON.stringify(r.zoomBeforeWheel)} -> ${JSON.stringify(r.zoomAfterWheel)}`,
+    );
   } finally {
     fs.rmSync(FIXTURE_PATH, { force: true });
   }

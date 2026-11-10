@@ -32,6 +32,14 @@ class PropertyFilter {
   /// Restricts to [VerificationStatus.verified] listings only.
   final bool verifiedOnly;
 
+  /// Restricts to listings that carry a published 360° virtual tour
+  /// ([CommercialProperty.hasTour]).
+  ///
+  /// This is a *listing-attribute* filter, not a publication gate: a tour
+  /// exists only after the owner's capture is approved, so `true` here can
+  /// never surface an unverified listing on its own.
+  final bool hasTourOnly;
+
   const PropertyFilter({
     this.minRentalRm,
     this.maxRentalRm,
@@ -41,6 +49,7 @@ class PropertyFilter {
     this.city = anyArea,
     this.state = anyState,
     this.verifiedOnly = false,
+    this.hasTourOnly = false,
   });
 
   static const PropertyFilter empty = PropertyFilter();
@@ -87,6 +96,11 @@ class PropertyFilter {
         id: FilterField.verifiedOnly,
         label: 'Verified only',
       ),
+    if (hasTourOnly)
+      const FilterChipData(
+        id: FilterField.hasTourOnly,
+        label: '360° tour only',
+      ),
   ];
 
   /// Validates the numeric ranges.
@@ -126,6 +140,7 @@ class PropertyFilter {
     if (verifiedOnly && p.verification != VerificationStatus.verified) {
       return false;
     }
+    if (hasTourOnly && !p.hasTour) return false;
     return true;
   }
 
@@ -153,6 +168,8 @@ class PropertyFilter {
         return copyWith(state: anyState);
       case FilterField.verifiedOnly:
         return copyWith(verifiedOnly: false);
+      case FilterField.hasTourOnly:
+        return copyWith(hasTourOnly: false);
       default:
         return this;
     }
@@ -171,6 +188,7 @@ class PropertyFilter {
     String? city,
     String? state,
     bool? verifiedOnly,
+    bool? hasTourOnly,
   }) => PropertyFilter(
     minRentalRm: clearMinRental ? null : (minRentalRm ?? this.minRentalRm),
     maxRentalRm: clearMaxRental ? null : (maxRentalRm ?? this.maxRentalRm),
@@ -180,6 +198,7 @@ class PropertyFilter {
     city: city ?? this.city,
     state: state ?? this.state,
     verifiedOnly: verifiedOnly ?? this.verifiedOnly,
+    hasTourOnly: hasTourOnly ?? this.hasTourOnly,
   );
 
   // --- Option derivation ----------------------------------------------------
@@ -247,6 +266,7 @@ abstract final class FilterField {
   static const String city = 'city';
   static const String state = 'state';
   static const String verifiedOnly = 'verifiedOnly';
+  static const String hasTourOnly = 'hasTourOnly';
 }
 
 /// One applied criterion, as a removable chip.

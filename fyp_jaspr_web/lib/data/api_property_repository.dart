@@ -151,7 +151,7 @@ class ApiPropertyRepository implements PropertyRepository {
   @override
   Future<CommercialProperty?> getPropertyById(String id) async {
     // Single-record read: scanning the paged catalogue for one id wasted up
-    // to 2,126 rows per detail view and drift-prone against live imports.
+    // to the full catalogue per detail view and drift-prone against live imports.
     // A 404 (unknown/unpublished id) or any other failure throws from the
     // bridge; callers treat every throw as "not found" — the same contract
     // as before, without the scan.

@@ -695,6 +695,32 @@ final class AssessmentApi {
     parse: ApiPropertyRepository.fromJson,
   );
 
+  /// Reads the persisted validated SHAP explanation for an assessment. A null
+  /// value (not a failure) means Stage 4 has not produced one yet. This never
+  /// calls the POST, so loading the Full Analysis page neither computes SHAP
+  /// nor confirms a stage.
+  Future<ApiResult<ResearchExplanation?>> explanation(String assessmentId) =>
+      _call(
+        '/api/v1/assessments/$assessmentId/explanation',
+        parse: (json) {
+          final payload = (json['explanation'] as Map?)?.cast<String, dynamic>();
+          return payload == null ? null : ResearchExplanation.fromJson(payload);
+        },
+      );
+
+  /// The read-only business-target evaluation for an assessment, taken from the
+  /// report's deterministic `requirement_matching` section. The report endpoint
+  /// assembles without advancing any stage, so this is safe on page load.
+  Future<ApiResult<BusinessTargetEvaluation>> targetMatching(
+    String assessmentId,
+  ) => _call(
+    '/api/v1/assessments/$assessmentId/report',
+    parse: (json) => BusinessTargetEvaluation.fromJson(
+      (json['requirement_matching'] as Map?)?.cast<String, dynamic>() ??
+          const {},
+    ),
+  );
+
   /// The catalogue's real `property_type` vocabulary.
   ///
   /// Stage 2 offers only these values, so the eligibility filter can never be

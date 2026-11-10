@@ -63,6 +63,13 @@ class PropertyCard extends StatelessComponent {
   /// record — so the workspace decides whether to resume or start.
   final String? assessHref;
 
+  /// Nearby-listing count for the 500 m cluster rule ("3+ nearby · 500m").
+  /// Null = not computed (e.g. the default filter is off), so the line is
+  /// omitted rather than showing a stale or fabricated number. This is a
+  /// count of OTHER commercial property listings — never the F&B competitor
+  /// research dataset.
+  final int? nearbyCount;
+
   const PropertyCard({
     super.key,
     required this.property,
@@ -77,6 +84,7 @@ class PropertyCard extends StatelessComponent {
     this.onLocate,
     this.anchorId,
     this.assessHref,
+    this.nearbyCount,
   });
 
   @override
@@ -142,6 +150,13 @@ class PropertyCard extends StatelessComponent {
             for (final (text, muted) in attrs)
               li(classes: muted ? 'muted' : null, [Component.text(text)]),
           ]),
+          if (nearbyCount != null)
+            p(classes: 'pcard-nearby', [
+              Component.text(
+                '$nearbyCount other commercial '
+                'propert${nearbyCount == 1 ? 'y' : 'ies'} within 500 m',
+              ),
+            ]),
           div(classes: 'badges', [
             Pill(
               property.verification.label,

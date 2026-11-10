@@ -1,33 +1,36 @@
-import 'package:flutter/material.dart';
+import 'dart:typed_data';
 
+import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:shared_logic/shared_logic.dart';
+
+import '../../../../application/services/service_locator.dart';
+import '../../../../core/config/mobile_config.dart';
+import '../../shell/entrepreneur_tab_scope.dart';
 import '../../shell/mobile_app_shell.dart';
 
-/// SiteWise Add Property — Flutter mobile presentation preview.
+/// SiteWise Add Property — REAL owner-listing workflow.
 ///
-/// This is a self-contained, presentation-only screen. It recreates the
-/// five-step mobile Add Property experience and uses local in-memory state.
-/// It does NOT call FastAPI or Supabase, upload photos, geocode an address,
-/// or create a property record.
-///
-/// Suggested location:
-///   fyp_mobile_app/lib/presentation/mobile/
-///     sitewise_add_property_mobile_preview.dart
-///
-/// Preview usage:
-///   const SitewiseAddPropertyMobilePreview()
-///
-/// Replace this preview with the real mobile use case only after mapping the
-/// existing mobile form state, validation, media workflow and API contract.
-class SitewiseAddPropertyMobilePreview extends StatefulWidget {
-  const SitewiseAddPropertyMobilePreview({super.key});
+/// Drafts persist in PostgreSQL (`fyp.rental_properties` with
+/// ``verification_status='draft'``) through the authenticated FastAPI
+/// endpoints; submitting hands the record to the existing property
+/// verification workflow (documents -> submit -> admin review). There is no
+/// local-only state here: every save is a server round trip, and the
+/// confirmation step shows the real database-assigned property ID.
+class SitewiseAddPropertyMobilePage extends StatefulWidget {
+  /// Resume an existing draft (`fyp.rental_properties.id`) from
+  /// My Properties. Null starts a blank form.
+  final String? initialDraftId;
+
+  const SitewiseAddPropertyMobilePage({super.key, this.initialDraftId});
 
   @override
-  State<SitewiseAddPropertyMobilePreview> createState() =>
-      _SitewiseAddPropertyMobilePreviewState();
+  State<SitewiseAddPropertyMobilePage> createState() =>
+      _SitewiseAddPropertyMobilePageState();
 }
 
-class _SitewiseAddPropertyMobilePreviewState
-    extends State<SitewiseAddPropertyMobilePreview> {
+class _SitewiseAddPropertyMobilePageState
+    extends State<SitewiseAddPropertyMobilePage> {
   static const Color _brand = Color(0xFF2F6FED);
   static const Color _brandStrong = Color(0xFF1D4ED8);
   static const Color _background = Color(0xFFF6F7F9);
@@ -45,30 +48,37 @@ class _SitewiseAddPropertyMobilePreviewState
 
   static const List<String> _stepDescriptions = <String>[
     'Enter the basic details of your commercial unit.',
-    'Add the property address and check its location.',
-    'Prepare the photos for your property profile.',
+    'Add the property address and check the pin position.',
+    'Attach photos of the property (JPG, PNG or WebP).',
     'Review the information before submission.',
-    'Preview the confirmation screen.',
+    'Save or submit your property.',
   ];
 
-  final TextEditingController _nameController =
-      TextEditingController(text: 'SS15 Corner Retail');
-  final TextEditingController _rentController =
-      TextEditingController(text: '7800');
-  final TextEditingController _areaController =
-      TextEditingController(text: '1680');
+  final TextEditingController _nameController = TextEditingController();
+  final TextEditingController _rentController = TextEditingController();
+  final TextEditingController _areaController = TextEditingController();
   final TextEditingController _addressController = TextEditingController();
-  final TextEditingController _stateController =
-      TextEditingController(text: 'Selangor');
-  final TextEditingController _districtController =
-      TextEditingController(text: 'Petaling');
+  final TextEditingController _stateController = TextEditingController();
+  final TextEditingController _districtController = TextEditingController();
   final TextEditingController _postcodeController = TextEditingController();
   final TextEditingController _latitudeController = TextEditingController();
   final TextEditingController _longitudeController = TextEditingController();
+  final TextEditingController _descriptionController = TextEditingController();
 
   int _step = 1;
   String _propertyType = 'Shoplot';
   String? _validationMessage;
+
+  // Server state: the persisted PostgreSQL draft and its lifecycle.
+  String? _draftId;
+  String _serverStatus = 'draft';
+  String? _rejectionReason;
+  bool _saving = false;
+  bool _submitting = false;
+  String? _serverMessage;
+  String? _serverError;
+  List<OwnerListingPhoto> _photos = const [];
+  final Set<int> _uploadingPhotos = <int>{};
 
   String get _propertyName => _nameController.text.trim();
   String get _monthlyRent => _rentController.text.trim();
@@ -79,6 +89,24 @@ class _SitewiseAddPropertyMobilePreviewState
   String get _postcode => _postcodeController.text.trim();
   String get _latitude => _latitudeController.text.trim();
   String get _longitude => _longitudeController.text.trim();
+
+  /// The record can only be edited while the backend policy allows it
+  /// (draft, rejected or corrections-requested). The backend enforces the
+  /// same rule; this only disables the UI honestly.
+  bool get _editable =>
+      _draftId == null || _serverStatus == 'draft' || _serverStatus == 'rejected';
+
+  bool get _live => MobileConfig.usesLiveApi;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.initialDraftId != null &&
+        widget.initialDraftId!.isNotEmpty &&
+        MobileConfig.usesLiveApi) {
+      _resumeDraft(widget.initialDraftId!);
+    }
+  }
 
   @override
   void dispose() {
@@ -91,37 +119,305 @@ class _SitewiseAddPropertyMobilePreviewState
     _postcodeController.dispose();
     _latitudeController.dispose();
     _longitudeController.dispose();
+    _descriptionController.dispose();
     super.dispose();
   }
+
+  // ---------------------------------------------------------------------------
+  // Server lifecycle
+  // ---------------------------------------------------------------------------
+
+  Future<void> _resumeDraft(String id) async {
+    setState(() {
+      _saving = true;
+      _serverError = null;
+    });
+    try {
+      final listing = await ServiceLocator.ownerListings.getListing(id);
+      if (!mounted) return;
+      _applyListing(listing);
+    } on Object catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _serverError = _readableError(error, fallback: 'Could not load the saved draft.');
+      });
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  void _applyListing(OwnerListing listing) {
+    _draftId = listing.id;
+    _serverStatus = listing.verificationStatus;
+    _rejectionReason = listing.rejectionReason;
+    _photos = listing.photos;
+    String text(TextEditingController c, String? v) {
+      c.text = v ?? '';
+      return c.text;
+    }
+
+    text(_nameController, listing.name);
+    text(_rentController,
+        listing.rentalPrice == null ? '' : listing.rentalPrice!.toStringAsFixed(0));
+    text(_areaController,
+        listing.sizeSqft == null ? '' : listing.sizeSqft!.toStringAsFixed(0));
+    text(_addressController, listing.address);
+    text(_stateController, listing.state);
+    text(_districtController, listing.city);
+    text(_descriptionController, listing.description);
+    text(_latitudeController,
+        listing.latitude == null ? '' : '${listing.latitude}');
+    text(_longitudeController,
+        listing.longitude == null ? '' : '${listing.longitude}');
+    if (listing.propertyType != null && listing.propertyType!.isNotEmpty) {
+      _propertyType = listing.propertyType!;
+    }
+    setState(() {});
+  }
+
+  Map<String, dynamic> _draftFields() => OwnerListing(
+        id: _draftId ?? '',
+        name: '',
+        verificationStatus: _serverStatus,
+      ).toDraftJson(
+        name: _propertyName.isEmpty ? null : _propertyName,
+        propertyType: _propertyType,
+        description:
+            _descriptionController.text.trim().isEmpty ? null : _descriptionController.text.trim(),
+        address: _address.isEmpty ? null : _address,
+        city: _district.isEmpty ? null : _district,
+        state: _stateName.isEmpty ? null : _stateName,
+        latitude: double.tryParse(_latitude),
+        longitude: double.tryParse(_longitude),
+        rentalPrice: double.tryParse(_monthlyRent),
+        sizeSqft: double.tryParse(_builtUpArea),
+        availability: _serverStatus == 'draft' ? null : 'Immediate',
+        hasParking: false,
+        isFnbSuitable: false,
+      );
+
+  /// Save Draft: create the row once, then update the SAME row. The backend
+  /// stamps the owner from the verified token and assigns the persistent id.
+  Future<void> _saveDraft() async {
+    if (_saving) return; // double-tap guard
+    if (!_live) {
+      setState(() {
+        _serverError =
+            'Draft saving requires the live Sitewise service '
+            '(a demo build keeps no property records).';
+      });
+      return;
+    }
+    setState(() {
+      _saving = true;
+      _serverError = null;
+      _serverMessage = null;
+      _validationMessage = null;
+    });
+    try {
+      final repository = ServiceLocator.ownerListings;
+      final OwnerListing saved;
+      if (_draftId == null) {
+        saved = await repository.createDraft(_draftFields());
+      } else {
+        saved = await repository.updateDraft(_draftId!, _draftFields());
+      }
+      if (!mounted) return;
+      setState(() {
+        _draftId = saved.id;
+        _serverStatus = saved.verificationStatus;
+        _serverMessage = 'Draft saved to Sitewise (ID ${saved.id}). '
+            'You can leave this page and resume it later from My Properties.';
+      });
+    } on Object catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _serverError = _readableError(error, fallback: 'Could not save the draft.');
+      });
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  /// Submit for Verification: a distinct action from Save Draft. The backend
+  /// validates completeness, requires ownership evidence, moves the record
+  /// into the admin queue atomically and returns the pending status.
+  Future<void> _submitForVerification() async {
+    if (_submitting) return; // repeated taps cannot create multiple submissions
+    if (!_live) {
+      setState(() {
+        _serverError =
+            'Submission requires the live Sitewise service '
+            '(a demo build keeps no property records).';
+      });
+      return;
+    }
+    setState(() {
+      _submitting = true;
+      _serverError = null;
+      _serverMessage = null;
+    });
+    try {
+      // The record must exist before evidence can attach to it.
+      String id = _draftId ?? '';
+      if (id.isEmpty) {
+        final saved = await ServiceLocator.ownerListings.createDraft(_draftFields());
+        if (!mounted) return;
+        id = saved.id;
+        _draftId = id;
+        _serverStatus = saved.verificationStatus;
+      } else {
+        await ServiceLocator.ownerListings.updateDraft(id, _draftFields());
+      }
+      final result = await ServiceLocator.propertyVerification.submit(id);
+      if (!mounted) return;
+      setState(() {
+        _serverStatus = 'pending';
+        _serverMessage = 'Submitted for verification (ID $id). '
+            'Status: ${result.listingStatus.wire}/${result.ownershipStatus.wire}. '
+            'An administrator will review your listing and ownership evidence.';
+        _step = 5;
+      });
+    } on Object catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _serverError = _readableError(
+          error,
+          fallback: 'Submission could not proceed. Your draft is saved.',
+        );
+      });
+    } finally {
+      if (mounted) setState(() => _submitting = false);
+    }
+  }
+
+  String _readableError(Object error, {required String fallback}) {
+    if (error is AppFailure) return error.message;
+    return fallback;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Photos
+  // ---------------------------------------------------------------------------
+
+  Future<void> _pickAndUploadPhoto() async {
+    if (_draftId == null) {
+      setState(() {
+        _validationMessage =
+            'Save the draft first — photos attach to the saved property record.';
+      });
+      return;
+    }
+    try {
+      final picker = ImagePicker();
+      final picked = await picker.pickImage(
+        source: ImageSource.gallery,
+        imageQuality: 85,
+      );
+      if (picked == null || !mounted) return;
+      final bytes = await picked.readAsBytes();
+      final Uint8List data = bytes;
+      setState(() => _uploadingPhotos.add(-1));
+      await ServiceLocator.ownerListings.uploadPhoto(
+        listingId: _draftId!,
+        filename: picked.name,
+        bytes: data,
+        contentType: _contentTypeFor(picked.name),
+      );
+      if (!mounted) return;
+      final photos =
+          await ServiceLocator.ownerListings.photos(_draftId!);
+      if (!mounted) return;
+      setState(() {
+        _photos = photos;
+        _serverMessage = 'Photo uploaded.';
+      });
+    } on Object catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _serverError = _readableError(
+          error,
+          fallback: 'The photo upload failed. Your draft is saved.',
+        );
+      });
+    } finally {
+      if (mounted) setState(() => _uploadingPhotos.clear());
+    }
+  }
+
+  Future<void> _deletePhoto(OwnerListingPhoto photo) async {
+    if (_draftId == null) return;
+    try {
+      await ServiceLocator.ownerListings.deletePhoto(_draftId!, photo.id);
+      if (!mounted) return;
+      setState(() {
+        _photos = _photos.where((p) => p.id != photo.id).toList();
+      });
+    } on Object catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _serverError = _readableError(error, fallback: 'Could not remove the photo.');
+      });
+    }
+  }
+
+  Future<void> _makePrimary(OwnerListingPhoto photo) async {
+    if (_draftId == null) return;
+    try {
+      await ServiceLocator.ownerListings.setPrimaryPhoto(_draftId!, photo.id);
+      if (!mounted) return;
+      final photos = await ServiceLocator.ownerListings.photos(_draftId!);
+      if (!mounted) return;
+      setState(() => _photos = photos);
+    } on Object catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _serverError = _readableError(error, fallback: 'Could not set the primary photo.');
+      });
+    }
+  }
+
+  static String _contentTypeFor(String filename) {
+    final lower = filename.toLowerCase();
+    if (lower.endsWith('.png')) return 'image/png';
+    if (lower.endsWith('.webp')) return 'image/webp';
+    return 'image/jpeg';
+  }
+
+  // ---------------------------------------------------------------------------
+  // Step validation + navigation (client-side guard only; the backend is
+  // authoritative at submission time)
+  // ---------------------------------------------------------------------------
 
   String _display(String value) => value.isEmpty ? 'Not provided' : value;
 
   bool _validateCurrentStep() {
+    if (!_editable) {
+      _validationMessage =
+          'This record is awaiting review — its details can no longer be edited.';
+      return false;
+    }
     if (_step == 1) {
       if (_propertyName.isEmpty) {
         _validationMessage = 'Enter a property name to continue.';
         return false;
       }
-
       final rent = double.tryParse(_monthlyRent);
       if (rent == null || rent <= 0) {
         _validationMessage = 'Enter a valid monthly rental greater than zero.';
         return false;
       }
-
       final area = double.tryParse(_builtUpArea);
       if (area == null || area <= 0) {
         _validationMessage = 'Enter a valid built-up area greater than zero.';
         return false;
       }
     }
-
     if (_step == 2) {
       if (_address.isEmpty || _stateName.isEmpty || _district.isEmpty) {
         _validationMessage = 'Address, state and district are required.';
         return false;
       }
-
       final hasLatitude = _latitude.isNotEmpty;
       final hasLongitude = _longitude.isNotEmpty;
       if (hasLatitude != hasLongitude) {
@@ -129,7 +425,6 @@ class _SitewiseAddPropertyMobilePreviewState
             'Enter both latitude and longitude, or leave both blank.';
         return false;
       }
-
       if (hasLatitude && hasLongitude) {
         final latitude = double.tryParse(_latitude);
         final longitude = double.tryParse(_longitude);
@@ -144,7 +439,6 @@ class _SitewiseAddPropertyMobilePreviewState
         }
       }
     }
-
     _validationMessage = null;
     return true;
   }
@@ -155,6 +449,11 @@ class _SitewiseAddPropertyMobilePreviewState
       if (_validateCurrentStep()) {
         _step += 1;
         _validationMessage = null;
+        if (_step == 5 && _live) {
+          // Reaching the confirmation step autosaves so the record exists
+          // even if the user leaves before pressing either button.
+          _saveDraft();
+        }
       }
     });
   }
@@ -196,6 +495,9 @@ class _SitewiseAddPropertyMobilePreviewState
       child: MobileAppShell(
         title: 'Add property',
         currentRoute: '/entrepreneur/add-property',
+        // The Add Property flow is entered from the Spaces tab, so the header
+        // keeps no back arrow — the tab dock is the way back.
+        showBack: false,
         body: SafeArea(
           child: LayoutBuilder(
             builder: (context, constraints) {
@@ -207,19 +509,28 @@ class _SitewiseAddPropertyMobilePreviewState
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: <Widget>[
-                        // The shared MobileAppShell provides the real
-                        // SiteWise top bar and floating bottom dock.
-                        _buildBreadcrumb(),
-                        const SizedBox(height: 18),
+                        const SizedBox(height: 8),
                         _buildPageHeading(),
                         const SizedBox(height: 18),
                         _buildStepper(),
                         const SizedBox(height: 18),
                         _buildMainCard(),
-                        const SizedBox(height: 18),
-                        _buildPropertySnapshot(),
-                        const SizedBox(height: 14),
-                        _buildWorkflowNote(),
+                        if (_serverMessage != null) ...<Widget>[
+                          const SizedBox(height: 14),
+                          _buildServerBanner(_serverMessage!, success: true),
+                        ],
+                        if (_serverError != null) ...<Widget>[
+                          const SizedBox(height: 14),
+                          _buildServerBanner(_serverError!, success: false),
+                        ],
+                        if (_rejectionReason != null &&
+                            _serverStatus == 'rejected') ...<Widget>[
+                          const SizedBox(height: 14),
+                          _buildServerBanner(
+                            'Administrator requested corrections: $_rejectionReason',
+                            success: false,
+                          ),
+                        ],
                       ],
                     ),
                   ),
@@ -231,26 +542,6 @@ class _SitewiseAddPropertyMobilePreviewState
       ),
     );
   }
-
-  Widget _buildBreadcrumb() {
-    return Wrap(
-      crossAxisAlignment: WrapCrossAlignment.center,
-      spacing: 8,
-      children: const <Widget>[
-        Text('Home', style: _breadcrumbStyle),
-        Icon(Icons.chevron_right_rounded, size: 15, color: _muted),
-        Text('My Properties', style: _breadcrumbStyle),
-        Icon(Icons.chevron_right_rounded, size: 15, color: _muted),
-        Text('Add Property', style: _breadcrumbStyle),
-      ],
-    );
-  }
-
-  static const TextStyle _breadcrumbStyle = TextStyle(
-    color: _muted,
-    fontSize: 12,
-    fontWeight: FontWeight.w700,
-  );
 
   Widget _buildPageHeading() {
     return Column(
@@ -277,36 +568,15 @@ class _SitewiseAddPropertyMobilePreviewState
           ),
         ),
         const SizedBox(height: 7),
-        const Text(
-          'Build a complete commercial-property profile before assessment.',
-          style: TextStyle(
+        Text(
+          _draftId == null
+              ? 'Create a real property record, save it as a draft and submit '
+                  'it for administrator verification.'
+              : 'Editing saved property #$_draftId (status: $_serverStatus).',
+          style: const TextStyle(
             color: _muted,
             fontSize: 13,
             height: 1.5,
-          ),
-        ),
-        const SizedBox(height: 13),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 7),
-          decoration: BoxDecoration(
-            color: const Color(0xFFEDF4FF),
-            border: Border.all(color: const Color(0xFFD4E3FB)),
-            borderRadius: BorderRadius.circular(30),
-          ),
-          child: const Row(
-            mainAxisSize: MainAxisSize.min,
-            children: <Widget>[
-              Icon(Icons.circle, color: _brand, size: 7),
-              SizedBox(width: 7),
-              Text(
-                'Presentation preview',
-                style: TextStyle(
-                  color: _brandStrong,
-                  fontSize: 11,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-            ],
           ),
         ),
       ],
@@ -457,19 +727,27 @@ class _SitewiseAddPropertyMobilePreviewState
                     ),
                     const SizedBox(width: 8),
                   ],
-                  FilledButton(
-                    onPressed: _goNext,
-                    style: FilledButton.styleFrom(
-                      backgroundColor: _brand,
-                      foregroundColor: Colors.white,
-                      minimumSize: const Size(112, 46),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(11),
+                  // Flexible keeps the narrow-phone footer overflow-free:
+                  // the label may shrink/ellipsize instead of pushing the
+                  // row past the 390dp viewport.
+                  Flexible(
+                    child: FilledButton(
+                      onPressed: _saving ? null : _goNext,
+                      style: FilledButton.styleFrom(
+                        backgroundColor: _brand,
+                        foregroundColor: Colors.white,
+                        minimumSize: const Size(0, 46),
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(11),
+                        ),
                       ),
-                    ),
-                    child: Text(
-                      _step == 4 ? 'Preview' : 'Continue →',
-                      style: const TextStyle(fontWeight: FontWeight.w800),
+                      child: Text(
+                        _step == 4 ? 'Review & finish' : 'Continue →',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontWeight: FontWeight.w800),
+                      ),
                     ),
                   ),
                 ],
@@ -521,14 +799,20 @@ class _SitewiseAddPropertyMobilePreviewState
           requiredField: true,
           keyboardType: const TextInputType.numberWithOptions(decimal: true),
         ),
+        const SizedBox(height: 17),
+        _buildTextField(
+          label: 'Description (optional)',
+          controller: _descriptionController,
+          hint: 'Condition, frontage, power supply, tenancy notes.',
+        ),
         const SizedBox(height: 19),
         const Divider(height: 1, color: Color(0xFFEEF1F5)),
         const SizedBox(height: 17),
         _buildChoiceGrid(),
         const SizedBox(height: 16),
         _buildInfoNotice(
-          'Costs and area are used for affordability and size-based analysis. '
-          'Production validation remains with your existing backend.',
+          'Saving creates a real draft record in Sitewise. Submitting sends '
+          'it to administrator verification — approval is never automatic.',
         ),
       ],
     );
@@ -595,11 +879,6 @@ class _SitewiseAddPropertyMobilePreviewState
             );
           },
         ),
-        const SizedBox(height: 8),
-        const Text(
-          'Choose the type supported by your existing listings catalogue.',
-          style: TextStyle(color: _muted, fontSize: 11, height: 1.45),
-        ),
       ],
     );
   }
@@ -622,7 +901,7 @@ class _SitewiseAddPropertyMobilePreviewState
         ),
         const SizedBox(height: 16),
         _buildTextField(
-          label: 'District',
+          label: 'City / district',
           controller: _districtController,
           requiredField: true,
         ),
@@ -634,163 +913,158 @@ class _SitewiseAddPropertyMobilePreviewState
         ),
         const SizedBox(height: 16),
         _buildTextField(
-          label: 'Latitude (optional)',
+          label: 'Latitude (required for submission)',
           controller: _latitudeController,
-          keyboardType: const TextInputType.numberWithOptions(decimal: true, signed: true),
+          keyboardType:
+              const TextInputType.numberWithOptions(decimal: true, signed: true),
         ),
         const SizedBox(height: 16),
         _buildTextField(
-          label: 'Longitude (optional)',
+          label: 'Longitude (required for submission)',
           controller: _longitudeController,
-          keyboardType: const TextInputType.numberWithOptions(decimal: true, signed: true),
+          keyboardType:
+              const TextInputType.numberWithOptions(decimal: true, signed: true),
         ),
         const SizedBox(height: 15),
-        _buildIllustrativeMap(),
+        _buildInfoNotice(
+          'Coordinates place the property on the Explore map. Valid Malaysian '
+          'state and postcode values are checked again when you submit.',
+        ),
       ],
     );
   }
 
-  Widget _buildIllustrativeMap() {
-    return Container(
-      height: 175,
-      clipBehavior: Clip.antiAlias,
-      decoration: BoxDecoration(
-        color: const Color(0xFFE8F0F3),
-        borderRadius: BorderRadius.circular(13),
-        border: Border.all(color: const Color(0xFFCEDBED)),
-      ),
-      child: Stack(
-        children: <Widget>[
-          Positioned.fill(
-            child: CustomPaint(painter: _MapPatternPainter()),
-          ),
-          const Center(
-            child: Icon(Icons.location_on, color: _brand, size: 38),
-          ),
-          Positioned(
-            left: 10,
-            right: 10,
-            bottom: 10,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-              decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.94),
-                border: Border.all(color: const Color(0xFFD8E3F5)),
-                borderRadius: BorderRadius.circular(9),
-              ),
-              child: const Text(
-                'Illustrative map only — connect your existing map integration.',
-                style: TextStyle(
-                  color: Color(0xFF34455E),
-                  fontSize: 10,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   Widget _buildPhotos() {
-    const photoLabels = <String>[
-      'Exterior photo',
-      'Interior photo',
-      'Floor layout',
-    ];
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 28),
-          decoration: BoxDecoration(
-            color: const Color(0xFFF7FAFF),
-            border: Border.all(
-              color: const Color(0xFFBBD0F3),
-              width: 1.5,
-              style: BorderStyle.solid,
+        InkWell(
+          onTap: _uploadingPhotos.isNotEmpty ? null : _pickAndUploadPhoto,
+          borderRadius: BorderRadius.circular(15),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 28),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF7FAFF),
+              border: Border.all(
+                color: const Color(0xFFBBD0F3),
+                width: 1.5,
+              ),
+              borderRadius: BorderRadius.circular(15),
             ),
-            borderRadius: BorderRadius.circular(15),
-          ),
-          child: const Column(
-            children: <Widget>[
-              Icon(Icons.add_photo_alternate_outlined,
-                  color: _brandStrong, size: 43),
-              SizedBox(height: 12),
-              Text(
-                'Property photo gallery',
-                style: TextStyle(
-                  color: _ink,
-                  fontSize: 15,
-                  fontWeight: FontWeight.w900,
+            child: Column(
+              children: <Widget>[
+                Icon(
+                  _uploadingPhotos.isNotEmpty
+                      ? Icons.hourglass_top_rounded
+                      : Icons.add_photo_alternate_outlined,
+                  color: _brandStrong,
+                  size: 43,
                 ),
-              ),
-              SizedBox(height: 7),
-              Text(
-                'This is a visual placeholder. The presentation preview does '
-                'not read or upload local files.',
-                textAlign: TextAlign.center,
-                style: TextStyle(color: _muted, fontSize: 11, height: 1.5),
-              ),
-              SizedBox(height: 12),
-              Chip(
-                label: Text('Optional step'),
-                visualDensity: VisualDensity.compact,
-                backgroundColor: Color(0xFFEDF4FF),
-                side: BorderSide(color: Color(0xFFD4E3FB)),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 15),
-        GridView.builder(
-          itemCount: photoLabels.length,
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: 3,
-            crossAxisSpacing: 8,
-            mainAxisSpacing: 8,
-            mainAxisExtent: 98,
-          ),
-          itemBuilder: (context, index) {
-            return Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  colors: <Color>[Color(0xFFEDF3FB), Color(0xFFE1EBF7)],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
-                border: Border.all(color: const Color(0xFFDCE6F3)),
-                borderRadius: BorderRadius.circular(11),
-              ),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: <Widget>[
-                  const Icon(Icons.image_outlined,
-                      color: Color(0xFF4D6380), size: 25),
-                  const SizedBox(height: 6),
-                  Text(
-                    photoLabels[index],
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(
-                      color: Color(0xFF4D6380),
-                      fontSize: 9,
-                      fontWeight: FontWeight.w700,
-                    ),
+                const SizedBox(height: 12),
+                Text(
+                  _uploadingPhotos.isNotEmpty
+                      ? 'Uploading photo…'
+                      : 'Add property photos',
+                  style: const TextStyle(
+                    color: _ink,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w900,
                   ),
-                ],
-              ),
-            );
-          },
+                ),
+                const SizedBox(height: 7),
+                const Text(
+                  'JPG, PNG or WebP — up to 8 MB each. Photos upload to '
+                  'Sitewise storage and attach to the saved draft.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: _muted, fontSize: 11, height: 1.5),
+                ),
+              ],
+            ),
+          ),
         ),
+        if (_photos.isNotEmpty) ...<Widget>[
+          const SizedBox(height: 15),
+          GridView.builder(
+            itemCount: _photos.length,
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 3,
+              crossAxisSpacing: 8,
+              mainAxisSpacing: 8,
+              mainAxisExtent: 120,
+            ),
+            itemBuilder: (context, index) {
+              final photo = _photos[index];
+              return Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  border: Border.all(
+                    color: photo.isPrimary
+                        ? const Color(0xFF81A8FB)
+                        : const Color(0xFFDCE6F3),
+                    width: photo.isPrimary ? 1.5 : 1,
+                  ),
+                  borderRadius: BorderRadius.circular(11),
+                ),
+                child: Column(
+                  children: <Widget>[
+                    Expanded(
+                      child: Image.network(
+                        photo.url,
+                        fit: BoxFit.cover,
+                        width: double.infinity,
+                        errorBuilder: (_, _, _) => const Icon(
+                          Icons.image_outlined,
+                          color: Color(0xFF4D6380),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    if (photo.isPrimary)
+                      const Text(
+                        'Primary',
+                        style: TextStyle(
+                          color: _brandStrong,
+                          fontSize: 9,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      )
+                    else
+                      GestureDetector(
+                        onTap: () => _makePrimary(photo),
+                        child: const Text(
+                          'Set primary',
+                          style: TextStyle(
+                            color: _muted,
+                            fontSize: 9,
+                            fontWeight: FontWeight.w700,
+                            decoration: TextDecoration.underline,
+                          ),
+                        ),
+                      ),
+                    GestureDetector(
+                      onTap: () => _deletePhoto(photo),
+                      child: const Text(
+                        'Remove',
+                        style: TextStyle(
+                          color: Color(0xFFB91C1C),
+                          fontSize: 9,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+        ],
         const SizedBox(height: 14),
         _buildInfoNotice(
-          'File type, size limits and photo upload must be handled by the '
-          'existing media workflow.',
+          'Ownership evidence documents are separate: upload them from My '
+          'Properties before submitting — at least one is required for '
+          'verification, and they stay private.',
         ),
       ],
     );
@@ -803,23 +1077,23 @@ class _SitewiseAddPropertyMobilePreviewState
         _buildReviewSection(
           title: 'Property details',
           step: 1,
-          rows: <_PreviewRow>[
-            _PreviewRow('Property name', _display(_propertyName)),
-            _PreviewRow('Property type', _propertyType),
-            _PreviewRow('Monthly rent', 'RM $_monthlyRent'),
-            _PreviewRow('Built-up area', '$_builtUpArea sq ft'),
+          rows: <_ReviewRow>[
+            _ReviewRow('Property name', _display(_propertyName)),
+            _ReviewRow('Property type', _propertyType),
+            _ReviewRow('Monthly rent', 'RM $_monthlyRent'),
+            _ReviewRow('Built-up area', '$_builtUpArea sq ft'),
           ],
         ),
         const SizedBox(height: 18),
         _buildReviewSection(
           title: 'Location & address',
           step: 2,
-          rows: <_PreviewRow>[
-            _PreviewRow('Address', _display(_address)),
-            _PreviewRow('State', _display(_stateName)),
-            _PreviewRow('District', _display(_district)),
-            _PreviewRow('Postcode', _display(_postcode)),
-            _PreviewRow(
+          rows: <_ReviewRow>[
+            _ReviewRow('Address', _display(_address)),
+            _ReviewRow('State', _display(_stateName)),
+            _ReviewRow('City / district', _display(_district)),
+            _ReviewRow('Postcode', _display(_postcode)),
+            _ReviewRow(
               'Coordinates',
               _latitude.isEmpty ? 'Not provided' : '$_latitude, $_longitude',
             ),
@@ -829,13 +1103,18 @@ class _SitewiseAddPropertyMobilePreviewState
         _buildReviewSection(
           title: 'Photos',
           step: 3,
-          rows: const <_PreviewRow>[
-            _PreviewRow('Upload status', 'Not connected in this preview'),
+          rows: <_ReviewRow>[
+            _ReviewRow(
+              'Attached photos',
+              _photos.isEmpty ? 'None yet' : '${_photos.length} photo(s)',
+            ),
           ],
         ),
         const SizedBox(height: 16),
         _buildInfoNotice(
-          'This preview does not send an API request or create a property record.',
+          'Review & finish saves the record to Sitewise. Submission for '
+          'verification additionally requires complete details and at least '
+          'one ownership document.',
         ),
       ],
     );
@@ -844,7 +1123,7 @@ class _SitewiseAddPropertyMobilePreviewState
   Widget _buildReviewSection({
     required String title,
     required int step,
-    required List<_PreviewRow> rows,
+    required List<_ReviewRow> rows,
   }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -876,48 +1155,37 @@ class _SitewiseAddPropertyMobilePreviewState
         ),
         const Divider(height: 1, color: Color(0xFFE9EDF4)),
         const SizedBox(height: 9),
-        ...rows.map(_buildPreviewRow),
+        ...rows.map(_buildReviewRow),
       ],
     );
   }
 
   Widget _buildConfirmation() {
+    final submitted = _serverStatus == 'pending';
     return Padding(
       padding: const EdgeInsets.fromLTRB(18, 28, 18, 24),
       child: Column(
         children: <Widget>[
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 6),
-            decoration: BoxDecoration(
-              color: const Color(0xFFFFF3D8),
-              border: Border.all(color: const Color(0xFFFFE3AB)),
-              borderRadius: BorderRadius.circular(30),
-            ),
-            child: const Text(
-              'UI preview — not saved',
-              style: TextStyle(
-                color: Color(0xFF965410),
-                fontSize: 10,
-                fontWeight: FontWeight.w800,
-              ),
-            ),
-          ),
-          const SizedBox(height: 18),
-          Container(
             width: 66,
             height: 66,
-            decoration: const BoxDecoration(
-              color: Color(0xFFDDF8E9),
+            decoration: BoxDecoration(
+              color: submitted
+                  ? const Color(0xFFDDF8E9)
+                  : const Color(0xFFEDF4FF),
               shape: BoxShape.circle,
             ),
-            child: const Icon(Icons.check_rounded,
-                color: Color(0xFF087443), size: 39),
+            child: Icon(
+              submitted ? Icons.check_rounded : Icons.save_rounded,
+              color: submitted ? const Color(0xFF087443) : _brandStrong,
+              size: 39,
+            ),
           ),
           const SizedBox(height: 17),
-          const Text(
-            'Submission confirmation design',
+          Text(
+            submitted ? 'Submitted for verification' : 'Draft saved',
             textAlign: TextAlign.center,
-            style: TextStyle(
+            style: const TextStyle(
               color: _ink,
               fontSize: 19,
               fontWeight: FontWeight.w900,
@@ -925,11 +1193,15 @@ class _SitewiseAddPropertyMobilePreviewState
             ),
           ),
           const SizedBox(height: 9),
-          const Text(
-            'This is how the creation-success state could appear after the '
-            'real FastAPI Add Property use case returns a property ID.',
+          Text(
+            submitted
+                ? 'Your property is now in the administrator review queue. '
+                    'Track its status in My Properties.'
+                : 'This property record is persisted in Sitewise. Complete the '
+                    'details, attach photos and ownership evidence, then '
+                    'submit it for verification.',
             textAlign: TextAlign.center,
-            style: TextStyle(color: _muted, fontSize: 12, height: 1.5),
+            style: const TextStyle(color: _muted, fontSize: 12, height: 1.5),
           ),
           const SizedBox(height: 19),
           Container(
@@ -944,7 +1216,7 @@ class _SitewiseAddPropertyMobilePreviewState
               crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
                 const Text(
-                  'Sample property',
+                  'Property',
                   style: TextStyle(
                     color: _muted,
                     fontSize: 11,
@@ -973,9 +1245,9 @@ class _SitewiseAddPropertyMobilePreviewState
                   ),
                 ),
                 const SizedBox(height: 4),
-                const Text(
-                  'Assigned by backend after successful creation',
-                  style: TextStyle(
+                Text(
+                  _draftId ?? 'Not saved yet',
+                  style: const TextStyle(
                     color: _ink,
                     fontSize: 13,
                     fontWeight: FontWeight.w900,
@@ -985,21 +1257,56 @@ class _SitewiseAddPropertyMobilePreviewState
             ),
           ),
           const SizedBox(height: 14),
+          if (!submitted) ...<Widget>[
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton.icon(
+                onPressed: _submitting ? null : _submitForVerification,
+                icon: _submitting
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : const Icon(Icons.verified_outlined, size: 19),
+                label: Text(
+                  _submitting ? 'Submitting…' : 'Submit for verification',
+                  style: const TextStyle(fontWeight: FontWeight.w800),
+                ),
+                style: FilledButton.styleFrom(
+                  backgroundColor: _brand,
+                  foregroundColor: Colors.white,
+                  minimumSize: const Size.fromHeight(47),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(11),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 9),
+          ],
           SizedBox(
             width: double.infinity,
-            child: FilledButton(
-              onPressed: () => _editStep(1),
-              style: FilledButton.styleFrom(
-                backgroundColor: _brand,
-                foregroundColor: Colors.white,
-                minimumSize: const Size.fromHeight(47),
+            child: OutlinedButton(
+              onPressed: _saving
+                  ? null
+                  : () {
+                      _saveDraft();
+                    },
+              style: OutlinedButton.styleFrom(
+                foregroundColor: _ink,
+                side: const BorderSide(color: _border),
+                minimumSize: const Size.fromHeight(46),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(11),
                 ),
               ),
-              child: const Text(
-                'Review the design again',
-                style: TextStyle(fontWeight: FontWeight.w800),
+              child: Text(
+                _saving ? 'Saving…' : 'Save draft',
+                style: const TextStyle(fontWeight: FontWeight.w800),
               ),
             ),
           ),
@@ -1007,7 +1314,10 @@ class _SitewiseAddPropertyMobilePreviewState
           SizedBox(
             width: double.infinity,
             child: OutlinedButton(
-              onPressed: () => _editStep(1),
+              onPressed: () => EntrepreneurTabScope.open(
+                context,
+                '/entrepreneur/spaces',
+              ),
               style: OutlinedButton.styleFrom(
                 foregroundColor: _ink,
                 side: const BorderSide(color: _border),
@@ -1017,7 +1327,7 @@ class _SitewiseAddPropertyMobilePreviewState
                 ),
               ),
               child: const Text(
-                'Go to My Properties (preview)',
+                'Go to My Properties',
                 style: TextStyle(fontWeight: FontWeight.w800),
               ),
             ),
@@ -1027,121 +1337,34 @@ class _SitewiseAddPropertyMobilePreviewState
     );
   }
 
-  Widget _buildPropertySnapshot() {
-    final rows = <_PreviewRow>[
-      _PreviewRow('Property name', _display(_propertyName)),
-      _PreviewRow('Property type', _propertyType),
-      _PreviewRow('Monthly rental', 'RM ${_monthlyRent.isEmpty ? '—' : _monthlyRent}'),
-      _PreviewRow('Built-up area', _builtUpArea.isEmpty ? '—' : '$_builtUpArea sq ft'),
-      _PreviewRow('State', _display(_stateName)),
-      _PreviewRow('District', _display(_district)),
-      const _PreviewRow('Media', 'Connected in production only'),
-    ];
-
+  Widget _buildServerBanner(String message, {required bool success}) {
     return Container(
-      padding: const EdgeInsets.fromLTRB(17, 18, 17, 15),
+      padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: Colors.white,
-        border: Border.all(color: _border),
-        borderRadius: BorderRadius.circular(17),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: <Widget>[
-          const Text(
-            'PROPERTY SNAPSHOT',
-            style: TextStyle(
-              color: _brandStrong,
-              fontSize: 10,
-              fontWeight: FontWeight.w900,
-              letterSpacing: 1.4,
-            ),
-          ),
-          const SizedBox(height: 3),
-          const Text(
-            'Your draft at a glance',
-            style: TextStyle(
-              color: _ink,
-              fontSize: 15,
-              fontWeight: FontWeight.w900,
-            ),
-          ),
-          const SizedBox(height: 8),
-          const Text(
-            'This summary updates as you enter your property information.',
-            style: TextStyle(color: _muted, fontSize: 12, height: 1.45),
-          ),
-          const SizedBox(height: 12),
-          ...rows.map(_buildSnapshotRow),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSnapshotRow(_PreviewRow row) {
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 11),
-      decoration: const BoxDecoration(
-        border: Border(top: BorderSide(color: Color(0xFFEEF1F5))),
+        color: success ? const Color(0xFFEAF8F0) : const Color(0xFFFFF0F0),
+        border: Border.all(
+          color: success ? const Color(0xFFB4E4CB) : const Color(0xFFF1B8B8),
+        ),
+        borderRadius: BorderRadius.circular(12),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
+          Icon(
+            success ? Icons.check_circle_outline_rounded : Icons.error_outline_rounded,
+            color: success ? const Color(0xFF087443) : const Color(0xFF991B1B),
+            size: 17,
+          ),
+          const SizedBox(width: 9),
           Expanded(
             child: Text(
-              row.label,
-              style: const TextStyle(
-                color: _muted,
+              message,
+              style: TextStyle(
+                color: success ? const Color(0xFF0A5B36) : const Color(0xFF991B1B),
                 fontSize: 11,
+                height: 1.5,
                 fontWeight: FontWeight.w700,
               ),
-            ),
-          ),
-          const SizedBox(width: 10),
-          Flexible(
-            child: Text(
-              row.value,
-              textAlign: TextAlign.right,
-              style: const TextStyle(
-                color: Color(0xFF1C2940),
-                fontSize: 11,
-                fontWeight: FontWeight.w900,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildWorkflowNote() {
-    return Container(
-      padding: const EdgeInsets.all(17),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF1F6FF),
-        border: Border.all(color: const Color(0xFFD6E5FF)),
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: const Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[
-          Text(
-            'Built for your SiteWise workflow',
-            style: TextStyle(
-              color: Color(0xFF163C8D),
-              fontSize: 14,
-              fontWeight: FontWeight.w900,
-            ),
-          ),
-          SizedBox(height: 7),
-          Text(
-            'White navigation, the existing blue palette, accessible form '
-            'layout and the entrepreneur workspace. This is a standalone '
-            'design demonstration, not an API implementation.',
-            style: TextStyle(
-              color: Color(0xFF284B83),
-              fontSize: 12,
-              height: 1.5,
             ),
           ),
         ],
@@ -1155,6 +1378,7 @@ class _SitewiseAddPropertyMobilePreviewState
     bool requiredField = false,
     TextInputType? keyboardType,
     String? hint,
+    int maxLines = 1,
   }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1164,6 +1388,8 @@ class _SitewiseAddPropertyMobilePreviewState
         TextField(
           controller: controller,
           keyboardType: keyboardType,
+          maxLines: maxLines,
+          enabled: _editable,
           onChanged: _onTextChanged,
           style: const TextStyle(color: _ink, fontSize: 13),
           decoration: InputDecoration(
@@ -1187,13 +1413,6 @@ class _SitewiseAddPropertyMobilePreviewState
             hintStyle: const TextStyle(color: Color(0xFF7A8798), fontSize: 12),
           ),
         ),
-        if (hint != null && keyboardType == null && !requiredField) ...<Widget>[
-          const SizedBox(height: 5),
-          Text(
-            hint,
-            style: const TextStyle(color: _muted, fontSize: 10, height: 1.4),
-          ),
-        ],
       ],
     );
   }
@@ -1267,7 +1486,7 @@ class _SitewiseAddPropertyMobilePreviewState
     );
   }
 
-  Widget _buildPreviewRow(_PreviewRow row) {
+  Widget _buildReviewRow(_ReviewRow row) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
       child: Column(
@@ -1296,69 +1515,9 @@ class _SitewiseAddPropertyMobilePreviewState
   }
 }
 
-class _PreviewRow {
-  const _PreviewRow(this.label, this.value);
+class _ReviewRow {
+  const _ReviewRow(this.label, this.value);
 
   final String label;
   final String value;
-}
-
-class _MapPatternPainter extends CustomPainter {
-  @override
-  void paint(Canvas canvas, Size size) {
-    final roadPaint = Paint()
-      ..color = Colors.white.withValues(alpha: 0.88)
-      ..strokeWidth = 8
-      ..style = PaintingStyle.stroke;
-
-    final thinRoadPaint = Paint()
-      ..color = const Color(0xFFD4E0E9)
-      ..strokeWidth = 1
-      ..style = PaintingStyle.stroke;
-
-    final roads = <Path>[
-      Path()
-        ..moveTo(-10, size.height * 0.22)
-        ..cubicTo(size.width * 0.25, size.height * 0.08,
-            size.width * 0.55, size.height * 0.34, size.width + 10, size.height * 0.18),
-      Path()
-        ..moveTo(-10, size.height * 0.75)
-        ..cubicTo(size.width * 0.30, size.height * 0.55,
-            size.width * 0.66, size.height * 0.92, size.width + 10, size.height * 0.66),
-      Path()
-        ..moveTo(size.width * 0.25, -10)
-        ..cubicTo(size.width * 0.12, size.height * 0.35,
-            size.width * 0.43, size.height * 0.62, size.width * 0.30, size.height + 10),
-      Path()
-        ..moveTo(size.width * 0.76, -10)
-        ..cubicTo(size.width * 0.60, size.height * 0.30,
-            size.width * 0.94, size.height * 0.70, size.width * 0.78, size.height + 10),
-    ];
-
-    for (final path in roads) {
-      canvas.drawPath(path, roadPaint);
-      canvas.drawPath(path, thinRoadPaint);
-    }
-
-    final blockPaint = Paint()
-      ..color = const Color(0xFFDCE8E1).withValues(alpha: 0.65)
-      ..style = PaintingStyle.fill;
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(
-        Rect.fromLTWH(size.width * 0.42, size.height * 0.13, 42, 22),
-        const Radius.circular(4),
-      ),
-      blockPaint,
-    );
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(
-        Rect.fromLTWH(size.width * 0.08, size.height * 0.48, 34, 19),
-        const Radius.circular(4),
-      ),
-      blockPaint,
-    );
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }

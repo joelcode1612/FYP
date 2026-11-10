@@ -1,6 +1,7 @@
 import 'package:jaspr/dom.dart';
 import 'package:jaspr/jaspr.dart';
 import 'package:jaspr_riverpod/jaspr_riverpod.dart';
+import 'package:jaspr_router/jaspr_router.dart';
 import 'package:shared_logic/shared_logic.dart';
 
 import '../../components/assessment_journey_stepper.dart';
@@ -81,6 +82,32 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
   Future<List<String>>? _typesFuture;
   Future<ApiResult<EvidencePayload>>? _evidenceFuture;
 
+  // --- Stage 1: the saved-property selector ---------------------------------
+  //
+  // Stage 1 is the workspace's entry state: the entrepreneur picks one of the
+  // properties their account has saved. The list comes from the authenticated
+  // saved-properties endpoint (the account's own rows) and every entry is
+  // resolved against the catalogue, so the cards show real listing data.
+
+  /// The saved properties, resolved against the catalogue. Null until the
+  /// first read completes.
+  Future<AssessmentSelectableProperties>? _selectableFuture;
+
+  /// The account's assessment history, used to badge a saved property that
+  /// already has an assessment. A failed read omits the badge — it never
+  /// invents a status.
+  Future<Map<String, AssessmentRecord>>? _historyFuture;
+
+  /// The resolved history, keyed by catalogue ref. Empty until the read
+  /// completes; a failed read leaves it empty.
+  Map<String, AssessmentRecord> _history = const {};
+
+  /// The Stage 1 search query.
+  String _search = '';
+
+  /// The catalogue ref the entrepreneur selected. Exactly one at a time.
+  String? _selectedRef;
+
   @override
   void initState() {
     super.initState();
@@ -88,6 +115,27 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
     if (_openStage == 'location_evidence' && component.propertyId.isNotEmpty) {
       _evidenceFuture = _api.evidence(component.propertyId);
     }
+  }
+
+  /// Re-runs the load when the route changes the property.
+  ///
+  /// The router reuses the same element for the same route, so a query-only
+  /// change (Stage 1 → `/entrepreneur/assessments?id=…`) arrives here rather
+  /// than as a fresh state. Without this the workspace would keep showing the
+  /// previous property's record.
+  @override
+  void didUpdateComponent(covariant AssessmentWorkspacePage oldComponent) {
+    super.didUpdateComponent(oldComponent);
+    if (oldComponent.propertyId == component.propertyId) return;
+    _openStage = _inlineStages.contains(component.stage) ? component.stage : null;
+    _record = null;
+    _draft = null;
+    _draftErrors = const {};
+    _typesFuture = null;
+    _evidenceFuture = null;
+    _notice = null;
+    _writeError = null;
+    _future = _open(component.propertyId);
   }
 
   // ------------------------------------------------------------------- load
@@ -334,30 +382,110 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
     return items.isEmpty ? '' : items.first;
   }
 
+  // ------------------------------------------------------------------ stage 1
+
+  /// The account's saved properties. One read of the saved list, then one
+  /// catalogue read per distinct ref (see [GetAssessmentSelectableProperties]).
+  Future<AssessmentSelectableProperties> _loadSelectable() =>
+      AppLocator.assessmentSelectableProperties.call();
+
+  /// The account's assessments, keyed by catalogue ref, so a saved property
+  /// that already has an assessment can say so before anything is created.
+  Future<Map<String, AssessmentRecord>> _loadHistory() async {
+    final result = await _api.history(limit: 50, offset: 0);
+    if (!result.ok) return const {};
+    return {for (final record in result.value!.items) record.propertyId: record};
+  }
+
+  /// Re-reads the saved list and drops the current selection.
+  void _reloadSelectable() => setState(() {
+        _selectableFuture = _loadSelectable();
+        _historyFuture = _loadHistory();
+        _selectedRef = null;
+        _search = '';
+        _notice = null;
+        _writeError = null;
+      });
+
+  /// Selects one saved property. Only one can be selected at a time, and a
+  /// property whose details could not be resolved is not selectable.
+  void _select(String propertyRef) => setState(() {
+        _selectedRef = propertyRef;
+        _notice = null;
+        _writeError = null;
+      });
+
+  /// Continues into the assessment for the selected property.
+  ///
+  /// The backend is the only authority: an existing record is resumed (never
+  /// duplicated) and a new one is created only for a property this account has
+  /// saved. Nothing is created just because the page was opened.
+  Future<void> _continueWith(String propertyRef) async {
+    if (_busy) return;
+    setState(() {
+      _busy = true;
+      _writeError = null;
+      _notice = null;
+    });
+
+    // 1. Is there already an assessment for this property?
+    final existing = await _api.byProperty(propertyRef);
+    if (!mounted) return;
+    if (!existing.ok) {
+      setState(() {
+        _busy = false;
+        _writeError = existing.failure;
+      });
+      return;
+    }
+    final record = existing.value;
+    if (record != null) {
+      setState(() {
+        _busy = false;
+        _notice =
+            'Your existing assessment for this property was reopened. '
+            'Nothing was duplicated.';
+      });
+      _openProperty(propertyRef);
+      return;
+    }
+
+    // 2. Otherwise the server creates it — and refuses when the property is
+    //    not on this account's saved list.
+    final started = await _api.start(propertyRef);
+    if (!mounted) return;
+    if (!started.ok) {
+      setState(() {
+        _busy = false;
+        _writeError = started.failure;
+      });
+      return;
+    }
+    setState(() {
+      _busy = false;
+      _notice = started.value!.created
+          ? 'Assessment started. Stage 1 is recorded as complete because the '
+              'property is now bound to it.'
+          : 'Your existing assessment for this property was reopened. '
+              'Nothing was duplicated.';
+    });
+    _openProperty(propertyRef);
+  }
+
+  /// Opens the workspace for one property, replacing the Stage 1 selector so
+  /// the browser history does not stack a second copy of the same screen.
+  void _openProperty(String propertyRef) {
+    context.replace(
+      '/entrepreneur/assessments?id=${Uri.encodeQueryComponent(propertyRef)}',
+    );
+  }
+
   // ------------------------------------------------------------------ render
 
   @override
   Component build(BuildContext context) {
     if (component.propertyId.isEmpty) {
-      return _shell(
-        title: 'Location Assessment Workspace',
-        subtitle:
-            'A five-stage assessment of one commercial property, saved to your '
-            'account as you go.',
-        child: const EmptyState(
-          title: 'No property selected',
-          body:
-              'The workspace assesses one listing at a time, so it needs a '
-              'property to work on. Choose a listing from Explore, from your '
-              'recommendations or from your saved properties, then open its '
-              'assessment.',
-          action: ActionLink(
-            'Browse commercial properties',
-            href: '/entrepreneur/explore',
-            variant: 'primary',
-          ),
-        ),
-      );
+      return _stage1();
     }
 
     return FutureBuilder<_Load>(
@@ -414,13 +542,349 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
     required Component child,
   }) => AppLayout(
     role: AppRole.entrepreneur,
-    currentRoute: '/entrepreneur/assessment',
+    currentRoute: '/entrepreneur/assessments',
     title: title,
     eyebrow: 'Location assessment',
     subtitle: subtitle,
     actions: actions,
     child: child,
   );
+
+  // --------------------------------------------------------------- stage 1 UI
+
+  /// Stage 1 — Select Property.
+  ///
+  /// The account's real saved properties, read from the authenticated
+  /// saved-properties endpoint and resolved against the catalogue. Opening
+  /// this screen never starts an assessment: only the Continue action asks
+  /// the backend to create or resume one.
+  Component _stage1() {
+    final selectable = _selectableFuture ??= _loadSelectable();
+    _historyFuture ??= _loadHistory().then((records) {
+      if (mounted) setState(() => _history = records);
+      return records;
+    });
+
+    return _shell(
+      title: 'Location Assessment',
+      subtitle:
+          'Choose a saved commercial property to begin your location '
+          'assessment.',
+      actions: const [
+        ActionLink(
+          'Assessment History',
+          href: '/entrepreneur/assessments/history',
+          variant: 'secondary',
+        ),
+      ],
+      child: FutureBuilder<AssessmentSelectableProperties>(
+        future: selectable,
+        builder: (context, snapshot) {
+          if (snapshot.connectionState != ConnectionState.done) {
+            return div(classes: 'stack stack--md', [
+              Skeleton(variant: 'block'),
+              Skeleton(variant: 'row', count: 4),
+            ]);
+          }
+          final data = snapshot.data;
+          if (data == null) {
+            return EmptyState(
+              title: 'Your saved properties did not load',
+              body:
+                  'The workspace received no response for your saved list. '
+                  'Nothing has been changed.',
+              action: ActionButton('Try again', onClick: _reloadSelectable),
+            );
+          }
+          if (data.isUnauthorized) {
+            return const EmptyState(
+              title: 'You are not signed in to this workspace',
+              body:
+                  'Saved properties belong to your account, so the service '
+                  'will only return them to a signed-in entrepreneur.',
+              action: ActionLink(
+                'Go to sign in',
+                href: '/login',
+                variant: 'primary',
+              ),
+            );
+          }
+          if (data.hasError) {
+            return EmptyState(
+              title: 'Your saved properties could not be loaded',
+              body: data.errorMessage!,
+              action: ActionButton('Try again', onClick: _reloadSelectable),
+            );
+          }
+          if (data.isEmpty) {
+            return const EmptyState(
+              title: 'No saved properties yet',
+              body:
+                  'No saved properties yet. Save a property from Explore to '
+                  'start a location assessment.',
+              action: ActionLink(
+                'Explore Properties',
+                href: '/entrepreneur/explore',
+                variant: 'primary',
+              ),
+            );
+          }
+          return _stage1List(data);
+        },
+      ),
+    );
+  }
+
+  /// The Stage 1 body: the five-stage order, the saved-property list and the
+  /// Continue action.
+  Component _stage1List(AssessmentSelectableProperties data) {
+    final visible = data.search(_search);
+    final selected = _selectedRef == null
+        ? null
+        : data.properties
+            .where((item) => item.propertyRef == _selectedRef)
+            .firstOrNull;
+    final selectedProperty = selected?.property;
+    final canContinue = _selectedRef != null && !_busy;
+
+    return div(classes: 'stack stack--sections', [
+      _stage1Progress(),
+
+      // Saved refs the catalogue no longer holds. Reported, never selectable.
+      if (data.unresolvedRefs.isNotEmpty)
+        div(classes: 'notice notice-warn', [
+          div([
+            Component.text(
+              '${data.unresolvedRefs.length} saved '
+              '${data.unresolvedRefs.length == 1 ? 'property is' : 'properties are'} '
+              'no longer in the property catalogue, so they cannot be '
+              'assessed. Remove them from your saved list to clear this '
+              'notice.',
+            ),
+          ]),
+        ]),
+
+      section(classes: 'panel', [
+        div(classes: 'panel__head', [
+          span(classes: 'panel__title', [
+            Component.text('Your Saved Properties'),
+          ]),
+        ]),
+        div(classes: 'panel__body stack stack--md', [
+          SearchInput(
+            label: 'Search saved properties',
+            placeholder: 'Search saved properties…',
+            ariaLabel: 'Search saved properties',
+            onInput: (value) => setState(() => _search = value),
+          ),
+          if (visible.isEmpty)
+            p(classes: 'body', [
+              Component.text(
+                _search.trim().isEmpty
+                    ? 'None of your saved properties can be assessed right '
+                          'now.'
+                    : 'No saved property matches “${_search.trim()}”.',
+              ),
+            ])
+          else
+            div(
+              classes: 'asw-select',
+              attributes: const {
+                'role': 'radiogroup',
+                'aria-label': 'Saved properties',
+              },
+              [for (final item in visible) _stage1Card(item)],
+            ),
+        ]),
+      ]),
+
+      // The property the entrepreneur picked, in full.
+      if (selectedProperty != null)
+        _SelectedPropertyPanel(property: selectedProperty, record: null),
+
+      div(classes: 'asw-select__actions', [
+        ActionLink(
+          'Assessment History',
+          href: '/entrepreneur/assessments/history',
+          variant: 'secondary',
+        ),
+        button(
+          classes: 'btn btn--primary',
+          attributes: {
+            'type': 'button',
+            if (!canContinue) 'disabled': '',
+            'aria-disabled': canContinue ? 'false' : 'true',
+          },
+          events: events(onClick: () {
+            final ref = _selectedRef;
+            if (ref == null || _busy) return;
+            _continueWith(ref);
+          }),
+          [
+            Component.text(_busy ? 'Starting…' : 'Continue Assessment'),
+          ],
+        ),
+      ]),
+
+      if (_notice != null) _successNotice(_notice!),
+      if (_writeError != null) _errorNotice(_writeError!),
+    ]);
+  }
+
+  /// One saved property as a selectable card.
+  ///
+  /// The radio input is the real control: exactly one card can be selected,
+  /// arrow keys move between them, and a property whose listing could not be
+  /// resolved is disabled rather than silently unselectable.
+  Component _stage1Card(SelectableProperty item) {
+    final property = item.property;
+    final unavailable = property == null;
+    final selected = item.propertyRef == _selectedRef;
+    final record = _history[item.propertyRef];
+
+    return label(
+      classes: [
+        'asw-select-card',
+        if (selected) 'is-selected',
+        if (unavailable) 'asw-select-card--unavailable',
+      ].join(' '),
+      [
+        input<bool>(
+          type: InputType.radio,
+          name: 'saved-property',
+          value: item.propertyRef,
+          checked: selected,
+          disabled: unavailable,
+          onChange: (value) => _select(item.propertyRef),
+        ),
+        div(classes: 'asw-select-card__body', [
+          if (property != null &&
+              property.imageUrl != null &&
+              property.imageUrl!.isNotEmpty)
+            img(
+              src: property.imageUrl!,
+              attributes: {'alt': property.title, 'loading': 'lazy'},
+              classes: 'asw-select-card__img',
+            )
+          else
+            div(classes: 'asw-select-card__noimg', [
+              Icon('image_not_supported', size: 'sm'),
+            ]),
+          div(classes: 'asw-select-card__main', [
+            div(classes: 'asw-select-card__title-row', [
+              span(classes: 'asw-select-card__title', [
+                Component.text(property?.title ?? item.propertyRef),
+              ]),
+              // Only shown when the account really has a record for this
+              // property — the history read, not a guess.
+              if (record != null)
+                Pill(
+                  record.isCompleted
+                      ? 'Assessment complete'
+                      : 'Assessment in progress',
+                  tone: record.isCompleted ? 'success' : 'action',
+                ),
+            ]),
+            span(classes: 'small asw-muted', [
+              Component.text('Property ${item.propertyRef}'),
+            ]),
+            if (property != null) ...[
+              span(classes: 'small', [
+                Component.text(
+                  [
+                    property.address,
+                    if (property.city.isNotEmpty) property.city,
+                    if (property.state.isNotEmpty) property.state,
+                  ].join(', '),
+                ),
+              ]),
+              span(classes: 'small asw-muted', [
+                Component.text(
+                  '${property.rentalDisplay} / month · '
+                  '${property.sizeSqft.toStringAsFixed(0)} sq ft · '
+                  '${property.propertyType}',
+                ),
+              ]),
+            ] else
+              span(classes: 'small asw-muted', [
+                Component.text(
+                  item.unavailableReason ??
+                      'The listing details for this property are unavailable.',
+                ),
+              ]),
+          ]),
+        ]),
+      ],
+    );
+  }
+
+  /// The five-stage order for Stage 1.
+  ///
+  /// It states the order only. No stage reads as complete here — completion
+  /// comes from the backend's persisted record.
+  Component _stage1Progress() {
+    const stages = [
+      ('select_property', 'Select property'),
+      ('business_requirements', 'Business preferences'),
+      ('location_evidence', 'Location evidence'),
+      ('ai_explanation', 'AI explanation'),
+      ('assessment_report', 'Assessment report'),
+    ];
+    return section(
+      classes: 'sw-assessment-journey',
+      attributes: const {'aria-label': 'Location assessment stages'},
+      [
+        div(classes: 'sw-assessment-journey__heading', [
+          div(classes: 'sw-assessment-journey__heading-text', [
+            span(classes: 'sw-assessment-journey__eyebrow', [
+              Component.text('YOUR ASSESSMENT JOURNEY'),
+            ]),
+            h2(classes: 'sw-assessment-journey__title', [
+              Component.text('Five stages to your location decision'),
+            ]),
+          ]),
+          div(classes: 'sw-assessment-journey__count', [
+            strong([Component.text('0 / 5')]),
+            span([Component.text(' completed')]),
+          ]),
+        ]),
+        div(classes: 'sw-assessment-journey__scroll', [
+          ol(classes: 'sw-assessment-journey__steps', [
+            for (final (index, stage) in stages.indexed)
+              li(
+                classes:
+                    'sw-assessment-journey__step '
+                    'sw-assessment-journey__step--'
+                    '${index == 0 ? 'current' : 'upcoming'}',
+                [
+                  div(
+                    classes: 'sw-assessment-journey__control',
+                    attributes: {
+                      'aria-label':
+                          'Step ${index + 1}: ${stage.$2} — '
+                          '${index == 0 ? 'Current stage' : 'Not started'}',
+                    },
+                    [
+                      span(classes: 'sw-assessment-journey__circle', [
+                        Component.text('${index + 1}'),
+                      ]),
+                      span(classes: 'sw-assessment-journey__step-title', [
+                        Component.text(stage.$2),
+                      ]),
+                      span(classes: 'sw-assessment-journey__step-status', [
+                        Component.text(
+                          index == 0 ? 'Current stage' : 'Not started',
+                        ),
+                      ]),
+                    ],
+                  ),
+                ],
+              ),
+          ]),
+        ]),
+      ],
+    );
+  }
 
   // --------------------------------------------------------------- failure UI
 
@@ -484,6 +948,11 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
     title: 'Location Assessment Workspace',
     subtitle: 'Assessment not started',
     actions: const [
+      ActionLink(
+        'Assessment History',
+        href: '/entrepreneur/assessments/history',
+        variant: 'secondary',
+      ),
       ActionLink(
         'Back to Explore',
         href: '/entrepreneur/explore',
@@ -549,6 +1018,11 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
           ? 'Property ${record.propertyId}'
           : '${property.title} · ${property.address}, ${property.city}',
       actions: [
+        ActionLink(
+          'Assessment History',
+          href: '/entrepreneur/assessments/history',
+          variant: 'secondary',
+        ),
         ActionLink(
           'Property detail',
           href: '/entrepreneur/property-detail?id=${record.propertyId}',
@@ -643,9 +1117,9 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
     ),
     span(classes: 'crumbs__sep', [Component.text('›')]),
     AppLink(
-      to: '/entrepreneur/explore',
+      to: '/entrepreneur/assessments',
       classes: 'crumbs__item crumbs__link',
-      children: [Component.text('Explore')],
+      children: [Component.text('Assessments')],
     ),
     span(classes: 'crumbs__sep', [Component.text('›')]),
     span(classes: 'crumbs__item crumbs__item--current', [

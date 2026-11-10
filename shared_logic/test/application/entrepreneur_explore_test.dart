@@ -281,6 +281,28 @@ void main() {
       await notifier().loadExplore();
       expect(read().explore.single.id, '4711');
     });
+
+    test('setQuery(reload: false) saves the term without a second request',
+        () async {
+      repo.nextPages = [
+        ExplorePage(items: [_prop('101')], total: 1, limit: 24, offset: 0),
+        ExplorePage(items: [_prop('101')], total: 1, limit: 24, offset: 0),
+      ];
+      await notifier().loadExplore();
+      final before = repo.queries.length;
+
+      // Clearing the search box while also resetting the filters must not
+      // spend a request on the intermediate state.
+      notifier().setQuery('Puchong', reload: false);
+      expect(repo.queries.length, before);
+      expect(notifier().query, 'Puchong');
+
+      // The single follow-up criteria change carries the saved term.
+      notifier().setExploreCriteria(notifier().exploreCriteria);
+      await Future<void>.delayed(Duration.zero);
+      expect(repo.queries.length, before + 1);
+      expect(repo.lastQuery?.query, 'Puchong');
+    });
   });
 
   group('ApiExploreRepository contract', () {

@@ -38,6 +38,9 @@ from sitewise.ml.shap_explainer import ShapExplainer
 _CATEGORY_RULES: tuple[tuple[str, str], ...] = (
     ("pop_", "population"),
     ("landscan_", "population"),
+    # Walk-reachable population is an accessibility measure in the approved
+    # baseline_47 grouping (7/14/13/3/10), not a catchment population figure.
+    ("worldpop_walk_reachable_", "accessibility"),
     ("worldpop_", "population"),
     ("office_pois_", "demand_generators"),
     ("schools_count_", "demand_generators"),
@@ -247,6 +250,9 @@ class ExplanationService:
             "additivity_ok": True,
             "background_size": explained.get("background_size"),
             "contributions": contributions,
+            # The exact resolved values the contributions were computed from,
+            # so a read-only consumer never pairs them with re-measured data.
+            "values": dict(bundle.values),
             "groups": group_contributions(contributions),
             "strongest_negative": [
                 {"feature": name, "contribution": value} for name, value in ranked[:5]

@@ -664,8 +664,30 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('Find a location'), findsOneWidget);
 
-      // Open the first real repository listing and enter the assessment.
-      await tester.tap(find.byType(MobilePropertyCard).first);
+      // The 500 m cluster rule ("3+ nearby · 500m") defaults ON in live
+      // mode and OFF in demo (the sparse bundled fixture has no qualifying
+      // clusters). If it IS on and nothing qualifies, the honest empty
+      // state offers the escape hatch — exercise it before opening a
+      // listing so both paths of the default filter stay covered.
+      final showAll = find.text('Show all properties');
+      if (tester.any(showAll)) {
+        // The empty state is scrollable; the action can sit outside the
+        // hittable viewport on the test surface.
+        await tester.ensureVisible(showAll);
+        await tester.pumpAndSettle();
+        await tester.tap(
+          find.ancestor(of: showAll, matching: find.byType(ElevatedButton)),
+        );
+        await tester.pumpAndSettle();
+      }
+      // The Listing header (heading + search + filter tiles) is tall enough
+      // that the first result card starts below the fold on a phone-sized
+      // surface, so bring it on screen the way a real user would before
+      // tapping. Explore is a CustomScrollView, not a ListView.
+      final firstCard = find.byType(MobilePropertyCard).first;
+      await tester.ensureVisible(firstCard);
+      await tester.pumpAndSettle();
+      await tester.tap(firstCard);
       await tester.pumpAndSettle();
       final assessButton = find.text('Assess this property');
       await tester.dragUntilVisible(

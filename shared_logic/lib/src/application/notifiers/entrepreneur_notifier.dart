@@ -108,7 +108,10 @@ class EntrepreneurNotifier extends Notifier<EntrepreneurState> {
   Future<void> loadAnalysis(String propertyId) =>
       _controller.loadAnalysis(propertyId);
 
-  void setQuery(String value) => _controller.setQuery(value);
+  /// Pass [reload]: false when a criteria change will immediately follow, so
+  /// the pair produces one request instead of two.
+  void setQuery(String value, {bool reload = true}) =>
+      _controller.setQuery(value, reload: reload);
 
   void setFilter(String value) => _controller.setFilter(value);
 

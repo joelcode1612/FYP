@@ -569,6 +569,11 @@ class SitewiseApp extends StatelessComponent {
           // `?stage=` optionally opens one of the two in-page stage panels.
           // The Flutter mobile assessment is a separate data-collection
           // workflow and never routes here.
+          //
+          // This is the backward-compatible deep link: it still opens the
+          // workspace for one property. `/entrepreneur/assessments` is the
+          // canonical route now (it opens Stage 1 when no property is given),
+          // so this one keeps working for old bookmarks and shared links.
           Route(
             path: '/entrepreneur/assessment',
             builder: (context, state) => _page(
@@ -582,14 +587,33 @@ class SitewiseApp extends StatelessComponent {
                   'to your account as you go.',
             ),
           ),
+          // The assessment history lives under the workspace route. It is
+          // registered before the workspace itself so the history path is
+          // always matched by its own route.
           Route(
-            path: '/entrepreneur/assessments',
+            path: '/entrepreneur/assessments/history',
             builder: (context, state) => _page(
               const e_assessment_history.AssessmentHistoryPage(),
               title: 'Assessment history — Sitewise',
               description:
                   'Every location assessment saved to your account, with its '
                   'real progress and report availability.',
+            ),
+          ),
+          // The main Assessments destination: the five-stage workspace. With
+          // no `?id=` it opens Stage 1 — the saved-property selector — and
+          // never starts an assessment on its own.
+          Route(
+            path: '/entrepreneur/assessments',
+            builder: (context, state) => _page(
+              e_assessment.AssessmentWorkspacePage(
+                propertyId: state.queryParams['id'] ?? '',
+                stage: state.queryParams['stage'] ?? '',
+              ),
+              title: 'Location Assessment Workspace — Sitewise',
+              description:
+                  'A five-stage assessment of one commercial property, saved '
+                  'to your account as you go.',
             ),
           ),
           Route(

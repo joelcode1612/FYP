@@ -150,6 +150,38 @@ _LIST_COLUMNS = """
 
 _PUBLISHED_FILTER = "p.is_published AND p.verification_status = 'approved'"
 
+# ---------------------------------------------------------------------------
+# Nearby-property contract (Explore default filter) — ONE definition.
+#
+# This counts OTHER ELIGIBLE COMMERCIAL LISTINGS within a geodesic radius of
+# each row. It is deliberately a DIFFERENT dataset from the F&B competitor
+# counts (`competitor_count_500m`), which aggregate fnb_a research outlets and
+# must never be shown as nearby-property numbers.
+#
+#   * neighbours   : approved + published `fyp.rental_properties` rows with a
+#                    usable generated geometry; each counted once (`o.id <> p.id`).
+#   * radius       : geodesic metres; a padded degree `&&` pre-filter keeps the
+#                    GIST index on `fyp.rental_properties.geom` usable, then
+#                    `ST_DWithin(...::geography)` decides (inclusive at the
+#                    boundary, like every other radius in this repository).
+#   * shape        : one correlated LATERAL per candidate row inside a single
+#                    statement — set-based SQL, no per-card application queries.
+#                    The base WHERE narrows candidates first, so rows excluded
+#                    by other filters never pay for a proximity scan.
+# ---------------------------------------------------------------------------
+_NEARBY_LATERAL = """
+LEFT JOIN LATERAL (
+    SELECT count(*)::int AS nearby_count
+    FROM fyp.rental_properties o
+    WHERE o.id <> p.id
+      AND o.is_published AND o.verification_status = 'approved'
+      AND o.geom IS NOT NULL
+      AND o.geom && ST_Expand(p.geom, :nearby_pad)
+      AND ST_DWithin(o.geom::geography, p.geom::geography, :nearby_radius_m)
+) nearby ON TRUE"""
+
+_NEARBY_COUNT_COLUMN = ", nearby.nearby_count AS nearby_property_count"
+
 
 def _meters_to_degrees(meters: float) -> float:
     """Meter→degree conversion for geometry-space radius predicates.
@@ -174,6 +206,17 @@ class FypPropertyRepository:
         One query, one lateral join per row — no N+1. Competitor/population
         figures come from the precomputed ``property_geospatial_features``
         row when one exists (``null`` otherwise: never a fabricated 0).
+
+        Optional spatial filter (``min_nearby_properties`` +
+        ``nearby_radius_m``): keeps only listings with at least that many
+        OTHER approved + published listings within the geodesic radius. The
+        filter applies before ``LIMIT``/``OFFSET`` and the ``total`` in
+        ``meta`` counts the same filtered set, so pagination stays consistent.
+        Rows without usable coordinates can never satisfy the spatial filter
+        (a NULL generated geometry makes the lateral count 0) and are excluded
+        rather than given invented coordinates. When the filter is absent the
+        lateral is not built at all and the response is byte-compatible with
+        previous consumers.
         """
         where = ["p.is_published", "p.verification_status = 'approved'"]
         args: dict[str, Any] = {}
@@ -207,13 +250,33 @@ class FypPropertyRepository:
         if params.get("fnb_suitable"):
             where.append("p.is_fnb_suitable = 1")
 
+        # Spatial filter: bound values only, radius validated against the
+        # same whitelist as every other radius endpoint in this repository.
+        nearby_min = params.get("min_nearby_properties")
+        nearby_active = nearby_min is not None
+        nearby_radius_m = int(params.get("nearby_radius_m") or 500)
+        nearby_lateral = ""
+        select_columns = _LIST_COLUMNS
+        if nearby_active:
+            self._validate_radius(nearby_radius_m)
+            nearby_lateral = _NEARBY_LATERAL
+            select_columns += _NEARBY_COUNT_COLUMN
+            args["min_nearby_properties"] = int(nearby_min)
+            args["nearby_radius_m"] = float(nearby_radius_m)
+            # Padded degree pre-filter window (2% slack) for the GIST index.
+            args["nearby_pad"] = nearby_radius_m * 1.02 / _M_PER_DEGREE
+            where.append("nearby.nearby_count >= :min_nearby_properties")
+
         order = _SORTS.get(params.get("sort") or "newest", _SORTS["newest"])
         where_sql = " AND ".join(where)
         limit = int(params.get("limit") or 24)
         offset = int(params.get("offset") or 0)
 
         total = self.session.execute(
-            text(f"SELECT count(*) FROM fyp.rental_properties p WHERE {where_sql}"),
+            text(
+                f"SELECT count(*) FROM fyp.rental_properties p "
+                f"{nearby_lateral} WHERE {where_sql}"
+            ),
             args,
         ).scalar_one()
 
@@ -221,8 +284,9 @@ class FypPropertyRepository:
             self.session.execute(
                 text(
                     f"""
-                    SELECT {_LIST_COLUMNS}
+                    SELECT {select_columns}
                     FROM fyp.rental_properties p
+                    {nearby_lateral}
                     LEFT JOIN LATERAL (
                         SELECT url FROM fyp.property_photos ph
                         WHERE ph.property_id = p.id
@@ -243,9 +307,13 @@ class FypPropertyRepository:
             .mappings()
             .all()
         )
+        meta: dict[str, Any] = {"total": int(total), "limit": limit, "offset": offset}
+        if nearby_active:
+            meta["min_nearby_properties"] = int(nearby_min)
+            meta["nearby_radius_m"] = nearby_radius_m
         return {
             "data": [dict(row) for row in rows],
-            "meta": {"total": int(total), "limit": limit, "offset": offset},
+            "meta": meta,
         }
 
     def get_published(self, property_id: int) -> dict | None:
@@ -883,6 +951,295 @@ class FypPropertyRepository:
             {"owner": str(owner_user_id)},
         ).mappings().all()
         return [dict(r) for r in rows]
+
+    # ------------------------------------------------- owner draft lifecycle
+
+    #: Columns the Add-Property wizard may write. Everything else is decided
+    #: administratively (verification_status / is_published) or derived (psf,
+    #: geom is a GENERATED column and must never be written).
+    _OWNER_WRITABLE = (
+        "name",
+        "property_type",
+        "description",
+        "address",
+        "city",
+        "state",
+        "latitude",
+        "longitude",
+        "rental_price",
+        "size_sqft",
+        "availability",
+        "floor_level",
+        "frontage_ft",
+        "has_parking",
+        "is_fnb_suitable",
+    )
+
+    _LISTING_SELECT = (
+        "SELECT id, owner_user_id, name, property_type, description, address, "
+        "city, state, latitude, longitude, rental_price, size_sqft, psf, "
+        "availability, floor_level, frontage_ft, has_parking, is_fnb_suitable, "
+        "verification_status, rejection_reason, is_published, created_at, "
+        "updated_at "
+        "FROM fyp.rental_properties"
+    )
+
+    def owner_listing(self, property_id: int) -> dict | None:
+        """One listing row (any status) — callers enforce ownership."""
+        row = self.session.execute(
+            text(f"{self._LISTING_SELECT} WHERE id = :pid"),
+            {"pid": property_id},
+        ).mappings().first()
+        return dict(row) if row else None
+
+    @staticmethod
+    def _numeric(value) -> float | None:
+        """The wizard collects floor_level/frontage as text; the columns are
+        numeric. Unparseable text degrades to NULL instead of an insert error."""
+        if value is None or value == "":
+            return None
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return None
+
+    def create_owner_draft(self, *, owner_user_id, payload: dict) -> dict:
+        """Persist a NEW draft listing (``verification_status='draft'``).
+
+        Drafts are minimally validated: only ``name`` is required (the column
+        is NOT NULL); everything else may arrive empty — an incomplete draft
+        is the point. Drafts never enter the admin queue: ``is_published``
+        stays false and the verification workflow only starts on an explicit
+        submit.
+        """
+        from sitewise.core.exceptions import ConflictError
+
+        name = (payload.get("name") or "").strip()
+        if not name:
+            raise ConflictError("A draft property needs at least a name.")
+        row = self.session.execute(
+            text(
+                """
+                INSERT INTO fyp.rental_properties (
+                    owner_user_id, name, property_type, description, address,
+                    city, state, latitude, longitude, rental_price,
+                    size_sqft, availability, floor_level, frontage_ft,
+                    has_parking, is_fnb_suitable,
+                    verification_status, is_published
+                ) VALUES (
+                    :owner_user_id, :name,
+                    COALESCE(NULLIF(:property_type, ''), 'Shop'),
+                    NULLIF(:description, ''),
+                    NULLIF(:address, ''), NULLIF(:city, ''), NULLIF(:state, ''),
+                    :latitude, :longitude, :rental_price, :size_sqft,
+                    NULLIF(:availability, ''), :floor_level, :frontage_ft,
+                    :has_parking, :is_fnb_suitable,
+                    'draft', false
+                )
+                RETURNING id
+                """
+            ),
+            {
+                "owner_user_id": str(owner_user_id),
+                "name": name[:160],
+                "property_type": (payload.get("property_type") or "").strip()[:60],
+                "description": payload.get("description"),
+                "address": payload.get("address"),
+                "city": payload.get("city"),
+                "state": payload.get("state"),
+                "latitude": payload.get("latitude"),
+                "longitude": payload.get("longitude"),
+                "rental_price": payload.get("rental_price"),
+                "size_sqft": payload.get("size_sqft"),
+                "availability": (payload.get("availability") or "").strip()[:60],
+                "floor_level": self._numeric(payload.get("floor_level")),
+                "frontage_ft": self._numeric(payload.get("frontage_ft")),
+                "has_parking": 1 if payload.get("has_parking") else 0,
+                "is_fnb_suitable": 1 if payload.get("is_fnb_suitable") else 0,
+            },
+        )
+        new_id = row.scalar_one()
+        self.session.commit()
+        return self.owner_listing(int(new_id))  # type: ignore[return-value]
+
+    def update_owner_listing(self, property_id: int, fields: dict) -> dict | None:
+        """Whitelisted partial update of one owned listing.
+
+        ``psf`` is recomputed whenever price and size are both known, matching
+        the create path. Ownership and state-transition rules live in the API
+        layer; this method only writes.
+        """
+        if not fields:
+            return self.owner_listing(property_id)
+        sets: list[str] = []
+        params: dict[str, Any] = {"pid": property_id}
+        for column in self._OWNER_WRITABLE:
+            if column not in fields:
+                continue
+            value = fields[column]
+            params[column] = value
+            if column in ("address", "city", "state", "availability",
+                          "property_type", "description", "name"):
+                sets.append(f"{column} = NULLIF(:{column}, '')")
+            elif column in ("floor_level", "frontage_ft"):
+                # Numeric columns fed by free-text wizard fields.
+                sets.append(f"{column} = :{column}")
+                params[column] = self._numeric(value)
+            else:
+                sets.append(f"{column} = :{column}")
+        if "rental_price" in fields or "size_sqft" in fields:
+            current = self.owner_listing(property_id) or {}
+            price = fields.get("rental_price", current.get("rental_price"))
+            size = fields.get("size_sqft", current.get("size_sqft"))
+            if price and size and float(size) > 0:
+                sets.append("psf = :psf")
+                params["psf"] = round(float(price) / float(size), 2)
+        if not sets:
+            return self.owner_listing(property_id)
+        sets.append("updated_at = now()")
+        row = self.session.execute(
+            text(
+                f"UPDATE fyp.rental_properties SET {', '.join(sets)} "
+                "WHERE id = :pid RETURNING id"
+            ),
+            params,
+        )
+        if row.scalar_one_or_none() is None:
+            self.session.rollback()
+            return None
+        self.session.commit()
+        return self.owner_listing(property_id)
+
+    def set_listing_verification_status(
+        self,
+        property_id: int,
+        status: str,
+        rejection_reason: str | None = None,
+    ) -> None:
+        """Mirror a lifecycle event onto the listing row.
+
+        Called INSIDE the caller's transaction (no commit here) so the
+        verification tables and the listing row land atomically.
+        """
+        self.session.execute(
+            text(
+                "UPDATE fyp.rental_properties "
+                "SET verification_status = :status, "
+                "rejection_reason = :reason, updated_at = now() "
+                "WHERE id = :pid"
+            ),
+            {"pid": property_id, "status": status, "reason": rejection_reason},
+        )
+
+    # ------------------------------------------------- property photos
+
+    _PHOTO_SELECT = (
+        "SELECT id, property_id, url, caption, is_primary, created_at "
+        "FROM fyp.property_photos"
+    )
+
+    def listing_photos(self, property_id: int) -> list[dict]:
+        """Display photos of one listing, primary first."""
+        rows = self.session.execute(
+            text(
+                f"{self._PHOTO_SELECT} WHERE property_id = :pid "
+                "ORDER BY is_primary DESC, id"
+            ),
+            {"pid": property_id},
+        ).mappings().all()
+        return [dict(r) for r in rows]
+
+    def add_listing_photo(
+        self, property_id: int, url: str, caption: str, is_primary: bool
+    ) -> dict:
+        """Attach one uploaded photo. The FIRST photo of a listing always
+        becomes primary; an explicit primary request demotes the others."""
+        photo_count = self.session.execute(
+            text(
+                "SELECT count(*) FROM fyp.property_photos WHERE property_id = :pid"
+            ),
+            {"pid": property_id},
+        ).scalar_one()
+        make_primary = is_primary or photo_count == 0
+        if make_primary:
+            self.session.execute(
+                text(
+                    "UPDATE fyp.property_photos SET is_primary = false "
+                    "WHERE property_id = :pid"
+                ),
+                {"pid": property_id},
+            )
+        row = self.session.execute(
+            text(
+                "INSERT INTO fyp.property_photos "
+                "(property_id, url, caption, is_primary) "
+                "VALUES (:pid, :url, :caption, :primary) "
+                "RETURNING id, property_id, url, caption, is_primary, created_at"
+            ),
+            {
+                "pid": property_id,
+                "url": url,
+                "caption": caption or "",
+                "primary": make_primary,
+            },
+        ).mappings().one()
+        self.session.commit()
+        return dict(row)
+
+    def delete_listing_photo(
+        self, property_id: int, photo_id: int
+    ) -> dict | None:
+        """Remove one photo row; returns the deleted row (for object
+        cleanup) or None. Promotes the oldest remaining photo when the
+        primary was removed."""
+        row = self.session.execute(
+            text(
+                f"{self._PHOTO_SELECT} WHERE property_id = :pid AND id = :phid "
+                "FOR UPDATE"
+            ),
+            {"pid": property_id, "phid": photo_id},
+        ).mappings().first()
+        if row is None:
+            self.session.rollback()
+            return None
+        self.session.execute(
+            text("DELETE FROM fyp.property_photos WHERE id = :phid"),
+            {"phid": photo_id},
+        )
+        if row["is_primary"]:
+            self.session.execute(
+                text(
+                    "UPDATE fyp.property_photos SET is_primary = true "
+                    "WHERE id = (SELECT id FROM fyp.property_photos "
+                    "WHERE property_id = :pid ORDER BY id LIMIT 1)"
+                ),
+                {"pid": property_id},
+            )
+        self.session.commit()
+        return dict(row)
+
+    def set_primary_listing_photo(self, property_id: int, photo_id: int) -> bool:
+        """Make one photo primary; returns False when it is not this
+        listing's photo."""
+        owned = self.session.execute(
+            text(
+                "SELECT count(*) FROM fyp.property_photos "
+                "WHERE id = :phid AND property_id = :pid"
+            ),
+            {"pid": property_id, "phid": photo_id},
+        ).scalar_one()
+        if not owned:
+            self.session.rollback()
+            return False
+        self.session.execute(
+            text(
+                "UPDATE fyp.property_photos SET is_primary = "
+                "(id = :phid) WHERE property_id = :pid"
+            ),
+            {"pid": property_id, "phid": photo_id},
+        )
+        self.session.commit()
+        return True
 
     # ------------------------------------------------- catalogue integration
 

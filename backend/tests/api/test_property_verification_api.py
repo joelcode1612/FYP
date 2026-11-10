@@ -17,7 +17,6 @@ from sqlalchemy import text
 from sqlmodel import Session
 
 from sitewise.core.config import settings
-from sitewise.db.models.rental_property import RentalProperty
 from sitewise.db.session import engine
 from sitewise.repositories.user_repository import UserRepository
 
@@ -31,6 +30,52 @@ def auth(token):
 PDF_BYTES = b"%PDF-1.4\n%test-document\n"
 
 
+def insert_listing(
+    session: Session,
+    owner_uuid: str,
+    *,
+    name: str,
+    address: str,
+    city: str,
+    state: str,
+    property_type: str = "Shop",
+    complete: bool = True,
+) -> int:
+    """Insert one owner listing in the canonical table. ``complete=True``
+    fills every field final submission validates; ``complete=False`` leaves
+    an intentionally sparse draft."""
+    row = session.execute(
+        text(
+            """
+            INSERT INTO fyp.rental_properties (
+                owner_user_id, name, property_type, address, city, state,
+                latitude, longitude, rental_price, size_sqft, availability,
+                verification_status, is_published
+            ) VALUES (
+                :owner, :name, :ptype, :address, :city, :state,
+                :lat, :lon, :price, :size, :availability,
+                'draft', false
+            ) RETURNING id
+            """
+        ),
+        {
+            "owner": owner_uuid,
+            "name": name,
+            "ptype": property_type,
+            "address": address,
+            "city": city,
+            "state": state,
+            "lat": 3.0722 if complete else None,
+            "lon": 101.6065 if complete else None,
+            "price": 4500 if complete else None,
+            "size": 1680 if complete else None,
+            "availability": "Immediate" if complete else None,
+        },
+    )
+    session.commit()
+    return int(row.scalar_one())
+
+
 @pytest.fixture(autouse=True)
 def private_storage(monkeypatch, tmp_path):
     monkeypatch.setattr(settings, "verification_storage_dir", str(tmp_path / "docs"))
@@ -39,7 +84,7 @@ def private_storage(monkeypatch, tmp_path):
 
 @pytest.fixture(autouse=True)
 def cleanup_verifications(cleanup_users):
-    """Verification rows before their property/user rows; order pinned by
+    """Verification rows before their property rows; order pinned by
     requesting ``cleanup_users`` (users are removed after this fixture)."""
     props: list[int] = []
     yield props
@@ -59,8 +104,10 @@ def cleanup_verifications(cleanup_users):
             else:
                 session.execute(text(f"DELETE FROM {table}"))
         if props:
+            # Photos cascade on delete; the listing rows themselves are
+            # owner-submitted test rows.
             session.execute(
-                text("DELETE FROM property WHERE property_id = ANY(:ids)"),
+                text("DELETE FROM fyp.rental_properties WHERE id = ANY(:ids)"),
                 {"ids": props},
             )
         session.commit()
@@ -68,7 +115,9 @@ def cleanup_verifications(cleanup_users):
 
 @pytest.fixture()
 def owner(client, cleanup_users, cleanup_verifications):
-    """A provisioned entrepreneur plus one owned legacy property row."""
+    """A provisioned entrepreneur plus one owned rental listing (the
+    canonical fyp.rental_properties identity the verification workflow is
+    bound to)."""
     sub = str(uuid.uuid4())
     token = make_token(
         sub=sub,
@@ -78,18 +127,16 @@ def owner(client, cleanup_users, cleanup_verifications):
     assert client.get("/api/v1/auth/me", headers=auth(token)).status_code == 200
     register_user_id(cleanup_users, uuid.UUID(sub))
     with Session(engine) as session:
-        prop = RentalProperty(
-            user_id=uuid.UUID(sub),
-            title="Corner shoplot, Section 13",
-            normalized_address="Jalan 13/1, Shah Alam",
-            property_type_normalized="Shop lot",
-            price=4500,
+        property_id = insert_listing(
+            session,
+            sub,
+            name="Corner shoplot, Section 13",
+            address="Jalan 13/1, Shah Alam",
+            city="Shah Alam",
+            state="Selangor",
+            property_type="Shop lot",
         )
-        session.add(prop)
-        session.commit()
-        session.refresh(prop)
-        cleanup_verifications.append(prop.property_id)
-        property_id = prop.property_id
+        cleanup_verifications.append(property_id)
     return {"token": token, "sub": sub, "property_id": property_id}
 
 
@@ -300,17 +347,16 @@ def test_admin_queue_filters_sort_and_paginate(
     assert client.get("/api/v1/auth/me", headers=auth(other_token)).status_code == 200
     register_user_id(cleanup_users, uuid.UUID(other_sub))
     with Session(engine) as session:
-        prop2 = RentalProperty(
-            user_id=uuid.UUID(other_sub),
-            title="Bistro unit, JB",
-            normalized_address="Jalan Trus, Johor Bahru",
-            property_type_normalized="Retail space",
+        prop2_id = insert_listing(
+            session,
+            other_sub,
+            name="Bistro unit, JB",
+            address="Jalan Trus, Johor Bahru",
+            city="Johor Bahru",
+            state="Johor",
+            property_type="Retail space",
         )
-        session.add(prop2)
-        session.commit()
-        session.refresh(prop2)
-        cleanup_verifications.append(prop2.property_id)
-        prop2_id = prop2.property_id
+        cleanup_verifications.append(prop2_id)
     upload_ownership_doc(client, owner)
     client.post(
         f"/api/v1/properties/{owner['property_id']}/verification/submit",
@@ -526,11 +572,15 @@ def test_concurrent_decisions_serialize_not_overwrite(client, owner, admin):
             json={"dimension": "listing"},
         )
 
-    worker = Thread(target=decision, daemon=True)
-    worker.start()
-    worker.join(timeout=1.5)
-    assert worker.is_alive(), "second decision did not wait for the row lock"
-    blocker_session.commit()  # release; no changes written by the holder
+    try:
+        worker = Thread(target=decision, daemon=True)
+        worker.start()
+        worker.join(timeout=1.5)
+        assert worker.is_alive(), "second decision did not wait for the row lock"
+    finally:
+        # ALWAYS release the lock: a failure above must never leave the
+        # blocker's transaction open, or fixture cleanup deadlocks.
+        blocker_session.commit()
     worker.join(timeout=5)
     assert not worker.is_alive()
     assert result["r"].status_code == 200

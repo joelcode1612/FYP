@@ -25,15 +25,13 @@
 <body>
   <div class="layout">
     <div class="toolbar"><div><strong>Property location</strong><span id="location-id"></span></div>
-      <div class="tabs" role="group" aria-label="Catchment radius">
-        <button type="button" data-radius="500" aria-pressed="false">500 m</button>
-        <button type="button" data-radius="1000" aria-pressed="false">1 km</button>
-        <button type="button" data-radius="both" aria-pressed="true">Both</button>
-      </div>
+      <!-- Radius tabs are built by property_leaflet_map.js: 500 m + 1 km "Both"
+           (legacy) unless ?radius selects the single-radius Full Analysis mode. -->
+      <div class="tabs" id="radius-tabs" role="group" aria-label="Catchment radius"></div>
     </div>
     <div class="notice" id="map-alert" hidden></div>
     <div id="map" role="region" aria-label="Leaflet interactive property map with catchment circles"></div>
-    <div class="footer"><div><span class="key a"></span>Selected unit &nbsp; <span class="key b"></span>0–500 m &nbsp; <span class="key c"></span>500 m–1 km</div><span id="nearby-label">Loading reference properties…</span></div>
+    <div class="footer"><div id="map-legend"><span class="key a"></span>Selected unit &nbsp; <span class="key b"></span>0–500 m &nbsp; <span class="key c"></span>500 m–1 km</div><span id="nearby-label">Loading reference properties…</span></div>
   </div>
   <script src="/vendor/leaflet/leaflet.js"></script>
   <script defer src="/map-config.js"></script>

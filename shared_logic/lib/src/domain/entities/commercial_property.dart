@@ -106,6 +106,13 @@ class CommercialProperty {
   /// the geospatial features row is absent.
   final double? accessibilityScore;
 
+  /// Real number of OTHER approved+published commercial listings within the
+  /// explore radius (geodesic PostGIS count, `nearby_property_count`). Null
+  /// when the request did not ask for the nearby filter — deliberately
+  /// separate from [competitorCount500m], which is an F&B research aggregate
+  /// and must never be shown as a nearby-property number.
+  final int? nearbyPropertyCount;
+
   /// True only when [suitabilityScore] carries an authoritative research
   /// value. False means "no score exists" — UI must hide the badge instead
   /// of showing a fabricated 0.
@@ -151,6 +158,7 @@ class CommercialProperty {
     this.population500m,
     this.population1km,
     this.accessibilityScore,
+    this.nearbyPropertyCount,
   }) : rentalMaxRm = rentalMaxRm ?? rentalRm;
 
   bool get hasRentalRange => rentalMaxRm > rentalRm;
@@ -222,5 +230,6 @@ class CommercialProperty {
     population500m: population500m,
     population1km: population1km,
     accessibilityScore: accessibilityScore,
+    nearbyPropertyCount: nearbyPropertyCount,
   );
 }

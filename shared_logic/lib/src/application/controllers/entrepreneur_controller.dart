@@ -312,14 +312,18 @@ class EntrepreneurController extends StateController<EntrepreneurState> {
   /// matters: the filter reads `state.query`, so the value must be visible
   /// before [loadExplore] runs. The server criteria object is kept in sync
   /// so the next page request carries the same term.
-  void setQuery(String value) {
+  ///
+  /// [reload] is false when the caller is about to change the criteria too:
+  /// saving the query without searching lets a single [setExploreCriteria]
+  /// perform one request instead of two.
+  void setQuery(String value, {bool reload = true}) {
     setState(
       state.copyWith(
         query: value,
         exploreCriteria: state.exploreCriteria.copyWith(query: value),
       ),
     );
-    loadExplore();
+    if (reload) loadExplore();
   }
 
   /// Replaces the server-driven search criteria (filters, sort, page size)

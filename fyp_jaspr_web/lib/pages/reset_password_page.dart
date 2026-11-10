@@ -206,7 +206,7 @@ class _ResetState extends State<ResetPasswordPage> {
               [
                 div(classes: 'rst-brand', [
                   img(
-                    src: 'assets/sitewise-mark-64.png',
+                    src: '/assets/sitewise-mark-64.png',
                     alt: 'Sitewise',
                     width: 30,
                     height: 30,

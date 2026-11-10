@@ -18,7 +18,7 @@ import '../../presentation/mobile/entrepreneur/pages/entrepreneur_recommendation
 import '../../presentation/mobile/entrepreneur/pages/entrepreneur_report_mobile_page.dart';
 import '../../presentation/mobile/entrepreneur/pages/entrepreneur_saved_mobile_page.dart';
 import '../../presentation/mobile/entrepreneur/pages/entrepreneur_tour_mobile_page.dart';
-import '../../presentation/mobile/entrepreneur/pages/sitewise_add_property_mobile_preview.dart';
+import '../../presentation/mobile/entrepreneur/pages/sitewise_add_property_mobile_page.dart';
 import '../../presentation/shared/capture/panorama_capture_page.dart';
 import '../../presentation/shared/pages/not_found_mobile_page.dart';
 import '../../presentation/shared/tour/tour_preview_mobile_page.dart';
@@ -124,7 +124,10 @@ abstract final class AppRoutes {
       ),
       '/entrepreneur/add-property' => (
         RouteAccess.workspace,
-        () => const SitewiseAddPropertyMobilePreview(),
+        () => SitewiseAddPropertyMobilePage(
+          // Resume a saved draft: arguments = fyp.rental_properties id.
+          initialDraftId: settings.arguments as String?,
+        ),
       ),
       '/entrepreneur/preferences' => (
         RouteAccess.workspace,

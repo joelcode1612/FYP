@@ -45,7 +45,7 @@ Component authBrandMark() => Component.element(
   tag: 'img',
   classes: 'auth-brand-mark-img',
   attributes: {
-    'src': 'assets/sitewise-mark-64.png',
+    'src': '/assets/sitewise-mark-64.png',
     'alt': 'Sitewise',
     'width': '14',
     'height': '14',

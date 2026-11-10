@@ -3,11 +3,13 @@ import 'package:flutter/material.dart';
 import 'package:shared_logic/shared_logic.dart';
 
 import '../../../../application/services/service_locator.dart';
+import '../../../../core/config/mobile_config.dart';
 import '../../../../core/theme/sitewise_m3.dart';
 import '../../../../core/theme/sitewise_theme.dart';
 import '../../shell/entrepreneur_tab_scope.dart';
 import '../../shell/mobile_app_shell.dart';
 import '../../widgets/m3_kit.dart';
+import '../../../shared/widgets/sitewise_bottom_sheet.dart';
 
 /// **Spaces** — the fourth tab of the consolidated five-tab navigation.
 ///
@@ -65,7 +67,7 @@ class EntrepreneurSpacesMobilePage extends ConsumerWidget {
           ),
           const SizedBox(height: 16),
           M3PrimaryButton(
-            label: 'Preview Add Property',
+            label: 'Add property',
             onTap: () => Navigator.of(context)
                 .pushNamed('/entrepreneur/add-property'),
           ),
@@ -78,6 +80,7 @@ class EntrepreneurSpacesMobilePage extends ConsumerWidget {
             icon: const Icon(Icons.search_rounded),
             label: const Text('Explore properties'),
           ),
+          const _OwnerListingsSection(),
           M3SectionRow(
             title: 'Property records',
             overline: '${appState.saved.length} SHORTLISTED',
@@ -141,6 +144,174 @@ class EntrepreneurSpacesMobilePage extends ConsumerWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// **My property listings** — the signed-in owner's REAL PostgreSQL records
+/// (`fyp.rental_properties` via `/properties/listings/mine`), with the
+/// verification lifecycle each one is in. Drafts and rejected/corrections
+/// records resume in the Add Property flow; pending/approved records open a
+/// read-only status sheet (the backend blocks edits awaiting review anyway).
+class _OwnerListingsSection extends StatelessWidget {
+  const _OwnerListingsSection();
+
+  static String _statusLabel(String wire) => switch (wire) {
+        'draft' => 'Draft',
+        'pending' => 'Pending verification',
+        'approved' => 'Approved',
+        'rejected' => 'Rejected',
+        _ => wire,
+      };
+
+  static Color _statusColor(String wire) => switch (wire) {
+        'draft' => const Color(0xFF58677D),
+        'pending' => const Color(0xFF965410),
+        'approved' => const Color(0xFF087443),
+        'rejected' => const Color(0xFFB91C1C),
+        _ => const Color(0xFF58677D),
+      };
+
+  void _openListing(BuildContext context, OwnerListing listing) {
+    if (listing.locallyEditable) {
+      Navigator.of(context)
+          .pushNamed('/entrepreneur/add-property', arguments: listing.id);
+      return;
+    }
+    showSitewiseBottomSheet<void>(
+      context,
+      title: listing.name,
+      builder: (_) => Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text('Status: ${_statusLabel(listing.verificationStatus)}'),
+          const SizedBox(height: 4),
+          Text(
+            '${listing.propertyType ?? 'Property'} · '
+            '${listing.rentalPrice == null ? 'Rent on request' : 'RM ${listing.rentalPrice!.toStringAsFixed(0)}'}',
+          ),
+          if (listing.rejectionReason != null) ...[
+            const SizedBox(height: 8),
+            Text(
+              'Administrator note: ${listing.rejectionReason}',
+              style: const TextStyle(color: Color(0xFFB91C1C)),
+            ),
+          ],
+          const SizedBox(height: 12),
+          const Text(
+            'This record is awaiting or has passed review; its details can '
+            'no longer be edited.',
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!MobileConfig.usesLiveApi) {
+      // Demo builds hold no owner records; the section stays honest by
+      // not pretending otherwise.
+      return const SizedBox.shrink();
+    }
+    return FutureBuilder<List<OwnerListing>>(
+      future: ServiceLocator.ownerListings.myListings(),
+      builder: (context, snap) {
+        if (snap.connectionState != ConnectionState.done) {
+          return const Padding(
+            padding: EdgeInsets.only(top: 20),
+            child: Center(child: CircularProgressIndicator()),
+          );
+        }
+        final listings = snap.data ?? const <OwnerListing>[];
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            M3SectionRow(
+              title: 'My property listings',
+              overline: '${listings.length} RECORD(S)',
+            ),
+            if (snap.hasError)
+              const M3Banner(
+                icon: Icons.cloud_off_rounded,
+                text:
+                    'Saved listings could not load. Check the connection '
+                    'and try again later.',
+              )
+            else if (listings.isEmpty)
+              const M3EmptyState(
+                icon: Icons.house_outlined,
+                title: 'No property records yet',
+                message:
+                    'Saved drafts and submitted properties appear here '
+                    'with their verification status.',
+              )
+            else
+              for (final listing in listings) ...[
+                const SizedBox(height: 10),
+                M3Card(
+                  onTap: () => _openListing(context, listing),
+                  padding: const EdgeInsets.all(14),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              listing.name,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                fontFamily: kFontFamily,
+                                fontSize: 13,
+                                fontWeight: FontWeight.w800,
+                                color: SitewiseM3.rowTitle,
+                              ),
+                            ),
+                          ),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: _statusColor(listing.verificationStatus)
+                                  .withValues(alpha: .1),
+                              borderRadius: BorderRadius.circular(999),
+                            ),
+                            child: Text(
+                              _statusLabel(listing.verificationStatus),
+                              style: TextStyle(
+                                fontFamily: kFontFamily,
+                                fontSize: 10,
+                                fontWeight: FontWeight.w800,
+                                color:
+                                    _statusColor(listing.verificationStatus),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        listing.rejectionReason != null
+                            ? 'Corrections requested: ${listing.rejectionReason}'
+                            : (listing.address ?? 'No address recorded yet'),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontFamily: kFontFamily,
+                          fontSize: 11,
+                          color: SitewiseM3.rowDesc,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+          ],
+        );
+      },
     );
   }
 }
