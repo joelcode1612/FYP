@@ -26,12 +26,12 @@ PU association score          ``p.source_data->>'research_p_association_score'``
 Two deliberate data-integrity decisions:
 
 * ``fyp_features.property_population_spatial`` holds TWO rows per catalogue id
-  (``SITEWISE_U_PROPERTY`` and ``PROPERTY_UNLABELED``). A deterministic
-  ``ORDER BY source_record_type LIMIT 1`` LATERAL resolves exactly one, matching
-  the existing ``FypPropertyRepository.get_population`` contract. The naive
-  ``to_jsonb`` lookup used by the single-property feature resolver raises
-  "Ambiguous ... 2 records matched" on this deployment; that resolver is left
-  untouched and still fails closed.
+  (``SITEWISE_U_PROPERTY`` and ``PROPERTY_UNLABELED``). A deterministic LATERAL
+  resolves exactly one. ``SITEWISE_U_PROPERTY`` is preferred because it is
+  byte-identical to the PU model's training record for U-class properties
+  (verified against the supplied ``example_property_47.json`` for MD-00510);
+  the previous alphabetical ``ORDER BY source_record_type`` picked the
+  ``PROPERTY_UNLABELED`` twin, which differs in the 4th significant digit.
 * Only the published **research catalogue** (``sitewise_app.properties``, 955
   U-class rows) is read here. The 955 imported ``fyp.rental_properties`` rows
   are ``verification_status='pending'`` and are deliberately NOT mixed in:
@@ -95,7 +95,7 @@ LEFT JOIN LATERAL (
     SELECT q.*
     FROM fyp_features.property_population_spatial q
     WHERE q.source_record_id = p.id
-    ORDER BY q.source_record_type
+    ORDER BY (q.source_record_type <> 'SITEWISE_U_PROPERTY'), q.source_record_type
     LIMIT 1
 ) pop ON TRUE
 WHERE p.rental_rm IS NOT NULL AND p.rental_rm > 0

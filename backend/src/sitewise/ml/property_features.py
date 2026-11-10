@@ -89,11 +89,18 @@ def _one(rows: list[dict], context: str) -> dict | None:
     return rows[0] if rows else None
 
 
-def _doc(session: Any, table: str, col: str, val: Any) -> dict:
+def _doc(session: Any, table: str, col: str, val: Any, order: str | None = None) -> dict:
     # table and column are internal literals only, never request-provided SQL.
-    sql = f"SELECT to_jsonb(t) AS doc FROM {table} AS t WHERE t.{col} = :id LIMIT 2"
-    row = _one(_rows(session, sql, {"id": val}), table)
-    return dict(row["doc"] or {}) if row else {}
+    # ``order`` is an internal literal too. It exists ONLY for
+    # fyp_features.property_population_spatial, which holds TWO rows per
+    # catalogue id (PROPERTY_UNLABELED and SITEWISE_U_PROPERTY) recording the
+    # same measurements at different raster precision. Without a deterministic
+    # tie-break the resolver raised "Ambiguous ... 2 records matched" for every
+    # catalogue property and live feature resolution was impossible.
+    suffix = f"ORDER BY {order} " if order else ""
+    sql = f"SELECT to_jsonb(t) AS doc FROM {table} AS t WHERE t.{col} = :id {suffix}LIMIT 1"
+    rows = _rows(session, sql, {"id": val})
+    return dict(rows[0]["doc"] or {}) if rows else {}
 
 
 class PropertyFeatureRepository:
@@ -161,17 +168,32 @@ class PropertyFeatureRepository:
         worldpop: dict = {}
         flags: list[str] = []
         if catalogue_id:
+            # Prefer the SITEWISE_U_PROPERTY extract: for U-class catalogue
+            # properties it is byte-identical to the model's training record
+            # (verified against the supplied example_property_47.json for
+            # MD-00510: pop_ring_0_500m=1071.6, pop_total_1km=6430.9,
+            # pop_total_3km=108745.1), while the alphabetical-first
+            # PROPERTY_UNLABELED row differs in the 4th significant digit.
             worldpop = _doc(
                 self.session, "fyp_features.property_population_spatial",
                 "source_record_id", catalogue_id,
+                order="(source_record_type <> 'SITEWISE_U_PROPERTY'), source_record_type",
             )
             if worldpop:
                 type_value = str(worldpop.get("source_record_type") or "").lower()
-                if type_value not in {"u", "property", "unlabelled", "unlabeled", "commercial_property"}:
+                if type_value not in {
+                    "u", "property", "unlabelled", "unlabeled",
+                    "commercial_property", "property_unlabeled", "sitewise_u_property",
+                }:
                     flags.append(
                         f"Population source_record_type '{type_value}' requires manual verification"
                     )
                     worldpop = {}
+                else:
+                    flags.append(
+                        "Population row resolved deterministically: source_record_type="
+                        + str(worldpop.get("source_record_type"))
+                    )
                 if worldpop.get("population_quality_flag") not in {None, "", "OK", "COMPLETE"}:
                     flags.append("Population quality flag: " + str(worldpop["population_quality_flag"]))
         extra = sf.get("other_features") or {}
