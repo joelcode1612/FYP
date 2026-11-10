@@ -3,6 +3,8 @@ import 'package:jaspr_riverpod/jaspr_riverpod.dart';
 import 'package:jaspr_riverpod/misc.dart' show Override;
 import 'package:shared_logic/shared_logic.dart';
 
+import 'dev_auth_bypass.dart';
+
 import 'admin_api.dart';
 import 'api_property_repository.dart';
 import 'assessment_api.dart';
@@ -160,14 +162,22 @@ abstract final class AppLocator {
   /// selections stay cookie-persisted for everyone.
   static void persistUiState(AppState state) {
     UiStore.write((
-      saved: WebAuth.profile != null ? const {} : state.saved,
+      // Demo Mode has no server-side shortlist to defer to: keep the cookie
+      // selection, otherwise every toggle would be persisted as an empty set.
+      saved: isSignedIn ? const {} : state.saved,
       compared: state.compared,
       roles: Workspaces.granted,
     ));
   }
 
   /// Whether the current visitor holds a verified session.
-  static bool get isSignedIn => WebAuth.profile != null;
+  ///
+  /// Development Demo Mode deliberately reports **false**: the fake profile is
+  /// for rendering only (avatar, role label), so every page keeps using its
+  /// local/cookie state. Reporting true here would send unauthenticated writes
+  /// to endpoints that correctly reject them with 401.
+  static bool get isSignedIn =>
+      !devAuthBypassEnabled && WebAuth.profile != null;
 
   /// Persists one saved-shortlist toggle for a signed-in account.
   ///
@@ -207,7 +217,8 @@ abstract final class AppLocator {
   /// Delisted refs (the server's `unresolved`) are excluded so dead entries
   /// never re-enter the shortlist.
   static Future<void> mergeAccountSaved() async {
-    if (WebAuth.profile == null) return;
+    // Demo Mode has no account shortlist; skip the (unauthenticated) read.
+    if (!isSignedIn) return;
     try {
       final refs = await savedPropertiesRepo
           .savedRefs()

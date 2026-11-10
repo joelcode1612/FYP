@@ -30,6 +30,7 @@ import 'package:http/io_client.dart';
 import 'package:shelf/shelf.dart' as shelf;
 
 import 'auth_stub.dart' show kSessionCookie, kTokenCookie;
+import 'dev_auth_bypass.dart';
 
 /// MFA screens (/staff/*) are excluded to avoid an enrollment redirect loop.
 final RegExp _workspacePath = RegExp(r'^/(admin|agent|entrepreneur|owner)(/|$)');
@@ -70,6 +71,11 @@ shelf.Middleware createStaffGuard(Uri backend, {http.Client? client}) {
     return (shelf.Request request) async {
       final path = request.requestedUri.path;
       if (!_workspacePath.hasMatch(path)) return inner(request);
+      // Development Demo Mode on a local origin only: skip the token/role
+      // check. The FastAPI backend remains the authorization authority.
+      if (devAuthBypassForHost(request.requestedUri.host)) {
+        return inner(request);
+      }
 
       // Root-relative return target avoids losing the destination in the
       // browser bridge and never allows an external redirect.
