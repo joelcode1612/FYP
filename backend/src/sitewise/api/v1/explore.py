@@ -18,6 +18,7 @@ from sqlmodel import Session
 
 from sitewise.db.session import get_db
 from sitewise.dependencies import CurrentUser
+from sitewise.ingestion.state import RefreshState
 from sitewise.repositories.fyp_property_repository import FypPropertyRepository
 
 router = APIRouter()
@@ -282,6 +283,10 @@ def explore_analysis(
             "competitor_counts": counts,
             "research_link": research,
             "population": population,
+            # Additive freshness/provenance block. Read-only; an unknown
+            # state is explicit ("unavailable"), never a zero.
+            "freshness": RefreshState(session).freshness_payload(fyp_id),
+            "provenance": RefreshState(session).provenance_summary(),
         },
         "meta": {
             "available": bool(

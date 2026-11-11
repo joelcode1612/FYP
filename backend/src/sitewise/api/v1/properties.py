@@ -115,17 +115,35 @@ class OwnerListingRequest(BaseModel):
 
 
 def _run_enrichment(repo: FypPropertyRepository, property_row: dict) -> dict:
-    """Compute + persist features for one property.
+    """Compute + persist initial features for one newly created property.
 
-    A failure here must never invalidate the saved listing: the caller keeps
-    the row and receives ``status: failed`` with the reason class.
+    Goes through FeatureRefreshService so the attempt is recorded as a
+    pending/current/failed freshness state that Admin and Entrepreneur clients
+    can display and retry. The property row is committed BEFORE this call, so
+    a failure here never invalidates the saved listing; no external data
+    download is triggered (local PostGIS only).
     """
+    from sitewise.services.feature_refresh_service import FeatureRefreshService
+
     try:
-        snapshot = repo.enrichment_snapshot(
-            float(property_row["latitude"]), float(property_row["longitude"])
+        result = FeatureRefreshService(repo.session).recalculate_new_property(
+            int(property_row["id"])
         )
-        stored = repo.upsert_geospatial_features(int(property_row["id"]), snapshot)
-        return {"status": "ok", "features": stored}
+        if result["successful_computations"] != 1:
+            return {
+                "status": "failed",
+                "reason": "feature_calculation_unavailable",
+                "detail": "; ".join(result["errors"])[:300],
+                "freshness": "pending_or_failed",
+            }
+        return {
+            "status": "ok",
+            # Preserve the original response contract: the stored feature row
+            # (competitor/demand/accessibility counts) is returned exactly as
+            # before, with the freshness state added alongside it.
+            "features": repo.get_geo_features(int(property_row["id"])) or {},
+            "freshness": "current",
+        }
     except Exception as exc:  # noqa: BLE001 - reported, never swallowed silently
         return {"status": "failed", "reason": type(exc).__name__, "detail": str(exc)[:300]}
 

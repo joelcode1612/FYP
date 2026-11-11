@@ -450,6 +450,72 @@ class AdminApi {
         method: 'POST',
       );
 
+  // --- Agent change requests (workflow B) ----------------------------------
+
+  /// `GET /api/v1/staff/change-requests` — the administrator queue for
+  /// agent-proposed listing changes. Separate from the property-verification
+  /// queue on purpose: the two workflows use different tables and must never
+  /// share one status field.
+  Future<List<Map<String, dynamic>>> listChangeRequests({
+    String status = 'pending',
+  }) async {
+    final payload = await WebAuth.request(
+      '/api/v1/staff/change-requests?status=${Uri.encodeQueryComponent(status)}',
+    );
+    final body = _object(payload);
+    return _rows(body['requests']);
+  }
+
+  /// `POST /api/v1/staff/listings/{listingId}/change-requests/{id}/decision`.
+  /// The backend refuses a stale approval with 409 (the listing changed after
+  /// the proposal); the message is surfaced verbatim.
+  Future<Map<String, dynamic>> decideChangeRequest({
+    required int listingId,
+    required String requestId,
+    required String decision,
+    String? note,
+  }) {
+    return WebAuth.request(
+      '/api/v1/staff/listings/$listingId/change-requests/$requestId/decision',
+      method: 'POST',
+      body: {
+        'decision': decision,
+        if (note != null && note.isNotEmpty) 'note': note,
+      },
+    );
+  }
+
+  // --- Agent assignments ----------------------------------------------------
+
+  /// `GET /api/v1/staff/assignments` — assignment rows joined with the real
+  /// operational property (FK-enforced).
+  Future<List<Map<String, dynamic>>> listAssignments({int? agentId}) async {
+    final query = agentId == null ? '' : '?agent_id=$agentId';
+    final payload = await WebAuth.request('/api/v1/staff/assignments$query');
+    return _rows(_object(payload)['assignments']);
+  }
+
+  /// `POST /api/v1/staff/listings/{listingId}/assign` — assigns the
+  /// operational property to an agent identity (by user id).
+  Future<Map<String, dynamic>> assignListing({
+    required int listingId,
+    required String agentUserId,
+  }) {
+    return WebAuth.request(
+      '/api/v1/staff/listings/$listingId/assign',
+      method: 'POST',
+      body: {'agent_user_id': agentUserId},
+    );
+  }
+
+  /// `DELETE /api/v1/staff/listings/{listingId}/assign`.
+  Future<Map<String, dynamic>> unassignListing(int listingId) {
+    return WebAuth.request(
+      '/api/v1/staff/listings/$listingId/assign',
+      method: 'DELETE',
+    );
+  }
+
   /// `GET /api/v1/staff/summary` — all KPI numbers come from FastAPI.
   Future<StaffSummary> summary() async {
     final payload = await WebAuth.request('/api/v1/staff/summary');

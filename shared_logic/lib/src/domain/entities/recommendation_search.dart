@@ -363,6 +363,7 @@ class RecommendationSearchRequest {
     int? pageSize,
     String? cursor,
     bool clearCursor = false,
+    bool clearBusinessType = false,
     bool clearState = false,
     bool clearArea = false,
     bool clearPropertyType = false,
@@ -370,7 +371,9 @@ class RecommendationSearchRequest {
     bool clearRentRange = false,
     bool clearSizeRange = false,
   }) => RecommendationSearchRequest(
-    businessType: businessType ?? this.businessType,
+    businessType: clearBusinessType
+        ? null
+        : (businessType ?? this.businessType),
     preferredState: clearState ? null : (preferredState ?? this.preferredState),
     preferredArea: clearArea ? null : (preferredArea ?? this.preferredArea),
     minRentalRm: clearRentRange ? null : (minRentalRm ?? this.minRentalRm),

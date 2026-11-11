@@ -43,13 +43,17 @@ class RecommendationsPage extends StatefulComponent {
 }
 
 class _RecommendationsPageState extends State<RecommendationsPage> {
-  // Filter draft. Kept local until "Find properties" so typing a budget does
+  // Filter DRAFT. Kept local until "Find properties" so typing a budget does
   // not fire a request per keystroke — the server call is the expensive part.
+  // The APPLIED criteria live in the session-scoped entrepreneur state
+  // (`state.recommendationRequest`); this draft is rehydrated from it on
+  // every mount, so returning from a property detail restores the form.
   String _businessType = '';
   String _state = '';
   String _propertyType = '';
   String _budget = '';
   String _minSize = '';
+  String _maxSize = '';
   String _query = '';
 
   /// One initial search per page instance.
@@ -66,8 +70,22 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
     Future.microtask(() async {
       if (!mounted || _seeded) return;
       _seeded = true;
+      final current = context.read(entrepreneurNotifierProvider);
+      // Returning within the same session: the session-scoped state still
+      // holds the applied filters AND their results. Restore the draft from
+      // the applied request — never re-seed from saved preferences, which
+      // would silently overwrite what the entrepreneur applied.
+      if (current.recommendationTotal != null) {
+        setState(() => _syncDraft(current.recommendationRequest));
+        return;
+      }
       final prefs = context.read(businessPreferencesProvider);
-      await _notifier.searchRecommendations(request: _initialRequest(prefs));
+      final request = _initialRequest(prefs);
+      // The form shows what the first search actually applies (saved
+      // requirements, or nothing) instead of a blank panel that disagrees
+      // with the results.
+      setState(() => _syncDraft(request));
+      await _notifier.searchRecommendations(request: request);
       final wanted = component.initialPropertyId;
       if (!mounted || wanted == null || wanted.isEmpty) return;
       final state = context.read(entrepreneurNotifierProvider);
@@ -75,6 +93,24 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
         _notifier.selectRanked(wanted);
       }
     });
+  }
+
+  /// Draft <- applied. Called on mount and after any applied-state change
+  /// that did not originate in the form (chip removal, reset).
+  void _syncDraft(RecommendationSearchRequest request) {
+    _businessType = request.businessType ?? '';
+    _state = request.preferredState ?? '';
+    _propertyType = request.propertyType ?? '';
+    _budget = request.maxRentalRm == null
+        ? ''
+        : request.maxRentalRm!.toStringAsFixed(0);
+    _minSize = request.minSizeSqft == null
+        ? ''
+        : request.minSizeSqft!.toStringAsFixed(0);
+    _maxSize = request.maxSizeSqft == null
+        ? ''
+        : request.maxSizeSqft!.toStringAsFixed(0);
+    _query = request.query ?? '';
   }
 
   /// The first search.
@@ -104,22 +140,24 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
         propertyType: _propertyType.isEmpty ? null : _propertyType,
         maxRentalRm: double.tryParse(_budget.trim()),
         minSizeSqft: double.tryParse(_minSize.trim()),
+        maxSizeSqft: double.tryParse(_maxSize.trim()),
         query: _query.trim().isEmpty ? null : _query.trim(),
         pageSize: 20,
       ),
     );
   }
 
+  /// Commits a new APPLIED request originating outside the form (chip
+  /// removal) and mirrors it into the draft so the form cannot disagree.
+  void _applyRequest(RecommendationSearchRequest request) {
+    setState(() => _syncDraft(request));
+    _notifier.applyRecommendationRequest(request);
+  }
+
   void _reset() {
-    setState(() {
-      _businessType = '';
-      _state = '';
-      _propertyType = '';
-      _budget = '';
-      _minSize = '';
-      _query = '';
-    });
-    _notifier.applyRecommendationRequest(const RecommendationSearchRequest());
+    const defaults = RecommendationSearchRequest();
+    setState(() => _syncDraft(defaults));
+    _notifier.applyRecommendationRequest(defaults);
   }
 
   /// Saves/removes a property. A signed-in account persists server-side first
@@ -183,6 +221,7 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
       child: div(classes: 'rec2', [
         div(classes: 'rec2__main', [
           _filters(state),
+          _appliedFilters(state.recommendationRequest),
           if (state.recommendationError != null)
             _errorBanner(state.recommendationError!),
           _resultHead(state),
@@ -253,62 +292,152 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
 
   // -- filters ---------------------------------------------------------------
 
+  /// The APPLIED criteria as readable, individually removable chips.
+  ///
+  /// Built from `state.recommendationRequest` — the same request the server
+  /// ranked — so the summary can never disagree with the results. Removing a
+  /// chip commits a new applied request immediately (it is not a draft edit).
+  Component _appliedFilters(RecommendationSearchRequest request) {
+    final chips = <({String label, RecommendationSearchRequest next})>[
+      if (request.preferredState != null)
+        (
+          label: request.preferredState!,
+          next: request.copyWith(clearState: true),
+        ),
+      if (request.propertyType != null)
+        (
+          label: request.propertyType!,
+          next: request.copyWith(clearPropertyType: true),
+        ),
+      if (request.maxRentalRm != null)
+        (
+          label: 'RM ${request.maxRentalRm!.toStringAsFixed(0)} max',
+          next: request.copyWith(clearRentRange: true),
+        ),
+      if (request.minSizeSqft != null || request.maxSizeSqft != null)
+        (
+          label: _sizeChipLabel(request),
+          next: request.copyWith(clearSizeRange: true),
+        ),
+      if (request.businessType != null)
+        (
+          label: request.businessType!,
+          next: request.copyWith(clearBusinessType: true),
+        ),
+      if (request.query != null)
+        (
+          label: '“${request.query}”',
+          next: request.copyWith(clearQuery: true),
+        ),
+      if (request.layoutPreferences.isNotEmpty)
+        (
+          label:
+              '${request.layoutPreferences.length} layout '
+              '${request.layoutPreferences.length == 1 ? 'preference' : 'preferences'}',
+          next: request.copyWith(layoutPreferences: const []),
+        ),
+    ];
+    if (chips.isEmpty) return Component.fragment([]);
+    return div(classes: 'rec2__applied', [
+      span(classes: 'rec2__applied-label', [
+        Component.text('Applied filters:'),
+      ]),
+      for (final chip in chips)
+        span(classes: 'chip rec2__chip', [
+          Component.text(chip.label),
+          button(
+            classes: 'rec2__chip-remove',
+            attributes: {
+              'type': 'button',
+              'aria-label': 'Remove filter ${chip.label}',
+            },
+            events: events(onClick: () => _applyRequest(chip.next)),
+            [Component.text('×')],
+          ),
+        ]),
+      AppLink(
+        to: '#rec2-filters',
+        classes: 'rec2__edit-filters',
+        children: [Component.text('Edit filters')],
+      ),
+    ]);
+  }
+
+  static String _sizeChipLabel(RecommendationSearchRequest request) {
+    final min = request.minSizeSqft;
+    final max = request.maxSizeSqft;
+    String n(double value) => value.toStringAsFixed(0);
+    if (min != null && max != null) return '${n(min)}–${n(max)} sq ft';
+    if (min != null) return '${n(min)}+ sq ft';
+    return 'Up to ${n(max!)} sq ft';
+  }
+
   Component _filters(EntrepreneurState state) {
     final facets = state.recommendationFacets;
-    return div(classes: 'rec2__filters', [
-      div(classes: 'rec2__filters-grid', [
-        _textField(
-          caption: 'Business type',
-          value: _businessType,
-          placeholder: 'e.g. Specialty coffee',
-          onInput: (v) => setState(() => _businessType = v),
-        ),
-        _textField(
-          caption: 'Monthly budget (RM)',
-          value: _budget,
-          placeholder: 'e.g. 8000',
-          onInput: (v) => setState(() => _budget = v),
-        ),
-        _textField(
-          caption: 'Minimum size (sq ft)',
-          value: _minSize,
-          placeholder: 'e.g. 1200',
-          onInput: (v) => setState(() => _minSize = v),
-        ),
-        _textField(
-          caption: 'Search',
-          value: _query,
-          placeholder: 'Area, title or property id',
-          onInput: (v) => setState(() => _query = v),
-        ),
-      ]),
-      // Chips, not <select>: the values come from the catalogue itself, so an
-      // option can never match zero rows. Counts are shown because they are
-      // real.
-      if (facets != null && facets.states.isNotEmpty)
-        _chipRow(
-          caption: 'Preferred state',
-          options: facets.states,
-          selected: _state,
-          onPick: (v) => setState(() => _state = v),
-        ),
-      if (facets != null && facets.propertyTypes.isNotEmpty)
-        _chipRow(
-          caption: 'Property type',
-          options: facets.propertyTypes,
-          selected: _propertyType,
-          onPick: (v) => setState(() => _propertyType = v),
-        ),
-      div(classes: 'rec2__filters-actions', [
-        ActionButton(
-          state.recommendationRefreshing ? 'Searching…' : 'Find properties',
-          variant: 'primary',
-          icon: 'search',
-          onClick: state.recommendationRefreshing ? null : _apply,
-        ),
-        ActionButton('Clear', variant: 'secondary', onClick: _reset),
-      ]),
-    ]);
+    return div(
+      classes: 'rec2__filters',
+      attributes: const {'id': 'rec2-filters'},
+      [
+        div(classes: 'rec2__filters-grid', [
+          _textField(
+            caption: 'Business type',
+            value: _businessType,
+            placeholder: 'e.g. Specialty coffee',
+            onInput: (v) => setState(() => _businessType = v),
+          ),
+          _textField(
+            caption: 'Monthly budget (RM)',
+            value: _budget,
+            placeholder: 'e.g. 8000',
+            onInput: (v) => setState(() => _budget = v),
+          ),
+          _textField(
+            caption: 'Minimum size (sq ft)',
+            value: _minSize,
+            placeholder: 'e.g. 800',
+            onInput: (v) => setState(() => _minSize = v),
+          ),
+          _textField(
+            caption: 'Maximum size (sq ft)',
+            value: _maxSize,
+            placeholder: 'e.g. 1800',
+            onInput: (v) => setState(() => _maxSize = v),
+          ),
+          _textField(
+            caption: 'Search',
+            value: _query,
+            placeholder: 'Area, title or property id',
+            onInput: (v) => setState(() => _query = v),
+          ),
+        ]),
+        // Chips, not <select>: the values come from the catalogue itself, so
+        // an option can never match zero rows. Counts are shown because they
+        // are real.
+        if (facets != null && facets.states.isNotEmpty)
+          _chipRow(
+            caption: 'Preferred state',
+            options: facets.states,
+            selected: _state,
+            onPick: (v) => setState(() => _state = v),
+          ),
+        if (facets != null && facets.propertyTypes.isNotEmpty)
+          _chipRow(
+            caption: 'Property type',
+            options: facets.propertyTypes,
+            selected: _propertyType,
+            onPick: (v) => setState(() => _propertyType = v),
+          ),
+        div(classes: 'rec2__filters-actions', [
+          ActionButton(
+            state.recommendationRefreshing ? 'Searching…' : 'Find properties',
+            variant: 'primary',
+            icon: 'search',
+            onClick: state.recommendationRefreshing ? null : _apply,
+          ),
+          ActionButton('Clear', variant: 'secondary', onClick: _reset),
+        ]),
+      ],
+    );
   }
 
   Component _chipRow({
@@ -366,16 +495,39 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
   Component _resultHead(EntrepreneurState state) {
     final total = state.recommendationTotal;
     final refreshing = state.recommendationRefreshing;
-    return div(classes: 'rec2__head', [
-      h2(classes: 'rec2__count', [
-        Component.text(
-          total == null
-              ? 'Ranked properties'
-              : '$total ${total == 1 ? 'property' : 'properties'}',
-        ),
+    return div(classes: 'stack', [
+      div(classes: 'rec2__head', [
+        h2(classes: 'rec2__count', [
+          Component.text(
+            total == null
+                ? 'Ranked properties'
+                : '$total ${total == 1 ? 'property' : 'properties'}',
+          ),
+        ]),
+        span(classes: 'rec2__eligibility', [
+          Component.text('PU score > 50'),
+        ]),
+        if (refreshing)
+          span(classes: 'rec2__refreshing', [Component.text('Updating…')]),
       ]),
-      if (refreshing)
-        span(classes: 'rec2__refreshing', [Component.text('Updating…')]),
+      // The target is at least three, but the minimum is never manufactured:
+      // when fewer properties qualify, say so and offer the filter editor.
+      if (total != null && total > 0 && total < 3)
+        div(classes: 'rec2__insufficient', [
+          Icon('info_outline', size: 'sm'),
+          span(classes: 'grow', [
+            Component.text(
+              'Only $total ${total == 1 ? 'property matches' : 'properties match'} '
+              'your current criteria and '
+              '${total == 1 ? 'has a PU score' : 'have PU scores'} above 50.',
+            ),
+          ]),
+          AppLink(
+            to: '#rec2-filters',
+            classes: 'rec2__edit-filters',
+            children: [Component.text('Edit filters')],
+          ),
+        ]),
     ]);
   }
 
@@ -394,13 +546,15 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
 
   Component _empty(EntrepreneurState state) => EmptyState(
     title: state.recommendationRequest.isBrowseOnly
-        ? 'No properties available'
+        ? 'No PU-eligible properties'
         : 'No property matches these requirements',
     body: state.recommendationRequest.isBrowseOnly
-        ? 'The catalogue returned no listings. That is a data condition, not a '
-              'filter problem.'
-        : 'Nothing in the catalogue satisfies every constraint. Widen the '
-              'budget or reduce the minimum floor area and search again.',
+        ? 'No property in the catalogue has a PU research score above 50, so '
+              'there is nothing eligible to recommend. That is a data '
+              'condition, not a filter problem.'
+        : 'Nothing in the catalogue satisfies every constraint AND has a PU '
+              'score above 50. Widen the budget or reduce the minimum floor '
+              'area and search again.',
     action: ActionButton(
       'Clear filters',
       variant: 'primary',
@@ -448,7 +602,9 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
         div(classes: 'rec2-card__facts', [
           _fact('Rent', 'RM ${prop.rentalRm.toStringAsFixed(0)}/mo'),
           _fact('Floor area', '${prop.sizeSqft.toStringAsFixed(0)} sq ft'),
-          if (item.suitabilityAvailable)
+          if (item.puAvailable == true && item.puScore != null)
+            _fact('PU score', item.puScore!.toStringAsFixed(0))
+          else if (item.suitabilityAvailable)
             _fact(
               'Research index',
               item.catalogSuitabilityScore!.toStringAsFixed(0),
@@ -589,8 +745,6 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
         ),
       ]),
 
-      // PU research is a SEPARATE model. It is never merged into the match
-      // figure above, and an unavailable PU score is stated, not zeroed.
       div(classes: 'rec2-panel__block', [
         span(classes: 'rec2-panel__label', [
           Component.text('PU research association'),
@@ -598,12 +752,13 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
         p(classes: 'small', [
           Component.text(
             item.puAvailable == true
-                ? 'PU association: ${item.puScore?.toStringAsFixed(1) ?? '—'} '
-                      '(research index, not a success probability).'
-                : 'The PU research model returned no association score for this '
-                      'property. Open the explainable analysis to request it '
-                      'explicitly — it is a separate research model and is '
-                      'never folded into the match figure.',
+                ? 'PU score: ${item.puScore?.toStringAsFixed(1) ?? '—'} / 100 '
+                      '— the research association index (not a success '
+                      'probability). Every listed recommendation exceeds 50.'
+                : 'No PU score is stored for this property, so it cannot pass '
+                      'the eligibility threshold and is not recommended. The '
+                      'PU model is a separate research model and is never '
+                      'folded into the match figure.',
           ),
         ]),
         ActionLink(

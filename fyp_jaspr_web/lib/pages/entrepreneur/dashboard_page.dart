@@ -37,34 +37,36 @@ class DashboardPage extends StatefulComponent {
 }
 
 class _DashboardPageState extends State<DashboardPage> {
-  /// One parallel load for everything the KPI row and the Recent Assessments
-  /// list need. The Current Assessment card keeps its own loader so a slow
-  /// read never holds up the rest of the dashboard.
-  late Future<HomeStats> _stats = _loadStats();
+  /// The dashboard loads each data source independently, so one failed or slow
+  /// read never blanks the whole page: the header, Quick Actions and the
+  /// Current Assessment card always render; a failed read degrades only the
+  /// section that needs it (an em dash on the KPI, an inline retry on Recent).
+  late Future<HistoryLoad> _history = _loadHistory();
+  late Future<int?> _catalogue = _loadCatalogueCount();
 
-  Future<HomeStats> _loadStats() async {
+  /// Assessment history for the Assessments/Reports KPIs and the Recent
+  /// Assessments list. Failure travels as data with the backend's message.
+  Future<HistoryLoad> _loadHistory() async {
     final history = await const AssessmentApi().history(limit: 50);
     if (!history.ok) {
-      return HomeStats(failure: history.failure);
+      return HistoryLoad(failure: history.failure);
     }
-    final rows = history.value!.items;
-    // The catalogue count is auxiliary: a failed read shows an em dash on one
-    // KPI instead of failing the whole dashboard.
-    int? catalogue;
-    try {
-      catalogue = (await ApiPropertyRepository().getProperties()).length;
-    } on Object {
-      catalogue = null;
-    }
-    return HomeStats(
-      assessments: history.value!.total,
-      reports: rows.where((r) => r.reportAvailable).length,
-      recent: rows.take(4).toList(),
-      catalogueCount: catalogue,
-    );
+    return HistoryLoad(value: history.value!);
   }
 
-  void _reload() => setState(() => _stats = _loadStats());
+  /// Catalogue size for the Explore KPI. Null (a failed read) shows an em
+  /// dash on one KPI instead of failing anything else.
+  Future<int?> _loadCatalogueCount() async {
+    try {
+      return (await ApiPropertyRepository().getProperties()).length;
+    } on Object {
+      return null;
+    }
+  }
+
+  void _reloadHistory() => setState(() => _history = _loadHistory());
+
+  void _reloadCatalogue() => setState(() => _catalogue = _loadCatalogueCount());
 
   /// First word of the backend-verified profile name — never a hardcoded
   /// demo identity. An empty name degrades to a plain welcome.
@@ -91,30 +93,15 @@ class _DashboardPageState extends State<DashboardPage> {
       showPageHead: false,
       child: div(classes: 'stack stack--sections sw-dash', [
         _head(name),
-        FutureBuilder<HomeStats>(
-          future: _stats,
-          builder: (context, snapshot) {
-            if (snapshot.connectionState != ConnectionState.done) {
-              return const Skeleton(variant: 'block', count: 3);
-            }
-            final stats = snapshot.data;
-            if (stats == null) {
-              return _statsError('No response from the data service.');
-            }
-            if (stats.failure != null) {
-              return _statsError(stats.failure!.message);
-            }
-            return div(classes: 'stack stack--sections', [
-              _kpis(stats, saved),
-              // Compact overview of the most recently updated saved
-              // assessment. It loads on its own so a slow or failed read
-              // never holds up the rest of the dashboard.
-              const _CurrentAssessment(),
-              _quickActions(saved),
-              _recent(stats.recent),
-            ]);
-          },
-        ),
+        // KPI row: each counter degrades to an em dash when its own read
+        // fails; the other cards keep their real values.
+        _kpis(saved),
+        // Compact overview of the most recently updated saved assessment.
+        // It loads on its own so a slow or failed read never holds up the
+        // rest of the dashboard.
+        const _CurrentAssessment(),
+        _quickActions(saved),
+        _recent(),
         // DESIGN.md §17: a concise, visible disclaimer near decision-support
         // output. Progress percentages here are server-derived stage counts,
         // never model scores, and this note keeps that boundary explicit.
@@ -130,7 +117,98 @@ class _DashboardPageState extends State<DashboardPage> {
     );
   }
 
-  // ------------------------------------------------------------------- head
+  // -------------------------------------------------------------------- KPIs
+
+  Component _kpis(Set<String> saved) {
+    return div(classes: 'sw-kpi-grid', [
+      _kpi(
+        'place',
+        '#1d4ed8',
+        'Explore Properties',
+        _catalogueKpiValue(),
+        Component.text('Commercial listings'),
+        '/entrepreneur/explore',
+      ),
+      _kpi(
+        'bookmark',
+        '#7c3aed',
+        'Saved Properties',
+        Component.text('${saved.length}'),
+        Component.text(saved.length == 1
+            ? 'Property shortlisted'
+            : 'Properties shortlisted'),
+        '/entrepreneur/saved',
+      ),
+      _kpi(
+        'fact_check',
+        '#059669',
+        'Assessments',
+        _historyKpiValue((history) => '${history.total}'),
+        Component.text('Started by you'),
+        '/entrepreneur/assessments',
+      ),
+      _kpi(
+        'description',
+        '#475569',
+        'Reports',
+        _historyKpiValue((history) =>
+            '${history.items.where((r) => r.reportAvailable).length}'),
+        _reportsKpiNote(),
+        '/entrepreneur/assessments',
+      ),
+    ]);
+  }
+
+  /// Explore KPI value. Null (a failed catalogue read) shows an em dash — an
+  /// honest "not available right now", never a fabricated zero. The read is
+  /// fast, so the em dash is momentary on a healthy server.
+  Component _catalogueKpiValue() {
+    return FutureBuilder<int?>(
+      future: _catalogue,
+      builder: (context, snapshot) {
+        final count = snapshot.data;
+        if (snapshot.connectionState != ConnectionState.done || count == null) {
+          return Component.text('—');
+        }
+        return Component.text('$count');
+      },
+    );
+  }
+
+  /// Assessments/Reports KPI values over the shared history future. A failed
+  /// or in-flight read shows an em dash while the Recent Assessments section
+  /// below carries the actual error and its scoped retry.
+  Component _historyKpiValue(String Function(AssessmentHistory) format) {
+    return FutureBuilder<HistoryLoad>(
+      future: _history,
+      builder: (context, snapshot) {
+        final load = snapshot.data;
+        if (snapshot.connectionState != ConnectionState.done ||
+            load == null ||
+            load.failure != null) {
+          return Component.text('—');
+        }
+        return Component.text(format(load.value!));
+      },
+    );
+  }
+
+  /// Keeps the original singular/plural wording; falls back to the neutral
+  /// plural while the read is in flight or failed.
+  Component _reportsKpiNote() {
+    return FutureBuilder<HistoryLoad>(
+      future: _history,
+      builder: (context, snapshot) {
+        final load = snapshot.data;
+        final reports = (snapshot.connectionState == ConnectionState.done &&
+                load != null &&
+                load.failure == null)
+            ? load.value!.items.where((r) => r.reportAvailable).length
+            : null;
+        return Component.text(reports == 1 ? 'Report ready' : 'Reports ready');
+      },
+    );
+  }
 
   Component _head(String name) {
     return header(classes: 'sw-dash-head', [
@@ -152,61 +230,12 @@ class _DashboardPageState extends State<DashboardPage> {
     ]);
   }
 
-  Component _statsError(String message) {
-    return div(classes: 'card stack', [
-      span(classes: 'title', [Component.text('Something went wrong')]),
-      p(classes: 'body', [Component.text(message)]),
-      ActionButton('Try again', variant: 'secondary', onClick: _reload),
-    ]);
-  }
-
-  // -------------------------------------------------------------------- KPIs
-
-  Component _kpis(HomeStats stats, Set<String> saved) {
-    return div(classes: 'sw-kpi-grid', [
-      _kpi(
-        'place',
-        '#1d4ed8',
-        'Explore Properties',
-        stats.catalogueCount == null
-            ? '—'
-            : '${stats.catalogueCount}',
-        'Commercial listings',
-        '/entrepreneur/explore',
-      ),
-      _kpi(
-        'bookmark',
-        '#7c3aed',
-        'Saved Properties',
-        '${saved.length}',
-        saved.length == 1 ? 'Property shortlisted' : 'Properties shortlisted',
-        '/entrepreneur/saved',
-      ),
-      _kpi(
-        'fact_check',
-        '#059669',
-        'Assessments',
-        '${stats.assessments}',
-        'Started by you',
-        '/entrepreneur/assessments',
-      ),
-      _kpi(
-        'description',
-        '#475569',
-        'Reports',
-        '${stats.reports}',
-        stats.reports == 1 ? 'Report ready' : 'Reports ready',
-        '/entrepreneur/assessments',
-      ),
-    ]);
-  }
-
   Component _kpi(
     String icon,
     String color,
     String label,
-    String value,
-    String note,
+    Component value,
+    Component note,
     String href,
   ) => AppLink(
     to: href,
@@ -220,8 +249,8 @@ class _DashboardPageState extends State<DashboardPage> {
         ),
         span(classes: 'kpi-label', [Component.text(label)]),
       ]),
-      div(classes: 'kpi-value', [Component.text(value)]),
-      div(classes: 'kpi-note', [Component.text(note)]),
+      div(classes: 'kpi-value', [value]),
+      div(classes: 'kpi-note', [note]),
     ],
   );
 
@@ -271,7 +300,10 @@ class _DashboardPageState extends State<DashboardPage> {
 
   // ------------------------------------------------------- recent assessments
 
-  Component _recent(List<AssessmentRecord> rows) {
+  /// Recent Assessments owns the history read's error state: a failure here
+  /// renders an inline retry scoped to this section only — the KPI row, the
+  /// Current Assessment card and Quick Actions remain usable.
+  Component _recent() {
     return section(classes: 'sw-dash-section', [
       div(classes: 'sw-dash-section-head', [
         h2([Component.text('Recent Assessments')]),
@@ -286,32 +318,67 @@ class _DashboardPageState extends State<DashboardPage> {
           ],
         ),
       ]),
-      if (rows.isEmpty)
-        div(classes: 'sw-dash-recent', [
-          div(classes: 'sw-home-empty', [
-            Icon('fact_check', size: 'lg'),
-            p(classes: 'sw-home-detail', [
-              Component.text(
-                'No assessments yet. Open a property and begin the five-stage '
-                'location assessment — it is saved to your account as you go.',
-              ),
-            ]),
-            AppLink(
-              to: '/entrepreneur/explore',
-              classes: 'sw-home-primary',
-              children: [
-                Component.text('Find a property to assess '),
-                span(attributes: const {'aria-hidden': 'true'}, [
-                  Component.text('→'),
-                ]),
-              ],
-            ),
+      FutureBuilder<HistoryLoad>(
+        future: _history,
+        builder: (context, snapshot) {
+          if (snapshot.connectionState != ConnectionState.done) {
+            return div(
+              classes: 'sw-dash-recent',
+              [const Skeleton(variant: 'row', count: 2)],
+            );
+          }
+          final load = snapshot.data;
+          if (load == null || load.failure != null) {
+            return div(
+              classes: 'sw-dash-recent',
+              [_recentError(load?.failure?.message)],
+            );
+          }
+          final rows = load.value!.items.take(4).toList();
+          return div(classes: 'sw-dash-recent', [
+            if (rows.isEmpty) _recentEmpty() else ...[
+              for (final record in rows) _recentRow(record),
+            ],
+          ]);
+        },
+      ),
+    ]);
+  }
+
+  /// A failure is contained here and never pretends the account has no
+  /// assessments. The message is the (already user-facing) backend sentence.
+  Component _recentError(String? message) {
+    return div(classes: 'sw-home-empty', [
+      Icon('error', size: 'lg'),
+      p(classes: 'sw-home-detail', [
+        Component.text(
+          'Recent assessments could not be loaded. '
+          '${message ?? 'No response from the data service.'}',
+        ),
+      ]),
+      ActionButton('Try again', variant: 'secondary', onClick: _reloadHistory),
+    ]);
+  }
+
+  Component _recentEmpty() {
+    return div(classes: 'sw-home-empty', [
+      Icon('fact_check', size: 'lg'),
+      p(classes: 'sw-home-detail', [
+        Component.text(
+          'No assessments yet. Open a property and begin the five-stage '
+          'location assessment — it is saved to your account as you go.',
+        ),
+      ]),
+      AppLink(
+        to: '/entrepreneur/explore',
+        classes: 'sw-home-primary',
+        children: [
+          Component.text('Find a property to assess '),
+          span(attributes: const {'aria-hidden': 'true'}, [
+            Component.text('→'),
           ]),
-        ])
-      else
-        div(classes: 'sw-dash-recent', [
-          for (final record in rows) _recentRow(record),
-        ]),
+        ],
+      ),
     ]);
   }
 
@@ -374,23 +441,14 @@ class _DashboardPageState extends State<DashboardPage> {
   }
 }
 
-/// Everything the KPI row and Recent Assessments section need, from one
-/// parallel backend read. `catalogueCount == null` means the catalogue read
-/// failed and the card shows an em dash rather than a fabricated zero.
-class HomeStats {
+/// The assessment-history read, carried as a value so the KPI counters and
+/// the Recent Assessments list can degrade independently of the rest of the
+/// dashboard. Exactly one of [failure] / [value] is set, mirroring ApiResult.
+class HistoryLoad {
   final AssessmentFailure? failure;
-  final int assessments;
-  final int reports;
-  final List<AssessmentRecord> recent;
-  final int? catalogueCount;
+  final AssessmentHistory? value;
 
-  const HomeStats({
-    this.failure,
-    this.assessments = 0,
-    this.reports = 0,
-    this.recent = const [],
-    this.catalogueCount,
-  });
+  const HistoryLoad({this.failure, this.value});
 }
 
 /// The most recently updated saved assessment, restyled to the mockup's

@@ -1,0 +1,65 @@
+{
+ "version": 0.6,
+ "elements": [
+  {
+   "type": "node",
+   "id": 6294195606,
+   "version": 1,
+   "timestamp": "2026-10-15T00:00:00Z",
+   "lat": 3.1250595,
+   "lon": 101.5959591,
+   "tags": {
+    "name": "Baan Rao Restaurant",
+    "amenity": "restaurant"
+   }
+  },
+  {
+   "type": "node",
+   "id": 6294195604,
+   "version": 1,
+   "timestamp": "2026-10-15T00:00:00Z",
+   "lat": 3.1251982,
+   "lon": 101.5959883,
+   "tags": {
+    "name": "Restoran Tropikiri",
+    "amenity": "restaurant"
+   }
+  },
+  {
+   "type": "node",
+   "id": 6294195605,
+   "version": 1,
+   "timestamp": "2026-10-15T00:00:00Z",
+   "lat": 3.1251372,
+   "lon": 101.5959733,
+   "tags": {
+    "name": "Bonjour Vietnam",
+    "amenity": "restaurant"
+   }
+  },
+  {
+   "type": "node",
+   "id": 6294184847,
+   "version": 1,
+   "timestamp": "2026-10-15T00:00:00Z",
+   "lat": 3.1319788,
+   "lon": 101.5977727,
+   "tags": {
+    "name": "Summer Breeze Cafe",
+    "amenity": "cafe"
+   }
+  },
+  {
+   "type": "node",
+   "id": 6294184848,
+   "version": 1,
+   "timestamp": "2026-10-15T00:00:00Z",
+   "lat": 3.132156,
+   "lon": 101.5977447,
+   "tags": {
+    "name": "Bayu Puteri Cafe",
+    "amenity": "cafe"
+   }
+  }
+ ]
+}

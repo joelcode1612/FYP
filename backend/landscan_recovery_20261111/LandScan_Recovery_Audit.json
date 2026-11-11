@@ -1,0 +1,135 @@
+{
+  "generated_at": "2026-11-11T10:00:07+00:00",
+  "affected_record": {
+    "subject_id": "0x31da0d8ffd84a2ad:0x9220817123f3ed72",
+    "subject_name": "KYOO1945 TEPPANYAKI Puteri Cove",
+    "sample_class": "P",
+    "state": "Johor",
+    "latitude": 1.412,
+    "longitude": 103.6563,
+    "coordinate_source": "google",
+    "coordinate_quality": "LOCATION_CONSISTENT"
+  },
+  "original_value": {
+    "landscan_ambient_pop_1000m": 0.0,
+    "status": "RECORDED_ZERO_SUM_OVER_EMPTY_SET",
+    "landscan_ambient_pop_2000m": 1989.0,
+    "landscan_ambient_pop_3000m": 8976.0,
+    "original_flag_landscan_all_nodata_radii": "500;1000",
+    "original_processing_status": "COMPLETED_ALL_NODATA_RADII"
+  },
+  "recovered_value": null,
+  "recovery_status": "UNRESOLVED_ALL_CELLS_NODATA",
+  "root_cause": "Category 4 (NoData pixels inside the buffer): the licensed local copy of LandScan 2024 (landscan-global-2024.tif loaded as public.landscan_2024) masks water as NoData -2147483647. The point sits on Puteri Harbour, Johor; all 3 cell centres within the 1000 m radius are ocean-masked. The original pipeline's documented rule (sum valid cells, NoData excluded) therefore summed an empty set and published 0.0. Coordinate, CRS, buffer, reprojection and tile-dedup causes were all ruled out: WorldPop 2025 (100 m) returns healthy values for the identical coordinate (pop_1000m=1955.6), the pipeline reproduces byte-identically, and a single official global tile covers the point.",
+  "raster_provenance": {
+    "table": "public.landscan_2024",
+    "source_file": "landscan-global-2024.tif",
+    "product": "LandScan 2024 ambient population (Oak Ridge National Laboratory)",
+    "resolution_deg": 0.0083333,
+    "srid": 4326,
+    "nodata": -2147483647.0,
+    "pixel_type": "32BSI",
+    "licence_status": "LICENCE_UNDOCUMENTED_IN_LOCAL_COPY - already licensed/loaded locally by the project; no new download performed",
+    "tiles_covering_point": 1
+  },
+  "calculation_methodology": "cumulative sums of whole 0.0083333-deg LandScan cells whose centre lies inside an ST_DistanceSphere 1000 m radius; NoData -2147483647 excluded; overlapping tiles deduplicated by pixel centre (max); no fractional weighting - identical to the documented original pipeline",
+  "nodata_coverage_statistics": {
+    "window_pixels_1000m": 3,
+    "valid_pixels_1000m": 0,
+    "nodata_pixels_1000m": 3,
+    "coverage_pct_1000m": 0.0,
+    "raw_st_value_verification_cells": [
+      [
+        103.654167,
+        1.404167,
+        -2147483647.0
+      ],
+      [
+        103.654167,
+        1.4125,
+        -2147483647.0
+      ],
+      [
+        103.6625,
+        1.4125,
+        -2147483647.0
+      ]
+    ],
+    "nearest_valid_cell": "value=514 persons at 1010.4 m (outside the 1000 m radius)"
+  },
+  "validation_results": [
+    {
+      "check": "P row count preserved",
+      "result": "PASS",
+      "detail": "rows=894"
+    },
+    {
+      "check": "PU row count preserved",
+      "result": "PASS",
+      "detail": "rows=1849"
+    },
+    {
+      "check": "affected subject matches",
+      "result": "PASS",
+      "detail": "0x31da0d8ffd84a2ad:0x9220817123f3ed72"
+    },
+    {
+      "check": "P: only landscan_ambient_pop_1000m changed in original columns",
+      "result": "PASS",
+      "detail": "changed original cols=['landscan_ambient_pop_1000m']"
+    },
+    {
+      "check": "P: 2km/3km unchanged for all 894 rows",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "PU: landscan_ambient_pop_2000m unchanged for all 1849 rows",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "PU: landscan_ambient_pop_3000m unchanged for all 1849 rows",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "PU: all original columns except landscan_ambient_pop_1000m unchanged",
+      "result": "PASS",
+      "detail": "pu_cols=143"
+    },
+    {
+      "check": "P: other 893 rows byte-equal on all original columns",
+      "result": "PASS",
+      "detail": ""
+    },
+    {
+      "check": "PU: 955 U rows carry no recovery changes",
+      "result": "PASS",
+      "detail": "u_rows=955"
+    },
+    {
+      "check": "P: exactly one missing 1km value after recovery",
+      "result": "PASS",
+      "detail": "missing_before=0 missing_after=1"
+    },
+    {
+      "check": "recovered value finite and nonnegative (if recovered)",
+      "result": "PASS",
+      "detail": "no recovery possible - value retained as NULL"
+    }
+  ],
+  "verified": true,
+  "unresolved_blocker": "The 1000 m window has 0% valid LandScan coverage: every cell centre inside the radius is a NoData ocean cell of the official product. An authentic observed 1 km LandScan value cannot be derived from this raster. Resolving it would require either (a) the ORNL LandScan 2024 cell value policy for harbour/reclaimed-land cells (product documentation or ORNL support) or (b) a licensed newer LandScan release with revised water masking - both outside this project's current licence evidence. No substitute (WorldPop, averages, interpolation) was used, per the recovery restrictions.",
+  "outputs": {
+    "A_positive_dataset": "C:\\Users\\Lenovo\\AndroidStudioProjects\\FYP\\backend\\landscan_recovery_20261111\\SiteWise_P_LandScan_1000m_Recovered.csv",
+    "B_pu_feature_dataset": "C:\\Users\\Lenovo\\AndroidStudioProjects\\FYP\\backend\\landscan_recovery_20261111\\SiteWise_PU_47_Features_LandScan_Updated.csv",
+    "C_this_audit": "C:\\Users\\Lenovo\\AndroidStudioProjects\\FYP\\backend\\landscan_recovery_20261111\\LandScan_Recovery_Audit.json",
+    "D_reusable_script": "C:\\Users\\Lenovo\\AndroidStudioProjects\\FYP\\backend\\landscan_recovery_20261111\\recover_landscan_1000m.py"
+  },
+  "downstream_notes": {
+    "pu_training_ready": false,
+    "reason": "one P record lacks a 1 km LandScan value; PU training must either declare an imputation strategy for this record or drop the feature for it - never silently treat the old 0.0 as observed data",
+    "other_flagged_file": "backend/ml_reference/training_population_bridge_1849.csv carries the same 0.0 for this subject_id and needs the same correction if it feeds training (left untouched per restrictions)"
+  }
+}

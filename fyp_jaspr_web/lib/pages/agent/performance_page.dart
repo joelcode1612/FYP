@@ -4,6 +4,7 @@ import 'package:shared_logic/shared_logic.dart';
 
 import '../../components/dashboard_kit.dart';
 import '../../components/ui.dart';
+import '../../data/admin_api.dart';
 import '../../data/agent_records.dart';
 import '../../layouts/app_layout.dart';
 
@@ -12,7 +13,10 @@ import '../../layouts/app_layout.dart';
 /// The reference design puts an impressions → views → enquiries funnel here.
 /// **This project captures none of those events**, so the funnel is drawn as
 /// unfilled stages with the reason under each one, and the only numbers on the
-/// page are arithmetic over the listing catalog that actually exists.
+/// page are arithmetic over the agent's REAL assigned listings — the same
+/// `GET /api/v1/staff/me/listings` dataset the dashboard and Assigned
+/// Listings read. An empty portfolio is reported as empty, never padded with
+/// catalogue stand-ins.
 ///
 /// That split is the whole point of the page: a chart of invented views would
 /// be indistinguishable from a real report to anyone reading a screenshot,
@@ -28,60 +32,93 @@ class AgentPerformancePage extends StatelessComponent {
       currentRoute: '/agent/performance',
       title: 'Performance',
       subtitle:
-          'Portfolio figures are computed from the listing dataset. Engagement '
-          'figures need events that are not captured yet.',
+          'Portfolio figures are computed from your assigned listings. '
+          'Engagement figures need events that are not captured yet.',
       eyebrow: 'Staff portal · agent',
       showPageHead: true,
-      child: FutureBuilder<List<CommercialProperty>>(
-        future: AgentRecords.assignedProperties(),
+      child: FutureBuilder<List<AgentAssignment>>(
+        future: AgentRecords.assignedListings(),
         builder: (context, snapshot) {
-          if (!snapshot.hasData) {
+          if (snapshot.connectionState != ConnectionState.done) {
             return div(classes: 'loading', [
               span(classes: 'spinner', []),
-              Component.text('Loading portfolio…'),
+              Component.text('Loading your assigned properties...'),
             ]);
           }
-          final listings = snapshot.data!;
+          if (snapshot.hasError) {
+            return _errorState(snapshot.error);
+          }
+          final listings = snapshot.data ?? const <AgentAssignment>[];
           return div(classes: 'stack', [
-            _catalogKpis(listings),
-            _funnelCard(),
-            div(classes: 'bento', [
+            if (listings.isEmpty)
+              EmptyState(
+                title: 'No properties assigned yet.',
+                body:
+                    'An administrator has not assigned any properties to your '
+                    'account, so there is no portfolio to measure.',
+              )
+            else ...[
+              _portfolioKpis(listings),
               _byStatusCard(listings),
-              _prerequisitesCard(),
-            ]),
+            ],
+            _funnelCard(),
           ]);
         },
       ),
     );
   }
 
-  /// Arithmetic over real catalog rows — no invented metrics.
-  Component _catalogKpis(List<CommercialProperty> listings) {
-    if (listings.isEmpty) {
-      return EmptyState(
-        title: 'No listings to measure',
-        body:
-            'The demonstration assignment returned nothing, so there is no '
-            'portfolio to average over.',
-      );
-    }
-    final rents = listings.map((l) => l.rentalRm).toList();
-    final sizes = listings.map((l) => l.sizeSqft).toList();
-    final scores = listings.map((l) => l.suitabilityScore).toList();
-    double avg(List<double> values) =>
-        values.fold<double>(0, (sum, v) => sum + v) / values.length;
+  Component _errorState(Object? error) {
+    return div(classes: 'card stack', [
+      span(classes: 'title', [
+        Component.text('Unable to load assigned properties.'),
+      ]),
+      p(classes: 'body muted', [
+        Component.text(
+          error == null
+              ? 'The backend did not answer. Please retry.'
+              : '${AdminApi.message(error)} Please retry.',
+        ),
+      ]),
+      const ActionLink(
+        'Retry',
+        href: '/agent/performance',
+        variant: 'secondary',
+      ),
+    ]);
+  }
+
+  /// Arithmetic over the REAL assignment rows — no invented metrics, and no
+  /// research suitability index (it is not an assignment or performance
+  /// measurement).
+  Component _portfolioKpis(List<AgentAssignment> listings) {
+    final rents = [
+      for (final l in listings)
+        if (l.raw['rental_price'] is num) (l.raw['rental_price'] as num).toDouble(),
+    ];
+    final sizes = [
+      for (final l in listings)
+        if (l.raw['size_sqft'] is num) (l.raw['size_sqft'] as num).toDouble(),
+    ];
+    final published = listings.where((l) => l.raw['is_published'] == true).length;
     return div(classes: 'bento-kpis', [
-      _kpi('Listings held', '${listings.length}', 'Demonstration assignment'),
-      _kpi('Median rent', _median(rents), 'From the imported dataset'),
+      _kpi('Listings held', '${listings.length}', 'Assigned to you'),
       _kpi(
-        'Average size',
-        '${avg(sizes).toStringAsFixed(0)} sqft',
-        'Across the portfolio',
+        'Median rent',
+        rents.isEmpty ? 'Not available' : _median(rents),
+        rents.isEmpty ? 'No rental recorded' : 'Across your portfolio',
       ),
       _kpi(
-        'Mean suitability',
-        avg(scores).toStringAsFixed(1),
-        'Computed from the stored index',
+        'Average size',
+        sizes.isEmpty
+            ? 'Not available'
+            : '${(sizes.reduce((x, y) => x + y) / sizes.length).toStringAsFixed(0)} sqft',
+        sizes.isEmpty ? 'No floor area recorded' : 'Across your portfolio',
+      ),
+      _kpi(
+        'Live listings',
+        '$published',
+        'Published on the public site',
       ),
     ]);
   }
@@ -149,44 +186,26 @@ class AgentPerformancePage extends StatelessComponent {
     ]);
   }
 
-  Component _byStatusCard(List<CommercialProperty> listings) {
+  /// Review-state breakdown of the SAME assignment rows the dashboard counts.
+  Component _byStatusCard(List<AgentAssignment> listings) {
+    int count(String wire) =>
+        listings.where((l) => AgentRecords.wireStatus(l) == wire).length;
+    const states = ['approved', 'pending', 'under_review', 'draft', 'rejected'];
     return div(classes: 'bento-card', [
       div(classes: 'bento-card__head', [
         h3([Component.text('Portfolio by review state')]),
         span(classes: 'card-note', [Component.text('Real')]),
       ]),
       div(classes: 'aside-list', [
-        for (final status in VerificationStatus.values)
+        for (final wire in states)
           AsideRow(
-            badge: '${listings.where((l) => l.verification == status).length}',
-            tone: status == VerificationStatus.verified ? 'teal' : 'blue',
-            title: AgentRecords.listingLabel(status),
-            caption: status.label,
+            badge: '${count(wire)}',
+            tone: AgentRecords.wireStatusTone(wire) == 'success'
+                ? 'teal'
+                : 'blue',
+            title: AgentRecords.wireStatusLabel(wire),
+            caption: 'Operational listing state',
           ),
-      ]),
-    ]);
-  }
-
-  Component _prerequisitesCard() {
-    return div(classes: 'bento-card', [
-      div(classes: 'bento-card__head', [
-        h3([Component.text('What has to be recorded first')]),
-        span(classes: 'card-note', [Component.text('Plan')]),
-      ]),
-      div(classes: 'aside-list', [
-        for (final item in const [
-          ('Event table', 'listing id, event type, timestamp, session.'),
-          ('Attribution', 'Which agent held the listing when the event fired.'),
-          (
-            'Agent identity',
-            'profiles.role must accept agent, plus an account.',
-          ),
-          (
-            'Retention window',
-            'How long events are kept defines the 180 days.',
-          ),
-        ])
-          AsideRow(badge: '→', tone: 'blue', title: item.$1, caption: item.$2),
       ]),
     ]);
   }

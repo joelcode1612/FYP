@@ -5,20 +5,22 @@ import 'package:shared_logic/shared_logic.dart';
 import '../../components/dashboard_kit.dart';
 import '../../components/letter_reveal.dart';
 import '../../components/ui.dart';
+import '../../data/admin_api.dart';
 import '../../data/agent_records.dart';
 import '../../layouts/app_layout.dart';
 
 /// Agent workspace home.
 ///
-/// ## Why this page is a prototype and says so out loud
+/// Every number on this page derives from the SAME authorized assignment
+/// dataset as Assigned Listings: `GET /api/v1/staff/me/listings`, which
+/// resolves the authenticated agent's profile server-side and returns the
+/// `agent_listing_assignment` rows (real foreign keys to
+/// `fyp.rental_properties`) joined with the operational property fields in
+/// one query. The former suitability-rank demonstration portfolio is gone.
 ///
-/// `profiles.role` has a database check constraint accepting only
-/// `entrepreneur`, `owner` and `admin`; there is no agent table, no
-/// `property_assignments` relation and no endpoint that could authorise one.
-/// So this workspace is built from the **real** listing catalog with a
-/// stand-in assignment rule, and every card that depends on the missing
-/// relations names the gap instead of hiding it. That is the brief's rule:
-/// show the shape of the workflow, never imply the backend enforces it.
+/// Status wording: "Active" = the listing passed administrator review
+/// (`verification_status = approved`). Publication (`is_published`) is a
+/// separate flag and is never inferred from approval.
 ///
 /// Layout reuses the app's bento grid (`.bento-head` / `.bento-kpis` /
 /// `.bento`) so the agent shell is the same object as the admin and owner
@@ -34,30 +36,33 @@ class AgentDashboardPage extends StatelessComponent {
       currentRoute: '/agent',
       title: 'Assigned portfolio',
       showPageHead: false,
-      child: FutureBuilder<List<CommercialProperty>>(
-        future: AgentRecords.assignedProperties(),
+      child: FutureBuilder<List<AgentAssignment>>(
+        future: AgentRecords.assignedListings(),
         builder: (context, snapshot) {
-          if (!snapshot.hasData) {
+          // A failed request and a genuinely empty portfolio must stay
+          // distinguishable: the error card never collapses into zeros.
+          if (snapshot.connectionState != ConnectionState.done) {
             return div(classes: 'loading', [
               span(classes: 'spinner', []),
-              Component.text('Loading assigned listings…'),
+              Component.text('Loading your assigned properties...'),
             ]);
           }
-          final listings = snapshot.data!;
+          if (snapshot.hasError) {
+            return _errorState(snapshot.error);
+          }
+          final listings = snapshot.data ?? const <AgentAssignment>[];
           return div(classes: 'stack', [
             _head(listings.length),
-            Callout(
-              'Agent is a proposed capability. The catalog, prices and areas '
-              'below are the imported dataset; which listings are "assigned" '
-              'to this agent is a demonstration rule that lives in this '
-              'browser only — no agent account or assignment table exists yet.',
-              tone: 'warning',
-            ),
+            // Zeros are truthful when nothing is assigned; the strip is
+            // always rendered so "0" is visible rather than implied.
             _kpis(listings),
-            div(classes: 'bento', [
-              _portfolioCard(listings),
-              _verificationCard(listings),
-            ]),
+            if (listings.isEmpty)
+              _noAssignments()
+            else
+              div(classes: 'bento', [
+                _portfolioCard(listings),
+                _verificationCard(listings),
+              ]),
           ]);
         },
       ),
@@ -65,17 +70,16 @@ class AgentDashboardPage extends StatelessComponent {
   }
 
   Component _head(int count) {
+    final sub = count == 0
+        ? 'No listings are assigned to your account yet.'
+        : 'The listings you handle, their review state and what is waiting '
+            'for an administrator. $count ${count == 1 ? 'unit' : 'units'} '
+            'assigned to you.';
     return div(classes: 'bento-head', [
       div(classes: 'bh-title', [
         span(classes: 'eyebrow-sm', [Component.text('Staff portal · agent')]),
         LetterRevealHeading.text('Assigned portfolio', level: 1),
-        p(classes: 'muted', [
-          Component.text(
-            'The listings this agent handles, their review state and what is '
-            'waiting for an administrator. $count units in the demonstration '
-            'portfolio.',
-          ),
-        ]),
+        p(classes: 'muted', [Component.text(sub)]),
       ]),
       div(classes: 'bh-actions', [
         AppLink(
@@ -87,28 +91,62 @@ class AgentDashboardPage extends StatelessComponent {
     ]);
   }
 
-  Component _kpis(List<CommercialProperty> listings) {
-    String count(VerificationStatus status) =>
-        '${listings.where((l) => l.verification == status).length}';
+  Component _noAssignments() {
+    return SectionCard(
+      title: 'Portfolio overview',
+      child: EmptyState(
+        title: 'No properties assigned yet.',
+        body:
+            'An administrator has not assigned any properties to your '
+            'account. Once one is assigned, it appears here and on the '
+            'Assigned Listings page with the same details.',
+        action: AppLink(
+          to: '/agent/listings',
+          classes: 'text-action',
+          children: [Component.text('Open Assigned Listings')],
+        ),
+      ),
+    );
+  }
+
+  Component _errorState(Object? error) {
+    return div(classes: 'card stack', [
+      span(classes: 'title', [
+        Component.text('Unable to load assigned properties.'),
+      ]),
+      p(classes: 'body muted', [
+        Component.text(
+          error == null
+              ? 'The backend did not answer. Please retry.'
+              : '${AdminApi.message(error)} Please retry.',
+        ),
+      ]),
+      const ActionLink('Retry', href: '/agent', variant: 'secondary'),
+    ]);
+  }
+
+  Component _kpis(List<AgentAssignment> listings) {
+    String count(String? wire) =>
+        '${listings.where((l) => AgentRecords.wireStatus(l) == wire).length}';
     return div(classes: 'bento-kpis', [
       _kpi(
         'Assigned listings',
         '${listings.length}',
-        'Demonstration portfolio',
+        'From your administrator\u2019s assignments',
       ),
       _kpi(
         'Active',
-        count(VerificationStatus.verified),
-        'Approved for display',
+        count('approved'),
+        'Passed administrator review',
       ),
       _kpi(
         'Pending review',
-        count(VerificationStatus.pending),
+        count('pending'),
         'Awaiting an administrator',
       ),
       _kpi(
         'Draft or suspended',
-        '${listings.where((l) => l.verification == VerificationStatus.draft || l.verification == VerificationStatus.rejected).length}',
+        '${listings.where((l) => AgentRecords.wireStatus(l) == 'draft' || AgentRecords.wireStatus(l) == 'rejected').length}',
         'Not live on the public site',
       ),
     ]);
@@ -122,7 +160,7 @@ class AgentDashboardPage extends StatelessComponent {
 
   /// The assigned units as records rather than cards: an agent works a queue,
   /// so the table gets the widest cell and links straight into the record.
-  Component _portfolioCard(List<CommercialProperty> listings) {
+  Component _portfolioCard(List<AgentAssignment> listings) {
     return div(classes: 'bento-card bento-wide', [
       div(classes: 'bento-card__head', [
         h3([Component.text('Portfolio overview')]),
@@ -138,38 +176,45 @@ class AgentDashboardPage extends StatelessComponent {
           DataColumn('Location'),
           DataColumn('Status'),
           DataColumn('Rent', numeric: true),
-          DataColumn('Detail', actions: true),
+          DataColumn('Listing id', numeric: true),
+          DataColumn('Manage', actions: true),
         ],
         rows: [
-          for (final property in listings)
+          for (final assignment in listings)
             [
               CellIdentity(
-                title: property.title,
-                caption: property.propertyType,
+                title: assignment.displayTitle.isEmpty
+                    ? 'Listing ${assignment.displayId}'
+                    : assignment.displayTitle,
+                caption: AgentRecords.propertyExists(assignment)
+                    ? AgentRecords.typeDisplay(assignment)
+                    : 'Operational record missing',
               ),
-              Component.text(property.city),
+              Component.text(AgentRecords.locationDisplay(assignment)),
               Pill(
-                AgentRecords.listingLabel(property.verification),
-                tone: AgentRecords.listingTone(property.verification),
+                AgentRecords.wireStatusLabel(AgentRecords.wireStatus(assignment)),
+                tone: AgentRecords.wireStatusTone(AgentRecords.wireStatus(assignment)),
               ),
-              Component.text(property.rentalDisplay),
+              Component.text(AgentRecords.rentDisplay(assignment)),
+              Component.text('${assignment.listingId}'),
               AppLink(
-                to: '/agent/property-detail?id=${property.id}',
+                to: '/agent/property-detail?id=${assignment.listingId}',
                 classes: 'text-action',
-                children: [Component.text('View')],
+                children: [Component.text('Manage')],
               ),
             ],
         ],
+        emptyLabel: 'No properties are assigned to your account yet.',
       ),
     ]);
   }
 
-  /// Pending property verification, driven by the real catalog states. When
-  /// the queue is empty the panel says so instead of padding itself with rows
-  /// that do not exist — the same honesty rule the old performance card used.
-  Component _verificationCard(List<CommercialProperty> listings) {
+  /// Pending property verification, driven by the same assignment rows as
+  /// every other panel on this page. When the queue is empty the panel says
+  /// so instead of padding itself with rows that do not exist.
+  Component _verificationCard(List<AgentAssignment> listings) {
     final pending = listings
-        .where((l) => l.verification == VerificationStatus.pending)
+        .where((l) => AgentRecords.wireStatus(l) == 'pending')
         .toList();
     return div(classes: 'bento-card', [
       div(classes: 'bento-card__head', [
@@ -187,15 +232,19 @@ class AgentDashboardPage extends StatelessComponent {
         )
       else
         div(classes: 'aside-list', [
-          for (final property in pending)
+          for (final assignment in pending)
             AsideRow(
               badge: '!',
               tone: 'warning',
-              title: property.title,
-              caption: '${property.city} · ${property.propertyType}',
+              title: assignment.displayTitle.isEmpty
+                  ? 'Listing ${assignment.displayId}'
+                  : assignment.displayTitle,
+              caption:
+                  '${AgentRecords.locationDisplay(assignment)} · '
+                  '${AgentRecords.typeDisplay(assignment)}',
               end: Pill(
-                AgentRecords.listingLabel(property.verification),
-                tone: AgentRecords.listingTone(property.verification),
+                AgentRecords.wireStatusLabel(AgentRecords.wireStatus(assignment)),
+                tone: AgentRecords.wireStatusTone(AgentRecords.wireStatus(assignment)),
               ),
             ),
         ]),

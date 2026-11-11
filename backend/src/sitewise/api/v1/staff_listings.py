@@ -36,6 +36,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import UTC, datetime
+from decimal import Decimal
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from pydantic import BaseModel, Field
@@ -104,8 +105,18 @@ class ReviewRequestPayload(BaseModel):
     reason: str = Field(min_length=12, max_length=2000)
 
 
+#: The decision verb the client sends vs the status the CHECK constraint
+#: stores. ``changes_requested`` is identical in both vocabularies.
+_DECISION_STATUS = {
+    "approve": "approved",
+    "reject": "rejected",
+    "changes_requested": "changes_requested",
+}
+
+
 class ChangeDecisionPayload(BaseModel):
     decision: str
+    note: str | None = Field(default=None, max_length=2000)
 
     def validated(self) -> str:
         if self.decision not in ("approve", "reject", "changes_requested"):
@@ -262,7 +273,9 @@ def _build_changes(
         if isinstance(live, bool) or isinstance(value, bool):
             live = bool(live)
             value = bool(value)
-        elif isinstance(live, (int, float)) and isinstance(value, (int, float)):
+        elif isinstance(live, (int, float, Decimal)) and isinstance(
+            value, (int, float, Decimal)
+        ):
             live = float(live)
             value = float(value)
         else:
@@ -288,8 +301,9 @@ def listing_detail(
     """One assigned listing: the Supabase assignment row plus the operational
     property row (same numeric id), photos and the open change request."""
     service = _admin_service()
-    _require_listing_access(service, user, listing_id)
-    assignment = service.get_listing(listing_id)
+    assignment, _profile = _require_listing_access(
+        session, service, user, listing_id
+    )
     repo = FypPropertyRepository(session)
     property_row = _operational_property(session, listing_id)
     photos = repo.listing_photos(listing_id)
@@ -314,7 +328,7 @@ def change_request_history(
     """Every change request and audit event recorded for this listing —
     preserved history, newest first."""
     service = _admin_service()
-    _require_listing_access(service, user, listing_id)
+    _require_listing_access(session, service, user, listing_id)
     requests = session.execute(
         text(
             "SELECT change_request_id FROM listing_change_request "
@@ -370,7 +384,7 @@ def save_proposal(
     first.
     """
     service = _admin_service()
-    _require_listing_access(service, user, listing_id)
+    _require_listing_access(session, service, user, listing_id)
     current = _operational_property(session, listing_id)
     if current is None:
         raise HTTPException(
@@ -452,7 +466,7 @@ def request_admin_review(
     event without persistence is never reported as submitted.
     """
     service = _admin_service()
-    _require_listing_access(service, user, listing_id)
+    _require_listing_access(session, service, user, listing_id)
     pending = session.execute(
         text(
             "SELECT change_request_id FROM listing_change_request "
@@ -512,7 +526,7 @@ def add_note(
 ) -> dict:
     """Persist an internal note as an audit event (append-only history)."""
     service = _admin_service()
-    _require_listing_access(service, user, listing_id)
+    _require_listing_access(session, service, user, listing_id)
     _record_audit(
         session,
         listing_id=listing_id,
@@ -529,28 +543,86 @@ def add_note(
 # ---------------------------------------------------------------------------
 
 
+def _same_value(current, proposed) -> bool:
+    """Type-tolerant equality for the concurrency check.
+
+    Handles the representations that meet here: psycopg2 returns ``Decimal``
+    for NUMERIC columns, the JSONB proposal carries floats/strings, and the
+    booleans may arrive as 0/1.
+    """
+    if isinstance(current, bool) or isinstance(proposed, bool):
+        return bool(current) == bool(proposed)
+    if isinstance(current, (int, float, Decimal)) and isinstance(
+        proposed, (int, float, Decimal)
+    ):
+        return abs(float(current) - float(proposed)) < 1e-9
+    return str("" if current is None else current) == str(
+        "" if proposed is None else proposed
+    )
+
+
+def _json_safe(value):
+    """Decimal/datetime are not JSON serializable in an HTTPException body."""
+    if isinstance(value, Decimal):
+        return float(value)
+    if hasattr(value, "isoformat"):
+        return value.isoformat()
+    return value
+
+
 def _apply_approved_changes(
     repo: FypPropertyRepository, listing_id: int, changes: dict
 ) -> dict:
-    """Apply approved field changes under server policy.
+    """Apply approved field changes under server policy with a stale check.
 
     Only the agent-proposable whitelist is applied, re-deriving each value
-    from the recorded proposal (never from the client's payload), and the
-    psf recompute runs inside ``update_owner_listing`` exactly as on the
-    owner path.
+    from the recorded proposal (never from the client's payload). Every field
+    also carries the LIVE value observed when the agent proposed it (``from``):
+    if the operational value has changed since then, the approval is refused
+    with 409 instead of silently overwriting the newer data. A field already
+    equal to the proposal is treated as applied (idempotent re-approval).
     """
+    current = repo.owner_listing(listing_id)
+    if current is None:
+        raise HTTPException(status_code=404, detail="Operational listing not found.")
+
     fields: dict = {}
+    stale: dict[str, dict] = {}
     for field in AGENT_PROPOSABLE_FIELDS:
         if field not in changes:
             continue
-        value = changes[field].get("to")
+        entry = changes[field] or {}
+        value = entry.get("to")
         if field == "property_type":
             value = _normalize_proposed_type(str(value))
+        live = current.get(field)
+        if _same_value(live, value):
+            continue  # already applied by an earlier approval
+        if not _same_value(live, entry.get("from")):
+            stale[field] = {
+                "expected_from": _json_safe(entry.get("from")),
+                "current": _json_safe(live),
+                "proposed": _json_safe(value),
+            }
+            continue
         fields[field] = value
-    if not fields:
+
+    if stale:
         raise HTTPException(
-            status_code=422, detail="The approved request carries no applicable field."
+            status_code=409,
+            detail={
+                "code": "stale_change_request",
+                "message": (
+                    "The listing changed after this request was proposed; the "
+                    "approval would overwrite newer data. Ask the agent to "
+                    "re-propose against the current values."
+                ),
+                "fields": stale,
+            },
         )
+    if not fields:
+        # Nothing left to write: either fully applied already or empty.
+        return current
     updated = repo.update_owner_listing(listing_id, fields)
     if updated is None:
         raise HTTPException(status_code=404, detail="Operational listing not found.")
@@ -577,7 +649,7 @@ def decide_change_request(
     """
     decision = payload.validated()
     service = _admin_service()
-    _require_listing_access(service, admin, listing_id)
+    _require_listing_access(session, service, admin, listing_id)
     request = session.get(ListingChangeRequest, request_id)
     if request is None or request.listing_id != listing_id:
         raise HTTPException(status_code=404, detail="Change request not found.")
@@ -591,7 +663,7 @@ def decide_change_request(
         applied = _apply_approved_changes(
             FypPropertyRepository(session), listing_id, request.changes or {}
         )
-    request.status = decision
+    request.status = _DECISION_STATUS[decision]
     request.reviewed_by = admin.user_id
     request.review_note = (payload.note or "").strip() or None
     request.updated_at = _utcnow()
@@ -616,6 +688,96 @@ def decide_change_request(
 
 
 # ---------------------------------------------------------------------------
+# Administrator queue: agent change requests + assignments
+# ---------------------------------------------------------------------------
+
+
+@router.get("/change-requests")
+def admin_change_requests(
+    status: str = "pending",
+    admin: AuthenticatedUser = Depends(require_admin_mfa),
+    session: Session = Depends(get_db),
+) -> dict:
+    """Every agent change request, newest first (default: pending).
+
+    This is the administrator's discoverability surface for workflow B
+    (agent listing changes) - deliberately separate from the
+    ``property_verification`` queue (workflow A). Each row carries the live
+    operational values alongside the proposal so the reviewer sees exactly
+    what would change. Agent names come from the Supabase agent profiles;
+    if that lookup is unavailable the row still renders with the user id.
+    """
+    if status not in ("pending", "draft", "approved", "rejected", "changes_requested", "all"):
+        raise HTTPException(
+            status_code=422,
+            detail="status must be pending, draft, approved, rejected, changes_requested or all.",
+        )
+    params: dict = {}
+    sql = (
+        "SELECT change_request_id FROM listing_change_request "
+        + ("" if status == "all" else "WHERE status = :status ")
+        + "ORDER BY created_at DESC LIMIT 200"
+    )
+    if status != "all":
+        params["status"] = status
+    ids = session.execute(text(sql), params).scalars().all()
+
+    profiles: dict[str, dict] = {}
+    try:
+        for profile in _admin_service().list_agent_profiles():
+            uid = profile.get("user_id")
+            if uid:
+                profiles[str(uid)] = profile
+    except Exception:  # noqa: BLE001 - the queue must render without Supabase
+        profiles = {}
+
+    repo = FypPropertyRepository(session)
+    requests: list[dict] = []
+    for request_id in ids:
+        row = session.get(ListingChangeRequest, request_id)
+        if row is None:
+            continue
+        payload = _request_dict(row)
+        property_row = repo.owner_listing(row.listing_id) or {}
+        changed_fields = sorted((row.changes or {}).keys())
+        payload["agent"] = profiles.get(str(row.proposed_by))
+        payload["property"] = {
+            "listing_id": row.listing_id,
+            "name": property_row.get("name"),
+            "address": property_row.get("address"),
+            "city": property_row.get("city"),
+            "state": property_row.get("state"),
+            # Numeric columns arrive as Decimal; pydantic v2 serializes those
+            # as strings, so normalise them to numbers for the review table.
+            "rental_price": _json_safe(property_row.get("rental_price")),
+            "size_sqft": _json_safe(property_row.get("size_sqft")),
+            "verification_status": property_row.get("verification_status"),
+            "is_published": property_row.get("is_published"),
+            "property_exists": bool(property_row),
+        }
+        payload["current"] = {
+            field: _json_safe(property_row.get(field)) for field in changed_fields
+        }
+        requests.append(payload)
+    return {"requests": requests, "count": len(requests)}
+
+
+@router.get("/assignments")
+def admin_assignments(
+    agent_id: int | None = None,
+    admin: AuthenticatedUser = Depends(require_admin_mfa),
+    session: Session = Depends(get_db),
+) -> dict:
+    """Agent assignment overview (optional agent filter)."""
+    from sitewise.repositories.agent_assignment_repository import (
+        AgentAssignmentRepository,
+    )
+
+    rows = AgentAssignmentRepository(session).list_all(agent_id=agent_id)
+    return {"assignments": rows, "count": len(rows)}
+
+
+# ---------------------------------------------------------------------------
 # Listing photos (agent-scoped reuse of the owner photo mechanism)
 # ---------------------------------------------------------------------------
 
@@ -624,7 +786,7 @@ def _photo_targets(
     listing_id: int, user: AuthenticatedUser, session: Session
 ) -> FypPropertyRepository:
     service = _admin_service()
-    _require_listing_access(service, user, listing_id)
+    _require_listing_access(session, service, user, listing_id)
     if _operational_property(session, listing_id) is None:
         raise HTTPException(
             status_code=404,

@@ -26,6 +26,24 @@ def auth(token):
     return {"Authorization": f"Bearer {token}"}
 
 
+@pytest.fixture(autouse=True)
+def offline_address_validation(monkeypatch):
+    """The submission path calls Google Address Validation; the suite runs
+    offline with a provider-validated result so lifecycle tests exercise the
+    real transitions instead of the network (same pattern as
+    ``test_property_verification_api.py``)."""
+    from sitewise.services import property_verification_service as service_module
+
+    monkeypatch.setattr(
+        service_module,
+        "validate_address",
+        lambda **_kwargs: {
+            "status": "validated",
+            "formatted_address": "Test formatted address, Selangor",
+        },
+    )
+
+
 @pytest.fixture()
 def cleanup_listings(cleanup_users):
     props: list[int] = []
@@ -98,6 +116,9 @@ def complete_payload():
         "address": "Jalan SS15/4, Subang Jaya",
         "city": "Subang Jaya",
         "state": "Selangor",
+        # The address-validation policy made postcode a required submission
+        # field; SS15 Subang Jaya is 47500.
+        "postcode": "47500",
         "latitude": 3.0722,
         "longitude": 101.6065,
         "rental_price": 7800,
