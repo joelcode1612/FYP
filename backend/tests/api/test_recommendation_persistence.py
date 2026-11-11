@@ -93,6 +93,7 @@ def test_typed_columns_and_canonical_text_id_are_written(user_id):
             )
         ).scalars().first()
         assert row is not None
+        assert row.user_id == user_id  # app UUID, never fyp.users' legacy BIGINT
         assert row.property_id == "MD-00510"  # TEXT canonical id, not an int
         assert str(row.batch_id) == batch["batch_id"]
         assert float(row.score) == pytest.approx(0.7403, abs=1e-6)

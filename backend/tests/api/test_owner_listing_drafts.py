@@ -125,6 +125,14 @@ def test_draft_create_round_trip_and_no_duplicates(client, owner, cleanup_listin
     assert row["is_published"] is False
     assert row["owner_user_id"] == owner["sub"]
     assert row["rental_price"] is None  # minimally validated draft
+    # Supabase UUID ownership must never be assigned to the legacy BIGINT FK.
+    with Session(engine) as session:
+        persisted = session.execute(
+            text("SELECT owner_id, owner_user_id FROM fyp.rental_properties WHERE id = :pid"),
+            {"pid": pid},
+        ).one()
+    assert persisted.owner_id is None
+    assert str(persisted.owner_user_id) == owner["sub"]
 
     # Resume: GET returns the same row plus its (empty) photo list.
     g = client.get(f"/api/v1/properties/listings/{pid}", headers=auth(owner["token"]))

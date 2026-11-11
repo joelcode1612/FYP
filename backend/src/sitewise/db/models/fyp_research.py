@@ -1,13 +1,15 @@
 """ORM read models for the ``fyp`` research/operational schema.
 
-These classes mirror the LIVE ``fyp`` schema (verified against the deployed
-PostgreSQL database, 2026-11-09) and the supplied ERD contract
+These classes mirror the external ``fyp`` schema described by the earlier
+deployment evidence (2026-11-09) and the supplied ERD contract
 (``456.pgerd`` → ``SiteWise_PostgreSQL_ORM_Models_From_ERD``). They exist so
 application queries can go through typed session.execute(select(...)) where
-practical and so ``create_all`` recognises the tables as already present —
-**no table here is ever created, altered or dropped by the application.**
+practical. Their ``externally_managed`` metadata flag excludes them from
+startup DDL; startup verifies that they already exist instead.
+**No table here is ever created, altered or dropped by the application.**
 
-Key semantics established by live inspection (do not re-derive):
+Historical deployment notes (row counts are not runtime guarantees; verify
+the configured database before making schema changes):
 
 * ``fyp.rental_properties`` is the primary operational property table
   (bigserial ``id``). 1,182 rows live: 227 ``approved``+published,
@@ -32,11 +34,11 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Optional
 
-from sqlalchemy import Column
+from sqlalchemy import BigInteger, Column
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlmodel import Field, SQLModel
 
-_FYP_SCHEMA = {"schema": "fyp"}
+_FYP_SCHEMA = {"schema": "fyp", "info": {"externally_managed": True}}
 
 
 class FypRentalProperty(SQLModel, table=True):
@@ -46,7 +48,11 @@ class FypRentalProperty(SQLModel, table=True):
     __table_args__ = _FYP_SCHEMA
 
     id: Optional[int] = Field(default=None, primary_key=True)
-    owner_id: Optional[int] = Field(default=None, foreign_key="fyp.users.id")
+    # The database enforces the legacy FK to fyp.users.id. That identity is
+    # intentionally not mapped here; declaring an unresolved ORM FK breaks
+    # metadata sorting even when every database table already exists.
+    # UUID ownership uses owner_user_id in the repository, never this column.
+    owner_id: Optional[int] = Field(default=None, sa_column=Column(BigInteger))
     listing_id: Optional[str] = Field(default=None, max_length=120)
     name: str = Field(max_length=255)
     property_type: str = Field(max_length=255)
@@ -183,7 +189,11 @@ class FypRecommendationResult(SQLModel, table=True):
 
     id: Optional[int] = Field(default=None, primary_key=True)
     batch_id: Optional[str] = None
-    user_id: Optional[int] = Field(default=None, foreign_key="fyp.users.id")
+    # Preserve the legacy integer value and its database-enforced FK without
+    # registering another users model or confusing it with users.user_id.
+    user_id: Optional[int] = Field(
+        default=None, sa_column=Column(BigInteger, nullable=False)
+    )
     property_id: int = Field(foreign_key="fyp.rental_properties.id")
     suitability_score: Optional[float] = None
     ranking: Optional[int] = None
