@@ -102,10 +102,9 @@ dev_dependencies:
 flutter:
   assets:
     - models/target_reticle.glb
-    # Official Sitewise mark — the same 64px master used by the web app
-    # (fyp_jaspr_web/web/assets/sitewise-mark-64.png) and the launcher icons.
-    # Referenced by M3BrandLockup in the post-sign-in Material 3 workspace.
     - assets/sitewise-mark-64.png
+    - assets/config/dev.json
+    - assets/config/sitewise_dev.json
 
   uses-material-design: true
 

@@ -182,3 +182,107 @@ abstract final class PropertyFormRules {
     return null;
   }
 }
+
+/// Shared address-verification state; Google verification is not ownership approval.
+enum AddressVerificationState {
+  unverified,
+  verifying,
+  validatedPendingConfirmation,
+  verified,
+  partiallyValidated,
+  unconfirmed,
+  serviceError,
+}
+
+/// Exact address and verified coordinates; changes make a verification stale.
+class AddressSnapshot {
+  const AddressSnapshot({
+    required this.address,
+    required this.city,
+    required this.state,
+    required this.postcode,
+    this.latitude,
+    this.longitude,
+  });
+
+  final String address;
+  final String city;
+  final String state;
+  final String postcode;
+  final double? latitude;
+  final double? longitude;
+
+  @override
+  bool operator ==(Object other) =>
+      other is AddressSnapshot &&
+      other.address == address &&
+      other.city == city &&
+      other.state == state &&
+      other.postcode == postcode &&
+      other.latitude == latitude &&
+      other.longitude == longitude;
+
+  @override
+  int get hashCode =>
+      Object.hash(address, city, state, postcode, latitude, longitude);
+}
+
+/// Normalised verdict from the existing backend Google address adapter.
+class AddressValidationResult {
+  const AddressValidationResult({
+    required this.status,
+    this.formattedAddress,
+    this.granularity,
+    this.postalCode,
+    this.latitude,
+    this.longitude,
+    this.provider,
+  });
+
+  final String status;
+  final String? formattedAddress;
+  final String? granularity;
+  final String? postalCode;
+  final double? latitude;
+  final double? longitude;
+  final String? provider;
+
+  bool get confirmed => status == 'validated';
+
+  bool get hasCoordinates =>
+      latitude != null && longitude != null &&
+      latitude!.isFinite && longitude!.isFinite &&
+      latitude! >= -90 && latitude! <= 90 &&
+      longitude! >= -180 && longitude! <= 180;
+
+  factory AddressValidationResult.fromData(Map<String, dynamic> data) =>
+      AddressValidationResult(
+        status: '${data['status'] ?? 'unconfirmed'}',
+        formattedAddress: data['formatted_address'] as String?,
+        granularity: data['validation_granularity'] as String?,
+        postalCode: data['postal_code'] as String?,
+        latitude: (data['latitude'] as num?)?.toDouble(),
+        longitude: (data['longitude'] as num?)?.toDouble(),
+        provider: data['provider'] as String?,
+      );
+}
+
+/// User-facing messages shared by the web and mobile address verification UI.
+abstract final class AddressVerificationCopy {
+  static const String validated =
+      'Address validated. Please confirm the location shown below.';
+  static const String partiallyValidated =
+      'We found the general location, but cannot confirm the exact property '
+      'address. Please check the building, unit number or postcode.';
+  static const String unconfirmed =
+      "We couldn't verify this address. Please check your address details and "
+      'try again.';
+  static const String unavailable =
+      'Address verification is temporarily unavailable. Please retry.';
+  static const String invalidRequest =
+      'The address could not be checked. Review the address details and try again.';
+  static const String required =
+      'Verify and confirm the address before submitting.';
+  static const String stale =
+      'Address details changed — verify the address again.';
+}

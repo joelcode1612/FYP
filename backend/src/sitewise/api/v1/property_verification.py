@@ -16,6 +16,7 @@ from typing import Annotated, Literal
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
+from sqlalchemy import text
 from sqlmodel import Session
 
 from sitewise.db.session import get_db
@@ -27,6 +28,7 @@ from sitewise.dependencies import (
 )
 from sitewise.domain import rbac
 from sitewise.services import verification_storage as storage
+from sitewise.services.property_enrichment_service import PropertyEnrichmentService
 from sitewise.services.property_verification_service import (
     AdminPropertyReviewService,
     PropertyVerificationService,
@@ -58,6 +60,15 @@ class SubmitRequest(BaseModel):
     """
 
     scope: Literal["full", "listing"] = "full"
+    acknowledge_unavailable_population: bool = Field(
+        default=False,
+        description=(
+            "Set only after the owner has been told that population could not "
+            "be measured for these coordinates. Population is never estimated, "
+            "so the owner has to acknowledge the gap before the listing enters "
+            "the review queue."
+        ),
+    )
 
 
 class RejectRequest(BaseModel):
@@ -109,12 +120,73 @@ def submit_for_verification(
     Google Address Validation is no longer part of the submission flow; the
     listing enters the queue with the address as entered and location truth
     is established by geospatial enrichment plus admin review.
+
+    Submission is always an explicit owner action and never an automatic
+    consequence of enrichment finishing. Two guards apply, and only once
+    enrichment has actually been attempted for the listing:
+
+    * while a category is still ``running`` the submission is refused (409),
+      because the figures the reviewer will see are not settled yet;
+    * when population is ``unavailable`` or ``failed`` the owner must
+      acknowledge the gap (409 until they do). Population is reported as
+      unavailable rather than estimated, so the reviewer needs to know it is
+      missing instead of assuming a low number.
     """
+    acknowledgement = bool(
+        payload.acknowledge_unavailable_population if payload is not None else False
+    )
+    _guard_enrichment_before_submit(session, property_id, acknowledgement)
     return PropertyVerificationService(session).submit(
         property_id,
         current.user_id,
         scope=payload.scope if payload is not None else "full",
     )
+
+
+def _guard_enrichment_before_submit(
+    session: Session, property_id: int, acknowledged: bool
+) -> None:
+    """Refuse a premature or unacknowledged submission.
+
+    Listings that were never enriched keep their previous behaviour: the guard
+    only engages once at least one enrichment category row exists, so the
+    existing submission flows (and their tests) are untouched.
+    """
+    rows = session.execute(
+        text(
+            """
+            SELECT category, status
+            FROM fyp.property_enrichment_category
+            WHERE property_id = :pid
+            """
+        ),
+        {"pid": property_id},
+    ).all()
+    if not rows:
+        return
+
+    states = {row[0]: row[1] for row in rows}
+    running = sorted(c for c, s in states.items() if s == "running")
+    if running:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "Enrichment is still running for: "
+                + ", ".join(running)
+                + ". Wait for it to finish before submitting."
+            ),
+        )
+
+    population = states.get("population")
+    if population in ("unavailable", "failed", "stale") and not acknowledged:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "Population could not be measured for these coordinates "
+                f"(state: {population}). Confirm that you want to submit "
+                "without a population figure."
+            ),
+        )
 
 
 @submitter_router.post("/{property_id}/verification/documents", status_code=201)
@@ -210,8 +282,18 @@ def review_queue(
 @staff_router.get("/{property_id}")
 def review_detail(property_id: int, session: DbSession, admin: AdminUser) -> dict:
     """Full verification detail: property, owner identity reference, both
-    dimension statuses, document metadata and chronological audit history."""
-    return AdminPropertyReviewService(session).detail(property_id)
+    dimension statuses, document metadata and chronological audit history.
+
+    The stored per-category enrichment state is added alongside it so the
+    reviewer can see which figures are measured, which are unavailable and why
+    — without recalculating anything. A category that could not be measured is
+    reported as unavailable, never as a zero.
+    """
+    payload = AdminPropertyReviewService(session).detail(property_id)
+    enrichment = PropertyEnrichmentService(session)
+    enrichment.ensure_schema()
+    payload["enrichment"] = enrichment.summary(property_id)
+    return payload
 
 
 @staff_router.post("/{property_id}/verification/start-review")

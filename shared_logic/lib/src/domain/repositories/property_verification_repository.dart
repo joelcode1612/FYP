@@ -40,7 +40,18 @@ abstract class PropertyVerificationRepository {
   /// listing dimension enters review while ownership stays untouched
   /// (`not_submitted` on a first submission). Authorization is enforced
   /// server-side either way.
-  Future<PropertyVerification> submit(String propertyId, {String? scope});
+  ///
+  /// [acknowledgeUnavailablePopulation] must be `true` once the owner has been
+  /// told that population could not be measured for these coordinates. The
+  /// backend refuses the submission (409) while enrichment is still running,
+  /// and refuses it without this acknowledgement when population is
+  /// unavailable — population is never estimated, so the gap has to be
+  /// accepted explicitly rather than silently shipped to the reviewer.
+  Future<PropertyVerification> submit(
+    String propertyId, {
+    String? scope,
+    bool acknowledgeUnavailablePopulation = false,
+  });
 
   /// Upload one evidence document (metadata is returned, bytes are stored
   /// server-side under an unpredictable key).

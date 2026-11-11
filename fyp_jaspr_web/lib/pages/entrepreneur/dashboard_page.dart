@@ -94,29 +94,36 @@ class _DashboardPageState extends State<DashboardPage> {
       // The welcome header is the page's own first element — no separate
       // page-title band above it.
       showPageHead: false,
-      child: div(classes: 'stack stack--sections sw-dash', [
-        _head(name),
-        // KPI row: each counter degrades to an em dash when its own read
-        // fails; the other cards keep their real values.
-        _kpis(saved),
-        // Compact overview of the most recently updated saved assessment.
-        // It loads on its own so a slow or failed read never holds up the
-        // rest of the dashboard.
-        const _CurrentAssessment(),
-        _quickActions(saved),
-        _recent(),
-        // DESIGN.md §17: a concise, visible disclaimer near decision-support
-        // output. Progress percentages here are server-derived stage counts,
-        // never model scores, and this note keeps that boundary explicit.
-        p(classes: 'stat-note', [
-          Component.text(
-            'Sitewise supports location decision-making. Assessments and '
-            'recommendations do not guarantee business success or confirm '
-            'regulatory approval. Verify important property and licensing '
-            'information independently.',
-          ),
-        ]),
-      ]),
+      // The shared section stack already applies a gap, while the dashboard
+      // stylesheet adds 34px top margins to sections. Keep one consistent,
+      // responsive vertical rhythm instead of accumulating both spacings.
+      child: div(
+        classes: 'stack stack--sections sw-dash',
+        styles: Styles(raw: {'gap': 'clamp(16px, 2vw, 24px)'}),
+        [
+          _head(name),
+          // KPI row: each counter degrades to an em dash when its own read
+          // fails; the other cards keep their real values.
+          _kpis(saved),
+          // Compact overview of the most recently updated saved assessment.
+          // It loads on its own so a slow or failed read never holds up the
+          // rest of the dashboard.
+          const _CurrentAssessment(),
+          _quickActions(saved),
+          _recent(),
+          // DESIGN.md §17: a concise, visible disclaimer near decision-support
+          // output. Progress percentages here are server-derived stage counts,
+          // never model scores, and this note keeps that boundary explicit.
+          p(classes: 'stat-note', [
+            Component.text(
+              'Sitewise supports location decision-making. Assessments and '
+              'recommendations do not guarantee business success or confirm '
+              'regulatory approval. Verify important property and licensing '
+              'information independently.',
+            ),
+          ]),
+        ],
+      ),
     );
   }
 
@@ -260,7 +267,7 @@ class _DashboardPageState extends State<DashboardPage> {
   // ------------------------------------------------------------ quick actions
 
   Component _quickActions(Set<String> saved) {
-    return section(classes: 'sw-dash-section', [
+    return section(classes: 'sw-dash-section', styles: Styles(raw: {'margin-top': '0'}), [
       div(classes: 'sw-dash-section-head', [
         h2([Component.text('Quick Actions')]),
       ]),
@@ -307,7 +314,7 @@ class _DashboardPageState extends State<DashboardPage> {
   /// renders an inline retry scoped to this section only — the KPI row, the
   /// Current Assessment card and Quick Actions remain usable.
   Component _recent() {
-    return section(classes: 'sw-dash-section', [
+    return section(classes: 'sw-dash-section', styles: Styles(raw: {'margin-top': '0'}), [
       div(classes: 'sw-dash-section-head', [
         h2([Component.text('Recent Assessments')]),
         AppLink(
@@ -506,7 +513,7 @@ class _CurrentAssessmentState extends State<_CurrentAssessment> {
 
   /// The shared card frame, so loading, empty, error and summary states all
   /// occupy the same place in the page and the layout never jumps.
-  Component _frame(Component body) => section(classes: 'sw-dash-section', [
+  Component _frame(Component body) => section(classes: 'sw-dash-section', styles: Styles(raw: {'margin-top': '0'}), [
     div(classes: 'sw-dash-section-head', [
       h2([Component.text('Current Assessment')]),
       AppLink(

@@ -27,6 +27,9 @@ class OwnerListingResult {
 
   bool get enriched => enrichmentStatus == 'ok';
 
+  /// A saved draft is not in the admin queue yet.
+  bool get isDraft => verificationStatus == 'draft';
+
   int? featureInt(String key) => switch (features?[key]) {
     final num value => value.toInt(),
     _ => null,
@@ -41,7 +44,12 @@ class OwnerListingResult {
       name: '${data['name'] ?? ''}',
       verificationStatus: '${data['verification_status'] ?? 'pending'}',
       isPublished: data['is_published'] == true,
-      enrichmentStatus: '${enrichment['status'] ?? 'failed'}',
+      // A draft response carries no `enrichment` block because saving a draft
+      // never enriches: enrichment is a separate, explicit step. Report that
+      // as "not run" instead of implying a failure.
+      enrichmentStatus: enrichment.isEmpty
+          ? 'not_run'
+          : '${enrichment['status'] ?? 'failed'}',
       features: features,
       enrichmentDetail: enrichment['detail'] as String?,
     );
@@ -165,9 +173,93 @@ class ApiPropertyRepository implements PropertyRepository {
     return OwnerListingResult.fromResponse(response);
   }
 
+  /// Save the Add Property wizard as a DRAFT.
+  ///
+  /// A draft is `verification_status='draft'`, unpublished, and outside the
+  /// admin queue. This is deliberately different from
+  /// [submitOwnerListing]: enrichment and submission are separate, explicit
+  /// steps, so nothing reaches the reviewer without the owner asking for it.
+  Future<OwnerListingResult> createOwnerDraft(Map<String, dynamic> body) async {
+    final response = await WebAuth.request(
+      '/api/v1/properties/listings/drafts',
+      method: 'POST',
+      body: body,
+    );
+    return OwnerListingResult.fromResponse(response);
+  }
+
   /// Re-run enrichment for an owned listing (idempotent server-side).
-  Future<Map<String, dynamic>> enrichListing(int propertyId) =>
-      WebAuth.request('/api/v1/properties/listings/$propertyId/enrich', method: 'POST');
+  ///
+  /// [phase] runs one phase only — Phase 1 (PostGIS) and Phase 2 (population)
+  /// are separate requests so the owner sees the fast categories settle while
+  /// the raster work is still going. Omitting it runs both.
+  Future<PropertyEnrichmentSummary> enrichListing(
+    int propertyId, {
+    EnrichmentPhase? phase,
+    bool force = false,
+  }) async {
+    final response = await WebAuth.request(
+      '/api/v1/properties/listings/$propertyId/enrich',
+      method: 'POST',
+      body: {
+        if (phase != null) 'phase': phase.wire,
+        if (force) 'force': true,
+      },
+    );
+    return PropertyEnrichmentSummary.fromJson(_enrichmentPayload(response));
+  }
+
+  /// Stored enrichment state. Never recalculates, so it is safe to poll.
+  Future<PropertyEnrichmentSummary> enrichmentState(int propertyId) async {
+    final response = await WebAuth.request(
+      '/api/v1/properties/listings/$propertyId/enrichment',
+    );
+    return PropertyEnrichmentSummary.fromJson(_enrichmentPayload(response));
+  }
+
+  /// Retry exactly one enrichment category.
+  Future<PropertyEnrichmentSummary> retryEnrichment(
+    int propertyId,
+    EnrichmentCategory category,
+  ) async {
+    final response = await WebAuth.request(
+      '/api/v1/properties/listings/$propertyId/enrichment/${category.wire}/retry',
+      method: 'POST',
+    );
+    return PropertyEnrichmentSummary.fromJson(_enrichmentPayload(response));
+  }
+
+  static Map<String, dynamic> _enrichmentPayload(Map<String, dynamic> response) {
+    final data = response['data'];
+    return data is Map<String, dynamic> ? data : response;
+  }
+
+  /// Checks an address through FastAPI; never exposes the Google API key.
+  /// A validated address is NOT proof of property ownership or approval.
+  Future<AddressValidationResult> validateAddress({
+    required List<String> addressLines,
+    String? city,
+    String? state,
+    String? postcode,
+  }) async {
+    final response = await WebAuth.request(
+      '/api/v1/properties/validate-address',
+      method: 'POST',
+      body: {
+        'address_lines': addressLines
+            .where((line) => line.trim().isNotEmpty)
+            .toList(),
+        if (city != null && city.trim().isNotEmpty) 'city': city.trim(),
+        if (state != null && state.trim().isNotEmpty) 'state': state.trim(),
+        if (postcode != null && postcode.trim().isNotEmpty)
+          'postcode': postcode.trim(),
+        'region_code': 'MY',
+      },
+    );
+    final data =
+        (response['data'] as Map?)?.cast<String, dynamic>() ?? const {};
+    return AddressValidationResult.fromData(data);
+  }
 }
 
 /// Deterministic workbook-index ranking, not a trained prediction or demo data.

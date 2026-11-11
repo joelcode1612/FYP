@@ -8,6 +8,7 @@ import '../../../../application/services/service_locator.dart';
 import '../../../../core/config/mobile_config.dart';
 import '../../shell/entrepreneur_tab_scope.dart';
 import '../../shell/mobile_app_shell.dart';
+import '../../../shared/tour/ar_capture_mobile_page.dart';
 
 /// SiteWise Add Property — REAL owner-listing workflow.
 ///
@@ -43,7 +44,7 @@ class _SitewiseAddPropertyMobilePageState
   static const List<String> _stepNames = <String>[
     'Property details',
     'Location',
-    'Photos',
+    'AR 360° Capture',
     'Review',
     'Confirmation',
   ];
@@ -51,7 +52,7 @@ class _SitewiseAddPropertyMobilePageState
   static const List<String> _stepDescriptions = <String>[
     'Enter the basic details of your commercial unit.',
     'Add the address details of your commercial unit.',
-    'Attach photos of the property (JPG, PNG or WebP).',
+    'Capture a 360° virtual tour of the property with AR guidance.',
     'Review the information before submission.',
     'Save or submit your property.',
   ];
@@ -793,7 +794,7 @@ class _SitewiseAddPropertyMobilePageState
       case 2:
         return _buildLocation();
       case 3:
-        return _buildPhotos();
+        return _buildArCapture();
       case 4:
         return _buildReview();
       default:
@@ -1095,6 +1096,134 @@ class _SitewiseAddPropertyMobilePageState
     );
     if (!mounted || picked == null) return;
     onSelected(picked);
+  }
+
+
+  // ------------------------------------------------------- AR 360 capture
+  bool _startingCapture = false;
+
+  Future<void> _startArCapture() async {
+    if (_startingCapture) return;
+    setState(() => _startingCapture = true);
+    try {
+      await _saveDraft();
+      final id = _draftId;
+      if (!mounted) return;
+      if (id == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'The draft could not be saved, so AR capture was not started.',
+            ),
+          ),
+        );
+        return;
+      }
+      await Navigator.of(context).pushNamed(
+        '/owner/capture',
+        arguments: ArCaptureRequest(propertyId: id),
+      );
+      if (mounted) setState(() {});
+    } finally {
+      if (mounted) setState(() => _startingCapture = false);
+    }
+  }
+
+  Widget _arGuidance(IconData icon, String title, String body) {
+    final scheme = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, size: 20, color: scheme.primary),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title, style: Theme.of(context).textTheme.titleSmall),
+                const SizedBox(height: 2),
+                Text(
+                  body,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: scheme.onSurfaceVariant,
+                      ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildArCapture() {
+    final scheme = Theme.of(context).colorScheme;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: scheme.surface,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: scheme.outlineVariant),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  Icon(Icons.view_in_ar_outlined, color: scheme.primary),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      'AR 360° Capture',
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 14),
+              _arGuidance(
+                Icons.grid_on_outlined,
+                'Follow 26 capture points',
+                'Stand at the centre and turn in place; each station is '
+                    'recorded automatically when it is aligned and steady.',
+              ),
+              _arGuidance(
+                Icons.center_focus_strong_outlined,
+                'AR alignment guidance',
+                'Align the target, hold still, and let the app confirm the '
+                    'position before the frame is taken.',
+              ),
+              _arGuidance(
+                Icons.panorama_outlined,
+                'Create a virtual tour',
+                'Frames are stitched into a 360° tour for this property.',
+              ),
+              const SizedBox(height: 4),
+              FilledButton.icon(
+                onPressed: _startingCapture ? null : _startArCapture,
+                icon: const Icon(Icons.play_circle_outline),
+                label: Text(
+                  _startingCapture ? 'Saving draft…' : 'Start AR Capture',
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'The virtual tour will be linked to this property and can be '
+                'reviewed in My Properties.',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: scheme.onSurfaceVariant,
+                    ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
   }
 
   Widget _buildPhotos() {

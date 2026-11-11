@@ -493,7 +493,7 @@ class _Notice extends StatelessWidget {
                 MobileConfig.problems.join('\n'),
               'Start the backend and the app separately: '
               '.\\run-sitewise.cmd starts FastAPI; Flutter needs its own '
-              '--dart-define-from-file=fyp_mobile_app/config/dev.env.',
+              '--dart-define-from-file=fyp_mobile_app/config/dev.json.',
             ].join('\n\n'),
           );
         }

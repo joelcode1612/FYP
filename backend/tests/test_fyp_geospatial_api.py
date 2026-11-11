@@ -240,12 +240,18 @@ def test_create_listing_persists_pending_and_enriches(client, owner_token, creat
         ).scalar_one()
         assert geom.startswith("POINT("), "generated geom must be populated"
 
-    # The create path now runs the feature-refresh service and reports its
-    # summary (not a per-feature dict). The values land in the geospatial
-    # table; assert them there so the test still proves real enrichment.
+    # The create path runs the feature-refresh service and reports the STORED
+    # feature row (not a per-feature summary), with the freshness state
+    # alongside it. Assert the stored values here so the test still proves real
+    # enrichment; the authoritative checks are the database reads below.
+    #
+    # NOTE: this assertion previously read `features["properties_recalculated"]`,
+    # a key `_run_enrichment` has never put in `features` (it returns
+    # `repo.get_geo_features(...)`). The test was stale against the committed
+    # contract, not catching a regression.
     enrichment = body["enrichment"]
     assert enrichment["status"] == "ok", enrichment
-    assert enrichment["features"]["properties_recalculated"] >= 1
+    assert enrichment["features"]["property_id"] == pid
     with Session(engine) as session:
         features = session.execute(
             text(

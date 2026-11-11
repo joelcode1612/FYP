@@ -1,5 +1,8 @@
 
 
+import logging
+from typing import Literal
+
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import text
@@ -15,8 +18,11 @@ from sitewise.services.address_validation_service import (
     AddressValidationUnavailable,
     validate_address,
 )
+from sitewise.services.property_enrichment_service import PropertyEnrichmentService
 
 router = APIRouter()
+
+logger = logging.getLogger("sitewise.properties")
 
 #: The only commercial property types the Add Property form may submit.
 #: Mirrors `shared_logic/lib/src/domain/data/add_property_rules.dart`; the
@@ -137,6 +143,20 @@ def _run_enrichment(repo: FypPropertyRepository, property_row: dict) -> dict:
                 "detail": "; ".join(result["errors"])[:300],
                 "freshness": "pending_or_failed",
             }
+        # Record the per-category lifecycle for the SAME values. The wide
+        # feature row above stays the measurement contract; this keeps the
+        # admin review panel from reporting "not started" for a listing whose
+        # features were in fact calculated. Same source tables and predicates,
+        # so the numbers agree; a failure here must not fail the creation.
+        try:
+            PropertyEnrichmentService(repo.session).run(
+                int(property_row["id"]), phase="postgis"
+            )
+        except Exception as exc:  # noqa: BLE001 - additive bookkeeping only
+            logger.warning(
+                "enrichment.category_state_failed property=%s error=%s",
+                property_row.get("id"), exc,
+            )
         return {
             "status": "ok",
             # Preserve the original response contract: the stored feature row
@@ -423,32 +443,138 @@ def set_primary_listing_photo(
     return {"data": repo.listing_photos(property_id)}
 
 
+class EnrichRequest(BaseModel):
+    """Which enrichment phase to run.
+
+    ``postgis`` and ``population`` are the two phases the Add Property flow
+    starts separately. ``all`` is the default so an existing client that sends
+    no body keeps its old behaviour.
+    """
+
+    phase: Literal["postgis", "population", "all"] = "all"
+    force: bool = False
+    categories: list[str] | None = Field(
+        default=None,
+        description=(
+            "Optional explicit subset. Unknown names are ignored so a client "
+            "cannot ask for a category that does not exist."
+        ),
+    )
+
+
+def _require_owned_listing(
+    session: Session, property_id: int, current: AuthenticatedUser
+) -> None:
+    """404 when the listing is missing, 403 when it belongs to someone else.
+
+    The owner identity always comes from the verified token; an administrator
+    may act on any listing.
+    """
+    row = session.execute(
+        text("SELECT owner_user_id FROM fyp.rental_properties WHERE id = :pid"),
+        {"pid": property_id},
+    ).first()
+    if row is None:
+        raise HTTPException(status_code=404, detail="Property not found.")
+    owner_uuid = row[0]
+    if rbac.can_administer_users(current.role):
+        return
+    if owner_uuid is None or str(owner_uuid) != str(current.user_id):
+        raise ForbiddenError("You can only enrich your own property listings.")
+
+
 @router.post("/listings/{property_id}/enrich")
 def enrich_listing(
     property_id: int,
     session: Session = Depends(get_db),
     current: AuthenticatedUser = Depends(require_property_owner),
+    payload: EnrichRequest | None = None,
 ):
-    """Recompute features for an owned listing (idempotent).
+    """Run one enrichment phase for an owned listing.
 
-    Only the owner or an administrator may enrich; the row is never modified
-    beyond the feature table, and repeated calls produce the same single row.
+    The two phases are independent on purpose:
+
+    * ``phase="postgis"`` (Phase 1) computes F&B competitors, demand
+      generators, roads/transportation and parking. Fast, and safe to call
+      while the owner is still filling the form.
+    * ``phase="population"`` (Phase 2) runs the raster population chain on its
+      own. It is the only category that can legitimately be unavailable, and
+      calling it never recomputes Phase 1.
+    * ``phase="all"`` (default, backward compatible with callers that send no
+      body) runs both.
+
+    Idempotent: a category already ``current`` for the same coordinates is not
+    recalculated unless ``force`` is set. A request that arrives while another
+    request owns a category leaves that category alone instead of starting a
+    duplicate computation.
     """
-    repo = FypPropertyRepository(session)
-    coords = repo._coords(property_id)
-    owner = session.execute(
-        text("SELECT owner_user_id FROM fyp.rental_properties WHERE id = :pid"),
-        {"pid": property_id},
-    ).first()
-    if coords is None or owner is None:
-        raise HTTPException(status_code=404, detail="Property not found or has no coordinates.")
-    owner_uuid = owner[0]
-    is_admin = rbac.can_administer_users(current.role)
-    if not is_admin and (owner_uuid is None or str(owner_uuid) != str(current.user_id)):
-        raise ForbiddenError("You can only enrich your own property listings.")
-    snapshot = repo.enrichment_snapshot(coords[0], coords[1])
-    stored = repo.upsert_geospatial_features(property_id, snapshot)
-    return {"data": stored, "meta": {"property_id": property_id, "status": "ok"}}
+    _require_owned_listing(session, property_id, current)
+    phase = payload.phase if payload is not None else "all"
+    force = bool(payload.force) if payload is not None else False
+    categories = payload.categories if payload is not None else None
+
+    service = PropertyEnrichmentService(session)
+    try:
+        summary = service.run(
+            property_id, phase=phase, categories=categories, force=force
+        )
+    except LookupError:
+        raise HTTPException(
+            status_code=404, detail="Property not found or has no coordinates."
+        )
+    # Preserve the original response contract: the stored feature row (with its
+    # flat competitor/demand/accessibility columns) is still the payload, and
+    # the per-category lifecycle is added alongside it. A client written against
+    # the old shape keeps working; a client that needs the new states reads
+    # `categories`.
+    stored = FypPropertyRepository(session).get_geo_features(property_id) or {}
+    return {
+        "data": {**stored, **summary},
+        "meta": {"property_id": property_id, "status": "ok"},
+    }
+
+
+@router.get("/listings/{property_id}/enrichment")
+def enrichment_state(
+    property_id: int,
+    session: Session = Depends(get_db),
+    current: AuthenticatedUser = Depends(require_property_owner),
+):
+    """Stored per-category enrichment state.
+
+    Reads what is stored and never recalculates: the Add Property progress
+    panel, the admin review and the property-detail page all poll this and
+    must not trigger work by looking.
+    """
+    _require_owned_listing(session, property_id, current)
+    service = PropertyEnrichmentService(session)
+    service.ensure_schema()
+    return {"data": service.summary(property_id), "meta": {"property_id": property_id}}
+
+
+@router.post("/listings/{property_id}/enrichment/{category}/retry")
+def retry_enrichment_category(
+    property_id: int,
+    category: str,
+    session: Session = Depends(get_db),
+    current: AuthenticatedUser = Depends(require_property_owner),
+):
+    """Retry exactly one category.
+
+    Scoped to a single category so a failed population raster never forces the
+    four PostGIS categories to be recomputed.
+    """
+    _require_owned_listing(session, property_id, current)
+    service = PropertyEnrichmentService(session)
+    try:
+        summary = service.retry(property_id, category)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    except LookupError:
+        raise HTTPException(
+            status_code=404, detail="Property not found or has no coordinates."
+        )
+    return {"data": summary, "meta": {"property_id": property_id, "status": "ok"}}
 
 
 # ---------------------------------------------------------------------------

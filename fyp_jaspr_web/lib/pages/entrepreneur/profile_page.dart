@@ -2,24 +2,12 @@ import 'package:jaspr/dom.dart';
 import 'package:jaspr/jaspr.dart';
 import 'package:shared_logic/shared_logic.dart';
 
-import '../../components/dashboard_kit.dart';
 import '../../components/ui.dart';
 import '../../data/auth_service.dart';
-import '../../data/workspaces.dart';
 import '../../layouts/app_layout.dart';
 
-/// Entrepreneur account, laid out as the source's
-/// `sitewise-entrepreneur/profile.html`.
-///
-/// ```text
-/// .detail-grid
-///   .panel    Contact details — labelled .field rows + .actions-row
-///   .analysis .panel Recommendation settings · .panel Workspace
-/// ```
-///
-/// The previous version was one centred card with two unlabelled inputs and no
-/// link to the preferences that actually drive ranking, so the account page gave
-/// the user no route to the settings it referred to.
+/// Entrepreneur account profile: contact details and recommendation settings.
+/// The Workspaces card is intentionally omitted from this role-specific page.
 @client
 class ProfilePage extends StatefulComponent {
   const ProfilePage({super.key});
@@ -30,9 +18,7 @@ class ProfilePage extends StatefulComponent {
 
 class _ProfilePageState extends State<ProfilePage> {
   /// The last server-confirmed values. `WebAuth.profile` is not refreshed by a
-  /// PATCH, so Discard needs its own baseline: without it, discarding after a
-  /// successful save would restore the pre-save text and make stored data look
-  /// like an unsaved edit.
+  /// PATCH, so Discard uses the last successfully saved baseline.
   late String _savedConcept;
   late String _savedPhone;
 
@@ -48,8 +34,7 @@ class _ProfilePageState extends State<ProfilePage> {
   @override
   void initState() {
     super.initState();
-    // The identity comes from the backend-verified profile (GET /auth/me) —
-    // never a hardcoded demo account. Missing values degrade to blanks.
+    // Identity comes from the backend-verified account profile.
     final profile = WebAuth.profile ?? <String, dynamic>{};
     _savedConcept = (profile['full_name'] as String?) ?? '';
     _savedPhone = (profile['phone_number'] as String?) ?? '';
@@ -60,8 +45,7 @@ class _ProfilePageState extends State<ProfilePage> {
 
   bool get _dirty => _concept != _savedConcept || _phone != _savedPhone;
 
-  /// `phone_number` is `max_length=20` in `db/models/user.py`; checking it here
-  /// turns a database rejection into a readable field error.
+  /// `phone_number` has max_length=20 in the backend user model.
   bool _validate() {
     final name = _concept.trim();
     final phone = _phone.trim();
@@ -83,9 +67,7 @@ class _ProfilePageState extends State<ProfilePage> {
       _errorMessage = null;
     });
     try {
-      // PATCH /api/v1/users/me: the server persists the permitted fields and
-      // echoes the updated profile back, so the confirmation below is backed
-      // by the stored row — not local widget state.
+      // PATCH /api/v1/users/me persists the verified profile fields.
       final response = await WebAuth.request(
         '/api/v1/users/me',
         method: 'PATCH',
@@ -94,7 +76,6 @@ class _ProfilePageState extends State<ProfilePage> {
       if (!mounted) return;
       setState(() {
         _saving = false;
-        // Re-baseline from what the server stored, not from what was typed.
         _savedConcept = (response['full_name'] as String?) ?? _concept.trim();
         _savedPhone = (response['phone_number'] as String?) ?? _phone.trim();
         _concept = _savedConcept;
@@ -106,7 +87,6 @@ class _ProfilePageState extends State<ProfilePage> {
       if (!mounted) return;
       setState(() {
         _saving = false;
-        // What was typed is kept, so a failed save costs no re-entry.
         _errorMessage =
             'Your profile could not be saved. Nothing was changed on the '
             'server — check your connection and try again.';
@@ -219,7 +199,7 @@ class _ProfilePageState extends State<ProfilePage> {
             ]),
         ]),
 
-        // --- Recommendation settings + workspace ------------------------------
+        // --- Recommendation settings -----------------------------------------
         div(classes: 'analysis', [
           section(classes: 'panel', [
             h2([Component.text('Recommendation settings')]),
@@ -242,45 +222,8 @@ class _ProfilePageState extends State<ProfilePage> {
               ),
             ]),
           ]),
-          _workspacePanel(),
         ]),
       ]),
     );
-  }
-
-  /// Workspaces are based on backend-assigned roles, not demo role cookies.
-  /// Property management stays under the Entrepreneur role and is authorized
-  /// per property by FastAPI rather than by a separate owner role.
-  Component _workspacePanel() {
-    return section(classes: 'panel', [
-      h2([Component.text('Workspaces')]),
-      p(classes: 'body', [
-        Component.text(
-          'Workspaces follow your verified account role. Property management '
-          'is available through My Properties when your ownership is verified.',
-        ),
-      ]),
-      div(classes: 'aside-list', [
-        for (final role in Workspaces.openable)
-          AsideRow(
-            badge: role.label.substring(0, 1),
-            tone: 'teal',
-            title: role.label,
-            caption: '${role.portal} · verified account role',
-            end: AppLink(
-              to: role.homeRoute,
-              classes: 'text-action',
-              children: [Component.text('Open')],
-            ),
-          ),
-      ]),
-      div(classes: 'actions-row', [
-        const ActionLink(
-          'My Properties',
-          href: '/entrepreneur/my-properties',
-          variant: 'secondary',
-        ),
-      ]),
-    ]);
   }
 }

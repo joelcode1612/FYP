@@ -54,6 +54,7 @@ configurations.all {
 
 dependencies {
     implementation(files("../libs/sceneform-base-1.17.1-nsfix.aar"))
+    implementation("com.google.ar:core:1.57.0")
 }
 
 flutter {

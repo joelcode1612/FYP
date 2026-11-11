@@ -518,6 +518,7 @@ class SitewiseApp extends StatelessComponent {
             path: '/entrepreneur/property-detail',
             builder: (context, state) => _page(
               e_property_detail.PropertyDetailPage(
+                key: ValueKey('property-detail-${state.queryParams['id'] ?? ''}'),
                 id: state.queryParams['id'] ?? '',
               ),
               title: 'Property detail — Sitewise',

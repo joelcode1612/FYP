@@ -193,25 +193,48 @@ class OvertureCollector:
         # List the concrete part files through the public S3 API: DuckDB's
         # HTTP glob does not expand on this bucket, and an explicit list also
         # bounds exactly which objects are read.
+        # Paginate ALL ListObjectsV2 pages. One response can be truncated.
+        # An explicit budget is a FAILURE, not a successful partial snapshot.
         try:
+            from xml.etree import ElementTree as ET
+            parts = []
+            token = None
             with self._http() as client:
-                listing = client.get(
-                    "https://overturemaps-us-west-2.s3.amazonaws.com/",
-                    params={"list-type": "2", "prefix": prefix},
-                )
-                listing.raise_for_status()
+                while True:
+                    params = {"list-type": "2", "prefix": prefix}
+                    if token:
+                        params["continuation-token"] = token
+                    response = client.get(
+                        "https://overturemaps-us-west-2.s3.amazonaws.com/",
+                        params=params,
+                    )
+                    response.raise_for_status()
+                    root = ET.fromstring(response.content)
+                    ns = {"s3": "http://s3.amazonaws.com/doc/2006-03-01/"}
+                    for item in root.findall("s3:Contents", ns):
+                        key_node = item.find("s3:Key", ns)
+                        if key_node is not None and key_node.text and key_node.text.endswith(".parquet"):
+                            parts.append(key_node.text)
+                    truncated = root.findtext("s3:IsTruncated", default="false", namespaces=ns).lower() == "true"
+                    if not truncated:
+                        break
+                    next_token = root.findtext("s3:NextContinuationToken", namespaces=ns)
+                    if not next_token or next_token == token:
+                        raise RuntimeError("S3 listing truncated without a new continuation token")
+                    token = next_token
         except Exception as exc:
             raise CollectorBlocked(
                 self.source_name,
-                f"release listing failed: {type(exc).__name__}: {str(exc)[:200]}",
+                f"complete release part listing failed: {type(exc).__name__}: {str(exc)[:200]}",
             ) from exc
-        parts = re.findall(r"<Key>([^<]+)</Key>", listing.text)
-        parts = [k for k in parts if k.endswith(".parquet")]
+        parts = sorted(set(parts))
         if not parts:
             raise CollectorBlocked(self.source_name, f"no parquet parts under {prefix}")
-        # Deterministic, bounded set (configurable); the bbox predicate below
-        # prunes row groups inside each file.
-        parts = sorted(parts)[: max(1, self.config.max_overture_parts)]
+        if len(parts) > self.config.max_overture_parts:
+            raise CollectorBlocked(self.source_name,
+                f"incomplete coverage: {len(parts)} parts found but max_overture_parts="
+                f"{self.config.max_overture_parts}. Increase limit or use explicit bounded mode.")
+        parts_total = len(parts)
         # ``base`` already ends with /release/, and the listed keys are
         # bucket-relative (release/<id>/...).
         paths = [f"{base}/{release}/theme=places/type=place/{key.rsplit('/', 1)[-1]}" for key in parts]
@@ -273,6 +296,8 @@ class OvertureCollector:
             "snapshot_at": _now_iso(),
             "source": f"{base}/{prefix}",
             "parts_read": len(paths),
-            "full_snapshot": False,
+            "parts_total": parts_total,
+            "all_parts_verified": len(paths) == parts_total,
+            "full_snapshot": False,  # bbox-based, not a global snapshot
             "release": release,
         }

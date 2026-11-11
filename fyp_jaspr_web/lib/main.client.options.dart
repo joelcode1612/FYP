@@ -6,6 +6,8 @@
 
 import 'package:jaspr/client.dart';
 
+import 'package:sitewise_jaspr_web/components/property_detail/location_insights.dart'
+    deferred as _location_insights;
 import 'package:sitewise_jaspr_web/components/agent_assignment_control.dart'
     deferred as _agent_assignment_control;
 import 'package:sitewise_jaspr_web/components/agent_change_requests_panel.dart'
@@ -136,6 +138,14 @@ ClientOptions get defaultClientOptions => ClientOptions(
     'agent_change_requests_panel': ClientLoader(
       (p) => _agent_change_requests_panel.AgentChangeRequestsPanel(),
       loader: _agent_change_requests_panel.loadLibrary,
+    ),
+    'location_insights': ClientLoader(
+      (p) => _location_insights.LocationInsightsV4(
+        propertyId: p['propertyId'] as String,
+        puScore: p['puScore'] as num?,
+        hasPuScore: p['hasPuScore'] as bool,
+      ),
+      loader: _location_insights.loadLibrary,
     ),
     'verification_detail_view': ClientLoader(
       (p) => _verification_detail_view.VerificationDetailView(),

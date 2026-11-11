@@ -40,6 +40,17 @@ class _AiRecommendationsPageState extends State<AiRecommendationsPage> {
   bool _generating = false;
   String? _error;
   bool _reused = false;
+
+  // Each saved batch contains at most 20 ranked results. Pagination changes
+  // presentation only: it never re-ranks, truncates, or regenerates a batch.
+  static const int _pageSize = 5;
+  int _pageIndex = 0; // Zero-based; the URL uses one-based ?page=N.
+
+  void _goToPage(int pageIndex) {
+    if (pageIndex == _pageIndex) return;
+    setState(() => _pageIndex = pageIndex);
+  }
+
   /// Dev-only: metadata of the PU model variant that produced the batch
   /// (legacy default vs experimental47). Never rendered for normal users.
   Map<String, dynamic> _modelInfo = const {};
@@ -53,6 +64,12 @@ class _AiRecommendationsPageState extends State<AiRecommendationsPage> {
   @override
   void initState() {
     super.initState();
+    // Keep the result page when returning from an explanation, including
+    // when the router remounts this component.
+    final requestedPage = int.tryParse(Uri.base.queryParameters['page'] ?? '1');
+    _pageIndex = requestedPage != null && requestedPage > 0
+        ? requestedPage - 1
+        : 0;
     _latest = _loadLatest();
   }
 
@@ -78,6 +95,7 @@ class _AiRecommendationsPageState extends State<AiRecommendationsPage> {
       });
       setState(() {
         _generating = false;
+        _pageIndex = 0; // A new/reused generated batch opens at rank 1.
         _reused = response['reused_existing_batch'] == true;
         _modelInfo = Map<String, dynamic>.from(
           (response['model'] as Map?) ?? const {},
@@ -102,9 +120,9 @@ class _AiRecommendationsPageState extends State<AiRecommendationsPage> {
     }
     return _page(
       title: 'AI recommendations',
-      child: div(classes: 'stack stack--sections', [
+      child: div(classes: 'stack', styles: Styles(raw: {'gap': '20px'}), [
           if (_devModelView && _modelInfo.isNotEmpty)
-            div(classes: 'notice notice-info', [
+            div(classes: 'notice notice-info', styles: Styles(raw: {'margin-bottom': '0'}), [
               Component.text(
                 '[DEV] Active PU model: ${_modelInfo['name'] ?? '?'} '
                 '(variant=${_modelInfo['key'] ?? '?'}, version='
@@ -114,7 +132,7 @@ class _AiRecommendationsPageState extends State<AiRecommendationsPage> {
                 'SITEWISE_PU_MODEL_VARIANT on the backend and regenerate.',
               ),
             ]),
-          div(classes: 'notice', [
+          div(classes: 'notice', styles: Styles(raw: {'margin-bottom': '0'}), [
             Component.text(
               'Ranked from your saved requirements. Preference fit and the PU '
               'research association index are reported separately and are '
@@ -123,7 +141,7 @@ class _AiRecommendationsPageState extends State<AiRecommendationsPage> {
           ]),
           _toolbar(),
           if (_error != null)
-            div(classes: 'notice notice-warn', [
+            div(classes: 'notice notice-warn', styles: Styles(raw: {'margin-bottom': '0'}), [
               Component.text('Could not load AI recommendations: $_error'),
               ActionButton('Try again', onClick: () => setState(() {
                 _latest = _loadLatest();
@@ -165,13 +183,107 @@ class _AiRecommendationsPageState extends State<AiRecommendationsPage> {
                   ),
                 );
               }
-              return div(classes: 'stack', [
-                for (final item in batch.results)
-                  _AiRecommendationCard(item: item),
+              final total = batch.results.length;
+              final pageCount = (total + _pageSize - 1) ~/ _pageSize;
+              // A saved batch can contain fewer items than the page in a
+              // bookmarked URL. Clamp the rendered page without mutating data.
+              final pageIndex = _pageIndex < pageCount
+                  ? _pageIndex
+                  : pageCount - 1;
+              final start = pageIndex * _pageSize;
+              final end = start + _pageSize < total
+                  ? start + _pageSize
+                  : total;
+              final visibleResults = batch.results.sublist(start, end);
+
+              return div(classes: 'stack', styles: Styles(raw: {'gap': '16px'}), [
+                div(
+                  classes: 'row',
+                  styles: Styles(raw: {
+                    'justify-content': 'space-between',
+                    'gap': '8px',
+                    'flex-wrap': 'wrap',
+                    'color': '#475569',
+                    'font-size': '13px',
+                    'font-weight': '600',
+                  }),
+                  [
+                    span([Component.text(
+                      'Showing ${start + 1}–$end of $total recommendations',
+                    )]),
+                    span([Component.text('Page ${pageIndex + 1} of $pageCount')]),
+                  ],
+                ),
+                for (final item in visibleResults)
+                  _AiRecommendationCard(
+                    item: item,
+                    returnPage: pageIndex + 1,
+                  ),
+                if (pageCount > 1) _pagination(pageIndex, pageCount),
               ]);
             },
           ),
         ]),
+    );
+  }
+
+  /// Accessible numbered pagination for the saved batch already in memory.
+  /// No API call or recomputation occurs when changing pages.
+  Component _pagination(int current, int pageCount) {
+    final first = pageCount <= 5
+        ? 0
+        : current <= 2
+            ? 0
+            : current >= pageCount - 3
+                ? pageCount - 5
+                : current - 2;
+    final last = first + 5 < pageCount ? first + 5 : pageCount;
+    return nav(
+      classes: 'actions-row',
+      attributes: const {'aria-label': 'AI recommendation pages'},
+      styles: Styles(raw: {
+        'justify-content': 'center',
+        'gap': '8px',
+        'flex-wrap': 'wrap',
+        'margin-top': '4px',
+      }),
+      [
+        ActionButton(
+          'Previous',
+          variant: 'secondary',
+          onClick: current == 0 ? null : () => _goToPage(current - 1),
+        ),
+        for (var page = first; page < last; page++)
+          button(
+            attributes: {
+              'type': 'button',
+              'aria-label': 'Page ${page + 1}',
+              if (page == current) 'aria-current': 'page',
+            },
+            styles: Styles(raw: {
+              'min-width': '40px',
+              'min-height': '40px',
+              'padding': '8px 12px',
+              'border-radius': '10px',
+              'border': page == current
+                  ? '1px solid #1D4ED8'
+                  : '1px solid #CBD5E1',
+              'background': page == current ? '#1D4ED8' : '#FFFFFF',
+              'color': page == current ? '#FFFFFF' : '#1E293B',
+              'font-weight': '700',
+              'cursor': 'pointer',
+            }),
+            events: events(onClick: () => _goToPage(page)),
+            [Component.text('${page + 1}')],
+          ),
+        ActionButton(
+          'Next',
+          variant: 'secondary',
+          onClick: current == pageCount - 1
+              ? null
+              : () => _goToPage(current + 1),
+        ),
+      ],
     );
   }
 
@@ -208,8 +320,9 @@ class _AiRecommendationsPageState extends State<AiRecommendationsPage> {
 
 class _AiRecommendationCard extends StatelessComponent {
   final GeneratedRecommendation item;
+  final int returnPage;
 
-  const _AiRecommendationCard({required this.item});
+  const _AiRecommendationCard({required this.item, required this.returnPage});
 
   @override
   Component build(BuildContext context) {
@@ -267,7 +380,7 @@ class _AiRecommendationCard extends StatelessComponent {
         ActionLink(
           'Why recommended (explanation)',
           href:
-              '/entrepreneur/ai-recommendations?result=${item.resultId}',
+              '/entrepreneur/ai-recommendations?result=${item.resultId}&page=$returnPage',
           variant: 'primary',
         ),
         ActionLink(
@@ -315,6 +428,13 @@ class _ExplanationView extends StatefulComponent {
 class _ExplanationViewState extends State<_ExplanationView> {
   late Future<PersonalisedExplanation?> _future;
 
+  static String get _returnToResults {
+    final page = int.tryParse(Uri.base.queryParameters['page'] ?? '1') ?? 1;
+    return page <= 1
+        ? '/entrepreneur/ai-recommendations'
+        : '/entrepreneur/ai-recommendations?page=$page';
+  }
+
   @override
   void initState() {
     super.initState();
@@ -342,15 +462,15 @@ class _ExplanationViewState extends State<_ExplanationView> {
             body:
                 'The result may have been generated in another session or the '
                 'service did not respond. Regenerate the batch and try again.',
-            action: const ActionLink(
+            action: ActionLink(
               'Back to AI recommendations',
-              href: '/entrepreneur/ai-recommendations',
+              href: _returnToResults,
               variant: 'primary',
             ),
           );
         }
         final e = snap.data!;
-        return div(classes: 'stack stack--sections', [
+        return div(classes: 'stack', styles: Styles(raw: {'gap': '20px'}), [
             section(classes: 'panel', [
               h2([Component.text('Preference match (rule engine)')]),
               p(classes: 'what', [
@@ -434,9 +554,9 @@ class _ExplanationViewState extends State<_ExplanationView> {
               ],
             ]),
             div(classes: 'actions-row', [
-              const ActionLink(
+              ActionLink(
                 'Back to AI recommendations',
-                href: '/entrepreneur/ai-recommendations',
+                href: _returnToResults,
                 variant: 'primary',
               ),
             ]),
