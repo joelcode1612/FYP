@@ -11210,6 +11210,28 @@ input[type="range"] {
   border-color: var(--action);
   color: #fff;
 }
+/* Native control, repainted to the design system: 14px, 4px radius, blue fill
+   when checked. `appearance: none` is required — with the native appearance the
+   UA paints its own box and ignores the border/background declared here, which
+   left an opaque dark square instead of an empty checkbox. */
+.sw-reg .sw-enrich-ack__check input[type='checkbox'] {
+  appearance: none;
+  -webkit-appearance: none;
+  flex: none;
+  width: 14px;
+  height: 14px;
+  margin-top: 3px;
+  border: 1px solid var(--border-strong);
+  border-radius: 4px;
+  background: #fff;
+  cursor: pointer;
+}
+.sw-reg .sw-enrich-ack__check input[type='checkbox']:checked {
+  border-color: var(--action);
+  background: var(--action)
+    url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M2 6.4 4.7 9 10 3.2' fill='none' stroke='%23fff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")
+    center / 10px 10px no-repeat;
+}
 
 /* ---- Location analysis (five compact rows) ----------------------------- */
 
@@ -11258,8 +11280,8 @@ input[type="range"] {
 }
 .sw-reg .sw-analysis__badge { justify-self: end; }
 .sw-reg .sw-analysis__chev {
-  color: var(--overline);
-  font-size: 10px;
+  color: var(--muted);
+  font-size: 11px;
   transition: transform .15s ease;
 }
 .sw-reg .sw-analysis__row[open] .sw-analysis__chev { transform: rotate(180deg); }

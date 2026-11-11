@@ -67,10 +67,10 @@ const Map<String, _TrailSpec> _trails = {
   // The workspace is now the main Assessments destination; the history list
   // hangs off it as a sibling section.
   '/entrepreneur/assessments': _TrailSpec('Location assessment'),
-  '/entrepreneur/assessments/history':
-      _TrailSpec('Assessment history', sectionRoute: '/entrepreneur/assessments'),
+  '/entrepreneur/assessments/history': _TrailSpec('History'),
+  '/entrepreneur/reports': _TrailSpec('Reports'),
   '/entrepreneur/report':
-      _TrailSpec('Suitability report', sectionRoute: '/entrepreneur/recommendations'),
+      _TrailSpec('Suitability report', sectionRoute: '/entrepreneur/reports'),
   '/entrepreneur/tour': _TrailSpec('360° tour', sectionRoute: '/entrepreneur/recommendations'),
   '/entrepreneur/explanation':
       _TrailSpec('Why this score', sectionRoute: '/entrepreneur/recommendations'),

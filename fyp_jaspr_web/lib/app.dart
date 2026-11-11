@@ -34,6 +34,7 @@ import 'pages/entrepreneur/property_detail_page.dart' as e_property_detail;
 import 'pages/entrepreneur/property_analysis_page.dart' as e_property_analysis;
 import 'pages/entrepreneur/recommendations_page.dart' as e_recommendations;
 import 'pages/entrepreneur/report_page.dart' as e_report;
+import 'pages/entrepreneur/reports_page.dart' as e_reports;
 import 'pages/entrepreneur/saved_page.dart' as e_saved;
 import 'pages/entrepreneur/tour_page.dart' as e_tour;
 import 'pages/admin/agents_page.dart';
@@ -596,6 +597,14 @@ class SitewiseApp extends StatelessComponent {
             builder: (context, state) => _page(
               const e_add_property.AddPropertyPage(),
               title: 'Register a property — Sitewise',
+            ),
+          ),
+          Route(
+            path: '/entrepreneur/reports',
+            builder: (context, state) => _page(
+              const e_reports.ReportsPage(),
+              title: 'Reports — Sitewise',
+              description: 'Your saved property assessment reports.',
             ),
           ),
           Route(
