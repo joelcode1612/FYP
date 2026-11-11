@@ -67,7 +67,9 @@ abstract final class DevicePoseMath {
     required List<double> mag,
   }) {
     if (accel.length != 3 || mag.length != 3) return null;
-    final an = math.sqrt(accel[0] * accel[0] + accel[1] * accel[1] + accel[2] * accel[2]);
+    final an = math.sqrt(
+      accel[0] * accel[0] + accel[1] * accel[1] + accel[2] * accel[2],
+    );
     if (an < 1e-6) return null;
     final ax = accel[0] / an, ay = accel[1] / an, az = accel[2] / an;
 

@@ -64,10 +64,7 @@ void main() {
     test('degenerate vectors produce no pose instead of noise', () {
       expect(DevicePoseMath.fuse(accel: [0, 0, 0], mag: northMag), isNull);
       // Field parallel to gravity: the east vector collapses.
-      expect(
-        DevicePoseMath.fuse(accel: [0, 0, 9.81], mag: [0, 0, 50]),
-        isNull,
-      );
+      expect(DevicePoseMath.fuse(accel: [0, 0, 9.81], mag: [0, 0, 50]), isNull);
       expect(DevicePoseMath.fuse(accel: [0, 9.81], mag: northMag), isNull);
     });
 
@@ -151,10 +148,9 @@ void main() {
     }
 
     test('tracking must warm up before the origin is established', () {
-      final service = PanoramaCaptureService(
-        [point()],
-        const CaptureConfig(trackingWarmupPolls: 3),
-      );
+      final service = PanoramaCaptureService([
+        point(),
+      ], const CaptureConfig(trackingWarmupPolls: 3));
       for (var i = 0; i < 3; i++) {
         service.observePose(
           cameraPosition: origin,
@@ -231,18 +227,23 @@ void main() {
     });
 
     test('stability must hold continuously for the configured window', () {
-      final service = PanoramaCaptureService(
-        [point()],
-        const CaptureConfig(stabilityDuration: Duration(milliseconds: 800)),
-      );
+      final service = PanoramaCaptureService([
+        point(),
+      ], const CaptureConfig(stabilityDuration: Duration(milliseconds: 800)));
       arm(service, aligned: true);
       expect(service.state, CaptureSessionState.stabilizing);
-      expect(service.stabilityReady(t0.add(const Duration(milliseconds: 799))),
-          isFalse);
-      expect(service.stabilityReady(t0.add(const Duration(milliseconds: 800))),
-          isTrue);
-      expect(service.stabilityFraction(t0.add(const Duration(milliseconds: 400))),
-          closeTo(0.5, 1e-9));
+      expect(
+        service.stabilityReady(t0.add(const Duration(milliseconds: 799))),
+        isFalse,
+      );
+      expect(
+        service.stabilityReady(t0.add(const Duration(milliseconds: 800))),
+        isTrue,
+      );
+      expect(
+        service.stabilityFraction(t0.add(const Duration(milliseconds: 400))),
+        closeTo(0.5, 1e-9),
+      );
 
       // Losing alignment resets the window; it does not resume where it left off.
       final lost = t0.add(const Duration(seconds: 2));
@@ -254,8 +255,10 @@ void main() {
         at: lost,
       );
       expect(service.state, CaptureSessionState.guiding);
-      expect(service.stabilityReady(lost.add(const Duration(seconds: 5))),
-          isFalse);
+      expect(
+        service.stabilityReady(lost.add(const Duration(seconds: 5))),
+        isFalse,
+      );
       service.observePose(
         cameraPosition: origin,
         yawError: 0,
@@ -263,10 +266,14 @@ void main() {
         alignedNow: true,
         at: lost,
       );
-      expect(service.stabilityReady(lost.add(const Duration(milliseconds: 799))),
-          isFalse);
-      expect(service.stabilityReady(lost.add(const Duration(milliseconds: 800))),
-          isTrue);
+      expect(
+        service.stabilityReady(lost.add(const Duration(milliseconds: 799))),
+        isFalse,
+      );
+      expect(
+        service.stabilityReady(lost.add(const Duration(milliseconds: 800))),
+        isTrue,
+      );
     });
 
     test('the index advances only after a confirmed image', () {
@@ -330,10 +337,7 @@ void main() {
       expect(service.frames.containsKey(2), isTrue);
       expect(service.missingFrames(), [1, 3]);
       expect(service.beginCapture(), isTrue);
-      expect(
-        service.confirmFrame(imagePath: '/frames/1b.png', at: t0),
-        isTrue,
-      );
+      expect(service.confirmFrame(imagePath: '/frames/1b.png', at: t0), isTrue);
       expect(service.frames[1]!.imagePath, '/frames/1b.png');
       expect(service.currentIndex, 2);
     });
@@ -380,10 +384,9 @@ void main() {
     });
 
     test('drift beyond the threshold blocks alignment', () {
-      final service = PanoramaCaptureService(
-        [point()],
-        const CaptureConfig(movementThresholdMeters: 0.5),
-      );
+      final service = PanoramaCaptureService([
+        point(),
+      ], const CaptureConfig(movementThresholdMeters: 0.5));
       arm(service, aligned: true);
       expect(service.positionWarning, isFalse);
       service.observePose(
@@ -421,12 +424,12 @@ void main() {
       expect(service.targets.length, 26);
       expect(service.targets.first.name, 'ZENITH');
       expect(service.targets.first.pitch, 90);
-      expect(service.targets.last.name, 'NADIR');
-      expect(service.targets.last.pitch, -90);
-      expect(
-        service.targets.map((t) => t.frameIndex).toSet(),
-        {for (var i = 1; i <= 26; i++) i},
-      );
+      // The rig shoots both poles first, then the three 8-frame bands.
+      expect(service.targets[1].name, 'NADIR');
+      expect(service.targets[1].pitch, -90);
+      expect(service.targets.map((t) => t.frameIndex).toSet(), {
+        for (var i = 1; i <= 26; i++) i,
+      });
 
       arm(service, aligned: true);
       for (var i = 0; i < service.targets.length; i++) {
@@ -458,11 +461,16 @@ void main() {
     });
 
     test('ZENITH and NADIR accept any yaw', () {
+      // isAligned takes offsets from the target, not absolute angles.
       final zenith = CaptureTargetDataSource.targets.first;
-      final nadir = CaptureTargetDataSource.targets.last;
-      expect(zenith.isAligned(yawDeg: 179, pitchDeg: 80), isTrue);
-      expect(nadir.isAligned(yawDeg: -179, pitchDeg: -80), isTrue);
-      expect(zenith.isAligned(yawDeg: 0, pitchDeg: 60), isFalse);
+      final nadir = CaptureTargetDataSource.targets[1];
+      final band = CaptureTargetDataSource.targets[2];
+      expect(zenith.isAligned(yawDeg: 179, pitchDeg: 10), isTrue);
+      expect(nadir.isAligned(yawDeg: -179, pitchDeg: -10), isTrue);
+      expect(zenith.isAligned(yawDeg: 0, pitchDeg: 30), isFalse);
+      // A band target still gates yaw, which is why the poles are special.
+      expect(band.isAligned(yawDeg: 20, pitchDeg: 0), isFalse);
+      expect(band.isAligned(yawDeg: 10, pitchDeg: 10), isTrue);
     });
   });
 }

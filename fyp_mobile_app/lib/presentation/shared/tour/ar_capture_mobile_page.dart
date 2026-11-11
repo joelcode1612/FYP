@@ -90,6 +90,13 @@ class _ArCaptureMobilePageState extends State<ArCaptureMobilePage>
       return;
     }
     if (_paused) return;
+    // Only a real background transition releases the camera. `inactive` also
+    // fires for the Android permission dialog, which would tear the controller
+    // down while initialize() is still awaiting the user's answer.
+    if (state != AppLifecycleState.paused &&
+        state != AppLifecycleState.hidden) {
+      return;
+    }
     // Holding the camera while backgrounded crashes on some devices; the
     // session and its confirmed frames stay in the store untouched.
     _paused = true;
@@ -103,7 +110,8 @@ class _ArCaptureMobilePageState extends State<ArCaptureMobilePage>
     final propertyId = widget.request.propertyId;
     if (propertyId.isEmpty) {
       setState(() {
-        _setupError = 'No property was supplied, so there is nothing to capture '
+        _setupError =
+            'No property was supplied, so there is nothing to capture '
             'a tour for.';
         _preparing = false;
       });
@@ -242,6 +250,7 @@ class _ArCaptureMobilePageState extends State<ArCaptureMobilePage>
       return;
     }
     setState(() => _capturing = true);
+    var complete = false;
     try {
       final bytes = await _source.takePicture();
       final target = service.currentTarget;
@@ -261,21 +270,19 @@ class _ArCaptureMobilePageState extends State<ArCaptureMobilePage>
       }
       await ServiceLocator.frameStore.saveManifest(tourId, service.frames);
       await _syncFrameCount(tourId, service.capturedCount);
-      if (!mounted) return;
-      setState(() => _capturing = false);
-      if (service.allCaptured) await _generate();
+      complete = service.allCaptured;
     } catch (error) {
       service.failCapture(
         error is CameraException
             ? 'The camera could not save this frame (${error.code}).'
-            : readableFailure(
-                error,
-                fallback: 'The frame could not be saved.',
-              ),
+            : readableFailure(error, fallback: 'The frame could not be saved.'),
       );
-      if (!mounted) return;
-      setState(() => _capturing = false);
+    } finally {
+      // Every exit clears the busy flag, including the refused-frame paths —
+      // otherwise the screen stays on "Saving frame…" with no way forward.
+      if (mounted) setState(() => _capturing = false);
     }
+    if (complete && mounted) await _generate();
   }
 
   Future<void> _generate() async {
@@ -304,10 +311,9 @@ class _ArCaptureMobilePageState extends State<ArCaptureMobilePage>
     setState(() => _generating = false);
     if (result.success) {
       service.markPreview();
-      Navigator.of(context).pushReplacementNamed(
-        '/tour-preview',
-        arguments: tourId,
-      );
+      Navigator.of(
+        context,
+      ).pushReplacementNamed('/tour-preview', arguments: tourId);
       return;
     }
     service.fail(result.message);
@@ -321,7 +327,8 @@ class _ArCaptureMobilePageState extends State<ArCaptureMobilePage>
     final confirmed = await showSitewiseConfirmDialog(
       context,
       title: 'Restart this capture?',
-      message: 'Every frame saved for this tour is deleted from the device. '
+      message:
+          'Every frame saved for this tour is deleted from the device. '
           'The tour itself stays a draft.',
       confirmLabel: 'Restart',
       destructive: true,
@@ -340,10 +347,9 @@ class _ArCaptureMobilePageState extends State<ArCaptureMobilePage>
   void _openPreview() {
     final tourId = _tourId;
     if (tourId == null) return;
-    Navigator.of(context).pushReplacementNamed(
-      '/tour-preview',
-      arguments: tourId,
-    );
+    Navigator.of(
+      context,
+    ).pushReplacementNamed('/tour-preview', arguments: tourId);
   }
 
   /// The tour record carries the real number of confirmed frames, so the
@@ -377,10 +383,9 @@ class _ArCaptureMobilePageState extends State<ArCaptureMobilePage>
     try {
       final root = await ServiceLocator.frameStore.tourRoot(tourId);
       await Directory(root).create(recursive: true);
-      await File('$root/origin.json').writeAsString(
-        jsonEncode({'headingDeg': headingDeg}),
-        flush: true,
-      );
+      await File(
+        '$root/origin.json',
+      ).writeAsString(jsonEncode({'headingDeg': headingDeg}), flush: true);
     } catch (error) {
       // Retakes still resume from the in-memory session; only a cold restart
       // would need the start direction set again.
@@ -611,7 +616,8 @@ class _ArCaptureMobilePageState extends State<ArCaptureMobilePage>
     if (_paused) {
       return _panel(
         title: 'Camera paused',
-        message: 'The camera was released while the app was in the background. '
+        message:
+            'The camera was released while the app was in the background. '
             'Return to the app to continue; your saved frames are kept.',
       );
     }
@@ -634,7 +640,8 @@ class _ArCaptureMobilePageState extends State<ArCaptureMobilePage>
     if (_sensorsSilent) {
       return _panel(
         title: 'No orientation data',
-        message: 'The accelerometer and compass have not reported a reading. '
+        message:
+            'The accelerometer and compass have not reported a reading. '
             'Guided capture needs both — a device without a magnetometer '
             'cannot aim at the 26 targets.',
         actionLabel: 'Try again',
@@ -660,7 +667,8 @@ class _ArCaptureMobilePageState extends State<ArCaptureMobilePage>
       final pose = _source.pose;
       return _panel(
         title: 'Set the start direction',
-        message: 'Stand where you will stay for all 26 frames and point the '
+        message:
+            'Stand where you will stay for all 26 frames and point the '
             'camera at the direction you want as 0°. Every target is measured '
             'from it.'
             '${pose == null ? '' : '\n\nCurrent direction: ${pose.headingDeg.toStringAsFixed(0)}°'}',
@@ -671,7 +679,8 @@ class _ArCaptureMobilePageState extends State<ArCaptureMobilePage>
     if (service.allCaptured) {
       return _panel(
         title: 'All 26 frames captured',
-        message: 'Generate the panorama to finish this tour. You can still '
+        message:
+            'Generate the panorama to finish this tour. You can still '
             'retake individual frames from the preview.',
         actionLabel: 'Generate panorama',
         onAction: _generate,

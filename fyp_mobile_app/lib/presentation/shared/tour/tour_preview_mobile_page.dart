@@ -282,7 +282,8 @@ class _TourPreviewMobilePageState extends State<TourPreviewMobilePage> {
     }
     final status = vm.tour?.status;
     // A tour awaiting review or already approved is not silently editable.
-    final canRetake = status == VirtualTourStatus.draft ||
+    final canRetake =
+        status == VirtualTourStatus.draft ||
         status == VirtualTourStatus.ready ||
         status == VirtualTourStatus.rejected;
     return GridView.builder(
@@ -300,8 +301,9 @@ class _TourPreviewMobilePageState extends State<TourPreviewMobilePage> {
         // The grid is ordered by capture sequence, but a missing frame file
         // drops out of the manifest, so the position in this list is not the
         // sequence index. Resolve it from the rig definition instead.
-        final sequenceIndex = CaptureTargetDataSource.targets
-            .indexWhere((t) => t.frameIndex == f.frameIndex);
+        final sequenceIndex = CaptureTargetDataSource.targets.indexWhere(
+          (t) => t.frameIndex == f.frameIndex,
+        );
         return Card(
           clipBehavior: Clip.antiAlias,
           child: Column(
@@ -338,7 +340,9 @@ class _TourPreviewMobilePageState extends State<TourPreviewMobilePage> {
                 Padding(
                   padding: const EdgeInsets.only(bottom: 4),
                   child: TextButton.icon(
-                    onPressed: vm.generating ? null : () => _retake(sequenceIndex),
+                    onPressed: vm.generating
+                        ? null
+                        : () => _retake(sequenceIndex),
                     icon: const Icon(Icons.replay_rounded, size: 14),
                     label: const Text('Retake', style: TextStyle(fontSize: 11)),
                     style: TextButton.styleFrom(

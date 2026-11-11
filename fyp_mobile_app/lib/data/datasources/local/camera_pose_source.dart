@@ -48,7 +48,8 @@ class CameraPoseSource {
     try {
       final cameras = await availableCameras();
       if (cameras.isEmpty) {
-        _error = 'No camera is available on this device, so a tour cannot be '
+        _error =
+            'No camera is available on this device, so a tour cannot be '
             'captured here.';
         return;
       }
@@ -77,8 +78,9 @@ class CameraPoseSource {
         'cameraPermission' =>
           'Camera permission was denied. Allow camera access for SiteWise in '
               'the system settings, then reopen this screen.',
-        _ => 'The camera could not be started (${e.code})'
-            '${e.description == null ? '.' : ': ${e.description}'}',
+        _ =>
+          'The camera could not be started (${e.code})'
+              '${e.description == null ? '.' : ': ${e.description}'}',
       };
       return;
     } catch (e) {
@@ -88,10 +90,11 @@ class CameraPoseSource {
 
     _accel = accelerometerEventStream(samplingPeriod: _sampling).listen(
       (event) {
-        _filteredAccel = DevicePoseMath.lowPass(
-          _filteredAccel,
-          [event.x, event.y, event.z],
-        );
+        _filteredAccel = DevicePoseMath.lowPass(_filteredAccel, [
+          event.x,
+          event.y,
+          event.z,
+        ]);
         _fuse();
       },
       onError: (Object e) {
@@ -100,11 +103,11 @@ class CameraPoseSource {
     );
     _mag = magnetometerEventStream(samplingPeriod: _sampling).listen(
       (event) {
-        _filteredMag = DevicePoseMath.lowPass(
-          _filteredMag,
-          [event.x, event.y, event.z],
-          alpha: 0.6,
-        );
+        _filteredMag = DevicePoseMath.lowPass(_filteredMag, [
+          event.x,
+          event.y,
+          event.z,
+        ], alpha: 0.6);
         _fuse();
       },
       onError: (Object e) {
