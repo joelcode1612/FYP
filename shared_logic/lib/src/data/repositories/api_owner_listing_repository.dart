@@ -1,5 +1,4 @@
 import '../../core/network/api_client.dart';
-import '../../domain/data/add_property_rules.dart';
 import '../../domain/entities/owner_listing.dart';
 
 /// Live owner-listing lifecycle over the authenticated FastAPI endpoints
@@ -131,36 +130,5 @@ class ApiOwnerListingRepository {
       const {},
     );
     _mutated();
-  }
-
-  /// Ask the backend to validate an address with Google Address Validation.
-  ///
-  /// The Google key never leaves the FastAPI process. A 503 means the provider
-  /// is not configured/enabled; the thrown [AppFailure] carries the backend's
-  /// own explanation so the UI can distinguish "address rejected" from
-  /// "service unavailable". This never changes verification status.
-  Future<AddressValidationResult> validateAddress({
-    required List<String> addressLines,
-    String? city,
-    String? state,
-    String? postcode,
-  }) async {
-    final response = await _client.post(
-      '/api/v1/properties/validate-address',
-      <String, dynamic>{
-        'address_lines': addressLines
-            .where((line) => line.trim().isNotEmpty)
-            .toList(growable: false),
-        if (city != null && city.trim().isNotEmpty) 'city': city.trim(),
-        if (state != null && state.trim().isNotEmpty) 'state': state.trim(),
-        if (postcode != null && postcode.trim().isNotEmpty)
-          'postcode': postcode.trim(),
-        'region_code': 'MY',
-      },
-    );
-    final data = response['data'] is Map<String, dynamic>
-        ? response['data'] as Map<String, dynamic>
-        : const <String, dynamic>{};
-    return AddressValidationResult.fromData(data);
   }
 }

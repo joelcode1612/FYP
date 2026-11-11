@@ -26,7 +26,6 @@ from sitewise.core.exceptions import (
     ConflictError,
     ForbiddenError,
     NotFoundError,
-    ValidationError,
 )
 from sitewise.db.models.property_verification import (
     LISTING_STATUSES,
@@ -37,7 +36,6 @@ from sitewise.db.models.property_verification import (
 )
 from sitewise.repositories.fyp_property_repository import FypPropertyRepository
 from sitewise.services import verification_storage as storage
-from sitewise.services.address_validation_service import validate_address
 
 DECISIONABLE = ("pending", "under_review")
 RESUBMITTABLE = ("not_submitted", "rejected", "information_requested")
@@ -59,8 +57,6 @@ REQUIRED_FOR_SUBMISSION = (
     "city",
     "state",
     "postcode",
-    "latitude",
-    "longitude",
     "rental_price",
     "size_sqft",
     "availability",
@@ -292,42 +288,6 @@ class PropertyVerificationService:
 
     # -- mutations ----------------------------------------------------------
 
-    def _ensure_address_validated(self, listing: dict[str, Any]) -> None:
-        """Require a provider-confirmed premise address before the queue.
-
-        The verdict is obtained HERE (never read from the request) and written
-        to the listing in the same transaction as the lifecycle transition, so
-        the admin review can see that the address was actually checked. A
-        partial or unconfirmed verdict blocks submission instead of silently
-        degrading to "address supplied by the owner".
-        """
-        if listing.get("address_validation_status") == "validated":
-            return
-        verdict = validate_address(
-            address_lines=[listing["address"]],
-            region_code="MY",
-            locality=listing.get("city"),
-            postal_code=listing.get("postcode"),
-            administrative_area=listing.get("state"),
-        )
-        status = verdict.get("status")
-        if status != "validated":
-            raise ValidationError(
-                "We found the general location, but cannot confirm the exact "
-                "property address. Please check the building, unit number or "
-                "postcode."
-                if status == "partially_validated"
-                else "We couldn't verify this address. Please check your "
-                "address details and try again."
-            )
-        FypPropertyRepository(self.session).set_address_validation(
-            int(listing["id"]),
-            status="validated",
-            formatted_address=verdict.get("formatted_address"),
-            latitude=verdict.get("latitude"),
-            longitude=verdict.get("longitude"),
-        )
-
     def submit(
         self, property_id: int, submitter_id: uuid.UUID, scope: str = "full"
     ) -> dict[str, Any]:
@@ -338,8 +298,8 @@ class PropertyVerificationService:
         * ``full`` (default) — the historical behaviour: at least one active
           ownership document is REQUIRED and both dimensions move to
           ``pending`` together.
-        * ``listing`` — the listing-information-only workflow: a complete,
-          address-validated listing enters the review queue with
+        * ``listing`` — the listing-information-only workflow: a complete
+          listing enters the review queue with
           ``listing_status = pending`` while ``ownership_status`` stays
           exactly where it is (``not_submitted`` for a first submission).
           Ownership evidence is NOT required, ownership is never verified by
@@ -363,9 +323,9 @@ class PropertyVerificationService:
                 + ". Save the draft and try again once the listing is complete."
             )
 
-        # Address validation is a SEPARATE dimension from ownership evidence:
-        # it proves the premises exists, never that the submitter owns it.
-        self._ensure_address_validated(listing)
+        # Address validation was removed from the owner flow: the listing
+        # enters the queue with the address as entered, and location truth is
+        # established by geospatial enrichment plus admin review.
 
         verification = verification_row(self.session, property_id)
         if verification is None:

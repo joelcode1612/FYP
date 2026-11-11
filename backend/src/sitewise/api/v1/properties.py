@@ -1,5 +1,4 @@
 
-from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from pydantic import BaseModel, Field, field_validator
@@ -88,8 +87,10 @@ class OwnerListingRequest(BaseModel):
     city: str = Field(min_length=2, max_length=80)
     state: str = Field(min_length=2, max_length=80)
     postcode: str = Field(pattern=r"^\d{5}$")
-    latitude: float = Field(ge=-90, le=90)
-    longitude: float = Field(ge=-180, le=180)
+    # Coordinates are optional: the wizard no longer geocodes, and the
+    # backend's enrichment/admin review resolves the location afterwards.
+    latitude: float | None = Field(default=None, ge=-90, le=90)
+    longitude: float | None = Field(default=None, ge=-180, le=180)
     rental_price: float = Field(gt=0, le=10_000_000)
     size_sqft: float = Field(gt=0, le=10_000_000)
     property_type: str = Field(default="Shoplot", max_length=60)
@@ -148,45 +149,6 @@ def _run_enrichment(repo: FypPropertyRepository, property_row: dict) -> dict:
         return {"status": "failed", "reason": type(exc).__name__, "detail": str(exc)[:300]}
 
 
-def _validate_listing_address(payload: "OwnerListingRequest") -> dict:
-    """Server-side gate: a listing may only be created with a complete,
-    provider-confirmed premise address.
-
-    This is deliberately NOT a client-supplied flag. The backend asks Google
-    itself, so a forged request cannot claim a verdict. ``503`` keeps the
-    distinction between "the address is wrong" (422) and "the provider is
-    unavailable" (503) explicit.
-    """
-    try:
-        verdict = validate_address(
-            address_lines=[payload.address],
-            region_code="MY",
-            locality=payload.city,
-            postal_code=payload.postcode,
-            administrative_area=payload.state,
-        )
-    except AddressValidationRejected as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
-    except AddressValidationUnavailable as exc:
-        raise HTTPException(
-            status_code=503,
-            detail=str(exc),
-        ) from exc
-
-    status = verdict.get("status")
-    if status != "validated":
-        message = (
-            "We found the general location, but cannot confirm the exact "
-            "property address. Please check the building, unit number or "
-            "postcode."
-            if status == "partially_validated"
-            else "We couldn't verify this address. Please check your address "
-            "details and try again."
-        )
-        raise HTTPException(status_code=422, detail=message)
-    return verdict
-
-
 @router.post("/listings", status_code=201)
 def create_owner_listing(
     payload: OwnerListingRequest,
@@ -199,20 +161,13 @@ def create_owner_listing(
     separate best-effort step whose outcome is reported, so a spatial failure
     never loses the submission.
 
-    Address verification is enforced HERE, not only in the UI: the server asks
-    Google Address Validation about the submitted address and refuses the
-    create unless the verdict is a complete premise. The verdict and Google's
-    normalised address are persisted with the row, and the provider's
-    coordinates replace the client's values so the pin matches the address.
+    Google Address Validation is no longer part of the create path: the
+    listing is stored with the owner's address as entered and its location is
+    resolved afterwards by the geospatial enrichment and admin review. The
+    standalone ``/validate-address`` endpoint remains available for callers
+    that want an explicit check.
     """
-    verdict = _validate_listing_address(payload)
     body = payload.model_dump()
-    body["address_validation_status"] = verdict["status"]
-    body["address_formatted"] = verdict.get("formatted_address")
-    body["address_validated_at"] = datetime.now(UTC)
-    if verdict.get("latitude") is not None and verdict.get("longitude") is not None:
-        body["latitude"] = float(verdict["latitude"])
-        body["longitude"] = float(verdict["longitude"])
 
     repo = FypPropertyRepository(session)
     row = repo.create_owner_listing(owner_user_id=current.user_id, payload=body)
@@ -224,9 +179,11 @@ def create_owner_listing(
             "verification_status": row["verification_status"],
             "is_published": row["is_published"],
             "address_validation": {
-                "status": verdict["status"],
-                "granularity": verdict.get("validation_granularity"),
-                "formatted_address": verdict.get("formatted_address"),
+                "status": row.get("address_validation_status"),
+                "granularity": None,
+                "formatted_address": row.get("address_formatted"),
+                "note": "Address validation is not performed at submission; "
+                "location is resolved by enrichment and admin review.",
             },
             "note": "Listings stay pending and unpublished until an administrator verifies them.",
         },

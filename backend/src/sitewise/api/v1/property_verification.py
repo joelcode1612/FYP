@@ -27,10 +27,6 @@ from sitewise.dependencies import (
 )
 from sitewise.domain import rbac
 from sitewise.services import verification_storage as storage
-from sitewise.services.address_validation_service import (
-    AddressValidationRejected,
-    AddressValidationUnavailable,
-)
 from sitewise.services.property_verification_service import (
     AdminPropertyReviewService,
     PropertyVerificationService,
@@ -110,20 +106,15 @@ def submit_for_verification(
     scope enters the queue on listing information alone (ownership stays
     ``not_submitted``).
 
-    The address is validated by the SERVER with Google Address Validation in
-    the same call: an unconfirmed address returns ``422`` and an unavailable
-    provider returns ``503``, never a silent success.
+    Google Address Validation is no longer part of the submission flow; the
+    listing enters the queue with the address as entered and location truth
+    is established by geospatial enrichment plus admin review.
     """
-    try:
-        return PropertyVerificationService(session).submit(
-            property_id,
-            current.user_id,
-            scope=payload.scope if payload is not None else "full",
-        )
-    except AddressValidationRejected as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
-    except AddressValidationUnavailable as exc:
-        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    return PropertyVerificationService(session).submit(
+        property_id,
+        current.user_id,
+        scope=payload.scope if payload is not None else "full",
+    )
 
 
 @submitter_router.post("/{property_id}/verification/documents", status_code=201)

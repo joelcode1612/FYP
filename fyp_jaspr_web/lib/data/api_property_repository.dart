@@ -48,10 +48,6 @@ class OwnerListingResult {
   }
 }
 
-/// Provider verdict for one address. The shape lives in `shared_logic`
-/// ([AddressValidationResult]) so the web and mobile forms parse the same
-/// contract; it is deliberately separate from property verification: a
-/// validated address never implies ownership or approval.
 class ApiPropertyRepository implements PropertyRepository {
   Future<List<CommercialProperty>>? _cached;
 
@@ -172,32 +168,6 @@ class ApiPropertyRepository implements PropertyRepository {
   /// Re-run enrichment for an owned listing (idempotent server-side).
   Future<Map<String, dynamic>> enrichListing(int propertyId) =>
       WebAuth.request('/api/v1/properties/listings/$propertyId/enrich', method: 'POST');
-
-  /// Ask the backend to validate an address (Google Address Validation).
-  ///
-  /// The Google key stays on the server. A 503 means the provider is not
-  /// enabled/configured — the thrown message says so explicitly, so the UI can
-  /// distinguish "address rejected" from "service unavailable".
-  Future<AddressValidationResult> validateAddress({
-    required List<String> addressLines,
-    String? city,
-    String? state,
-    String? postcode,
-  }) async {
-    final response = await WebAuth.request(
-      '/api/v1/properties/validate-address',
-      method: 'POST',
-      body: {
-        'address_lines': addressLines.where((line) => line.trim().isNotEmpty).toList(),
-        if (city != null && city.trim().isNotEmpty) 'city': city.trim(),
-        if (state != null && state.trim().isNotEmpty) 'state': state.trim(),
-        if (postcode != null && postcode.trim().isNotEmpty) 'postcode': postcode.trim(),
-        'region_code': 'MY',
-      },
-    );
-    final data = (response['data'] as Map?)?.cast<String, dynamic>() ?? const {};
-    return AddressValidationResult.fromData(data);
-  }
 }
 
 /// Deterministic workbook-index ranking, not a trained prediction or demo data.

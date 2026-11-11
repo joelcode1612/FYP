@@ -148,8 +148,8 @@ abstract final class PropertyFormRules {
   }
 
   /// Five digits, and — when [state] and [city] are supplied — a postcode the
-  /// dataset actually publishes for that locality. Format alone never proves
-  /// the address exists; Google Address Validation is the second check.
+  /// dataset actually publishes for that locality. Format plus locality keep
+  /// obvious typos out of the form; existence is established by admin review.
   static String? postcodeError(
     String? value, {
     String? state,
@@ -181,119 +181,4 @@ abstract final class PropertyFormRules {
     }
     return null;
   }
-}
-
-/// The address-verification state machine, identical on web and mobile.
-///
-/// A Google verdict proves the ADDRESS exists; it never proves ownership,
-/// approval or publication eligibility.
-enum AddressVerificationState {
-  unverified,
-  verifying,
-  validatedPendingConfirmation,
-  verified,
-  partiallyValidated,
-  unconfirmed,
-  serviceError,
-}
-
-/// The exact location values that were sent to the provider.
-///
-/// A verified verdict is bound to one snapshot: if any of these values change,
-/// the verdict is stale and the owner must verify again.
-class AddressSnapshot {
-  const AddressSnapshot({
-    required this.address,
-    required this.city,
-    required this.state,
-    required this.postcode,
-    this.latitude,
-    this.longitude,
-  });
-
-  final String address;
-  final String city;
-  final String state;
-  final String postcode;
-  final double? latitude;
-  final double? longitude;
-
-  @override
-  bool operator ==(Object other) =>
-      other is AddressSnapshot &&
-      other.address == address &&
-      other.city == city &&
-      other.state == state &&
-      other.postcode == postcode &&
-      other.latitude == latitude &&
-      other.longitude == longitude;
-
-  @override
-  int get hashCode => Object.hash(address, city, state, postcode, latitude, longitude);
-}
-
-/// One normalized verdict returned by the backend's Google adapter.
-class AddressValidationResult {
-  const AddressValidationResult({
-    required this.status,
-    this.formattedAddress,
-    this.granularity,
-    this.postalCode,
-    this.latitude,
-    this.longitude,
-    this.provider,
-  });
-
-  /// `validated`, `partially_validated` or `unconfirmed`.
-  final String status;
-  final String? formattedAddress;
-  final String? granularity;
-  final String? postalCode;
-  final double? latitude;
-  final double? longitude;
-  final String? provider;
-
-  bool get confirmed => status == 'validated';
-
-  bool get hasCoordinates =>
-      latitude != null &&
-      longitude != null &&
-      latitude!.isFinite &&
-      longitude!.isFinite &&
-      latitude! >= -90 &&
-      latitude! <= 90 &&
-      longitude! >= -180 &&
-      longitude! <= 180;
-
-  factory AddressValidationResult.fromData(Map<String, dynamic> data) =>
-      AddressValidationResult(
-        status: '${data['status'] ?? 'unconfirmed'}',
-        formattedAddress: data['formatted_address'] as String?,
-        granularity: data['validation_granularity'] as String?,
-        postalCode: data['postal_code'] as String?,
-        latitude: (data['latitude'] as num?)?.toDouble(),
-        longitude: (data['longitude'] as num?)?.toDouble(),
-        provider: data['provider'] as String?,
-      );
-}
-
-/// User-facing copy for each verification outcome. Kept in Shared Logic so the
-/// web and mobile forms say exactly the same thing.
-abstract final class AddressVerificationCopy {
-  static const String validated =
-      'Address validated. Please confirm the location shown below.';
-  static const String partiallyValidated =
-      'We found the general location, but cannot confirm the exact property '
-      'address. Please check the building, unit number or postcode.';
-  static const String unconfirmed =
-      "We couldn't verify this address. Please check your address details and "
-      'try again.';
-  static const String unavailable =
-      'Address verification is temporarily unavailable. Please retry.';
-  static const String invalidRequest =
-      'The address could not be checked. Review the address details and try again.';
-  static const String required =
-      'Verify and confirm the address before submitting.';
-  static const String stale =
-      'Address details changed — verify the address again.';
 }

@@ -26,24 +26,6 @@ def auth(token):
     return {"Authorization": f"Bearer {token}"}
 
 
-@pytest.fixture(autouse=True)
-def offline_address_validation(monkeypatch):
-    """The submission path calls Google Address Validation; the suite runs
-    offline with a provider-validated result so lifecycle tests exercise the
-    real transitions instead of the network (same pattern as
-    ``test_property_verification_api.py``)."""
-    from sitewise.services import property_verification_service as service_module
-
-    monkeypatch.setattr(
-        service_module,
-        "validate_address",
-        lambda **_kwargs: {
-            "status": "validated",
-            "formatted_address": "Test formatted address, Selangor",
-        },
-    )
-
-
 @pytest.fixture()
 def cleanup_listings(cleanup_users):
     props: list[int] = []
@@ -200,7 +182,7 @@ def test_incomplete_draft_cannot_be_submitted(client, owner, cleanup_listings):
     assert s.status_code == 409
     detail = s.json()["detail"]
     assert "Complete these fields" in detail
-    for missing in ("address", "latitude", "rental price", "availability"):
+    for missing in ("address", "rental price", "availability"):
         assert missing in detail
     # The draft is untouched and still a draft.
     g = client.get(f"/api/v1/properties/listings/{pid}", headers=auth(owner["token"]))
@@ -474,3 +456,33 @@ def test_photo_storage_unavailable_preserves_draft(
         f"/api/v1/properties/listings/{pid}/photos", headers=auth(owner["token"])
     ).json()["data"]
     assert photos == []
+
+
+def test_listing_can_be_created_without_coordinates(client, owner, cleanup_listings):
+    """Address validation was removed from the owner flow: the wizard no
+    longer geocodes, so the create endpoint must accept a listing with no
+    latitude/longitude and the listing-scope submit must enter the queue."""
+    body = complete_payload()
+    body.pop("latitude")
+    body.pop("longitude")
+    r = client.post(
+        "/api/v1/properties/listings",
+        headers=auth(owner["token"]),
+        json=body,
+    )
+    assert r.status_code == 201, r.text
+    data = r.json()["data"]
+    cleanup_listings.append(data["id"])
+    assert data["latitude"] is None and data["longitude"] is None
+    assert data["verification_status"] == "pending"
+    assert r.json()["meta"]["address_validation"]["note"].startswith(
+        "Address validation is not performed"
+    )
+
+    s = client.post(
+        f"/api/v1/properties/{data['id']}/verification/submit",
+        headers=auth(owner["token"]),
+        json={"scope": "listing"},
+    )
+    assert s.status_code == 200, s.text
+    assert s.json()["listing_status"] == "pending"

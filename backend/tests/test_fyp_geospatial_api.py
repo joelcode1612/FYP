@@ -68,22 +68,6 @@ def created_properties():
         session.commit()
 
 
-@pytest.fixture(autouse=True)
-def offline_address_validation(monkeypatch):
-    """Owner creation calls Google Address Validation; the suite runs offline
-    with a provider-validated verdict so the tests exercise persistence and
-    enrichment instead of the network."""
-    verdict = {
-        "status": "validated",
-        "formatted_address": "Test formatted address, Kuala Lumpur",
-    }
-    import sitewise.api.v1.properties as properties_module
-    from sitewise.services import property_verification_service as verification_module
-
-    monkeypatch.setattr(properties_module, "validate_address", lambda **_kw: verdict)
-    monkeypatch.setattr(verification_module, "validate_address", lambda **_kw: verdict)
-
-
 PROPERTY_BODY = {
     "name": "Contract Test Shoplot",
     "address": "12 Jalan Uji, Taman Uji",

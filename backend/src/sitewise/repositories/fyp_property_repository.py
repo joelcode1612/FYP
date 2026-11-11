@@ -886,8 +886,8 @@ class FypPropertyRepository:
         column); the legacy integer ``owner_id`` is left NULL. ``geom`` is a
         GENERATED column (from latitude/longitude) and must not be written.
         """
-        lat = float(payload["latitude"])
-        lon = float(payload["longitude"])
+        lat = payload.get("latitude")
+        lon = payload.get("longitude")
         size = payload.get("size_sqft")
         price = payload.get("rental_price")
         psf = None
@@ -926,8 +926,8 @@ class FypPropertyRepository:
                 "city": payload.get("city"),
                 "state": payload.get("state"),
                 "postcode": (payload.get("postcode") or "").strip() or None,
-                "latitude": lat,
-                "longitude": lon,
+                "latitude": float(lat) if lat is not None else None,
+                "longitude": float(lon) if lon is not None else None,
                 "rental_price": price,
                 "size_sqft": size,
                 "psf": psf,

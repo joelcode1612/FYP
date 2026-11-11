@@ -67,20 +67,6 @@ class _AddPropertyPageState extends State<AddPropertyPage> {
   /// Populated only from a confirmed API response.
   OwnerListingResult? _result;
 
-  /// Address-verification state machine. Kept SEPARATE from the property's
-  /// administrative verification status: a Google verdict proves the address
-  /// exists, never ownership or approval.
-  AddressVerificationState _addressState = AddressVerificationState.unverified;
-  AddressValidationResult? _addressResult;
-  AddressSnapshot? _verifiedSnapshot;
-  String? _addressMessage;
-  double? _verifiedLatitude;
-  double? _verifiedLongitude;
-
-  /// Monotonic token: a late response from an earlier request must never mark
-  /// a modified address as verified.
-  int _addressRequestId = 0;
-
   final ApiPropertyRepository _repository = ApiPropertyRepository();
 
   static const _steps = [
@@ -113,7 +99,6 @@ class _AddPropertyPageState extends State<AddPropertyPage> {
     'monthlyRent': 'Monthly rent',
     'ownerRole': 'Relationship to the property',
     'confirm': 'Confirmation',
-    'addressVerification': 'Address verification',
   };
 
   static const int _maxPhotos = 8;
@@ -185,9 +170,6 @@ class _AddPropertyPageState extends State<AddPropertyPage> {
           }
         }
       }
-      if (!_addressVerified) {
-        _errors['addressVerification'] = AddressVerificationCopy.required;
-      }
       if (!_confirm) {
         _errors['confirm'] = 'Please confirm the details before saving.';
       }
@@ -216,30 +198,7 @@ class _AddPropertyPageState extends State<AddPropertyPage> {
     if (_step > 0) setState(() => _step--);
   }
 
-  // --------------------------------------------------- address verification
-
-  AddressSnapshot _addressSnapshot() => AddressSnapshot(
-    address: (_fields['address'] ?? '').trim(),
-    city: (_fields['city'] ?? '').trim(),
-    state: (_fields['state'] ?? '').trim(),
-    postcode: (_fields['postcode'] ?? '').trim(),
-    latitude: _verifiedLatitude,
-    longitude: _verifiedLongitude,
-  );
-
-  /// Any edit to a location value invalidates the previous verdict: a verified
-  /// address is bound to the exact values that were validated.
-  void _invalidateAddress() {
-    _addressRequestId++;
-    _addressState = AddressVerificationState.unverified;
-    _addressResult = null;
-    _verifiedSnapshot = null;
-    _addressMessage = null;
-    _verifiedLatitude = null;
-    _verifiedLongitude = null;
-    _fields.remove('latitude');
-    _fields.remove('longitude');
-  }
+  // --------------------------------------------------- location edits
 
   void _onLocationChanged(String key, String value) {
     setState(() {
@@ -251,7 +210,6 @@ class _AddPropertyPageState extends State<AddPropertyPage> {
       } else if (key == 'city') {
         _fields.remove('postcode');
       }
-      _invalidateAddress();
       _errors.remove(key);
     });
   }
@@ -274,15 +232,6 @@ class _AddPropertyPageState extends State<AddPropertyPage> {
       _submitError = null;
     });
     try {
-      final latitude = _verifiedLatitude;
-      final longitude = _verifiedLongitude;
-      if (latitude == null || longitude == null) {
-        setState(() {
-          _saving = false;
-          _errors['addressVerification'] = AddressVerificationCopy.required;
-        });
-        return;
-      }
       final result = await _repository.submitOwnerListing({
         'name': _fields['propertyName']!.trim(),
         'property_type': commercialPropertyTypeWire(
@@ -293,11 +242,8 @@ class _AddPropertyPageState extends State<AddPropertyPage> {
         'city': _fields['city']!.trim(),
         'state': _fields['state']!.trim(),
         'postcode': _fields['postcode']!.trim(),
-        // Coordinates come from the confirmed Google verdict, never from a
-        // manually typed value. The backend re-validates the address and
-        // replaces these with the provider's own coordinates.
-        'latitude': latitude,
-        'longitude': longitude,
+        // No coordinates: the wizard does not geocode. The backend's
+        // geospatial enrichment and admin review resolve the location.
         'rental_price': double.parse(_fields['monthlyRent']!.trim()),
         'size_sqft': double.parse(_fields['builtUp']!.trim()),
         'availability': _optional('availability'),
@@ -313,11 +259,11 @@ class _AddPropertyPageState extends State<AddPropertyPage> {
         _saving = false;
       });
       // Enter the admin review queue with the LISTING-ONLY scope: the saved
-      // listing is complete and address-validated by construction, and this
-      // wizard collects no ownership documents — ownership therefore stays
-      // `not_submitted` and only an administrator's listing decision follows.
-      // Best-effort: a failed enqueue is reported honestly below, it never
-      // rolls back the saved listing.
+      // listing is complete, and this wizard collects no ownership documents
+      // — ownership therefore stays `not_submitted` and only an
+      // administrator's listing decision follows. Best-effort: a failed
+      // enqueue is reported honestly below, it never rolls back the saved
+      // listing.
       try {
         await AppLocator.propertyVerificationRepo.submit(
           '${result.propertyId}',
@@ -493,124 +439,6 @@ class _AddPropertyPageState extends State<AddPropertyPage> {
   );
 
   // --------------------------------------------------------------- step card
-
-  /// Ask the backend (which holds the Google key) to validate the address.
-  /// A verdict here never changes the listing's verification status.
-  Future<void> _validateAddress() async {
-    if (_addressState == AddressVerificationState.verifying) return;
-    final snapshot = _addressSnapshot();
-    if (snapshot.address.isEmpty) {
-      setState(() {
-        _errors['address'] = PropertyFormRules.addressError(snapshot.address) ??
-            'Enter a street address first.';
-      });
-      return;
-    }
-    if (snapshot.state.isEmpty ||
-        snapshot.city.isEmpty ||
-        snapshot.postcode.isEmpty) {
-      _validate();
-      setState(() {});
-      return;
-    }
-    final requestId = ++_addressRequestId;
-    setState(() {
-      _addressState = AddressVerificationState.verifying;
-      _addressMessage = null;
-      _errors.remove('addressVerification');
-    });
-    try {
-      final result = await _repository.validateAddress(
-        addressLines: [snapshot.address, snapshot.postcode],
-        city: snapshot.city,
-        state: snapshot.state,
-        postcode: snapshot.postcode,
-      );
-      if (!mounted || requestId != _addressRequestId) return;
-      if (_addressSnapshot() != snapshot) {
-        // The owner edited the address while the request was in flight; a
-        // late verdict must not mark the new address as verified.
-        setState(() {
-          _addressState = AddressVerificationState.unverified;
-          _addressMessage = AddressVerificationCopy.stale;
-        });
-        return;
-      }
-      final (state, message) = switch (result.status) {
-        'validated' => (
-          AddressVerificationState.validatedPendingConfirmation,
-          AddressVerificationCopy.validated,
-        ),
-        'partially_validated' => (
-          AddressVerificationState.partiallyValidated,
-          AddressVerificationCopy.partiallyValidated,
-        ),
-        _ => (
-          AddressVerificationState.unconfirmed,
-          AddressVerificationCopy.unconfirmed,
-        ),
-      };
-      setState(() {
-        _addressResult = result;
-        _addressState = state;
-        _addressMessage = message;
-      });
-    } catch (error) {
-      if (!mounted || requestId != _addressRequestId) return;
-      setState(() {
-        _addressState = AddressVerificationState.serviceError;
-        _addressMessage = _addressFailureCopy(_cleanError(error));
-        _verifiedLatitude = null;
-        _verifiedLongitude = null;
-      });
-    }
-  }
-
-  /// Distinguishes "provider unavailable" from "address rejected" so the owner
-  /// is told which action to take. All values are preserved either way.
-  String _addressFailureCopy(String message) {
-    final lower = message.toLowerCase();
-    if (lower.contains('temporarily unavailable') ||
-        lower.contains('not enabled') ||
-        lower.contains('not configured') ||
-        lower.contains('503')) {
-      return AddressVerificationCopy.unavailable;
-    }
-    if (lower.contains('rejected') ||
-        lower.contains('422') ||
-        lower.contains('invalid')) {
-      return AddressVerificationCopy.invalidRequest;
-    }
-    return message.isEmpty ? AddressVerificationCopy.unavailable : message;
-  }
-
-  /// Explicit confirmation step: `validated` alone is not `verified`.
-  void _confirmAddress() {
-    final result = _addressResult;
-    if (_addressState !=
-            AddressVerificationState.validatedPendingConfirmation ||
-        result == null ||
-        !result.hasCoordinates) {
-      return;
-    }
-    setState(() {
-      // Coordinates first: the snapshot must describe the CONFIRMED values,
-      // otherwise `_addressVerified` can never match afterwards.
-      _verifiedLatitude = result.latitude;
-      _verifiedLongitude = result.longitude;
-      _addressState = AddressVerificationState.verified;
-      _verifiedSnapshot = _addressSnapshot();
-      _fields['latitude'] = result.latitude!.toStringAsFixed(6);
-      _fields['longitude'] = result.longitude!.toStringAsFixed(6);
-      _addressMessage =
-          result.formattedAddress ?? AddressVerificationCopy.validated;
-      _errors.remove('addressVerification');
-    });
-  }
-
-  bool get _addressVerified =>
-      _addressState == AddressVerificationState.verified &&
-      _verifiedSnapshot == _addressSnapshot();
 
   /// Backend rejection notice. The server's own sentence is shown; nothing
   /// is retried automatically and the form stays editable.
@@ -983,90 +811,6 @@ class _AddPropertyPageState extends State<AddPropertyPage> {
     ]);
   }
 
-  String _addressStateLabel(AddressVerificationState state) => switch (state) {
-    AddressVerificationState.unverified => 'NOT VERIFIED',
-    AddressVerificationState.verifying => 'CHECKING',
-    AddressVerificationState.validatedPendingConfirmation => 'CONFIRM REQUIRED',
-    AddressVerificationState.verified => 'VERIFIED',
-    AddressVerificationState.partiallyValidated => 'CORRECTION REQUIRED',
-    AddressVerificationState.unconfirmed => 'CORRECTION REQUIRED',
-    AddressVerificationState.serviceError => 'UNAVAILABLE',
-  };
-
-  Component _addressVerificationPanel() {
-    final state = _addressState;
-    final busy = state == AddressVerificationState.verifying;
-    final result = _addressResult;
-    final tone = switch (state) {
-      AddressVerificationState.verified => 'sw-address-panel--ok',
-      AddressVerificationState.validatedPendingConfirmation =>
-        'sw-address-panel--confirm',
-      AddressVerificationState.partiallyValidated ||
-      AddressVerificationState.unconfirmed => 'sw-address-panel--warn',
-      AddressVerificationState.serviceError => 'sw-address-panel--error',
-      _ => 'sw-address-panel--idle',
-    };
-    return div(classes: 'sw-address-panel $tone', [
-      div(classes: 'sw-address-head', [
-        span(classes: 'sw-label', [Component.text('ADDRESS VERIFICATION')]),
-        span(classes: 'sw-address-badge', [
-          Component.text(_addressStateLabel(state)),
-        ]),
-      ]),
-      p(classes: 'sw-address-copy', [
-        Component.text(
-          _addressMessage ??
-              'Verify the address with Google before submitting. A validated '
-                  'address confirms the location only — it does not verify '
-                  'ownership or approve the listing.',
-        ),
-      ]),
-      if (result != null &&
-          result.formattedAddress != null &&
-          result.formattedAddress!.isNotEmpty)
-        p(classes: 'sw-address-formatted', [
-          strong([Component.text('Normalized address: ')]),
-          Component.text(result.formattedAddress!),
-        ]),
-      if (result != null && result.latitude != null && result.longitude != null)
-        p(classes: 'sw-address-coords', [
-          Component.text(
-            'Coordinates: ${result.latitude!.toStringAsFixed(6)}, '
-            '${result.longitude!.toStringAsFixed(6)}',
-          ),
-        ]),
-      div(classes: 'sw-address-actions', [
-        button(
-          classes: 'sw-btn sw-btn-text',
-          attributes: {
-            'type': 'button',
-            if (busy) 'disabled': '',
-            'aria-busy': busy ? 'true' : 'false',
-          },
-          events: events(onClick: _validateAddress),
-          [
-            Component.text(
-              busy
-                  ? 'Checking address…'
-                  : (state == AddressVerificationState.unverified
-                      ? 'Verify address'
-                      : 'Verify again'),
-            ),
-          ],
-        ),
-        if (state == AddressVerificationState.validatedPendingConfirmation)
-          button(
-            classes: 'sw-btn sw-btn-primary',
-            attributes: const {'type': 'button'},
-            events: events(onClick: _confirmAddress),
-            [Component.text('Confirm this address')],
-          ),
-      ]),
-      if (_errors['addressVerification'] != null)
-        _fieldError('addressVerification', _errors['addressVerification']!),
-    ]);
-  }
-
   Component _stepLocation() => div(classes: 'sw-fields', [
         _field(
           key: 'address',
@@ -1095,9 +839,6 @@ class _AddPropertyPageState extends State<AddPropertyPage> {
           required: true,
           hint: 'e.g. 47500',
         ),
-        div(classes: 'sw-field sw-field--wide', [
-          _addressVerificationPanel(),
-        ]),
         _field(
           key: 'availability',
           label: 'Availability',
@@ -1112,10 +853,8 @@ class _AddPropertyPageState extends State<AddPropertyPage> {
         ),
         p(classes: 'sw-reg-note', [
           Component.text(
-            'Changing the address, state, city or postcode clears the previous '
-            'verification — verify the updated address again. Google validates '
-            'the address only; SiteWise administrators separately verify the '
-            'listing and ownership evidence.',
+            'SiteWise administrators separately verify the listing and '
+            'ownership evidence after submission.',
           ),
         ]),
       ]);
@@ -1388,19 +1127,6 @@ class _AddPropertyPageState extends State<AddPropertyPage> {
           _reviewRow('State', _fields['state']),
           _reviewRow('City / township', _fields['city']),
           _reviewRow('Postcode', _fields['postcode']),
-          _reviewRow(
-            'Address verification',
-            _addressVerified
-                ? 'Verified${_addressResult?.formattedAddress == null ? '' : ' · ${_addressResult!.formattedAddress}'}'
-                : _addressStateLabel(_addressState),
-          ),
-          _reviewRow(
-            'Coordinates',
-            _verifiedLatitude == null || _verifiedLongitude == null
-                ? null
-                : '${_verifiedLatitude!.toStringAsFixed(6)}, '
-                      '${_verifiedLongitude!.toStringAsFixed(6)}',
-          ),
         ]),
         _reviewSection('Facilities & photos', 3, [
           _reviewRow('Facilities', '${_facilities.length} selected'),
@@ -1410,8 +1136,6 @@ class _AddPropertyPageState extends State<AddPropertyPage> {
           ),
           _reviewRow('Relationship', _fields['ownerRole']),
         ]),
-        if (_errors['addressVerification'] != null)
-          _fieldError('addressVerification', _errors['addressVerification']!),
         label(classes: _confirm ? 'sw-confirm sw-confirm--on' : 'sw-confirm', [
           button(
         classes: _confirm

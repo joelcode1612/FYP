@@ -13555,38 +13555,6 @@ input[type="range"] {
 .sw-edit:hover { text-decoration: underline; }
 .sw-edit:focus-visible { outline: 2px solid #1d4ed8; outline-offset: 2px; border-radius: 4px; }
 
-.sw-address-panel {
-  display: grid; gap: 10px; padding: 16px;
-  background: #fff; border: 1px solid #dbe3ef; border-radius: 14px;
-  color: #1e293b;
-}
-.sw-address-panel--ok { background: #f3fbf7; border-color: #9fd8bd; }
-.sw-address-panel--confirm { background: #f5f9ff; border-color: #b9cdf7; }
-.sw-address-panel--warn { background: #fffbf2; border-color: #f0c98a; }
-.sw-address-panel--error { background: #fff5f5; border-color: #f1b8b8; }
-.sw-address-head {
-  display: flex; align-items: center; justify-content: space-between;
-  gap: 10px; flex-wrap: wrap;
-}
-.sw-address-badge {
-  font-size: 10px; font-weight: 800; letter-spacing: .08em;
-  padding: 4px 8px; border-radius: 999px;
-  background: #e8eef6; color: #1e293b;
-}
-.sw-address-panel--ok .sw-address-badge { background: #d9f2e5; color: #0a5b36; }
-.sw-address-panel--confirm .sw-address-badge { background: #dbe8ff; color: #1d4ed8; }
-.sw-address-panel--warn .sw-address-badge { background: #fdeccb; color: #8a4b00; }
-.sw-address-panel--error .sw-address-badge { background: #fbdada; color: #991b1b; }
-.sw-address-copy { margin: 0; font-size: 13px; line-height: 1.5; }
-.sw-address-formatted { margin: 0; font-size: 13px; color: #0b0f19; }
-.sw-address-coords {
-  margin: 0; font-size: 12px; color: #64748b;
-  font-variant-numeric: tabular-nums;
-}
-.sw-address-actions {
-  display: flex; flex-wrap: wrap; align-items: center; gap: 10px;
-}
-.sw-address-panel .sw-field-error { margin-top: 2px; }
 
 /* --------------------------------------------------------------------------
    Recommendations (replaced Explore)
