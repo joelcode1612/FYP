@@ -1,0 +1,21 @@
+{
+  "scope": "New checkpoint documentation and synthetic qualification tool; no application code changes",
+  "files": [
+    {
+      "path": "docs/cp08/CHECKPOINT.md",
+      "sha256": "76a2a27163f59da0ed29c8c09bc682245a41aecbe460122c81da833a2db6dc93"
+    },
+    {
+      "path": "docs/cp08/RESULTS.md",
+      "sha256": "bfdcff914f5835f571954f62e3d4830e7193eb01b33e2951792d461093c2f8b9"
+    },
+    {
+      "path": "docs/cp08/README.md",
+      "sha256": "30b1d9296acbd2dc031dd3beb774155afaea19cf31bee641c31f79fa8db3f121"
+    },
+    {
+      "path": "tests/cp08/qualification.py",
+      "sha256": "85f0a71037b738c507167a6f58d82493a88934b393703d67c1fa00be2ec2e07b"
+    }
+  ]
+}
