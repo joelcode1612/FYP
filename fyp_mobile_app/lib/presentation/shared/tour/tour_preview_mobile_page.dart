@@ -292,39 +292,39 @@ class _TourPreviewMobilePageState extends State<TourPreviewMobilePage> {
       itemBuilder: (c, i) {
         final f = vm.frames[i];
         return Card(
-            clipBehavior: Clip.antiAlias,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Expanded(
-                  child: FutureBuilder<Uint8List?>(
-                    future: _bytesFor(f.imagePath),
-                    builder: (cc, snap) {
-                      if (snap.connectionState != ConnectionState.done) {
-                        return const Icon(Icons.image_outlined);
-                      }
-                      final bytes = snap.data;
-                      if (bytes == null) {
-                        return const Icon(
-                          Icons.image_not_supported_outlined,
-                          color: SitewiseColors.muted,
-                        );
-                      }
-                      return Image.memory(bytes, fit: BoxFit.cover);
-                    },
-                  ),
+          clipBehavior: Clip.antiAlias,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Expanded(
+                child: FutureBuilder<Uint8List?>(
+                  future: _bytesFor(f.imagePath),
+                  builder: (cc, snap) {
+                    if (snap.connectionState != ConnectionState.done) {
+                      return const Icon(Icons.image_outlined);
+                    }
+                    final bytes = snap.data;
+                    if (bytes == null) {
+                      return const Icon(
+                        Icons.image_not_supported_outlined,
+                        color: SitewiseColors.muted,
+                      );
+                    }
+                    return Image.memory(bytes, fit: BoxFit.cover);
+                  },
                 ),
-                Padding(
-                  padding: const EdgeInsets.all(6),
-                  child: Text(
-                    '#${i + 1} ${f.targetName}',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontSize: 11),
-                  ),
+              ),
+              Padding(
+                padding: const EdgeInsets.all(6),
+                child: Text(
+                  '#${i + 1} ${f.targetName}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontSize: 11),
                 ),
-              ],
-            ),
+              ),
+            ],
+          ),
         );
       },
     );
