@@ -95,13 +95,32 @@ async function installHarnessSession(page, { role = 'auto' } = {}) {
       // already a JSON string. The earlier one-argument form silently turned
       // every POST into a GET, so a paged request looked identical to the
       // first one and the harness replayed page 1 forever.
+      //
+      // Like `tool/auth_client.js`'s `apiRequest`, a non-2xx response REJECTS
+      // with the FastAPI detail message. Returning the error body as if it
+      // were a result would let a page render a failure as success, and no
+      // probe could ever observe an error state.
       request: async (path, method, body) => {
         const init = { method: method || 'GET' };
         if (body) {
           init.headers = { 'content-type': 'application/json' };
           init.body = typeof body === 'string' ? body : JSON.stringify(body);
         }
-        return (await fetch(`${apiOrigin}${path}`, init)).text();
+        const response = await fetch(`${apiOrigin}${path}`, init);
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          const detail = payload.detail;
+          const message =
+            (typeof detail === 'string' && detail) ||
+            detail?.message ||
+            payload.error?.message ||
+            'The data service could not complete this request.';
+          const err = new Error(message);
+          if (detail && typeof detail === 'object' && detail.code) err.code = detail.code;
+          err.status = response.status;
+          throw err;
+        }
+        return JSON.stringify(payload);
       },
       // Mirrors the real bridge's `requestDetailed`: the outcome travels back
       // as data ({ok, status, code, message}) so pages can branch on the HTTP

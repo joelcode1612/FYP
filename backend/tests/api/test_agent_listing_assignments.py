@@ -448,3 +448,62 @@ def test_other_agent_cannot_upload_photo(client, agents, listing_id, monkeypatch
         files={"file": ("photo.png", b"\x89PNG\r\n\x1a\n" + b"0" * 64, "image/png")},
     )
     assert response.status_code == 403
+
+
+def test_reject_without_reason_is_refused(client, agents, admin_token, listing_id):
+    """Rejecting (or asking for changes) must carry a reason: the agent needs
+    an actionable explanation, and the decision is not recorded without one."""
+    _assign(listing_id, AGENT_A_ID)
+    _proposal(
+        client, agents["a"]["token"], listing_id,
+        description="Needs a reason " + uuid.uuid4().hex[:6],
+    )
+    submitted = client.post(
+        f"/api/v1/staff/listings/{listing_id}/review-request",
+        json={"reason": "Please review this description."},
+        headers=auth(agents["a"]["token"]),
+    )
+    request_id = submitted.json()["change_request"]["change_request_id"]
+
+    refused = client.post(
+        f"/api/v1/staff/listings/{listing_id}/change-requests/{request_id}/decision",
+        json={"decision": "reject"},
+        headers=auth(admin_token),
+    )
+    assert refused.status_code == 422, refused.text
+    assert "reason is required" in refused.json()["detail"].lower()
+
+    # The request is still pending — a refused decision never consumes it.
+    history = client.get(
+        f"/api/v1/staff/listings/{listing_id}/change-requests",
+        headers=auth(agents["a"]["token"]),
+    ).json()["requests"]
+    assert history[0]["status"] == "pending"
+
+
+def test_proposer_cannot_decide_own_request(
+    client, agents, admin_token, listing_id
+):
+    """An administrator who authored the proposal cannot approve it: the
+    review must be independent of the author."""
+    _assign(listing_id, AGENT_A_ID)
+    # The admin authors the proposal (administrators may act on any listing).
+    _proposal(
+        client, admin_token, listing_id,
+        description="Admin-authored " + uuid.uuid4().hex[:6],
+    )
+    submitted = client.post(
+        f"/api/v1/staff/listings/{listing_id}/review-request",
+        json={"reason": "Self-authored proposal for the guard test."},
+        headers=auth(admin_token),
+    )
+    assert submitted.status_code == 200, submitted.text
+    request_id = submitted.json()["change_request"]["change_request_id"]
+
+    refused = client.post(
+        f"/api/v1/staff/listings/{listing_id}/change-requests/{request_id}/decision",
+        json={"decision": "approve", "note": "Trying to self-approve."},
+        headers=auth(admin_token),
+    )
+    assert refused.status_code == 403, refused.text
+    assert "cannot approve or reject" in refused.json()["detail"].lower()

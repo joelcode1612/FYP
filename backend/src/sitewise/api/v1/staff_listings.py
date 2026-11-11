@@ -658,6 +658,22 @@ def decide_change_request(
             status_code=409,
             detail=f"This request was already decided (current state: {request.status}).",
         )
+    # An agent who happens to hold an administrator role must not decide on
+    # their own proposal: the review must be independent of the author.
+    if str(request.proposed_by) == str(admin.user_id):
+        raise HTTPException(
+            status_code=403,
+            detail="You cannot approve or reject a change request you proposed.",
+        )
+    note = (payload.note or "").strip()
+    if decision in ("reject", "changes_requested") and not note:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                "A reason is required when rejecting a change request or "
+                "asking the agent for changes."
+            ),
+        )
     applied: dict | None = None
     if decision == "approve":
         applied = _apply_approved_changes(
@@ -665,7 +681,7 @@ def decide_change_request(
         )
     request.status = _DECISION_STATUS[decision]
     request.reviewed_by = admin.user_id
-    request.review_note = (payload.note or "").strip() or None
+    request.review_note = note or None
     request.updated_at = _utcnow()
     session.add(request)
     session.flush()
@@ -732,11 +748,34 @@ def admin_change_requests(
         profiles = {}
 
     repo = FypPropertyRepository(session)
+    rows = [session.get(ListingChangeRequest, rid) for rid in ids]
+    rows = [row for row in rows if row is not None]
+
+    # Agent notes and activity for the listings on this page, fetched in ONE
+    # query and grouped: the reviewer must be able to read what the agent
+    # recorded without opening the listing. Notes are audit rows
+    # (``note_added``); the rest of the trail is shown alongside them.
+    audit_by_listing: dict[int, list[dict]] = {}
+    if rows:
+        listing_ids = sorted({row.listing_id for row in rows})
+        audit_ids = session.execute(
+            text(
+                "SELECT audit_id, listing_id FROM listing_change_audit "
+                "WHERE listing_id = ANY(:ids) "
+                "ORDER BY created_at DESC LIMIT 400"
+            ),
+            {"ids": listing_ids},
+        ).mappings().all()
+        for audit in audit_ids:
+            bucket = audit_by_listing.setdefault(int(audit["listing_id"]), [])
+            if len(bucket) >= 20:
+                continue
+            event = session.get(ListingChangeAudit, audit["audit_id"])
+            if event is not None:
+                bucket.append(_audit_dict(event))
+
     requests: list[dict] = []
-    for request_id in ids:
-        row = session.get(ListingChangeRequest, request_id)
-        if row is None:
-            continue
+    for row in rows:
         payload = _request_dict(row)
         property_row = repo.owner_listing(row.listing_id) or {}
         changed_fields = sorted((row.changes or {}).keys())
@@ -758,6 +797,7 @@ def admin_change_requests(
         payload["current"] = {
             field: _json_safe(property_row.get(field)) for field in changed_fields
         }
+        payload["activity"] = audit_by_listing.get(int(row.listing_id), [])
         requests.append(payload)
     return {"requests": requests, "count": len(requests)}
 

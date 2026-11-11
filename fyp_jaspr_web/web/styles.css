@@ -13787,6 +13787,10 @@ input[type="range"] {
   font-size: 12px; font-weight: 800; line-height: 1.35; color: var(--ink);
   max-width: 100%; overflow-wrap: anywhere;
 }
+.swpm-selector-note {
+  margin-top: 2px; font-size: 10px; font-weight: 800; letter-spacing: .03em;
+  text-transform: uppercase; color: #B45309;
+}
 
 /* Top grid: property card + review card ----------------------------------- */
 .swpm-topgrid {

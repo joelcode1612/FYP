@@ -70,6 +70,16 @@ class _AgentChangeRequestsPanelState extends State<AgentChangeRequestsPanel> {
     final requestId = '${request['change_request_id'] ?? ''}';
     final listingId = (request['listing_id'] as num?)?.toInt();
     if (requestId.isEmpty || listingId == null) return;
+    final note = (_notes[requestId] ?? '').trim();
+    // Rejecting or asking for changes always carries a reason: the agent must
+    // know what to fix, and the backend refuses the decision without one.
+    if (decision != 'approve' && note.isEmpty) {
+      setState(() {
+        _error =
+            'Enter a reason before rejecting a request or asking for changes.';
+      });
+      return;
+    }
     setState(() {
       _busyId = requestId;
       _error = null;
@@ -79,7 +89,7 @@ class _AgentChangeRequestsPanelState extends State<AgentChangeRequestsPanel> {
         listingId: listingId,
         requestId: requestId,
         decision: decision,
-        note: _notes[requestId],
+        note: note.isEmpty ? null : note,
       );
       await _load();
     } catch (err) {
@@ -184,6 +194,7 @@ class _AgentChangeRequestsPanelState extends State<AgentChangeRequestsPanel> {
       if ((request['reason'] as String?)?.isNotEmpty == true)
         p(classes: 'body', [Component.text('Reason: ${request['reason']}')]),
       _changesTable(changes),
+      _activityBlock(request),
       p(classes: 'small muted', [
         Component.text(
           'Submitted ${_short(request['created_at'])} · '
@@ -249,6 +260,41 @@ class _AgentChangeRequestsPanelState extends State<AgentChangeRequestsPanel> {
               '${_value((entry.value as Map?)?['from'])} → '
               '${_value((entry.value as Map?)?['to'])}',
             ),
+          ]),
+        ]),
+    ]);
+  }
+
+  /// The agent's notes and the rest of the listing's change trail. Notes are
+  /// audit events recorded by the agent; the reviewer needs them to judge a
+  /// proposal (e.g. "landlord confirmed the new rent").
+  Component _activityBlock(Map<String, dynamic> request) {
+    final rows = (request['activity'] as List? ?? const [])
+        .whereType<Map<String, dynamic>>()
+        .toList();
+    if (rows.isEmpty) return const Component.fragment([]);
+    String label(String action) => switch (action) {
+      'note_added' => 'Agent note',
+      'draft_saved' => 'Draft saved',
+      'review_requested' => 'Review requested',
+      'approve' => 'Approved',
+      'reject' => 'Rejected',
+      'changes_requested' => 'Changes requested',
+      _ => action.replaceAll('_', ' '),
+    };
+    return div(classes: 'stack', [
+      span(classes: 'small muted', [Component.text('Agent notes & activity')]),
+      for (final row in rows)
+        div(classes: 'row row--between', [
+          span(classes: 'small', [
+            Component.text(
+              row['note'] != null && '${row['note']}'.isNotEmpty
+                  ? '${label('${row['action'] ?? ''}')}: ${row['note']}'
+                  : label('${row['action'] ?? ''}'),
+            ),
+          ]),
+          span(classes: 'small muted', [
+            Component.text(_short(row['created_at'])),
           ]),
         ]),
     ]);

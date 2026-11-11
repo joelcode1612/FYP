@@ -75,10 +75,29 @@ class _AgentPropertyDetailPageState extends State<AgentPropertyDetailPage> {
   bool _uploading = false;
   String? _mediaNotice;
   String _noteText = '';
+  bool _savingNote = false;
+  String? _noteError;
 
-  /// The listing id the agent asked to switch to while the current draft has
-  /// unsaved edits (`null` when no switch is pending).
-  int? _switchTargetId;
+  /// Persists the current editor state so leaving the page (back to My
+  /// Properties, another listing) and returning does not discard typed values.
+  /// Only the SERVER draft is shared across devices; this is the local,
+  /// not-yet-saved buffer and it is cleared once the draft is saved.
+  void _rememberUnsaved() {
+    final listingId = _detail?.assignment.listingId;
+    if (listingId == null) return;
+    if (!_dirty) {
+      _UnsavedDraftStore.clear(listingId);
+      return;
+    }
+    _UnsavedDraftStore.write(
+      listingId,
+      _UnsavedDraft(
+        fields: Map<String, String>.from(_draft),
+        parking: _draftParking,
+        fnb: _draftFnb,
+      ),
+    );
+  }
 
   static const _availabilityOptions = [
     'Available',
@@ -106,8 +125,8 @@ class _AgentPropertyDetailPageState extends State<AgentPropertyDetailPage> {
   }
 
   /// Warns before the browser unloads the page with unsaved edits (reload,
-  /// close, external navigation). In-app tab switches are covered by the
-  /// draft itself; selector switches use the in-page confirm dialog.
+  /// close, external navigation). In-app navigation is safe: every keystroke is
+  /// mirrored into [_UnsavedDraftStore] and restored by [_resetDraft].
   void _installUnloadGuard() {
     web.window.addEventListener(
       'beforeunload',
@@ -146,6 +165,10 @@ class _AgentPropertyDetailPageState extends State<AgentPropertyDetailPage> {
         _activity = const [];
       });
       _resetDraft(detail);
+      // Loaded eagerly (not on first tab visit) so the Overview review card
+      // can show the latest administrator decision without the agent having
+      // to hunt for the Admin review tab.
+      unawaited(_loadHistory());
     } on Object catch (error) {
       if (!mounted) return;
       setState(() {
@@ -155,24 +178,79 @@ class _AgentPropertyDetailPageState extends State<AgentPropertyDetailPage> {
     }
   }
 
+  /// Restores the editor from the LIVE listing values, then layers the agent's
+  /// own persisted DRAFT on top. Reopening a property — or returning to it
+  /// after navigating away — therefore shows the saved proposal instead of
+  /// silently discarding it and presenting the published values.
   void _resetDraft(AgentListingDetail detail) {
     final facts = detail.facts;
+    final open = detail.openRequest;
+    final proposed =
+        open != null && open.status == AgentChangeRequest.statusDraft
+        ? open.changes
+        : const <String, Map<String, dynamic>>{};
+
+    String text(String field, String fallback) {
+      final entry = proposed[field];
+      if (entry == null || !entry.containsKey('to')) return fallback;
+      final value = entry['to'];
+      if (value == null) return '';
+      if (value is num) return _numText(value.toDouble());
+      return '$value';
+    }
+
+    bool flag(String field, bool fallback) {
+      final value = proposed[field]?['to'];
+      return value is bool ? value : fallback;
+    }
+
+    // Unsaved values typed earlier in this browser session win over the
+    // server state: returning to the page must not silently lose them.
+    final unsaved = _UnsavedDraftStore.read(detail.assignment.listingId);
+
     setState(() {
-      _dirty = false;
-      _saveNotice = null;
-      _draftParking = facts?.hasParking ?? false;
-      _draftFnb = facts?.isFnbSuitable ?? false;
+      _dirty = unsaved != null;
+      _saveNotice = unsaved == null
+          ? null
+          : 'Restored unsaved edits from this session — save the draft to '
+                'persist them.';
+      _draftParking = unsaved?.parking ?? flag(
+        'has_parking',
+        facts?.hasParking ?? false,
+      );
+      _draftFnb = unsaved?.fnb ?? flag(
+        'is_fnb_suitable',
+        facts?.isFnbSuitable ?? false,
+      );
       _draft
         ..clear()
-        ..addAll({
-          'name': facts?.name ?? '',
-          'rental_price': _numText(facts?.rentalPrice),
-          'size_sqft': _numText(facts?.sizeSqft),
-          'property_type': facts?.propertyType ?? '',
-          'floor_level': _numText(facts?.floorLevel),
-          'availability': facts?.availability ?? '',
-          'description': facts?.description ?? '',
-        });
+        ..addAll(
+          unsaved?.fields ??
+              {
+                'name': text('name', facts?.name ?? ''),
+                'rental_price': text(
+                  'rental_price',
+                  _numText(facts?.rentalPrice),
+                ),
+                'size_sqft': text('size_sqft', _numText(facts?.sizeSqft)),
+                'property_type': text(
+                  'property_type',
+                  facts?.propertyType ?? '',
+                ),
+                'floor_level': text(
+                  'floor_level',
+                  _numText(facts?.floorLevel),
+                ),
+                'availability': text(
+                  'availability',
+                  facts?.availability ?? '',
+                ),
+                'description': text(
+                  'description',
+                  facts?.description ?? '',
+                ),
+              },
+        );
     });
   }
 
@@ -194,6 +272,7 @@ class _AgentPropertyDetailPageState extends State<AgentPropertyDetailPage> {
       _dirty = true;
       _saveNotice = null;
     });
+    _rememberUnsaved();
   }
 
   /// Availability is part of the PROPOSED listing state — it never touches
@@ -204,6 +283,7 @@ class _AgentPropertyDetailPageState extends State<AgentPropertyDetailPage> {
       _dirty = true;
       _saveNotice = null;
     });
+    _rememberUnsaved();
   }
 
   String? _validate() {
@@ -252,6 +332,7 @@ class _AgentPropertyDetailPageState extends State<AgentPropertyDetailPage> {
         ),
       );
       if (!mounted) return;
+      _UnsavedDraftStore.clear(detail.assignment.listingId);
       setState(() {
         _saving = false;
         _dirty = false;
@@ -287,6 +368,7 @@ class _AgentPropertyDetailPageState extends State<AgentPropertyDetailPage> {
   void _discardDraft() {
     final detail = _detail;
     if (detail == null) return;
+    _UnsavedDraftStore.clear(detail.assignment.listingId);
     _resetDraft(detail);
   }
 
@@ -478,38 +560,35 @@ class _AgentPropertyDetailPageState extends State<AgentPropertyDetailPage> {
   Future<void> _addNote() async {
     final detail = _detail;
     final text = _noteText.trim();
-    if (detail == null || text.isEmpty) return;
+    if (detail == null || text.isEmpty || _savingNote) return;
+    setState(() {
+      _savingNote = true;
+      _noteError = null;
+    });
     try {
       await _repo.addNote(detail.assignment.listingId, text);
       if (!mounted) return;
       setState(() {
         _noteText = '';
+        _savingNote = false;
         _historyLoaded = false;
       });
       await _loadHistory();
     } on Object catch (err) {
       if (!mounted) return;
-      setState(() => _mediaNotice = AdminApi.message(err));
+      setState(() {
+        _savingNote = false;
+        _noteError = AdminApi.message(err);
+      });
     }
   }
 
   // --- Selector --------------------------------------------------------------
 
-  /// The switch target route. With unsaved edits the selector opens the
-  /// confirm dialog instead of navigating directly; the dialog's action is a
-  /// real [ActionLink], so navigation stays a normal router navigation.
+  /// The route for another assigned listing. Navigation is a normal
+  /// router navigation: unsaved values live in [_UnsavedDraftStore], so they
+  /// are restored by [_resetDraft] when the agent comes back.
   String _routeFor(int listingId) => '/agent/property-detail?id=$listingId';
-
-  void _chooseAssignment(int index) {
-    final next = _filteredAssignments[index];
-    final current = _detail?.assignment;
-    if (current != null && next.listingId == current.listingId) return;
-    if (_dirty) {
-      setState(() => _switchTargetId = next.listingId);
-    }
-    // When clean, the selector renders as a Link and the router performs
-    // the navigation — no programmatic push needed.
-  }
 
   List<AgentAssignment> get _filteredAssignments {
     final q = _selectorQuery.trim().toLowerCase();
@@ -601,7 +680,6 @@ class _AgentPropertyDetailPageState extends State<AgentPropertyDetailPage> {
       div(classes: 'swpm-edgrid', [_editor(detail, facts), _sideStack(facts)]),
       if (_previewOpen) _previewDialog(facts),
       if (_reviewDialogOpen) _reviewDialog(),
-      if (_switchTargetId != null) _switchDialog(),
     ]);
   }
 
@@ -647,15 +725,17 @@ class _AgentPropertyDetailPageState extends State<AgentPropertyDetailPage> {
         ),
       ]),
       div(classes: 'swpm-selectors', [
-        for (var i = 0; i < rows.length; i++) _selectorCard(rows[i], i),
+        for (final row in rows) _selectorCard(row),
       ]),
     ]);
   }
 
-  /// Clean navigation renders the card as a real link (router-intercepted);
-  /// with unsaved edits it renders as a button that opens the confirm
-  /// dialog, so the warning cannot be bypassed by a middle-click either.
-  Component _selectorCard(AgentAssignment assignment, int index) {
+  /// Every card is a real link (router-intercepted), including while the
+  /// current listing has unsaved edits: those edits are already mirrored into
+  /// [_UnsavedDraftStore] on each keystroke, so switching listings no longer
+  /// loses them and no confirm dialog is needed. Middle-click and
+  /// open-in-new-tab keep working because nothing is a synthetic button.
+  Component _selectorCard(AgentAssignment assignment) {
     final selected = assignment.listingId == _detail?.assignment.listingId;
     final classes = selected
         ? 'swpm-selector swpm-selector--active'
@@ -673,20 +753,16 @@ class _AgentPropertyDetailPageState extends State<AgentPropertyDetailPage> {
               : assignment.displayTitle,
         ),
       ]),
+      if (_UnsavedDraftStore.read(assignment.listingId) != null)
+        span(classes: 'swpm-selector-note', [
+          Component.text('Unsaved edits kept'),
+        ]),
     ];
-    if (!_dirty) {
-      return AppLink(
-        to: _routeFor(assignment.listingId),
-        classes: classes,
-        attributes: attributes,
-        children: children,
-      );
-    }
-    return button(
+    return AppLink(
+      to: _routeFor(assignment.listingId),
       classes: classes,
-      attributes: {'type': 'button', ...attributes},
-      events: events(onClick: () => _chooseAssignment(index)),
-      children,
+      attributes: attributes,
+      children: children,
     );
   }
 
@@ -854,6 +930,15 @@ class _AgentPropertyDetailPageState extends State<AgentPropertyDetailPage> {
           _hasPending ? '1 pending' : 'None',
         ),
       ]),
+      if (_latestNegativeDecision != null)
+        Callout(
+          _negativeDecisionText(_latestNegativeDecision!),
+          tone: _latestNegativeDecision!.status ==
+                  AgentChangeRequest.statusRejected
+              ? 'danger'
+              : 'warning',
+          icon: 'history',
+        ),
       div(classes: 'swpm-boundary', [
         span(classes: 'ms', [Component.text('admin_panel_settings')]),
         span([
@@ -1151,11 +1236,14 @@ class _AgentPropertyDetailPageState extends State<AgentPropertyDetailPage> {
                 type: InputType.checkbox,
                 checked: _draftParking,
                 events: events(
-                  onClick: () => setState(() {
-                    _draftParking = !_draftParking;
-                    _dirty = true;
-                    _saveNotice = null;
-                  }),
+                  onClick: () {
+                    setState(() {
+                      _draftParking = !_draftParking;
+                      _dirty = true;
+                      _saveNotice = null;
+                    });
+                    _rememberUnsaved();
+                  },
                 ),
               ),
               span([Component.text('Parking available')]),
@@ -1165,11 +1253,14 @@ class _AgentPropertyDetailPageState extends State<AgentPropertyDetailPage> {
                 type: InputType.checkbox,
                 checked: _draftFnb,
                 events: events(
-                  onClick: () => setState(() {
-                    _draftFnb = !_draftFnb;
-                    _dirty = true;
-                    _saveNotice = null;
-                  }),
+                  onClick: () {
+                    setState(() {
+                      _draftFnb = !_draftFnb;
+                      _dirty = true;
+                      _saveNotice = null;
+                    });
+                    _rememberUnsaved();
+                  },
                 ),
               ),
               span([Component.text('Flagged as F&B suitable')]),
@@ -1337,14 +1428,27 @@ class _AgentPropertyDetailPageState extends State<AgentPropertyDetailPage> {
             'maxlength': '240',
             'placeholder': 'Record a follow-up or required check',
             'aria-label': 'New internal note',
+            'value': _noteText,
+            if (_noteError != null) 'aria-invalid': 'true',
           },
-          events: events<String>(onInput: (v) => _noteText = v),
+          events: events<String>(
+            // setState is required: the Add-note button is disabled while the
+            // field is empty, so the rebuild is what enables it.
+            onInput: (v) => setState(() {
+              _noteText = v;
+              _noteError = null;
+            }),
+          ),
         ),
         ActionButton(
-          'Add note',
-          onClick: () => unawaited(_addNote()),
+          _savingNote ? 'Saving…' : 'Add note',
+          onClick: _savingNote || _noteText.trim().isEmpty
+              ? null
+              : () => unawaited(_addNote()),
           variant: 'secondary',
         ),
+        if (_noteError != null)
+          p(classes: 'swpm-sub', [Component.text(_noteError!)]),
       ]),
     ]);
   }
@@ -1453,11 +1557,45 @@ class _AgentPropertyDetailPageState extends State<AgentPropertyDetailPage> {
           tone: 'warning',
           icon: 'campaign',
         ),
+      if (_latestNegativeDecision != null)
+        Callout(
+          _negativeDecisionText(_latestNegativeDecision!),
+          tone: _latestNegativeDecision!.status ==
+                  AgentChangeRequest.statusRejected
+              ? 'danger'
+              : 'warning',
+          icon: 'history',
+        ),
       h4(classes: 'swpm-h4', [Component.text('Original vs proposed values')]),
       _diffTable(open),
       h4(classes: 'swpm-h4', [Component.text('Submission history')]),
       _historyList(),
     ]);
+  }
+
+  /// The newest decision that sent the work back to the agent. ``_history`` is
+  /// newest-first, so the first rejected / changes-requested entry is the one
+  /// the agent must act on.
+  AgentChangeRequest? get _latestNegativeDecision {
+    for (final request in _history) {
+      if (request.status == AgentChangeRequest.statusRejected ||
+          request.status == AgentChangeRequest.statusChangesRequested) {
+        return request;
+      }
+    }
+    return null;
+  }
+
+  static String _negativeDecisionText(AgentChangeRequest request) {
+    final reason = request.reviewNote?.trim();
+    final verdict = request.status == AgentChangeRequest.statusRejected
+        ? 'rejected'
+        : 'sent back for changes';
+    return reason == null || reason.isEmpty
+        ? 'Your last change request was $verdict. Revise the fields and submit '
+              'again.'
+        : 'Your last change request was $verdict: “$reason”. Revise the fields '
+              'and submit again.';
   }
 
   Component _diffTable(AgentChangeRequest? open) {
@@ -1792,32 +1930,37 @@ class _AgentPropertyDetailPageState extends State<AgentPropertyDetailPage> {
       ],
     );
   }
+}
 
-  Component _switchDialog() {
-    final target = _assignments.firstWhere(
-      (assignment) => assignment.listingId == _switchTargetId,
-      orElse: () => _assignments.first,
-    );
-    final route = _routeFor(target.listingId);
-    return SitewiseDialog(
-      title: 'Discard unsaved edits?',
-      ariaLabel: 'Discard unsaved edits',
-      onClose: () => setState(() => _switchTargetId = null),
-      body: p(classes: 'body muted', [
-        Component.text(
-          'You have unsaved edits on this listing. Switching to '
-          '"${target.displayTitle.isEmpty ? target.displayId : target.displayTitle}" '
-          'discards them; save the draft first to keep them.',
-        ),
-      ]),
-      actions: [
-        ActionButton(
-          'Keep editing',
-          onClick: () => setState(() => _switchTargetId = null),
-          variant: 'secondary',
-        ),
-        ActionLink('Discard and switch', href: route, variant: 'primary'),
-      ],
-    );
+/// One listing's unsaved editor state, held for the browser session.
+final class _UnsavedDraft {
+  const _UnsavedDraft({
+    required this.fields,
+    required this.parking,
+    required this.fnb,
+  });
+
+  final Map<String, String> fields;
+  final bool parking;
+  final bool fnb;
+}
+
+/// In-memory buffer of unsaved agent edits, keyed by listing id.
+///
+/// The persisted draft lives on the server (written by "Save draft"); this
+/// store only covers values typed but not yet saved, so switching listings or
+/// leaving the page for My Properties and coming back restores them. It is
+/// cleared on a successful save, on discard, and when the session ends.
+abstract final class _UnsavedDraftStore {
+  static final Map<int, _UnsavedDraft> _entries = <int, _UnsavedDraft>{};
+
+  static _UnsavedDraft? read(int listingId) => _entries[listingId];
+
+  static void write(int listingId, _UnsavedDraft draft) {
+    _entries[listingId] = draft;
+  }
+
+  static void clear(int listingId) {
+    _entries.remove(listingId);
   }
 }
