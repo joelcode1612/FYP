@@ -504,9 +504,6 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
                 : '$total ${total == 1 ? 'property' : 'properties'}',
           ),
         ]),
-        span(classes: 'rec2__eligibility', [
-          Component.text('PU score > 50'),
-        ]),
         if (refreshing)
           span(classes: 'rec2__refreshing', [Component.text('Updating…')]),
       ]),

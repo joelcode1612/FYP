@@ -14895,18 +14895,8 @@ input[type="range"] {
   text-underline-offset: 3px;
 }
 
-.rec2__eligibility {
-  font-size: 10.5px;
-  font-weight: 800;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  color: var(--action);
-  border: 1px solid var(--geo-border, rgba(29, 78, 216, 0.28));
-  background: var(--geo-wash, rgba(29, 78, 216, 0.08));
-  border-radius: 99px;
-  padding: 3px 9px;
-  white-space: nowrap;
-}
+/* Eligibility chip removed from the results header (2026-11-11). */
+
 
 .rec2__insufficient {
   display: flex;
