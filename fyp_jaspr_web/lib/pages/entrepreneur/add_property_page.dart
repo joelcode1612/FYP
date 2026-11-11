@@ -25,13 +25,19 @@ final class _SelectedPhoto {
   final String url;
 }
 
-/// Entrepreneur property registration — a **browser-local draft** wizard.
+/// Entrepreneur property registration — a compact five-step wizard.
 ///
-/// Five steps: details, location & pricing, F&B readiness, photos & proof,
-/// review. It mirrors the reference prototype's own honesty note: records are
-/// stored in this browser and are **not** submitted to any server or backend.
-/// There is no owner-listing entity in `shared_logic`, so this is intentionally a
-/// local, unverified draft surface rather than a fabricated "published" listing.
+/// Steps: property details, location & pricing, F&B readiness, photos & proof,
+/// then review. The review step saves a real **draft** through FastAPI, runs the
+/// two-phase geospatial enrichment (PostGIS first, population second) and only
+/// then offers an explicit **Submit to Admin**. Nothing enters the review queue
+/// on its own.
+///
+/// Layout note: this is a single centred 720px column — the design system's cap
+/// for a standalone form. The former hero banner, in-page breadcrumb and
+/// persistent preview sidebar were removed; they pushed the form below the fold
+/// and made a five-field step read as a long vertical list. The global
+/// [AppLayout] navigation is the only navigation on the page.
 @client
 class AddPropertyPage extends StatefulComponent {
   const AddPropertyPage({super.key});
@@ -96,12 +102,31 @@ class _AddPropertyPageState extends State<AddPropertyPage> {
 
   final ApiPropertyRepository _repository = ApiPropertyRepository();
 
-  static const _steps = [
+  /// Short labels for the horizontal step indicator.
+  static const _steps = ['Details', 'Location', 'F&B', 'Photos', 'Review'];
+
+  /// Full titles for the card heading.
+  static const _stepTitles = [
     'Property details',
     'Location & pricing',
     'F&B readiness',
     'Photos & proof',
-    'Review & save',
+    'Review & submit',
+  ];
+
+  /// The ten owner-declared facilities. Rendered as compact chips, not a long
+  /// list of full-width checkboxes.
+  static const _facilityOptions = [
+    'Grease trap',
+    'Exhaust provision',
+    'Three-phase power',
+    'Water supply',
+    'Food preparation area',
+    'Dedicated drainage',
+    'Parking available',
+    'Ground floor frontage',
+    'Loading access',
+    'Accessible entrance',
   ];
 
   /// Required field keys per step.
@@ -114,9 +139,9 @@ class _AddPropertyPageState extends State<AddPropertyPage> {
 
   /// Human labels for cross-step validation messages.
   static const _labels = <String, String>{
-    'propertyName': 'Property title',
+    'propertyName': 'Property name',
     'propertyType': 'Property type',
-    'builtUp': 'Built-up area',
+    'builtUp': 'Floor area',
     'address': 'Street address',
     'latitude': 'Latitude',
     'longitude': 'Longitude',
@@ -139,8 +164,6 @@ class _AddPropertyPageState extends State<AddPropertyPage> {
 
   bool get _isLast => _step == _steps.length - 1;
 
-  String get _percent => '${((_step + 1) * 100 / _steps.length).round()}%';
-
   void _set(String key, String value) => setState(() => _fields[key] = value);
 
   void _toggleFacility(String value) => setState(() {
@@ -150,6 +173,13 @@ class _AddPropertyPageState extends State<AddPropertyPage> {
       _facilities.add(value);
     }
   });
+
+  /// Only completed steps are re-openable, and never once the draft is saved:
+  /// the persisted record would otherwise drift from the edited form.
+  bool _canNavigateTo(int index) {
+    if (_saved || _saving || _submitting) return false;
+    return index < _step;
+  }
 
   void _validate() {
     _errors.clear();
@@ -269,6 +299,125 @@ class _AddPropertyPageState extends State<AddPropertyPage> {
     });
   }
 
+  /// Ask the backend (which holds the Google key) to validate the address.
+  /// A verdict here never changes the listing's verification status.
+  Future<void> _validateAddress() async {
+    if (_addressState == AddressVerificationState.verifying) return;
+    final snapshot = _addressSnapshot();
+    if (snapshot.address.isEmpty) {
+      setState(() {
+        _errors['address'] =
+            PropertyFormRules.addressError(snapshot.address) ??
+            'Enter a street address first.';
+      });
+      return;
+    }
+    if (snapshot.state.isEmpty ||
+        snapshot.city.isEmpty ||
+        snapshot.postcode.isEmpty) {
+      _validate();
+      setState(() {});
+      return;
+    }
+    final requestId = ++_addressRequestId;
+    setState(() {
+      _addressState = AddressVerificationState.verifying;
+      _addressMessage = null;
+      _errors.remove('addressVerification');
+    });
+    try {
+      final result = await _repository.validateAddress(
+        addressLines: [snapshot.address, snapshot.postcode],
+        city: snapshot.city,
+        state: snapshot.state,
+        postcode: snapshot.postcode,
+      );
+      if (!mounted || requestId != _addressRequestId) return;
+      if (_addressSnapshot() != snapshot) {
+        // The owner edited the address while the request was in flight; a
+        // late verdict must not mark the new address as verified.
+        setState(() {
+          _addressState = AddressVerificationState.unverified;
+          _addressMessage = AddressVerificationCopy.stale;
+        });
+        return;
+      }
+      final (state, message) = switch (result.status) {
+        'validated' => (
+          AddressVerificationState.validatedPendingConfirmation,
+          AddressVerificationCopy.validated,
+        ),
+        'partially_validated' => (
+          AddressVerificationState.partiallyValidated,
+          AddressVerificationCopy.partiallyValidated,
+        ),
+        _ => (
+          AddressVerificationState.unconfirmed,
+          AddressVerificationCopy.unconfirmed,
+        ),
+      };
+      setState(() {
+        _addressResult = result;
+        _addressState = state;
+        _addressMessage = message;
+      });
+    } catch (error) {
+      if (!mounted || requestId != _addressRequestId) return;
+      setState(() {
+        _addressState = AddressVerificationState.serviceError;
+        _addressMessage = _addressFailureCopy(_cleanError(error));
+        _verifiedLatitude = null;
+        _verifiedLongitude = null;
+      });
+    }
+  }
+
+  /// Distinguishes "provider unavailable" from "address rejected" so the owner
+  /// is told which action to take. All values are preserved either way.
+  String _addressFailureCopy(String message) {
+    final lower = message.toLowerCase();
+    if (lower.contains('temporarily unavailable') ||
+        lower.contains('not enabled') ||
+        lower.contains('not configured') ||
+        lower.contains('503')) {
+      return AddressVerificationCopy.unavailable;
+    }
+    if (lower.contains('rejected') ||
+        lower.contains('422') ||
+        lower.contains('invalid')) {
+      return AddressVerificationCopy.invalidRequest;
+    }
+    return message.isEmpty ? AddressVerificationCopy.unavailable : message;
+  }
+
+  /// Explicit confirmation step: `validated` alone is not `verified`.
+  void _confirmAddress() {
+    final result = _addressResult;
+    if (_addressState !=
+            AddressVerificationState.validatedPendingConfirmation ||
+        result == null ||
+        !result.hasCoordinates) {
+      return;
+    }
+    setState(() {
+      // Coordinates first: the snapshot must describe the CONFIRMED values,
+      // otherwise `_addressVerified` can never match afterwards.
+      _verifiedLatitude = result.latitude;
+      _verifiedLongitude = result.longitude;
+      _addressState = AddressVerificationState.verified;
+      _verifiedSnapshot = _addressSnapshot();
+      _fields['latitude'] = result.latitude!.toStringAsFixed(6);
+      _fields['longitude'] = result.longitude!.toStringAsFixed(6);
+      _addressMessage =
+          result.formattedAddress ?? AddressVerificationCopy.validated;
+      _errors.remove('addressVerification');
+    });
+  }
+
+  bool get _addressVerified =>
+      _addressState == AddressVerificationState.verified &&
+      _verifiedSnapshot == _addressSnapshot();
+
   /// Save the wizard as a DRAFT.
   ///
   /// Nothing is submitted to an administrator here. The draft is persisted
@@ -316,7 +465,7 @@ class _AddPropertyPageState extends State<AddPropertyPage> {
         'availability': _optional('availability'),
         'floor_level': _optional('floorLevel'),
         'has_parking': _facilities.any(
-              (facility) => facility.toLowerCase().contains('parking'),
+          (facility) => facility.toLowerCase().contains('parking'),
         ),
       });
       if (!mounted) return;
@@ -474,340 +623,98 @@ class _AddPropertyPageState extends State<AddPropertyPage> {
     super.dispose();
   }
 
+  // ------------------------------------------------------------------- shell
+
   @override
   Component build(BuildContext context) {
-    if (_saved) return _savedView();
-
     return AppLayout(
       role: AppRole.entrepreneur,
       currentRoute: '/entrepreneur/add-property',
-      title: 'Register a property',
+      title: 'Add property',
+      // The page renders its own compact heading; the global PageHead would
+      // add a second, oversized one.
       showPageHead: false,
-      // The wizard hero renders its own styled `sw-reg-breadcrumb` below;
-      // the global AppLayout trail is suppressed so the page never shows two.
+      // The global trail duplicates the step indicator on a single-form page.
       showBreadcrumbs: false,
-      child: div(classes: 'stack stack--sections sw-reg', [
-        div(classes: 'sw-reg-breadcrumb', [
-          AppLink(
-            to: '/entrepreneur',
-            classes: 'sw-reg-crumb-link',
-            children: [Component.text('Home')],
-          ),
-          span(classes: 'sw-reg-crumb-sep', [Component.text('›')]),
-          AppLink(
-            to: '/entrepreneur/my-properties',
-            classes: 'sw-reg-crumb-link',
-            children: [Component.text('My Properties')],
-          ),
-          span(classes: 'sw-reg-crumb-sep', [Component.text('›')]),
-          span([Component.text('Add Property')]),
-        ]),
-        div(classes: 'sw-reg-hero', [
-          div([
-            p(classes: 'sw-reg-kicker', [
-              Component.text('ENTREPRENEUR WORKSPACE / REGISTRATION'),
-            ]),
-            h1([Component.text('Add commercial property')]),
+      child: div(classes: 'sw-reg', [
+        // One 720px column for heading, steps and form. Aligning all three to
+        // the same measure is what makes the page read as a single organised
+        // form rather than a full-width banner above a floating card.
+        div(classes: 'sw-reg-shell', [
+          header(classes: 'sw-reg-head', [
+            h1([Component.text('Add a commercial property')]),
             p([
               Component.text(
-                'Capture commercial details, location, F&B facilities and '
-                    'ownership information in one structured workflow. Submitting '
-                    'saves the listing as pending and enriches it from the '
-                    'SiteWise geospatial data.',
+                _saved
+                    ? 'Draft saved. Review the location analysis, then submit it '
+                          'for administrator review.'
+                    : 'Five short steps. Your listing is stored as a draft and is '
+                          'not sent for review until you submit it.',
               ),
             ]),
           ]),
-          span(classes: 'sw-reg-status', [
-            i(
-              classes: 'sw-reg-status-dot',
-              attributes: const {'aria-hidden': 'true'},
-              [],
-            ),
-            span([Component.text('Submits to SiteWise · pending verification')]),
+          _stepper(),
+          div(classes: 'sw-reg-card', [
+            _cardHead(),
+            _errorSummary(),
+            _submitErrorNotice(),
+            div(classes: 'sw-reg-body', [
+              if (_step == 0) _stepDetails(),
+              if (_step == 1) _stepLocation(),
+              if (_step == 2) _stepReadiness(),
+              if (_step == 3) _stepProof(),
+              if (_step == 4) _stepReview(),
+            ]),
+            _footer(),
           ]),
-        ]),
-        _stepper(),
-        div(classes: 'sw-reg-grid', [
-          div(classes: 'sw-reg-card', [_stepCard()]),
-          div(classes: 'sw-reg-aside', [_preview(), _connectionNotice()]),
         ]),
       ]),
     );
   }
 
-  // --------------------------------------------------------------- stepper
-
-  /// Horizontal five-step progress strip. Completed steps remain clickable so
+  /// Compact horizontal step indicator. Completed steps remain clickable so
   /// entered values can be edited without losing the rest of the draft.
-  Component _stepper() => div(classes: 'sw-reg-stepper-wrap', [
-    div(classes: 'sw-reg-stepper-caption', [
-      strong([Component.text('Step ${_step + 1} of ${_steps.length}')]),
-      span([Component.text(' · $_percent complete')]),
-    ]),
-    nav(
-      classes: 'sw-reg-stepper',
-      attributes: const {'aria-label': 'Add Property progress'},
-      [
-        for (var i = 0; i < _steps.length; i++)
-          button(
-            classes:
-            'sw-reg-step'
-                '${i == _step ? ' is-active' : ''}'
-                '${i < _step ? ' is-done' : ''}',
-            attributes: {
-              'type': 'button',
-              'aria-current': i == _step ? 'step' : 'false',
-              if (i > _step) 'disabled': '',
-            },
-            events: events(
-              onClick: i < _step ? () => setState(() => _step = i) : null,
-            ),
-            [
-              span(
-                classes: 'sw-reg-step-index',
-                attributes: const {'aria-hidden': 'true'},
-                [Component.text(i < _step ? '✓' : '${i + 1}')],
-              ),
-              span(classes: 'sw-reg-step-meta', [
-                strong([Component.text(_steps[i])]),
-                small([
-                  Component.text(
-                    i == _step
-                        ? 'In progress'
-                        : (i < _step ? 'Completed' : 'Upcoming'),
-                  ),
-                ]),
-              ]),
-            ],
-          ),
-      ],
-    ),
-  ]);
-
-  Component _connectionNotice() => div(
-    classes: 'sw-reg-connection',
-    attributes: const {'role': 'note'},
+  Component _stepper() => nav(
+    classes: 'sw-reg-stepper',
+    attributes: const {'aria-label': 'Add property steps'},
     [
-      h3([Component.text('How submission works')]),
-      p([
-        Component.text(
-          'Submitting creates a real listing through FastAPI, saved as '
-              'pending and unpublished. SiteWise then computes nearby F&B '
-              'competitors, demand generators and road accessibility from its '
-              'PostGIS data; any feature the database cannot compute for these '
-              'coordinates is reported as unavailable rather than estimated. '
-              'Photographs are not uploaded yet.',
-        ),
-      ]),
-    ],
-  );
-
-  // --------------------------------------------------------------- step card
-
-  /// Ask the backend (which holds the Google key) to validate the address.
-  /// A verdict here never changes the listing's verification status.
-  Future<void> _validateAddress() async {
-    if (_addressState == AddressVerificationState.verifying) return;
-    final snapshot = _addressSnapshot();
-    if (snapshot.address.isEmpty) {
-      setState(() {
-        _errors['address'] = PropertyFormRules.addressError(snapshot.address) ??
-            'Enter a street address first.';
-      });
-      return;
-    }
-    if (snapshot.state.isEmpty ||
-        snapshot.city.isEmpty ||
-        snapshot.postcode.isEmpty) {
-      _validate();
-      setState(() {});
-      return;
-    }
-    final requestId = ++_addressRequestId;
-    setState(() {
-      _addressState = AddressVerificationState.verifying;
-      _addressMessage = null;
-      _errors.remove('addressVerification');
-    });
-    try {
-      final result = await _repository.validateAddress(
-        addressLines: [snapshot.address, snapshot.postcode],
-        city: snapshot.city,
-        state: snapshot.state,
-        postcode: snapshot.postcode,
-      );
-      if (!mounted || requestId != _addressRequestId) return;
-      if (_addressSnapshot() != snapshot) {
-        // The owner edited the address while the request was in flight; a
-        // late verdict must not mark the new address as verified.
-        setState(() {
-          _addressState = AddressVerificationState.unverified;
-          _addressMessage = AddressVerificationCopy.stale;
-        });
-        return;
-      }
-      final (state, message) = switch (result.status) {
-        'validated' => (
-        AddressVerificationState.validatedPendingConfirmation,
-        AddressVerificationCopy.validated,
-        ),
-        'partially_validated' => (
-        AddressVerificationState.partiallyValidated,
-        AddressVerificationCopy.partiallyValidated,
-        ),
-        _ => (
-        AddressVerificationState.unconfirmed,
-        AddressVerificationCopy.unconfirmed,
-        ),
-      };
-      setState(() {
-        _addressResult = result;
-        _addressState = state;
-        _addressMessage = message;
-      });
-    } catch (error) {
-      if (!mounted || requestId != _addressRequestId) return;
-      setState(() {
-        _addressState = AddressVerificationState.serviceError;
-        _addressMessage = _addressFailureCopy(_cleanError(error));
-        _verifiedLatitude = null;
-        _verifiedLongitude = null;
-      });
-    }
-  }
-
-  /// Distinguishes "provider unavailable" from "address rejected" so the owner
-  /// is told which action to take. All values are preserved either way.
-  String _addressFailureCopy(String message) {
-    final lower = message.toLowerCase();
-    if (lower.contains('temporarily unavailable') ||
-        lower.contains('not enabled') ||
-        lower.contains('not configured') ||
-        lower.contains('503')) {
-      return AddressVerificationCopy.unavailable;
-    }
-    if (lower.contains('rejected') ||
-        lower.contains('422') ||
-        lower.contains('invalid')) {
-      return AddressVerificationCopy.invalidRequest;
-    }
-    return message.isEmpty ? AddressVerificationCopy.unavailable : message;
-  }
-
-  /// Explicit confirmation step: `validated` alone is not `verified`.
-  void _confirmAddress() {
-    final result = _addressResult;
-    if (_addressState !=
-        AddressVerificationState.validatedPendingConfirmation ||
-        result == null ||
-        !result.hasCoordinates) {
-      return;
-    }
-    setState(() {
-      // Coordinates first: the snapshot must describe the CONFIRMED values,
-      // otherwise `_addressVerified` can never match afterwards.
-      _verifiedLatitude = result.latitude;
-      _verifiedLongitude = result.longitude;
-      _addressState = AddressVerificationState.verified;
-      _verifiedSnapshot = _addressSnapshot();
-      _fields['latitude'] = result.latitude!.toStringAsFixed(6);
-      _fields['longitude'] = result.longitude!.toStringAsFixed(6);
-      _addressMessage =
-          result.formattedAddress ?? AddressVerificationCopy.validated;
-      _errors.remove('addressVerification');
-    });
-  }
-
-  bool get _addressVerified =>
-      _addressState == AddressVerificationState.verified &&
-          _verifiedSnapshot == _addressSnapshot();
-
-  /// Backend rejection notice. The server's own sentence is shown; nothing
-  /// is retried automatically and the form stays editable.
-  Component _submitErrorNotice() => _submitError == null
-      ? const Component.fragment([])
-      : div(
-    classes: 'sw-reg-error',
-    attributes: const {'role': 'alert'},
-    [
-      strong([Component.text('Submission not accepted')]),
-      p([Component.text(_submitError!)]),
-    ],
-  );
-
-  Component _stepCard() => div([
-    header(classes: 'sw-reg-card-head', [
-      div([
-        span(classes: 'sw-label', [
-          Component.text('STEP 0${_step + 1} / ${_stepLabel()}'),
-        ]),
-        h2([Component.text(_steps[_step])]),
-        p([Component.text(_stepDesc())]),
-      ]),
-      span(classes: 'sw-reg-counter', [
-        Component.text('0${_step + 1} / 0${_steps.length}'),
-      ]),
-    ]),
-    _errorSummary(),
-    _submitErrorNotice(),
-    div(classes: 'sw-reg-step-body', [
-      if (_step == 0) _stepDetails(),
-      if (_step == 1) _stepLocation(),
-      if (_step == 2) _stepReadiness(),
-      if (_step == 3) _stepProof(),
-      if (_step == 4) _stepReview(),
-    ]),
-    footer(classes: 'sw-reg-footer', [
-      AppLink(
-        to: '/entrepreneur/my-properties',
-        classes: 'sw-btn sw-btn-text',
-        children: [Component.text('Cancel')],
-      ),
-      div([
+      for (var i = 0; i < _steps.length; i++)
         button(
-          classes: 'sw-btn',
-          attributes: {'type': 'button', if (_step == 0) 'disabled': ''},
-          events: events(onClick: _step == 0 ? null : _back),
-          [Component.text('← Back')],
-        ),
-        button(
-          classes: 'sw-btn sw-btn-primary',
+          classes:
+              'sw-reg-step'
+              '${i == _step ? ' is-active' : ''}'
+              '${i < _step ? ' is-done' : ''}',
           attributes: {
             'type': 'button',
-            if (_saving) 'disabled': '',
-            'aria-busy': _saving ? 'true' : 'false',
+            'aria-current': i == _step ? 'step' : 'false',
+            'aria-label': 'Step ${i + 1}: ${_stepTitles[i]}',
+            if (!_canNavigateTo(i)) 'disabled': '',
           },
-          events: events(onClick: _next),
+          events: events(
+            onClick: _canNavigateTo(i) ? () => setState(() => _step = i) : null,
+          ),
           [
-            Component.text(
-              _saving
-                  ? 'Submitting…'
-                  : (_isLast ? 'Submit for verification ' : 'Continue '),
+            span(
+              classes: 'sw-reg-step-index',
+              attributes: const {'aria-hidden': 'true'},
+              [Component.text(i < _step ? '✓' : '${i + 1}')],
             ),
-            if (!_saving) span([Component.text('→')]),
+            span(classes: 'sw-reg-step-label', [
+              Component.text(_steps[i]),
+            ]),
           ],
         ),
-      ]),
+    ],
+  );
+
+  Component _cardHead() => div(classes: 'sw-reg-card-head', [
+    span(classes: 'sw-reg-step-kicker', [
+      Component.text(
+        _saved ? 'Final step' : 'Step ${_step + 1} of ${_steps.length}',
+      ),
     ]),
+    h2([Component.text(_stepTitles[_step])]),
   ]);
-
-  String _stepLabel() => switch (_step) {
-    0 => 'BASICS',
-    1 => 'LOCATION',
-    2 => 'READINESS',
-    3 => 'PROOF',
-    _ => 'REVIEW',
-  };
-
-  String _stepDesc() => switch (_step) {
-    0 => 'Start with the identifying details of the commercial premises.',
-    1 =>
-    'Where the premises is and the commercial terms on offer. '
-        'Malaysia · MYR.',
-    2 => 'Utilities and infrastructure that affect F&B operations.',
-    3 => 'Visuals and the ownership or authorization behind the listing.',
-    _ => 'Confirm the details before submitting your listing.',
-  };
 
   // ------------------------------------------------------------ field helpers
 
@@ -820,6 +727,7 @@ class _AddPropertyPageState extends State<AddPropertyPage> {
     List<String>? options,
     bool isTextarea = false,
     bool wide = false,
+    int rows = 3,
     void Function(String)? onChanged,
   }) {
     final err = _errors[key];
@@ -850,7 +758,7 @@ class _AddPropertyPageState extends State<AddPropertyPage> {
         attributes: {
           'id': key,
           'name': key,
-          'rows': '4',
+          'rows': '$rows',
           'placeholder': hint ?? '',
           if (required) 'required': '',
           if (err != null) 'aria-invalid': 'true',
@@ -920,33 +828,23 @@ class _AddPropertyPageState extends State<AddPropertyPage> {
 
   // --------------------------------------------------------------- step: details
 
+  /// Two-column grouping: identity first, then the commercial terms, then the
+  /// free-text description. Name and description span the full width because
+  /// they are the only fields whose content is unbounded.
   Component _stepDetails() => div(classes: 'sw-fields', [
     _field(
       key: 'propertyName',
-      label: 'Property title',
+      label: 'Property name',
       required: true,
-      hint: 'e.g. Ground Floor Corner Shoplot at SS15',
+      wide: true,
+      hint: 'e.g. Ground floor corner shoplot at SS15',
     ),
     _field(
       key: 'propertyType',
-      label: 'Commercial property type',
+      label: 'Property type',
       required: true,
       type: 'select',
       options: commercialPropertyTypeLabels,
-    ),
-    _field(
-      key: 'monthlyRent',
-      label: 'Monthly rental (RM)',
-      required: true,
-      type: 'number',
-      hint: 'e.g. 7800',
-    ),
-    _field(
-      key: 'builtUp',
-      label: 'Built-up area (sqft)',
-      required: true,
-      type: 'number',
-      hint: 'e.g. 1680',
     ),
     _field(
       key: 'floorLevel',
@@ -962,6 +860,20 @@ class _AddPropertyPageState extends State<AddPropertyPage> {
       ],
     ),
     _field(
+      key: 'monthlyRent',
+      label: 'Monthly rental (RM)',
+      required: true,
+      type: 'number',
+      hint: '7800',
+    ),
+    _field(
+      key: 'builtUp',
+      label: 'Floor area (sq ft)',
+      required: true,
+      type: 'number',
+      hint: '1680',
+    ),
+    _field(
       key: 'premiseStatus',
       label: 'Premises status',
       type: 'select',
@@ -973,16 +885,29 @@ class _AddPropertyPageState extends State<AddPropertyPage> {
       ],
     ),
     _field(
+      key: 'availability',
+      label: 'Availability',
+      type: 'select',
+      options: const [
+        'Available now',
+        'Within 30 days',
+        'Within 60 days',
+        'Within 90 days',
+        'Contact for availability',
+      ],
+    ),
+    _field(
       key: 'description',
-      label: 'Property description',
+      label: 'Description',
       isTextarea: true,
       wide: true,
-      hint: 'Frontage, layout, access and important premises features…',
+      rows: 3,
+      hint: 'Frontage, layout, access and premises features (optional)…',
     ),
-    p(classes: 'sw-reg-note', [
+    p(classes: 'sw-reg-note sw-field--wide', [
       Component.text(
-        'Only F&B commercial premises are accepted. The title, type, '
-            'monthly rental and floor area are validated again by the server.',
+        'F&B commercial premises only. Name, type, rent and floor area are '
+        're-validated by the server.',
       ),
     ]),
   ]);
@@ -1068,18 +993,15 @@ class _AddPropertyPageState extends State<AddPropertyPage> {
           'list': listId,
           'value': value,
           'autocomplete': 'off',
-          'placeholder': hint ??
-              (enabled
-                  ? 'Start typing to search…'
-                  : 'Select the previous field first'),
+          'placeholder':
+              hint ??
+              (enabled ? 'Start typing to search…' : 'Select the state first'),
           if (!enabled) 'disabled': '',
           if (required) 'required': '',
           if (err != null) 'aria-invalid': 'true',
           if (err != null) 'aria-describedby': '$key-error',
         },
-        events: events<String>(
-          onInput: (v) => _onLocationChanged(key, v),
-        ),
+        events: events<String>(onInput: (v) => _onLocationChanged(key, v)),
       ),
       Component.element(
         tag: 'datalist',
@@ -1094,162 +1016,141 @@ class _AddPropertyPageState extends State<AddPropertyPage> {
   }
 
   String _addressStateLabel(AddressVerificationState state) => switch (state) {
-    AddressVerificationState.unverified => 'NOT VERIFIED',
+    AddressVerificationState.unverified => 'NOT CHECKED',
     AddressVerificationState.verifying => 'CHECKING',
-    AddressVerificationState.validatedPendingConfirmation => 'CONFIRM REQUIRED',
+    AddressVerificationState.validatedPendingConfirmation => 'CONFIRM',
     AddressVerificationState.verified => 'VERIFIED',
-    AddressVerificationState.partiallyValidated => 'CORRECTION REQUIRED',
-    AddressVerificationState.unconfirmed => 'CORRECTION REQUIRED',
+    AddressVerificationState.partiallyValidated => 'CORRECTION',
+    AddressVerificationState.unconfirmed => 'CORRECTION',
     AddressVerificationState.serviceError => 'UNAVAILABLE',
   };
 
-  Component _addressVerificationPanel() {
-    final state = _addressState;
-    final busy = state == AddressVerificationState.verifying;
-    final result = _addressResult;
-    final tone = switch (state) {
-      AddressVerificationState.verified => 'sw-address-panel--ok',
-      AddressVerificationState.validatedPendingConfirmation =>
-      'sw-address-panel--confirm',
-      AddressVerificationState.partiallyValidated ||
-      AddressVerificationState.unconfirmed => 'sw-address-panel--warn',
-      AddressVerificationState.serviceError => 'sw-address-panel--error',
-      _ => 'sw-address-panel--idle',
-    };
-    return div(classes: 'sw-address-panel $tone', [
-      div(classes: 'sw-address-head', [
-        span(classes: 'sw-label', [Component.text('ADDRESS VERIFICATION')]),
-        span(classes: 'sw-address-badge', [
-          Component.text(_addressStateLabel(state)),
-        ]),
-      ]),
-      p(classes: 'sw-address-copy', [
-        Component.text(
-          _addressMessage ??
-              'Verify the address with Google before submitting. A validated '
-                  'address confirms the location only — it does not verify '
-                  'ownership or approve the listing.',
-        ),
-      ]),
-      if (result != null &&
-          result.formattedAddress != null &&
-          result.formattedAddress!.isNotEmpty)
-        p(classes: 'sw-address-formatted', [
-          strong([Component.text('Normalized address: ')]),
-          Component.text(result.formattedAddress!),
-        ]),
-      if (result != null && result.latitude != null && result.longitude != null)
-        p(classes: 'sw-address-coords', [
+  static String _addressTone(AddressVerificationState state) =>
+      switch (state) {
+        AddressVerificationState.verified => 'success',
+        AddressVerificationState.validatedPendingConfirmation => 'action',
+        AddressVerificationState.partiallyValidated ||
+        AddressVerificationState.unconfirmed => 'warning',
+        AddressVerificationState.serviceError => 'danger',
+        _ => 'neutral',
+      };
+
+  /// The "location verification" half of the postcode row: a single button in
+  /// the adjacent grid cell, aligned with the input. The verdict itself is a
+  /// one-line status strip underneath rather than a full panel.
+  Component _verifyCell() {
+    final busy = _addressState == AddressVerificationState.verifying;
+    final verified = _addressVerified;
+    return div(classes: 'sw-field sw-field--action', [
+      span(classes: 'sw-field-label', [Component.text('Location check')]),
+      button(
+        classes: 'sw-btn sw-btn-check${verified ? ' is-ok' : ''}',
+        attributes: {
+          'type': 'button',
+          if (busy) 'disabled': '',
+          'aria-busy': busy ? 'true' : 'false',
+        },
+        events: events(onClick: busy ? null : _validateAddress),
+        [
           Component.text(
-            'Coordinates: ${result.latitude!.toStringAsFixed(6)}, '
-                '${result.longitude!.toStringAsFixed(6)}',
+            busy
+                ? 'Checking…'
+                : (verified ? 'Checked' : 'Verify address'),
+          ),
+        ],
+      ),
+    ]);
+  }
+
+  /// Compact verdict strip. The normalized address and coordinates are shown
+  /// as read-only facts only once the provider actually returned them.
+  Component _addressStatusLine() {
+    final state = _addressState;
+    final result = _addressResult;
+    final coords = _verifiedLatitude != null && _verifiedLongitude != null;
+    return div([
+      div(classes: 'sw-addr-line', [
+        StatusBadge(_addressStateLabel(state), tone: _addressTone(state)),
+        span(classes: 'sw-addr-line__copy', [
+          Component.text(
+            _addressMessage ??
+                'The address is confirmed with the location provider before '
+                    'the draft can be saved.',
           ),
         ]),
-      div(classes: 'sw-address-actions', [
-        button(
-          classes: 'sw-btn sw-btn-text',
-          attributes: {
-            'type': 'button',
-            if (busy) 'disabled': '',
-            'aria-busy': busy ? 'true' : 'false',
-          },
-          events: events(onClick: _validateAddress),
-          [
-            Component.text(
-              busy
-                  ? 'Checking address…'
-                  : (state == AddressVerificationState.unverified
-                  ? 'Verify address'
-                  : 'Verify again'),
-            ),
-          ],
-        ),
         if (state == AddressVerificationState.validatedPendingConfirmation)
           button(
-            classes: 'sw-btn sw-btn-primary',
+            classes: 'sw-btn sw-btn-check sw-btn-check--primary',
             attributes: const {'type': 'button'},
             events: events(onClick: _confirmAddress),
-            [Component.text('Confirm this address')],
+            [Component.text('Confirm address')],
           ),
       ]),
+      if (result != null &&
+          (result.formattedAddress ?? '').isNotEmpty)
+        p(classes: 'sw-reg-coords', [
+          Component.text('Normalized: ${result.formattedAddress}'),
+        ]),
+      if (coords)
+        p(classes: 'sw-reg-coords', [
+          Component.text(
+            'Verified coordinates: '
+            '${_verifiedLatitude!.toStringAsFixed(6)}, '
+            '${_verifiedLongitude!.toStringAsFixed(6)}',
+          ),
+        ]),
       if (_errors['addressVerification'] != null)
         _fieldError('addressVerification', _errors['addressVerification']!),
     ]);
   }
 
-  Component _stepLocation() => div(classes: 'sw-fields', [
-    _field(
-      key: 'address',
-      label: 'Building / unit number and street address',
-      required: true,
-      wide: true,
-      hint: 'e.g. No. 12, Jalan SS 15/4',
-      onChanged: (v) => _onLocationChanged('address', v),
-    ),
-    _stateField(),
-    _locationTextField(
-      key: 'city',
-      label: 'City / township',
-      options: MalaysiaLocations.citiesFor(_fields['state']),
-      enabled: (_fields['state'] ?? '').isNotEmpty,
-      required: true,
-    ),
-    _locationTextField(
-      key: 'postcode',
-      label: 'Postcode',
-      options: MalaysiaLocations.postcodesFor(
-        _fields['state'],
-        _fields['city'],
+  Component _stepLocation() => div([
+    div(classes: 'sw-fields', [
+      _stateField(),
+      _locationTextField(
+        key: 'city',
+        label: 'City / township',
+        options: MalaysiaLocations.citiesFor(_fields['state']),
+        enabled: (_fields['state'] ?? '').isNotEmpty,
+        required: true,
       ),
-      enabled: (_fields['city'] ?? '').isNotEmpty,
-      required: true,
-      hint: 'e.g. 47500',
-    ),
-    div(classes: 'sw-field sw-field--wide', [
-      _addressVerificationPanel(),
+      _field(
+        key: 'address',
+        label: 'Street address',
+        required: true,
+        wide: true,
+        hint: 'e.g. No. 12, Jalan SS 15/4',
+        onChanged: (v) => _onLocationChanged('address', v),
+      ),
+      _locationTextField(
+        key: 'postcode',
+        label: 'Postcode',
+        options: MalaysiaLocations.postcodesFor(
+          _fields['state'],
+          _fields['city'],
+        ),
+        enabled: (_fields['city'] ?? '').isNotEmpty,
+        required: true,
+        hint: '47500',
+      ),
+      _verifyCell(),
     ]),
-    _field(
-      key: 'availability',
-      label: 'Availability',
-      type: 'select',
-      options: const [
-        'Available now',
-        'Within 30 days',
-        'Within 60 days',
-        'Within 90 days',
-        'Contact for availability',
-      ],
-    ),
+    _addressStatusLine(),
     p(classes: 'sw-reg-note', [
       Component.text(
-        'Changing the address, state, city or postcode clears the previous '
-            'verification — verify the updated address again. Google validates '
-            'the address only; SiteWise administrators separately verify the '
-            'listing and ownership evidence.',
+        'Editing the address clears the previous check. The provider confirms '
+        'the address only — it never verifies ownership.',
       ),
     ]),
   ]);
 
   // --------------------------------------------------------------- step: readiness
 
+  /// Facilities as compact toggle chips; the operational selects follow in the
+  /// same two-column grid as every other step.
   Component _stepReadiness() => div([
-    h3(classes: 'sw-reg-section-title', [
-      Component.text('Available F&B infrastructure '),
-      small([Component.text('Check what is documented')]),
-    ]),
     div(classes: 'sw-facilities', [
-      for (final f in const [
-        'Grease trap',
-        'Exhaust provision',
-        'Three-phase power',
-        'Water supply',
-        'Food preparation area',
-        'Dedicated drainage',
-        'Parking available',
-        'Ground floor frontage',
-        'Loading access',
-        'Accessible entrance',
-      ])
+      for (final f in _facilityOptions)
         button(
           classes: _facilities.contains(f)
               ? 'sw-facility sw-facility--on'
@@ -1260,16 +1161,15 @@ class _AddPropertyPageState extends State<AddPropertyPage> {
           },
           events: events(onClick: () => _toggleFacility(f)),
           [
-            Icon(
-              _facilities.contains(f) ? 'check_circle' : 'add_circle',
-              size: 'sm',
-            ),
+            if (_facilities.contains(f))
+              span(
+                classes: 'sw-facility__tick',
+                attributes: const {'aria-hidden': 'true'},
+                [Component.text('✓')],
+              ),
             Component.text(f),
           ],
         ),
-    ]),
-    h3(classes: 'sw-reg-section-title sw-extra-title', [
-      Component.text('Operational details'),
     ]),
     div(classes: 'sw-fields', [
       _field(
@@ -1299,14 +1199,13 @@ class _AddPropertyPageState extends State<AddPropertyPage> {
         label: 'Readiness notes',
         wide: true,
         isTextarea: true,
-        hint:
-        'Ventilation, utilities, equipment restrictions or fit-out needs…',
+        rows: 2,
+        hint: 'Ventilation, utilities, equipment restrictions…',
       ),
     ]),
     p(classes: 'sw-reg-note', [
       Component.text(
-        'These facilities are owner-declared, not independently inspected or '
-            'certified.',
+        'Facilities are owner-declared and are not independently inspected.',
       ),
     ]),
   ]);
@@ -1314,10 +1213,6 @@ class _AddPropertyPageState extends State<AddPropertyPage> {
   // --------------------------------------------------------------- step: proof
 
   Component _stepProof() => div([
-    h3(classes: 'sw-reg-section-title', [
-      Component.text('Property photography '),
-      small([Component.text('8 photos maximum')]),
-    ]),
     label(
       classes: 'sw-upload',
       attributes: const {'for': 'swRegPhotoInput'},
@@ -1325,15 +1220,21 @@ class _AddPropertyPageState extends State<AddPropertyPage> {
         span(
           classes: 'sw-upload-icon',
           attributes: const {'aria-hidden': 'true'},
-          [Component.text('↥')],
+          [Component.text('+')],
         ),
         span([
-          strong([Component.text('Select property photographs')]),
-          small([Component.text('JPG, PNG or WebP · up to 8 MB per file')]),
+          strong([Component.text('Add photographs')]),
+          small([
+            Component.text(
+              'JPG, PNG or WebP · 8 MB max · ${_photos.length}/$_maxPhotos '
+              'selected',
+            ),
+          ]),
         ]),
       ],
     ),
     input(
+      classes: 'sw-upload-input',
       attributes: const {
         'id': 'swRegPhotoInput',
         'type': 'file',
@@ -1360,10 +1261,6 @@ class _AddPropertyPageState extends State<AddPropertyPage> {
               },
               children: const [],
             ),
-            div(classes: 'sw-photo-meta', [
-              span([Component.text(_photos[i].name)]),
-              small([Component.text(_photos[i].sizeLabel)]),
-            ]),
             button(
               classes: 'sw-photo-remove',
               attributes: {
@@ -1374,24 +1271,8 @@ class _AddPropertyPageState extends State<AddPropertyPage> {
               [Component.text('×')],
             ),
           ]),
-      ])
-    else
-      p(classes: 'sw-reg-note', [
-        Component.text(
-          'No photographs selected yet. Photos are optional for a local draft.',
-        ),
       ]),
-    p(classes: 'sw-reg-note', [
-      Component.text(
-        'Selected images are previewed in this browser only. No image '
-            'upload endpoint or media service is connected, so they are never '
-            'transmitted, stored or attached to a property record.',
-      ),
-    ]),
-    h3(classes: 'sw-reg-section-title sw-extra-title', [
-      Component.text('Authorization details'),
-    ]),
-    div(classes: 'sw-fields', [
+    div(classes: 'sw-fields sw-fields--spaced', [
       _field(
         key: 'ownerRole',
         label: 'Your relationship to the property',
@@ -1414,8 +1295,8 @@ class _AddPropertyPageState extends State<AddPropertyPage> {
     ]),
     p(classes: 'sw-reg-note', [
       Component.text(
-        'Supporting documents are not retained or transmitted by this '
-            'preview.',
+        'Photographs are previewed in this browser only. No upload service is '
+        'connected, so they are never transmitted or attached to the record.',
       ),
     ]),
   ]);
@@ -1438,113 +1319,117 @@ class _AddPropertyPageState extends State<AddPropertyPage> {
       }
       accepted.add(file);
     }
-    final free = _maxPhotos - _photos.length;
-    if (accepted.length > free) {
-      error = 'You can select up to $_maxPhotos photographs.';
-      if (free <= 0) {
-        accepted.clear();
-      } else {
-        accepted.removeRange(free, accepted.length);
-      }
-    }
-    final added = <_SelectedPhoto>[];
-    for (final file in accepted) {
-      added.add(
-        _SelectedPhoto(
-          name: file.name,
-          sizeLabel: _formatBytes(file.size),
-          url: web.URL.createObjectURL(file),
-        ),
-      );
+    final room = _maxPhotos - _photos.length;
+    if (accepted.length > room) {
+      error = 'A listing can hold up to $_maxPhotos photographs.';
+      accepted.removeRange(room < 0 ? 0 : room, accepted.length);
     }
     setState(() {
-      _photos.addAll(added);
       _photoError = error;
+      for (final file in accepted) {
+        _photos.add(
+          _SelectedPhoto(
+            name: file.name,
+            sizeLabel: _sizeLabel(file.size),
+            url: web.URL.createObjectURL(file),
+          ),
+        );
+      }
     });
   }
 
   void _removePhoto(int index) {
     if (index < 0 || index >= _photos.length) return;
-    final removed = _photos.removeAt(index);
-    web.URL.revokeObjectURL(removed.url);
-    setState(() => _photoError = null);
+    setState(() {
+      web.URL.revokeObjectURL(_photos[index].url);
+      _photos.removeAt(index);
+      _photoError = null;
+    });
   }
 
-  static String _formatBytes(int bytes) => bytes < 1024 * 1024
-      ? '${(bytes / 1024).round()} KB'
-      : '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+  static String _sizeLabel(int bytes) {
+    if (bytes >= 1024 * 1024) {
+      return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+    }
+    return '${(bytes / 1024).round()} KB';
+  }
 
   // --------------------------------------------------------------- step: review
 
-  Component _stepReview() => div([
-    _reviewSection('Property details', 0, [
-      _reviewRow('Property title', _fields['propertyName']),
-      _reviewRow('Commercial property type', _fields['propertyType']),
-      _reviewRow(
-        'Monthly rental',
-        (_fields['monthlyRent'] ?? '').isEmpty
-            ? null
-            : 'RM ${_fields['monthlyRent']}',
-      ),
-      _reviewRow(
-        'Built-up area',
-        (_fields['builtUp'] ?? '').isEmpty
-            ? null
-            : '${_fields['builtUp']} sq ft',
-      ),
-    ]),
-    _reviewSection('Location & address', 1, [
-      _reviewRow('Address', _fields['address']),
-      _reviewRow('State', _fields['state']),
-      _reviewRow('City / township', _fields['city']),
-      _reviewRow('Postcode', _fields['postcode']),
-      _reviewRow(
-        'Address verification',
-        _addressVerified
-            ? 'Verified${_addressResult?.formattedAddress == null ? '' : ' · ${_addressResult!.formattedAddress}'}'
-            : _addressStateLabel(_addressState),
-      ),
-      _reviewRow(
-        'Coordinates',
-        _verifiedLatitude == null || _verifiedLongitude == null
-            ? null
-            : '${_verifiedLatitude!.toStringAsFixed(6)}, '
-            '${_verifiedLongitude!.toStringAsFixed(6)}',
-      ),
-    ]),
-    _reviewSection('Facilities & photos', 3, [
-      _reviewRow('Facilities', '${_facilities.length} selected'),
-      _reviewRow(
-        'Photographs',
-        '${_photos.length} selected (local preview only)',
-      ),
-      _reviewRow('Relationship', _fields['ownerRole']),
-    ]),
-    if (_errors['addressVerification'] != null)
-      _fieldError('addressVerification', _errors['addressVerification']!),
-    label(classes: _confirm ? 'sw-confirm sw-confirm--on' : 'sw-confirm', [
-      button(
-        classes: _confirm
-            ? 'sw-confirm-box sw-confirm-box--on'
-            : 'sw-confirm-box',
-        attributes: {
-          'type': 'button',
-          'role': 'checkbox',
-          'aria-checked': _confirm ? 'true' : 'false',
-        },
-        events: events(onClick: () => setState(() => _confirm = !_confirm)),
-        [Icon(_confirm ? 'check' : 'check_box_outline_blank', size: 'sm')],
-      ),
-      span([
-        Component.text(
-          'I confirm the details are accurate to the best of my knowledge. '
-              'Saving a local draft does not verify ownership, authorize F&B use '
-              'or publish a public listing.',
+  Component _stepReview() {
+    if (_saved) return _analysisStep();
+    return div([
+      _reviewSection('Property details', 0, [
+        _reviewRow('Property name', _fields['propertyName']),
+        _reviewRow('Property type', _fields['propertyType']),
+        _reviewRow('Floor level', _fields['floorLevel']),
+        _reviewRow(
+          'Monthly rental',
+          (_fields['monthlyRent'] ?? '').isEmpty
+              ? null
+              : 'RM ${_fields['monthlyRent']}',
+        ),
+        _reviewRow(
+          'Floor area',
+          (_fields['builtUp'] ?? '').isEmpty
+              ? null
+              : '${_fields['builtUp']} sq ft',
+        ),
+        _reviewRow('Premises status', _fields['premiseStatus']),
+      ]),
+      _reviewSection('Location & pricing', 1, [
+        _reviewRow('Street address', _fields['address']),
+        _reviewRow('City / township', _fields['city']),
+        _reviewRow('State', _fields['state']),
+        _reviewRow('Postcode', _fields['postcode']),
+        _reviewRow('Availability', _fields['availability']),
+        _reviewRow(
+          'Address check',
+          _addressVerified
+              ? 'Verified'
+              : _addressStateLabel(_addressState),
         ),
       ]),
-    ]),
-    if (_errors['confirm'] != null) _fieldError('confirm', _errors['confirm']!),
-  ]);
+      _reviewSection('F&B readiness', 2, [
+        _reviewRow('Facilities', '${_facilities.length} selected'),
+        _reviewRow('F&B approval', _fields['fbApproval']),
+        _reviewRow('Electricity', _fields['electricity']),
+      ]),
+      _reviewSection('Photos & authorization', 3, [
+        _reviewRow(
+          'Photographs',
+          '${_photos.length} selected (preview only)',
+        ),
+        _reviewRow('Relationship', _fields['ownerRole']),
+        _reviewRow('Contact email', _fields['contactEmail']),
+      ]),
+      if (_errors['addressVerification'] != null)
+        _fieldError('addressVerification', _errors['addressVerification']!),
+      label(classes: _confirm ? 'sw-confirm sw-confirm--on' : 'sw-confirm', [
+        button(
+          classes: _confirm
+              ? 'sw-confirm-box sw-confirm-box--on'
+              : 'sw-confirm-box',
+          attributes: {
+            'type': 'button',
+            'role': 'checkbox',
+            'aria-checked': _confirm ? 'true' : 'false',
+          },
+          events: events(onClick: () => setState(() => _confirm = !_confirm)),
+          [Icon(_confirm ? 'check' : 'check_box_outline_blank', size: 'sm')],
+        ),
+        span([
+          Component.text(
+            'I confirm these details are accurate to the best of my knowledge. '
+            'Saving a draft does not verify ownership, authorise F&B use or '
+            'publish a listing.',
+          ),
+        ]),
+      ]),
+      if (_errors['confirm'] != null)
+        _fieldError('confirm', _errors['confirm']!),
+    ]);
+  }
 
   Component _reviewSection(String heading, int step, List<Component> rows) =>
       div(classes: 'sw-review-section', [
@@ -1568,74 +1453,33 @@ class _AddPropertyPageState extends State<AddPropertyPage> {
   Component _errorSummary() => _errors.isEmpty
       ? span([])
       : div(
-    classes: 'sw-error-summary',
-    attributes: const {'role': 'alert'},
-    [
-      strong([
-        Component.text('Please correct the highlighted information'),
-      ]),
-      ul([
-        for (final e in _errors.entries)
-          li([Component.text('${_labels[e.key] ?? e.key}: ${e.value}')]),
-      ]),
-    ],
-  );
+          classes: 'sw-error-summary',
+          attributes: const {'role': 'alert'},
+          [
+            strong([
+              Component.text('Please correct the highlighted information'),
+            ]),
+            ul([
+              for (final e in _errors.entries)
+                li([Component.text('${_labels[e.key] ?? e.key}: ${e.value}')]),
+            ]),
+          ],
+        );
 
-  // --------------------------------------------------------------- live preview
+  /// Backend rejection notice. The server's own sentence is shown; nothing
+  /// is retried automatically and the form stays editable.
+  Component _submitErrorNotice() => _submitError == null
+      ? const Component.fragment([])
+      : div(
+          classes: 'sw-reg-error',
+          attributes: const {'role': 'alert'},
+          [
+            strong([Component.text('Submission not accepted')]),
+            p([Component.text(_submitError!)]),
+          ],
+        );
 
-  Component _preview() => aside(classes: 'sw-reg-preview', [
-    div(classes: 'sw-preview-top', [
-      span(classes: 'sw-label', [Component.text('LIVE PROPERTY PREVIEW')]),
-      span(classes: 'sw-preview-badge', [Component.text('UNPUBLISHED')]),
-    ]),
-    div(classes: 'sw-preview-content', [
-      span(classes: 'sw-label', [Component.text('COMMERCIAL PROPERTY')]),
-      h3([
-        Component.text(
-          _fields['propertyName']?.isNotEmpty == true
-              ? _fields['propertyName']!
-              : 'Untitled property',
-        ),
-      ]),
-      p([
-        Component.text(
-          _fields['address']?.isNotEmpty == true
-              ? _fields['address']!
-              : 'Location not specified',
-        ),
-      ]),
-      div(classes: 'sw-preview-rent', [
-        small([Component.text('MONTHLY RENT')]),
-        strong([
-          Component.text(
-            _fields['monthlyRent']?.isNotEmpty == true
-                ? 'RM ${_fields['monthlyRent']}'
-                : '—',
-          ),
-        ]),
-        span([Component.text(' / month')]),
-      ]),
-      dl([
-        _previewRow('Property type', _fields['propertyType']),
-        _previewRow('Built-up area', _fields['builtUp']),
-        _previewRow('Floor', _fields['floorLevel']),
-        _previewRow('Facilities', '${_facilities.length} selected'),
-      ]),
-    ]),
-    div(classes: 'sw-preview-foot', [
-      Component.text(
-        'This preview reflects entered information, not independently '
-            'verified data.',
-      ),
-    ]),
-  ]);
-
-  Component _previewRow(String label, String? value) => div([
-    dt([Component.text(label)]),
-    dd([Component.text((value ?? '').isEmpty ? '—' : value!)]),
-  ]);
-
-  // --------------------------------------------------------------- saved view
+  // ------------------------------------------------------- geospatial analysis
 
   /// Formats a measured value, or labels its absence.
   ///
@@ -1648,42 +1492,6 @@ class _AddPropertyPageState extends State<AddPropertyPage> {
     return unit.isEmpty ? text : '$text$unit';
   }
 
-  /// One line summarising what a category actually measured.
-  String _measurementLine(EnrichmentCategoryState state) {
-    final c = state.category;
-    if (!state.status.hasMeasurement) return '';
-    switch (c) {
-      case EnrichmentCategory.fnbCompetitors:
-        return '500 m: ${_measured(state.number('competitor_count_500m'))} · '
-            '1 km: ${_measured(state.number('competitor_count_1km'))}';
-      case EnrichmentCategory.demandGenerators:
-        return '500 m: ${_measured(state.number('demand_generator_count_500m'))} · '
-            '1 km: ${_measured(state.number('demand_generator_count_1km'))}';
-      case EnrichmentCategory.roadsTransport:
-        return 'Road length (1 km): '
-            '${_measured(state.number('accessibility_road_km_1km'), decimals: 1, unit: ' km')} · '
-            'Nearest major road: '
-            '${_measured(state.number('nearest_major_road_m'), unit: ' m')} · '
-            'Transit stops (500 m): '
-            '${_measured(state.number('transit_stops_500m'))}';
-      case EnrichmentCategory.parking:
-        return 'Facilities (500 m): '
-            '${_measured(state.number('parking_facilities_500m'))} · '
-            '1 km: ${_measured(state.number('parking_facilities_1km'))} · '
-            'Nearest: ${_measured(state.number('nearest_parking_m'), unit: ' m')}';
-      case EnrichmentCategory.population:
-        final unavailable = state.unavailableRadii;
-        final parts = <String>[
-          '500 m: ${_measured(state.number('population_500m'))}',
-          '1 km: ${_measured(state.number('population_1km'))}',
-        ];
-        final line = parts.join(' · ');
-        return unavailable.isEmpty
-            ? line
-            : '$line (no raster coverage at ${unavailable.join(', ')})';
-    }
-  }
-
   static String _statusTone(EnrichmentStatus status) => switch (status) {
     EnrichmentStatus.current => 'success',
     EnrichmentStatus.unavailable => 'warning',
@@ -1693,153 +1501,243 @@ class _AddPropertyPageState extends State<AddPropertyPage> {
     EnrichmentStatus.pending => 'neutral',
   };
 
-  /// The eight-step sequence: save, the five categories, the summary, submit.
-  Component _stageSequence(PropertyEnrichmentSummary? summary) {
-    final rows = <Component>[];
-    var index = 0;
-    Component row(
-      String label,
-      String statusLabel,
-      String tone, {
-      String detail = '',
-      Component? action,
-    }) {
-      index += 1;
-      final done = tone == 'success';
-      return div(
-        classes: 'sw-enrich-step'
-            '${done ? ' is-done' : ''}'
-            '${tone == 'danger' ? ' is-failed' : ''}'
-            '${tone == 'action' ? ' is-running' : ''}',
-        [
-          span(classes: 'sw-enrich-step__index', [
-            Component.text(done ? '✓' : '$index'),
-          ]),
-          div(classes: 'sw-enrich-step__body', [
-            div(classes: 'sw-enrich-step__head', [
-              strong([Component.text(label)]),
-              StatusBadge(statusLabel, tone: tone),
-            ]),
-            if (detail.isNotEmpty)
-              p(classes: 'sw-enrich-step__detail', [Component.text(detail)]),
-          ]),
-          ?action,
-        ],
-      );
+  /// The five categories in the order the wizard presents them: population
+  /// first (it is the one that can be genuinely unavailable), then the four
+  /// PostGIS categories.
+  static const _analysisOrder = <(String, EnrichmentCategory)>[
+    ('Population', EnrichmentCategory.population),
+    ('F&B competitors', EnrichmentCategory.fnbCompetitors),
+    ('Nearby places', EnrichmentCategory.demandGenerators),
+    ('Transportation', EnrichmentCategory.roadsTransport),
+    ('Parking', EnrichmentCategory.parking),
+  ];
+
+  /// One line per category: enough to judge the location, short enough to keep
+  /// the wizard compact.
+  String _summaryLine(
+    EnrichmentCategory category,
+    EnrichmentCategoryState state,
+  ) {
+    if (!state.status.hasMeasurement) return '';
+    switch (category) {
+      case EnrichmentCategory.population:
+        return '500 m ${_measured(state.number('population_500m'))} · '
+            '1 km ${_measured(state.number('population_1km'))}';
+      case EnrichmentCategory.fnbCompetitors:
+        return '500 m ${_measured(state.number('competitor_count_500m'))} · '
+            '1 km ${_measured(state.number('competitor_count_1km'))}';
+      case EnrichmentCategory.demandGenerators:
+        return '500 m '
+            '${_measured(state.number('demand_generator_count_500m'))} · '
+            '1 km ${_measured(state.number('demand_generator_count_1km'))}';
+      case EnrichmentCategory.roadsTransport:
+        return 'Roads '
+            '${_measured(state.number('accessibility_road_km_1km'), decimals: 1, unit: ' km')} · '
+            'nearest ${_measured(state.number('nearest_major_road_m'), unit: ' m')}';
+      case EnrichmentCategory.parking:
+        return '500 m ${_measured(state.number('parking_facilities_500m'))} · '
+            'nearest ${_measured(state.number('nearest_parking_m'), unit: ' m')}';
     }
-
-    rows.add(
-      row(
-        'Draft saved',
-        'Done',
-        'success',
-        detail: summary == null
-            ? 'The listing is stored privately and is not in the review queue.'
-            : 'The listing is stored privately and is not in the review queue.',
-      ),
-    );
-
-    for (final category in EnrichmentCategory.values) {
-      final state = summary?.state(category);
-      final status = state?.status ?? EnrichmentStatus.pending;
-      final measured = state == null ? '' : _measurementLine(state);
-      final reason = state?.reason ?? '';
-      final detail = <String>[
-        if (measured.isNotEmpty) measured,
-        if (reason.isNotEmpty && status != EnrichmentStatus.current) reason,
-        if (category.phase == EnrichmentPhase.population &&
-            status == EnrichmentStatus.current)
-          'Source: ${state?.provenance?['source'] ?? 'population raster'}',
-      ].join(' — ');
-      rows.add(
-        row(
-          category.label,
-          status.label,
-          _statusTone(status),
-          detail: detail,
-          action: (state != null && status.retryable && !_enriching)
-              ? button(
-                  classes: 'sw-enrich-retry',
-                  attributes: const {'type': 'button'},
-                  events: events(
-                    onClick: () => _retryCategory(category),
-                  ),
-                  [Component.text('Retry')],
-                )
-              : null,
-        ),
-      );
-    }
-
-    final settled = summary != null && summary.phaseOneComplete && summary.phaseTwoComplete;
-    rows.add(
-      row(
-        'Location summary',
-        settled ? 'Ready' : 'Waiting',
-        settled ? 'success' : 'neutral',
-        detail: settled
-            ? 'All five categories have settled. Review the figures above before submitting.'
-            : 'Waiting for the remaining categories to finish.',
-      ),
-    );
-
-    rows.add(
-      row(
-        'Submit to Admin',
-        _submitted ? 'Submitted' : 'Your decision',
-        _submitted ? 'success' : 'neutral',
-        detail: _submitted
-            ? 'The listing information is in the administrator review queue.'
-            : 'Nothing is sent for review until you press the button below.',
-      ),
-    );
-
-    return div(classes: 'sw-enrich-steps', rows);
   }
 
-  Component _enrichmentPanel(PropertyEnrichmentSummary? summary) {
-    return div(classes: 'sw-saved-notice', attributes: const {'role': 'note'}, [
-      strong([Component.text('Location enrichment')]),
-      p([
-        Component.text(
-          _enriching
-              ? 'Calculating from PostGIS and the population raster. '
-                  'Each category reports as soon as it settles — there is no '
-                  'countdown and no invented progress.'
-              : 'Each category reports its own state. A category that could not be '
-                  'measured is labelled, never shown as zero.',
-        ),
+  /// The full measurement breakdown, revealed only when a category is expanded.
+  List<(String, String)> _measurementPairs(
+    EnrichmentCategory category,
+    EnrichmentCategoryState state,
+  ) {
+    if (!state.status.hasMeasurement) return const [];
+    switch (category) {
+      case EnrichmentCategory.population:
+        final source = state.provenance?['source'];
+        final missing = state.unavailableRadii;
+        return [
+          ('Within 500 m', _measured(state.number('population_500m'))),
+          ('Within 1 km', _measured(state.number('population_1km'))),
+          if (source is String && source.isNotEmpty) ('Source', source),
+          if (missing.isNotEmpty) ('No raster coverage', missing.join(', ')),
+        ];
+      case EnrichmentCategory.fnbCompetitors:
+        return [
+          ('Within 500 m', _measured(state.number('competitor_count_500m'))),
+          ('Within 1 km', _measured(state.number('competitor_count_1km'))),
+        ];
+      case EnrichmentCategory.demandGenerators:
+        return [
+          (
+            'Within 500 m',
+            _measured(state.number('demand_generator_count_500m')),
+          ),
+          (
+            'Within 1 km',
+            _measured(state.number('demand_generator_count_1km')),
+          ),
+        ];
+      case EnrichmentCategory.roadsTransport:
+        return [
+          (
+            'Road length within 1 km',
+            _measured(
+              state.number('accessibility_road_km_1km'),
+              decimals: 1,
+              unit: ' km',
+            ),
+          ),
+          (
+            'Nearest major road',
+            _measured(state.number('nearest_major_road_m'), unit: ' m'),
+          ),
+          (
+            'Transit stops within 500 m',
+            _measured(state.number('transit_stops_500m')),
+          ),
+          (
+            'Transit stops within 1 km',
+            _measured(state.number('transit_stops_1km')),
+          ),
+        ];
+      case EnrichmentCategory.parking:
+        return [
+          (
+            'Within 500 m',
+            _measured(state.number('parking_facilities_500m')),
+          ),
+          ('Within 1 km', _measured(state.number('parking_facilities_1km'))),
+          ('Nearest facility', _measured(state.number('nearest_parking_m'), unit: ' m')),
+        ];
+    }
+  }
+
+  /// Compact five-row analysis. A row expands only on request — the full
+  /// analytical dashboard belongs on the Property Detail page, not here.
+  Component _analysisSection(PropertyEnrichmentSummary? summary) {
+    return section(classes: 'sw-analysis', [
+      div(classes: 'sw-analysis__head', [
+        h3([Component.text('Location analysis')]),
+        if (_enriching || (summary?.isRunning ?? false))
+          span(classes: 'sw-analysis__live', [
+            Component.text('Calculating…'),
+          ]),
       ]),
+      for (final (label, category) in _analysisOrder)
+        _analysisRow(label, category, summary?.state(category)),
       if (_enrichmentError != null)
         p(classes: 'sw-enrich-error', [Component.text(_enrichmentError!)]),
-      _stageSequence(summary),
+      p(classes: 'sw-reg-note', [
+        Component.text(
+          'Measured from SiteWise PostGIS data and the population raster. A '
+          'category with no data is labelled “Not available”, never zero.',
+        ),
+      ]),
     ]);
   }
 
-  Component _submitPanel(PropertyEnrichmentSummary? summary) {
+  Component _analysisRow(
+    String label,
+    EnrichmentCategory category,
+    EnrichmentCategoryState? state,
+  ) {
+    final status = state?.status ?? EnrichmentStatus.pending;
+    final tone = _statusTone(status);
+    final pairs = state == null
+        ? const <(String, String)>[]
+        : _measurementPairs(category, state);
+    final line = state == null ? '' : _summaryLine(category, state);
+    final reason = state?.reason ?? '';
+    final text = line.isNotEmpty ? line : (reason.isNotEmpty ? reason : '—');
+
+    final badge = span(classes: 'sw-analysis__badge', [
+      StatusBadge(status.label, tone: tone),
+    ]);
+
+    final header = [
+      span(classes: 'sw-analysis__label', [Component.text(label)]),
+      span(classes: 'sw-analysis__value', [Component.text(text)]),
+      badge,
+      span(
+        classes: 'sw-analysis__chev',
+        attributes: const {'aria-hidden': 'true'},
+        [Component.text('▾')],
+      ),
+    ];
+
+    final body = <Component>[
+      if (pairs.isNotEmpty)
+        dl(classes: 'sw-analysis__detail', [
+          for (final (k, v) in pairs)
+            div([dt([Component.text(k)]), dd([Component.text(v)])]),
+        ]),
+      if (state != null && status.retryable && !_enriching)
+        div(classes: 'sw-analysis__actions', [
+          button(
+            classes: 'sw-enrich-retry',
+            attributes: const {'type': 'button'},
+            events: events(onClick: () => _retryCategory(category)),
+            [Component.text('Retry')],
+          ),
+        ]),
+    ];
+
+    // A settled category with nothing to expand renders as a plain row: an
+    // empty <details> would invite a click that reveals nothing.
+    if (body.isEmpty) {
+      return div(classes: 'sw-analysis__row', [
+        div(classes: 'sw-analysis__summary is-static', header),
+      ]);
+    }
+    return Component.element(
+      tag: 'details',
+      classes: 'sw-analysis__row',
+      children: [
+        Component.element(
+          tag: 'summary',
+          classes: 'sw-analysis__summary',
+          children: header,
+        ),
+        ...body,
+      ],
+    );
+  }
+
+  Component _draftLine() {
+    final r = _result;
+    return div(classes: 'sw-draft-line', [
+      StatusBadge(
+        _submitted ? 'Submitted' : 'Draft',
+        tone: _submitted ? 'success' : 'neutral',
+      ),
+      span([
+        Component.text(
+          r == null
+              ? 'The draft was accepted by the server.'
+              : '“${r.name}” · #${r.propertyId} · '
+                    '${r.isPublished ? 'published' : 'not published'}',
+        ),
+      ]),
+    ]);
+  }
+
+  /// The acknowledgement + honesty notice that sits directly above the footer
+  /// actions. The submit button itself lives in the footer.
+  Component _submitNotice(PropertyEnrichmentSummary? summary) {
     if (_submitted) {
-      return div(classes: 'sw-saved-notice', attributes: const {'role': 'note'}, [
-        strong([Component.text('Review queue')]),
+      return div(classes: 'sw-notice sw-notice--ok', [
+        strong([Component.text('In the review queue')]),
         p([
           Component.text(
-            'The listing information has entered the administrator review '
-            'queue. Ownership documents were not required for this submission; '
-            'publishing still needs a separate ownership verification.',
+            'The listing information is with an administrator. Ownership '
+            'documents were not part of this submission, so publishing still '
+            'needs a separate ownership check.',
           ),
         ]),
       ]);
     }
 
     final populationUnavailable = summary?.populationUnavailable ?? false;
-    final running = summary?.isRunning ?? _enriching;
-    final canSubmit = !running && !_submitting;
-
-    return div(classes: 'sw-saved-notice sw-enrich-submit', [
+    return div(classes: 'sw-notice', [
       strong([Component.text('Submit to Admin')]),
       p([
         Component.text(
-          'Saving a draft never submits it. Review the figures above, then send '
-          'the listing to an administrator when you are ready.',
+          'Nothing is sent for review until you press Submit to Admin.',
         ),
       ]),
       if (populationUnavailable)
@@ -1847,104 +1745,147 @@ class _AddPropertyPageState extends State<AddPropertyPage> {
           p([
             Component.text(
               'Population could not be measured for these coordinates. No '
-              'estimate is substituted, so the administrator will see '
-              '"Not available" for population. Confirm that you want to '
-              'submit anyway.',
+              'estimate is substituted, so the administrator will see “Not '
+              'available”. Confirm that you want to submit anyway.',
             ),
           ]),
-          label(classes: 'sw-enrich-ack__check', [
-            input(
-              attributes: {
-                'type': 'checkbox',
-                'id': 'ack-population',
-                if (_ackPopulation) 'checked': '',
-              },
-              events: events(onClick: () {
-                setState(() => _ackPopulation = !_ackPopulation);
-              }),
-            ),
-            span([
-              Component.text(
-                'I understand population is unavailable for this property.',
+          label(
+            classes: 'sw-enrich-ack__check',
+            attributes: const {'for': 'ack-population'},
+            [
+              input(
+                attributes: {
+                  'type': 'checkbox',
+                  'id': 'ack-population',
+                  if (_ackPopulation) 'checked': '',
+                },
+                events: events(onClick: () {
+                  setState(() => _ackPopulation = !_ackPopulation);
+                }),
               ),
-            ]),
-          ]),
+              span([
+                Component.text(
+                  'I understand population is unavailable for this property.',
+                ),
+              ]),
+            ],
+          ),
         ]),
       if (_enqueueError != null)
         p(classes: 'sw-enrich-error', [Component.text(_enqueueError!)]),
-      div(classes: 'sw-saved-actions', [
-        button(
-          classes: 'sw-btn sw-btn-primary'
-              '${canSubmit ? '' : ' is-disabled'}',
-          attributes: {
-            'type': 'button',
-            if (!canSubmit) 'disabled': '',
-          },
-          events: events(onClick: canSubmit ? _submitToAdmin : null),
-          [
-            Component.text(
-              _submitting
-                  ? 'Submitting…'
-                  : running
-                  ? 'Waiting for enrichment…'
-                  : 'Submit to Admin',
-            ),
-          ],
-        ),
-      ]),
     ]);
   }
 
-  Component _savedView() {
-    final result = _result;
+  /// The saved half of the final step: draft identity, the five analysis rows,
+  /// the submit notice and (once submitted) the way out.
+  Component _analysisStep() {
     final summary = _enrichment;
-    return AppLayout(
-      role: AppRole.entrepreneur,
-      currentRoute: '/entrepreneur/add-property',
-      title: _submitted ? 'Submitted for review' : 'Draft saved',
-      eyebrow: 'Workspace',
-      subtitle: _submitted
-          ? 'Saved and queued for administrator verification.'
-          : 'Saved as a draft. Nothing has been sent for review yet.',
-      child: div(classes: 'stack stack--sections sw-reg-saved', [
-        div(classes: 'sw-saved-card', [
-          div(classes: 'sw-saved-icon', [
-            Icon(_submitted ? 'check_circle' : 'save', size: 'lg'),
-          ]),
-          h2([
-            Component.text(
-              _submitted
-                  ? 'Listing submitted — pending verification'
-                  : 'Draft saved — not yet submitted',
-            ),
-          ]),
-          p([
-            Component.text(
-              result == null
-                  ? 'The draft was accepted by the server.'
-                  : '“${result.name}” was saved with property ID '
-                      '${result.propertyId}. It is ${result.verificationStatus} '
-                      'and ${result.isPublished ? 'published' : 'not published'}.',
-            ),
-          ]),
-          if (_submitError != null)
-            p(classes: 'sw-enrich-error', [Component.text(_submitError!)]),
-          _enrichmentPanel(summary),
-          _submitPanel(summary),
-          div(classes: 'sw-saved-actions', [
-            AppLink(
-              to: '/entrepreneur/add-property',
-              classes: 'sw-btn sw-btn-primary',
-              children: [Component.text('Register another')],
-            ),
-            AppLink(
-              to: '/entrepreneur/my-properties',
-              classes: 'sw-btn',
-              children: [Component.text('Back to My Properties')],
-            ),
-          ]),
+    return div([
+      _draftLine(),
+      _analysisSection(summary),
+      _submitNotice(summary),
+      if (_submitted)
+        div(classes: 'sw-saved-actions', [
+          AppLink(
+            to: '/entrepreneur/my-properties',
+            classes: 'sw-btn',
+            children: [Component.text('My properties')],
+          ),
+          AppLink(
+            to: '/entrepreneur/add-property',
+            classes: 'sw-btn sw-btn-primary',
+            children: [Component.text('Register another')],
+          ),
         ]),
-      ]),
-    );
+    ]);
+  }
+
+  // ------------------------------------------------------------------ footer
+
+  /// Compact action bar. Save Draft appears only on the final step (earlier
+  /// steps are incomplete by definition); Generate location analysis appears
+  /// while the analysis is unsettled; Submit to Admin only after a draft
+  /// exists.
+  Component _footer() {
+    // Once submitted there is nothing left to act on: the card already ends
+    // with the review-queue notice and the way out, so an empty bar with a
+    // divider would be pure decoration.
+    if (_submitted) return const Component.fragment([]);
+
+    final summary = _enrichment;
+    final running = _enriching || (summary?.isRunning ?? false);
+    final settled =
+        (summary?.phaseOneComplete ?? false) &&
+        (summary?.phaseTwoComplete ?? false);
+
+    final left = <Component>[
+      if (!_saved && _step > 0)
+        button(
+          classes: 'sw-btn',
+          attributes: const {'type': 'button'},
+          events: events(onClick: _back),
+          [Component.text('Back')],
+        ),
+    ];
+
+    final right = <Component>[];
+    if (!_saved) {
+      right.add(
+        button(
+          classes: 'sw-btn sw-btn-primary',
+          attributes: {
+            'type': 'button',
+            if (_saving) 'disabled': '',
+            'aria-busy': _saving ? 'true' : 'false',
+          },
+          events: events(onClick: _next),
+          [
+            Component.text(
+              _saving ? 'Saving…' : (_isLast ? 'Save draft' : 'Continue'),
+            ),
+          ],
+        ),
+      );
+    } else {
+      if (!_submitted && !running && !settled) {
+        right.add(
+          button(
+            classes: 'sw-btn',
+            attributes: const {'type': 'button'},
+            events: events(onClick: _runEnrichment),
+            [Component.text('Generate location analysis')],
+          ),
+        );
+      }
+      if (!_submitted) {
+        right.add(
+          button(
+            classes: 'sw-btn sw-btn-primary',
+            attributes: {
+              'type': 'button',
+              if (running || _submitting) 'disabled': '',
+              'aria-busy': _submitting ? 'true' : 'false',
+            },
+            events: events(
+              onClick: running || _submitting ? null : _submitToAdmin,
+            ),
+            [
+              Component.text(
+                _submitting
+                    ? 'Submitting…'
+                    : running
+                    ? 'Analysing…'
+                    : 'Submit to Admin',
+              ),
+            ],
+          ),
+        );
+      }
+    }
+
+    return footer(classes: 'sw-reg-footer', [
+      div(classes: 'sw-reg-footer-left', left),
+      div(classes: 'sw-reg-footer-right', right),
+    ]);
   }
 }
