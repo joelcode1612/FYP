@@ -1,0 +1,43 @@
+{
+  "name": "sitewise_pu_47_experimental",
+  "version": "hist_gradient_boosting@PU_47_CANDIDATE_2026_11_11",
+  "feature_set": "experimental_47_landscan_update",
+  "algorithm": "Bagged Histogram Gradient Boosting (PUScoreEnsemble, 4 bags)",
+  "artifact_sha256": "1d09cb9a44301d1020bb367a1b3dcb1803935e853c348eccad357f0ede8fd1e2",
+  "artifact_filename": "sitewise_pu_47_experimental.joblib",
+  "score_meaning": "Research positive-label association index: relative association with observed operating F&B sites versus unlabeled commercial properties. NOT a business-success probability; uncalibrated for production ranking.",
+  "not_a_business_success_probability": true,
+  "production_ready": false,
+  "training": {
+    "n_P": 894,
+    "n_U": 955,
+    "n_features": 47
+  },
+  "spatial_cv": [
+    {
+      "model": "hist_gradient_boosting",
+      "auroc": 0.7600699564596296,
+      "average_precision": 0.7332427046426881
+    },
+    {
+      "model": "extra_trees",
+      "auroc": 0.7499103901115245,
+      "average_precision": 0.7219089763060584
+    },
+    {
+      "model": "logistic",
+      "auroc": 0.7171364916604147,
+      "average_precision": 0.6904240229760589
+    }
+  ],
+  "missing_cells": 180,
+  "landscan_provenance": {
+    "status": "unresolved",
+    "csv_flag": "NO_PENDING_LICENCE (record flag, not proof of actual licence)",
+    "official_catalog_license": "CC-BY-4.0 for asset projects/sat-io/open-datasets/ORNL/LANDSCAN_GLOBAL, verify original extraction matches this asset",
+    "note": "NO_PENDING_LICENCE is an internal record flag, not proof of the dataset's actual licence. Authorized local research testing only; production activation stays gated."
+  },
+  "material_conflict": "nearest_transit_walk_m differs in 1847/1849 records between the two source datasets; newer values used (unresolved).",
+  "scikit_learn": "1.8.0",
+  "supplied_readme": "SiteWise_PU_47_Feature_Research_Update/README.md (2026-11-11)"
+}

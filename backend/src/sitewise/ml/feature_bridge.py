@@ -3,35 +3,44 @@
 Evidence (verified 2026-11-11 against this deployment)
 =====================================================
 The selected PU artifact (``sitewise_selected_pu_model.joblib``, feature_set
-``baseline_47``) requires 47 features. After the duplicate-population fix in
+``baseline_47``) and the supplied experimental artifact
+(``sitewise_pu_47_experimental.joblib``, version
+``hist_gradient_boosting@PU_47_CANDIDATE_2026_11_11``) both require 47
+features. After the duplicate-population fix in
 ``property_features.PropertyFeatureRepository`` the live database resolves 42
 of them for every catalogue property (39 direct columns/JSON keys plus the
-three documented WorldPop ring equivalents). FIVE features exist in NO table:
+three documented WorldPop ring equivalents). FIVE features exist in no table:
 
 * ``pop_2000m``                      - no 2 km ring is stored anywhere
 * ``landscan_ambient_pop_1000m``     - only WorldPop-derived ``ambient_population_1km``
 * ``landscan_ambient_pop_2000m``     - absent
 * ``landscan_ambient_pop_3000m``     - absent
-* ``worldpop_walk_reachable_10min``  - absent from every source examined
+* ``worldpop_walk_reachable_10min``  - absent from every source table
 
-FOUR of the five (``pop_2000m`` and the three LandScan rasters) are present,
-keyed by subject id, in the ORIGINAL training dataset that produced both PU
-artifacts. The verified copy is committed as
+All five are present, keyed by research subject id, in the ORIGINAL training
+dataset that produced the PU artifacts. The verified copy is committed as
 ``backend/ml_reference/training_population_bridge_1849.csv`` (1,849 rows =
-894 P + 955 U, the exact training population). Byte-parity was validated for
-the reference property MD-00510 against the supplied
-``example_property_47.json``: ``pop_2000m=35472.8``,
-``landscan_ambient_pop_1000m=2749``, ``..._2000m=30743``, ``..._3000m=85886``.
+894 P + 955 U, the exact training population). The ``worldpop`` column was
+joined from ``Sitewise_PU_Training_Candidates_1849.csv`` whose sha256
+(565920bc...) matches the training package's ``SHA256SUMS.txt``; coverage is
+exactly 1,794/1,849 rows — the remaining 55 rows (15 P + 40 U) have no value
+in any source and stay explicitly missing. Byte-parity of the original four
+bridge features was validated against the supplied
+``example_property_47.json`` for reference property MD-00510:
+``pop_2000m=35472.8``, ``landscan_ambient_pop_1000m=2749``, ``..._2000m=30743``,
+``..._3000m=85886``; its ``worldpop_walk_reachable_10min=2.317`` also matches.
 
-``worldpop_walk_reachable_10min`` cannot be recovered: it is absent from the
-database, the training export, every workbook and both SQL dumps. It survives
-only for the 25 complete-case rows of ``shap_background_47.csv``. Any live
-47-feature inference is therefore UNAVAILABLE for every property, and this
-module reports that state explicitly instead of fabricating or zero-filling.
+Consequences
+------------
+* The 1,794 complete research subjects can run live 47-feature inference
+  (in-sample research use of the artifacts' own training inputs).
+* The 55 incomplete research subjects, and EVERY newly submitted commercial
+  listing, report ``47-feature inference unavailable`` with the exact missing
+  features — no value is ever fabricated, borrowed, or zero-filled.
 
 LandScan licence: the training export records
 ``landscan_ml_training_eligible=NO_PENDING_LICENCE`` for all 1,849 rows. The
-values are reproduced here ONLY because they are the artifact's own training
+values are reproduced here ONLY because they are the artifacts' own training
 inputs (in-sample research use, stated in the model card); every response
 carries the licence status so downstream consumers can gate on it.
 """
@@ -51,10 +60,14 @@ BRIDGE_FEATURES: tuple[str, ...] = (
     "landscan_ambient_pop_1000m",
     "landscan_ambient_pop_2000m",
     "landscan_ambient_pop_3000m",
+    "worldpop_walk_reachable_10min",
 )
 
-#: Known unrecoverable feature (evidence documented in the module docstring).
-UNRECOVERABLE_FEATURES: tuple[str, ...] = ("worldpop_walk_reachable_10min",)
+#: No feature is unrecoverable any more: the 2026-11-11 bridge regeneration
+#: recovered ``worldpop_walk_reachable_10min`` for the 1,794 complete research
+#: subjects. The 55 genuinely-missing rows stay per-property missing with an
+#: explicit flag — never imputed and never borrowed from another subject.
+UNRECOVERABLE_FEATURES: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)

@@ -114,7 +114,7 @@ class ModelLoader:
                 meta = json.loads(meta_path.read_text(encoding="utf-8")) if meta_path.is_file() else {}
             except (OSError, KeyError, ValueError, TypeError) as exc:
                 raise ModelUnavailableError("The legacy feature contract cannot be parsed") from exc
-            meta["artifact_type"] = "legacy_pickle"
+            meta.setdefault("artifact_type", "legacy_pickle")
 
         if not names or any(not isinstance(x, str) or not x.strip() for x in names):
             raise ModelUnavailableError("Artifact feature names are invalid")

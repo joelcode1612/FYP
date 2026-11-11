@@ -1206,7 +1206,9 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
               if (_openStage == stage.key &&
                   stage.key == 'business_requirements')
                 // A record saved before the questionnaire existed keeps its
-                // own legacy editor; a v2 record gets the eight questions.
+                // own legacy editor; a v2/v3 record gets the five questions
+                // (v3 form). A v2 record seeds its stored tokens without
+                // being re-interpreted; only new answers use v3 tokens.
                 record.requirementsVersion == 1
                     ? _legacyRequirementsPanel(record)
                     : _questionnairePanel(record),
@@ -1283,13 +1285,16 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
         ]),
       ]);
 
-  // ------------------------------------------- stage 2: eight-question flow
+  // ------------------------------------------ stage 2: five-question flow (V3)
 
-  /// One business-preference question.
+  /// One business-preference question (five-question Recommender V3,
+  /// requirements schema v3, 2026-11-11).
   ///
-  /// `kind` is `single`, `multi` or `number`; `options` are (token, label)
-  /// pairs. Tokens are what the backend validates, so a label can change
-  /// without rewriting a saved answer.
+  /// `kind` is `single` or `multi`; `options` are (token, label) pairs.
+  /// Tokens are what the backend validates, so a label can change without
+  /// rewriting a saved answer. Q4 shows the five V3 priorities; the two
+  /// legacy v2 tokens stay valid server-side for pre-V3 records, which seed
+  /// from storage without being re-interpreted.
   static const List<
     ({String id, String prompt, String help, String kind, List<(String, String)> options})
   >
@@ -1304,8 +1309,8 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
         ('restaurant', 'Restaurant'),
         ('bakery_dessert_shop', 'Bakery / Dessert Shop'),
         ('fast_food_quick_service', 'Fast Food / Quick Service'),
-        ('beverage_shop_kiosk', 'Beverage Shop / Kiosk'),
-        ('other_fnb', 'Other F&B'),
+        ('beverage_shop_kiosk', 'Beverage / Kiosk'),
+        ('other_fnb', 'Other'),
       ],
     ),
     (
@@ -1336,53 +1341,31 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
     (
       id: 'recommendation_priority',
       prompt: 'What matters most when choosing the location?',
-      help: 'This is the priority the assessment is read against.',
+      help:
+          'This priority dynamically re-weights the scoring components '
+          '(Q4 of the five-question recommender).',
       kind: 'single',
       options: [
-        ('high_customer_demand', 'High Customer Demand'),
+        ('high_nearby_population', 'High Nearby Population'),
         ('affordable_operating_location', 'Affordable Operating Location'),
         ('easy_customer_accessibility', 'Easy Customer Accessibility'),
-        ('favorable_competition', 'Favorable Competition'),
+        ('active_commercial_surroundings', 'Active Commercial Surroundings'),
         ('balanced_suitability', 'Balanced Suitability'),
       ],
     ),
     (
-      id: 'target_price_segment',
-      prompt: 'How is your menu priced?',
-      help: 'Price positioning informs how competitor density is interpreted.',
+      id: 'space_size_preference',
+      prompt: 'What size of business space do you prefer?',
+      help:
+          'Scored against the catalogue\'s calibrated floor-area percentiles '
+          '(Q5 of the five-question recommender).',
       kind: 'single',
       options: [
-        ('budget_friendly', 'Budget-Friendly'),
-        ('mid_range', 'Mid-Range'),
-        ('premium', 'Premium'),
-        ('mixed_price_range', 'Mixed Price Range'),
+        ('compact_business_space', 'Compact Business Space'),
+        ('standard_business_space', 'Standard Business Space'),
+        ('spacious_business_space', 'Spacious Business Space'),
+        ('flexible_no_preference', 'Flexible / No Preference'),
       ],
-    ),
-    (
-      id: 'customer_access_mode',
-      prompt: 'How will most customers reach you?',
-      help: 'Checked against the transport measurements the analysis holds.',
-      kind: 'single',
-      options: [
-        ('walking', 'Walking'),
-        ('public_transportation', 'Public Transportation'),
-        ('private_vehicle', 'Private Vehicle'),
-        ('mixed_transportation', 'Mixed Transportation'),
-      ],
-    ),
-    (
-      id: 'max_monthly_rent_myr',
-      prompt: 'What is your maximum monthly rental?',
-      help: 'In MYR. Must be greater than zero; compared with the asking rent.',
-      kind: 'number',
-      options: [],
-    ),
-    (
-      id: 'min_floor_area_sqft',
-      prompt: 'What is the smallest floor area you can operate in?',
-      help: 'In square feet. Must be greater than zero; compared with the listing.',
-      kind: 'number',
-      options: [],
     ),
   ];
 
@@ -1475,7 +1458,7 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
       _record = updated;
       _future = Future.value(_Started(updated));
       _notice = completeStage
-          ? 'Your eight answers are saved and stage 2 is recorded as '
+          ? 'Your five answers are saved and stage 2 is recorded as '
                 'complete. ${updated.completedStages} of '
                 '${updated.totalStages} stages done.'
           : 'Your answers were saved to this assessment.';
@@ -1488,7 +1471,6 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
     final index = _answerStep.clamp(0, _questions.length - 1);
     final q = _questions[index];
     final isLast = index == _questions.length - 1;
-    final value = _answers[q.id];
     final progress = ((index + 1) / _questions.length * 100).round();
 
     return section(classes: 'panel asw-inline', [
@@ -1519,30 +1501,7 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
         ),
         h3(classes: 'asw-q__prompt', [Component.text(q.prompt)]),
         p(classes: 'asw-note', [Component.text(q.help)]),
-        if (q.kind == 'number')
-          Field(
-            labelText: q.id == 'max_monthly_rent_myr'
-                ? 'Maximum monthly rental (RM)'
-                : 'Minimum floor area (sq ft)',
-            error: _answerError,
-            hint: 'Enter a number greater than zero.',
-            child: input(
-              attributes: {
-                'type': 'number',
-                'min': '1',
-                'step': '1',
-                'value': '${value ?? ''}',
-              },
-              events: events<String>(
-                onInput: (v) => setState(() {
-                  _answers[q.id] = v;
-                  _answerError = null;
-                }),
-              ),
-            ),
-          )
-        else
-          div(classes: 'chips', [
+        div(classes: 'chips', [
             for (final (token, caption) in q.options)
               label(
                 classes: _isPicked(q, token) ? 'checkpill is-on' : 'checkpill',

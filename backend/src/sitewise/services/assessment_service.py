@@ -200,6 +200,32 @@ MULTI_SELECT_V2: dict[str, tuple[str, ...]] = {
     ),
 }
 
+# --- Five-question V3 questionnaire (requirements schema v3, 2026-11-11) -----
+#
+# Q1 fnb_concept and Q2 service_model reuse the v2 enums verbatim; Q3
+# target_customers is the same multi-select. Q4 extends the v2 priority enum
+# with the two V3 tokens; Q5 is a new categorical space-size answer scored
+# against the calibrated sqft percentiles. Enum tuples are imported from the
+# domain scoring module so the API contract and the scoring engine cannot
+# drift apart.
+from sitewise.domain.recommendation_scoring import (  # noqa: E402
+    RECOMMENDATION_PRIORITY_V3,
+    SPACE_SIZE_PREFERENCE_V3,
+)
+
+SINGLE_SELECT_V3: dict[str, tuple[str, ...]] = {
+    "fnb_concept": SINGLE_SELECT_V2["fnb_concept"],
+    "service_model": SINGLE_SELECT_V2["service_model"],
+    "recommendation_priority": SINGLE_SELECT_V2["recommendation_priority"]
+    + RECOMMENDATION_PRIORITY_V3,
+    "space_size_preference": SPACE_SIZE_PREFERENCE_V3,
+}
+
+# Only the NEW v3-specific keys route a payload to the v3 validator: a v2
+# payload shares fnb_concept / service_model / recommendation_priority with
+# v3 and must keep validating as v2 (backward compatibility).
+V3_ONLY_KEYS = frozenset({"space_size_preference"})
+
 # Required positive numeric answers, in the questionnaire's own units.
 NUMBER_V2 = ("max_monthly_rent_myr", "min_floor_area_sqft")
 
@@ -216,13 +242,16 @@ _LEGACY_TO_V2_NUMBERS = {
 
 
 def requirements_version_of(stored: Any) -> int:
-    """0 = nothing stored, 1 = legacy criteria form, 2 = eight-question form."""
+    """0 = nothing stored, 1 = legacy criteria form, 2 = eight-question form,
+    3 = five-question V3 form."""
     if not isinstance(stored, dict) or not stored:
         return 0
     explicit = stored.get("requirements_version")
-    if isinstance(explicit, int) and explicit in (1, 2):
+    if isinstance(explicit, int) and explicit in (1, 2, 3):
         return explicit
-    return 2 if any(key in stored for key in V2_ONLY_KEYS) else 1
+    return 3 if any(key in stored for key in V3_ONLY_KEYS) else (
+        2 if any(key in stored for key in V2_ONLY_KEYS) else 1
+    )
 
 
 def legacy_requirements_view(stored: dict) -> dict:
@@ -255,6 +284,8 @@ def validate_requirements(raw: Any) -> dict:
             code="invalid_requirements",
             status_code=422,
         )
+    if any(key in raw for key in V3_ONLY_KEYS):
+        return _validate_v3(raw)
     if any(key in raw for key in V2_ONLY_KEYS):
         return _validate_v2(raw)
     return _validate_v1(raw)
@@ -423,6 +454,99 @@ def _validate_v2(raw: dict) -> dict:
     if problems:
         raise AssessmentError(" ".join(problems), code="invalid_requirements", status_code=422)
     clean["requirements_version"] = 2
+    return clean
+
+
+def _validate_v3(raw: dict) -> dict:
+    """Validate the five-question V3 business preferences.
+
+    Q1 (fnb_concept), Q2 (service_model), Q4 (recommendation_priority) and Q5
+    (space_size_preference) are required single-selects; Q3 (target_customers)
+    requires at least one pick. The v2 numeric answers
+    (``max_monthly_rent_myr`` / ``min_floor_area_sqft``) are OPTIONAL here: Q5
+    replaces the categorical size numbers with calibrated bands, and the V3
+    affordability component falls back to the calibrated rent percentiles
+    when no budget is stated. A stated budget is still accepted and stays
+    authoritative for affordability and eligibility. Legacy v2-only fields
+    present in the payload are preserved verbatim so an upgraded record loses
+    nothing.
+    """
+    problems: list[str] = []
+    clean: dict[str, Any] = {}
+
+    for field, allowed in SINGLE_SELECT_V3.items():
+        value = raw.get(field)
+        token = value.strip().lower() if isinstance(value, str) else ""
+        if not token:
+            problems.append(f"{field} is required.")
+            continue
+        if token not in allowed:
+            problems.append(f"{field} must be one of: {', '.join(allowed)}.")
+            continue
+        clean[field] = token
+
+    for field, allowed in MULTI_SELECT_V2.items():
+        value = raw.get(field)
+        if not isinstance(value, list):
+            problems.append(f"{field} must be a list.")
+            continue
+        picks: list[str] = []
+        for item in value:
+            token = item.strip().lower() if isinstance(item, str) else ""
+            if not token or token not in allowed:
+                problems.append(f"{field} contains an unknown value.")
+                continue
+            if token not in picks:
+                picks.append(token)
+        if not picks:
+            problems.append(f"{field} requires at least one selection.")
+            continue
+        clean[field] = picks
+
+    # Optional numeric answers (positive when present).
+    for field in NUMBER_V2:
+        value = raw.get(field)
+        if value is None or value == "":
+            continue
+        if isinstance(value, bool) or not isinstance(value, (int, float, str)):
+            problems.append(f"{field} must be a number.")
+            continue
+        try:
+            number = float(value)
+        except (TypeError, ValueError):
+            problems.append(f"{field} must be a number.")
+            continue
+        if not math.isfinite(number) or number <= 0:
+            problems.append(f"{field} must be greater than zero.")
+            continue
+        clean[field] = number
+
+    # Preserve any legacy descriptive fields supplied alongside.
+    for field, limit in _TEXT_FIELDS.items():
+        value = raw.get(field)
+        if value is None:
+            continue
+        if not isinstance(value, str):
+            problems.append(f"{field} must be text.")
+            continue
+        text_value = value.strip()
+        if len(text_value) > limit:
+            problems.append(f"{field} must be {limit} characters or fewer.")
+            continue
+        clean[field] = text_value
+
+    for field in _LIST_FIELDS:
+        value = raw.get(field)
+        if value is None:
+            continue
+        if not isinstance(value, list) or any(not isinstance(v, str) for v in value):
+            problems.append(f"{field} must be a list of text values.")
+            continue
+        clean[field] = [v.strip() for v in value if v.strip()][:_MAX_LIST_ITEMS]
+
+    if problems:
+        raise AssessmentError(" ".join(problems), code="invalid_requirements", status_code=422)
+    clean["requirements_version"] = 3
     return clean
 
 

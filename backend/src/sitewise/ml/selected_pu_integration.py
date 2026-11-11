@@ -8,9 +8,10 @@ Feature coverage (Phase: Layer 1 completion)
 ``feature_coverage`` combines the live database (duplicate-population-safe
 after the ``property_features`` fix) with the committed original-training
 bridge file. It reports every feature's value and provenance and NEVER
-fabricates a value: for properties whose 47th feature
-(``worldpop_walk_reachable_10min``) cannot be recovered the prediction state
-is explicitly ``unavailable`` with the exact blocking features listed.
+fabricates a value: for the 55 research subjects whose 47th feature
+(``worldpop_walk_reachable_10min``) has no value in any source, and for every
+newly submitted listing, the prediction state is explicitly
+``unavailable`` with the exact blocking features listed.
 """
 from __future__ import annotations
 
@@ -66,8 +67,9 @@ def predict_live(analytics_session: Session, property_id: str) -> dict:
 
     No value is ever fabricated or zero-filled. When the 47-feature vector is
     incomplete the response states ``available: false`` with the exact
-    blocking features (currently ``worldpop_walk_reachable_10min`` for every
-    property, since no available data source holds it).
+    blocking features (the 55 research subjects whose
+    ``worldpop_walk_reachable_10min`` has no value in any source, and every
+    newly submitted listing).
     """
     coverage_report = feature_coverage(analytics_session, property_id)
     features = {

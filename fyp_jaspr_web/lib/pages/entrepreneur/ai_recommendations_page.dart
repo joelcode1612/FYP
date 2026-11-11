@@ -40,6 +40,15 @@ class _AiRecommendationsPageState extends State<AiRecommendationsPage> {
   bool _generating = false;
   String? _error;
   bool _reused = false;
+  /// Dev-only: metadata of the PU model variant that produced the batch
+  /// (legacy default vs experimental47). Never rendered for normal users.
+  Map<String, dynamic> _modelInfo = const {};
+
+  /// Development-only gate: debug builds, or `?debug=1` in the URL query.
+  static bool get _devModelView {
+    if (kDebugMode) return true;
+    return Uri.base.queryParameters.containsKey('debug');
+  }
 
   @override
   void initState() {
@@ -70,6 +79,9 @@ class _AiRecommendationsPageState extends State<AiRecommendationsPage> {
       setState(() {
         _generating = false;
         _reused = response['reused_existing_batch'] == true;
+        _modelInfo = Map<String, dynamic>.from(
+          (response['model'] as Map?) ?? const {},
+        );
         _latest = Future.value(batch);
       });
     } catch (err) {
@@ -91,6 +103,17 @@ class _AiRecommendationsPageState extends State<AiRecommendationsPage> {
     return _page(
       title: 'AI recommendations',
       child: div(classes: 'stack stack--sections', [
+          if (_devModelView && _modelInfo.isNotEmpty)
+            div(classes: 'notice notice-info', [
+              Component.text(
+                '[DEV] Active PU model: ${_modelInfo['name'] ?? '?'} '
+                '(variant=${_modelInfo['key'] ?? '?'}, version='
+                '${_modelInfo['version'] ?? '?'}, features='
+                '${_modelInfo['feature_count'] ?? '?'}). '
+                'Legacy vs experimental47 comparison: switch '
+                'SITEWISE_PU_MODEL_VARIANT on the backend and regenerate.',
+              ),
+            ]),
           div(classes: 'notice', [
             Component.text(
               'Ranked from your saved requirements. Preference fit and the PU '

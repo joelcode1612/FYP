@@ -8,12 +8,15 @@ Covers the three evidence-based fixes:
    deterministically and prefers the SITEWISE_U_PROPERTY extract, which is
    byte-identical to the PU model's training record (proven against the
    supplied example_property_47.json for MD-00510).
-2. The four DB-absent training features (pop_2000m and the three LandScan
-   rasters) resolve from the committed original-training bridge file
-   ``ml_reference/training_population_bridge_1849.csv``.
-3. ``worldpop_walk_reachable_10min`` is unrecoverable from every available
-   source, so live 47-feature inference is reported as EXPLICITLY
-   UNAVAILABLE - never zero-filled, never fabricated.
+2. The five DB-absent training features (pop_2000m, the three LandScan
+   rasters AND ``worldpop_walk_reachable_10min``) resolve from the committed
+   original-training bridge file
+   ``ml_reference/training_population_bridge_1849.csv``. The worldpop column
+   was joined (2026-11-11) from the training CSV whose sha256 matches the
+   training package's SHA256SUMS.txt; it covers 1,794/1,849 rows.
+3. The 55 research subjects with no worldpop value in any source — and every
+   non-research property — still report EXPLICITLY UNAVAILABLE inference:
+   never zero-filled, never fabricated, never borrowed from another subject.
 
 All assertions run against the real analytics database and real artifacts.
 """
@@ -93,22 +96,35 @@ def test_population_duplication_is_resolved_deterministically(analytics_session)
         ), bundle.flags
 
 
-def test_bridge_yields_46_of_47_with_one_documented_unrecoverable(analytics_session):
+def test_bridge_completes_all_five_db_absent_features(analytics_session):
     for property_id in SAMPLE_IDS:
         report = feature_coverage(analytics_session, property_id)
-        assert report["available_features"] == 46
+        assert report["available_features"] == 47
         assert report["feature_count"] == 47
-        assert report["complete"] is False
-        assert report["missing_features"] == ["worldpop_walk_reachable_10min"]
-        assert report["unrecoverable_features"] == list(UNRECOVERABLE_FEATURES)
-        # Exactly the four DB-absent features come from the bridge file.
+        assert report["complete"] is True
+        assert report["missing_features"] == []
+        assert report["unrecoverable_features"] == list(UNRECOVERABLE_FEATURES) == []
+        # Exactly the five DB-absent features come from the bridge file.
         bridge_sourced = [
             name
             for name, source in report["value_sources"].items()
             if "training_population_bridge_1849.csv" in source
         ]
         assert sorted(bridge_sourced) == sorted(BRIDGE_FEATURES)
-        assert report["inference_state"] == "unavailable_missing_training_features"
+        assert report["inference_state"] == "ready"
+
+
+def _incomplete_catalogue_id() -> str:
+    """A REAL research row whose worldpop value is missing in every source."""
+    with BRIDGE_CSV.open(encoding="utf-8", newline="") as fp:
+        for row in csv.DictReader(fp):
+            if (
+                row.get("sample_class", "").strip().upper() == "U"
+                and not row.get("worldpop_walk_reachable_10min", "").strip()
+                and row.get("canonical_property_id", "").strip()
+            ):
+                return row["canonical_property_id"].strip()
+    pytest.fail("No incomplete-U bridge row found; the 55-row gap disappeared")
 
 
 def test_resolved_values_byte_match_the_training_reference_vector(analytics_session):
@@ -129,18 +145,28 @@ def test_landscan_licence_status_is_surfaced(analytics_session):
     assert any("NO_PENDING_LICENCE" in flag for flag in report["flags"])
 
 
-def test_live_prediction_is_explicitly_unavailable_and_never_fabricated(
+def test_live_prediction_is_available_for_bridge_complete_rows(
     analytics_session,
 ):
-    result = predict_live(analytics_session, "EP-01877")
+    result = predict_live(analytics_session, "MD-00510")
+    assert result["available"] is True
+    assert 0.0 <= result["score"] <= 1.0
+    assert result["inference_state"] == "ready"
+    assert result["feature_coverage"]["complete"] is True
+
+
+def test_live_prediction_fails_closed_for_incomplete_rows(analytics_session):
+    # A REAL research subject among the 55 with no worldpop value anywhere:
+    # inference stays explicitly unavailable, never fabricated or borrowed.
+    property_id = _incomplete_catalogue_id()
+    result = predict_live(analytics_session, property_id)
     assert result["available"] is False
     assert result["score"] is None
     assert result["inference_state"] == "unavailable_missing_training_features"
-    assert result["feature_coverage"]["missing_features"] == [
-        "worldpop_walk_reachable_10min"
-    ]
+    missing = result["feature_coverage"]["missing_features"]
+    assert "worldpop_walk_reachable_10min" in missing
+    assert len(missing) < 47
     assert "fabricated" in result["policy"]
-    # The unavailable feature is explicitly None in the reported vector.
     assert result["feature_coverage"]["value_sources"].get(
         "worldpop_walk_reachable_10min"
     ) is None
@@ -182,23 +208,21 @@ def test_coverage_endpoint_reports_full_contract(client, headers):
     assert response.status_code == 200, response.text
     body = response.json()
     assert body["feature_count"] == 47
-    assert body["available_features"] == 46
-    assert body["missing_features"] == ["worldpop_walk_reachable_10min"]
-    assert body["inference_state"] == "unavailable_missing_training_features"
+    assert body["available_features"] == 47
+    assert body["missing_features"] == []
+    assert body["inference_state"] == "ready"
     assert set(body["value_sources"]) >= set(BRIDGE_FEATURES)
 
 
-def test_prediction_endpoint_returns_controlled_unavailable_state(client, headers):
+def test_prediction_endpoint_returns_live_prediction_for_complete_rows(client, headers):
     response = client.get(
         "/api/v1/ml/selected/properties/MD-00510/prediction", headers=headers
     )
     assert response.status_code == 200, response.text
     body = response.json()
-    assert body["available"] is False
-    assert body["score"] is None
-    assert "worldpop_walk_reachable_10min" in body["reason"]
-    assert "fabricated" in body["policy"]
-    assert body["feature_coverage"]["available_features"] == 46
+    assert body["available"] is True
+    assert 0.0 <= body["score"] <= 1.0
+    assert body["feature_coverage"]["available_features"] == 47
 
 
 def test_coverage_endpoint_404_for_unknown_property(client, headers):
