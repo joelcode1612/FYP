@@ -34,8 +34,7 @@ resolution: workspace
 dependencies:
   flutter:
     sdk: flutter
-  ar_flutter_plugin:
-    path: ../third_party/ar_flutter_plugin
+  ar_flutter_plugin: ^0.7.3 # hosted on pub.dev
   vector_math: ^2.1.4 # already in Flutter
 
   # The following adds the Cupertino Icons font to your application.
@@ -78,12 +77,10 @@ hooks:
 dependency_overrides:
   permission_handler: ^12.0.3
   permission_handler_android: ^13.0.1
-  # `panorama` pulls motion_sensors 0.1.0 transitively. That release still calls
-  # the removed `jcenter()`, targets AGP 3.5.0 and declares no `namespace`, so it
-  # cannot be configured under AGP 9 / Gradle 9. Point it at the vendored copy in
-  # third_party/, which is the same plugin code with modernised build wiring.
-  motion_sensors:
-    path: ../third_party/motion_sensors
+  # `panorama` pulls motion_sensors 0.1.0 transitively from pub.dev. That release
+  # still calls the removed `jcenter()`, targets AGP 3.5.0 and declares no
+  # `namespace`; Android builds under AGP 9 / Gradle 9 may need a newer hosted
+  # release or an updated fork. No vendored third_party/ override is used.
 
 dev_dependencies:
   flutter_test:

@@ -60,9 +60,10 @@ packages:
   ar_flutter_plugin:
     dependency: transitive
     description:
-      path: "third_party/ar_flutter_plugin"
-      relative: true
-    source: path
+      name: ar_flutter_plugin
+      sha256: "52b6b2ccec4b624ca3fb8d7cc68128f11126580b412c3da2da82c41ddfd6d6ae"
+      url: "https://pub.dev"
+    source: hosted
     version: "0.7.3"
   archive:
     dependency: transitive
@@ -1029,11 +1030,12 @@ packages:
     source: hosted
     version: "2.1.0"
   motion_sensors:
-    dependency: "direct overridden"
+    dependency: transitive
     description:
-      path: "third_party/motion_sensors"
-      relative: true
-    source: path
+      name: motion_sensors
+      sha256: "4e2734a76cd6da633013bcdc68a9efe9fbbcff906e6d6c45040932edda3fa5d6"
+      url: "https://pub.dev"
+    source: hosted
     version: "0.1.0"
   mustache_template:
     dependency: transitive
