@@ -5,5 +5,5 @@
   "API_BASE_URL": "http://127.0.0.1:8090",
   "WEB_BASE_URL": "http://127.0.0.1:8090",
   "GOOGLE_WEB_CLIENT_ID": "235856432090-un8doods8fc5f3bmvtgbjtvojbjg2spa.apps.googleusercontent.com",
-  "SITEWISE_DEV_AUTH_BYPASS": "true"
+  "SITEWISE_DEV_AUTH_BYPASS": "false"
 }
