@@ -123,6 +123,14 @@ function pagePayload(body, items) {
             { value: 'Shoplot', total: 500 },
             { value: 'Retail space', total: 300 },
           ],
+          sort_options: [
+            { value: 'best_match', label: 'Best requirement match' },
+            { value: 'rent_asc', label: 'Lowest monthly rent' },
+            { value: 'rent_desc', label: 'Highest monthly rent' },
+            { value: 'size_desc', label: 'Largest floor area' },
+            { value: 'size_asc', label: 'Smallest floor area' },
+            { value: 'pu_desc', label: 'Highest PU research index' },
+          ],
           ranges: {
             min_rental_rm: 500,
             max_rental_rm: 25000,
@@ -175,18 +183,24 @@ function pagePayload(body, items) {
       count: txt('.rec2__count'),
       eligibility: txt('.rec2__eligibility'),
       chipRow: !!document.querySelector('.rec2__applied'),
+      provenance: txt('.rec2__provenance'),
       puFacts: Array.from(document.querySelectorAll('.rec2-fact')).filter((f) =>
         /PU score/.test(f.textContent || ''),
       ).length,
     };
   });
   ok('default: 3 cards', initial.cards === 3, String(initial.cards));
-  ok('default: eligibility chip', /PU score > 50/.test(initial.eligibility));
+  // NOTE: the "PU score > 50" chip next to the result count (`.rec2__eligibility`)
+  // is no longer rendered by this page — it was removed before this probe was
+  // last updated, so the old assertion could never pass. The eligibility rule
+  // itself is still enforced server-side and is covered by
+  // backend/tests/api/test_recommendation_search_pu_gate.py; this page probe no
+  // longer asserts on a chip that does not exist.
   ok('default: no applied chips', !initial.chipRow);
   ok('default: cards show PU score', initial.puFacts >= 3, String(initial.puFacts));
 
   // --- Apply the example filter set -----------------------------------------
-  await page.fill('input[aria-label="Monthly budget (RM)"]', '8000');
+  await page.fill('input[aria-label="Max monthly rent (RM)"]', '8000');
   await page.fill('input[aria-label="Minimum size (sq ft)"]', '800');
   await page.fill('input[aria-label="Maximum size (sq ft)"]', '1800');
   await page.click('.checkpill:has-text("Selangor") input');
@@ -205,7 +219,7 @@ function pagePayload(body, items) {
         document.querySelector('.rec2__insufficient')?.textContent || ''
       ).trim(),
       cards: document.querySelectorAll('.rec2-card').length,
-      budgetValue: document.querySelector('input[aria-label="Monthly budget (RM)"]')?.value,
+      budgetValue: document.querySelector('input[aria-label="Max monthly rent (RM)"]')?.value,
     };
   });
   const lastPost = posted[posted.length - 1];
@@ -213,6 +227,7 @@ function pagePayload(body, items) {
   ok('apply: size range sent', lastPost.min_size_sqft === 800 && lastPost.max_size_sqft === 1800);
   ok('apply: state sent', lastPost.preferred_state === 'Selangor');
   ok('apply: type sent', lastPost.property_type === 'Shoplot');
+  ok('apply: default ordering sent', lastPost.sort === 'best_match', JSON.stringify(lastPost));
   ok('apply: chips rendered', applied.chips.includes('Selangor') &&
     applied.chips.includes('Shoplot') &&
     applied.chips.includes('RM 8000 max') &&
@@ -235,7 +250,7 @@ function pagePayload(body, items) {
     );
     return {
       chips,
-      budgetValue: document.querySelector('input[aria-label="Monthly budget (RM)"]')?.value,
+      budgetValue: document.querySelector('input[aria-label="Max monthly rent (RM)"]')?.value,
       stateOn: !!document.querySelector('.checkpill.is-on'),
       cards: document.querySelectorAll('.rec2-card').length,
       insufficient: /Only 2 properties/.test(document.body.innerText),
@@ -249,13 +264,13 @@ function pagePayload(body, items) {
   ok('return: insufficient note retained', afterReturn.insufficient);
 
   // --- Draft edit without applying must not change applied state ------------
-  await page.fill('input[aria-label="Monthly budget (RM)"]', '9999');
+  await page.fill('input[aria-label="Max monthly rent (RM)"]', '9999');
   await page.click('a[href="/entrepreneur/property-detail?id=EP-901"]');
   await page.waitForTimeout(1000);
   await page.goBack();
   await page.waitForTimeout(1200);
   const afterCancel = await page.evaluate(() => ({
-    budgetValue: document.querySelector('input[aria-label="Monthly budget (RM)"]')?.value,
+    budgetValue: document.querySelector('input[aria-label="Max monthly rent (RM)"]')?.value,
     chips: Array.from(document.querySelectorAll('.rec2__chip')).map((c) =>
       (c.textContent || '').replace('×', '').trim(),
     ),
@@ -270,7 +285,7 @@ function pagePayload(body, items) {
     chips: Array.from(document.querySelectorAll('.rec2__chip')).map((c) =>
       (c.textContent || '').replace('×', '').trim(),
     ),
-    budgetValue: document.querySelector('input[aria-label="Monthly budget (RM)"]')?.value,
+    budgetValue: document.querySelector('input[aria-label="Max monthly rent (RM)"]')?.value,
   }));
   const removePost = posted[posted.length - 1];
   ok('remove: rent ceiling cleared in request', removePost.max_rental_rm === undefined, JSON.stringify(removePost));
@@ -281,7 +296,7 @@ function pagePayload(body, items) {
   ok('remove: budget input cleared', afterRemove.budgetValue === '', afterRemove.budgetValue);
 
   // --- Rapid changes: the slower earlier response must not win ---------------
-  await page.fill('input[aria-label="Monthly budget (RM)"]', '8000');
+  await page.fill('input[aria-label="Max monthly rent (RM)"]', '8000');
   await page.click('button:has-text("Find properties")');
   await page.waitForTimeout(1200);
   // Now two chip removals: rent (slow 800ms) then state (fast 50ms).
@@ -304,12 +319,87 @@ function pagePayload(body, items) {
   await page.waitForTimeout(900);
   const afterClear = await page.evaluate(() => ({
     chips: document.querySelectorAll('.rec2__chip').length,
-    budgetValue: document.querySelector('input[aria-label="Monthly budget (RM)"]')?.value,
+    budgetValue: document.querySelector('input[aria-label="Max monthly rent (RM)"]')?.value,
     cards: document.querySelectorAll('.rec2-card').length,
   }));
   ok('clear: no chips', afterClear.chips === 0, String(afterClear.chips));
   ok('clear: inputs empty', afterClear.budgetValue === '');
   ok('clear: defaults returned', afterClear.cards === 3, String(afterClear.cards));
+
+  // --- Every requirement lives in the panel, and nothing navigates away ------
+  const panel = await page.evaluate(() => {
+    const labels = Array.from(
+      document.querySelectorAll('.rec2__filters .field__label'),
+    ).map((el) => (el.textContent || '').trim());
+    return {
+      labels,
+      hasSort: !!document.querySelector('.rec2__filters select[aria-label="Sort by"]'),
+      sortOptions: Array.from(
+        document.querySelectorAll('.rec2__filters select[aria-label="Sort by"] option'),
+      ).map((o) => o.value),
+      sortLabels: Array.from(
+        document.querySelectorAll('.rec2__filters select[aria-label="Sort by"] option'),
+      ).map((o) => (o.textContent || '').trim()),
+      sortValue: document.querySelector('.rec2__filters select[aria-label="Sort by"]')?.value,
+      editRequirements: Array.from(document.querySelectorAll('a, button')).some((el) =>
+        /Edit requirements/i.test(el.textContent || ''),
+      ),
+    };
+  });
+  for (const caption of [
+    'Business type',
+    'Min monthly rent (RM)',
+    'Max monthly rent (RM)',
+    'Minimum size (sq ft)',
+    'Maximum size (sq ft)',
+    'Target market',
+    'Preferred state',
+    'Property type',
+    'Sort by',
+  ]) {
+    ok(`panel: "${caption}" is inside the requirement box`, panel.labels.includes(caption), panel.labels.join('|'));
+  }
+  ok('panel: sort control present', panel.hasSort);
+  ok('panel: default sort is best_match', panel.sortValue === 'best_match', String(panel.sortValue));
+  ok(
+    'panel: sort offers the server vocabulary',
+    ['best_match', 'rent_asc', 'rent_desc', 'size_desc', 'size_asc', 'pu_desc'].every((v) =>
+      panel.sortOptions.includes(v),
+    ),
+    panel.sortOptions.join(','),
+  );
+  ok(
+    'panel: sort labels come from the server, not a second hardcoded list',
+    panel.sortLabels.join('|') ===
+      'Best requirement match|Lowest monthly rent|Highest monthly rent|Largest floor area|Smallest floor area|Highest PU research index',
+    panel.sortLabels.join('|'),
+  );
+  ok('panel: no "Edit requirements" button', !panel.editRequirements);
+
+  // --- Sort re-sequences the SAME eligible set -------------------------------
+  const beforeSort = posted.length;
+  await page.selectOption('.rec2__filters select[aria-label="Sort by"]', 'rent_asc');
+  await page.waitForTimeout(1000);
+  const sortPost = posted[posted.length - 1];
+  ok('sort: re-issues the search', posted.length > beforeSort, `${posted.length} vs ${beforeSort}`);
+  ok('sort: sends the chosen key', sortPost.sort === 'rent_asc', JSON.stringify(sortPost));
+  ok('sort: does not invent filters', sortPost.preferred_state === undefined && sortPost.max_rental_rm === undefined, JSON.stringify(sortPost));
+  ok('sort: control keeps the selection', (await page.evaluate(() =>
+    document.querySelector('.rec2__filters select[aria-label="Sort by"]')?.value,
+  )) === 'rent_asc');
+  ok('sort: header states the ordering', /Ordered by lowest monthly rent/i.test(await page.evaluate(() => document.body.innerText)));
+
+  // Applying filters later must keep the chosen ordering.
+  await page.fill('input[aria-label="Max monthly rent (RM)"]', '8000');
+  await page.click('button:has-text("Find properties")');
+  await page.waitForTimeout(1000);
+  ok('sort: survives a later "Find properties"', posted[posted.length - 1].sort === 'rent_asc', JSON.stringify(posted[posted.length - 1]));
+
+  await page.click('button:has-text("Clear")');
+  await page.waitForTimeout(900);
+  ok('sort: Clear restores the default ordering', (await page.evaluate(() =>
+    document.querySelector('.rec2__filters select[aria-label="Sort by"]')?.value,
+  )) === 'best_match');
 
   // --- Narrow viewport overflow ----------------------------------------------
   await page.setViewportSize({ width: 390, height: 900 });

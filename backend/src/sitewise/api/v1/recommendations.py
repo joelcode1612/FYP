@@ -1,4 +1,5 @@
 import uuid
+from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field, model_validator
@@ -10,12 +11,24 @@ from sitewise.db.session import get_db
 from sitewise.dependencies import AuthenticatedUser, CurrentUser, get_active_user, require_admin_mfa
 from sitewise.domain import rbac
 from sitewise.services.recommendation_search_service import (
+    SORT_BEST_MATCH,
     RecommendationSearchService,
     SearchCriteria,
 )
 from sitewise.services.recommendation_service import RecommendationService
 
 router = APIRouter()
+
+#: The accepted orderings. Declared as a Literal so an unsupported value is a
+#: 422 from Pydantic rather than a silently unsorted list.
+SortKey = Literal[
+    "best_match",
+    "rent_asc",
+    "rent_desc",
+    "size_desc",
+    "size_asc",
+    "pu_desc",
+]
 
 
 class RecommendationSearchRequest(BaseModel):
@@ -39,6 +52,13 @@ class RecommendationSearchRequest(BaseModel):
     query: str | None = Field(default=None, max_length=120)
     page_size: int = Field(default=20, ge=1, le=60)
     cursor: str | None = Field(default=None, max_length=512)
+    sort: SortKey = Field(
+        default=SORT_BEST_MATCH,
+        description=(
+            "Ordering of the eligible set. Never changes which properties "
+            "qualify — only their sequence."
+        ),
+    )
 
     @model_validator(mode="after")
     def _check_ranges(self) -> "RecommendationSearchRequest":
@@ -86,6 +106,7 @@ def search_recommendations(
         query=body.query,
         page_size=body.page_size,
         cursor=body.cursor,
+        sort=body.sort,
     )
     try:
         return RecommendationSearchService(session).search(criteria)

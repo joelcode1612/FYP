@@ -97,6 +97,26 @@ PU_ELIGIBILITY_THRESHOLD = 50.0
 PU_SCORE_SCALE = "0-100"
 PU_ELIGIBILITY_COLUMN = "sitewise_app.properties.suitability_score"
 
+# ---------------------------------------------------------------------------
+# Ordering
+# ---------------------------------------------------------------------------
+#
+#: The orderings the API accepts. ``best_match`` is the requirement-fit
+#: ordering this build documents; the rest are transparent single-column
+#: orderings of the SAME eligible set, so switching sort never changes which
+#: properties qualify — only their sequence. Every key ends with the catalogue
+#: id, which keeps the order total and therefore cursor pagination safe.
+SORT_BEST_MATCH = "best_match"
+SORT_OPTIONS: dict[str, str] = {
+    SORT_BEST_MATCH: "Best requirement match",
+    "rent_asc": "Lowest monthly rent",
+    "rent_desc": "Highest monthly rent",
+    "size_desc": "Largest floor area",
+    "size_asc": "Smallest floor area",
+    "pu_desc": "Highest PU research index",
+}
+DEFAULT_SORT = SORT_BEST_MATCH
+
 # Card payload: exactly what a listing card renders. Detail pages load the
 # full record separately, so no gallery/description is fetched here.
 _CARD_COLUMNS = (
@@ -140,12 +160,17 @@ class SearchCriteria:
     query: str | None = None
     page_size: int = 20
     cursor: str | None = None
+    sort: str = DEFAULT_SORT
 
     def cache_payload(self) -> dict[str, Any]:
         """Everything that changes the ranked result — and nothing else.
 
         ``page_size`` and ``cursor`` are excluded on purpose: the cache stores
-        the full ranked list, so two page requests share one entry.
+        the full ranked list, so two page requests share one entry. ``sort`` IS
+        included: two orderings are two different rankings, and the cursor
+        fingerprint is derived from this payload, so a cursor issued under one
+        sort is rejected under another instead of returning page N of the wrong
+        sequence.
         """
         return {
             "business_type": (self.business_type or "").strip().lower(),
@@ -158,6 +183,7 @@ class SearchCriteria:
             "type": (self.property_type or "").strip(),
             "layout": [p.strip().lower() for p in self.layout_preferences if p.strip()],
             "q": (self.query or "").strip().lower(),
+            "sort": self.sort if self.sort in SORT_OPTIONS else DEFAULT_SORT,
         }
 
 
@@ -318,6 +344,13 @@ class RecommendationSearchService:
             "property_types": [
                 {"value": r["value"], "total": int(r["total"])} for r in types
             ],
+            # The accepted orderings travel with the facets so the client does
+            # not keep a second copy of this list. Order matters: the first
+            # entry is the default.
+            "sort_options": [
+                {"value": value, "label": label}
+                for value, label in SORT_OPTIONS.items()
+            ],
             "ranges": {
                 "min_rental_rm": _as_float(bounds["min_rent"]),
                 "max_rental_rm": _as_float(bounds["max_rent"]),
@@ -341,7 +374,7 @@ class RecommendationSearchService:
         rows = self._query(criteria)
         for row in rows:
             row.matches = self._evaluate(row, criteria)
-        rows.sort(key=_rank_key)
+        rows.sort(key=_sort_key(criteria.sort))
         self._cache_put(key, rows)
         return rows
 
@@ -608,6 +641,31 @@ def _rank_key(row: _Row) -> tuple:
         -round(row.size_sqft, 2),  # larger floor area first = more space headroom
         row.id,
     )
+
+
+def _sort_key(sort: str):
+    """The ordering function for one accepted sort key.
+
+    Every alternative ordering ends with the catalogue id so the sequence is
+    total and stable — the same guarantee cursor pagination relies on. The
+    eligible SET is identical for all of them; sort only re-sequences it, so no
+    ordering can surface a property that failed the PU gate or the filters.
+
+    An unknown value falls back to ``best_match`` rather than raising: the API
+    layer already rejects unknown values with 422, and a stale client must
+    never receive an unsorted list.
+    """
+    if sort == "rent_asc":
+        return lambda row: (round(row.rental_rm, 2), row.id)
+    if sort == "rent_desc":
+        return lambda row: (-round(row.rental_rm, 2), row.id)
+    if sort == "size_desc":
+        return lambda row: (-round(row.size_sqft, 2), row.id)
+    if sort == "size_asc":
+        return lambda row: (round(row.size_sqft, 2), row.id)
+    if sort == "pu_desc":
+        return lambda row: (-round(row.pu_score or 0.0, 6), row.id)
+    return _rank_key
 
 
 def _as_float(value: Any) -> float | None:

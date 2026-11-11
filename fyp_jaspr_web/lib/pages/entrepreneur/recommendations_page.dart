@@ -51,10 +51,30 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
   String _businessType = '';
   String _state = '';
   String _propertyType = '';
+  String _minBudget = '';
   String _budget = '';
   String _minSize = '';
   String _maxSize = '';
+  String _targetMarket = '';
   String _query = '';
+
+  /// The active ordering. Held as the accepted server key, never a label, so a
+  /// rename of the wording cannot silently change the request.
+  String _sort = _sortBestMatch;
+
+  static const _sortBestMatch = 'best_match';
+
+  /// Used only when the facets call has not returned (or failed). The server
+  /// sends the authoritative list with the facets; this keeps the control
+  /// usable — and identical — before that arrives.
+  static const _sortFallback = <String, String>{
+    _sortBestMatch: 'Best requirement match',
+    'rent_asc': 'Lowest monthly rent',
+    'rent_desc': 'Highest monthly rent',
+    'size_desc': 'Largest floor area',
+    'size_asc': 'Smallest floor area',
+    'pu_desc': 'Highest PU research index',
+  };
 
   /// One initial search per page instance.
   bool _seeded = false;
@@ -101,6 +121,9 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
     _businessType = request.businessType ?? '';
     _state = request.preferredState ?? '';
     _propertyType = request.propertyType ?? '';
+    _minBudget = request.minRentalRm == null
+        ? ''
+        : request.minRentalRm!.toStringAsFixed(0);
     _budget = request.maxRentalRm == null
         ? ''
         : request.maxRentalRm!.toStringAsFixed(0);
@@ -110,8 +133,18 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
     _maxSize = request.maxSizeSqft == null
         ? ''
         : request.maxSizeSqft!.toStringAsFixed(0);
+    _targetMarket = request.layoutPreferences.join(', ');
     _query = request.query ?? '';
+    _sort = request.sort ?? _sortBestMatch;
   }
+
+  /// Target market is the one requirement with no dedicated catalogue column,
+  /// so it travels as the request's layout preferences — the same convention
+  /// the preferences page uses. Commas separate several requirements.
+  List<String> get _layoutPreferences => [
+    for (final part in _targetMarket.split(','))
+      if (part.trim().isNotEmpty) part.trim(),
+  ];
 
   /// The first search.
   ///
@@ -138,13 +171,26 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
             : _businessType.trim(),
         preferredState: _state.isEmpty ? null : _state,
         propertyType: _propertyType.isEmpty ? null : _propertyType,
+        minRentalRm: double.tryParse(_minBudget.trim()),
         maxRentalRm: double.tryParse(_budget.trim()),
         minSizeSqft: double.tryParse(_minSize.trim()),
         maxSizeSqft: double.tryParse(_maxSize.trim()),
+        layoutPreferences: _layoutPreferences,
         query: _query.trim().isEmpty ? null : _query.trim(),
+        sort: _sort,
         pageSize: 20,
       ),
     );
+  }
+
+  /// Ordering is a view of the SAME result set, so it is committed the moment
+  /// it changes instead of waiting for "Find properties". It is built from the
+  /// APPLIED request, never the draft: changing the sort must not silently
+  /// apply a budget the entrepreneur has typed but not submitted.
+  void _applySort(String value) {
+    final applied = context.read(entrepreneurNotifierProvider).recommendationRequest;
+    if ((applied.sort ?? _sortBestMatch) == value) return;
+    _notifier.applyRecommendationRequest(applied.copyWith(sort: value));
   }
 
   /// Commits a new APPLIED request originating outside the form (chip
@@ -211,13 +257,6 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
       title: 'Recommendations',
       eyebrow: 'Find a space that fits your vision',
       subtitle: _subtitle(state),
-      actions: const [
-        ActionLink(
-          'Edit requirements',
-          href: '/entrepreneur/preferences',
-          variant: 'secondary',
-        ),
-      ],
       child: div(classes: 'rec2', [
         div(classes: 'rec2__main', [
           _filters(state),
@@ -248,7 +287,7 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
           ],
           if (state.recommendationModel != null)
             p(classes: 'rec2__provenance', [
-              Component.text(_provenance(state.recommendationModel!)),
+              Component.text(_provenance(state)),
             ]),
         ]),
         div(classes: 'rec2__side', [
@@ -272,23 +311,57 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
 
   String _subtitle(EntrepreneurState state) {
     final total = state.recommendationTotal;
-    final model = state.recommendationModel;
     final parts = <String>[
       if (total != null) '$total properties match your requirements',
-      if (model != null) model.label,
+      _orderingSummary(state),
     ];
-    return parts.isEmpty
-        ? 'Ranked commercial properties for your business.'
-        : parts.join(' · ');
+    return parts.join(' · ');
   }
 
-  String _provenance(RecommendationModelStatus model) => model.available
-      ? 'Scores come from the experimental preference-matching model '
-            '(${model.version ?? 'unversioned'}). They measure agreement with '
-            'your stated requirements, not the probability of business '
-            'success.'
-      : '${model.reason} Listings are ordered by how many of your requirements '
-            'they meet, then by lower rent. This is not a model score.';
+  /// What the list is currently ordered by. The header must agree with the
+  /// list: quoting "requirement-fit ordering" while the list is sorted by rent
+  /// would be a false statement about the data.
+  String _orderingSummary(EntrepreneurState state) {
+    final sort = state.recommendationRequest.sort;
+    final model = state.recommendationModel;
+    if (sort == null || sort == _sortBestMatch) {
+      return model?.label ?? 'Ranked commercial properties for your business.';
+    }
+    return 'Ordered by ${_sortLabel(state, sort).toLowerCase()}';
+  }
+
+  /// Label for an ordering key, preferring the server's own vocabulary.
+  String _sortLabel(EntrepreneurState state, String key) {
+    final fromServer = state.recommendationFacets?.sortOptions;
+    if (fromServer != null && fromServer.containsKey(key)) {
+      return fromServer[key]!;
+    }
+    return _sortFallback[key] ?? key;
+  }
+
+  Map<String, String> _sortOptions(EntrepreneurState state) {
+    final fromServer = state.recommendationFacets?.sortOptions;
+    return fromServer == null || fromServer.isEmpty
+        ? _sortFallback
+        : fromServer;
+  }
+
+  String _provenance(EntrepreneurState state) {
+    final model = state.recommendationModel!;
+    final sort = state.recommendationRequest.sort;
+    if (sort != null && sort != _sortBestMatch) {
+      return 'Ordered by ${_sortLabel(state, sort).toLowerCase()}. This only '
+          're-sequences the same eligible properties — it does not change '
+          'which properties qualify, and it is not a model score.';
+    }
+    return model.available
+        ? 'Scores come from the experimental preference-matching model '
+              '(${model.version ?? 'unversioned'}). They measure agreement with '
+              'your stated requirements, not the probability of business '
+              'success.'
+        : '${model.reason} Listings are ordered by how many of your requirements '
+              'they meet, then by lower rent. This is not a model score.';
+  }
 
   // -- filters ---------------------------------------------------------------
 
@@ -309,9 +382,9 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
           label: request.propertyType!,
           next: request.copyWith(clearPropertyType: true),
         ),
-      if (request.maxRentalRm != null)
+      if (request.minRentalRm != null || request.maxRentalRm != null)
         (
-          label: 'RM ${request.maxRentalRm!.toStringAsFixed(0)} max',
+          label: _rentChipLabel(request),
           next: request.copyWith(clearRentRange: true),
         ),
       if (request.minSizeSqft != null || request.maxSizeSqft != null)
@@ -331,9 +404,9 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
         ),
       if (request.layoutPreferences.isNotEmpty)
         (
-          label:
-              '${request.layoutPreferences.length} layout '
-              '${request.layoutPreferences.length == 1 ? 'preference' : 'preferences'}',
+          label: request.layoutPreferences.length == 1
+              ? request.layoutPreferences.first
+              : '${request.layoutPreferences.length} layout preferences',
           next: request.copyWith(layoutPreferences: const []),
         ),
     ];
@@ -372,6 +445,15 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
     return 'Up to ${n(max!)} sq ft';
   }
 
+  static String _rentChipLabel(RecommendationSearchRequest request) {
+    final min = request.minRentalRm;
+    final max = request.maxRentalRm;
+    String n(double value) => value.toStringAsFixed(0);
+    if (min != null && max != null) return 'RM ${n(min)}–${n(max)}';
+    if (min != null) return 'RM ${n(min)}+';
+    return 'RM ${n(max!)} max';
+  }
+
   Component _filters(EntrepreneurState state) {
     final facets = state.recommendationFacets;
     return div(
@@ -386,7 +468,13 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
             onInput: (v) => setState(() => _businessType = v),
           ),
           _textField(
-            caption: 'Monthly budget (RM)',
+            caption: 'Min monthly rent (RM)',
+            value: _minBudget,
+            placeholder: 'e.g. 3000',
+            onInput: (v) => setState(() => _minBudget = v),
+          ),
+          _textField(
+            caption: 'Max monthly rent (RM)',
             value: _budget,
             placeholder: 'e.g. 8000',
             onInput: (v) => setState(() => _budget = v),
@@ -403,6 +491,13 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
             placeholder: 'e.g. 1800',
             onInput: (v) => setState(() => _maxSize = v),
           ),
+          _textField(
+            caption: 'Target market',
+            value: _targetMarket,
+            placeholder: 'e.g. Office workers, students',
+            onInput: (v) => setState(() => _targetMarket = v),
+          ),
+          _sortField(_sortOptions(state)),
           _textField(
             caption: 'Search',
             value: _query,
@@ -439,6 +534,37 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
       ],
     );
   }
+
+  /// Ordering control. Applied on change rather than on "Find properties":
+  /// re-sequencing the same eligible set is not a filter change, and a sort
+  /// that appears to do nothing until another button is pressed reads as
+  /// broken.
+  ///
+  /// The labels are sentences ("Best requirement match"), so the control is
+  /// given two grid tracks — one 160px track truncates every option.
+  Component _sortField(Map<String, String> options) =>
+      label(classes: 'field rec2__field--wide', [
+        span(classes: 'field__label', [Component.text('Sort by')]),
+        select(
+          attributes: {'aria-label': 'Sort by', 'id': 'rec2-sort'},
+          events: events<List<String>>(
+            onInput: (values) {
+              final value = values.isEmpty ? '' : values.first;
+              if (value.isEmpty || value == _sort) return;
+              setState(() => _sort = value);
+              _applySort(value);
+            },
+          ),
+          [
+            for (final entry in options.entries)
+              option(
+                value: entry.key,
+                attributes: _sort == entry.key ? {'selected': ''} : null,
+                [Component.text(entry.value)],
+              ),
+          ],
+        ),
+      ]);
 
   Component _chipRow({
     required String caption,

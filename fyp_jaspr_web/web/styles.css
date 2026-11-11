@@ -13603,6 +13603,12 @@ input[type="range"] {
   grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
   gap: 12px;
 }
+/* Ordering labels are sentences ("Best requirement match"), so the control
+   needs two tracks; a single 160px track truncates every option. Only applied
+   once there is more than one track to span. */
+@media (min-width: 720px) {
+  .rec2__filters-grid > .rec2__field--wide { grid-column: span 2; }
+}
 .rec2__filters-actions { display: flex; flex-wrap: wrap; gap: 10px; }
 
 /* Result head ------------------------------------------------------------ */
