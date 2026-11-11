@@ -3,7 +3,9 @@ import '../../domain/entities/commercial_property.dart';
 import '../../domain/entities/explore.dart';
 import '../../domain/entities/location_intelligence.dart';
 import '../../domain/entities/recommendation.dart';
+import '../../domain/entities/recommendation_search.dart';
 import '../../domain/repositories/explore_repository.dart';
+import '../../domain/repositories/recommendation_search_repository.dart';
 import '../../domain/usecases/property_usecases.dart';
 import '../../domain/usecases/recommendation_usecases.dart';
 import '../states/entrepreneur_state.dart';
@@ -43,11 +45,13 @@ class EntrepreneurController extends StateController<EntrepreneurState> {
   final GetLocationAnalysis _getLocationAnalysis;
   final FilterProperties _filterProperties;
   final ExploreRepository? _exploreRepository;
+  final RecommendationSearchRepository? _recommendationSearchRepository;
   final void Function(BusinessPreferences preferences)? _onPreferencesUpdated;
 
   /// Monotonic guards against stale asynchronous responses.
   int _exploreSeq = 0;
   int _analysisSeq = 0;
+  int _recommendationSeq = 0;
 
   /// Rows fetched from the server for the CURRENT search, before the
   /// client-side filter may have trimmed them. The pagination offset must
@@ -62,11 +66,13 @@ class EntrepreneurController extends StateController<EntrepreneurState> {
     required BusinessPreferences preferences,
     FilterProperties filterProperties = const FilterProperties(),
     ExploreRepository? exploreRepository,
+    RecommendationSearchRepository? recommendationSearchRepository,
     void Function(BusinessPreferences preferences)? onPreferencesUpdated,
   }) : _getProperties = getProperties,
        _getRecommendations = getRecommendations,
        _getLocationAnalysis = getLocationAnalysis,
        _exploreRepository = exploreRepository,
+       _recommendationSearchRepository = recommendationSearchRepository,
        _filterProperties = filterProperties,
        _onPreferencesUpdated = onPreferencesUpdated,
        super(EntrepreneurState(preferences: preferences));
@@ -93,6 +99,14 @@ class EntrepreneurController extends StateController<EntrepreneurState> {
   /// True while another page of the current server search is in flight.
   bool get _isLoadingMore => state.listRefreshing && state.explore.isNotEmpty;
 
+  /// The server query for one page: the stored criteria (filters, sort,
+  /// page size) with the live free-text query and pagination offset applied.
+  /// The free-text filter string stays a client-side vocabulary (it matches
+  /// type OR city via [FilterProperties]), so it is deliberately NOT sent as
+  /// a server parameter beyond the backend's own `q` search.
+  ExploreQuery _serverQuery({required int offset}) =>
+      state.exploreCriteria.copyWith(query: state.query, offset: offset);
+
   /// Loads listings, then applies the current query and filter.
   ///
   /// The first call of a session shows the loading surface ([loading]);
@@ -111,24 +125,21 @@ class EntrepreneurController extends StateController<EntrepreneurState> {
     try {
       final repo = _exploreRepository;
       if (repo != null) {
-        // The free-text filter string is a client-side vocabulary (matches
-        // type OR city), so it is deliberately NOT sent as a server
-        // parameter — [FilterProperties] applies it to the fetched page, and
-        // pagination counts raw server rows via [_serverFetched].
         _serverFetched = 0;
-        final page = await repo.search(
-          ExploreQuery.fromCriteria(query: state.query, limit: 24),
-        );
+        final page = await repo.search(_serverQuery(offset: 0));
         if (seq != _exploreSeq || isDisposed) return;
         _serverFetched = page.items.length;
-        // The client-side filter still runs over the server page: it is the
-        // single definition of "matches" and costs nothing on an
-        // already-filtered page.
+        // The server already applied the free-text `q` against
+        // name/address/city/type; re-checking it here would drop rows the
+        // server matched on a field the client predicate does not know (e.g.
+        // property type). The predicate runs with an empty query, keeping
+        // only the string-vocabulary filter — which stays 'All' on this
+        // path — as a final consistency pass.
         setState(
           state.copyWith(
             explore: _filterProperties(
               properties: page.items,
-              query: state.query,
+              query: '',
               filter: state.filter,
             ),
             exploreTotal: page.total,
@@ -136,6 +147,7 @@ class EntrepreneurController extends StateController<EntrepreneurState> {
             loading: false,
             listRefreshing: false,
             clearError: true,
+            clearExploreFailure: true,
           ),
         );
         // Facets are fetched once per session; a failure leaves the current
@@ -174,6 +186,7 @@ class EntrepreneurController extends StateController<EntrepreneurState> {
             e,
             fallback: 'We could not load listings. Please try again.',
           ),
+          exploreFailure: e,
           loading: false,
           listRefreshing: false,
         ),
@@ -190,13 +203,7 @@ class EntrepreneurController extends StateController<EntrepreneurState> {
     final seq = ++_exploreSeq;
     setState(state.copyWith(listRefreshing: true));
     try {
-      final page = await repo.search(
-        ExploreQuery.fromCriteria(
-          query: state.query,
-          limit: 24,
-          offset: _serverFetched,
-        ),
-      );
+      final page = await repo.search(_serverQuery(offset: _serverFetched));
       if (seq != _exploreSeq || isDisposed) return;
       _serverFetched += page.items.length;
       final existingIds = state.explore.map((p) => p.id).toSet();
@@ -208,7 +215,7 @@ class EntrepreneurController extends StateController<EntrepreneurState> {
             // the visible list must never show it twice.
             for (final p in _filterProperties(
               properties: page.items,
-              query: state.query,
+              query: '',
               filter: state.filter,
             ))
               if (!existingIds.contains(p.id)) p,
@@ -216,6 +223,8 @@ class EntrepreneurController extends StateController<EntrepreneurState> {
           exploreTotal: page.total,
           exploreHasMore: page.hasMore,
           listRefreshing: false,
+          clearError: true,
+          clearExploreFailure: true,
         ),
       );
     } catch (e) {
@@ -226,6 +235,7 @@ class EntrepreneurController extends StateController<EntrepreneurState> {
             e,
             fallback: 'We could not load more listings. Please try again.',
           ),
+          exploreFailure: e,
           listRefreshing: false,
         ),
       );
@@ -261,6 +271,174 @@ class EntrepreneurController extends StateController<EntrepreneurState> {
         ),
       );
     }
+  }
+
+  /// Whether a live recommendation backend is wired.
+  bool get hasRecommendationSearch => _recommendationSearchRepository != null;
+
+  /// Runs a recommendation search from the first page.
+  ///
+  /// The server owns filtering, ordering and paging, so this method only
+  /// publishes what came back. Two properties matter for correctness:
+  ///
+  ///  * the criteria that produced the result are stored, so
+  ///    [loadMoreRecommendations] pages through *that* ranking;
+  ///  * the cursor is always dropped on a new search — reusing a stale cursor
+  ///    would ask for page N of a ranking that no longer exists.
+  ///
+  /// A failure leaves the previous results on screen and reports the reason
+  /// separately ([recommendationError]); it never blanks the list and never
+  /// substitutes demo rows.
+  Future<void> searchRecommendations({
+    RecommendationSearchRequest? request,
+  }) async {
+    final repo = _recommendationSearchRepository;
+    if (repo == null) {
+      setState(
+        state.copyWith(
+          recommendationError:
+              'Recommendation search is not available in this build.',
+          recommendationLoading: false,
+          recommendationRefreshing: false,
+        ),
+      );
+      return;
+    }
+
+    final criteria = (request ?? state.recommendationRequest).copyWith(
+      clearCursor: true,
+    );
+    final firstLoad = state.ranked.isEmpty;
+    final seq = ++_recommendationSeq;
+    setState(
+      state.copyWith(
+        recommendationRequest: criteria,
+        recommendationLoading: firstLoad,
+        recommendationRefreshing: !firstLoad,
+        clearRecommendationError: true,
+      ),
+    );
+
+    try {
+      final page = await repo.search(criteria);
+      if (seq != _recommendationSeq || isDisposed) return;
+      final previousSelection = state.selectedRankedId;
+      final keepSelection =
+          previousSelection != null &&
+          page.items.any((r) => r.id == previousSelection);
+      setState(
+        state.copyWith(
+          ranked: page.items,
+          recommendationCursor: page.nextCursor,
+          clearRecommendationCursor: page.nextCursor == null,
+          recommendationHasMore: page.hasMore,
+          recommendationTotal: page.total,
+          recommendationModel: page.model,
+          recommendationLoading: false,
+          recommendationRefreshing: false,
+          // Opening the first result keeps the intelligence panel populated
+          // without a second request; a still-present selection survives a
+          // filter change instead of jumping to an unrelated listing.
+          selectedRankedId: keepSelection
+              ? previousSelection
+              : (page.items.isEmpty ? null : page.items.first.id),
+          clearSelectedRankedId: page.items.isEmpty,
+          clearRecommendationError: true,
+        ),
+      );
+
+      // Filter vocabulary is enhancement data: a failure leaves the chips
+      // empty rather than failing the whole page.
+      if (state.recommendationFacets == null) {
+        try {
+          final facets = await repo.facets();
+          if (seq == _recommendationSeq && !isDisposed) {
+            setState(state.copyWith(recommendationFacets: facets));
+          }
+        } on Object {
+          // Keep the empty chip row; the search result stands alone.
+        }
+      }
+    } catch (e) {
+      if (seq != _recommendationSeq || isDisposed) return;
+      setState(
+        state.copyWith(
+          recommendationError: readableFailure(
+            e,
+            fallback:
+                'We could not rank properties right now. Please try again.',
+          ),
+          recommendationLoading: false,
+          recommendationRefreshing: false,
+        ),
+      );
+    }
+  }
+
+  /// Appends the next page of the CURRENT ranking.
+  ///
+  /// No-op when there is no cursor, no live backend, or a page is already in
+  /// flight — so a double tap cannot duplicate rows or skip a page. Rows are
+  /// de-duplicated by id as a final guard: a server-side insert between pages
+  /// can legitimately shift a row across the boundary.
+  Future<void> loadMoreRecommendations() async {
+    final repo = _recommendationSearchRepository;
+    final cursor = state.recommendationCursor;
+    if (repo == null ||
+        cursor == null ||
+        !state.recommendationHasMore ||
+        state.recommendationRefreshing) {
+      return;
+    }
+    final seq = ++_recommendationSeq;
+    setState(
+      state.copyWith(recommendationRefreshing: true, clearRecommendationError: true),
+    );
+    try {
+      final page = await repo.search(
+        state.recommendationRequest.copyWith(cursor: cursor),
+      );
+      if (seq != _recommendationSeq || isDisposed) return;
+      final seen = state.ranked.map((r) => r.id).toSet();
+      setState(
+        state.copyWith(
+          ranked: [
+            ...state.ranked,
+            for (final item in page.items)
+              if (!seen.contains(item.id)) item,
+          ],
+          recommendationCursor: page.nextCursor,
+          clearRecommendationCursor: page.nextCursor == null,
+          recommendationHasMore: page.hasMore,
+          recommendationTotal: page.total,
+          recommendationRefreshing: false,
+          clearRecommendationError: true,
+        ),
+      );
+    } catch (e) {
+      if (seq != _recommendationSeq || isDisposed) return;
+      setState(
+        state.copyWith(
+          recommendationError: readableFailure(
+            e,
+            fallback: 'We could not load more properties. Please try again.',
+          ),
+          recommendationRefreshing: false,
+        ),
+      );
+    }
+  }
+
+  /// Selects the listing whose intelligence panel is open. Selection is local
+  /// state only — it never triggers a request.
+  void selectRanked(String id) {
+    if (state.selectedRankedId == id) return;
+    setState(state.copyWith(selectedRankedId: id));
+  }
+
+  /// Applies new criteria and re-runs from page 1.
+  void applyRecommendationRequest(RecommendationSearchRequest request) {
+    searchRecommendations(request: request);
   }
 
   /// Loads the location analysis for one property.
@@ -306,9 +484,30 @@ class EntrepreneurController extends StateController<EntrepreneurState> {
 
   /// Updates the query and re-runs the search. Applying the new state first
   /// matters: the filter reads `state.query`, so the value must be visible
-  /// before [loadExplore] runs.
-  void setQuery(String value) {
-    setState(state.copyWith(query: value));
+  /// before [loadExplore] runs. The server criteria object is kept in sync
+  /// so the next page request carries the same term.
+  ///
+  /// [reload] is false when the caller is about to change the criteria too:
+  /// saving the query without searching lets a single [setExploreCriteria]
+  /// perform one request instead of two.
+  void setQuery(String value, {bool reload = true}) {
+    setState(
+      state.copyWith(
+        query: value,
+        exploreCriteria: state.exploreCriteria.copyWith(query: value),
+      ),
+    );
+    if (reload) loadExplore();
+  }
+
+  /// Replaces the server-driven search criteria (filters, sort, page size)
+  /// and re-runs the search from the first page. Pagination resets because
+  /// [_serverQuery] derives every request from this object. The demo /
+  /// client-driven path ignores the criteria (its full listing is already
+  /// in memory) but still stores them so a later live wiring inherits the
+  /// last chosen filters.
+  void setExploreCriteria(ExploreQuery criteria) {
+    setState(state.copyWith(exploreCriteria: criteria));
     loadExplore();
   }
 

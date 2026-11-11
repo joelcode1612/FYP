@@ -236,9 +236,12 @@ def test_property_creation_requires_owner_role(client, identity, cleanup_users):
         UserRepository(session).update(sub, {"role": "agent"})
 
     r = client.post(
-        "/api/v1/properties/",
+        # The legacy POST /properties/ (public.property) was retired with
+        # migration 0005; property creation now goes through the canonical
+        # draft endpoint on fyp.rental_properties.
+        "/api/v1/properties/listings/drafts",
         headers=auth(identity["token"]),
-        json={"title": "x"},
+        json={"name": "x"},
     )
     assert r.status_code == 403
 

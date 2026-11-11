@@ -10,8 +10,10 @@ import '../../domain/entities/commercial_property.dart';
 ///
 /// A listing matches when:
 ///   * the query is empty, or the lowercased query appears in the concatenated
-///     `title city address id` (the id is searchable so the explore tab can be
-///     driven straight from a record's identifier); **and**
+///     `title city state address id` (the id is searchable so the explore tab
+///     can be driven straight from a record's identifier, and the state is
+///     searchable so "Selangor" / "Penang" work without opening a filter);
+///     **and**
 ///   * the filter is `'All'`, or equals the property type, or equals the city.
 ///
 /// Note the original matched the filter against *either* type or city — that is
@@ -29,9 +31,9 @@ class FilterProperties {
     return properties.where((p) {
       final matchesQuery =
           query.isEmpty ||
-          '${p.title} ${p.city} ${p.address} ${p.id}'.toLowerCase().contains(
-            needle,
-          );
+          '${p.title} ${p.city} ${p.state} ${p.address} ${p.id}'
+              .toLowerCase()
+              .contains(needle);
       final matchesFilter =
           filter == 'All' || p.propertyType == filter || p.city == filter;
       return matchesQuery && matchesFilter;

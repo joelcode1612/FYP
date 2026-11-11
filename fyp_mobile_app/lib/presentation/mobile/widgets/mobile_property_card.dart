@@ -15,7 +15,11 @@ import 'mobile_suitability_badge.dart';
 ///
 /// All three read the same [CommercialProperty] and use the real verification
 /// state; nothing is mocked here.
-
+///
+/// The row card shows only facts the record actually carries: a verification
+/// badge only for genuinely admin-verified listings, a ground-floor flag only
+/// when the backend recorded a ground-level unit, and a 360° badge only for a
+/// published tour. Absent data is simply absent — never a placeholder claim.
 class MobilePropertyCard extends StatelessWidget {
   final CommercialProperty property;
   final VoidCallback? onTap;
@@ -35,6 +39,19 @@ class MobilePropertyCard extends StatelessWidget {
     this.onToggleCompare,
     this.rankBanner,
   });
+
+  /// True only when the listing records a ground-level unit.
+  ///
+  /// `floor_level` arrives as text (the live projection maps the numeric column
+  /// through `toString`), so both encodings are accepted. A missing value is
+  /// "unknown", which must not be rendered as "ground floor".
+  bool get _isGroundFloor {
+    final raw = property.floorLevel?.trim().toLowerCase();
+    if (raw == null || raw.isEmpty) return false;
+    if (raw.contains('ground')) return true;
+    final numeric = double.tryParse(raw);
+    return numeric != null && numeric == 0;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -69,108 +86,19 @@ class MobilePropertyCard extends StatelessWidget {
                 ),
               ),
             Padding(
-              padding: const EdgeInsets.all(12),
+              padding: const EdgeInsets.all(11),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   MobilePropertyImage(
                     property: property,
-                    width: 108,
-                    height: 112,
-                    borderRadius: BorderRadius.circular(
-                      SitewiseSpacing.radius,
-                    ),
+                    width: 104,
+                    height: 104,
+                    borderRadius: BorderRadius.circular(SitewiseSpacing.radius),
                     badge: property.hasTour ? '360°' : null,
                   ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Expanded(
-                              child: Text(
-                                property.title,
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w700,
-                                  color: SitewiseColors.ink,
-                                  height: 1.2,
-                                ),
-                              ),
-                            ),
-                            if (onToggleSaved != null)
-                              _IconAction(
-                                icon: saved
-                                    ? Icons.bookmark_rounded
-                                    : Icons.bookmark_border_rounded,
-                                active: saved,
-                                tooltip: saved
-                                    ? 'Remove from saved'
-                                    : 'Save property',
-                                onTap: onToggleSaved!,
-                              ),
-                          ],
-                        ),
-                        const SizedBox(height: 2),
-                        _locationRow(),
-                        const SizedBox(height: 8),
-                        Text(
-                          '${property.rentalDisplay} / month',
-                          style: const TextStyle(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w800,
-                            color: SitewiseColors.action,
-                          ),
-                        ),
-                        const SizedBox(height: 3),
-                        _metaRow(),
-                        const SizedBox(height: 10),
-                        Row(
-                          children: [
-                            MobileSuitabilityBadge(
-                              score: property.suitabilityScore,
-                              compact: true,
-                            ),
-                            const SizedBox(width: 5),
-                            const Expanded(
-                              child: Text(
-                                'Suitability',
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                  fontSize: 10.5,
-                                  color: SitewiseColors.muted,
-                                ),
-                              ),
-                            ),
-                            if (property.verification ==
-                                VerificationStatus.verified)
-                              SitewiseStatusBadge.forVerification(
-                                property.verification,
-                              ),
-                            if (onToggleCompare != null) ...[
-                              const SizedBox(width: 4),
-                              _IconAction(
-                                icon: compared
-                                    ? Icons.compare_arrows_rounded
-                                    : Icons.compare_arrows,
-                                active: compared,
-                                tooltip: compared
-                                    ? 'Remove from compare'
-                                    : 'Add to compare',
-                                onTap: onToggleCompare!,
-                              ),
-                            ],
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
+                  const SizedBox(width: 11),
+                  Expanded(child: _details()),
                 ],
               ),
             ),
@@ -180,13 +108,107 @@ class MobilePropertyCard extends StatelessWidget {
     );
   }
 
+  Widget _details() => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: Text(
+              property.title,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                fontFamily: kFontFamily,
+                fontSize: 13.5,
+                fontWeight: FontWeight.w700,
+                color: SitewiseColors.ink,
+                height: 1.25,
+                letterSpacing: -0.2,
+              ),
+            ),
+          ),
+          if (onToggleSaved != null)
+            _IconAction(
+              icon: saved
+                  ? Icons.bookmark_rounded
+                  : Icons.bookmark_border_rounded,
+              active: saved,
+              tooltip: saved ? 'Remove from saved' : 'Save property',
+              onTap: onToggleSaved!,
+            ),
+        ],
+      ),
+      const SizedBox(height: 3),
+      _locationRow(),
+      const SizedBox(height: 6),
+      // The explore projection maps SQL NULL rent/size to 0; a real listing
+      // never rents for RM 0, so zero is rendered as "not listed" rather than
+      // a fake price.
+      Row(
+        crossAxisAlignment: CrossAxisAlignment.baseline,
+        textBaseline: TextBaseline.alphabetic,
+        children: [
+          Flexible(
+            child: Text(
+              property.rentalRm > 0
+                  ? property.rentalDisplay
+                  : 'Rent on request',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                fontFamily: kFontFamily,
+                fontSize: 15,
+                fontWeight: FontWeight.w800,
+                color: SitewiseColors.action,
+                letterSpacing: -0.3,
+              ),
+            ),
+          ),
+          if (property.rentalRm > 0)
+            const Padding(
+              padding: EdgeInsets.only(left: 3),
+              child: Text(
+                '/ month',
+                style: TextStyle(fontSize: 10.5, color: SitewiseColors.muted),
+              ),
+            ),
+        ],
+      ),
+      const SizedBox(height: 2),
+      _metaRow(),
+      if (_badges().isNotEmpty) ...[const SizedBox(height: 7), _badgeRow()],
+    ],
+  );
+
+  List<Widget> _badges() => [
+    if (property.verification == VerificationStatus.verified)
+      SitewiseStatusBadge.forVerification(property.verification),
+    if (_isGroundFloor) const _FactTag(label: 'Ground floor'),
+    if (property.hasTour) const _FactTag(label: '360° tour'),
+  ];
+
+  Widget _badgeRow() => Row(
+    children: [
+      Expanded(child: Wrap(spacing: 5, runSpacing: 5, children: _badges())),
+      if (onToggleCompare != null)
+        _IconAction(
+          icon: compared ? Icons.compare_arrows_rounded : Icons.compare_arrows,
+          active: compared,
+          tooltip: compared ? 'Remove from compare' : 'Add to compare',
+          onTap: onToggleCompare!,
+        ),
+    ],
+  );
+
   Widget _locationRow() => Row(
     children: [
-      const Icon(Icons.place_outlined, size: 13, color: SitewiseColors.muted),
+      const Icon(Icons.place_outlined, size: 12, color: SitewiseColors.muted),
       const SizedBox(width: 3),
       Expanded(
         child: Text(
-          '${property.city}, ${property.state}',
+          _place,
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
           style: const TextStyle(fontSize: 11.5, color: SitewiseColors.muted),
@@ -195,31 +217,73 @@ class MobilePropertyCard extends StatelessWidget {
     ],
   );
 
-  Widget _metaRow() => Row(
-    children: [
-      const Icon(
-        Icons.crop_square_rounded,
-        size: 12,
-        color: SitewiseColors.overline,
-      ),
-      const SizedBox(width: 3),
-      Text(
-        '${property.sizeSqft.toStringAsFixed(0)} sq ft',
-        style: const TextStyle(fontSize: 11.5, color: SitewiseColors.muted),
-      ),
-      const Padding(
-        padding: EdgeInsets.symmetric(horizontal: 6),
-        child: Text('·', style: TextStyle(color: SitewiseColors.overline)),
-      ),
-      Flexible(
-        child: Text(
-          property.propertyType,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: const TextStyle(fontSize: 11.5, color: SitewiseColors.muted),
+  /// "City, State" without inventing the missing half.
+  String get _place {
+    final city = property.city.trim();
+    final state = property.state.trim();
+    if (city.isEmpty) return state.isEmpty ? property.address : state;
+    if (state.isEmpty) return city;
+    return '$city, $state';
+  }
+
+  /// Size · type, plus the real nearby-listing count when the backend computed
+  /// it (`nearby_property_count`; null means the request did not ask for the
+  /// spatial filter, so nothing is claimed). Kept on one line so the card stays
+  /// compact, and never confused with the F&B competitor research counts.
+  Widget _metaRow() {
+    final nearby = property.nearbyPropertyCount;
+    return Row(
+      children: [
+        const Icon(
+          Icons.crop_free_rounded,
+          size: 12,
+          color: SitewiseColors.overline,
         ),
+        const SizedBox(width: 3),
+        Flexible(
+          child: Text(
+            [
+              property.sizeSqft > 0
+                  ? '${property.sizeSqft.toStringAsFixed(0)} sq ft'
+                  : 'Size not listed',
+              property.propertyType,
+              if (nearby != null)
+                '$nearby other commercial '
+                    'propert${nearby == 1 ? 'y' : 'ies'} within 500 m',
+            ].join(' · '),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(fontSize: 11.5, color: SitewiseColors.muted),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// Small neutral fact tag (ground floor, tour) — a recorded attribute, not a
+/// quality judgement.
+class _FactTag extends StatelessWidget {
+  final String label;
+
+  const _FactTag({required this.label});
+
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+    decoration: BoxDecoration(
+      color: SitewiseColors.background,
+      borderRadius: BorderRadius.circular(6),
+      border: Border.all(color: SitewiseColors.border),
+    ),
+    child: Text(
+      label,
+      style: const TextStyle(
+        fontSize: 10,
+        fontWeight: FontWeight.w600,
+        color: SitewiseColors.muted,
       ),
-    ],
+    ),
   );
 }
 

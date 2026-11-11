@@ -41,6 +41,15 @@ class PreferencesPage extends StatefulComponent {
 class _PreferencesPageState extends State<PreferencesPage> {
   static const _api = AssessmentApi();
 
+  static const _businessCategories = <String>[
+    'Cafe / Coffee Shop',
+    'Restaurant',
+    'Bakery / Dessert Shop',
+    'Fast Food / Quick Service',
+    'Beverage Shop / Kiosk',
+    'Other F&B',
+  ];
+
   bool _loading = true;
   String? _loadError;
   bool _unauthorized = false;
@@ -424,15 +433,41 @@ class _PreferencesPageState extends State<PreferencesPage> {
       div(classes: 'field', [
         span(classes: 'field__label', [Component.text('Property type')]),
         if (_catalogueTypes == null)
-          input(
+          select(
             attributes: {
-              'type': 'text',
-              'value': _propertyType,
-              'placeholder': 'Enter an exact catalogue property type or Any',
+              'id': 'business-category',
+              'name': 'business_type',
+              'aria-label': 'Business category',
+              if (_errors['business_type'] != null) 'aria-invalid': 'true',
             },
             events: events<String>(
-              onInput: (value) => setState(() => _propertyType = value),
+              onInput: (value) {
+                setState(() => _businessType = value);
+              },
             ),
+            [
+              option(
+                value: '',
+                attributes: {if (_businessType.isEmpty) 'selected': ''},
+                [Component.text('Select business category')],
+              ),
+
+              // Preserve older saved values that are not in the dropdown.
+              if (_businessType.isNotEmpty &&
+                  !_businessCategories.contains(_businessType))
+                option(
+                  value: _businessType,
+                  attributes: {'selected': ''},
+                  [Component.text(_businessType)],
+                ),
+
+              for (final category in _businessCategories)
+                option(
+                  value: category,
+                  attributes: {if (_businessType == category) 'selected': ''},
+                  [Component.text(category)],
+                ),
+            ],
           )
         else
           div(classes: 'chips', [

@@ -21,34 +21,47 @@
 library;
 
 // --- Domain: entities -------------------------------------------------------
+export 'src/domain/data/add_property_rules.dart';
+export 'src/domain/data/malaysia_locations.dart';
 export 'src/domain/entities/app_role.dart';
+export 'src/domain/entities/agent_listing.dart';
 export 'src/domain/entities/capture_config.dart';
 export 'src/domain/entities/capture_point.dart';
 export 'src/domain/entities/capture_session_state.dart';
 export 'src/domain/entities/captured_frame.dart';
 export 'src/domain/entities/commercial_property.dart';
 export 'src/domain/entities/explore.dart';
+export 'src/domain/entities/full_analysis.dart';
 export 'src/domain/entities/geo.dart';
 export 'src/domain/entities/location_intelligence.dart';
+export 'src/domain/entities/owner_listing.dart';
 export 'src/domain/entities/property_verification.dart';
+export 'src/domain/entities/pu_feature_coverage.dart';
+export 'src/domain/entities/pu_prediction.dart';
 export 'src/domain/entities/recommendation.dart';
+export 'src/domain/entities/recommendation_search.dart';
+export 'src/domain/entities/personalised_recommendations.dart';
 export 'src/domain/entities/sitewise_records.dart';
 export 'src/domain/entities/user.dart';
 export 'src/domain/entities/virtual_tour.dart';
 
 // --- Domain: contracts & services -------------------------------------------
 export 'src/domain/repositories/admin_repositories.dart';
+export 'src/domain/repositories/agent_listing_repository.dart';
 export 'src/domain/repositories/auth_repository.dart';
 export 'src/domain/repositories/explore_repository.dart';
 export 'src/domain/repositories/intelligence_repositories.dart';
 export 'src/domain/repositories/onboarding_repository.dart';
 export 'src/domain/repositories/property_repository.dart';
 export 'src/domain/repositories/property_verification_repository.dart';
+export 'src/domain/repositories/pu_prediction_repository.dart';
 export 'src/domain/repositories/recommendation_repository.dart';
+export 'src/domain/repositories/recommendation_search_repository.dart';
 export 'src/domain/repositories/saved_properties_repository.dart';
 export 'src/domain/services/panorama_stitcher.dart';
 
 // --- Domain: use cases ------------------------------------------------------
+export 'src/domain/usecases/assessment_selection_usecases.dart';
 export 'src/domain/usecases/intelligence_usecases.dart';
 export 'src/domain/usecases/property_usecases.dart';
 export 'src/domain/usecases/recommendation_usecases.dart';
@@ -65,10 +78,16 @@ export 'src/data/models/commercial_property_model.dart';
 export 'src/data/models/location_intelligence_model.dart';
 export 'src/data/models/user_model.dart';
 export 'src/data/repositories/admin_repositories_impl.dart';
+export 'src/data/repositories/api_agent_listing_repository.dart';
 export 'src/data/repositories/api_explore_repository.dart';
 export 'src/data/repositories/api_intelligence_repository.dart';
+export 'src/data/repositories/api_owner_listing_repository.dart';
 export 'src/data/repositories/api_owner_property_repository.dart';
 export 'src/data/repositories/api_property_verification_repository.dart';
+export 'src/data/repositories/api_property_repository.dart';
+export 'src/data/repositories/api_pu_prediction_repository.dart';
+export 'src/data/repositories/api_recommendation_search_repository.dart';
+export 'src/data/repositories/api_personalised_recommendation_repository.dart';
 export 'src/data/repositories/api_saved_properties_repository.dart';
 export 'src/data/repositories/api_user_repository.dart';
 export 'src/data/repositories/intelligence_repositories_impl.dart';

@@ -69,6 +69,13 @@ class Settings(BaseSettings):
     # (MFA factor administration in supabase-py 2.34.0).
     supabase_admin_timeout_seconds: int = 15
 
+    # --- Google Maps Platform (server-side only) ---------------------------
+    # Address validation / location verification ONLY. Never used to replace
+    # the OSM/Overture analytical dataset, and never exposed to a browser or
+    # mobile client: the key stays on this server.
+    google_maps_api_key: str = ""
+    google_maps_timeout_seconds: int = 12
+
     @property
     def cors_origin_list(self) -> list[str]:
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]

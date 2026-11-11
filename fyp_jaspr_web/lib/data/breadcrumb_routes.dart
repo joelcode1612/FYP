@@ -53,17 +53,25 @@ class _TrailSpec {
 
 const Map<String, _TrailSpec> _trails = {
   // --- Entrepreneur -----------------------------------------------------
-  '/entrepreneur/explore': _TrailSpec('Explore'),
-  '/entrepreneur/map': _TrailSpec('Map view', sectionRoute: '/entrepreneur/explore'),
+  // Retired discovery route: `/entrepreneur/explore` redirects to
+  // Recommendations in `app.dart`. Kept so a crumb resolved mid-redirect still
+  // has a label.
+  '/entrepreneur/explore': _TrailSpec('Recommendations'),
+  '/entrepreneur/map': _TrailSpec('Map view', sectionRoute: '/entrepreneur/recommendations'),
   '/entrepreneur/property-detail':
-      _TrailSpec('Property details', sectionRoute: '/entrepreneur/explore'),
+      _TrailSpec('Property details', sectionRoute: '/entrepreneur/recommendations'),
   '/entrepreneur/property-analysis':
-      _TrailSpec('Location analysis', sectionRoute: '/entrepreneur/explore'),
+      _TrailSpec('Location analysis', sectionRoute: '/entrepreneur/recommendations'),
   '/entrepreneur/assessment':
-      _TrailSpec('Assessment workspace', sectionRoute: '/entrepreneur/explore'),
+      _TrailSpec('Assessment workspace', sectionRoute: '/entrepreneur/recommendations'),
+  // The workspace is now the main Assessments destination; the history list
+  // hangs off it as a sibling section.
+  '/entrepreneur/assessments': _TrailSpec('Location assessment'),
+  '/entrepreneur/assessments/history':
+      _TrailSpec('Assessment history', sectionRoute: '/entrepreneur/assessments'),
   '/entrepreneur/report':
-      _TrailSpec('Suitability report', sectionRoute: '/entrepreneur/explore'),
-  '/entrepreneur/tour': _TrailSpec('360° tour', sectionRoute: '/entrepreneur/explore'),
+      _TrailSpec('Suitability report', sectionRoute: '/entrepreneur/recommendations'),
+  '/entrepreneur/tour': _TrailSpec('360° tour', sectionRoute: '/entrepreneur/recommendations'),
   '/entrepreneur/explanation':
       _TrailSpec('Why this score', sectionRoute: '/entrepreneur/recommendations'),
   '/entrepreneur/recommendations': _TrailSpec('Recommendations'),

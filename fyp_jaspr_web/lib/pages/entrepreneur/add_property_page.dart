@@ -1,9 +1,13 @@
 import 'package:jaspr/dom.dart';
 import 'package:jaspr/jaspr.dart';
-import 'package:shared_logic/shared_logic.dart';
+// The wizard uses the web repository's owner-listing/address endpoints, not
+// the shared catalogue repository of the same name.
+import 'package:shared_logic/shared_logic.dart' hide ApiPropertyRepository;
 import 'package:universal_web/web.dart' as web;
 
 import '../../components/ui.dart';
+import '../../data/api_property_repository.dart';
+import '../../data/app_locator.dart';
 import '../../layouts/app_layout.dart';
 
 /// A photo selected in this browser session. [url] is a browser object URL,
@@ -47,6 +51,38 @@ class _AddPropertyPageState extends State<AddPropertyPage> {
   final List<_SelectedPhoto> _photos = [];
   String? _photoError;
 
+  /// Set when the backend rejects the submission — rendered verbatim so the
+  /// administrator's/user's own sentence is never replaced by "something
+  /// went wrong".
+  String? _submitError;
+
+  /// `true` once the listing-scope verification submission succeeded and the
+  /// property is genuinely sitting in the admin review queue.
+  bool _enqueued = false;
+
+  /// The server's own sentence when the verification submission failed after
+  /// the listing was saved — shown honestly, never disguised as a success.
+  String? _enqueueError;
+
+  /// Populated only from a confirmed API response.
+  OwnerListingResult? _result;
+
+  /// Address-verification state machine. Kept SEPARATE from the property's
+  /// administrative verification status: a Google verdict proves the address
+  /// exists, never ownership or approval.
+  AddressVerificationState _addressState = AddressVerificationState.unverified;
+  AddressValidationResult? _addressResult;
+  AddressSnapshot? _verifiedSnapshot;
+  String? _addressMessage;
+  double? _verifiedLatitude;
+  double? _verifiedLongitude;
+
+  /// Monotonic token: a late response from an earlier request must never mark
+  /// a modified address as verified.
+  int _addressRequestId = 0;
+
+  final ApiPropertyRepository _repository = ApiPropertyRepository();
+
   static const _steps = [
     'Property details',
     'Location & pricing',
@@ -57,24 +93,27 @@ class _AddPropertyPageState extends State<AddPropertyPage> {
 
   /// Required field keys per step.
   static const _required = <int, List<String>>{
-    0: ['propertyName', 'propertyType', 'builtUp'],
-    1: ['address', 'city', 'state', 'postcode', 'monthlyRent'],
+    0: ['propertyName', 'propertyType', 'builtUp', 'monthlyRent'],
+    1: ['address', 'city', 'state', 'postcode'],
     3: ['ownerRole'],
     4: [],
   };
 
   /// Human labels for cross-step validation messages.
   static const _labels = <String, String>{
-    'propertyName': 'Property name',
+    'propertyName': 'Property title',
     'propertyType': 'Property type',
     'builtUp': 'Built-up area',
     'address': 'Street address',
+    'latitude': 'Latitude',
+    'longitude': 'Longitude',
     'city': 'City / township',
     'state': 'State',
     'postcode': 'Postcode',
     'monthlyRent': 'Monthly rent',
     'ownerRole': 'Relationship to the property',
     'confirm': 'Confirmation',
+    'addressVerification': 'Address verification',
   };
 
   static const int _maxPhotos = 8;
@@ -101,57 +140,62 @@ class _AddPropertyPageState extends State<AddPropertyPage> {
 
   void _validate() {
     _errors.clear();
-    for (final key in _required[_step] ?? const []) {
-      if ((_fields[key] ?? '').trim().isEmpty) {
-        _errors[key] = 'This field is required.';
-      }
-    }
-    // Numeric values are validated in Dart, not left to the browser's
-    // type=number spinner (which accepts "-1", "e" and empty strings).
-    if (_step == 0 || _isLast) {
-      _validatePositiveNumber(
-        'builtUp',
-        'Built-up area must be a number greater than 0.',
+    final checkDetails = _step == 0 || _isLast;
+    final checkLocation = _step == 1 || _isLast;
+
+    if (checkDetails) {
+      _putError(
+        'propertyName',
+        PropertyFormRules.titleError(_fields['propertyName']),
       );
-    }
-    if (_step == 1 || _isLast) {
-      _validatePositiveNumber(
+      _putError(
+        'propertyType',
+        PropertyFormRules.propertyTypeError(_fields['propertyType']),
+      );
+      _putError(
         'monthlyRent',
-        'Monthly rent must be a number greater than 0.',
+        PropertyFormRules.rentError(_fields['monthlyRent']),
       );
-      _validatePostcode();
+      _putError('builtUp', PropertyFormRules.areaError(_fields['builtUp']));
+    }
+    if (checkLocation) {
+      _putError('address', PropertyFormRules.addressError(_fields['address']));
+      _putError('state', PropertyFormRules.stateError(_fields['state']));
+      _putError(
+        'city',
+        PropertyFormRules.cityError(_fields['state'], _fields['city']),
+      );
+      _putError(
+        'postcode',
+        PropertyFormRules.postcodeError(
+          _fields['postcode'],
+          state: _fields['state'],
+          city: _fields['city'],
+        ),
+      );
     }
     // On the final step, re-check every earlier step so navigating back and
     // clearing a field cannot produce an incomplete draft.
     if (_isLast) {
       for (final keys in _required.values) {
         for (final key in keys) {
-          if ((_fields[key] ?? '').trim().isEmpty) {
+          if ((_fields[key] ?? '').trim().isEmpty &&
+              !_errors.containsKey(key)) {
             _errors[key] = 'This field is required.';
           }
         }
       }
+      if (!_addressVerified) {
+        _errors['addressVerification'] = AddressVerificationCopy.required;
+      }
       if (!_confirm) {
-      _errors['confirm'] = 'Please confirm the details before saving.';
-    }
-  }
-  }
-
-  void _validatePositiveNumber(String key, String message) {
-    final raw = (_fields[key] ?? '').trim();
-    if (raw.isEmpty || _errors.containsKey(key)) return;
-    final value = double.tryParse(raw);
-    if (value == null || !value.isFinite || value <= 0) {
-      _errors[key] = message;
+        _errors['confirm'] = 'Please confirm the details before saving.';
+      }
     }
   }
 
-  void _validatePostcode() {
-    final raw = (_fields['postcode'] ?? '').trim();
-    if (raw.isEmpty || _errors.containsKey('postcode')) return;
-    if (!RegExp(r'^\d{5}$').hasMatch(raw)) {
-      _errors['postcode'] = 'Enter a 5-digit Malaysian postcode.';
-    }
+  void _putError(String key, String? message) {
+    if (message != null) _errors[key] = message;
   }
 
   Future<void> _next() async {
@@ -172,24 +216,143 @@ class _AddPropertyPageState extends State<AddPropertyPage> {
     if (_step > 0) setState(() => _step--);
   }
 
-  Future<void> _saveDraft() async {
-    // Duplicate-submit guard. `_saving` stays true for the whole transition so
-    // a second click cannot start a second save. No async property-creation
-    // service exists: the web repository's createProperty() throws
-    // UnsupportedError and there is no image-upload endpoint. When a real
-    // service is connected, its `await` replaces the microtask below and the
-    // real returned property_id can be read afterwards.
-    if (_saving || _saved) return;
-    setState(() => _saving = true);
-    await Future<void>.delayed(Duration.zero);
-    if (!mounted) return;
+  // --------------------------------------------------- address verification
+
+  AddressSnapshot _addressSnapshot() => AddressSnapshot(
+    address: (_fields['address'] ?? '').trim(),
+    city: (_fields['city'] ?? '').trim(),
+    state: (_fields['state'] ?? '').trim(),
+    postcode: (_fields['postcode'] ?? '').trim(),
+    latitude: _verifiedLatitude,
+    longitude: _verifiedLongitude,
+  );
+
+  /// Any edit to a location value invalidates the previous verdict: a verified
+  /// address is bound to the exact values that were validated.
+  void _invalidateAddress() {
+    _addressRequestId++;
+    _addressState = AddressVerificationState.unverified;
+    _addressResult = null;
+    _verifiedSnapshot = null;
+    _addressMessage = null;
+    _verifiedLatitude = null;
+    _verifiedLongitude = null;
+    _fields.remove('latitude');
+    _fields.remove('longitude');
+  }
+
+  void _onLocationChanged(String key, String value) {
     setState(() {
-      // The draft is held in memory for this browser session only. Nothing is
-      // persisted to a server, localStorage or the database, and no
-      // property_id is issued.
-      _saving = false;
-      _saved = true;
+      _fields[key] = value;
+      if (key == 'state') {
+        // A city/postcode from the previous state cannot stay selected.
+        _fields.remove('city');
+        _fields.remove('postcode');
+      } else if (key == 'city') {
+        _fields.remove('postcode');
+      }
+      _invalidateAddress();
+      _errors.remove(key);
     });
+  }
+
+  /// Submit the wizard to FastAPI.
+  ///
+  /// The listing is created first (`pending`, unpublished) and enriched from
+  /// the PostGIS data second. Both outcomes are reported truthfully: a saved
+  /// listing with a failed enrichment is NOT presented as a failure, and an
+  /// API rejection is never presented as a save.
+  Future<void> _saveDraft() async {
+    if (_saving || _saved) return;
+    _validate();
+    if (_errors.isNotEmpty) {
+      setState(() {});
+      return;
+    }
+    setState(() {
+      _saving = true;
+      _submitError = null;
+    });
+    try {
+      final latitude = _verifiedLatitude;
+      final longitude = _verifiedLongitude;
+      if (latitude == null || longitude == null) {
+        setState(() {
+          _saving = false;
+          _errors['addressVerification'] = AddressVerificationCopy.required;
+        });
+        return;
+      }
+      final result = await _repository.submitOwnerListing({
+        'name': _fields['propertyName']!.trim(),
+        'property_type': commercialPropertyTypeWire(
+          (_fields['propertyType'] ?? '').trim(),
+        ),
+        'description': _optional('description'),
+        'address': _fields['address']!.trim(),
+        'city': _fields['city']!.trim(),
+        'state': _fields['state']!.trim(),
+        'postcode': _fields['postcode']!.trim(),
+        // Coordinates come from the confirmed Google verdict, never from a
+        // manually typed value. The backend re-validates the address and
+        // replaces these with the provider's own coordinates.
+        'latitude': latitude,
+        'longitude': longitude,
+        'rental_price': double.parse(_fields['monthlyRent']!.trim()),
+        'size_sqft': double.parse(_fields['builtUp']!.trim()),
+        'availability': _optional('availability'),
+        'floor_level': _optional('floorLevel'),
+        'has_parking': _facilities.any(
+          (facility) => facility.toLowerCase().contains('parking'),
+        ),
+      });
+      if (!mounted) return;
+      setState(() {
+        _result = result;
+        _saved = true;
+        _saving = false;
+      });
+      // Enter the admin review queue with the LISTING-ONLY scope: the saved
+      // listing is complete and address-validated by construction, and this
+      // wizard collects no ownership documents — ownership therefore stays
+      // `not_submitted` and only an administrator's listing decision follows.
+      // Best-effort: a failed enqueue is reported honestly below, it never
+      // rolls back the saved listing.
+      try {
+        await AppLocator.propertyVerificationRepo.submit(
+          '${result.propertyId}',
+          scope: 'listing',
+        );
+        if (!mounted) return;
+        setState(() => _enqueued = true);
+      } catch (error) {
+        if (!mounted) return;
+        setState(() => _enqueueError = _cleanError(error));
+      }
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _saving = false;
+        _submitError = _cleanError(error);
+      });
+    }
+  }
+
+  String? _optional(String key) {
+    final value = (_fields[key] ?? '').trim();
+    return value.isEmpty ? null : value;
+  }
+
+  /// Strips the bridge's `Exception: ` prefixes so the backend's own sentence
+  /// is what the owner reads.
+  static String _cleanError(Object error) {
+    var raw = error.toString();
+    raw = raw.replaceFirst(
+      RegExp(r'^((Bad state|Exception|Error|StateError)(\([^)]*\))?):\s*'),
+      '',
+    );
+    final trimmed = raw.trim();
+    return trimmed.isEmpty ? 'The submission could not be completed.' : trimmed;
   }
 
   @override
@@ -238,8 +401,9 @@ class _AddPropertyPageState extends State<AddPropertyPage> {
             p([
               Component.text(
                 'Capture commercial details, location, F&B facilities and '
-                'ownership information in one structured workflow. This form '
-                'keeps a local draft only.',
+                'ownership information in one structured workflow. Submitting '
+                'saves the listing as pending and enriches it from the '
+                'SiteWise geospatial data.',
               ),
             ]),
           ]),
@@ -249,7 +413,7 @@ class _AddPropertyPageState extends State<AddPropertyPage> {
               attributes: const {'aria-hidden': 'true'},
               [],
             ),
-            span([Component.text('Local draft · not submitted')]),
+            span([Component.text('Submits to SiteWise · pending verification')]),
           ]),
         ]),
         _stepper(),
@@ -314,19 +478,152 @@ class _AddPropertyPageState extends State<AddPropertyPage> {
     classes: 'sw-reg-connection',
     attributes: const {'role': 'note'},
     [
-      h3([Component.text('Submission not connected')]),
+      h3([Component.text('How submission works')]),
           p([
             Component.text(
-          'The web property repository does not expose a working create '
-          'operation, and no image-upload endpoint exists. Saving keeps a '
-          'local, in-session draft: nothing is sent to the backend, no '
-          'record is created and no property ID is issued.',
+          'Submitting creates a real listing through FastAPI, saved as '
+          'pending and unpublished. SiteWise then computes nearby F&B '
+          'competitors, demand generators and road accessibility from its '
+          'PostGIS data; any feature the database cannot compute for these '
+          'coordinates is reported as unavailable rather than estimated. '
+          'Photographs are not uploaded yet.',
             ),
           ]),
     ],
   );
 
   // --------------------------------------------------------------- step card
+
+  /// Ask the backend (which holds the Google key) to validate the address.
+  /// A verdict here never changes the listing's verification status.
+  Future<void> _validateAddress() async {
+    if (_addressState == AddressVerificationState.verifying) return;
+    final snapshot = _addressSnapshot();
+    if (snapshot.address.isEmpty) {
+      setState(() {
+        _errors['address'] = PropertyFormRules.addressError(snapshot.address) ??
+            'Enter a street address first.';
+      });
+      return;
+    }
+    if (snapshot.state.isEmpty ||
+        snapshot.city.isEmpty ||
+        snapshot.postcode.isEmpty) {
+      _validate();
+      setState(() {});
+      return;
+    }
+    final requestId = ++_addressRequestId;
+    setState(() {
+      _addressState = AddressVerificationState.verifying;
+      _addressMessage = null;
+      _errors.remove('addressVerification');
+    });
+    try {
+      final result = await _repository.validateAddress(
+        addressLines: [snapshot.address, snapshot.postcode],
+        city: snapshot.city,
+        state: snapshot.state,
+        postcode: snapshot.postcode,
+      );
+      if (!mounted || requestId != _addressRequestId) return;
+      if (_addressSnapshot() != snapshot) {
+        // The owner edited the address while the request was in flight; a
+        // late verdict must not mark the new address as verified.
+        setState(() {
+          _addressState = AddressVerificationState.unverified;
+          _addressMessage = AddressVerificationCopy.stale;
+        });
+        return;
+      }
+      final (state, message) = switch (result.status) {
+        'validated' => (
+          AddressVerificationState.validatedPendingConfirmation,
+          AddressVerificationCopy.validated,
+        ),
+        'partially_validated' => (
+          AddressVerificationState.partiallyValidated,
+          AddressVerificationCopy.partiallyValidated,
+        ),
+        _ => (
+          AddressVerificationState.unconfirmed,
+          AddressVerificationCopy.unconfirmed,
+        ),
+      };
+      setState(() {
+        _addressResult = result;
+        _addressState = state;
+        _addressMessage = message;
+      });
+    } catch (error) {
+      if (!mounted || requestId != _addressRequestId) return;
+      setState(() {
+        _addressState = AddressVerificationState.serviceError;
+        _addressMessage = _addressFailureCopy(_cleanError(error));
+        _verifiedLatitude = null;
+        _verifiedLongitude = null;
+      });
+    }
+  }
+
+  /// Distinguishes "provider unavailable" from "address rejected" so the owner
+  /// is told which action to take. All values are preserved either way.
+  String _addressFailureCopy(String message) {
+    final lower = message.toLowerCase();
+    if (lower.contains('temporarily unavailable') ||
+        lower.contains('not enabled') ||
+        lower.contains('not configured') ||
+        lower.contains('503')) {
+      return AddressVerificationCopy.unavailable;
+    }
+    if (lower.contains('rejected') ||
+        lower.contains('422') ||
+        lower.contains('invalid')) {
+      return AddressVerificationCopy.invalidRequest;
+    }
+    return message.isEmpty ? AddressVerificationCopy.unavailable : message;
+  }
+
+  /// Explicit confirmation step: `validated` alone is not `verified`.
+  void _confirmAddress() {
+    final result = _addressResult;
+    if (_addressState !=
+            AddressVerificationState.validatedPendingConfirmation ||
+        result == null ||
+        !result.hasCoordinates) {
+      return;
+    }
+    setState(() {
+      // Coordinates first: the snapshot must describe the CONFIRMED values,
+      // otherwise `_addressVerified` can never match afterwards.
+      _verifiedLatitude = result.latitude;
+      _verifiedLongitude = result.longitude;
+      _addressState = AddressVerificationState.verified;
+      _verifiedSnapshot = _addressSnapshot();
+      _fields['latitude'] = result.latitude!.toStringAsFixed(6);
+      _fields['longitude'] = result.longitude!.toStringAsFixed(6);
+      _addressMessage =
+          result.formattedAddress ?? AddressVerificationCopy.validated;
+      _errors.remove('addressVerification');
+    });
+  }
+
+  bool get _addressVerified =>
+      _addressState == AddressVerificationState.verified &&
+      _verifiedSnapshot == _addressSnapshot();
+
+  /// Backend rejection notice. The server's own sentence is shown; nothing
+  /// is retried automatically and the form stays editable.
+  Component _submitErrorNotice() => _submitError == null
+      ? const Component.fragment([])
+      : div(
+          classes: 'sw-reg-error',
+          attributes: const {'role': 'alert'},
+          [
+            strong([Component.text('Submission not accepted')]),
+            p([Component.text(_submitError!)]),
+          ],
+        );
 
   Component _stepCard() => div([
         header(classes: 'sw-reg-card-head', [
@@ -342,6 +639,7 @@ class _AddPropertyPageState extends State<AddPropertyPage> {
           ]),
         ]),
         _errorSummary(),
+        _submitErrorNotice(),
         div(classes: 'sw-reg-step-body', [
           if (_step == 0) _stepDetails(),
           if (_step == 1) _stepLocation(),
@@ -373,8 +671,8 @@ class _AddPropertyPageState extends State<AddPropertyPage> {
               [
             Component.text(
               _saving
-                  ? 'Saving…'
-                  : (_isLast ? 'Save local draft ' : 'Continue '),
+                  ? 'Submitting…'
+                  : (_isLast ? 'Submit for verification ' : 'Continue '),
             ),
             if (!_saving) span([Component.text('→')]),
               ],
@@ -398,7 +696,7 @@ class _AddPropertyPageState extends State<AddPropertyPage> {
             'Malaysia · MYR.',
         2 => 'Utilities and infrastructure that affect F&B operations.',
         3 => 'Visuals and the ownership or authorization behind the listing.',
-        _ => 'Confirm the details before saving your local draft.',
+        _ => 'Confirm the details before submitting your listing.',
       };
 
   // ------------------------------------------------------------ field helpers
@@ -412,6 +710,7 @@ class _AddPropertyPageState extends State<AddPropertyPage> {
     List<String>? options,
     bool isTextarea = false,
     bool wide = false,
+    void Function(String)? onChanged,
   }) {
     final err = _errors[key];
     final value = _fields[key] ?? '';
@@ -471,7 +770,7 @@ class _AddPropertyPageState extends State<AddPropertyPage> {
           // state. See jaspr/src/dom/events.dart.
           events: type == 'number'
               ? events<num>(onInput: (v) => _set(key, _numberText(v)))
-              : events<String>(onInput: (v) => _set(key, v)),
+              : events<String>(onInput: onChanged ?? (v) => _set(key, v)),
         ),
     };
 
@@ -512,21 +811,32 @@ class _AddPropertyPageState extends State<AddPropertyPage> {
   // --------------------------------------------------------------- step: details
 
   Component _stepDetails() => div(classes: 'sw-fields', [
-        _field(key: 'propertyName', label: 'Property name', required: true),
+        _field(
+          key: 'propertyName',
+          label: 'Property title',
+          required: true,
+          hint: 'e.g. Ground Floor Corner Shoplot at SS15',
+        ),
         _field(
           key: 'propertyType',
-          label: 'Property type',
+          label: 'Commercial property type',
           required: true,
           type: 'select',
-          options: const [
-            'Shoplot / shophouse',
-            'Ground floor retail',
-            'Corner retail unit',
-            'Shopping mall unit',
-            'Commercial kiosk',
-            'Standalone commercial',
-            'Other commercial premises',
-          ],
+          options: commercialPropertyTypeLabels,
+        ),
+        _field(
+          key: 'monthlyRent',
+          label: 'Monthly rental (RM)',
+          required: true,
+          type: 'number',
+          hint: 'e.g. 7800',
+        ),
+        _field(
+          key: 'builtUp',
+          label: 'Built-up area (sqft)',
+          required: true,
+          type: 'number',
+          hint: 'e.g. 1680',
         ),
         _field(
           key: 'floorLevel',
@@ -540,13 +850,6 @@ class _AddPropertyPageState extends State<AddPropertyPage> {
             'Third floor or above',
             'Multiple levels',
           ],
-        ),
-        _field(
-          key: 'builtUp',
-          label: 'Built-up area (sqft)',
-          required: true,
-          type: 'number',
-          hint: 'e.g. 1680',
         ),
         _field(
           key: 'premiseStatus',
@@ -566,50 +869,235 @@ class _AddPropertyPageState extends State<AddPropertyPage> {
           wide: true,
           hint: 'Frontage, layout, access and important premises features…',
         ),
+        p(classes: 'sw-reg-note', [
+          Component.text(
+            'Only F&B commercial premises are accepted. The title, type, '
+            'monthly rental and floor area are validated again by the server.',
+          ),
+        ]),
       ]);
 
   // --------------------------------------------------------------- step: location
 
-  Component _stepLocation() => div(classes: 'sw-fields', [
-    _field(key: 'address', label: 'Street address', required: true, wide: true),
-        _field(key: 'city', label: 'City / township', required: true),
-        _field(
-          key: 'state',
-          label: 'State',
-          required: true,
-          type: 'select',
-          options: const [
-            'Johor',
-            'Kedah',
-            'Kelantan',
-            'Melaka',
-            'Negeri Sembilan',
-            'Pahang',
-            'Penang',
-            'Perak',
-            'Perlis',
-            'Sabah',
-            'Sarawak',
-            'Selangor',
-            'Terengganu',
-            'Kuala Lumpur',
-            'Putrajaya',
-            'Labuan',
+  /// State is a fixed list of the 16 states/federal territories.
+  Component _stateField() {
+    final err = _errors['state'];
+    final value = _fields['state'] ?? '';
+    return div(classes: 'sw-field', [
+      Component.element(
+        tag: 'label',
+        classes: 'sw-field-label',
+        attributes: const {'for': 'state'},
+        children: [
+          Component.text('State'),
+          Component.element(
+            tag: 'em',
+            attributes: const {'aria-hidden': 'true'},
+            children: [Component.text(' *')],
+          ),
+        ],
+      ),
+      select(
+        attributes: {
+          'id': 'state',
+          'name': 'state',
+          'required': '',
+          if (err != null) 'aria-invalid': 'true',
+          if (err != null) 'aria-describedby': 'state-error',
+        },
+        events: events<List<String>>(
+          onInput: (v) => _onLocationChanged('state', v.isEmpty ? '' : v.first),
+        ),
+        [
+          option(value: '', [Component.text('Select a state…')]),
+          for (final name in MalaysiaLocations.stateNames)
+            option(
+              value: name,
+              attributes: value == name ? {'selected': ''} : null,
+              [Component.text(name)],
+            ),
+        ],
+      ),
+      if (err != null) _fieldError('state', err),
+    ]);
+  }
+
+  /// Searchable city/postcode input backed by a native `<datalist>`: typing
+  /// filters the options, while the value is validated against the same
+  /// dataset the options come from.
+  Component _locationTextField({
+    required String key,
+    required String label,
+    required List<String> options,
+    required bool enabled,
+    String? hint,
+    bool required = false,
+  }) {
+    final err = _errors[key];
+    final value = _fields[key] ?? '';
+    final listId = 'sw-$key-options';
+    return div(classes: 'sw-field', [
+      Component.element(
+        tag: 'label',
+        classes: 'sw-field-label',
+        attributes: {'for': key},
+        children: [
+          Component.text(label),
+          if (required)
+            Component.element(
+              tag: 'em',
+              attributes: const {'aria-hidden': 'true'},
+              children: [Component.text(' *')],
+            ),
+        ],
+      ),
+      input(
+        attributes: {
+          'id': key,
+          'name': key,
+          'list': listId,
+          'value': value,
+          'autocomplete': 'off',
+          'placeholder': hint ??
+              (enabled
+                  ? 'Start typing to search…'
+                  : 'Select the previous field first'),
+          if (!enabled) 'disabled': '',
+          if (required) 'required': '',
+          if (err != null) 'aria-invalid': 'true',
+          if (err != null) 'aria-describedby': '$key-error',
+        },
+        events: events<String>(
+          onInput: (v) => _onLocationChanged(key, v),
+        ),
+      ),
+      Component.element(
+        tag: 'datalist',
+        attributes: {'id': listId},
+        children: [
+          for (final optionValue in options)
+            option(value: optionValue, const []),
+        ],
+      ),
+      if (err != null) _fieldError(key, err),
+    ]);
+  }
+
+  String _addressStateLabel(AddressVerificationState state) => switch (state) {
+    AddressVerificationState.unverified => 'NOT VERIFIED',
+    AddressVerificationState.verifying => 'CHECKING',
+    AddressVerificationState.validatedPendingConfirmation => 'CONFIRM REQUIRED',
+    AddressVerificationState.verified => 'VERIFIED',
+    AddressVerificationState.partiallyValidated => 'CORRECTION REQUIRED',
+    AddressVerificationState.unconfirmed => 'CORRECTION REQUIRED',
+    AddressVerificationState.serviceError => 'UNAVAILABLE',
+  };
+
+  Component _addressVerificationPanel() {
+    final state = _addressState;
+    final busy = state == AddressVerificationState.verifying;
+    final result = _addressResult;
+    final tone = switch (state) {
+      AddressVerificationState.verified => 'sw-address-panel--ok',
+      AddressVerificationState.validatedPendingConfirmation =>
+        'sw-address-panel--confirm',
+      AddressVerificationState.partiallyValidated ||
+      AddressVerificationState.unconfirmed => 'sw-address-panel--warn',
+      AddressVerificationState.serviceError => 'sw-address-panel--error',
+      _ => 'sw-address-panel--idle',
+    };
+    return div(classes: 'sw-address-panel $tone', [
+      div(classes: 'sw-address-head', [
+        span(classes: 'sw-label', [Component.text('ADDRESS VERIFICATION')]),
+        span(classes: 'sw-address-badge', [
+          Component.text(_addressStateLabel(state)),
+        ]),
+      ]),
+      p(classes: 'sw-address-copy', [
+        Component.text(
+          _addressMessage ??
+              'Verify the address with Google before submitting. A validated '
+                  'address confirms the location only — it does not verify '
+                  'ownership or approve the listing.',
+        ),
+      ]),
+      if (result != null &&
+          result.formattedAddress != null &&
+          result.formattedAddress!.isNotEmpty)
+        p(classes: 'sw-address-formatted', [
+          strong([Component.text('Normalized address: ')]),
+          Component.text(result.formattedAddress!),
+        ]),
+      if (result != null && result.latitude != null && result.longitude != null)
+        p(classes: 'sw-address-coords', [
+          Component.text(
+            'Coordinates: ${result.latitude!.toStringAsFixed(6)}, '
+            '${result.longitude!.toStringAsFixed(6)}',
+          ),
+        ]),
+      div(classes: 'sw-address-actions', [
+        button(
+          classes: 'sw-btn sw-btn-text',
+          attributes: {
+            'type': 'button',
+            if (busy) 'disabled': '',
+            'aria-busy': busy ? 'true' : 'false',
+          },
+          events: events(onClick: _validateAddress),
+          [
+            Component.text(
+              busy
+                  ? 'Checking address…'
+                  : (state == AddressVerificationState.unverified
+                      ? 'Verify address'
+                      : 'Verify again'),
+            ),
           ],
         ),
+        if (state == AddressVerificationState.validatedPendingConfirmation)
+          button(
+            classes: 'sw-btn sw-btn-primary',
+            attributes: const {'type': 'button'},
+            events: events(onClick: _confirmAddress),
+            [Component.text('Confirm this address')],
+          ),
+      ]),
+      if (_errors['addressVerification'] != null)
+        _fieldError('addressVerification', _errors['addressVerification']!),
+    ]);
+  }
+
+  Component _stepLocation() => div(classes: 'sw-fields', [
         _field(
+          key: 'address',
+          label: 'Building / unit number and street address',
+          required: true,
+          wide: true,
+          hint: 'e.g. No. 12, Jalan SS 15/4',
+          onChanged: (v) => _onLocationChanged('address', v),
+        ),
+        _stateField(),
+        _locationTextField(
+          key: 'city',
+          label: 'City / township',
+          options: MalaysiaLocations.citiesFor(_fields['state']),
+          enabled: (_fields['state'] ?? '').isNotEmpty,
+          required: true,
+        ),
+        _locationTextField(
           key: 'postcode',
           label: 'Postcode',
+          options: MalaysiaLocations.postcodesFor(
+            _fields['state'],
+            _fields['city'],
+          ),
+          enabled: (_fields['city'] ?? '').isNotEmpty,
           required: true,
           hint: 'e.g. 47500',
         ),
-        _field(
-          key: 'monthlyRent',
-          label: 'Monthly rent (RM)',
-          required: true,
-          type: 'number',
-          hint: '7800',
-        ),
+        div(classes: 'sw-field sw-field--wide', [
+          _addressVerificationPanel(),
+        ]),
         _field(
           key: 'availability',
           label: 'Availability',
@@ -624,8 +1112,10 @@ class _AddPropertyPageState extends State<AddPropertyPage> {
         ),
         p(classes: 'sw-reg-note', [
           Component.text(
-            'The address is saved as supplied. This preview does not validate a '
-            'map location, public transport distance or commercial demand.',
+            'Changing the address, state, city or postcode clears the previous '
+            'verification — verify the updated address again. Google validates '
+            'the address only; SiteWise administrators separately verify the '
+            'listing and ownership evidence.',
           ),
         ]),
       ]);
@@ -877,27 +1367,51 @@ class _AddPropertyPageState extends State<AddPropertyPage> {
   // --------------------------------------------------------------- step: review
 
   Component _stepReview() => div([
-        h3(classes: 'sw-reg-section-title', [
-          Component.text('Review your property record '),
-          small([Component.text('Confirm before saving')]),
+        _reviewSection('Property details', 0, [
+          _reviewRow('Property title', _fields['propertyName']),
+          _reviewRow('Commercial property type', _fields['propertyType']),
+          _reviewRow(
+            'Monthly rental',
+            (_fields['monthlyRent'] ?? '').isEmpty
+                ? null
+                : 'RM ${_fields['monthlyRent']}',
+          ),
+          _reviewRow(
+            'Built-up area',
+            (_fields['builtUp'] ?? '').isEmpty
+                ? null
+                : '${_fields['builtUp']} sq ft',
+          ),
         ]),
-        dl(classes: 'sw-review-list', [
-          _reviewRow('Property name', _fields['propertyName']),
-          _reviewRow('Type', _fields['propertyType']),
-          _reviewRow('Built-up area', _fields['builtUp']),
+        _reviewSection('Location & address', 1, [
           _reviewRow('Address', _fields['address']),
-          _reviewRow('City', _fields['city']),
           _reviewRow('State', _fields['state']),
+          _reviewRow('City / township', _fields['city']),
           _reviewRow('Postcode', _fields['postcode']),
-          _reviewRow('Monthly rent (RM)', _fields['monthlyRent']),
-          _reviewRow('Facilities', '${_facilities.length} selected'),
-          _reviewRow('F&B approval', _fields['fbApproval']),
-      _reviewRow(
-        'Photographs',
-        '${_photos.length} selected (local preview only)',
-      ),
-      _reviewRow('Relationship', _fields['ownerRole']),
+          _reviewRow(
+            'Address verification',
+            _addressVerified
+                ? 'Verified${_addressResult?.formattedAddress == null ? '' : ' · ${_addressResult!.formattedAddress}'}'
+                : _addressStateLabel(_addressState),
+          ),
+          _reviewRow(
+            'Coordinates',
+            _verifiedLatitude == null || _verifiedLongitude == null
+                ? null
+                : '${_verifiedLatitude!.toStringAsFixed(6)}, '
+                      '${_verifiedLongitude!.toStringAsFixed(6)}',
+          ),
         ]),
+        _reviewSection('Facilities & photos', 3, [
+          _reviewRow('Facilities', '${_facilities.length} selected'),
+          _reviewRow(
+            'Photographs',
+            '${_photos.length} selected (local preview only)',
+          ),
+          _reviewRow('Relationship', _fields['ownerRole']),
+        ]),
+        if (_errors['addressVerification'] != null)
+          _fieldError('addressVerification', _errors['addressVerification']!),
         label(classes: _confirm ? 'sw-confirm sw-confirm--on' : 'sw-confirm', [
           button(
         classes: _confirm
@@ -920,6 +1434,20 @@ class _AddPropertyPageState extends State<AddPropertyPage> {
           ]),
         ]),
     if (_errors['confirm'] != null) _fieldError('confirm', _errors['confirm']!),
+      ]);
+
+  Component _reviewSection(String heading, int step, List<Component> rows) =>
+      div(classes: 'sw-review-section', [
+        div(classes: 'sw-review-head', [
+          h3([Component.text(heading)]),
+          button(
+            classes: 'sw-edit',
+            attributes: {'type': 'button'},
+            events: events(onClick: () => setState(() => _step = step)),
+            [Component.text('Edit')],
+          ),
+        ]),
+        dl(classes: 'sw-review-list', rows),
       ]);
 
   Component _reviewRow(String label, String? value) => div([
@@ -999,51 +1527,102 @@ class _AddPropertyPageState extends State<AddPropertyPage> {
 
   // --------------------------------------------------------------- saved view
 
-  Component _savedView() => AppLayout(
-        role: AppRole.entrepreneur,
-        currentRoute: '/entrepreneur/add-property',
-        title: 'Draft saved',
-        eyebrow: 'Workspace',
-        subtitle: 'Your property draft is held in this browser session.',
-        child: div(classes: 'stack stack--sections sw-reg-saved', [
-          div(classes: 'sw-saved-card', [
-            div(classes: 'sw-saved-icon', [Icon('check_circle', size: 'lg')]),
-        h2([Component.text('Local draft saved — not submitted')]),
-            p([
-              Component.text(
-                '“${_fields['propertyName']?.isNotEmpty == true ? _fields['propertyName']! : 'Untitled property'}” '
-            'is held in this browser session only. It has not been sent to '
-            'the backend, no property was created and no property ID was '
-            'issued.',
-              ),
-            ]),
-        div(
-          classes: 'sw-saved-notice',
-          attributes: const {'role': 'note'},
-          [
-            strong([Component.text('Property creation is not connected.')]),
-            p([
-              Component.text(
-                'The web repository has no working create operation and '
-                'there is no image-upload endpoint. This screen is a '
-                'design-state preview, not a successful API response.',
-              ),
-            ]),
-          ],
-        ),
-            div(classes: 'sw-saved-actions', [
-              AppLink(
-                to: '/entrepreneur/add-property',
-                classes: 'sw-btn sw-btn-primary',
-                children: [Component.text('Register another')],
-              ),
-              AppLink(
-                to: '/entrepreneur/my-properties',
-                classes: 'sw-btn',
-                children: [Component.text('Back to My Properties')],
-              ),
-            ]),
+  Component _savedView() {
+    final result = _result;
+    final features = result?.features;
+    return AppLayout(
+      role: AppRole.entrepreneur,
+      currentRoute: '/entrepreneur/add-property',
+      title: 'Listing submitted',
+      eyebrow: 'Workspace',
+      subtitle: 'Saved by SiteWise and queued for verification.',
+      child: div(classes: 'stack stack--sections sw-reg-saved', [
+        div(classes: 'sw-saved-card', [
+          div(classes: 'sw-saved-icon', [Icon('check_circle', size: 'lg')]),
+          h2([Component.text('Listing saved — pending verification')]),
+          p([
+            Component.text(
+              result == null
+                  ? 'The submission was accepted by the server.'
+                  : '“${result.name}” was saved with property ID ${result.propertyId}. '
+                        'It is ${result.verificationStatus} and '
+                        '${result.isPublished ? 'published' : 'not published'} — '
+                        'an administrator must verify it before it appears in Explore.',
+            ),
+          ]),
+          div(
+            classes: 'sw-saved-notice',
+            attributes: const {'role': 'note'},
+            [
+              strong([Component.text('Review queue')]),
+              if (_enqueued)
+                p([
+                  Component.text(
+                    'The listing information has entered the administrator '
+                    'review queue. Ownership documents were not required for '
+                    'this submission; publishing still needs a separate '
+                    'ownership verification.',
+                  ),
+                ])
+              else if (_enqueueError != null)
+                p([
+                  Component.text(
+                    'The listing is saved, but it has NOT entered the review '
+                    'queue yet ($_enqueueError). Open the property from My '
+                    'Properties and submit it for verification there.',
+                  ),
+                ])
+              else
+                p([
+                  Component.text(
+                    'Queueing the listing for review…',
+                  ),
+                ]),
+            ],
+          ),
+          div(
+            classes: 'sw-saved-notice',
+            attributes: const {'role': 'note'},
+            [
+              strong([Component.text('Automatic location enrichment')]),
+              if (result == null)
+                p([Component.text('Enrichment status unavailable.')])
+              else if (!result.enriched)
+                p([
+                  Component.text(
+                    'The listing is saved, but the spatial enrichment step did not '
+                    'complete (${result.enrichmentDetail ?? result.enrichmentStatus}). '
+                    'Nothing was lost — you can retry it from My Properties.',
+                  ),
+                ])
+              else
+                p([
+                  Component.text(
+                    'F&B competitors within 500 m: '
+                    '${result.featureInt('competitor_count_500m') ?? 'unavailable'}, '
+                    'within 1 km: ${result.featureInt('competitor_count_1km') ?? 'unavailable'}. '
+                    'Demand generators within 500 m: '
+                    '${result.featureInt('demand_generator_count_500m') ?? 'unavailable'}. '
+                    'Population within 500 m: '
+                    '${features?['population_500m'] ?? 'unavailable (no raster source)'}.',
+                  ),
+                ]),
+            ],
+          ),
+          div(classes: 'sw-saved-actions', [
+            AppLink(
+              to: '/entrepreneur/add-property',
+              classes: 'sw-btn sw-btn-primary',
+              children: [Component.text('Register another')],
+            ),
+            AppLink(
+              to: '/entrepreneur/my-properties',
+              classes: 'sw-btn',
+              children: [Component.text('Back to My Properties')],
+            ),
           ]),
         ]),
-      );
+      ]),
+    );
+  }
 }

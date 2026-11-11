@@ -40,6 +40,10 @@ class EntrepreneurPropertyDetailMobilePage extends ConsumerStatefulWidget {
 
 class _EntrepreneurPropertyDetailMobilePageState
     extends ConsumerState<EntrepreneurPropertyDetailMobilePage> {
+  /// Resolved once per route (a FutureBuilder created inside `build` would
+  /// refetch on every rebuild).
+  late Future<CommercialProperty?> _propertyFuture = _loadProperty();
+
   @override
   void initState() {
     super.initState();
@@ -51,6 +55,56 @@ class _EntrepreneurPropertyDetailMobilePageState
           .read(entrepreneurNotifierProvider.notifier)
           .loadAnalysis(widget.propertyId);
     });
+  }
+
+  /// Resolves the listing against the SAME authoritative dataset the Explore
+  /// list used: the live `/explore/properties/{id}` repository in live mode
+  /// (numeric `fyp.rental_properties` ids), the demo store in demo mode. A
+  /// 404 from the backend means "not published" and surfaces as the
+  /// unavailable state; other failures surface as a retryable error instead
+  /// of pretending the property is gone.
+  Future<CommercialProperty?> _loadProperty() async {
+    final repo = ref.read(exploreRepositoryProvider);
+    if (repo != null) {
+      try {
+        final detail = await repo.detail(widget.propertyId);
+        return detail.property;
+      } on NotFoundShape {
+        return null;
+      }
+    }
+    return ServiceLocator.properties.detail(widget.propertyId);
+  }
+
+  void _reload() {
+    setState(() => _propertyFuture = _loadProperty());
+    // The location insights are a second, independent request — refreshing the
+    // listing alone would leave stale analysis next to fresh facts.
+    ref.read(entrepreneurNotifierProvider.notifier).loadAnalysis(
+      widget.propertyId,
+    );
+  }
+
+  /// Saves/unsaves against the server first, so the shortlist the Saved tab
+  /// reads is the authoritative one. The old `toggleSaved` only moved the
+  /// in-memory set: the bookmark looked saved, then disappeared on restart.
+  Future<void> _toggleSaved(String id, bool wantSaved) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final failure = await ref
+        .read(appNotifierProvider.notifier)
+        .persistSaved(id, wantSaved: wantSaved);
+    if (!mounted) return;
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(
+          failure ??
+              (wantSaved
+                  ? 'Saved to your shortlist.'
+                  : 'Removed from saved.'),
+        ),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
   }
 
   void _open(String route, {Object? arguments}) =>
@@ -66,13 +120,54 @@ class _EntrepreneurPropertyDetailMobilePageState
     final model = ref.watch(entrepreneurNotifierProvider);
     return MobileAppShell(
             title: 'Property',
-            currentRoute: '/entrepreneur/explore',
-            body: FutureBuilder<CommercialProperty?>(
-              future: ServiceLocator.properties.detail(widget.propertyId),
+            currentRoute: '/entrepreneur/recommendations',
+            actions: [
+              IconButton(
+                tooltip: 'Refresh property',
+                icon: const Icon(Icons.refresh_rounded),
+                onPressed: _reload,
+              ),
+            ],
+            body: RefreshIndicator(
+              color: SitewiseColors.action,
+              onRefresh: () async => _reload(),
+              child: FutureBuilder<CommercialProperty?>(
+              future: _propertyFuture,
               builder: (c, snap) {
                 if (snap.connectionState != ConnectionState.done) {
                   return const MobilePropertyListSkeleton(
                     padding: EdgeInsets.all(16),
+                  );
+                }
+                if (snap.hasError) {
+                  return Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(32),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            readableFailure(
+                              snap.error!,
+                              fallback:
+                                  'We could not load this property. '
+                                  'Please try again.',
+                            ),
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(
+                              fontSize: 13.5,
+                              color: SitewiseColors.muted,
+                            ),
+                          ),
+                          const SizedBox(height: 14),
+                          SitewiseSecondaryButton(
+                            label: 'Try again',
+                            icon: Icons.refresh_rounded,
+                            onPressed: _reload,
+                          ),
+                        ],
+                      ),
+                    ),
                   );
                 }
                 final p = snap.data;
@@ -84,6 +179,7 @@ class _EntrepreneurPropertyDetailMobilePageState
                 final saved = appState.saved.contains(p.id);
                 return ListView(
                   padding: const EdgeInsets.fromLTRB(16, 14, 16, 122),
+                  physics: const AlwaysScrollableScrollPhysics(),
                   children: [
                     _hero(p, saved),
                     const SizedBox(height: 16),
@@ -132,6 +228,7 @@ class _EntrepreneurPropertyDetailMobilePageState
                   ],
                 );
               },
+              ),
             ),
     );
   }
@@ -153,17 +250,7 @@ class _EntrepreneurPropertyDetailMobilePageState
           shape: const CircleBorder(),
           child: InkWell(
             customBorder: const CircleBorder(),
-            onTap: () {
-              ref.read(appNotifierProvider.notifier).toggleSaved(p.id);
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text(
-                    saved ? 'Removed from saved.' : 'Saved to your shortlist.',
-                  ),
-                  behavior: SnackBarBehavior.floating,
-                ),
-              );
-            },
+            onTap: () => _toggleSaved(p.id, !saved),
             child: SizedBox(
               width: 40,
               height: 40,
@@ -228,7 +315,9 @@ class _EntrepreneurPropertyDetailMobilePageState
         children: [
           Flexible(
             child: Text(
-              p.rentalDisplay,
+              // SQL NULL rent arrives as 0; a real listing is never RM 0,
+              // so the zero renders as "not listed" rather than a price.
+              p.rentalRm > 0 ? p.rentalDisplay : 'Rent on request',
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: const TextStyle(
@@ -239,23 +328,39 @@ class _EntrepreneurPropertyDetailMobilePageState
               ),
             ),
           ),
-          const SizedBox(width: 4),
-          const Padding(
-            padding: EdgeInsets.only(bottom: 2),
-            child: Text(
-              '/ month',
-              style: TextStyle(fontSize: 12.5, color: SitewiseColors.muted),
+          if (p.rentalRm > 0)
+            const Padding(
+              padding: EdgeInsets.only(bottom: 2),
+              child: Text(
+                '/ month',
+                style: TextStyle(fontSize: 12.5, color: SitewiseColors.muted),
+              ),
             ),
-          ),
         ],
       ),
       const SizedBox(height: 14),
-      MobileSuitabilityBadge(score: p.suitabilityScore),
-      const SizedBox(height: 4),
-      const Text(
-        'Location suitability for your business.',
-        style: TextStyle(fontSize: 11, color: SitewiseColors.muted),
-      ),
+      if (p.hasSuitabilityScore) ...[
+        MobileSuitabilityBadge(score: p.suitabilityScore),
+        const SizedBox(height: 4),
+        const Text(
+          'Location suitability for your business.',
+          style: TextStyle(fontSize: 11, color: SitewiseColors.muted),
+        ),
+      ] else ...[
+        const Text(
+          'Suitability: not scored yet',
+          style: TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w700,
+            color: SitewiseColors.muted,
+          ),
+        ),
+        const SizedBox(height: 4),
+        const Text(
+          'This listing has no research suitability index yet.',
+          style: TextStyle(fontSize: 11, color: SitewiseColors.muted),
+        ),
+      ],
     ],
   );
 
@@ -283,7 +388,9 @@ class _EntrepreneurPropertyDetailMobilePageState
             Expanded(
               child: _Fact(
                 label: 'Floor area',
-                value: '${p.sizeSqft.toStringAsFixed(0)} sq ft',
+                value: p.sizeSqft > 0
+                    ? '${p.sizeSqft.toStringAsFixed(0)} sq ft'
+                    : 'Not listed',
               ),
             ),
             const SizedBox(width: 12),
@@ -304,7 +411,11 @@ class _EntrepreneurPropertyDetailMobilePageState
             Expanded(
               child: _Fact(
                 label: 'Rental efficiency',
-                value: 'RM${p.rentalPerSqft.toStringAsFixed(2)} / sq ft',
+                // Dividing a placeholder 0 rent or 0 size would print
+                // "RM 0.00 / sq ft" — the honest marker is "Not computable".
+                value: p.rentalRm > 0 && p.sizeSqft > 0
+                    ? 'RM${p.rentalPerSqft.toStringAsFixed(2)} / sq ft'
+                    : 'Not computable',
               ),
             ),
             const SizedBox(width: 12),
@@ -369,7 +480,11 @@ class _EntrepreneurPropertyDetailMobilePageState
   );
 
   Widget _insights(CommercialProperty p, EntrepreneurState model) {
-    final a = model.analysis;
+    // The state owner keeps the last analysis it loaded. If the user opened a
+    // different property, that analysis belongs to the OTHER listing — showing
+    // it here would attribute one unit's research figures to another.
+    final a = model.analysisPropertyId == p.id ? model.analysis : null;
+    final error = model.analysisPropertyId == p.id ? model.analysisError : null;
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -393,7 +508,7 @@ class _EntrepreneurPropertyDetailMobilePageState
             ],
           ),
           const SizedBox(height: 16),
-          if (model.loading)
+          if (model.analysisLoading && a == null)
             const Padding(
               padding: EdgeInsets.symmetric(vertical: 12),
               child: MobileSkeletonBox(height: 14, width: 180),
@@ -420,7 +535,30 @@ class _EntrepreneurPropertyDetailMobilePageState
             ),
             const SizedBox(height: 4),
             for (final f in a.factors) SitewiseFactorRow(factor: f),
-          ] else
+          ] else if (error != null)
+            // A failed analysis read is a failure, not "no analysis exists":
+            // say so and offer the real retry.
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    error,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      height: 1.4,
+                      color: SitewiseColors.danger,
+                    ),
+                  ),
+                ),
+                TextButton(
+                  onPressed: () => ref
+                      .read(entrepreneurNotifierProvider.notifier)
+                      .loadAnalysis(p.id),
+                  child: const Text('Retry', style: TextStyle(fontSize: 12)),
+                ),
+              ],
+            )
+          else
             const Text(
               'Location analysis is unavailable for this property.',
               style: TextStyle(fontSize: 12.5, color: SitewiseColors.muted),
@@ -440,8 +578,7 @@ class _EntrepreneurPropertyDetailMobilePageState
         SitewiseButton(
           label: saved ? 'Saved ✓' : 'Save property',
           icon: saved ? Icons.bookmark_rounded : Icons.bookmark_border_rounded,
-          onPressed: () =>
-              ref.read(appNotifierProvider.notifier).toggleSaved(p.id),
+          onPressed: () => _toggleSaved(p.id, !saved),
         ),
         const SizedBox(height: 8),
         SitewiseSecondaryButton(

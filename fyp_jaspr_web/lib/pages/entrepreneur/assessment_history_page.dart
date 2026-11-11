@@ -51,7 +51,7 @@ class _AssessmentHistoryPageState extends State<AssessmentHistoryPage> {
   Component build(BuildContext context) {
     return AppLayout(
       role: AppRole.entrepreneur,
-      currentRoute: '/entrepreneur/assessments',
+      currentRoute: '/entrepreneur/assessments/history',
       title: 'Assessment history',
       eyebrow: 'Assessments',
       subtitle:
@@ -182,7 +182,7 @@ class _AssessmentHistoryPageState extends State<AssessmentHistoryPage> {
       td([
         if (property != null)
           AppLink(
-            to: '/entrepreneur/assessment?id=${record.propertyId}',
+            to: '/entrepreneur/assessments?id=${record.propertyId}',
             classes: 'who text-action',
             children: [Component.text(property.title)],
           )
@@ -246,7 +246,7 @@ class _AssessmentHistoryPageState extends State<AssessmentHistoryPage> {
       ]),
       td([
         AppLink(
-          to: '/entrepreneur/assessment?id=${record.propertyId}',
+          to: '/entrepreneur/assessments?id=${record.propertyId}',
           classes: 'text-action',
           children: [Component.text(record.isCompleted ? 'Review' : 'Reopen')],
         ),

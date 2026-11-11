@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_logic/shared_logic.dart';
 
 import '../../../../application/services/assessment_session.dart';
@@ -21,7 +22,7 @@ import '../../widgets/m3_kit.dart';
 /// Inputs live on [AssessmentSessionStore]; nothing here talks to the
 /// network or writes persistence.
 
-class EntrepreneurAssessmentSetupMobilePage extends StatefulWidget {
+class EntrepreneurAssessmentSetupMobilePage extends ConsumerStatefulWidget {
   /// Property chosen upstream; empty when the flow is resumed from the hub.
   final String propertyId;
 
@@ -31,12 +32,12 @@ class EntrepreneurAssessmentSetupMobilePage extends StatefulWidget {
   });
 
   @override
-  State<EntrepreneurAssessmentSetupMobilePage> createState() =>
+  ConsumerState<EntrepreneurAssessmentSetupMobilePage> createState() =>
       _EntrepreneurAssessmentSetupMobilePageState();
 }
 
 class _EntrepreneurAssessmentSetupMobilePageState
-    extends State<EntrepreneurAssessmentSetupMobilePage> {
+    extends ConsumerState<EntrepreneurAssessmentSetupMobilePage> {
   static const _concepts = [
     'Specialty café',
     'Bakery & dessert',
@@ -87,8 +88,14 @@ class _EntrepreneurAssessmentSetupMobilePageState
       }
       return;
     }
+    if (mounted) {
+      setState(() {
+        _loadingError = null;
+        _missingProperty = false;
+      });
+    }
     try {
-      final p = await ServiceLocator.properties.detail(widget.propertyId);
+      final p = await _resolveProperty(widget.propertyId);
       if (!mounted) return;
       if (p == null) {
         setState(() => _missingProperty = true);
@@ -102,6 +109,24 @@ class _EntrepreneurAssessmentSetupMobilePageState
       if (!mounted) return;
       setState(() => _loadingError = 'This property could not be loaded.');
     }
+  }
+
+  /// The listing can arrive from two id universes: the live Explore repository
+  /// (`fyp.rental_properties` numeric ids, what "Assess this property" passes)
+  /// or the shared property repository (catalogue refs). Asking only the second
+  /// one is why a live listing ended on "No property selected" instead of the
+  /// assessment form.
+  Future<CommercialProperty?> _resolveProperty(String id) async {
+    final explore = ref.read(exploreRepositoryProvider);
+    if (explore != null) {
+      try {
+        final detail = await explore.detail(id);
+        return detail.property;
+      } on NotFoundShape {
+        return null;
+      }
+    }
+    return ServiceLocator.properties.detail(id);
   }
 
   void _submit() {
@@ -180,13 +205,24 @@ class _EntrepreneurAssessmentSetupMobilePageState
                   'tied to one property.',
               actionLabel: 'Find a location',
               onAction: () => Navigator.of(context).pushNamedAndRemoveUntil(
-                '/entrepreneur/explore',
+                '/entrepreneur/recommendations',
                 (route) => route.isFirst,
               ),
             )
-          else if (_loadingError != null)
-            M3Banner(icon: Icons.error_outline_rounded, text: _loadingError!)
-          else if (p == null)
+          else if (_loadingError != null) ...[
+            M3Banner(icon: Icons.error_outline_rounded, text: _loadingError!),
+            const SizedBox(height: 10),
+            // A failed read used to be a dead end: the banner had no way to
+            // re-run the request, so the only exit was leaving the flow.
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton.icon(
+                onPressed: _load,
+                icon: const Icon(Icons.refresh_rounded, size: 16),
+                label: const Text('Try again'),
+              ),
+            ),
+          ] else if (p == null)
             const Padding(
               padding: EdgeInsets.symmetric(vertical: 28),
               child: Center(child: CircularProgressIndicator()),

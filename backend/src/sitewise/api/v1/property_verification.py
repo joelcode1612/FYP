@@ -27,6 +27,10 @@ from sitewise.dependencies import (
 )
 from sitewise.domain import rbac
 from sitewise.services import verification_storage as storage
+from sitewise.services.address_validation_service import (
+    AddressValidationRejected,
+    AddressValidationUnavailable,
+)
 from sitewise.services.property_verification_service import (
     AdminPropertyReviewService,
     PropertyVerificationService,
@@ -44,6 +48,20 @@ AdminUser = Annotated[AuthenticatedUser, Depends(require_admin_mfa)]
 
 class DimensionRequest(BaseModel):
     dimension: Literal["listing", "ownership"]
+
+
+class SubmitRequest(BaseModel):
+    """How much of the property is being submitted for review.
+
+    ``full`` (default) keeps the historical contract: at least one active
+    ownership document is required and both dimensions go ``pending``.
+    ``listing`` submits the listing information only — no ownership evidence
+    required, ``ownership_status`` untouched (stays ``not_submitted`` on a
+    first submission). An admin approving a listing-scope submission never
+    verifies ownership and never publishes the property.
+    """
+
+    scope: Literal["full", "listing"] = "full"
 
 
 class RejectRequest(BaseModel):
@@ -85,10 +103,27 @@ def submit_for_verification(
     property_id: int,
     session: DbSession,
     current: OwnerUser,
+    payload: SubmitRequest | None = None,
 ) -> dict:
-    """Submit (or resubmit) the property for verification. Requires at least
-    one ownership document; both dimensions move to ``pending``."""
-    return PropertyVerificationService(session).submit(property_id, current.user_id)
+    """Submit (or resubmit) the property for verification. The default
+    ``full`` scope requires at least one ownership document; the ``listing``
+    scope enters the queue on listing information alone (ownership stays
+    ``not_submitted``).
+
+    The address is validated by the SERVER with Google Address Validation in
+    the same call: an unconfirmed address returns ``422`` and an unavailable
+    provider returns ``503``, never a silent success.
+    """
+    try:
+        return PropertyVerificationService(session).submit(
+            property_id,
+            current.user_id,
+            scope=payload.scope if payload is not None else "full",
+        )
+    except AddressValidationRejected as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except AddressValidationUnavailable as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
 
 
 @submitter_router.post("/{property_id}/verification/documents", status_code=201)

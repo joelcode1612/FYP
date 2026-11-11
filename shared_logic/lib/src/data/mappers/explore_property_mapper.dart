@@ -41,12 +41,12 @@ abstract final class ExplorePropertyMapper {
       hasSuitabilityScore: score != null,
       ownerId: '',
       hasTour: false,
-      imageUrl: _s(row['primary_image']),
-      description: _s(row['description']),
-      availability: _s(row['availability']),
-      tenure: _s(row['tenure']),
-      furnishing: _s(row['furnishing']),
-      floorLevel: _s(row['floor_level']),
+      imageUrl: _ns(row['primary_image']),
+      description: _ns(row['description']),
+      availability: _ns(row['availability']),
+      tenure: _ns(row['tenure']),
+      furnishing: _ns(row['furnishing']),
+      floorLevel: _ns(row['floor_level']),
       bathrooms: _i(row['bathrooms']),
       isFnbSuitable: _b(row['is_fnb_suitable']),
       hasParking: _b(row['has_parking']),
@@ -54,6 +54,10 @@ abstract final class ExplorePropertyMapper {
       isFreehold: _b(row['is_freehold']),
       psf: _d(row['psf']),
       hasResearchLink: row['has_research_link'] == true,
+      // Real nearby-listing count from the optional spatial filter — null
+      // when the request did not ask for it. Distinct from the F&B
+      // competitor research counts above.
+      nearbyPropertyCount: _i(row['nearby_property_count']),
       competitorCount500m: _i(row['competitor_count_500m']),
       competitorCount1km: _i(row['competitor_count_1km']),
       population500m: _d(row['population_500m']),
@@ -128,23 +132,34 @@ abstract final class ExplorePropertyMapper {
   /// Competitor rows (`fnb_a.fnb_outlet` projection).
   static NearbyOutlets outlets(Map<String, dynamic> response) {
     final meta = (response['meta'] as Map?)?.cast<String, dynamic>() ?? const {};
+    final rawCounts = (meta['counts'] as Map?)?.cast<String, dynamic>() ?? const {};
     return NearbyOutlets(
       available: meta['available'] == true,
       radiusM: _i(meta['radius_m']) ?? 500,
+      counts: {
+        for (final entry in rawCounts.entries)
+          if (entry.value is num) entry.key: (entry.value as num).toInt(),
+      },
       outlets: [
         for (final row
             in (response['data'] as List? ?? const [])
                 .whereType<Map<String, dynamic>>())
           NearbyOutlet(
-            outletKey: '${row['outlet_key']}',
-            name: _s(row['outlet_name']),
-            category: _s(row['outlet_category']),
+            // Normalized keys first, legacy keys as the fallback so the same
+            // mapper still reads responses from a pre-source-mode backend.
+            outletKey: '${row['competitor_key'] ?? row['outlet_key']}',
+            name: _s(row['name'] ?? row['outlet_name']),
+            category: _s(row['category'] ?? row['outlet_category']),
             brand: _s(row['brand']),
-            streetAddress: _s(row['addr_street']),
-            city: _s(row['addr_city']),
+            streetAddress: _s(row['street_address'] ?? row['addr_street']),
+            city: _s(row['city'] ?? row['addr_city']),
             latitude: _d(row['latitude']),
             longitude: _d(row['longitude']),
             distanceM: _d(row['distance_m']) ?? 0,
+            provider: _s(row['provider']),
+            operatingStatus: _s(row['operating_status']),
+            sourceLicence: _s(row['source_licence']),
+            sourceSnapshot: _s(row['source_snapshot']),
           ),
       ],
     );
@@ -203,19 +218,61 @@ abstract final class ExplorePropertyMapper {
   }
 
   // --- primitives -----------------------------------------------------------
+  //
+  // PostgreSQL `numeric` columns are JSON-encoded as STRINGS ("6000.00",
+  // "2.0"), while `double precision`/`integer` columns arrive as JSON numbers.
+  // Every helper below accepts both. Casting with `v as num?` used to throw a
+  // TypeError on the first real row, which surfaced in the app as the generic
+  // "Unable to load properties" state even though the API answered 200.
 
-  static String _s(Object? v) => v == null ? '' : '$v';
+  static String _s(Object? v) {
+    if (v == null) return '';
+    final text = '$v';
+    // The imported workbook writes the literal text "NULL" for absent text
+    // columns. That is a missing value, not a value to render.
+    return text.toUpperCase() == 'NULL' ? '' : text;
+  }
 
-  static double? _d(Object? v) => (v as num?)?.toDouble();
+  /// Nullable text: SQL NULL (and the "NULL" text artifact) stays null so the
+  /// UI can say "not provided" instead of showing an invented empty fact.
+  static String? _ns(Object? v) {
+    if (v == null) return null;
+    final text = _s(v);
+    return text.isEmpty ? null : text;
+  }
 
-  static int? _i(Object? v) => (v as num?)?.toInt();
+  static double? _d(Object? v) {
+    if (v == null) return null;
+    if (v is num) return v.toDouble();
+    if (v is String) return double.tryParse(v.trim());
+    return null;
+  }
 
-  static bool? _b(Object? v) => v == null ? null : v == true || v == 1;
+  static int? _i(Object? v) {
+    if (v == null) return null;
+    if (v is num) return v.toInt();
+    if (v is String) return num.tryParse(v.trim())?.round();
+    return null;
+  }
+
+  /// `smallint` flags (0/1) and their string forms keep the tri-state meaning:
+  /// null is "not recorded", never coerced to false.
+  static bool? _b(Object? v) {
+    if (v == null) return null;
+    if (v is bool) return v;
+    if (v is num) return v != 0;
+    if (v is String) {
+      final text = v.trim().toLowerCase();
+      if (text == '1' || text == 'true' || text == 't') return true;
+      if (text == '0' || text == 'false' || text == 'f') return false;
+    }
+    return null;
+  }
 
   static DateTime? _dt(Object? v) =>
       v == null ? null : DateTime.tryParse('$v');
 
   static List<String> _strings(Object? v) => [
-    for (final item in (v as List? ?? const [])) '$item',
+    for (final item in (v is List ? v : const [])) '$item',
   ];
 }

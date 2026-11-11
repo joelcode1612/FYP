@@ -39,13 +39,19 @@ class ApiPropertyVerificationRepository
       );
 
   @override
-  Future<PropertyVerification> submit(String propertyId) async =>
-      _verification(
-        await _client.post(
-          '/api/v1/properties/$propertyId/verification/submit',
-          const {},
-        ),
-      );
+  Future<PropertyVerification> submit(
+    String propertyId, {
+    String? scope,
+  }) async => _verification(
+    await _client.post(
+      '/api/v1/properties/$propertyId/verification/submit',
+      // The wire default is `full`; the key is only sent when the caller
+      // explicitly narrows the scope, so legacy payloads stay identical.
+      {
+        if (scope != null && scope != 'full') 'scope': scope,
+      },
+    ),
+  );
 
   @override
   Future<VerificationDocument> uploadDocument({

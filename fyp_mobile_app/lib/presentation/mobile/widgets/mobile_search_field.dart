@@ -12,7 +12,13 @@ class MobileSearchField extends StatelessWidget {
   final String hint;
   final TextEditingController? controller;
   final ValueChanged<String>? onChanged;
+  final ValueChanged<String>? onSubmitted;
   final VoidCallback? onTap;
+
+  /// Clears the query. When supplied alongside [controller], a clear button
+  /// appears as soon as the field holds text — the only way to get back to the
+  /// unfiltered list without deleting characters one at a time.
+  final VoidCallback? onClear;
   final bool readOnly;
   final Widget? trailing;
 
@@ -21,7 +27,9 @@ class MobileSearchField extends StatelessWidget {
     this.hint = 'Search property, area or location',
     this.controller,
     this.onChanged,
+    this.onSubmitted,
     this.onTap,
+    this.onClear,
     this.readOnly = false,
     this.trailing,
   });
@@ -34,6 +42,7 @@ class MobileSearchField extends StatelessWidget {
           child: TextField(
             controller: controller,
             onChanged: onChanged,
+            onSubmitted: onSubmitted,
             readOnly: readOnly,
             onTap: onTap,
             textInputAction: TextInputAction.search,
@@ -49,6 +58,7 @@ class MobileSearchField extends StatelessWidget {
                 size: 20,
                 color: SitewiseColors.muted,
               ),
+              suffixIcon: _clearButton(),
               isDense: true,
               contentPadding: const EdgeInsets.symmetric(vertical: 14),
               filled: true,
@@ -61,6 +71,25 @@ class MobileSearchField extends StatelessWidget {
         ),
         if (trailing != null) ...[const SizedBox(width: 8), trailing!],
       ],
+    );
+  }
+
+  /// Rebuilds only the suffix, so typing does not rebuild the whole row.
+  Widget? _clearButton() {
+    final controller = this.controller;
+    final onClear = this.onClear;
+    if (controller == null || onClear == null || readOnly) return null;
+    return ValueListenableBuilder<TextEditingValue>(
+      valueListenable: controller,
+      builder: (context, value, _) {
+        if (value.text.isEmpty) return const SizedBox.shrink();
+        return IconButton(
+          icon: const Icon(Icons.close_rounded, size: 18),
+          color: SitewiseColors.muted,
+          tooltip: 'Clear search',
+          onPressed: onClear,
+        );
+      },
     );
   }
 

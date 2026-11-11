@@ -16,6 +16,7 @@ from sitewise.dependencies import CurrentUser
 from sitewise.ml.model_loader import ModelLoader
 from sitewise.ml.property_features import FeatureResolutionError
 from sitewise.ml.property_predictor import PropertyPUPredictor
+from sitewise.services.explanation_service import CATEGORY_LABELS, category_of
 
 router = APIRouter()
 AnalyticsSession = Annotated[Session, Depends(get_analytics_db)]
@@ -38,6 +39,13 @@ def model_metadata(_user: CurrentUser) -> dict:
         "experiment_tag": loaded.meta.get("experiment_tag"),
         "research_only": True,
         "calibrated_probability": bool(loaded.meta.get("is_calibrated_PU_class_prior", False)),
+        # The canonical feature taxonomy, so a read-only UI groups the 47
+        # features exactly as the explanation service does instead of keeping
+        # a second copy of the category rules that could drift.
+        "features": [
+            {"name": name, "category": category_of(name), "category_label": CATEGORY_LABELS.get(category_of(name), category_of(name))}
+            for name in loaded.feature_names
+        ],
     }
 
 

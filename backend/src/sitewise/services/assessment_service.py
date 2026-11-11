@@ -35,7 +35,7 @@ from sitewise.db.models.assessment import Assessment
 from sitewise.ml.model_loader import ModelLoader
 from sitewise.repositories.assessment_repository import AssessmentRepository
 from sitewise.repositories.catalog_repository import CatalogRepository
-from sitewise.services.report_service import ReportService
+from sitewise.repositories.favourite_repository import FavouriteRepository
 
 # (key, title, timestamp column) in workflow order.
 STAGES: tuple[tuple[str, str, str], ...] = (
@@ -116,19 +116,11 @@ def decision_support_capabilities(property_id: str, session: Session) -> dict:
     if not model["available"]:
         report = {"available": False, "reason": model["reason"]}
     else:
-        # Only reached once a model exists: ask the generator itself whether it
-        # produces a report rather than duplicating its readiness rule here.
-        generated = ReportService(session).generate_property_report(property_id)
-        implemented = generated.get("report") != "not implemented"
-        report = {
-            "available": implemented,
-            "reason": None
-            if implemented
-            else (
-                "The assessment report generator is not implemented, so no "
-                "report can be produced for this property yet."
-            ),
-        }
+        # The assessment report assembler (ReportService.generate_assessment_report)
+        # is implemented and served by GET /assessments/{id}/report. Its only
+        # hard dependency is the research score, which needs the artifact, so
+        # availability tracks the model probe rather than a second guess.
+        report = {"available": True, "reason": None}
 
     return {"model": model, "explanation": explanation, "report": report}
 
@@ -152,9 +144,107 @@ _NUMBER_FIELDS = (
 )
 _LIST_FIELDS = ("requirements", "preferred_areas")
 
+# --- Eight-question business preferences (requirements schema v2) -----------
+#
+# The entrepreneur questionnaire defined for the assessment workflow. Answers
+# are stored as stable snake_case tokens, never display labels, so the web and
+# mobile clients cannot drift apart and a label can be re-worded without
+# reinterpreting an already-saved answer.
+#
+# These preferences belong to the personalized constraint/matching layer ONLY.
+# They are never fed to the trained PU model, whose 47-feature contract is
+# fixed by the artifact.
+SINGLE_SELECT_V2: dict[str, tuple[str, ...]] = {
+    "fnb_concept": (
+        "cafe_coffee_shop",
+        "restaurant",
+        "bakery_dessert_shop",
+        "fast_food_quick_service",
+        "beverage_shop_kiosk",
+        "other_fnb",
+    ),
+    "service_model": (
+        "dine_in",
+        "takeaway_quick_service",
+        "delivery_focused",
+        "hybrid",
+    ),
+    "recommendation_priority": (
+        "high_customer_demand",
+        "affordable_operating_location",
+        "easy_customer_accessibility",
+        "favorable_competition",
+        "balanced_suitability",
+    ),
+    "target_price_segment": (
+        "budget_friendly",
+        "mid_range",
+        "premium",
+        "mixed_price_range",
+    ),
+    "customer_access_mode": (
+        "walking",
+        "public_transportation",
+        "private_vehicle",
+        "mixed_transportation",
+    ),
+}
+
+MULTI_SELECT_V2: dict[str, tuple[str, ...]] = {
+    "target_customers": (
+        "nearby_residents",
+        "office_workers",
+        "students",
+        "commuters",
+        "general_public",
+    ),
+}
+
+# Required positive numeric answers, in the questionnaire's own units.
+NUMBER_V2 = ("max_monthly_rent_myr", "min_floor_area_sqft")
+
+V2_ONLY_KEYS = frozenset(SINGLE_SELECT_V2) | frozenset(MULTI_SELECT_V2) | frozenset(NUMBER_V2)
+
+# Safe legacy equivalences. These two pairs mean exactly the same thing, so a
+# v1 record can be *displayed* against the new questions without inventing an
+# answer. Nothing else is mapped: a free-text concept is not the fnb_concept
+# enum, and guessing would silently rewrite the entrepreneur's answer.
+_LEGACY_TO_V2_NUMBERS = {
+    "max_budget_rm": "max_monthly_rent_myr",
+    "min_size_sqft": "min_floor_area_sqft",
+}
+
+
+def requirements_version_of(stored: Any) -> int:
+    """0 = nothing stored, 1 = legacy criteria form, 2 = eight-question form."""
+    if not isinstance(stored, dict) or not stored:
+        return 0
+    explicit = stored.get("requirements_version")
+    if isinstance(explicit, int) and explicit in (1, 2):
+        return explicit
+    return 2 if any(key in stored for key in V2_ONLY_KEYS) else 1
+
+
+def legacy_requirements_view(stored: dict) -> dict:
+    """The two numbers a v1 record can honestly answer for the v2 questions."""
+    view: dict[str, Any] = {"derived_from_legacy": True}
+    for legacy, modern in _LEGACY_TO_V2_NUMBERS.items():
+        value = stored.get(legacy)
+        if isinstance(value, (int, float)) and not isinstance(value, bool) and value > 0:
+            view[modern] = float(value)
+    return view
+
+
 
 def validate_requirements(raw: Any) -> dict:
     """Normalise and validate the business-requirements payload.
+
+    Two schemas are accepted so a record saved before the eight-question
+    questionnaire keeps working:
+
+    * **v2** — the eight business-preference answers (detected by any
+      v2-only key being present)
+    * **v1** — the legacy criteria form
 
     Raises ``AssessmentError`` (422) listing every problem at once, so the form
     can show all field errors rather than one per round trip.
@@ -165,6 +255,12 @@ def validate_requirements(raw: Any) -> dict:
             code="invalid_requirements",
             status_code=422,
         )
+    if any(key in raw for key in V2_ONLY_KEYS):
+        return _validate_v2(raw)
+    return _validate_v1(raw)
+
+
+def _validate_v1(raw: dict) -> dict:
 
     problems: list[str] = []
     clean: dict[str, Any] = {}
@@ -240,6 +336,93 @@ def validate_requirements(raw: Any) -> dict:
 
     if problems:
         raise AssessmentError(" ".join(problems), code="invalid_requirements", status_code=422)
+    clean["requirements_version"] = 1
+    return clean
+
+
+def _validate_v2(raw: dict) -> dict:
+    """Validate the eight-question business preferences.
+
+    Every single-select answer is required and must be one of the published
+    tokens; ``target_customers`` requires at least one pick; both numbers must
+    be present and strictly positive. Legacy descriptive fields are preserved
+    verbatim when supplied so an upgraded record loses nothing.
+    """
+    problems: list[str] = []
+    clean: dict[str, Any] = {}
+
+    for field, allowed in SINGLE_SELECT_V2.items():
+        value = raw.get(field)
+        token = value.strip().lower() if isinstance(value, str) else ""
+        if not token:
+            problems.append(f"{field} is required.")
+            continue
+        if token not in allowed:
+            problems.append(f"{field} must be one of: {', '.join(allowed)}.")
+            continue
+        clean[field] = token
+
+    for field, allowed in MULTI_SELECT_V2.items():
+        value = raw.get(field)
+        if not isinstance(value, list):
+            problems.append(f"{field} must be a list.")
+            continue
+        picks: list[str] = []
+        for item in value:
+            token = item.strip().lower() if isinstance(item, str) else ""
+            if not token or token not in allowed:
+                problems.append(f"{field} contains an unknown value.")
+                continue
+            if token not in picks:
+                picks.append(token)
+        if not picks:
+            problems.append(f"{field} requires at least one selection.")
+            continue
+        clean[field] = picks
+
+    for field in NUMBER_V2:
+        value = raw.get(field)
+        if value is None or value == "":
+            problems.append(f"{field} is required.")
+            continue
+        if isinstance(value, bool) or not isinstance(value, (int, float, str)):
+            problems.append(f"{field} must be a number.")
+            continue
+        try:
+            number = float(value)
+        except (TypeError, ValueError):
+            problems.append(f"{field} must be a number.")
+            continue
+        if not math.isfinite(number) or number <= 0:
+            problems.append(f"{field} must be greater than zero.")
+            continue
+        clean[field] = number
+
+    for field, limit in _TEXT_FIELDS.items():
+        value = raw.get(field)
+        if value is None:
+            continue
+        if not isinstance(value, str):
+            problems.append(f"{field} must be text.")
+            continue
+        text_value = value.strip()
+        if len(text_value) > limit:
+            problems.append(f"{field} must be {limit} characters or fewer.")
+            continue
+        clean[field] = text_value
+
+    for field in _LIST_FIELDS:
+        value = raw.get(field)
+        if value is None:
+            continue
+        if not isinstance(value, list) or any(not isinstance(v, str) for v in value):
+            problems.append(f"{field} must be a list of text values.")
+            continue
+        clean[field] = [v.strip() for v in value if v.strip()][:_MAX_LIST_ITEMS]
+
+    if problems:
+        raise AssessmentError(" ".join(problems), code="invalid_requirements", status_code=422)
+    clean["requirements_version"] = 2
     return clean
 
 
@@ -287,7 +470,25 @@ class AssessmentService:
             )
         existing = self.repo.get_by_user_and_property(user_id, property_id)
         if existing is not None:
+            # Resume is always allowed: the entrepreneur may have removed the
+            # property from their shortlist after starting, and losing access to
+            # in-progress work because of that would destroy data.
             return existing, False
+
+        # Starting a NEW assessment requires the property to be on the caller's
+        # own Saved Properties list. Ownership comes from the verified token, so
+        # a property saved by another account (or never saved at all) cannot be
+        # assessed by supplying its id.
+        if FavouriteRepository(self.session).get_by_user_and_property(
+            user_id, property_id
+        ) is None:
+            raise AssessmentError(
+                "Save this property to your shortlist before starting an "
+                "assessment.",
+                code="property_not_saved",
+                status_code=403,
+            )
+
         now = _now()
         assessment = Assessment(
             user_id=user_id,
@@ -443,6 +644,14 @@ class AssessmentService:
             "progress_percent": round(completed / TOTAL_STAGES * 100),
             "report_available": assessment.report_generated_at is not None,
             "requirements": requirements,
+            "requirements_version": requirements_version_of(requirements),
+            # Only a v1 record gets a derived view. A v2 record's own answers are
+            # already the questionnaire and are never re-derived.
+            "requirements_legacy_view": (
+                legacy_requirements_view(requirements)
+                if requirements and requirements_version_of(requirements) == 1
+                else None
+            ),
             "stages": stages,
             "capabilities": capabilities,
             "next_action": self._next_action(stages, current_index, completed),

@@ -2,3 +2,9 @@
 # Preserve their committed bytes on Windows as well as Unix checkouts.
 fyp_jaspr_web/web/data/administrative_1_state.geojson -text
 fyp_jaspr_web/web/data/administrative_2_district.geojson -text
+
+# The questionnaire reference manifest verifies exact committed SHA-256 bytes.
+# Windows newline conversion must not invalidate these frozen sources.
+backend/src/sitewise/customer_contracts/reference/a2_router_lib.py -text
+backend/src/sitewise/customer_contracts/reference/a2_routing_spec_v1.json -text
+backend/src/sitewise/customer_contracts/reference/CUST_RECOVERY_20261027/CUST03_CORRECTED_QUESTIONNAIRE_AND_ROUTING_CONTRACT.json -text

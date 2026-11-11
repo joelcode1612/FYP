@@ -19,6 +19,7 @@
   let map = null;
   let root = null;
   let markerLayer = null;
+  const propertyMarkers = new Map(); // cached by stable catalogue ID
   let transportLayer = null;
   let radiusCircle = null;
   let previousState = '';
@@ -58,9 +59,13 @@
   function destroy() {
     abortTransitRequest();
     if (map) { try { map.remove(); } catch (_) { /* detached node */ } }
+    // The panes live inside the mount element, which this script owns.
+    const mount = root ? root.querySelector(':scope > .swcx-map-mount') : null;
+    if (mount) mount.remove();
     map = null;
     root = null;
     markerLayer = null;
+    propertyMarkers.clear();
     transportLayer = null;
     radiusCircle = null;
     previousState = '';
@@ -75,17 +80,49 @@
     e.textContent = message;
     el.appendChild(e);
   }
+  // Leaflet must not mount on the framework-rendered element. The page is a
+  // Jaspr client component, and every re-render rewrites the `class` attribute
+  // of the elements it owns. That strips the `leaflet-container` class Leaflet
+  // adds at init; without it the app-wide `img { max-width: 100% }` rule
+  // (styles.css) collapses each tile to 0px width and the basemap disappears
+  // while the markers keep painting. Mounting on a child the framework never
+  // renders keeps Leaflet's classes, its clipping and its tile sizing intact
+  // across re-renders.
+  function mountFor(host) {
+    let mount = host.querySelector(':scope > .swcx-map-mount');
+    if (!mount) {
+      mount = document.createElement('div');
+      mount.className = 'swcx-map-mount';
+      host.appendChild(mount);
+    }
+    return mount;
+  }
   function initialize(el) {
     if (typeof window.L === 'undefined') {
       mapUnavailable(el, 'The map library could not load. Property search and listings remain available.');
       return false;
     }
+    const cartoKey = window.SITEWISE_MAP_CONFIG?.cartoBasemapsKey;
+    if (!cartoKey) {
+      mapUnavailable(el, 'CARTO basemap key missing. Generate map-config.js and rebuild SiteWise.');
+      return false;
+    }
     try {
-      map = L.map(el, { zoomControl: true, preferCanvas: true, scrollWheelZoom: false })
-        .setView(DEFAULT, 11);
-      L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+      map = L.map(mountFor(el), {
+        zoomControl: true,
+        preferCanvas: true,
+        // Google-Maps-like wheel behaviour: the pointer is the zoom anchor and
+        // one wheel notch advances one level. 100px per level damps trackpad
+        // bursts without making a mouse wheel feel unresponsive.
+        scrollWheelZoom: true,
+        wheelDebounceTime: 40,
+        wheelPxPerZoomLevel: 100,
+      }).setView(DEFAULT, 11);
+      L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png?key=' + encodeURIComponent(cartoKey), {
         subdomains: 'abcd', maxZoom: 19,
         attribution: '&copy; OpenStreetMap contributors &copy; CARTO',
+      }).on('tileerror', () => {
+        mapUnavailable(el, 'CARTO tiles could not load. Check key restrictions and network requests.');
       }).addTo(map);
       markerLayer = (typeof L.markerClusterGroup === 'function')
         ? L.markerClusterGroup({ maxClusterRadius: 42, showCoverageOnHover: false })
@@ -133,26 +170,55 @@
     const center = points.find(p => String(p.id) === selectedId) || null;
     const radiusM = Number(data.radiusM) === 500 ? 500 : 1000;
 
-    markerLayer.clearLayers();
+    // Diff by ID: UI updates must not destroy and reconstruct all markers.
     if (radiusCircle) {
       map.removeLayer(radiusCircle);
       radiusCircle = null;
     }
 
+    const activeIds = new Set();
     const bounds = [];
     for (const p of points) {
-      const selected = String(p.id) === selectedId;
-      const marker = L.marker([Number(p.lat), Number(p.lon)], {
-        title: String(p.title || p.id),
-        icon: propertyIcon(selected, Boolean(p.nearby)),
-      });
-      marker.bindPopup(`<div class="swcx-popup"><strong>${escapeHtml(p.title || p.id)}</strong>` +
-        `<small>${escapeHtml(p.address || '')}</small>` +
-        `<small>RM ${Number(p.rentRm || 0).toLocaleString('en-MY')}/month</small>` +
-        `<a href="/entrepreneur/property-detail?id=${encodeURIComponent(String(p.id))}">View details</a></div>`);
-      marker.on('click', () => pickProperty(p.id));
-      markerLayer.addLayer(marker);
+      const id = String(p.id);
+      const selected = id === selectedId;
+      const nearby = Boolean(p.nearby);
+      const state = selected ? 'selected' : nearby ? 'near' : 'other';
+      const signature = JSON.stringify([
+        Number(p.lat), Number(p.lon), p.title, p.address, p.rentRm,
+      ]);
+      activeIds.add(id);
+      let entry = propertyMarkers.get(id);
+
+      if (!entry || entry.signature !== signature) {
+        if (entry) markerLayer.removeLayer(entry.marker);
+        const marker = L.marker([Number(p.lat), Number(p.lon)], {
+          title: String(p.title || p.id),
+          icon: propertyIcon(selected, nearby),
+        });
+        marker.bindPopup('<div class="swcx-popup"><strong>' +
+          escapeHtml(p.title || p.id) + '</strong>' +
+          '<small>' + escapeHtml(p.address || '') + '</small>' +
+          '<small>RM ' + Number(p.rentRm || 0).toLocaleString('en-MY') +
+          '/month</small>' +
+          '<a href="/entrepreneur/property-detail?id=' +
+          encodeURIComponent(id) + '">View details</a></div>');
+        marker.on('click', () => pickProperty(id));
+        markerLayer.addLayer(marker);
+        entry = { marker, signature, state };
+        propertyMarkers.set(id, entry);
+      } else if (entry.state !== state) {
+        entry.marker.setIcon(propertyIcon(selected, nearby));
+        entry.state = state;
+      }
       bounds.push([Number(p.lat), Number(p.lon)]);
+    }
+
+    // Remove only the markers excluded by current search/filter criteria.
+    for (const [id, entry] of propertyMarkers) {
+      if (!activeIds.has(id)) {
+        markerLayer.removeLayer(entry.marker);
+        propertyMarkers.delete(id);
+      }
     }
 
     if (center) {

@@ -168,7 +168,35 @@ class SupabaseAuthRepository implements AuthRepository {
 
   @override
   Future<SitewiseUser?> currentUser() async {
-    final session = _client.currentSession;
+    // `currentSession` is a synchronous getter that returns whatever Keystore
+    // holds — including an access token that expired while the app was closed.
+    // Sending that token to GET /api/v1/auth/me produced a 401 (and a
+    // "Session expired" card) on the Sign In screen before anyone had signed
+    // in. `getSession()` refreshes an expired token first and resolves to null
+    // once nothing usable is left, so an anonymous cold start makes no backend
+    // call at all. A refreshed token is still verified by FastAPI below.
+    final Session? session;
+    try {
+      session = await _guard(
+        _client.getSession(),
+        'Restoring your session took too long. Check your connection and try '
+        'again.',
+      );
+    } on AuthException catch (error) {
+      if (!isRejectedRefreshError(error)) {
+        // A retryable / 5xx / unknown refresh failure is an outage, not a
+        // signed-out user. gotrue keeps the saved session in that case, so
+        // surface a connectivity error with Retry rather than silently
+        // discarding a valid login.
+        throw const NetworkFailure();
+      }
+      // Supabase definitively rejected the refresh token. That means "no
+      // session", not an error the user caused. Drop the stale credentials
+      // locally so a restart cannot re-offer them, and return a clean Sign In
+      // state without ever calling /auth/me.
+      await _discardStaleSession();
+      return null;
+    }
     if (session == null) return null;
     return _authorize(session);
   }
@@ -354,6 +382,20 @@ class SupabaseAuthRepository implements AuthRepository {
 
   // --- internals -----------------------------------------------------------
 
+  /// Best-effort local clear after a rejected refresh token.
+  ///
+  /// gotrue removes the session itself before rethrowing a non-retryable
+  /// refresh error, so this is normally a no-op with no network call; the
+  /// explicit call also covers `AuthSessionMissingException`. Any failure is
+  /// irrelevant — the caller still fails closed by reporting "no session".
+  Future<void> _discardStaleSession() async {
+    try {
+      await _client.signOut();
+    } on Object {
+      // Deliberately swallowed: never turn "not signed in" into an error card.
+    }
+  }
+
   /// One-time google_sign_in SDK initialization whose FAILURE is retryable:
   /// a failed first attempt clears the cached slot so the next button press
   /// starts a fresh initialization instead of re-awaiting a dead future.
@@ -479,6 +521,34 @@ class SupabaseAuthRepository implements AuthRepository {
     if (parts.isEmpty) return 'Sitewise User';
     return parts.map((p) => p[0].toUpperCase() + p.substring(1)).join(' ');
   }
+}
+
+/// Whether a gotrue refresh failure means the saved credentials are no longer
+/// usable, as opposed to the auth host being temporarily unreachable.
+///
+/// A rejected refresh token (400/401/403, `invalid_grant`, `session_expired`,
+/// `refresh_token_*`, ...) is definitive: gotrue has already removed the local
+/// session, so the only correct outcome is a clean Sign In form. A retryable
+/// fetch error or a 5xx keeps the session intact and must be shown as a
+/// connectivity problem with Retry — never as a silent sign-out.
+///
+/// Exposed for unit tests. It branches on SDK codes only and never lets raw
+/// provider text reach a screen.
+bool isRejectedRefreshError(AuthException error) {
+  if (error is AuthRetryableFetchException) return false;
+
+  final code = error.code?.toLowerCase() ?? '';
+  if (code == ErrorCode.sessionExpired.code ||
+      code == 'invalid_grant' ||
+      code == 'invalid_jwt' ||
+      code == 'user_banned' ||
+      code == 'user_not_found' ||
+      code.contains('refresh_token')) {
+    return true;
+  }
+
+  final status = error.statusCode;
+  return status == '400' || status == '401' || status == '403';
 }
 
 /// Translates a Gotrue error into the domain failure that decides where the

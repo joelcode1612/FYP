@@ -1,6 +1,7 @@
 import 'package:riverpod/riverpod.dart';
 
 import '../../core/constants/app_constants.dart';
+import '../../core/errors/app_failure.dart';
 import '../../domain/entities/app_role.dart';
 import '../controllers/app_controller.dart';
 import '../states/app_state.dart';
@@ -54,6 +55,71 @@ class AppNotifier extends Notifier<AppState> {
   void toggleCompared(String id) => _controller.toggleCompared(id);
 
   void clearCompared() => _controller.clearCompared();
+
+  /// Reads the account's shortlist from `public.favourite_property`.
+  ///
+  /// Previously nothing ever called the saved-properties repository on mobile:
+  /// the tab showed an in-memory set that started empty on every launch, so a
+  /// saved property vanished after a restart even though the server had it.
+  /// A failure is reported on the state — never turned into an empty list.
+  Future<void> loadSaved() async {
+    final repo = ref.read(savedPropertiesRepositoryProvider);
+    if (repo == null) {
+      // Demo build: the local set is the only truth, and saying otherwise
+      // would invent a server that does not exist.
+      return;
+    }
+    if (state.savedLoading) return;
+    _controller.setSavedLoading(true);
+    _controller.setSavedError(null);
+    try {
+      final refs = await repo.savedRefs();
+      if (!ref.mounted) return;
+      _controller.setSaved(refs);
+    } on Object catch (error) {
+      if (!ref.mounted) return;
+      _controller.setSavedError(
+        error is AppFailure
+            ? error.userMessage
+            : 'Your saved properties could not be loaded.',
+      );
+    } finally {
+      if (ref.mounted) _controller.setSavedLoading(false);
+    }
+  }
+
+  /// Saves/unsaves against the server FIRST, then moves the shortlist.
+  ///
+  /// Returns the failure message, or null on success. The optimistic local
+  /// toggle is deliberately not used here: the tab must never show a saved
+  /// state the backend did not accept.
+  Future<String?> persistSaved(String propertyRef, {required bool wantSaved}) async {
+    final repo = ref.read(savedPropertiesRepositoryProvider);
+    if (repo == null) {
+      // Demo build: no server, so the local toggle IS the operation.
+      _controller.toggleSaved(propertyRef);
+      return null;
+    }
+    try {
+      if (wantSaved) {
+        await repo.save(propertyRef);
+      } else {
+        await repo.unsave(propertyRef);
+      }
+      final next = {...state.saved};
+      if (wantSaved) {
+        next.add(propertyRef);
+      } else {
+        next.remove(propertyRef);
+      }
+      if (ref.mounted) _controller.setSaved(next);
+      return null;
+    } on Object catch (error) {
+      return error is AppFailure
+          ? error.userMessage
+          : 'The saved list could not be updated. Please try again.';
+    }
+  }
 
   /// Replaces the whole state (the web app reseeds from a stored cookie).
   void restore(AppState value) => _controller.restore(value);

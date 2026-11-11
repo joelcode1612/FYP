@@ -1,0 +1,8 @@
+{
+  "measured_at": "2026-11-11T09:57:08+0800",
+  "property_id": "MD-00510",
+  "model_version": "sitewise-pu-pvu-1.0",
+  "first_call_seconds": 0.074,
+  "cached_call_seconds": 0.0187,
+  "note": "First call = live Permutation SHAP over 47 features with the real 25-row background; cached call = process-wide verified-SHAP cache hit. Results are durable per user via recommendation_result.shap."
+}

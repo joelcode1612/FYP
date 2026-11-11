@@ -1,4 +1,6 @@
+import '../../core/errors/app_failure.dart';
 import '../../core/network/api_client.dart';
+import '../../domain/entities/commercial_property.dart';
 import '../../domain/entities/explore.dart';
 import '../../domain/repositories/explore_repository.dart';
 import '../mappers/explore_property_mapper.dart';
@@ -42,13 +44,35 @@ class ApiExploreRepository implements ExploreRepository {
       '/api/v1/explore/properties',
       query: query.toQueryMap(),
     );
-    final meta = (response['meta'] as Map?)?.cast<String, dynamic>() ?? const {};
-    final items = [
-      for (final row
-          in (response['data'] as List? ?? const [])
-              .whereType<Map<String, dynamic>>())
-        ExplorePropertyMapper.property(row),
-    ];
+    final rawData = response['data'];
+    if (rawData != null && rawData is! List) {
+      // A 200 with the wrong envelope is a contract failure. Without this
+      // guard the `as List?` cast throws an unclassified TypeError and the UI
+      // reports a connection problem instead of a data problem.
+      throw const ResponseFormatFailure(
+        'The property list returned by the service could not be read.',
+      );
+    }
+    final rawMeta = response['meta'];
+    final meta = rawMeta is Map
+        ? rawMeta.cast<String, dynamic>()
+        : const <String, dynamic>{};
+    final rows = (rawData as List? ?? const []).whereType<Map<String, dynamic>>();
+    final items = <CommercialProperty>[];
+    for (final row in rows) {
+      try {
+        items.add(ExplorePropertyMapper.property(row));
+      } on Object {
+        // A malformed/mismatched row is a CONTRACT failure, not a connection
+        // failure. Without this classification the UI falls through to its
+        // generic "Unable to load properties" state even though the server
+        // answered 200. Never echo the row or the exception — either could
+        // contain data that must not reach a log or the screen.
+        throw const ResponseFormatFailure(
+          'The property data returned by the service could not be read.',
+        );
+      }
+    }
     return ExplorePage(
       items: List.unmodifiable(items),
       total: (meta['total'] as num?)?.toInt() ?? items.length,

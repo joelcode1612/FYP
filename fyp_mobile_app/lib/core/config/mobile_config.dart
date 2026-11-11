@@ -19,6 +19,12 @@ abstract final class MobileConfig {
   /// Set to true only after `Supabase.initialize()` returned successfully.
   static bool supabaseInitialized = false;
 
+  /// Test-only live-mode override (null = derive from the build config).
+  /// Widget tests flip this so the real repository fakes are exercised
+  /// through the same code path a live build takes, without needing
+  /// compile-time defines.
+  static bool? overrideUsesLiveApi;
+
   /// A safe, human-readable reason when initialisation failed. Never contains
   /// an exception message that might echo credentials.
   static String? initializationError;
@@ -97,10 +103,11 @@ abstract final class MobileConfig {
   /// separately by [supabaseReady] / [problems] and enforced fail-closed by
   /// the auth repository, which is the correct authority for access.
   static bool get usesLiveApi =>
-      hasValidApiBaseUrl &&
-      hasSupabaseCredentials &&
-      !hasUnsafeKey &&
-      supabaseUrlLooksValid;
+      overrideUsesLiveApi ??
+      (hasValidApiBaseUrl &&
+          hasSupabaseCredentials &&
+          !hasUnsafeKey &&
+          supabaseUrlLooksValid);
 
   /// Blocking problems. Empty means the build can attempt a real sign-in.
   static List<String> get problems => <String>[

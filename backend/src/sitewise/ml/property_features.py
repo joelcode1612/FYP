@@ -43,6 +43,7 @@ class PropertyFeatureBundle:
             "subject_id": self.subject_id,
             "feature_count": len(self.values),
             "available_features": self.available_features,
+            "values": self.values,
             "missing_features": self.missing_features,
             "value_sources": self.value_sources,
             "analysis_status": self.analysis_status,
@@ -88,11 +89,18 @@ def _one(rows: list[dict], context: str) -> dict | None:
     return rows[0] if rows else None
 
 
-def _doc(session: Any, table: str, col: str, val: Any) -> dict:
+def _doc(session: Any, table: str, col: str, val: Any, order: str | None = None) -> dict:
     # table and column are internal literals only, never request-provided SQL.
-    sql = f"SELECT to_jsonb(t) AS doc FROM {table} AS t WHERE t.{col} = :id LIMIT 2"
-    row = _one(_rows(session, sql, {"id": val}), table)
-    return dict(row["doc"] or {}) if row else {}
+    # ``order`` is an internal literal too. It exists ONLY for
+    # fyp_features.property_population_spatial, which holds TWO rows per
+    # catalogue id (PROPERTY_UNLABELED and SITEWISE_U_PROPERTY) recording the
+    # same measurements at different raster precision. Without a deterministic
+    # tie-break the resolver raised "Ambiguous ... 2 records matched" for every
+    # catalogue property and live feature resolution was impossible.
+    suffix = f"ORDER BY {order} " if order else ""
+    sql = f"SELECT to_jsonb(t) AS doc FROM {table} AS t WHERE t.{col} = :id {suffix}LIMIT 1"
+    rows = _rows(session, sql, {"id": val})
+    return dict(rows[0]["doc"] or {}) if rows else {}
 
 
 class PropertyFeatureRepository:
@@ -160,17 +168,32 @@ class PropertyFeatureRepository:
         worldpop: dict = {}
         flags: list[str] = []
         if catalogue_id:
+            # Prefer the SITEWISE_U_PROPERTY extract: for U-class catalogue
+            # properties it is byte-identical to the model's training record
+            # (verified against the supplied example_property_47.json for
+            # MD-00510: pop_ring_0_500m=1071.6, pop_total_1km=6430.9,
+            # pop_total_3km=108745.1), while the alphabetical-first
+            # PROPERTY_UNLABELED row differs in the 4th significant digit.
             worldpop = _doc(
                 self.session, "fyp_features.property_population_spatial",
                 "source_record_id", catalogue_id,
+                order="(source_record_type <> 'SITEWISE_U_PROPERTY'), source_record_type",
             )
             if worldpop:
                 type_value = str(worldpop.get("source_record_type") or "").lower()
-                if type_value not in {"u", "property", "unlabelled", "unlabeled", "commercial_property"}:
+                if type_value not in {
+                    "u", "property", "unlabelled", "unlabeled",
+                    "commercial_property", "property_unlabeled", "sitewise_u_property",
+                }:
                     flags.append(
                         f"Population source_record_type '{type_value}' requires manual verification"
                     )
                     worldpop = {}
+                else:
+                    flags.append(
+                        "Population row resolved deterministically: source_record_type="
+                        + str(worldpop.get("source_record_type"))
+                    )
                 if worldpop.get("population_quality_flag") not in {None, "", "OK", "COMPLETE"}:
                     flags.append("Population quality flag: " + str(worldpop["population_quality_flag"]))
         extra = sf.get("other_features") or {}
@@ -227,3 +250,49 @@ class PropertyFeatureRepository:
             analysis_status=sf.get("analysis_status"),
             flags=sorted(set(flags)),
         )
+
+    def background(
+        self, required_features: list[str], *, limit: int = 50
+    ) -> list[dict[str, float]]:
+        """Real reference rows for SHAP, with the exact training features.
+
+        Only analysed unlabeled subjects whose every required feature resolves
+        numerically are returned. Rows with a gap are skipped rather than
+        zero-filled, because a synthetic background changes the baseline and
+        would make the explanation describe a property that does not exist.
+        """
+        if not required_features:
+            return []
+        cap = max(1, min(int(limit), 100))
+        rows = _rows(
+            self.session,
+            """
+            SELECT to_jsonb(f) AS doc
+            FROM sitewise_analytics.subject_features f
+            WHERE btrim(f.sample_class) = 'U'
+              AND f.analysis_status = 'COMPLETED'
+            ORDER BY f.imported_at DESC NULLS LAST
+            LIMIT :scan
+            """,
+            # Over-scan: many rows are incomplete, so read more than we keep.
+            {"scan": cap * 6},
+        )
+        out: list[dict[str, float]] = []
+        for row in rows:
+            doc = dict(row["doc"] or {})
+            extra = doc.get("other_features") or {}
+            if not isinstance(extra, dict):
+                extra = {}
+            merged: dict[str, Any] = {**doc, **extra}
+            values: dict[str, float] = {}
+            for name in required_features:
+                number = _numeric(merged.get(name))
+                if number is None:
+                    values = {}
+                    break
+                values[name] = number
+            if values:
+                out.append(values)
+            if len(out) >= cap:
+                break
+        return out

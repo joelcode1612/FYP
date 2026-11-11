@@ -21,7 +21,9 @@
 /// web decision-support workflow's persistence.
 library;
 
-import 'package:shared_logic/shared_logic.dart';
+// Hide the shared ApiPropertyRepository: this workspace decodes catalogue rows
+// through the web repository's fromJson forwarder below.
+import 'package:shared_logic/shared_logic.dart' hide ApiPropertyRepository;
 
 import 'api_property_repository.dart';
 import 'auth_service.dart';
@@ -228,6 +230,15 @@ final class AssessmentRecord {
   /// The saved business requirements, or null when stage 2 has not been saved.
   final Map<String, dynamic>? requirements;
 
+  /// 0 = nothing saved, 1 = legacy criteria form, 2 = eight-question form.
+  ///
+  /// The workspace uses this to show a "saved before the questionnaire
+  /// existed" notice instead of reinterpreting old answers.
+  final int requirementsVersion;
+
+  /// The two numbers a v1 record can honestly answer for the v2 questions.
+  final Map<String, dynamic>? requirementsLegacyView;
+
   final List<AssessmentStage> stages;
   final AssessmentCapabilities capabilities;
   final AssessmentNextAction nextAction;
@@ -249,6 +260,8 @@ final class AssessmentRecord {
     required this.progressPercent,
     required this.reportAvailable,
     required this.requirements,
+    required this.requirementsVersion,
+    this.requirementsLegacyView,
     required this.stages,
     required this.capabilities,
     required this.nextAction,
@@ -279,6 +292,9 @@ final class AssessmentRecord {
       progressPercent: (json['progress_percent'] as num).toInt(),
       reportAvailable: json['report_available'] == true,
       requirements: (json['requirements'] as Map?)?.cast<String, dynamic>(),
+      requirementsVersion: (json['requirements_version'] as num?)?.toInt() ?? 0,
+      requirementsLegacyView:
+          (json['requirements_legacy_view'] as Map?)?.cast<String, dynamic>(),
       stages: [
         for (final stage in (json['stages'] as List? ?? const []))
           AssessmentStage.fromJson((stage as Map).cast<String, dynamic>()),
@@ -679,6 +695,32 @@ final class AssessmentApi {
   Future<ApiResult<CommercialProperty>> property(String propertyId) => _call(
     '/api/v1/catalog/properties/$propertyId',
     parse: ApiPropertyRepository.fromJson,
+  );
+
+  /// Reads the persisted validated SHAP explanation for an assessment. A null
+  /// value (not a failure) means Stage 4 has not produced one yet. This never
+  /// calls the POST, so loading the Full Analysis page neither computes SHAP
+  /// nor confirms a stage.
+  Future<ApiResult<ResearchExplanation?>> explanation(String assessmentId) =>
+      _call(
+        '/api/v1/assessments/$assessmentId/explanation',
+        parse: (json) {
+          final payload = (json['explanation'] as Map?)?.cast<String, dynamic>();
+          return payload == null ? null : ResearchExplanation.fromJson(payload);
+        },
+      );
+
+  /// The read-only business-target evaluation for an assessment, taken from the
+  /// report's deterministic `requirement_matching` section. The report endpoint
+  /// assembles without advancing any stage, so this is safe on page load.
+  Future<ApiResult<BusinessTargetEvaluation>> targetMatching(
+    String assessmentId,
+  ) => _call(
+    '/api/v1/assessments/$assessmentId/report',
+    parse: (json) => BusinessTargetEvaluation.fromJson(
+      (json['requirement_matching'] as Map?)?.cast<String, dynamic>() ??
+          const {},
+    ),
   );
 
   /// The catalogue's real `property_type` vocabulary.

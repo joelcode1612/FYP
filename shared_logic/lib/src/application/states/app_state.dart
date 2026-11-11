@@ -18,11 +18,23 @@ class AppState {
   final Set<String> saved;
   final Set<String> compared;
 
+  /// True while the account's shortlist is being read from the server.
+  ///
+  /// Separate from an empty [saved] set: "still loading" and "you have saved
+  /// nothing" look identical in the UI unless the state distinguishes them,
+  /// and a failed read must not masquerade as an empty shortlist.
+  final bool savedLoading;
+
+  /// Why the shortlist could not be read. Null when the last read succeeded.
+  final String? savedError;
+
   const AppState({
     this.role = AppRole.entrepreneur,
     this.preview = PreviewMode.auto,
     this.saved = const <String>{},
     this.compared = const <String>{},
+    this.savedLoading = false,
+    this.savedError,
   });
 
   bool isSaved(String id) => saved.contains(id);
@@ -34,12 +46,17 @@ class AppState {
     PreviewMode? preview,
     Set<String>? saved,
     Set<String>? compared,
+    bool? savedLoading,
+    String? savedError,
+    bool clearSavedError = false,
   }) {
     return AppState(
       role: role ?? this.role,
       preview: preview ?? this.preview,
       saved: saved ?? this.saved,
       compared: compared ?? this.compared,
+      savedLoading: savedLoading ?? this.savedLoading,
+      savedError: clearSavedError ? null : (savedError ?? this.savedError),
     );
   }
 }

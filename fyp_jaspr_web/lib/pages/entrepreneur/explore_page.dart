@@ -66,6 +66,15 @@ class _ExplorePageState extends State<ExplorePage> {
   PropertyFilter filter = PropertyFilter.empty;
   ExploreSort sort = ExploreSort.imported;
 
+  /// Default-on 500 m cluster rule: keep only listings with at least 3 OTHER
+  /// eligible commercial properties within 500 m. The web Explore page is
+  /// client-driven over the loaded catalogue, so the rule is applied with the
+  /// shared haversine helper over the full source set (mirroring the backend
+  /// semantics: neighbours count from every eligible record, not only the
+  /// ones matching the current keyword/filters). Toggling it off shows all
+  /// properties again.
+  bool nearbyOnly = true;
+
   /// Selected property id (marker click, card Locate, or `?id=`).
   String? selectedId;
 
@@ -76,6 +85,10 @@ class _ExplorePageState extends State<ExplorePage> {
   int visibleLimit = 24;
   Timer? _queryDebounce;
   Future<LocationAnalysis?>? _analysisFuture;
+
+  // Per-property request guard: a second tap cannot reverse a pending save.
+  final Set<String> _savingPropertyIds = <String>{};
+  String? _saveError;
 
   @override
   void initState() {
@@ -106,18 +119,37 @@ class _ExplorePageState extends State<ExplorePage> {
 
   /// The inventory is provided by the existing FastAPI catalogue repository,
   /// not a hardcoded JavaScript array or an Excel-only snapshot.
-  List<CommercialProperty> get _filtered =>
-      sortForExplore(filter.apply(_model.explore), sort);
+  // Filter/sort once per source list + criteria instead of repeating the
+  // O(n log n) work for the toolbar, map, cards and filter panel each build.
+  List<CommercialProperty>? _filteredMemo;
+  List<CommercialProperty>? _filteredSource;
+  PropertyFilter? _filteredCriteria;
+  ExploreSort? _filteredSort;
+
+  List<CommercialProperty> get _filtered {
+    final source = _model.explore;
+    if (identical(source, _filteredSource) &&
+        identical(filter, _filteredCriteria) &&
+        sort == _filteredSort &&
+        _filteredMemo != null) {
+      return _filteredMemo!;
+    }
+    final result = sortForExplore(filter.apply(source), sort);
+    _filteredSource = source;
+    _filteredCriteria = filter;
+    _filteredSort = sort;
+    return _filteredMemo = result;
+  }
 
   /// Coordinates usable for plotting and distance math. The (0, 0) pair is
   /// this codebase's "no coordinates" sentinel; a listing without coordinates
   /// is skipped, never placed at an invented location.
   static bool _validPoint(CommercialProperty p) =>
       p.latitude.isFinite &&
-      p.longitude.isFinite &&
-      p.latitude.abs() <= 90 &&
-      p.longitude.abs() <= 180 &&
-      p.hasCoordinates;
+          p.longitude.isFinite &&
+          p.latitude.abs() <= 90 &&
+          p.longitude.abs() <= 180 &&
+          p.hasCoordinates;
 
   /// Great-circle distance in metres from the shared_logic helper — the same
   /// implementation the mobile app uses. This is NOT a walking or driving
@@ -141,20 +173,22 @@ class _ExplorePageState extends State<ExplorePage> {
 
   /// Radius limits the property LIST, not the background map inventory.
   /// Keeping other pins visible lets a user choose a different center.
+  /// The default cluster rule narrows the base set BEFORE the radius step.
   List<CommercialProperty> get _listed {
+    final base = _nearbyQualified;
     final center = _center;
-    if (center == null) return _filtered;
-    final matches = _filtered
+    if (center == null) return base;
+    final matches = base
         .where(
           (candidate) =>
-              candidate.id == center.id ||
-              (_validPoint(candidate) &&
-                  (_metres(center, candidate) ?? double.infinity) <= radiusM),
-        )
+      candidate.id == center.id ||
+          (_validPoint(candidate) &&
+              (_metres(center, candidate) ?? double.infinity) <= radiusM),
+    )
         .toList();
     if (sort == ExploreSort.imported) {
       matches.sort(
-        (left, right) => (_metres(center, left) ?? double.infinity).compareTo(
+            (left, right) => (_metres(center, left) ?? double.infinity).compareTo(
           _metres(center, right) ?? double.infinity,
         ),
       );
@@ -168,11 +202,70 @@ class _ExplorePageState extends State<ExplorePage> {
   int _nearbyCount(CommercialProperty center, int limitM) => _filtered
       .where(
         (candidate) =>
-            candidate.id != center.id &&
-            _validPoint(candidate) &&
-            (_metres(center, candidate) ?? double.infinity) <= limitM,
-      )
+    candidate.id != center.id &&
+        _validPoint(candidate) &&
+        (_metres(center, candidate) ?? double.infinity) <= limitM,
+  )
       .length;
+
+  // ---------------------------------------------------------------------------
+  // 500 m cluster rule (default filter).
+  // ---------------------------------------------------------------------------
+
+  /// Memoized nearby counts over the FULL loaded catalogue (the backend
+  /// counts every published+approved neighbour, not just query matches).
+  /// Pairwise O(n²) is bounded by a degree-bounding-box prefilter before the
+  /// great-circle call, and recomputed only when the source list instance
+  /// changes — one pass per load, not per build.
+  Map<String, int>? _nearbyCountMemo;
+  List<CommercialProperty>? _nearbyCountSource;
+
+  /// 500 m ≈ 0.00449° of latitude; at peninsular-Malaysia latitudes the
+  /// longitude span is slightly wider, so 0.0046° bounds both axes safely
+  /// for the prefilter (the exact haversine still decides membership).
+  static const double _nearbyDegreePad = 0.0046;
+
+  static const int _nearbyMinProperties = 3;
+  static const int _nearbyRadiusM = 500;
+
+  Map<String, int> get _nearbyCounts {
+    final source = _model.explore;
+    if (identical(source, _nearbyCountSource) && _nearbyCountMemo != null) {
+      return _nearbyCountMemo!;
+    }
+    final points = [for (final p in source) if (_validPoint(p)) p];
+    final counts = {for (final p in points) p.id: 0};
+    for (var i = 0; i < points.length; i++) {
+      final a = points[i];
+      for (var j = i + 1; j < points.length; j++) {
+        final b = points[j];
+        if ((a.latitude - b.latitude).abs() > _nearbyDegreePad) continue;
+        if ((a.longitude - b.longitude).abs() > _nearbyDegreePad) continue;
+        final d = _metres(a, b);
+        if (d != null && d <= _nearbyRadiusM) {
+          counts[a.id] = counts[a.id]! + 1;
+          counts[b.id] = counts[b.id]! + 1;
+        }
+      }
+    }
+    _nearbyCountSource = source;
+    return _nearbyCountMemo = counts;
+  }
+
+  /// Count shown on a card: only meaningful while the rule is the active
+  /// view of the dataset; null hides the line entirely.
+  int? _cardNearbyCount(CommercialProperty p) =>
+      nearbyOnly ? _nearbyCounts[p.id] : null;
+
+  /// The catalogue narrowed by the cluster rule. Kept separate from
+  /// [_filtered] so the keyword/filters memo and this rule stay orthogonal.
+  List<CommercialProperty> get _nearbyQualified {
+    if (!nearbyOnly) return _filtered;
+    final counts = _nearbyCounts;
+    return _filtered
+        .where((property) => (counts[property.id] ?? 0) >= _nearbyMinProperties)
+        .toList();
+  }
 
   Future<LocationAnalysis?> _readAnalysis(String propertyId) async {
     try {
@@ -222,6 +315,9 @@ class _ExplorePageState extends State<ExplorePage> {
       filter = PropertyFilter.empty;
       sort = ExploreSort.imported;
       radiusM = 1000;
+      // Reset restores the page's DEFAULT state; the default is the 500 m
+      // cluster rule ON (it is a default, not a chosen filter).
+      nearbyOnly = true;
       selectedId = null;
       showTransport = false;
       _analysisFuture = null;
@@ -240,21 +336,52 @@ class _ExplorePageState extends State<ExplorePage> {
     });
   }
 
-  /// Saves/removes a shortlist property. A signed-in account persists to the
-  /// server first and the shortlist only moves once the server accepted the
-  /// change; a visitor keeps the cookie-backed selection.
+  /// Persists an authenticated save/unsave before changing UI state.
+  /// The in-flight guard prevents double taps and concurrent requests for the
+  /// same property. Visitors keep their existing session-only shortlist.
   Future<void> _toggleSaved(String id) async {
+    if (_savingPropertyIds.contains(id)) return;
     final notifier = context.read(appNotifierProvider.notifier);
     if (!AppLocator.isSignedIn) {
       notifier.toggleSaved(id);
+      if (_saveError != null && mounted) {
+        setState(() => _saveError = null);
+      }
       return;
     }
-    final current = context.read(appNotifierProvider).saved.contains(id);
-    final failure = await AppLocator.persistToggleSaved(
-      id,
-      wantSaved: !current,
-    );
-    if (failure == null && mounted) notifier.toggleSaved(id);
+
+    final wasSaved = context.read(appNotifierProvider).saved.contains(id);
+    setState(() {
+      _savingPropertyIds.add(id);
+      _saveError = null;
+    });
+    try {
+      final failure = await AppLocator.persistToggleSaved(
+        id,
+        wantSaved: !wasSaved,
+      );
+      if (!mounted) return;
+      if (failure != null) {
+        setState(() {
+          _saveError = 'Could not ${wasSaved ? 'remove' : 'save'} property '
+              '$id. ${failure.message} Please retry.';
+        });
+        return;
+      }
+      // The request was accepted. Flip only this property once.
+      notifier.toggleSaved(id);
+    } catch (_) {
+      // Avoid exposing raw server exceptions in the UI.
+      if (mounted) {
+        setState(() {
+          _saveError = 'Could not update saved property $id. '
+              'Please check your connection and retry.';
+        });
+      }
+    } finally {
+      _savingPropertyIds.remove(id);
+      if (mounted) setState(() {});
+    }
   }
 
   @override
@@ -271,32 +398,32 @@ class _ExplorePageState extends State<ExplorePage> {
       title: 'Explore commercial properties',
       eyebrow: 'Property discovery',
       subtitle:
-          'Search rental listings, view their locations, and examine the '
+      'Search rental listings, view their locations, and examine the '
           'surrounding 500 m or 1 km catchment. Source coordinates may be approximate.',
       child: state.loading
           ? const _Loading()
           : state.error != null
           ? EmptyState(
-              title: 'Properties could not load',
-              body: state.error!,
-              action: ActionButton(
-                'Try again',
-                onClick: () => context
-                    .read(entrepreneurNotifierProvider.notifier)
-                    .loadExplore(),
-              ),
-            )
+        title: 'Properties could not load',
+        body: state.error!,
+        action: ActionButton(
+          'Try again',
+          onClick: () => context
+              .read(entrepreneurNotifierProvider.notifier)
+              .loadExplore(),
+        ),
+      )
           : div(classes: 'swcx-page', [
-              _filterHeader(),
-              _toolbar(),
-              div(classes: 'swcx-layout', [
-                div(classes: 'swcx-map-column', [_mapPanel()]),
-                div(classes: 'swcx-list-column', [
-                  _listingPanel(saved, compared),
-                ]),
-              ]),
-              if (_center != null) _insightsPanel(),
-            ]),
+        _filterHeader(),
+        _toolbar(),
+        div(classes: 'swcx-layout', [
+          div(classes: 'swcx-map-column', [_mapPanel()]),
+          div(classes: 'swcx-list-column', [
+            _listingPanel(saved, compared),
+          ]),
+        ]),
+        if (_center != null) _insightsPanel(),
+      ]),
     );
   }
 
@@ -337,13 +464,32 @@ class _ExplorePageState extends State<ExplorePage> {
         span([
           Component.text(
             center == null
-                ? '${_filtered.length} matching commercial property records'
+                ? '${_nearbyQualified.length} matching commercial property records'
                 : '${_nearbyCount(center, 500)} other listings ≤500 m · '
-                      '${_nearbyCount(center, 1000)} other listings ≤1 km',
+                '${_nearbyCount(center, 1000)} other listings ≤1 km',
           ),
         ]),
       ]),
       div(classes: 'swcx-tools', [
+        // Default-on cluster rule. It narrows the LIST and the record count
+        // above; the map keeps showing the full filtered inventory so a user
+        // can still pick a new center anywhere.
+        button(
+          classes: nearbyOnly ? 'swcx-tool swcx-tool--active' : 'swcx-tool',
+          attributes: {
+            'type': 'button',
+            'aria-pressed': nearbyOnly ? 'true' : 'false',
+            'aria-label': 'Show only properties with 3 or more other '
+                'commercial properties within 500 metres',
+          },
+          events: events(
+            onClick: () => setState(() {
+              nearbyOnly = !nearbyOnly;
+              visibleLimit = 24;
+            }),
+          ),
+          [Icon('storefront', size: 'sm'), Component.text('3+ nearby · 500m')],
+        ),
         span(classes: 'swcx-tools-label', [Component.text('Radius')]),
         for (final metres in const [500, 1000])
           button(
@@ -354,7 +500,7 @@ class _ExplorePageState extends State<ExplorePage> {
               'type': 'button',
               'aria-pressed': radiusM == metres ? 'true' : 'false',
               'aria-label':
-                  'Select ${metres == 500 ? '500 metres' : '1 kilometre'} radius',
+              'Select ${metres == 500 ? '500 metres' : '1 kilometre'} radius',
             },
             events: events(
               onClick: () => setState(() {
@@ -413,7 +559,7 @@ class _ExplorePageState extends State<ExplorePage> {
               'lon': p.longitude,
               'rentRm': p.rentalRm,
               'nearby':
-                  center != null &&
+              center != null &&
                   (p.id == center.id ||
                       (_metres(center, p) ?? double.infinity) <= radiusM),
             },
@@ -489,7 +635,7 @@ class _ExplorePageState extends State<ExplorePage> {
           p(classes: 'small', [
             Component.text(
               'Distances are straight-line estimates from catalogue coordinates, '
-              'not travel times. 500 m is included in the 1 km total.',
+                  'not travel times. 500 m is included in the 1 km total.',
             ),
           ]),
         ]),
@@ -542,6 +688,23 @@ class _ExplorePageState extends State<ExplorePage> {
           Component.text('${results.length} listed'),
         ]),
       ]),
+      if (_saveError != null)
+        div(
+          classes: 'swcx-save-error',
+          attributes: const {'role': 'alert'},
+          [
+            p([Component.text(_saveError!)]),
+            button(
+              classes: 'swcx-save-error__dismiss',
+              attributes: const {
+                'type': 'button',
+                'aria-label': 'Dismiss save error',
+              },
+              events: events(onClick: () => setState(() => _saveError = null)),
+              [Component.text('Dismiss')],
+            ),
+          ],
+        ),
       div(classes: 'swcx-list-sort', [
         span(classes: 'field__label', [Component.text('Sort by')]),
         select(
@@ -567,9 +730,29 @@ class _ExplorePageState extends State<ExplorePage> {
       if (results.isEmpty)
         div(classes: 'swcx-list-empty', [
           Icon('search_off', size: 'lg'),
-          h3([Component.text('No matching properties')]),
-          p([Component.text('Try another radius or clear some filters.')]),
-          ActionButton('Clear filters', onClick: _reset),
+          if (nearbyOnly) ...[
+            h3([
+              Component.text('No properties with 3+ neighbours within 500 m'),
+            ]),
+            p([
+              Component.text(
+                'The default “3 other commercial properties within 500 m” rule '
+                'is hiding every listing that otherwise matches your filters. '
+                'Turn it off to see all properties.',
+              ),
+            ]),
+            ActionButton(
+              'Show all properties',
+              onClick: () => setState(() {
+                nearbyOnly = false;
+                visibleLimit = 24;
+              }),
+            ),
+          ] else ...[
+            h3([Component.text('No matching properties')]),
+            p([Component.text('Try another radius or clear some filters.')]),
+            ActionButton('Clear filters', onClick: _reset),
+          ],
         ])
       else
         div(classes: 'swcx-list-scroll', [
@@ -578,13 +761,15 @@ class _ExplorePageState extends State<ExplorePage> {
               PropertyCard(
                 property: p,
                 href:
-                    '/entrepreneur/property-detail?id=${Uri.encodeComponent(p.id)}',
+                '/entrepreneur/property-detail?id=${Uri.encodeComponent(p.id)}',
                 assessHref:
-                    '/entrepreneur/assessment?id=${Uri.encodeComponent(p.id)}',
+                '/entrepreneur/assessments?id=${Uri.encodeComponent(p.id)}',
                 anchorId: 'swcx-property-${p.id}',
+                nearbyCount: _cardNearbyCount(p),
                 selected: p.id == selectedId,
                 saved: saved.contains(p.id),
                 compared: compared.contains(p.id),
+                saving: _savingPropertyIds.contains(p.id),
                 onLocate: () => _choose(p, scrollToMap: true),
                 onToggleSaved: () => _toggleSaved(p.id),
                 onToggleCompared: () => context
@@ -655,7 +840,7 @@ class _ExplorePageState extends State<ExplorePage> {
               dd([
                 Component.text(
                   '$nearby500 within 500 m · '
-                  '${nearby1km - nearby500} more in the 500 m–1 km ring',
+                      '${nearby1km - nearby500} more in the 500 m–1 km ring',
                 ),
               ]),
             ]),
@@ -663,7 +848,7 @@ class _ExplorePageState extends State<ExplorePage> {
           ActionLink(
             'View full property details',
             href:
-                '/entrepreneur/property-detail?id=${Uri.encodeComponent(center.id)}',
+            '/entrepreneur/property-detail?id=${Uri.encodeComponent(center.id)}',
             variant: 'secondary',
           ),
         ]),
@@ -680,7 +865,7 @@ class _ExplorePageState extends State<ExplorePage> {
                 return p([
                   Component.text(
                     'No analysis is available for this listing. The map and nearby '
-                    'property counts remain available.',
+                        'property counts remain available.',
                   ),
                 ]);
               }
@@ -689,7 +874,7 @@ class _ExplorePageState extends State<ExplorePage> {
                 p([
                   Component.text(
                     'F&B competitor count (analysis source): '
-                    '${analysis.competitorCount}',
+                        '${analysis.competitorCount}',
                   ),
                 ]),
                 if (analysis.demandSummary.isNotEmpty)
@@ -705,7 +890,7 @@ class _ExplorePageState extends State<ExplorePage> {
           p(classes: 'small', [
             Component.text(
               'Competition is a separate F&B dataset; the map radius above '
-              'counts commercial property listings only.',
+                  'counts commercial property listings only.',
             ),
           ]),
         ]),
@@ -727,9 +912,9 @@ enum ExploreSort { imported, rentalLow, rentalHigh, areaLarge, areaSmall }
 /// Applies [sort] to [input]. Dart's sort is not stable, so ties break on id —
 /// the grid and the map read the same deterministic sequence.
 List<CommercialProperty> sortForExplore(
-  List<CommercialProperty> input,
-  ExploreSort sort,
-) {
+    List<CommercialProperty> input,
+    ExploreSort sort,
+    ) {
   if (sort == ExploreSort.imported) return List.of(input);
   return [...input]..sort((left, right) {
     final score = switch (sort) {

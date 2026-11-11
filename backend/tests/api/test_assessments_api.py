@@ -35,7 +35,7 @@ def auth(token):
 
 
 @pytest.fixture()
-def identity(client, cleanup_users):
+def identity(client, cleanup_users, catalog_ids):
     sub = str(uuid.uuid4())
     token = make_token(
         sub=sub,
@@ -45,11 +45,25 @@ def identity(client, cleanup_users):
     r = client.get("/api/v1/auth/me", headers=auth(token))
     assert r.status_code == 200, r.text
     register_user_id(cleanup_users, uuid.UUID(sub))
+
+    # Starting an assessment requires the property to be on the caller's Saved
+    # Properties list. Seed that here so the suite exercises the real rule
+    # rather than working around it.
+    for ref in (catalog_ids["analysed"], catalog_ids.get("unanalysed")):
+        if not ref:
+            continue
+        saved = client.post(
+            "/api/v1/saved-properties/",
+            json={"property_ref": ref},
+            headers=auth(token),
+        )
+        assert saved.status_code in (200, 201), saved.text
+
     return {"token": token, "sub": sub, "user_id": uuid.UUID(sub)}
 
 
 @pytest.fixture()
-def other_identity(client, cleanup_users):
+def other_identity(client, cleanup_users, catalog_ids):
     sub = str(uuid.uuid4())
     token = make_token(
         sub=sub,
@@ -59,6 +73,19 @@ def other_identity(client, cleanup_users):
     r = client.get("/api/v1/auth/me", headers=auth(token))
     assert r.status_code == 200, r.text
     register_user_id(cleanup_users, uuid.UUID(sub))
+
+    # A second entrepreneur must save the property before starting their own
+    # assessment of it — the same rule that applies to the first.
+    for ref in (catalog_ids["analysed"], catalog_ids.get("unanalysed")):
+        if not ref:
+            continue
+        saved = client.post(
+            "/api/v1/saved-properties/",
+            json={"property_ref": ref},
+            headers=auth(token),
+        )
+        assert saved.status_code in (200, 201), saved.text
+
     return {"token": token, "sub": sub, "user_id": uuid.UUID(sub)}
 
 
@@ -75,6 +102,11 @@ def cleanup_assessments(cleanup_users):
     with Session(engine) as session:
         session.execute(
             text("DELETE FROM assessment WHERE user_id = ANY(:ids)"),
+            {"ids": list(cleanup_users)},
+        )
+        # Saved rows reference the same users and must go before them.
+        session.execute(
+            text("DELETE FROM favorite_property WHERE user_id = ANY(:ids)"),
             {"ids": list(cleanup_users)},
         )
         session.commit()
@@ -619,3 +651,155 @@ def test_validate_requirements_defaults_optional_numbers():
     assert clean["min_size_sqft"] == 0.0
     assert clean["target_market"] == ""
     assert clean["requirements"] == []
+
+
+# ------------------------------------------- eight-question assessment flow
+
+V2_REQUIREMENTS = {
+    "fnb_concept": "cafe_coffee_shop",
+    "service_model": "hybrid",
+    "target_customers": ["office_workers", "students"],
+    "recommendation_priority": "balanced_suitability",
+    "target_price_segment": "mid_range",
+    "customer_access_mode": "public_transportation",
+    "max_monthly_rent_myr": 8500,
+    "min_floor_area_sqft": 900,
+}
+
+
+def _start(client, identity, property_id):
+    started = client.post(
+        "/api/v1/assessments/",
+        json={"property_id": property_id},
+        headers=auth(identity["token"]),
+    )
+    assert started.status_code == 200, started.text
+    return started.json()["assessment"]["assessment_id"]
+
+
+def test_start_requires_the_property_to_be_on_the_saved_list(
+    client, cleanup_users, catalog_ids
+):
+    sub = str(uuid.uuid4())
+    token = make_token(
+        sub=sub,
+        email=f"bare-{sub[:8]}@{TEST_EMAIL_DOMAIN}",
+        role_claims={"full_name": "Unsaved Tester"},
+    )
+    assert client.get("/api/v1/auth/me", headers=auth(token)).status_code == 200
+    register_user_id(cleanup_users, uuid.UUID(sub))
+
+    r = client.post(
+        "/api/v1/assessments/",
+        json={"property_id": catalog_ids["analysed"]},
+        headers=auth(token),
+    )
+    assert r.status_code == 403, r.text
+    assert "save" in r.text.lower()
+
+
+def test_eight_question_payload_is_accepted_and_versioned(
+    client, identity, catalog_ids
+):
+    aid = _start(client, identity, catalog_ids["analysed"])
+    r = client.patch(
+        f"/api/v1/assessments/{aid}",
+        json={"requirements": V2_REQUIREMENTS},
+        headers=auth(identity["token"]),
+    )
+    assert r.status_code == 200, r.text
+    body = r.json()["assessment"]
+    assert body["requirements_version"] == 2
+    assert body["requirements"]["fnb_concept"] == "cafe_coffee_shop"
+    assert body["requirements"]["target_customers"] == ["office_workers", "students"]
+    # A v2 record needs no derived legacy view.
+    assert body["requirements_legacy_view"] is None
+
+
+def test_legacy_record_is_version_one_and_keeps_its_answers(
+    client, identity, catalog_ids
+):
+    aid = _start(client, identity, catalog_ids["analysed"])
+    r = client.patch(
+        f"/api/v1/assessments/{aid}",
+        json={"requirements": VALID_REQUIREMENTS},
+        headers=auth(identity["token"]),
+    )
+    assert r.status_code == 200, r.text
+    body = r.json()["assessment"]
+    assert body["requirements_version"] == 1
+    assert body["requirements"]["business_type"] == "Cafe"
+    # Only the semantically identical number is derived; the concept is not.
+    view = body["requirements_legacy_view"]
+    assert view["derived_from_legacy"] is True
+    assert view["max_monthly_rent_myr"] == 8000.0
+    assert "fnb_concept" not in view
+
+
+def test_incomplete_questionnaire_is_rejected_as_a_whole(
+    client, identity, catalog_ids
+):
+    aid = _start(client, identity, catalog_ids["analysed"])
+    broken = dict(V2_REQUIREMENTS, target_customers=[], max_monthly_rent_myr=0)
+    r = client.patch(
+        f"/api/v1/assessments/{aid}",
+        json={"requirements": broken},
+        headers=auth(identity["token"]),
+    )
+    assert r.status_code == 422, r.text
+    # Every problem in one response, so the form can show all of them.
+    assert "target_customers" in r.text and "max_monthly_rent_myr" in r.text
+
+
+def test_explanation_is_refused_with_a_code_when_the_model_cannot_load(
+    client, identity, catalog_ids
+):
+    aid = _start(client, identity, catalog_ids["analysed"])
+    r = client.post(
+        f"/api/v1/assessments/{aid}/explanation", headers=auth(identity["token"])
+    )
+    # No fabricated SHAP values: the endpoint reports the real blocker.
+    assert r.status_code in (409, 503), r.text
+    # A machine-readable refusal code must be present. Before shap 0.50 was
+    # installed the blocker was the missing import itself ("install SHAP and
+    # numpy..."); with SHAP available the pipeline runs further and the real
+    # blocker surfaces (e.g. features_unresolved from the analytics data),
+    # so the assertion checks the code contract rather than specific words.
+    detail = r.json().get("detail")
+    code = detail.get("code") if isinstance(detail, dict) else None
+    assert code or "model" in r.text.lower() or "shap" in r.text.lower()
+
+
+def test_assessment_report_has_all_sections_and_never_invents_evidence(
+    client, identity, catalog_ids
+):
+    aid = _start(client, identity, catalog_ids["analysed"])
+    client.patch(
+        f"/api/v1/assessments/{aid}",
+        json={"requirements": V2_REQUIREMENTS},
+        headers=auth(identity["token"]),
+    )
+    r = client.get(f"/api/v1/assessments/{aid}/report", headers=auth(identity["token"]))
+    assert r.status_code == 200, r.text
+    body = r.json()
+    for key in (
+        "property",
+        "questionnaire",
+        "evidence_categories",
+        "research_association",
+        "explanation",
+        "requirement_matching",
+        "missing_information",
+        "model_information",
+        "export",
+        "generated_at",
+    ):
+        assert key in body, key
+    assert body["questionnaire"]["available"] is True
+    # No verified SHAP exists, so both model sections must be unavailable.
+    assert body["research_association"]["available"] is False
+    assert body["explanation"]["available"] is False
+    assert body["export"]["pdf"] is False
+    assert body["missing_information"]
+    checks = {c["key"]: c for c in body["requirement_matching"]["checks"]}
+    assert checks["affordability"]["verdict"] in ("match", "mismatch", "unknown")

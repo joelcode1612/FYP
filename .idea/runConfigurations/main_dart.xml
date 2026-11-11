@@ -5,9 +5,6 @@
          install/transfer time for no benefit. Release builds are unaffected. -->
     <option name="additionalArgs" value="--target-platform=android-arm64 --dart-define-from-file=$PROJECT_DIR$/fyp_mobile_app/config/dev.env" />
     <option name="filePath" value="$PROJECT_DIR$/fyp_mobile_app/lib/main.dart" />
-    <!-- Pin the IDE's "Start paused" checkbox off: it made flutter run wait
-         for a debugger attach before the first frame on every cold start. -->
-    <option name="startPaused" value="false" />
     <method v="2" />
   </configuration>
 </component>

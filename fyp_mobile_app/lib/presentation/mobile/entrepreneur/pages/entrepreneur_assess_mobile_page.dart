@@ -6,7 +6,9 @@ import '../../../../application/services/service_locator.dart';
 import '../../../../core/theme/sitewise_m3.dart';
 import '../../../../core/theme/sitewise_theme.dart';
 import '../../../../core/routing/app_routes.dart';
+import '../../shell/entrepreneur_tab_scope.dart';
 import '../../shell/mobile_app_shell.dart';
+import '../../widgets/async_section.dart';
 import '../../widgets/m3_kit.dart';
 import '../../../shared/widgets/sitewise_bottom_sheet.dart';
 
@@ -25,6 +27,18 @@ class EntrepreneurAssessMobilePage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // The five-tab host keeps this page alive, so a draft created or saved on
+    // the assessment screens never triggered a rebuild: the tab kept showing
+    // "No assessments yet" and 0/0 progress after the user had just finished
+    // one. The session store is a ChangeNotifier now, so every mutation
+    // (start / inputs / saved / discard / restore) repaints this page.
+    return ListenableBuilder(
+      listenable: ServiceLocator.assessmentSession,
+      builder: (context, _) => _buildBody(context),
+    );
+  }
+
+  Widget _buildBody(BuildContext context) {
     final draft = ServiceLocator.assessmentSession.draft;
     return MobileAppShell(
       title: 'Assess',
@@ -82,8 +96,10 @@ class EntrepreneurAssessMobilePage extends StatelessWidget {
                   'Start from a listing, or pick a property with the '
                   'New button, to assess it for your business.',
               actionLabel: 'Find a location',
-              onAction: () =>
-                  Navigator.of(context).pushNamed('/entrepreneur/explore'),
+              onAction: () => EntrepreneurTabScope.open(
+                context,
+                '/entrepreneur/recommendations',
+              ),
             )
           else ...[
             _DraftCard(draft: draft, onOpen: () => _openDraft(context, draft)),
@@ -123,17 +139,14 @@ class EntrepreneurAssessMobilePage extends StatelessWidget {
     await showSitewiseBottomSheet<void>(
       context,
       title: 'Choose a property',
-      builder: (_) => FutureBuilder<List<CommercialProperty>>(
-        future: ServiceLocator.properties.listings(),
-        builder: (context, snap) {
-          if (snap.connectionState != ConnectionState.done) {
-            return const Padding(
-              padding: EdgeInsets.symmetric(vertical: 28),
-              child: Center(child: CircularProgressIndicator()),
-            );
-          }
-          final properties = snap.data ?? const <CommercialProperty>[];
+      builder: (_) => AsyncSection<List<CommercialProperty>>(
+        load: () => ServiceLocator.properties.listings(),
+        errorTitle: 'The property list could not be loaded',
+        builder: (context, properties) {
           if (properties.isEmpty) {
+            // Reached only after a SUCCESSFUL read — a failed read renders the
+            // error state above with its own Retry, instead of claiming there
+            // are no properties.
             return const Padding(
               padding: EdgeInsets.symmetric(vertical: 20),
               child: Text('No properties are available right now.'),

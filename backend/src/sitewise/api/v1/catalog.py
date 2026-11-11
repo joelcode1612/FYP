@@ -1,11 +1,18 @@
-"""Read-only catalogue of the imported F&B property workbook.
+"""Read-only catalogue of the imported research-property workbook.
 
-The 2,126 normalised rows live in ``sitewise_app.properties`` in the analytics
+The 955 normalised rows live in ``sitewise_app.properties`` in the analytics
 database (``Final_Location_Analysis``). That table was previously reachable
 only through the throwaway Express server in ``FYP/test`` (``/api/catalog/
 properties``). This endpoint exposes the SAME dataset through the intended
 FastAPI backend so the Jaspr frontend no longer needs the test folder at
 runtime.
+
+The row set is the 955 U-class commercial properties of
+``SiteWise_PU_Property_Image_Scores_Merged``. The 894 P-class research rows in
+``sitewise_analytics.subject_features`` are model input, NOT listings, and are
+deliberately absent here. ``suitability_score`` is that workbook's uncalibrated
+P-vs-U association index rescaled to 0-100 for ranking; ``source_data`` carries
+the raw score plus ``score_type``. Neither is a business-success probability.
 
 It is intentionally read-only and column-allow-listed: nothing here writes to
 or alters the analytics/geospatial tables, and no scoring, recommendation or

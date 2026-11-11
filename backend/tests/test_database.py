@@ -33,7 +33,10 @@ def test_application_database_connects():
                 )
             )
         }
-        assert {"users", "property", "favorite_property", "recommendation_result"} <= tables
+        assert {"users", "favorite_property", "recommendation_result"} <= tables
+        # The legacy public.property table was retired by migration 0005;
+        # operational property records live in fyp.rental_properties.
+        assert "property" not in tables
 
 
 def test_analytics_database_connects_and_is_read_only_in_practice():

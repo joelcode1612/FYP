@@ -33,7 +33,6 @@ from typing import Any
 
 import httpx
 from supabase import Client, create_client
-from supabase_auth.types import InviteUserByEmailOptions
 
 from sitewise.core.config import settings
 from sitewise.core.exceptions import (
@@ -160,10 +159,13 @@ class SupabaseAdminService:
         one-time code, and sets a password. No custom token is generated and
         no password is ever created or viewed by an administrator.
         """
-        options = InviteUserByEmailOptions(
-            data={"full_name": full_name, **({"phone_number": phone_number} if phone_number else {})},
-            redirect_to=settings.staff_invite_redirect,
-        )
+        options = {
+            "data": {
+                "full_name": full_name,
+                **({"phone_number": phone_number} if phone_number else {}),
+            },
+            "redirect_to": settings.staff_invite_redirect,
+        }
         try:
             invited = self.client.auth.admin.invite_user_by_email(email, options=options)
         except Exception as exc:
@@ -190,9 +192,31 @@ class SupabaseAdminService:
         return _normalize_auth_user(data) if data else None
 
     def admin_list_factors(self, auth_user_id: str) -> list[dict[str, Any]]:
-        """List MFA factors for a user (documented GoTrue admin endpoint)."""
-        data = self._gotrue_admin_json("GET", f"admin/users/{auth_user_id}/factors")
-        return list(data.get("factors", []))
+        """Retrieve MFA factors for a Supabase Auth user."""
+
+        data = self._gotrue_admin_json(
+            "GET",
+            f"admin/users/{auth_user_id}/factors"
+        )
+
+        if isinstance(data, list):
+            factors = data
+
+        elif isinstance(data, dict):
+            factors = data.get("factors", [])
+
+        else:
+            raise ValueError(
+                f"Unexpected MFA response type: {type(data).__name__}"
+            )
+
+        if not isinstance(factors, list):
+            raise ValueError("MFA factors must be a list")
+
+        if not all(isinstance(factor, dict) for factor in factors):
+            raise ValueError("MFA factors contain an invalid record")
+
+        return factors
 
     def admin_delete_factor(self, auth_user_id: str, factor_id: str) -> None:
         """Delete an MFA factor (administrator-supervised recovery).
@@ -349,6 +373,62 @@ class SupabaseAdminService:
     # Role-change audit
     # ------------------------------------------------------------------
 
+    @staticmethod
+    def _audit_payload(
+        *,
+        affected_user_id: uuid.UUID | str | None,
+        affected_email: str | None,
+        performed_by_user_id: uuid.UUID | str,
+        performed_by_email: str | None,
+        action: str,
+        previous_role: str | None = None,
+        new_role: str | None = None,
+        previous_status: str | None = None,
+        new_status: str | None = None,
+        details: dict[str, Any] | None = None,
+        entity_type: str = "user",
+    ) -> dict[str, Any]:
+        """Build the insert payload for the LIVE ``role_change_audit`` schema.
+
+        The live table's columns are ``user_id_affected``,
+        ``affected_email_snapshot``, ``changed_by_user_id``, ``entity_type``,
+        ``entity_id`` (uuid), ``action``, ``action_status``, ``old_role``,
+        ``new_role``, ``old_account_status``, ``new_account_status`` and a
+        NON-NULL ``details`` jsonb. There is no ``performed_by_email`` /
+        ``affected_email`` / ``previous_status`` column — the operator's email
+        is preserved inside the ``details`` jsonb instead of being dropped.
+        Writing the historical field names fails with PostgREST PGRST204,
+        which is exactly how every staff mutation used to break.
+        """
+        payload: dict[str, Any] = {
+            "entity_type": entity_type,
+            "action": action,
+            "action_status": "success",
+            # Non-nullable jsonb: always present, never NULL.
+            "details": {
+                **(details or {}),
+                "performed_by_email": performed_by_email,
+            },
+        }
+        if affected_user_id is not None:
+            payload["user_id_affected"] = str(affected_user_id)
+            # entity_id is uuid-typed, so it can only carry a user identity —
+            # a company registration keeps its id inside `details`.
+            payload["entity_id"] = str(affected_user_id)
+        if affected_email:
+            payload["affected_email_snapshot"] = affected_email
+        if performed_by_user_id is not None:
+            payload["changed_by_user_id"] = str(performed_by_user_id)
+        if previous_role is not None:
+            payload["old_role"] = previous_role
+        if new_role is not None:
+            payload["new_role"] = new_role
+        if previous_status is not None:
+            payload["old_account_status"] = previous_status
+        if new_status is not None:
+            payload["new_account_status"] = new_status
+        return payload
+
     def insert_role_audit(
         self,
         *,
@@ -362,27 +442,21 @@ class SupabaseAdminService:
         previous_status: str | None = None,
         new_status: str | None = None,
         details: dict[str, Any] | None = None,
+        entity_type: str = "user",
     ) -> dict[str, Any]:
-        payload: dict[str, Any] = {
-            "performed_by_user_id": str(performed_by_user_id),
-            "action": action,
-        }
-        if affected_user_id is not None:
-            payload["affected_user_id"] = str(affected_user_id)
-        if affected_email:
-            payload["affected_email"] = affected_email
-        if performed_by_email:
-            payload["performed_by_email"] = performed_by_email
-        for key, value in (
-            ("previous_role", previous_role),
-            ("new_role", new_role),
-            ("previous_status", previous_status),
-            ("new_status", new_status),
-        ):
-            if value is not None:
-                payload[key] = value
-        if details:
-            payload["details"] = details
+        payload = self._audit_payload(
+            affected_user_id=affected_user_id,
+            affected_email=affected_email,
+            performed_by_user_id=performed_by_user_id,
+            performed_by_email=performed_by_email,
+            action=action,
+            previous_role=previous_role,
+            new_role=new_role,
+            previous_status=previous_status,
+            new_status=new_status,
+            details=details,
+            entity_type=entity_type,
+        )
         try:
             result = self.client.table("role_change_audit").insert(payload).execute()
         except Exception as exc:
@@ -392,9 +466,34 @@ class SupabaseAdminService:
     def list_role_audit(self, affected_user_id: uuid.UUID | str | None = None) -> list[dict[str, Any]]:
         query = self.client.table("role_change_audit").select("*")
         if affected_user_id is not None:
-            query = query.eq("affected_user_id", str(affected_user_id))
-        result = query.order("created_at", desc=True).limit(200).execute()
-        return list(result.data or [])
+            # Live column: user_id_affected (NOT affected_user_id — filtering
+            # by the historical name fails with PGRST204).
+            query = query.eq("user_id_affected", str(affected_user_id))
+        result = query.order("changed_at", desc=True).limit(200).execute()
+        return [self._audit_wire(row) for row in (result.data or [])]
+
+    @staticmethod
+    def _audit_wire(row: dict[str, Any]) -> dict[str, Any]:
+        """Normalize one live ``role_change_audit`` row to the API contract
+        the staff router (and the Jaspr activity page) reads — the inverse of
+        :meth:`_audit_payload`."""
+        details = row.get("details") if isinstance(row.get("details"), dict) else {}
+        return {
+            "action": row.get("action") or "",
+            "affected_user_id": row.get("user_id_affected") or "",
+            "affected_email": row.get("affected_email_snapshot") or "",
+            "performed_by_user_id": row.get("changed_by_user_id") or "",
+            "performed_by_email": details.get("performed_by_email") or "",
+            "created_at": row.get("changed_at") or "",
+            "previous_role": row.get("old_role"),
+            "new_role": row.get("new_role"),
+            "previous_status": row.get("old_account_status"),
+            "new_status": row.get("new_account_status"),
+            "details": details or None,
+            "entity_type": row.get("entity_type") or "",
+            "entity_id": row.get("entity_id") or "",
+            "action_status": row.get("action_status") or "",
+        }
 
     # ------------------------------------------------------------------
     # Agent profiles + listing assignment + verification (existing tables)

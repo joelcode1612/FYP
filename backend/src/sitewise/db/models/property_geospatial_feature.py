@@ -10,7 +10,7 @@ class PropertyGeospatialFeature(SQLModel, table=True):
     __tablename__ = "property_geospatial_feature"
 
     geo_feature_id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
-    property_id: int = Field(foreign_key="property.property_id")
+    property_id: int = Field()  # legacy FK to public.property retired by migration 0005
     population_500m: Optional[int] = None
     population_1km: Optional[int] = None
     competitor_count_1km: Optional[int] = None

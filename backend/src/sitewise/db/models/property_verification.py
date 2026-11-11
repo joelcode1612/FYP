@@ -1,6 +1,6 @@
 """Unified property verification (listing + ownership dimensions).
 
-One workflow per owner-submitted property (``property.property_id``): the
+One workflow per owner-submitted property (``fyp.rental_properties.id``): the
 listing-accuracy dimension and the ownership/authority dimension are reviewed
 independently, and the property becomes publication-eligible only when BOTH
 are ``verified`` (``publication_eligible`` is recomputed on every decision).
@@ -55,7 +55,7 @@ class PropertyVerification(SQLModel, table=True):
     )
 
     verification_id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
-    property_id: int = Field(foreign_key="property.property_id", nullable=False, index=True)
+    property_id: int = Field(foreign_key="fyp.rental_properties.id", nullable=False, index=True)
     listing_status: str = Field(default="not_submitted", max_length=32, nullable=False)
     ownership_status: str = Field(default="not_submitted", max_length=32, nullable=False)
     submitted_by: uuid.UUID = Field(foreign_key="users.user_id", nullable=False, index=True)
@@ -80,7 +80,7 @@ class VerificationDocument(SQLModel, table=True):
     verification_id: uuid.UUID = Field(
         foreign_key="property_verification.verification_id", nullable=False, index=True
     )
-    property_id: int = Field(foreign_key="property.property_id", nullable=False, index=True)
+    property_id: int = Field(foreign_key="fyp.rental_properties.id", nullable=False, index=True)
     verification_type: str = Field(max_length=16, nullable=False)
     document_type: str = Field(max_length=60, nullable=False)
     original_filename: str = Field(max_length=255, nullable=False)
@@ -96,7 +96,7 @@ class VerificationAudit(SQLModel, table=True):
     __tablename__ = "verification_audit"
 
     audit_id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
-    property_id: int = Field(foreign_key="property.property_id", nullable=False, index=True)
+    property_id: int = Field(foreign_key="fyp.rental_properties.id", nullable=False, index=True)
     verification_id: uuid.UUID | None = Field(
         default=None, foreign_key="property_verification.verification_id", index=True
     )

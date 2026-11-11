@@ -4,6 +4,7 @@ import '../../domain/entities/commercial_property.dart';
 import '../../domain/entities/explore.dart';
 import '../../domain/entities/location_intelligence.dart';
 import '../../domain/entities/recommendation.dart';
+import '../../domain/entities/recommendation_search.dart';
 import '../controllers/entrepreneur_controller.dart';
 import '../states/entrepreneur_state.dart';
 import 'providers.dart';
@@ -28,6 +29,9 @@ class EntrepreneurNotifier extends Notifier<EntrepreneurState> {
       getLocationAnalysis: ref.watch(getLocationAnalysisProvider),
       preferences: ref.watch(businessPreferencesProvider),
       exploreRepository: ref.watch(exploreRepositoryProvider),
+      recommendationSearchRepository: ref.watch(
+        recommendationSearchRepositoryProvider,
+      ),
       onPreferencesUpdated: ref.watch(onPreferencesUpdatedProvider),
     );
     _controller.addListener(_publish);
@@ -70,6 +74,19 @@ class EntrepreneurNotifier extends Notifier<EntrepreneurState> {
   /// Database-backed filter facets when an [ExploreRepository] is wired.
   ExploreFilterOptions? get filterOptions => state.filterOptions;
 
+  /// The criteria (filters, sort, page size) currently driving the
+  /// server-driven search. Meaningful only when [isServerDriven].
+  ExploreQuery get exploreCriteria => state.exploreCriteria;
+
+  /// True when [loadExplore]/[loadMore] run real server searches.
+  bool get isServerDriven => state.filterOptions != null ||
+      state.exploreTotal != null || _controller.isServerDriven;
+
+  /// The classified failure behind [error] (connection / session / server /
+  /// contract), for UIs that distinguish the states. Null when there is no
+  /// error or the failure carried no classification.
+  Object? get exploreFailure => state.exploreFailure;
+
   List<PropertyRecommendation> get recommendations => state.recommendations;
 
   LocationAnalysis? get analysis => state.analysis;
@@ -80,10 +97,63 @@ class EntrepreneurNotifier extends Notifier<EntrepreneurState> {
 
   BusinessPreferences get prefs => state.preferences;
 
+  // --- Server-ranked recommendation search ---------------------------------
+  //
+  // Read-only projections of the same [EntrepreneurState] the Explore path
+  // publishes, so the Recommendations page has exactly one state owner.
+
+  /// Ranked results, in the order the server returned them.
+  List<RankedProperty> get ranked => state.ranked;
+
+  /// Whether a live recommendation backend is wired at this composition root.
+  bool get hasRecommendationSearch => _controller.hasRecommendationSearch;
+
+  bool get recommendationLoading => state.recommendationLoading;
+
+  bool get recommendationRefreshing => state.recommendationRefreshing;
+
+  String? get recommendationError => state.recommendationError;
+
+  bool get recommendationHasMore => state.recommendationHasMore;
+
+  int? get recommendationTotal => state.recommendationTotal;
+
+  RecommendationModelStatus? get recommendationModel =>
+      state.recommendationModel;
+
+  RecommendationFacets? get recommendationFacets =>
+      state.recommendationFacets;
+
+  RecommendationSearchRequest get recommendationRequest =>
+      state.recommendationRequest;
+
+  String? get selectedRankedId => state.selectedRankedId;
+
+  /// The selected listing, resolved against the current page set. Null when
+  /// nothing is selected or the selection is no longer in the results.
+  RankedProperty? get selectedRanked {
+    final id = state.selectedRankedId;
+    if (id == null) return null;
+    for (final item in state.ranked) {
+      if (item.id == id) return item;
+    }
+    return null;
+  }
+
+  Future<void> searchRecommendations({RecommendationSearchRequest? request}) =>
+      _controller.searchRecommendations(request: request);
+
+  Future<void> loadMoreRecommendations() =>
+      _controller.loadMoreRecommendations();
+
+  void selectRanked(String id) => _controller.selectRanked(id);
+
+  void applyRecommendationRequest(RecommendationSearchRequest request) =>
+      _controller.applyRecommendationRequest(request);
+
   /// Loads listings: a real server search when an ExploreRepository is wired,
   /// otherwise the client-filtered full listing.
   Future<void> loadExplore() => _controller.loadExplore();
-
   /// Appends the next server page. No-op on the client-driven path.
   Future<void> loadMore() => _controller.loadMore();
 
@@ -95,9 +165,17 @@ class EntrepreneurNotifier extends Notifier<EntrepreneurState> {
   Future<void> loadAnalysis(String propertyId) =>
       _controller.loadAnalysis(propertyId);
 
-  void setQuery(String value) => _controller.setQuery(value);
+  /// Pass [reload]: false when a criteria change will immediately follow, so
+  /// the pair produces one request instead of two.
+  void setQuery(String value, {bool reload = true}) =>
+      _controller.setQuery(value, reload: reload);
 
   void setFilter(String value) => _controller.setFilter(value);
+
+  /// Replaces the server-driven search criteria (filters, sort, page size)
+  /// and re-runs the search from the first page.
+  void setExploreCriteria(ExploreQuery criteria) =>
+      _controller.setExploreCriteria(criteria);
 
   /// Replaces the current preferences. The write-back to the app's preferences
   /// store stays a callback supplied by the composition root.

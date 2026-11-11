@@ -67,7 +67,7 @@ class _TourPreviewMobilePageState extends State<TourPreviewMobilePage> {
         title: 'Tour preview',
         // Matches parentShellRoute('/tour-preview') so the Listing tab stays
         // highlighted while the tour is open.
-        currentRoute: '/entrepreneur/explore',
+        currentRoute: '/entrepreneur/recommendations',
         body: vm.loading
             ? const SitewiseLoadingState()
             : vm.tour == null

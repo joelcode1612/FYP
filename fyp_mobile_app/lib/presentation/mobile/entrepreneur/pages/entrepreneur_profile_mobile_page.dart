@@ -2,21 +2,40 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_logic/shared_logic.dart';
 import 'package:flutter/material.dart';
 
-import '../../../../application/services/service_locator.dart';
 import '../../../../core/theme/sitewise_theme.dart';
+import '../../../shared/widgets/sitewise_inline_notice.dart';
 import '../../shell/mobile_app_shell.dart';
 
 /// Mobile entrepreneur profile: identity, business preferences and account
 /// actions. Intentionally not an analytics surface.
 
-class EntrepreneurProfileMobilePage extends ConsumerWidget {
+class EntrepreneurProfileMobilePage extends ConsumerStatefulWidget {
   const EntrepreneurProfileMobilePage({super.key});
+
+  @override
+  ConsumerState<EntrepreneurProfileMobilePage> createState() =>
+      _EntrepreneurProfileMobilePageState();
+}
+
+class _EntrepreneurProfileMobilePageState
+    extends ConsumerState<EntrepreneurProfileMobilePage> {
+  @override
+  void initState() {
+    super.initState();
+    // The saved/comparison counts on this page are server-backed. Nothing used
+    // to read the shortlist on mobile, so both counters were always 0 after a
+    // restart even though the account had saved properties.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      ref.read(appNotifierProvider.notifier).loadSaved();
+    });
+  }
 
   /// Signs out through the shared auth state so the session, the persisted
   /// tokens and every route guard see the same transition; the workspace is
   /// then torn down in one navigation rather than left underneath the auth
   /// screen.
-  Future<void> _logOut(BuildContext context, WidgetRef ref) async {
+  Future<void> _logOut(BuildContext context) async {
     await ref.read(authNotifierProvider.notifier).signOut();
     if (!context.mounted) return;
     Navigator.of(context).pushNamedAndRemoveUntil('/auth', (_) => false);
@@ -32,13 +51,20 @@ class EntrepreneurProfileMobilePage extends ConsumerWidget {
   }
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final prefs = ServiceLocator.preferences;
+  Widget build(BuildContext context) {
+    // Watched, not read from the locator: editing preferences now invalidates
+    // the provider, so this tile repaints with the new business type/budget
+    // instead of showing the values captured before the edit.
+    final prefs = ref.watch(businessPreferencesProvider);
     final appState = ref.watch(appNotifierProvider);
     return MobileAppShell(
       title: 'Profile',
       currentRoute: '/entrepreneur/profile',
-      body: ListView(
+      body: RefreshIndicator(
+        color: SitewiseColors.action,
+        onRefresh: () =>
+            ref.read(appNotifierProvider.notifier).loadSaved(),
+        child: ListView(
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
         children: [
           // Only the verified profile is observed here; the identity card
@@ -47,7 +73,14 @@ class EntrepreneurProfileMobilePage extends ConsumerWidget {
             user: ref.watch(authNotifierProvider.select((s) => s.user)),
             saved: appState.saved.length,
             compared: appState.compared.length,
+            countsKnown: appState.savedError == null,
           ),
+          if (appState.savedError != null)
+            SitewiseInlineNotice(
+              message: appState.savedError!,
+              busy: appState.savedLoading,
+              onRetry: () => ref.read(appNotifierProvider.notifier).loadSaved(),
+            ),
           const SizedBox(height: 20),
           _SectionLabel('Business'),
           const SizedBox(height: 8),
@@ -65,7 +98,9 @@ class EntrepreneurProfileMobilePage extends ConsumerWidget {
               _Tile(
                 icon: Icons.bookmark_border_rounded,
                 title: 'Saved properties',
-                subtitle: '${appState.saved.length} saved',
+                subtitle: appState.savedError == null
+                    ? '${appState.saved.length} saved'
+                    : 'Could not be loaded',
                 onTap: () =>
                     Navigator.of(context).pushNamed('/entrepreneur/saved'),
               ),
@@ -97,7 +132,7 @@ class EntrepreneurProfileMobilePage extends ConsumerWidget {
           ),
           const SizedBox(height: 20),
           OutlinedButton.icon(
-            onPressed: () => _logOut(context, ref),
+            onPressed: () => _logOut(context),
             icon: const Icon(Icons.logout_rounded, size: 18),
             label: const Text('Log out'),
             style: OutlinedButton.styleFrom(
@@ -114,6 +149,7 @@ class EntrepreneurProfileMobilePage extends ConsumerWidget {
             ),
           ),
         ],
+        ),
       ),
     );
   }
@@ -126,10 +162,15 @@ class _IdentityCard extends StatelessWidget {
   final int saved;
   final int compared;
 
+  /// False when the shortlist read failed — the pills then show "—" instead of
+  /// a zero that reads as "you have saved nothing".
+  final bool countsKnown;
+
   const _IdentityCard({
     required this.user,
     required this.saved,
     required this.compared,
+    this.countsKnown = true,
   });
 
   @override
@@ -187,8 +228,8 @@ class _IdentityCard extends StatelessWidget {
                   spacing: 6,
                   children: [
                     _Pill(user?.role.label ?? 'F&B Entrepreneur'),
-                    _Pill('$saved saved'),
-                    _Pill('$compared compared'),
+                    _Pill(countsKnown ? '$saved saved' : '— saved'),
+                    _Pill(countsKnown ? '$compared compared' : '— compared'),
                   ],
                 ),
               ],

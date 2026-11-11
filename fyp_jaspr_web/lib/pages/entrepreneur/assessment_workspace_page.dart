@@ -81,6 +81,44 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
   Future<List<String>>? _typesFuture;
   Future<ApiResult<EvidencePayload>>? _evidenceFuture;
 
+  // --- Stage 1: the saved-property selector ---------------------------------
+  //
+  // Stage 1 is the workspace's entry state: the entrepreneur picks one of the
+  // properties their account has saved. The list comes from the authenticated
+  // saved-properties endpoint (the account's own rows) and every entry is
+  // resolved against the catalogue, so the cards show real listing data.
+
+  /// The saved properties, resolved against the catalogue. Null until the
+  /// first read completes.
+  Future<AssessmentSelectableProperties>? _selectableFuture;
+
+  /// The account's assessment history, used to badge a saved property that
+  /// already has an assessment. A failed read omits the badge — it never
+  /// invents a status.
+  Future<Map<String, AssessmentRecord>>? _historyFuture;
+
+  /// The resolved history, keyed by catalogue ref. Empty until the read
+  /// completes; a failed read leaves it empty.
+  Map<String, AssessmentRecord> _history = const {};
+
+  /// The Stage 1 search query.
+  String _search = '';
+
+  /// The catalogue refs the entrepreneur selected, in selection order.
+  ///
+  /// Up to three properties form the shortlist. Each still gets its OWN
+  /// independent assessment record: the backend's create-or-resume contract is
+  /// per property (one `property_id` per assessment row) and there is no
+  /// combined multi-property prediction or report, so this list never becomes
+  /// a single batched record.
+  static const int _maxSelections = 3;
+  final List<String> _selectedRefs = <String>[];
+
+  /// What the last Continue actually did, one entry per selected property.
+  /// Stage 1 renders this as the selected-assessments overview: created,
+  /// resumed or refused, with a way into each independent assessment.
+  List<_SelectionOutcome> _outcomes = const [];
+
   @override
   void initState() {
     super.initState();
@@ -88,6 +126,27 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
     if (_openStage == 'location_evidence' && component.propertyId.isNotEmpty) {
       _evidenceFuture = _api.evidence(component.propertyId);
     }
+  }
+
+  /// Re-runs the load when the route changes the property.
+  ///
+  /// The router reuses the same element for the same route, so a query-only
+  /// change (Stage 1 → `/entrepreneur/assessments?id=…`) arrives here rather
+  /// than as a fresh state. Without this the workspace would keep showing the
+  /// previous property's record.
+  @override
+  void didUpdateComponent(covariant AssessmentWorkspacePage oldComponent) {
+    super.didUpdateComponent(oldComponent);
+    if (oldComponent.propertyId == component.propertyId) return;
+    _openStage = _inlineStages.contains(component.stage) ? component.stage : null;
+    _record = null;
+    _draft = null;
+    _draftErrors = const {};
+    _typesFuture = null;
+    _evidenceFuture = null;
+    _notice = null;
+    _writeError = null;
+    _future = _open(component.propertyId);
   }
 
   // ------------------------------------------------------------------- load
@@ -334,30 +393,145 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
     return items.isEmpty ? '' : items.first;
   }
 
+  // ------------------------------------------------------------------ stage 1
+
+  /// The account's saved properties. One read of the saved list, then one
+  /// catalogue read per distinct ref (see [GetAssessmentSelectableProperties]).
+  Future<AssessmentSelectableProperties> _loadSelectable() =>
+      AppLocator.assessmentSelectableProperties.call();
+
+  /// The account's assessments, keyed by catalogue ref, so a saved property
+  /// that already has an assessment can say so before anything is created.
+  Future<Map<String, AssessmentRecord>> _loadHistory() async {
+    final result = await _api.history(limit: 50, offset: 0);
+    if (!result.ok) return const {};
+    return {for (final record in result.value!.items) record.propertyId: record};
+  }
+
+  /// Re-runs the saved-property read. The shortlist is cleared with it: the
+  /// list itself may have changed, so stale refs must not survive a reload.
+  void _reloadSelectable() => setState(() {
+        _selectableFuture = _loadSelectable();
+        _historyFuture = _loadHistory();
+        _selectedRefs.clear();
+        _outcomes = const [];
+        _search = '';
+        _notice = null;
+        _writeError = null;
+      });
+
+  /// Toggles one saved property in the shortlist.
+  ///
+  /// A property whose details could not be resolved never reaches this
+  /// method (its checkbox is disabled), duplicates are impossible because the
+  /// toggle checks membership first, and a fourth property cannot be added.
+  /// Searching and filtering never touch the selection — the checkbox state
+  /// is derived from this list, not from what is currently visible.
+  void _toggleSelection(String propertyRef) => setState(() {
+        if (_selectedRefs.contains(propertyRef)) {
+          _selectedRefs.remove(propertyRef);
+        } else if (_selectedRefs.length < _maxSelections) {
+          _selectedRefs.add(propertyRef);
+        }
+        // A changed shortlist invalidates the previous Continue's result.
+        _outcomes = const [];
+        _notice = null;
+        _writeError = null;
+      });
+
+  /// Continues with EVERY selected property.
+  ///
+  /// The backend's create-or-resume contract is per property (one `property_id`
+  /// per assessment row), so each selection is processed on its own and the
+  /// three requests run sequentially on purpose: each is an independent server
+  /// transaction that checks the catalogue, resumes the caller's existing
+  /// record (never duplicated) or creates a new one only for a property this
+  /// account has saved. There is no batch endpoint and no combined assessment
+  /// to reuse.
+  ///
+  /// A per-property failure never aborts the other selections — it is reported
+  /// for that property in the overview below.
+  Future<void> _continueSelected() async {
+    if (_busy || _selectedRefs.isEmpty) return;
+    setState(() {
+      _busy = true;
+      _writeError = null;
+      _notice = null;
+      _outcomes = const [];
+    });
+
+    final outcomes = <_SelectionOutcome>[];
+    for (final ref in _selectedRefs) {
+      // 1. Is there already an assessment for this property?
+      final existing = await _api.byProperty(ref);
+      if (!mounted) return;
+      if (!existing.ok) {
+        // Could not even check (network, 403, unknown ref) — report it for
+        // this property instead of guessing whether a record exists.
+        outcomes.add(_SelectionOutcome(ref: ref, failure: existing.failure));
+        continue;
+      }
+      final record = existing.value;
+      if (record != null) {
+        outcomes.add(_SelectionOutcome(
+          ref: ref,
+          title: record.property?.title,
+          resumed: true,
+        ));
+        continue;
+      }
+
+      // 2. Otherwise the server creates it — and refuses when the property is
+      //    not on this account's saved list.
+      final started = await _api.start(ref);
+      if (!mounted) return;
+      if (!started.ok) {
+        outcomes.add(_SelectionOutcome(ref: ref, failure: started.failure));
+        continue;
+      }
+      final startedValue = started.value!;
+      outcomes.add(_SelectionOutcome(
+        ref: ref,
+        title: startedValue.assessment.property?.title,
+        resumed: !startedValue.created,
+      ));
+    }
+
+    // Refresh the badges from the real records rather than guessing which
+    // rows the Continue created.
+    final history = await _loadHistory();
+    if (!mounted) return;
+
+    final ready = outcomes.where((o) => !o.failed).length;
+    final created = outcomes.where((o) => !o.failed && !o.resumed).length;
+    final failed = outcomes.where((o) => o.failed).length;
+    final notice = switch ((ready, failed)) {
+      (0, _) => 'No assessment could be started. See the reason for each '
+          'property below.',
+      (_, 0) =>
+        '$ready assessment${ready == 1 ? '' : 's'} ready: '
+            '$created new, ${ready - created} reopened. Open each property '
+            'below — the assessments are independent.',
+      (_, _) => '$ready of ${outcomes.length} assessments ready. '
+          '$failed could not be started — the reason is shown below.',
+    };
+
+    setState(() {
+      _busy = false;
+      _outcomes = outcomes;
+      _history = history;
+      _notice = notice;
+    });
+  }
+
+
+
   // ------------------------------------------------------------------ render
 
   @override
   Component build(BuildContext context) {
     if (component.propertyId.isEmpty) {
-      return _shell(
-        title: 'Location Assessment Workspace',
-        subtitle:
-            'A five-stage assessment of one commercial property, saved to your '
-            'account as you go.',
-        child: const EmptyState(
-          title: 'No property selected',
-          body:
-              'The workspace assesses one listing at a time, so it needs a '
-              'property to work on. Choose a listing from Explore, from your '
-              'recommendations or from your saved properties, then open its '
-              'assessment.',
-          action: ActionLink(
-            'Browse commercial properties',
-            href: '/entrepreneur/explore',
-            variant: 'primary',
-          ),
-        ),
-      );
+      return _stage1();
     }
 
     return FutureBuilder<_Load>(
@@ -414,13 +588,441 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
     required Component child,
   }) => AppLayout(
     role: AppRole.entrepreneur,
-    currentRoute: '/entrepreneur/assessment',
+    currentRoute: '/entrepreneur/assessments',
     title: title,
     eyebrow: 'Location assessment',
     subtitle: subtitle,
     actions: actions,
     child: child,
   );
+
+  // --------------------------------------------------------------- stage 1 UI
+
+  /// Stage 1 — Select Property.
+  ///
+  /// The account's real saved properties, read from the authenticated
+  /// saved-properties endpoint and resolved against the catalogue. Opening
+  /// this screen never starts an assessment: only the Continue action asks
+  /// the backend to create or resume one.
+  Component _stage1() {
+    final selectable = _selectableFuture ??= _loadSelectable();
+    _historyFuture ??= _loadHistory().then((records) {
+      if (mounted) setState(() => _history = records);
+      return records;
+    });
+
+    return _shell(
+      title: 'Location Assessment',
+      subtitle:
+          'Choose a saved commercial property to begin your location '
+          'assessment.',
+      actions: const [
+        ActionLink(
+          'Assessment History',
+          href: '/entrepreneur/assessments/history',
+          variant: 'secondary',
+        ),
+      ],
+      child: FutureBuilder<AssessmentSelectableProperties>(
+        future: selectable,
+        builder: (context, snapshot) {
+          if (snapshot.connectionState != ConnectionState.done) {
+            return div(classes: 'stack stack--md', [
+              Skeleton(variant: 'block'),
+              Skeleton(variant: 'row', count: 4),
+            ]);
+          }
+          final data = snapshot.data;
+          if (data == null) {
+            return EmptyState(
+              title: 'Your saved properties did not load',
+              body:
+                  'The workspace received no response for your saved list. '
+                  'Nothing has been changed.',
+              action: ActionButton('Try again', onClick: _reloadSelectable),
+            );
+          }
+          if (data.isUnauthorized) {
+            return const EmptyState(
+              title: 'You are not signed in to this workspace',
+              body:
+                  'Saved properties belong to your account, so the service '
+                  'will only return them to a signed-in entrepreneur.',
+              action: ActionLink(
+                'Go to sign in',
+                href: '/login',
+                variant: 'primary',
+              ),
+            );
+          }
+          if (data.hasError) {
+            return EmptyState(
+              title: 'Your saved properties could not be loaded',
+              body: data.errorMessage!,
+              action: ActionButton('Try again', onClick: _reloadSelectable),
+            );
+          }
+          if (data.isEmpty) {
+            return const EmptyState(
+              title: 'No saved properties yet',
+              body:
+                  'No saved properties yet. Save a property from Explore to '
+                  'start a location assessment.',
+              action: ActionLink(
+                'Explore Properties',
+                href: '/entrepreneur/explore',
+                variant: 'primary',
+              ),
+            );
+          }
+          return _stage1List(data);
+        },
+      ),
+    );
+  }
+
+  /// The Stage 1 body: the five-stage order, the saved-property list and the
+  /// Continue action.
+  Component _stage1List(AssessmentSelectableProperties data) {
+    final visible = data.search(_search);
+    // The shortlist is resolved against the WHOLE saved list, never the
+    // filtered view, so searching cannot hide or drop a selection. Only
+    // resolved listings take part — the summary rows render listing data.
+    final selectedItems = <SelectableProperty>[
+      for (final ref in _selectedRefs)
+        for (final item in data.properties)
+          if (item.propertyRef == ref && item.property != null) item,
+    ];
+    final atLimit = _selectedRefs.length >= _maxSelections;
+    final canContinue = _selectedRefs.isNotEmpty && !_busy;
+
+    return div(classes: 'stack stack--sections', [
+      _stage1Progress(),
+
+      // Saved refs the catalogue no longer holds. Reported, never selectable.
+      if (data.unresolvedRefs.isNotEmpty)
+        div(classes: 'notice notice-warn', [
+          div([
+            Component.text(
+              '${data.unresolvedRefs.length} saved '
+              '${data.unresolvedRefs.length == 1 ? 'property is' : 'properties are'} '
+              'no longer in the property catalogue, so they cannot be '
+              'assessed. Remove them from your saved list to clear this '
+              'notice.',
+            ),
+          ]),
+        ]),
+
+      section(classes: 'panel', [
+        div(classes: 'panel__head', [
+          span(classes: 'panel__title', [
+            Component.text('Your Saved Properties'),
+          ]),
+          span(
+            classes: 'asw-select-count',
+            attributes: const {'aria-live': 'polite'},
+            [
+              Component.text(
+                '${_selectedRefs.length} of $_maxSelections selected',
+              ),
+            ],
+          ),
+        ]),
+        div(classes: 'panel__body stack stack--md', [
+          SearchInput(
+            label: 'Search saved properties',
+            placeholder: 'Search saved properties…',
+            ariaLabel: 'Search saved properties',
+            onInput: (value) => setState(() => _search = value),
+          ),
+          if (atLimit)
+            div(classes: 'notice notice-info asw-select-limit', [
+              Component.text(
+                'You have selected the maximum of $_maxSelections properties. '
+                'Remove one below to choose a different property.',
+              ),
+            ]),
+          if (visible.isEmpty)
+            p(classes: 'body', [
+              Component.text(
+                _search.trim().isEmpty
+                    ? 'None of your saved properties can be assessed right '
+                          'now.'
+                    : 'No saved property matches “${_search.trim()}”.',
+              ),
+            ])
+          else
+            div(
+              classes: 'asw-select',
+              attributes: {
+                'role': 'group',
+                'aria-label':
+                    'Saved properties — choose up to $_maxSelections',
+              },
+              [for (final item in visible) _stage1Card(item, atLimit)],
+            ),
+        ]),
+      ]),
+
+      // Compact shortlist. Replaces the old full-property preview: three
+      // oversized images pushed the Continue action off-screen.
+      if (selectedItems.isNotEmpty)
+        _SelectedSummary(
+          items: selectedItems,
+          maxCount: _maxSelections,
+          onRemove: _toggleSelection,
+        ),
+
+      div(classes: 'asw-select__actions', [
+        ActionLink(
+          'Assessment History',
+          href: '/entrepreneur/assessments/history',
+          variant: 'secondary',
+        ),
+        button(
+          classes: 'btn btn--primary',
+          attributes: {
+            'type': 'button',
+            if (!canContinue) 'disabled': '',
+            'aria-disabled': canContinue ? 'false' : 'true',
+          },
+          events: events(onClick: () {
+            if (_selectedRefs.isEmpty || _busy) return;
+            _continueSelected();
+          }),
+          [
+            Component.text(
+              _busy
+                  ? 'Starting…'
+                  : _selectedRefs.length <= 1
+                      ? 'Continue Assessment'
+                      : 'Continue with ${_selectedRefs.length} assessments',
+            ),
+          ],
+        ),
+      ]),
+
+      if (_outcomes.isNotEmpty) _outcomesPanel(),
+
+      if (_notice != null) _successNotice(_notice!),
+      if (_writeError != null) _errorNotice(_writeError!),
+    ]);
+  }
+
+  /// What the backend did for each selected property on Continue, with a way
+  /// into every independent assessment. This is navigation between the
+  /// selected properties — NOT a cross-property comparison; the backend has
+  /// no combined prediction or report contract.
+  Component _outcomesPanel() {
+    return section(classes: 'panel asw-outcomes', [
+      div(classes: 'panel__head', [
+        span(classes: 'panel__title', [
+          Component.text('Selected assessments'),
+        ]),
+      ]),
+      div(classes: 'panel__body stack stack--md', [
+        p(classes: 'small asw-muted', [
+          Component.text(
+            'Every selected property has its own independent assessment '
+            'record — its own questionnaire, evidence, prediction and report. '
+            'Open one to continue its stages.',
+          ),
+        ]),
+        for (final outcome in _outcomes)
+          div(
+            classes: [
+              'asw-outcome',
+              if (outcome.failed) 'asw-outcome--failed',
+            ].join(' '),
+            [
+              div(classes: 'asw-outcome__main', [
+                span(classes: 'asw-outcome__title', [
+                  Component.text(
+                    outcome.title ?? 'Property ${outcome.ref}',
+                  ),
+                ]),
+                span(classes: 'small', [
+                  Component.text(
+                    outcome.failed
+                        ? outcome.failure!.message
+                        : outcome.resumed
+                            ? 'Existing assessment reopened — nothing was '
+                                'duplicated.'
+                            : 'New assessment created. Stage 1 is recorded as '
+                                'complete.',
+                  ),
+                ]),
+              ]),
+              if (!outcome.failed)
+                ActionLink(
+                  'Open assessment',
+                  href:
+                      '/entrepreneur/assessments?id=${Uri.encodeQueryComponent(outcome.ref)}',
+                  variant: 'secondary',
+                ),
+            ],
+          ),
+      ]),
+    ]);
+  }
+
+  /// One saved property as a selectable card.
+  ///
+  /// The checkbox is the real control: up to three cards can be selected,
+  /// the keyboard toggles them like any native checkbox, and a property whose
+  /// listing could not be resolved is disabled rather than silently
+  /// unselectable. When the shortlist is full the remaining checkboxes are
+  /// disabled so a fourth property cannot be added.
+  Component _stage1Card(SelectableProperty item, bool atLimit) {
+    final property = item.property;
+    final unavailable = property == null;
+    final selected = _selectedRefs.contains(item.propertyRef);
+    final locked = !selected && (atLimit || unavailable);
+    final record = _history[item.propertyRef];
+
+    return label(
+      classes: [
+        'asw-select-card',
+        if (selected) 'is-selected',
+        if (locked) 'asw-select-card--locked',
+      ].join(' '),
+      [
+        input<bool>(
+          type: InputType.checkbox,
+          name: 'saved-property',
+          value: item.propertyRef,
+          checked: selected,
+          disabled: locked,
+          onChange: (_) => _toggleSelection(item.propertyRef),
+        ),
+        div(classes: 'asw-select-card__body', [
+          if (property != null &&
+              property.imageUrl != null &&
+              property.imageUrl!.isNotEmpty)
+            img(
+              src: property.imageUrl!,
+              attributes: {'alt': property.title, 'loading': 'lazy'},
+              classes: 'asw-select-card__img',
+            )
+          else
+            div(classes: 'asw-select-card__noimg', [
+              Icon('image_not_supported', size: 'sm'),
+            ]),
+          div(classes: 'asw-select-card__main', [
+            div(classes: 'asw-select-card__title-row', [
+              span(classes: 'asw-select-card__title', [
+                Component.text(property?.title ?? item.propertyRef),
+              ]),
+              // Only shown when the account really has a record for this
+              // property — the history read, not a guess.
+              if (record != null)
+                Pill(
+                  record.isCompleted
+                      ? 'Assessment complete'
+                      : 'Assessment in progress',
+                  tone: record.isCompleted ? 'success' : 'action',
+                ),
+            ]),
+            span(classes: 'small asw-muted', [
+              Component.text('Property ${item.propertyRef}'),
+            ]),
+            if (property != null) ...[
+              span(classes: 'small', [
+                Component.text(
+                  [
+                    property.address,
+                    if (property.city.isNotEmpty) property.city,
+                    if (property.state.isNotEmpty) property.state,
+                  ].join(', '),
+                ),
+              ]),
+              span(classes: 'small asw-muted', [
+                Component.text(
+                  '${property.rentalDisplay} / month · '
+                  '${property.sizeSqft.toStringAsFixed(0)} sq ft · '
+                  '${property.propertyType}',
+                ),
+              ]),
+            ] else
+              span(classes: 'small asw-muted', [
+                Component.text(
+                  item.unavailableReason ??
+                      'The listing details for this property are unavailable.',
+                ),
+              ]),
+          ]),
+        ]),
+      ],
+    );
+  }
+
+  /// The five-stage order for Stage 1.
+  ///
+  /// It states the order only. No stage reads as complete here — completion
+  /// comes from the backend's persisted record.
+  Component _stage1Progress() {
+    const stages = [
+      ('select_property', 'Select property'),
+      ('business_requirements', 'Business preferences'),
+      ('location_evidence', 'Location evidence'),
+      ('ai_explanation', 'AI explanation'),
+      ('assessment_report', 'Assessment report'),
+    ];
+    return section(
+      classes: 'sw-assessment-journey',
+      attributes: const {'aria-label': 'Location assessment stages'},
+      [
+        div(classes: 'sw-assessment-journey__heading', [
+          div(classes: 'sw-assessment-journey__heading-text', [
+            span(classes: 'sw-assessment-journey__eyebrow', [
+              Component.text('YOUR ASSESSMENT JOURNEY'),
+            ]),
+            h2(classes: 'sw-assessment-journey__title', [
+              Component.text('Five stages to your location decision'),
+            ]),
+          ]),
+          div(classes: 'sw-assessment-journey__count', [
+            strong([Component.text('0 / 5')]),
+            span([Component.text(' completed')]),
+          ]),
+        ]),
+        div(classes: 'sw-assessment-journey__scroll', [
+          ol(classes: 'sw-assessment-journey__steps', [
+            for (final (index, stage) in stages.indexed)
+              li(
+                classes:
+                    'sw-assessment-journey__step '
+                    'sw-assessment-journey__step--'
+                    '${index == 0 ? 'current' : 'upcoming'}',
+                [
+                  div(
+                    classes: 'sw-assessment-journey__control',
+                    attributes: {
+                      'aria-label':
+                          'Step ${index + 1}: ${stage.$2} — '
+                          '${index == 0 ? 'Current stage' : 'Not started'}',
+                    },
+                    [
+                      span(classes: 'sw-assessment-journey__circle', [
+                        Component.text('${index + 1}'),
+                      ]),
+                      span(classes: 'sw-assessment-journey__step-title', [
+                        Component.text(stage.$2),
+                      ]),
+                      span(classes: 'sw-assessment-journey__step-status', [
+                        Component.text(
+                          index == 0 ? 'Current stage' : 'Not started',
+                        ),
+                      ]),
+                    ],
+                  ),
+                ],
+              ),
+          ]),
+        ]),
+      ],
+    );
+  }
 
   // --------------------------------------------------------------- failure UI
 
@@ -484,6 +1086,11 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
     title: 'Location Assessment Workspace',
     subtitle: 'Assessment not started',
     actions: const [
+      ActionLink(
+        'Assessment History',
+        href: '/entrepreneur/assessments/history',
+        variant: 'secondary',
+      ),
       ActionLink(
         'Back to Explore',
         href: '/entrepreneur/explore',
@@ -550,6 +1157,11 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
           : '${property.title} · ${property.address}, ${property.city}',
       actions: [
         ActionLink(
+          'Assessment History',
+          href: '/entrepreneur/assessments/history',
+          variant: 'secondary',
+        ),
+        ActionLink(
           'Property detail',
           href: '/entrepreneur/property-detail?id=${record.propertyId}',
           variant: 'secondary',
@@ -593,7 +1205,11 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
               ),
               if (_openStage == stage.key &&
                   stage.key == 'business_requirements')
-                _requirementsPanel(record),
+                // A record saved before the questionnaire existed keeps its
+                // own legacy editor; a v2 record gets the eight questions.
+                record.requirementsVersion == 1
+                    ? _legacyRequirementsPanel(record)
+                    : _questionnairePanel(record),
               if (_openStage == stage.key && stage.key == 'location_evidence')
                 _evidencePanel(record),
             ],
@@ -639,9 +1255,9 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
     ),
     span(classes: 'crumbs__sep', [Component.text('›')]),
     AppLink(
-      to: '/entrepreneur/explore',
+      to: '/entrepreneur/assessments',
       classes: 'crumbs__item crumbs__link',
-      children: [Component.text('Explore')],
+      children: [Component.text('Assessments')],
     ),
     span(classes: 'crumbs__sep', [Component.text('›')]),
     span(classes: 'crumbs__item crumbs__item--current', [
@@ -667,9 +1283,366 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
         ]),
       ]);
 
+  // ------------------------------------------- stage 2: eight-question flow
+
+  /// One business-preference question.
+  ///
+  /// `kind` is `single`, `multi` or `number`; `options` are (token, label)
+  /// pairs. Tokens are what the backend validates, so a label can change
+  /// without rewriting a saved answer.
+  static const List<
+    ({String id, String prompt, String help, String kind, List<(String, String)> options})
+  >
+  _questions = [
+    (
+      id: 'fnb_concept',
+      prompt: 'What kind of F&B business are you opening?',
+      help: 'Your concept shapes how the competition figures are read.',
+      kind: 'single',
+      options: [
+        ('cafe_coffee_shop', 'Café / Coffee Shop'),
+        ('restaurant', 'Restaurant'),
+        ('bakery_dessert_shop', 'Bakery / Dessert Shop'),
+        ('fast_food_quick_service', 'Fast Food / Quick Service'),
+        ('beverage_shop_kiosk', 'Beverage Shop / Kiosk'),
+        ('other_fnb', 'Other F&B'),
+      ],
+    ),
+    (
+      id: 'service_model',
+      prompt: 'How will you serve customers?',
+      help: 'Dine-in, takeaway and delivery place different demands on a site.',
+      kind: 'single',
+      options: [
+        ('dine_in', 'Dine-in'),
+        ('takeaway_quick_service', 'Takeaway / Quick Service'),
+        ('delivery_focused', 'Delivery Focused'),
+        ('hybrid', 'Hybrid'),
+      ],
+    ),
+    (
+      id: 'target_customers',
+      prompt: 'Who are your target customers?',
+      help: 'Select every group that matters. At least one is required.',
+      kind: 'multi',
+      options: [
+        ('nearby_residents', 'Nearby Residents'),
+        ('office_workers', 'Office Workers'),
+        ('students', 'Students'),
+        ('commuters', 'Commuters'),
+        ('general_public', 'General Public'),
+      ],
+    ),
+    (
+      id: 'recommendation_priority',
+      prompt: 'What matters most when choosing the location?',
+      help: 'This is the priority the assessment is read against.',
+      kind: 'single',
+      options: [
+        ('high_customer_demand', 'High Customer Demand'),
+        ('affordable_operating_location', 'Affordable Operating Location'),
+        ('easy_customer_accessibility', 'Easy Customer Accessibility'),
+        ('favorable_competition', 'Favorable Competition'),
+        ('balanced_suitability', 'Balanced Suitability'),
+      ],
+    ),
+    (
+      id: 'target_price_segment',
+      prompt: 'How is your menu priced?',
+      help: 'Price positioning informs how competitor density is interpreted.',
+      kind: 'single',
+      options: [
+        ('budget_friendly', 'Budget-Friendly'),
+        ('mid_range', 'Mid-Range'),
+        ('premium', 'Premium'),
+        ('mixed_price_range', 'Mixed Price Range'),
+      ],
+    ),
+    (
+      id: 'customer_access_mode',
+      prompt: 'How will most customers reach you?',
+      help: 'Checked against the transport measurements the analysis holds.',
+      kind: 'single',
+      options: [
+        ('walking', 'Walking'),
+        ('public_transportation', 'Public Transportation'),
+        ('private_vehicle', 'Private Vehicle'),
+        ('mixed_transportation', 'Mixed Transportation'),
+      ],
+    ),
+    (
+      id: 'max_monthly_rent_myr',
+      prompt: 'What is your maximum monthly rental?',
+      help: 'In MYR. Must be greater than zero; compared with the asking rent.',
+      kind: 'number',
+      options: [],
+    ),
+    (
+      id: 'min_floor_area_sqft',
+      prompt: 'What is the smallest floor area you can operate in?',
+      help: 'In square feet. Must be greater than zero; compared with the listing.',
+      kind: 'number',
+      options: [],
+    ),
+  ];
+
+  /// Answers keyed by question id. Numbers are stored as text while typing and
+  /// parsed only when the step is validated.
+  final Map<String, dynamic> _answers = <String, dynamic>{};
+  int _answerStep = 0;
+  String? _answerError;
+  bool _answersSeeded = false;
+
+  void _seedAnswers() {
+    if (_answersSeeded) return;
+    _answersSeeded = true;
+    final stored = _record?.requirements;
+    final legacy = _record?.requirementsLegacyView;
+    for (final q in _questions) {
+      final value = stored?[q.id] ?? legacy?[q.id];
+      if (value == null) continue;
+      if (q.kind == 'multi' && value is List) {
+        _answers[q.id] = [for (final item in value) '$item'];
+      } else if (q.kind == 'number' && value is num) {
+        _answers[q.id] = value == value.roundToDouble()
+            ? value.toStringAsFixed(0)
+            : '$value';
+      } else if (value is String) {
+        _answers[q.id] = value;
+      }
+    }
+  }
+
+  bool _stepValid(String kind, Object? value) {
+    switch (kind) {
+      case 'multi':
+        return value is List && value.isNotEmpty;
+      case 'number':
+        final parsed = double.tryParse('${value ?? ''}');
+        return parsed != null && parsed.isFinite && parsed > 0;
+      default:
+        return value is String && value.isNotEmpty;
+    }
+  }
+
+  Map<String, dynamic> _answersPayload() => {
+    for (final q in _questions)
+      q.id: q.kind == 'number'
+          ? double.parse('${_answers[q.id]}')
+          : _answers[q.id],
+  };
+
+  Future<void> _saveAnswers(
+    AssessmentRecord record, {
+    bool completeStage = false,
+  }) async {
+    if (_busy) return;
+    final firstInvalid = _questions.indexWhere(
+      (q) => !_stepValid(q.kind, _answers[q.id]),
+    );
+    if (firstInvalid >= 0) {
+      setState(() {
+        _answerStep = firstInvalid;
+        _answerError = 'Answer this question before saving.';
+      });
+      return;
+    }
+    setState(() {
+      _busy = true;
+      _answerError = null;
+      _writeError = null;
+      _notice = null;
+    });
+    final payload = _answersPayload();
+    final result = completeStage
+        ? await _api.saveRequirementsAndComplete(
+            record.assessmentId,
+            payload,
+            'business_requirements',
+          )
+        : await _api.saveRequirements(record.assessmentId, payload);
+    if (!mounted) return;
+    if (!result.ok) {
+      setState(() {
+        _busy = false;
+        _writeError = result.failure;
+      });
+      return;
+    }
+    final updated = result.value!;
+    setState(() {
+      _busy = false;
+      _record = updated;
+      _future = Future.value(_Started(updated));
+      _notice = completeStage
+          ? 'Your eight answers are saved and stage 2 is recorded as '
+                'complete. ${updated.completedStages} of '
+                '${updated.totalStages} stages done.'
+          : 'Your answers were saved to this assessment.';
+    });
+  }
+
+  /// One question at a time, with a progress bar and Previous/Next.
+  Component _questionnairePanel(AssessmentRecord record) {
+    _seedAnswers();
+    final index = _answerStep.clamp(0, _questions.length - 1);
+    final q = _questions[index];
+    final isLast = index == _questions.length - 1;
+    final value = _answers[q.id];
+    final progress = ((index + 1) / _questions.length * 100).round();
+
+    return section(classes: 'panel asw-inline', [
+      div(classes: 'panel__head', [
+        span(classes: 'panel__title', [
+          Component.text('Business preferences'),
+        ]),
+        span(classes: 'small asw-muted', [
+          Component.text('Question ${index + 1} of ${_questions.length}'),
+        ]),
+      ]),
+      div(classes: 'panel__body stack stack--md', [
+        div(
+          attributes: {
+            'style':
+                'height:6px;border-radius:999px;background:#E2E8F0;overflow:hidden;',
+          },
+          [
+            div(
+              attributes: {
+                'style':
+                    'height:100%;width:$progress%;'
+                    'background:#1D4ED8;transition:width .2s ease;',
+              },
+              const [],
+            ),
+          ],
+        ),
+        h3(classes: 'asw-q__prompt', [Component.text(q.prompt)]),
+        p(classes: 'asw-note', [Component.text(q.help)]),
+        if (q.kind == 'number')
+          Field(
+            labelText: q.id == 'max_monthly_rent_myr'
+                ? 'Maximum monthly rental (RM)'
+                : 'Minimum floor area (sq ft)',
+            error: _answerError,
+            hint: 'Enter a number greater than zero.',
+            child: input(
+              attributes: {
+                'type': 'number',
+                'min': '1',
+                'step': '1',
+                'value': '${value ?? ''}',
+              },
+              events: events<String>(
+                onInput: (v) => setState(() {
+                  _answers[q.id] = v;
+                  _answerError = null;
+                }),
+              ),
+            ),
+          )
+        else
+          div(classes: 'chips', [
+            for (final (token, caption) in q.options)
+              label(
+                classes: _isPicked(q, token) ? 'checkpill is-on' : 'checkpill',
+                [
+                  input(
+                    attributes: {
+                      'type': q.kind == 'multi' ? 'checkbox' : 'radio',
+                      'name': 'aswQ${q.id}',
+                      if (_isPicked(q, token)) 'checked': '',
+                    },
+                    events: events(
+                      onChange: (_) => setState(() {
+                        _toggleAnswer(q, token);
+                        _answerError = null;
+                      }),
+                    ),
+                  ),
+                  span([Component.text(caption)]),
+                ],
+              ),
+          ]),
+        if (_answerError != null)
+          div(classes: 'notice notice-warn', [
+            Component.text(_answerError!),
+          ]),
+        div(classes: 'actions-row', [
+          ActionButton(
+            'Previous',
+            variant: 'ghost',
+            onClick: index == 0
+                ? null
+                : () => setState(() {
+                    _answerStep = index - 1;
+                    _answerError = null;
+                  }),
+          ),
+          if (isLast)
+            ActionButton(
+              _busy ? 'Saving…' : 'Save and complete stage 2',
+              onClick: _busy ? null : () => _saveAnswers(record, completeStage: true),
+            )
+          else
+            ActionButton(
+              'Next',
+              onClick: () {
+                if (!_stepValid(q.kind, _answers[q.id])) {
+                  setState(
+                    () => _answerError = 'Answer this question to continue.',
+                  );
+                  return;
+                }
+                setState(() {
+                  _answerStep = index + 1;
+                  _answerError = null;
+                });
+              },
+            ),
+          ActionButton(
+            'Save answers only',
+            variant: 'secondary',
+            onClick: _busy ? null : () => _saveAnswers(record),
+          ),
+        ]),
+      ]),
+    ]);
+  }
+
+  bool _isPicked(
+    ({String id, String prompt, String help, String kind, List<(String, String)> options}) q,
+    String token,
+  ) {
+    final value = _answers[q.id];
+    if (q.kind == 'multi') {
+      return value is List && value.contains(token);
+    }
+    return value == token;
+  }
+
+  void _toggleAnswer(
+    ({String id, String prompt, String help, String kind, List<(String, String)> options}) q,
+    String token,
+  ) {
+    if (q.kind == 'multi') {
+      final current = [
+        for (final item in (_answers[q.id] as List? ?? const [])) '$item',
+      ];
+      if (current.contains(token)) {
+        current.remove(token);
+      } else {
+        current.add(token);
+      }
+      _answers[q.id] = current;
+      return;
+    }
+    _answers[q.id] = token;
+  }
+
   // ------------------------------------------------------------- stage 2 body
 
-  Component _requirementsPanel(AssessmentRecord record) {
+  Component _legacyRequirementsPanel(AssessmentRecord record) {
     _seedDraft();
     final draft = _draft;
     if (draft == null) return const span([]);
@@ -1360,6 +2333,115 @@ class _ProgressPanel extends StatelessComponent {
         span(classes: 'small asw-muted', [
           Component.text('Last updated ${assessmentStamp(record.updatedAt!)}'),
         ]),
+    ]);
+  }
+}
+
+/// What the backend actually did for one selected property on Continue.
+class _SelectionOutcome {
+  const _SelectionOutcome({
+    required this.ref,
+    this.title,
+    this.resumed = false,
+    this.failure,
+  });
+
+  /// The catalogue ref, preserved exactly as selected.
+  final String ref;
+
+  /// The listing title from the record the backend returned; null when the
+  /// request failed before a record came back (the ref is shown instead).
+  final String? title;
+
+  /// True when an existing record was resumed rather than created.
+  final bool resumed;
+
+  /// The backend's refusal for THIS property. Other selections still proceed.
+  final AssessmentFailure? failure;
+
+  bool get failed => failure != null;
+}
+
+/// The compact selected-properties summary for Stage 1.
+///
+/// Deliberately NOT the full listing preview: with up to three properties the
+/// oversized images pushed the Continue action off-screen. Each row keeps a
+/// small thumbnail, the title, the two figures that matter for a shortlist
+/// (monthly rental, floor area) and an explicit remove action.
+class _SelectedSummary extends StatelessComponent {
+  final List<SelectableProperty> items;
+  final int maxCount;
+  final void Function(String propertyRef) onRemove;
+
+  const _SelectedSummary({
+    required this.items,
+    required this.maxCount,
+    required this.onRemove,
+  });
+
+  @override
+  Component build(BuildContext context) => section(classes: 'panel asw-selected', [
+    div(classes: 'panel__head', [
+      span(classes: 'panel__title', [Component.text('Selected properties')]),
+      span(classes: 'asw-select-count', [
+        Component.text('${items.length} of $maxCount selected'),
+      ]),
+    ]),
+    div(classes: 'panel__body stack stack--sm', [
+      p(classes: 'small asw-muted', [
+        Component.text(
+          'Each property keeps its own independent assessment — separate '
+          'questionnaire, evidence, prediction and report. The assessments '
+          'are not combined into one comparison.',
+        ),
+      ]),
+      for (final item in items) _row(item),
+    ]),
+  ]);
+
+  Component _row(SelectableProperty item) {
+    final property = item.property!;
+    return div(classes: 'asw-selected__row', [
+      if (property.imageUrl != null && property.imageUrl!.isNotEmpty)
+        img(
+          src: property.imageUrl!,
+          attributes: {'alt': property.title, 'loading': 'lazy'},
+          classes: 'asw-selected__thumb',
+        )
+      else
+        // No placeholder photograph: the style guide forbids one, and a fake
+        // image would misrepresent a listing that has none.
+        div(classes: 'asw-selected__noimg', [
+          Icon('image_not_supported', size: 'sm'),
+        ]),
+      div(classes: 'asw-selected__main', [
+        span(classes: 'asw-selected__title', [
+          Component.text(property.title),
+        ]),
+        span(classes: 'small', [
+          Component.text(
+            '${property.rentalDisplay} / month · '
+            '${property.sizeSqft.toStringAsFixed(0)} sq ft',
+          ),
+        ]),
+        span(classes: 'small asw-muted', [
+          Component.text(
+            [
+              'Property ${item.propertyRef}',
+              if (property.city.isNotEmpty) property.city,
+            ].join(' · '),
+          ),
+        ]),
+      ]),
+      button(
+        classes: 'asw-selected__remove',
+        attributes: {
+          'type': 'button',
+          'aria-label': 'Remove ${property.title} from the selection',
+        },
+        events: events(onClick: () => onRemove(item.propertyRef)),
+        [Component.text('Remove')],
+      ),
     ]);
   }
 }

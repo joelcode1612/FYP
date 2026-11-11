@@ -26,6 +26,7 @@ import 'pages/entrepreneur/dashboard_page.dart' as e_dashboard;
 import 'pages/entrepreneur/my_properties_page.dart' as e_my_properties;
 import 'pages/entrepreneur/add_property_page.dart' as e_add_property;
 import 'pages/entrepreneur/explanation_page.dart' as e_explanation;
+import 'pages/entrepreneur/ai_recommendations_page.dart' as e_ai;
 import 'pages/entrepreneur/explore_page.dart' as e_explore;
 import 'pages/entrepreneur/preferences_page.dart' as e_preferences;
 import 'pages/entrepreneur/profile_page.dart' as e_profile;
@@ -121,6 +122,17 @@ class SitewiseApp extends StatelessComponent {
             return (id == null || id.isEmpty)
                 ? '/admin/listings'
                 : '/admin/listing-detail?id=${Uri.encodeComponent(id)}';
+          }
+          // Explore was replaced by Recommendations. Old bookmarks, in-app
+          // links and shared URLs keep working: the query string is carried
+          // over verbatim so `?q=`, `?id=` and filter parameters survive the
+          // move instead of silently resetting the search.
+          if (path == '/entrepreneur/explore' ||
+              path == '/entrepreneur/explore/') {
+            final uri = Uri.parse(state.location);
+            return uri
+                .replace(path: '/entrepreneur/recommendations')
+                .toString();
           }
           final rolePath = RegExp(
             r'^/(entrepreneur|owner|admin|agent)(/|$)',
@@ -491,6 +503,17 @@ class SitewiseApp extends StatelessComponent {
               title: 'Why this property — Sitewise',
             ),
           ),
+          // AI recommendations: the personalised Layer 2/3 pipeline
+          // (saved preferences, durable batches, optional SHAP section).
+          Route(
+            path: '/entrepreneur/ai-recommendations',
+            builder: (context, state) => _page(
+              e_ai.AiRecommendationsPage(
+                resultId: state.queryParams['result'] ?? '',
+              ),
+              title: 'AI recommendations — Sitewise',
+            ),
+          ),
           Route(
             path: '/entrepreneur/property-detail',
             builder: (context, state) => _page(
@@ -525,13 +548,25 @@ class SitewiseApp extends StatelessComponent {
               title: '360° tour — Sitewise',
             ),
           ),
+          // Canonical discovery destination (replaced Explore). `?id=<catalogue
+          // id>` is honoured so the old `/entrepreneur/explore?id=...` links
+          // still open with that unit selected; `?id=map` simply lands on the
+          // list, because the location panel is always on screen here.
           Route(
             path: '/entrepreneur/recommendations',
-            builder: (context, state) => _page(
-              const e_recommendations.RecommendationsPage(),
-              title: 'Recommendations — Sitewise',
-              description: 'Listings ranked against your stated preferences.',
-            ),
+            builder: (context, state) {
+              final id = state.queryParams['id'];
+              return _page(
+                e_recommendations.RecommendationsPage(
+                  key: ValueKey('recommendations-${id ?? ''}'),
+                  initialPropertyId: (id == null || id == 'map') ? null : id,
+                ),
+                title: 'Recommendations — Sitewise',
+                description:
+                    'Listings ranked against your stated preferences, with '
+                    'requirement-level match reasons and location intelligence.',
+              );
+            },
           ),
           Route(
             path: '/entrepreneur/compare',
@@ -574,6 +609,11 @@ class SitewiseApp extends StatelessComponent {
           // `?stage=` optionally opens one of the two in-page stage panels.
           // The Flutter mobile assessment is a separate data-collection
           // workflow and never routes here.
+          //
+          // This is the backward-compatible deep link: it still opens the
+          // workspace for one property. `/entrepreneur/assessments` is the
+          // canonical route now (it opens Stage 1 when no property is given),
+          // so this one keeps working for old bookmarks and shared links.
           Route(
             path: '/entrepreneur/assessment',
             builder: (context, state) => _page(
@@ -587,14 +627,33 @@ class SitewiseApp extends StatelessComponent {
                   'to your account as you go.',
             ),
           ),
+          // The assessment history lives under the workspace route. It is
+          // registered before the workspace itself so the history path is
+          // always matched by its own route.
           Route(
-            path: '/entrepreneur/assessments',
+            path: '/entrepreneur/assessments/history',
             builder: (context, state) => _page(
               const e_assessment_history.AssessmentHistoryPage(),
               title: 'Assessment history — Sitewise',
               description:
                   'Every location assessment saved to your account, with its '
                   'real progress and report availability.',
+            ),
+          ),
+          // The main Assessments destination: the five-stage workspace. With
+          // no `?id=` it opens Stage 1 — the saved-property selector — and
+          // never starts an assessment on its own.
+          Route(
+            path: '/entrepreneur/assessments',
+            builder: (context, state) => _page(
+              e_assessment.AssessmentWorkspacePage(
+                propertyId: state.queryParams['id'] ?? '',
+                stage: state.queryParams['stage'] ?? '',
+              ),
+              title: 'Location Assessment Workspace — Sitewise',
+              description:
+                  'A five-stage assessment of one commercial property, saved '
+                  'to your account as you go.',
             ),
           ),
           Route(
@@ -625,10 +684,20 @@ class SitewiseApp extends StatelessComponent {
           ),
           Route(
             path: '/agent/property-detail',
-            builder: (context, state) => _page(
-              AgentPropertyDetailPage(id: state.queryParams['id'] ?? ''),
-              title: 'Listing — Sitewise agent',
-            ),
+            builder: (context, state) {
+              final id = state.queryParams['id'] ?? '';
+              // Keyed by id (same pattern as /admin/listing-detail):
+              // navigating between two listings must rebuild the state —
+              // jaspr reuses the State when type and position match, and
+              // switching listings must never show the previous draft.
+              return _page(
+                AgentPropertyDetailPage(
+                  key: ValueKey('agent-property-$id'),
+                  id: id,
+                ),
+                title: 'Manage property — Sitewise agent',
+              );
+            },
           ),
           Route(
             path: '/agent/enquiries',

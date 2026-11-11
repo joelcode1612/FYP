@@ -1,7 +1,9 @@
 import 'package:jaspr_riverpod/jaspr_riverpod.dart';
 // The main barrel does not re-export `Override`; this companion barrel does.
 import 'package:jaspr_riverpod/misc.dart' show Override;
-import 'package:shared_logic/shared_logic.dart';
+// The shared barrel now also exports an ApiPropertyRepository; this app binds
+// its own browser-transport implementation from api_property_repository.dart.
+import 'package:shared_logic/shared_logic.dart' hide ApiPropertyRepository;
 
 import 'dev_auth_bypass.dart';
 
@@ -58,6 +60,34 @@ abstract final class AppLocator {
   static final SavedPropertiesRepository savedPropertiesRepo =
       ApiSavedPropertiesRepository(const WebApiClient());
 
+  /// Server-side recommendation search over the property catalogue
+  /// (`POST /api/v1/recommendations/search`).
+  ///
+  /// The backend owns filtering, ordering and cursor pagination, so this app
+  /// never sorts or pages the catalogue locally. Ids are CATALOGUE ids — the
+  /// same space [savedPropertiesRepo], assessments and the PU model use — so a
+  /// ranked card can be saved, assessed and opened without translation.
+  static final RecommendationSearchRepository recommendationSearchRepo =
+      ApiRecommendationSearchRepository(const WebApiClient());
+
+  /// The personalised Layer 2/3 pipeline (`/recommendations/generate`,
+  /// `/recommendations/me/generated`, `/recommendations/{id}/explanation`).
+  /// Ownership always comes from the authenticated session; no user id is
+  /// ever sent by this app.
+  static final ApiPersonalisedRecommendationRepository
+      personalisedRecommendations =
+      ApiPersonalisedRecommendationRepository(const WebApiClient());
+
+  /// The assessment Stage 1 selector's data source: the account's own saved
+  /// properties, each resolved against the catalogue so the page can show real
+  /// listing details. One use case, one saved-list read, one catalogue read
+  /// per distinct ref — and never the browser-session mock list.
+  static final GetAssessmentSelectableProperties
+  assessmentSelectableProperties = GetAssessmentSelectableProperties(
+    savedPropertiesRepo,
+    propertyRepo,
+  );
+
   /// The unified listing/ownership verification workflow — submitter actions
   /// and the admin review queue both ride this one repository over
   /// `/api/v1/properties/verification/*` and `/api/v1/staff/properties/*`.
@@ -69,6 +99,13 @@ abstract final class AppLocator {
   /// Stateless: one shared const instance. Campaigns and Surveys deliberately
   /// do not use it — those two have no backend surface on purpose.
   static const AdminApi adminApi = AdminApi();
+
+  /// Agent listing management over `/api/v1/staff/me/listings` and the
+  /// assigned-listing detail/proposal/photo endpoints. Rides the shared
+  /// [ApiClient] port like every other live repository, so the same
+  /// shared_logic class backs the mobile agent workspace when it exists.
+  static final AgentListingRepository agentListingRepo =
+      ApiAgentListingRepository(const WebApiClient());
 
   // --- Application services (shared orchestration) --------------------------
   static final PropertyService properties = PropertyService(propertyRepo);
@@ -93,6 +130,17 @@ abstract final class AppLocator {
       ApiLocationIntelligenceRepository(const WebApiClient());
   static final LocationIntelligenceService intelligence =
       LocationIntelligenceService(intelligenceRepo);
+
+  /// Read-only research-ML surface for the Full Analysis page: the selected
+  /// artifact's metadata/taxonomy, the P/U association score and the per-
+  /// feature coverage diagnostic over `/api/v1/ml/*`. Transport only — the
+  /// backend resolves features and runs the saved model; this never scores.
+  /// The persisted SHAP explanation and target matching are read through
+  /// [AssessmentApi] (assessment-scoped), not here, so this page can never
+  /// trigger the POST that computes SHAP or advances a stage.
+  static final PuPredictionRepository puPredictions = ApiPuPredictionRepository(
+    const WebApiClient(),
+  );
 
   static final VerificationService verification = VerificationService(
     verificationRepo,
@@ -220,9 +268,9 @@ abstract final class AppLocator {
     // Demo Mode has no account shortlist; skip the (unauthenticated) read.
     if (!isSignedIn) return;
     try {
-      final refs = await savedPropertiesRepo
-          .savedRefs()
-          .timeout(const Duration(seconds: 3));
+      final refs = await savedPropertiesRepo.savedRefs().timeout(
+        const Duration(seconds: 3),
+      );
       if (refs.isEmpty) return;
       uiSeed = uiSeed.copyWith(saved: {...uiSeed.saved, ...refs});
     } on Object {
@@ -260,6 +308,12 @@ abstract final class AppLocator {
       ),
     ),
     savedPropertiesRepositoryProvider.overrideWithValue(savedPropertiesRepo),
+    // Recommendations are server-ranked for both apps. Overriding this is what
+    // makes the Recommendations page show real, ranked, paginated catalogue
+    // rows instead of a locally sorted list.
+    recommendationSearchRepositoryProvider.overrideWithValue(
+      recommendationSearchRepo,
+    ),
     propertyVerificationRepositoryProvider.overrideWithValue(
       propertyVerificationRepo,
     ),

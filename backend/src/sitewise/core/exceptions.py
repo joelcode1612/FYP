@@ -17,6 +17,14 @@ class ConflictError(SiteWiseError):
     status_code = 409
 
 
+class ValidationError(SiteWiseError):
+    """A request value violates a business validation rule that Pydantic
+    cannot express on its own (for example an address the provider could not
+    confirm). Maps to 422."""
+
+    status_code = 422
+
+
 # ---------------------------------------------------------------------------
 # Authentication / authorization errors.
 #

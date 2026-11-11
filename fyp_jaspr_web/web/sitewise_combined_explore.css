@@ -34,6 +34,9 @@
 .swcx-map-counter { display:inline-flex; align-items:center; background:#eff6ff; color:#1e40af;
   border-radius:99px; font-size:11px; font-weight:800; padding:7px 11px; }
 .swcx-map-canvas { position:relative; height:550px; background:#e8eef6; min-width:0; width:100%; }
+/* Leaflet mounts on this child, never on the framework-rendered canvas, so a
+   Jaspr re-render cannot strip the classes its CSS depends on. */
+.swcx-map-mount { position:absolute; inset:0; }
 .swcx-hidden-bridge { display:none !important; }
 .swcx-map-foot { padding:13px 17px 12px; border-top:1px solid #e2e8f0; }
 .swcx-map-foot p { margin:9px 0 0; line-height:1.5; color:#64748b; }
@@ -88,7 +91,7 @@
 .swcx-popup strong { display:block; font-size:13px; color:#0f172a; }
 .swcx-popup small { display:block; margin:4px 0; color:#475569; }
 .swcx-popup a { display:inline-block; color:#1d4ed8; font-weight:750; margin-top:7px; }
-.swcx-map-error { position:absolute; inset:0; z-index:500; display:grid; place-items:center; text-align:center;
+.swcx-map-error { position:absolute; inset:0; z-index:900; display:grid; place-items:center; text-align:center;
   padding:20px; background:#e8eef6; color:#334155; font-weight:650; line-height:1.5; }
 @media (max-width:1140px) {
   .swcx-layout { grid-template-columns:minmax(0,1.15fr) minmax(300px,.85fr); }

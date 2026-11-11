@@ -11,18 +11,19 @@ import '../../presentation/mobile/auth/widgets/auth_tabs.dart';
 import '../../presentation/mobile/onboarding/pages/onboarding_flow_page.dart';
 import '../../presentation/mobile/start/app_start_gate.dart';
 import '../../presentation/mobile/shell/entrepreneur_tab_host.dart';
-import '../../presentation/mobile/entrepreneur/pages/entrepreneur_assessment_setup_mobile_page.dart';
+import '../../presentation/mobile/entrepreneur/pages/entrepreneur_assessment_questions_mobile_page.dart';
 import '../../presentation/mobile/entrepreneur/pages/entrepreneur_assessment_summary_mobile_page.dart';
+import '../../presentation/mobile/entrepreneur/pages/entrepreneur_ai_recommendations_mobile_page.dart';
 import '../../presentation/mobile/entrepreneur/pages/entrepreneur_compare_mobile_page.dart';
 import '../../presentation/mobile/entrepreneur/pages/entrepreneur_evidence_mobile_page.dart';
 import '../../presentation/mobile/landing/pages/landing_mobile_page.dart';
 import '../../presentation/mobile/entrepreneur/pages/entrepreneur_preferences_mobile_page.dart';
 import '../../presentation/mobile/entrepreneur/pages/entrepreneur_property_detail_mobile_page.dart';
-import '../../presentation/mobile/entrepreneur/pages/entrepreneur_recommendations_mobile_page.dart';
+import '../../presentation/mobile/entrepreneur/pages/entrepreneur_explore_mobile_page.dart';
 import '../../presentation/mobile/entrepreneur/pages/entrepreneur_report_mobile_page.dart';
 import '../../presentation/mobile/entrepreneur/pages/entrepreneur_saved_mobile_page.dart';
 import '../../presentation/mobile/entrepreneur/pages/entrepreneur_tour_mobile_page.dart';
-import '../../presentation/mobile/entrepreneur/pages/sitewise_add_property_mobile_preview.dart';
+import '../../presentation/mobile/entrepreneur/pages/sitewise_add_property_mobile_page.dart';
 import '../../presentation/shared/capture/panorama_capture_page.dart';
 import '../../presentation/shared/pages/not_found_mobile_page.dart';
 import '../../presentation/shared/tour/tour_preview_mobile_page.dart';
@@ -46,9 +47,13 @@ String parentShellRoute(String route) {
     '/entrepreneur/saved': '/entrepreneur/spaces',
     '/entrepreneur/add-property': '/entrepreneur/spaces',
     '/entrepreneur/compare': '/entrepreneur/spaces',
-    '/entrepreneur/recommendations': '/entrepreneur/explore',
-    '/entrepreneur/property-detail': '/entrepreneur/explore',
-    '/entrepreneur/tour': '/entrepreneur/explore',
+    // Discovery is the Recommendations tab. Every retired discovery route
+    // (Explore, property detail, tour) highlights it, and the legacy
+    // `/entrepreneur/explore` path maps onto it so an old link never lands on
+    // a tab that no longer exists.
+    '/entrepreneur/explore': '/entrepreneur/recommendations',
+    '/entrepreneur/property-detail': '/entrepreneur/recommendations',
+    '/entrepreneur/tour': '/entrepreneur/recommendations',
     '/entrepreneur/report': '/entrepreneur/assess',
     // The Option A assessment flow keeps the Assess tab highlighted.
     '/entrepreneur/assessment-setup': '/entrepreneur/assess',
@@ -58,9 +63,9 @@ String parentShellRoute(String route) {
     AppRoutes.assessmentQuestionnaire: '/entrepreneur/assess',
     AppRoutes.assessmentReview: '/entrepreneur/assess',
     // The 360° capture and preview flow is role-neutral shared work; it is
-    // entered from a property tour, so it highlights the Listing tab.
-    '/capture': '/entrepreneur/explore',
-    '/tour-preview': '/entrepreneur/explore',
+    // entered from a property tour, so it highlights the discovery tab.
+    '/capture': '/entrepreneur/recommendations',
+    '/tour-preview': '/entrepreneur/recommendations',
   };
   // Normalise a trailing slash or query string before lookup, so a deep link
   // cannot silently fall through to "no tab selected".
@@ -135,7 +140,10 @@ abstract final class AppRoutes {
       ),
       '/entrepreneur/add-property' => (
         RouteAccess.workspace,
-        () => const SitewiseAddPropertyMobilePreview(),
+        () => SitewiseAddPropertyMobilePage(
+          // Resume a saved draft: arguments = fyp.rental_properties id.
+          initialDraftId: settings.arguments as String?,
+        ),
       ),
       assessmentHome => (RouteAccess.workspace, () => const HomeScreen()),
       assessmentQuestionnaire || assessmentReview => (
@@ -153,12 +161,16 @@ abstract final class AppRoutes {
         RouteAccess.workspace,
         () => const EntrepreneurPreferencesMobilePage(),
       ),
+      // Legacy discovery path. Recommendations replaced Listing/Explore, but
+      // the old path stays resolvable: `?map`-style arguments still open the
+      // map surface, everything else opens the Recommendations tab.
       '/entrepreneur/explore' => (
         RouteAccess.workspace,
-        () => EntrepreneurTabHost(
-          initialRoute: '/entrepreneur/explore',
-          initialArguments: settings.arguments,
-        ),
+        () => settings.arguments == 'map'
+            ? const EntrepreneurExploreMobilePage(startInMap: true)
+            : const EntrepreneurTabHost(
+                initialRoute: '/entrepreneur/recommendations',
+              ),
       ),
       '/entrepreneur/property-detail' => (
         RouteAccess.workspace,
@@ -174,7 +186,16 @@ abstract final class AppRoutes {
       ),
       '/entrepreneur/recommendations' => (
         RouteAccess.workspace,
-        () => const EntrepreneurRecommendationsMobilePage(),
+        () => EntrepreneurTabHost(
+          initialRoute: '/entrepreneur/recommendations',
+          initialArguments: settings.arguments,
+        ),
+      ),
+      // AI recommendations: the personalised Layer 2/3 pipeline (saved
+      // preferences + durable batches + SHAP-backed explanations).
+      '/entrepreneur/ai-recommendations' => (
+        RouteAccess.workspace,
+        () => const EntrepreneurAiRecommendationsMobilePage(),
       ),
       '/entrepreneur/compare' => (
         RouteAccess.workspace,
@@ -194,7 +215,7 @@ abstract final class AppRoutes {
       // property id as arguments; the later steps read the session draft.
       '/entrepreneur/assessment-setup' => (
         RouteAccess.workspace,
-        () => EntrepreneurAssessmentSetupMobilePage(
+        () => EntrepreneurAssessmentQuestionsPage(
           propertyId: settings.arguments as String? ?? '',
         ),
       ),

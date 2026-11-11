@@ -314,6 +314,21 @@ class OwnershipRequest {
   bool get awaitingDecision => status.isEmpty;
 }
 
+/// Single consistent snapshot for Agent Management. No duplicate reads.
+class StaffOverviewSnapshot {
+  final List<StaffAgent> agents;
+  final List<CompanyRecord> companies;
+  final List<StaffInvitation> invitations;
+  final StaffSummary summary;
+
+  const StaffOverviewSnapshot({
+    required this.agents,
+    required this.companies,
+    required this.invitations,
+    required this.summary,
+  });
+}
+
 /// Reads/writes for the operations pages. Instances are cheap; `AppLocator`
 /// exposes one shared instance.
 class AdminApi {
@@ -356,6 +371,19 @@ class AdminApi {
   }
 
   // --- Agent management -----------------------------------------------------
+
+  /// One server request, three Supabase reads for the full Agent Management page.
+  /// This endpoint uses the same admin + aal2 authorization as the old routes.
+  Future<StaffOverviewSnapshot> overview() async {
+    final payload = _object(await WebAuth.request('/api/v1/staff/overview'));
+    return StaffOverviewSnapshot(
+      agents: _rows(payload['agents']).map(StaffAgent.fromJson).toList(growable: false),
+      companies: _rows(payload['companies']).map(CompanyRecord.fromJson).toList(growable: false),
+      invitations: _rows(payload['invitations']).map(StaffInvitation.fromJson).toList(growable: false),
+      summary: StaffSummary.fromJson(_object(payload['summary'])),
+    );
+  }
+
 
   /// `GET /api/v1/staff/agents` — accounts whose role is `agent`.
   Future<List<StaffAgent>> listAgents() async {

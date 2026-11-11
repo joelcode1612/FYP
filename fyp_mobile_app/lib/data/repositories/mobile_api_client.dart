@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -50,42 +51,75 @@ class MobileApiClient implements ApiClient {
   ]) async {
     final token = _bearer();
     if (token == null) {
-      throw const NetworkFailure('No authenticated session is available.');
+      throw const UnauthorizedFailure(
+        'No authenticated session is available.',
+      );
     }
-    final request = await _http.openUrl(method, uri)
-      ..headers.contentType = ContentType.json
-      ..headers.set(HttpHeaders.authorizationHeader, 'Bearer $token');
-    if (body != null) {
-      request.write(jsonEncode(body));
-    }
-    final response = await request.close().timeout(
-      const Duration(seconds: 15),
-    );
-    final text = await response.transform(utf8.decoder).join();
-    if (response.statusCode < 200 || response.statusCode >= 300) {
-      // FastAPI error shape: {detail: string} or {detail: {code, message}}.
-      // Messages are the backend's own user-facing sentences; no stack or
-      // header detail is carried through.
-      String message = 'The data service could not complete this request.';
-      try {
-        final decoded = jsonDecode(text);
-        final detail = decoded is Map ? decoded['detail'] : null;
-        if (detail is String && detail.isNotEmpty) {
-          message = detail;
-        } else if (detail is Map && detail['message'] is String) {
-          message = detail['message'] as String;
-        }
-      } on Object {
-        // Non-JSON error body: the generic message stands.
+    final String text;
+    final int status;
+    try {
+      final request = await _http.openUrl(method, uri)
+        ..headers.contentType = ContentType.json
+        ..headers.set(HttpHeaders.authorizationHeader, 'Bearer $token');
+      if (body != null) {
+        request.write(jsonEncode(body));
       }
-      throw NetworkFailure(message);
+      final response = await request.close().timeout(
+        const Duration(seconds: 15),
+      );
+      status = response.statusCode;
+      text = await response.transform(utf8.decoder).join();
+    } on SocketException {
+      // Host not listening / no route — a "backend unavailable" state, not
+      // a server-side error and not a client misconfiguration.
+      throw const NetworkFailure(
+        'Could not connect to the Sitewise service. '
+        'Check that the API server is running.',
+      );
+    } on HttpException {
+      // A pooled keep-alive connection dying mid-request (server restarted
+      // between two calls) is the same transport-level state for the user.
+      throw const NetworkFailure(
+        'Could not connect to the Sitewise service. '
+        'Check that the API server is running.',
+      );
+    } on TimeoutException {
+      throw const NetworkFailure(
+        'The Sitewise service took too long to respond.',
+      );
+    }
+    if (status < 200 || status >= 300) {
+      throw _failureForStatus(status, text);
     }
     if (text.isEmpty) return const {}; // 204-style empty success
-    final decoded = jsonDecode(text);
+    final Object decoded;
+    try {
+      decoded = jsonDecode(text);
+    } on FormatException {
+      // A 2xx with a non-JSON body is a contract problem, distinct from
+      // connectivity and from a server error.
+      throw const ResponseFormatFailure(
+        'The server returned a body that is not valid JSON.',
+      );
+    }
     if (decoded is Map<String, dynamic>) return decoded;
     // Bare arrays are wrapped the same way the web bridge wraps them, so
     // every repository sees one response shape on both platforms.
     return {'data': decoded};
+  }
+
+  /// Maps a non-2xx status to the shared failure taxonomy. The backend's
+  /// own user-facing `detail` message is carried through where present —
+  /// no stack, header or URL detail is ever included.
+  AppFailure _failureForStatus(int status, String body) {
+    final message = _failureMessage(body);
+    return switch (status) {
+      401 || 403 => UnauthorizedFailure(message),
+      404 => NotFoundFailure(message),
+      422 => ValidationFailure(message),
+      >= 500 => ServiceFailure(message),
+      _ => NetworkFailure(message),
+    };
   }
 
   @override
@@ -133,7 +167,7 @@ class MobileApiClient implements ApiClient {
     final streamed = await request.send().timeout(const Duration(seconds: 30));
     final response = await http.Response.fromStream(streamed);
     if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw NetworkFailure(_failureMessage(response.body));
+      throw _failureForStatus(response.statusCode, response.body);
     }
     return _decodePayload(response.body);
   }
@@ -153,7 +187,7 @@ class MobileApiClient implements ApiClient {
         .timeout(const Duration(seconds: 30));
     if (response.statusCode < 200 || response.statusCode >= 300) {
       final text = await response.transform(utf8.decoder).join();
-      throw NetworkFailure(_failureMessage(text));
+      throw _failureForStatus(response.statusCode, text);
     }
     return await response.fold<List<int>>(
       <int>[],

@@ -20,6 +20,39 @@ class NetworkFailure extends AppFailure {
       'Unable to reach Sitewise. Check your connection and try again.';
 }
 
+/// The request reached the Sitewise service but was refused for lack of a
+/// valid session (HTTP 401/403). Distinct from [NetworkFailure] so the UI
+/// can say "sign in again" instead of "check your connection".
+class UnauthorizedFailure extends AppFailure {
+  const UnauthorizedFailure([super.message = 'Your session has expired.']);
+
+  @override
+  String get userMessage => 'Your session has expired. Please sign in again.';
+}
+
+/// The request reached the service and the service reported a server-side
+/// problem (HTTP 5xx / database failure). Not a connection problem and not
+/// an authorization problem.
+class ServiceFailure extends AppFailure {
+  const ServiceFailure([super.message = 'The Sitewise service hit a problem.']);
+
+  @override
+  String get userMessage =>
+      'The Sitewise service hit a problem on our side. Please try again.';
+}
+
+/// A response arrived but could not be parsed into the expected contract —
+/// a malformed body is a contract problem, not a connection problem.
+class ResponseFormatFailure extends AppFailure {
+  const ResponseFormatFailure([
+    super.message = 'The server response could not be read.',
+  ]);
+
+  @override
+  String get userMessage =>
+      'The server sent a response Sitewise could not read. Please try again.';
+}
+
 class NotFoundFailure extends AppFailure {
   const NotFoundFailure([super.message = 'The requested item was not found.']);
 

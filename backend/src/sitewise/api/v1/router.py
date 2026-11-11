@@ -7,13 +7,16 @@ from sitewise.api.v1 import (
     explore,
     geospatial,
     ml_predictions,
+    personalised_recommendations,
     preferences,
     properties,
     property_verification,
     recommendations,
     reports,
     saved_properties,
+    selected_pu_routes,
     staff,
+    staff_listings,
     statistics,
     suitability,
     users,
@@ -37,7 +40,20 @@ router.include_router(
 )
 router.include_router(users.router, prefix="/users", tags=["users"])
 router.include_router(staff.router, prefix="/staff", tags=["staff"])
+# Agent listing management (assigned-listing edits, change requests,
+# listing photos). Separate module so staff.py is never modified; the
+# assignment enforcement helper is IMPORTED from staff.py, so there is
+# exactly one authorization definition for staff listing access.
+router.include_router(staff_listings.router, prefix="/staff", tags=["staff_listings"])
 router.include_router(recommendations.router, prefix="/recommendations", tags=["recommendations"])
+# Layer 2/3 personalised pipeline. Separate router so the existing
+# recommendations module (and its in-progress /search, /facets work) is never
+# modified. Registered AFTER it: existing static paths keep priority.
+router.include_router(
+    personalised_recommendations.router,
+    prefix="/recommendations",
+    tags=["recommendations_personalised"],
+)
 # Web Location Assessment Workspace (decision-support). Mobile data collection
 # keeps its own session store and does not use these routes.
 router.include_router(assessments.router, prefix="/assessments", tags=["assessments"])
@@ -67,3 +83,10 @@ from sitewise.core.config import settings
 if settings.m2_upstream_enabled:
     from sitewise.api.v1 import m2
     router.include_router(m2.router, prefix="/m2", tags=["m2_upstream"])
+
+# Additive OPTIONAL selected research PU model (Layer-1 alternate). Mounted
+# BESIDE the default /ml routes — nothing existing is replaced. Same
+# authentication dependency, same read-only analytics connection.
+router.include_router(
+    selected_pu_routes.router, prefix="/ml/selected", tags=["ml_selected"]
+)

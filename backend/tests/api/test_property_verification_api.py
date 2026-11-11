@@ -17,7 +17,6 @@ from sqlalchemy import text
 from sqlmodel import Session
 
 from sitewise.core.config import settings
-from sitewise.db.models.rental_property import RentalProperty
 from sitewise.db.session import engine
 from sitewise.repositories.user_repository import UserRepository
 
@@ -31,6 +30,70 @@ def auth(token):
 PDF_BYTES = b"%PDF-1.4\n%test-document\n"
 
 
+def insert_listing(
+    session: Session,
+    owner_uuid: str,
+    *,
+    name: str,
+    address: str,
+    city: str,
+    state: str,
+    property_type: str = "Shop",
+    complete: bool = True,
+) -> int:
+    """Insert one owner listing in the canonical table. ``complete=True``
+    fills every field final submission validates; ``complete=False`` leaves
+    an intentionally sparse draft."""
+    row = session.execute(
+        text(
+            """
+            INSERT INTO fyp.rental_properties (
+                owner_user_id, name, property_type, address, city, state,
+                postcode, latitude, longitude, rental_price, size_sqft,
+                availability, verification_status, is_published
+            ) VALUES (
+                :owner, :name, :ptype, :address, :city, :state,
+                :postcode, :lat, :lon, :price, :size, :availability,
+                'draft', false
+            ) RETURNING id
+            """
+        ),
+        {
+            "owner": owner_uuid,
+            "name": name,
+            "ptype": property_type,
+            "address": address,
+            "city": city,
+            "state": state,
+            "postcode": "40460" if complete else None,
+            "lat": 3.0722 if complete else None,
+            "lon": 101.6065 if complete else None,
+            "price": 4500 if complete else None,
+            "size": 1680 if complete else None,
+            "availability": "Immediate" if complete else None,
+        },
+    )
+    session.commit()
+    return int(row.scalar_one())
+
+
+@pytest.fixture(autouse=True)
+def offline_address_validation(monkeypatch):
+    """The suite runs without Google: every address submitted through the
+    verification workflow is treated as provider-validated, so lifecycle
+    tests exercise transitions instead of the network."""
+    from sitewise.services import property_verification_service as service_module
+
+    monkeypatch.setattr(
+        service_module,
+        "validate_address",
+        lambda **_kwargs: {
+            "status": "validated",
+            "formatted_address": "Test formatted address, Selangor",
+        },
+    )
+
+
 @pytest.fixture(autouse=True)
 def private_storage(monkeypatch, tmp_path):
     monkeypatch.setattr(settings, "verification_storage_dir", str(tmp_path / "docs"))
@@ -39,7 +102,7 @@ def private_storage(monkeypatch, tmp_path):
 
 @pytest.fixture(autouse=True)
 def cleanup_verifications(cleanup_users):
-    """Verification rows before their property/user rows; order pinned by
+    """Verification rows before their property rows; order pinned by
     requesting ``cleanup_users`` (users are removed after this fixture)."""
     props: list[int] = []
     yield props
@@ -50,6 +113,7 @@ def cleanup_verifications(cleanup_users):
             "verification_audit",
             "verification_document",
             "property_verification",
+            "fyp.property_geospatial_features",
         ):
             if props:
                 session.execute(
@@ -59,8 +123,10 @@ def cleanup_verifications(cleanup_users):
             else:
                 session.execute(text(f"DELETE FROM {table}"))
         if props:
+            # Photos cascade on delete; the listing rows themselves are
+            # owner-submitted test rows.
             session.execute(
-                text("DELETE FROM property WHERE property_id = ANY(:ids)"),
+                text("DELETE FROM fyp.rental_properties WHERE id = ANY(:ids)"),
                 {"ids": props},
             )
         session.commit()
@@ -68,7 +134,9 @@ def cleanup_verifications(cleanup_users):
 
 @pytest.fixture()
 def owner(client, cleanup_users, cleanup_verifications):
-    """A provisioned entrepreneur plus one owned legacy property row."""
+    """A provisioned entrepreneur plus one owned rental listing (the
+    canonical fyp.rental_properties identity the verification workflow is
+    bound to)."""
     sub = str(uuid.uuid4())
     token = make_token(
         sub=sub,
@@ -78,18 +146,16 @@ def owner(client, cleanup_users, cleanup_verifications):
     assert client.get("/api/v1/auth/me", headers=auth(token)).status_code == 200
     register_user_id(cleanup_users, uuid.UUID(sub))
     with Session(engine) as session:
-        prop = RentalProperty(
-            user_id=uuid.UUID(sub),
-            title="Corner shoplot, Section 13",
-            normalized_address="Jalan 13/1, Shah Alam",
-            property_type_normalized="Shop lot",
-            price=4500,
+        property_id = insert_listing(
+            session,
+            sub,
+            name="Corner shoplot, Section 13",
+            address="Jalan 13/1, Shah Alam",
+            city="Shah Alam",
+            state="Selangor",
+            property_type="Shop lot",
         )
-        session.add(prop)
-        session.commit()
-        session.refresh(prop)
-        cleanup_verifications.append(prop.property_id)
-        property_id = prop.property_id
+        cleanup_verifications.append(property_id)
     return {"token": token, "sub": sub, "property_id": property_id}
 
 
@@ -300,17 +366,16 @@ def test_admin_queue_filters_sort_and_paginate(
     assert client.get("/api/v1/auth/me", headers=auth(other_token)).status_code == 200
     register_user_id(cleanup_users, uuid.UUID(other_sub))
     with Session(engine) as session:
-        prop2 = RentalProperty(
-            user_id=uuid.UUID(other_sub),
-            title="Bistro unit, JB",
-            normalized_address="Jalan Trus, Johor Bahru",
-            property_type_normalized="Retail space",
+        prop2_id = insert_listing(
+            session,
+            other_sub,
+            name="Bistro unit, JB",
+            address="Jalan Trus, Johor Bahru",
+            city="Johor Bahru",
+            state="Johor",
+            property_type="Retail space",
         )
-        session.add(prop2)
-        session.commit()
-        session.refresh(prop2)
-        cleanup_verifications.append(prop2.property_id)
-        prop2_id = prop2.property_id
+        cleanup_verifications.append(prop2_id)
     upload_ownership_doc(client, owner)
     client.post(
         f"/api/v1/properties/{owner['property_id']}/verification/submit",
@@ -526,11 +591,15 @@ def test_concurrent_decisions_serialize_not_overwrite(client, owner, admin):
             json={"dimension": "listing"},
         )
 
-    worker = Thread(target=decision, daemon=True)
-    worker.start()
-    worker.join(timeout=1.5)
-    assert worker.is_alive(), "second decision did not wait for the row lock"
-    blocker_session.commit()  # release; no changes written by the holder
+    try:
+        worker = Thread(target=decision, daemon=True)
+        worker.start()
+        worker.join(timeout=1.5)
+        assert worker.is_alive(), "second decision did not wait for the row lock"
+    finally:
+        # ALWAYS release the lock: a failure above must never leave the
+        # blocker's transaction open, or fixture cleanup deadlocks.
+        blocker_session.commit()
     worker.join(timeout=5)
     assert not worker.is_alive()
     assert result["r"].status_code == 200
@@ -576,3 +645,223 @@ def test_owner_sees_own_submission_round_trip(client, owner, admin):
     assert body["verification"]["ownership_status"] == "verified"
     assert body["verification"]["publication_eligible"] is True
     assert len(body["documents"]) == 2
+
+
+# --------------------------------------------------------------------------
+# Listing-information-only workflow (no ownership documents)
+# --------------------------------------------------------------------------
+
+
+def listing_scope_submit(client, owner):
+    return client.post(
+        f"/api/v1/properties/{owner['property_id']}/verification/submit",
+        headers=auth(owner["token"]),
+        json={"scope": "listing"},
+    )
+
+
+def test_listing_only_submission_enters_queue_without_ownership_documents(
+    client, owner, admin
+):
+    """A complete listing enters Admin review with scope=listing: the listing
+    dimension goes pending, ownership stays not_submitted, publication
+    eligibility stays false."""
+    r = listing_scope_submit(client, owner)
+    assert r.status_code == 200, r.text
+    verification = r.json()
+    assert verification["listing_status"] == "pending"
+    assert verification["ownership_status"] == "not_submitted"
+    assert verification["publication_eligible"] is False
+
+    # The submission is visible in the admin queue and its detail carries
+    # the listing-only audit trail.
+    queue = client.get("/api/v1/staff/properties/", headers=auth(admin["token"]))
+    assert queue.status_code == 200
+    assert owner["property_id"] in {
+        item["property_id"] for item in queue.json()["items"]
+    }
+
+    detail = client.get(
+        f"/api/v1/staff/properties/{owner['property_id']}",
+        headers=auth(admin["token"]),
+    )
+    assert detail.status_code == 200
+    actions = [row["action"] for row in detail.json()["history"]]
+    assert actions == ["listing_submitted"]
+    assert detail.json()["history"][0]["verification_type"] == "listing"
+
+
+def test_listing_approval_does_not_verify_ownership_or_publish(client, owner, admin):
+    """Approving the listing dimension moves ONLY that dimension; the
+    property stays unpublished and ineligible even though the listing is
+    verified."""
+    assert listing_scope_submit(client, owner).status_code == 200
+    pid = owner["property_id"]
+    base = f"/api/v1/staff/properties/{pid}/verification"
+
+    started = client.post(
+        f"{base}/start-review", headers=auth(admin["token"]), json={"dimension": "listing"}
+    )
+    assert started.status_code == 200, started.text
+    approved = client.post(
+        f"{base}/approve", headers=auth(admin["token"]), json={"dimension": "listing"}
+    )
+    assert approved.status_code == 200, approved.text
+    body = approved.json()
+    assert body["listing_status"] == "verified"
+    assert body["ownership_status"] == "not_submitted"
+    assert body["publication_eligible"] is False
+
+    # The listing row mirrors the aggregate, never 'approved': publication
+    # stays a separate administrative action.
+    with Session(engine) as session:
+        row = session.execute(
+            text(
+                "SELECT verification_status, is_published, rejection_reason "
+                "FROM fyp.rental_properties WHERE id = :pid"
+            ),
+            {"pid": pid},
+        ).mappings().one()
+    assert row["verification_status"] == "pending"
+    assert row["is_published"] is False
+
+
+def test_ownership_stays_unreviewable_after_listing_only_submission(
+    client, owner, admin
+):
+    """A listing-scope submission never moves ownership: it stays
+    not_submitted, which no staff decision can act on — ownership simply
+    cannot be verified for a listing-only submission."""
+    assert listing_scope_submit(client, owner).status_code == 200
+    pid = owner["property_id"]
+    base = f"/api/v1/staff/properties/{pid}/verification"
+    # start-review from not_submitted is refused...
+    assert (
+        client.post(
+            f"{base}/start-review", headers=auth(admin["token"]), json={"dimension": "ownership"}
+        ).status_code
+        == 409
+    )
+    # ...and so is approving it directly.
+    refused = client.post(
+        f"{base}/approve", headers=auth(admin["token"]), json={"dimension": "ownership"}
+    )
+    assert refused.status_code == 409
+
+
+def test_ownership_approval_still_requires_evidence_after_review_starts(
+    client, owner, admin
+):
+    """Even when ownership somehow sits in a decisionable state, 'verified'
+    demands an active document on file."""
+    full_submission(client, owner)
+    pid = owner["property_id"]
+    base = f"/api/v1/staff/properties/{pid}/verification"
+    # Start + approve listing first; ownership is pending (full scope).
+    client.post(f"{base}/approve", headers=auth(admin["token"]), json={"dimension": "listing"})
+    # Remove the ownership evidence to simulate an evidence-less record.
+    with Session(engine) as session:
+        session.execute(
+            text(
+                "UPDATE verification_document SET status = 'superseded' "
+                "WHERE property_id = :pid AND verification_type = 'ownership'"
+            ),
+            {"pid": pid},
+        )
+        session.commit()
+    refused = client.post(
+        f"{base}/approve", headers=auth(admin["token"]), json={"dimension": "ownership"}
+    )
+    assert refused.status_code == 409
+    assert "document" in refused.json()["detail"]
+
+
+def test_listing_scope_resubmission_after_rejection(client, owner, admin):
+    """Reject the listing, then the owner resubmits with scope=listing: the
+    listing returns to pending and ownership is never touched."""
+    assert listing_scope_submit(client, owner).status_code == 200
+    pid = owner["property_id"]
+    base = f"/api/v1/staff/properties/{pid}/verification"
+    client.post(f"{base}/start-review", headers=auth(admin["token"]), json={"dimension": "listing"})
+    rejected = client.post(
+        f"{base}/reject",
+        headers=auth(admin["token"]),
+        json={"dimension": "listing", "reason": "Floor level is inconsistent."},
+    )
+    assert rejected.status_code == 200
+
+    resubmitted = listing_scope_submit(client, owner)
+    assert resubmitted.status_code == 200, resubmitted.text
+    assert resubmitted.json()["listing_status"] == "pending"
+    assert resubmitted.json()["ownership_status"] == "not_submitted"
+    assert resubmitted.json()["latest_note"] is None
+
+    # A listing-scope resubmission while pending is refused.
+    again = listing_scope_submit(client, owner)
+    assert again.status_code == 409
+
+
+def test_admin_detail_carries_location_context(client, owner, admin):
+    """The staff detail response expands with photos, amenities, geospatial
+    features and nearby demand generators — real rows round-trip, and the
+    absent blocks arrive as explicit nulls the UI renders as 'Not
+    calculated'."""
+    assert listing_scope_submit(client, owner).status_code == 200
+    pid = owner["property_id"]
+
+    with Session(engine) as session:
+        session.execute(
+            text(
+                "INSERT INTO fyp.property_photos (property_id, url, caption, "
+                "is_primary, created_at) VALUES (:pid, :url, :caption, true, now())"
+            ),
+            {"pid": pid, "url": "https://example.test/photo-1.jpg", "caption": "Frontage"},
+        )
+        session.execute(
+            text(
+                "INSERT INTO fyp.property_geospatial_features (property_id, "
+                "competitor_count_500m, competitor_count_1km, "
+                "demand_generator_count_500m, demand_generator_count_1km, "
+                "population_500m, population_1km, nearest_major_road_m, "
+                "last_calculated_at) VALUES (:pid, 12, 37, 9, 28, NULL, NULL, "
+                "140, now())"
+            ),
+            {"pid": pid},
+        )
+        session.commit()
+
+    detail = client.get(
+        f"/api/v1/staff/properties/{pid}", headers=auth(admin["token"])
+    )
+    assert detail.status_code == 200, detail.text
+    body = detail.json()
+
+    photos = body["photos"]
+    assert len(photos) == 1
+    assert photos[0]["url"] == "https://example.test/photo-1.jpg"
+    assert photos[0]["is_primary"] is True
+
+    geo = body["geo_features"]
+    assert geo is not None
+    assert geo["competitor_count_500m"] == 12
+    assert geo["competitor_count_1km"] == 37
+    assert geo["demand_generator_count_1km"] == 28
+    assert geo["population_500m"] is None
+    assert geo["last_calculated_at"]
+
+    demand = body["demand_generators"]
+    assert isinstance(demand, list)
+    for generator in demand:
+        assert generator["subject_id"]
+        assert generator["distance_m"] is not None
+    assert body["amenities"] is None  # no fyp.property_features row for test listings
+    assert body["population"] is None  # no verified research link for test listings
+
+    # The expanded property payload carries the fields the Admin overview
+    # tab renders.
+    prop = body["property"]
+    assert prop["postcode"] == "40460"
+    assert prop["latitude"] == 3.0722
+    assert prop["longitude"] == 101.6065
+    assert prop["has_parking"] is False
+    assert prop["is_published"] is False

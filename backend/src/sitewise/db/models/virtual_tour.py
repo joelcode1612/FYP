@@ -9,7 +9,7 @@ class VirtualTour(SQLModel, table=True):
     __tablename__ = "virtual_tour"
 
     tour_id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
-    property_id: int = Field(foreign_key="property.property_id")
+    property_id: int = Field()  # legacy FK to public.property retired by migration 0005
     url: str
     status: str = Field(default="pending", max_length=50)
     created_at: datetime = Field(default_factory=datetime.utcnow)

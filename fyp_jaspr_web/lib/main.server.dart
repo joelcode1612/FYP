@@ -96,8 +96,8 @@ class _DocumentShell extends StatelessComponent {
         'sitewise-api': kPublicApiBase,
       },
       head: [
-        link(rel: 'icon', type: 'image/png', href: 'assets/sitewise-icon-32.png'),
-        link(rel: 'apple-touch-icon', href: 'assets/sitewise-icon-180.png'),
+        link(rel: 'icon', type: 'image/png', href: '/assets/sitewise-icon-32.png'),
+        link(rel: 'apple-touch-icon', href: '/assets/sitewise-icon-180.png'),
         link(rel: 'stylesheet', type: 'text/css', href: 'styles.css'),
         link(rel: 'stylesheet', type: 'text/css', href: 'staff-mfa.css'),
         link(rel: 'preconnect', href: 'https://fonts.googleapis.com'),

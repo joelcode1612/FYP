@@ -18,6 +18,7 @@ request. Every privileged operation is recorded in ``role_change_audit``.
 
 from __future__ import annotations
 
+import logging
 import uuid
 from datetime import datetime, timezone
 
@@ -38,6 +39,30 @@ from sitewise.domain import rbac
 from sitewise.services.user_service import UserService
 
 router = APIRouter()
+
+logger = logging.getLogger("sitewise.staff")
+
+
+def _record_audit(service: SupabaseAdminService, **kwargs) -> bool:
+    """Record a privileged action WITHOUT failing a mutation that already
+    succeeded.
+
+    Both the invitation and the suspension flow commit their real state
+    change before the audit row is written (two different databases cannot
+    share a transaction). If the audit write fails there, the truthful
+    outcome is "change applied, not audited" — reporting it as a failure made
+    administrators retry already-applied changes and hid what actually
+    happened. The technical cause is logged server-side; the response carries
+    ``audit_recorded: false`` so the UI can say exactly that.
+    """
+    try:
+        service.insert_role_audit(**kwargs)
+        return True
+    except Exception:
+        logger.exception(
+            "role_change_audit write failed for action=%s", kwargs.get("action")
+        )
+        return False
 
 
 # ---------------------------------------------------------------------------
@@ -136,9 +161,12 @@ def _iso(value: object) -> str:
     return formatter() if callable(formatter) else ""
 
 
-def _latest_invitations(service: SupabaseAdminService) -> dict[str, dict]:
+def _latest_invitations(
+    service: SupabaseAdminService, rows: list[dict] | None = None
+) -> dict[str, dict]:
     """Newest invitation per email, keyed by the lower-cased address."""
-    rows = service.list_invitations()
+    if rows is None:
+        rows = service.list_invitations()
     ordered = sorted(rows, key=lambda row: str(row.get("created_at") or ""), reverse=True)
     latest: dict[str, dict] = {}
     for row in ordered:
@@ -148,16 +176,25 @@ def _latest_invitations(service: SupabaseAdminService) -> dict[str, dict]:
     return latest
 
 
-def _company_index(service: SupabaseAdminService) -> dict[int, str]:
+def _company_index(
+    service: SupabaseAdminService, rows: list[dict] | None = None
+) -> dict[int, str]:
     """``company_id -> company_name`` for the existing company rows."""
     return {
         int(company["company_id"]): str(company.get("company_name") or "")
-        for company in service.list_companies()
+        for company in (rows if rows is not None else service.list_companies())
         if company.get("company_id") is not None
     }
 
 
-def _agent_records(session: Session, service: SupabaseAdminService) -> list[dict]:
+def _agent_records(
+    session: Session,
+    service: SupabaseAdminService,
+    *,
+    agent_profiles: list[dict] | None = None,
+    company_rows: list[dict] | None = None,
+    invitation_rows: list[dict] | None = None,
+) -> list[dict]:
     """The single source of rows shared by the roster and the summary tiles.
 
     Both endpoints must agree on what an "agent" is, so the count in a KPI can
@@ -166,12 +203,12 @@ def _agent_records(session: Session, service: SupabaseAdminService) -> list[dict
     browser.
     """
     by_user: dict[str, dict] = {}
-    for agent in service.list_agent_profiles():
+    for agent in (agent_profiles if agent_profiles is not None else service.list_agent_profiles()):
         uid = agent.get("user_id")
         if uid:
             by_user[str(uid)] = agent
-    companies = _company_index(service)
-    invitations = _latest_invitations(service)
+    companies = _company_index(service, company_rows)
+    invitations = _latest_invitations(service, invitation_rows)
     records: list[dict] = []
     for profile in UserService(session).list_users(limit=500):
         if not rbac.has_role(profile.role, (rbac.ROLE_AGENT,)):
@@ -347,7 +384,8 @@ def create_agent(
             invited_by_user_id=admin.user_id,
             status="sent",
         )
-    service.insert_role_audit(
+    audit_recorded = _record_audit(
+        service,
         affected_user_id=auth_user_id,
         affected_email=email,
         performed_by_user_id=admin.user_id,
@@ -374,6 +412,7 @@ def create_agent(
         "agent_profile": agent_profile,
         "company": {"company_id": company_id, "company_name": company_name},
         "mirror": _mirror_payload(mirror),
+        "audit_recorded": audit_recorded,
     }
 
 
@@ -536,6 +575,7 @@ def complete_onboarding(
     # mirror, mirroring the ordering of every other status change. Skipped
     # entirely when the account is already active (idempotent retries).
     activated = False
+    audit_recorded = True
     if user.account_status != rbac.STATUS_ACTIVE:
         if user.account_status == rbac.STATUS_SUSPENDED:
             raise _structured_error(
@@ -551,7 +591,8 @@ def complete_onboarding(
         )
         if updated is None:  # pragma: no cover - profile read above
             raise HTTPException(status_code=404, detail="Local profile not found.")
-        service.insert_role_audit(
+        audit_recorded = _record_audit(
+            service,
             affected_user_id=user.user_id,
             affected_email=user.email,
             performed_by_user_id=user.user_id,
@@ -586,6 +627,7 @@ def complete_onboarding(
         "invitation_status": state,
         "email_confirmed_at": str(accepted_at),
         "activated": activated,
+        "audit_recorded": audit_recorded,
     }
 
 
@@ -608,18 +650,20 @@ def create_company(
     """Register a company so its real ``company_id`` can be assigned."""
     service = _admin_service()
     company = service.create_company(payload.company_name)
-    service.insert_role_audit(
+    audit_recorded = _record_audit(
+        service,
         affected_user_id=None,
         affected_email=None,
         performed_by_user_id=admin.user_id,
         performed_by_email=admin.email,
         action="company.registered",
+        entity_type="company",
         details={
             "company_id": company["company_id"],
             "company_name": company["company_name"],
         },
     )
-    return company
+    return {**company, "audit_recorded": audit_recorded}
 
 
 @router.get("/summary")
@@ -651,6 +695,52 @@ def staff_summary(
         ),
         "invitations": len(invitations),
         "companies": len(service.list_companies()),
+    }
+
+
+@router.get("/overview")
+def staff_overview(
+    admin: AdminMfaUser,
+    session: Session = Depends(get_db),
+) -> dict:
+    """Agent management snapshot: read each Supabase table only once.
+
+    Keep /agents, /companies, /invitations and /summary for existing callers.
+    Authentication/role/MFA checks remain the same as those endpoints.
+    """
+    service = _admin_service()
+    agent_profiles = service.list_agent_profiles()
+    company_rows = service.list_companies()
+    invitation_rows = service.list_invitations()
+    agents = _agent_records(
+        session, service,
+        agent_profiles=agent_profiles,
+        company_rows=company_rows,
+        invitation_rows=invitation_rows,
+    )
+    summary = {
+        "total_agents": len(agents),
+        "active_agents": sum(
+            1 for row in agents if row["account_status"] == rbac.STATUS_ACTIVE
+        ),
+        "pending_agents": sum(
+            1 for row in agents if row["account_status"] == rbac.STATUS_PENDING
+        ),
+        "suspended_agents": sum(
+            1 for row in agents if row["account_status"] == rbac.STATUS_SUSPENDED
+        ),
+        "open_invitations": sum(
+            1 for row in invitation_rows
+            if _invitation_state(row) in _OPEN_INVITATION_STATES
+        ),
+        "invitations": len(invitation_rows),
+        "companies": len(company_rows),
+    }
+    return {
+        "agents": agents,
+        "companies": company_rows,
+        "invitations": invitation_rows,
+        "summary": summary,
     }
 
 
@@ -697,7 +787,8 @@ def update_agent_status(
     if updated is None:  # pragma: no cover - existence checked above
         raise HTTPException(status_code=404, detail="User not found.")
 
-    service.insert_role_audit(
+    audit_recorded = _record_audit(
+        service,
         affected_user_id=user_id,
         affected_email=updated.email,
         performed_by_user_id=admin.user_id,
@@ -706,7 +797,7 @@ def update_agent_status(
         previous_status=previous,
         new_status=new_status,
     )
-    return _mirror_payload(updated)
+    return {**_mirror_payload(updated), "audit_recorded": audit_recorded}
 
 
 # ---------------------------------------------------------------------------
@@ -734,14 +825,15 @@ def mfa_recovery(
         if factor.get("status") == "verified" and factor.get("factor_type", factor.get("type")) == "totp":
             service.admin_delete_factor(str(user_id), str(factor_id))
             removed.append(str(factor_id))
-    service.insert_role_audit(
+    audit_recorded = _record_audit(
+        service,
         affected_user_id=user_id,
         performed_by_user_id=admin.user_id,
         performed_by_email=admin.email,
         action="staff.mfa_factor_reset",
         details={"removed_factors": removed, "reason": payload.reason},
     )
-    return {"removed_factors": removed, "re_enrollment_required": True}
+    return {"removed_factors": removed, "re_enrollment_required": True, "audit_recorded": audit_recorded}
 
 
 # ---------------------------------------------------------------------------
@@ -776,8 +868,9 @@ def revoke_invitation(
             detail=f"Only open invitations can be revoked (current state: {state or 'unknown'}).",
         )
     service.update_invitation(str(invitation_id), {"invitation_status": "revoked"})
-    service.insert_role_audit(
-        # The audit table's affected_user_id has an FK to public.users; an
+    audit_recorded = _record_audit(
+        service,
+        # The audit table's user_id_affected has an FK to public.users; an
         # invitation may reference an auth identity with no mirror row, so the
         # id is recorded in details instead of forcing a broken foreign key.
         affected_user_id=None,
@@ -791,7 +884,7 @@ def revoke_invitation(
             "invited_user_id": invitation.get("invited_user_id"),
         },
     )
-    return {**invitation, "invitation_status": "revoked"}
+    return {**invitation, "invitation_status": "revoked", "audit_recorded": audit_recorded}
 
 
 @router.get("/audit")
@@ -888,11 +981,12 @@ def assign_listing(
     if profile is None:
         raise HTTPException(status_code=404, detail="Agent profile not found.")
     updated = service.assign_listing(listing_id, int(profile["agent_id"]))
-    service.insert_role_audit(
+    audit_recorded = _record_audit(
+        service,
         affected_user_id=payload.agent_user_id,
         performed_by_user_id=admin.user_id,
         performed_by_email=admin.email,
         action="listing.assigned",
         details={"listing_id": listing_id, "agent_id": profile["agent_id"]},
     )
-    return updated
+    return {**updated, "audit_recorded": audit_recorded}

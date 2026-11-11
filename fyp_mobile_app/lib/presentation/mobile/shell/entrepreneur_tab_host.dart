@@ -4,7 +4,7 @@ import 'package:shared_logic/shared_logic.dart';
 import '../../../core/theme/sitewise_m3.dart';
 import '../entrepreneur/pages/entrepreneur_assess_mobile_page.dart';
 import '../entrepreneur/pages/entrepreneur_dashboard_mobile_page.dart';
-import '../entrepreneur/pages/entrepreneur_explore_mobile_page.dart';
+import '../entrepreneur/pages/entrepreneur_recommendations_mobile_page.dart';
 import '../entrepreneur/pages/entrepreneur_profile_mobile_page.dart';
 import '../entrepreneur/pages/entrepreneur_spaces_mobile_page.dart';
 import 'entrepreneur_tab_scope.dart';
@@ -43,7 +43,9 @@ class _EntrepreneurTabHostState extends State<EntrepreneurTabHost> {
   void initState() {
     super.initState();
     final startingIndex = _tabs.indexWhere(
-          (tab) => tab.route == widget.initialRoute,
+      (tab) =>
+          tab.route ==
+          EntrepreneurTabScope.resolveTabRoute(widget.initialRoute),
     );
     _selectedIndex = startingIndex < 0 ? 0 : startingIndex;
     _hasVisited = List<bool>.filled(_tabs.length, false);
@@ -61,11 +63,10 @@ class _EntrepreneurTabHostState extends State<EntrepreneurTabHost> {
 
   Widget _pageFor(String route) => switch (route) {
     '/entrepreneur' => const EntrepreneurDashboardMobilePage(),
-    '/entrepreneur/explore' => EntrepreneurExploreMobilePage(
-      startInMap:
-      widget.initialRoute == '/entrepreneur/explore' &&
-          widget.initialArguments == 'map',
-    ),
+    // Discovery tab. The page itself decides between a plain catalogue browse
+    // and a ranked search — it never asks the host which one it is.
+    '/entrepreneur/recommendations' =>
+      const EntrepreneurRecommendationsMobilePage(),
     '/entrepreneur/assess' => const EntrepreneurAssessMobilePage(),
     '/entrepreneur/spaces' => const EntrepreneurSpacesMobilePage(),
     '/entrepreneur/profile' => const EntrepreneurProfileMobilePage(),
@@ -91,6 +92,10 @@ class _EntrepreneurTabHostState extends State<EntrepreneurTabHost> {
           actions: const [],
           brandTitle: _selectedIndex == 0,
           m3: true,
+          // Root workspace: the five tabs are top-level destinations, so the
+          // header must never offer a back arrow that pops the whole
+          // workspace (system back already returns to Home via PopScope).
+          showBack: false,
         ),
         body: IndexedStack(
           index: _selectedIndex,

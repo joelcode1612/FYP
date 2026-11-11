@@ -32,11 +32,27 @@ abstract final class AgentRecords {
   ///
   /// Sorted rather than randomised so two reloads show the same portfolio — a
   /// demo that reshuffles every refresh reads like a bug.
+  ///
+  /// **Dashboard/performance display only.** The live management workflow
+  /// (Assigned Listings page + property management page) uses
+  /// [assignedListings] below, which reads the REAL server-side assignments;
+  /// the two never mix on one screen.
   static Future<List<CommercialProperty>> assignedProperties() async {
     final listings = [...await AppLocator.properties.listings()];
     listings.sort((a, b) => b.suitabilityScore.compareTo(a.suitabilityScore));
     return listings.take(assignmentCount).toList();
   }
+
+  /// The listings GENUINELY assigned to the authenticated agent
+  /// (`GET /api/v1/staff/me/listings` — Supabase assignment rows resolved
+  /// server-side from the verified bearer token).
+  ///
+  /// This replaces the suitability-rank selection for every management
+  /// surface: an empty result is a valid state (no agent profile or no
+  /// assignment), never substituted with catalogue stand-ins. Authorization
+  /// is enforced by the backend on every follow-up call.
+  static Future<List<AgentAssignment>> assignedListings() =>
+      AppLocator.agentListingRepo.assignedListings();
 
   /// The agent-facing name for an existing [VerificationStatus].
   ///

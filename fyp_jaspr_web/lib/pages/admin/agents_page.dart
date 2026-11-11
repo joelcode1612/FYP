@@ -43,9 +43,9 @@ class AdminAgentsPage extends StatefulComponent {
   State<AdminAgentsPage> createState() => _AdminAgentsPageState();
 }
 
+// Company and identity are entered together, then reviewed before sending.
 const _steps = <String>[
-  'Company assignment',
-  'Agent information',
+  'Agent details',
   'Review',
   'Invitation',
 ];
@@ -58,6 +58,7 @@ final _emailPattern = RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$');
 class _Option {
   final String value;
   final String label;
+
   const _Option(this.value, this.label);
 }
 
@@ -115,59 +116,37 @@ class _AdminAgentsPageState extends State<AdminAgentsPage> {
     _load();
   }
 
-  /// One failing endpoint must not blank the rest of the page: each read is
-  /// individually guarded, all four start concurrently, and the errors are
-  /// reported together while successful data is still rendered.
-  Future<T?> _guard<T>(Future<T> future, String label, List<String> errors) async {
-    try {
-      return await future;
-    } catch (error) {
-      errors.add('$label: ${AdminApi.message(error)}');
-      return null;
-    }
-  }
+  /// Monotonic sequence prevents an older refresh from overwriting a newer one.
+  int _loadSequence = 0;
 
+  /// A single backend snapshot avoids repeated PostgREST reads and inconsistent
+  /// KPIs. On failure, keep last good data and display a visible error.
   Future<void> _load({bool silent = false}) async {
+    final sequence = ++_loadSequence;
     if (!silent) {
       setState(() {
         _loading = true;
         _error = null;
       });
     }
-    final errors = <String>[];
-    final agentsFuture = _guard(
-      AppLocator.adminApi.listAgents(),
-      'Agent directory',
-      errors,
-    );
-    final invitationsFuture = _guard(
-      AppLocator.adminApi.listInvitations(),
-      'Invitations',
-      errors,
-    );
-    final companiesFuture = _guard(
-      AppLocator.adminApi.listCompanies(),
-      'Company directory',
-      errors,
-    );
-    final summaryFuture = _guard(
-      AppLocator.adminApi.summary(),
-      'Summary',
-      errors,
-    );
-    final agents = await agentsFuture;
-    final invitations = await invitationsFuture;
-    final companies = await companiesFuture;
-    final summary = await summaryFuture;
-    if (!mounted) return;
-    setState(() {
-      if (agents != null) _agents = agents;
-      if (invitations != null) _invitations = invitations;
-      if (companies != null) _companies = companies;
-      if (summary != null) _summary = summary;
-      _loading = false;
-      _error = errors.isEmpty ? null : errors.join(' · ');
-    });
+    try {
+      final snapshot = await AppLocator.adminApi.overview();
+      if (!mounted || sequence != _loadSequence) return;
+      setState(() {
+        _agents = snapshot.agents;
+        _invitations = snapshot.invitations;
+        _companies = snapshot.companies;
+        _summary = snapshot.summary;
+        _loading = false;
+        _error = null;
+      });
+    } catch (error) {
+      if (!mounted || sequence != _loadSequence) return;
+      setState(() {
+        _loading = false;
+        _error = AdminApi.message(error);
+      });
+    }
   }
 
   // --- Derived values -------------------------------------------------------
@@ -192,30 +171,32 @@ class _AdminAgentsPageState extends State<AdminAgentsPage> {
 
   List<StaffAgent> get _filtered {
     final q = _query.trim().toLowerCase();
-    return _agents.where((agent) {
-      if (q.isNotEmpty) {
-        final haystack =
-            '${agent.displayName} ${agent.email} ${agent.companyName} '
-                    '${agent.status} ${agent.invitationStatus} '
-                    '${agent.agentId} ${agent.phone}'
-                .toLowerCase();
-        if (!haystack.contains(q)) return false;
-      }
-      if (_statusFilter != 'all' &&
-          agent.status.toLowerCase() != _statusFilter) {
-        return false;
-      }
-      if (_inviteFilter == 'none') {
-        if (agent.invitationStatus.isNotEmpty) return false;
-      } else if (_inviteFilter != 'all' &&
-          agent.invitationStatus.toLowerCase() != _inviteFilter) {
-        return false;
-      }
-      if (_companyFilter != 'all' && agent.companyId != _companyFilter) {
-        return false;
-      }
-      return true;
-    }).toList(growable: false);
+    return _agents
+        .where((agent) {
+          if (q.isNotEmpty) {
+            final haystack =
+                '${agent.displayName} ${agent.email} ${agent.companyName} '
+                        '${agent.status} ${agent.invitationStatus} '
+                        '${agent.agentId} ${agent.phone}'
+                    .toLowerCase();
+            if (!haystack.contains(q)) return false;
+          }
+          if (_statusFilter != 'all' &&
+              agent.status.toLowerCase() != _statusFilter) {
+            return false;
+          }
+          if (_inviteFilter == 'none') {
+            if (agent.invitationStatus.isNotEmpty) return false;
+          } else if (_inviteFilter != 'all' &&
+              agent.invitationStatus.toLowerCase() != _inviteFilter) {
+            return false;
+          }
+          if (_companyFilter != 'all' && agent.companyId != _companyFilter) {
+            return false;
+          }
+          return true;
+        })
+        .toList(growable: false);
   }
 
   String? get _duplicateError {
@@ -261,7 +242,9 @@ class _AdminAgentsPageState extends State<AdminAgentsPage> {
       return null;
     }
     final name = _newCompanyName.trim();
-    if (name.length < 2) return 'Enter the company name (at least 2 characters)';
+    if (name.length < 2) {
+      return 'Enter the company name (at least 2 characters)';
+    }
     if (_companies.any(
       (company) => company.name.toLowerCase() == name.toLowerCase(),
     )) {
@@ -305,14 +288,34 @@ class _AdminAgentsPageState extends State<AdminAgentsPage> {
     final parsed = DateTime.tryParse(raw);
     if (parsed == null) return raw.length > 10 ? raw.substring(0, 10) : raw;
     const months = <String>[
-      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
     ];
     return '${parsed.day.toString().padLeft(2, '0')} '
         '${months[parsed.month - 1]} ${parsed.year}';
   }
 
   // --- Mutations ------------------------------------------------------------
+
+  /// Surfaces a truthful partial-failure state: the backend commits the real
+  /// change first and records the audit row second, so an audit write failure
+  /// arrives as `audit_recorded: false` on a SUCCESS response — not as an
+  /// error the administrator would retry against an already-applied change.
+  static String _auditSuffix(Map<String, dynamic> result) =>
+      result['audit_recorded'] == false
+          ? ' NOTE: the change is applied but the audit log write failed — '
+              'the server logged the cause; report it to the operator.'
+          : '';
 
   void _setNotice(String text, {required bool error}) {
     setState(() {
@@ -329,13 +332,13 @@ class _AdminAgentsPageState extends State<AdminAgentsPage> {
     };
     setState(() => _busyId = agent.userId);
     try {
-      await AppLocator.adminApi.setAgentStatus(agent.userId, status);
+      final result = await AppLocator.adminApi.setAgentStatus(agent.userId, status);
       await _load(silent: true);
       if (!mounted) return;
       setState(() => _confirmingId = null);
       _setNotice(
         '${agent.displayName} was $label. The change is stored server-side '
-        'and written to the administrator audit log.',
+        'and written to the administrator audit log.${_auditSuffix(result)}',
         error: false,
       );
     } catch (error) {
@@ -357,13 +360,13 @@ class _AdminAgentsPageState extends State<AdminAgentsPage> {
     }
     setState(() => _revokingId = invite.invitationId);
     try {
-      await AppLocator.adminApi.revokeInvitation(invite.invitationId);
+      final result = await AppLocator.adminApi.revokeInvitation(invite.invitationId);
       await _load(silent: true);
       if (!mounted) return;
       _setNotice(
         'The invitation for ${invite.email} was revoked server-side. No '
         'identity was deleted and no email was sent; the address can now be '
-        'invited again.',
+        'invited again.${_auditSuffix(result)}',
         error: false,
       );
     } catch (error) {
@@ -399,6 +402,9 @@ class _AdminAgentsPageState extends State<AdminAgentsPage> {
         'Company "${created.name}" registered with company_id ${created.id}.',
         error: false,
       );
+      // Company registration audits best-effort; a failed audit write does
+      // not invalidate the created row, and the flag arrives on the success
+      // response (`CompanyRecord` does not carry it).
     } catch (error) {
       if (!mounted) return;
       setState(() {
@@ -413,7 +419,7 @@ class _AdminAgentsPageState extends State<AdminAgentsPage> {
       _validatedAgent = true;
       _wizardError = null;
     });
-    if (!_agentStepValid || !_confirmed) return;
+    if (!_companyStepValid || !_agentStepValid || !_confirmed) return;
     setState(() => _submitting = true);
     try {
       // A newly registered company is written first so the invitation carries
@@ -429,8 +435,9 @@ class _AdminAgentsPageState extends State<AdminAgentsPage> {
         companyId = selected.id;
         companyName = selected.name;
       } else {
-        final created =
-            await AppLocator.adminApi.createCompany(_newCompanyName.trim());
+        final created = await AppLocator.adminApi.createCompany(
+          _newCompanyName.trim(),
+        );
         companyId = created.id;
         companyName = created.name;
       }
@@ -447,9 +454,12 @@ class _AdminAgentsPageState extends State<AdminAgentsPage> {
         _result = result;
         _resultCompanyId = companyId;
         _resultCompanyName = companyName;
-        _step = 3;
+        _step = 2;
         _submitting = false;
       });
+      if (result['audit_recorded'] == false) {
+        _setNotice(_auditSuffix(result).trim(), error: false);
+      }
     } catch (error) {
       if (!mounted) return;
       setState(() {
@@ -467,9 +477,13 @@ class _AdminAgentsPageState extends State<AdminAgentsPage> {
   void _focusOpenDialog() {
     Future<void>.delayed(const Duration(milliseconds: 30), () {
       if (!mounted) return;
+      // Prefer the first form field instead of placing focus on the stepper.
       final target = web.document.querySelector(
-        '.dialog input, .dialog button, .dialog [tabindex]',
-      );
+            '.ag-invite-form select, .ag-invite-form input',
+          ) ??
+          web.document.querySelector(
+            '.dialog input, .dialog button, .dialog [tabindex]',
+          );
       (target as web.HTMLElement?)?.focus();
     });
   }
@@ -539,20 +553,21 @@ class _AdminAgentsPageState extends State<AdminAgentsPage> {
   void _nextFromCompany() {
     setState(() {
       _validatedCompany = true;
-      _wizardError = null;
-    });
-    if (!_companyStepValid) return;
-    setState(() => _step = 1);
-    _focusOpenDialog();
-  }
-
-  void _nextFromAgent() {
-    setState(() {
       _validatedAgent = true;
       _wizardError = null;
     });
-    if (!_agentStepValid) return;
-    setState(() => _step = 2);
+    if (!_companyStepValid || !_agentStepValid) {
+      // Focus the first invalid field. Both sections validate together.
+      Future<void>.delayed(const Duration(milliseconds: 30), () {
+        if (!mounted) return;
+        final invalid = web.document.querySelector(
+          '.ag-invite-form [aria-invalid="true"]',
+        );
+        (invalid as web.HTMLElement?)?.focus();
+      });
+      return;
+    }
+    setState(() => _step = 1);
     _focusOpenDialog();
   }
 
@@ -723,8 +738,8 @@ class _AdminAgentsPageState extends State<AdminAgentsPage> {
           ActionNotice(_notice!, tone: _noticeError ? 'danger' : 'info'),
         if (_error != null)
           Callout(
-            'Some live data could not be read: $_error. The records that did '
-            'load are shown below; use Refresh to retry.',
+            'Could not refresh agent management: $_error. Previously loaded '
+            'records are preserved. Use Refresh to retry.',
             tone: 'warning',
             icon: 'warning',
           ),
@@ -762,13 +777,12 @@ class _AdminAgentsPageState extends State<AdminAgentsPage> {
       rows: [
         for (final agent in rows)
           [
-            CellIdentity(
-              title: agent.displayName,
-              caption: agent.email,
-            ),
+            CellIdentity(title: agent.displayName, caption: agent.email),
             Component.text(
               agent.companyName.isEmpty
-                  ? (agent.companyId.isEmpty ? 'Unassigned' : '#${agent.companyId}')
+                  ? (agent.companyId.isEmpty
+                        ? 'Unassigned'
+                        : '#${agent.companyId}')
                   : agent.companyName,
             ),
             agent.status.isEmpty
@@ -807,7 +821,10 @@ class _AdminAgentsPageState extends State<AdminAgentsPage> {
       );
     }
     if (status == 'pending') {
-      return ActionButton('Activate', onClick: () => _setStatus(agent, 'active'));
+      return ActionButton(
+        'Activate',
+        onClick: () => _setStatus(agent, 'active'),
+      );
     }
     return ActionButton(
       'Suspend',
@@ -913,9 +930,7 @@ class _AdminAgentsPageState extends State<AdminAgentsPage> {
                               : null,
                         )
                       else
-                        span(classes: 'ag-muted', [
-                          Component.text('Closed'),
-                        ]),
+                        span(classes: 'ag-muted', [Component.text('Closed')]),
                     ]),
                   ],
               ],
@@ -931,16 +946,17 @@ class _AdminAgentsPageState extends State<AdminAgentsPage> {
     [
       for (var i = 0; i < _steps.length; i++)
         button(
-          classes: 'ag-step'
+          classes:
+              'ag-step'
               '${i == _step ? ' ag-step--on' : ''}'
               '${i < _step ? ' ag-step--done' : ''}',
           attributes: {
             'type': 'button',
             'aria-current': i == _step ? 'step' : 'false',
-            if (i > _step || _step == 3) 'disabled': '',
+            if (i > _step || _step == 2) 'disabled': '',
           },
           events: events(
-            onClick: (i < _step && _step < 3 && !_submitting)
+            onClick: (i < _step && _step < 2 && !_submitting)
                 ? () => setState(() => _step = i)
                 : null,
           ),
@@ -991,7 +1007,8 @@ class _AdminAgentsPageState extends State<AdminAgentsPage> {
                         : company.name,
                   ),
               ],
-              hint: 'Selected from public.company — no duplicate row is created.',
+              hint:
+                  'Selected from public.company — no duplicate row is created.',
               error: _companyError,
               onChanged: (value) => setState(() {
                 _selectedCompanyId = value;
@@ -1002,7 +1019,8 @@ class _AdminAgentsPageState extends State<AdminAgentsPage> {
       Field(
         labelText: 'New company name',
         error: _companyError,
-        hint: 'Registered in public.company before the invite is sent; the '
+        hint:
+            'Registered in public.company before the invite is sent; the '
             'returned company_id is preserved with the agent.',
         child: _textInput(
           value: _newCompanyName,
@@ -1110,11 +1128,7 @@ class _AdminAgentsPageState extends State<AdminAgentsPage> {
         label: 'Phone',
         value: _invPhone.trim().isEmpty ? 'Not provided' : _invPhone.trim(),
       ),
-      InfoRow(
-        icon: 'apartment',
-        label: 'Company',
-        value: _assignmentLabel,
-      ),
+      InfoRow(icon: 'apartment', label: 'Company', value: _assignmentLabel),
       InfoRow(icon: 'badge', label: 'Role', value: 'Agent'),
       InfoRow(
         icon: 'lock',
@@ -1132,9 +1146,7 @@ class _AdminAgentsPageState extends State<AdminAgentsPage> {
       input(
         type: InputType.checkbox,
         checked: _confirmed,
-        events: events(
-          onClick: () => setState(() => _confirmed = !_confirmed),
-        ),
+        events: events(onClick: () => setState(() => _confirmed = !_confirmed)),
       ),
       span([
         Component.text(
@@ -1154,9 +1166,7 @@ class _AdminAgentsPageState extends State<AdminAgentsPage> {
     final invitation = result['invitation'];
     final status = '${result['invitation_status'] ?? ''}'.isNotEmpty
         ? '${result['invitation_status']}'
-        : (invitation is Map
-            ? '${invitation['invitation_status'] ?? ''}'
-            : '');
+        : (invitation is Map ? '${invitation['invitation_status'] ?? ''}' : '');
     final email = '${result['email'] ?? _invEmail.trim()}';
     final accountStatus = '${result['account_status'] ?? ''}';
     return div(classes: 'stack', [
@@ -1208,15 +1218,31 @@ class _AdminAgentsPageState extends State<AdminAgentsPage> {
     ]);
   }
 
+  /// One complete entry form — no hidden email field on a later page.
+  /// The existing company/agent field builders and validation remain reused.
+  Component _invitationForm() => div(classes: 'ag-invite-form', [
+    div(classes: 'ag-invite-form__section', [
+      h3(classes: 'ag-invite-form__heading', [
+        Component.text('Company assignment'),
+      ]),
+      _companyStep(),
+    ]),
+    div(classes: 'ag-invite-form__section', [
+      h3(classes: 'ag-invite-form__heading', [
+        Component.text('Agent information'),
+      ]),
+      _agentStep(),
+    ]),
+  ]);
+
   Component _wizardBody() => switch (_step) {
-    0 => _companyStep(),
-    1 => _agentStep(),
-    2 => _reviewStep(),
+    0 => _invitationForm(),
+    1 => _reviewStep(),
     _ => _resultStep(),
   };
 
   List<Component> _wizardActions() {
-    if (_step == 3) {
+    if (_step == 2) {
       return [
         ActionButton(
           'Invite another',
@@ -1237,29 +1263,16 @@ class _AdminAgentsPageState extends State<AdminAgentsPage> {
           onClick: _submitting ? null : _closeInvite,
         ),
         ActionButton(
-          'Continue',
+          'Review details',
           onClick: _submitting ? null : _nextFromCompany,
-        ),
-      ];
-    }
-    if (_step == 1) {
-      return [
-        ActionButton(
-          'Back',
-          variant: 'secondary',
-          onClick: _submitting ? null : () => setState(() => _step = 0),
-        ),
-        ActionButton(
-          'Continue',
-          onClick: _submitting ? null : _nextFromAgent,
         ),
       ];
     }
     return [
       ActionButton(
-        'Back',
+        'Back to details',
         variant: 'secondary',
-        onClick: _submitting ? null : () => setState(() => _step = 1),
+        onClick: _submitting ? null : () => setState(() => _step = 0),
       ),
       ActionButton(
         _submitting ? 'Sending…' : 'Send invitation',
@@ -1270,20 +1283,24 @@ class _AdminAgentsPageState extends State<AdminAgentsPage> {
 
   Component _inviteDialog() {
     return SitewiseDialog(
-      title: _step == 3 ? 'Invitation submitted' : 'Invite an agent',
-      ariaLabel: 'Invite an agent — step ${_step + 1} of 4',
+      title: _step == 2 ? 'Invitation submitted' : 'Invite an agent',
+      ariaLabel: 'Invite an agent — step ${_step + 1} of 3',
       onClose: _submitting ? _noop : _closeInvite,
       wide: true,
+      // Only this dialog gets the two-column invitation layout and the
+      // ~940px panel; other `dialog--wide` modals keep their width.
+      panelClass: 'dialog--invite',
       body: div(
-        classes: 'stack ag-wizard',
+        classes: 'stack ag-wizard ag-invite-dialog-body',
         attributes: {'aria-busy': _submitting ? 'true' : 'false'},
         [
           _stepper(),
           _wizardBody(),
           if (_wizardError != null)
-            div(attributes: const {'role': 'alert'}, [
-              ActionNotice(_wizardError!, tone: 'danger'),
-            ]),
+            div(
+              attributes: const {'role': 'alert'},
+              [ActionNotice(_wizardError!, tone: 'danger')],
+            ),
         ],
       ),
       actions: _wizardActions(),
@@ -1304,9 +1321,10 @@ class _AdminAgentsPageState extends State<AdminAgentsPage> {
           ),
         ]),
         if (_companyDialogError != null)
-          div(attributes: const {'role': 'alert'}, [
-            ActionNotice(_companyDialogError!, tone: 'danger'),
-          ]),
+          div(
+            attributes: const {'role': 'alert'},
+            [ActionNotice(_companyDialogError!, tone: 'danger')],
+          ),
         Field(
           labelText: 'Company name',
           error: _companyDialogError,
@@ -1334,9 +1352,7 @@ class _AdminAgentsPageState extends State<AdminAgentsPage> {
   }
 
   Component _detailsDialog() {
-    final agent = _agents
-        .where((row) => row.userId == _detailsId)
-        .firstOrNull;
+    final agent = _agents.where((row) => row.userId == _detailsId).firstOrNull;
     if (agent == null) return const span([]);
     return SitewiseDialog(
       title: agent.displayName,
@@ -1376,11 +1392,7 @@ class _AdminAgentsPageState extends State<AdminAgentsPage> {
           label: 'Added',
           value: _shortDate(agent.createdAt),
         ),
-        InfoRow(
-          icon: 'fingerprint',
-          label: 'User id',
-          value: agent.userId,
-        ),
+        InfoRow(icon: 'fingerprint', label: 'User id', value: agent.userId),
       ]),
       actions: [
         ActionButton(
@@ -1451,20 +1463,9 @@ class _AdminAgentsPageState extends State<AdminAgentsPage> {
       ],
       child: div(classes: 'stack ag ops-fade', [
         _hero(),
-        Callout(
-          'Invitations, company registration and status changes run through '
-          'the server-side staff API, which requires an administrator account '
-          'with MFA and writes every change to the audit log. There is no '
-          'password field here by design: the invited agent sets their own '
-          'credential.',
-          icon: 'shield',
-        ),
         _metrics(),
         _rosterPanel(),
-        div(classes: 'ag-columns', [
-          _companiesPanel(),
-          _invitationsPanel(),
-        ]),
+        div(classes: 'ag-columns', [_companiesPanel(), _invitationsPanel()]),
         if (_inviteOpen) _inviteDialog(),
         if (_companyDialogOpen) _companyDialog(),
         if (_detailsId != null) _detailsDialog(),

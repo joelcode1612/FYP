@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#F4F7FB">
+  <meta name="description" content="Sitewise Entrepreneur Location Assessment — five-stage, eight-question decision-support workspace.">
+  <title>Sitewise | Location Assessment Workspace</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <svg width="0" height="0" aria-hidden="true" style="position:absolute"><defs>
+  <symbol id="i-home" viewBox="0 0 24 24"><path d="m3 11 9-8 9 8M5 10v11h14V10M9 21v-7h6v7" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="10.8" cy="10.8" r="6.5" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="m16 16 4.5 4.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
+  <symbol id="i-star" viewBox="0 0 24 24"><path d="m12 2 3.2 6.6 7.3 1-5.3 5.2 1.2 7.2-6.4-3.4-6.4 3.4 1.2-7.2-5.3-5.2 7.3-1Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></symbol>
+  <symbol id="i-bookmark" viewBox="0 0 24 24"><path d="M5 3h14v19l-7-5-7 5Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></symbol>
+  <symbol id="i-clipboard" viewBox="0 0 24 24"><path d="M9 4h6M9 2h6l1 4H8l1-4Zm-3 3H4v17h16V5h-2M8 11h8M8 15h8" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></symbol>
+  <symbol id="i-settings" viewBox="0 0 24 24"><path d="M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8ZM10 2l-.6 2.5-2.1 1.2-2.4-.7L3 8.2l1.8 1.8v2.4L3 14.2l1.9 3.2 2.4-.7 2.1 1.2L10 20.5h4l.6-2.6 2.1-1.2 2.4.7 1.9-3.2-1.8-1.8v-2.4L21 8.2l-1.9-3.2-2.4.7-2.1-1.2L14 2H10Z" stroke="currentColor" stroke-width="1.6" fill="none"/></symbol>
+  <symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M4 22c0-5 3-8 8-8s8 3 8 8" fill="none" stroke="currentColor" stroke-width="1.8"/></symbol>
+  <symbol id="i-bell" viewBox="0 0 24 24"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9Zm-8 13h4" fill="none" stroke="currentColor" stroke-width="1.8"/></symbol>
+  <symbol id="i-map" viewBox="0 0 24 24"><path d="M4 4h5l6 3 5-3v16l-5 3-6-3-5 3V4ZM9 4v16M15 7v16" fill="none" stroke="currentColor" stroke-width="1.6"/></symbol>
+  </defs></svg>
+  <div class="shell">
+    <aside class="sidebar" id="sidebar" aria-label="Entrepreneur navigation">
+      <a class="brand" href="#stage-1"><span class="brand-mark" aria-hidden="true">⌖</span><span class="brand-text">Sitewise<small class="brand-sub">ENTREPRENEUR WORKSPACE</small></span></a>
+      <div class="side-label">WORKSPACE</div>
+      <nav class="side-nav" aria-label="Main workspace">
+        <a href="/entrepreneur" title="Dashboard"><svg><use href="#i-home"/></svg><span>Dashboard</span></a>
+        <a href="/entrepreneur/explore" title="Explore Properties"><svg><use href="#i-search"/></svg><span>Explore Properties</span></a>
+        <a href="/entrepreneur/recommendations" title="Recommendations"><svg><use href="#i-star"/></svg><span>Recommendations</span></a>
+        <a href="/entrepreneur/saved" title="Saved Properties"><svg><use href="#i-bookmark"/></svg><span>Saved Properties</span></a>
+        <a href="#stage-1" class="current" aria-current="page" title="Assessments"><svg><use href="#i-clipboard"/></svg><span>Assessments</span></a>
+        <a href="/entrepreneur/preferences" title="Preferences"><svg><use href="#i-settings"/></svg><span>Preferences</span></a>
+        <a href="/entrepreneur/profile" title="Profile"><svg><use href="#i-user"/></svg><span>Profile</span></a>
+      </nav>
+      <div class="sidebar-bottom">Sitewise · F&amp;B Location Intelligence<br><span style="opacity:.72">Research decision support</span></div>
+    </aside>
+    <div class="workspace">
+      <header class="topbar">
+        <div style="display:flex;align-items:center;gap:12px;min-width:0"><button class="icon-button mobile-trigger" id="mobileMenu" aria-label="Open workspace menu" aria-expanded="false">☰</button><div class="topbar-path">Assessments <span>›</span> <b>Location Assessment</b></div></div>
+        <div class="top-actions"><span class="badge grey top-user-label">Entrepreneur workspace</span><button class="icon-button" aria-label="Notification preview" title="Notifications unavailable in standalone preview"><svg><use href="#i-bell"/></svg></button><span class="avatar" title="Account avatar example">A</span></div>
+      </header>
+      <main class="page" id="app-main">
+        <section class="intro">
+          <div><div class="eyebrow">SITEWISE · BUSINESS LOCATION ASSESSMENT</div><h1 id="pageTitle">Location Assessment Workspace</h1><p id="pageSubtitle">Assess one saved commercial property, from selection to final report.</p></div>
+          <div class="top-cta"><span class="badge amber" id="modeBadge">LIVE SOURCE · NOT CONNECTED</span><button class="btn sm" id="restartBtn">Start over</button></div>
+        </section>
+        <nav class="stages" aria-label="Assessment stages" id="stepper"></nav>
+        <div id="stageBody" aria-live="polite"></div>
+        <p class="footnote">Sitewise is a decision-support tool. Model association scores are not business success probabilities, and property suitability does not confirm regulatory or landlord approval. Figures are labelled as live, unavailable, or illustrative.</p>
+      </main>
+    </div>
+  </div>
+  <div class="toast" id="toast" hidden role="status"></div>
+  <script src="app.js"></script>
+</body>
+</html>

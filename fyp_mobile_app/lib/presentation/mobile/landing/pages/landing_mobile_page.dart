@@ -256,8 +256,10 @@ class _LandingMobilePageState extends ConsumerState<LandingMobilePage> {
                   ),
                   const SizedBox(height: 20),
                   MobileTourShowcase(
-                    onExplore: () =>
-                        _enter(AppRole.entrepreneur, '/entrepreneur/explore'),
+                    onExplore: () => _enter(
+                      AppRole.entrepreneur,
+                      '/entrepreneur/recommendations',
+                    ),
                   ),
                 ],
               ),

@@ -73,13 +73,25 @@ class SitewiseStatusBadge extends StatelessWidget {
             ),
             const SizedBox(width: 6),
           ],
-          Text(
-            label,
-            style: TextStyle(
-              fontFamily: kFontFamily,
-              color: color,
-              fontSize: 11.5,
-              fontWeight: FontWeight.w800,
+          // Flexible, not a bare Text: a flex child is measured against the
+          // space left after the dot, so the label truncates instead of
+          // pushing the Row past its maximum width.
+          Flexible(
+            child: Text(
+              label,
+              // A pill is a fixed-height chip, not a layout driver: when a
+              // card column is narrower than the label (320 dp phones, or a
+              // card that also carries a trailing icon) it must shorten
+              // rather than paint the overflow stripes.
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              softWrap: false,
+              style: TextStyle(
+                fontFamily: kFontFamily,
+                color: color,
+                fontSize: 11.5,
+                fontWeight: FontWeight.w800,
+              ),
             ),
           ),
         ],

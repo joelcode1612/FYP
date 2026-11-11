@@ -34,6 +34,15 @@ const PROFILES = {
   agent: { user_id: 'harness-agent', email: 'aina@jaspr.local', display_name: 'Agent Aina', role: 'agent' },
 };
 
+const RECOMMENDATION_FIXTURE = path.join(
+  __dirname,
+  '..',
+  '..',
+  'test',
+  '.data',
+  'recommendation_search_fixture.json',
+);
+
 function loadRows() {
   if (!fs.existsSync(FIXTURE)) {
     throw new Error(`Missing fixture at ${FIXTURE}. Run: node tool/gen_catalog_fixture.js`);
@@ -42,11 +51,27 @@ function loadRows() {
 }
 
 /**
+ * Real `POST /api/v1/recommendations/search` and `GET /.../facets` payloads.
+ *
+ * They are captured from the live FastAPI service against PostgreSQL by
+ * `capture_recommendation_fixture.py` (see the repo notes), not hand-written:
+ * the harness has no Supabase credentials, and inventing a response shape here
+ * would let the page pass an audit against a contract the server never sends.
+ * Returns null when the capture has not been run, so the page falls back to its
+ * honest "unavailable" state instead of fake rows.
+ */
+function loadRecommendationFixture() {
+  if (!fs.existsSync(RECOMMENDATION_FIXTURE)) return null;
+  return JSON.parse(fs.readFileSync(RECOMMENDATION_FIXTURE, 'utf8'));
+}
+
+/**
  * @param {import('playwright-core').Page} page
  * @param {{role?: string}} options role, or `auto` to follow the URL prefix
  */
 async function installHarnessSession(page, { role = 'auto' } = {}) {
   const rows = loadRows();
+  const recommendation = loadRecommendationFixture();
 
   await page.addInitScript(({ role, profiles, apiOrigin }) => {
     const profileFor = () => {
@@ -66,7 +91,18 @@ async function installHarnessSession(page, { role = 'auto' } = {}) {
           profile: profileFor(),
           error: '',
         }),
-      request: async (path) => (await fetch(`${apiOrigin}${path}`)).text(),
+      // Mirrors the real bridge: `request(path, method, body)` where `body` is
+      // already a JSON string. The earlier one-argument form silently turned
+      // every POST into a GET, so a paged request looked identical to the
+      // first one and the harness replayed page 1 forever.
+      request: async (path, method, body) => {
+        const init = { method: method || 'GET' };
+        if (body) {
+          init.headers = { 'content-type': 'application/json' };
+          init.body = typeof body === 'string' ? body : JSON.stringify(body);
+        }
+        return (await fetch(`${apiOrigin}${path}`, init)).text();
+      },
       google: async () => {
         throw new Error('Harness session: sign-in is not available in headless verification.');
       },
@@ -101,6 +137,36 @@ async function installHarnessSession(page, { role = 'auto' } = {}) {
         headers: { 'Access-Control-Allow-Origin': route.request().headers()['origin'] || '*' },
         body: JSON.stringify(body),
       });
+    if (url.pathname === '/api/v1/recommendations/search') {
+      if (!recommendation) {
+        return route.fulfill({
+          status: 503,
+          contentType: 'application/json',
+          body: JSON.stringify({ detail: 'Recommendation fixture not captured.' }),
+        });
+      }
+      // A cursor means "next page of the ranking that produced page one".
+      const hasCursor = Boolean((route.request().postDataJSON() || {}).cursor);
+      const payload = hasCursor
+        ? recommendation.page_two || recommendation.page_one
+        : recommendation.page_one;
+      return json(payload);
+    }
+    if (url.pathname === '/api/v1/recommendations/facets') {
+      if (!recommendation) {
+        return route.fulfill({
+          status: 503,
+          contentType: 'application/json',
+          body: JSON.stringify({ detail: 'Recommendation fixture not captured.' }),
+        });
+      }
+      return json(recommendation.facets);
+    }
+    // The workspace shell loads the shortlist on mount. Serving it here keeps
+    // the audit's network log free of unrelated 404s.
+    if (url.pathname === '/api/v1/saved-properties/me') {
+      return json({ ok: true, data: [] });
+    }
     if (url.pathname === '/api/v1/catalog/properties') {
       const limit = Math.min(200, Math.max(1, Number(url.searchParams.get('limit')) || 100));
       const offset = Math.max(0, Number(url.searchParams.get('offset')) || 0);
@@ -108,7 +174,11 @@ async function installHarnessSession(page, { role = 'auto' } = {}) {
     }
     const detail = /^\/api\/v1\/catalog\/properties\/(.+)$/.exec(url.pathname);
     if (detail) {
-      const row = rows.find((r) => r.id === decodeURIComponent(detail[1])) || null;
+      const id = decodeURIComponent(detail[1]);
+      // Ranked ids come from the live catalogue and are not all present in the
+      // older bundled fixture, so the captured detail rows are consulted first.
+      const captured = recommendation?.details?.[id];
+      const row = captured || rows.find((r) => r.id === id) || null;
       return json({ ok: Boolean(row), data: row });
     }
     return route.fulfill({

@@ -7,6 +7,7 @@ import '../../../core/theme/sitewise_theme.dart';
 import '../../../presentation/mobile/widgets/m3_kit.dart';
 import '../../shared/widgets/sitewise_brand.dart';
 import '../../shared/widgets/sitewise_role_menu.dart';
+import 'entrepreneur_tab_scope.dart';
 
 /// Compact mobile header.
 ///
@@ -27,12 +28,19 @@ class MobileTopBar extends ConsumerWidget implements PreferredSizeWidget {
   /// Opt into the Material 3 post-sign-in chrome.
   final bool m3;
 
+  /// Force the back affordance on or off. When null (default) the back arrow
+  /// follows [Navigator.canPop]. Root workspaces (the persistent tab host)
+  /// pass `false`: a primary tab is a top-level destination and must never
+  /// offer a back arrow that pops the whole workspace away.
+  final bool? showBack;
+
   const MobileTopBar({
     super.key,
     required this.title,
     required this.actions,
     this.brandTitle = false,
     this.m3 = false,
+    this.showBack,
   });
 
   @override
@@ -40,7 +48,7 @@ class MobileTopBar extends ConsumerWidget implements PreferredSizeWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final canPop = Navigator.of(context).canPop();
+    final canPop = showBack ?? Navigator.of(context).canPop();
     if (!m3) return _classic(context, ref, canPop);
     return _m3(context, canPop);
   }
@@ -77,8 +85,12 @@ class MobileTopBar extends ConsumerWidget implements PreferredSizeWidget {
         if (role == AppRole.entrepreneur)
           InkWell(
             borderRadius: BorderRadius.circular(20),
-            onTap: () =>
-                Navigator.of(context).pushNamed('/entrepreneur/profile'),
+            // In-page shortcut to a primary tab: switch the persistent host's
+            // tab in place instead of stacking a second workspace route.
+            onTap: () => EntrepreneurTabScope.open(
+              context,
+              '/entrepreneur/profile',
+            ),
             child: const Padding(
               padding: EdgeInsets.all(8),
               child: CircleAvatar(

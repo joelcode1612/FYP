@@ -52,6 +52,21 @@ def explore_properties(
     sort: str = "newest",
     limit: int = Query(default=24, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
+    min_nearby_properties: int | None = Query(
+        default=None,
+        ge=1,
+        le=500,
+        description=(
+            "Optional spatial filter: keep only listings with at least this "
+            "many OTHER approved+published listings within nearby_radius_m. "
+            "Omit to keep the unfiltered behaviour (backward compatible)."
+        ),
+    ),
+    nearby_radius_m: int = Query(
+        default=500,
+        description="Geodesic radius in metres for the nearby-property "
+        "count; must be one of (250, 500, 1000).",
+    ),
 ) -> dict:
     """Map markers + listing cards: approved, published listings only.
 
@@ -59,24 +74,36 @@ def explore_properties(
     the precomputed research counts — ``null`` means "not calculated for
     this property", never 0. Map-marker consumers read ``latitude``/
     ``longitude`` (null coordinates are skipped client-side).
+
+    When ``min_nearby_properties`` is supplied, each row additionally carries
+    ``nearby_property_count`` — the real number of OTHER eligible listings
+    within the radius, computed with PostGIS geodesic distance (never the
+    F&B ``competitor_count_*`` research aggregates). Listings without usable
+    coordinates cannot satisfy the spatial filter and are excluded.
     """
-    return FypPropertyRepository(session).list_published(
-        {
-            "q": q,
-            "state": state,
-            "city": city,
-            "property_type": property_type,
-            "availability": availability,
-            "min_price": min_price,
-            "max_price": max_price,
-            "min_size": min_size,
-            "max_size": max_size,
-            "fnb_suitable": fnb_suitable,
-            "sort": sort,
-            "limit": limit,
-            "offset": offset,
-        }
-    )
+    params = {
+        "q": q,
+        "state": state,
+        "city": city,
+        "property_type": property_type,
+        "availability": availability,
+        "min_price": min_price,
+        "max_price": max_price,
+        "min_size": min_size,
+        "max_size": max_size,
+        "fnb_suitable": fnb_suitable,
+        "sort": sort,
+        "limit": limit,
+        "offset": offset,
+        "min_nearby_properties": min_nearby_properties,
+        "nearby_radius_m": nearby_radius_m,
+    }
+    try:
+        return FypPropertyRepository(session).list_published(params)
+    except ValueError as exc:
+        # Radius whitelist violations surface as 422, matching the
+        # competitor/demand-generator endpoints.
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 @router.get("/properties/{property_id}")
@@ -116,19 +143,32 @@ def explore_competitors(
     session=DbSession,
     radius_m: int = Query(default=500),
     limit: int = Query(default=50, ge=1, le=100),
+    source: str = Query(
+        default="osm",
+        description="Competitor source: osm (default), overture, or merged.",
+    ),
 ) -> dict:
     """Actual competitor outlets (name, category, distance) within radius.
 
-    Live PostGIS lookup on ``fnb_a.fnb_outlet``; ``available: false`` with an
-    empty list when the property has no coordinates — an honest state, not a
-    fabricated count.
+    ``source=osm`` keeps the original behaviour (OpenStreetMap only).
+    ``overture`` reads ``fnb_a.overture_places``; ``merged`` combines both and
+    removes Overture rows already MATCHed to an OSM outlet, so a business is
+    never listed twice. ``meta.counts`` reports the raw per-provider numbers
+    next to the deduplicated merged count.
     """
+    repo = FypPropertyRepository(session)
     try:
-        return FypPropertyRepository(session).list_competitors(
-            property_id, radius_m=radius_m, limit=limit
+        result = repo.list_competitors(
+            property_id, radius_m=radius_m, limit=limit, source=source
         )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+    coords = repo._coords(property_id)
+    if coords is not None:
+        result["meta"]["counts"] = repo.competitor_counts_by_source(
+            coords[0], coords[1], radius_m=radius_m
+        )
+    return result
 
 
 @router.get("/properties/{property_id}/demand-generators")

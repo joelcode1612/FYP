@@ -2,6 +2,7 @@ import '../../domain/entities/commercial_property.dart';
 import '../../domain/entities/explore.dart';
 import '../../domain/entities/location_intelligence.dart';
 import '../../domain/entities/recommendation.dart';
+import '../../domain/entities/recommendation_search.dart';
 
 /// State for the entrepreneur browsing flow.
 ///
@@ -55,8 +56,64 @@ class EntrepreneurState {
   /// composition root supplied a server-driven Explore repository.
   final ExploreFilterOptions? filterOptions;
 
+  /// Filter, sort and page-size criteria for the server-driven Explore
+  /// search. The free-text query is still owned by [query] (kept in sync by
+  /// the controller) so the demo/client-driven path is untouched; on the
+  /// server path this object is what actually reaches
+  /// `GET /explore/properties`. Default `const ExploreQuery()` = newest
+  /// first, page of 24, no constraints.
+  final ExploreQuery exploreCriteria;
+
+  /// The raw failure object behind [error], for UIs that need to classify
+  /// the failure (connection refused vs expired session vs server error vs
+  /// malformed contract) instead of showing one generic message. Null when
+  /// [error] is null or was produced without a classified failure.
+  final Object? exploreFailure;
+
   final List<PropertyRecommendation> recommendations;
   final LocationAnalysis? analysis;
+
+  // --- Server-side recommendation search -----------------------------------
+  //
+  // One owner for the Recommendations page on BOTH platforms. The server
+  // filters, orders and pages; this state only holds the ordered result, the
+  // cursor and the per-surface progress flags. Nothing here re-sorts.
+
+  /// Ranked results in server order. Appending a page never re-orders.
+  final List<RankedProperty> ranked;
+
+  /// The criteria the current [ranked] list was produced with. Pagination
+  /// reuses it verbatim, so page 2 cannot silently use different filters.
+  final RecommendationSearchRequest recommendationRequest;
+
+  /// Cursor for the next page, or null when there is none.
+  final String? recommendationCursor;
+
+  final bool recommendationHasMore;
+
+  /// Server-reported total for the current criteria.
+  final int? recommendationTotal;
+
+  /// Model provenance for the current result set. Null before the first
+  /// search; after it, this is what the UI quotes — never a hardcoded label.
+  final RecommendationModelStatus? recommendationModel;
+
+  /// Filter vocabulary from the catalogue (states, types, ranges).
+  final RecommendationFacets? recommendationFacets;
+
+  /// First load of the Recommendations page: nothing to show yet.
+  final bool recommendationLoading;
+
+  /// A new search or an extra page is in flight with results still visible.
+  final bool recommendationRefreshing;
+
+  /// Recommendation failures are separate from Explore failures: a failed
+  /// ranking must not blank the Explore grid, and vice versa.
+  final String? recommendationError;
+
+  /// The listing whose intelligence panel is open (right panel on web, detail
+  /// sheet on mobile). Always a real id from [ranked].
+  final String? selectedRankedId;
 
   final String query;
   final String filter;
@@ -77,8 +134,21 @@ class EntrepreneurState {
     this.exploreTotal,
     this.exploreHasMore = false,
     this.filterOptions,
+    this.exploreCriteria = const ExploreQuery(),
+    this.exploreFailure,
     this.recommendations = const [],
     this.analysis,
+    this.ranked = const [],
+    this.recommendationRequest = const RecommendationSearchRequest(),
+    this.recommendationCursor,
+    this.recommendationHasMore = false,
+    this.recommendationTotal,
+    this.recommendationModel,
+    this.recommendationFacets,
+    this.recommendationLoading = false,
+    this.recommendationRefreshing = false,
+    this.recommendationError,
+    this.selectedRankedId,
     this.query = '',
     this.filter = 'All',
   });
@@ -97,8 +167,26 @@ class EntrepreneurState {
     bool clearExploreTotal = false,
     bool? exploreHasMore,
     ExploreFilterOptions? filterOptions,
+    ExploreQuery? exploreCriteria,
+    Object? exploreFailure,
+    bool clearExploreFailure = false,
     List<PropertyRecommendation>? recommendations,
     LocationAnalysis? analysis,
+    List<RankedProperty>? ranked,
+    RecommendationSearchRequest? recommendationRequest,
+    String? recommendationCursor,
+    bool clearRecommendationCursor = false,
+    bool? recommendationHasMore,
+    int? recommendationTotal,
+    bool clearRecommendationTotal = false,
+    RecommendationModelStatus? recommendationModel,
+    RecommendationFacets? recommendationFacets,
+    bool? recommendationLoading,
+    bool? recommendationRefreshing,
+    String? recommendationError,
+    bool clearRecommendationError = false,
+    String? selectedRankedId,
+    bool clearSelectedRankedId = false,
     String? query,
     String? filter,
     BusinessPreferences? preferences,
@@ -121,8 +209,34 @@ class EntrepreneurState {
           : (exploreTotal ?? this.exploreTotal),
       exploreHasMore: exploreHasMore ?? this.exploreHasMore,
       filterOptions: filterOptions ?? this.filterOptions,
+      exploreCriteria: exploreCriteria ?? this.exploreCriteria,
+      exploreFailure: clearExploreFailure
+          ? null
+          : (exploreFailure ?? this.exploreFailure),
       recommendations: recommendations ?? this.recommendations,
       analysis: analysis ?? this.analysis,
+      ranked: ranked ?? this.ranked,
+      recommendationRequest: recommendationRequest ?? this.recommendationRequest,
+      recommendationCursor: clearRecommendationCursor
+          ? null
+          : (recommendationCursor ?? this.recommendationCursor),
+      recommendationHasMore:
+          recommendationHasMore ?? this.recommendationHasMore,
+      recommendationTotal: clearRecommendationTotal
+          ? null
+          : (recommendationTotal ?? this.recommendationTotal),
+      recommendationModel: recommendationModel ?? this.recommendationModel,
+      recommendationFacets: recommendationFacets ?? this.recommendationFacets,
+      recommendationLoading:
+          recommendationLoading ?? this.recommendationLoading,
+      recommendationRefreshing:
+          recommendationRefreshing ?? this.recommendationRefreshing,
+      recommendationError: clearRecommendationError
+          ? null
+          : (recommendationError ?? this.recommendationError),
+      selectedRankedId: clearSelectedRankedId
+          ? null
+          : (selectedRankedId ?? this.selectedRankedId),
       query: query ?? this.query,
       filter: filter ?? this.filter,
     );

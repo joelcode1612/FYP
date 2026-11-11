@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:shared_logic/shared_logic.dart';
 
 /// One active business assessment draft.
@@ -43,10 +44,13 @@ class AssessmentDraft {
 
 /// Holds the single active assessment draft for this app session.
 ///
-/// A plain mutable holder (same pattern as `ServiceLocator.preferences`)
-/// rather than a Cubit: the draft is written by the flow screens and read on
-/// navigation, and every route push rebuilds its page, so no stream is needed.
-class AssessmentSessionStore {
+/// A [ChangeNotifier] rather than a Cubit: the draft is written by the flow
+/// screens and read on navigation. The "every route push rebuilds its page"
+/// assumption this class used to rely on is false inside the five-tab shell —
+/// [EntrepreneurTabHost] keeps each tab's page alive, so returning to Assess
+/// after saving a draft never rebuilt it and the progress tiles kept showing
+/// the pre-assessment state. Listeners are notified after every mutation.
+class AssessmentSessionStore extends ChangeNotifier {
   /// Called after every draft mutation so the caller can write the draft
   /// through to [ApplicationDraftRepository]. Best-effort: the hook receives
   /// the draft, or an [_EmptyDraft] sentinel (empty property id) meaning
@@ -65,6 +69,7 @@ class AssessmentSessionStore {
   /// copy on disk is already authoritative for this data.
   void restore(AssessmentDraft draft) {
     _draft = draft;
+    notifyListeners();
   }
 
   /// Opens the flow for [property], or resumes it when the draft already
@@ -112,6 +117,7 @@ class AssessmentSessionStore {
     } catch (_) {
       // Persisting the clear is best-effort; the in-session discard is done.
     }
+    notifyListeners();
   }
 
   void _persist() {
@@ -123,6 +129,7 @@ class AssessmentSessionStore {
       // Write-through is best-effort: losing the disk copy degrades to the
       // old session-only behaviour, it must never crash the flow.
     }
+    notifyListeners();
   }
 }
 
