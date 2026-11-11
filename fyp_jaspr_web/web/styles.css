@@ -3858,6 +3858,18 @@ a.card:hover {
   display: block;
   overflow: hidden;
   background: var(--geo-wash);
+  /* Real photographs arrive with inline width/height:100%, so without an
+     explicit ratio the tile takes the photo's own aspect (often near-square)
+     and dominates the card. Pinning the media box to the placeholder's 16:10
+     ratio keeps every card uniform and "normal" sized. */
+  aspect-ratio: 16 / 10;
+}
+
+.pcard .pcard-media img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 /* Placeholder media. The target never ships photographs — the source's `.cover`
