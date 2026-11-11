@@ -232,12 +232,11 @@ final class AssessmentRecord {
 
   /// 0 = nothing saved, 1 = legacy criteria form, 2 = eight-question form.
   ///
-  /// The workspace uses this to show a "saved before the questionnaire
-  /// existed" notice instead of reinterpreting old answers.
+  /// The workspace now uses this only to gate Stage 2's "Complete" action:
+  /// the M2 questionnaire is a UI-only preview that persists nothing, so a
+  /// record without a saved V1 requirements payload must not offer an action
+  /// the backend would refuse.
   final int requirementsVersion;
-
-  /// The two numbers a v1 record can honestly answer for the v2 questions.
-  final Map<String, dynamic>? requirementsLegacyView;
 
   final List<AssessmentStage> stages;
   final AssessmentCapabilities capabilities;
@@ -261,7 +260,6 @@ final class AssessmentRecord {
     required this.reportAvailable,
     required this.requirements,
     required this.requirementsVersion,
-    this.requirementsLegacyView,
     required this.stages,
     required this.capabilities,
     required this.nextAction,
@@ -293,8 +291,6 @@ final class AssessmentRecord {
       reportAvailable: json['report_available'] == true,
       requirements: (json['requirements'] as Map?)?.cast<String, dynamic>(),
       requirementsVersion: (json['requirements_version'] as num?)?.toInt() ?? 0,
-      requirementsLegacyView:
-          (json['requirements_legacy_view'] as Map?)?.cast<String, dynamic>(),
       stages: [
         for (final stage in (json['stages'] as List? ?? const []))
           AssessmentStage.fromJson((stage as Map).cast<String, dynamic>()),
@@ -646,31 +642,11 @@ final class AssessmentApi {
     parse: AssessmentHistory.fromJson,
   );
 
-  /// Saves the business requirements. The server validates and normalises
-  /// them; a 422 carries every problem in one message.
-  Future<ApiResult<AssessmentRecord>> saveRequirements(
-    String assessmentId,
-    Map<String, dynamic> requirements,
-  ) => _call(
-    '/api/v1/assessments/$assessmentId',
-    method: 'PATCH',
-    body: {'requirements': requirements},
-    parse: AssessmentRecord.fromJson,
-  );
-
-  /// Saves the requirements and records the stage complete in one request.
-  /// The server applies them in that order, so the stage is only completed
-  /// against values it has just validated.
-  Future<ApiResult<AssessmentRecord>> saveRequirementsAndComplete(
-    String assessmentId,
-    Map<String, dynamic> requirements,
-    String stageKey,
-  ) => _call(
-    '/api/v1/assessments/$assessmentId',
-    method: 'PATCH',
-    body: {'requirements': requirements, 'complete_stage': stageKey},
-    parse: AssessmentRecord.fromJson,
-  );
+  // There is deliberately no client-side requirements write anymore. Stage 2
+  // is the M2 questionnaire UI preview, which persists no answers; stage
+  // completion goes through completeStage() below and is decided by the
+  // backend. The server's validate_requirements() vocabulary is still shared
+  // with /api/v1/preferences/me, so it is NOT dead code.
 
   /// Marks a stage complete. The server refuses with 409 when the stage's own
   /// precondition is not met (evidence missing, model artifact absent, a prior
@@ -725,9 +701,9 @@ final class AssessmentApi {
 
   /// The catalogue's real `property_type` vocabulary.
   ///
-  /// Stage 2 offers only these values, so the eligibility filter can never be
-  /// set to a type that matches no listing. Read from the data rather than
-  /// hardcoded in the UI.
+  /// The recommendation preferences form offers only these values, so the
+  /// eligibility filter can never be set to a type that matches no listing.
+  /// Read from the data rather than hardcoded in the UI.
   Future<ApiResult<List<String>>> propertyTypes() => _call(
     '/api/v1/catalog/property-types',
     parse: (json) => [

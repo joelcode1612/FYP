@@ -606,7 +606,9 @@ class SitewiseApp extends StatelessComponent {
           ),
           // Web decision-support workspace. `?id=` is the same catalogue
           // property id Explore, Property detail and Saved already pass;
-          // `?stage=` optionally opens one of the two in-page stage panels.
+          // `?stage=` optionally opens one of the two in-page stage panels;
+          // `?queue=` carries the other properties selected alongside it so
+          // the evaluation queue survives reloads and shared links.
           // The Flutter mobile assessment is a separate data-collection
           // workflow and never routes here.
           //
@@ -620,6 +622,7 @@ class SitewiseApp extends StatelessComponent {
               e_assessment.AssessmentWorkspacePage(
                 propertyId: state.queryParams['id'] ?? '',
                 stage: state.queryParams['stage'] ?? '',
+                queue: state.queryParams['queue'] ?? '',
               ),
               title: 'Location Assessment Workspace — Sitewise',
               description:
@@ -649,6 +652,7 @@ class SitewiseApp extends StatelessComponent {
               e_assessment.AssessmentWorkspacePage(
                 propertyId: state.queryParams['id'] ?? '',
                 stage: state.queryParams['stage'] ?? '',
+                queue: state.queryParams['queue'] ?? '',
               ),
               title: 'Location Assessment Workspace — Sitewise',
               description:

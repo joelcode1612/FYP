@@ -12345,115 +12345,8 @@ input[type="range"] {
   }
 }
 
-/* --- Progress panel -------------------------------------------------------- */
-
-.asw-progress {
-  gap: var(--md);
-}
-
-.asw-progress__head {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: var(--md);
-}
-
-.asw-progress__count {
-  font-size: 20px;
-  font-weight: 800;
-  letter-spacing: -0.01em;
-  color: var(--ink);
-}
-
-.asw-progress__meta {
-  align-items: flex-end;
-}
-
-.asw-progress__foot {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: space-between;
-  gap: var(--xs) var(--md);
-}
-
-/* --- Stage cards ----------------------------------------------------------- */
-
-/* `.panel` is a column; a stage card reads as a row of content plus actions
-   and wraps below 620px, where the actions move under the description. */
-.asw-stage {
-  flex-direction: row;
-  flex-wrap: wrap;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: var(--md);
-  border-left: 3px solid var(--border-strong);
-}
-
-.asw-stage--complete {
-  border-left-color: var(--success);
-}
-
-.asw-stage--current {
-  border-left-color: var(--action);
-  background: var(--alt-surface);
-}
-
-.asw-stage--unavailable {
-  border-left-color: var(--warning);
-  border-left-style: dashed;
-}
-
-.asw-stage__head {
-  display: flex;
-  align-items: flex-start;
-  gap: var(--md);
-  flex: 1 1 320px;
-  min-width: 0;
-}
-
-.asw-stage__no {
-  display: grid;
-  place-items: center;
-  flex: 0 0 auto;
-  width: 32px;
-  height: 32px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: var(--neutral-wash);
-  font-size: 14px;
-  font-weight: 800;
-  color: var(--action);
-}
-
-.asw-stage--complete .asw-stage__no {
-  border-color: rgba(13, 148, 136, 0.35);
-  background: var(--success-wash);
-  color: var(--success-text);
-}
-
-.asw-stage--unavailable .asw-stage__no {
-  border-color: rgba(180, 83, 9, 0.35);
-  background: var(--warning-wash);
-  color: var(--warning);
-}
-
-.asw-stage__title {
-  font-size: 16px;
-  font-weight: 800;
-  color: var(--ink);
-}
-
-.asw-stage__reason {
-  color: var(--warning);
-}
-
-.asw-stage__actions {
-  flex: 0 0 auto;
-}
-
 /* The two stages whose body renders inside the workspace. Tinted and edged
-   with the accent so the open panel reads as belonging to the card above it. */
+   with the accent so the open panel reads as belonging to the stepper. */
 .asw-inline {
   border-left: 3px solid var(--action);
   background: var(--alt-surface);
@@ -12508,20 +12401,6 @@ input[type="range"] {
   font-weight: 800;
   line-height: 1.35;
   color: var(--ink);
-}
-
-/* --- Capability verdicts --------------------------------------------------- */
-
-.asw-cap {
-  display: grid;
-  gap: var(--xs);
-  padding: var(--sm) 0;
-  border-bottom: 1px solid var(--border);
-}
-
-.asw-cap:last-child {
-  padding-bottom: 0;
-  border-bottom: 0;
 }
 
 /* --- Evidence review ------------------------------------------------------- */
@@ -12583,14 +12462,6 @@ input[type="range"] {
 }
 
 @media (max-width: 620px) {
-  .asw-stage {
-    flex-direction: column;
-  }
-
-  .asw-stage__actions {
-    width: 100%;
-  }
-
   .asw-evidence__table td:last-child {
     white-space: normal;
   }

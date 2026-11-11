@@ -214,6 +214,7 @@ ClientOptions get defaultClientOptions => ClientOptions(
       (p) => _assessment_workspace_page.AssessmentWorkspacePage(
         propertyId: p['propertyId'] as String,
         stage: p['stage'] as String,
+        queue: p['queue'] as String,
       ),
       loader: _assessment_workspace_page.loadLibrary,
     ),

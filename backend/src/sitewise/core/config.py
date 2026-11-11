@@ -45,6 +45,18 @@ class Settings(BaseSettings):
     project1_cp07_enabled: bool = False
     project1_cp07_uc_database_url: SecretStr = SecretStr("")
 
+    # Candidate AI workflow: explicit migrations and authority reconciliation only.
+    project1_workflow_enabled: bool = False
+    project1_rules_version: str = ""
+    project1_rules_sha256: str = ""
+    project1_rules_adoption_receipt: str = ""
+    project1_runtime_database_url: SecretStr = SecretStr("")
+    project1_audit_database_url: SecretStr = SecretStr("")
+    tokenharbor_api_key: SecretStr = SecretStr("")
+    tokenharbor_enabled: bool = False
+    tokenharbor_structured_mode: str = "json_schema"
+    tokenharbor_timeout_seconds: int = 30
+
     # --- Supabase authentication ------------------------------------------
     # Identity provider. Registration/login happen in the frontend through the
     # Supabase SDK; this backend only VERIFIES the issued access tokens.
