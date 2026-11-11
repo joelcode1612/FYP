@@ -720,6 +720,12 @@ class AdminPropertyReviewService:
         geo = repo.get_geo_features(property_id)
         demand = repo.list_demand_generators(property_id, radius_m=1000, limit=12)
         population = repo.get_population(property_id)
+        # Feature freshness + source provenance (additive). The values are
+        # READ from the refresh-state tables; this method never triggers a
+        # calculation. An unknown state is explicit, never a zero.
+        from sitewise.ingestion.state import RefreshState
+
+        refresh_state = RefreshState(self.session)
         return {
             "photos": [_jsonable(photo) for photo in photos],
             "amenities": None if amenities is None else _jsonable(amenities),
@@ -728,6 +734,8 @@ class AdminPropertyReviewService:
                 _jsonable(row) for row in demand.get("data", [])
             ],
             "population": None if population is None else _jsonable(population),
+            "freshness": refresh_state.freshness_payload(property_id),
+            "provenance": refresh_state.provenance_summary(),
         }
 
     # -- decisions ----------------------------------------------------------

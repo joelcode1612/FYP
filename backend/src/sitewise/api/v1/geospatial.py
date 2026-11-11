@@ -2,9 +2,30 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlmodel import Session
 
 from sitewise.db.session import get_db
+from sitewise.dependencies import CurrentUser
+from sitewise.ingestion.state import RefreshState
 from sitewise.repositories.geospatial_repository import GeospatialRepository
 
 router = APIRouter()
+
+
+@router.get("/property/{property_id}/freshness")
+def get_feature_freshness(
+    property_id: int,
+    _user: CurrentUser,
+    session: Session = Depends(get_db),
+):
+    """Additive freshness/provenance for one property's calculated features.
+
+    ``status`` is one of current / stale / pending / failed / unavailable.
+    ``available=false`` means no trustworthy value exists — it is never
+    reported as zero. Read-only: this endpoint never triggers a calculation.
+    """
+    state = RefreshState(session)
+    return {
+        "data": state.freshness_payload(property_id),
+        "provenance": state.provenance_summary(),
+    }
 
 
 @router.get("/property/{property_id}/competitors")

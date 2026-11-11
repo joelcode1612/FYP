@@ -234,25 +234,54 @@ def test_mfa_recovery_removes_verified_totp_factors_and_audits(client, cleanup_u
 
 
 def test_admin_assigns_listing_and_records_audit(client, cleanup_users, fake_admin):
-    """Scenario 22: administrator assigns a listing to an agent."""
+    """Scenario 22: administrator assigns a listing to an agent.
+
+    Assignments live in ``agent_listing_assignment`` (FK to the operational
+    property); the fake Supabase service supplies the agent profile only.
+    """
+    from sqlalchemy import text
+    from sqlmodel import Session
+
+    from sitewise.db.session import engine
+
     _, admin_token = _admin_token(client, cleanup_users)
     created = client.post("/api/v1/staff/agents", headers=auth(admin_token), json=CREATE_BODY)
     agent_uid = created.json()["agent_user_id"]
     _track_agent(cleanup_users, created.json())
-    listing = fake_admin.seed_listing(701, None)
 
-    r = client.post(f"/api/v1/staff/listings/701/assign",
-                    headers=auth(admin_token), json={"agent_user_id": agent_uid})
-    assert r.status_code == 200, r.text
-    assert r.json()["agent_id"] == fake_admin.listings[701]["agent_id"]
-    assert listing["agent_id"] is None  # pre-assignment copy unchanged
-    assert any(a["action"] == "listing.assigned" and a["affected_user_id"] == agent_uid
-               for a in fake_admin.audit)
+    with Session(engine) as session:
+        listing_id = int(
+            session.execute(
+                text("SELECT id FROM fyp.rental_properties ORDER BY id LIMIT 1")
+            ).scalar_one()
+        )
+    try:
+        r = client.post(f"/api/v1/staff/listings/{listing_id}/assign",
+                        headers=auth(admin_token), json={"agent_user_id": agent_uid})
+        assert r.status_code == 200, r.text
+        assigned_agent_id = r.json()["agent_id"]
+        assert assigned_agent_id is not None
+        with Session(engine) as session:
+            row = session.execute(
+                text("SELECT agent_id FROM agent_listing_assignment WHERE listing_id = :l"),
+                {"l": listing_id},
+            ).scalar_one()
+        assert int(row) == int(assigned_agent_id)
+        assert any(a["action"] == "listing.assigned" and a["affected_user_id"] == agent_uid
+                   for a in fake_admin.audit)
 
-    # Assigning to an unknown agent profile -> 404.
-    r2 = client.post(f"/api/v1/staff/listings/701/assign",
-                     headers=auth(admin_token), json={"agent_user_id": str(uuid.uuid4())})
-    assert r2.status_code == 404
+        # Assigning to an unknown agent profile -> 404.
+        r2 = client.post(f"/api/v1/staff/listings/{listing_id}/assign",
+                         headers=auth(admin_token), json={"agent_user_id": str(uuid.uuid4())})
+        assert r2.status_code == 404
+    finally:
+        with Session(engine) as session:
+            session.execute(
+                text("DELETE FROM agent_listing_assignment WHERE listing_id = :l"),
+                {"l": listing_id},
+            )
+            session.commit()
+
 
 
 def test_audit_and_invitations_listing(client, cleanup_users, fake_admin):

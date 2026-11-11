@@ -1,0 +1,83 @@
+[
+ {
+  "id": "08f2ab1e-0000-0000-0000-000000000001",
+  "names": {
+   "primary": "Fixture Cafe SS15"
+  },
+  "categories": {
+   "primary": "cafe"
+  },
+  "bbox": {
+   "minx": 101.586,
+   "miny": 3.075,
+   "maxx": 101.5862,
+   "maxy": 3.0752
+  },
+  "addresses": [
+   {
+    "freeform": "Jalan SS15/4",
+    "locality": "Subang Jaya",
+    "postcode": "47500"
+   }
+  ],
+  "operating_status": null,
+  "confidence": 0.91
+ },
+ {
+  "id": "08f2ab1e-0000-0000-0000-000000000002",
+  "names": {
+   "primary": "Fixture Restaurant Petaling"
+  },
+  "categories": {
+   "primary": "restaurant"
+  },
+  "bbox": {
+   "minx": 101.62,
+   "miny": 3.1,
+   "maxx": 101.6202,
+   "maxy": 3.1002
+  },
+  "addresses": [
+   {
+    "freeform": "Jalan SS2/24",
+    "locality": "Petaling Jaya"
+   }
+  ],
+  "operating_status": "open",
+  "confidence": 0.88
+ },
+ {
+  "id": "08f2ab1e-0000-0000-0000-000000000003",
+  "names": {
+   "primary": "Out Of Area Diner"
+  },
+  "categories": {
+   "primary": "restaurant"
+  },
+  "bbox": {
+   "minx": 100.1,
+   "miny": 2.1,
+   "maxx": 100.1002,
+   "maxy": 2.1002
+  },
+  "operating_status": null,
+  "confidence": 0.5
+ },
+ {
+  "id": "08f2ab1e-0000-0000-0000-000000000004",
+  "names": {
+   "primary": "Unsupported Hardware Store"
+  },
+  "categories": {
+   "primary": "hardware_store"
+  },
+  "bbox": {
+   "minx": 101.586,
+   "miny": 3.075,
+   "maxx": 101.5862,
+   "maxy": 3.0752
+  },
+  "operating_status": null,
+  "confidence": 0.7
+ }
+]

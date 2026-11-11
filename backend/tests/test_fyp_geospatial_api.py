@@ -68,11 +68,29 @@ def created_properties():
         session.commit()
 
 
+@pytest.fixture(autouse=True)
+def offline_address_validation(monkeypatch):
+    """Owner creation calls Google Address Validation; the suite runs offline
+    with a provider-validated verdict so the tests exercise persistence and
+    enrichment instead of the network."""
+    verdict = {
+        "status": "validated",
+        "formatted_address": "Test formatted address, Kuala Lumpur",
+    }
+    import sitewise.api.v1.properties as properties_module
+    from sitewise.services import property_verification_service as verification_module
+
+    monkeypatch.setattr(properties_module, "validate_address", lambda **_kw: verdict)
+    monkeypatch.setattr(verification_module, "validate_address", lambda **_kw: verdict)
+
+
 PROPERTY_BODY = {
     "name": "Contract Test Shoplot",
     "address": "12 Jalan Uji, Taman Uji",
     "city": "Kuala Lumpur",
     "state": "Kuala Lumpur",
+    # Address-validation policy requires a postcode on submission.
+    "postcode": "50000",
     "latitude": 3.046482,
     "longitude": 101.587067,
     "rental_price": 4200,
@@ -238,14 +256,26 @@ def test_create_listing_persists_pending_and_enriches(client, owner_token, creat
         ).scalar_one()
         assert geom.startswith("POINT("), "generated geom must be populated"
 
+    # The create path now runs the feature-refresh service and reports its
+    # summary (not a per-feature dict). The values land in the geospatial
+    # table; assert them there so the test still proves real enrichment.
     enrichment = body["enrichment"]
     assert enrichment["status"] == "ok", enrichment
-    features = enrichment["features"]
+    assert enrichment["features"]["properties_recalculated"] >= 1
+    with Session(engine) as session:
+        features = session.execute(
+            text(
+                "SELECT competitor_count_500m, competitor_count_1km, population_500m "
+                "FROM fyp.property_geospatial_features WHERE property_id = :p"
+            ),
+            {"p": pid},
+        ).mappings().first()
+    assert features is not None, "enrichment must persist a geospatial row"
     assert features["competitor_count_500m"] is not None
     assert features["competitor_count_1km"] >= features["competitor_count_500m"]
     # Population has no legitimate per-coordinate source in this deployment.
     assert features["population_500m"] is None
-    assert "unavailable" in (body.get("meta", {}).get("note", "") + "unavailable")
+    assert body["meta"]["note"].endswith("until an administrator verifies them.")
 
 
 def test_create_listing_requires_authentication(client):

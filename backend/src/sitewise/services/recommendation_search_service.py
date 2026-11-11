@@ -26,6 +26,11 @@ Deliberate distinctions
 * Missing rental/size is impossible in this dataset (100 % coverage), but the
   SQL still refuses rows without them: a listing with no rent cannot be
   evaluated against a budget.
+* Every returned property passed the strict PU eligibility gate
+  (``suitability_score > 50`` on the verified 0-100 scale) BEFORE
+  requirement-fit ranking. The threshold is never lowered to fill a result
+  page, the score is reported per card, and it remains a research association
+  index — not a probability of business success.
 * The catalogue is the product's published property catalogue — the same id
   space (``EP-``/``MD-``) that saved-properties, assessments, property detail
   and the PU model use. It is NOT the ``fyp.rental_properties`` owner-listing
@@ -68,6 +73,29 @@ MODEL_UNAVAILABLE_REASON = (
     "The trained recommendation artifact is not integrated in this build, so "
     "no model score is produced. Results are ordered by requirement fit only."
 )
+
+# ---------------------------------------------------------------------------
+# PU eligibility gate
+# ---------------------------------------------------------------------------
+#
+#: Strict PU eligibility threshold on the verified 0-100 scale. A property is
+#: eligible only when its PU score is STRICTLY greater than this value, so a
+#: score of exactly 50.0 is excluded.
+#:
+#: Scale verification (read-only audit of the live table, 2026-11-11):
+#: ``sitewise_app.properties.suitability_score`` is the stored Layer 1 PU
+#: research association score multiplied by 100 — exactly equal to
+#: ``source_data->>'research_p_association_score' * 100`` on every sampled row
+#: (955 rows, 0 nulls, observed range 0.25-98.0, 290 rows above 50). It is NOT
+#: a probability of business success; it is the same uncalibrated P-vs-U
+#: association index the generation pipeline consumes.
+#:
+#: The gate is applied in SQL for EVERY search (defaults included), so an
+#: ineligible property can never reach ranking or pagination. The threshold is
+#: never lowered to fill a result page.
+PU_ELIGIBILITY_THRESHOLD = 50.0
+PU_SCORE_SCALE = "0-100"
+PU_ELIGIBILITY_COLUMN = "sitewise_app.properties.suitability_score"
 
 # Card payload: exactly what a listing card renders. Detail pages load the
 # full record separately, so no gallery/description is fetched here.
@@ -165,6 +193,17 @@ class _Row:
     matches: list[_Match] = field(default_factory=list)
 
     @property
+    def pu_score(self) -> float | None:
+        """The stored PU association index on the 0-100 scale.
+
+        ``suitability_score`` IS that score x100 (verified against
+        ``source_data.research_p_association_score``); the gate guarantees it
+        is present and strictly above [PU_ELIGIBILITY_THRESHOLD] for every
+        row that reaches ranking.
+        """
+        return self.suitability_score
+
+    @property
     def met_count(self) -> int:
         return sum(1 for m in self.matches if m.met is True)
 
@@ -228,6 +267,19 @@ class RecommendationSearchService:
                 "property_source": "catalog",
                 "criteria": criteria.cache_payload(),
                 "cached": self._last_cache_hit,
+                # Eligibility provenance: every result passed this gate BEFORE
+                # requirement-fit ranking. The threshold is never relaxed to
+                # reach a target count.
+                "pu_eligibility": {
+                    "threshold": PU_ELIGIBILITY_THRESHOLD,
+                    "scale": PU_SCORE_SCALE,
+                    "comparison": "strictly_greater_than",
+                    "column": PU_ELIGIBILITY_COLUMN,
+                    "score_meaning": (
+                        "Uncalibrated P-vs-U research association index, not a "
+                        "probability of commercial success."
+                    ),
+                },
             },
         }
 
@@ -337,8 +389,12 @@ class RecommendationSearchService:
         where = [
             "p.rental_rm IS NOT NULL",
             "p.size_sqft IS NOT NULL",
+            # PU eligibility gate: STRICTLY above the threshold on the
+            # verified 0-100 scale. `NULL > 50` is NULL, so a property with no
+            # PU score is excluded rather than treated as zero or as eligible.
+            "p.suitability_score > CAST(:pu_threshold AS double precision)",
         ]
-        params: dict[str, Any] = {}
+        params: dict[str, Any] = {"pu_threshold": PU_ELIGIBILITY_THRESHOLD}
 
         if criteria.max_rental_rm is not None:
             where.append("p.rental_rm <= CAST(:max_rent AS double precision)")
@@ -463,14 +519,15 @@ class RecommendationSearchService:
             "longitude": row.longitude,
             "research": {
                 # Workbook association index: a relative research ranking
-                # input, never a business-success probability.
+                # input, never a business-success probability. This value IS
+                # the PU score x100 (verified); it is exposed under both names
+                # so existing consumers keep working while new ones can read
+                # the explicit PU field.
                 "catalog_suitability_score": row.suitability_score,
                 "suitability_available": row.suitability_score is not None,
-                # The PU model is NOT run in the list endpoint (that would be
-                # one inference per card). Null = "not loaded in this
-                # response", which the detail panel resolves explicitly.
-                "pu_score": None,
-                "pu_available": None,
+                "pu_score": row.pu_score,
+                "pu_available": row.pu_score is not None,
+                "pu_score_scale": PU_SCORE_SCALE,
             },
             "recommendation": {
                 "available": False,
@@ -533,16 +590,20 @@ def _criteria_fingerprint(criteria: SearchCriteria) -> str:
 
 
 def _rank_key(row: _Row) -> tuple:
-    """Deterministic requirement-fit ordering.
+    """Deterministic requirement-fit ordering with a PU quality tie-break.
 
-    Most requirements met first, fewest contradicted second, then the largest
-    budget headroom, then the largest size headroom, then the catalogue id.
-    The final id tie-break makes the order total and stable, which is what
-    makes cursor pagination safe.
+    Most requirements met first, fewest contradicted second, then HIGHER PU
+    score (all rows already passed the strict >50 eligibility gate), then the
+    largest budget headroom, then the largest size headroom, then the
+    catalogue id. Requirement fit therefore stays the primary ranking signal —
+    PU breaks ties among equally-fitting properties and never overrides a
+    requirement outcome. The final id tie-break makes the order total and
+    stable, which is what makes cursor pagination safe.
     """
     return (
         -row.met_count,
         row.unmet_count,
+        -round(row.pu_score or 0.0, 6),
         round(row.rental_rm, 2),  # cheaper first = more budget headroom
         -round(row.size_sqft, 2),  # larger floor area first = more space headroom
         row.id,

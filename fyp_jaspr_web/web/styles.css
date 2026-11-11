@@ -14838,3 +14838,107 @@ input[type="range"] {
     padding-top: 10px;
   }
 }
+
+/* --------------------------------------------------------------------------
+   Admin verification detail — data freshness row (Phase 10/11)
+   Read-only provenance line under the Location Intelligence source note.
+   Scoped to the admin shell, so no other workspace is affected.
+   -------------------------------------------------------------------------- */
+.app-shell.app-shell--admin .vd-freshness {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  margin: 2px 0 10px;
+}
+.app-shell.app-shell--admin .vd-freshness .small { line-height: 1.5; }
+
+/* ==========================================================================
+   Recommendations — applied-filter summary + PU eligibility note
+   --------------------------------------------------------------------------
+   Rendered only by the entrepreneur Recommendations page. The chips mirror
+   the APPLIED search request (the same one the server ranked); each chip is
+   individually removable and "Edit filters" jumps to the filter panel.
+   ========================================================================== */
+
+.rec2__applied {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  background: var(--paper);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+
+.rec2__applied-label {
+  font-size: 11.5px;
+  font-weight: 750;
+  color: var(--muted);
+}
+
+.rec2__chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 6px 4px 10px;
+}
+
+.rec2__chip-remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 0;
+  border-radius: 99px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.rec2__chip-remove:hover {
+  background: var(--danger-wash, rgba(220, 38, 38, 0.1));
+  color: var(--danger, #b91c1c);
+}
+
+.rec2__edit-filters {
+  font-size: 11.5px;
+  font-weight: 750;
+  color: var(--action);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.rec2__eligibility {
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--action);
+  border: 1px solid var(--geo-border, rgba(29, 78, 216, 0.28));
+  background: var(--geo-wash, rgba(29, 78, 216, 0.08));
+  border-radius: 99px;
+  padding: 3px 9px;
+  white-space: nowrap;
+}
+
+.rec2__insufficient {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border: 1px solid var(--warning-border, #fde68a);
+  background: var(--warning-wash, #fffbeb);
+  border-radius: 11px;
+  font-size: 12px;
+  color: var(--text);
+}
+
+.rec2__insufficient .grow { flex: 1; min-width: 0; }
+
+@media (max-width: 620px) {
+  .rec2__applied { align-items: flex-start; }
+  .rec2__insufficient { flex-wrap: wrap; }
+}

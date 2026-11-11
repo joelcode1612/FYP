@@ -720,6 +720,84 @@ class VerificationPopulation {
 }
 
 /// Administrator detail response: everything about one verification.
+/// Data-freshness/provenance block for a property's calculated features.
+///
+/// Mirrors `fyp.property_feature_freshness`. `status` is one of
+/// `current` | `stale` | `pending` | `failed` | `unavailable`; `available`
+/// is false when no trustworthy value exists — an unknown state is never
+/// rendered as a zero.
+class FeatureFreshness {
+  final String status;
+  final bool available;
+  final String? calculationVersion;
+  final String? featuresCalculatedAt;
+  final String? lastRefreshAttemptAt;
+  final String? lastSuccessfulRefreshAt;
+  final String? sourceRelease;
+  final String? competitorSource;
+  final String? lastError;
+  final String? reason;
+
+  const FeatureFreshness({
+    required this.status,
+    required this.available,
+    this.calculationVersion,
+    this.featuresCalculatedAt,
+    this.lastRefreshAttemptAt,
+    this.lastSuccessfulRefreshAt,
+    this.sourceRelease,
+    this.competitorSource,
+    this.lastError,
+    this.reason,
+  });
+
+  factory FeatureFreshness.fromJson(Map<String, dynamic> row) =>
+      FeatureFreshness(
+        status: '${row['status'] ?? 'unavailable'}',
+        available: row['available'] == true,
+        calculationVersion: row['calculation_version']?.toString(),
+        featuresCalculatedAt: row['features_calculated_at']?.toString(),
+        lastRefreshAttemptAt: row['last_refresh_attempt_at']?.toString(),
+        lastSuccessfulRefreshAt: row['last_successful_refresh_at']?.toString(),
+        sourceRelease: row['source_release']?.toString(),
+        competitorSource: row['competitor_source']?.toString(),
+        lastError: row['last_error']?.toString(),
+        reason: row['reason']?.toString(),
+      );
+
+  /// Human label; unknown states fall back to the raw value.
+  String get label => switch (status) {
+    'current' => 'Current',
+    'stale' => 'Outdated',
+    'pending' => 'Updating',
+    'failed' => 'Calculation failed',
+    _ => 'No analytical data',
+  };
+}
+
+/// One open-data source licence/snapshot in the provenance block.
+class SourceProvenance {
+  final String sourceName;
+  final String? licence;
+  final int snapshots;
+  final String? latestSnapshot;
+
+  const SourceProvenance({
+    required this.sourceName,
+    required this.snapshots,
+    this.licence,
+    this.latestSnapshot,
+  });
+
+  factory SourceProvenance.fromJson(Map<String, dynamic> row) =>
+      SourceProvenance(
+        sourceName: '${row['source_name'] ?? ''}',
+        licence: row['source_licence']?.toString(),
+        snapshots: (row['snapshots'] as num?)?.toInt() ?? 0,
+        latestSnapshot: row['latest_snapshot']?.toString(),
+      );
+}
+
 class VerificationDetail {
   final VerificationProperty property;
   final VerificationOwner? owner;
@@ -745,6 +823,12 @@ class VerificationDetail {
   /// Research population snapshot; `null` without a verified subject link.
   final VerificationPopulation? population;
 
+  /// Feature freshness (current / stale / pending / failed / unavailable).
+  final FeatureFreshness? freshness;
+
+  /// Open-data source provenance/licences backing the calculated features.
+  final List<SourceProvenance> provenance;
+
   const VerificationDetail({
     required this.property,
     this.owner,
@@ -756,6 +840,8 @@ class VerificationDetail {
     this.geoFeatures,
     this.demandGenerators = const [],
     this.population,
+    this.freshness,
+    this.provenance = const [],
   });
 
   factory VerificationDetail.fromJson(Map<String, dynamic> row) =>
@@ -808,6 +894,19 @@ class VerificationDetail {
                 row['population'] as Map<String, dynamic>,
               )
             : null,
+        freshness: row['freshness'] is Map<String, dynamic>
+            ? FeatureFreshness.fromJson(
+                row['freshness'] as Map<String, dynamic>,
+              )
+            : null,
+        provenance: [
+          for (final source
+              in ((row['provenance'] as Map<String, dynamic>?)?['sources']
+                          as List? ??
+                      const [])
+                  .whereType<Map<String, dynamic>>())
+            SourceProvenance.fromJson(source),
+        ],
       );
 }
 
