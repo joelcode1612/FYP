@@ -42,7 +42,9 @@ class _DashboardPageState extends State<DashboardPage> {
   /// Current Assessment card always render; a failed read degrades only the
   /// section that needs it (an em dash on the KPI, an inline retry on Recent).
   late Future<HistoryLoad> _history = _loadHistory();
-  late Future<int?> _catalogue = _loadCatalogueCount();
+  // Never reassigned: a failed catalogue count degrades to the Explore KPI's
+  // em dash, and navigation to Explore (or a page reload) is the retry.
+  late final Future<int?> _catalogue = _loadCatalogueCount();
 
   /// Assessment history for the Assessments/Reports KPIs and the Recent
   /// Assessments list. Failure travels as data with the backend's message.
@@ -65,8 +67,9 @@ class _DashboardPageState extends State<DashboardPage> {
   }
 
   void _reloadHistory() => setState(() => _history = _loadHistory());
-
-  void _reloadCatalogue() => setState(() => _catalogue = _loadCatalogueCount());
+  // The catalogue count has no in-page retry on purpose: its only consumer is
+  // the Explore KPI, and the Explore page re-reads the catalogue itself, so
+  // navigation is the retry. A full page reload also refreshes it.
 
   /// First word of the backend-verified profile name — never a hardcoded
   /// demo identity. An empty name degrades to a plain welcome.
