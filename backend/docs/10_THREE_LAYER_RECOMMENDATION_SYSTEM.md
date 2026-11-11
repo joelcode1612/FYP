@@ -249,10 +249,29 @@ shared client; the detail link renders only when
 
 ## 10. Verification
 
-* Backend suites touching this work (run 2026-11-11, exact totals in
-  `§12`): Layer-1 coverage (12), selected-PU (10), `test_ml` (8),
-  personalised pipeline (22), persistence (8), reuse + training gate (3),
-  SHAP operations (2), ID compatibility (4).
+* Focused suites run after each phase, all green: Layer-1 coverage (12),
+  selected-PU (10), `test_ml` (8), personalised pipeline (22),
+  persistence (8), reuse + training gate (3), SHAP operations (2),
+  ID compatibility (4).
+* Full backend suite (2026-11-11, default pytest temp, 326 collected):
+  **316 passed, 7 failed, 3 skipped, 0 errors**.
+* The 7 failures are **not attributable to this integration**: all are in
+  `tests/api/test_owner_listing_drafts.py` (3) and
+  `tests/test_fyp_geospatial_api.py` (4), and their assertion messages are
+  the concurrent session's uncommitted postcode/address-validation work
+  (`"Complete these fields ... postcode"`, `"Field required: postcode"`,
+  `KeyError: 'data'`). Those production files
+  (`property_verification.py`, `fyp_property_repository.py`,
+  `property_verification_service.py`) remain uncommitted in the other
+  session's working tree; none is touched by any commit in this series.
+  The prior handoff reported 15 such failures on the active tree; the count
+  is 7 at this verification point.
+* Sandbox note: pytest's tmpdir garbage cleanup trips the environment's
+  bulk-delete guard at teardown and truncates the final stdout summary;
+  results above were reconstructible from the progress-dot census and
+  cross-checked with `-rf --tb=line` runs. `--basetemp` workarounds add
+  setup `PermissionError` errors (an environment artifact, not product
+  defects) and are not used for the authoritative count.
 * Notable verified behaviours: both artifacts load with independent
   contracts; unknown components excluded-never-zero-filled; deterministic
   ranking; ownership isolation (API + DB); restart survival; user-deletion
@@ -282,10 +301,15 @@ cd backend
 
 ## 12. Test totals
 
-Filled from the final full-suite run of this integration — see
-`backend/tests/` and the implementation report. The pre-integration
-documented baseline was 288 passed / 3 skipped on a clean tree; this
-integration adds the suites listed in §10.
+| Run | Passed | Failed | Skipped | Errors |
+|---|---|---|---|---|
+| Clean integration worktree at `dfb2243` (prior handoff) | 288 | 0 | 3 | 0 |
+| Active working tree at handoff (concurrent postcode work) | — | 15 | — | — |
+| Final full backend suite, this integration (2026-11-11) | **316** | **7** | **3** | **0** |
+
+The 7 final failures are the same concurrent postcode-related set (reduced
+from 15 as that session's work progressed); none lies in a file changed by
+this integration. Per-phase focused suites are listed in §10.
 
 ## 13. Limitations and future work
 
