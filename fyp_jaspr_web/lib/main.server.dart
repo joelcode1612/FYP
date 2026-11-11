@@ -26,6 +26,7 @@ import 'data/api_config.dart';
 import 'data/api_proxy.dart';
 import 'data/app_locator.dart';
 import 'data/auth_service.dart';
+import 'data/dev_auth_bypass.dart';
 import 'data/ssr_service.dart';
 import 'data/staff_guard.dart';
 
@@ -74,7 +75,10 @@ class _DocumentShell extends StatelessComponent {
     // screen and keep the destination. The router drops `next` when it sets the
     // header itself (it only forwards the matched path), so it is done here.
     final path = context.url.split('?').first;
-    if (_workspacePath.hasMatch(path) && WebAuth.profile == null) {
+    final demoBypass = devAuthBypassForHost(context.headers['host']);
+    if (!demoBypass &&
+        _workspacePath.hasMatch(path) &&
+        WebAuth.profile == null) {
       redirectTo(context, '/login?next=${Uri.encodeComponent(context.url)}');
     }
 

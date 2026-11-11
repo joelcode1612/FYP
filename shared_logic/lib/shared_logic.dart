@@ -162,3 +162,17 @@ export 'src/application/services/recommendation_service.dart';
 export 'src/application/services/tour_service.dart';
 export 'src/application/services/upload_service.dart';
 export 'src/application/services/verification_service.dart';
+
+// --- M2 assessment: domain, fixtures and ViewModel -------------------------
+//
+// New feature work uses Riverpod + MVVM: an immutable state object, a
+// `Notifier` ViewModel, and platform bindings supplied by each app
+// (`flutter_riverpod` on mobile, `jaspr_riverpod` on web). This coexists with
+// the Cubits above; those are not migrated yet.
+//
+// The fixtures are PROTOTYPE data (`PROTO-V4-2026-10-28`) — illustrative, not a
+// scientific instrument, not fielded research, not approved benchmarks, and
+// using prototype-local item ids rather than frozen B03 register ids.
+export 'src/domain/entities/m2_assessment.dart';
+export 'src/data/datasources/local/m2_prototype_data.dart';
+export 'src/application/notifiers/m2_assessment_notifier.dart';

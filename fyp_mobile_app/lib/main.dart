@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -63,8 +64,42 @@ Future<void> main() async {
 /// shared notifiers at the services [ServiceLocator] owns — so every screen
 /// and every guard reads the same auth and app state from the widget tree
 /// instead of receiving it as a constructor argument.
-class SitewiseApp extends StatelessWidget {
+class SitewiseApp extends ConsumerStatefulWidget {
   const SitewiseApp({super.key});
+
+  @override
+  ConsumerState<SitewiseApp> createState() => _SitewiseAppState();
+}
+
+class _SitewiseAppState extends ConsumerState<SitewiseApp>
+    with WidgetsBindingObserver {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.hidden ||
+        state == AppLifecycleState.paused ||
+        state == AppLifecycleState.detached) {
+      unawaited(
+        ref.read(assessmentViewModelProvider).pauseActive().catchError((
+          Object error,
+          StackTrace stack,
+        ) {
+          debugPrint('Questionnaire pause checkpoint failed.');
+        }),
+      );
+    }
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {

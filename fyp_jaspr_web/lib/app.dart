@@ -5,6 +5,7 @@ import 'package:shared_logic/shared_logic.dart';
 
 import 'data/app_locator.dart';
 import 'data/auth_service.dart';
+import 'data/dev_auth_bypass.dart';
 import 'data/ssr_service.dart';
 import 'data/workspaces.dart';
 import 'pages/auth_callback_page.dart';
@@ -137,6 +138,10 @@ class SitewiseApp extends StatelessComponent {
             r'^/(entrepreneur|owner|admin|agent)(/|$)',
           ).firstMatch(path);
           if (rolePath == null) return null;
+          // Development Demo Mode: render any workspace without a login.
+          // FastAPI still authorizes every protected API call, so this grants
+          // presentation only — no backend permission is changed.
+          if (devAuthBypassEnabled) return null;
           // Anonymous request for a workspace: go to the sign-in screen and keep
           // the destination. FastAPI stays the authorization authority — every
           // protected API call is independently verified against the bearer

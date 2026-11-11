@@ -75,6 +75,15 @@ router.include_router(statistics.router, prefix="/statistics", tags=["statistics
 router.include_router(explore.router, prefix="/explore", tags=["explore"])
 # PU model coverage/prediction reporting (implemented; was never registered).
 router.include_router(ml_predictions.router, prefix="/ml", tags=["ml_predictions"])
+
+# UPSTREAM M2 RESEARCH FEATURE: disabled by default, no QJ/QG activation.
+# Requires separately reviewed schema migration and authorized instrument
+# version before it may be enabled in a controlled environment.
+from sitewise.core.config import settings
+if settings.m2_upstream_enabled:
+    from sitewise.api.v1 import m2
+    router.include_router(m2.router, prefix="/m2", tags=["m2_upstream"])
+
 # Additive OPTIONAL selected research PU model (Layer-1 alternate). Mounted
 # BESIDE the default /ml routes — nothing existing is replaced. Same
 # authentication dependency, same read-only analytics connection.

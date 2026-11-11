@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_logic/shared_logic.dart';
 import '../config/dev_auth_bypass.dart';
-
 import '../../presentation/mobile/start/auth_blocking_views.dart';
 import 'mobile_role.dart';
 
@@ -84,6 +83,9 @@ class _AuthGuardState extends ConsumerState<AuthGuard> {
   @override
   void initState() {
     super.initState();
+    // Development Demo Mode has no session to restore. Skipping the notifier
+    // here also avoids starting the Supabase bootstrap that no screen needs.
+    if (devAuthBypassEnabled) return;
     // A protected route can be entered without ever passing through the
     // startup gate (deep link, state restore). Kick the single restore here;
     // `start()` ignores repeat calls, so this cannot race the gate. Deferred
@@ -108,13 +110,16 @@ class _AuthGuardState extends ConsumerState<AuthGuard> {
 
   @override
   Widget build(BuildContext context) {
+    // Development Demo Mode (debug builds only, opt-in via
+    // --dart-define SITEWISE_DEV_AUTH_BYPASS=true): render every route without
+    // a session. Without this, AppStartGate's direct jump into the workspace
+    // would be bounced straight back to Sign In by this guard.
+    if (devAuthBypassEnabled) return widget.builder(context);
+
     // The whole session state is watched, so an expiry mid-session re-checks
     // authority here instead of leaving a guarded screen mounted.
     final state = ref.watch(authNotifierProvider);
     if (widget.access == RouteAccess.public) return widget.builder(context);
-    // if (widget.access == RouteAccess.public) {
-    //   return widget.builder(context);
-    // }
 
     switch (state.status) {
       case AuthStatus.authenticated:

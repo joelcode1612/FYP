@@ -5,13 +5,14 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     # --- Databases ---------------------------------------------------------
-    # Both URLs name the same PostgreSQL database: it holds the application
-    # tables (user profiles, saved properties, preferences) and the analytics
-    # layer (DOSM statistics, geospatial features). Startup `create_all` runs
-    # through `database_url`; the analytics engine is only ever used for reads.
+    # Application database (user profiles, saved properties, preferences).
+    # Startup `create_all` runs through this URL, so it is the only database
+    # the ORM ever writes to.
     database_url: str = (
-        "postgresql+psycopg2://postgres:123456@localhost:5432/Final_Location_Analysis"
+        "postgresql+psycopg2://postgres:123456@localhost:5432/Dss"
     )
+    # Analytics database (DOSM statistics, geospatial features). Read-only by
+    # convention; the ORM never runs create_all or migrations against it.
     analytics_database_url: str = (
         "postgresql+psycopg2://postgres:123456@localhost:5432/Final_Location_Analysis"
     )
@@ -30,6 +31,14 @@ class Settings(BaseSettings):
     # verification-documents` is used.
     verification_storage_dir: str = ""
     verification_max_upload_mb: int = 10
+
+    # --- M2 upstream research feature (CORRECTIVE R16 / P0-01) -------------
+    # Feature flag referenced by api/v1/router.py:38. Intended as a DEFAULT-OFF
+    # gate: the opt-in /m2 router is only registered when this is explicitly
+    # true. M2 schema + authorized questionnaire records still require separate
+    # Owner/governance approval and a controlled migration; flipping this flag
+    # alone does NOT activate any M2 endpoint or schema.
+    m2_upstream_enabled: bool = False
 
     # --- Supabase authentication ------------------------------------------
     # Identity provider. Registration/login happen in the frontend through the

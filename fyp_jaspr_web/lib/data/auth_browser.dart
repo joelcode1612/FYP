@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'dart:js_interop';
 
+import 'dev_auth_bypass.dart';
+
 @JS('sitewiseAuth')
 external _AuthBridge get _bridge;
 
@@ -62,8 +64,12 @@ extension type _AuthBridge(JSObject _) implements JSObject {
 }
 
 abstract final class WebAuth {
-  static Map<String, dynamic> get _state =>
-      jsonDecode(_bridge.snapshot().toDart) as Map<String, dynamic>;
+  // Development Demo Mode: answer every getter from an in-memory snapshot so
+  // the app never needs `sitewiseAuth` (auth_bundle.js) or a Supabase session.
+  // Without this, `_bridge.snapshot()` would throw on an unconfigured page.
+  static Map<String, dynamic> get _state => devAuthBypassEnabled
+      ? devAuthBypassState
+      : jsonDecode(_bridge.snapshot().toDart) as Map<String, dynamic>;
   static bool get configured => _state['configured'] == true;
 
   /// True when the last password sign-in returned a TOTP MFA challenge that
@@ -86,6 +92,7 @@ abstract final class WebAuth {
       _state['profile'] as Map<String, dynamic>?;
   static String get error => _state['error'] as String? ?? '';
   static Future<void> initialize() async {
+    if (devAuthBypassEnabled) return;
     await _bridge.ready.toDart;
   }
 

@@ -1,9 +1,44 @@
-import 'package:flutter_riverpod/misc.dart';
+import 'dart:async';
 import 'package:shared_logic/shared_logic.dart';
+import 'package:flutter_riverpod/misc.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/legacy.dart' as legacy;
 
 import '../core/config/mobile_config.dart';
 import 'services/bootstrap_aware_auth_service.dart';
 import 'services/service_locator.dart';
+import '../features/assessment/model/repository/assessment_repository.dart';
+import '../features/assessment/model/service/assessment_local_service.dart';
+import '../features/assessment/model/service/questionnaire_routing_service.dart';
+import '../features/assessment/viewmodel/assessment_view_model.dart';
+
+/// Riverpod provides dependencies; ChangeNotifier owns MVVM state.
+final assessmentLocalServiceProvider = Provider<AssessmentLocalService>((ref) {
+  final service = SqliteAssessmentLocalService();
+  ref.onDispose(() {
+    unawaited(service.close());
+  });
+  return service;
+});
+
+final assessmentRepositoryProvider = Provider<AssessmentRepository>((ref) {
+  return AssessmentRepository(
+    localService: ref.watch(assessmentLocalServiceProvider),
+  );
+});
+
+final questionnaireRoutingServiceProvider =
+    Provider<QuestionnaireRoutingService>((ref) {
+      return const DemoQuestionnaireRoutingService();
+    });
+
+final assessmentViewModelProvider =
+    legacy.ChangeNotifierProvider<AssessmentViewModel>((ref) {
+      return AssessmentViewModel(
+        repository: ref.watch(assessmentRepositoryProvider),
+        routingService: ref.watch(questionnaireRoutingServiceProvider),
+      );
+    });
 
 /// Composition-root overrides for the shared Riverpod providers.
 ///

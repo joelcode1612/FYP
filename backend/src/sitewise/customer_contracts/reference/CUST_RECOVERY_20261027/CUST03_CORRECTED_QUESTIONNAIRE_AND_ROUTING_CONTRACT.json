@@ -1,0 +1,2767 @@
+{
+  "spec_version": "P3-01C-VNEXT-0.6.1-CUST-REC",
+  "parent_version": "P3-01C-VNEXT-0.6",
+  "status": "RECOVERY_CANDIDATE_PROPOSED_PENDING_INDEPENDENT_VERIFICATION",
+  "generated": "2026-10-27",
+  "authority": "NONE_GRANTED_BY_THIS_DOCUMENT",
+  "supersedes": "P3-01C-VNEXT-0.6",
+  "release_state": {
+    "questionnaire_version": "UNRELEASED",
+    "questionnaire_uuid": null,
+    "release_hash": null,
+    "survey_fielding_authorized": false,
+    "engine_execution_authorized": false,
+    "suitability_scoring_authorized": false,
+    "respondents_fielded": 0,
+    "note": "UNCHANGED IN SUBSTANCE FROM v0.3. Eight documentary corrections do not move a single release flag. No figure in this contract is customer evidence."
+  },
+  "authority_directions": {
+    "SD-01": {
+      "value": "DESCRIPTIVE_ONLY_DIRECTION",
+      "formal_status": "OWNER_DIRECTION_FOUND_FORMAL_APPROVAL_PENDING"
+    },
+    "SD-02": {
+      "value": "OPTION_B_COARSE_LOCALITY_PLUS_HYPOTHETICAL_LIKELY_ORIGIN",
+      "formal_status": "OWNER_DIRECTION_FOUND_FORMAL_APPROVAL_PENDING",
+      "source": "GEO v0.2 03 §C / 12 GEO_HB_01_SCOPE; historical GEO-B is a DIFFERENT bundle and is not SD02-B",
+      "note": "Preserved, NOT called adopted. Option B is Owner direction, not a signed scientific contract. GEO_A0 remains an explicitly fallback-only bundle and may not replace SD02-B silently."
+    },
+    "SD-03": {
+      "value": "A10_R01_R12_PROPOSED_STRUCTURE",
+      "formal_status": "RECOMMENDATION_ONLY"
+    },
+    "SD-09": {
+      "value": "SEPARATE_PRE_AND_POST_SCREEN_DENOMINATORS",
+      "formal_status": "OWNER_SELECTION_REQUIRED",
+      "note": "Q_pre/Q_post are candidate names, not normative A10 fields."
+    },
+    "SD-16-PR": {
+      "value": "RECONCILED_NO_INVALID_INFERENCE_POLICY",
+      "formal_status": "OWNER_SELECTION_REQUIRED"
+    }
+  },
+  "construct_registry": {
+    "G01_AREA_AFFILIATION": {
+      "a10_construct": "G01_AREA_ELIGIBILITY",
+      "relation": "NARROWED_IMPLEMENTATION_OF_A10_ELIGIBILITY",
+      "a10_core_state": "QUALITY_OR_CONTEXT",
+      "data_class": "RESPONDENT_SURVEY",
+      "implemented_by": [
+        "Q01"
+      ],
+      "approval": "PENDING_SCIENTIFIC"
+    },
+    "G01_AREA_PRESENCE_FREQUENCY": {
+      "a10_construct": "G01_AREA_ELIGIBILITY",
+      "relation": "NARROWED_IMPLEMENTATION_OF_A10_ELIGIBILITY",
+      "a10_core_state": "QUALITY_OR_CONTEXT",
+      "data_class": "RESPONDENT_SURVEY",
+      "implemented_by": [
+        "Q02"
+      ],
+      "approval": "PENDING_SCIENTIFIC"
+    },
+    "G02_RESPONSE_VALIDITY": {
+      "a10_construct": "G02_RESPONSE_VALIDITY",
+      "relation": "PRESERVED_VERBATIM_FROM_A10",
+      "a10_core_state": "QUALITY_OR_CONTEXT",
+      "data_class": "ADMIN_METHODOLOGY",
+      "implemented_by": [],
+      "control_implementation": "RULE_BASED_NOT_ITEM_BASED",
+      "implementation_detail": "Implemented by the response-lifecycle rules in section 'response_lifecycle' plus the per-item validity rules in 'items[].non_substantive_codes'. It is NOT implemented by any questionnaire item, and no item may occupy this construct ID.",
+      "approval": "PENDING_SCIENTIFIC",
+      "preserved": true,
+      "note": "PRE-EXISTING. A10 reserves G02 for a validity control. No content item may occupy this slot. Preserved unchanged by this correction."
+    },
+    "GEO_ORIGIN_TYPE_01": {
+      "a10_construct": null,
+      "relation": "NO_A10_ANTECEDENT_PROPOSED_NEW_CONSTRUCT",
+      "a10_core_state": "NOT_APPLICABLE_NO_A10_SLOT",
+      "data_class": "RESPONDENT_SURVEY",
+      "implemented_by": [
+        "Q03"
+      ],
+      "identifier_authority": "GEO v0.2 12 §'Identifier clash' and 13 GEO-12 propose this exact replacement name; adopted here as a PROPOSED draft identifier only.",
+      "approval": "BLOCKED_SOURCE"
+    },
+    "GEO_ORIGIN_AREA_01": {
+      "a10_slot": null,
+      "implemented_by": [],
+      "status": "BLOCKED_DEPENDENCY — GEO_HB_05 area codebook absent (20 fields, 0 values)",
+      "reportability": "NOT_REPORTABLE",
+      "requires_before_any_implementation": [
+        "versioned area catalogue",
+        "source rights",
+        "privacy and consent clearance",
+        "approved cafe-concept and study-area stimulus",
+        "WS2 routing approval"
+      ],
+      "prohibited": [
+        "GPS",
+        "address",
+        "postcode",
+        "pin",
+        "silent centroid inference",
+        "actual journey distance",
+        "footfall extrapolation"
+      ],
+      "small_cell": "may be suppressed under SD-11; floor NOT approved"
+    },
+    "GEO_TRANSPORT_TO_AREA_01": {
+      "a10_construct": "G01_AREA_ELIGIBILITY",
+      "relation": "DESCRIPTIVE_CONTEXT_NOT_A10_CONSTRUCT",
+      "a10_core_state": "QUALITY_OR_CONTEXT",
+      "data_class": "RESPONDENT_SURVEY",
+      "implemented_by": [
+        "Q12"
+      ],
+      "approval": "PENDING_SCIENTIFIC"
+    },
+    "D01_CONCEPT_INTENT": {
+      "a10_construct": "D01_CONCEPT_INTENT",
+      "relation": "ACCEPTED_WITH_COMPOUND_MODIFICATION",
+      "a10_core_state": "CORE_CANDIDATE",
+      "data_class": "RESPONDENT_SURVEY",
+      "implemented_by": [
+        "Q05"
+      ],
+      "approval": "PENDING_SCIENTIFIC"
+    },
+    "D02_PRODUCT_INTEREST": {
+      "a10_construct": "D02_PRODUCT_INTEREST",
+      "relation": "ACCEPTED",
+      "a10_core_state": "CORE_CANDIDATE",
+      "data_class": "RESPONDENT_SURVEY",
+      "implemented_by": [
+        "Q06"
+      ],
+      "approval": "PENDING_SCIENTIFIC"
+    },
+    "D03A_PRICE_ACCEPT": {
+      "a10_construct": "D03A_PRICE_ACCEPT",
+      "relation": "ACCEPTED_UNFIELDABLE_WITHOUT_STIMULUS",
+      "a10_core_state": "CORE_CANDIDATE",
+      "data_class": "RESPONDENT_SURVEY",
+      "implemented_by": [
+        "Q07"
+      ],
+      "approval": "BLOCKED_MEASUREMENT"
+    },
+    "D04_EXISTING_USE": {
+      "a10_construct": "D04_EXISTING_USE",
+      "relation": "ACCEPTED_WITH_UNVALIDATED_RECALL_WINDOW",
+      "a10_core_state": "COMMON_SUPPORTING_CANDIDATE",
+      "data_class": "RESPONDENT_SURVEY",
+      "implemented_by": [
+        "Q04"
+      ],
+      "approval": "PENDING_SCIENTIFIC"
+    },
+    "D05A_PAST_OCCASION": {
+      "a10_construct": "D05A_PAST_OCCASION",
+      "relation": "ACCEPTED_OPTION_BANK_MISSING",
+      "a10_core_state": "CONTEXT_OPTIONAL_CANDIDATE",
+      "data_class": "RESPONDENT_SURVEY",
+      "implemented_by": [
+        "Q08"
+      ],
+      "approval": "BLOCKED_SOURCE"
+    },
+    "D05B_PLANNED_OCCASION": {
+      "a10_construct": "D05B_PLANNED_OCCASION",
+      "relation": "ACCEPTED_OPTION_BANK_MISSING",
+      "a10_core_state": "CONTEXT_OPTIONAL_CANDIDATE",
+      "data_class": "RESPONDENT_SURVEY",
+      "implemented_by": [
+        "Q09"
+      ],
+      "approval": "BLOCKED_SOURCE"
+    },
+    "D06_EXPERIENCE_PRIORITY": {
+      "a10_construct": "D06_EXPERIENCE_PRIORITY",
+      "relation": "ACCEPTED_FEATURE_BANK_MISSING",
+      "a10_core_state": "CONTEXT_OPTIONAL_CANDIDATE",
+      "data_class": "RESPONDENT_SURVEY",
+      "implemented_by": [
+        "Q10"
+      ],
+      "approval": "BLOCKED_SOURCE"
+    },
+    "FMT01_FORMAT_CHOICE": {
+      "a10_construct": null,
+      "relation": "PROPOSED_NEW_CONSTRUCT_NOT_D06",
+      "a10_core_state": "NOT_APPLICABLE_NO_A10_SLOT",
+      "data_class": "RESPONDENT_SURVEY",
+      "implemented_by": [
+        "Q11"
+      ],
+      "approval": "PENDING_OWNER"
+    },
+    "EXP01_PRICE_EXPECTATION": {
+      "a10_construct": null,
+      "relation": "RESTORED_ORIGINAL_CS07_CONSTRUCT_NOT_D03A",
+      "a10_core_state": "NOT_APPLICABLE_NO_A10_SLOT",
+      "data_class": "RESPONDENT_SURVEY",
+      "implemented_by": [
+        "Q13"
+      ],
+      "approval": "PENDING_OWNER"
+    },
+    "GEO_USUAL_SUBAREA_01": {
+      "a10_slot": null,
+      "distinct_from": [
+        "GEO_ORIGIN_AREA_01",
+        "GEO_ORIGIN_TYPE_01"
+      ],
+      "status": "DEFER_LOSS_DISCLOSED — historical CS-13 sub-area loss is disclosed, not repaired",
+      "note": "A usual sub-area is not a hypothetical cafe-visit origin area. Substitution between them is E_CONSTRUCT_SUBSTITUTION_REJECTED.",
+      "implemented_by": []
+    }
+  },
+  "taxonomy_crosswalk": {
+    "note": "P3IR-14. Maps A10 'proposed core state' to the contract's data_class_rules. Where meanings differ the mapping is declared NOT_EQUIVALENT rather than forced.",
+    "CORE_CANDIDATE": {
+      "data_class": "RESPONDENT_SURVEY",
+      "relation": "CONSISTENT"
+    },
+    "COMMON_SUPPORTING_CANDIDATE": {
+      "data_class": "RESPONDENT_SURVEY",
+      "relation": "CONSISTENT"
+    },
+    "CONTEXT_OPTIONAL_CANDIDATE": {
+      "data_class": "RESPONDENT_SURVEY",
+      "relation": "CONSISTENT"
+    },
+    "QUALITY_OR_CONTEXT": {
+      "data_class": "RESPONDENT_SURVEY_OR_ADMIN_METHODOLOGY",
+      "relation": "SPLIT_BY_ITEM",
+      "detail": "G01 is respondent-answered; G02 is a rule-based administrative control."
+    },
+    "RESEARCH_ONLY_CONTEXT": {
+      "data_class": "PUBLISHER_CONTEXT",
+      "relation": "CONSISTENT"
+    },
+    "PARALLEL_MINOR_FINANCIAL_SCREEN": {
+      "data_class": "ENTREPRENEUR_PLAN",
+      "relation": "CONSISTENT"
+    },
+    "NOT_APPLICABLE_NO_A10_SLOT": {
+      "data_class": "RESPONDENT_SURVEY",
+      "relation": "EXPLICIT_NOT_APPLICABLE",
+      "detail": "Used for proposed constructs with no A10 antecedent. Must never be silently mapped to a CORE_CANDIDATE."
+    }
+  },
+  "data_class_rules": {
+    "RESPONDENT_SURVEY": "R03-R08 item- and screen-valid respondent evidence; V is the denominator",
+    "ENTREPRENEUR_PLAN": "R01/R10 versioned plan snapshot; NO respondent denominator",
+    "PUBLISHER_CONTEXT": "R09 dated publisher/venue evidence; publisher units and dates, never respondent Q",
+    "ADMIN_METHODOLOGY": "R02/R12 administrative counts and disclosures; may render without V"
+  },
+  "response_lifecycle": {
+    "note": "P3IR-04. Transport/answer states are separated from question option codes. Option values must never appear in answer_state.",
+    "stages": [
+      "SUBMISSION_RECORDED",
+      "CONSENT_REVIEWED",
+      "DUPLICATE_QUALITY_REVIEWED",
+      "Q_PRE_CANDIDATE",
+      "AREA_ELIGIBILITY_EVALUATED",
+      "Q_POST_CANDIDATE",
+      "ITEM_SHOWN",
+      "ANSWER_EVENT_RECORDED",
+      "SUBSTANTIVE_ITEM_VALIDATED",
+      "REPORT_COHORT_SNAPSHOT"
+    ],
+    "answer_states": {
+      "NOT_SHOWN": "Item not displayed to this unit. Not an answer. Excluded from A and V.",
+      "SKIPPED": "Item displayed, no answer recorded. Excluded from A and V.",
+      "REFUSED": "Item displayed, explicit refusal. Counted in A as an answer event (A10 line 41), never in V. Reported separately from DONOTKNOW. Never converted to SKIPPED and never to AREA_OUTSIDE.",
+      "INVALID": "Item displayed, answer fails a validity rule (bad code, exclusive conflict, cap exceeded). Counted in A as an answer event; never in V. A10 line 41: 'an answer event (valid, invalid or explicit non-substantive option)'. Scope: exclusive-conflict and bad-code triggers do NOT apply to Q01 — Q01 dispositions come only from items[0].eligibility_effect.disposition_rule (PROPOSED_PENDING_SD_A); a Q01 invalid-screen unit exits via the SCREEN_INVALID partition term, counted in A_pre.",
+      "ANSWERED_SUBSTANTIVE": "Item displayed, answer recorded, answer is substantive for this item. Counted in A and in V.",
+      "ANSWERED_NON_SUBSTANTIVE": "Item displayed, answer recorded, answer is an explicit non-substantive option for this item. Counted in A, NOT in V. Scope: excludes any option whose option_to_state_map value is REFUSED (e.g. PREFER_NOT_TO_ANSWER on Q02/Q04..Q13, DECLINE on Q03) — those are REFUSED events, per refusal_and_state_semantics.answer_state_precedence_rule."
+    },
+    "unit_exclusions": {
+      "NO_CONSENT": "Excluded before Q.",
+      "DUPLICATE": "Excluded before Q.",
+      "QUALITY_FAILED": "Excluded before Q.",
+      "UNDER_AGE": "Excluded before Q. Kept as its own reason, never merged with area exclusion.",
+      "VERSION_MISMATCH": "Excluded before Q.",
+      "AFTER_CUTOFF": "Excluded before Q.",
+      "REJECTED_RESPONSE": "Response unit rejected on an accepted/rejected review (quality, contradiction, policy). Excluded before Q. Distinct from INVALID, which is an item-level answer state.",
+      "NOT_ASSESSED": "Qualification never evaluated. Excluded from Q and reported separately from UNKNOWN: 'we did not check' and 'we checked and could not tell' are different facts."
+    },
+    "geographic_exclusions": {
+      "AREA_OUTSIDE": "Geographic predicate returned NO. Excluded from Q. Counted and reported separately.",
+      "AREA_UNKNOWN": "Geographic predicate returned UNKNOWN. Excluded from Q. Never promoted to eligible. Counted and reported separately. The qualification result is NOT_COMPUTABLE."
+    },
+    "a10_donotknow_mapping": {
+      "note": "A10 §3 names DONOTKNOW as a distinct state. It is preserved here as a non_substantive_reason value, not silently dropped.",
+      "A10_DONOTKNOW": "Represented as answer_state=ANSWERED_NON_SUBSTANTIVE with non_substantive_reason in {NOT_SURE, CANNOT_JUDGE, CANNOT_REMEMBER, NOT_APPLICABLE}",
+      "assertion": "no A10-named state is unrepresentable"
+    },
+    "exclusion_separation_rule": "An area screen-out, a duplicate, an under-age exclusion and a quality failure are four different reasons and must never share one counter.",
+    "a10_not_area_eligible_mapping": {
+      "note": "A10 names NOT_AREA_ELIGIBLE as one state. It is represented here as two, because 'outside' and 'unknown' carry different R02 obligations.",
+      "AREA_OUTSIDE": "predicate returned NO",
+      "AREA_UNKNOWN": "predicate returned UNKNOWN; never promoted to eligible",
+      "assertion": "all seven A10-named states are representable; two of them are split"
+    },
+    "state_count": {
+      "answer_states": 6,
+      "geographic_exclusion_states": 2,
+      "unit_exclusion_reasons": 8,
+      "total_transport_level_states": 8,
+      "note": "Answer states and unit exclusions are DIFFERENT NAMESPACES and their counts must not be added together. The v0.3 '8' was a transport-level answer+geographic count; the unit-exclusion count rises from 6 to 8 with REJECTED_RESPONSE and NOT_ASSESSED."
+    }
+  },
+  "event_fields": [
+    "campaign_id",
+    "respondent_unit_pseudonym",
+    "question_id",
+    "question_version",
+    "option_bank_version",
+    "stimulus_hash",
+    "concept_version",
+    "shown_at",
+    "answer_state",
+    "non_substantive_reason",
+    "option_ids",
+    "answered_at",
+    "cohort_rule_version",
+    "cutoff"
+  ],
+  "measurement_line_fields": {
+    "note": "P3IR-05. A10 §3 requires campaign, question/version, stimulus/version, I/Q/S/A/V, x, V, percentage, cohort scope, limitation, cutoff on every R03-R08 numerical line. I and percentage were missing in v0.1 and are added here.",
+    "fields": [
+      "source_provenance",
+      "campaign_id",
+      "question_id",
+      "construct_id",
+      "report_sections",
+      "question_version",
+      "option_bank_version",
+      "stimulus_hash",
+      "concept_version",
+      "cohort_scope",
+      "cutoff",
+      "I",
+      "Q",
+      "S",
+      "A",
+      "V",
+      "x",
+      "percentage",
+      "denominator_scope",
+      "limitation"
+    ],
+    "I_rule": "I = UNKNOWN_NOT_ENUMERABLE for open self-selected campaigns. Clicks, link views and starts are not invitations and must never be substituted.",
+    "percentage_rule": "percentage = 100 * x / V when V > 0; otherwise the line returns NOT_ESTIMABLE and no percentage field is emitted."
+  },
+  "denominator_invariants": [
+    "0 <= V <= A <= S <= Q",
+    "I may be UNKNOWN_NOT_ENUMERABLE; it is never 0",
+    "x <= V for every option",
+    "V == 0 => NOT_ESTIMABLE (never 0%)",
+    "single_select: sum(substantive category counts) == V",
+    "multi_select: sum(option counts) may exceed V",
+    "exclusive codes may not co-occur with any other code — violation is E_EXCLUSIVE_CODE_CONFLICT -> INVALID on every item EXCEPT Q01, where the co-selection resolves to AREA_OUTSIDE/AREA_UNKNOWN under the single Q01 disposition rule (items[0].eligibility_effect.disposition_rule, PROPOSED_PENDING_SD_A (Scientific + Owner; NOT adopted))",
+    "max_selections cap applies to substantive codes only",
+    "non-substantive answers count in A but not in V",
+    "an area-ineligible or area-unknown unit never enters Q",
+    "Q_pre and Q_post are candidate names, not adopted A10 fields"
+  ],
+  "report_sections": {
+    "canonical_ids": [
+      "R01",
+      "R02",
+      "R03",
+      "R04",
+      "R05",
+      "R06",
+      "R07",
+      "R08",
+      "R09",
+      "R10",
+      "R11",
+      "R12"
+    ],
+    "rule": "report_sections is a list of canonical R-IDs, or an empty list with an explicit disposition. Non-canonical labels such as RESEARCH_ONLY_OR_OWNER_DECISION or R08_LIMITED_CONTEXT are forbidden as section identifiers and are represented as disposition plus scope_qualifier."
+  },
+  "report_availability": {
+    "R01": {
+      "state": "NOT_A_CUSTOMER_SECTION",
+      "source": "M2/FIN01"
+    },
+    "R02": {
+      "state": "RENDERABLE_ADMINISTRATIVE",
+      "requires_V": false
+    },
+    "R03": {
+      "state": "SPECIFICATION_ONLY",
+      "blocking_gates": [
+        "G03",
+        "G04",
+        "G05",
+        "G06",
+        "G07",
+        "G08",
+        "G10"
+      ]
+    },
+    "R04": {
+      "state": "SPECIFICATION_ONLY",
+      "blocking_gates": [
+        "G01",
+        "G06",
+        "G08",
+        "G10"
+      ]
+    },
+    "R05": {
+      "state": "UNAVAILABLE_MISSING_APPROVED_STIMULUS",
+      "reason": "D03A requires one exact product/size/quantity/fulfilment/charges/price stimulus. No approved M2 offer exists. A10 also rules the CS-07 expectation band NOT equivalent to D03A.",
+      "must_not_render_as": [
+        "zero acceptability",
+        "WTP band",
+        "any percentage"
+      ]
+    },
+    "R06": {
+      "state": "SPECIFICATION_ONLY",
+      "blocking_gates": [
+        "G03",
+        "G04",
+        "G05"
+      ]
+    },
+    "R07": {
+      "state": "SPECIFICATION_ONLY",
+      "blocking_gates": [
+        "G01",
+        "G06"
+      ]
+    },
+    "R08": {
+      "state": "SPECIFICATION_ONLY",
+      "scope_qualifier": "LIMITED_CONTEXT",
+      "blocking_gates": [
+        "G01",
+        "G07",
+        "G08"
+      ]
+    },
+    "R09": {
+      "state": "SEPARATE_INPUT_PUBLISHER",
+      "source": "CTX01/CTX02"
+    },
+    "R10": {
+      "state": "SEPARATE_INPUT_ENTREPRENEUR_PLAN",
+      "source": "FIN01"
+    },
+    "R11": {
+      "state": "NEVER",
+      "reason": "No authorised overall suitability verdict. No BKC variable, no approved benchmark, no sufficiency rule."
+    },
+    "R12": {
+      "state": "RENDERABLE_ADMINISTRATIVE",
+      "requires_V": false
+    }
+  },
+  "items": [
+    {
+      "id": "Q01",
+      "construct": "G01_AREA_AFFILIATION",
+      "class": "ESSENTIAL_SCREEN",
+      "source_original": "CS-01",
+      "type": "multi_select_with_exclusive_terminals",
+      "max_selections": null,
+      "stem": "Which of the following describe your connection to [named area]? Select all that apply. If none apply, select one of: Rarely, Never, Not sure.",
+      "codes": [
+        "LIVE",
+        "WORK",
+        "STUDY",
+        "RUN_BUSINESS",
+        "VISIT_PURPOSE",
+        "PASS_THROUGH",
+        "RARELY",
+        "NEVER",
+        "NOT_SURE"
+      ],
+      "substantive_codes": [
+        "LIVE",
+        "WORK",
+        "STUDY",
+        "RUN_BUSINESS",
+        "VISIT_PURPOSE",
+        "PASS_THROUGH"
+      ],
+      "exclusive_codes": [
+        "RARELY",
+        "NEVER",
+        "NOT_SURE"
+      ],
+      "non_substantive_codes": [
+        "NEVER",
+        "NOT_SURE",
+        "RARELY"
+      ],
+      "eligibility_effect": {
+        "RARELY": "AREA_OUTSIDE",
+        "NEVER": "AREA_OUTSIDE",
+        "NOT_SURE": "AREA_UNKNOWN",
+        "default": "ELIGIBLE",
+        "default_when_empty": "AREA_UNKNOWN",
+        "note": "PROPOSED_PENDING_SD_A (Scientific + Owner; NOT adopted): single Q01 disposition rule — see eligibility_effect.disposition_rule (the sole rule source). (1) exclusive terminal co-selected with affiliation: terminal wins (RARELY/NEVER -> AREA_OUTSIDE; NOT_SURE -> AREA_UNKNOWN); (2) sole terminal likewise; (3) any code not in `codes` -> REJECT -> answer_state INVALID, Q01_SCREEN SCREEN_INVALID (unknown_code_policy REJECT is the only unknown-code exit; it is NOT AREA_UNKNOWN); (4) empty -> AREA_UNKNOWN; (5) affiliations only -> ELIGIBLE. 'INVALID at Q01 screen' is the subtracted SCREEN_INVALID partition term of the Q_pre/Q_post formula, not a competing route.",
+        "unknown_code_policy": "REJECT",
+        "disposition_rule": {
+          "status": "PROPOSED_PENDING_SD_A (Scientific + Owner; NOT adopted)",
+          "single_rule_source": "items[0]/eligibility_effect/disposition_rule is the ONLY source of the Q01 screen disposition. The general exclusive-conflict->INVALID clauses (denominator_invariants, single_select_and_multi_select_guards, E_EXCLUSIVE_CODE_CONFLICT) and the INVALID answer-state trigger list DO NOT apply to Q01. There is no competing disposition anywhere in this contract.",
+          "rules": [
+            {
+              "n": 1,
+              "case": "exclusive terminal (RARELY, NEVER, NOT_SURE) co-selected with any affiliation code",
+              "disposition": "terminal wins: RARELY/NEVER -> AREA_OUTSIDE; NOT_SURE -> AREA_UNKNOWN; never INVALID, never ELIGIBLE"
+            },
+            {
+              "n": 2,
+              "case": "sole exclusive terminal",
+              "disposition": "RARELY/NEVER -> AREA_OUTSIDE; NOT_SURE -> AREA_UNKNOWN"
+            },
+            {
+              "n": 3,
+              "case": "any selected code not in `codes` (unknown code)",
+              "disposition": "REJECT: item answer_state = INVALID; Q01_SCREEN = SCREEN_INVALID; unit leaves the funnel via the SCREEN_INVALID partition term; never AREA_UNKNOWN, never ELIGIBLE (unknown_code_policy REJECT is the single rule)"
+            },
+            {
+              "n": 4,
+              "case": "empty answer",
+              "disposition": "AREA_UNKNOWN (default_when_empty)"
+            },
+            {
+              "n": 5,
+              "case": "affiliation codes only (any overlap, all in `codes`)",
+              "disposition": "ELIGIBLE (default)"
+            }
+          ],
+          "totality": "Every possible Q01 answer set maps to exactly one of {AREA_OUTSIDE, AREA_UNKNOWN, SCREEN_INVALID, ELIGIBLE}; every value of routing_model.route_inputs.Q01_SCREEN has exactly one declared exit (routing_model.screen_value_exits).",
+          "note": "v0.6 encoded the same terminal-wins choice using adoption language while still leaving three competing clauses in the bytes; v0.6.1 keeps the choice (required for determinism) but deletes every competing clause and re-marks it as a proposal for SD-A."
+        }
+      },
+      "report_sections": [
+        "R02",
+        "R08"
+      ],
+      "disposition": "REWRITE_WITH_ROUTE_OUTS_RESTORED",
+      "status": "BLOCKED_MEASUREMENT",
+      "permitted_claim": "Overlapping affiliation counts and the separate counts of RARELY, NEVER and NOT_SURE screen-outs, with I/Q/S/A/V",
+      "forbidden_inference": "Respondent residence; residential totals; demand counts; treating NOT_SURE as eligible or ineligible",
+      "coverage_limitation": "Affiliation categories are proposed; the geographic predicate that turns them into eligibility is not approved (Task B / SD-02 formal).",
+      "gate_dependencies": [
+        "G01",
+        "G06",
+        "G07",
+        "G08"
+      ],
+      "candidate_remark": {
+        "remark_id": "RM-Q01",
+        "question_id": "Q01",
+        "question_version": "BLOCKED_MEASUREMENT",
+        "remark_version": "candidate_draft_v0_6_1",
+        "locale_en": {
+          "text": "Select all the descriptions that apply. 'Rarely', 'Never' and 'Not sure' are separate choices — pick one of them if none of the others fit. Choosing more than one description does not count you more than once.",
+          "review_status": "PROPOSED_NON_AUTHORITATIVE"
+        },
+        "locale_bm": {
+          "text": "Pilih semua keterangan yang berkaitan. 'Jarang', 'Tidak pernah' dan 'Tidak pasti' ialah pilihan berasingan — pilih satu daripadanya jika tiada yang lain sesuai. Memilih lebih daripada satu keterangan tidak mengira anda lebih daripada sekali.",
+          "review_status": "PROPOSED_NON_AUTHORITATIVE_BM_TRANSLATION_REVIEW_PENDING"
+        },
+        "review_status": "PENDING_SCIENTIFIC_TRANSLATION_ACCESSIBILITY_ETHICS",
+        "authority_to_activate": "NONE_GRANTED_BY_THIS_DOCUMENT",
+        "note": "Candidate draft only. WS2-NEW-16 records that no option display labels exist anywhere in the package; these EN/BM strings are proposed wording, not the validated instrument. BM translation requires independent review (prior A03 recorded the UNSURE/NOT_SURE BM collision hazard)."
+      },
+      "legacy_successor_map": {
+        "rule": "Each code declares whether it is comparable to a legacy CS-01 code. A code with no successor must not be pooled with any other code, and legacy and successor distributions must not be pooled without a declared comparability rule.",
+        "entries": {
+          "LIVE": {
+            "legacy": "CS-01 LIVE",
+            "successor": "LIVE",
+            "comparability": "COMPARABLE"
+          },
+          "WORK": {
+            "legacy": "CS-01 WORK",
+            "successor": "WORK",
+            "comparability": "COMPARABLE"
+          },
+          "STUDY": {
+            "legacy": "CS-01 STUDY",
+            "successor": "STUDY",
+            "comparability": "COMPARABLE"
+          },
+          "RUN_BUSINESS": {
+            "legacy": "CS-01 RUN_BUSINESS",
+            "successor": "RUN_BUSINESS",
+            "comparability": "COMPARABLE"
+          },
+          "PASS_THROUGH": {
+            "legacy": "CS-01 PASS_THROUGH",
+            "successor": "PASS_THROUGH",
+            "comparability": "COMPARABLE"
+          },
+          "VISIT_PURPOSE": {
+            "legacy": "CS-01 VISIT_PURPOSE",
+            "successor": null,
+            "comparability": "NOT_COMPARABLE",
+            "action": "RETAIN_AS_DISTINCT",
+            "note": "No REGULAR_VISIT counterpart exists anywhere in the candidate. This code is retained as a distinct construct and must never be pooled with PASS_THROUGH or with any other code. A successor concept is a scientific decision, not a documentary one, and is NOT made here."
+          },
+          "RARELY": {
+            "legacy": "CS-01 RARELY",
+            "successor": "RARELY",
+            "comparability": "COMPARABLE",
+            "class": "SCREEN_OUT_TERMINAL"
+          },
+          "NEVER": {
+            "legacy": "CS-01 NEVER",
+            "successor": "NEVER",
+            "comparability": "COMPARABLE",
+            "class": "SCREEN_OUT_TERMINAL"
+          },
+          "NOT_SURE": {
+            "legacy": "CS-01 NOT_SURE",
+            "successor": "NOT_SURE",
+            "comparability": "COMPARABLE",
+            "class": "SCREEN_OUT_TERMINAL"
+          }
+        }
+      },
+      "display_order": [
+        "LIVE",
+        "WORK",
+        "STUDY",
+        "RUN_BUSINESS",
+        "VISIT_PURPOSE",
+        "PASS_THROUGH",
+        "RARELY",
+        "NEVER",
+        "NOT_SURE"
+      ],
+      "display_order_version": {
+        "display_order_version": "display_order_v1_P3-01C-VNEXT-0.6.1-CUST-REC",
+        "status": "PROPOSED_PENDING_SD_N (Scientific + instrument; approval OPEN)",
+        "note": "Order is pinned for reproducibility only. The pin itself is an instrument decision (SD-N; A10:272 requires order approval for ALL items); 11 of 13 items declare no pinned order. Any reorder must mint a new display_order_version."
+      }
+    },
+    {
+      "id": "Q02",
+      "construct": "G01_AREA_PRESENCE_FREQUENCY",
+      "class": "ESSENTIAL_SCREEN",
+      "source_original": "CS-02",
+      "type": "ordinal_single",
+      "max_selections": 1,
+      "stem": "In the last four weeks, on how many days were you physically present in [named area]? Please count each day once, even if you were there more than once that day.",
+      "codes": [
+        "NONE",
+        "DAYS_1_3",
+        "DAYS_4_10",
+        "DAYS_11_20",
+        "DAYS_GT_20",
+        "PREFER_NOT_TO_ANSWER"
+      ],
+      "substantive_codes": [
+        "NONE",
+        "DAYS_1_3",
+        "DAYS_4_10",
+        "DAYS_11_20",
+        "DAYS_GT_20"
+      ],
+      "exclusive_codes": [],
+      "non_substantive_codes": [
+        "PREFER_NOT_TO_ANSWER"
+      ],
+      "report_sections": [
+        "R02",
+        "R08"
+      ],
+      "disposition": "REWRITE_BLOCKED_SOURCE",
+      "status": "SCIENTIFIC_APPROVAL_PENDING",
+      "permitted_claim": "Four-week days-present band distribution among displayed units, with I/Q/S/A/V, once the band scale is scientifically approved",
+      "forbidden_inference": "Calendar-month visit frequency; visits rather than days; dwell time; café footfall; guaranteed local customers; pedestrian counts; any eligibility threshold derived from these bands",
+      "coverage_limitation": "Bands are source-faithful to the recovered CS-02 item. The recall window is four weeks, NOT a calendar month; the two are not interchangeable and no calendar-month figure may be derived from this item. Recall validity over four weeks is untested. Any eligibility use of this item remains SCIENTIFIC_APPROVAL_PENDING: no geographic threshold is created here.",
+      "gate_dependencies": [
+        "G01",
+        "G07"
+      ],
+      "recall_unit": {
+        "unit": "days_present",
+        "reference_period": "last_four_weeks",
+        "reference_period_days": 28,
+        "counting_rule": "one calendar day counted once regardless of number of separate presences",
+        "band_edges": {
+          "NONE": [
+            0,
+            0
+          ],
+          "DAYS_1_3": [
+            1,
+            3
+          ],
+          "DAYS_4_10": [
+            4,
+            10
+          ],
+          "DAYS_11_20": [
+            11,
+            20
+          ],
+          "DAYS_GT_20": [
+            21,
+            28
+          ]
+        },
+        "exhaustive": true,
+        "disjoint": true,
+        "alternative_proposed_NOT_APPLIED": {
+          "unit": "visits_per_four_weeks",
+          "rationale": "Option B of GATE-01. Not applied: it is a different construct and would require a new question version, a comparability note and scientific approval. Recorded so the choice is visible, not implicit.",
+          "authority_required": "WS2 scientific + Owner"
+        },
+        "covers_all_integers_0_to_28": true
+      },
+      "candidate_remark": {
+        "remark_id": "RM-Q02",
+        "question_id": "Q02",
+        "question_version": "SCIENTIFIC_APPROVAL_PENDING",
+        "remark_version": "candidate_draft_v0_6",
+        "locale_en": {
+          "text": "Count separate calendar days in the stated four-week period; more than one visit on a single day counts as one day.",
+          "review_status": "PROPOSED_NON_AUTHORITATIVE"
+        },
+        "locale_bm": {
+          "text": "Kira hari kalendar berasingan dalam tempoh empat minggu yang dinyatakan; lebih daripada satu lawatan pada satu hari dikira sebagai satu hari.",
+          "review_status": "PROPOSED_NON_AUTHORITATIVE_BM_TRANSLATION_REVIEW_PENDING"
+        },
+        "review_status": "PENDING_SCIENTIFIC_TRANSLATION_ACCESSIBILITY_ETHICS",
+        "authority_to_activate": "NONE_GRANTED_BY_THIS_DOCUMENT",
+        "note": "Candidate draft only. WS2-NEW-16 records that no option display labels exist anywhere in the package; these EN/BM strings are proposed wording, not the validated instrument. BM translation requires independent review (prior A03 recorded the UNSURE/NOT_SURE BM collision hazard)."
+      },
+      "refusal_route": {
+        "reachable": true,
+        "code": "PREFER_NOT_TO_ANSWER",
+        "consequence": "answer_state = REFUSED; counted in A as an answer event; never in V; never converted to SKIPPED; never converted to AREA_OUTSIDE",
+        "note": "Q02 is treated as a pre-screen item under the item_show_gate Q02=ALWAYS staging, which is PROPOSED_PENDING_SD_C_SD_I (Scientific + Owner; NOT adopted); REFUSED is an answer event on the screen but does not affect area eligibility. Single answer state for PREFER_NOT_TO_ANSWER on Q02: REFUSED (via option_to_state_map; see refusal_and_state_semantics.answer_state_precedence_rule). It is NOT an ANSWERED_NON_SUBSTANTIVE event."
+      },
+      "option_to_state_map": {
+        "NONE": "ANSWERED_SUBSTANTIVE",
+        "DAYS_1_3": "ANSWERED_SUBSTANTIVE",
+        "DAYS_4_10": "ANSWERED_SUBSTANTIVE",
+        "DAYS_11_20": "ANSWERED_SUBSTANTIVE",
+        "DAYS_GT_20": "ANSWERED_SUBSTANTIVE",
+        "PREFER_NOT_TO_ANSWER": "REFUSED"
+      }
+    },
+    {
+      "id": "Q03",
+      "construct": "GEO_ORIGIN_TYPE_01",
+      "class": "ESSENTIAL",
+      "source_original": "CS-11",
+      "type": "nominal_single",
+      "max_selections": 1,
+      "stem": "If you decided to visit the café described above, where would you most likely begin that journey?",
+      "codes": [
+        "HOME",
+        "WORKPLACE",
+        "STUDY_LOCATION",
+        "OTHER_ACTIVITY",
+        "VARIES",
+        "DECLINE",
+        "NOT_SURE"
+      ],
+      "substantive_codes": [
+        "HOME",
+        "WORKPLACE",
+        "STUDY_LOCATION",
+        "OTHER_ACTIVITY",
+        "VARIES"
+      ],
+      "exclusive_codes": [],
+      "non_substantive_codes": [
+        "DECLINE",
+        "NOT_SURE"
+      ],
+      "report_sections": [
+        "R08"
+      ],
+      "disposition": "NON_EQUIVALENT_REPLACEMENT_BLOCKED_SOURCE",
+      "status": "BLOCKED_SOURCE",
+      "permitted_claim": "Counts and shares of stated likely origin TYPE among item-valid units, as a hypothetical self-report",
+      "forbidden_inference": "Exact home or work location; actual trips; commute length; individual catchment; journey distance; demand",
+      "coverage_limitation": "No A10 construct and no research anchor exist for this construct. GEO v0.2 supplies an identifier and a scope, not a validated construct definition.",
+      "gate_dependencies": [
+        "G01",
+        "G03",
+        "G05"
+      ],
+      "candidate_remark": {
+        "remark_id": "RM-Q03",
+        "question_id": "Q03",
+        "question_version": "BLOCKED_SOURCE",
+        "remark_version": "candidate_draft_v0_5",
+        "locale_en": {
+          "text": "This asks about the kind of place you would start a journey from — for example home, work or study. It is a hypothetical question about the type of origin, not a verified home or work location.",
+          "review_status": "PROPOSED_NON_AUTHORITATIVE"
+        },
+        "locale_bm": {
+          "text": "Ini bertanya tentang jenis tempat anda akan memulakan perjalanan — contohnya rumah, tempat kerja atau belajar. Ia soalan hipotetikal tentang jenis asalan, bukan lokasi rumah atau tempat kerja yang disahkan.",
+          "review_status": "PROPOSED_NON_AUTHORITATIVE_BM_TRANSLATION_REVIEW_PENDING"
+        },
+        "review_status": "PENDING_SCIENTIFIC_TRANSLATION_ACCESSIBILITY_ETHICS",
+        "authority_to_activate": "NONE_GRANTED_BY_THIS_DOCUMENT",
+        "note": "Candidate draft only. WS2-NEW-16 records that no option display labels exist anywhere in the package; these EN/BM strings are proposed wording, not the validated instrument. BM translation requires independent review (prior A03 recorded the UNSURE/NOT_SURE BM collision hazard)."
+      },
+      "refusal_route": "DECLINE_OPTION",
+      "option_to_state_map": {
+        "HOME": "ANSWERED_SUBSTANTIVE",
+        "WORKPLACE": "ANSWERED_SUBSTANTIVE",
+        "STUDY_LOCATION": "ANSWERED_SUBSTANTIVE",
+        "OTHER_ACTIVITY": "ANSWERED_SUBSTANTIVE",
+        "VARIES": "ANSWERED_SUBSTANTIVE",
+        "DECLINE": "REFUSED",
+        "NOT_SURE": "ANSWERED_NON_SUBSTANTIVE",
+        "rule": "Option values never appear in answer_state. DECLINE is an option whose recorded answer_state is REFUSED; NOT_SURE is an option whose recorded answer_state is ANSWERED_NON_SUBSTANTIVE. This is what makes REFUSED reachable on this item without conflating an option code with a transport/answer state."
+      }
+    },
+    {
+      "id": "Q04",
+      "construct": "D04_EXISTING_USE",
+      "class": "ESSENTIAL",
+      "source_original": "CS-03",
+      "type": "ordinal_single",
+      "max_selections": 1,
+      "stem": "In the past 30 days, on how many occasions have you bought food or a drink from an existing café?",
+      "codes": [
+        "ZERO",
+        "ONE",
+        "TWO_THREE",
+        "FOUR_SEVEN",
+        "EIGHT_PLUS",
+        "CANNOT_REMEMBER",
+        "PREFER_NOT_TO_ANSWER"
+      ],
+      "substantive_codes": [
+        "ZERO",
+        "ONE",
+        "TWO_THREE",
+        "FOUR_SEVEN",
+        "EIGHT_PLUS"
+      ],
+      "exclusive_codes": [],
+      "non_substantive_codes": [
+        "CANNOT_REMEMBER",
+        "PREFER_NOT_TO_ANSWER"
+      ],
+      "report_sections": [
+        "R06"
+      ],
+      "disposition": "NON_EQUIVALENT_REWRITE",
+      "status": "BLOCKED_MEASUREMENT",
+      "permitted_claim": "30-day recall-band distribution with I/Q/S/A/V; no mean reconstructed from bands",
+      "forbidden_inference": "New-café conversion; sales forecast; exact purchase count; pooling with the original 7-day item",
+      "coverage_limitation": "The 30-day window is A10's; the 7-day item was the pre-registered one. Recall validity for 30 days is untested.",
+      "gate_dependencies": [
+        "G03",
+        "G04",
+        "G05"
+      ],
+      "refusal_route": {
+        "reachable": true,
+        "code": "PREFER_NOT_TO_ANSWER",
+        "consequence": "answer_state = REFUSED; counted in A as an answer event; never in V; never converted to SKIPPED; never converted to AREA_OUTSIDE",
+        "question_necessity_note": "The route exists on evidence-bearing items only. Q01-Q03 are screening/context and carry NOT_SURE or their own non-substantive terminal instead."
+      },
+      "candidate_remark": {
+        "remark_id": "RM-Q04",
+        "question_id": "Q04",
+        "question_version": "BLOCKED_MEASUREMENT",
+        "remark_version": "candidate_draft_v0_5",
+        "locale_en": {
+          "text": "Think about existing cafés you actually bought from in the past 30 days. Orders you collected in person count; purely online-only orders do not.",
+          "review_status": "PROPOSED_NON_AUTHORITATIVE"
+        },
+        "locale_bm": {
+          "text": "Fikirkan kafé sedia ada yang anda benar-benar membeli daripadanya dalam 30 hari lepas. Pesanan yang anda ambil sendiri dikira; pesanan dalam talian sahaja tidak dikira.",
+          "review_status": "PROPOSED_NON_AUTHORITATIVE_BM_TRANSLATION_REVIEW_PENDING"
+        },
+        "review_status": "PENDING_SCIENTIFIC_TRANSLATION_ACCESSIBILITY_ETHICS",
+        "authority_to_activate": "NONE_GRANTED_BY_THIS_DOCUMENT",
+        "note": "Candidate draft only. WS2-NEW-16 records that no option display labels exist anywhere in the package; these EN/BM strings are proposed wording, not the validated instrument. BM translation requires independent review (prior A03 recorded the UNSURE/NOT_SURE BM collision hazard)."
+      },
+      "option_to_state_map": {
+        "ZERO": "ANSWERED_SUBSTANTIVE",
+        "ONE": "ANSWERED_SUBSTANTIVE",
+        "TWO_THREE": "ANSWERED_SUBSTANTIVE",
+        "FOUR_SEVEN": "ANSWERED_SUBSTANTIVE",
+        "EIGHT_PLUS": "ANSWERED_SUBSTANTIVE",
+        "CANNOT_REMEMBER": "ANSWERED_NON_SUBSTANTIVE",
+        "PREFER_NOT_TO_ANSWER": "REFUSED"
+      }
+    },
+    {
+      "id": "Q05",
+      "construct": "D01_CONCEPT_INTENT",
+      "class": "ESSENTIAL",
+      "source_original": "CS-06",
+      "type": "ordinal_single",
+      "max_selections": 1,
+      "stem": "If the café described in [concept_card_version] opened in [named area], how likely would you be to visit it at least once during its first three months?",
+      "codes": [
+        "DEF_NO",
+        "PROB_NO",
+        "UNSURE",
+        "PROB_YES",
+        "DEF_YES",
+        "CANNOT_JUDGE",
+        "PREFER_NOT_TO_ANSWER"
+      ],
+      "display_order": [
+        "DEF_NO",
+        "PROB_NO",
+        "UNSURE",
+        "PROB_YES",
+        "DEF_YES",
+        "CANNOT_JUDGE",
+        "PREFER_NOT_TO_ANSWER"
+      ],
+      "display_order_decision": "NEGATIVE_FIRST adopted deliberately to reduce acquiescence. A10 lists positive-first; the reversal is a recorded decision, not an oversight.",
+      "display_order_rationale": "Acquiescence and positivity bias inflate agreement when the positive pole is presented first. The order does not change the ordinal structure or the permitted analysis.",
+      "substantive_codes": [
+        "DEF_NO",
+        "PROB_NO",
+        "UNSURE",
+        "PROB_YES",
+        "DEF_YES"
+      ],
+      "exclusive_codes": [],
+      "non_substantive_codes": [
+        "CANNOT_JUDGE",
+        "PREFER_NOT_TO_ANSWER"
+      ],
+      "report_sections": [
+        "R03"
+      ],
+      "disposition": "REWRITE_COMPOUND",
+      "status": "BLOCKED_MEASUREMENT",
+      "permitted_claim": "Five-category ordinal distribution, plus the predeclared DEF_YES + PROB_YES share of the item-specific V, labelled as stated interest only",
+      "forbidden_inference": "Calibrated probability; predicted visits; customers; revenue; demand score; any conversion to a rate",
+      "ordinal_only_rationale": "Only a Juster-type 0-10 scale carries a validated probability interpretation (Juster 1966; Brennan & Esslemont, Marketing Bulletin 1994/95, on accuracy for fast-moving consumer goods). A five-point labelled intention scale does not, so every figure from Q05 is ordinal and sample-scoped.",
+      "coverage_limitation": "The stem compounds a time horizon with an at-least-once event; which clause drives the answer is untested. UNSURE is substantive per the applicable A10 worked example and is counted in V; CANNOT_JUDGE is not. Horizon and event interpretation are referred to WS2.",
+      "gate_dependencies": [
+        "G03",
+        "G04",
+        "G05",
+        "G06"
+      ],
+      "ordinal_meaning": {
+        "DEF_NO": 1,
+        "PROB_NO": 2,
+        "UNSURE": 3,
+        "PROB_YES": 4,
+        "DEF_YES": 5,
+        "note": "Display order is presentation. Ordinal meaning is the declared mapping. The two are separate fields so a display-order change cannot silently change the scale."
+      },
+      "numerator_rule": {
+        "predeclared": true,
+        "numerator_categories": [
+          "DEF_YES",
+          "PROB_YES"
+        ],
+        "denominator": "V for this item, version and stimulus",
+        "formula": "100 * (x[DEF_YES] + x[PROB_YES]) / V",
+        "applied_only_when": "V > 0",
+        "output_label": "stated first-three-month interest",
+        "expressly_not": [
+          "numeric chance of visiting",
+          "predicted visits",
+          "realised visits",
+          "sales",
+          "population-wide probability"
+        ],
+        "max_single_category_override": null,
+        "authority": "SCIENTIFIC_APPROVAL_PENDING — predeclared by the correction author, awaiting WS2 review of the first-visit horizon and event interpretation"
+      },
+      "refusal_route": {
+        "reachable": true,
+        "code": "PREFER_NOT_TO_ANSWER",
+        "consequence": "answer_state = REFUSED; counted in A as an answer event; never in V; never converted to SKIPPED; never converted to AREA_OUTSIDE",
+        "question_necessity_note": "The route exists on evidence-bearing items only. Q01-Q03 are screening/context and carry NOT_SURE or their own non-substantive terminal instead."
+      },
+      "stimulus_dependency": {
+        "kind": "CONCEPT_CARD_VERSIONED",
+        "stem_cites": "[concept_card_version]",
+        "stimulus_approved": false,
+        "route_consequence": "OPEN_ROUTING_03 — recorded as a disclosure, not applied as a show gate",
+        "asymmetry_with": "Q07 declares stimulus_required=true and stimulus_absent_outcome=NOT_SHOWN; Q05/Q10 cite a stimulus but declared nothing before this correction"
+      },
+      "candidate_remark": {
+        "remark_id": "RM-Q05",
+        "question_id": "Q05",
+        "question_version": "BLOCKED_MEASUREMENT",
+        "remark_version": "candidate_draft_v0_5",
+        "locale_en": {
+          "text": "'First three months' means the first 90 days after the café opens. We ask how likely you are to visit at least once in that window — not whether you will become a regular customer.",
+          "review_status": "PROPOSED_NON_AUTHORITATIVE"
+        },
+        "locale_bm": {
+          "text": "'Tiga bulan pertama' bermaksud 90 hari pertama selepas kafé dibuka. Kami bertanya sejauh mana kemungkinan anda melawat sekurang-kurangnya sekali dalam tempoh itu — bukan sama ada anda akan menjadi pelanggan tetap.",
+          "review_status": "PROPOSED_NON_AUTHORITATIVE_BM_TRANSLATION_REVIEW_PENDING"
+        },
+        "review_status": "PENDING_SCIENTIFIC_TRANSLATION_ACCESSIBILITY_ETHICS",
+        "authority_to_activate": "NONE_GRANTED_BY_THIS_DOCUMENT",
+        "note": "Candidate draft only. WS2-NEW-16 records that no option display labels exist anywhere in the package; these EN/BM strings are proposed wording, not the validated instrument. BM translation requires independent review (prior A03 recorded the UNSURE/NOT_SURE BM collision hazard)."
+      },
+      "option_to_state_map": {
+        "DEF_NO": "ANSWERED_SUBSTANTIVE",
+        "PROB_NO": "ANSWERED_SUBSTANTIVE",
+        "UNSURE": "ANSWERED_SUBSTANTIVE",
+        "PROB_YES": "ANSWERED_SUBSTANTIVE",
+        "DEF_YES": "ANSWERED_SUBSTANTIVE",
+        "CANNOT_JUDGE": "ANSWERED_NON_SUBSTANTIVE",
+        "PREFER_NOT_TO_ANSWER": "REFUSED"
+      },
+      "display_order_version": {
+        "display_order_version": "display_order_v1_P3-01C-VNEXT-0.6.1-CUST-REC",
+        "status": "PROPOSED_PENDING_SD_N (Scientific + instrument; approval OPEN)",
+        "note": "Order is pinned for reproducibility only. The pin itself is an instrument decision (SD-N; A10:272 requires order approval for ALL items); 11 of 13 items declare no pinned order. Any reorder must mint a new display_order_version."
+      }
+    },
+    {
+      "id": "Q06",
+      "construct": "D02_PRODUCT_INTEREST",
+      "class": "ESSENTIAL",
+      "source_original": "CS-09",
+      "type": "multi_select",
+      "max_selections": 3,
+      "stem": "Which of the following categories from this proposed café menu would you be interested in? Select up to three.",
+      "codes": [
+        "COFFEE_ESPRESSO",
+        "NON_COFFEE",
+        "BAKED_PASTRY",
+        "LIGHT_MEALS",
+        "DESSERTS",
+        "RETAIL",
+        "UNLISTED_CATEGORY_REPORTED",
+        "NONE",
+        "NOT_SURE",
+        "PREFER_NOT_TO_ANSWER"
+      ],
+      "substantive_codes": [
+        "COFFEE_ESPRESSO",
+        "NON_COFFEE",
+        "BAKED_PASTRY",
+        "LIGHT_MEALS",
+        "DESSERTS",
+        "RETAIL",
+        "UNLISTED_CATEGORY_REPORTED",
+        "NONE"
+      ],
+      "exclusive_codes": [
+        "NONE",
+        "NOT_SURE",
+        "PREFER_NOT_TO_ANSWER"
+      ],
+      "non_substantive_codes": [
+        "NOT_SURE",
+        "PREFER_NOT_TO_ANSWER"
+      ],
+      "counts_toward_max_selections": [
+        "COFFEE_ESPRESSO",
+        "NON_COFFEE",
+        "BAKED_PASTRY",
+        "LIGHT_MEALS",
+        "DESSERTS",
+        "RETAIL",
+        "UNLISTED_CATEGORY_REPORTED",
+        "NONE"
+      ],
+      "report_sections": [
+        "R04"
+      ],
+      "disposition": "REWRITE_WITH_RESOLVABLE_OTHER",
+      "status": "BLOCKED_MEASUREMENT",
+      "permitted_claim": "Per-category selection counts over V; option shares may sum above 100%",
+      "forbidden_inference": "Sales mix; unit sales; category market share; demand",
+      "other_code_resolution": {
+        "problem": "v0.1 offered OTHER_CATEGORY while forbidding free text and defining no coding scheme, so the code could not be resolved at analysis time.",
+        "resolution": "Replaced by UNLISTED_CATEGORY_REPORTED, a boolean presence flag with a defined meaning: the respondent reports at least one wanted category outside the six listed. It measures presence, never content.",
+        "fallback_if_rejected": "Remove the flag entirely and disclose that unlisted categories are unmeasurable in this instrument.",
+        "status": "PROPOSED_PENDING_APPROVAL"
+      },
+      "coverage_limitation": "M2-06 includes an 'Other' category that cannot be fielded as a closed content code. The content of unlisted interest is not captured; only its presence.",
+      "gate_dependencies": [
+        "G01",
+        "G06"
+      ],
+      "refusal_route": {
+        "reachable": true,
+        "code": "PREFER_NOT_TO_ANSWER",
+        "consequence": "answer_state = REFUSED; counted in A as an answer event; never in V; never converted to SKIPPED; never converted to AREA_OUTSIDE",
+        "question_necessity_note": "The route exists on evidence-bearing items only. Q01-Q03 are screening/context and carry NOT_SURE or their own non-substantive terminal instead."
+      },
+      "candidate_remark": {
+        "remark_id": "RM-Q06",
+        "question_id": "Q06",
+        "question_version": "BLOCKED_MEASUREMENT",
+        "remark_version": "candidate_draft_v0_5",
+        "locale_en": {
+          "text": "Choose the product categories you would consider. You may pick up to three from the list; 'None' is its own choice.",
+          "review_status": "PROPOSED_NON_AUTHORITATIVE"
+        },
+        "locale_bm": {
+          "text": "Pilih kategori produk yang anda pertimbangkan. Anda boleh memilih sehingga tiga daripada senarai; 'Tiada' ialah pilihan sendiri.",
+          "review_status": "PROPOSED_NON_AUTHORITATIVE_BM_TRANSLATION_REVIEW_PENDING"
+        },
+        "review_status": "PENDING_SCIENTIFIC_TRANSLATION_ACCESSIBILITY_ETHICS",
+        "authority_to_activate": "NONE_GRANTED_BY_THIS_DOCUMENT",
+        "note": "Candidate draft only. WS2-NEW-16 records that no option display labels exist anywhere in the package; these EN/BM strings are proposed wording, not the validated instrument. BM translation requires independent review (prior A03 recorded the UNSURE/NOT_SURE BM collision hazard)."
+      },
+      "option_to_state_map": {
+        "COFFEE_ESPRESSO": "ANSWERED_SUBSTANTIVE",
+        "NON_COFFEE": "ANSWERED_SUBSTANTIVE",
+        "BAKED_PASTRY": "ANSWERED_SUBSTANTIVE",
+        "LIGHT_MEALS": "ANSWERED_SUBSTANTIVE",
+        "DESSERTS": "ANSWERED_SUBSTANTIVE",
+        "RETAIL": "ANSWERED_SUBSTANTIVE",
+        "UNLISTED_CATEGORY_REPORTED": "ANSWERED_SUBSTANTIVE",
+        "NONE": "ANSWERED_SUBSTANTIVE",
+        "NOT_SURE": "ANSWERED_NON_SUBSTANTIVE",
+        "PREFER_NOT_TO_ANSWER": "REFUSED"
+      },
+      "cap_semantics": {
+        "prefer_not_to_answer_counts_toward_max_selections": false,
+        "deterministic_rule": "PREFER_NOT_TO_ANSWER is the declared refusal code (answer_state REFUSED via option_to_state_map); a refusal is not a substantive selection, never counts toward max_selections, and is exclusive: combined with any category code the answer is INVALID (E_EXCLUSIVE_CODE_CONFLICT). A sole PNTA answer is a REFUSED event, not a cap violation.",
+        "rule_authority": "AUTHORITY_FREE — forced by already-declared REFUSED semantics and the invariant 'max_selections cap applies to substantive codes only'; no scientific choice made",
+        "cap_set_status": "PROPOSED_PENDING_SD_B (Owner; OD-C-01) — the choice counts_toward_max_selections = substantive set (8 codes incl. UNLISTED_CATEGORY_REPORTED and NONE) is retained from v0.6 for determinism but is NOT adopted; the SD-B alternatives (6-listed-only cap; no cap) remain open in CUST02 §6/§7.",
+        "residual_for_SD_B": "the respondent remark ('up to three from the list') and REC-A-06 ({3 listed}+UNLISTED -> INVALID) are scientific/Owner questions under SD-B and SD-P; not silently changed here."
+      }
+    },
+    {
+      "id": "Q07",
+      "construct": "D03A_PRICE_ACCEPT",
+      "class": "ESSENTIAL_CONDITIONAL",
+      "source_original": "CS-07",
+      "type": "ordinal_single",
+      "max_selections": 1,
+      "stem": "How acceptable would paying [exact_rm_price] for [one_exact_product_size_quantity_fulfilment_and_charges] at the proposed café be to you?",
+      "codes": [
+        "VERY_UNACCEPTABLE",
+        "SOMEWHAT_UNACCEPTABLE",
+        "NEITHER",
+        "SOMEWHAT_ACCEPTABLE",
+        "VERY_ACCEPTABLE",
+        "CANNOT_JUDGE",
+        "PREFER_NOT_TO_ANSWER"
+      ],
+      "substantive_codes": [
+        "VERY_UNACCEPTABLE",
+        "SOMEWHAT_UNACCEPTABLE",
+        "NEITHER",
+        "SOMEWHAT_ACCEPTABLE",
+        "VERY_ACCEPTABLE"
+      ],
+      "exclusive_codes": [],
+      "non_substantive_codes": [
+        "CANNOT_JUDGE",
+        "PREFER_NOT_TO_ANSWER"
+      ],
+      "show_rule": "NOT_SHOWN unless an approved, versioned exact offer stimulus exists. When the stimulus is absent the item is NOT_SHOWN for every unit and R05 returns UNAVAILABLE_MISSING_APPROVED_STIMULUS.",
+      "report_sections": [
+        "R05"
+      ],
+      "disposition": "NON_EQUIVALENT_REPLACEMENT",
+      "status": "BLOCKED_MEASUREMENT",
+      "permitted_claim": "Acceptability distribution for one exact offer, if and only if that offer is approved",
+      "forbidden_inference": "WTP curve; price optimum; revenue; comparison to an incompatible M2 offer; any acceptability figure while the stimulus is absent",
+      "coverage_limitation": "No approved M2 offer exists. M2-10 admits 'latte/americano' (two products) while CS-07 fixes 'latte'.",
+      "gate_dependencies": [
+        "G01",
+        "G06"
+      ],
+      "stimulus_required": true,
+      "stimulus_absent_outcome": "NOT_SHOWN",
+      "stimulus_absent_report_state": "UNAVAILABLE_MISSING_APPROVED_STIMULUS",
+      "stimulus_absent_error_code": "E_OFFER_STIMULUS_MISSING",
+      "refusal_route": {
+        "reachable": true,
+        "code": "PREFER_NOT_TO_ANSWER",
+        "consequence": "answer_state = REFUSED; counted in A as an answer event; never in V; never converted to SKIPPED; never converted to AREA_OUTSIDE",
+        "question_necessity_note": "The route exists on evidence-bearing items only. Q01-Q03 are screening/context and carry NOT_SURE or their own non-substantive terminal instead."
+      },
+      "candidate_remark": {
+        "remark_id": "RM-Q07",
+        "question_id": "Q07",
+        "question_version": "BLOCKED_MEASUREMENT",
+        "remark_version": "candidate_draft_v0_5",
+        "locale_en": {
+          "text": "This shows the exact café offer (product, size, price). If no approved offer is shown, this question does not appear and no price-acceptability figure is produced.",
+          "review_status": "PROPOSED_NON_AUTHORITATIVE"
+        },
+        "locale_bm": {
+          "text": "Ini memaparkan tawaran kafé sebenar (produk, saiz, harga). Jika tiada tawaran diluluskan dipaparkan, soalan ini tidak muncul dan tiada angka kebolehterimaan harga dihasilkan.",
+          "review_status": "PROPOSED_NON_AUTHORITATIVE_BM_TRANSLATION_REVIEW_PENDING"
+        },
+        "review_status": "PENDING_SCIENTIFIC_TRANSLATION_ACCESSIBILITY_ETHICS",
+        "authority_to_activate": "NONE_GRANTED_BY_THIS_DOCUMENT",
+        "note": "Candidate draft only. WS2-NEW-16 records that no option display labels exist anywhere in the package; these EN/BM strings are proposed wording, not the validated instrument. BM translation requires independent review (prior A03 recorded the UNSURE/NOT_SURE BM collision hazard)."
+      },
+      "option_to_state_map": {
+        "VERY_UNACCEPTABLE": "ANSWERED_SUBSTANTIVE",
+        "SOMEWHAT_UNACCEPTABLE": "ANSWERED_SUBSTANTIVE",
+        "NEITHER": "ANSWERED_SUBSTANTIVE",
+        "SOMEWHAT_ACCEPTABLE": "ANSWERED_SUBSTANTIVE",
+        "VERY_ACCEPTABLE": "ANSWERED_SUBSTANTIVE",
+        "CANNOT_JUDGE": "ANSWERED_NON_SUBSTANTIVE",
+        "PREFER_NOT_TO_ANSWER": "REFUSED"
+      }
+    },
+    {
+      "id": "Q08",
+      "construct": "D05A_PAST_OCCASION",
+      "class": "CONDITIONAL_R07",
+      "source_original": null,
+      "type": "multi_select",
+      "max_selections": null,
+      "stem": "Thinking only about the existing-café visits you reported in the past 30 days, on which occasions did you visit a café? Select all that apply.",
+      "codes": [
+        "WORK_BREAK",
+        "STUDY",
+        "SOCIAL",
+        "ON_THE_GO",
+        "UNLISTED_OCCASION_REPORTED",
+        "CANNOT_REMEMBER",
+        "PREFER_NOT_TO_ANSWER"
+      ],
+      "substantive_codes": [
+        "WORK_BREAK",
+        "STUDY",
+        "SOCIAL",
+        "ON_THE_GO",
+        "UNLISTED_OCCASION_REPORTED"
+      ],
+      "exclusive_codes": [
+        "CANNOT_REMEMBER"
+      ],
+      "non_substantive_codes": [
+        "CANNOT_REMEMBER",
+        "PREFER_NOT_TO_ANSWER"
+      ],
+      "show_rule": "Shown only to units whose Q04 answer is a substantive code other than ZERO. Units with Q04 = CANNOT_REMEMBER are NOT_SHOWN and are counted under R07_ROUTED_OUT_UNKNOWN_RECALL, never silently dropped.",
+      "report_sections": [
+        "R07"
+      ],
+      "disposition": "NEW_ITEM",
+      "status": "BLOCKED_SOURCE",
+      "permitted_claim": "Occasion counts among eligible past purchasers, with its own V",
+      "forbidden_inference": "Planned future visits; pooling with Q09; time-of-day demand",
+      "coverage_limitation": "The occasion bank is a provisional four-category list with no approved source. Unlisted occasion content is not captured.",
+      "gate_dependencies": [
+        "G01",
+        "G06"
+      ],
+      "refusal_route": {
+        "reachable": true,
+        "code": "PREFER_NOT_TO_ANSWER",
+        "consequence": "answer_state = REFUSED; counted in A as an answer event; never in V; never converted to SKIPPED; never converted to AREA_OUTSIDE",
+        "question_necessity_note": "The route exists on evidence-bearing items only. Q01-Q03 are screening/context and carry NOT_SURE or their own non-substantive terminal instead."
+      },
+      "candidate_remark": {
+        "remark_id": "RM-Q08",
+        "question_id": "Q08",
+        "question_version": "BLOCKED_SOURCE",
+        "remark_version": "candidate_draft_v0_5",
+        "locale_en": {
+          "text": "This is about actual past occasions you bought from an existing café. It appears only if you reported at least one such occasion.",
+          "review_status": "PROPOSED_NON_AUTHORITATIVE"
+        },
+        "locale_bm": {
+          "text": "Ini tentang kejadian sebenar lepas anda membeli daripada kafé sedia ada. Ia muncul hanya jika anda melaporkan sekurang-kurangnya satu kejadian sedemikian.",
+          "review_status": "PROPOSED_NON_AUTHORITATIVE_BM_TRANSLATION_REVIEW_PENDING"
+        },
+        "review_status": "PENDING_SCIENTIFIC_TRANSLATION_ACCESSIBILITY_ETHICS",
+        "authority_to_activate": "NONE_GRANTED_BY_THIS_DOCUMENT",
+        "note": "Candidate draft only. WS2-NEW-16 records that no option display labels exist anywhere in the package; these EN/BM strings are proposed wording, not the validated instrument. BM translation requires independent review (prior A03 recorded the UNSURE/NOT_SURE BM collision hazard)."
+      },
+      "option_to_state_map": {
+        "WORK_BREAK": "ANSWERED_SUBSTANTIVE",
+        "STUDY": "ANSWERED_SUBSTANTIVE",
+        "SOCIAL": "ANSWERED_SUBSTANTIVE",
+        "ON_THE_GO": "ANSWERED_SUBSTANTIVE",
+        "UNLISTED_OCCASION_REPORTED": "ANSWERED_SUBSTANTIVE",
+        "CANNOT_REMEMBER": "ANSWERED_NON_SUBSTANTIVE",
+        "PREFER_NOT_TO_ANSWER": "REFUSED"
+      }
+    },
+    {
+      "id": "Q09",
+      "construct": "D05B_PLANNED_OCCASION",
+      "class": "CONDITIONAL_R07",
+      "source_original": null,
+      "type": "multi_select",
+      "max_selections": null,
+      "stem": "If you visited this proposed café, on which occasions might you choose to visit? Select all that apply.",
+      "codes": [
+        "WORK_BREAK",
+        "STUDY",
+        "SOCIAL",
+        "ON_THE_GO",
+        "UNLISTED_OCCASION_REPORTED",
+        "NONE",
+        "CANNOT_JUDGE",
+        "PREFER_NOT_TO_ANSWER"
+      ],
+      "substantive_codes": [
+        "WORK_BREAK",
+        "STUDY",
+        "SOCIAL",
+        "ON_THE_GO",
+        "UNLISTED_OCCASION_REPORTED",
+        "NONE"
+      ],
+      "exclusive_codes": [
+        "NONE",
+        "CANNOT_JUDGE"
+      ],
+      "non_substantive_codes": [
+        "CANNOT_JUDGE",
+        "PREFER_NOT_TO_ANSWER"
+      ],
+      "show_rule": "Shown after the versioned concept card. Independent of Q04.",
+      "report_sections": [
+        "R07"
+      ],
+      "disposition": "NEW_ITEM",
+      "status": "BLOCKED_SOURCE",
+      "permitted_claim": "Hypothetical stated occasion counts among substantive responses",
+      "forbidden_inference": "Actual visit frequency; time-of-day demand; pooling with Q08",
+      "coverage_limitation": "Same provisional bank as Q08.",
+      "gate_dependencies": [
+        "G01",
+        "G06"
+      ],
+      "refusal_route": {
+        "reachable": true,
+        "code": "PREFER_NOT_TO_ANSWER",
+        "consequence": "answer_state = REFUSED; counted in A as an answer event; never in V; never converted to SKIPPED; never converted to AREA_OUTSIDE",
+        "question_necessity_note": "The route exists on evidence-bearing items only. Q01-Q03 are screening/context and carry NOT_SURE or their own non-substantive terminal instead."
+      },
+      "show_rule_conflict": {
+        "declared_prose": "Shown after the versioned concept card. Independent of Q04.",
+        "declared_class": "CONDITIONAL_R07",
+        "conflict": "The prose is absolute about independence from Q04. The class groups Q09 with Q08, whose show_rule is explicitly Q04-gated. Both cannot govern.",
+        "preserved_verbatim": true,
+        "decision": "OPEN_ROUTING_01 — WS2 scientific + Owner",
+        "governs_until_decided": "the declared class (CONDITIONAL_R07), because a class is the machine-readable field and the prose is a human note",
+        "do_not": [
+          "silently rewrite the prose",
+          "silently keep only the prose",
+          "treat the conflict as resolved because one reading is more convenient"
+        ]
+      },
+      "candidate_remark": {
+        "remark_id": "RM-Q09",
+        "question_id": "Q09",
+        "question_version": "BLOCKED_SOURCE",
+        "remark_version": "candidate_draft_v0_5",
+        "locale_en": {
+          "text": "This asks about occasions you imagine visiting the proposed café. It is hypothetical and separate from your past behaviour.",
+          "review_status": "PROPOSED_NON_AUTHORITATIVE"
+        },
+        "locale_bm": {
+          "text": "Ini bertanya tentang kejadian yang anda bayangkan melawat kafé dicadangkan. Ia hipotetikal dan berasingan daripada tingkah laku lepas anda.",
+          "review_status": "PROPOSED_NON_AUTHORITATIVE_BM_TRANSLATION_REVIEW_PENDING"
+        },
+        "review_status": "PENDING_SCIENTIFIC_TRANSLATION_ACCESSIBILITY_ETHICS",
+        "authority_to_activate": "NONE_GRANTED_BY_THIS_DOCUMENT",
+        "note": "Candidate draft only. WS2-NEW-16 records that no option display labels exist anywhere in the package; these EN/BM strings are proposed wording, not the validated instrument. BM translation requires independent review (prior A03 recorded the UNSURE/NOT_SURE BM collision hazard)."
+      },
+      "option_to_state_map": {
+        "WORK_BREAK": "ANSWERED_SUBSTANTIVE",
+        "STUDY": "ANSWERED_SUBSTANTIVE",
+        "SOCIAL": "ANSWERED_SUBSTANTIVE",
+        "ON_THE_GO": "ANSWERED_SUBSTANTIVE",
+        "UNLISTED_OCCASION_REPORTED": "ANSWERED_SUBSTANTIVE",
+        "NONE": "ANSWERED_SUBSTANTIVE",
+        "CANNOT_JUDGE": "ANSWERED_NON_SUBSTANTIVE",
+        "PREFER_NOT_TO_ANSWER": "REFUSED"
+      }
+    },
+    {
+      "id": "Q10",
+      "construct": "D06_EXPERIENCE_PRIORITY",
+      "class": "CONDITIONAL_R07",
+      "source_original": null,
+      "type": "ordinal_matrix",
+      "max_selections": 1,
+      "feature_count_max": 6,
+      "stem": "For each feature of the described café, how important would that feature be to you if you chose to visit?",
+      "codes": [
+        "NOT_AT_ALL_IMPORTANT",
+        "SLIGHTLY_IMPORTANT",
+        "MODERATELY_IMPORTANT",
+        "VERY_IMPORTANT",
+        "EXTREMELY_IMPORTANT",
+        "NOT_APPLICABLE",
+        "CANNOT_JUDGE",
+        "PREFER_NOT_TO_ANSWER"
+      ],
+      "substantive_codes": [
+        "NOT_AT_ALL_IMPORTANT",
+        "SLIGHTLY_IMPORTANT",
+        "MODERATELY_IMPORTANT",
+        "VERY_IMPORTANT",
+        "EXTREMELY_IMPORTANT"
+      ],
+      "exclusive_codes": [],
+      "non_substantive_codes": [
+        "NOT_APPLICABLE",
+        "CANNOT_JUDGE",
+        "PREFER_NOT_TO_ANSWER"
+      ],
+      "report_sections": [
+        "R07"
+      ],
+      "disposition": "NEW_ITEM",
+      "status": "G06_APPROVAL_PENDING",
+      "permitted_claim": "Per-feature ordered distribution with its own V_feature, plus the predeclared top-two share per feature",
+      "forbidden_inference": "Composite importance score; preference weights; forced ranking; causal satisfaction; revenue; treating format choice as importance",
+      "coverage_limitation": "Feature bank absent. The A10 v0.3:344 'Examples:' list is a drafted example set, not an approved ceiling; F<=6 is an author burden proposal. M2's product taxonomy is unapproved, so Q06 must not be treated as confirming it. Scale anchors reconciled to A10 v0.3 D06 here; any further relabel voids the predeclared top-two set.",
+      "gate_dependencies": [
+        "G01",
+        "G06",
+        "G05"
+      ],
+      "per_feature_record": {
+        "record_key": [
+          "feature_id",
+          "feature_version",
+          "answer_event_id"
+        ],
+        "V_field": "V_feature",
+        "independent_per_feature": true,
+        "note": "Each feature carries its own valid denominator. There is no item-level V for Q10 and no pooling of features into one denominator."
+      },
+      "top_two_rule": {
+        "predeclared": true,
+        "top_two_categories": [
+          "VERY_IMPORTANT",
+          "EXTREMELY_IMPORTANT"
+        ],
+        "formula": "100 * (x[VERY_IMPORTANT] + x[EXTREMELY_IMPORTANT]) / V_feature",
+        "valid_only_under_anchor_set": [
+          "NOT_AT_ALL_IMPORTANT",
+          "SLIGHTLY_IMPORTANT",
+          "MODERATELY_IMPORTANT",
+          "VERY_IMPORTANT",
+          "EXTREMELY_IMPORTANT"
+        ],
+        "guard": "If the anchor set is relabelled without regenerating this set, the numerator becomes undetectably wrong. The evaluator raises E_TOP_TWO_ANCHOR_MISMATCH."
+      },
+      "ordering": {
+        "ranking": null,
+        "forced_ranking": false,
+        "rule": "Importance is not rank. A respondent may rate every feature VERY_IMPORTANT. No rank order, no composite score and no weight may be derived from these items."
+      },
+      "feature_bank": {
+        "approved_bank": null,
+        "feature_count_F": null,
+        "author_proposal": {
+          "F_max": 6,
+          "status": "AUTHOR_PROPOSAL_NOT_G06_APPROVAL",
+          "note": "R1 F-11: A10 v0.3:344 gives an 'Examples:' list of three, which is a drafted example set, not an approved exhaustive bank. F<=6 is a burden cap proposed by the correction author. Neither is a G06 approval."
+        },
+        "gate": "G06_APPROVAL_PENDING"
+      },
+      "refusal_route": {
+        "reachable": true,
+        "code": "PREFER_NOT_TO_ANSWER",
+        "consequence": "answer_state = REFUSED; counted in A as an answer event; never in V; never converted to SKIPPED; never converted to AREA_OUTSIDE",
+        "question_necessity_note": "The route exists on evidence-bearing items only. Q01-Q03 are screening/context and carry NOT_SURE or their own non-substantive terminal instead."
+      },
+      "stimulus_dependency": {
+        "kind": "CONCEPT_CARD_VERSIONED",
+        "stem_cites": "the café described above",
+        "stimulus_approved": false,
+        "route_consequence": "OPEN_ROUTING_03 — recorded as a disclosure, not applied as a show gate",
+        "asymmetry_with": "Q07 declares stimulus_required=true and stimulus_absent_outcome=NOT_SHOWN; Q05/Q10 cite a stimulus but declared nothing before this correction"
+      },
+      "candidate_remark": {
+        "remark_id": "RM-Q10",
+        "question_id": "Q10",
+        "question_version": "G06_APPROVAL_PENDING",
+        "remark_version": "candidate_draft_v0_5",
+        "locale_en": {
+          "text": "For each feature shown, rate how important it would be to your decision to visit. 'Not applicable' means the feature is not offered; it is not a low score.",
+          "review_status": "PROPOSED_NON_AUTHORITATIVE"
+        },
+        "locale_bm": {
+          "text": "Bagi setiap ciri yang dipaparkan, nilaikan betapa pentingnya ia kepada keputusan anda untuk melawat. 'Tidak Berkenaan' bermaksud ciri tidak ditawarkan; ia bukan skor rendah.",
+          "review_status": "PROPOSED_NON_AUTHORITATIVE_BM_TRANSLATION_REVIEW_PENDING"
+        },
+        "review_status": "PENDING_SCIENTIFIC_TRANSLATION_ACCESSIBILITY_ETHICS",
+        "authority_to_activate": "NONE_GRANTED_BY_THIS_DOCUMENT",
+        "note": "Candidate draft only. WS2-NEW-16 records that no option display labels exist anywhere in the package; these EN/BM strings are proposed wording, not the validated instrument. BM translation requires independent review (prior A03 recorded the UNSURE/NOT_SURE BM collision hazard)."
+      },
+      "option_to_state_map": {
+        "NOT_AT_ALL_IMPORTANT": "ANSWERED_SUBSTANTIVE",
+        "SLIGHTLY_IMPORTANT": "ANSWERED_SUBSTANTIVE",
+        "MODERATELY_IMPORTANT": "ANSWERED_SUBSTANTIVE",
+        "VERY_IMPORTANT": "ANSWERED_SUBSTANTIVE",
+        "EXTREMELY_IMPORTANT": "ANSWERED_SUBSTANTIVE",
+        "NOT_APPLICABLE": "ANSWERED_NON_SUBSTANTIVE",
+        "CANNOT_JUDGE": "ANSWERED_NON_SUBSTANTIVE",
+        "PREFER_NOT_TO_ANSWER": "REFUSED"
+      }
+    },
+    {
+      "id": "Q11",
+      "construct": "FMT01_FORMAT_CHOICE",
+      "class": "OPTIONAL_CONTEXT",
+      "source_original": "CS-08",
+      "type": "nominal_single",
+      "max_selections": 1,
+      "stem": "For the proposed café offer, which service format would you mainly choose?",
+      "codes": [
+        "DINE_IN",
+        "TAKEAWAY",
+        "EITHER_EQUALLY",
+        "CANNOT_JUDGE",
+        "PREFER_NOT_TO_ANSWER"
+      ],
+      "substantive_codes": [
+        "DINE_IN",
+        "TAKEAWAY",
+        "EITHER_EQUALLY"
+      ],
+      "exclusive_codes": [],
+      "non_substantive_codes": [
+        "CANNOT_JUDGE",
+        "PREFER_NOT_TO_ANSWER"
+      ],
+      "report_sections": [],
+      "disposition": "RESEARCH_ONLY",
+      "report_disposition": "RESEARCH_ONLY_OR_OWNER_DECISION",
+      "status": "BLOCKED_OWNER",
+      "permitted_claim": "None in a report until the construct is registered and an Owner decision authorises a section",
+      "forbidden_inference": "Ordered D06 importance; spending; visit frequency",
+      "coverage_limitation": "No A10 construct. Rendering is suppressed, not annotated.",
+      "gate_dependencies": [
+        "G01",
+        "G06"
+      ],
+      "refusal_route": {
+        "reachable": true,
+        "code": "PREFER_NOT_TO_ANSWER",
+        "consequence": "answer_state = REFUSED; counted in A as an answer event; never in V; never converted to SKIPPED; never converted to AREA_OUTSIDE",
+        "question_necessity_note": "The route exists on evidence-bearing items only. Q01-Q03 are screening/context and carry NOT_SURE or their own non-substantive terminal instead."
+      },
+      "candidate_remark": {
+        "remark_id": "RM-Q11",
+        "question_id": "Q11",
+        "question_version": "BLOCKED_OWNER",
+        "remark_version": "candidate_draft_v0_6_1",
+        "locale_en": {
+          "text": "If the café format (for example dine-in or takeaway) is shown, this asks which format you would use. It is optional.",
+          "review_status": "PROPOSED_NON_AUTHORITATIVE"
+        },
+        "locale_bm": {
+          "text": "Jika format kafé (contohnya dine-in atau bawa pulang) dipaparkan, ini bertanya format mana anda akan gunakan. Ia pilihan.",
+          "review_status": "PROPOSED_NON_AUTHORITATIVE_BM_TRANSLATION_REVIEW_PENDING"
+        },
+        "review_status": "PENDING_SCIENTIFIC_TRANSLATION_ACCESSIBILITY_ETHICS",
+        "authority_to_activate": "NONE_GRANTED_BY_THIS_DOCUMENT",
+        "note": "Candidate draft only. WS2-NEW-16 records that no option display labels exist anywhere in the package; these EN/BM strings are proposed wording, not the validated instrument. BM translation requires independent review (prior A03 recorded the UNSURE/NOT_SURE BM collision hazard).",
+        "locale_bm_correction_note": "v0.6 IA-D07 claimed 'Updated BM similarly' but left four enumerated formats against two codes (REC-LNG-01). v0.6.1 removed the two unbacked strings ('makan di tempat duduk', 'Ambil-ambil'); whether either is a legitimate synonym is for the translation authority (SD-P), not for this author. All BM text remains PROPOSED_NON_AUTHORITATIVE_BM_TRANSLATION_REVIEW_PENDING."
+      },
+      "option_to_state_map": {
+        "DINE_IN": "ANSWERED_SUBSTANTIVE",
+        "TAKEAWAY": "ANSWERED_SUBSTANTIVE",
+        "EITHER_EQUALLY": "ANSWERED_SUBSTANTIVE",
+        "CANNOT_JUDGE": "ANSWERED_NON_SUBSTANTIVE",
+        "PREFER_NOT_TO_ANSWER": "REFUSED"
+      }
+    },
+    {
+      "id": "Q12",
+      "construct": "GEO_TRANSPORT_TO_AREA_01",
+      "class": "OPTIONAL_CONTEXT",
+      "source_original": "CS-12",
+      "type": "nominal_single",
+      "max_selections": 1,
+      "stem": "What is your usual way of travelling to [named area]?",
+      "codes": [
+        "WALK",
+        "MOTORCYCLE",
+        "CAR",
+        "PUBLIC_TRANSPORT",
+        "OTHER",
+        "NOT_SURE",
+        "PREFER_NOT_TO_ANSWER"
+      ],
+      "substantive_codes": [
+        "WALK",
+        "MOTORCYCLE",
+        "CAR",
+        "PUBLIC_TRANSPORT"
+      ],
+      "exclusive_codes": [],
+      "non_substantive_codes": [
+        "NOT_SURE",
+        "PREFER_NOT_TO_ANSWER",
+        "OTHER"
+      ],
+      "report_sections": [
+        "R08"
+      ],
+      "report_scope_qualifier": "LIMITED_CONTEXT",
+      "disposition": "OPTIONAL_CONTEXT",
+      "status": "BLOCKED_MEASUREMENT",
+      "permitted_claim": "Descriptive travel-to-area mode distribution with a limited-context qualifier",
+      "forbidden_inference": "Travel time; routing; precise origin; café-trip mode; distance",
+      "coverage_limitation": "Transport to the area is not transport to the café. OTHER has no coding scheme and is not treated as a category.",
+      "gate_dependencies": [
+        "G01",
+        "G07"
+      ],
+      "refusal_route": {
+        "reachable": true,
+        "code": "PREFER_NOT_TO_ANSWER",
+        "consequence": "answer_state = REFUSED; counted in A as an answer event; never in V; never converted to SKIPPED; never converted to AREA_OUTSIDE",
+        "question_necessity_note": "The route exists on evidence-bearing items only. Q01-Q03 are screening/context and carry NOT_SURE or their own non-substantive terminal instead."
+      },
+      "non_substantive_reasons": {
+        "OTHER": "UNCODABLE_OTHER — the respondent gave an answer that falls outside the approved category set; it is a real answer event (counted in A) but it can never enter a category distribution's valid denominator (never in V)."
+      },
+      "candidate_remark": {
+        "remark_id": "RM-Q12",
+        "question_id": "Q12",
+        "question_version": "BLOCKED_MEASUREMENT",
+        "remark_version": "candidate_draft_v0_5",
+        "locale_en": {
+          "text": "Choose how you would travel to the area. 'Other' is recorded but is not a category in the distribution.",
+          "review_status": "PROPOSED_NON_AUTHORITATIVE"
+        },
+        "locale_bm": {
+          "text": "Pilih cara anda akan pergi ke kawasan itu. 'Lain-lain' direkodkan tetapi bukan kategori dalam taburan.",
+          "review_status": "PROPOSED_NON_AUTHORITATIVE_BM_TRANSLATION_REVIEW_PENDING"
+        },
+        "review_status": "PENDING_SCIENTIFIC_TRANSLATION_ACCESSIBILITY_ETHICS",
+        "authority_to_activate": "NONE_GRANTED_BY_THIS_DOCUMENT",
+        "note": "Candidate draft only. WS2-NEW-16 records that no option display labels exist anywhere in the package; these EN/BM strings are proposed wording, not the validated instrument. BM translation requires independent review (prior A03 recorded the UNSURE/NOT_SURE BM collision hazard)."
+      },
+      "option_to_state_map": {
+        "WALK": "ANSWERED_SUBSTANTIVE",
+        "MOTORCYCLE": "ANSWERED_SUBSTANTIVE",
+        "CAR": "ANSWERED_SUBSTANTIVE",
+        "PUBLIC_TRANSPORT": "ANSWERED_SUBSTANTIVE",
+        "OTHER": "ANSWERED_NON_SUBSTANTIVE",
+        "NOT_SURE": "ANSWERED_NON_SUBSTANTIVE",
+        "PREFER_NOT_TO_ANSWER": "REFUSED"
+      }
+    },
+    {
+      "id": "Q13",
+      "construct": "EXP01_PRICE_EXPECTATION",
+      "class": "OPTIONAL_CONTEXT",
+      "source_original": "CS-07",
+      "type": "ordinal_single",
+      "max_selections": 1,
+      "stem": "What would you expect to pay for [defined item: medium latte, dine-in]?",
+      "codes": [
+        "LT_RM8",
+        "RM8_TO_1199",
+        "RM12_TO_1499",
+        "RM15_TO_1799",
+        "GE_RM18",
+        "NOT_SURE",
+        "PREFER_NOT_TO_ANSWER"
+      ],
+      "substantive_codes": [
+        "LT_RM8",
+        "RM8_TO_1199",
+        "RM12_TO_1499",
+        "RM15_TO_1799",
+        "GE_RM18"
+      ],
+      "exclusive_codes": [],
+      "non_substantive_codes": [
+        "NOT_SURE",
+        "PREFER_NOT_TO_ANSWER"
+      ],
+      "report_sections": [],
+      "disposition": "RESTORED_FROM_ORIGINAL_AS_SEPARATE_CONSTRUCT",
+      "report_disposition": "RESEARCH_ONLY_OR_OWNER_DECISION",
+      "status": "BLOCKED_OWNER",
+      "permitted_claim": "Banded price expectation, upper-bound language mandatory, only if an Owner decision authorises a section",
+      "forbidden_inference": "Any identification with D03A or R05; acceptability; WTP; price optimum",
+      "rationale": "P3IR-07. The original CS-07 was the only price measure ever classified DESCRIPTIVE in the research trace. Removing it entirely destroyed that signal; restoring it as a SEPARATE construct preserves the measurement without mislabelling it as R05.",
+      "coverage_limitation": "Upper-bound language is mandatory. Hypothetical bias is unquantified.",
+      "gate_dependencies": [
+        "G01",
+        "G06"
+      ],
+      "refusal_route": {
+        "reachable": true,
+        "code": "PREFER_NOT_TO_ANSWER",
+        "consequence": "answer_state = REFUSED; counted in A as an answer event; never in V; never converted to SKIPPED; never converted to AREA_OUTSIDE",
+        "question_necessity_note": "The route exists on evidence-bearing items only. Q01-Q03 are screening/context and carry NOT_SURE or their own non-substantive terminal instead."
+      },
+      "candidate_remark": {
+        "remark_id": "RM-Q13",
+        "question_id": "Q13",
+        "question_version": "BLOCKED_OWNER",
+        "remark_version": "candidate_draft_v0_5",
+        "locale_en": {
+          "text": "This asks the price you would expect to pay for a defined item. It is research-only and is not the same as the acceptability question.",
+          "review_status": "PROPOSED_NON_AUTHORITATIVE"
+        },
+        "locale_bm": {
+          "text": "Ini bertanya harga yang anda jangka bayar untuk item tertentu. Ia penyelidikan sahaja dan bukan soalan kebolehterimaan.",
+          "review_status": "PROPOSED_NON_AUTHORITATIVE_BM_TRANSLATION_REVIEW_PENDING"
+        },
+        "review_status": "PENDING_SCIENTIFIC_TRANSLATION_ACCESSIBILITY_ETHICS",
+        "authority_to_activate": "NONE_GRANTED_BY_THIS_DOCUMENT",
+        "note": "Candidate draft only. WS2-NEW-16 records that no option display labels exist anywhere in the package; these EN/BM strings are proposed wording, not the validated instrument. BM translation requires independent review (prior A03 recorded the UNSURE/NOT_SURE BM collision hazard)."
+      },
+      "option_to_state_map": {
+        "LT_RM8": "ANSWERED_SUBSTANTIVE",
+        "RM8_TO_1199": "ANSWERED_SUBSTANTIVE",
+        "RM12_TO_1499": "ANSWERED_SUBSTANTIVE",
+        "RM15_TO_1799": "ANSWERED_SUBSTANTIVE",
+        "GE_RM18": "ANSWERED_SUBSTANTIVE",
+        "NOT_SURE": "ANSWERED_NON_SUBSTANTIVE",
+        "PREFER_NOT_TO_ANSWER": "REFUSED"
+      }
+    }
+  ],
+  "prohibited_outputs": [
+    "MARKET_DEMAND_ESTIMATE",
+    "SALES_FORECAST",
+    "REVENUE_FORECAST",
+    "OVERALL_SUITABILITY_SCORE",
+    "CALIBRATED_INTENT_PROBABILITY",
+    "PRECISE_RESPONDENT_GPS",
+    "COMPETITOR_COUNT_FROM_UNVERIFIED_VENUES",
+    "FOOTFALL_OR_PEDESTRIAN_COUNT",
+    "CATCHMENT_AREA_CLAIM",
+    "FR22_FINDING_WITHOUT_APPROVED_BENCHMARK",
+    "PREFERENCE_WEIGHT_OR_COMPOSITE_INDEX",
+    "ANY_NUMBER_WITHOUT_ITS_DENOMINATOR"
+  ],
+  "error_codes": {
+    "E_NOT_ESTIMABLE_V_ZERO": "V == 0; no percentage may be emitted",
+    "E_MONOTONICITY_VIOLATION": "0 <= V <= A <= S <= Q does not hold",
+    "E_OPTION_COUNT_EXCEEDS_V": "an option count exceeds V",
+    "E_SINGLE_SELECT_SUM_MISMATCH": "single-select substantive counts do not sum to V",
+    "E_EXCLUSIVE_CODE_CONFLICT": "an exclusive code co-occurs with another code — INVALID on all items except Q01 (Q01: disposition_rule terminal-wins -> AREA_OUTSIDE/AREA_UNKNOWN, PROPOSED_PENDING_SD_A; the error does not fire on Q01)",
+    "E_MAX_SELECTIONS_EXCEEDED": "substantive selections exceed max_selections",
+    "E_UNKNOWN_CODE": "a code is not in the item's approved code list",
+    "E_CONSTRUCT_SUBSTITUTION_REJECTED": "a value from one construct was offered as another",
+    "E_LEGACY_SCREEN_PREDICATE_REJECTED": "the superseded single-select eligibility predicate was applied",
+    "E_OFFER_STIMULUS_MISSING": "D03A has no approved exact offer stimulus",
+    "E_UNVERIFIED_COMPETITOR_COUNT": "a competitor count was requested from unverified venues",
+    "E_NO_APPROVED_BENCHMARK": "no approved benchmark exists for this construct",
+    "E_SCORE_NOT_AUTHORIZED": "a composite or suitability score was requested",
+    "E_NONCANONICAL_REPORT_SECTION": "a report section label is not R01..R12",
+    "E_FEATURE_COUNT_EXCEEDED": "Q10 feature count exceeds feature_count_max",
+    "E_AREA_INELIGIBLE_IN_DENOMINATOR": "an area-ineligible or area-unknown unit was counted in Q",
+    "E_NONSUBSTANTIVE_IN_V": "a non-substantive answer was counted in V",
+    "E_MULTIPLE_CODES_SINGLE_SELECT": "a single-select item carried more than one code",
+    "E_UNKNOWN_ELIGIBILITY_CODE": "a Q01 code outside the approved set reached the screen; single disposition: REJECT -> answer_state INVALID and Q01_SCREEN = SCREEN_INVALID (partition term, PROPOSED_PENDING_SD_A). It is never treated as eligible and never re-routed to AREA_UNKNOWN.",
+    "E_TOP_TWO_ANCHOR_MISMATCH": "declared in v0.6.1 (was used undeclared in items[9].top_two_rule.guard): the Q10 top-two anchor set no longer matches the item's declared valid_only_under_anchor_set; the numerator is refused, never emitted from a stale pair.",
+    "E_UNCLASSIFIED_CODE": "declared in v0.6.1 (was used undeclared in code_classification_totality.on_violation): a code reached analysis in neither substantive_codes nor non_substantive_codes; fail closed — counted in A, reported as an integrity failure, never promoted to V."
+  },
+  "provenance": {
+    "original_customer_instrument": {
+      "file": "sources/ORIGINAL_CS14_READONLY.md",
+      "sha256": "e7ad68d74ad23fad97e37aec335ea0faa7bb40373dc304b9dbbde60eefc4e01c"
+    },
+    "a10_contract": {
+      "file": "sources/A10_READONLY.md",
+      "sha256": "3947f3265d41169201170ed321c0dca04662df8fb3f5a80ca387856f01e0c72a"
+    },
+    "m2_instrument": {
+      "file": "REFERENCE_REMOVED_DANGLING: 'sources/ORIGINAL_M2_READONLY.md' is not present in this package or workspace; the declared sha256 is retained as a historical claim only (unverifiable from these bytes). The file must be re-supplied by the document custodian before any M2 dependency is treated as pinned.",
+      "sha256": "aa1b4a962f1ddfb79deedde89a1ca42fc3776092795c6106b439a0dcda40fe6e"
+    },
+    "research_trace": {
+      "file": "sources/ORIGINAL_RESEARCH_TRACE_READONLY.md",
+      "sha256": "87d8c6ffa110c630f8eb3f225b4526461f2e49f78d5000aeb4d81d555e7e748c"
+    },
+    "geo_handoff_contract": {
+      "file": "REFERENCE_REMOVED_DANGLING: the previously cited path 'PROJECT1_PHASE3_PARALLEL_BASELINES_V0_2_GEO_UPDATE/12_P301_HANDOFF_AND_DEPENDENCY_CONTRACT.md' (kept as historical data in change_log.json) does not exist in this workspace. Re-pin is a WS1/GEO owner action (SD-J). Status of the handoff content remains SOURCE_NOT_AVAILABLE (WS2-NEW-14).",
+      "status": "GEO_HB objects defined; P301C_GEO_CHANGE_REQUEST.md PENDING (GEO-11)"
+    },
+    "successor_build": {
+      "built_from": "P3-01C-VNEXT-0.3",
+      "source_sha256": "b6c3f723622f7191483531fd79dc33ece0b174c9ed59bd2e43fb8fef6ec3b63e",
+      "builder": "build_v0_4.py",
+      "gates": "P301C-GATE-01..08"
+    }
+  },
+  "funnel_rules": {
+    "I_zero_forbidden": true,
+    "monotonic": true,
+    "percentage_requires_V_gt_0": true,
+    "note": "Machine-checkable. A = answer events per A10 line 41, which includes invalid and refusal. V = substantive only. A state in neither list is not an answer event. The v0.3 list omitted REFUSED; corrected here for the same reason P3C-NEW-01 corrected INVALID.",
+    "A_counts_answer_events": true,
+    "answer_events_in_A": [
+      "ANSWERED_SUBSTANTIVE",
+      "ANSWERED_NON_SUBSTANTIVE",
+      "INVALID",
+      "REFUSED"
+    ],
+    "answer_events_in_V": [
+      "ANSWERED_SUBSTANTIVE"
+    ],
+    "single_select_max_codes": 1,
+    "single_select_code_rule": "A single-select item must carry exactly one code. Any combination, including a substantive code plus a non-substantive code such as DEF_YES with CANNOT_JUDGE, is E_MULTIPLE_CODES_SINGLE_SELECT. The rule counts all codes, not only substantive ones.",
+    "derived": {
+      "not_shown_n": "Q - S",
+      "skipped_n": "S - A",
+      "non_substantive_answered": "A - V - invalid - refused",
+      "note": "Each term is an independently derived event-set cardinality. A tautology in any of these is a defect: the v0.2 form 'A - V' absorbed INVALID once INVALID entered A."
+    },
+    "a_definition_authority": {
+      "rule": "Exactly one A-definition is operative for this candidate. Any other definition present in a lineage document is superseded and must not be used to compute a denominator.",
+      "operative_version": "P3-01C-VNEXT-0.6.1-CUST-REC",
+      "supersession_register": "see top-level `lineage.superseded` — ONE register, not a second copy here",
+      "derivation_source": "A10 line 41 — an answer event (valid, invalid or explicit non-substantive option)."
+    }
+  },
+  "eight_gate_corrections": {
+    "applied": [
+      "P301C-GATE-01",
+      "P301C-GATE-02",
+      "P301C-GATE-03",
+      "P301C-GATE-04",
+      "P301C-GATE-05",
+      "P301C-GATE-06",
+      "P301C-GATE-07",
+      "P301C-GATE-08"
+    ],
+    "closed_by_author_alone": [],
+    "note": "Every gate is CORRECTED_BY_AUTHOR. None is CLOSED. Closure requires the named independent / scientific / Owner / ethics approvals; the previously cited dossier file 'A10_SCIENTIFIC_OWNER_ETHICS_APPROVAL_DOSSIER.md' does not exist in this package (dangling reference removed per C8) — no approvable dossier is available yet, and the nearest recovery-package artefact, CUST_RECOVERY_20261027/agentD/HUMAN_REVIEW_DOSSIER.md, is an input FOR human reviewers, not a closure record."
+  },
+  "code_classification_totality": {
+    "rule": "Every code declared in items[].codes must appear in exactly one of substantive_codes or non_substantive_codes. The two sets are disjoint and jointly exhaustive over codes.",
+    "why": "A code in neither set is the R2 F-2 unclassified-response class. Silently admitting it to V lets an uncodable answer inflate a category distribution.",
+    "on_violation": "fail closed — E_UNCLASSIFIED_CODE; the answer event is counted in A and reported as an integrity failure, never promoted to V."
+  },
+  "refusal_and_state_semantics": {
+    "rule": "REFUSED is a declared lifecycle state that must be REACHABLE from the instrument. Before this correction, 0 of 12 older items exposed a selectable refusal path. The state was nameable but unproducible.",
+    "refusal_route_required_on": [
+      "Q02",
+      "Q03",
+      "Q04",
+      "Q05",
+      "Q06",
+      "Q07",
+      "Q08",
+      "Q09",
+      "Q10",
+      "Q11",
+      "Q12",
+      "Q13"
+    ],
+    "states_are_not_mutually_exclusive_layers": true,
+    "cross_version_item_specific_map": "see item_state_map in A05_ITEM_AND_RESPONSE_STATE_CODEBOOK.json",
+    "funnel_membership": {
+      "REFUSED": {
+        "in_A": true,
+        "in_V": false,
+        "note": "A10 line 41 records refusal as an answer event. A10 line 41 also requires refusal to be reported separately from DONOTKNOW."
+      },
+      "DONOTKNOW": {
+        "in_A": true,
+        "in_V": false,
+        "instrument_state": "ANSWERED_NON_SUBSTANTIVE"
+      },
+      "UNSURE": {
+        "in_A": true,
+        "in_V": "ITEM_SPECIFIC — substantive for D01/D02, non-substantive elsewhere if declared so",
+        "note": "Membership is item-specific and never global."
+      },
+      "CANNOT_JUDGE": {
+        "in_A": true,
+        "in_V": false
+      },
+      "NOT_SHOWN": {
+        "in_A": false,
+        "in_V": false
+      },
+      "SKIPPED": {
+        "in_A": false,
+        "in_V": false
+      },
+      "INVALID": {
+        "in_A": true,
+        "in_V": false
+      },
+      "REJECTED_RESPONSE": {
+        "in_A": false,
+        "in_V": false,
+        "layer": "UNIT_EXCLUSION_BEFORE_Q",
+        "note": "Restores the state the v0.2/v0.3 8-state vocabulary dropped. It is a UNIT-level outcome, not an answer state, so it must not be placed in the answer-state namespace. R2 F-3 and R1 F-6 are one defect at different layers."
+      },
+      "NOT_AREA_ELIGIBLE": {
+        "in_A": false,
+        "in_V": false,
+        "layer": "GEOGRAPHIC_EXCLUSION_AFTER_SCREEN",
+        "note": "Split into AREA_OUTSIDE + AREA_UNKNOWN; the merged name is retained only as a deprecated alias."
+      },
+      "ANSWERED_NON_SUBSTANTIVE": {
+        "in_A": true,
+        "in_V": false
+      },
+      "NOT_ASSESSED": {
+        "in_A": false,
+        "in_V": false,
+        "layer": "QUALIFICATION_STAGE",
+        "note": "Qualification was never evaluated. Distinct from UNKNOWN."
+      }
+    },
+    "non_tautological_NS_rule": {
+      "forbidden": "not_substantive_answered = S - V  (tautological: redefines the term by the funnel)",
+      "required": "non_substantive_answered = A - V - invalid - refused  where each term is an independently derived event-set cardinality",
+      "independence_requirement": "A, V and invalid must each be derived from the event log, not from each other.",
+      "derivation": {
+        "A": "count of units with an answer_event present, answer_state in the A-membership set",
+        "V": "count of units with answer_state == ANSWERED_SUBSTANTIVE",
+        "invalid": "count of units with answer_state == INVALID",
+        "refused": "count of units with answer_state == REFUSED"
+      }
+    },
+    "single_select_and_multi_select_guards": {
+      "single_select": "exactly one code, counting all codes including non-substantive ones",
+      "exclusive_multi_select": "an exclusive code may not co-occur with any other code; on Q01 the resolution is AREA_OUTSIDE/AREA_UNKNOWN per items[0].eligibility_effect.disposition_rule (PROPOSED_PENDING_SD_A (Scientific + Owner; NOT adopted)), not INVALID; on all other items the violation is E_EXCLUSIVE_CODE_CONFLICT -> INVALID",
+      "refusal_is_never": [
+        "SKIPPED",
+        "AREA_OUTSIDE",
+        "a substantive category",
+        "silently dropped from A"
+      ]
+    },
+    "answer_state_precedence_rule": {
+      "rule": "The recorded answer_state of an item answer is determined ONLY by the item's option_to_state_map (fallback, where no map exists: refusal_route.code -> REFUSED and the substantive/non-substantive lists). Membership in non_substantive_codes is a code-classification for the A/V funnel taxonomy (and the non_substantive_reason register), NOT a competing answer-state declaration. A code mapped to REFUSED is never in state ANSWERED_NON_SUBSTANTIVE.",
+      "fix": "v0.6 left Q02 PREFER_NOT_TO_ANSWER simultaneously REFUSED (option_to_state_map) and on the A/non-substantive path (non_substantive_codes) — CUST05 B05. v0.6.1 declares exactly one state, REFUSED, consistently on every PNTA-carrying item; every such item now carries a complete option_to_state_map so the state is derivable item-by-item.",
+      "authority": "AUTHORITY_FREE (deterministic consistency under already-declared REFUSED semantics); no scientific choice made"
+    }
+  },
+  "qualification_model": {
+    "adopted_predicate": null,
+    "adopted_population": null,
+    "recruitment_frame": null,
+    "status": "NOT_ADOPTED — WS1 T1-T3 handover is consumed as RESEARCH INPUT, not as an approved Q predicate",
+    "geographic_screening_evidence": [
+      "ELIGIBLE_CANDIDATE",
+      "OUTSIDE",
+      "UNKNOWN",
+      "AMBIGUOUS",
+      "DATA_INVALID",
+      "NOT_ASSESSED"
+    ],
+    "qualification_decision": [
+      "ACCEPTED",
+      "REJECTED",
+      "UNRESOLVED"
+    ],
+    "rules": {
+      "unknown_is": "NOT_COMPUTABLE — never zero, never eligible, never a rejection",
+      "ambiguous_is": "NOT_COMPUTABLE pending adjudication — never silently split",
+      "data_invalid_is": "excluded and reported separately from OUTSIDE",
+      "outside_is": "excluded from Q and counted",
+      "overlapping_affiliations": "one response unit remains one unit; affiliations never multiply a respondent",
+      "wrong_or_unknown_code": "fails closed — E_UNKNOWN_ELIGIBILITY_CODE -> Q01_SCREEN = SCREEN_INVALID (subtracted partition term; PROPOSED_PENDING_SD_A (Scientific + Owner; NOT adopted)); not AREA_UNKNOWN",
+      "geography_alone_never_admits_to_Q": true,
+      "Q_requires": [
+        "accepted",
+        "consented",
+        "deduplicated",
+        "B-qualified",
+        "under the exact campaign/area/stimulus/snapshot rules"
+      ],
+      "unresolved_admission_result": "HOLD_UNTIL_AUTHORIZED"
+    },
+    "named_owners_pending": [
+      "TBD_B-01..10",
+      "SD-05",
+      "SD-09",
+      "OD-07 (identity/dedup)",
+      "OD-08 (consent/withdrawal)",
+      "Q_pre/Q_post nomenclature"
+    ],
+    "expressly_not_fabricated": [
+      "an approved population",
+      "a recruitment frame",
+      "an authorised Q count"
+    ]
+  },
+  "r08_interpreter": {
+    "permitted": [
+      "sample-only geographic participation and qualification disclosure",
+      "area-affiliation composition with item-specific denominators",
+      "hypothetical origin-TYPE proportions with item-specific denominators",
+      "non-response and screen-out disclosure by separate reason"
+    ],
+    "not_reportable": [
+      "origin-area distributions (no catalogue, no data, no scientific approval, no privacy release)",
+      "any distance",
+      "any catchment",
+      "any footfall",
+      "any residency claim"
+    ],
+    "separate_from": [
+      "R09 competitor context",
+      "R11 scoring (forbidden)"
+    ],
+    "forbidden_outputs_added": []
+  },
+  "adaptive_burden": {
+    "counting_unit": "route, not question. A per-respondent count of displayed items is derived per route; a single '13 questions' figure is prohibited.",
+    "inventory_dimensions": [
+      "groups",
+      "per_respondent_displayed_items",
+      "per_feature_rating_cells",
+      "optional_context_modules",
+      "eligibility_exits",
+      "actual_answer_effort"
+    ],
+    "feature_dependent": true,
+    "symbolic_expressions": {
+      "best_case_items": "G_core_min",
+      "typical_case_items": "G_core + (optional_context_modules_shown)",
+      "worst_case_items": "G_core + M + (F * 1)",
+      "rating_cells_worst_case": "F"
+    },
+    "universal_two_questions_per_response_category": {
+      "rule": "PROHIBITED. No such universal rule exists or is created. Any additional item requires a specific construct justification and a burden trade-off record."
+    },
+    "content_validity_dependencies": {
+      "expert_panel": "G04_NOT_PERFORMED",
+      "cognitive_pretest": "G05_NOT_PERFORMED_PENDING_AUTHORIZED_ETHICS_ROUTE",
+      "note": "No human cognitive interview and no completion-time measurement may be taken until ethics and consent authorisation exists."
+    },
+    "pretest_protocol": {
+      "status": "FUTURE_PROTOCOL_ONLY — for authorised evaluators; not participant recruitment",
+      "elements": [
+        "comprehension probing per item",
+        "multi-select affordance probing for Q01",
+        "exclusivity comprehension",
+        "bilingual equivalence reconciliation",
+        "accessibility review",
+        "completion-time observation"
+      ]
+    },
+    "preserved_issues": {
+      "behavioural_anchor_ordering": "R1 F-7 PRESERVED — the pre-registered behavioural-anchor-first ordering is currently inverted; recorded as an ordering issue for scientific resolution, not repaired by relabelling.",
+      "self_report_vs_observed": "R1 F-8 PRESERVED — Q02, Q04, Q08, Q12 are self-reported behaviour. No item measures observed behaviour. The dataset type string must not label them as intention.",
+      "variable_slot_aliases": "R1 F-4/F-9/F-10 PRESERVED — construct aliases and missing BKC slots recorded as open, not silently added."
+    }
+  },
+  "routing_model": {
+    "status": "AUTHOR_ROUTING_PROPOSAL_REQUIRES_SCIENTIFIC_APPROVAL",
+    "why": "The predecessor declared routing for 3 of 13 items. A route table that the contract cannot check is an author assertion, and A06's table had already drifted from the contract's own item classes. Gates are declared here so counts are DERIVED.",
+    "route_inputs": {
+      "Q01_SCREEN": [
+        "ELIGIBLE",
+        "AREA_OUTSIDE",
+        "AREA_UNKNOWN",
+        "SCREEN_INVALID"
+      ],
+      "Q04_ANSWER": [
+        "ZERO",
+        "SUBSTANTIVE_NONZERO",
+        "CANNOT_REMEMBER",
+        "NOT_SHOWN"
+      ],
+      "APPROVED_EXACT_OFFER_STIMULUS": [
+        true,
+        false
+      ],
+      "OPTIONAL_CONTEXT_ENABLED": [
+        true,
+        false
+      ]
+    },
+    "input_values_today": {
+      "APPROVED_EXACT_OFFER_STIMULUS": false,
+      "OPTIONAL_CONTEXT_ENABLED": "UNDECIDED — Owner",
+      "note": "Neither value is set by this correction. They are the reason R05 is unrenderable and OPTIONAL_CONTEXT items are withholdable."
+    },
+    "gate_vocabulary": [
+      "ALWAYS",
+      "OPEN_ROUTING_01",
+      "OPEN_ROUTING_02",
+      "Q01_ELIGIBLE",
+      "Q01_ELIGIBLE_AND_APPROVED_EXACT_OFFER_STIMULUS",
+      "Q01_ELIGIBLE_AND_OPTIONAL_CONTEXT_ENABLED",
+      "Q01_ELIGIBLE_AND_Q04_SUBSTANTIVE_NONZERO"
+    ],
+    "item_show_gate": {
+      "Q01": "ALWAYS",
+      "Q02": "ALWAYS",
+      "Q03": "Q01_ELIGIBLE",
+      "Q04": "Q01_ELIGIBLE",
+      "Q05": "Q01_ELIGIBLE",
+      "Q06": "Q01_ELIGIBLE",
+      "Q07": "Q01_ELIGIBLE_AND_APPROVED_EXACT_OFFER_STIMULUS",
+      "Q08": "Q01_ELIGIBLE_AND_Q04_SUBSTANTIVE_NONZERO",
+      "Q09": "OPEN_ROUTING_01",
+      "Q10": "OPEN_ROUTING_02",
+      "Q11": "Q01_ELIGIBLE_AND_OPTIONAL_CONTEXT_ENABLED",
+      "Q12": "Q01_ELIGIBLE_AND_OPTIONAL_CONTEXT_ENABLED",
+      "Q13": "Q01_ELIGIBLE_AND_OPTIONAL_CONTEXT_ENABLED"
+    },
+    "open_decisions": {
+      "ROUTING-01": {
+        "item": "Q09",
+        "conflict": "Q09's class is CONDITIONAL_R07 (the R07 module, grouped with Q08), but its inherited show_rule prose reads 'Shown after the versioned concept card. Independent of Q04.' An item that is classed on Q04's route and described as independent of Q04 is an item disagreeing with itself.",
+        "author_default": "Q01_ELIGIBLE_AND_Q04_SUBSTANTIVE_NONZERO",
+        "author_default_reason": "the declared class governs; the prose is the inherited string",
+        "not_settled_by": "this correction",
+        "owner": "WS2 scientific + Owner",
+        "consequence_if_wrong": "R07's denominator for D05B changes by the Q04=ZERO group"
+      },
+      "ROUTING-02": {
+        "item": "Q10",
+        "conflict": "Q10 carries class CONDITIONAL_R07 and no gate of any kind, on an item that is both conditional and feature-matrix shaped.",
+        "author_default": "Q01_ELIGIBLE_AND_Q04_SUBSTANTIVE_NONZERO",
+        "author_default_reason": "same route as the other R07 items, Q08",
+        "not_settled_by": "this correction",
+        "owner": "WS2 scientific + Owner",
+        "consequence_if_wrong": "R07's D06 denominator and the F rating-cell burden change"
+      },
+      "ROUTING-03": {
+        "items": [
+          "Q05",
+          "Q10"
+        ],
+        "conflict": "Both stems cite a versioned concept card ('[concept_card_version]', 'the café described above'), yet neither declares a stimulus dependency, while Q07 does. The concept card is NOT approved. The instrument therefore refers to a stimulus it cannot show.",
+        "declared_here": "stimulus_dependency = CONCEPT_CARD_VERSIONED with stimulus_approved=false",
+        "author_default": "RECORDED_AS_DISCLOSURE_NOT_APPLIED_AS_A_SHOW_GATE",
+        "author_default_reason": "applying NOT_SHOWN to Q05/Q10 would remove the core intent and product-interest items entirely; that is a scientific decision, not a correction-author one",
+        "not_settled_by": "this correction",
+        "owner": "WS2 scientific + Owner + G06",
+        "consequence_if_wrong": "if an approved concept card is required for display, Q05 and Q10 are NOT_SHOWN today and R03/R07 are unrenderable for the same reason R05 already is"
+      },
+      "ROUTING-04": {
+        "items": [
+          "Q03"
+        ],
+        "conflict": "Q03 is class ESSENTIAL while its stem is hypothetical ('If you decided to visit the café described above'), and A06's hand-written table had already shown it as absent on RT-CORE-MIN.",
+        "author_default": "Q01_ELIGIBLE",
+        "author_default_reason": "ESSENTIAL is the declared class.",
+        "not_settled_by": "this correction",
+        "owner": "WS2 scientific + Owner"
+      }
+    },
+    "route_definitions": {
+      "RT-EXIT": {
+        "Q01_SCREEN": "AREA_OUTSIDE",
+        "Q04_ANSWER": "NOT_SHOWN",
+        "APPROVED_EXACT_OFFER_STIMULUS": false,
+        "OPTIONAL_CONTEXT_ENABLED": false,
+        "entry": "Q01 in {RARELY, NEVER}, including co-selection with any affiliation code (terminal wins, PROPOSED_PENDING_SD_A (Scientific + Owner; NOT adopted))"
+      },
+      "RT-UNKNOWN": {
+        "Q01_SCREEN": "AREA_UNKNOWN",
+        "Q04_ANSWER": "NOT_SHOWN",
+        "APPROVED_EXACT_OFFER_STIMULUS": false,
+        "OPTIONAL_CONTEXT_ENABLED": false,
+        "entry": "Q01 = NOT_SURE (alone or co-selected with an affiliation code) or empty. Unknown/not-in-`codes` answers are NOT routed here: they fail closed to SCREEN_INVALID (Q01 answer_state INVALID, subtracted partition term) per items[0].eligibility_effect.disposition_rule rule 3 (PROPOSED_PENDING_SD_A (Scientific + Owner; NOT adopted))."
+      },
+      "RT-CORE-MIN": {
+        "Q01_SCREEN": "ELIGIBLE",
+        "Q04_ANSWER": "ZERO",
+        "APPROVED_EXACT_OFFER_STIMULUS": false,
+        "OPTIONAL_CONTEXT_ENABLED": false,
+        "entry": "Q01 eligible; Q04 = ZERO; no approved stimulus; optional withheld"
+      },
+      "RT-UNKNOWN-RECALL": {
+        "Q01_SCREEN": "ELIGIBLE",
+        "Q04_ANSWER": "CANNOT_REMEMBER",
+        "APPROVED_EXACT_OFFER_STIMULUS": false,
+        "OPTIONAL_CONTEXT_ENABLED": false,
+        "entry": "Q04 = CANNOT_REMEMBER"
+      },
+      "RT-CORE-STD": {
+        "Q01_SCREEN": "ELIGIBLE",
+        "Q04_ANSWER": "SUBSTANTIVE_NONZERO",
+        "APPROVED_EXACT_OFFER_STIMULUS": false,
+        "OPTIONAL_CONTEXT_ENABLED": false,
+        "entry": "Q01 eligible; Q04 substantive non-ZERO; no stimulus; optional off"
+      },
+      "RT-CORE-FULL": {
+        "Q01_SCREEN": "ELIGIBLE",
+        "Q04_ANSWER": "SUBSTANTIVE_NONZERO",
+        "APPROVED_EXACT_OFFER_STIMULUS": true,
+        "OPTIONAL_CONTEXT_ENABLED": false,
+        "entry": "RT-CORE-STD with an approved versioned exact-offer stimulus"
+      },
+      "RT-CORE-PLUS": {
+        "Q01_SCREEN": "ELIGIBLE",
+        "Q04_ANSWER": "SUBSTANTIVE_NONZERO",
+        "APPROVED_EXACT_OFFER_STIMULUS": true,
+        "OPTIONAL_CONTEXT_ENABLED": true,
+        "entry": "RT-CORE-FULL with optional context enabled"
+      }
+    },
+    "count_derivation": "displayed groups per route are COMPUTED from item_show_gate and route_definitions by the evaluator's route_table(); no route count in any deliverable may be typed by hand.",
+    "items_with_open_show_gate": [
+      "Q09",
+      "Q10"
+    ],
+    "not_decided_here": [
+      "whether Q09 depends on Q04",
+      "whether Q10 is displayed at all",
+      "whether an unapproved concept card blocks Q05/Q10 display",
+      "whether Q03 requires a decided visit"
+    ],
+    "screen_value_exits": {
+      "rule": "each value of route_inputs.Q01_SCREEN has exactly ONE declared exit (determinism per IA06 §9.1)",
+      "ELIGIBLE": "post-screen core routes RT-CORE-MIN / RT-UNKNOWN-RECALL / RT-CORE-STD / RT-CORE-FULL / RT-CORE-PLUS, selected by Q04_ANSWER / APPROVED_EXACT_OFFER_STIMULUS / OPTIONAL_CONTEXT_ENABLED",
+      "AREA_OUTSIDE": "RT-EXIT (RARELY/NEVER, alone or co-selected with an affiliation code — terminal wins, PROPOSED_PENDING_SD_A (Scientific + Owner; NOT adopted)); shown items: gate ALWAYS (Q01, Q02)",
+      "AREA_UNKNOWN": "RT-UNKNOWN (NOT_SURE alone or co-selected; or empty); shown items: gate ALWAYS (Q01, Q02)",
+      "SCREEN_INVALID": "not a route: item shown only by gate ALWAYS (Q01, Q02); no further items; answer_state INVALID on Q01; unit exits Q_pre via the subtracted SCREEN_INVALID term of the Q_post partition (PROPOSED_PENDING_SD_A (Scientific + Owner; NOT adopted))"
+    },
+    "item_show_gate_decisions": {
+      "Q02": {
+        "gate": "ALWAYS",
+        "status": "PROPOSED_PENDING_SD_C_SD_I (Scientific + Owner; NOT adopted)",
+        "why": "The Q02=ALWAYS staging (second pre-screen item) flips S_pre/Q_pre semantics and is SD-C/SD-I territory (IA-D03); WS2-NEW-15 requires a dated scope act and remains REMAINS_OPEN. The gate value is kept because removing it would silently decide the opposite; it is encoded as a proposal only.",
+        "companion_flag": "documents/A05 v0.6.1 carries the same marker on RT-EXIT/RT-UNKNOWN displayed_groups recomputation."
+      },
+      "others": "unchanged from v0.6"
+    }
+  },
+  "approval_gate_matrix": {
+    "vocabulary": [
+      "DOCUMENTARY_REVIEW_READY",
+      "SCIENTIFIC_APPROVAL_PENDING",
+      "OWNER_DECISION_REQUIRED",
+      "PRIVACY_APPROVAL_PENDING",
+      "INSTITUTIONAL_APPROVAL_PENDING",
+      "NOT_AUTHORIZED"
+    ],
+    "grants": "NONE. No formal approval exists. An LLM summary or same-runtime reviewer never grants one.",
+    "rows": [
+      {
+        "gate": "P-1/SD-03 report scope R03-R08",
+        "owner": "Owner",
+        "status": "OWNER_DECISION_REQUIRED"
+      },
+      {
+        "gate": "SD-01 descriptive-only",
+        "owner": "Owner",
+        "status": "OWNER_DECISION_REQUIRED"
+      },
+      {
+        "gate": "SD-02 formal geography",
+        "owner": "Owner",
+        "status": "OWNER_DECISION_REQUIRED"
+      },
+      {
+        "gate": "SD-05 area catalogue",
+        "owner": "Owner",
+        "status": "OWNER_DECISION_REQUIRED"
+      },
+      {
+        "gate": "SD-09 Q / denominators",
+        "owner": "Owner",
+        "status": "OWNER_DECISION_REQUIRED"
+      },
+      {
+        "gate": "SD-11 minimum publishable cell",
+        "owner": "Owner + DPO",
+        "status": "OWNER_DECISION_REQUIRED"
+      },
+      {
+        "gate": "G04 expert-panel content validity",
+        "owner": "scientific panel",
+        "status": "SCIENTIFIC_APPROVAL_PENDING"
+      },
+      {
+        "gate": "G05 cognitive/bilingual pretest",
+        "owner": "institution",
+        "status": "INSTITUTIONAL_APPROVAL_PENDING"
+      },
+      {
+        "gate": "G06 F and feature bank",
+        "owner": "Task C + Owner",
+        "status": "OWNER_DECISION_REQUIRED"
+      },
+      {
+        "gate": "M2 exact offer and R05",
+        "owner": "Owner + scientific",
+        "status": "OWNER_DECISION_REQUIRED"
+      },
+      {
+        "gate": "OD-07 unique-response rule",
+        "owner": "Owner",
+        "status": "OWNER_DECISION_REQUIRED"
+      },
+      {
+        "gate": "OD-08 privacy/consent/withdrawal/retention",
+        "owner": "DPO + committee",
+        "status": "PRIVACY_APPROVAL_PENDING"
+      },
+      {
+        "gate": "institutional review",
+        "owner": "institution",
+        "status": "INSTITUTIONAL_APPROVAL_PENDING"
+      },
+      {
+        "gate": "B-17 canonical-spine choice",
+        "owner": "Owner",
+        "status": "OWNER_DECISION_REQUIRED"
+      },
+      {
+        "gate": "P-3 demand benchmark for R11",
+        "owner": "Owner + scientific",
+        "status": "SCIENTIFIC_APPROVAL_PENDING"
+      },
+      {
+        "gate": "ROUTING-01 Q09 route (Q04-gated vs independent)",
+        "owner": "WS2 scientific + Owner",
+        "status": "SCIENTIFIC_APPROVAL_PENDING"
+      },
+      {
+        "gate": "ROUTING-02 Q10 route (no gate declared)",
+        "owner": "WS2 scientific + Owner",
+        "status": "SCIENTIFIC_APPROVAL_PENDING"
+      },
+      {
+        "gate": "ROUTING-03 unapproved concept card on Q05/Q10",
+        "owner": "WS2 scientific + Owner + G06",
+        "status": "OWNER_DECISION_REQUIRED"
+      },
+      {
+        "gate": "ROUTING-04 Q03 hypothetical stem under ESSENTIAL class",
+        "owner": "WS2 scientific + Owner",
+        "status": "SCIENTIFIC_APPROVAL_PENDING"
+      }
+    ],
+    "fielding": "NOT_AUTHORIZED — cannot be self-granted by the correction author",
+    "engine": "NOT_AUTHORIZED — BUILD-01 / TEST-EXEC restrictions stand"
+  },
+  "pre_screen_population": {
+    "label": "SCREENING_ELIGIBLE_UNITS",
+    "label_status": "WORKING_LABEL_NOT_FINAL_FIELD_ID",
+    "definition": "Units admitted to the screening funnel: those that have passed consent, duplicate, quality, age, version and cutoff checks, BEFORE the area-eligibility screen. This is a DISTINCT cohort from A10's canonical post-screen Q.",
+    "ladder": {
+      "I_pre": {
+        "definition": "Invitations / eligible-link impressions. UNKNOWN_NOT_ENUMERABLE for open QR / public-link recruitment (A10 I rule applies at pre-screen stage too)."
+      },
+      "Q_pre": "SCREENING_ELIGIBLE_UNITS: units admitted to the screening funnel.",
+      "S_pre": "Screening items shown (Q01, Q02 — both gated ALWAYS under the v0.6.1 bytes; the Q02 ALWAYS staging is PROPOSED_PENDING_SD_C_SD_I, not adopted). Screen-out units still see both ALWAYS-gated items before exiting.",
+      "A_pre": "Answer events on screening items (valid, invalid, non-substantive).",
+      "V_pre": "Valid substantive answers on screening items."
+    },
+    "transitions_out": {
+      "NO_CONSENT": "rejected before Q; never in Q_pre.",
+      "DUPLICATE": "rejected before Q; never in Q_pre.",
+      "REJECTED_RESPONSE": "quality / attention / bot fail; rejected before Q; never in Q_pre (pre-Q_pre exclusion, not a Q_post term).",
+      "UNDER_AGE": "rejected before Q.",
+      "VERSION_MISMATCH": "rejected before Q.",
+      "AFTER_CUTOFF": "rejected before Q.",
+      "AREA_OUTSIDE": "passed Q01 screen but outside target area -> leaves Q_post. scientific/owner decision pending (SD-05 / SD-09).",
+      "AREA_UNKNOWN": "NOT_SURE / empty on Q01 -> leaves Q_post as AREA_UNKNOWN; scientific/owner decision pending on its treatment.",
+      "AMBIGUOUS": "overlapping / contradictory area code: a QUALIFICATION-stage outcome that occurs BEFORE Q_pre admission — such units are never in Q_pre (unresolved_admission_result HOLD_UNTIL_AUTHORIZED), so AMBIGUOUS is NOT a Q_post partition term. Stated once; no held-cohort subtraction exists or is needed.",
+      "PENDING": "awaiting adjudication: like AMBIGUOUS, a QUALIFICATION-stage outcome occurring BEFORE Q_pre admission; never counted in Q_pre, therefore not a Q_post partition term.",
+      "SCREEN_INVALID": "Q01 answered with an unrecognized/not-in-`codes` code or otherwise failing screen validity: answer_state INVALID, counted in A_pre, and a SUBTRACTED TERM of the Q_pre -> Q_post partition (Q_pre = AREA_OUTSIDE + AREA_UNKNOWN + SCREEN_INVALID + Q_post). Never in Q_post; never AREA_UNKNOWN (PROPOSED_PENDING_SD_A (Scientific + Owner; NOT adopted))."
+    },
+    "to_post_screen": {
+      "Q_post_definition": "TOTAL ADDITIVE PARTITION (chosen and stated per C1): Q_pre = AREA_OUTSIDE + AREA_UNKNOWN + SCREEN_INVALID + Q_post, equivalently Q_post = Q_pre - AREA_OUTSIDE - AREA_UNKNOWN - SCREEN_INVALID. The three subtracted terms are exactly the declared Q01_SCREEN exits other than ELIGIBLE. AMBIGUOUS, PENDING, REJECTED_RESPONSE and all pre-Q exclusions (NO_CONSENT, DUPLICATE, UNDER_AGE, VERSION_MISMATCH, AFTER_CUTOFF, NOT_ASSESSED) occur BEFORE Q_pre admission and are not partition terms. Treatment of AREA_UNKNOWN at Q_post admission remains an OPEN Owner/scientific decision (SD-09 / SD-I).",
+      "same_cohort_rule": "A10 inequality 0 <= V <= A <= S <= Q applies WITHIN the same stage and population. S_pre (screening shown) must NEVER be compared against Q_post.",
+      "decision_status": "OPEN_SD09"
+    },
+    "example_100_80": {
+      "n_screened": 100,
+      "Q_pre": 100,
+      "AREA_OUTSIDE": 20,
+      "AREA_UNKNOWN": 0,
+      "SCREEN_INVALID": 0,
+      "Q_post": 80,
+      "partition_check": "Q_pre (100) == AREA_OUTSIDE (20) + AREA_UNKNOWN (0) + SCREEN_INVALID (0) + Q_post (80)",
+      "note": "S_screen = 100 is evaluated against the pre-screen PARENT Q_pre = 100, never against Q_post = 80. The 20 outside units are AREA-INELIGIBLE, not 'uninterested'; they must not be relabelled as a Q_post denominator. v0.6.1: example now exercises every partition term (zero counts declared, not omitted)."
+    },
+    "integrity_rule": "If S_screen > Q_post arises from the SAME legitimately frozen eligible population, it is an integrity error, not a tolerated exception.",
+    "candidate_adoption_status": "PROPOSED_AMENDMENT_OWNER_DIRECTION_RECORDED_IN_CHAT_FORMAL_ADOPTION_OPEN"
+  },
+  "remark_affordance": {
+    "design_principle": "Collapsed, accessible, neutral per-displayed-group help affordance (ⓘ Remark / Why we ask). It explains the question before answering; it is NOT a 14th answer item and does not change Q/S/A/V on its own.",
+    "status": "PROPOSED_PENDING_REVIEW",
+    "owner": "Owner preference in principle (work order v1.1 §0.1 Remark dropdown); scientific/ethics/translation review required before adoption",
+    "distinction": "Respondent help (Remark) is separate from the entrepreneur evidence inspector that explains how an existing report finding was derived.",
+    "review_status": "PENDING_SCIENTIFIC_TRANSLATION_ACCESSIBILITY_ETHICS",
+    "authority": "NONE_GRANTED_BY_THIS_DOCUMENT"
+  },
+  "identity_model": {
+    "decision_id": "OD-07",
+    "namespace_collision_note": "OD-07 appears in two live registers: OD-07:survey_registration_wall (research participation design) and OD-07:authentication_model (a separate architecture/QA register). They must not be silently renamed or merged.",
+    "owner_status": "OWNER_SELECTION_STILL_REQUIRED",
+    "privacy_status": "PRIVACY_APPROVAL_PENDING",
+    "modes": {
+      "REGISTERED_ACCOUNT": {
+        "deduplicates": "the same account (not necessarily the same natural person)",
+        "disposition_when_same_submission_retried": "SAME_UNIT_RETRY_NO_DOUBLE_COUNT",
+        "disposition_when_two_accounts": "CANNOT_ASSERT_ONE_PERSON",
+        "limitation": "registration-wall bias; multiple accounts remain possible"
+      },
+      "ANONYMOUS_OPEN_LINK": {
+        "deduplicates": "submission or session as configured",
+        "disposition_when_free_text_duplicate": "NOT_PERSON_UNIQUE_DISCLOSED",
+        "limitation": "cannot verify person-level uniqueness; self-selection and repeats"
+      },
+      "CONTROLLED_ISSUED_INVITATION_TOKEN": {
+        "deduplicates": "reuse of the SAME issued token",
+        "disposition_when_token_reused": "SAME_TOKEN_RESUBMISSION_FLAGGED",
+        "disposition_when_two_tokens_same_person": "CANNOT_ASSERT_ONE_PERSON",
+        "limitation": "a token is ONE ISSUED INVITATION, never proof of one natural person; issuance-channel/source bias; operational burden"
+      }
+    },
+    "prohibited_claims": [
+      "one-person-one-response assured",
+      "token proves a unique natural person",
+      "anonymous open-link submissions are person-unique"
+    ],
+    "recommended_candidate_to_examine_first": "CONTROLLED_ISSUED_INVITATION_TOKEN if invitations are feasible; avoid mandatory account registration unless a functional requirement is demonstrated",
+    "note": "Comparison for Owner/privacy review only. No identity method is selected here."
+  },
+  "report_render_status": {
+    "note": "For each entrepreneur report, an R03-R08 section is emitted ONLY in its approved status. Report sections follow evidence availability and scientific authorization; no automatic percentage and no FR22/business-success score is ever created from these sections.",
+    "statuses": {
+      "REPORTABLE_WITH_VALID_EVIDENCE": "authorized descriptive evidence exists for this section",
+      "NOT_MEASURED": "the construct was not measured",
+      "NOT_SHOWN": "routing prevented display to any eligible unit",
+      "NOT_ESTIMABLE": "V = 0 at the proper stage; no percentage (never 0%)",
+      "UNAVAILABLE_MISSING_APPROVED_STIMULUS": "the required approved stimulus does not exist (R05 today)",
+      "WITHHELD_PRIVACY": "suppression policy applies",
+      "UNAUTHORIZED_CLAIM": "the claim is not authorized and must not be rendered"
+    },
+    "fr22_guard": "R03-R08 sections must never create FR22/BKC suitability points. Frozen engine statuses remain exactly BELOW_THRESHOLD, ON_TRACK, ABOVE_THRESHOLD, NO_BENCHMARK.",
+    "r08_origin_type_status": "PROPOSED_EXTENSION_REQUIRES_ITEM_TO_REPORT_AMENDMENT_AND_PRIVACY_CHECK",
+    "authority": "NONE_GRANTED_BY_THIS_DOCUMENT"
+  },
+  "screening_architecture_decision": {
+    "selected_candidate": "A",
+    "owner_direction": "RECORDED_IN_CHAT_2026-10-27",
+    "formal_adoption": "OPEN_SD09",
+    "alternatives_recorded": {
+      "B": "multi-stage funnel with stage-specific eligible-parent count per item; stable A10 export mapping",
+      "C": "keep single Q, mark screening-item proportions UNAVAILABLE_DEFINITION_UNRESOLVED"
+    },
+    "note": "Candidate A direction recorded; not a formal controlled spine amendment."
+  },
+  "suppression_policy": {
+    "status": "STRUCTURAL_CONTROLS_BINDING_FLOOR_NOT_APPROVED",
+    "primary_suppression": {
+      "rule": "A cell whose count is below the Owner-declared floor k is suppressed before publication.",
+      "floor_symbol": "k",
+      "floor_value": null,
+      "floor_status": "NOT_APPROVED — SD-11 Owner decision outstanding",
+      "note": "This package does not set k. The directive forbids inventing a statistical or privacy threshold, and IR07 declined to approve one."
+    },
+    "binding_structural_controls": [
+      "COMPLEMENTARY_SUPPRESSION",
+      "CROSS_VIEW_DIFFERENCING_CHECK",
+      "RESIDUAL_BUCKET_REQUIRED"
+    ],
+    "complementary_suppression": {
+      "rule": "If any cell in a released table is suppressed, at least one additional cell in the same row or column must also be suppressed, chosen so that no suppressed cell can be recovered by subtraction from published totals or marginals.",
+      "applies_regardless_of_floor": true,
+      "why_structural": "The control constrains the SHAPE of what is published, not the size of any count. It is therefore binding without a numeric threshold."
+    },
+    "cross_view_differencing_check": {
+      "rule": "No two published views (tables, versions, releases) may differ by exactly one suppressed cell. Where a release is versioned, each successive release must be checked against its predecessor for single-cell differencing.",
+      "applies_regardless_of_floor": true,
+      "why_structural": "Closes the withdrawal-plus-versioning route recorded as PV-8 (CRITICAL) by IR07."
+    },
+    "residual_bucket_required": {
+      "rule": "Any suppressed residual must be published as a residual bucket (for example 'other / suppressed') large enough that the suppressed cells are not individually recoverable.",
+      "applies_regardless_of_floor": true
+    },
+    "prohibited": [
+      "Publishing a suppressed cell with no complementary suppression",
+      "Publishing two views that differ by exactly one suppressed cell",
+      "Recovering a suppressed cell by subtraction from totals"
+    ]
+  },
+  "derived_from_contract": "05_ENGINE_REPORT_CONTRACT_CANDIDATE_v0_5.json",
+  "derived_from_contract_sha256": "db37f5d3d6c2ba4e35bf0e2c241343e32d27b8e6e3ad90a0946351d313f7290e",
+  "corrections_applied": [
+    {
+      "id": "C-01",
+      "test": "T01",
+      "defect": "Q01 double-listed RARELY/NEVER in substantive_codes and exclusive_codes, violating the contract's own exclusivity invariant and making V > Q reachable.",
+      "change": "substantive_codes ['LIVE', 'WORK', 'STUDY', 'RUN_BUSINESS', 'VISIT_PURPOSE', 'PASS_THROUGH', 'RARELY', 'NEVER'] -> ['LIVE', 'WORK', 'STUDY', 'RUN_BUSINESS', 'VISIT_PURPOSE', 'PASS_THROUGH'] ; non_substantive_codes ['NOT_SURE'] -> ['NEVER', 'NOT_SURE', 'RARELY'] ; added legacy_successor_map declaring VISIT_PURPOSE has no successor and must not be pooled.",
+      "not_done": "No REGULAR_VISIT successor construct was invented."
+    },
+    {
+      "id": "C-02",
+      "test": "T05",
+      "defect": "Q03 had no VARIES (variable-origin respondent unrepresentable), no DECLINE, and no refusal route, so REFUSED was nameable but unproducible on the item.",
+      "change": "codes ['HOME', 'WORKPLACE', 'STUDY_LOCATION', 'OTHER_ACTIVITY', 'NOT_SURE'] -> ['HOME', 'WORKPLACE', 'STUDY_LOCATION', 'OTHER_ACTIVITY', 'VARIES', 'DECLINE', 'NOT_SURE'] ; substantive_codes set to the five substantive codes incl. VARIES ; non_substantive_codes [DECLINE, NOT_SURE] ; refusal_route DECLINE_OPTION ; option_to_state_map added.",
+      "not_done": "DECLINE is an OPTION mapping to the REFUSED STATE, not an option value written into answer_state."
+    },
+    {
+      "id": "C-02b",
+      "test": "T05",
+      "defect": "refusal_and_state_semantics.refusal_route_required_on listed Q04..Q13 and omitted Q03, exempting Q03 from the contract's own refusal-reachability rule.",
+      "change": "refusal_route_required_on now includes Q03."
+    },
+    {
+      "id": "C-03",
+      "test": "T10",
+      "defect": "The A denominator drifted twice across v0.2 and v0.3, and no version declared which definition was operative.",
+      "change": "funnel_rules.a_definition_authority added: one operative definition (v0.6), superseded definitions named with their defect. v0.2/v0.3 retained as lineage, not deleted.",
+      "not_done": "The historical versions were NOT removed; the test requires them present and marked superseded."
+    },
+    {
+      "id": "C-04",
+      "test": "T11",
+      "defect": "Only a 'small_cell' placeholder and an unapproved SD-11 gate label existed. No binding suppression rule closed the differencing route 40 - 18 - 12 = 10.",
+      "change": "suppression_policy added with three binding STRUCTURAL controls (complementary suppression, cross-view differencing check, residual bucket).",
+      "not_done": "No numeric floor k was set. k remains null and NOT_APPROVED."
+    },
+    {
+      "id": "C-06",
+      "test": "T01/T05/T10",
+      "defect": "No version declared which of its predecessors were superseded, so a defect present only in lineage could be reported as a live defect, and a defective version could be 'fixed' by deletion.",
+      "change": "lineage block added: every earlier version retained, marked SUPERSEDED, with the defects actually verified present in it.",
+      "not_done": "No historical version was edited or deleted."
+    },
+    {
+      "id": "IA-D-corrections",
+      "base": "Author R3 v0.6 (3a785414) — T01/T05/T10/T11/T15 already fixed",
+      "ia_d_corrections": [
+        {
+          "id": "IA-D01",
+          "test": "IA06 §9.1",
+          "severity": "CRITICAL",
+          "defect": "Q01 eligibility_effect.note says 'exclusive terminals win -> AREA_OUTSIDE', but RT-CONFLICT route says exclusive+affiliation -> INVALID with no Q_post exit. Two dispositions for the same answer.",
+          "change": "Deleted RT-CONFLICT from route_definitions. PROPOSED (SD-A) terminal-wins rule: RARELY/NEVER -> AREA_OUTSIDE regardless of co-occurring affiliations. Updated Q01.eligibility_effect.note to state the single proposed rule. Removed INVALID from Q01_SCREEN values. Added INVALID transition to pre_screen_population.transitions_out for unrecognized-code rejection.",
+          "post_correction": "One Q01 screen rule; every Q01_SCREEN value (ELIGIBLE, AREA_OUTSIDE, AREA_UNKNOWN) has a declared Q_post exit."
+        },
+        {
+          "id": "IA-D02",
+          "test": "IA06 §9.2",
+          "severity": "MAJOR",
+          "defect": "funnel_rules.non_substantive_answered = 'A - V - invalid - refused' but refusal_and_state_semantics.non_tautological_NS_rule.required = 'A - V - invalid'. Refusals absorbed into wrong counter.",
+          "change": "Updated non_tautological_NS_rule.required to 'A - V - invalid - refused' and added refused to derivation section.",
+          "post_correction": "Both formulas use A - V - invalid - refused."
+        },
+        {
+          "id": "IA-D03",
+          "test": "IA06 §9.3",
+          "severity": "MAJOR",
+          "defect": "S_pre = 'Screening items shown (Q01, Q02 at minimum)' but Q02 show_gate = Q01_ELIGIBLE. S_pre mixes pre-screen and post-screen cohorts.",
+          "change": "Set Q02 show_gate to ALWAYS — staging PROPOSED_PENDING_SD_C_SD_I (Scientific + Owner), NOT adopted; adding a second pre-screen item needs the dated scope act required by WS2-NEW-15. Updated S_pre description and stop_skip_logic to reflect Q02 is shown to all units.",
+          "post_correction": "S_pre is a same-cohort ladder: Q01 and Q02 both shown to Q_pre."
+        },
+        {
+          "id": "IA-D04",
+          "test": "IA06 §9.4",
+          "severity": "MAJOR",
+          "defect": "Q06 max_selections=3, counts_toward_max_selections excludes UNLISTED_CATEGORY_REPORTED and NONE, but both are in substantive_codes. Three-substantive + UNLISTED is valid under the field but invalid under the invariant and stem.",
+          "change": "Added UNLISTED_CATEGORY_REPORTED and NONE to counts_toward_max_selections so the cap set = substantive set (8 codes). Stem 'up to three' now correctly counts UNLISTED and NONE.",
+          "post_correction": "Q06 cap set equals substantive set; stem matches."
+        },
+        {
+          "id": "IA-D05",
+          "test": "IA06 §9.5",
+          "severity": "MAJOR",
+          "defect": "Q02 has code PREFER_NOT_TO_ANSWER but no refusal_route; Q02 missing from refusal_route_required_on. REFUSED nameable but unproducible on Q02.",
+          "change": "Added refusal_route (PREFER_NOT_TO_ANSWER -> REFUSED) and option_to_state_map to Q02. Added Q02 to refusal_route_required_on.",
+          "post_correction": "REFUSED reachable on Q02; refusal_route_required_on covers Q02..Q13."
+        },
+        {
+          "id": "IA-D06",
+          "test": "IA06 §9.6",
+          "severity": "MAJOR",
+          "defect": "Q02.candidate_remark.locale_en.text contains '[CONDITIONAL PENDING SD-05: the days-in-four-weeks construct is not yet adopted; if a frequency scale is adopted instead, this wording must be revised.]' — internal decision ID shown to respondents.",
+          "change": "Removed the bracket clause from Q02 remark. Retained the caveat as a design record note in IA05 SD-J.",
+          "post_correction": "No internal decision identifier in respondent-facing remark text."
+        },
+        {
+          "id": "IA-D07",
+          "test": "IA06 §9.6",
+          "severity": "MAJOR",
+          "defect": "Q11.candidate_remark.locale_en.text names 'kiosk' as an example format, but Q11 codes are DINE_IN, TAKEAWAY, EITHER_EQUALLY, CANNOT_JUDGE, PREFER_NOT_TO_ANSWER — no kiosk code exists.",
+          "change": "Replaced 'dine-in, takeaway, kiosk' with 'dine-in or takeaway' in Q11 EN remark. BM was NOT actually updated in v0.6 (REC-LNG-01 residual; the claim was unsupported by the bytes); fixed in v0.6.1 — see cust_recovery_corrections C7.",
+          "post_correction": "Every option named in Q11 remark exists in Q11 codes."
+        },
+        {
+          "id": "IA-D08",
+          "test": "IA06 §9.7",
+          "severity": "MAJOR",
+          "defect": "Q01 stem says 'select one of the last three answers' — a position instruction — but Q01 has no display_order field. True by coincidence; false after any reorder.",
+          "change": "Added display_order to Q01 pinning the exact sequence. Reworded stem from position-based ('last three answers') to content-based ('Rarely, Never, Not sure').",
+          "post_correction": "Q01 display order is pinned and versioned; stem is order-independent."
+        },
+        {
+          "id": "IA-D09",
+          "test": "IA06 §9.7",
+          "severity": "MINOR",
+          "defect": "Q05.display_order = [DEF_NO, PROB_NO, UNSURE, PROB_YES, DEF_YES, CANNOT_JUDGE] omits PREFER_NOT_TO_ANSWER, a declared code.",
+          "change": "Added PREFER_NOT_TO_ANSWER to Q05.display_order.",
+          "post_correction": "Display order is complete over all codes."
+        }
+      ],
+      "count": 9,
+      "summary": "9 candidate defects (IA-D01..D09) fixed in contract JSON. 5 documentary defects (IA-D10..D14) fixed in companion documents. IA-D13 already corrected in WS2_OC19_CORRECTION_20261027/."
+    },
+    {
+      "id": "CUST-REC-0.6.1",
+      "base": "P3-01C-VNEXT-0.6 bytes (1188ab0f…), hash-verified before build; v0.5 (db37f5d3…) remains the REVIEW_FAIL baseline",
+      "workstream": "WS-CUST-RECOVERY-01",
+      "author_role": "Agent B — Correction Author; cannot certify; independent verification is Agents C/E",
+      "summary": "Nine mandated corrections C1..C9 applied; per-clause diff in CUST04_SOURCE_AND_VERSION_DIFF.md; per-correction status in cust_recovery_corrections.",
+      "not_done": "No SD-A..SD-Q decision adopted. No release_state flag moved. No fielding/ENGINE/migration. v0.5/v0.6 bytes untouched."
+    }
+  ],
+  "correction_package": {
+    "work_order": "PROJECT1-R3-HANDOVER-GATE-CORRECTION-V4",
+    "package": "P3R3_CORRECTION_V4_20261027",
+    "note": "Every edit above is minimal and named. Nothing outside the five corrections was changed. The superseded versions remain in the bundle and are marked as lineage.",
+    "build_script_v0_6_1": "CUST_RECOVERY_20261027/agentB/BUILD_V0_6_1.py"
+  },
+  "lineage": {
+    "rule": "Only the operative version is in force. Every earlier version is superseded and must not be used to compute a denominator, a distribution or a report. They are retained so the audit trail survives; deleting one is not a correction.",
+    "superseded": {
+      "P3-01C-VNEXT-0.2": {
+        "label": "v0.2",
+        "file": "v0.2.json",
+        "sha256": "f190b7246e66fcb1b0d7f6069d72527222b7ef70f71e24e3bd01f9915587ef52",
+        "status": "SUPERSEDED",
+        "verified_defects": [
+          "Q01 declares ['NEVER', 'RARELY'] as both substantive and exclusive",
+          "Q03 has no VARIES code",
+          "answer_events_in_A field absent"
+        ]
+      },
+      "P3-01C-VNEXT-0.3": {
+        "label": "v0.3",
+        "file": "v0.3.json",
+        "sha256": "b6c3f723622f7191483531fd79dc33ece0b174c9ed59bd2e43fb8fef6ec3b63e",
+        "status": "SUPERSEDED",
+        "verified_defects": [
+          "Q01 declares ['NEVER', 'RARELY'] as both substantive and exclusive",
+          "Q03 has no VARIES code",
+          "answer_events_in_A ['ANSWERED_NON_SUBSTANTIVE', 'ANSWERED_SUBSTANTIVE', 'INVALID'] != lifecycle-derived ['ANSWERED_NON_SUBSTANTIVE', 'ANSWERED_SUBSTANTIVE', 'INVALID', 'REFUSED']"
+        ]
+      },
+      "P3-01C-VNEXT-0.4": {
+        "label": "v0.4",
+        "file": "v0.4.json",
+        "sha256": "af9b9642698e3265ff067f0fc753c376e73237f810b1205ed15efc8ee0a7bf42",
+        "status": "SUPERSEDED",
+        "verified_defects": [
+          "Q01 declares ['NEVER', 'RARELY'] as both substantive and exclusive",
+          "Q03 has no VARIES code"
+        ]
+      },
+      "P3-01C-VNEXT-0.5": {
+        "label": "v0.5",
+        "file": "v0.5.json",
+        "sha256": "db37f5d3d6c2ba4e35bf0e2c241343e32d27b8e6e3ad90a0946351d313f7290e",
+        "status": "SUPERSEDED",
+        "verified_defects": [
+          "Q01 declares ['NEVER', 'RARELY'] as both substantive and exclusive",
+          "Q03 has no VARIES code"
+        ]
+      },
+      "P3-01C-VNEXT-0.6": {
+        "label": "v0.6",
+        "file": "v0.6.json",
+        "package_path": "P3_01C_VNEXT_0_6_FINAL_20261027/contracts/v0.6.json",
+        "sha256": "1188ab0ffc0293c3b446cff427abdaf43115e3d727f546f86721e965855caa8e",
+        "status": "SUPERSEDED",
+        "verified_defects": [
+          "C1/REC-SCI-01+REC-SCI-03/IA-D01: four competing Q01 dispositions for LIVE+RARELY; unknown-code double allocation; Q_post not an additive partition of Q_pre",
+          "C2/IA-D03+IA-D05 residual: Q02 ALWAYS gate unmarked; Q02 PREFER_NOT_TO_ANSWER dual state; 10 of 11 PNTA-carrying items lacked complete option_to_state_map",
+          "C3/IA-D04 gap: PREFER_NOT_TO_ANSWER cap semantics undeclared on Q06",
+          "C4/IA-D10+REC-DOCT-04: A04 rewrite row-damaged (30 parsed vs 34 pinned); WS2-NEW-15 contradicted the Q02 fix",
+          "C5/REC-DOCT-02+IA-D14: A05 companion still v0.5, live RT-CONFLICT, stale displayed_groups, cache citing absent generator",
+          "C6/IA-D11 residual: duplicate A06_FULL.md still carried skipped = S - A - REFUSED",
+          "C7/REC-LNG-01+02+IA-D08 residual: Q11 BM remark enumerated unbacked formats; Q01 EN+BM remarks kept positional cues; pinned order unapproved and unversioned",
+          "C8/CUST05 T15: three dangling file references; E_TOP_TWO_ANCHOR_MISMATCH and E_UNCLASSIFIED_CODE used but undeclared",
+          "C9/REC-DOCT-01: build/GEN_MANIFEST.py residue unlisted in the package manifest"
+        ]
+      }
+    }
+  },
+  "recovery_provenance": {
+    "workstream": "WS-CUST-RECOVERY-01",
+    "role": "Agent B — Correction Author (no certification authority)",
+    "built_from": {
+      "version": "P3-01C-VNEXT-0.6",
+      "sha256": "1188ab0ffc0293c3b446cff427abdaf43115e3d727f546f86721e965855caa8e",
+      "file": "P3_01C_VNEXT_0_6_FINAL_20261027/contracts/v0.6.json"
+    },
+    "root_baseline": {
+      "version": "P3-01C-VNEXT-0.5",
+      "sha256": "db37f5d3d6c2ba4e35bf0e2c241343e32d27b8e6e3ad90a0946351d313f7290e",
+      "ia06_verdict": "REVIEW_FAIL"
+    },
+    "pinned_crosswalk_input": {
+      "file": "P3_01C_VNEXT_0_6_FINAL_20261027/documents/A04_FULL.csv",
+      "sha256": "e25302646bcf4419ff52206e3fd7b08d78b020b36dc62efb998cba3a0f453883"
+    },
+    "build_script": "CUST_RECOVERY_20261027/agentB/BUILD_V0_6_1.py",
+    "corrections": "C1..C9 per Phase-1 findings CUST01/CUST02/CUST05/CUST06; see cust_recovery_corrections and CUST04_SOURCE_AND_VERSION_DIFF.md",
+    "rule": "v0.5 and v0.6 bytes are immutable history and were not modified. This file is a NEW successor artifact. No scientific or Owner decision (SD-A..SD-Q) is resolved here; rule choices needed for determinism are encoded AND marked PROPOSED_PENDING_<ID>.",
+    "authority": "NONE_GRANTED_BY_THIS_DOCUMENT"
+  },
+  "pending_decision_register_marker": "Every PROPOSED_PENDING_* marker in these bytes, its locator and its named authority are listed in CUST_RECOVERY_20261027/agentB/PENDING_DECISIONS_REGISTER.md. The author resolved NONE of SD-A..SD-Q.",
+  "cust_recovery_corrections": {
+    "C1": {
+      "status": "DONE",
+      "scope": "items[0].eligibility_effect (note + disposition_rule + unknown_code_policy); response_lifecycle.answer_states.INVALID; denominator_invariants[6]; refusal_and_state_semantics guards; error_codes E_EXCLUSIVE_CODE_CONFLICT / E_UNKNOWN_ELIGIBILITY_CODE; routing_model (Q01_SCREEN vocabulary, screen_value_exits, RT-EXIT/RT-UNKNOWN entries); qualification_model.rules.wrong_or_unknown_code; pre_screen_population (transitions_out rename INVALID->SCREEN_INVALID, AMBIGUOUS/PENDING/REJECTED declared pre-Q_pre, Q_post_definition, example_100_80); corrections_applied IA-D01 wording",
+      "rule_choice_marked": "PROPOSED_PENDING_SD_A (Scientific + Owner; NOT adopted)"
+    },
+    "C2": {
+      "status": "DONE",
+      "scope": "routing_model.item_show_gate_decisions.Q02 (ALWAYS kept ONLY as PROPOSED_PENDING_SD_C_SD_I (Scientific + Owner; NOT adopted)); items[1].refusal_route.note; answer_state_precedence_rule; Q02 PNTA single state REFUSED; complete option_to_state_map added to Q04..Q13 (10 items; maps now on all 11 PNTA-carrying items); pre_screen_population.ladder.S_pre and IA-D03 record re-marked"
+    },
+    "C3": {
+      "status": "DONE",
+      "scope": "items[5].cap_semantics (PNTA never counts toward max_selections — AUTHORITY_FREE under declared REFUSED semantics) + PNTA added to exclusive_codes + cap-set choice re-marked PROPOSED_PENDING_SD_B"
+    },
+    "C4": {
+      "status": "DONE",
+      "scope": "agentB/A04_FULL_v0.6.1.csv rebuilt from the PINNED A04_FULL.csv (sha e25302646bcf…): 34 records (1 header + 33 findings), 4 fields each, no row concatenation; IA-D10 statuses for WS2-NEW-10/-16/-19/-21 carried as PARTIAL_FIX with v0.6.1 provenance; WS2-NEW-15 no longer claims 'Q02 carries no routing rule yet' and stays REMAINS_OPEN on SD-C/SD-I; every finding carries a v0.6.1 disposition",
+      "generator": "agentB/BUILD_A04_A05_A06.py"
+    },
+    "C5": {
+      "status": "DONE",
+      "scope": "agentB/A05_FULL_ADAPTIVE_ROUTING_AND_BURDEN_CONTRACT_v0.6.1.json: spec_version v0.6.1; routes = the 7 route_definitions of v0.6.1 (live RT-CONFLICT deleted, removed_routes wording carries no adoption language); RT-EXIT/RT-UNKNOWN recomputed to displayed_groups=2 shown [Q01,Q02] flagged PROPOSED_PENDING_SD_C_SD_I (Scientific + Owner; NOT adopted); derived_route_counts regenerated by agentB/A05_ROUTE_COUNTS.py (cited honestly per REC-DOCT-03); count_is_exact=false retained; burden ranges cite CUST06",
+      "generator": "agentB/A05_ROUTE_COUNTS.py + BUILD_A04_A05_A06.py"
+    },
+    "C6": {
+      "status": "DONE",
+      "scope": "single authoritative A06 companion agentB/A06_FULL_v0.6.1.md: skipped = S - A (never S - A - REFUSED); transition formula updated to the 3-term partition; REC-SCI-04 recorded: the pinned WS2 source-of-truth CSV row still carries the rejected formulas and is OUTSIDE Agent B write authority — recorded, not edited",
+      "generator": "BUILD_A04_A05_A06.py"
+    },
+    "C7": {
+      "status": "DONE",
+      "scope": "Q11 BM remark enumerates only declared format codes; Q01 EN+BM positional cues removed (content, not position); display_order_version + SD-N marker on the two pinned items (Q01, Q05); IA-D07 'Updated BM similarly' provenance claim corrected; NO BM stems or option display labels invented — see agentB/TRANSLATION_AND_LABELS_BLOCKER.md",
+      "not_invented": "BM stems (13/13), EN+BM option display labels (0 exist), BM synonym adjudication for 'makan di tempat duduk'/'Ambil-ambil' — all handed to the translation authority (SD-P)"
+    },
+    "C8": {
+      "status": "DONE",
+      "scope": "3 dangling references removed with their historical paths retained as data (provenance.geo_handoff_contract.file; provenance.m2_instrument.file; eight_gate_corrections.note); E_TOP_TWO_ANCHOR_MISMATCH and E_UNCLASSIFIED_CODE declared in error_codes"
+    },
+    "C9": {
+      "status": "DONE",
+      "scope": "v0.6 residue excluded (no build/, no GEN_MANIFEST.py, no duplicate contract copies in the successor package); new artifacts only; internal agentB/SHA256MANIFEST-draft.txt lists every shipped file (draft for the coordinator to promote at freeze; the final freeze manifest is NOT created by Agent B)"
+    }
+  }
+}
