@@ -191,7 +191,7 @@ class AuthConfigurationFailure extends AuthUnavailableFailure {
   @override
   String get userMessage =>
       'This build has no sign-in configuration. Start Flutter with '
-      '--dart-define-from-file=fyp_mobile_app/config/dev.env — starting '
+      '--dart-define-from-file=fyp_mobile_app/config/dev.json — starting '
       'run-sitewise.cmd alone cannot supply Dart compile-time values.';
 }
 

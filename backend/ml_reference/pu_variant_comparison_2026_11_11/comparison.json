@@ -1,0 +1,338 @@
+{
+  "generated_for": "joel branch integration 2026-11-11",
+  "legacy_model": {
+    "source": "stored research_p_association_score (baseline_47 artifact output)",
+    "distribution": {
+      "n": 896,
+      "mean": 0.395238,
+      "median": 0.35521,
+      "min": 0.002513,
+      "p10": 0.119534,
+      "p90": 0.745126,
+      "max": 0.979971
+    }
+  },
+  "experimental_model": {
+    "artifact": "sitewise_pu_47_experimental.joblib",
+    "sha256": "1d09cb9a44301d1020bb367a1b3dcb1803935e853c348eccad357f0ede8fd1e2",
+    "version": "hist_gradient_boosting@PU_47_CANDIDATE_2026_11_11",
+    "spatial_cv_auroc": 0.76007,
+    "production_ready": false,
+    "landscan_provenance": "unresolved (NO_PENDING_LICENCE record flag)",
+    "distribution": {
+      "n": 896,
+      "mean": 0.260961,
+      "median": 0.191275,
+      "min": 0.007989,
+      "p10": 0.027491,
+      "p90": 0.612711,
+      "max": 0.93111
+    }
+  },
+  "coverage": {
+    "catalogue_rows": 955,
+    "experimental_scored": 896,
+    "experimental_unavailable": 59,
+    "paired_with_legacy": 896
+  },
+  "score_differences": {
+    "mean_abs_diff": 0.20831,
+    "max_abs_diff": 0.846203,
+    "mean_signed_diff": -0.134277
+  },
+  "rank_correlation": {
+    "pearson_r": 0.469641,
+    "spearman_rho": 0.515229
+  },
+  "interpretation": "Both are uncalibrated P-vs-U research association indices on the same 1,849-row training sample. Agreement metrics describe consistency, NOT correctness; the experimental artifact's spatial-CV AUROC (0.76007) is in-sample research evidence and no independent holdout exists. No superiority claim is made.",
+  "unavailable_examples": [
+    {
+      "property_id": "EP-01453",
+      "missing_features": [
+        "walk_isochrone_area_10min_km2",
+        "worldpop_walk_reachable_10min"
+      ]
+    },
+    {
+      "property_id": "EP-02013",
+      "missing_features": [
+        "walk_isochrone_area_10min_km2",
+        "worldpop_walk_reachable_10min"
+      ]
+    },
+    {
+      "property_id": "EP-02175",
+      "missing_features": [
+        "walk_isochrone_area_10min_km2",
+        "worldpop_walk_reachable_10min"
+      ]
+    },
+    {
+      "property_id": "EP-02180",
+      "missing_features": [
+        "walk_isochrone_area_10min_km2",
+        "worldpop_walk_reachable_10min"
+      ]
+    },
+    {
+      "property_id": "EP-02181",
+      "missing_features": [
+        "walk_isochrone_area_10min_km2",
+        "worldpop_walk_reachable_10min"
+      ]
+    },
+    {
+      "property_id": "EP-03153",
+      "missing_features": [
+        "walk_isochrone_area_10min_km2",
+        "worldpop_walk_reachable_10min"
+      ]
+    },
+    {
+      "property_id": "MD-00057",
+      "missing_features": [
+        "nearest_parking_distance_m"
+      ]
+    },
+    {
+      "property_id": "MD-00075",
+      "missing_features": [
+        "weekday_transit_routes_1km_walk",
+        "weekday_departures_500m_walk_am",
+        "worldpop_walk_reachable_10min"
+      ]
+    },
+    {
+      "property_id": "MD-00130",
+      "missing_features": [
+        "walk_isochrone_area_10min_km2",
+        "worldpop_walk_reachable_10min"
+      ]
+    },
+    {
+      "property_id": "MD-00172",
+      "missing_features": [
+        "weekday_transit_routes_1km_walk",
+        "weekday_departures_500m_walk_am",
+        "walk_isochrone_area_10min_km2",
+        "worldpop_walk_reachable_10min"
+      ]
+    }
+  ],
+  "example_top20_experimental_v3": {
+    "profile": {
+      "requirements_version": 3,
+      "fnb_concept": "cafe_coffee_shop",
+      "service_model": "dine_in",
+      "target_customers": [
+        "nearby_residents",
+        "office_workers"
+      ],
+      "recommendation_priority": "balanced_suitability",
+      "space_size_preference": "standard_business_space"
+    },
+    "note": "Research example on the experimental PU pathway with the V3 rule engine (balanced priority). Not a production ranking.",
+    "results": [
+      {
+        "rank": 1,
+        "property_id": "EP-02559",
+        "final_score_0_100": 82.0,
+        "pu_score_0_100": 93.1,
+        "preference_fit_0_100": 56.2,
+        "monthly_rental_myr": 5500.0,
+        "built_up_sqft": 2000.0,
+        "state": "Johor"
+      },
+      {
+        "rank": 2,
+        "property_id": "MD-03167",
+        "final_score_0_100": 78.4,
+        "pu_score_0_100": 83.9,
+        "preference_fit_0_100": 65.7,
+        "monthly_rental_myr": 1300.0,
+        "built_up_sqft": 1400.0,
+        "state": "Johor"
+      },
+      {
+        "rank": 3,
+        "property_id": "MD-01758",
+        "final_score_0_100": 78.0,
+        "pu_score_0_100": 80.3,
+        "preference_fit_0_100": 72.7,
+        "monthly_rental_myr": 4500.0,
+        "built_up_sqft": 1760.0,
+        "state": "Selangor"
+      },
+      {
+        "rank": 4,
+        "property_id": "MD-04041",
+        "final_score_0_100": 77.3,
+        "pu_score_0_100": 83.5,
+        "preference_fit_0_100": 62.8,
+        "monthly_rental_myr": 4500.0,
+        "built_up_sqft": 1500.0,
+        "state": "Johor"
+      },
+      {
+        "rank": 5,
+        "property_id": "MD-00955",
+        "final_score_0_100": 77.1,
+        "pu_score_0_100": 80.1,
+        "preference_fit_0_100": 70.2,
+        "monthly_rental_myr": 5500.0,
+        "built_up_sqft": 1760.0,
+        "state": "Selangor"
+      },
+      {
+        "rank": 6,
+        "property_id": "EP-03706",
+        "final_score_0_100": 74.4,
+        "pu_score_0_100": 84.2,
+        "preference_fit_0_100": 51.6,
+        "monthly_rental_myr": 8000.0,
+        "built_up_sqft": 1230.0,
+        "state": "Pulau Pinang"
+      },
+      {
+        "rank": 7,
+        "property_id": "EP-03410",
+        "final_score_0_100": 74.3,
+        "pu_score_0_100": 80.7,
+        "preference_fit_0_100": 59.5,
+        "monthly_rental_myr": 4200.0,
+        "built_up_sqft": 1200.0,
+        "state": "Pulau Pinang"
+      },
+      {
+        "rank": 8,
+        "property_id": "MD-00403",
+        "final_score_0_100": 74.2,
+        "pu_score_0_100": 75.4,
+        "preference_fit_0_100": 71.2,
+        "monthly_rental_myr": 2100.0,
+        "built_up_sqft": 1650.0,
+        "state": "Selangor"
+      },
+      {
+        "rank": 9,
+        "property_id": "MD-01096",
+        "final_score_0_100": 74.1,
+        "pu_score_0_100": 77.1,
+        "preference_fit_0_100": 67.2,
+        "monthly_rental_myr": 3300.0,
+        "built_up_sqft": 1700.0,
+        "state": "Selangor"
+      },
+      {
+        "rank": 10,
+        "property_id": "MD-04688",
+        "final_score_0_100": 73.5,
+        "pu_score_0_100": 80.0,
+        "preference_fit_0_100": 58.2,
+        "monthly_rental_myr": 3000.0,
+        "built_up_sqft": 1000.0,
+        "state": "Pulau Pinang"
+      },
+      {
+        "rank": 11,
+        "property_id": "MD-03394",
+        "final_score_0_100": 73.1,
+        "pu_score_0_100": 77.0,
+        "preference_fit_0_100": 64.1,
+        "monthly_rental_myr": 5000.0,
+        "built_up_sqft": 1650.0,
+        "state": "Johor"
+      },
+      {
+        "rank": 12,
+        "property_id": "EP-03133",
+        "final_score_0_100": 72.7,
+        "pu_score_0_100": 84.6,
+        "preference_fit_0_100": 45.0,
+        "monthly_rental_myr": 8800.0,
+        "built_up_sqft": 2530.0,
+        "state": "Pulau Pinang"
+      },
+      {
+        "rank": 13,
+        "property_id": "MD-03968",
+        "final_score_0_100": 72.7,
+        "pu_score_0_100": 74.3,
+        "preference_fit_0_100": 68.9,
+        "monthly_rental_myr": 2500.0,
+        "built_up_sqft": 1540.0,
+        "state": "Johor"
+      },
+      {
+        "rank": 14,
+        "property_id": "EP-03402",
+        "final_score_0_100": 72.6,
+        "pu_score_0_100": 74.3,
+        "preference_fit_0_100": 68.6,
+        "monthly_rental_myr": 3000.0,
+        "built_up_sqft": 1481.0,
+        "state": "Pulau Pinang"
+      },
+      {
+        "rank": 15,
+        "property_id": "MD-01965",
+        "final_score_0_100": 72.3,
+        "pu_score_0_100": 79.7,
+        "preference_fit_0_100": 55.0,
+        "monthly_rental_myr": 500.0,
+        "built_up_sqft": 182.0,
+        "state": "Selangor"
+      },
+      {
+        "rank": 16,
+        "property_id": "MD-00933",
+        "final_score_0_100": 71.7,
+        "pu_score_0_100": 76.1,
+        "preference_fit_0_100": 61.6,
+        "monthly_rental_myr": 4500.0,
+        "built_up_sqft": 1870.0,
+        "state": "Selangor"
+      },
+      {
+        "rank": 17,
+        "property_id": "EP-03341",
+        "final_score_0_100": 71.6,
+        "pu_score_0_100": 81.8,
+        "preference_fit_0_100": 47.8,
+        "monthly_rental_myr": 7400.0,
+        "built_up_sqft": 1138.0,
+        "state": "Pulau Pinang"
+      },
+      {
+        "rank": 18,
+        "property_id": "MD-00913",
+        "final_score_0_100": 71.6,
+        "pu_score_0_100": 70.4,
+        "preference_fit_0_100": 74.4,
+        "monthly_rental_myr": 1800.0,
+        "built_up_sqft": 1800.0,
+        "state": "Selangor"
+      },
+      {
+        "rank": 19,
+        "property_id": "MD-00752",
+        "final_score_0_100": 71.5,
+        "pu_score_0_100": 75.9,
+        "preference_fit_0_100": 61.2,
+        "monthly_rental_myr": 3500.0,
+        "built_up_sqft": 1382.0,
+        "state": "Selangor"
+      },
+      {
+        "rank": 20,
+        "property_id": "MD-00556",
+        "final_score_0_100": 71.2,
+        "pu_score_0_100": 69.6,
+        "preference_fit_0_100": 74.9,
+        "monthly_rental_myr": 2000.0,
+        "built_up_sqft": 1437.0,
+        "state": "Selangor"
+      }
+    ]
+  }
+}

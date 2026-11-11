@@ -445,6 +445,50 @@ class _VerificationDetailBodyState extends State<_VerificationDetailBody> {
                 : 'fyp.property_geospatial_features · No matched record',
           ),
         ]),
+        // Data freshness (Phase 10/11). Read-only: the value comes from
+        // fyp.property_feature_freshness, never recomputed on page load.
+        // An unknown state is explicit — never shown as zero.
+        if (detail.freshness != null)
+          div(classes: 'vd-freshness', [
+            Pill(
+              detail.freshness!.label,
+              tone: switch (detail.freshness!.status) {
+                'current' => 'success',
+                'stale' || 'pending' => 'warning',
+                'failed' => 'danger',
+                _ => 'neutral',
+              },
+            ),
+            span(classes: 'small muted', [
+              Component.text(
+                [
+                  if (detail.freshness!.lastSuccessfulRefreshAt != null)
+                    'Last successful refresh '
+                        '${_fmtDate(detail.freshness!.lastSuccessfulRefreshAt)}',
+                  if (detail.freshness!.sourceRelease != null)
+                    'source ${detail.freshness!.sourceRelease}',
+                  if (detail.freshness!.calculationVersion != null)
+                    'calc ${detail.freshness!.calculationVersion}',
+                ].join(' · '),
+              ),
+            ]),
+          ]),
+        if (detail.freshness?.lastError != null)
+          div(classes: 'vd-note vd-note--warning', [
+            span(classes: 'vd-note__symbol', [Component.text('!')]),
+            Component.text(
+              'The last feature calculation failed (${detail.freshness!.lastError}). '
+              'Previously calculated values, when present, remain readable '
+              'and are labelled rather than replaced with zeros.',
+            ),
+          ]),
+        if (detail.provenance.isNotEmpty)
+          p(classes: 'vd-source', [
+            Component.text(
+              'Sources: '
+              '${detail.provenance.map((prov) => '${prov.sourceName}${prov.licence == null ? '' : ' (${prov.licence})'}').join(' · ')}',
+            ),
+          ]),
         if (!calculated)
           div(classes: 'vd-note vd-note--warning', [
             span(classes: 'vd-note__symbol', [Component.text('!')]),

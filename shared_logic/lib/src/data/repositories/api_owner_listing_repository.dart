@@ -1,6 +1,6 @@
 import '../../core/network/api_client.dart';
-import '../../domain/data/add_property_rules.dart';
 import '../../domain/entities/owner_listing.dart';
+import '../../domain/entities/property_enrichment.dart';
 
 /// Live owner-listing lifecycle over the authenticated FastAPI endpoints
 /// (`backend/src/sitewise/api/v1/properties.py`):
@@ -133,34 +133,60 @@ class ApiOwnerListingRepository {
     _mutated();
   }
 
-  /// Ask the backend to validate an address with Google Address Validation.
+  // -------------------------------------------------------------------
+  // Two-phase geospatial enrichment
+  //
+  // Phase 1 (PostGIS) and Phase 2 (population) are separate requests on
+  // purpose: the owner sees the fast categories settle while the raster work
+  // is still running, and a population failure never invalidates the rest.
+  // -------------------------------------------------------------------
+
+  /// Runs one enrichment phase and returns the settled per-category states.
   ///
-  /// The Google key never leaves the FastAPI process. A 503 means the provider
-  /// is not configured/enabled; the thrown [AppFailure] carries the backend's
-  /// own explanation so the UI can distinguish "address rejected" from
-  /// "service unavailable". This never changes verification status.
-  Future<AddressValidationResult> validateAddress({
-    required List<String> addressLines,
-    String? city,
-    String? state,
-    String? postcode,
+  /// [phase] is [EnrichmentPhase.postgis] or [EnrichmentPhase.population].
+  /// Passing `null` runs both (the backend's legacy default).
+  /// [force] recalculates even when a category is already current.
+  Future<PropertyEnrichmentSummary> enrich(
+    String listingId, {
+    EnrichmentPhase? phase,
+    bool force = false,
+    List<EnrichmentCategory>? categories,
   }) async {
     final response = await _client.post(
-      '/api/v1/properties/validate-address',
-      <String, dynamic>{
-        'address_lines': addressLines
-            .where((line) => line.trim().isNotEmpty)
-            .toList(growable: false),
-        if (city != null && city.trim().isNotEmpty) 'city': city.trim(),
-        if (state != null && state.trim().isNotEmpty) 'state': state.trim(),
-        if (postcode != null && postcode.trim().isNotEmpty)
-          'postcode': postcode.trim(),
-        'region_code': 'MY',
+      '/api/v1/properties/listings/$listingId/enrich',
+      {
+        if (phase != null) 'phase': phase.wire,
+        if (force) 'force': true,
+        if (categories != null && categories.isNotEmpty)
+          'categories': categories.map((c) => c.wire).toList(),
       },
     );
-    final data = response['data'] is Map<String, dynamic>
-        ? response['data'] as Map<String, dynamic>
-        : const <String, dynamic>{};
-    return AddressValidationResult.fromData(data);
+    return PropertyEnrichmentSummary.fromJson(_summaryPayload(response));
+  }
+
+  /// Reads stored enrichment state. Never triggers a recalculation, so the
+  /// progress panel can poll it safely.
+  Future<PropertyEnrichmentSummary> enrichment(String listingId) async {
+    final response = await _client.get(
+      '/api/v1/properties/listings/$listingId/enrichment',
+    );
+    return PropertyEnrichmentSummary.fromJson(_summaryPayload(response));
+  }
+
+  /// Retries exactly one category.
+  Future<PropertyEnrichmentSummary> retryCategory(
+    String listingId,
+    EnrichmentCategory category,
+  ) async {
+    final response = await _client.post(
+      '/api/v1/properties/listings/$listingId/enrichment/${category.wire}/retry',
+      const {},
+    );
+    return PropertyEnrichmentSummary.fromJson(_summaryPayload(response));
+  }
+
+  static Map<String, dynamic> _summaryPayload(Map<String, dynamic> response) {
+    final data = response['data'];
+    return data is Map<String, dynamic> ? data : response;
   }
 }

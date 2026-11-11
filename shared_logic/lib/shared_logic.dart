@@ -35,6 +35,7 @@ export 'src/domain/entities/full_analysis.dart';
 export 'src/domain/entities/geo.dart';
 export 'src/domain/entities/location_intelligence.dart';
 export 'src/domain/entities/owner_listing.dart';
+export 'src/domain/entities/property_enrichment.dart';
 export 'src/domain/entities/property_verification.dart';
 export 'src/domain/entities/pu_feature_coverage.dart';
 export 'src/domain/entities/pu_prediction.dart';

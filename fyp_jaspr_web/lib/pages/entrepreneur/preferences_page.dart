@@ -433,41 +433,20 @@ class _PreferencesPageState extends State<PreferencesPage> {
       div(classes: 'field', [
         span(classes: 'field__label', [Component.text('Property type')]),
         if (_catalogueTypes == null)
-          select(
+          // Catalogue unavailable: keep the property type editable. This
+          // must not accidentally edit the separate business-category field.
+          input<String>(
+            key: const ValueKey('preferences-property-type-fallback'),
+            value: _propertyType == 'Any' ? '' : _propertyType,
+            onInput: (value) =>
+                setState(() => _propertyType = value.isEmpty ? 'Any' : value),
             attributes: {
-              'id': 'business-category',
-              'name': 'business_type',
-              'aria-label': 'Business category',
-              if (_errors['business_type'] != null) 'aria-invalid': 'true',
+              'type': 'text',
+              'name': 'property_type',
+              'placeholder': 'Any or exact property type',
+              'aria-label': 'Property type (exact catalogue value)',
+              if (_errors['property_type'] != null) 'aria-invalid': 'true',
             },
-            events: events<String>(
-              onInput: (value) {
-                setState(() => _businessType = value);
-              },
-            ),
-            [
-              option(
-                value: '',
-                attributes: {if (_businessType.isEmpty) 'selected': ''},
-                [Component.text('Select business category')],
-              ),
-
-              // Preserve older saved values that are not in the dropdown.
-              if (_businessType.isNotEmpty &&
-                  !_businessCategories.contains(_businessType))
-                option(
-                  value: _businessType,
-                  attributes: {'selected': ''},
-                  [Component.text(_businessType)],
-                ),
-
-              for (final category in _businessCategories)
-                option(
-                  value: category,
-                  attributes: {if (_businessType == category) 'selected': ''},
-                  [Component.text(category)],
-                ),
-            ],
           )
         else
           div(classes: 'chips', [
@@ -503,17 +482,43 @@ class _PreferencesPageState extends State<PreferencesPage> {
       // Business category describes the entrepreneur's concept; it is stored
       // separately from the property type instead of overwriting it.
       div(classes: 'field', [
-        span(classes: 'field__label', [Component.text('Business category')]),
-        input(
+        label(
+          classes: 'field__label',
+          attributes: const {'for': 'business-category'},
+          [Component.text('Business category')],
+        ),
+        select(
+          id: 'business-category',
+          key: const ValueKey('preferences-business-category'),
           attributes: {
-            'type': 'text',
-            'value': _businessType,
-            'placeholder': 'e.g. Specialty coffee',
+            'name': 'business_type',
             if (_errors['business_type'] != null) 'aria-invalid': 'true',
           },
-          events: events<String>(
-            onInput: (v) => setState(() => _businessType = v),
+          // Jaspr select changes deliver a list of selected strings.
+          onChange: (values) => setState(
+            () => _businessType = values.isEmpty ? '' : values.first,
           ),
+          [
+            option(
+              value: '',
+              selected: _businessType.isEmpty,
+              [Component.text('Select business category')],
+            ),
+            // Existing custom categories must remain visible after a reload.
+            if (_businessType.isNotEmpty &&
+                !_businessCategories.contains(_businessType))
+              option(
+                value: _businessType,
+                selected: true,
+                [Component.text(_businessType)],
+              ),
+            for (final category in _businessCategories)
+              option(
+                value: category,
+                selected: _businessType == category,
+                [Component.text(category)],
+              ),
+          ],
         ),
         if (_errors['business_type'] != null)
           span(classes: 'field__error', [
@@ -530,16 +535,15 @@ class _PreferencesPageState extends State<PreferencesPage> {
 
       div(classes: 'field', [
         span(classes: 'field__label', [Component.text('Target market')]),
-        input(
+        input<String>(
+          key: const ValueKey('preferences-target-market'),
+          value: _targetMarket,
+          onInput: (v) => setState(() => _targetMarket = v),
           attributes: {
             'type': 'text',
-            'value': _targetMarket,
             'placeholder': 'e.g. Office workers, students',
             if (_errors['target_market'] != null) 'aria-invalid': 'true',
           },
-          events: events<String>(
-            onInput: (v) => setState(() => _targetMarket = v),
-          ),
         ),
         if (_errors['target_market'] != null)
           span(classes: 'field__error', [
@@ -584,19 +588,18 @@ class _PreferencesPageState extends State<PreferencesPage> {
     required void Function(String) onChanged,
   }) => div(classes: 'field', [
     span(classes: 'field__label', [Component.text(label)]),
-    input(
+    // Preserve the raw text of each rent/area field, including intermediate
+    // edits. Jaspr number inputs emit num rather than the String stored here.
+    input<String>(
+      key: ValueKey('preferences-$field'),
+      value: value,
+      onInput: onChanged,
       attributes: {
-        'type': 'number',
-        'inputmode': 'numeric',
-        'value': value,
+        'type': 'text',
+        'inputmode': 'decimal',
+        'name': field,
         if (_errors[field] != null) 'aria-invalid': 'true',
       },
-      events: events<String>(
-        // Keep the raw text while the user types. Validation and parsing happen
-        // together in _payload(), so clearing a field or entering a partial
-        // number does not silently restore the previous value.
-        onInput: onChanged,
-      ),
     ),
     if (_errors[field] != null)
       span(classes: 'field__error', [Component.text(_errors[field]!)])

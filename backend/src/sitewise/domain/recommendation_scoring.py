@@ -31,6 +31,10 @@ from dataclasses import dataclass, field
 from typing import Any
 
 SCORING_CONFIG_VERSION = "sitewise_rule_based_preference_v1"
+#: Five-question Recommender V3 (2026-11-11). Version string and calibration
+#: constants are the serialized snapshot's own values (see
+#: ``sitewise.ml.sitewise_recommender_v3``), not invented here.
+SCORING_CONFIG_V3_VERSION = "sitewise_rule_based_5q_dosm_v3_2026_11_11"
 SCORE_MEANING = (
     "Rule-based preference match combined with an uncalibrated P-vs-U research "
     "association index. NOT a success probability, NOT a trained recommender."
@@ -228,6 +232,9 @@ class PreferenceProfile:
     parking_requirements: tuple[str, ...] = ()
     accessibility_requirements: tuple[str, ...] = ()
     competition_tolerance: str | None = None
+    #: Q5 of the five-question V3 questionnaire. One of
+    #: :data:`SPACE_SIZE_PREFERENCE_V3` (``None`` = not stated / pre-V3 record).
+    space_size_preference: str | None = None
     raw: dict = field(default_factory=dict)
 
     def as_dict(self) -> dict[str, Any]:
@@ -251,22 +258,26 @@ class PreferenceProfile:
             "parking_requirements": list(self.parking_requirements),
             "accessibility_requirements": list(self.accessibility_requirements),
             "competition_tolerance": self.competition_tolerance,
+            "space_size_preference": self.space_size_preference,
         }
 
 
 def preference_profile_from(stored: Mapping[str, Any] | None) -> PreferenceProfile:
-    """Map the ONE stored preference vocabulary (v1 or v2) to a profile.
+    """Map the ONE stored preference vocabulary (v1/v2/v3) to a profile.
 
     The assessment workspace and ``/preferences/me`` already share
     ``validate_requirements``; this mapper reads that validated payload and
-    does not introduce a second vocabulary. v2 numeric keys take precedence;
-    v1 equivalents are used only when the v2 key is absent.
+    does not introduce a second vocabulary. v3 numeric keys take precedence;
+    v2/v1 equivalents are used only when the v3 key is absent.
     """
     raw = dict(stored or {})
     version = raw.get("requirements_version")
-    version = version if isinstance(version, int) and version in (1, 2) else (
-        2 if any(k in raw for k in ("fnb_concept", "max_monthly_rent_myr", "target_customers")) else 1
-    )
+    if version not in (1, 2, 3):
+        version = (
+            3 if "space_size_preference" in raw
+            else 2 if any(k in raw for k in ("fnb_concept", "max_monthly_rent_myr", "target_customers"))
+            else 1
+        )
 
     max_rent = _num(raw.get("max_monthly_rent_myr"))
     if max_rent is None:
@@ -336,6 +347,7 @@ def preference_profile_from(stored: Mapping[str, Any] | None) -> PreferenceProfi
         parking_requirements=parking_tokens,
         accessibility_requirements=access_tokens,
         competition_tolerance=PRIORITY_TO_COMPETITION_TOLERANCE.get(priority or "", None),
+        space_size_preference=_text(raw.get("space_size_preference")),
         raw=raw,
     )
 
@@ -936,6 +948,9 @@ class ScoredCandidate:
     reasons: tuple[str, ...]
     cautions: tuple[str, ...]
     coverage: dict[str, Any]
+    #: Which Layer-1 artifact produced ``pu_association_score``. Never mixed
+    #: inside one ranking batch: every row of a batch carries the same name.
+    layer1_model: str = "pu_model"
     rank: int | None = None
 
     def as_dict(self) -> dict[str, Any]:
@@ -965,9 +980,10 @@ class ScoredCandidate:
                 "verification": self.candidate.verification,
             },
             "model": {
-                "name": "pu_model",
+                "name": self.layer1_model,
                 "research_only": True,
                 "association_score": round(self.pu_association_score, 6),
+                "association_score_0_100": round(self.pu_association_score * 100.0, 1),
                 "score_source": self.candidate.pu_score_source,
                 "model_method": self.candidate.pu_model_method,
                 "feature_set": self.candidate.pu_feature_set,
@@ -982,6 +998,10 @@ class ScoredCandidate:
                     None if self.preference_match_score is None
                     else round(self.preference_match_score, 6)
                 ),
+                "preference_match_score_0_100": (
+                    None if self.preference_match_score is None
+                    else round(self.preference_match_score * 100.0, 1)
+                ),
                 "engine": "rule_based",
                 "trained_recommender": False,
                 "config_version": SCORING_CONFIG.version,
@@ -992,6 +1012,7 @@ class ScoredCandidate:
             },
             "final_recommendation": {
                 "score": round(self.final_score, 6),
+                "score_0_100": round(self.final_score * 100.0, 1),
                 "rank": self.rank,
                 "basis": self.final_score_basis,
                 "score_meaning": SCORE_MEANING,
@@ -1116,3 +1137,524 @@ def rank_candidates(scores: list[ScoredCandidate]) -> list[ScoredCandidate]:
         )
         for index, item in enumerate(ordered)
     ]
+
+
+# ---------------------------------------------------------------------------
+# Five-question Recommender V3 (requirements schema v3, 2026-11-11)
+# ---------------------------------------------------------------------------
+#
+# The scoring rules below are a documented reconstruction of the supplied
+# five-question recommender, anchored on the calibration snapshot the user
+# supplied as ``RECOMMENDER_V3.joblib`` (module ``sitewise_recommender_v3``,
+# classes ``FiveQuestionRecommender``/``Calibration``). The original .py source
+# of that package was NOT delivered, so:
+#   * every constant here equals the snapshot's own serialized values
+#     (verified at load time by ``sitewise.ml.sitewise_recommender_v3``), and
+#   * every rule is deterministic, versioned and reported with each result.
+# Nothing is presented as a trained model output.
+
+#: Q4 "Business Location Priority" — the three new V3 tokens (the two v2
+#: tokens ``high_customer_demand`` / ``favorable_competition`` remain accepted
+#: for backward compatibility with pre-V3 records).
+RECOMMENDATION_PRIORITY_V3: tuple[str, ...] = (
+    "high_nearby_population",
+    "affordable_operating_location",
+    "easy_customer_accessibility",
+    "active_commercial_surroundings",
+    "balanced_suitability",
+)
+
+#: Q5 "Preferred Business Space".
+SPACE_SIZE_PREFERENCE_V3: tuple[str, ...] = (
+    "compact_business_space",
+    "standard_business_space",
+    "spacious_business_space",
+    "flexible_no_preference",
+)
+
+#: Q3 "Target Customers" (multi-select) — identical to the v2 vocabulary.
+TARGET_CUSTOMERS_V3: tuple[str, ...] = (
+    "nearby_residents",
+    "office_workers",
+    "students",
+    "commuters",
+    "general_public",
+)
+
+
+@dataclass(frozen=True)
+class CalibrationV3:
+    """Catalogue-calibrated constants for the V3 rule engine.
+
+    Defaults are the values serialized inside ``RECOMMENDER_V3.joblib``;
+    ``sitewise.ml.sitewise_recommender_v3`` verifies the artifact against
+    them. ``catalogue_fingerprint`` pins the 955-row eligible research
+    catalogue the scales were calibrated on.
+    """
+
+    version: str = SCORING_CONFIG_V3_VERSION
+    rent_p10: float = 1600.0
+    rent_p90: float = 12000.0
+    sqft_p10: float = 1138.8
+    sqft_p33: float = 1540.0
+    sqft_p67: float = 1760.0
+    sqft_p90: float = 2865.8
+    count_scales: Mapping[str, float] = field(default_factory=lambda: {
+        "population_500m": 5126.7,
+        "population_1000m": 19218.0,
+        "office_pois_500m": 3.0,
+        "schools_count_500m": 2.0,
+        "universities_count_500m": 1.0,
+        "retail_pois_500m": 8.0,
+        "retail_pois_1000m": 21.0,
+        "malls_count_500m": 1.0,
+        "malls_count_1000m": 1.0,
+        "bus_stops_500m_walk": 2.0,
+        "rail_stations_1km_walk": 1.0,
+        "parking_facilities_500m": 4.0,
+        "walk_isochrone_area_10min_km2": 0.2688,
+        "frontage_ft": 22.0,
+        "depth_ft": 75.0,
+    })
+    population_count: int = 955
+    catalogue_fingerprint: str = (
+        "e5b1c7d2926c47e0a7b688920580b1f9858c0d14e1d1582d4397f118522b3e3b"
+    )
+    pu_weight: float = 0.70
+    preference_weight: float = 0.30
+    low_pu_caution_bound: float = 0.20
+    #: DOSM national average household size — a CONTEXTUAL statistical factor
+    #: for the estimated-households evidence line only. It is NOT a measured
+    #: household count for any property's catchment.
+    avg_household_size: float = 3.9
+
+    def as_dict(self) -> dict[str, Any]:
+        return {
+            "version": self.version,
+            "rent_p10": self.rent_p10,
+            "rent_p90": self.rent_p90,
+            "sqft_p10": self.sqft_p10,
+            "sqft_p33": self.sqft_p33,
+            "sqft_p67": self.sqft_p67,
+            "sqft_p90": self.sqft_p90,
+            "count_scales": dict(self.count_scales),
+            "population_count": self.population_count,
+            "catalogue_fingerprint": self.catalogue_fingerprint,
+            "pu_weight": self.pu_weight,
+            "preference_weight": self.preference_weight,
+            "low_pu_caution_bound": self.low_pu_caution_bound,
+            "avg_household_size_context": self.avg_household_size,
+            "household_note": (
+                "Estimated households = population / DOSM national average "
+                "household size. Contextual statistical evidence, NOT a "
+                "measured household count for the property's catchment."
+            ),
+        }
+
+
+CALIBRATION_V3 = CalibrationV3()
+
+
+def _scale(calibration: CalibrationV3, name: str) -> float:
+    return float(calibration.count_scales.get(name, 1.0)) or 1.0
+
+
+#: Q4 -> dynamic component weights. Documented research mapping, NOT learned:
+#: each priority redistributes the baseline weights towards the components
+#: that priority names. Every row sums to 1.0 (asserted in tests).
+_Q4_WEIGHTS_V3: dict[str, ScoringWeights] = {
+    "high_nearby_population": ScoringWeights(
+        budget_fit=0.15, size_fit=0.10, property_type_fit=0.05,
+        target_market_fit=0.35, accessibility_fit=0.10, parking_fit=0.05,
+        competition_fit=0.10, physical_fit=0.10,
+    ),
+    "affordable_operating_location": ScoringWeights(
+        budget_fit=0.35, size_fit=0.15, property_type_fit=0.05,
+        target_market_fit=0.15, accessibility_fit=0.05, parking_fit=0.10,
+        competition_fit=0.10, physical_fit=0.05,
+    ),
+    "easy_customer_accessibility": ScoringWeights(
+        budget_fit=0.15, size_fit=0.10, property_type_fit=0.05,
+        target_market_fit=0.15, accessibility_fit=0.30, parking_fit=0.15,
+        competition_fit=0.05, physical_fit=0.05,
+    ),
+    "active_commercial_surroundings": ScoringWeights(
+        budget_fit=0.10, size_fit=0.10, property_type_fit=0.10,
+        target_market_fit=0.30, accessibility_fit=0.10, parking_fit=0.05,
+        competition_fit=0.15, physical_fit=0.10,
+    ),
+    "balanced_suitability": ScoringWeights(),
+    # Backward-compatible v2 tokens keep their documented semantics.
+    "high_customer_demand": ScoringWeights(
+        budget_fit=0.15, size_fit=0.10, property_type_fit=0.05,
+        target_market_fit=0.35, accessibility_fit=0.10, parking_fit=0.05,
+        competition_fit=0.10, physical_fit=0.10,
+    ),
+    "favorable_competition": ScoringWeights(
+        budget_fit=0.15, size_fit=0.10, property_type_fit=0.05,
+        target_market_fit=0.15, accessibility_fit=0.10, parking_fit=0.10,
+        competition_fit=0.25, physical_fit=0.10,
+    ),
+}
+
+
+def effective_weights_v3(priority: str | None) -> ScoringWeights:
+    """Q4 dynamically adjusts the component weights (V3 requirement)."""
+    key = (priority or "").strip().lower()
+    weights = _Q4_WEIGHTS_V3.get(key)
+    if weights is None:
+        weights = ScoringWeights()  # balanced baseline for unstated priorities
+    total = sum(weights.as_dict().values())
+    if not math.isclose(total, 1.0, abs_tol=1e-9):
+        raise ValueError(f"V3 weights for priority '{key}' sum to {total}, expected 1.0")
+    return weights
+
+
+def _size_band_v3(
+    preference: str | None, calibration: CalibrationV3
+) -> tuple[float, float] | None:
+    """Q5 categorical preference -> calibrated sqft band (p10/p33/p67/p90)."""
+    key = (preference or "").strip().lower()
+    if key == "compact_business_space":
+        return calibration.sqft_p10, calibration.sqft_p33
+    if key == "standard_business_space":
+        return calibration.sqft_p33, calibration.sqft_p67
+    if key == "spacious_business_space":
+        return calibration.sqft_p67, calibration.sqft_p90
+    return None  # flexible / unstated: no band, component excluded
+
+
+def _budget_fit_v3(
+    c: PropertyCandidate, p: PreferenceProfile, cfg: ScoringConfig,
+    calibration: CalibrationV3,
+) -> ComponentResult:
+    """V3 rental affordability.
+
+    A stated maximum budget stays authoritative (v1 rule). Without one, the
+    calibrated catalogue distribution decides: rent at/below the 10th
+    percentile scores 1.0, linearly decaying to 0.0 at/above the 90th
+    percentile.
+    """
+    rent = c.monthly_rental_myr
+    if rent is None:
+        return _unknown(
+            "budget_fit",
+            "Budget fit was not scored.",
+            "Monthly rent is unknown; affordability is not treated as zero.",
+        )
+    if p.max_rent_myr is not None and p.max_rent_myr > 0:
+        return _budget_fit(c, p, cfg)
+    p10, p90 = calibration.rent_p10, calibration.rent_p90
+    if rent <= p10:
+        value, reason = 1.0, (
+            f"RM{rent:,.0f}/month is at or below the catalogue's 10th-percentile "
+            f"rent (RM{p10:,.0f}) — highly affordable for the research catalogue."
+        )
+    elif rent >= p90:
+        value, reason = 0.0, (
+            f"RM{rent:,.0f}/month is at or above the catalogue's 90th-percentile "
+            f"rent (RM{p90:,.0f}) — the most expensive decile of the catalogue."
+        )
+    else:
+        value = _clamp01((p90 - rent) / (p90 - p10))
+        reason = (
+            f"RM{rent:,.0f}/month sits between the catalogue's 10th (RM{p10:,.0f}) "
+            f"and 90th (RM{p90:,.0f}) percentile rents."
+        )
+    return _scored(
+        "budget_fit", value, reason,
+        {"monthly_rental_myr": rent, "catalogue_rent_p10": p10,
+         "catalogue_rent_p90": p90, "stated_budget": p.max_rent_myr},
+    )
+
+
+def _size_fit_v3(
+    c: PropertyCandidate, p: PreferenceProfile, _cfg: ScoringConfig,
+    calibration: CalibrationV3,
+) -> ComponentResult:
+    """V5/V3 categorical size calibration (Q5).
+
+    The preference names a band from the catalogue's sqft percentiles; the
+    listing scores 1.0 inside its band and decays linearly with distance from
+    the band edges over one band-width tolerance. ``flexible_no_preference``
+    is excluded (unknown), never zero.
+    """
+    size = c.built_up_sqft
+    preference = p.space_size_preference
+    band = _size_band_v3(preference, calibration)
+    if size is None:
+        return _unknown(
+            "size_fit",
+            "Floor-area fit was not scored.",
+            "Built-up area is unknown; size fit is not treated as zero.",
+        )
+    if band is None:
+        return _unknown(
+            "size_fit",
+            "Floor-area fit was not scored.",
+            "No categorical size preference was stated (flexible / unstated); "
+            "size fit is excluded from the weighted mean rather than assumed.",
+        )
+    low, high = band
+    tolerance = max(high - low, calibration.sqft_p33 - calibration.sqft_p10)
+    if low <= size <= high:
+        value = 1.0
+        reason = (
+            f"{size:,.0f} sq ft is inside your '{preference}' band "
+            f"({low:,.0f}–{high:,.0f} sq ft, catalogue percentiles)."
+        )
+    else:
+        distance = low - size if size < low else size - high
+        value = _clamp01(1.0 - distance / tolerance)
+        reason = (
+            f"{size:,.0f} sq ft is {distance:,.0f} sq ft outside your "
+            f"'{preference}' band ({low:,.0f}–{high:,.0f} sq ft)."
+        )
+    return _scored(
+        "size_fit", value, reason,
+        {"built_up_sqft": size, "space_size_preference": preference,
+         "band_sqft": [low, high]},
+    )
+
+
+def _target_market_fit_v3(
+    c: PropertyCandidate, p: PreferenceProfile, _cfg: ScoringConfig,
+    calibration: CalibrationV3,
+) -> ComponentResult:
+    """V3 demand fit using the calibration's own count scales.
+
+    Adds the estimated-households evidence line (population / DOSM average
+    household size — contextual statistical evidence, NOT a measured
+    household count) and the commercial-surroundings signals that
+    ``active_commercial_surroundings`` prioritises.
+    """
+    signals: list[tuple[float, str]] = []
+
+    def add(value: float | None, scale_name: str, label: str) -> None:
+        fit = _saturating(value, _scale(calibration, scale_name))
+        if fit is not None:
+            signals.append((fit, f"{label}={value:,.0f}"))
+
+    customers = set(p.target_customers)
+    concept = p.fnb_concept or ""
+
+    # Residential population + estimated households (Q4=high_nearby_population,
+    # Q3 nearby_residents/general_public).
+    if customers & {"nearby_residents", "general_public"} or concept in {
+        "cafe_coffee_shop", "restaurant", "bakery_dessert_shop", ""
+    }:
+        add(c.population_500m, "population_500m", "population_500m")
+        add(c.population_1000m, "population_1000m", "population_1000m")
+
+    # Office workers / commercial surroundings.
+    if (
+        "office_workers" in customers
+        or concept in {"cafe_coffee_shop", "fast_food_quick_service"}
+        or p.recommendation_priority == "active_commercial_surroundings"
+    ):
+        add(c.office_pois_500m, "office_pois_500m", "office_pois_500m")
+
+    # Students.
+    if "students" in customers or concept in {"bakery_dessert_shop", "beverage_shop_kiosk"}:
+        add(c.schools_count_500m, "schools_count_500m", "schools_500m")
+        add(c.universities_count_500m, "universities_count_500m", "universities_500m")
+
+    # Commuters.
+    if "commuters" in customers or concept in {"fast_food_quick_service", "beverage_shop_kiosk"}:
+        add(c.bus_stops_500m_walk, "bus_stops_500m_walk", "bus_stops_500m")
+        add(c.rail_stations_1km_walk, "rail_stations_1km_walk", "rail_1km")
+
+    # Commercial surroundings (retail + malls).
+    if (
+        customers & {"general_public", "nearby_residents"}
+        or concept in {"restaurant", "bakery_dessert_shop", "other_fnb"}
+        or p.recommendation_priority == "active_commercial_surroundings"
+    ):
+        add(c.malls_count_500m, "malls_count_500m", "malls_500m")
+
+    # Concept-specific same-category demand signal (as v1).
+    same_category = {
+        "cafe_coffee_shop": c.cafe_count_500m,
+        "restaurant": c.restaurant_count_500m,
+        "fast_food_quick_service": c.fast_food_count_500m,
+        "bakery_dessert_shop": c.bakery_count_500m,
+    }.get(concept)
+    if same_category is not None:
+        add(same_category, "office_pois_500m", "same_category_outlets_500m")
+
+    if not signals:
+        return _unknown(
+            "target_market_fit",
+            "Target-market fit was not scored.",
+            "No verified demand-generator measurements are available for this "
+            "listing and your target customers; absence is not treated as zero demand.",
+        )
+    value = math.fsum(s[0] for s in signals) / len(signals)
+    label = CONCEPT_LABELS.get(concept, p.business_category or "your F&B concept")
+    audience = ', '.join(sorted(customers)) or 'not specified'
+    if value <= _cfg_concern(_cfg):
+        reason = (
+            f"Nearby demand-generator measurements are weak for {label} and your "
+            f"target customers ({audience})."
+        )
+    elif value >= _cfg_strength(_cfg):
+        reason = (
+            f"Nearby demand generators are consistent with {label} and your "
+            f"target customers ({audience})."
+        )
+    else:
+        reason = (
+            f"Nearby demand generators were measured for {label} and your "
+            f"target customers ({audience}) with mixed results."
+        )
+    household_estimate = (
+        round(c.population_500m / calibration.avg_household_size, 1)
+        if c.population_500m is not None else None
+    )
+    return _scored(
+        "target_market_fit", value, reason,
+        {
+            "signals": [label for _, label in signals],
+            "target_customers": sorted(customers),
+            "fnb_concept": concept or None,
+            "estimated_households_500m_context": household_estimate,
+            "household_note": (
+                "Estimated from population / DOSM national average household "
+                "size. Contextual statistical evidence, NOT a measured "
+                "household count for the property's catchment."
+            ) if household_estimate is not None else None,
+        },
+    )
+
+
+def _cfg_strength(cfg: ScoringConfig) -> float:
+    return cfg.strength_threshold
+
+
+def _cfg_concern(cfg: ScoringConfig) -> float:
+    return cfg.concern_threshold
+
+
+#: V3 config: same 70/30 final combination (verified against the snapshot),
+#: versioned under the snapshot's own version string.
+SCORING_CONFIG_V3 = ScoringConfig(
+    version=SCORING_CONFIG_V3_VERSION,
+    weights=ScoringWeights(),  # placeholder; V3 weights are Q4-dynamic
+    pu_weight=CALIBRATION_V3.pu_weight,
+    preference_weight=CALIBRATION_V3.preference_weight,
+)
+
+_SCORING_CONFIG_V3 = SCORING_CONFIG_V3  # alias used below
+
+
+def score_candidate_v3(
+    candidate: PropertyCandidate,
+    profile: PreferenceProfile,
+    *,
+    calibration: CalibrationV3 = CALIBRATION_V3,
+    config: ScoringConfig = SCORING_CONFIG_V3,
+    layer1_model: str = "pu_model",
+) -> ScoredCandidate:
+    """Compute one deterministic V3 five-question score.
+
+    Same contract as :func:`score_candidate` (components, coverage,
+    explanations) with three V3 differences: the component weights follow the
+    Q4 priority, ``size_fit`` uses the Q5 categorical calibration bands, and
+    affordability uses the calibrated rent percentiles when no budget is
+    stated. Every sub-score stays on the same 0–1 scale (exposed as 0–100 in
+    the payload), and the final score remains ``0.70 * pu + 0.30 * preference``.
+    """
+    pu = candidate.pu_association_score
+    if pu is None or not 0.0 <= pu <= 1.0:
+        raise ValueError("A valid Layer 1 PU association score in [0, 1] is required")
+
+    weights = effective_weights_v3(profile.recommendation_priority)
+    components: dict[str, ComponentResult] = {
+        "budget_fit": _budget_fit_v3(candidate, profile, config, calibration),
+        "size_fit": _size_fit_v3(candidate, profile, config, calibration),
+        "property_type_fit": _property_type_fit(candidate, profile, config),
+        "target_market_fit": _target_market_fit_v3(candidate, profile, config, calibration),
+        "accessibility_fit": _accessibility_fit(candidate, profile, config),
+        "parking_fit": _parking_fit(candidate, profile, config),
+        "competition_fit": _competition_fit(candidate, profile, config),
+        "physical_fit": _physical_fit(candidate, profile, config),
+    }
+    known = [(name, c) for name, c in components.items() if c.value is not None]
+    weight_sum = math.fsum(weights.as_dict()[name] for name, _ in known)
+    preference = (
+        math.fsum(weights.as_dict()[name] * float(c.value) for name, c in known) / weight_sum
+        if weight_sum > 0 else None
+    )
+
+    if preference is None:
+        final = pu
+        basis = "pu_only_no_scorable_preference_components"
+    else:
+        final = config.pu_weight * pu + config.preference_weight * preference
+        basis = (
+            f"pu_{config.pu_weight:.2f}_preference_{config.preference_weight:.2f}"
+            f"_q4_{(profile.recommendation_priority or 'balanced')}"
+        )
+    if not 0.0 <= final <= 1.0:
+        raise ValueError(f"Final score out of range: {final}")
+
+    reasons: list[str] = []
+    cautions: list[str] = []
+    for name, component in components.items():
+        if component.caution:
+            cautions.append(component.caution)
+        if component.status == "unknown":
+            continue
+        value = float(component.value or 0.0)
+        if value >= config.strength_threshold:
+            reasons.append(component.reason)
+        elif value <= config.concern_threshold:
+            label = name.replace("_", " ")
+            cautions.append(f"{label} is low ({value:.2f}): {component.reason}")
+    if pu < calibration.low_pu_caution_bound:
+        cautions.append(
+            f"PU research association score is low ({pu * 100:.1f}/100, below the "
+            f"calibration's low-score bound of "
+            f"{calibration.low_pu_caution_bound * 100:.0f}/100): the location shows "
+            "weak association with the observed F&B sample in this research "
+            "dataset. This is NOT a prediction of business failure."
+        )
+    verification = candidate.verification or {}
+    if not verification.get("confirmed_available", False):
+        cautions.append(
+            "Listing availability is UNKNOWN_NOT_VERIFIED in the research catalogue. "
+            "This is NOT confirmed availability; verify with the listing source "
+            "before acting on a recommendation."
+        )
+    if candidate.data_completeness_pct is not None and candidate.data_completeness_pct < 90:
+        cautions.append(
+            f"Research feature completeness is {candidate.data_completeness_pct:.1f}%; "
+            "some geospatial measurements may be missing."
+        )
+    if candidate.coordinate_quality and "NOT" in candidate.coordinate_quality.upper():
+        cautions.append(f"Coordinate quality: {candidate.coordinate_quality}.")
+
+    unknown_names = [name for name, c in components.items() if c.status == "unknown"]
+    coverage = {
+        "scored_components": len(known),
+        "total_components": len(components),
+        "unknown_components": unknown_names,
+        "effective_weight": round(weight_sum, 6),
+        "effective_weights_v3": weights.as_dict(),
+        "q4_priority": profile.recommendation_priority,
+        "q5_size_preference": profile.space_size_preference,
+        "missing_data_policy": "exclude_and_renormalise",
+    }
+    return ScoredCandidate(
+        property_id=candidate.property_id,
+        candidate=candidate,
+        pu_association_score=pu,
+        preference_match_score=preference,
+        final_score=final,
+        final_score_basis=basis,
+        components=components,
+        reasons=tuple(reasons),
+        cautions=tuple(dict.fromkeys(cautions)),
+        coverage=coverage,
+        layer1_model=layer1_model,
+    )

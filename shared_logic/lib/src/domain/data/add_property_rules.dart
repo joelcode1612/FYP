@@ -148,8 +148,8 @@ abstract final class PropertyFormRules {
   }
 
   /// Five digits, and — when [state] and [city] are supplied — a postcode the
-  /// dataset actually publishes for that locality. Format alone never proves
-  /// the address exists; Google Address Validation is the second check.
+  /// dataset actually publishes for that locality. Format plus locality keep
+  /// obvious typos out of the form; existence is established by admin review.
   static String? postcodeError(
     String? value, {
     String? state,
@@ -183,10 +183,7 @@ abstract final class PropertyFormRules {
   }
 }
 
-/// The address-verification state machine, identical on web and mobile.
-///
-/// A Google verdict proves the ADDRESS exists; it never proves ownership,
-/// approval or publication eligibility.
+/// Shared address-verification state; Google verification is not ownership approval.
 enum AddressVerificationState {
   unverified,
   verifying,
@@ -197,10 +194,7 @@ enum AddressVerificationState {
   serviceError,
 }
 
-/// The exact location values that were sent to the provider.
-///
-/// A verified verdict is bound to one snapshot: if any of these values change,
-/// the verdict is stale and the owner must verify again.
+/// Exact address and verified coordinates; changes make a verification stale.
 class AddressSnapshot {
   const AddressSnapshot({
     required this.address,
@@ -229,10 +223,11 @@ class AddressSnapshot {
       other.longitude == longitude;
 
   @override
-  int get hashCode => Object.hash(address, city, state, postcode, latitude, longitude);
+  int get hashCode =>
+      Object.hash(address, city, state, postcode, latitude, longitude);
 }
 
-/// One normalized verdict returned by the backend's Google adapter.
+/// Normalised verdict from the existing backend Google address adapter.
 class AddressValidationResult {
   const AddressValidationResult({
     required this.status,
@@ -244,7 +239,6 @@ class AddressValidationResult {
     this.provider,
   });
 
-  /// `validated`, `partially_validated` or `unconfirmed`.
   final String status;
   final String? formattedAddress;
   final String? granularity;
@@ -256,14 +250,10 @@ class AddressValidationResult {
   bool get confirmed => status == 'validated';
 
   bool get hasCoordinates =>
-      latitude != null &&
-      longitude != null &&
-      latitude!.isFinite &&
-      longitude!.isFinite &&
-      latitude! >= -90 &&
-      latitude! <= 90 &&
-      longitude! >= -180 &&
-      longitude! <= 180;
+      latitude != null && longitude != null &&
+      latitude!.isFinite && longitude!.isFinite &&
+      latitude! >= -90 && latitude! <= 90 &&
+      longitude! >= -180 && longitude! <= 180;
 
   factory AddressValidationResult.fromData(Map<String, dynamic> data) =>
       AddressValidationResult(
@@ -277,8 +267,7 @@ class AddressValidationResult {
       );
 }
 
-/// User-facing copy for each verification outcome. Kept in Shared Logic so the
-/// web and mobile forms say exactly the same thing.
+/// User-facing messages shared by the web and mobile address verification UI.
 abstract final class AddressVerificationCopy {
   static const String validated =
       'Address validated. Please confirm the location shown below.';

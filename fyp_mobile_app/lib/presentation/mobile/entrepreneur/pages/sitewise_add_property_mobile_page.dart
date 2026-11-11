@@ -8,6 +8,7 @@ import '../../../../application/services/service_locator.dart';
 import '../../../../core/config/mobile_config.dart';
 import '../../shell/entrepreneur_tab_scope.dart';
 import '../../shell/mobile_app_shell.dart';
+import '../../../shared/tour/ar_capture_mobile_page.dart';
 
 /// SiteWise Add Property — REAL owner-listing workflow.
 ///
@@ -39,25 +40,19 @@ class _SitewiseAddPropertyMobilePageState
   static const Color _border = Color(0xFFE2E8F0);
   static const Color _errorInk = Color(0xFFB42318);
   static const Color _errorBorder = Color(0xFFE7A6A0);
-  static const Color _okInk = Color(0xFF087443);
-  static const Color _okBorder = Color(0xFFB4E4CB);
-  static const Color _okSurface = Color(0xFFEAF8F0);
-  static const Color _warnInk = Color(0xFF8A5A00);
-  static const Color _warnBorder = Color(0xFFF0D18A);
-  static const Color _warnSurface = Color(0xFFFFF8E8);
 
   static const List<String> _stepNames = <String>[
     'Property details',
     'Location',
-    'Photos',
+    'AR 360° Capture',
     'Review',
     'Confirmation',
   ];
 
   static const List<String> _stepDescriptions = <String>[
     'Enter the basic details of your commercial unit.',
-    'Add the address, then verify it before continuing.',
-    'Attach photos of the property (JPG, PNG or WebP).',
+    'Add the address details of your commercial unit.',
+    'Capture a 360° virtual tour of the property with AR guidance.',
     'Review the information before submission.',
     'Save or submit your property.',
   ];
@@ -78,18 +73,6 @@ class _SitewiseAddPropertyMobilePageState
   /// Field-specific errors, rendered under the relevant control. The shared
   /// [PropertyFormRules] produce the messages so web and mobile agree.
   final Map<String, String> _fieldErrors = <String, String>{};
-
-  /// Address-verification state machine (shared with the web form). A Google
-  /// verdict proves the ADDRESS exists; it never proves ownership or approval.
-  AddressVerificationState _addressState = AddressVerificationState.unverified;
-  AddressValidationResult? _addressResult;
-  AddressSnapshot? _verifiedSnapshot;
-  String? _addressMessage;
-  double? _verifiedLatitude;
-  double? _verifiedLongitude;
-
-  /// Monotonic token: a late response must never verify a changed address.
-  int _addressRequestId = 0;
 
   // Server state: the persisted PostgreSQL draft and its lifecycle.
   String? _draftId;
@@ -186,159 +169,7 @@ class _SitewiseAddPropertyMobilePageState
     text(_descriptionController, listing.description);
     final normalizedType = normalizeCommercialPropertyType(listing.propertyType);
     if (normalizedType != null) _propertyType = normalizedType;
-    // A listing the SERVER already validated carries the persisted verdict;
-    // restore it so a resumed draft does not demand a redundant re-check.
-    if (listing.addressValidationStatus == 'validated' &&
-        listing.latitude != null &&
-        listing.longitude != null) {
-      _verifiedLatitude = listing.latitude;
-      _verifiedLongitude = listing.longitude;
-      _addressState = AddressVerificationState.verified;
-      _addressMessage = 'Address validated by SiteWise for this listing.';
-      _verifiedSnapshot = _addressSnapshot();
-    }
     setState(() {});
-  }
-
-  AddressSnapshot _addressSnapshot() => AddressSnapshot(
-        address: _address,
-        city: _district,
-        state: _stateName,
-        postcode: _postcode,
-        latitude: _verifiedLatitude,
-        longitude: _verifiedLongitude,
-      );
-
-  /// Any edit to a location value invalidates the verdict: a verified address
-  /// is bound to the exact values that were validated.
-  void _invalidateAddress() {
-    _addressRequestId++;
-    _addressState = AddressVerificationState.unverified;
-    _addressResult = null;
-    _verifiedSnapshot = null;
-    _addressMessage = null;
-    _verifiedLatitude = null;
-    _verifiedLongitude = null;
-  }
-
-  Future<void> _validateAddress() async {
-    if (_addressState == AddressVerificationState.verifying) return;
-    final snapshot = _addressSnapshot();
-    if (snapshot.address.isEmpty) {
-      setState(() {
-        _fieldErrors['address'] =
-            PropertyFormRules.addressError(snapshot.address) ??
-                'Enter a street address first.';
-      });
-      return;
-    }
-    if (snapshot.state.isEmpty ||
-        snapshot.city.isEmpty ||
-        snapshot.postcode.isEmpty) {
-      setState(() {
-        _fieldErrors['state'] = PropertyFormRules.stateError(snapshot.state) ?? '';
-        _fieldErrors['city'] =
-            PropertyFormRules.cityError(snapshot.state, snapshot.city) ?? '';
-        _fieldErrors['postcode'] = PropertyFormRules.postcodeError(
-              snapshot.postcode,
-              state: snapshot.state,
-              city: snapshot.city,
-            ) ??
-            '';
-        _fieldErrors.removeWhere((_, value) => value.isEmpty);
-        _validationMessage = 'Complete the state, city and postcode first.';
-      });
-      return;
-    }
-    final requestId = ++_addressRequestId;
-    setState(() {
-      _addressState = AddressVerificationState.verifying;
-      _addressMessage = null;
-      _fieldErrors.remove('verification');
-    });
-    try {
-      final result = await ServiceLocator.ownerListings.validateAddress(
-        addressLines: <String>[snapshot.address, snapshot.postcode],
-        city: snapshot.city,
-        state: snapshot.state,
-        postcode: snapshot.postcode,
-      );
-      if (!mounted || requestId != _addressRequestId) return;
-      if (_addressSnapshot() != snapshot) {
-        // The owner edited the address while the request was in flight.
-        setState(() {
-          _addressState = AddressVerificationState.unverified;
-          _addressMessage = AddressVerificationCopy.stale;
-        });
-        return;
-      }
-      final (state, message) = switch (result.status) {
-        'validated' => (
-            AddressVerificationState.validatedPendingConfirmation,
-            AddressVerificationCopy.validated,
-          ),
-        'partially_validated' => (
-            AddressVerificationState.partiallyValidated,
-            AddressVerificationCopy.partiallyValidated,
-          ),
-        _ => (
-            AddressVerificationState.unconfirmed,
-            AddressVerificationCopy.unconfirmed,
-          ),
-      };
-      setState(() {
-        _addressResult = result;
-        _addressState = state;
-        _addressMessage = message;
-      });
-    } on Object catch (error) {
-      if (!mounted || requestId != _addressRequestId) return;
-      setState(() {
-        _addressState = AddressVerificationState.serviceError;
-        _addressMessage = _addressFailureCopy(
-          _readableError(error, fallback: ''),
-        );
-        _verifiedLatitude = null;
-        _verifiedLongitude = null;
-      });
-    }
-  }
-
-  String _addressFailureCopy(String message) {
-    final lower = message.toLowerCase();
-    if (lower.contains('temporarily unavailable') ||
-        lower.contains('not enabled') ||
-        lower.contains('not configured') ||
-        lower.contains('503')) {
-      return AddressVerificationCopy.unavailable;
-    }
-    if (lower.contains('rejected') ||
-        lower.contains('422') ||
-        lower.contains('invalid')) {
-      return AddressVerificationCopy.invalidRequest;
-    }
-    return message.isEmpty ? AddressVerificationCopy.unavailable : message;
-  }
-
-  void _confirmAddress() {
-    final result = _addressResult;
-    if (_addressState !=
-            AddressVerificationState.validatedPendingConfirmation ||
-        result == null ||
-        !result.hasCoordinates) {
-      return;
-    }
-    setState(() {
-      // Coordinates first: the snapshot must describe the CONFIRMED values,
-      // otherwise the later staleness check can never match.
-      _verifiedLatitude = result.latitude;
-      _verifiedLongitude = result.longitude;
-      _verifiedSnapshot = _addressSnapshot();
-      _addressState = AddressVerificationState.verified;
-      _addressMessage =
-          result.formattedAddress ?? AddressVerificationCopy.validated;
-      _fieldErrors.remove('verification');
-    });
   }
 
   void _onStateChanged(String? value) {
@@ -346,7 +177,6 @@ class _SitewiseAddPropertyMobilePageState
       _stateController.text = value ?? '';
       _districtController.clear();
       _postcodeController.clear();
-      _invalidateAddress();
       _fieldErrors.remove('state');
       _fieldErrors.remove('city');
       _fieldErrors.remove('postcode');
@@ -358,7 +188,6 @@ class _SitewiseAddPropertyMobilePageState
     setState(() {
       _districtController.text = value ?? '';
       _postcodeController.clear();
-      _invalidateAddress();
       _fieldErrors.remove('city');
       _fieldErrors.remove('postcode');
       _validationMessage = null;
@@ -368,7 +197,6 @@ class _SitewiseAddPropertyMobilePageState
   void _onPostcodeChanged(String? value) {
     setState(() {
       _postcodeController.text = value ?? '';
-      _invalidateAddress();
       _fieldErrors.remove('postcode');
       _validationMessage = null;
     });
@@ -387,8 +215,6 @@ class _SitewiseAddPropertyMobilePageState
         city: _district.isEmpty ? null : _district,
         state: _stateName.isEmpty ? null : _stateName,
         postcode: _postcode.isEmpty ? null : _postcode,
-        latitude: _verifiedLatitude,
-        longitude: _verifiedLongitude,
         rentalPrice: double.tryParse(_monthlyRent),
         sizeSqft: double.tryParse(_builtUpArea),
         availability: _serverStatus == 'draft' ? null : 'Immediate',
@@ -638,14 +464,6 @@ class _SitewiseAddPropertyMobilePageState
         city: _district,
       ),
     );
-    // A verdict only covers the exact values that were validated. If the
-    // snapshot has moved since confirmation, the verdict is stale.
-    final verified = _addressState == AddressVerificationState.verified &&
-        _verifiedSnapshot != null &&
-        _verifiedSnapshot == _addressSnapshot();
-    if (!verified) {
-      _fieldErrors['verification'] = AddressVerificationCopy.required;
-    }
   }
 
   void _putField(String key, String? message) {
@@ -976,7 +794,7 @@ class _SitewiseAddPropertyMobilePageState
       case 2:
         return _buildLocation();
       case 3:
-        return _buildPhotos();
+        return _buildArCapture();
       case 4:
         return _buildReview();
       default:
@@ -1155,26 +973,19 @@ class _SitewiseAddPropertyMobilePageState
           onSelected: _onPostcodeChanged,
         ),
         const SizedBox(height: 18),
-        _addressVerificationPanel(),
-        const SizedBox(height: 15),
         _buildInfoNotice(
-          'Address verification only proves the address exists — it is not '
-          'ownership verification. Ownership evidence is uploaded separately '
-          'from My Properties.',
+          'SiteWise administrators separately verify the listing and '
+          'ownership evidence after submission. Ownership evidence is '
+          'uploaded separately from My Properties.',
         ),
       ],
     );
   }
 
   void _onAddressChanged(String value) {
-    final hadVerdict = _addressState != AddressVerificationState.unverified;
     setState(() {
       _fieldErrors.remove('address');
       _validationMessage = null;
-      if (hadVerdict) {
-        _invalidateAddress();
-        _addressMessage = AddressVerificationCopy.stale;
-      }
     });
   }
 
@@ -1287,300 +1098,132 @@ class _SitewiseAddPropertyMobilePageState
     onSelected(picked);
   }
 
-  String _addressStateLabel(AddressVerificationState state) {
-    switch (state) {
-      case AddressVerificationState.unverified:
-        return 'Not verified';
-      case AddressVerificationState.verifying:
-        return 'Checking';
-      case AddressVerificationState.validatedPendingConfirmation:
-        return 'Awaiting confirmation';
-      case AddressVerificationState.verified:
-        return 'Verified';
-      case AddressVerificationState.partiallyValidated:
-        return 'Partial match';
-      case AddressVerificationState.unconfirmed:
-        return 'Not confirmed';
-      case AddressVerificationState.serviceError:
-        return 'Temporarily unavailable';
+
+  // ------------------------------------------------------- AR 360 capture
+  bool _startingCapture = false;
+
+  Future<void> _startArCapture() async {
+    if (_startingCapture) return;
+    setState(() => _startingCapture = true);
+    try {
+      await _saveDraft();
+      final id = _draftId;
+      if (!mounted) return;
+      if (id == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'The draft could not be saved, so AR capture was not started.',
+            ),
+          ),
+        );
+        return;
+      }
+      await Navigator.of(context).pushNamed(
+        '/owner/capture',
+        arguments: ArCaptureRequest(propertyId: id),
+      );
+      if (mounted) setState(() {});
+    } finally {
+      if (mounted) setState(() => _startingCapture = false);
     }
   }
 
-  bool get _canVerifyAddress =>
-      _editable &&
-      _address.isNotEmpty &&
-      _stateName.isNotEmpty &&
-      _district.isNotEmpty &&
-      _postcode.isNotEmpty;
+  Widget _arGuidance(IconData icon, String title, String body) {
+    final scheme = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, size: 20, color: scheme.primary),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title, style: Theme.of(context).textTheme.titleSmall),
+                const SizedBox(height: 2),
+                Text(
+                  body,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: scheme.onSurfaceVariant,
+                      ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 
-  Widget _addressVerificationPanel() {
-    final state = _addressState;
-    final result = _addressResult;
-    final busy = state == AddressVerificationState.verifying;
-
-    final (Color surface, Color border, Color ink, IconData icon) =
-        switch (state) {
-      AddressVerificationState.unverified => (
-          const Color(0xFFF2F7FF),
-          const Color(0xFFD6E5FB),
-          const Color(0xFF21477F),
-          Icons.verified_outlined,
-        ),
-      AddressVerificationState.verifying => (
-          const Color(0xFFF2F7FF),
-          const Color(0xFFD6E5FB),
-          const Color(0xFF21477F),
-          Icons.sync_rounded,
-        ),
-      AddressVerificationState.validatedPendingConfirmation => (
-          const Color(0xFFEDF4FF),
-          const Color(0xFFBBD0F3),
-          _brandStrong,
-          Icons.place_outlined,
-        ),
-      AddressVerificationState.verified => (
-          _okSurface,
-          _okBorder,
-          _okInk,
-          Icons.verified_rounded,
-        ),
-      AddressVerificationState.partiallyValidated => (
-          _warnSurface,
-          _warnBorder,
-          _warnInk,
-          Icons.info_outline_rounded,
-        ),
-      AddressVerificationState.unconfirmed => (
-          const Color(0xFFFFF5F5),
-          _errorBorder,
-          _errorInk,
-          Icons.error_outline_rounded,
-        ),
-      AddressVerificationState.serviceError => (
-          _warnSurface,
-          _warnBorder,
-          _warnInk,
-          Icons.cloud_off_rounded,
-        ),
-    };
-
-    final verificationError = _fieldErrors['verification'];
-    final formatted = result?.formattedAddress;
-    final showNormalized = formatted != null &&
-        (state == AddressVerificationState.validatedPendingConfirmation ||
-            state == AddressVerificationState.verified);
-    final coordinates = state == AddressVerificationState.verified
-        ? _verifiedLatitude != null && _verifiedLongitude != null
-            ? '${_verifiedLatitude!.toStringAsFixed(6)}, '
-                '${_verifiedLongitude!.toStringAsFixed(6)}'
-            : null
-        : result?.hasCoordinates == true
-            ? '${result!.latitude!.toStringAsFixed(6)}, '
-                '${result.longitude!.toStringAsFixed(6)}'
-            : null;
-
+  Widget _buildArCapture() {
+    final scheme = Theme.of(context).colorScheme;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: <Widget>[
+      children: [
         Container(
-          padding: const EdgeInsets.all(13),
+          padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            color: surface,
-            border: Border.all(color: border),
-            borderRadius: BorderRadius.circular(13),
+            color: scheme.surface,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: scheme.outlineVariant),
           ),
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: <Widget>[
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
               Row(
-                children: <Widget>[
-                  Icon(icon, color: ink, size: 16),
-                  const SizedBox(width: 7),
+                children: [
+                  Icon(Icons.view_in_ar_outlined, color: scheme.primary),
+                  const SizedBox(width: 10),
                   Expanded(
                     child: Text(
-                      'Address verification',
-                      style: TextStyle(
-                        color: ink,
-                        fontSize: 11,
-                        fontWeight: FontWeight.w900,
-                      ),
+                      'AR 360° Capture',
+                      style: Theme.of(context).textTheme.titleMedium,
                     ),
                   ),
-                  if (busy)
-                    SizedBox(
-                      width: 13,
-                      height: 13,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 1.8,
-                        valueColor: AlwaysStoppedAnimation<Color>(ink),
-                      ),
-                    )
-                  else
-                    Text(
-                      _addressStateLabel(state),
-                      style: TextStyle(
-                        color: ink,
-                        fontSize: 10,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
                 ],
               ),
-              if (_addressMessage != null) ...<Widget>[
-                const SizedBox(height: 8),
-                Text(
-                  _addressMessage!,
-                  style: TextStyle(color: ink, fontSize: 11, height: 1.5),
+              const SizedBox(height: 14),
+              _arGuidance(
+                Icons.grid_on_outlined,
+                'Follow 26 capture points',
+                'Stand at the centre and turn in place; each station is '
+                    'recorded automatically when it is aligned and steady.',
+              ),
+              _arGuidance(
+                Icons.center_focus_strong_outlined,
+                'AR alignment guidance',
+                'Align the target, hold still, and let the app confirm the '
+                    'position before the frame is taken.',
+              ),
+              _arGuidance(
+                Icons.panorama_outlined,
+                'Create a virtual tour',
+                'Frames are stitched into a 360° tour for this property.',
+              ),
+              const SizedBox(height: 4),
+              FilledButton.icon(
+                onPressed: _startingCapture ? null : _startArCapture,
+                icon: const Icon(Icons.play_circle_outline),
+                label: Text(
+                  _startingCapture ? 'Saving draft…' : 'Start AR Capture',
                 ),
-              ],
-              if (showNormalized) ...<Widget>[
-                const SizedBox(height: 10),
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(9),
-                    border: Border.all(color: border),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: <Widget>[
-                      const Text(
-                        'Provider-normalised address',
-                        style: TextStyle(
-                          color: Color(0xFF627088),
-                          fontSize: 9,
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
-                      const SizedBox(height: 3),
-                      Text(
-                        formatted,
-                        style: const TextStyle(
-                          color: Color(0xFF1A273A),
-                          fontSize: 11,
-                          height: 1.45,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                      if (coordinates != null) ...<Widget>[
-                        const SizedBox(height: 5),
-                        Text(
-                          'Coordinates $coordinates',
-                          style: const TextStyle(
-                            color: Color(0xFF627088),
-                            fontSize: 10,
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-              ],
-              const SizedBox(height: 11),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: _verificationActions(state),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'The virtual tour will be linked to this property and can be '
+                'reviewed in My Properties.',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: scheme.onSurfaceVariant,
+                    ),
               ),
             ],
           ),
         ),
-        if (verificationError != null) ...<Widget>[
-          const SizedBox(height: 7),
-          _buildFieldError(verificationError),
-        ],
       ],
     );
-  }
-
-  List<Widget> _verificationActions(AddressVerificationState state) {
-    switch (state) {
-      case AddressVerificationState.verifying:
-        return const <Widget>[];
-      case AddressVerificationState.validatedPendingConfirmation:
-        final result = _addressResult;
-        return <Widget>[
-          FilledButton(
-            onPressed: result != null && result.hasCoordinates
-                ? _confirmAddress
-                : null,
-            style: FilledButton.styleFrom(
-              backgroundColor: _brandStrong,
-              padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 11),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(9),
-              ),
-            ),
-            child: const Text(
-              'Confirm this address',
-              style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800),
-            ),
-          ),
-          TextButton(
-            onPressed: _canVerifyAddress ? _validateAddress : null,
-            child: const Text(
-              'Verify again',
-              style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800),
-            ),
-          ),
-        ];
-      case AddressVerificationState.verified:
-        return <Widget>[
-          OutlinedButton(
-            onPressed: _canVerifyAddress ? _validateAddress : null,
-            style: OutlinedButton.styleFrom(
-              foregroundColor: _okInk,
-              side: const BorderSide(color: _okBorder),
-              padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 11),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(9),
-              ),
-            ),
-            child: const Text(
-              'Verify again',
-              style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800),
-            ),
-          ),
-        ];
-      case AddressVerificationState.partiallyValidated:
-      case AddressVerificationState.unconfirmed:
-      case AddressVerificationState.serviceError:
-        return <Widget>[
-          FilledButton(
-            onPressed: _canVerifyAddress ? _validateAddress : null,
-            style: FilledButton.styleFrom(
-              backgroundColor: _brandStrong,
-              padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 11),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(9),
-              ),
-            ),
-            child: const Text(
-              'Try again',
-              style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800),
-            ),
-          ),
-        ];
-      case AddressVerificationState.unverified:
-        return <Widget>[
-          FilledButton(
-            onPressed: _canVerifyAddress ? _validateAddress : null,
-            style: FilledButton.styleFrom(
-              backgroundColor: _brandStrong,
-              padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 11),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(9),
-              ),
-            ),
-            child: const Text(
-              'Verify address',
-              style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800),
-            ),
-          ),
-        ];
-    }
   }
 
   Widget _buildPhotos() {
@@ -1720,12 +1363,6 @@ class _SitewiseAddPropertyMobilePageState
   }
 
   Widget _buildReview() {
-    final verified = _addressState == AddressVerificationState.verified;
-    final coordinates = _verifiedLatitude != null && _verifiedLongitude != null
-        ? '${_verifiedLatitude!.toStringAsFixed(6)}, '
-            '${_verifiedLongitude!.toStringAsFixed(6)}'
-        : null;
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
@@ -1748,16 +1385,6 @@ class _SitewiseAddPropertyMobilePageState
             _ReviewRow('State', _display(_stateName)),
             _ReviewRow('City / township', _display(_district)),
             _ReviewRow('Postcode', _display(_postcode)),
-            _ReviewRow(
-              'Address verification',
-              verified
-                  ? 'Verified — ${_addressResult?.formattedAddress ?? 'confirmed by the provider'}'
-                  : _addressStateLabel(_addressState),
-            ),
-            _ReviewRow(
-              'Coordinates',
-              coordinates ?? 'Not available until the address is verified',
-            ),
           ],
         ),
         const SizedBox(height: 18),
@@ -1771,18 +1398,11 @@ class _SitewiseAddPropertyMobilePageState
             ),
           ],
         ),
-        if (!verified) ...<Widget>[
-          const SizedBox(height: 16),
-          _buildInfoNotice(
-            'The address is not verified yet. Use Edit on "Location & address" '
-            'to verify and confirm it before submitting.',
-          ),
-        ],
         const SizedBox(height: 16),
         _buildInfoNotice(
           'Review & finish saves the record to Sitewise. Submission for '
-          'verification additionally requires complete details, a verified '
-          'address and at least one ownership document.',
+          'verification additionally requires complete details and, for full '
+          'verification, at least one ownership document.',
         ),
       ],
     );

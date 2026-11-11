@@ -78,23 +78,6 @@ def insert_listing(
 
 
 @pytest.fixture(autouse=True)
-def offline_address_validation(monkeypatch):
-    """The suite runs without Google: every address submitted through the
-    verification workflow is treated as provider-validated, so lifecycle
-    tests exercise transitions instead of the network."""
-    from sitewise.services import property_verification_service as service_module
-
-    monkeypatch.setattr(
-        service_module,
-        "validate_address",
-        lambda **_kwargs: {
-            "status": "validated",
-            "formatted_address": "Test formatted address, Selangor",
-        },
-    )
-
-
-@pytest.fixture(autouse=True)
 def private_storage(monkeypatch, tmp_path):
     monkeypatch.setattr(settings, "verification_storage_dir", str(tmp_path / "docs"))
     return tmp_path / "docs"

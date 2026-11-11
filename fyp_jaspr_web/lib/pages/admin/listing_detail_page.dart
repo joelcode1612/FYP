@@ -5,6 +5,7 @@ import 'package:jaspr/jaspr.dart';
 import 'package:jaspr_riverpod/jaspr_riverpod.dart';
 import 'package:shared_logic/shared_logic.dart';
 
+import '../../components/agent_assignment_control.dart';
 import '../../components/ui.dart';
 import '../../components/verification_detail_view.dart';
 import '../../layouts/app_layout.dart';
@@ -73,6 +74,7 @@ class _ListingDetailPageState extends State<ListingDetailPage> {
                 icon: 'arrow_back',
               ),
               const VerificationDetailView(),
+              AgentAssignmentControl(propertyId: _loadedId),
             ])
           : div(classes: 'card stack', [
               if (error != null && !loading) ...[

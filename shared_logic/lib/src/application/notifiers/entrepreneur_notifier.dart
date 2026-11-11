@@ -185,8 +185,17 @@ class EntrepreneurNotifier extends Notifier<EntrepreneurState> {
   void _publish(EntrepreneurState next) => state = next;
 }
 
-/// Page-scoped: destroyed once no screen is watching it anymore.
+/// Session-scoped, deliberately NOT `autoDispose`.
+///
+/// The entrepreneur workspace's applied recommendation filters, ranked
+/// results and selected listing must survive page navigation: opening a
+/// property detail and returning, or switching between recommendation
+/// workflow pages, previously disposed this provider (no watchers during the
+/// navigation gap) and silently reset the entrepreneur's filters to the
+/// saved-preference defaults. One session-scoped state owner is the single
+/// source of truth for applied criteria — the filter form keeps only a DRAFT
+/// copy, and no second provider duplicates this state.
 final entrepreneurNotifierProvider =
-    NotifierProvider.autoDispose<EntrepreneurNotifier, EntrepreneurState>(
+    NotifierProvider<EntrepreneurNotifier, EntrepreneurState>(
       EntrepreneurNotifier.new,
     );

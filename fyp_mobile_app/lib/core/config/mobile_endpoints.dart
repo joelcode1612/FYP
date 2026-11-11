@@ -1,4 +1,5 @@
 import 'package:shared_logic/shared_logic.dart';
+import 'mobile_runtime_config.dart';
 
 /// Where this mobile build sends its authenticated requests.
 ///
@@ -30,34 +31,17 @@ import 'package:shared_logic/shared_logic.dart';
 /// No LAN IP is baked into source. Release builds must supply an HTTPS
 /// `API_BASE_URL`; `MobileConfig` refuses cleartext in release mode.
 abstract final class MobileEndpoints {
-  static const String _apiOverride = String.fromEnvironment('API_BASE_URL');
-  static const String _webOverride = String.fromEnvironment('WEB_BASE_URL');
-  static const String _hostMode = String.fromEnvironment(
-    'API_HOST_MODE',
-    defaultValue: 'emulator',
-  );
-
-  static const String _emulatorOrigin = 'http://10.0.2.2:8090';
-  static const String _adbReverseOrigin = 'http://127.0.0.1:8090';
-  static const String _defaultOrigin =
-      _hostMode == 'adb-reverse' ? _adbReverseOrigin : _emulatorOrigin;
-
-  /// Compile-time so every consumer stays const-friendly.
-  ///
-  /// `String.isNotEmpty` is NOT a constant expression in Dart, so an explicit
-  /// define is detected with `== ''` instead. An empty define is treated as
-  /// "not supplied" rather than producing an invalid URI.
-  static const String apiBaseUrl =
-      _apiOverride == '' ? _defaultOrigin : _apiOverride;
-
-  /// Public origin used to build the password-recovery / confirmation
-  /// redirect. The reset completes in the web portal (mobile has no OAuth
-  /// link handler), so this must be an origin the user can actually open.
-  static const String webBaseUrl =
-      _webOverride == '' ? apiBaseUrl : _webOverride;
-
-  /// Development host-selection mode actually compiled into this build.
-  /// Safe to log: one of a fixed set of names, never a key or an address.
+  static String get _apiOverride => MobileRuntimeConfig.value(
+    'API_BASE_URL', fallback: const String.fromEnvironment('API_BASE_URL'));
+  static String get _webOverride => MobileRuntimeConfig.value(
+    'WEB_BASE_URL', fallback: const String.fromEnvironment('WEB_BASE_URL'));
+  static String get _hostMode => MobileRuntimeConfig.value(
+    'API_HOST_MODE', fallback: const String.fromEnvironment('API_HOST_MODE', defaultValue: 'emulator'));
+  static const _emulatorOrigin = 'http://10.0.2.2:8090';
+  static const _adbReverseOrigin = 'http://127.0.0.1:8090';
+  static String get apiBaseUrl => _apiOverride.isNotEmpty ? _apiOverride
+      : (_hostMode == 'adb-reverse' ? _adbReverseOrigin : _emulatorOrigin);
+  static String get webBaseUrl => _webOverride.isNotEmpty ? _webOverride : apiBaseUrl;
   static String get hostMode => _hostMode;
 
   static Uri get profileUri => Uri.parse('$apiBaseUrl/api/v1/auth/me');

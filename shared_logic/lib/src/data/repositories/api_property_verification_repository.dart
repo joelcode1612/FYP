@@ -42,6 +42,7 @@ class ApiPropertyVerificationRepository
   Future<PropertyVerification> submit(
     String propertyId, {
     String? scope,
+    bool acknowledgeUnavailablePopulation = false,
   }) async => _verification(
     await _client.post(
       '/api/v1/properties/$propertyId/verification/submit',
@@ -49,6 +50,8 @@ class ApiPropertyVerificationRepository
       // explicitly narrows the scope, so legacy payloads stay identical.
       {
         if (scope != null && scope != 'full') 'scope': scope,
+        if (acknowledgeUnavailablePopulation)
+          'acknowledge_unavailable_population': true,
       },
     ),
   );

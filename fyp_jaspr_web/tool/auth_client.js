@@ -187,13 +187,20 @@ async function apiRequest(path, method = 'GET', body) {
   if (!path.startsWith('/api/')) throw new Error('Invalid API route.');
   const { data, error } = await client.auth.getSession();
   if (error || !data.session) throw new Error('Sign in to continue.');
-  const response = await fetch(api + path, {
-    method,
-    credentials: 'same-origin',
-    headers: { Authorization: 'Bearer ' + data.session.access_token, 'Content-Type': 'application/json' },
-    body: body == null ? undefined : JSON.stringify(body),
-    signal: AbortSignal.timeout(15000),
-  });
+  let response;
+  try {
+    response = await fetch(api + path, {
+      method,
+      credentials: 'same-origin',
+      headers: { Authorization: 'Bearer ' + data.session.access_token, 'Content-Type': 'application/json' },
+      body: body == null ? undefined : JSON.stringify(body),
+      signal: AbortSignal.timeout(15000),
+    });
+  } catch (err) {
+    // Same rule as requestDetailed: an aborted request reports what happened
+    // in words a user can act on, never the browser's internal abort text.
+    throw new Error(friendlyFetchError(err, 'The data service could not complete this request.'));
+  }
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) {
     // FastAPI error shape: {detail: string} or {detail: {code, message}}.
@@ -555,15 +562,37 @@ async function finishStaffOnboarding() {
 // now reusable: the initial `ready` promise retries a few times, and a
 // background poller keeps trying while the API is down, then re-enables the
 // rendered buttons in place (no refresh needed).
+// Browser abort exceptions must never reach the UI verbatim. When an
+// `AbortSignal.timeout` fires, Chromium throws a DOMException whose `.message`
+// is the internal text "signal timed out" — which a dashboard error card then
+// displayed word for word. Map the abort *names* (stable across browsers) to
+// one honest sentence; every other error keeps its own message.
+function friendlyFetchError(err, fallback) {
+  const name = err?.name || '';
+  if (name === 'TimeoutError' || name === 'AbortError') {
+    return 'The server did not respond in time. If this keeps happening, '
+      + 'confirm the SiteWise server is running, then try again.';
+  }
+  return (typeof err?.message === 'string' && err.message) ? err.message : fallback;
+}
+
 // Load the public Supabase configuration. It is served by the Jaspr server
 // itself, so it is available even when the FastAPI backend is still starting.
 // The old code probed `api + '/health'` here and then ignored the result;
 // readiness is now reported separately by probeBackend() below.
 async function loadConfig() {
-  const response = await fetch(publicConfigUrl, {
-    cache: 'no-store',
-    signal: AbortSignal.timeout(5000),
-  });
+  let response;
+  try {
+    response = await fetch(publicConfigUrl, {
+      cache: 'no-store',
+      signal: AbortSignal.timeout(5000),
+    });
+  } catch (err) {
+    // A timed-out config fetch used to poison `state.error` with the browser's
+    // internal "signal timed out" text, which every later API answer then
+    // echoed onto the dashboard. Report the real situation instead.
+    throw new Error(friendlyFetchError(err, 'The authentication configuration is unavailable.'));
+  }
   if (!response.ok) throw new Error('The authentication configuration is unavailable.');
   const config = await response.json();
   if (!config.configured || !config.supabaseUrl || !config.supabasePublishableKey) {
@@ -1217,9 +1246,10 @@ window.sitewiseAuth = {
         ok: false,
         status: typeof err?.status === 'number' ? err.status : null,
         code: typeof err?.code === 'string' ? err.code : null,
-        message: typeof err?.message === 'string' && err.message
-          ? err.message
-          : 'The data service could not complete this request.',
+        // Aborted fetches (AbortSignal.timeout) carry the browser-internal
+        // "signal timed out" message; render a user sentence instead. Backend
+        // messages already written for clients pass through unchanged.
+        message: friendlyFetchError(err, 'The data service could not complete this request.'),
       });
     }
   },

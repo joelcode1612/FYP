@@ -24,6 +24,7 @@ from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, EmailStr, Field
+from sqlalchemy import text
 from sqlmodel import Session
 
 from sitewise.core.supabase_admin import SupabaseAdminService
@@ -37,6 +38,9 @@ from sitewise.dependencies import (
 )
 from sitewise.domain import rbac
 from sitewise.services.user_service import UserService
+from sitewise.repositories.agent_assignment_repository import (
+    AgentAssignmentRepository,
+)
 
 router = APIRouter()
 
@@ -905,33 +909,65 @@ def _agent_profile_or_empty(service: SupabaseAdminService, user_id: uuid.UUID) -
 
 
 @router.get("/me/listings")
-def my_assigned_listings(agent: AgentMfaUser) -> dict:
+def my_assigned_listings(
+    agent: AgentMfaUser, session: Session = Depends(get_db)
+) -> dict:
     """Listings assigned to the authenticated agent (valid empty state when
-    there is no agent profile or no assignment - never unrelated listings)."""
+    there is no agent profile or no assignment - never unrelated listings).
+
+    The assignment rows live in ``agent_listing_assignment`` with a REAL
+    foreign key to ``fyp.rental_properties(id)``; the Supabase agent profile
+    only supplies the ``agent_id`` scope. A row whose operational property
+    disappeared is reported with ``property_exists: false`` rather than being
+    rendered as a property.
+    """
     service = _admin_service()
     profile = _agent_profile_or_empty(service, agent.user_id)
     if profile is None:
         return {"agent": None, "listings": []}
-    listings = service.list_assigned_listings(int(profile["agent_id"]))
+    listings = AgentAssignmentRepository(session).list_for_agent(
+        int(profile["agent_id"])
+    )
     return {"agent": profile, "listings": listings}
 
 
 def _require_listing_access(
+    session: Session,
     service: SupabaseAdminService,
     user: AgentMfaUser,
     listing_id: int,
 ) -> tuple[dict, dict | None]:
-    listing = service.get_listing(listing_id)
-    if listing is None:
-        raise HTTPException(status_code=404, detail="Listing not found.")
+    """One enforcement point for listing scope.
+
+    The assignment is read from ``agent_listing_assignment`` (FK to the
+    operational property). A missing assignment is a 404 - it is also how a
+    property that does not exist is reported, so an agent can never probe the
+    property table through this route. A different agent's assignment is a
+    403. Administrators pass without an assignment row (their decisions are
+    audited separately).
+    """
+    repo = AgentAssignmentRepository(session)
+    assignment = repo.get(listing_id)
     if rbac.can_administer_users(user.role):
-        return listing, None  # administrators may act on any listing
+        # Administrators may act on any listing, including one that has no
+        # assignment row yet - but never on an id that is not a real property.
+        if assignment is not None:
+            return assignment, None
+        exists = session.execute(
+            text("SELECT 1 FROM fyp.rental_properties WHERE id = :lid"),
+            {"lid": int(listing_id)},
+        ).scalar()
+        if not exists:
+            raise HTTPException(status_code=404, detail="Listing not found.")
+        return {"listing_id": int(listing_id), "agent_id": None, "property_exists": True}, None
+    if assignment is None:
+        raise HTTPException(status_code=404, detail="Listing not found.")
     profile = _agent_profile_or_empty(service, user.user_id)
-    if profile is None or listing.get("agent_id") != profile.get("agent_id"):
+    if profile is None or assignment.get("agent_id") != profile.get("agent_id"):
         # Scope enforcement: an agent cannot reach another agent's listing by
         # changing a request parameter.
         raise HTTPException(status_code=403, detail="This listing is not assigned to you.")
-    return listing, profile
+    return assignment, profile
 
 
 @router.post("/listings/{listing_id}/verifications", status_code=201)
@@ -939,6 +975,7 @@ def submit_verification(
     listing_id: int,
     payload: VerificationFindingRequest,
     user: AgentMfaUser,
+    session: Session = Depends(get_db),
 ) -> dict:
     """Record a listing-verification finding on an ASSIGNED listing.
 
@@ -947,7 +984,7 @@ def submit_verification(
     administrator through the listing review workflow.
     """
     service = _admin_service()
-    _require_listing_access(service, user, listing_id)
+    _require_listing_access(session, service, user, listing_id)
     record = service.insert_listing_verification(
         listing_id=listing_id,
         verified_by_user_id=user.user_id,
@@ -963,9 +1000,10 @@ def submit_verification(
 def listing_verifications(
     listing_id: int,
     user: AgentMfaUser,
+    session: Session = Depends(get_db),
 ) -> list[dict]:
     service = _admin_service()
-    _require_listing_access(service, user, listing_id)
+    _require_listing_access(session, service, user, listing_id)
     return service.list_listing_verifications(listing_id)
 
 
@@ -974,13 +1012,25 @@ def assign_listing(
     listing_id: int,
     payload: AssignListingRequest,
     admin: AdminMfaUser,
+    session: Session = Depends(get_db),
 ) -> dict:
-    """Assign (or reassign) a listing to an agent profile."""
+    """Assign (or reassign) an operational property to an agent profile.
+
+    Writes ``agent_listing_assignment``; the FK rejects ids that are not real
+    properties, and that case is surfaced as 404 (never a phantom row).
+    """
     service = _admin_service()
     profile = _agent_profile_or_empty(service, payload.agent_user_id)
     if profile is None:
         raise HTTPException(status_code=404, detail="Agent profile not found.")
-    updated = service.assign_listing(listing_id, int(profile["agent_id"]))
+    try:
+        updated = AgentAssignmentRepository(session).assign(
+            listing_id,
+            int(profile["agent_id"]),
+            assigned_by=admin.user_id,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
     audit_recorded = _record_audit(
         service,
         affected_user_id=payload.agent_user_id,
@@ -990,3 +1040,16 @@ def assign_listing(
         details={"listing_id": listing_id, "agent_id": profile["agent_id"]},
     )
     return {**updated, "audit_recorded": audit_recorded}
+
+
+@router.delete("/listings/{listing_id}/assign")
+def unassign_listing(
+    listing_id: int,
+    admin: AdminMfaUser,
+    session: Session = Depends(get_db),
+) -> dict:
+    """Remove the assignment (the property itself is untouched)."""
+    removed = AgentAssignmentRepository(session).unassign(listing_id)
+    if not removed:
+        raise HTTPException(status_code=404, detail="No assignment for this listing.")
+    return {"listing_id": listing_id, "unassigned": True}

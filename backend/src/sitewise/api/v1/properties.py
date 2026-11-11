@@ -1,5 +1,7 @@
 
-from datetime import UTC, datetime
+
+import logging
+from typing import Literal
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from pydantic import BaseModel, Field, field_validator
@@ -16,8 +18,11 @@ from sitewise.services.address_validation_service import (
     AddressValidationUnavailable,
     validate_address,
 )
+from sitewise.services.property_enrichment_service import PropertyEnrichmentService
 
 router = APIRouter()
+
+logger = logging.getLogger("sitewise.properties")
 
 #: The only commercial property types the Add Property form may submit.
 #: Mirrors `shared_logic/lib/src/domain/data/add_property_rules.dart`; the
@@ -88,8 +93,10 @@ class OwnerListingRequest(BaseModel):
     city: str = Field(min_length=2, max_length=80)
     state: str = Field(min_length=2, max_length=80)
     postcode: str = Field(pattern=r"^\d{5}$")
-    latitude: float = Field(ge=-90, le=90)
-    longitude: float = Field(ge=-180, le=180)
+    # Coordinates are optional: the wizard no longer geocodes, and the
+    # backend's enrichment/admin review resolves the location afterwards.
+    latitude: float | None = Field(default=None, ge=-90, le=90)
+    longitude: float | None = Field(default=None, ge=-180, le=180)
     rental_price: float = Field(gt=0, le=10_000_000)
     size_sqft: float = Field(gt=0, le=10_000_000)
     property_type: str = Field(default="Shoplot", max_length=60)
@@ -115,58 +122,51 @@ class OwnerListingRequest(BaseModel):
 
 
 def _run_enrichment(repo: FypPropertyRepository, property_row: dict) -> dict:
-    """Compute + persist features for one property.
+    """Compute + persist initial features for one newly created property.
 
-    A failure here must never invalidate the saved listing: the caller keeps
-    the row and receives ``status: failed`` with the reason class.
+    Goes through FeatureRefreshService so the attempt is recorded as a
+    pending/current/failed freshness state that Admin and Entrepreneur clients
+    can display and retry. The property row is committed BEFORE this call, so
+    a failure here never invalidates the saved listing; no external data
+    download is triggered (local PostGIS only).
     """
+    from sitewise.services.feature_refresh_service import FeatureRefreshService
+
     try:
-        snapshot = repo.enrichment_snapshot(
-            float(property_row["latitude"]), float(property_row["longitude"])
+        result = FeatureRefreshService(repo.session).recalculate_new_property(
+            int(property_row["id"])
         )
-        stored = repo.upsert_geospatial_features(int(property_row["id"]), snapshot)
-        return {"status": "ok", "features": stored}
+        if result["successful_computations"] != 1:
+            return {
+                "status": "failed",
+                "reason": "feature_calculation_unavailable",
+                "detail": "; ".join(result["errors"])[:300],
+                "freshness": "pending_or_failed",
+            }
+        # Record the per-category lifecycle for the SAME values. The wide
+        # feature row above stays the measurement contract; this keeps the
+        # admin review panel from reporting "not started" for a listing whose
+        # features were in fact calculated. Same source tables and predicates,
+        # so the numbers agree; a failure here must not fail the creation.
+        try:
+            PropertyEnrichmentService(repo.session).run(
+                int(property_row["id"]), phase="postgis"
+            )
+        except Exception as exc:  # noqa: BLE001 - additive bookkeeping only
+            logger.warning(
+                "enrichment.category_state_failed property=%s error=%s",
+                property_row.get("id"), exc,
+            )
+        return {
+            "status": "ok",
+            # Preserve the original response contract: the stored feature row
+            # (competitor/demand/accessibility counts) is returned exactly as
+            # before, with the freshness state added alongside it.
+            "features": repo.get_geo_features(int(property_row["id"])) or {},
+            "freshness": "current",
+        }
     except Exception as exc:  # noqa: BLE001 - reported, never swallowed silently
         return {"status": "failed", "reason": type(exc).__name__, "detail": str(exc)[:300]}
-
-
-def _validate_listing_address(payload: "OwnerListingRequest") -> dict:
-    """Server-side gate: a listing may only be created with a complete,
-    provider-confirmed premise address.
-
-    This is deliberately NOT a client-supplied flag. The backend asks Google
-    itself, so a forged request cannot claim a verdict. ``503`` keeps the
-    distinction between "the address is wrong" (422) and "the provider is
-    unavailable" (503) explicit.
-    """
-    try:
-        verdict = validate_address(
-            address_lines=[payload.address],
-            region_code="MY",
-            locality=payload.city,
-            postal_code=payload.postcode,
-            administrative_area=payload.state,
-        )
-    except AddressValidationRejected as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
-    except AddressValidationUnavailable as exc:
-        raise HTTPException(
-            status_code=503,
-            detail=str(exc),
-        ) from exc
-
-    status = verdict.get("status")
-    if status != "validated":
-        message = (
-            "We found the general location, but cannot confirm the exact "
-            "property address. Please check the building, unit number or "
-            "postcode."
-            if status == "partially_validated"
-            else "We couldn't verify this address. Please check your address "
-            "details and try again."
-        )
-        raise HTTPException(status_code=422, detail=message)
-    return verdict
 
 
 @router.post("/listings", status_code=201)
@@ -181,20 +181,13 @@ def create_owner_listing(
     separate best-effort step whose outcome is reported, so a spatial failure
     never loses the submission.
 
-    Address verification is enforced HERE, not only in the UI: the server asks
-    Google Address Validation about the submitted address and refuses the
-    create unless the verdict is a complete premise. The verdict and Google's
-    normalised address are persisted with the row, and the provider's
-    coordinates replace the client's values so the pin matches the address.
+    Google Address Validation is no longer part of the create path: the
+    listing is stored with the owner's address as entered and its location is
+    resolved afterwards by the geospatial enrichment and admin review. The
+    standalone ``/validate-address`` endpoint remains available for callers
+    that want an explicit check.
     """
-    verdict = _validate_listing_address(payload)
     body = payload.model_dump()
-    body["address_validation_status"] = verdict["status"]
-    body["address_formatted"] = verdict.get("formatted_address")
-    body["address_validated_at"] = datetime.now(UTC)
-    if verdict.get("latitude") is not None and verdict.get("longitude") is not None:
-        body["latitude"] = float(verdict["latitude"])
-        body["longitude"] = float(verdict["longitude"])
 
     repo = FypPropertyRepository(session)
     row = repo.create_owner_listing(owner_user_id=current.user_id, payload=body)
@@ -206,9 +199,11 @@ def create_owner_listing(
             "verification_status": row["verification_status"],
             "is_published": row["is_published"],
             "address_validation": {
-                "status": verdict["status"],
-                "granularity": verdict.get("validation_granularity"),
-                "formatted_address": verdict.get("formatted_address"),
+                "status": row.get("address_validation_status"),
+                "granularity": None,
+                "formatted_address": row.get("address_formatted"),
+                "note": "Address validation is not performed at submission; "
+                "location is resolved by enrichment and admin review.",
             },
             "note": "Listings stay pending and unpublished until an administrator verifies them.",
         },
@@ -448,32 +443,138 @@ def set_primary_listing_photo(
     return {"data": repo.listing_photos(property_id)}
 
 
+class EnrichRequest(BaseModel):
+    """Which enrichment phase to run.
+
+    ``postgis`` and ``population`` are the two phases the Add Property flow
+    starts separately. ``all`` is the default so an existing client that sends
+    no body keeps its old behaviour.
+    """
+
+    phase: Literal["postgis", "population", "all"] = "all"
+    force: bool = False
+    categories: list[str] | None = Field(
+        default=None,
+        description=(
+            "Optional explicit subset. Unknown names are ignored so a client "
+            "cannot ask for a category that does not exist."
+        ),
+    )
+
+
+def _require_owned_listing(
+    session: Session, property_id: int, current: AuthenticatedUser
+) -> None:
+    """404 when the listing is missing, 403 when it belongs to someone else.
+
+    The owner identity always comes from the verified token; an administrator
+    may act on any listing.
+    """
+    row = session.execute(
+        text("SELECT owner_user_id FROM fyp.rental_properties WHERE id = :pid"),
+        {"pid": property_id},
+    ).first()
+    if row is None:
+        raise HTTPException(status_code=404, detail="Property not found.")
+    owner_uuid = row[0]
+    if rbac.can_administer_users(current.role):
+        return
+    if owner_uuid is None or str(owner_uuid) != str(current.user_id):
+        raise ForbiddenError("You can only enrich your own property listings.")
+
+
 @router.post("/listings/{property_id}/enrich")
 def enrich_listing(
     property_id: int,
     session: Session = Depends(get_db),
     current: AuthenticatedUser = Depends(require_property_owner),
+    payload: EnrichRequest | None = None,
 ):
-    """Recompute features for an owned listing (idempotent).
+    """Run one enrichment phase for an owned listing.
 
-    Only the owner or an administrator may enrich; the row is never modified
-    beyond the feature table, and repeated calls produce the same single row.
+    The two phases are independent on purpose:
+
+    * ``phase="postgis"`` (Phase 1) computes F&B competitors, demand
+      generators, roads/transportation and parking. Fast, and safe to call
+      while the owner is still filling the form.
+    * ``phase="population"`` (Phase 2) runs the raster population chain on its
+      own. It is the only category that can legitimately be unavailable, and
+      calling it never recomputes Phase 1.
+    * ``phase="all"`` (default, backward compatible with callers that send no
+      body) runs both.
+
+    Idempotent: a category already ``current`` for the same coordinates is not
+    recalculated unless ``force`` is set. A request that arrives while another
+    request owns a category leaves that category alone instead of starting a
+    duplicate computation.
     """
-    repo = FypPropertyRepository(session)
-    coords = repo._coords(property_id)
-    owner = session.execute(
-        text("SELECT owner_user_id FROM fyp.rental_properties WHERE id = :pid"),
-        {"pid": property_id},
-    ).first()
-    if coords is None or owner is None:
-        raise HTTPException(status_code=404, detail="Property not found or has no coordinates.")
-    owner_uuid = owner[0]
-    is_admin = rbac.can_administer_users(current.role)
-    if not is_admin and (owner_uuid is None or str(owner_uuid) != str(current.user_id)):
-        raise ForbiddenError("You can only enrich your own property listings.")
-    snapshot = repo.enrichment_snapshot(coords[0], coords[1])
-    stored = repo.upsert_geospatial_features(property_id, snapshot)
-    return {"data": stored, "meta": {"property_id": property_id, "status": "ok"}}
+    _require_owned_listing(session, property_id, current)
+    phase = payload.phase if payload is not None else "all"
+    force = bool(payload.force) if payload is not None else False
+    categories = payload.categories if payload is not None else None
+
+    service = PropertyEnrichmentService(session)
+    try:
+        summary = service.run(
+            property_id, phase=phase, categories=categories, force=force
+        )
+    except LookupError:
+        raise HTTPException(
+            status_code=404, detail="Property not found or has no coordinates."
+        )
+    # Preserve the original response contract: the stored feature row (with its
+    # flat competitor/demand/accessibility columns) is still the payload, and
+    # the per-category lifecycle is added alongside it. A client written against
+    # the old shape keeps working; a client that needs the new states reads
+    # `categories`.
+    stored = FypPropertyRepository(session).get_geo_features(property_id) or {}
+    return {
+        "data": {**stored, **summary},
+        "meta": {"property_id": property_id, "status": "ok"},
+    }
+
+
+@router.get("/listings/{property_id}/enrichment")
+def enrichment_state(
+    property_id: int,
+    session: Session = Depends(get_db),
+    current: AuthenticatedUser = Depends(require_property_owner),
+):
+    """Stored per-category enrichment state.
+
+    Reads what is stored and never recalculates: the Add Property progress
+    panel, the admin review and the property-detail page all poll this and
+    must not trigger work by looking.
+    """
+    _require_owned_listing(session, property_id, current)
+    service = PropertyEnrichmentService(session)
+    service.ensure_schema()
+    return {"data": service.summary(property_id), "meta": {"property_id": property_id}}
+
+
+@router.post("/listings/{property_id}/enrichment/{category}/retry")
+def retry_enrichment_category(
+    property_id: int,
+    category: str,
+    session: Session = Depends(get_db),
+    current: AuthenticatedUser = Depends(require_property_owner),
+):
+    """Retry exactly one category.
+
+    Scoped to a single category so a failed population raster never forces the
+    four PostGIS categories to be recomputed.
+    """
+    _require_owned_listing(session, property_id, current)
+    service = PropertyEnrichmentService(session)
+    try:
+        summary = service.retry(property_id, category)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    except LookupError:
+        raise HTTPException(
+            status_code=404, detail="Property not found or has no coordinates."
+        )
+    return {"data": summary, "meta": {"property_id": property_id, "status": "ok"}}
 
 
 # ---------------------------------------------------------------------------

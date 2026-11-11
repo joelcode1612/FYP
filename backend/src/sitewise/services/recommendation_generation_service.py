@@ -30,6 +30,7 @@ from typing import Any
 
 from sqlmodel import Session
 
+from sitewise.core.config import Settings
 from sitewise.core.logging import logger
 from sitewise.domain.recommendation_scoring import (
     SCORE_MEANING,
@@ -40,8 +41,13 @@ from sitewise.domain.recommendation_scoring import (
     rank_candidates,
     score_candidate,
 )
+from sitewise.domain.recommendation_scoring import (
+    SCORING_CONFIG_V3,
+)
 from sitewise.ml.model_loader import ModelLoader
 from sitewise.ml.property_features import PropertyFeatureRepository
+from sitewise.ml.pu_variant import experimental_prediction, resolve_variant
+from sitewise.ml.sitewise_recommender_v3 import load_snapshot
 from sitewise.ml.selected_pu_integration import (
     SELECTED_MODEL_NAME,
     explain_selected_payload,
@@ -126,14 +132,23 @@ class RecommendationGenerationService:
     # ------------------------------------------------------------- generation
     @staticmethod
     def _inputs_hash(
-        profile: Any, limit: int, state: str | None, property_ids: list[str] | None
+        profile: Any,
+        limit: int,
+        state: str | None,
+        property_ids: list[str] | None,
+        *,
+        layer1_key: str,
+        layer1_version: str | None,
+        engine_version: str,
     ) -> str:
         """Stable hash of every input that can change the ranked output.
 
-        Covers the normalised preference profile, the request filters and the
-        scoring configuration version - a preference edit, a different limit
-        or a new scoring version all produce a different hash, so a cached
-        batch can never be served for changed inputs.
+        Covers the normalised preference profile, the request filters, the
+        Layer-2 engine version, AND the Layer-1 variant + artifact version -
+        a preference edit, a different limit, a new scoring version or a
+        model-variant switch all produce a different hash, so a cached batch
+        can never be served for changed inputs (cache invalidation on model,
+        preference or calibration change).
         """
         material = json.dumps(
             {
@@ -141,7 +156,9 @@ class RecommendationGenerationService:
                 "limit": limit,
                 "state": state,
                 "property_ids": sorted(property_ids or []),
-                "scoring_version": SCORING_CONFIG.version,
+                "scoring_version": engine_version,
+                "layer1_variant": layer1_key,
+                "layer1_version": layer1_version,
             },
             sort_keys=True,
             separators=(",", ":"),
@@ -168,10 +185,30 @@ class RecommendationGenerationService:
         batch is returned without recomputing (``reused_existing_batch``).
         """
         limit = max(1, min(int(limit), 100))
+        settings = Settings()
+        variant = resolve_variant(settings)
         payload = self.preferences.payload(user_id)
         stored = payload.get("preferences")
         profile = preference_profile_from(stored)
-        inputs_hash = self._inputs_hash(profile, limit, state, property_ids)
+        # Layer-2 engine follows the stored preferences' schema version: v3
+        # (five-question) answers score with the V3 rule engine whose
+        # calibration is verified against RECOMMENDER_V3.joblib. v1/v2
+        # records keep the original engine and are never re-interpreted.
+        recommender = None
+        if profile.preferences_version == 3:
+            recommender = load_snapshot()
+            engine_version = SCORING_CONFIG_V3.version
+        else:
+            engine_version = SCORING_CONFIG.version
+        inputs_hash = self._inputs_hash(
+            profile,
+            limit,
+            state,
+            property_ids,
+            layer1_key=variant.key,
+            layer1_version=variant.version,
+            engine_version=engine_version,
+        )
 
         existing = self.store.latest(user_id)
         if existing and existing.get("results"):
@@ -191,15 +228,68 @@ class RecommendationGenerationService:
 
         rejections: Counter[str] = Counter()
         scored: list[Any] = []
+        experimental_unavailable: list[dict[str, Any]] = []
+        experimental_scored = 0
         for row in rows:
             candidate = PropertyCandidate.from_row(row)
             failures = eligibility_failures(candidate, profile)
+            if variant.key == "experimental47":
+                # The stored legacy score is irrelevant for the experimental
+                # variant: eligibility re-checks the LIVE score instead, so a
+                # row without a stored score can still be scored - and a row
+                # WITH a stored score never leaks it into this batch.
+                failures = [
+                    f for f in failures
+                    if f != "pu_association_score_missing_or_invalid"
+                ]
             if failures:
                 for reason in failures:
                     rejections[reason] += 1
                 continue
+            if variant.key == "experimental47":
+                prediction = experimental_prediction(
+                    self.analytics_session, str(candidate.property_id)
+                )
+                if not prediction.get("available"):
+                    rejections["experimental47_47_feature_inference_unavailable"] += 1
+                    if len(experimental_unavailable) < 10:
+                        experimental_unavailable.append(
+                            {
+                                "property_id": candidate.property_id,
+                                "missing_features": (
+                                    prediction.get("feature_coverage") or {}
+                                ).get("missing_features", []),
+                                "inference_state": prediction.get("inference_state"),
+                            }
+                        )
+                    continue
+                from dataclasses import replace as _replace
+
+                candidate = _replace(
+                    candidate,
+                    pu_association_score=float(prediction["score"]),
+                    pu_score_source=variant.score_source,
+                    pu_feature_set="experimental_47_landscan_update",
+                    pu_model_method="live_inference",
+                )
+                experimental_scored += 1
             try:
-                scored.append(score_candidate(candidate, profile, config=SCORING_CONFIG))
+                if recommender is not None:
+                    scored.append(
+                        recommender.score_preference(
+                            profile,
+                            candidate,
+                            config=SCORING_CONFIG_V3,
+                            layer1_model=variant.layer1_model,
+                        )
+                    )
+                else:
+                    item = score_candidate(candidate, profile, config=SCORING_CONFIG)
+                    if item.layer1_model != variant.layer1_model:
+                        from dataclasses import replace
+
+                        item = replace(item, layer1_model=variant.layer1_model)
+                    scored.append(item)
             except ValueError as exc:
                 # Fail closed on an invalid PU score or out-of-range component:
                 # never substitute a demonstration value.
@@ -223,6 +313,15 @@ class RecommendationGenerationService:
                 "property_ids": sorted(shortlist) if shortlist is not None else None,
             },
             "limit": limit,
+            "layer1_variant": variant.key,
+            "layer1_model": variant.layer1_model,
+            "layer2_engine_version": engine_version,
+            "experimental_coverage": {
+                "scored_live_inference": experimental_scored,
+                "unavailable_examples": experimental_unavailable,
+            }
+            if variant.key == "experimental47"
+            else None,
             "ranking": "final_score desc, preference_match_score desc, "
                        "pu_association_score desc, property_id asc",
         }
@@ -254,38 +353,53 @@ class RecommendationGenerationService:
                     "never as zero."
                 ),
             },
-            "model": {
-                "name": "pu_model",
-                "artifact": "PU_model.joblib",
-                "research_only": True,
-                "used_for_ranking": True,
-                "score_source": (
-                    "sitewise_app.properties.source_data.research_p_association_score "
-                    "(stored output of the original PU model on the 47-feature baseline)"
-                ),
-                "score_meaning": (
-                    "Uncalibrated association with the observed-positive F&B "
-                    "sample class; NOT a probability of commercial success."
-                ),
-                "selected_alternative": {
-                    "name": SELECTED_MODEL_NAME,
-                    "role": "optional alternate Layer 1 PU research model",
-                    "used_for_ranking": False,
-                    "endpoints": [
-                        "GET /api/v1/ml/selected/model",
-                        "GET /api/v1/ml/selected/properties/{property_id}/prediction",
-                        "GET /api/v1/ml/selected/properties/{property_id}/explanation",
-                    ],
-                },
-            },
-            "layer2": {
-                "engine": "rule_based",
+            "model": self._model_section(variant),
+            "layer2": self._layer2_section(recommender),
+            "scoring": self._scoring_section(recommender),
+            "candidate_summary": candidate_summary,
+            "results": batch["results"],
+            "explanation_endpoint": (
+                "GET /api/v1/recommendations/{result_id}/explanation"
+            ),
+            "limitations": list(LIMITATIONS),
+        }
+
+    # ------------------------------------------------------------ sections
+    @staticmethod
+    def _model_section(variant: Any) -> dict[str, Any]:
+        """Layer-1 section describing the ACTIVE PU variant."""
+        section = variant.as_dict()
+        section["used_for_ranking"] = True
+        section["selected_alternative"] = {
+            "name": SELECTED_MODEL_NAME,
+            "role": "optional alternate Layer 1 PU research model",
+            "used_for_ranking": False,
+            "endpoints": [
+                "GET /api/v1/ml/selected/model",
+                "GET /api/v1/ml/selected/properties/{property_id}/prediction",
+                "GET /api/v1/ml/selected/properties/{property_id}/explanation",
+            ],
+        }
+        return section
+
+    @staticmethod
+    def _layer2_section(recommender: Any | None) -> dict[str, Any]:
+        """Layer-2 section for the engine actually used by this batch."""
+        if recommender is not None:
+            describe = recommender.describe()
+            return {
+                "engine": "rule_based_5q_v3",
                 "trained_recommender": False,
+                "config_version": SCORING_CONFIG_V3.version,
                 "status": (
-                    "No genuine trained Layer 2 recommender.joblib was found in "
-                    "the repository or the supplied training/SHAP packages. None "
-                    "was fabricated; a transparent versioned scoring engine is used."
+                    "Five-question V3 rule engine. The calibration constants are "
+                    "restored from the supplied RECOMMENDER_V3.joblib snapshot and "
+                    "verified field-by-field at load time; the package's original "
+                    ".py source was not supplied, so the deterministic rules are a "
+                    "documented reconstruction anchored on the snapshot's own "
+                    "values. Nothing here is a trained model output."
                 ),
+                "calibration": describe.get("calibration"),
                 "training_data_needed": [
                     "Per-entrepreneur preference snapshots linked to a decision",
                     (
@@ -298,15 +412,37 @@ class RecommendationGenerationService:
                         "replacing the research baseline weights"
                     ),
                 ],
-            },
-            "scoring": SCORING_CONFIG.as_dict(),
-            "candidate_summary": candidate_summary,
-            "results": batch["results"],
-            "explanation_endpoint": (
-                "GET /api/v1/recommendations/{result_id}/explanation"
+            }
+        return {
+            "engine": "rule_based",
+            "trained_recommender": False,
+            "status": (
+                "No genuine trained Layer 2 recommender.joblib was found in "
+                "the repository or the supplied training/SHAP packages. None "
+                "was fabricated; a transparent versioned scoring engine is used."
             ),
-            "limitations": list(LIMITATIONS),
+            "training_data_needed": [
+                "Per-entrepreneur preference snapshots linked to a decision",
+                (
+                    "Observed outcomes (shortlist, viewing, lease signed, outlet "
+                    "survival/revenue) with explicit negative feedback"
+                ),
+                "Consent, de-identification and a time-based train/test split",
+                (
+                    "Offline evaluation (NDCG / MAP / CTR calibration) before "
+                    "replacing the research baseline weights"
+                ),
+            ],
         }
+
+    @staticmethod
+    def _scoring_section(recommender: Any | None) -> dict[str, Any]:
+        if recommender is not None:
+            section = SCORING_CONFIG_V3.as_dict()
+            section["engine"] = "rule_based_5q_v3"
+            section["calibration"] = recommender.describe().get("calibration")
+            return section
+        return SCORING_CONFIG.as_dict()
 
     def _reused_response(
         self,
@@ -322,6 +458,8 @@ class RecommendationGenerationService:
         ``reused_existing_batch`` is True and no catalogue scan or scoring
         pass runs.
         """
+        variant = resolve_variant(Settings())
+        recommender = load_snapshot() if profile.preferences_version == 3 else None
         results = existing["results"]
         first = results[0]
         return {
@@ -342,52 +480,9 @@ class RecommendationGenerationService:
                     "never as zero."
                 ),
             },
-            "model": {
-                "name": "pu_model",
-                "artifact": "PU_model.joblib",
-                "research_only": True,
-                "used_for_ranking": True,
-                "score_source": (
-                    "sitewise_app.properties.source_data.research_p_association_score "
-                    "(stored output of the original PU model on the 47-feature baseline)"
-                ),
-                "score_meaning": (
-                    "Uncalibrated association with the observed-positive F&B "
-                    "sample class; NOT a probability of commercial success."
-                ),
-                "selected_alternative": {
-                    "name": SELECTED_MODEL_NAME,
-                    "role": "optional alternate Layer 1 PU research model",
-                    "used_for_ranking": False,
-                    "endpoints": [
-                        "GET /api/v1/ml/selected/model",
-                        "GET /api/v1/ml/selected/properties/{property_id}/prediction",
-                        "GET /api/v1/ml/selected/properties/{property_id}/explanation",
-                    ],
-                },
-            },
-            "layer2": {
-                "engine": "rule_based",
-                "trained_recommender": False,
-                "status": (
-                    "No genuine trained Layer 2 recommender.joblib was found in "
-                    "the repository or the supplied training/SHAP packages. None "
-                    "was fabricated; a transparent versioned scoring engine is used."
-                ),
-                "training_data_needed": [
-                    "Per-entrepreneur preference snapshots linked to a decision",
-                    (
-                        "Observed outcomes (shortlist, viewing, lease signed, outlet "
-                        "survival/revenue) with explicit negative feedback"
-                    ),
-                    "Consent, de-identification and a time-based train/test split",
-                    (
-                        "Offline evaluation (NDCG / MAP / CTR calibration) before "
-                        "replacing the research baseline weights"
-                    ),
-                ],
-            },
-            "scoring": SCORING_CONFIG.as_dict(),
+            "model": self._model_section(variant),
+            "layer2": self._layer2_section(recommender),
+            "scoring": self._scoring_section(recommender),
             "candidate_summary": first.get("batch_summary") or {},
             "results": results,
             "explanation_endpoint": (

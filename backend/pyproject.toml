@@ -26,6 +26,16 @@ dependencies = [
     "joblib>=1.3",
     "scikit-learn>=1.8,<1.9",
     "shap>=0.50,<0.51",
+    # Bounded open-data ingestion + feature refresh (GeoParquet column/row
+    # pruning, geometry validation, scheduled execution). pyosmium is NOT
+    # declared: no Python 3.13 Windows wheel exists, so the OSM collector uses
+    # Overpass/GeoJSON (and optionally OSMnx) instead of PBF parsing.
+    "pyarrow>=18",
+    "duckdb>=1.1",
+    "shapely>=2",
+    "geopandas>=1.0",
+    "osmnx>=2.0",
+    "apscheduler>=3.10,<4",
 ]
 
 [project.optional-dependencies]

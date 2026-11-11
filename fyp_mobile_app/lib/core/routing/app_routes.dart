@@ -24,8 +24,8 @@ import '../../presentation/mobile/entrepreneur/pages/entrepreneur_report_mobile_
 import '../../presentation/mobile/entrepreneur/pages/entrepreneur_saved_mobile_page.dart';
 import '../../presentation/mobile/entrepreneur/pages/entrepreneur_tour_mobile_page.dart';
 import '../../presentation/mobile/entrepreneur/pages/sitewise_add_property_mobile_page.dart';
-import '../../presentation/shared/capture/panorama_capture_page.dart';
 import '../../presentation/shared/pages/not_found_mobile_page.dart';
+import '../../presentation/shared/tour/ar_capture_mobile_page.dart';
 import '../../presentation/shared/tour/tour_preview_mobile_page.dart';
 
 /// Centralised route table for the Flutter app (mobile tree only).
@@ -46,6 +46,7 @@ String parentShellRoute(String route) {
     '/entrepreneur/preferences': '/entrepreneur/profile',
     '/entrepreneur/saved': '/entrepreneur/spaces',
     '/entrepreneur/add-property': '/entrepreneur/spaces',
+    '/owner/capture': '/entrepreneur/spaces',
     '/entrepreneur/compare': '/entrepreneur/spaces',
     // Discovery is the Recommendations tab. Every retired discovery route
     // (Explore, property detail, tour) highlights it, and the legacy
@@ -62,9 +63,8 @@ String parentShellRoute(String route) {
     AppRoutes.assessmentHome: '/entrepreneur/assess',
     AppRoutes.assessmentQuestionnaire: '/entrepreneur/assess',
     AppRoutes.assessmentReview: '/entrepreneur/assess',
-    // The 360° capture and preview flow is role-neutral shared work; it is
-    // entered from a property tour, so it highlights the discovery tab.
-    '/capture': '/entrepreneur/recommendations',
+    // The 360° preview flow is role-neutral shared work; it is entered from
+    // a property tour, so it highlights the discovery tab.
     '/tour-preview': '/entrepreneur/recommendations',
   };
   // Normalise a trailing slash or query string before lookup, so a deep link
@@ -114,15 +114,22 @@ abstract final class AppRoutes {
         RouteAccess.workspace,
         () => const OnboardingFlowPage(),
       ),
-      // Shared 360° capture + preview flow (device-bound, no role namespace).
-      '/capture' => (
-        RouteAccess.workspace,
-        () => PanoramaCapturePage(propertyId: settings.arguments as String?),
-      ),
       '/tour-preview' => (
         RouteAccess.workspace,
         () =>
             TourPreviewMobilePage(tourId: settings.arguments as String? ?? ''),
+      ),
+      // Guided 360° capture for one of the owner's listings. Arguments carry
+      // the listing id and name; a bare id (deep link) still resolves.
+      '/owner/capture' => (
+        RouteAccess.workspace,
+        () => ArCaptureMobilePage(
+          request: settings.arguments is ArCaptureRequest
+              ? settings.arguments as ArCaptureRequest
+              : ArCaptureRequest(
+                  propertyId: settings.arguments as String? ?? '',
+                ),
+        ),
       ),
       // Entrepreneur
       '/entrepreneur' => (

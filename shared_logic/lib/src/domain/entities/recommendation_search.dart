@@ -262,6 +262,13 @@ class RecommendationSearchRequest {
   final int pageSize;
   final String? cursor;
 
+  /// Ordering of the eligible set — `best_match` (default), `rent_asc`,
+  /// `rent_desc`, `size_desc`, `size_asc` or `pu_desc`.
+  ///
+  /// `null` means "let the server apply its default", which is what a saved
+  /// preference does: sort is a view of the results, not a stored requirement.
+  final String? sort;
+
   const RecommendationSearchRequest({
     this.businessType,
     this.preferredState,
@@ -275,6 +282,7 @@ class RecommendationSearchRequest {
     this.query,
     this.pageSize = 20,
     this.cursor,
+    this.sort,
   });
 
   /// Builds the search from saved preferences.
@@ -347,6 +355,7 @@ class RecommendationSearchRequest {
     if (query != null) 'query': query,
     'page_size': pageSize,
     if (cursor != null) 'cursor': cursor,
+    if (sort != null) 'sort': sort,
   };
 
   RecommendationSearchRequest copyWith({
@@ -362,7 +371,9 @@ class RecommendationSearchRequest {
     String? query,
     int? pageSize,
     String? cursor,
+    String? sort,
     bool clearCursor = false,
+    bool clearBusinessType = false,
     bool clearState = false,
     bool clearArea = false,
     bool clearPropertyType = false,
@@ -370,7 +381,9 @@ class RecommendationSearchRequest {
     bool clearRentRange = false,
     bool clearSizeRange = false,
   }) => RecommendationSearchRequest(
-    businessType: businessType ?? this.businessType,
+    businessType: clearBusinessType
+        ? null
+        : (businessType ?? this.businessType),
     preferredState: clearState ? null : (preferredState ?? this.preferredState),
     preferredArea: clearArea ? null : (preferredArea ?? this.preferredArea),
     minRentalRm: clearRentRange ? null : (minRentalRm ?? this.minRentalRm),
@@ -384,6 +397,7 @@ class RecommendationSearchRequest {
     query: clearQuery ? null : (query ?? this.query),
     pageSize: pageSize ?? this.pageSize,
     cursor: clearCursor ? null : (cursor ?? this.cursor),
+    sort: sort ?? this.sort,
   );
 }
 
@@ -391,6 +405,12 @@ class RecommendationSearchRequest {
 class RecommendationFacets {
   final List<FacetOption> states;
   final List<FacetOption> propertyTypes;
+
+  /// The orderings the server accepts, `value -> label`, in server order
+  /// (first = default). Read from the API so the UI keeps no second copy of
+  /// this list; empty when the facets call failed.
+  final Map<String, String> sortOptions;
+
   final double? minRentalRm;
   final double? maxRentalRm;
   final double? minSizeSqft;
@@ -400,6 +420,7 @@ class RecommendationFacets {
   const RecommendationFacets({
     this.states = const [],
     this.propertyTypes = const [],
+    this.sortOptions = const {},
     this.minRentalRm,
     this.maxRentalRm,
     this.minSizeSqft,
@@ -420,6 +441,11 @@ class RecommendationFacets {
     return RecommendationFacets(
       states: options('states'),
       propertyTypes: options('property_types'),
+      sortOptions: {
+        for (final row in (json['sort_options'] as List? ?? const []))
+          if (row is Map<String, dynamic> && row['value'] != null)
+            '${row['value']}': '${row['label'] ?? row['value']}',
+      },
       minRentalRm: (ranges['min_rental_rm'] as num?)?.toDouble(),
       maxRentalRm: (ranges['max_rental_rm'] as num?)?.toDouble(),
       minSizeSqft: (ranges['min_size_sqft'] as num?)?.toDouble(),

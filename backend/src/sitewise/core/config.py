@@ -93,6 +93,30 @@ class Settings(BaseSettings):
     google_maps_api_key: str = ""
     google_maps_timeout_seconds: int = 12
 
+    # --- Layer-1 PU model variant ------------------------------------------
+    # Which PU artifact the personalised recommender's Layer-1 score comes
+    # from. "legacy" (default) keeps the stored production
+    # research_p_association_score untouched. "experimental47" runs LIVE
+    # inference with the supplied experimental 47-feature bagged Histogram
+    # Gradient Boosting artifact for research properties whose full
+    # 47-feature vector resolves (DB + committed training bridge); everything
+    # else reports "47-feature inference unavailable" and is excluded from
+    # that experimental ranking. The two score families are NEVER mixed
+    # inside one ranking batch, and experimental scores are never written to
+    # the legacy score columns. Research/testing only: the experimental
+    # artifact is production_ready=false per its model card.
+    sitewise_pu_model_variant: str = "legacy"
+
+    @property
+    def pu_model_variant(self) -> str:
+        variant = (self.sitewise_pu_model_variant or "legacy").strip().lower()
+        if variant not in {"legacy", "experimental47"}:
+            raise ValueError(
+                "SITEWISE_PU_MODEL_VARIANT must be 'legacy' or 'experimental47', "
+                f"got {self.sitewise_pu_model_variant!r}"
+            )
+        return variant
+
     @property
     def cors_origin_list(self) -> list[str]:
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]

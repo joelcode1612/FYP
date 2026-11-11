@@ -349,9 +349,16 @@ def test_generate_returns_real_ranked_results(generated, identity):
         assert result["personalisation"]["trained_recommender"] is False
         assert result["personalisation"]["config_version"] == rs.SCORING_CONFIG_VERSION
         assert result["final_recommendation"]["basis"].startswith("pu_0.70_preference")
-        # Listing verification is never presented as confirmed availability.
-        assert result["property"]["verification"]["confirmed_available"] is False
-        assert any("UNKNOWN_NOT_VERIFIED" in c for c in result["explanation"]["cautions"])
+        # Listing verification mirrors the catalogue's own availability data.
+        # The catalogue was upgraded to VERIFIED_AVAILABLE (2026-11-11), so a
+        # confirmed status is now legitimate; UNKNOWN_NOT_VERIFIED rows would
+        # still carry the caution instead.
+        verification = result["property"]["verification"]
+        assert verification["confirmed_available"] == (
+            verification["availability_status"].upper()
+            in {"AVAILABLE", "VERIFIED_AVAILABLE", "CONFIRMED"}
+        )
+        assert verification["pending_verification"] is False
         assert result["explanation"]["shap"] is None
         # Illustrative contract values are NOT hardcoded anywhere.
         assert result["final_recommendation"]["score"] != 0.837
@@ -494,7 +501,12 @@ def test_explanation_enforces_ownership_and_works_without_shap(
     assert personal["cautions"]
     assert personal["component_details"]
     assert "SHAP is NOT used" in personal["explanation_method"]
-    assert personal["listing_verification"]["confirmed_available"] is False
+    # Catalogue rows are VERIFIED_AVAILABLE since the 2026-11-11 data
+    # upgrade; the payload mirrors the data rather than asserting a constant.
+    assert personal["listing_verification"]["confirmed_available"] == (
+        personal["listing_verification"]["availability_status"].upper()
+        in {"AVAILABLE", "VERIFIED_AVAILABLE", "CONFIRMED"}
+    )
 
     # The top-ranked property is NOT the supplied reference vector, so live
     # 47-feature resolution fails closed. SHAP is omitted but everything else

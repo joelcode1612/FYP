@@ -6,7 +6,8 @@ import '../../shell/mobile_app_shell.dart';
 import '../../widgets/assessment_stepper.dart';
 import '../../widgets/m3_kit.dart';
 
-/// **ASSESSMENT / STEP 1 OF 3** — the eight business-preference questions.
+/// **ASSESSMENT / STEP 1 OF 3** — the five business-preference questions
+/// (Recommender V3, requirements schema v3).
 ///
 /// One question per screen with a progress bar and Previous/Next, matching the
 /// web workspace exactly: the same snake_case answer tokens, the same backend
@@ -43,7 +44,10 @@ class _Question {
   });
 }
 
-/// The eight questions. Tokens are the backend's published values.
+/// The five questions (Recommender V3, requirements schema v3, 2026-11-11).
+/// Tokens are the backend's published values. Q4 shows the five V3
+/// priorities; the two legacy v2 tokens stay valid server-side for pre-V3
+/// records, which seed from storage without being re-interpreted.
 const List<_Question> _questions = [
   _Question(
     id: 'fnb_concept',
@@ -54,8 +58,8 @@ const List<_Question> _questions = [
       ('restaurant', 'Restaurant'),
       ('bakery_dessert_shop', 'Bakery / Dessert Shop'),
       ('fast_food_quick_service', 'Fast Food / Quick Service'),
-      ('beverage_shop_kiosk', 'Beverage Shop / Kiosk'),
-      ('other_fnb', 'Other F&B'),
+      ('beverage_shop_kiosk', 'Beverage / Kiosk'),
+      ('other_fnb', 'Other'),
     ],
   ),
   _Question(
@@ -85,46 +89,29 @@ const List<_Question> _questions = [
   _Question(
     id: 'recommendation_priority',
     prompt: 'What matters most when choosing the location?',
-    help: 'The priority the assessment is read against.',
+    help:
+        'This priority dynamically re-weights the scoring components '
+        '(Q4 of the five-question recommender).',
     options: [
-      ('high_customer_demand', 'High Customer Demand'),
+      ('high_nearby_population', 'High Nearby Population'),
       ('affordable_operating_location', 'Affordable Operating Location'),
       ('easy_customer_accessibility', 'Easy Customer Accessibility'),
-      ('favorable_competition', 'Favorable Competition'),
+      ('active_commercial_surroundings', 'Active Commercial Surroundings'),
       ('balanced_suitability', 'Balanced Suitability'),
     ],
   ),
   _Question(
-    id: 'target_price_segment',
-    prompt: 'How is your menu priced?',
-    help: 'Price positioning informs how competitor density is interpreted.',
+    id: 'space_size_preference',
+    prompt: 'What size of business space do you prefer?',
+    help:
+        'Scored against the catalogue\'s calibrated floor-area percentiles '
+        '(Q5 of the five-question recommender).',
     options: [
-      ('budget_friendly', 'Budget-Friendly'),
-      ('mid_range', 'Mid-Range'),
-      ('premium', 'Premium'),
-      ('mixed_price_range', 'Mixed Price Range'),
+      ('compact_business_space', 'Compact Business Space'),
+      ('standard_business_space', 'Standard Business Space'),
+      ('spacious_business_space', 'Spacious Business Space'),
+      ('flexible_no_preference', 'Flexible / No Preference'),
     ],
-  ),
-  _Question(
-    id: 'customer_access_mode',
-    prompt: 'How will most customers reach you?',
-    help: 'Checked against the transport measurements the analysis holds.',
-    options: [
-      ('walking', 'Walking'),
-      ('public_transportation', 'Public Transportation'),
-      ('private_vehicle', 'Private Vehicle'),
-      ('mixed_transportation', 'Mixed Transportation'),
-    ],
-  ),
-  _Question(
-    id: 'max_monthly_rent_myr',
-    prompt: 'What is your maximum monthly rental?',
-    help: 'In MYR. Must be greater than zero; compared with the asking rent.',
-  ),
-  _Question(
-    id: 'min_floor_area_sqft',
-    prompt: 'What is the smallest floor area you can operate in?',
-    help: 'In square feet. Must be greater than zero; compared with the listing.',
   ),
 ];
 

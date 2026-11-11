@@ -24,6 +24,56 @@ def fake_admin(monkeypatch):
     return fake
 
 
+@pytest.fixture()
+def real_listings():
+    """Two real operational property ids + assignment cleanup.
+
+    Assignments live in ``agent_listing_assignment`` (FK to
+    ``fyp.rental_properties.id``); the fake Supabase service only supplies
+    agent profiles now, so scope tests must seed the real table.
+    """
+    from sqlalchemy import text
+    from sqlmodel import Session
+
+    from sitewise.db.session import engine
+
+    with Session(engine) as session:
+        ids = session.execute(
+            text("SELECT id FROM fyp.rental_properties ORDER BY id LIMIT 2")
+        ).scalars().all()
+    assert len(ids) == 2
+    created: list[int] = []
+    yield ids, created
+    with Session(engine) as session:
+        if created:
+            session.execute(
+                text(
+                    "DELETE FROM agent_listing_assignment WHERE listing_id = ANY(:ids)"
+                ),
+                {"ids": created},
+            )
+            session.commit()
+
+
+def _assign(listing_id: int, agent_id: int, created: list[int]) -> None:
+    from sqlalchemy import text
+    from sqlmodel import Session
+
+    from sitewise.db.session import engine
+
+    with Session(engine) as session:
+        session.execute(
+            text(
+                "INSERT INTO agent_listing_assignment (listing_id, agent_id) "
+                "VALUES (:lid, :aid) ON CONFLICT (listing_id) DO UPDATE "
+                "SET agent_id = EXCLUDED.agent_id"
+            ),
+            {"lid": int(listing_id), "aid": int(agent_id)},
+        )
+        session.commit()
+    created.append(int(listing_id))
+
+
 def auth(token):
     return {"Authorization": f"Bearer {token}"}
 
@@ -97,18 +147,23 @@ def test_agent_with_aal2_gets_valid_empty_state(client, cleanup_users, fake_admi
     assert body["listings"] == []
 
 
-def test_agent_sees_only_assigned_listings(client, cleanup_users, fake_admin):
+def test_agent_sees_only_assigned_listings(
+    client, cleanup_users, fake_admin, real_listings
+):
+    ids, created = real_listings
     sub, token = _mirror_user(cleanup_users, role="agent")
     profile = fake_admin.create_agent_profile(user_id=sub, agent_name="Assigned Agent")
-    mine = fake_admin.seed_listing(101, profile["agent_id"])
-    fake_admin.seed_listing(202, None)
     other_agent = fake_admin.create_agent_profile(user_id=uuid.uuid4(), agent_name="Other")
-    fake_admin.seed_listing(303, other_agent["agent_id"])
+    _assign(ids[0], profile["agent_id"], created)
+    _assign(ids[1], other_agent["agent_id"], created)
 
     r = client.get("/api/v1/staff/me/listings", headers=auth(token))
     assert r.status_code == 200
-    ids = [row["listing_id"] for row in r.json()["listings"]]
-    assert ids == [mine["listing_id"]]
+    returned = [row["listing_id"] for row in r.json()["listings"]]
+    # Scope: the agent's own assignment is present, the other agent's is not.
+    # (Pre-existing rows for other agent ids are outside this test's control.)
+    assert ids[0] in returned
+    assert ids[1] not in returned
 
 
 def test_suspended_agent_denied(client, cleanup_users, fake_admin):
@@ -125,40 +180,53 @@ def test_pending_agent_denied(client, cleanup_users, fake_admin):
     assert r.status_code == 403
 
 
-def test_verification_finding_requires_assigned_listing(client, cleanup_users, fake_admin):
+def test_verification_finding_requires_assigned_listing(
+    client, cleanup_users, fake_admin, real_listings
+):
     """An agent cannot reach another agent's listing by changing a request
     parameter; administrators may act on any listing."""
+    ids, created = real_listings
     sub, token = _mirror_user(cleanup_users, role="agent")
     profile = fake_admin.create_agent_profile(user_id=sub, agent_name="Scoped Agent")
-    assigned = fake_admin.seed_listing(501, profile["agent_id"])
-    unassigned = fake_admin.seed_listing(502, None)
+    other = fake_admin.create_agent_profile(user_id=uuid.uuid4(), agent_name="Other")
+    # Another agent owns the first listing; the second has no assignment.
+    _assign(ids[0], other["agent_id"], created)
 
     good = {
         "property_authenticity_status": "verified",
         "commercial_classification_status": "confirmed",
         "verification_reason": "Site visit completed; photos match listing.",
     }
-    # Unassigned listing -> 403.
-    r = client.post(f"/api/v1/staff/listings/{unassigned['listing_id']}/verifications",
+    # Another agent's assignment -> 403.
+    r = client.post(f"/api/v1/staff/listings/{ids[0]}/verifications",
                     headers=auth(token), json=good)
     assert r.status_code == 403
 
-    # Assigned listing -> 201 and recorded against the caller.
-    r = client.post(f"/api/v1/staff/listings/{assigned['listing_id']}/verifications",
+    # No assignment at all -> 404 (never a phantom property).
+    r = client.post(f"/api/v1/staff/listings/{ids[1]}/verifications",
+                    headers=auth(token), json=good)
+    assert r.status_code == 404
+
+    # Own assignment -> 201 and recorded against the caller.
+    _assign(ids[1], profile["agent_id"], created)
+    r = client.post(f"/api/v1/staff/listings/{ids[1]}/verifications",
                     headers=auth(token), json=good)
     assert r.status_code == 201, r.text
     assert r.json()["verified_by_user_id"] == str(sub)
 
     # Listing history readable by the assigned agent.
-    r = client.get(f"/api/v1/staff/listings/{assigned['listing_id']}/verifications",
+    r = client.get(f"/api/v1/staff/listings/{ids[1]}/verifications",
                    headers=auth(token))
     assert r.status_code == 200
     assert len(r.json()) == 1
 
 
-def test_admin_can_verify_any_listing(client, cleanup_users, fake_admin):
+def test_admin_can_verify_any_listing(
+    client, cleanup_users, fake_admin, real_listings
+):
     _, token = _mirror_user(cleanup_users, role="admin")
-    unassigned = fake_admin.seed_listing(601, None)
+    ids, _created = real_listings
+    unassigned = {"listing_id": ids[0]}
     r = client.post(
         f"/api/v1/staff/listings/{unassigned['listing_id']}/verifications",
         headers=auth(token),

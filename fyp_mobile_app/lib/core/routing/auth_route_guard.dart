@@ -36,7 +36,6 @@ class AuthPendingDestination {
     final allowed =
         pending.route == home ||
         pending.route.startsWith('$home/') ||
-        pending.route == '/capture' ||
         pending.route == '/tour-preview';
     return allowed ? pending.route : null;
   }

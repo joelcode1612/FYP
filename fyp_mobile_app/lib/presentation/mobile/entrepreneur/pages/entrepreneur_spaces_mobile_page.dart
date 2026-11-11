@@ -10,6 +10,7 @@ import '../../shell/entrepreneur_tab_scope.dart';
 import '../../shell/mobile_app_shell.dart';
 import '../../widgets/async_section.dart';
 import '../../widgets/m3_kit.dart';
+import '../../../shared/tour/ar_capture_mobile_page.dart';
 import '../../../shared/widgets/sitewise_bottom_sheet.dart';
 import '../../../shared/widgets/sitewise_inline_notice.dart';
 
@@ -357,6 +358,34 @@ class _OwnerListingsSection extends StatelessWidget {
                           fontFamily: kFontFamily,
                           fontSize: 11,
                           color: SitewiseM3.rowDesc,
+                        ),
+                      ),
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: TextButton.icon(
+                          onPressed: () => Navigator.of(context).pushNamed(
+                            '/owner/capture',
+                            arguments: ArCaptureRequest(
+                              propertyId: listing.id,
+                              title: listing.name,
+                            ),
+                          ),
+                          icon: const Icon(Icons.threesixty_rounded, size: 16),
+                          label: const Text(
+                            'Capture 360° tour',
+                            style: TextStyle(
+                              fontFamily: kFontFamily,
+                              fontSize: 11.5,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          style: TextButton.styleFrom(
+                            foregroundColor: SitewiseColors.action,
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 6),
+                            minimumSize: Size.zero,
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          ),
                         ),
                       ),
                     ],

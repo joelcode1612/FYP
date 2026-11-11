@@ -98,6 +98,9 @@ def complete_payload():
         "address": "Jalan SS15/4, Subang Jaya",
         "city": "Subang Jaya",
         "state": "Selangor",
+        # The address-validation policy made postcode a required submission
+        # field; SS15 Subang Jaya is 47500.
+        "postcode": "47500",
         "latitude": 3.0722,
         "longitude": 101.6065,
         "rental_price": 7800,
@@ -179,7 +182,7 @@ def test_incomplete_draft_cannot_be_submitted(client, owner, cleanup_listings):
     assert s.status_code == 409
     detail = s.json()["detail"]
     assert "Complete these fields" in detail
-    for missing in ("address", "latitude", "rental price", "availability"):
+    for missing in ("address", "rental price", "availability"):
         assert missing in detail
     # The draft is untouched and still a draft.
     g = client.get(f"/api/v1/properties/listings/{pid}", headers=auth(owner["token"]))
@@ -453,3 +456,33 @@ def test_photo_storage_unavailable_preserves_draft(
         f"/api/v1/properties/listings/{pid}/photos", headers=auth(owner["token"])
     ).json()["data"]
     assert photos == []
+
+
+def test_listing_can_be_created_without_coordinates(client, owner, cleanup_listings):
+    """Address validation was removed from the owner flow: the wizard no
+    longer geocodes, so the create endpoint must accept a listing with no
+    latitude/longitude and the listing-scope submit must enter the queue."""
+    body = complete_payload()
+    body.pop("latitude")
+    body.pop("longitude")
+    r = client.post(
+        "/api/v1/properties/listings",
+        headers=auth(owner["token"]),
+        json=body,
+    )
+    assert r.status_code == 201, r.text
+    data = r.json()["data"]
+    cleanup_listings.append(data["id"])
+    assert data["latitude"] is None and data["longitude"] is None
+    assert data["verification_status"] == "pending"
+    assert r.json()["meta"]["address_validation"]["note"].startswith(
+        "Address validation is not performed"
+    )
+
+    s = client.post(
+        f"/api/v1/properties/{data['id']}/verification/submit",
+        headers=auth(owner["token"]),
+        json={"scope": "listing"},
+    )
+    assert s.status_code == 200, s.text
+    assert s.json()["listing_status"] == "pending"

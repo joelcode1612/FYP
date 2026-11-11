@@ -267,15 +267,20 @@ class NotificationControlState extends State<NotificationControl> {
             ),
         ];
       case AppRole.agent:
-        // The same catalog the listings page reads, so the bell and the table
-        // can never disagree about what this agent is holding.
-        final assigned = await AgentRecords.assignedProperties();
+        // The SAME authorized source as the dashboard and the listings page
+        // (`/api/v1/staff/me/listings`), so the bell and the pages can never
+        // disagree about what this agent is holding.
+        final assigned = await AgentRecords.assignedListings();
         return [
-          for (final p in assigned.take(5))
+          for (final assignment in assigned.take(5))
             (
-              title: p.title,
-              subtitle: AgentRecords.listingLabel(p.verification),
-              id: p.id,
+              title: assignment.displayTitle.isEmpty
+                  ? assignment.displayId
+                  : assignment.displayTitle,
+              subtitle: AgentRecords.wireStatusLabel(
+                AgentRecords.wireStatus(assignment),
+              ),
+              id: '${assignment.listingId}',
               route: '/agent/property-detail',
             ),
         ];

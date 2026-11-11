@@ -10,7 +10,6 @@ import '../../data/datasources/local/opencv_panorama_stitcher_stub.dart'
 import '../../data/repositories/mobile_api_client.dart';
 import '../../data/repositories/onboarding_repository_impl.dart';
 import '../../data/repositories/supabase_auth_repository.dart';
-import 'ar_capture_service.dart';
 import 'assessment_session.dart';
 import 'capture_session_store.dart';
 import 'draft_repository.dart';
@@ -209,7 +208,4 @@ abstract final class ServiceLocator {
     CaptureLog.enabled = config.enableLogs;
     return PanoramaCaptureService(CaptureTargetDataSource.targets, config);
   }
-
-  /// Fresh AR plugin boundary (stateful per capture screen — never shared).
-  static ArCaptureService newArCaptureService() => ArCaptureService();
 }

@@ -73,6 +73,8 @@ PROPERTY_BODY = {
     "address": "12 Jalan Uji, Taman Uji",
     "city": "Kuala Lumpur",
     "state": "Kuala Lumpur",
+    # Address-validation policy requires a postcode on submission.
+    "postcode": "50000",
     "latitude": 3.046482,
     "longitude": 101.587067,
     "rental_price": 4200,
@@ -238,14 +240,32 @@ def test_create_listing_persists_pending_and_enriches(client, owner_token, creat
         ).scalar_one()
         assert geom.startswith("POINT("), "generated geom must be populated"
 
+    # The create path runs the feature-refresh service and reports the STORED
+    # feature row (not a per-feature summary), with the freshness state
+    # alongside it. Assert the stored values here so the test still proves real
+    # enrichment; the authoritative checks are the database reads below.
+    #
+    # NOTE: this assertion previously read `features["properties_recalculated"]`,
+    # a key `_run_enrichment` has never put in `features` (it returns
+    # `repo.get_geo_features(...)`). The test was stale against the committed
+    # contract, not catching a regression.
     enrichment = body["enrichment"]
     assert enrichment["status"] == "ok", enrichment
-    features = enrichment["features"]
+    assert enrichment["features"]["property_id"] == pid
+    with Session(engine) as session:
+        features = session.execute(
+            text(
+                "SELECT competitor_count_500m, competitor_count_1km, population_500m "
+                "FROM fyp.property_geospatial_features WHERE property_id = :p"
+            ),
+            {"p": pid},
+        ).mappings().first()
+    assert features is not None, "enrichment must persist a geospatial row"
     assert features["competitor_count_500m"] is not None
     assert features["competitor_count_1km"] >= features["competitor_count_500m"]
     # Population has no legitimate per-coordinate source in this deployment.
     assert features["population_500m"] is None
-    assert "unavailable" in (body.get("meta", {}).get("note", "") + "unavailable")
+    assert body["meta"]["note"].endswith("until an administrator verifies them.")
 
 
 def test_create_listing_requires_authentication(client):

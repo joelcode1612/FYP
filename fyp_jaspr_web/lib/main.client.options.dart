@@ -6,6 +6,12 @@
 
 import 'package:jaspr/client.dart';
 
+import 'package:sitewise_jaspr_web/components/property_detail/location_insights.dart'
+    deferred as _location_insights;
+import 'package:sitewise_jaspr_web/components/agent_assignment_control.dart'
+    deferred as _agent_assignment_control;
+import 'package:sitewise_jaspr_web/components/agent_change_requests_panel.dart'
+    deferred as _agent_change_requests_panel;
 import 'package:sitewise_jaspr_web/components/verification_detail_view.dart'
     deferred as _verification_detail_view;
 import 'package:sitewise_jaspr_web/pages/admin/activity_page.dart'
@@ -123,6 +129,24 @@ import 'package:sitewise_jaspr_web/pages/staff_verify_page.dart'
 /// ```
 ClientOptions get defaultClientOptions => ClientOptions(
   clients: {
+    'agent_assignment_control': ClientLoader(
+      (p) => _agent_assignment_control.AgentAssignmentControl(
+        propertyId: p['propertyId'] as String,
+      ),
+      loader: _agent_assignment_control.loadLibrary,
+    ),
+    'agent_change_requests_panel': ClientLoader(
+      (p) => _agent_change_requests_panel.AgentChangeRequestsPanel(),
+      loader: _agent_change_requests_panel.loadLibrary,
+    ),
+    'location_insights': ClientLoader(
+      (p) => _location_insights.LocationInsightsV4(
+        propertyId: p['propertyId'] as String,
+        puScore: p['puScore'] as num?,
+        hasPuScore: p['hasPuScore'] as bool,
+      ),
+      loader: _location_insights.loadLibrary,
+    ),
     'verification_detail_view': ClientLoader(
       (p) => _verification_detail_view.VerificationDetailView(),
       loader: _verification_detail_view.loadLibrary,

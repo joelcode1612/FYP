@@ -13,6 +13,7 @@ import '../widgets/sitewise_empty_state.dart';
 import '../widgets/sitewise_loading_state.dart';
 import '../widgets/sitewise_secondary_button.dart';
 import '../../mobile/shell/mobile_app_shell.dart';
+import 'ar_capture_mobile_page.dart';
 
 /// Mobile tour preview: real 360° panorama, 26-frame grid with retake,
 /// regenerate, submit and delete. The capture screen resumes for retakes.
@@ -279,6 +280,12 @@ class _TourPreviewMobilePageState extends State<TourPreviewMobilePage> {
         ),
       );
     }
+    final status = vm.tour?.status;
+    // A tour awaiting review or already approved is not silently editable.
+    final canRetake =
+        status == VirtualTourStatus.draft ||
+        status == VirtualTourStatus.ready ||
+        status == VirtualTourStatus.rejected;
     return GridView.builder(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
@@ -291,55 +298,83 @@ class _TourPreviewMobilePageState extends State<TourPreviewMobilePage> {
       itemCount: vm.frames.length,
       itemBuilder: (c, i) {
         final f = vm.frames[i];
-        return InkWell(
-          onTap: () => _retake(i),
-          child: Card(
-            clipBehavior: Clip.antiAlias,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Expanded(
-                  child: FutureBuilder<Uint8List?>(
-                    future: _bytesFor(f.imagePath),
-                    builder: (cc, snap) {
-                      if (snap.connectionState != ConnectionState.done) {
-                        return const Icon(Icons.image_outlined);
-                      }
-                      final bytes = snap.data;
-                      if (bytes == null) {
-                        return const Icon(
-                          Icons.image_not_supported_outlined,
-                          color: SitewiseColors.muted,
-                        );
-                      }
-                      return Image.memory(bytes, fit: BoxFit.cover);
-                    },
-                  ),
+        // The grid is ordered by capture sequence, but a missing frame file
+        // drops out of the manifest, so the position in this list is not the
+        // sequence index. Resolve it from the rig definition instead.
+        final sequenceIndex = CaptureTargetDataSource.targets.indexWhere(
+          (t) => t.frameIndex == f.frameIndex,
+        );
+        return Card(
+          clipBehavior: Clip.antiAlias,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Expanded(
+                child: FutureBuilder<Uint8List?>(
+                  future: _bytesFor(f.imagePath),
+                  builder: (cc, snap) {
+                    if (snap.connectionState != ConnectionState.done) {
+                      return const Icon(Icons.image_outlined);
+                    }
+                    final bytes = snap.data;
+                    if (bytes == null) {
+                      return const Icon(
+                        Icons.image_not_supported_outlined,
+                        color: SitewiseColors.muted,
+                      );
+                    }
+                    return Image.memory(bytes, fit: BoxFit.cover);
+                  },
                 ),
+              ),
+              Padding(
+                padding: const EdgeInsets.all(6),
+                child: Text(
+                  '#${i + 1} ${f.targetName}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontSize: 11),
+                ),
+              ),
+              if (canRetake && sequenceIndex >= 0)
                 Padding(
-                  padding: const EdgeInsets.all(6),
-                  child: Text(
-                    '#${i + 1} ${f.targetName}',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontSize: 11),
+                  padding: const EdgeInsets.only(bottom: 4),
+                  child: TextButton.icon(
+                    onPressed: vm.generating
+                        ? null
+                        : () => _retake(sequenceIndex),
+                    icon: const Icon(Icons.replay_rounded, size: 14),
+                    label: const Text('Retake', style: TextStyle(fontSize: 11)),
+                    style: TextButton.styleFrom(
+                      foregroundColor: SitewiseColors.action,
+                      padding: const EdgeInsets.symmetric(horizontal: 6),
+                      minimumSize: Size.zero,
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
                   ),
                 ),
-              ],
-            ),
+            ],
           ),
         );
       },
     );
   }
 
-  Future<void> _retake(int index) async {
+  /// Reopens the live capture session at [sequenceIndex] and hands over to the
+  /// capture screen, which resumes that exact session — the other 25 frames
+  /// are never discarded.
+  Future<void> _retake(int sequenceIndex) async {
     final tour = vm.tour;
-    if (tour == null) return;
+    if (tour == null || vm.generating) return;
+    await vm.retakeFrame(sequenceIndex, tour.propertyId);
     _invalidateImageCaches();
-    await vm.retakeFrame(index, tour.propertyId);
-    if (mounted) {
-      Navigator.of(context).pushNamed('/capture', arguments: tour.propertyId);
-    }
+    if (!mounted) return;
+    Navigator.of(context).pushNamed(
+      '/owner/capture',
+      arguments: ArCaptureRequest(
+        propertyId: tour.propertyId,
+        title: tour.title,
+      ),
+    );
   }
 }

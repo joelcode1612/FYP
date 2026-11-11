@@ -9,6 +9,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../core/bootstrap/startup_trace.dart';
 import '../../core/config/mobile_endpoints.dart';
+import '../../core/config/mobile_runtime_config.dart';
 
 /// Server-side identity lookup used to confirm what a local session claims.
 ///
@@ -128,12 +129,10 @@ class SupabaseAuthRepository implements AuthRepository {
 
   // OAuth client IDs are public identifiers; the CLIENT SECRET must never
   // appear in the app or its dart-defines.
-  static const String _googleWebClientId = String.fromEnvironment(
-    'GOOGLE_WEB_CLIENT_ID',
-  );
-  static const String _googleIosClientId = String.fromEnvironment(
-    'GOOGLE_IOS_CLIENT_ID',
-  );
+  static String get _googleWebClientId => MobileRuntimeConfig.value(
+    'GOOGLE_WEB_CLIENT_ID', fallback: const String.fromEnvironment('GOOGLE_WEB_CLIENT_ID'));
+  static String get _googleIosClientId => MobileRuntimeConfig.value(
+    'GOOGLE_IOS_CLIENT_ID', fallback: const String.fromEnvironment('GOOGLE_IOS_CLIENT_ID'));
 
   // google_sign_in v7 initialization must complete before authenticate().
   Future<void>? _googleInitialization;
