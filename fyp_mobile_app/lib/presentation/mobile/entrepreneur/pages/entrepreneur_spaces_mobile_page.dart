@@ -8,8 +8,10 @@ import '../../../../core/theme/sitewise_m3.dart';
 import '../../../../core/theme/sitewise_theme.dart';
 import '../../shell/entrepreneur_tab_scope.dart';
 import '../../shell/mobile_app_shell.dart';
+import '../../widgets/async_section.dart';
 import '../../widgets/m3_kit.dart';
 import '../../../shared/widgets/sitewise_bottom_sheet.dart';
+import '../../../shared/widgets/sitewise_inline_notice.dart';
 
 /// **Spaces** — the fourth tab of the consolidated five-tab navigation.
 ///
@@ -24,16 +26,54 @@ import '../../../shared/widgets/sitewise_bottom_sheet.dart';
 /// Labels say "shortlisted" rather than "owned" so the UI never implies an
 /// authorization the data layer cannot back.
 
-class EntrepreneurSpacesMobilePage extends ConsumerWidget {
+class EntrepreneurSpacesMobilePage extends ConsumerStatefulWidget {
   const EntrepreneurSpacesMobilePage({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<EntrepreneurSpacesMobilePage> createState() =>
+      _EntrepreneurSpacesMobilePageState();
+}
+
+class _EntrepreneurSpacesMobilePageState
+    extends ConsumerState<EntrepreneurSpacesMobilePage> {
+  final GlobalKey<AsyncSectionState<List<CommercialProperty>>> _catalogueKey =
+      GlobalKey<AsyncSectionState<List<CommercialProperty>>>();
+
+  /// The owner's own listing records live in their own section; pull-to-refresh
+  /// has to reach that request too, otherwise a draft created on another screen
+  /// stays stale until the tab is rebuilt.
+  final GlobalKey<AsyncSectionState<List<OwnerListing>>> _listingsKey =
+      GlobalKey<AsyncSectionState<List<OwnerListing>>>();
+
+  @override
+  void initState() {
+    super.initState();
+    // The shortlist is server-owned; without this read the tab showed an empty
+    // in-memory set on every launch even when the account had saved spaces.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      ref.read(appNotifierProvider.notifier).loadSaved();
+    });
+  }
+
+  Future<void> _refresh() async {
+    await Future.wait([
+      ref.read(appNotifierProvider.notifier).loadSaved(),
+      _catalogueKey.currentState?.refresh() ?? Future<void>.value(),
+      _listingsKey.currentState?.refresh() ?? Future<void>.value(),
+    ]);
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final appState = ref.watch(appNotifierProvider);
     return MobileAppShell(
       title: 'Spaces',
       currentRoute: '/entrepreneur/spaces',
-      body: M3Content(
+      body: RefreshIndicator(
+        color: SitewiseColors.action,
+        onRefresh: _refresh,
+        child: M3Content(
         children: [
           const M3ScreenHeading(
             eyebrow: 'Property workspace',
@@ -43,13 +83,23 @@ class EntrepreneurSpacesMobilePage extends ConsumerWidget {
                 'queued for comparison.',
           ),
           const SizedBox(height: 18),
+          if (appState.savedError != null)
+            SitewiseInlineNotice(
+              message: appState.savedError!,
+              busy: appState.savedLoading,
+              onRetry: () => ref.read(appNotifierProvider.notifier).loadSaved(),
+            ),
           Row(
             children: [
               Expanded(
                 child: M3MetricTile(
                   label: 'Shortlisted',
-                  value: '${appState.saved.length}',
-                  caption: 'Saved space records',
+                  value: appState.savedError == null
+                      ? '${appState.saved.length}'
+                      : '—',
+                  caption: appState.savedError == null
+                      ? 'Saved space records'
+                      : 'Could not be loaded',
                   icon: Icons.storefront_outlined,
                 ),
               ),
@@ -75,47 +125,50 @@ class EntrepreneurSpacesMobilePage extends ConsumerWidget {
           OutlinedButton.icon(
             onPressed: () => EntrepreneurTabScope.open(
               context,
-              '/entrepreneur/explore',
+              '/entrepreneur/recommendations',
             ),
             icon: const Icon(Icons.search_rounded),
-            label: const Text('Explore properties'),
+            label: const Text('Browse recommendations'),
           ),
-          const _OwnerListingsSection(),
+          _OwnerListingsSection(refreshKey: _listingsKey),
           M3SectionRow(
             title: 'Property records',
             overline: '${appState.saved.length} SHORTLISTED',
           ),
-          if (appState.saved.isEmpty)
+          if (appState.saved.isEmpty && appState.savedError == null)
             M3EmptyState(
               icon: Icons.storefront_outlined,
               title: 'No spaces saved yet',
               message:
-                  'Save a property from the Listing tab and it will '
+                  'Save a property from the Recommendations tab and it will '
                   'appear here as a space record.',
-              actionLabel: 'Browse listings',
-              onAction: () =>
-                  EntrepreneurTabScope.open(context, '/entrepreneur/explore'),
+              actionLabel: 'Browse recommendations',
+              onAction: () => EntrepreneurTabScope.open(
+                context,
+                '/entrepreneur/recommendations',
+              ),
             )
+          else if (appState.saved.isEmpty)
+            // The read failed: the notice above carries the reason and retry.
+            const SizedBox.shrink()
           else
-            FutureBuilder<List<CommercialProperty>>(
-              future: ServiceLocator.properties.listings(),
-              builder: (context, snap) {
-                if (snap.connectionState != ConnectionState.done) {
-                  return const Padding(
-                    padding: EdgeInsets.only(top: 24),
-                    child: Center(child: CircularProgressIndicator()),
-                  );
-                }
-                final records = (snap.data ?? const <CommercialProperty>[])
-                    .where((p) => appState.saved.contains(p.id))
-                    .toList();
+            AsyncSection<List<CommercialProperty>>(
+              key: _catalogueKey,
+              load: () => ServiceLocator.properties.listings(),
+              errorTitle: 'Your saved spaces could not be loaded',
+              builder: (context, catalogue) {
+                final records =
+                    catalogue.where((p) => appState.saved.contains(p.id)).toList();
                 if (records.isEmpty) {
+                  // The rows are gone from the catalogue, which is different
+                  // from a failed read — the AsyncSection error state already
+                  // covers the latter.
                   return const M3EmptyState(
                     icon: Icons.storefront_outlined,
                     title: 'Records unavailable',
                     message:
                         'The saved properties are no longer present in '
-                        'the property repository.',
+                        'the property catalogue.',
                   );
                 }
                 return Column(
@@ -143,6 +196,7 @@ class EntrepreneurSpacesMobilePage extends ConsumerWidget {
                 'record is only available to its authorized owner or manager.',
           ),
         ],
+        ),
       ),
     );
   }
@@ -154,7 +208,10 @@ class EntrepreneurSpacesMobilePage extends ConsumerWidget {
 /// records resume in the Add Property flow; pending/approved records open a
 /// read-only status sheet (the backend blocks edits awaiting review anyway).
 class _OwnerListingsSection extends StatelessWidget {
-  const _OwnerListingsSection();
+  const _OwnerListingsSection({required this.refreshKey});
+
+  /// Supplied by the tab so pull-to-refresh can re-run this section's request.
+  final GlobalKey<AsyncSectionState<List<OwnerListing>>> refreshKey;
 
   static String _statusLabel(String wire) => switch (wire) {
         'draft' => 'Draft',
@@ -215,31 +272,28 @@ class _OwnerListingsSection extends StatelessWidget {
       // not pretending otherwise.
       return const SizedBox.shrink();
     }
-    return FutureBuilder<List<OwnerListing>>(
-      future: ServiceLocator.ownerListings.myListings(),
-      builder: (context, snap) {
-        if (snap.connectionState != ConnectionState.done) {
-          return const Padding(
-            padding: EdgeInsets.only(top: 20),
-            child: Center(child: CircularProgressIndicator()),
-          );
-        }
-        final listings = snap.data ?? const <OwnerListing>[];
-        return Column(
+    // The list used to be fetched by a FutureBuilder built inside `build()`,
+    // so it re-requested on every rebuild, had no retry, and never noticed a
+    // draft saved on the Add Property screen. `listingsRevision` is bumped by
+    // the repository after each confirmed write, which reloads this section
+    // when the user returns.
+    return ValueListenableBuilder<int>(
+      valueListenable: ServiceLocator.listingsRevision,
+      builder: (context, revision, _) =>
+          AsyncSection<List<OwnerListing>>(
+        key: refreshKey,
+        revision: revision,
+        load: ServiceLocator.ownerListings.myListings,
+        errorTitle: 'Your property listings could not be loaded',
+        builder: (context, listings) {
+          return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             M3SectionRow(
               title: 'My property listings',
               overline: '${listings.length} RECORD(S)',
             ),
-            if (snap.hasError)
-              const M3Banner(
-                icon: Icons.cloud_off_rounded,
-                text:
-                    'Saved listings could not load. Check the connection '
-                    'and try again later.',
-              )
-            else if (listings.isEmpty)
+            if (listings.isEmpty)
               const M3EmptyState(
                 icon: Icons.house_outlined,
                 title: 'No property records yet',
@@ -310,8 +364,9 @@ class _OwnerListingsSection extends StatelessWidget {
                 ),
               ],
           ],
-        );
-      },
+          );
+        },
+      ),
     );
   }
 }

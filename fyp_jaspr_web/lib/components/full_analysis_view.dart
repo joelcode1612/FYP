@@ -394,7 +394,9 @@ class _ScorePanel extends StatelessComponent {
         ),
         strong([Component.text('not')]),
         Component.text(
-          ' the likelihood of business success or a personalized recommendation.',
+          ' the likelihood of business success or a personalized '
+          'recommendation. It is also separate from the 0–100 suitability '
+          'score used elsewhere in SiteWise.',
         ),
       ]),
     ]);
@@ -1385,7 +1387,7 @@ class _TargetItem extends StatelessComponent {
       BusinessTargetStatus.achieved => 'Achieved',
       BusinessTargetStatus.notAchieved => 'Not achieved',
       BusinessTargetStatus.context => 'Context',
-      BusinessTargetStatus.requiresVerification => 'Need verification',
+      BusinessTargetStatus.requiresVerification => 'Requires verification',
     };
     final cls = switch (status) {
       BusinessTargetStatus.achieved => 'fa-status--achieved',

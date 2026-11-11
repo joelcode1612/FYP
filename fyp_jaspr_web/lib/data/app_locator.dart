@@ -1,7 +1,9 @@
 import 'package:jaspr_riverpod/jaspr_riverpod.dart';
 // The main barrel does not re-export `Override`; this companion barrel does.
 import 'package:jaspr_riverpod/misc.dart' show Override;
-import 'package:shared_logic/shared_logic.dart';
+// The shared barrel now also exports an ApiPropertyRepository; this app binds
+// its own browser-transport implementation from api_property_repository.dart.
+import 'package:shared_logic/shared_logic.dart' hide ApiPropertyRepository;
 
 import 'admin_api.dart';
 import 'api_property_repository.dart';
@@ -56,6 +58,16 @@ abstract final class AppLocator {
   static final SavedPropertiesRepository savedPropertiesRepo =
       ApiSavedPropertiesRepository(const WebApiClient());
 
+  /// Server-side recommendation search over the property catalogue
+  /// (`POST /api/v1/recommendations/search`).
+  ///
+  /// The backend owns filtering, ordering and cursor pagination, so this app
+  /// never sorts or pages the catalogue locally. Ids are CATALOGUE ids — the
+  /// same space [savedPropertiesRepo], assessments and the PU model use — so a
+  /// ranked card can be saved, assessed and opened without translation.
+  static final RecommendationSearchRepository recommendationSearchRepo =
+      ApiRecommendationSearchRepository(const WebApiClient());
+
   /// The personalised Layer 2/3 pipeline (`/recommendations/generate`,
   /// `/recommendations/me/generated`, `/recommendations/{id}/explanation`).
   /// Ownership always comes from the authenticated session; no user id is
@@ -85,6 +97,13 @@ abstract final class AppLocator {
   /// Stateless: one shared const instance. Campaigns and Surveys deliberately
   /// do not use it — those two have no backend surface on purpose.
   static const AdminApi adminApi = AdminApi();
+
+  /// Agent listing management over `/api/v1/staff/me/listings` and the
+  /// assigned-listing detail/proposal/photo endpoints. Rides the shared
+  /// [ApiClient] port like every other live repository, so the same
+  /// shared_logic class backs the mobile agent workspace when it exists.
+  static final AgentListingRepository agentListingRepo =
+      ApiAgentListingRepository(const WebApiClient());
 
   // --- Application services (shared orchestration) --------------------------
   static final PropertyService properties = PropertyService(propertyRepo);
@@ -278,6 +297,12 @@ abstract final class AppLocator {
       ),
     ),
     savedPropertiesRepositoryProvider.overrideWithValue(savedPropertiesRepo),
+    // Recommendations are server-ranked for both apps. Overriding this is what
+    // makes the Recommendations page show real, ranked, paginated catalogue
+    // rows instead of a locally sorted list.
+    recommendationSearchRepositoryProvider.overrideWithValue(
+      recommendationSearchRepo,
+    ),
     propertyVerificationRepositoryProvider.overrideWithValue(
       propertyVerificationRepo,
     ),

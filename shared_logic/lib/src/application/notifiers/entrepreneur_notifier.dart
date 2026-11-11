@@ -4,6 +4,7 @@ import '../../domain/entities/commercial_property.dart';
 import '../../domain/entities/explore.dart';
 import '../../domain/entities/location_intelligence.dart';
 import '../../domain/entities/recommendation.dart';
+import '../../domain/entities/recommendation_search.dart';
 import '../controllers/entrepreneur_controller.dart';
 import '../states/entrepreneur_state.dart';
 import 'providers.dart';
@@ -28,6 +29,9 @@ class EntrepreneurNotifier extends Notifier<EntrepreneurState> {
       getLocationAnalysis: ref.watch(getLocationAnalysisProvider),
       preferences: ref.watch(businessPreferencesProvider),
       exploreRepository: ref.watch(exploreRepositoryProvider),
+      recommendationSearchRepository: ref.watch(
+        recommendationSearchRepositoryProvider,
+      ),
       onPreferencesUpdated: ref.watch(onPreferencesUpdatedProvider),
     );
     _controller.addListener(_publish);
@@ -93,10 +97,63 @@ class EntrepreneurNotifier extends Notifier<EntrepreneurState> {
 
   BusinessPreferences get prefs => state.preferences;
 
+  // --- Server-ranked recommendation search ---------------------------------
+  //
+  // Read-only projections of the same [EntrepreneurState] the Explore path
+  // publishes, so the Recommendations page has exactly one state owner.
+
+  /// Ranked results, in the order the server returned them.
+  List<RankedProperty> get ranked => state.ranked;
+
+  /// Whether a live recommendation backend is wired at this composition root.
+  bool get hasRecommendationSearch => _controller.hasRecommendationSearch;
+
+  bool get recommendationLoading => state.recommendationLoading;
+
+  bool get recommendationRefreshing => state.recommendationRefreshing;
+
+  String? get recommendationError => state.recommendationError;
+
+  bool get recommendationHasMore => state.recommendationHasMore;
+
+  int? get recommendationTotal => state.recommendationTotal;
+
+  RecommendationModelStatus? get recommendationModel =>
+      state.recommendationModel;
+
+  RecommendationFacets? get recommendationFacets =>
+      state.recommendationFacets;
+
+  RecommendationSearchRequest get recommendationRequest =>
+      state.recommendationRequest;
+
+  String? get selectedRankedId => state.selectedRankedId;
+
+  /// The selected listing, resolved against the current page set. Null when
+  /// nothing is selected or the selection is no longer in the results.
+  RankedProperty? get selectedRanked {
+    final id = state.selectedRankedId;
+    if (id == null) return null;
+    for (final item in state.ranked) {
+      if (item.id == id) return item;
+    }
+    return null;
+  }
+
+  Future<void> searchRecommendations({RecommendationSearchRequest? request}) =>
+      _controller.searchRecommendations(request: request);
+
+  Future<void> loadMoreRecommendations() =>
+      _controller.loadMoreRecommendations();
+
+  void selectRanked(String id) => _controller.selectRanked(id);
+
+  void applyRecommendationRequest(RecommendationSearchRequest request) =>
+      _controller.applyRecommendationRequest(request);
+
   /// Loads listings: a real server search when an ExploreRepository is wired,
   /// otherwise the client-filtered full listing.
   Future<void> loadExplore() => _controller.loadExplore();
-
   /// Appends the next server page. No-op on the client-driven path.
   Future<void> loadMore() => _controller.loadMore();
 

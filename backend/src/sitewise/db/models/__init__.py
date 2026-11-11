@@ -12,6 +12,7 @@ from .fyp_research import (
     FypRecommendationResult,
     FypRentalProperty,
 )
+from .listing_change_request import ListingChangeAudit, ListingChangeRequest
 from .nearby_competitor import NearbyCompetitor
 from .property_feature import PropertyFeature
 from .property_foot_traffic import PropertyFootTraffic
@@ -40,6 +41,8 @@ __all__ = [
     "FypPropertySubjectLink",
     "FypRecommendationResult",
     "FypRentalProperty",
+    "ListingChangeAudit",
+    "ListingChangeRequest",
     "NearbyCompetitor",
     "PropertyFeature",
     "PropertyFootTraffic",

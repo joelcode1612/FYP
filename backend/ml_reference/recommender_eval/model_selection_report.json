@@ -1,8 +1,8 @@
 {
-  "generated_at": "2026-11-10T19:47:16.772249+00:00",
+  "generated_at": "2026-11-11T01:56:19.332261+00:00",
   "decision": "refuse_to_train",
   "inventory": {
-    "users_total": 39,
+    "users_total": 47,
     "preference_snapshots": 1,
     "saved_properties": 4,
     "exposed_impressions": 13,

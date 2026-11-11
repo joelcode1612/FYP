@@ -41,6 +41,11 @@ class OwnerListing {
   final String? address;
   final String? city;
   final String? state;
+  /// Five-digit Malaysian postcode (string so leading zeros survive).
+  final String? postcode;
+  /// Server-attested Google Address Validation verdict: `validated`,
+  /// `partially_validated`, `unconfirmed` or null when never validated.
+  final String? addressValidationStatus;
   final double? latitude;
   final double? longitude;
   final double? rentalPrice;
@@ -68,6 +73,8 @@ class OwnerListing {
     this.address,
     this.city,
     this.state,
+    this.postcode,
+    this.addressValidationStatus,
     this.latitude,
     this.longitude,
     this.rentalPrice,
@@ -96,6 +103,8 @@ class OwnerListing {
         address: row['address']?.toString(),
         city: row['city']?.toString(),
         state: row['state']?.toString(),
+        postcode: row['postcode']?.toString(),
+        addressValidationStatus: row['address_validation_status']?.toString(),
         latitude: _d(row['latitude']),
         longitude: _d(row['longitude']),
         rentalPrice: _d(row['rental_price']),
@@ -141,6 +150,7 @@ class OwnerListing {
     String? address,
     String? city,
     String? state,
+    String? postcode,
     double? latitude,
     double? longitude,
     double? rentalPrice,
@@ -158,6 +168,7 @@ class OwnerListing {
         'address': address,
         'city': city,
         'state': state,
+        'postcode': postcode,
         'latitude': latitude,
         'longitude': longitude,
         'rental_price': rentalPrice,

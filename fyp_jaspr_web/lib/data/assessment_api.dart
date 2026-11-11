@@ -21,7 +21,9 @@
 /// web decision-support workflow's persistence.
 library;
 
-import 'package:shared_logic/shared_logic.dart';
+// Hide the shared ApiPropertyRepository: this workspace decodes catalogue rows
+// through the web repository's fromJson forwarder below.
+import 'package:shared_logic/shared_logic.dart' hide ApiPropertyRepository;
 
 import 'api_property_repository.dart';
 import 'auth_service.dart';

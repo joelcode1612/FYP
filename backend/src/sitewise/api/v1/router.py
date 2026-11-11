@@ -16,6 +16,7 @@ from sitewise.api.v1 import (
     saved_properties,
     selected_pu_routes,
     staff,
+    staff_listings,
     statistics,
     suitability,
     users,
@@ -39,6 +40,11 @@ router.include_router(
 )
 router.include_router(users.router, prefix="/users", tags=["users"])
 router.include_router(staff.router, prefix="/staff", tags=["staff"])
+# Agent listing management (assigned-listing edits, change requests,
+# listing photos). Separate module so staff.py is never modified; the
+# assignment enforcement helper is IMPORTED from staff.py, so there is
+# exactly one authorization definition for staff listing access.
+router.include_router(staff_listings.router, prefix="/staff", tags=["staff_listings"])
 router.include_router(recommendations.router, prefix="/recommendations", tags=["recommendations"])
 # Layer 2/3 personalised pipeline. Separate router so the existing
 # recommendations module (and its in-progress /search, /facets work) is never

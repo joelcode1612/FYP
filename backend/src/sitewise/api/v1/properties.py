@@ -1,6 +1,8 @@
 
+from datetime import UTC, datetime
+
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import text
 from sqlmodel import Session
 
@@ -16,6 +18,49 @@ from sitewise.services.address_validation_service import (
 )
 
 router = APIRouter()
+
+#: The only commercial property types the Add Property form may submit.
+#: Mirrors `shared_logic/lib/src/domain/data/add_property_rules.dart`; the
+#: backend is authoritative, so a client cannot widen the list.
+COMMERCIAL_PROPERTY_TYPES = (
+    "Shoplot",
+    "Retail Space",
+    "Ground Floor Shop",
+    "Corner Shoplot",
+    "Retail Unit",
+    "Kiosk",
+    "Commercial F&B Premise",
+)
+
+#: Legacy spellings still present in existing rows / older clients. They are
+#: normalised instead of rejected so an edit of an old listing keeps working.
+_LEGACY_PROPERTY_TYPES = {
+    "shop": "Shoplot",
+    "shop lot": "Shoplot",
+    "shophouse": "Shoplot",
+    "shoplot / shophouse": "Shoplot",
+    "ground floor retail": "Ground Floor Shop",
+    "corner retail unit": "Corner Shoplot",
+    "shopping mall unit": "Retail Unit",
+    "commercial kiosk": "Kiosk",
+    "standalone commercial": "Retail Unit",
+}
+
+
+def normalize_property_type(value: str | None) -> str:
+    """Return an allowed commercial type or raise ``ValueError``."""
+    raw = (value or "").strip()
+    if not raw:
+        raise ValueError("Select a commercial property type.")
+    for allowed in COMMERCIAL_PROPERTY_TYPES:
+        if allowed.lower() == raw.lower():
+            return allowed
+    mapped = _LEGACY_PROPERTY_TYPES.get(raw.lower())
+    if mapped:
+        return mapped
+    raise ValueError(
+        "property_type must be one of: " + ", ".join(COMMERCIAL_PROPERTY_TYPES)
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -38,21 +83,35 @@ class OwnerListingRequest(BaseModel):
     decided administratively, never by the submitter.
     """
 
-    name: str = Field(min_length=2, max_length=160)
-    address: str = Field(min_length=3, max_length=300)
+    name: str = Field(min_length=4, max_length=160)
+    address: str = Field(min_length=5, max_length=300)
     city: str = Field(min_length=2, max_length=80)
     state: str = Field(min_length=2, max_length=80)
+    postcode: str = Field(pattern=r"^\d{5}$")
     latitude: float = Field(ge=-90, le=90)
     longitude: float = Field(ge=-180, le=180)
     rental_price: float = Field(gt=0, le=10_000_000)
     size_sqft: float = Field(gt=0, le=10_000_000)
-    property_type: str = Field(default="Shop", max_length=60)
+    property_type: str = Field(default="Shoplot", max_length=60)
     description: str | None = Field(default=None, max_length=4000)
     availability: str | None = Field(default=None, max_length=60)
     floor_level: str | None = Field(default=None, max_length=60)
     frontage_ft: float | None = Field(default=None, ge=0, le=10_000)
     has_parking: bool = False
     is_fnb_suitable: bool = False
+
+    @field_validator("name", "address", "city", "state")
+    @classmethod
+    def _trim_required(cls, value: str) -> str:
+        trimmed = value.strip()
+        if not trimmed:
+            raise ValueError("This field is required.")
+        return trimmed
+
+    @field_validator("property_type")
+    @classmethod
+    def _commercial_type(cls, value: str) -> str:
+        return normalize_property_type(value)
 
 
 def _run_enrichment(repo: FypPropertyRepository, property_row: dict) -> dict:
@@ -71,6 +130,45 @@ def _run_enrichment(repo: FypPropertyRepository, property_row: dict) -> dict:
         return {"status": "failed", "reason": type(exc).__name__, "detail": str(exc)[:300]}
 
 
+def _validate_listing_address(payload: "OwnerListingRequest") -> dict:
+    """Server-side gate: a listing may only be created with a complete,
+    provider-confirmed premise address.
+
+    This is deliberately NOT a client-supplied flag. The backend asks Google
+    itself, so a forged request cannot claim a verdict. ``503`` keeps the
+    distinction between "the address is wrong" (422) and "the provider is
+    unavailable" (503) explicit.
+    """
+    try:
+        verdict = validate_address(
+            address_lines=[payload.address],
+            region_code="MY",
+            locality=payload.city,
+            postal_code=payload.postcode,
+            administrative_area=payload.state,
+        )
+    except AddressValidationRejected as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except AddressValidationUnavailable as exc:
+        raise HTTPException(
+            status_code=503,
+            detail=str(exc),
+        ) from exc
+
+    status = verdict.get("status")
+    if status != "validated":
+        message = (
+            "We found the general location, but cannot confirm the exact "
+            "property address. Please check the building, unit number or "
+            "postcode."
+            if status == "partially_validated"
+            else "We couldn't verify this address. Please check your address "
+            "details and try again."
+        )
+        raise HTTPException(status_code=422, detail=message)
+    return verdict
+
+
 @router.post("/listings", status_code=201)
 def create_owner_listing(
     payload: OwnerListingRequest,
@@ -82,9 +180,24 @@ def create_owner_listing(
     The listing is committed first (``pending``, unpublished). Enrichment is a
     separate best-effort step whose outcome is reported, so a spatial failure
     never loses the submission.
+
+    Address verification is enforced HERE, not only in the UI: the server asks
+    Google Address Validation about the submitted address and refuses the
+    create unless the verdict is a complete premise. The verdict and Google's
+    normalised address are persisted with the row, and the provider's
+    coordinates replace the client's values so the pin matches the address.
     """
+    verdict = _validate_listing_address(payload)
+    body = payload.model_dump()
+    body["address_validation_status"] = verdict["status"]
+    body["address_formatted"] = verdict.get("formatted_address")
+    body["address_validated_at"] = datetime.now(UTC)
+    if verdict.get("latitude") is not None and verdict.get("longitude") is not None:
+        body["latitude"] = float(verdict["latitude"])
+        body["longitude"] = float(verdict["longitude"])
+
     repo = FypPropertyRepository(session)
-    row = repo.create_owner_listing(owner_user_id=current.user_id, payload=payload.model_dump())
+    row = repo.create_owner_listing(owner_user_id=current.user_id, payload=body)
     enrichment = _run_enrichment(repo, row)
     return {
         "data": row,
@@ -92,6 +205,11 @@ def create_owner_listing(
         "meta": {
             "verification_status": row["verification_status"],
             "is_published": row["is_published"],
+            "address_validation": {
+                "status": verdict["status"],
+                "granularity": verdict.get("validation_granularity"),
+                "formatted_address": verdict.get("formatted_address"),
+            },
             "note": "Listings stay pending and unpublished until an administrator verifies them.",
         },
     }
@@ -128,6 +246,7 @@ class OwnerDraftRequest(BaseModel):
     address: str | None = Field(default=None, max_length=300)
     city: str | None = Field(default=None, max_length=80)
     state: str | None = Field(default=None, max_length=80)
+    postcode: str | None = Field(default=None, pattern=r"^\d{5}$")
     latitude: float | None = Field(default=None, ge=-90, le=90)
     longitude: float | None = Field(default=None, ge=-180, le=180)
     rental_price: float | None = Field(default=None, gt=0, le=10_000_000)

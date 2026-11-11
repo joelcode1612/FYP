@@ -33,7 +33,14 @@ abstract class PropertyVerificationRepository {
   /// Submit (or resubmit) the property for verification. The backend moves
   /// each resubmittable dimension to `pending` and refuses invalid
   /// transitions with 409.
-  Future<PropertyVerification> submit(String propertyId);
+  ///
+  /// [scope] selects how much is submitted: `null`/`'full'` keeps the
+  /// historical contract (ownership evidence required, both dimensions go
+  /// `pending`); `'listing'` submits the listing information only — the
+  /// listing dimension enters review while ownership stays untouched
+  /// (`not_submitted` on a first submission). Authorization is enforced
+  /// server-side either way.
+  Future<PropertyVerification> submit(String propertyId, {String? scope});
 
   /// Upload one evidence document (metadata is returned, bytes are stored
   /// server-side under an unpredictable key).

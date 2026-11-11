@@ -45,6 +45,22 @@ List<Override> sitewiseOverrides({AuthService? auth}) {
         )
       : ServiceLocator.recommendationRepo;
 
+  // Live builds read the real catalogue. Demo builds keep the bundled
+  // fixtures. The swap happens BEFORE the override list is built so
+  // `GetProperties` and every `ServiceLocator.properties` call see the same
+  // repository.
+  if (MobileConfig.usesLiveApi &&
+      ServiceLocator.propertyRepo is! ApiPropertyRepository) {
+    ServiceLocator.propertyRepo = ApiPropertyRepository(ServiceLocator.apiClient);
+  }
+
+  // The report and assessment-summary screens resolve their analysis through
+  // `ServiceLocator.recommendations`, not through the provider above. Point the
+  // locator at the SAME repository so a live build never renders the demo
+  // `analysisFor` fallback (which returns the first demo property's figures for
+  // any id it does not recognise).
+  ServiceLocator.analysisRepo = analysisRepository;
+
   return [
     authServiceProvider.overrideWithValue(resolvedAuth),
     getPropertiesProvider.overrideWithValue(
@@ -65,13 +81,21 @@ List<Override> sitewiseOverrides({AuthService? auth}) {
     businessPreferencesProvider.overrideWith(
       (ref) => ServiceLocator.preferences,
     ),
-    onPreferencesUpdatedProvider.overrideWithValue((value) {
-      ServiceLocator.preferences = value;
-      // §4: preferences are part of the persistent form state — every change
-      // is written through to the user-scoped draft store (best-effort, the
-      // repository swallows its own I/O failures).
-      ServiceLocator.drafts.savePreferences(value);
-    }),
+    // `overrideWith` (not `overrideWithValue`) so the handler can invalidate
+    // `businessPreferencesProvider`. Without that invalidation the provider
+    // closure is never re-evaluated, so every screen watching it — Profile,
+    // the recommendations criteria summary — kept rendering the pre-edit
+    // values until the app restarted.
+    onPreferencesUpdatedProvider.overrideWith(
+      (ref) => (value) {
+        ServiceLocator.preferences = value;
+        ref.invalidate(businessPreferencesProvider);
+        // §4: preferences are part of the persistent form state — every change
+        // is written through to the user-scoped draft store (best-effort, the
+        // repository swallows its own I/O failures).
+        ServiceLocator.drafts.savePreferences(value);
+      },
+    ),
     propertyServiceProvider.overrideWithValue(ServiceLocator.properties),
     tourServiceProvider.overrideWithValue(ServiceLocator.tourService),
     if (MobileConfig.usesLiveApi) ...[
@@ -80,6 +104,13 @@ List<Override> sitewiseOverrides({AuthService? auth}) {
       ),
       savedPropertiesRepositoryProvider.overrideWithValue(
         ApiSavedPropertiesRepository(ServiceLocator.apiClient),
+      ),
+      // Server-ranked recommendations (`POST /api/v1/recommendations/search`).
+      // Without this override the Recommendations page reports the feature as
+      // unavailable rather than sorting a local list — the server owns
+      // filtering, ordering and paging for both platforms.
+      recommendationSearchRepositoryProvider.overrideWithValue(
+        ApiRecommendationSearchRepository(ServiceLocator.apiClient),
       ),
       // [getLocationAnalysisProvider] is deliberately absent here: its single
       // override above already selected the live-backed [analysisRepository].

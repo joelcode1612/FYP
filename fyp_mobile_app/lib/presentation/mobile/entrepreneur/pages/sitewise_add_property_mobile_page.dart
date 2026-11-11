@@ -37,6 +37,14 @@ class _SitewiseAddPropertyMobilePageState
   static const Color _ink = Color(0xFF10151F);
   static const Color _muted = Color(0xFF58677D);
   static const Color _border = Color(0xFFE2E8F0);
+  static const Color _errorInk = Color(0xFFB42318);
+  static const Color _errorBorder = Color(0xFFE7A6A0);
+  static const Color _okInk = Color(0xFF087443);
+  static const Color _okBorder = Color(0xFFB4E4CB);
+  static const Color _okSurface = Color(0xFFEAF8F0);
+  static const Color _warnInk = Color(0xFF8A5A00);
+  static const Color _warnBorder = Color(0xFFF0D18A);
+  static const Color _warnSurface = Color(0xFFFFF8E8);
 
   static const List<String> _stepNames = <String>[
     'Property details',
@@ -48,7 +56,7 @@ class _SitewiseAddPropertyMobilePageState
 
   static const List<String> _stepDescriptions = <String>[
     'Enter the basic details of your commercial unit.',
-    'Add the property address and check the pin position.',
+    'Add the address, then verify it before continuing.',
     'Attach photos of the property (JPG, PNG or WebP).',
     'Review the information before submission.',
     'Save or submit your property.',
@@ -61,13 +69,27 @@ class _SitewiseAddPropertyMobilePageState
   final TextEditingController _stateController = TextEditingController();
   final TextEditingController _districtController = TextEditingController();
   final TextEditingController _postcodeController = TextEditingController();
-  final TextEditingController _latitudeController = TextEditingController();
-  final TextEditingController _longitudeController = TextEditingController();
   final TextEditingController _descriptionController = TextEditingController();
 
   int _step = 1;
   String _propertyType = 'Shoplot';
   String? _validationMessage;
+
+  /// Field-specific errors, rendered under the relevant control. The shared
+  /// [PropertyFormRules] produce the messages so web and mobile agree.
+  final Map<String, String> _fieldErrors = <String, String>{};
+
+  /// Address-verification state machine (shared with the web form). A Google
+  /// verdict proves the ADDRESS exists; it never proves ownership or approval.
+  AddressVerificationState _addressState = AddressVerificationState.unverified;
+  AddressValidationResult? _addressResult;
+  AddressSnapshot? _verifiedSnapshot;
+  String? _addressMessage;
+  double? _verifiedLatitude;
+  double? _verifiedLongitude;
+
+  /// Monotonic token: a late response must never verify a changed address.
+  int _addressRequestId = 0;
 
   // Server state: the persisted PostgreSQL draft and its lifecycle.
   String? _draftId;
@@ -87,8 +109,6 @@ class _SitewiseAddPropertyMobilePageState
   String get _stateName => _stateController.text.trim();
   String get _district => _districtController.text.trim();
   String get _postcode => _postcodeController.text.trim();
-  String get _latitude => _latitudeController.text.trim();
-  String get _longitude => _longitudeController.text.trim();
 
   /// The record can only be edited while the backend policy allows it
   /// (draft, rejected or corrections-requested). The backend enforces the
@@ -117,8 +137,6 @@ class _SitewiseAddPropertyMobilePageState
     _stateController.dispose();
     _districtController.dispose();
     _postcodeController.dispose();
-    _latitudeController.dispose();
-    _longitudeController.dispose();
     _descriptionController.dispose();
     super.dispose();
   }
@@ -164,15 +182,196 @@ class _SitewiseAddPropertyMobilePageState
     text(_addressController, listing.address);
     text(_stateController, listing.state);
     text(_districtController, listing.city);
+    text(_postcodeController, listing.postcode);
     text(_descriptionController, listing.description);
-    text(_latitudeController,
-        listing.latitude == null ? '' : '${listing.latitude}');
-    text(_longitudeController,
-        listing.longitude == null ? '' : '${listing.longitude}');
-    if (listing.propertyType != null && listing.propertyType!.isNotEmpty) {
-      _propertyType = listing.propertyType!;
+    final normalizedType = normalizeCommercialPropertyType(listing.propertyType);
+    if (normalizedType != null) _propertyType = normalizedType;
+    // A listing the SERVER already validated carries the persisted verdict;
+    // restore it so a resumed draft does not demand a redundant re-check.
+    if (listing.addressValidationStatus == 'validated' &&
+        listing.latitude != null &&
+        listing.longitude != null) {
+      _verifiedLatitude = listing.latitude;
+      _verifiedLongitude = listing.longitude;
+      _addressState = AddressVerificationState.verified;
+      _addressMessage = 'Address validated by SiteWise for this listing.';
+      _verifiedSnapshot = _addressSnapshot();
     }
     setState(() {});
+  }
+
+  AddressSnapshot _addressSnapshot() => AddressSnapshot(
+        address: _address,
+        city: _district,
+        state: _stateName,
+        postcode: _postcode,
+        latitude: _verifiedLatitude,
+        longitude: _verifiedLongitude,
+      );
+
+  /// Any edit to a location value invalidates the verdict: a verified address
+  /// is bound to the exact values that were validated.
+  void _invalidateAddress() {
+    _addressRequestId++;
+    _addressState = AddressVerificationState.unverified;
+    _addressResult = null;
+    _verifiedSnapshot = null;
+    _addressMessage = null;
+    _verifiedLatitude = null;
+    _verifiedLongitude = null;
+  }
+
+  Future<void> _validateAddress() async {
+    if (_addressState == AddressVerificationState.verifying) return;
+    final snapshot = _addressSnapshot();
+    if (snapshot.address.isEmpty) {
+      setState(() {
+        _fieldErrors['address'] =
+            PropertyFormRules.addressError(snapshot.address) ??
+                'Enter a street address first.';
+      });
+      return;
+    }
+    if (snapshot.state.isEmpty ||
+        snapshot.city.isEmpty ||
+        snapshot.postcode.isEmpty) {
+      setState(() {
+        _fieldErrors['state'] = PropertyFormRules.stateError(snapshot.state) ?? '';
+        _fieldErrors['city'] =
+            PropertyFormRules.cityError(snapshot.state, snapshot.city) ?? '';
+        _fieldErrors['postcode'] = PropertyFormRules.postcodeError(
+              snapshot.postcode,
+              state: snapshot.state,
+              city: snapshot.city,
+            ) ??
+            '';
+        _fieldErrors.removeWhere((_, value) => value.isEmpty);
+        _validationMessage = 'Complete the state, city and postcode first.';
+      });
+      return;
+    }
+    final requestId = ++_addressRequestId;
+    setState(() {
+      _addressState = AddressVerificationState.verifying;
+      _addressMessage = null;
+      _fieldErrors.remove('verification');
+    });
+    try {
+      final result = await ServiceLocator.ownerListings.validateAddress(
+        addressLines: <String>[snapshot.address, snapshot.postcode],
+        city: snapshot.city,
+        state: snapshot.state,
+        postcode: snapshot.postcode,
+      );
+      if (!mounted || requestId != _addressRequestId) return;
+      if (_addressSnapshot() != snapshot) {
+        // The owner edited the address while the request was in flight.
+        setState(() {
+          _addressState = AddressVerificationState.unverified;
+          _addressMessage = AddressVerificationCopy.stale;
+        });
+        return;
+      }
+      final (state, message) = switch (result.status) {
+        'validated' => (
+            AddressVerificationState.validatedPendingConfirmation,
+            AddressVerificationCopy.validated,
+          ),
+        'partially_validated' => (
+            AddressVerificationState.partiallyValidated,
+            AddressVerificationCopy.partiallyValidated,
+          ),
+        _ => (
+            AddressVerificationState.unconfirmed,
+            AddressVerificationCopy.unconfirmed,
+          ),
+      };
+      setState(() {
+        _addressResult = result;
+        _addressState = state;
+        _addressMessage = message;
+      });
+    } on Object catch (error) {
+      if (!mounted || requestId != _addressRequestId) return;
+      setState(() {
+        _addressState = AddressVerificationState.serviceError;
+        _addressMessage = _addressFailureCopy(
+          _readableError(error, fallback: ''),
+        );
+        _verifiedLatitude = null;
+        _verifiedLongitude = null;
+      });
+    }
+  }
+
+  String _addressFailureCopy(String message) {
+    final lower = message.toLowerCase();
+    if (lower.contains('temporarily unavailable') ||
+        lower.contains('not enabled') ||
+        lower.contains('not configured') ||
+        lower.contains('503')) {
+      return AddressVerificationCopy.unavailable;
+    }
+    if (lower.contains('rejected') ||
+        lower.contains('422') ||
+        lower.contains('invalid')) {
+      return AddressVerificationCopy.invalidRequest;
+    }
+    return message.isEmpty ? AddressVerificationCopy.unavailable : message;
+  }
+
+  void _confirmAddress() {
+    final result = _addressResult;
+    if (_addressState !=
+            AddressVerificationState.validatedPendingConfirmation ||
+        result == null ||
+        !result.hasCoordinates) {
+      return;
+    }
+    setState(() {
+      // Coordinates first: the snapshot must describe the CONFIRMED values,
+      // otherwise the later staleness check can never match.
+      _verifiedLatitude = result.latitude;
+      _verifiedLongitude = result.longitude;
+      _verifiedSnapshot = _addressSnapshot();
+      _addressState = AddressVerificationState.verified;
+      _addressMessage =
+          result.formattedAddress ?? AddressVerificationCopy.validated;
+      _fieldErrors.remove('verification');
+    });
+  }
+
+  void _onStateChanged(String? value) {
+    setState(() {
+      _stateController.text = value ?? '';
+      _districtController.clear();
+      _postcodeController.clear();
+      _invalidateAddress();
+      _fieldErrors.remove('state');
+      _fieldErrors.remove('city');
+      _fieldErrors.remove('postcode');
+      _validationMessage = null;
+    });
+  }
+
+  void _onCityChanged(String? value) {
+    setState(() {
+      _districtController.text = value ?? '';
+      _postcodeController.clear();
+      _invalidateAddress();
+      _fieldErrors.remove('city');
+      _fieldErrors.remove('postcode');
+      _validationMessage = null;
+    });
+  }
+
+  void _onPostcodeChanged(String? value) {
+    setState(() {
+      _postcodeController.text = value ?? '';
+      _invalidateAddress();
+      _fieldErrors.remove('postcode');
+      _validationMessage = null;
+    });
   }
 
   Map<String, dynamic> _draftFields() => OwnerListing(
@@ -187,8 +386,9 @@ class _SitewiseAddPropertyMobilePageState
         address: _address.isEmpty ? null : _address,
         city: _district.isEmpty ? null : _district,
         state: _stateName.isEmpty ? null : _stateName,
-        latitude: double.tryParse(_latitude),
-        longitude: double.tryParse(_longitude),
+        postcode: _postcode.isEmpty ? null : _postcode,
+        latitude: _verifiedLatitude,
+        longitude: _verifiedLongitude,
         rentalPrice: double.tryParse(_monthlyRent),
         sizeSqft: double.tryParse(_builtUpArea),
         availability: _serverStatus == 'draft' ? null : 'Immediate',
@@ -271,6 +471,11 @@ class _SitewiseAddPropertyMobilePageState
       }
       final result = await ServiceLocator.propertyVerification.submit(id);
       if (!mounted) return;
+      // The verification status changed on the server. The draft update above
+      // already bumped the listings revision, but that happened BEFORE this
+      // call returned — bump again so My Properties refetches the record with
+      // its new "pending review" status instead of the "draft" it just read.
+      ServiceLocator.listingsRevision.value++;
       setState(() {
         _serverStatus = 'pending';
         _serverMessage = 'Submitted for verification (ID $id). '
@@ -392,55 +597,59 @@ class _SitewiseAddPropertyMobilePageState
   String _display(String value) => value.isEmpty ? 'Not provided' : value;
 
   bool _validateCurrentStep() {
+    _fieldErrors.clear();
     if (!_editable) {
       _validationMessage =
           'This record is awaiting review — its details can no longer be edited.';
       return false;
     }
-    if (_step == 1) {
-      if (_propertyName.isEmpty) {
-        _validationMessage = 'Enter a property name to continue.';
-        return false;
-      }
-      final rent = double.tryParse(_monthlyRent);
-      if (rent == null || rent <= 0) {
-        _validationMessage = 'Enter a valid monthly rental greater than zero.';
-        return false;
-      }
-      final area = double.tryParse(_builtUpArea);
-      if (area == null || area <= 0) {
-        _validationMessage = 'Enter a valid built-up area greater than zero.';
-        return false;
-      }
+    if (_step == 1) _collectDetailsErrors();
+    if (_step == 2) _collectLocationErrors();
+    if (_step == 4) {
+      // Review re-checks everything: navigating back and clearing a field must
+      // not let an incomplete draft reach the confirmation step.
+      _collectDetailsErrors();
+      _collectLocationErrors();
     }
-    if (_step == 2) {
-      if (_address.isEmpty || _stateName.isEmpty || _district.isEmpty) {
-        _validationMessage = 'Address, state and district are required.';
-        return false;
-      }
-      final hasLatitude = _latitude.isNotEmpty;
-      final hasLongitude = _longitude.isNotEmpty;
-      if (hasLatitude != hasLongitude) {
-        _validationMessage =
-            'Enter both latitude and longitude, or leave both blank.';
-        return false;
-      }
-      if (hasLatitude && hasLongitude) {
-        final latitude = double.tryParse(_latitude);
-        final longitude = double.tryParse(_longitude);
-        if (latitude == null ||
-            longitude == null ||
-            latitude < -90 ||
-            latitude > 90 ||
-            longitude < -180 ||
-            longitude > 180) {
-          _validationMessage = 'Enter valid latitude and longitude values.';
-          return false;
-        }
-      }
+    if (_fieldErrors.isNotEmpty) {
+      _validationMessage = 'Please correct the highlighted information.';
+      return false;
     }
     _validationMessage = null;
     return true;
+  }
+
+  void _collectDetailsErrors() {
+    _putField('title', PropertyFormRules.titleError(_propertyName));
+    _putField('type', PropertyFormRules.propertyTypeError(_propertyType));
+    _putField('rent', PropertyFormRules.rentError(_monthlyRent));
+    _putField('area', PropertyFormRules.areaError(_builtUpArea));
+  }
+
+  void _collectLocationErrors() {
+    _putField('address', PropertyFormRules.addressError(_address));
+    _putField('state', PropertyFormRules.stateError(_stateName));
+    _putField('city', PropertyFormRules.cityError(_stateName, _district));
+    _putField(
+      'postcode',
+      PropertyFormRules.postcodeError(
+        _postcode,
+        state: _stateName,
+        city: _district,
+      ),
+    );
+    // A verdict only covers the exact values that were validated. If the
+    // snapshot has moved since confirmation, the verdict is stale.
+    final verified = _addressState == AddressVerificationState.verified &&
+        _verifiedSnapshot != null &&
+        _verifiedSnapshot == _addressSnapshot();
+    if (!verified) {
+      _fieldErrors['verification'] = AddressVerificationCopy.required;
+    }
+  }
+
+  void _putField(String key, String? message) {
+    if (message != null) _fieldErrors[key] = message;
   }
 
   void _goNext() {
@@ -780,10 +989,11 @@ class _SitewiseAddPropertyMobilePageState
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
         _buildTextField(
-          label: 'Property name',
+          label: 'Property title',
           controller: _nameController,
           requiredField: true,
-          hint: 'Use a recognizable name for your property and dashboard.',
+          hint: 'e.g. Ground Floor Corner Shoplot at SS15',
+          error: _fieldErrors['title'],
         ),
         const SizedBox(height: 17),
         _buildTextField(
@@ -791,6 +1001,7 @@ class _SitewiseAddPropertyMobilePageState
           controller: _rentController,
           requiredField: true,
           keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          error: _fieldErrors['rent'],
         ),
         const SizedBox(height: 17),
         _buildTextField(
@@ -798,6 +1009,7 @@ class _SitewiseAddPropertyMobilePageState
           controller: _areaController,
           requiredField: true,
           keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          error: _fieldErrors['area'],
         ),
         const SizedBox(height: 17),
         _buildTextField(
@@ -819,18 +1031,13 @@ class _SitewiseAddPropertyMobilePageState
   }
 
   Widget _buildChoiceGrid() {
-    const choices = <String>[
-      'Shoplot',
-      'Retail space',
-      'Office',
-      'Industrial',
-      'Other',
-    ];
+    final choices = commercialPropertyTypeLabels;
+    final error = _fieldErrors['type'];
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
-        _fieldLabel('Property type', requiredField: true),
+        _fieldLabel('Commercial property type', requiredField: true),
         const SizedBox(height: 9),
         GridView.builder(
           itemCount: choices.length,
@@ -849,6 +1056,7 @@ class _SitewiseAddPropertyMobilePageState
               onPressed: () {
                 setState(() {
                   _propertyType = choice;
+                  _fieldErrors.remove('type');
                   _validationMessage = null;
                 });
               },
@@ -879,11 +1087,19 @@ class _SitewiseAddPropertyMobilePageState
             );
           },
         ),
+        if (error != null) ...<Widget>[
+          const SizedBox(height: 7),
+          _buildFieldError(error),
+        ],
       ],
     );
   }
 
   Widget _buildLocation() {
+    final cityOptions = MalaysiaLocations.citiesFor(_stateName);
+    final postcodeOptions =
+        MalaysiaLocations.postcodesFor(_stateName, _district);
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
@@ -891,47 +1107,480 @@ class _SitewiseAddPropertyMobilePageState
           label: 'Street address',
           controller: _addressController,
           requiredField: true,
-          hint: 'Street, building and unit number.',
+          hint: 'Building name, unit number and street.',
+          helper:
+              'Include the unit or lot number — Google checks the address '
+              'exactly as written.',
+          error: _fieldErrors['address'],
+          onChanged: _onAddressChanged,
         ),
         const SizedBox(height: 16),
-        _buildTextField(
-          label: 'State',
-          controller: _stateController,
+        _buildSelectField(
+          label: 'State / federal territory',
+          value: _stateName,
+          hint: 'Select a state',
+          options: MalaysiaLocations.stateNames,
+          searchable: true,
           requiredField: true,
+          error: _fieldErrors['state'],
+          onSelected: _onStateChanged,
         ),
         const SizedBox(height: 16),
-        _buildTextField(
-          label: 'City / district',
-          controller: _districtController,
+        _buildSelectField(
+          label: 'City / township',
+          value: _district,
+          hint: _stateName.isEmpty
+              ? 'Select a state first'
+              : 'Search cities in $_stateName',
+          options: cityOptions,
+          enabled: _stateName.isNotEmpty,
           requiredField: true,
+          error: _fieldErrors['city'],
+          onSelected: _onCityChanged,
         ),
         const SizedBox(height: 16),
-        _buildTextField(
+        _buildSelectField(
           label: 'Postcode',
-          controller: _postcodeController,
-          keyboardType: TextInputType.number,
+          value: _postcode,
+          hint: _district.isEmpty
+              ? 'Select a city first'
+              : 'Search postcodes for $_district',
+          options: postcodeOptions,
+          enabled: _district.isNotEmpty,
+          requiredField: true,
+          helper: postcodeOptions.isEmpty
+              ? null
+              : '${postcodeOptions.length} postcode(s) listed for this city.',
+          error: _fieldErrors['postcode'],
+          onSelected: _onPostcodeChanged,
         ),
-        const SizedBox(height: 16),
-        _buildTextField(
-          label: 'Latitude (required for submission)',
-          controller: _latitudeController,
-          keyboardType:
-              const TextInputType.numberWithOptions(decimal: true, signed: true),
-        ),
-        const SizedBox(height: 16),
-        _buildTextField(
-          label: 'Longitude (required for submission)',
-          controller: _longitudeController,
-          keyboardType:
-              const TextInputType.numberWithOptions(decimal: true, signed: true),
-        ),
+        const SizedBox(height: 18),
+        _addressVerificationPanel(),
         const SizedBox(height: 15),
         _buildInfoNotice(
-          'Coordinates place the property on the Explore map. Valid Malaysian '
-          'state and postcode values are checked again when you submit.',
+          'Address verification only proves the address exists — it is not '
+          'ownership verification. Ownership evidence is uploaded separately '
+          'from My Properties.',
         ),
       ],
     );
+  }
+
+  void _onAddressChanged(String value) {
+    final hadVerdict = _addressState != AddressVerificationState.unverified;
+    setState(() {
+      _fieldErrors.remove('address');
+      _validationMessage = null;
+      if (hadVerdict) {
+        _invalidateAddress();
+        _addressMessage = AddressVerificationCopy.stale;
+      }
+    });
+  }
+
+  /// A tappable field that opens a searchable option sheet.
+  ///
+  /// Used for the dependent State -> City -> Postcode chain: the option list is
+  /// always the dataset list for the current parent selection, so an
+  /// incompatible value can never be entered in the first place.
+  Widget _buildSelectField({
+    required String label,
+    required String value,
+    required String hint,
+    required List<String> options,
+    required ValueChanged<String> onSelected,
+    bool requiredField = false,
+    bool enabled = true,
+    bool searchable = true,
+    String? helper,
+    String? error,
+  }) {
+    final hasValue = value.isNotEmpty;
+    final canOpen = _editable && enabled && options.isNotEmpty;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        _fieldLabel(label, requiredField: requiredField),
+        const SizedBox(height: 7),
+        InkWell(
+          onTap: canOpen
+              ? () => _openOptionPicker(
+                    title: label,
+                    options: options,
+                    selected: value,
+                    onSelected: onSelected,
+                  )
+              : null,
+          borderRadius: BorderRadius.circular(11),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+            decoration: BoxDecoration(
+              color: canOpen ? const Color(0xFFFAFBFD) : const Color(0xFFF2F4F7),
+              border: Border.all(
+                color: error == null ? const Color(0xFFD5DDE9) : _errorBorder,
+              ),
+              borderRadius: BorderRadius.circular(11),
+            ),
+            child: Row(
+              children: <Widget>[
+                Expanded(
+                  child: Text(
+                    hasValue ? value : hint,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: hasValue ? _ink : const Color(0xFF7A8798),
+                      fontSize: hasValue ? 13 : 12,
+                      fontWeight: hasValue ? FontWeight.w700 : FontWeight.w400,
+                    ),
+                  ),
+                ),
+                Icon(
+                  searchable ? Icons.search_rounded : Icons.expand_more_rounded,
+                  size: 17,
+                  color: canOpen ? _muted : const Color(0xFFA9B4C2),
+                ),
+              ],
+            ),
+          ),
+        ),
+        if (helper != null && error == null) ...<Widget>[
+          const SizedBox(height: 6),
+          Text(
+            helper,
+            style: const TextStyle(
+              color: Color(0xFF6B7A90),
+              fontSize: 10,
+              height: 1.45,
+            ),
+          ),
+        ],
+        if (error != null) ...<Widget>[
+          const SizedBox(height: 6),
+          _buildFieldError(error),
+        ],
+      ],
+    );
+  }
+
+  Future<void> _openOptionPicker({
+    required String title,
+    required List<String> options,
+    required String selected,
+    required ValueChanged<String> onSelected,
+  }) async {
+    final picked = await showModalBottomSheet<String>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
+      ),
+      builder: (sheetContext) => _OptionSheet(
+        title: title,
+        options: options,
+        selected: selected,
+      ),
+    );
+    if (!mounted || picked == null) return;
+    onSelected(picked);
+  }
+
+  String _addressStateLabel(AddressVerificationState state) {
+    switch (state) {
+      case AddressVerificationState.unverified:
+        return 'Not verified';
+      case AddressVerificationState.verifying:
+        return 'Checking';
+      case AddressVerificationState.validatedPendingConfirmation:
+        return 'Awaiting confirmation';
+      case AddressVerificationState.verified:
+        return 'Verified';
+      case AddressVerificationState.partiallyValidated:
+        return 'Partial match';
+      case AddressVerificationState.unconfirmed:
+        return 'Not confirmed';
+      case AddressVerificationState.serviceError:
+        return 'Temporarily unavailable';
+    }
+  }
+
+  bool get _canVerifyAddress =>
+      _editable &&
+      _address.isNotEmpty &&
+      _stateName.isNotEmpty &&
+      _district.isNotEmpty &&
+      _postcode.isNotEmpty;
+
+  Widget _addressVerificationPanel() {
+    final state = _addressState;
+    final result = _addressResult;
+    final busy = state == AddressVerificationState.verifying;
+
+    final (Color surface, Color border, Color ink, IconData icon) =
+        switch (state) {
+      AddressVerificationState.unverified => (
+          const Color(0xFFF2F7FF),
+          const Color(0xFFD6E5FB),
+          const Color(0xFF21477F),
+          Icons.verified_outlined,
+        ),
+      AddressVerificationState.verifying => (
+          const Color(0xFFF2F7FF),
+          const Color(0xFFD6E5FB),
+          const Color(0xFF21477F),
+          Icons.sync_rounded,
+        ),
+      AddressVerificationState.validatedPendingConfirmation => (
+          const Color(0xFFEDF4FF),
+          const Color(0xFFBBD0F3),
+          _brandStrong,
+          Icons.place_outlined,
+        ),
+      AddressVerificationState.verified => (
+          _okSurface,
+          _okBorder,
+          _okInk,
+          Icons.verified_rounded,
+        ),
+      AddressVerificationState.partiallyValidated => (
+          _warnSurface,
+          _warnBorder,
+          _warnInk,
+          Icons.info_outline_rounded,
+        ),
+      AddressVerificationState.unconfirmed => (
+          const Color(0xFFFFF5F5),
+          _errorBorder,
+          _errorInk,
+          Icons.error_outline_rounded,
+        ),
+      AddressVerificationState.serviceError => (
+          _warnSurface,
+          _warnBorder,
+          _warnInk,
+          Icons.cloud_off_rounded,
+        ),
+    };
+
+    final verificationError = _fieldErrors['verification'];
+    final formatted = result?.formattedAddress;
+    final showNormalized = formatted != null &&
+        (state == AddressVerificationState.validatedPendingConfirmation ||
+            state == AddressVerificationState.verified);
+    final coordinates = state == AddressVerificationState.verified
+        ? _verifiedLatitude != null && _verifiedLongitude != null
+            ? '${_verifiedLatitude!.toStringAsFixed(6)}, '
+                '${_verifiedLongitude!.toStringAsFixed(6)}'
+            : null
+        : result?.hasCoordinates == true
+            ? '${result!.latitude!.toStringAsFixed(6)}, '
+                '${result.longitude!.toStringAsFixed(6)}'
+            : null;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: <Widget>[
+        Container(
+          padding: const EdgeInsets.all(13),
+          decoration: BoxDecoration(
+            color: surface,
+            border: Border.all(color: border),
+            borderRadius: BorderRadius.circular(13),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Row(
+                children: <Widget>[
+                  Icon(icon, color: ink, size: 16),
+                  const SizedBox(width: 7),
+                  Expanded(
+                    child: Text(
+                      'Address verification',
+                      style: TextStyle(
+                        color: ink,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                  ),
+                  if (busy)
+                    SizedBox(
+                      width: 13,
+                      height: 13,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 1.8,
+                        valueColor: AlwaysStoppedAnimation<Color>(ink),
+                      ),
+                    )
+                  else
+                    Text(
+                      _addressStateLabel(state),
+                      style: TextStyle(
+                        color: ink,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                ],
+              ),
+              if (_addressMessage != null) ...<Widget>[
+                const SizedBox(height: 8),
+                Text(
+                  _addressMessage!,
+                  style: TextStyle(color: ink, fontSize: 11, height: 1.5),
+                ),
+              ],
+              if (showNormalized) ...<Widget>[
+                const SizedBox(height: 10),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(9),
+                    border: Border.all(color: border),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      const Text(
+                        'Provider-normalised address',
+                        style: TextStyle(
+                          color: Color(0xFF627088),
+                          fontSize: 9,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        formatted,
+                        style: const TextStyle(
+                          color: Color(0xFF1A273A),
+                          fontSize: 11,
+                          height: 1.45,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      if (coordinates != null) ...<Widget>[
+                        const SizedBox(height: 5),
+                        Text(
+                          'Coordinates $coordinates',
+                          style: const TextStyle(
+                            color: Color(0xFF627088),
+                            fontSize: 10,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ],
+              const SizedBox(height: 11),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: _verificationActions(state),
+              ),
+            ],
+          ),
+        ),
+        if (verificationError != null) ...<Widget>[
+          const SizedBox(height: 7),
+          _buildFieldError(verificationError),
+        ],
+      ],
+    );
+  }
+
+  List<Widget> _verificationActions(AddressVerificationState state) {
+    switch (state) {
+      case AddressVerificationState.verifying:
+        return const <Widget>[];
+      case AddressVerificationState.validatedPendingConfirmation:
+        final result = _addressResult;
+        return <Widget>[
+          FilledButton(
+            onPressed: result != null && result.hasCoordinates
+                ? _confirmAddress
+                : null,
+            style: FilledButton.styleFrom(
+              backgroundColor: _brandStrong,
+              padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 11),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(9),
+              ),
+            ),
+            child: const Text(
+              'Confirm this address',
+              style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800),
+            ),
+          ),
+          TextButton(
+            onPressed: _canVerifyAddress ? _validateAddress : null,
+            child: const Text(
+              'Verify again',
+              style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800),
+            ),
+          ),
+        ];
+      case AddressVerificationState.verified:
+        return <Widget>[
+          OutlinedButton(
+            onPressed: _canVerifyAddress ? _validateAddress : null,
+            style: OutlinedButton.styleFrom(
+              foregroundColor: _okInk,
+              side: const BorderSide(color: _okBorder),
+              padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 11),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(9),
+              ),
+            ),
+            child: const Text(
+              'Verify again',
+              style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800),
+            ),
+          ),
+        ];
+      case AddressVerificationState.partiallyValidated:
+      case AddressVerificationState.unconfirmed:
+      case AddressVerificationState.serviceError:
+        return <Widget>[
+          FilledButton(
+            onPressed: _canVerifyAddress ? _validateAddress : null,
+            style: FilledButton.styleFrom(
+              backgroundColor: _brandStrong,
+              padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 11),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(9),
+              ),
+            ),
+            child: const Text(
+              'Try again',
+              style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800),
+            ),
+          ),
+        ];
+      case AddressVerificationState.unverified:
+        return <Widget>[
+          FilledButton(
+            onPressed: _canVerifyAddress ? _validateAddress : null,
+            style: FilledButton.styleFrom(
+              backgroundColor: _brandStrong,
+              padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 11),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(9),
+              ),
+            ),
+            child: const Text(
+              'Verify address',
+              style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800),
+            ),
+          ),
+        ];
+    }
   }
 
   Widget _buildPhotos() {
@@ -1071,6 +1720,12 @@ class _SitewiseAddPropertyMobilePageState
   }
 
   Widget _buildReview() {
+    final verified = _addressState == AddressVerificationState.verified;
+    final coordinates = _verifiedLatitude != null && _verifiedLongitude != null
+        ? '${_verifiedLatitude!.toStringAsFixed(6)}, '
+            '${_verifiedLongitude!.toStringAsFixed(6)}'
+        : null;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
@@ -1078,9 +1733,9 @@ class _SitewiseAddPropertyMobilePageState
           title: 'Property details',
           step: 1,
           rows: <_ReviewRow>[
-            _ReviewRow('Property name', _display(_propertyName)),
-            _ReviewRow('Property type', _propertyType),
-            _ReviewRow('Monthly rent', 'RM $_monthlyRent'),
+            _ReviewRow('Property title', _display(_propertyName)),
+            _ReviewRow('Commercial property type', _propertyType),
+            _ReviewRow('Monthly rental', 'RM $_monthlyRent'),
             _ReviewRow('Built-up area', '$_builtUpArea sq ft'),
           ],
         ),
@@ -1089,13 +1744,19 @@ class _SitewiseAddPropertyMobilePageState
           title: 'Location & address',
           step: 2,
           rows: <_ReviewRow>[
-            _ReviewRow('Address', _display(_address)),
+            _ReviewRow('Street address', _display(_address)),
             _ReviewRow('State', _display(_stateName)),
-            _ReviewRow('City / district', _display(_district)),
+            _ReviewRow('City / township', _display(_district)),
             _ReviewRow('Postcode', _display(_postcode)),
             _ReviewRow(
+              'Address verification',
+              verified
+                  ? 'Verified — ${_addressResult?.formattedAddress ?? 'confirmed by the provider'}'
+                  : _addressStateLabel(_addressState),
+            ),
+            _ReviewRow(
               'Coordinates',
-              _latitude.isEmpty ? 'Not provided' : '$_latitude, $_longitude',
+              coordinates ?? 'Not available until the address is verified',
             ),
           ],
         ),
@@ -1110,11 +1771,18 @@ class _SitewiseAddPropertyMobilePageState
             ),
           ],
         ),
+        if (!verified) ...<Widget>[
+          const SizedBox(height: 16),
+          _buildInfoNotice(
+            'The address is not verified yet. Use Edit on "Location & address" '
+            'to verify and confirm it before submitting.',
+          ),
+        ],
         const SizedBox(height: 16),
         _buildInfoNotice(
           'Review & finish saves the record to Sitewise. Submission for '
-          'verification additionally requires complete details and at least '
-          'one ownership document.',
+          'verification additionally requires complete details, a verified '
+          'address and at least one ownership document.',
         ),
       ],
     );
@@ -1378,7 +2046,10 @@ class _SitewiseAddPropertyMobilePageState
     bool requiredField = false,
     TextInputType? keyboardType,
     String? hint,
+    String? helper,
+    String? error,
     int maxLines = 1,
+    ValueChanged<String>? onChanged,
   }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1390,7 +2061,7 @@ class _SitewiseAddPropertyMobilePageState
           keyboardType: keyboardType,
           maxLines: maxLines,
           enabled: _editable,
-          onChanged: _onTextChanged,
+          onChanged: onChanged ?? _onTextChanged,
           style: const TextStyle(color: _ink, fontSize: 13),
           decoration: InputDecoration(
             filled: true,
@@ -1399,18 +2070,61 @@ class _SitewiseAddPropertyMobilePageState
                 const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(11),
-              borderSide: const BorderSide(color: Color(0xFFD5DDE9)),
+              borderSide: BorderSide(
+                color: error == null ? const Color(0xFFD5DDE9) : _errorBorder,
+              ),
             ),
             enabledBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(11),
-              borderSide: const BorderSide(color: Color(0xFFD5DDE9)),
+              borderSide: BorderSide(
+                color: error == null ? const Color(0xFFD5DDE9) : _errorBorder,
+              ),
             ),
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(11),
-              borderSide: const BorderSide(color: _brand, width: 1.5),
+              borderSide: BorderSide(
+                color: error == null ? _brand : _errorBorder,
+                width: 1.5,
+              ),
             ),
             hintText: hint,
             hintStyle: const TextStyle(color: Color(0xFF7A8798), fontSize: 12),
+          ),
+        ),
+        if (helper != null && error == null) ...<Widget>[
+          const SizedBox(height: 6),
+          Text(
+            helper,
+            style: const TextStyle(
+              color: Color(0xFF6B7A90),
+              fontSize: 10,
+              height: 1.45,
+            ),
+          ),
+        ],
+        if (error != null) ...<Widget>[
+          const SizedBox(height: 6),
+          _buildFieldError(error),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildFieldError(String message) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        const Icon(Icons.error_outline_rounded, color: _errorInk, size: 13),
+        const SizedBox(width: 5),
+        Expanded(
+          child: Text(
+            message,
+            style: const TextStyle(
+              color: _errorInk,
+              fontSize: 10,
+              height: 1.45,
+              fontWeight: FontWeight.w700,
+            ),
           ),
         ),
       ],
@@ -1520,4 +2234,167 @@ class _ReviewRow {
 
   final String label;
   final String value;
+}
+
+/// Searchable single-select sheet used by the State / City / Postcode fields.
+///
+/// The list always comes from the Malaysian postcode dataset in Shared Logic,
+/// so the owner can only pick a value that actually exists for the parent
+/// selection — the free-text path that produced mismatched state/postcode pairs
+/// is gone.
+class _OptionSheet extends StatefulWidget {
+  const _OptionSheet({
+    required this.title,
+    required this.options,
+    required this.selected,
+  });
+
+  final String title;
+  final List<String> options;
+  final String selected;
+
+  @override
+  State<_OptionSheet> createState() => _OptionSheetState();
+}
+
+class _OptionSheetState extends State<_OptionSheet> {
+  static const Color _ink = Color(0xFF10151F);
+  static const Color _muted = Color(0xFF58677D);
+  static const Color _brand = Color(0xFF2F6FED);
+
+  final TextEditingController _filter = TextEditingController();
+  List<String> _visible = const <String>[];
+
+  @override
+  void initState() {
+    super.initState();
+    _visible = widget.options;
+  }
+
+  @override
+  void dispose() {
+    _filter.dispose();
+    super.dispose();
+  }
+
+  void _applyFilter(String query) {
+    final needle = query.trim().toLowerCase();
+    setState(() {
+      _visible = needle.isEmpty
+          ? widget.options
+          : widget.options
+              .where((option) => option.toLowerCase().contains(needle))
+              .toList(growable: false);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final height = MediaQuery.of(context).size.height * 0.68;
+    return Padding(
+      padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+      child: SafeArea(
+        top: false,
+        child: SizedBox(
+          height: height,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: <Widget>[
+              const SizedBox(height: 9),
+              Center(
+                child: Container(
+                  width: 38,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFD8DFE9),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(18, 12, 18, 4),
+                child: Text(
+                  widget.title,
+                  style: const TextStyle(
+                    color: _ink,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(18, 6, 18, 8),
+                child: TextField(
+                  controller: _filter,
+                  autofocus: false,
+                  onChanged: _applyFilter,
+                  style: const TextStyle(color: _ink, fontSize: 13),
+                  decoration: InputDecoration(
+                    isDense: true,
+                    filled: true,
+                    fillColor: const Color(0xFFF6F8FC),
+                    prefixIcon: const Icon(Icons.search_rounded,
+                        size: 18, color: _muted),
+                    hintText: 'Search ${widget.title.toLowerCase()}',
+                    hintStyle:
+                        const TextStyle(color: Color(0xFF7A8798), fontSize: 12),
+                    contentPadding: const EdgeInsets.symmetric(vertical: 12),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: const BorderSide(color: Color(0xFFD5DDE9)),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: const BorderSide(color: Color(0xFFD5DDE9)),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: const BorderSide(color: _brand, width: 1.5),
+                    ),
+                  ),
+                ),
+              ),
+              Expanded(
+                child: _visible.isEmpty
+                    ? Center(
+                        child: Text(
+                          'No match for "${_filter.text.trim()}"',
+                          style: const TextStyle(color: _muted, fontSize: 12),
+                        ),
+                      )
+                    : ListView.separated(
+                        itemCount: _visible.length,
+                        separatorBuilder: (_, _) => const Divider(
+                          height: 1,
+                          color: Color(0xFFEFF2F7),
+                        ),
+                        itemBuilder: (context, index) {
+                          final option = _visible[index];
+                          final selected = option == widget.selected;
+                          return ListTile(
+                            dense: true,
+                            title: Text(
+                              option,
+                              style: TextStyle(
+                                color: selected ? _brand : _ink,
+                                fontSize: 13,
+                                fontWeight:
+                                    selected ? FontWeight.w800 : FontWeight.w500,
+                              ),
+                            ),
+                            trailing: selected
+                                ? const Icon(Icons.check_rounded,
+                                    size: 18, color: _brand)
+                                : null,
+                            onTap: () => Navigator.of(context).pop(option),
+                          );
+                        },
+                      ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 }

@@ -898,19 +898,23 @@ class FypPropertyRepository:
                 """
                 INSERT INTO fyp.rental_properties (
                     owner_user_id, name, property_type, description, address,
-                    city, state, latitude, longitude, rental_price,
+                    city, state, postcode, latitude, longitude, rental_price,
                     size_sqft, psf, availability, has_parking, is_fnb_suitable,
-                    floor_level, frontage_ft, verification_status, is_published
+                    floor_level, frontage_ft, verification_status, is_published,
+                    address_validation_status, address_formatted,
+                    address_validated_at
                 ) VALUES (
                     :owner_user_id, :name, :property_type, :description, :address,
-                    :city, :state, :latitude, :longitude,
+                    :city, :state, :postcode, :latitude, :longitude,
                     :rental_price, :size_sqft, :psf, :availability, :has_parking,
                     :is_fnb_suitable, :floor_level, :frontage_ft,
-                    'pending', false
+                    'pending', false, :address_validation_status,
+                    :address_formatted, :address_validated_at
                 )
-                RETURNING id, name, address, city, state, latitude, longitude,
-                          rental_price, size_sqft, property_type, availability,
-                          verification_status, is_published, created_at
+                RETURNING id, name, address, city, state, postcode, latitude,
+                          longitude, rental_price, size_sqft, property_type,
+                          availability, verification_status, is_published,
+                          address_validation_status, address_formatted, created_at
                 """
             ),
             {
@@ -921,6 +925,7 @@ class FypPropertyRepository:
                 "address": payload.get("address"),
                 "city": payload.get("city"),
                 "state": payload.get("state"),
+                "postcode": (payload.get("postcode") or "").strip() or None,
                 "latitude": lat,
                 "longitude": lon,
                 "rental_price": price,
@@ -931,6 +936,11 @@ class FypPropertyRepository:
                 "is_fnb_suitable": 1 if payload.get("is_fnb_suitable") else 0,
                 "floor_level": payload.get("floor_level"),
                 "frontage_ft": payload.get("frontage_ft"),
+                "address_validation_status": payload.get(
+                    "address_validation_status"
+                ),
+                "address_formatted": payload.get("address_formatted"),
+                "address_validated_at": payload.get("address_validated_at"),
             },
         ).mappings().one()
         self.session.commit()
@@ -940,9 +950,10 @@ class FypPropertyRepository:
         rows = self.session.execute(
             text(
                 """
-                SELECT id, name, address, city, state, latitude, longitude,
-                       rental_price, size_sqft, property_type, availability,
-                       verification_status, is_published, created_at
+                SELECT id, name, address, city, state, postcode, latitude,
+                       longitude, rental_price, size_sqft, property_type,
+                       availability, verification_status, is_published,
+                       address_validation_status, created_at
                 FROM fyp.rental_properties
                 WHERE owner_user_id = :owner
                 ORDER BY created_at DESC
@@ -964,6 +975,7 @@ class FypPropertyRepository:
         "address",
         "city",
         "state",
+        "postcode",
         "latitude",
         "longitude",
         "rental_price",
@@ -977,10 +989,11 @@ class FypPropertyRepository:
 
     _LISTING_SELECT = (
         "SELECT id, owner_user_id, name, property_type, description, address, "
-        "city, state, latitude, longitude, rental_price, size_sqft, psf, "
+        "city, state, postcode, latitude, longitude, rental_price, size_sqft, psf, "
         "availability, floor_level, frontage_ft, has_parking, is_fnb_suitable, "
-        "verification_status, rejection_reason, is_published, created_at, "
-        "updated_at "
+        "verification_status, rejection_reason, is_published, "
+        "address_validation_status, address_formatted, address_validated_at, "
+        "created_at, updated_at "
         "FROM fyp.rental_properties"
     )
 
@@ -1022,7 +1035,7 @@ class FypPropertyRepository:
                 """
                 INSERT INTO fyp.rental_properties (
                     owner_user_id, name, property_type, description, address,
-                    city, state, latitude, longitude, rental_price,
+                    city, state, postcode, latitude, longitude, rental_price,
                     size_sqft, availability, floor_level, frontage_ft,
                     has_parking, is_fnb_suitable,
                     verification_status, is_published
@@ -1031,9 +1044,9 @@ class FypPropertyRepository:
                     COALESCE(NULLIF(:property_type, ''), 'Shop'),
                     NULLIF(:description, ''),
                     NULLIF(:address, ''), NULLIF(:city, ''), NULLIF(:state, ''),
-                    :latitude, :longitude, :rental_price, :size_sqft,
-                    NULLIF(:availability, ''), :floor_level, :frontage_ft,
-                    :has_parking, :is_fnb_suitable,
+                    NULLIF(:postcode, ''), :latitude, :longitude, :rental_price,
+                    :size_sqft, NULLIF(:availability, ''), :floor_level,
+                    :frontage_ft, :has_parking, :is_fnb_suitable,
                     'draft', false
                 )
                 RETURNING id
@@ -1047,6 +1060,7 @@ class FypPropertyRepository:
                 "address": payload.get("address"),
                 "city": payload.get("city"),
                 "state": payload.get("state"),
+                "postcode": (payload.get("postcode") or "").strip()[:5],
                 "latitude": payload.get("latitude"),
                 "longitude": payload.get("longitude"),
                 "rental_price": payload.get("rental_price"),
@@ -1078,7 +1092,7 @@ class FypPropertyRepository:
                 continue
             value = fields[column]
             params[column] = value
-            if column in ("address", "city", "state", "availability",
+            if column in ("address", "city", "state", "postcode", "availability",
                           "property_type", "description", "name"):
                 sets.append(f"{column} = NULLIF(:{column}, '')")
             elif column in ("floor_level", "frontage_ft"):
@@ -1109,6 +1123,52 @@ class FypPropertyRepository:
             return None
         self.session.commit()
         return self.owner_listing(property_id)
+
+    def set_address_validation(
+        self,
+        property_id: int,
+        *,
+        status: str,
+        formatted_address: str | None,
+        latitude: float | None = None,
+        longitude: float | None = None,
+    ) -> None:
+        """Persist a SERVER-obtained Google Address Validation verdict.
+
+        Called INSIDE the caller's transaction (no commit here) so the verdict
+        and the lifecycle transition land atomically. Coordinates are replaced
+        only when the provider returned a validated premise and real numbers —
+        a partial verdict never overwrites the owner's pin.
+        """
+        sets = [
+            "address_validation_status = :status",
+            "address_formatted = :formatted",
+            "address_validated_at = now()",
+            "updated_at = now()",
+        ]
+        params: dict[str, Any] = {
+            "pid": property_id,
+            "status": status,
+            "formatted": formatted_address,
+        }
+        if (
+            status == "validated"
+            and latitude is not None
+            and longitude is not None
+            and -90 <= float(latitude) <= 90
+            and -180 <= float(longitude) <= 180
+        ):
+            sets.append("latitude = :lat")
+            sets.append("longitude = :lon")
+            params["lat"] = float(latitude)
+            params["lon"] = float(longitude)
+        self.session.execute(
+            text(
+                f"UPDATE fyp.rental_properties SET {', '.join(sets)} "
+                "WHERE id = :pid"
+            ),
+            params,
+        )
 
     def set_listing_verification_status(
         self,

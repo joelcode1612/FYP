@@ -371,6 +371,28 @@ class _EntrepreneurExploreMobilePageState
     context,
   ).pushNamed('/entrepreneur/property-detail', arguments: id);
 
+  /// Save/unsave against the account's shortlist first. The Saved tab reads
+  /// that server list, so a local-only toggle would silently disagree with it.
+  Future<void> _toggleSaved(String id) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final wantSaved = !ref.read(appNotifierProvider).saved.contains(id);
+    final failure = await ref
+        .read(appNotifierProvider.notifier)
+        .persistSaved(id, wantSaved: wantSaved);
+    if (!mounted) return;
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(
+          failure ??
+              (wantSaved
+                  ? 'Saved to your shortlist.'
+                  : 'Removed from saved.'),
+        ),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
   /// Pull-to-refresh: re-runs the *current* criteria from the first page.
   /// Filters and the search term are already stored in the notifier, so one
   /// [loadExplore] is enough — re-applying the criteria here used to fire a
@@ -585,8 +607,7 @@ class _EntrepreneurExploreMobilePageState
             return MobilePropertyCard(
               property: p,
               saved: appState.saved.contains(p.id),
-              onToggleSaved: () =>
-                  ref.read(appNotifierProvider.notifier).toggleSaved(p.id),
+              onToggleSaved: () => _toggleSaved(p.id),
               compared: appState.compared.contains(p.id),
               onToggleCompare: () =>
                   ref.read(appNotifierProvider.notifier).toggleCompared(p.id),

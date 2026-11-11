@@ -148,8 +148,17 @@ class EntrepreneurAssessmentSummaryMobilePage extends StatelessWidget {
               ),
               const SizedBox(height: 8),
               Text(
-                '${draft.concept} · ${draft.audience} · '
-                'Budget RM ${draft.budgetRm?.toStringAsFixed(0)}',
+                // A draft can reach this page before every input is filled
+                // (it is restored from the device store). Printing "RM null"
+                // or an empty "· ·" would present missing input as data.
+                [
+                  if (draft.concept.isNotEmpty) draft.concept,
+                  if (draft.audience.isNotEmpty) draft.audience,
+                  if (draft.budgetRm != null)
+                    'Budget RM ${draft.budgetRm!.toStringAsFixed(0)}'
+                  else
+                    'Budget not set',
+                ].join(' · '),
                 style: const TextStyle(
                   fontFamily: kFontFamily,
                   fontSize: 11.5,
@@ -254,16 +263,33 @@ class _DemandAnalysisCard extends StatefulWidget {
 }
 
 class _DemandAnalysisCardState extends State<_DemandAnalysisCard> {
-  late final Future<LocationAnalysis?> _future = _load();
+  late Future<LocationAnalysis?> _future = _load();
+
+  /// Set when the read FAILED (connection, session, server). Distinct from
+  /// `null` analysis, which means the service answered and has nothing for
+  /// this property — the two must not collapse into the same card.
+  String? _error;
 
   Future<LocationAnalysis?> _load() async {
+    _error = null;
     try {
       return await ServiceLocator.recommendations.analysis(widget.propertyId);
-    } catch (_) {
-      // No demand evidence for this property — the UI shows Unavailable.
+    } on Object catch (error) {
+      // A failure is not "no analysis exists": keep it distinguishable and
+      // retryable instead of showing the honest-absence copy for an outage.
+      _error = readableFailure(
+        error,
+        fallback: 'The demand analysis could not be loaded.',
+      );
       return null;
     }
   }
+
+  /// Re-runs the actual request (a `setState` alone would only rebuild the
+  /// same failed future).
+  void _reload() => setState(() {
+    _future = _load();
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -274,6 +300,7 @@ class _DemandAnalysisCardState extends State<_DemandAnalysisCard> {
             ? snap.data
             : null;
         final pending = snap.connectionState != ConnectionState.done;
+        final error = pending ? null : _error;
         return M3Card(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -294,9 +321,12 @@ class _DemandAnalysisCardState extends State<_DemandAnalysisCard> {
                   _statusTag(
                     pending
                         ? 'Checking'
+                        : error != null
+                        ? 'Could not load'
                         : a == null
                         ? 'Unavailable'
                         : 'Sample data',
+                    failed: error != null,
                   ),
                 ],
               ),
@@ -309,6 +339,29 @@ class _DemandAnalysisCardState extends State<_DemandAnalysisCard> {
                     width: 18,
                     child: CircularProgressIndicator(strokeWidth: 2),
                   ),
+                )
+              else if (error != null)
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        error,
+                        style: const TextStyle(
+                          fontFamily: kFontFamily,
+                          fontSize: 11.5,
+                          height: 1.55,
+                          color: SitewiseColors.danger,
+                        ),
+                      ),
+                    ),
+                    TextButton(
+                      onPressed: _reload,
+                      child: const Text(
+                        'Retry',
+                        style: TextStyle(fontSize: 12),
+                      ),
+                    ),
+                  ],
                 )
               else if (a == null) ...[
                 Text(
@@ -354,8 +407,9 @@ class _DemandAnalysisCardState extends State<_DemandAnalysisCard> {
     );
   }
 
-  Widget _statusTag(String label) {
-    final unavailable = label == 'Unavailable';
+  Widget _statusTag(String label, {bool failed = false}) {
+    final unavailable = label == 'Unavailable' || failed;
+    final color = failed ? SitewiseColors.danger : SitewiseM3.amber;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
@@ -363,7 +417,7 @@ class _DemandAnalysisCardState extends State<_DemandAnalysisCard> {
         borderRadius: BorderRadius.circular(SitewiseM3.radiusPill),
         border: Border.all(
           color: unavailable
-              ? SitewiseM3.amber.withValues(alpha: 0.35)
+              ? color.withValues(alpha: 0.35)
               : SitewiseM3.line,
         ),
       ),
@@ -373,7 +427,7 @@ class _DemandAnalysisCardState extends State<_DemandAnalysisCard> {
           fontFamily: kFontFamily,
           fontSize: 10,
           fontWeight: FontWeight.w700,
-          color: unavailable ? SitewiseM3.amber : SitewiseM3.muted,
+          color: unavailable ? color : SitewiseM3.muted,
         ),
       ),
     );

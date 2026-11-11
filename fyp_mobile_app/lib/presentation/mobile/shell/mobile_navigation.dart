@@ -16,13 +16,18 @@ class MobileDestination {
 
 /// Bottom-navigation destinations per role.
 ///
-/// The entrepreneur workspace follows the consolidated five-tab model from
-/// `Sitewise_Mobile_Material3_Mock_Data.html`:
-/// **Home / Listing / Assess / Spaces / Profile**. The previous
-/// Home / Explore / Saved / Compare / Profile bar folded discovery into one
-/// tab and had no home for assessments or property records. Saved and Compare
-/// remain reachable from Profile and Home quick links — they are no longer
-/// top-level destinations.
+/// The entrepreneur workspace follows the consolidated five-tab model:
+/// **Home / Recommendations / Assess / Spaces / Profile**.
+///
+/// The second tab used to be "Listing" (the Explore browser). Discovery is now
+/// one destination — Recommendations — because the recommendation search
+/// carries browsing too: with no criteria it returns a plain catalogue browse,
+/// so two tabs for one job only split the same data across two screens.
+/// `/entrepreneur/explore` still resolves (see `app_routes.dart`) so old links
+/// and the map deep link keep working.
+///
+/// Saved and Compare remain reachable from Profile, Home quick links and the
+/// Spaces tab — they are not top-level destinations.
 ///
 /// Admin, Property Owner and Agent get no destinations: those workspaces
 /// belong to `fyp_jaspr_web`. An empty bar beats one whose routes do not
@@ -41,9 +46,9 @@ List<MobileDestination> mobileDestinationsFor(AppRole role) {
           label: 'Home',
         ),
         MobileDestination(
-          route: '/entrepreneur/explore',
-          icon: Icons.search_rounded,
-          label: 'Listing',
+          route: '/entrepreneur/recommendations',
+          icon: Icons.recommend_outlined,
+          label: 'Recommendations',
         ),
         MobileDestination(
           route: '/entrepreneur/assess',

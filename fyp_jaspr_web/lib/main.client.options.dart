@@ -42,6 +42,8 @@ import 'package:sitewise_jaspr_web/pages/agent/property_detail_page.dart'
     deferred as _property_detail_page;
 import 'package:sitewise_jaspr_web/pages/entrepreneur/add_property_page.dart'
     deferred as _add_property_page;
+import 'package:sitewise_jaspr_web/pages/entrepreneur/ai_recommendations_page.dart'
+    deferred as _ai_recommendations_page;
 import 'package:sitewise_jaspr_web/pages/entrepreneur/assessment_history_page.dart'
     deferred as _assessment_history_page;
 import 'package:sitewise_jaspr_web/pages/entrepreneur/assessment_workspace_page.dart'
@@ -198,6 +200,12 @@ ClientOptions get defaultClientOptions => ClientOptions(
       (p) => _add_property_page.AddPropertyPage(),
       loader: _add_property_page.loadLibrary,
     ),
+    'ai_recommendations_page': ClientLoader(
+      (p) => _ai_recommendations_page.AiRecommendationsPage(
+        resultId: p['resultId'] as String,
+      ),
+      loader: _ai_recommendations_page.loadLibrary,
+    ),
     'assessment_history_page': ClientLoader(
       (p) => _assessment_history_page.AssessmentHistoryPage(),
       loader: _assessment_history_page.loadLibrary,
@@ -254,7 +262,9 @@ ClientOptions get defaultClientOptions => ClientOptions(
       loader: _entrepreneur_property_detail_page.loadLibrary,
     ),
     'recommendations_page': ClientLoader(
-      (p) => _recommendations_page.RecommendationsPage(),
+      (p) => _recommendations_page.RecommendationsPage(
+        initialPropertyId: p['initialPropertyId'] as String?,
+      ),
       loader: _recommendations_page.loadLibrary,
     ),
     'report_page': ClientLoader(

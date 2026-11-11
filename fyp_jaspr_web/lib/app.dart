@@ -122,6 +122,17 @@ class SitewiseApp extends StatelessComponent {
                 ? '/admin/listings'
                 : '/admin/listing-detail?id=${Uri.encodeComponent(id)}';
           }
+          // Explore was replaced by Recommendations. Old bookmarks, in-app
+          // links and shared URLs keep working: the query string is carried
+          // over verbatim so `?q=`, `?id=` and filter parameters survive the
+          // move instead of silently resetting the search.
+          if (path == '/entrepreneur/explore' ||
+              path == '/entrepreneur/explore/') {
+            final uri = Uri.parse(state.location);
+            return uri
+                .replace(path: '/entrepreneur/recommendations')
+                .toString();
+          }
           final rolePath = RegExp(
             r'^/(entrepreneur|owner|admin|agent)(/|$)',
           ).firstMatch(path);
@@ -532,13 +543,25 @@ class SitewiseApp extends StatelessComponent {
               title: '360° tour — Sitewise',
             ),
           ),
+          // Canonical discovery destination (replaced Explore). `?id=<catalogue
+          // id>` is honoured so the old `/entrepreneur/explore?id=...` links
+          // still open with that unit selected; `?id=map` simply lands on the
+          // list, because the location panel is always on screen here.
           Route(
             path: '/entrepreneur/recommendations',
-            builder: (context, state) => _page(
-              const e_recommendations.RecommendationsPage(),
-              title: 'Recommendations — Sitewise',
-              description: 'Listings ranked against your stated preferences.',
-            ),
+            builder: (context, state) {
+              final id = state.queryParams['id'];
+              return _page(
+                e_recommendations.RecommendationsPage(
+                  key: ValueKey('recommendations-${id ?? ''}'),
+                  initialPropertyId: (id == null || id == 'map') ? null : id,
+                ),
+                title: 'Recommendations — Sitewise',
+                description:
+                    'Listings ranked against your stated preferences, with '
+                    'requirement-level match reasons and location intelligence.',
+              );
+            },
           ),
           Route(
             path: '/entrepreneur/compare',
@@ -656,10 +679,20 @@ class SitewiseApp extends StatelessComponent {
           ),
           Route(
             path: '/agent/property-detail',
-            builder: (context, state) => _page(
-              AgentPropertyDetailPage(id: state.queryParams['id'] ?? ''),
-              title: 'Listing — Sitewise agent',
-            ),
+            builder: (context, state) {
+              final id = state.queryParams['id'] ?? '';
+              // Keyed by id (same pattern as /admin/listing-detail):
+              // navigating between two listings must rebuild the state —
+              // jaspr reuses the State when type and position match, and
+              // switching listings must never show the previous draft.
+              return _page(
+                AgentPropertyDetailPage(
+                  key: ValueKey('agent-property-$id'),
+                  id: id,
+                ),
+                title: 'Manage property — Sitewise agent',
+              );
+            },
           ),
           Route(
             path: '/agent/enquiries',

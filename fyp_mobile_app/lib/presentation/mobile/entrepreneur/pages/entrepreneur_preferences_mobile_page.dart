@@ -28,9 +28,17 @@ class _EntrepreneurPreferencesMobilePageState
     _type = TextEditingController(
       text: ServiceLocator.preferences.businessType,
     );
-    _budget = ServiceLocator.preferences.maxBudgetRm;
-    _size = ServiceLocator.preferences.minSizeSqft;
+    // Clamped to the slider range: a persisted preference outside it (an older
+    // draft, a hand-edited store) would trip the Slider's value assertion and
+    // red-screen the page before the user could fix it.
+    _budget = ServiceLocator.preferences.maxBudgetRm.clamp(_budgetMin, _budgetMax);
+    _size = ServiceLocator.preferences.minSizeSqft.clamp(_sizeMin, _sizeMax);
   }
+
+  static const double _budgetMin = 1500;
+  static const double _budgetMax = 12000;
+  static const double _sizeMin = 200;
+  static const double _sizeMax = 3000;
 
   @override
   void dispose() {
@@ -58,8 +66,8 @@ class _EntrepreneurPreferencesMobilePageState
                 const SizedBox(height: 20),
                 Text('Max budget: RM${_budget.toStringAsFixed(0)}'),
                 Slider(
-                  min: 1500,
-                  max: 12000,
+                  min: _budgetMin,
+                  max: _budgetMax,
                   divisions: 21,
                   value: _budget,
                   onChanged: (v) => setState(() => _budget = v),
@@ -67,8 +75,8 @@ class _EntrepreneurPreferencesMobilePageState
                 const SizedBox(height: 8),
                 Text('Min size: ${_size.toStringAsFixed(0)} sq ft'),
                 Slider(
-                  min: 200,
-                  max: 3000,
+                  min: _sizeMin,
+                  max: _sizeMax,
                   divisions: 14,
                   value: _size,
                   onChanged: (v) => setState(() => _size = v),

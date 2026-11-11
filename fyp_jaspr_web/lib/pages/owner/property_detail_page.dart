@@ -34,6 +34,22 @@ class _PropertyDetailPageState extends State<PropertyDetailPage> {
   /// SnackBar + Navigator.pop with an inline success card.
   bool _submitted = false;
 
+  /// The server's own sentence when the submission was refused (e.g. 409 for
+  /// a listing already in review) — shown instead of a success card.
+  String? _submitError;
+
+  /// Strips wrapper prefixes so the backend's sentence is what the owner
+  /// reads (same convention as the entrepreneur wizard).
+  static String _cleanError(Object error) {
+    var raw = error.toString();
+    raw = raw.replaceFirst(
+      RegExp(r'^((Bad state|Exception|Error|StateError)(\([^)]*\))?):\s*'),
+      '',
+    );
+    final trimmed = raw.trim();
+    return trimmed.isEmpty ? 'The submission could not be completed.' : trimmed;
+  }
+
   @override
   Component build(BuildContext context) {
     return AppLayout(
@@ -59,13 +75,37 @@ class _PropertyDetailPageState extends State<PropertyDetailPage> {
                 }
                 final p = snap.data;
                 if (p == null) return _NotFound(id: component.id);
-                return _DetailBody(
-                  property: p,
-                  onSubmit: () async {
-                    await AppLocator.properties.submit(p.id);
-                    if (mounted) setState(() => _submitted = true);
-                  },
-                );
+                return Component.fragment([
+                  if (_submitError != null)
+                    div(classes: 'notice notice-danger', [
+                      Component.text(_submitError!),
+                    ]),
+                  _DetailBody(
+                    property: p,
+                    onSubmit: () async {
+                      // Listing-scope submission through the unified
+                      // workflow: this page manages no ownership documents,
+                      // so ownership stays `not_submitted` and only the
+                      // listing accuracy dimension enters admin review.
+                      try {
+                        await AppLocator.propertyVerificationRepo.submit(
+                          p.id,
+                          scope: 'listing',
+                        );
+                        if (mounted) {
+                          setState(() {
+                            _submitted = true;
+                            _submitError = null;
+                          });
+                        }
+                      } catch (error) {
+                        if (mounted) {
+                          setState(() => _submitError = _cleanError(error));
+                        }
+                      }
+                    },
+                  ),
+                ]);
               },
             ),
     );
@@ -130,7 +170,11 @@ class _DetailBody extends StatelessComponent {
                 icon: '360',
               ),
           ]),
-          if (prop.verification == VerificationStatus.draft)
+          // Draft AND rejected listings can (re)submit: the backend refuses
+          // transitions that are not open with its own 409 sentence, which
+          // renders verbatim in the notice above.
+          if (prop.verification == VerificationStatus.draft ||
+              prop.verification == VerificationStatus.rejected)
             ActionButton(
               'Submit for verification',
               onClick: onSubmit,

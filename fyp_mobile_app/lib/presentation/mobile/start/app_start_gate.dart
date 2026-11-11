@@ -88,9 +88,30 @@ class _AppStartGateState extends ConsumerState<AppStartGate> {
     });
   }
 
+  /// Upper bound on the onboarding-flag read, mirroring
+  /// [ServiceLocator.draftRestoreTimeout]. The flag lives behind
+  /// `path_provider`'s platform channel; a stalled or unavailable channel would
+  /// otherwise leave `_onboardingDone` null forever and hold this gate on the
+  /// splash permanently.
+  static const Duration _onboardingReadTimeout = Duration(seconds: 2);
+
+  /// One in-flight read at a time — `build` re-runs while the flag is null.
+  bool _onboardingReading = false;
+
   Future<void> _readOnboarding() async {
-    final completed = await ServiceLocator.onboardingRepo
-        .hasCompletedOnboarding();
+    if (_onboardingReading) return;
+    _onboardingReading = true;
+    var completed = false;
+    try {
+      completed = await ServiceLocator.onboardingRepo
+          .hasCompletedOnboarding()
+          .timeout(_onboardingReadTimeout);
+    } catch (_) {
+      // Unreadable store: show the intro again rather than trapping the user
+      // on the splash. The flow is informational and always exits to the
+      // workspace, so this degrades instead of blocking.
+      completed = false;
+    }
     if (mounted) setState(() => _onboardingDone = completed);
   }
 

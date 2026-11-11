@@ -9,38 +9,62 @@ import '../../../shared/widgets/sitewise_empty_state.dart';
 import '../../../shared/widgets/sitewise_secondary_button.dart';
 import '../../shell/entrepreneur_tab_scope.dart';
 import '../../shell/mobile_app_shell.dart';
+import '../../widgets/async_section.dart';
 import '../../widgets/mobile_property_image.dart';
 import '../../widgets/mobile_section_header.dart';
 import '../../widgets/mobile_skeleton.dart';
 import '../../widgets/mobile_suitability_badge.dart';
 
 /// Mobile compare: stacked comparison cards per property — no desktop table.
-
-class EntrepreneurCompareMobilePage extends ConsumerWidget {
+///
+/// The comparison set lives in memory, but the property ROWS it resolves
+/// against come from the repository. This screen used to build a fresh
+/// `FutureBuilder` future inside `build()`, which re-requested the catalogue on
+/// every rebuild, blanked the cards behind a skeleton each time, and rendered a
+/// failed read as "the properties you selected are no longer available".
+/// [AsyncSection] owns the request, keeps the cards on screen during a refresh,
+/// and surfaces a real Retry.
+class EntrepreneurCompareMobilePage extends ConsumerStatefulWidget {
   const EntrepreneurCompareMobilePage({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<EntrepreneurCompareMobilePage> createState() =>
+      _EntrepreneurCompareMobilePageState();
+}
+
+class _EntrepreneurCompareMobilePageState
+    extends ConsumerState<EntrepreneurCompareMobilePage> {
+  final GlobalKey<AsyncSectionState<List<CommercialProperty>>> _catalogueKey =
+      GlobalKey<AsyncSectionState<List<CommercialProperty>>>();
+
+  @override
+  Widget build(BuildContext context) {
     final appState = ref.watch(appNotifierProvider);
     return MobileAppShell(
         title: 'Compare',
         currentRoute: '/entrepreneur/compare',
-        body: appState.compared.isEmpty
-            ? SitewiseEmptyState(
-                icon: Icons.compare_arrows,
-                title: 'Nothing to compare',
-                message: 'Add up to 3 properties from Explore or Recommended.',
-                actionLabel: 'Explore properties',
-                onAction: () =>
-                    EntrepreneurTabScope.open(context, '/entrepreneur/explore'),
-              )
-            : FutureBuilder<List<CommercialProperty>>(
-                future: ServiceLocator.properties.listings(),
-                builder: (c, snap) {
-                  if (snap.connectionState != ConnectionState.done) {
-                    return const MobilePropertyListSkeleton();
-                  }
-                  final items = (snap.data ?? const <CommercialProperty>[])
+        body: RefreshIndicator(
+          color: SitewiseColors.action,
+          onRefresh: () async =>
+              _catalogueKey.currentState?.refresh() ?? Future<void>.value(),
+          child: AsyncSection<List<CommercialProperty>>(
+                key: _catalogueKey,
+                load: () => ServiceLocator.properties.listings(),
+                isEmpty: (_) => appState.compared.isEmpty,
+                emptyBuilder: (_) => SitewiseEmptyState(
+                  icon: Icons.compare_arrows,
+                  title: 'Nothing to compare',
+                  message: 'Add up to 3 properties from Recommendations.',
+                  actionLabel: 'Browse recommendations',
+                  onAction: () => EntrepreneurTabScope.open(
+                    context,
+                    '/entrepreneur/recommendations',
+                  ),
+                ),
+                loadingBuilder: (_) => const MobilePropertyListSkeleton(),
+                errorTitle: 'The comparison could not be loaded',
+                builder: (context, catalogue) {
+                  final items = catalogue
                       .where((p) => appState.compared.contains(p.id))
                       .toList();
                   if (items.isEmpty) {
@@ -92,6 +116,7 @@ class EntrepreneurCompareMobilePage extends ConsumerWidget {
                   );
                 },
               ),
+        ),
     );
   }
 }

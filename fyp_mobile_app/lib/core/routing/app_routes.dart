@@ -15,7 +15,7 @@ import '../../presentation/mobile/entrepreneur/pages/entrepreneur_evidence_mobil
 import '../../presentation/mobile/landing/pages/landing_mobile_page.dart';
 import '../../presentation/mobile/entrepreneur/pages/entrepreneur_preferences_mobile_page.dart';
 import '../../presentation/mobile/entrepreneur/pages/entrepreneur_property_detail_mobile_page.dart';
-import '../../presentation/mobile/entrepreneur/pages/entrepreneur_recommendations_mobile_page.dart';
+import '../../presentation/mobile/entrepreneur/pages/entrepreneur_explore_mobile_page.dart';
 import '../../presentation/mobile/entrepreneur/pages/entrepreneur_report_mobile_page.dart';
 import '../../presentation/mobile/entrepreneur/pages/entrepreneur_saved_mobile_page.dart';
 import '../../presentation/mobile/entrepreneur/pages/entrepreneur_tour_mobile_page.dart';
@@ -43,18 +43,22 @@ String parentShellRoute(String route) {
     '/entrepreneur/saved': '/entrepreneur/spaces',
     '/entrepreneur/add-property': '/entrepreneur/spaces',
     '/entrepreneur/compare': '/entrepreneur/spaces',
-    '/entrepreneur/recommendations': '/entrepreneur/explore',
-    '/entrepreneur/property-detail': '/entrepreneur/explore',
-    '/entrepreneur/tour': '/entrepreneur/explore',
+    // Discovery is the Recommendations tab. Every retired discovery route
+    // (Explore, property detail, tour) highlights it, and the legacy
+    // `/entrepreneur/explore` path maps onto it so an old link never lands on
+    // a tab that no longer exists.
+    '/entrepreneur/explore': '/entrepreneur/recommendations',
+    '/entrepreneur/property-detail': '/entrepreneur/recommendations',
+    '/entrepreneur/tour': '/entrepreneur/recommendations',
     '/entrepreneur/report': '/entrepreneur/assess',
     // The Option A assessment flow keeps the Assess tab highlighted.
     '/entrepreneur/assessment-setup': '/entrepreneur/assess',
     '/entrepreneur/assessment-evidence': '/entrepreneur/assess',
     '/entrepreneur/assessment-summary': '/entrepreneur/assess',
     // The 360° capture and preview flow is role-neutral shared work; it is
-    // entered from a property tour, so it highlights the Listing tab.
-    '/capture': '/entrepreneur/explore',
-    '/tour-preview': '/entrepreneur/explore',
+    // entered from a property tour, so it highlights the discovery tab.
+    '/capture': '/entrepreneur/recommendations',
+    '/tour-preview': '/entrepreneur/recommendations',
   };
   // Normalise a trailing slash or query string before lookup, so a deep link
   // cannot silently fall through to "no tab selected".
@@ -134,12 +138,16 @@ abstract final class AppRoutes {
         RouteAccess.workspace,
         () => const EntrepreneurPreferencesMobilePage(),
       ),
+      // Legacy discovery path. Recommendations replaced Listing/Explore, but
+      // the old path stays resolvable: `?map`-style arguments still open the
+      // map surface, everything else opens the Recommendations tab.
       '/entrepreneur/explore' => (
         RouteAccess.workspace,
-        () => EntrepreneurTabHost(
-          initialRoute: '/entrepreneur/explore',
-          initialArguments: settings.arguments,
-        ),
+        () => settings.arguments == 'map'
+            ? const EntrepreneurExploreMobilePage(startInMap: true)
+            : const EntrepreneurTabHost(
+                initialRoute: '/entrepreneur/recommendations',
+              ),
       ),
       '/entrepreneur/property-detail' => (
         RouteAccess.workspace,
@@ -155,7 +163,10 @@ abstract final class AppRoutes {
       ),
       '/entrepreneur/recommendations' => (
         RouteAccess.workspace,
-        () => const EntrepreneurRecommendationsMobilePage(),
+        () => EntrepreneurTabHost(
+          initialRoute: '/entrepreneur/recommendations',
+          initialArguments: settings.arguments,
+        ),
       ),
       // AI recommendations: the personalised Layer 2/3 pipeline (saved
       // preferences + durable batches + SHAP-backed explanations).

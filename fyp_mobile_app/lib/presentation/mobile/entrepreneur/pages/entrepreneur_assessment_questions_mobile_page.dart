@@ -137,6 +137,7 @@ class _EntrepreneurAssessmentQuestionsPageState
   bool _busy = false;
   String? _assessmentId;
   String? _fatal;
+  bool _fatalRetryable = false;
 
   @override
   void initState() {
@@ -183,8 +184,21 @@ class _EntrepreneurAssessmentQuestionsPageState
       });
     } on Object catch (error) {
       if (!mounted) return;
-      setState(() => _fatal = _describe(error));
+      setState(() {
+        _fatal = _describe(error);
+        // A missing session or an unsaved property will fail again on retry;
+        // a connection problem will not. Only the latter gets a Try again.
+        _fatalRetryable = !_permanent(error);
+      });
     }
+  }
+
+  /// True when re-running the request can never succeed.
+  static bool _permanent(Object error) {
+    final text = '$error';
+    return text.contains('property_not_saved') ||
+        text.contains('401') ||
+        text.contains('403');
   }
 
   /// Turns an API failure into a sentence the entrepreneur can act on.
@@ -272,6 +286,22 @@ class _EntrepreneurAssessmentQuestionsPageState
                 actionLabel: 'Back to Assess',
                 onAction: () => Navigator.of(context).maybePop(),
               ),
+              if (_fatalRetryable) ...[
+                const SizedBox(height: 6),
+                // The request itself is re-run — the screen used to be a dead
+                // end for a temporary connection failure.
+                TextButton.icon(
+                  onPressed: () {
+                    setState(() {
+                      _fatal = null;
+                      _fatalRetryable = false;
+                    });
+                    _open();
+                  },
+                  icon: const Icon(Icons.refresh_rounded, size: 16),
+                  label: const Text('Try again'),
+                ),
+              ],
             ],
           ),
         ),

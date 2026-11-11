@@ -132,34 +132,44 @@ class GetAssessmentSelectableProperties {
 
     final records = <SelectableProperty>[];
     // One catalogue read per distinct ref, even if the server repeats a ref.
+    // The reads run in small bounded batches instead of strictly one-by-one:
+    // they are independent idempotent GETs, so resolving them concurrently
+    // removes the avoidable latency of N sequential round trips while the
+    // per-ref error isolation (a failed read becomes an unavailable record,
+    // never a thrown error) and the output order are preserved.
+    const batchSize = 6;
     final cache = <String, SelectableProperty>{};
-    for (final ref in resolved) {
-      final cached = cache[ref];
-      if (cached != null) {
-        records.add(cached);
-        continue;
-      }
-      CommercialProperty? property;
-      String? unavailableReason;
-      try {
-        property = await properties.getPropertyById(ref);
-      } on AppFailure catch (failure) {
-        unavailableReason = failure.message;
-      } on Object {
-        unavailableReason =
-            'The listing details could not be loaded from the catalogue.';
-      }
-      if (property == null && unavailableReason == null) {
-        unavailableReason =
-            'This listing is no longer available in the property catalogue.';
-      }
-      final record = SelectableProperty(
-        propertyRef: ref,
-        property: property,
-        unavailableReason: unavailableReason,
+    for (var start = 0; start < resolved.length; start += batchSize) {
+      final batch = resolved.skip(start).take(batchSize).toList(growable: false);
+      final resolvedBatch = await Future.wait(
+        batch.map((ref) async {
+          final cached = cache[ref];
+          if (cached != null) return cached;
+          CommercialProperty? property;
+          String? unavailableReason;
+          try {
+            property = await properties.getPropertyById(ref);
+          } on AppFailure catch (failure) {
+            unavailableReason = failure.message;
+          } on Object {
+            unavailableReason =
+                'The listing details could not be loaded from the catalogue.';
+          }
+          if (property == null && unavailableReason == null) {
+            unavailableReason =
+                'This listing is no longer available in the property catalogue.';
+          }
+          return SelectableProperty(
+            propertyRef: ref,
+            property: property,
+            unavailableReason: unavailableReason,
+          );
+        }),
       );
-      cache[ref] = record;
-      records.add(record);
+      for (final record in resolvedBatch) {
+        cache[record.propertyRef] = record;
+        records.add(record);
+      }
     }
 
     final unresolvedList = unresolved.toList()..sort();

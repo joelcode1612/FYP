@@ -26,6 +26,7 @@ from sitewise.core.exceptions import (
     ConflictError,
     ForbiddenError,
     NotFoundError,
+    ValidationError,
 )
 from sitewise.db.models.property_verification import (
     LISTING_STATUSES,
@@ -36,6 +37,7 @@ from sitewise.db.models.property_verification import (
 )
 from sitewise.repositories.fyp_property_repository import FypPropertyRepository
 from sitewise.services import verification_storage as storage
+from sitewise.services.address_validation_service import validate_address
 
 DECISIONABLE = ("pending", "under_review")
 RESUBMITTABLE = ("not_submitted", "rejected", "information_requested")
@@ -56,6 +58,7 @@ REQUIRED_FOR_SUBMISSION = (
     "address",
     "city",
     "state",
+    "postcode",
     "latitude",
     "longitude",
     "rental_price",
@@ -77,10 +80,11 @@ def rental_listing(session: Session, property_id: int) -> dict[str, Any] | None:
     row = session.execute(
         text(
             "SELECT id, owner_user_id, name, property_type, description, "
-            "address, city, state, latitude, longitude, rental_price, "
+            "address, city, state, postcode, latitude, longitude, rental_price, "
             "size_sqft, psf, availability, floor_level, frontage_ft, "
             "has_parking, is_fnb_suitable, verification_status, "
-            "rejection_reason, is_published, created_at, updated_at "
+            "rejection_reason, is_published, address_validation_status, "
+            "address_formatted, address_validated_at, created_at, updated_at "
             f"FROM {_LISTING_TABLE} WHERE id = :pid"
         ),
         {"pid": property_id},
@@ -97,6 +101,7 @@ def listing_payload(listing: dict[str, Any]) -> dict[str, Any]:
     """
     price = listing.get("rental_price")
     size = listing.get("size_sqft")
+    frontage = listing.get("frontage_ft")
     return {
         "property_id": listing["id"],
         "title": listing.get("name") or "",
@@ -108,6 +113,21 @@ def listing_payload(listing: dict[str, Any]) -> dict[str, Any]:
         "address": listing.get("address"),
         "city": listing.get("city"),
         "state": listing.get("state"),
+        "postcode": listing.get("postcode"),
+        "latitude": None
+        if listing.get("latitude") is None
+        else float(listing["latitude"]),
+        "longitude": None
+        if listing.get("longitude") is None
+        else float(listing["longitude"]),
+        "availability": listing.get("availability"),
+        "floor_level": listing.get("floor_level"),
+        "frontage_ft": None if frontage is None else float(frontage),
+        "has_parking": bool(listing.get("has_parking")),
+        "is_fnb_suitable": bool(listing.get("is_fnb_suitable")),
+        "is_published": bool(listing.get("is_published")),
+        "address_formatted": listing.get("address_formatted"),
+        "address_validation_status": listing.get("address_validation_status"),
         "status": listing.get("verification_status"),
         "company_name": None,
         "user_id": None
@@ -186,6 +206,31 @@ def audit_payload(a: VerificationAudit) -> dict[str, Any]:
     }
 
 
+def _jsonable(value: Any) -> Any:
+    """Normalise one raw row value for a JSON payload.
+
+    ``SELECT *`` projections (``fyp.property_geospatial_features``,
+    ``fyp.property_features``) mix numerics, datetimes and decimals; the
+    Admin web UI parses this payload defensively, so values are coerced —
+    never dropped — and unknown types degrade to strings instead of 500s.
+    """
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return value
+    if isinstance(value, datetime):
+        return _iso(value)
+    if isinstance(value, (list, tuple)):
+        return [_jsonable(item) for item in value]
+    if isinstance(value, dict):
+        return {str(key): _jsonable(item) for key, item in value.items()}
+    decimal = getattr(value, "as_isoformat", None)
+    if callable(decimal):  # datetime.date and decimal-free ISO types
+        return str(value)
+    try:
+        return float(value)  # Decimal and numeric[*,*] columns
+    except (TypeError, ValueError):
+        return str(value)
+
+
 def verification_row(session: Session, property_id: int) -> PropertyVerification | None:
     return session.exec(
         select(PropertyVerification).where(PropertyVerification.property_id == property_id)
@@ -247,7 +292,65 @@ class PropertyVerificationService:
 
     # -- mutations ----------------------------------------------------------
 
-    def submit(self, property_id: int, submitter_id: uuid.UUID) -> dict[str, Any]:
+    def _ensure_address_validated(self, listing: dict[str, Any]) -> None:
+        """Require a provider-confirmed premise address before the queue.
+
+        The verdict is obtained HERE (never read from the request) and written
+        to the listing in the same transaction as the lifecycle transition, so
+        the admin review can see that the address was actually checked. A
+        partial or unconfirmed verdict blocks submission instead of silently
+        degrading to "address supplied by the owner".
+        """
+        if listing.get("address_validation_status") == "validated":
+            return
+        verdict = validate_address(
+            address_lines=[listing["address"]],
+            region_code="MY",
+            locality=listing.get("city"),
+            postal_code=listing.get("postcode"),
+            administrative_area=listing.get("state"),
+        )
+        status = verdict.get("status")
+        if status != "validated":
+            raise ValidationError(
+                "We found the general location, but cannot confirm the exact "
+                "property address. Please check the building, unit number or "
+                "postcode."
+                if status == "partially_validated"
+                else "We couldn't verify this address. Please check your "
+                "address details and try again."
+            )
+        FypPropertyRepository(self.session).set_address_validation(
+            int(listing["id"]),
+            status="validated",
+            formatted_address=verdict.get("formatted_address"),
+            latitude=verdict.get("latitude"),
+            longitude=verdict.get("longitude"),
+        )
+
+    def submit(
+        self, property_id: int, submitter_id: uuid.UUID, scope: str = "full"
+    ) -> dict[str, Any]:
+        """Submit (or resubmit) the property for review.
+
+        ``scope`` selects how much is being submitted:
+
+        * ``full`` (default) — the historical behaviour: at least one active
+          ownership document is REQUIRED and both dimensions move to
+          ``pending`` together.
+        * ``listing`` — the listing-information-only workflow: a complete,
+          address-validated listing enters the review queue with
+          ``listing_status = pending`` while ``ownership_status`` stays
+          exactly where it is (``not_submitted`` for a first submission).
+          Ownership evidence is NOT required, ownership is never verified by
+          this path, and publication eligibility stays ``false`` — approving
+          the listing later never publishes the property.
+
+        Completeness and server-side address validation apply to BOTH scopes:
+        an incomplete or unconfirmed listing cannot enter the queue either way.
+        """
+        if scope not in ("full", "listing"):
+            raise ConflictError("scope must be 'full' or 'listing'.")
         listing = self.get_property_owned(property_id, submitter_id)
 
         # An incomplete draft can be SAVED but never SUBMITTED: every field
@@ -260,6 +363,10 @@ class PropertyVerificationService:
                 + ". Save the draft and try again once the listing is complete."
             )
 
+        # Address validation is a SEPARATE dimension from ownership evidence:
+        # it proves the premises exists, never that the submitter owns it.
+        self._ensure_address_validated(listing)
+
         verification = verification_row(self.session, property_id)
         if verification is None:
             verification = PropertyVerification(property_id=property_id, submitted_by=submitter_id)
@@ -270,7 +377,16 @@ class PropertyVerificationService:
                 "ownership_status": None,
             }
         else:
-            if not can_resubmit(verification.listing_status, verification.ownership_status):
+            if scope == "listing":
+                # Only the listing dimension must be open for (re)submission;
+                # the ownership dimension is untouched, so its state is not
+                # part of this gate.
+                if verification.listing_status not in RESUBMITTABLE:
+                    raise ConflictError(
+                        "This listing is already awaiting or has passed "
+                        "review; wait for the administrator's decision."
+                    )
+            elif not can_resubmit(verification.listing_status, verification.ownership_status):
                 raise ConflictError(
                     "This property is already awaiting or has passed review; "
                     "wait for the administrator's decision."
@@ -279,21 +395,26 @@ class PropertyVerificationService:
                 "listing_status": verification.listing_status,
                 "ownership_status": verification.ownership_status,
             }
-        ownership_docs = self.session.exec(
-            select(VerificationDocument).where(
-                VerificationDocument.property_id == property_id,
-                VerificationDocument.verification_type == "ownership",
-                VerificationDocument.status == "active",
-            )
-        ).all()
-        if not ownership_docs:
-            raise ConflictError(
-                "Upload at least one ownership or authorisation document "
-                "before submitting for verification."
-            )
+        if scope == "full":
+            ownership_docs = self.session.exec(
+                select(VerificationDocument).where(
+                    VerificationDocument.property_id == property_id,
+                    VerificationDocument.verification_type == "ownership",
+                    VerificationDocument.status == "active",
+                )
+            ).all()
+            if not ownership_docs:
+                raise ConflictError(
+                    "Upload at least one ownership or authorisation document "
+                    "before submitting for verification."
+                )
         if verification.listing_status in RESUBMITTABLE:
             verification.listing_status = "pending"
-        if verification.ownership_status in RESUBMITTABLE:
+        # The listing-only scope NEVER advances ownership: without evidence
+        # the dimension must remain not_submitted (or whatever accurate state
+        # it already holds) — an approval of listing facts is not proof of
+        # ownership and never moves this status.
+        if scope == "full" and verification.ownership_status in RESUBMITTABLE:
             verification.ownership_status = "pending"
         verification.submitted_by = submitter_id
         verification.latest_note = None
@@ -309,10 +430,10 @@ class PropertyVerificationService:
             VerificationAudit(
                 property_id=property_id,
                 verification_id=verification.verification_id,
-                verification_type=None,
+                verification_type=None if scope == "full" else "listing",
                 previous_status=previous["listing_status"],
                 new_status=verification.listing_status,
-                action="submitted",
+                action="submitted" if scope == "full" else "listing_submitted",
             )
         )
         self.session.commit()
@@ -582,6 +703,31 @@ class AdminPropertyReviewService:
             "verification": verification_payload(verification),
             "documents": [document_payload(d) for d in documents],
             "history": [audit_payload(a) for a in history],
+            **self._location_context(property_id),
+        }
+
+    def _location_context(self, property_id: int) -> dict[str, Any]:
+        """Photos, amenities and geospatial intelligence for the Admin detail.
+
+        Every block is OPTIONAL and reads through the repository's existing
+        methods — nothing is computed on the fly, no ML model runs, and a
+        missing row reaches the UI as an explicit null so it can render
+        "Not calculated for this property" instead of a fabricated number.
+        """
+        repo = FypPropertyRepository(self.session)
+        photos = repo.get_photos(property_id)
+        amenities = repo.get_amenities(property_id)
+        geo = repo.get_geo_features(property_id)
+        demand = repo.list_demand_generators(property_id, radius_m=1000, limit=12)
+        population = repo.get_population(property_id)
+        return {
+            "photos": [_jsonable(photo) for photo in photos],
+            "amenities": None if amenities is None else _jsonable(amenities),
+            "geo_features": None if geo is None else _jsonable(geo),
+            "demand_generators": [
+                _jsonable(row) for row in demand.get("data", [])
+            ],
+            "population": None if population is None else _jsonable(population),
         }
 
     # -- decisions ----------------------------------------------------------
@@ -651,6 +797,23 @@ class AdminPropertyReviewService:
             raise NotFoundError("Unknown verification dimension.")
         if new_status not in LISTING_STATUSES:
             raise ConflictError(f"Unknown verification status '{new_status}'.")
+        # Ownership is only ever verified on the strength of evidence that is
+        # actually on file. An administrator may reject or request
+        # information freely, but "verified" with an empty evidence folder
+        # would fabricate an authorization claim the record cannot support.
+        if dimension == "ownership" and new_status == "verified":
+            evidence = self.session.exec(
+                select(VerificationDocument).where(
+                    VerificationDocument.property_id == property_id,
+                    VerificationDocument.verification_type == "ownership",
+                    VerificationDocument.status == "active",
+                )
+            ).first()
+            if evidence is None:
+                raise ConflictError(
+                    "Ownership cannot be verified without at least one "
+                    "active ownership or authorisation document on file."
+                )
         listing = rental_listing(self.session, property_id)
         if listing is None:
             raise NotFoundError("Property not found")

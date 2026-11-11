@@ -1,0 +1,2605 @@
+{
+ "criteria": {
+  "business_type": "Specialty Caf\u00e9",
+  "preferred_state": "Selangor",
+  "max_rental_rm": 10000,
+  "min_size_sqft": 900,
+  "layout_preferences": [
+   "Ground floor"
+  ],
+  "page_size": 20
+ },
+ "page_one": {
+  "data": [
+   {
+    "property_id": "MD-00531",
+    "property_source": "catalog",
+    "title": "Taman Bayu Perdana, Klang Shoplot for Rent",
+    "address": "Klang, Selangor",
+    "city": "",
+    "state": "Selangor",
+    "postcode": "",
+    "rental_rm": 700.0,
+    "size_sqft": 1496.0,
+    "property_type": "Shop lot",
+    "image_url": "https://cdn.rnudah.com/images/plain/e6a47127a7988f9a0ad23371178b74b3-2986533781368657891.jpg",
+    "latitude": 3.0169609,
+    "longitude": 101.4358213,
+    "research": {
+     "catalog_suitability_score": 62.82109506373287,
+     "suitability_available": true,
+     "pu_score": null,
+     "pu_available": null
+    },
+    "recommendation": {
+     "available": false,
+     "rank": 1,
+     "score": null,
+     "score_type": "requirement_fit_ordering",
+     "model_version": null,
+     "reason": "The trained recommendation artifact is not integrated in this build, so no model score is produced. Results are ordered by requirement fit only.",
+     "matched_requirements": [
+      "Monthly rental within RM10,000",
+      "Floor area at least 900 sq ft",
+      "In Selangor"
+     ],
+     "unmatched_requirements": [],
+     "unverified_requirements": [
+      "Ground floor"
+     ],
+     "match_ratio": 1.0,
+     "matched_count": 3,
+     "verifiable_count": 3
+    }
+   },
+   {
+    "property_id": "MD-00065",
+    "property_source": "catalog",
+    "title": "Taman Garing Permai Rawang 1st Floor Rent",
+    "address": "Rawang, Selangor",
+    "city": "",
+    "state": "Selangor",
+    "postcode": "",
+    "rental_rm": 800.0,
+    "size_sqft": 3000.0,
+    "property_type": "Shop lot",
+    "image_url": "https://cdn.rnudah.com/images/plain/bf0d9f344c8aaad63b456e7db3235f0c-2973787634118726507.jpg",
+    "latitude": 3.3285603,
+    "longitude": 101.5605616,
+    "research": {
+     "catalog_suitability_score": 10.904472271630533,
+     "suitability_available": true,
+     "pu_score": null,
+     "pu_available": null
+    },
+    "recommendation": {
+     "available": false,
+     "rank": 2,
+     "score": null,
+     "score_type": "requirement_fit_ordering",
+     "model_version": null,
+     "reason": "The trained recommendation artifact is not integrated in this build, so no model score is produced. Results are ordered by requirement fit only.",
+     "matched_requirements": [
+      "Monthly rental within RM10,000",
+      "Floor area at least 900 sq ft",
+      "In Selangor"
+     ],
+     "unmatched_requirements": [],
+     "unverified_requirements": [
+      "Ground floor"
+     ],
+     "match_ratio": 1.0,
+     "matched_count": 3,
+     "verifiable_count": 3
+    }
+   },
+   {
+    "property_id": "MD-00729",
+    "property_source": "catalog",
+    "title": "UNTUK DISEWAKAN: Lot Kedai Tingkat Atas [Taman Langat Murni, Banting]",
+    "address": "Banting, Selangor",
+    "city": "",
+    "state": "Selangor",
+    "postcode": "",
+    "rental_rm": 800.0,
+    "size_sqft": 2720.0,
+    "property_type": "Shop lot",
+    "image_url": "https://cdn.rnudah.com/images/plain/4db9898b68e1e64a5a1f9273f12af493-3004504581185571678.jpg",
+    "latitude": 2.8027574,
+    "longitude": 101.4956767,
+    "research": {
+     "catalog_suitability_score": 51.969599474351426,
+     "suitability_available": true,
+     "pu_score": null,
+     "pu_available": null
+    },
+    "recommendation": {
+     "available": false,
+     "rank": 3,
+     "score": null,
+     "score_type": "requirement_fit_ordering",
+     "model_version": null,
+     "reason": "The trained recommendation artifact is not integrated in this build, so no model score is produced. Results are ordered by requirement fit only.",
+     "matched_requirements": [
+      "Monthly rental within RM10,000",
+      "Floor area at least 900 sq ft",
+      "In Selangor"
+     ],
+     "unmatched_requirements": [],
+     "unverified_requirements": [
+      "Ground floor"
+     ],
+     "match_ratio": 1.0,
+     "matched_count": 3,
+     "verifiable_count": 3
+    }
+   },
+   {
+    "property_id": "MD-00767",
+    "property_source": "catalog",
+    "title": "[Good deal] Cheapest shop office in Bandar Rawang",
+    "address": "Rawang, Selangor",
+    "city": "",
+    "state": "Selangor",
+    "postcode": "",
+    "rental_rm": 1000.0,
+    "size_sqft": 1650.0,
+    "property_type": "Shop lot",
+    "image_url": "https://cdn.rnudah.com/images/plain/09f79a06901aa0aec2d4438abbbca668-2985405250042915856.jpg",
+    "latitude": 3.3207272,
+    "longitude": 101.5771544,
+    "research": {
+     "catalog_suitability_score": 35.168848269079895,
+     "suitability_available": true,
+     "pu_score": null,
+     "pu_available": null
+    },
+    "recommendation": {
+     "available": false,
+     "rank": 4,
+     "score": null,
+     "score_type": "requirement_fit_ordering",
+     "model_version": null,
+     "reason": "The trained recommendation artifact is not integrated in this build, so no model score is produced. Results are ordered by requirement fit only.",
+     "matched_requirements": [
+      "Monthly rental within RM10,000",
+      "Floor area at least 900 sq ft",
+      "In Selangor"
+     ],
+     "unmatched_requirements": [],
+     "unverified_requirements": [
+      "Ground floor"
+     ],
+     "match_ratio": 1.0,
+     "matched_count": 3,
+     "verifiable_count": 3
+    }
+   },
+   {
+    "property_id": "MD-00338",
+    "property_source": "catalog",
+    "title": "Corner 3rd Floor & Rooftop Shop-lot (20'x75') Taman Berkeley",
+    "address": "Klang, Selangor",
+    "city": "",
+    "state": "Selangor",
+    "postcode": "",
+    "rental_rm": 1000.0,
+    "size_sqft": 1500.0,
+    "property_type": "Shop lot",
+    "image_url": "https://cdn.rnudah.com/images/plain/e5e2e4752f749c85490a12c4e427ac11-2992039658407900553.jpg",
+    "latitude": 3.0581859,
+    "longitude": 101.4627167,
+    "research": {
+     "catalog_suitability_score": 65.22625762279169,
+     "suitability_available": true,
+     "pu_score": null,
+     "pu_available": null
+    },
+    "recommendation": {
+     "available": false,
+     "rank": 5,
+     "score": null,
+     "score_type": "requirement_fit_ordering",
+     "model_version": null,
+     "reason": "The trained recommendation artifact is not integrated in this build, so no model score is produced. Results are ordered by requirement fit only.",
+     "matched_requirements": [
+      "Monthly rental within RM10,000",
+      "Floor area at least 900 sq ft",
+      "In Selangor"
+     ],
+     "unmatched_requirements": [],
+     "unverified_requirements": [
+      "Ground floor"
+     ],
+     "match_ratio": 1.0,
+     "matched_count": 3,
+     "verifiable_count": 3
+    }
+   },
+   {
+    "property_id": "MD-01783",
+    "property_source": "catalog",
+    "title": "Rawang BG 1, Shop/Office @ Kampung Dato Lee Kim Sai",
+    "address": "Rawang, Selangor",
+    "city": "",
+    "state": "Selangor",
+    "postcode": "",
+    "rental_rm": 1000.0,
+    "size_sqft": 1500.0,
+    "property_type": "Shop lot",
+    "image_url": "https://img.rnudah.com/images/21/213712096720168.jpg",
+    "latitude": 3.3118938,
+    "longitude": 101.5765872,
+    "research": {
+     "catalog_suitability_score": 13.79841527566106,
+     "suitability_available": true,
+     "pu_score": null,
+     "pu_available": null
+    },
+    "recommendation": {
+     "available": false,
+     "rank": 6,
+     "score": null,
+     "score_type": "requirement_fit_ordering",
+     "model_version": null,
+     "reason": "The trained recommendation artifact is not integrated in this build, so no model score is produced. Results are ordered by requirement fit only.",
+     "matched_requirements": [
+      "Monthly rental within RM10,000",
+      "Floor area at least 900 sq ft",
+      "In Selangor"
+     ],
+     "unmatched_requirements": [],
+     "unverified_requirements": [
+      "Ground floor"
+     ],
+     "match_ratio": 1.0,
+     "matched_count": 3,
+     "verifiable_count": 3
+    }
+   },
+   {
+    "property_id": "MD-01440",
+    "property_source": "catalog",
+    "title": "1.5 Sty Shop Office 2838 sf @ Salak Perdana Business Park Salak Tinggi",
+    "address": "Salak Tinggi, Selangor",
+    "city": "",
+    "state": "Selangor",
+    "postcode": "",
+    "rental_rm": 1200.0,
+    "size_sqft": 2838.0,
+    "property_type": "Shop lot",
+    "image_url": "https://cdn.rnudah.com/images/plain/0c1c3a836f5b664693b0afde54fec303-2970211650550606412.jpg",
+    "latitude": 2.836772903258,
+    "longitude": 101.739033973654,
+    "research": {
+     "catalog_suitability_score": 35.48689511462115,
+     "suitability_available": true,
+     "pu_score": null,
+     "pu_available": null
+    },
+    "recommendation": {
+     "available": false,
+     "rank": 7,
+     "score": null,
+     "score_type": "requirement_fit_ordering",
+     "model_version": null,
+     "reason": "The trained recommendation artifact is not integrated in this build, so no model score is produced. Results are ordered by requirement fit only.",
+     "matched_requirements": [
+      "Monthly rental within RM10,000",
+      "Floor area at least 900 sq ft",
+      "In Selangor"
+     ],
+     "unmatched_requirements": [],
+     "unverified_requirements": [
+      "Ground floor"
+     ],
+     "match_ratio": 1.0,
+     "matched_count": 3,
+     "verifiable_count": 3
+    }
+   },
+   {
+    "property_id": "MD-01130",
+    "property_source": "catalog",
+    "title": "1st floor shop lot for rent Taman Kajang Utama",
+    "address": "Kajang, Selangor",
+    "city": "",
+    "state": "Selangor",
+    "postcode": "",
+    "rental_rm": 1200.0,
+    "size_sqft": 1600.0,
+    "property_type": "Shop lot",
+    "image_url": "https://cdn.rnudah.com/images/plain/73d04476388f15eeed607933f2b83e7a-3003676495734406797.jpg",
+    "latitude": 2.9720661,
+    "longitude": 101.7960954,
+    "research": {
+     "catalog_suitability_score": 52.62533644128082,
+     "suitability_available": true,
+     "pu_score": null,
+     "pu_available": null
+    },
+    "recommendation": {
+     "available": false,
+     "rank": 8,
+     "score": null,
+     "score_type": "requirement_fit_ordering",
+     "model_version": null,
+     "reason": "The trained recommendation artifact is not integrated in this build, so no model score is produced. Results are ordered by requirement fit only.",
+     "matched_requirements": [
+      "Monthly rental within RM10,000",
+      "Floor area at least 900 sq ft",
+      "In Selangor"
+     ],
+     "unmatched_requirements": [],
+     "unverified_requirements": [
+      "Ground floor"
+     ],
+     "match_ratio": 1.0,
+     "matched_count": 3,
+     "verifiable_count": 3
+    }
+   },
+   {
+    "property_id": "MD-00450",
+    "property_source": "catalog",
+    "title": "FOR RENT PANDAMARAN EHSAN JAYA 1st Floor Shop Lot facing main road",
+    "address": "Pandamaran, Selangor",
+    "city": "",
+    "state": "Selangor",
+    "postcode": "",
+    "rental_rm": 1200.0,
+    "size_sqft": 1540.0,
+    "property_type": "Shop lot",
+    "image_url": "https://cdn.rnudah.com/images/plain/18c3b17c2b012880d3ba0abd47658b9e-3005109788654603102.jpg",
+    "latitude": 3.0047806,
+    "longitude": 101.4188944,
+    "research": {
+     "catalog_suitability_score": 33.39309301692525,
+     "suitability_available": true,
+     "pu_score": null,
+     "pu_available": null
+    },
+    "recommendation": {
+     "available": false,
+     "rank": 9,
+     "score": null,
+     "score_type": "requirement_fit_ordering",
+     "model_version": null,
+     "reason": "The trained recommendation artifact is not integrated in this build, so no model score is produced. Results are ordered by requirement fit only.",
+     "matched_requirements": [
+      "Monthly rental within RM10,000",
+      "Floor area at least 900 sq ft",
+      "In Selangor"
+     ],
+     "unmatched_requirements": [],
+     "unverified_requirements": [
+      "Ground floor"
+     ],
+     "match_ratio": 1.0,
+     "matched_count": 3,
+     "verifiable_count": 3
+    }
+   },
+   {
+    "property_id": "MD-00082",
+    "property_source": "catalog",
+    "title": "Semenyih Kiara Plaza Shoplot For Rent",
+    "address": "Kajang, Selangor",
+    "city": "",
+    "state": "Selangor",
+    "postcode": "",
+    "rental_rm": 1200.0,
+    "size_sqft": 1200.0,
+    "property_type": "Shop lot",
+    "image_url": "https://cdn.rnudah.com/images/plain/a5d4f750cf99fe0294faca327d710656-2910891519505662263.jpg",
+    "latitude": 2.962901183852,
+    "longitude": 101.836175118497,
+    "research": {
+     "catalog_suitability_score": 13.807341034546075,
+     "suitability_available": true,
+     "pu_score": null,
+     "pu_available": null
+    },
+    "recommendation": {
+     "available": false,
+     "rank": 10,
+     "score": null,
+     "score_type": "requirement_fit_ordering",
+     "model_version": null,
+     "reason": "The trained recommendation artifact is not integrated in this build, so no model score is produced. Results are ordered by requirement fit only.",
+     "matched_requirements": [
+      "Monthly rental within RM10,000",
+      "Floor area at least 900 sq ft",
+      "In Selangor"
+     ],
+     "unmatched_requirements": [],
+     "unverified_requirements": [
+      "Ground floor"
+     ],
+     "match_ratio": 1.0,
+     "matched_count": 3,
+     "verifiable_count": 3
+    }
+   },
+   {
+    "property_id": "MD-00349",
+    "property_source": "catalog",
+    "title": "First Floor Shop at Taman Pelangi Semenyih, Semenyih",
+    "address": "Semenyih, Selangor",
+    "city": "",
+    "state": "Selangor",
+    "postcode": "",
+    "rental_rm": 1300.0,
+    "size_sqft": 1650.0,
+    "property_type": "Shop lot",
+    "image_url": "https://cdn.rnudah.com/images/plain/69f272af6e39c5671e7d6f8c4a6dfe62-2991317169010149528.jpg",
+    "latitude": 2.931767694155,
+    "longitude": 101.854586304098,
+    "research": {
+     "catalog_suitability_score": 31.340678983368846,
+     "suitability_available": true,
+     "pu_score": null,
+     "pu_available": null
+    },
+    "recommendation": {
+     "available": false,
+     "rank": 11,
+     "score": null,
+     "score_type": "requirement_fit_ordering",
+     "model_version": null,
+     "reason": "The trained recommendation artifact is not integrated in this build, so no model score is produced. Results are ordered by requirement fit only.",
+     "matched_requirements": [
+      "Monthly rental within RM10,000",
+      "Floor area at least 900 sq ft",
+      "In Selangor"
+     ],
+     "unmatched_requirements": [],
+     "unverified_requirements": [
+      "Ground floor"
+     ],
+     "match_ratio": 1.0,
+     "matched_count": 3,
+     "verifiable_count": 3
+    }
+   },
+   {
+    "property_id": "MD-01104",
+    "property_source": "catalog",
+    "title": "For Rent 1st Floor Shoplot Bandar Baru Salak Tinggi,Dengkil Sepang Sel",
+    "address": "Salak Tinggi, Selangor",
+    "city": "",
+    "state": "Selangor",
+    "postcode": "",
+    "rental_rm": 1300.0,
+    "size_sqft": 1540.0,
+    "property_type": "Shop lot",
+    "image_url": "https://cdn.rnudah.com/images/plain/6fda29b0f38ae1d3ee839098ec6e0aa4-2873327504800123915.jpg",
+    "latitude": 2.8359218,
+    "longitude": 101.7402292,
+    "research": {
+     "catalog_suitability_score": 33.204236706036134,
+     "suitability_available": true,
+     "pu_score": null,
+     "pu_available": null
+    },
+    "recommendation": {
+     "available": false,
+     "rank": 12,
+     "score": null,
+     "score_type": "requirement_fit_ordering",
+     "model_version": null,
+     "reason": "The trained recommendation artifact is not integrated in this build, so no model score is produced. Results are ordered by requirement fit only.",
+     "matched_requirements": [
+      "Monthly rental within RM10,000",
+      "Floor area at least 900 sq ft",
+      "In Selangor"
+     ],
+     "unmatched_requirements": [],
+     "unverified_requirements": [
+      "Ground floor"
+     ],
+     "match_ratio": 1.0,
+     "matched_count": 3,
+     "verifiable_count": 3
+    }
+   },
+   {
+    "property_id": "MD-01685",
+    "property_source": "catalog",
+    "title": "Puncak Alam Hillpark Avenue Pusat Perdagangan Hillpark Shop 22x70",
+    "address": "Puncak Alam, Selangor",
+    "city": "",
+    "state": "Selangor",
+    "postcode": "",
+    "rental_rm": 1300.0,
+    "size_sqft": 1540.0,
+    "property_type": "Shop lot",
+    "image_url": "https://cdn.rnudah.com/images/plain/897ef31c4bdaa0abe7da4975bc2ce9c0-2993067369460002708.jpg",
+    "latitude": 3.2136564,
+    "longitude": 101.4551981,
+    "research": {
+     "catalog_suitability_score": 73.92774814418598,
+     "suitability_available": true,
+     "pu_score": null,
+     "pu_available": null
+    },
+    "recommendation": {
+     "available": false,
+     "rank": 13,
+     "score": null,
+     "score_type": "requirement_fit_ordering",
+     "model_version": null,
+     "reason": "The trained recommendation artifact is not integrated in this build, so no model score is produced. Results are ordered by requirement fit only.",
+     "matched_requirements": [
+      "Monthly rental within RM10,000",
+      "Floor area at least 900 sq ft",
+      "In Selangor"
+     ],
+     "unmatched_requirements": [],
+     "unverified_requirements": [
+      "Ground floor"
+     ],
+     "match_ratio": 1.0,
+     "matched_count": 3,
+     "verifiable_count": 3
+    }
+   },
+   {
+    "property_id": "MD-01899",
+    "property_source": "catalog",
+    "title": "Taman Bukit Ampang 1st Floor Office Corner Lot",
+    "address": "Ampang, Selangor",
+    "city": "",
+    "state": "Selangor",
+    "postcode": "",
+    "rental_rm": 1300.0,
+    "size_sqft": 1500.0,
+    "property_type": "Shop lot",
+    "image_url": "https://cdn.rnudah.com/images/plain/0389b310ca2ecc8164619183f1455bd3-3001881183421709513.jpg",
+    "latitude": 3.1420588,
+    "longitude": 101.777791,
+    "research": {
+     "catalog_suitability_score": 21.297403365754683,
+     "suitability_available": true,
+     "pu_score": null,
+     "pu_available": null
+    },
+    "recommendation": {
+     "available": false,
+     "rank": 14,
+     "score": null,
+     "score_type": "requirement_fit_ordering",
+     "model_version": null,
+     "reason": "The trained recommendation artifact is not integrated in this build, so no model score is produced. Results are ordered by requirement fit only.",
+     "matched_requirements": [
+      "Monthly rental within RM10,000",
+      "Floor area at least 900 sq ft",
+      "In Selangor"
+     ],
+     "unmatched_requirements": [],
+     "unverified_requirements": [
+      "Ground floor"
+     ],
+     "match_ratio": 1.0,
+     "matched_count": 3,
+     "verifiable_count": 3
+    }
+   },
+   {
+    "property_id": "MD-00850",
+    "property_source": "catalog",
+    "title": "Shoplot Apartment, Corner Unit, One Selayang Off Jalan Rawang-For Rent",
+    "address": "Selayang, Selangor",
+    "city": "",
+    "state": "Selangor",
+    "postcode": "",
+    "rental_rm": 1400.0,
+    "size_sqft": 1475.0,
+    "property_type": "Shop lot",
+    "image_url": "https://cdn.rnudah.com/images/plain/315745e0a665c4f6b76087fc5681124b-3004262388858189110.jpg",
+    "latitude": 3.309529,
+    "longitude": 101.5970267,
+    "research": {
+     "catalog_suitability_score": 17.383283309321527,
+     "suitability_available": true,
+     "pu_score": null,
+     "pu_available": null
+    },
+    "recommendation": {
+     "available": false,
+     "rank": 15,
+     "score": null,
+     "score_type": "requirement_fit_ordering",
+     "model_version": null,
+     "reason": "The trained recommendation artifact is not integrated in this build, so no model score is produced. Results are ordered by requirement fit only.",
+     "matched_requirements": [
+      "Monthly rental within RM10,000",
+      "Floor area at least 900 sq ft",
+      "In Selangor"
+     ],
+     "unmatched_requirements": [],
+     "unverified_requirements": [
+      "Ground floor"
+     ],
+     "match_ratio": 1.0,
+     "matched_count": 3,
+     "verifiable_count": 3
+    }
+   },
+   {
+    "property_id": "MD-01524",
+    "property_source": "catalog",
+    "title": "bangi semenyih selangor serene square",
+    "address": "Bangi, Selangor",
+    "city": "",
+    "state": "Selangor",
+    "postcode": "",
+    "rental_rm": 1500.0,
+    "size_sqft": 3000.0,
+    "property_type": "Shop lot",
+    "image_url": "https://cdn.rnudah.com/images/plain/a3b772208b30a90ccf343a078ba9d5d8-2993093847919423380.jpg",
+    "latitude": 2.8967383,
+    "longitude": 101.7906912,
+    "research": {
+     "catalog_suitability_score": 23.081689051244695,
+     "suitability_available": true,
+     "pu_score": null,
+     "pu_available": null
+    },
+    "recommendation": {
+     "available": false,
+     "rank": 16,
+     "score": null,
+     "score_type": "requirement_fit_ordering",
+     "model_version": null,
+     "reason": "The trained recommendation artifact is not integrated in this build, so no model score is produced. Results are ordered by requirement fit only.",
+     "matched_requirements": [
+      "Monthly rental within RM10,000",
+      "Floor area at least 900 sq ft",
+      "In Selangor"
+     ],
+     "unmatched_requirements": [],
+     "unverified_requirements": [
+      "Ground floor"
+     ],
+     "match_ratio": 1.0,
+     "matched_count": 3,
+     "verifiable_count": 3
+    }
+   },
+   {
+    "property_id": "MD-00768",
+    "property_source": "catalog",
+    "title": "First Floor 22x75 Double Storey Shoplot Aman Perdana Kapar",
+    "address": "Aman Perdana, Selangor",
+    "city": "",
+    "state": "Selangor",
+    "postcode": "",
+    "rental_rm": 1500.0,
+    "size_sqft": 2275.0,
+    "property_type": "Shop lot",
+    "image_url": "https://cdn.rnudah.com/images/plain/533a834748532935e2ed32106386253b-3001331033329820996.jpg",
+    "latitude": 3.1081516,
+    "longitude": 101.4073799,
+    "research": {
+     "catalog_suitability_score": 40.49892928867685,
+     "suitability_available": true,
+     "pu_score": null,
+     "pu_available": null
+    },
+    "recommendation": {
+     "available": false,
+     "rank": 17,
+     "score": null,
+     "score_type": "requirement_fit_ordering",
+     "model_version": null,
+     "reason": "The trained recommendation artifact is not integrated in this build, so no model score is produced. Results are ordered by requirement fit only.",
+     "matched_requirements": [
+      "Monthly rental within RM10,000",
+      "Floor area at least 900 sq ft",
+      "In Selangor"
+     ],
+     "unmatched_requirements": [],
+     "unverified_requirements": [
+      "Ground floor"
+     ],
+     "match_ratio": 1.0,
+     "matched_count": 3,
+     "verifiable_count": 3
+    }
+   },
+   {
+    "property_id": "MD-00912",
+    "property_source": "catalog",
+    "title": "Setia Taipan 1 @ Setia Alam Shop Office for Rent",
+    "address": "Setia Alam, Selangor",
+    "city": "",
+    "state": "Selangor",
+    "postcode": "",
+    "rental_rm": 1500.0,
+    "size_sqft": 1650.0,
+    "property_type": "Shop lot",
+    "image_url": "https://cdn.rnudah.com/images/plain/4f11ffe2141bf47b8e23b12431336a06-3003538151723794061.jpg",
+    "latitude": 3.1269263,
+    "longitude": 101.4702397,
+    "research": {
+     "catalog_suitability_score": 60.586814721157154,
+     "suitability_available": true,
+     "pu_score": null,
+     "pu_available": null
+    },
+    "recommendation": {
+     "available": false,
+     "rank": 18,
+     "score": null,
+     "score_type": "requirement_fit_ordering",
+     "model_version": null,
+     "reason": "The trained recommendation artifact is not integrated in this build, so no model score is produced. Results are ordered by requirement fit only.",
+     "matched_requirements": [
+      "Monthly rental within RM10,000",
+      "Floor area at least 900 sq ft",
+      "In Selangor"
+     ],
+     "unmatched_requirements": [],
+     "unverified_requirements": [
+      "Ground floor"
+     ],
+     "match_ratio": 1.0,
+     "matched_count": 3,
+     "verifiable_count": 3
+    }
+   },
+   {
+    "property_id": "MD-00256",
+    "property_source": "catalog",
+    "title": "Taman sri muda Seksyen 25 Shah alam 4 storey shop 1st floor",
+    "address": "Shah Alam, Selangor",
+    "city": "",
+    "state": "Selangor",
+    "postcode": "",
+    "rental_rm": 1500.0,
+    "size_sqft": 1600.0,
+    "property_type": "Shop lot",
+    "image_url": "https://cdn.rnudah.com/images/plain/79374b2bb190376f371eeb67f215f63b-3005304352488065886.jpg",
+    "latitude": 3.033214,
+    "longitude": 101.5383543,
+    "research": {
+     "catalog_suitability_score": 42.70808890706428,
+     "suitability_available": true,
+     "pu_score": null,
+     "pu_available": null
+    },
+    "recommendation": {
+     "available": false,
+     "rank": 19,
+     "score": null,
+     "score_type": "requirement_fit_ordering",
+     "model_version": null,
+     "reason": "The trained recommendation artifact is not integrated in this build, so no model score is produced. Results are ordered by requirement fit only.",
+     "matched_requirements": [
+      "Monthly rental within RM10,000",
+      "Floor area at least 900 sq ft",
+      "In Selangor"
+     ],
+     "unmatched_requirements": [],
+     "unverified_requirements": [
+      "Ground floor"
+     ],
+     "match_ratio": 1.0,
+     "matched_count": 3,
+     "verifiable_count": 3
+    }
+   },
+   {
+    "property_id": "MD-01114",
+    "property_source": "catalog",
+    "title": "Pelangi Semenyih 2, Rinching, Tasik Kesuma, Shop office",
+    "address": "Semenyih, Selangor",
+    "city": "",
+    "state": "Selangor",
+    "postcode": "",
+    "rental_rm": 1500.0,
+    "size_sqft": 1540.0,
+    "property_type": "Shop lot",
+    "image_url": "https://cdn.rnudah.com/images/plain/511932dda7f79945b2fd1fd1a7e16322-2981740466484849729.jpg",
+    "latitude": 2.9155674,
+    "longitude": 101.8630885,
+    "research": {
+     "catalog_suitability_score": 26.219860200741696,
+     "suitability_available": true,
+     "pu_score": null,
+     "pu_available": null
+    },
+    "recommendation": {
+     "available": false,
+     "rank": 20,
+     "score": null,
+     "score_type": "requirement_fit_ordering",
+     "model_version": null,
+     "reason": "The trained recommendation artifact is not integrated in this build, so no model score is produced. Results are ordered by requirement fit only.",
+     "matched_requirements": [
+      "Monthly rental within RM10,000",
+      "Floor area at least 900 sq ft",
+      "In Selangor"
+     ],
+     "unmatched_requirements": [],
+     "unverified_requirements": [
+      "Ground floor"
+     ],
+     "match_ratio": 1.0,
+     "matched_count": 3,
+     "verifiable_count": 3
+    }
+   }
+  ],
+  "pagination": {
+   "next_cursor": "eyJvIjoyMCwiayI6IjQ1Yjk1Y2JhZGY1MDYxZmIifQ",
+   "has_more": true,
+   "total": 303,
+   "page_size": 20
+  },
+  "model": {
+   "available": false,
+   "version": null,
+   "score_type": "requirement_fit_ordering",
+   "reason": "The trained recommendation artifact is not integrated in this build, so no model score is produced. Results are ordered by requirement fit only.",
+   "research_only": true
+  },
+  "meta": {
+   "source": "sitewise_app.properties",
+   "property_source": "catalog",
+   "criteria": {
+    "business_type": "specialty caf\u00e9",
+    "state": "Selangor",
+    "area": "",
+    "min_rent": null,
+    "max_rent": 10000.0,
+    "min_size": 900.0,
+    "max_size": null,
+    "type": "",
+    "layout": [
+     "ground floor"
+    ],
+    "q": ""
+   },
+   "cached": false
+  }
+ },
+ "page_two": {
+  "data": [
+   {
+    "property_id": "MD-01681",
+    "property_source": "catalog",
+    "title": "First Floor Shop at Taman Reko Sentral, Kajang",
+    "address": "Kajang, Selangor",
+    "city": "",
+    "state": "Selangor",
+    "postcode": "",
+    "rental_rm": 1500.0,
+    "size_sqft": 1540.0,
+    "property_type": "Shop lot",
+    "image_url": "https://cdn.rnudah.com/images/plain/b94702fc97da28e3e85b280df96a3169-2967100666919717180.jpg",
+    "latitude": 2.991910912299,
+    "longitude": 101.795143793825,
+    "research": {
+     "catalog_suitability_score": 19.83253989031846,
+     "suitability_available": true,
+     "pu_score": null,
+     "pu_available": null
+    },
+    "recommendation": {
+     "available": false,
+     "rank": 21,
+     "score": null,
+     "score_type": "requirement_fit_ordering",
+     "model_version": null,
+     "reason": "The trained recommendation artifact is not integrated in this build, so no model score is produced. Results are ordered by requirement fit only.",
+     "matched_requirements": [
+      "Monthly rental within RM10,000",
+      "Floor area at least 900 sq ft",
+      "In Selangor"
+     ],
+     "unmatched_requirements": [],
+     "unverified_requirements": [
+      "Ground floor"
+     ],
+     "match_ratio": 1.0,
+     "matched_count": 3,
+     "verifiable_count": 3
+    }
+   },
+   {
+    "property_id": "MD-01853",
+    "property_source": "catalog",
+    "title": "TO LET  1st Floor Shop Lot Persiaran Pegaga Taman Bayu Perdana Klang",
+    "address": "Klang, Selangor",
+    "city": "",
+    "state": "Selangor",
+    "postcode": "",
+    "rental_rm": 1500.0,
+    "size_sqft": 1500.0,
+    "property_type": "Shop lot",
+    "image_url": "https://cdn.rnudah.com/images/plain/5e7e57f4a33ec65a5028cf153eba4b8e-3002038232514296325.jpg",
+    "latitude": 3.020627,
+    "longitude": 101.4311814,
+    "research": {
+     "catalog_suitability_score": 63.35959194732562,
+     "suitability_available": true,
+     "pu_score": null,
+     "pu_available": null
+    },
+    "recommendation": {
+     "available": false,
+     "rank": 22,
+     "score": null,
+     "score_type": "requirement_fit_ordering",
+     "model_version": null,
+     "reason": "The trained recommendation artifact is not integrated in this build, so no model score is produced. Results are ordered by requirement fit only.",
+     "matched_requirements": [
+      "Monthly rental within RM10,000",
+      "Floor area at least 900 sq ft",
+      "In Selangor"
+     ],
+     "unmatched_requirements": [],
+     "unverified_requirements": [
+      "Ground floor"
+     ],
+     "match_ratio": 1.0,
+     "matched_count": 3,
+     "verifiable_count": 3
+    }
+   },
+   {
+    "property_id": "MD-01178",
+    "property_source": "catalog",
+    "title": "Klang Sentral @ Klang 2nd Office Shop for Rent",
+    "address": "Klang, Selangor",
+    "city": "",
+    "state": "Selangor",
+    "postcode": "",
+    "rental_rm": 1700.0,
+    "size_sqft": 1650.0,
+    "property_type": "Shop lot",
+    "image_url": "https://cdn.rnudah.com/images/plain/5f94a1b0d7c3c5a295c8b843b9b43ead-3003640466816073357.jpg",
+    "latitude": 3.109183,
+    "longitude": 101.43823,
+    "research": {
+     "catalog_suitability_score": 21.585910864084276,
+     "suitability_available": true,
+     "pu_score": null,
+     "pu_available": null
+    },
+    "recommendation": {
+     "available": false,
+     "rank": 23,
+     "score": null,
+     "score_type": "requirement_fit_ordering",
+     "model_version": null,
+     "reason": "The trained recommendation artifact is not integrated in this build, so no model score is produced. Results are ordered by requirement fit only.",
+     "matched_requirements": [
+      "Monthly rental within RM10,000",
+      "Floor area at least 900 sq ft",
+      "In Selangor"
+     ],
+     "unmatched_requirements": [],
+     "unverified_requirements": [
+      "Ground floor"
+     ],
+     "match_ratio": 1.0,
+     "matched_count": 3,
+     "verifiable_count": 3
+    }
+   },
+   {
+    "property_id": "MD-01304",
+    "property_source": "catalog",
+    "title": "Puchong Jaya Jalan Kenari 3rd Floor shop/office for rent",
+    "address": "Puchong, Selangor",
+    "city": "",
+    "state": "Selangor",
+    "postcode": "",
+    "rental_rm": 1700.0,
+    "size_sqft": 1540.0,
+    "property_type": "Shop lot",
+    "image_url": "https://cdn.rnudah.com/images/plain/287f2a0be289af4b58abc8bd2c404e69-3003361547796446861.jpg",
+    "latitude": 3.0487416,
+    "longitude": 101.6253682,
+    "research": {
+     "catalog_suitability_score": 53.93253132306407,
+     "suitability_available": true,
+     "pu_score": null,
+     "pu_available": null
+    },
+    "recommendation": {
+     "available": false,
+     "rank": 24,
+     "score": null,
+     "score_type": "requirement_fit_ordering",
+     "model_version": null,
+     "reason": "The trained recommendation artifact is not integrated in this build, so no model score is produced. Results are ordered by requirement fit only.",
+     "matched_requirements": [
+      "Monthly rental within RM10,000",
+      "Floor area at least 900 sq ft",
+      "In Selangor"
+     ],
+     "unmatched_requirements": [],
+     "unverified_requirements": [
+      "Ground floor"
+     ],
+     "match_ratio": 1.0,
+     "matched_count": 3,
+     "verifiable_count": 3
+    }
+   },
+   {
+    "property_id": "MD-00617",
+    "property_source": "catalog",
+    "title": "Renovated Shop Lot Office Rent\u30101st Floor\u3011Bandar Baru Bukit Raja Klang",
+    "address": "Bandar Bukit Raja, Selangor",
+    "city": "",
+    "state": "Selangor",
+    "postcode": "",
+    "rental_rm": 1800.0,
+    "size_sqft": 1800.0,
+    "property_type": "Shop lot",
+    "image_url": "https://cdn.rnudah.com/images/plain/01264f0ee5212a3a51021ae40e061f78-3003923287050121571.jpg",
+    "latitude": 3.0650571,
+    "longitude": 101.4610541,
+    "research": {
+     "catalog_suitability_score": 52.12628423550684,
+     "suitability_available": true,
+     "pu_score": null,
+     "pu_available": null
+    },
+    "recommendation": {
+     "available": false,
+     "rank": 25,
+     "score": null,
+     "score_type": "requirement_fit_ordering",
+     "model_version": null,
+     "reason": "The trained recommendation artifact is not integrated in this build, so no model score is produced. Results are ordered by requirement fit only.",
+     "matched_requirements": [
+      "Monthly rental within RM10,000",
+      "Floor area at least 900 sq ft",
+      "In Selangor"
+     ],
+     "unmatched_requirements": [],
+     "unverified_requirements": [
+      "Ground floor"
+     ],
+     "match_ratio": 1.0,
+     "matched_count": 3,
+     "verifiable_count": 3
+    }
+   },
+   {
+    "property_id": "MD-00913",
+    "property_source": "catalog",
+    "title": "1st Floor Shoplot For Rent at Taman Perindustrian Subang Jaya",
+    "address": "Subang Jaya, Selangor",
+    "city": "",
+    "state": "Selangor",
+    "postcode": "",
+    "rental_rm": 1800.0,
+    "size_sqft": 1800.0,
+    "property_type": "Shop lot",
+    "image_url": null,
+    "latitude": 3.0227454,
+    "longitude": 101.6135413,
+    "research": {
+     "catalog_suitability_score": 72.51935518024302,
+     "suitability_available": true,
+     "pu_score": null,
+     "pu_available": null
+    },
+    "recommendation": {
+     "available": false,
+     "rank": 26,
+     "score": null,
+     "score_type": "requirement_fit_ordering",
+     "model_version": null,
+     "reason": "The trained recommendation artifact is not integrated in this build, so no model score is produced. Results are ordered by requirement fit only.",
+     "matched_requirements": [
+      "Monthly rental within RM10,000",
+      "Floor area at least 900 sq ft",
+      "In Selangor"
+     ],
+     "unmatched_requirements": [],
+     "unverified_requirements": [
+      "Ground floor"
+     ],
+     "match_ratio": 1.0,
+     "matched_count": 3,
+     "verifiable_count": 3
+    }
+   },
+   {
+    "property_id": "MD-01374",
+    "property_source": "catalog",
+    "title": "Selayang Baru Shot lot 22x70 For Rent Suitable Online Bussiness",
+    "address": "Selayang, Selangor",
+    "city": "",
+    "state": "Selangor",
+    "postcode": "",
+    "rental_rm": 1800.0,
+    "size_sqft": 1540.0,
+    "property_type": "Shop lot",
+    "image_url": "https://cdn.rnudah.com/images/plain/a524b353ee03dd299ed5635b275d1b1a-3003212730911587981.jpg",
+    "latitude": 3.244343823941,
+    "longitude": 101.66512921265,
+    "research": {
+     "catalog_suitability_score": 33.47385767677023,
+     "suitability_available": true,
+     "pu_score": null,
+     "pu_available": null
+    },
+    "recommendation": {
+     "available": false,
+     "rank": 27,
+     "score": null,
+     "score_type": "requirement_fit_ordering",
+     "model_version": null,
+     "reason": "The trained recommendation artifact is not integrated in this build, so no model score is produced. Results are ordered by requirement fit only.",
+     "matched_requirements": [
+      "Monthly rental within RM10,000",
+      "Floor area at least 900 sq ft",
+      "In Selangor"
+     ],
+     "unmatched_requirements": [],
+     "unverified_requirements": [
+      "Ground floor"
+     ],
+     "match_ratio": 1.0,
+     "matched_count": 3,
+     "verifiable_count": 3
+    }
+   },
+   {
+    "property_id": "MD-00670",
+    "property_source": "catalog",
+    "title": "Taman Klang Jaya 1st Floor Shoplot Office RENT, Fully Furnished Unit",
+    "address": "Bandar Bukit Tinggi, Selangor",
+    "city": "",
+    "state": "Selangor",
+    "postcode": "",
+    "rental_rm": 1900.0,
+    "size_sqft": 1500.0,
+    "property_type": "Shop lot",
+    "image_url": "https://cdn.rnudah.com/images/plain/c35ab9e9167b60c83a18e377a72aa8ec-2967596492593517722.jpg",
+    "latitude": 3.0034886,
+    "longitude": 101.4500228,
+    "research": {
+     "catalog_suitability_score": 23.598707229061063,
+     "suitability_available": true,
+     "pu_score": null,
+     "pu_available": null
+    },
+    "recommendation": {
+     "available": false,
+     "rank": 28,
+     "score": null,
+     "score_type": "requirement_fit_ordering",
+     "model_version": null,
+     "reason": "The trained recommendation artifact is not integrated in this build, so no model score is produced. Results are ordered by requirement fit only.",
+     "matched_requirements": [
+      "Monthly rental within RM10,000",
+      "Floor area at least 900 sq ft",
+      "In Selangor"
+     ],
+     "unmatched_requirements": [],
+     "unverified_requirements": [
+      "Ground floor"
+     ],
+     "match_ratio": 1.0,
+     "matched_count": 3,
+     "verifiable_count": 3
+    }
+   },
+   {
+    "property_id": "MD-01385",
+    "property_source": "catalog",
+    "title": "Kedai untuk disewa di Taman Sepakat, Kelanang, Banting",
+    "address": "Banting, Selangor",
+    "city": "",
+    "state": "Selangor",
+    "postcode": "",
+    "rental_rm": 2000.0,
+    "size_sqft": 2200.0,
+    "property_type": "Shop lot",
+    "image_url": "https://cdn.rnudah.com/images/plain/c5e58d9ed1d844c56b568b7c45468a75-3003202623993358383.jpg",
+    "latitude": 2.795058,
+    "longitude": 101.44199,
+    "research": {
+     "catalog_suitability_score": 32.353045931160416,
+     "suitability_available": true,
+     "pu_score": null,
+     "pu_available": null
+    },
+    "recommendation": {
+     "available": false,
+     "rank": 29,
+     "score": null,
+     "score_type": "requirement_fit_ordering",
+     "model_version": null,
+     "reason": "The trained recommendation artifact is not integrated in this build, so no model score is produced. Results are ordered by requirement fit only.",
+     "matched_requirements": [
+      "Monthly rental within RM10,000",
+      "Floor area at least 900 sq ft",
+      "In Selangor"
+     ],
+     "unmatched_requirements": [],
+     "unverified_requirements": [
+      "Ground floor"
+     ],
+     "match_ratio": 1.0,
+     "matched_count": 3,
+     "verifiable_count": 3
+    }
+   },
+   {
+    "property_id": "MD-00380",
+    "property_source": "catalog",
+    "title": "(FACING MAIN ROAD! HIGH TRAFFIC) 1st Floor Shoplot, Nadi Setia Ecohill",
+    "address": "Semenyih, Selangor",
+    "city": "",
+    "state": "Selangor",
+    "postcode": "",
+    "rental_rm": 2000.0,
+    "size_sqft": 1950.0,
+    "property_type": "Shop lot",
+    "image_url": "https://cdn.rnudah.com/images/plain/8028c87e85e4f7a6cc6c42749386f361-3005166411774888944.jpg",
+    "latitude": 2.9116124,
+    "longitude": 101.829937,
+    "research": {
+     "catalog_suitability_score": 18.05553582221737,
+     "suitability_available": true,
+     "pu_score": null,
+     "pu_available": null
+    },
+    "recommendation": {
+     "available": false,
+     "rank": 30,
+     "score": null,
+     "score_type": "requirement_fit_ordering",
+     "model_version": null,
+     "reason": "The trained recommendation artifact is not integrated in this build, so no model score is produced. Results are ordered by requirement fit only.",
+     "matched_requirements": [
+      "Monthly rental within RM10,000",
+      "Floor area at least 900 sq ft",
+      "In Selangor"
+     ],
+     "unmatched_requirements": [],
+     "unverified_requirements": [
+      "Ground floor"
+     ],
+     "match_ratio": 1.0,
+     "matched_count": 3,
+     "verifiable_count": 3
+    }
+   },
+   {
+    "property_id": "MD-00031",
+    "property_source": "catalog",
+    "title": "Shoplot For Rent @ Jalan TS 6, Subang Jaya",
+    "address": "Subang Jaya, Selangor",
+    "city": "",
+    "state": "Selangor",
+    "postcode": "",
+    "rental_rm": 2000.0,
+    "size_sqft": 1760.0,
+    "property_type": "Shop lot",
+    "image_url": "https://cdn.rnudah.com/images/plain/2af354fb262f93a842825cb6a6f93ebe-3005562102622187492.jpg",
+    "latitude": 3.0433772,
+    "longitude": 101.5986566,
+    "research": {
+     "catalog_suitability_score": 82.0710348627644,
+     "suitability_available": true,
+     "pu_score": null,
+     "pu_available": null
+    },
+    "recommendation": {
+     "available": false,
+     "rank": 31,
+     "score": null,
+     "score_type": "requirement_fit_ordering",
+     "model_version": null,
+     "reason": "The trained recommendation artifact is not integrated in this build, so no model score is produced. Results are ordered by requirement fit only.",
+     "matched_requirements": [
+      "Monthly rental within RM10,000",
+      "Floor area at least 900 sq ft",
+      "In Selangor"
+     ],
+     "unmatched_requirements": [],
+     "unverified_requirements": [
+      "Ground floor"
+     ],
+     "match_ratio": 1.0,
+     "matched_count": 3,
+     "verifiable_count": 3
+    }
+   },
+   {
+    "property_id": "MD-01629",
+    "property_source": "catalog",
+    "title": "Taman Velox Rawang",
+    "address": "Rawang, Selangor",
+    "city": "",
+    "state": "Selangor",
+    "postcode": "",
+    "rental_rm": 2000.0,
+    "size_sqft": 1540.0,
+    "property_type": "Shop lot",
+    "image_url": "https://cdn.rnudah.com/images/plain/d04f5eda64d75c55be8ca1629ee2273d-3000620553224842911.jpg",
+    "latitude": 3.3106267,
+    "longitude": 101.5266502,
+    "research": {
+     "catalog_suitability_score": 14.531230279003532,
+     "suitability_available": true,
+     "pu_score": null,
+     "pu_available": null
+    },
+    "recommendation": {
+     "available": false,
+     "rank": 32,
+     "score": null,
+     "score_type": "requirement_fit_ordering",
+     "model_version": null,
+     "reason": "The trained recommendation artifact is not integrated in this build, so no model score is produced. Results are ordered by requirement fit only.",
+     "matched_requirements": [
+      "Monthly rental within RM10,000",
+      "Floor area at least 900 sq ft",
+      "In Selangor"
+     ],
+     "unmatched_requirements": [],
+     "unverified_requirements": [
+      "Ground floor"
+     ],
+     "match_ratio": 1.0,
+     "matched_count": 3,
+     "verifiable_count": 3
+    }
+   },
+   {
+    "property_id": "MD-00556",
+    "property_source": "catalog",
+    "title": "Ground floor Shop-Bandar Bukit Tinggi 1 @ Klang-Ready 15/1 or 30/1/27",
+    "address": "Bandar Bukit Tinggi, Selangor",
+    "city": "",
+    "state": "Selangor",
+    "postcode": "",
+    "rental_rm": 2000.0,
+    "size_sqft": 1437.0,
+    "property_type": "Shop lot",
+    "image_url": "https://cdn.rnudah.com/images/plain/0e10121db1cdf15c5e729d6f6a0c9e26-3004796751462271984.jpg",
+    "latitude": 2.9933052,
+    "longitude": 101.4459046,
+    "research": {
+     "catalog_suitability_score": 41.86805531094838,
+     "suitability_available": true,
+     "pu_score": null,
+     "pu_available": null
+    },
+    "recommendation": {
+     "available": false,
+     "rank": 33,
+     "score": null,
+     "score_type": "requirement_fit_ordering",
+     "model_version": null,
+     "reason": "The trained recommendation artifact is not integrated in this build, so no model score is produced. Results are ordered by requirement fit only.",
+     "matched_requirements": [
+      "Monthly rental within RM10,000",
+      "Floor area at least 900 sq ft",
+      "In Selangor"
+     ],
+     "unmatched_requirements": [],
+     "unverified_requirements": [
+      "Ground floor"
+     ],
+     "match_ratio": 1.0,
+     "matched_count": 3,
+     "verifiable_count": 3
+    }
+   },
+   {
+    "property_id": "MD-00339",
+    "property_source": "catalog",
+    "title": "Gnd Floor Shop Lot - 20 x 65 - Bandar Baru Salak Tinggi Sepang",
+    "address": "Salak Tinggi, Selangor",
+    "city": "",
+    "state": "Selangor",
+    "postcode": "",
+    "rental_rm": 2000.0,
+    "size_sqft": 1300.0,
+    "property_type": "Shop lot",
+    "image_url": "https://cdn.rnudah.com/images/plain/71a6573cfa73bf164dde0189e3fe6f11-3002641275174540880.jpg",
+    "latitude": 2.8123434,
+    "longitude": 101.7372806,
+    "research": {
+     "catalog_suitability_score": 57.33174155452826,
+     "suitability_available": true,
+     "pu_score": null,
+     "pu_available": null
+    },
+    "recommendation": {
+     "available": false,
+     "rank": 34,
+     "score": null,
+     "score_type": "requirement_fit_ordering",
+     "model_version": null,
+     "reason": "The trained recommendation artifact is not integrated in this build, so no model score is produced. Results are ordered by requirement fit only.",
+     "matched_requirements": [
+      "Monthly rental within RM10,000",
+      "Floor area at least 900 sq ft",
+      "In Selangor"
+     ],
+     "unmatched_requirements": [],
+     "unverified_requirements": [
+      "Ground floor"
+     ],
+     "match_ratio": 1.0,
+     "matched_count": 3,
+     "verifiable_count": 3
+    }
+   },
+   {
+    "property_id": "MD-00922",
+    "property_source": "catalog",
+    "title": "Plaza Jelutong Bukit Jelutong Renovated Partition Office Room Selangor",
+    "address": "Bukit Jelutong, Selangor",
+    "city": "",
+    "state": "Selangor",
+    "postcode": "",
+    "rental_rm": 2000.0,
+    "size_sqft": 1150.0,
+    "property_type": "Shop lot",
+    "image_url": "https://cdn.rnudah.com/images/plain/3d981a71bab49ecf79b93e0e5e919186-3001217018024839916.jpg",
+    "latitude": 3.1155993,
+    "longitude": 101.5294712,
+    "research": {
+     "catalog_suitability_score": 61.99153727720434,
+     "suitability_available": true,
+     "pu_score": null,
+     "pu_available": null
+    },
+    "recommendation": {
+     "available": false,
+     "rank": 35,
+     "score": null,
+     "score_type": "requirement_fit_ordering",
+     "model_version": null,
+     "reason": "The trained recommendation artifact is not integrated in this build, so no model score is produced. Results are ordered by requirement fit only.",
+     "matched_requirements": [
+      "Monthly rental within RM10,000",
+      "Floor area at least 900 sq ft",
+      "In Selangor"
+     ],
+     "unmatched_requirements": [],
+     "unverified_requirements": [
+      "Ground floor"
+     ],
+     "match_ratio": 1.0,
+     "matched_count": 3,
+     "verifiable_count": 3
+    }
+   },
+   {
+    "property_id": "MD-00403",
+    "property_source": "catalog",
+    "title": "Sea Park Paramount Two Storey Shop Lot Upper Floor Facing Main Road",
+    "address": "Petaling Jaya, Selangor",
+    "city": "",
+    "state": "Selangor",
+    "postcode": "",
+    "rental_rm": 2100.0,
+    "size_sqft": 1650.0,
+    "property_type": "Shop lot",
+    "image_url": "https://cdn.rnudah.com/images/plain/55aa3b664b8b78de92cf97856dc49fa7-3005150127658896368.jpg",
+    "latitude": 3.104904,
+    "longitude": 101.625803,
+    "research": {
+     "catalog_suitability_score": 80.62855614621674,
+     "suitability_available": true,
+     "pu_score": null,
+     "pu_available": null
+    },
+    "recommendation": {
+     "available": false,
+     "rank": 36,
+     "score": null,
+     "score_type": "requirement_fit_ordering",
+     "model_version": null,
+     "reason": "The trained recommendation artifact is not integrated in this build, so no model score is produced. Results are ordered by requirement fit only.",
+     "matched_requirements": [
+      "Monthly rental within RM10,000",
+      "Floor area at least 900 sq ft",
+      "In Selangor"
+     ],
+     "unmatched_requirements": [],
+     "unverified_requirements": [
+      "Ground floor"
+     ],
+     "match_ratio": 1.0,
+     "matched_count": 3,
+     "verifiable_count": 3
+    }
+   },
+   {
+    "property_id": "MD-00618",
+    "property_source": "catalog",
+    "title": "Cheras Prima / Taman Sutera, Balakong / Ground Floor Shop",
+    "address": "Balakong, Selangor",
+    "city": "",
+    "state": "Selangor",
+    "postcode": "",
+    "rental_rm": 2100.0,
+    "size_sqft": 1400.0,
+    "property_type": "Shop lot",
+    "image_url": "https://cdn.rnudah.com/images/plain/dba8e1e2f2c0ee103817b8276a32e086-3004674930394893150.jpg",
+    "latitude": 3.0110552,
+    "longitude": 101.7631783,
+    "research": {
+     "catalog_suitability_score": 25.778694163888865,
+     "suitability_available": true,
+     "pu_score": null,
+     "pu_available": null
+    },
+    "recommendation": {
+     "available": false,
+     "rank": 37,
+     "score": null,
+     "score_type": "requirement_fit_ordering",
+     "model_version": null,
+     "reason": "The trained recommendation artifact is not integrated in this build, so no model score is produced. Results are ordered by requirement fit only.",
+     "matched_requirements": [
+      "Monthly rental within RM10,000",
+      "Floor area at least 900 sq ft",
+      "In Selangor"
+     ],
+     "unmatched_requirements": [],
+     "unverified_requirements": [
+      "Ground floor"
+     ],
+     "match_ratio": 1.0,
+     "matched_count": 3,
+     "verifiable_count": 3
+    }
+   },
+   {
+    "property_id": "MD-00432",
+    "property_source": "catalog",
+    "title": "1st floor shop office Seksyen 6 Kota Damansara",
+    "address": "Kota Damansara, Selangor",
+    "city": "",
+    "state": "Selangor",
+    "postcode": "",
+    "rental_rm": 2200.0,
+    "size_sqft": 1650.0,
+    "property_type": "Shop lot",
+    "image_url": "https://cdn.rnudah.com/images/plain/ad145257fb3f24e4ea731339db2e167a-3005118345879030768.jpg",
+    "latitude": 3.1565556,
+    "longitude": 101.5760088,
+    "research": {
+     "catalog_suitability_score": 22.291865899225925,
+     "suitability_available": true,
+     "pu_score": null,
+     "pu_available": null
+    },
+    "recommendation": {
+     "available": false,
+     "rank": 38,
+     "score": null,
+     "score_type": "requirement_fit_ordering",
+     "model_version": null,
+     "reason": "The trained recommendation artifact is not integrated in this build, so no model score is produced. Results are ordered by requirement fit only.",
+     "matched_requirements": [
+      "Monthly rental within RM10,000",
+      "Floor area at least 900 sq ft",
+      "In Selangor"
+     ],
+     "unmatched_requirements": [],
+     "unverified_requirements": [
+      "Ground floor"
+     ],
+     "match_ratio": 1.0,
+     "matched_count": 3,
+     "verifiable_count": 3
+    }
+   },
+   {
+    "property_id": "MD-00641",
+    "property_source": "catalog",
+    "title": "Desa Latania GF Shop Lot for Rent , Jalan Nagasari, Shah Alam, Klang",
+    "address": "Shah Alam, Selangor",
+    "city": "",
+    "state": "Selangor",
+    "postcode": "",
+    "rental_rm": 2200.0,
+    "size_sqft": 1650.0,
+    "property_type": "Shop lot",
+    "image_url": "https://cdn.rnudah.com/images/plain/f41fc7a8352538a6688a766397ee18a9-2996398297877360606.jpg",
+    "latitude": 3.02114,
+    "longitude": 101.486195,
+    "research": {
+     "catalog_suitability_score": 32.303959790325294,
+     "suitability_available": true,
+     "pu_score": null,
+     "pu_available": null
+    },
+    "recommendation": {
+     "available": false,
+     "rank": 39,
+     "score": null,
+     "score_type": "requirement_fit_ordering",
+     "model_version": null,
+     "reason": "The trained recommendation artifact is not integrated in this build, so no model score is produced. Results are ordered by requirement fit only.",
+     "matched_requirements": [
+      "Monthly rental within RM10,000",
+      "Floor area at least 900 sq ft",
+      "In Selangor"
+     ],
+     "unmatched_requirements": [],
+     "unverified_requirements": [
+      "Ground floor"
+     ],
+     "match_ratio": 1.0,
+     "matched_count": 3,
+     "verifiable_count": 3
+    }
+   },
+   {
+    "property_id": "MD-01112",
+    "property_source": "catalog",
+    "title": "Bandar Tasik Kesuma Berenang Semenyih, Ground floor shop",
+    "address": "Semenyih, Selangor",
+    "city": "",
+    "state": "Selangor",
+    "postcode": "",
+    "rental_rm": 2200.0,
+    "size_sqft": 1500.0,
+    "property_type": "Shop lot",
+    "image_url": "https://cdn.rnudah.com/images/plain/2fcf89fb5becaa8f53522a47a4f2edc4-2989337745463984047.jpg",
+    "latitude": 2.9137576,
+    "longitude": 101.8638976,
+    "research": {
+     "catalog_suitability_score": 31.114977420082408,
+     "suitability_available": true,
+     "pu_score": null,
+     "pu_available": null
+    },
+    "recommendation": {
+     "available": false,
+     "rank": 40,
+     "score": null,
+     "score_type": "requirement_fit_ordering",
+     "model_version": null,
+     "reason": "The trained recommendation artifact is not integrated in this build, so no model score is produced. Results are ordered by requirement fit only.",
+     "matched_requirements": [
+      "Monthly rental within RM10,000",
+      "Floor area at least 900 sq ft",
+      "In Selangor"
+     ],
+     "unmatched_requirements": [],
+     "unverified_requirements": [
+      "Ground floor"
+     ],
+     "match_ratio": 1.0,
+     "matched_count": 3,
+     "verifiable_count": 3
+    }
+   }
+  ],
+  "pagination": {
+   "next_cursor": "eyJvIjo0MCwiayI6IjQ1Yjk1Y2JhZGY1MDYxZmIifQ",
+   "has_more": true,
+   "total": 303,
+   "page_size": 20
+  },
+  "model": {
+   "available": false,
+   "version": null,
+   "score_type": "requirement_fit_ordering",
+   "reason": "The trained recommendation artifact is not integrated in this build, so no model score is produced. Results are ordered by requirement fit only.",
+   "research_only": true
+  },
+  "meta": {
+   "source": "sitewise_app.properties",
+   "property_source": "catalog",
+   "criteria": {
+    "business_type": "specialty caf\u00e9",
+    "state": "Selangor",
+    "area": "",
+    "min_rent": null,
+    "max_rent": 10000.0,
+    "min_size": 900.0,
+    "max_size": null,
+    "type": "",
+    "layout": [
+     "ground floor"
+    ],
+    "q": ""
+   },
+   "cached": true
+  }
+ },
+ "browse": {
+  "data": [
+   {
+    "property_id": "MD-01965",
+    "property_source": "catalog",
+    "title": "GM Klang Wholesale City, Retail Space for Rent, Block B",
+    "address": "Bandar Botanic, Selangor",
+    "city": "",
+    "state": "Selangor",
+    "postcode": "",
+    "rental_rm": 500.0,
+    "size_sqft": 182.0,
+    "property_type": "Retail space",
+    "image_url": "https://cdn.rnudah.com/images/plain/3f322d11e00e0753319193880841b30c-2979898988364062538.jpg",
+    "latitude": 2.9911679,
+    "longitude": 101.4503271,
+    "research": {
+     "catalog_suitability_score": 56.365386195911945,
+     "suitability_available": true,
+     "pu_score": null,
+     "pu_available": null
+    },
+    "recommendation": {
+     "available": false,
+     "rank": 1,
+     "score": null,
+     "score_type": "requirement_fit_ordering",
+     "model_version": null,
+     "reason": "The trained recommendation artifact is not integrated in this build, so no model score is produced. Results are ordered by requirement fit only.",
+     "matched_requirements": [],
+     "unmatched_requirements": [],
+     "unverified_requirements": [],
+     "match_ratio": null,
+     "matched_count": 0,
+     "verifiable_count": 0
+    }
+   },
+   {
+    "property_id": "MD-02521",
+    "property_source": "catalog",
+    "title": "Fiesta @Axis Pandan Shop Jalan Cempaka",
+    "address": "Ampang, Kuala Lumpur",
+    "city": "",
+    "state": "W.P. Kuala Lumpur",
+    "postcode": "",
+    "rental_rm": 500.0,
+    "size_sqft": 86.0,
+    "property_type": "Retail space",
+    "image_url": "https://cdn.rnudah.com/images/plain/f97a70ba841d13bf8d693d8be95d95b0-2965008577429294166.jpg",
+    "latitude": 3.1365668,
+    "longitude": 101.7472916,
+    "research": {
+     "catalog_suitability_score": 7.919563240552692,
+     "suitability_available": true,
+     "pu_score": null,
+     "pu_available": null
+    },
+    "recommendation": {
+     "available": false,
+     "rank": 2,
+     "score": null,
+     "score_type": "requirement_fit_ordering",
+     "model_version": null,
+     "reason": "The trained recommendation artifact is not integrated in this build, so no model score is produced. Results are ordered by requirement fit only.",
+     "matched_requirements": [],
+     "unmatched_requirements": [],
+     "unverified_requirements": [],
+     "match_ratio": null,
+     "matched_count": 0,
+     "verifiable_count": 0
+    }
+   },
+   {
+    "property_id": "MD-03578",
+    "property_source": "catalog",
+    "title": "Kota Tinggi Taman Kota Jaya Double Storey Shoplot For Rent",
+    "address": "Kota Tinggi, Johor",
+    "city": "",
+    "state": "Johor",
+    "postcode": "",
+    "rental_rm": 600.0,
+    "size_sqft": 1760.0,
+    "property_type": "Shop lot",
+    "image_url": "https://cdn.rnudah.com/images/plain/3fb2ff2ef2b5ae747ab07b18d1f95019-3003097911346407471.jpg",
+    "latitude": 1.7376885,
+    "longitude": 103.8889506,
+    "research": {
+     "catalog_suitability_score": 67.8641054740191,
+     "suitability_available": true,
+     "pu_score": null,
+     "pu_available": null
+    },
+    "recommendation": {
+     "available": false,
+     "rank": 3,
+     "score": null,
+     "score_type": "requirement_fit_ordering",
+     "model_version": null,
+     "reason": "The trained recommendation artifact is not integrated in this build, so no model score is produced. Results are ordered by requirement fit only.",
+     "matched_requirements": [],
+     "unmatched_requirements": [],
+     "unverified_requirements": [],
+     "match_ratio": null,
+     "matched_count": 0,
+     "verifiable_count": 0
+    }
+   },
+   {
+    "property_id": "MD-03687",
+    "property_source": "catalog",
+    "title": "Bakri Facing main road 1st floor 2nd floor for rent",
+    "address": "Muar, Johor",
+    "city": "",
+    "state": "Johor",
+    "postcode": "",
+    "rental_rm": 650.0,
+    "size_sqft": 1700.0,
+    "property_type": "Shop lot",
+    "image_url": "https://cdn.rnudah.com/images/plain/9cf95767f33a195f7aea013dc0c16916-3002481025512634885.jpg",
+    "latitude": 2.0424892,
+    "longitude": 102.6539628,
+    "research": {
+     "catalog_suitability_score": 41.27742965100216,
+     "suitability_available": true,
+     "pu_score": null,
+     "pu_available": null
+    },
+    "recommendation": {
+     "available": false,
+     "rank": 4,
+     "score": null,
+     "score_type": "requirement_fit_ordering",
+     "model_version": null,
+     "reason": "The trained recommendation artifact is not integrated in this build, so no model score is produced. Results are ordered by requirement fit only.",
+     "matched_requirements": [],
+     "unmatched_requirements": [],
+     "unverified_requirements": [],
+     "match_ratio": null,
+     "matched_count": 0,
+     "verifiable_count": 0
+    }
+   },
+   {
+    "property_id": "MD-05265",
+    "property_source": "catalog",
+    "title": "Bandar Sunway\uff5cSeberang Jaya\uff5cFirst Floor Retail Shop Lot for Rent",
+    "address": "Seberang Jaya, Penang",
+    "city": "",
+    "state": "Pulau Pinang",
+    "postcode": "",
+    "rental_rm": 650.0,
+    "size_sqft": 178.0,
+    "property_type": "Shop lot",
+    "image_url": "https://cdn.rnudah.com/images/plain/e293c86383f2b20fc3fa3ac72672332d-2991822746459343000.jpg",
+    "latitude": 5.3988967,
+    "longitude": 100.399159,
+    "research": {
+     "catalog_suitability_score": 3.616082607808003,
+     "suitability_available": true,
+     "pu_score": null,
+     "pu_available": null
+    },
+    "recommendation": {
+     "available": false,
+     "rank": 5,
+     "score": null,
+     "score_type": "requirement_fit_ordering",
+     "model_version": null,
+     "reason": "The trained recommendation artifact is not integrated in this build, so no model score is produced. Results are ordered by requirement fit only.",
+     "matched_requirements": [],
+     "unmatched_requirements": [],
+     "unverified_requirements": [],
+     "match_ratio": null,
+     "matched_count": 0,
+     "verifiable_count": 0
+    }
+   },
+   {
+    "property_id": "MD-00531",
+    "property_source": "catalog",
+    "title": "Taman Bayu Perdana, Klang Shoplot for Rent",
+    "address": "Klang, Selangor",
+    "city": "",
+    "state": "Selangor",
+    "postcode": "",
+    "rental_rm": 700.0,
+    "size_sqft": 1496.0,
+    "property_type": "Shop lot",
+    "image_url": "https://cdn.rnudah.com/images/plain/e6a47127a7988f9a0ad23371178b74b3-2986533781368657891.jpg",
+    "latitude": 3.0169609,
+    "longitude": 101.4358213,
+    "research": {
+     "catalog_suitability_score": 62.82109506373287,
+     "suitability_available": true,
+     "pu_score": null,
+     "pu_available": null
+    },
+    "recommendation": {
+     "available": false,
+     "rank": 6,
+     "score": null,
+     "score_type": "requirement_fit_ordering",
+     "model_version": null,
+     "reason": "The trained recommendation artifact is not integrated in this build, so no model score is produced. Results are ordered by requirement fit only.",
+     "matched_requirements": [],
+     "unmatched_requirements": [],
+     "unverified_requirements": [],
+     "match_ratio": null,
+     "matched_count": 0,
+     "verifiable_count": 0
+    }
+   },
+   {
+    "property_id": "MD-02361",
+    "property_source": "catalog",
+    "title": "GF Shop Lot Greenpark Condo Block D Taman Yarl Old Klang Road KL",
+    "address": "Old Klang Road, Kuala Lumpur",
+    "city": "",
+    "state": "W.P. Kuala Lumpur",
+    "postcode": "",
+    "rental_rm": 700.0,
+    "size_sqft": 400.0,
+    "property_type": "Shop lot",
+    "image_url": "https://cdn.rnudah.com/images/plain/4e896bbc978110de5e90f8a4cb0c98d6-2956961902597834588.jpg",
+    "latitude": 3.0688069,
+    "longitude": 101.6641728,
+    "research": {
+     "catalog_suitability_score": 15.417608062945257,
+     "suitability_available": true,
+     "pu_score": null,
+     "pu_available": null
+    },
+    "recommendation": {
+     "available": false,
+     "rank": 7,
+     "score": null,
+     "score_type": "requirement_fit_ordering",
+     "model_version": null,
+     "reason": "The trained recommendation artifact is not integrated in this build, so no model score is produced. Results are ordered by requirement fit only.",
+     "matched_requirements": [],
+     "unmatched_requirements": [],
+     "unverified_requirements": [],
+     "match_ratio": null,
+     "matched_count": 0,
+     "verifiable_count": 0
+    }
+   },
+   {
+    "property_id": "MD-01067",
+    "property_source": "catalog",
+    "title": "City Mall USJ19 Subang Jaya",
+    "address": "Subang Jaya, Selangor",
+    "city": "",
+    "state": "Selangor",
+    "postcode": "",
+    "rental_rm": 700.0,
+    "size_sqft": 300.0,
+    "property_type": "Shop lot",
+    "image_url": null,
+    "latitude": 3.0363579,
+    "longitude": 101.5893695,
+    "research": {
+     "catalog_suitability_score": 28.41180929570497,
+     "suitability_available": true,
+     "pu_score": null,
+     "pu_available": null
+    },
+    "recommendation": {
+     "available": false,
+     "rank": 8,
+     "score": null,
+     "score_type": "requirement_fit_ordering",
+     "model_version": null,
+     "reason": "The trained recommendation artifact is not integrated in this build, so no model score is produced. Results are ordered by requirement fit only.",
+     "matched_requirements": [],
+     "unmatched_requirements": [],
+     "unverified_requirements": [],
+     "match_ratio": null,
+     "matched_count": 0,
+     "verifiable_count": 0
+    }
+   },
+   {
+    "property_id": "MD-00065",
+    "property_source": "catalog",
+    "title": "Taman Garing Permai Rawang 1st Floor Rent",
+    "address": "Rawang, Selangor",
+    "city": "",
+    "state": "Selangor",
+    "postcode": "",
+    "rental_rm": 800.0,
+    "size_sqft": 3000.0,
+    "property_type": "Shop lot",
+    "image_url": "https://cdn.rnudah.com/images/plain/bf0d9f344c8aaad63b456e7db3235f0c-2973787634118726507.jpg",
+    "latitude": 3.3285603,
+    "longitude": 101.5605616,
+    "research": {
+     "catalog_suitability_score": 10.904472271630533,
+     "suitability_available": true,
+     "pu_score": null,
+     "pu_available": null
+    },
+    "recommendation": {
+     "available": false,
+     "rank": 9,
+     "score": null,
+     "score_type": "requirement_fit_ordering",
+     "model_version": null,
+     "reason": "The trained recommendation artifact is not integrated in this build, so no model score is produced. Results are ordered by requirement fit only.",
+     "matched_requirements": [],
+     "unmatched_requirements": [],
+     "unverified_requirements": [],
+     "match_ratio": null,
+     "matched_count": 0,
+     "verifiable_count": 0
+    }
+   },
+   {
+    "property_id": "MD-00729",
+    "property_source": "catalog",
+    "title": "UNTUK DISEWAKAN: Lot Kedai Tingkat Atas [Taman Langat Murni, Banting]",
+    "address": "Banting, Selangor",
+    "city": "",
+    "state": "Selangor",
+    "postcode": "",
+    "rental_rm": 800.0,
+    "size_sqft": 2720.0,
+    "property_type": "Shop lot",
+    "image_url": "https://cdn.rnudah.com/images/plain/4db9898b68e1e64a5a1f9273f12af493-3004504581185571678.jpg",
+    "latitude": 2.8027574,
+    "longitude": 101.4956767,
+    "research": {
+     "catalog_suitability_score": 51.969599474351426,
+     "suitability_available": true,
+     "pu_score": null,
+     "pu_available": null
+    },
+    "recommendation": {
+     "available": false,
+     "rank": 10,
+     "score": null,
+     "score_type": "requirement_fit_ordering",
+     "model_version": null,
+     "reason": "The trained recommendation artifact is not integrated in this build, so no model score is produced. Results are ordered by requirement fit only.",
+     "matched_requirements": [],
+     "unmatched_requirements": [],
+     "unverified_requirements": [],
+     "match_ratio": null,
+     "matched_count": 0,
+     "verifiable_count": 0
+    }
+   },
+   {
+    "property_id": "MD-04841",
+    "property_source": "catalog",
+    "title": "Tasek Gelugor|2sty Shop Lot|1st Floor For Rent|Ready Partitioned Rooms",
+    "address": "Tasek Gelugor, Penang",
+    "city": "",
+    "state": "Pulau Pinang",
+    "postcode": "",
+    "rental_rm": 800.0,
+    "size_sqft": 1400.0,
+    "property_type": "Shop lot",
+    "image_url": "https://cdn.rnudah.com/images/plain/7b71104e9360803651d0b0e7d53ca454-3004712074938649438.jpg",
+    "latitude": 5.4844382,
+    "longitude": 100.4901402,
+    "research": {
+     "catalog_suitability_score": 48.69791286143019,
+     "suitability_available": true,
+     "pu_score": null,
+     "pu_available": null
+    },
+    "recommendation": {
+     "available": false,
+     "rank": 11,
+     "score": null,
+     "score_type": "requirement_fit_ordering",
+     "model_version": null,
+     "reason": "The trained recommendation artifact is not integrated in this build, so no model score is produced. Results are ordered by requirement fit only.",
+     "matched_requirements": [],
+     "unmatched_requirements": [],
+     "unverified_requirements": [],
+     "match_ratio": null,
+     "matched_count": 0,
+     "verifiable_count": 0
+    }
+   },
+   {
+    "property_id": "MD-04212",
+    "property_source": "catalog",
+    "title": "Perling Jln Undan 16 ,Shop(1 Floor)",
+    "address": "Perling, Johor",
+    "city": "",
+    "state": "Johor",
+    "postcode": "",
+    "rental_rm": 800.0,
+    "size_sqft": 650.0,
+    "property_type": "Shop lot",
+    "image_url": "https://cdn.rnudah.com/images/plain/b622bbc34822821327b9b6b5575b512a-2998622965208781908.jpg",
+    "latitude": 1.4813301,
+    "longitude": 103.683412,
+    "research": {
+     "catalog_suitability_score": 58.39465022499938,
+     "suitability_available": true,
+     "pu_score": null,
+     "pu_available": null
+    },
+    "recommendation": {
+     "available": false,
+     "rank": 12,
+     "score": null,
+     "score_type": "requirement_fit_ordering",
+     "model_version": null,
+     "reason": "The trained recommendation artifact is not integrated in this build, so no model score is produced. Results are ordered by requirement fit only.",
+     "matched_requirements": [],
+     "unmatched_requirements": [],
+     "unverified_requirements": [],
+     "match_ratio": null,
+     "matched_count": 0,
+     "verifiable_count": 0
+    }
+   },
+   {
+    "property_id": "MD-00242",
+    "property_source": "catalog",
+    "title": "Damansara Bistari Petaling Jaya Shop For Rent",
+    "address": "Petaling Jaya, Selangor",
+    "city": "",
+    "state": "Selangor",
+    "postcode": "",
+    "rental_rm": 850.0,
+    "size_sqft": 210.0,
+    "property_type": "Shop lot",
+    "image_url": "https://cdn.rnudah.com/images/plain/18fad3f924ab2e41fb5c48c9a7e3c47a-3005312686200415855.jpg",
+    "latitude": 3.122675,
+    "longitude": 101.6277093,
+    "research": {
+     "catalog_suitability_score": 71.35251000700764,
+     "suitability_available": true,
+     "pu_score": null,
+     "pu_available": null
+    },
+    "recommendation": {
+     "available": false,
+     "rank": 13,
+     "score": null,
+     "score_type": "requirement_fit_ordering",
+     "model_version": null,
+     "reason": "The trained recommendation artifact is not integrated in this build, so no model score is produced. Results are ordered by requirement fit only.",
+     "matched_requirements": [],
+     "unmatched_requirements": [],
+     "unverified_requirements": [],
+     "match_ratio": null,
+     "matched_count": 0,
+     "verifiable_count": 0
+    }
+   },
+   {
+    "property_id": "MD-04816",
+    "property_source": "catalog",
+    "title": "Pusat Perniagaan Alma\uff5cBukit Mertajam Corner Second Floor Shop lot Rent",
+    "address": "Alma, Penang",
+    "city": "",
+    "state": "Pulau Pinang",
+    "postcode": "",
+    "rental_rm": 900.0,
+    "size_sqft": 2460.0,
+    "property_type": "Shop lot",
+    "image_url": "https://cdn.rnudah.com/images/plain/49c88350022f70891a3c478b054620ad-3004822070734261086.jpg",
+    "latitude": 5.3513423,
+    "longitude": 100.4602481,
+    "research": {
+     "catalog_suitability_score": 73.91822184306477,
+     "suitability_available": true,
+     "pu_score": null,
+     "pu_available": null
+    },
+    "recommendation": {
+     "available": false,
+     "rank": 14,
+     "score": null,
+     "score_type": "requirement_fit_ordering",
+     "model_version": null,
+     "reason": "The trained recommendation artifact is not integrated in this build, so no model score is produced. Results are ordered by requirement fit only.",
+     "matched_requirements": [],
+     "unmatched_requirements": [],
+     "unverified_requirements": [],
+     "match_ratio": null,
+     "matched_count": 0,
+     "verifiable_count": 0
+    }
+   },
+   {
+    "property_id": "EP-03498",
+    "property_source": "catalog",
+    "title": "Pusat Perniagaan Pekaka - Jalan Pekaka Nibong Tebal 1st floor RM900",
+    "address": "Nibong Tebal, Penang; Jalan Ooi Kar Seng",
+    "city": "",
+    "state": "Pulau Pinang",
+    "postcode": "",
+    "rental_rm": 900.0,
+    "size_sqft": 1200.0,
+    "property_type": "Shop lot",
+    "image_url": "https://media.edgeprop.my/s3fs-public/104661_1758272414_5EdgPro5_whatsappimage20250821at19.14.10_72af9dc9_0.jpg",
+    "latitude": 5.1465389,
+    "longitude": 100.4922555,
+    "research": {
+     "catalog_suitability_score": 53.97370599017744,
+     "suitability_available": true,
+     "pu_score": null,
+     "pu_available": null
+    },
+    "recommendation": {
+     "available": false,
+     "rank": 15,
+     "score": null,
+     "score_type": "requirement_fit_ordering",
+     "model_version": null,
+     "reason": "The trained recommendation artifact is not integrated in this build, so no model score is produced. Results are ordered by requirement fit only.",
+     "matched_requirements": [],
+     "unmatched_requirements": [],
+     "unverified_requirements": [],
+     "match_ratio": null,
+     "matched_count": 0,
+     "verifiable_count": 0
+    }
+   },
+   {
+    "property_id": "MD-04740",
+    "property_source": "catalog",
+    "title": "Tasek Gelugor Bunga Kemaju| Ground Floor Shop Lot| Facing Main Road |",
+    "address": "Kepala Batas, Penang",
+    "city": "",
+    "state": "Pulau Pinang",
+    "postcode": "",
+    "rental_rm": 900.0,
+    "size_sqft": 1200.0,
+    "property_type": "Shop lot",
+    "image_url": "https://cdn.rnudah.com/images/plain/6d96ab54f74b16f8845b1a3569d65233-3005071646146005854.jpg",
+    "latitude": 5.4790944,
+    "longitude": 100.5038614,
+    "research": {
+     "catalog_suitability_score": 30.87532259092345,
+     "suitability_available": true,
+     "pu_score": null,
+     "pu_available": null
+    },
+    "recommendation": {
+     "available": false,
+     "rank": 16,
+     "score": null,
+     "score_type": "requirement_fit_ordering",
+     "model_version": null,
+     "reason": "The trained recommendation artifact is not integrated in this build, so no model score is produced. Results are ordered by requirement fit only.",
+     "matched_requirements": [],
+     "unmatched_requirements": [],
+     "unverified_requirements": [],
+     "match_ratio": null,
+     "matched_count": 0,
+     "verifiable_count": 0
+    }
+   },
+   {
+    "property_id": "MD-02575",
+    "property_source": "catalog",
+    "title": "Shop|Office|Retail Lot Ground Floor Megan Ambassy Jln Ampang KLCC KL",
+    "address": "Ampang Hilir, Kuala Lumpur",
+    "city": "",
+    "state": "W.P. Kuala Lumpur",
+    "postcode": "",
+    "rental_rm": 900.0,
+    "size_sqft": 139.0,
+    "property_type": "Retail space",
+    "image_url": "https://cdn.rnudah.com/images/plain/b0a4e4dbb4b8fb0ecada54d1be761c63-3001374954183058756.jpg",
+    "latitude": 3.1585208,
+    "longitude": 101.7401858,
+    "research": {
+     "catalog_suitability_score": 17.14684312776951,
+     "suitability_available": true,
+     "pu_score": null,
+     "pu_available": null
+    },
+    "recommendation": {
+     "available": false,
+     "rank": 17,
+     "score": null,
+     "score_type": "requirement_fit_ordering",
+     "model_version": null,
+     "reason": "The trained recommendation artifact is not integrated in this build, so no model score is produced. Results are ordered by requirement fit only.",
+     "matched_requirements": [],
+     "unmatched_requirements": [],
+     "unverified_requirements": [],
+     "match_ratio": null,
+     "matched_count": 0,
+     "verifiable_count": 0
+    }
+   },
+   {
+    "property_id": "MD-00767",
+    "property_source": "catalog",
+    "title": "[Good deal] Cheapest shop office in Bandar Rawang",
+    "address": "Rawang, Selangor",
+    "city": "",
+    "state": "Selangor",
+    "postcode": "",
+    "rental_rm": 1000.0,
+    "size_sqft": 1650.0,
+    "property_type": "Shop lot",
+    "image_url": "https://cdn.rnudah.com/images/plain/09f79a06901aa0aec2d4438abbbca668-2985405250042915856.jpg",
+    "latitude": 3.3207272,
+    "longitude": 101.5771544,
+    "research": {
+     "catalog_suitability_score": 35.168848269079895,
+     "suitability_available": true,
+     "pu_score": null,
+     "pu_available": null
+    },
+    "recommendation": {
+     "available": false,
+     "rank": 18,
+     "score": null,
+     "score_type": "requirement_fit_ordering",
+     "model_version": null,
+     "reason": "The trained recommendation artifact is not integrated in this build, so no model score is produced. Results are ordered by requirement fit only.",
+     "matched_requirements": [],
+     "unmatched_requirements": [],
+     "unverified_requirements": [],
+     "match_ratio": null,
+     "matched_count": 0,
+     "verifiable_count": 0
+    }
+   },
+   {
+    "property_id": "MD-04191",
+    "property_source": "catalog",
+    "title": "For Rent 2nd floor shop  Jalan Sri Perkasa Taman Tampoi Utama",
+    "address": "Tampoi, Johor",
+    "city": "",
+    "state": "Johor",
+    "postcode": "",
+    "rental_rm": 1000.0,
+    "size_sqft": 1628.0,
+    "property_type": "Shop lot",
+    "image_url": "https://cdn.rnudah.com/images/plain/c5553f90098a5292a4ece81256e4cb19-2998839143615288800.jpg",
+    "latitude": 1.5071181,
+    "longitude": 103.6864295,
+    "research": {
+     "catalog_suitability_score": 54.32886702642443,
+     "suitability_available": true,
+     "pu_score": null,
+     "pu_available": null
+    },
+    "recommendation": {
+     "available": false,
+     "rank": 19,
+     "score": null,
+     "score_type": "requirement_fit_ordering",
+     "model_version": null,
+     "reason": "The trained recommendation artifact is not integrated in this build, so no model score is produced. Results are ordered by requirement fit only.",
+     "matched_requirements": [],
+     "unmatched_requirements": [],
+     "unverified_requirements": [],
+     "match_ratio": null,
+     "matched_count": 0,
+     "verifiable_count": 0
+    }
+   },
+   {
+    "property_id": "MD-04484",
+    "property_source": "catalog",
+    "title": "BANDAR PUTRA BERTAM FIRST FLOOR OFFICE FOR RENT Nr BERTAM MYDIN",
+    "address": "Bertam, Penang",
+    "city": "",
+    "state": "Pulau Pinang",
+    "postcode": "",
+    "rental_rm": 1000.0,
+    "size_sqft": 1614.0,
+    "property_type": "Shop lot",
+    "image_url": "https://cdn.rnudah.com/images/plain/6998402f394cb513788bd5ff76b0a570-3001957699281140937.jpg",
+    "latitude": 5.5178186,
+    "longitude": 100.4834485,
+    "research": {
+     "catalog_suitability_score": 41.439459554871114,
+     "suitability_available": true,
+     "pu_score": null,
+     "pu_available": null
+    },
+    "recommendation": {
+     "available": false,
+     "rank": 20,
+     "score": null,
+     "score_type": "requirement_fit_ordering",
+     "model_version": null,
+     "reason": "The trained recommendation artifact is not integrated in this build, so no model score is produced. Results are ordered by requirement fit only.",
+     "matched_requirements": [],
+     "unmatched_requirements": [],
+     "unverified_requirements": [],
+     "match_ratio": null,
+     "matched_count": 0,
+     "verifiable_count": 0
+    }
+   }
+  ],
+  "pagination": {
+   "next_cursor": "eyJvIjoyMCwiayI6IjBmZWVlZTMzMGJkZjMyYWIifQ",
+   "has_more": true,
+   "total": 955,
+   "page_size": 20
+  },
+  "model": {
+   "available": false,
+   "version": null,
+   "score_type": "requirement_fit_ordering",
+   "reason": "The trained recommendation artifact is not integrated in this build, so no model score is produced. Results are ordered by requirement fit only.",
+   "research_only": true
+  },
+  "meta": {
+   "source": "sitewise_app.properties",
+   "property_source": "catalog",
+   "criteria": {
+    "business_type": "",
+    "state": "",
+    "area": "",
+    "min_rent": null,
+    "max_rent": null,
+    "min_size": null,
+    "max_size": null,
+    "type": "",
+    "layout": [],
+    "q": ""
+   },
+   "cached": false
+  }
+ },
+ "facets": {
+  "data": {
+   "states": [
+    {
+     "value": "Selangor",
+     "total": 351
+    },
+    {
+     "value": "W.P. Kuala Lumpur",
+     "total": 236
+    },
+    {
+     "value": "Pulau Pinang",
+     "total": 205
+    },
+    {
+     "value": "Johor",
+     "total": 163
+    }
+   ],
+   "property_types": [
+    {
+     "value": "Shop lot",
+     "total": 826
+    },
+    {
+     "value": "Shophouse / Shop-office",
+     "total": 100
+    },
+    {
+     "value": "Retail space",
+     "total": 29
+    }
+   ],
+   "ranges": {
+    "min_rental_rm": 500.0,
+    "max_rental_rm": 23000.0,
+    "min_size_sqft": 63.0,
+    "max_size_sqft": 5760.0,
+    "total": 955
+   }
+  }
+ },
+ "details": {
+  "MD-00531": {
+   "id": "MD-00531",
+   "title": "Taman Bayu Perdana, Klang Shoplot for Rent",
+   "address": "Klang, Selangor",
+   "city": "",
+   "state": "Selangor",
+   "postcode": "",
+   "rental_rm": 700.0,
+   "size_sqft": 1496.0,
+   "latitude": 3.0169609,
+   "longitude": 101.4358213,
+   "property_type": "Shop lot",
+   "image_url": "https://cdn.rnudah.com/images/plain/e6a47127a7988f9a0ad23371178b74b3-2986533781368657891.jpg",
+   "source_url": "https://www.mudah.my/taman-bayu-perdana-klang-shoplot-for-rent-114905015.htm",
+   "suitability_score": 62.82109506373287,
+   "dataset_validation": "UNVERIFIED_RESEARCH_DATASET"
+  },
+  "MD-00065": {
+   "id": "MD-00065",
+   "title": "Taman Garing Permai Rawang 1st Floor Rent",
+   "address": "Rawang, Selangor",
+   "city": "",
+   "state": "Selangor",
+   "postcode": "",
+   "rental_rm": 800.0,
+   "size_sqft": 3000.0,
+   "latitude": 3.3285603,
+   "longitude": 101.5605616,
+   "property_type": "Shop lot",
+   "image_url": "https://cdn.rnudah.com/images/plain/bf0d9f344c8aaad63b456e7db3235f0c-2973787634118726507.jpg",
+   "source_url": "https://www.mudah.my/taman-garing-permai-rawang-1st-floor-rent-114138199.htm",
+   "suitability_score": 10.904472271630533,
+   "dataset_validation": "UNVERIFIED_RESEARCH_DATASET"
+  },
+  "MD-00729": {
+   "id": "MD-00729",
+   "title": "UNTUK DISEWAKAN: Lot Kedai Tingkat Atas [Taman Langat Murni, Banting]",
+   "address": "Banting, Selangor",
+   "city": "",
+   "state": "Selangor",
+   "postcode": "",
+   "rental_rm": 800.0,
+   "size_sqft": 2720.0,
+   "latitude": 2.8027574,
+   "longitude": 101.4956767,
+   "property_type": "Shop lot",
+   "image_url": "https://cdn.rnudah.com/images/plain/4db9898b68e1e64a5a1f9273f12af493-3004504581185571678.jpg",
+   "source_url": "https://www.mudah.my/untuk-disewakan-lot-kedai-tingkat-atas-taman-langat-murni-banting-115926613.htm",
+   "suitability_score": 51.969599474351426,
+   "dataset_validation": "UNVERIFIED_RESEARCH_DATASET"
+  },
+  "MD-00767": {
+   "id": "MD-00767",
+   "title": "[Good deal] Cheapest shop office in Bandar Rawang",
+   "address": "Rawang, Selangor",
+   "city": "",
+   "state": "Selangor",
+   "postcode": "",
+   "rental_rm": 1000.0,
+   "size_sqft": 1650.0,
+   "latitude": 3.3207272,
+   "longitude": 101.5771544,
+   "property_type": "Shop lot",
+   "image_url": "https://cdn.rnudah.com/images/plain/09f79a06901aa0aec2d4438abbbca668-2985405250042915856.jpg",
+   "source_url": "https://www.mudah.my/good-deal-cheapest-shop-office-in-bandar-rawang-114831527.htm",
+   "suitability_score": 35.168848269079895,
+   "dataset_validation": "UNVERIFIED_RESEARCH_DATASET"
+  },
+  "MD-00338": {
+   "id": "MD-00338",
+   "title": "Corner 3rd Floor & Rooftop Shop-lot (20'x75') Taman Berkeley",
+   "address": "Klang, Selangor",
+   "city": "",
+   "state": "Selangor",
+   "postcode": "",
+   "rental_rm": 1000.0,
+   "size_sqft": 1500.0,
+   "latitude": 3.0581859,
+   "longitude": 101.4627167,
+   "property_type": "Shop lot",
+   "image_url": "https://cdn.rnudah.com/images/plain/e5e2e4752f749c85490a12c4e427ac11-2992039658407900553.jpg",
+   "source_url": "https://www.mudah.my/corner-3rd-floor-rooftop-shop-lot-20-x75-taman-berkeley-115198202.htm",
+   "suitability_score": 65.22625762279169,
+   "dataset_validation": "UNVERIFIED_RESEARCH_DATASET"
+  },
+  "MD-01783": {
+   "id": "MD-01783",
+   "title": "Rawang BG 1, Shop/Office @ Kampung Dato Lee Kim Sai",
+   "address": "Rawang, Selangor",
+   "city": "",
+   "state": "Selangor",
+   "postcode": "",
+   "rental_rm": 1000.0,
+   "size_sqft": 1500.0,
+   "latitude": 3.3118938,
+   "longitude": 101.5765872,
+   "property_type": "Shop lot",
+   "image_url": "https://img.rnudah.com/images/21/213712096720168.jpg",
+   "source_url": "https://www.mudah.my/rawang-bg-1-shop-office-kampung-dato-lee-kim-sai-58585621.htm",
+   "suitability_score": 13.79841527566106,
+   "dataset_validation": "UNVERIFIED_RESEARCH_DATASET"
+  }
+ }
+}

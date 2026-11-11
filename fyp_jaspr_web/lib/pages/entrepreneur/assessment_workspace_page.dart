@@ -1,7 +1,6 @@
 import 'package:jaspr/dom.dart';
 import 'package:jaspr/jaspr.dart';
 import 'package:jaspr_riverpod/jaspr_riverpod.dart';
-import 'package:jaspr_router/jaspr_router.dart';
 import 'package:shared_logic/shared_logic.dart';
 
 import '../../components/assessment_journey_stepper.dart';
@@ -105,8 +104,20 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
   /// The Stage 1 search query.
   String _search = '';
 
-  /// The catalogue ref the entrepreneur selected. Exactly one at a time.
-  String? _selectedRef;
+  /// The catalogue refs the entrepreneur selected, in selection order.
+  ///
+  /// Up to three properties form the shortlist. Each still gets its OWN
+  /// independent assessment record: the backend's create-or-resume contract is
+  /// per property (one `property_id` per assessment row) and there is no
+  /// combined multi-property prediction or report, so this list never becomes
+  /// a single batched record.
+  static const int _maxSelections = 3;
+  final List<String> _selectedRefs = <String>[];
+
+  /// What the last Continue actually did, one entry per selected property.
+  /// Stage 1 renders this as the selected-assessments overview: created,
+  /// resumed or refused, with a way into each independent assessment.
+  List<_SelectionOutcome> _outcomes = const [];
 
   @override
   void initState() {
@@ -397,88 +408,123 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
     return {for (final record in result.value!.items) record.propertyId: record};
   }
 
-  /// Re-reads the saved list and drops the current selection.
+  /// Re-runs the saved-property read. The shortlist is cleared with it: the
+  /// list itself may have changed, so stale refs must not survive a reload.
   void _reloadSelectable() => setState(() {
         _selectableFuture = _loadSelectable();
         _historyFuture = _loadHistory();
-        _selectedRef = null;
+        _selectedRefs.clear();
+        _outcomes = const [];
         _search = '';
         _notice = null;
         _writeError = null;
       });
 
-  /// Selects one saved property. Only one can be selected at a time, and a
-  /// property whose details could not be resolved is not selectable.
-  void _select(String propertyRef) => setState(() {
-        _selectedRef = propertyRef;
+  /// Toggles one saved property in the shortlist.
+  ///
+  /// A property whose details could not be resolved never reaches this
+  /// method (its checkbox is disabled), duplicates are impossible because the
+  /// toggle checks membership first, and a fourth property cannot be added.
+  /// Searching and filtering never touch the selection — the checkbox state
+  /// is derived from this list, not from what is currently visible.
+  void _toggleSelection(String propertyRef) => setState(() {
+        if (_selectedRefs.contains(propertyRef)) {
+          _selectedRefs.remove(propertyRef);
+        } else if (_selectedRefs.length < _maxSelections) {
+          _selectedRefs.add(propertyRef);
+        }
+        // A changed shortlist invalidates the previous Continue's result.
+        _outcomes = const [];
         _notice = null;
         _writeError = null;
       });
 
-  /// Continues into the assessment for the selected property.
+  /// Continues with EVERY selected property.
   ///
-  /// The backend is the only authority: an existing record is resumed (never
-  /// duplicated) and a new one is created only for a property this account has
-  /// saved. Nothing is created just because the page was opened.
-  Future<void> _continueWith(String propertyRef) async {
-    if (_busy) return;
+  /// The backend's create-or-resume contract is per property (one `property_id`
+  /// per assessment row), so each selection is processed on its own and the
+  /// three requests run sequentially on purpose: each is an independent server
+  /// transaction that checks the catalogue, resumes the caller's existing
+  /// record (never duplicated) or creates a new one only for a property this
+  /// account has saved. There is no batch endpoint and no combined assessment
+  /// to reuse.
+  ///
+  /// A per-property failure never aborts the other selections — it is reported
+  /// for that property in the overview below.
+  Future<void> _continueSelected() async {
+    if (_busy || _selectedRefs.isEmpty) return;
     setState(() {
       _busy = true;
       _writeError = null;
       _notice = null;
+      _outcomes = const [];
     });
 
-    // 1. Is there already an assessment for this property?
-    final existing = await _api.byProperty(propertyRef);
-    if (!mounted) return;
-    if (!existing.ok) {
-      setState(() {
-        _busy = false;
-        _writeError = existing.failure;
-      });
-      return;
-    }
-    final record = existing.value;
-    if (record != null) {
-      setState(() {
-        _busy = false;
-        _notice =
-            'Your existing assessment for this property was reopened. '
-            'Nothing was duplicated.';
-      });
-      _openProperty(propertyRef);
-      return;
+    final outcomes = <_SelectionOutcome>[];
+    for (final ref in _selectedRefs) {
+      // 1. Is there already an assessment for this property?
+      final existing = await _api.byProperty(ref);
+      if (!mounted) return;
+      if (!existing.ok) {
+        // Could not even check (network, 403, unknown ref) — report it for
+        // this property instead of guessing whether a record exists.
+        outcomes.add(_SelectionOutcome(ref: ref, failure: existing.failure));
+        continue;
+      }
+      final record = existing.value;
+      if (record != null) {
+        outcomes.add(_SelectionOutcome(
+          ref: ref,
+          title: record.property?.title,
+          resumed: true,
+        ));
+        continue;
+      }
+
+      // 2. Otherwise the server creates it — and refuses when the property is
+      //    not on this account's saved list.
+      final started = await _api.start(ref);
+      if (!mounted) return;
+      if (!started.ok) {
+        outcomes.add(_SelectionOutcome(ref: ref, failure: started.failure));
+        continue;
+      }
+      final startedValue = started.value!;
+      outcomes.add(_SelectionOutcome(
+        ref: ref,
+        title: startedValue.assessment.property?.title,
+        resumed: !startedValue.created,
+      ));
     }
 
-    // 2. Otherwise the server creates it — and refuses when the property is
-    //    not on this account's saved list.
-    final started = await _api.start(propertyRef);
+    // Refresh the badges from the real records rather than guessing which
+    // rows the Continue created.
+    final history = await _loadHistory();
     if (!mounted) return;
-    if (!started.ok) {
-      setState(() {
-        _busy = false;
-        _writeError = started.failure;
-      });
-      return;
-    }
+
+    final ready = outcomes.where((o) => !o.failed).length;
+    final created = outcomes.where((o) => !o.failed && !o.resumed).length;
+    final failed = outcomes.where((o) => o.failed).length;
+    final notice = switch ((ready, failed)) {
+      (0, _) => 'No assessment could be started. See the reason for each '
+          'property below.',
+      (_, 0) =>
+        '$ready assessment${ready == 1 ? '' : 's'} ready: '
+            '$created new, ${ready - created} reopened. Open each property '
+            'below — the assessments are independent.',
+      (_, _) => '$ready of ${outcomes.length} assessments ready. '
+          '$failed could not be started — the reason is shown below.',
+    };
+
     setState(() {
       _busy = false;
-      _notice = started.value!.created
-          ? 'Assessment started. Stage 1 is recorded as complete because the '
-              'property is now bound to it.'
-          : 'Your existing assessment for this property was reopened. '
-              'Nothing was duplicated.';
+      _outcomes = outcomes;
+      _history = history;
+      _notice = notice;
     });
-    _openProperty(propertyRef);
   }
 
-  /// Opens the workspace for one property, replacing the Stage 1 selector so
-  /// the browser history does not stack a second copy of the same screen.
-  void _openProperty(String propertyRef) {
-    context.replace(
-      '/entrepreneur/assessments?id=${Uri.encodeQueryComponent(propertyRef)}',
-    );
-  }
+
 
   // ------------------------------------------------------------------ render
 
@@ -639,13 +685,16 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
   /// Continue action.
   Component _stage1List(AssessmentSelectableProperties data) {
     final visible = data.search(_search);
-    final selected = _selectedRef == null
-        ? null
-        : data.properties
-            .where((item) => item.propertyRef == _selectedRef)
-            .firstOrNull;
-    final selectedProperty = selected?.property;
-    final canContinue = _selectedRef != null && !_busy;
+    // The shortlist is resolved against the WHOLE saved list, never the
+    // filtered view, so searching cannot hide or drop a selection. Only
+    // resolved listings take part — the summary rows render listing data.
+    final selectedItems = <SelectableProperty>[
+      for (final ref in _selectedRefs)
+        for (final item in data.properties)
+          if (item.propertyRef == ref && item.property != null) item,
+    ];
+    final atLimit = _selectedRefs.length >= _maxSelections;
+    final canContinue = _selectedRefs.isNotEmpty && !_busy;
 
     return div(classes: 'stack stack--sections', [
       _stage1Progress(),
@@ -669,6 +718,15 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
           span(classes: 'panel__title', [
             Component.text('Your Saved Properties'),
           ]),
+          span(
+            classes: 'asw-select-count',
+            attributes: const {'aria-live': 'polite'},
+            [
+              Component.text(
+                '${_selectedRefs.length} of $_maxSelections selected',
+              ),
+            ],
+          ),
         ]),
         div(classes: 'panel__body stack stack--md', [
           SearchInput(
@@ -677,6 +735,13 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
             ariaLabel: 'Search saved properties',
             onInput: (value) => setState(() => _search = value),
           ),
+          if (atLimit)
+            div(classes: 'notice notice-info asw-select-limit', [
+              Component.text(
+                'You have selected the maximum of $_maxSelections properties. '
+                'Remove one below to choose a different property.',
+              ),
+            ]),
           if (visible.isEmpty)
             p(classes: 'body', [
               Component.text(
@@ -689,18 +754,24 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
           else
             div(
               classes: 'asw-select',
-              attributes: const {
-                'role': 'radiogroup',
-                'aria-label': 'Saved properties',
+              attributes: {
+                'role': 'group',
+                'aria-label':
+                    'Saved properties — choose up to $_maxSelections',
               },
-              [for (final item in visible) _stage1Card(item)],
+              [for (final item in visible) _stage1Card(item, atLimit)],
             ),
         ]),
       ]),
 
-      // The property the entrepreneur picked, in full.
-      if (selectedProperty != null)
-        _SelectedPropertyPanel(property: selectedProperty, record: null),
+      // Compact shortlist. Replaces the old full-property preview: three
+      // oversized images pushed the Continue action off-screen.
+      if (selectedItems.isNotEmpty)
+        _SelectedSummary(
+          items: selectedItems,
+          maxCount: _maxSelections,
+          onRemove: _toggleSelection,
+        ),
 
       div(classes: 'asw-select__actions', [
         ActionLink(
@@ -716,46 +787,113 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
             'aria-disabled': canContinue ? 'false' : 'true',
           },
           events: events(onClick: () {
-            final ref = _selectedRef;
-            if (ref == null || _busy) return;
-            _continueWith(ref);
+            if (_selectedRefs.isEmpty || _busy) return;
+            _continueSelected();
           }),
           [
-            Component.text(_busy ? 'Starting…' : 'Continue Assessment'),
+            Component.text(
+              _busy
+                  ? 'Starting…'
+                  : _selectedRefs.length <= 1
+                      ? 'Continue Assessment'
+                      : 'Continue with ${_selectedRefs.length} assessments',
+            ),
           ],
         ),
       ]),
+
+      if (_outcomes.isNotEmpty) _outcomesPanel(),
 
       if (_notice != null) _successNotice(_notice!),
       if (_writeError != null) _errorNotice(_writeError!),
     ]);
   }
 
+  /// What the backend did for each selected property on Continue, with a way
+  /// into every independent assessment. This is navigation between the
+  /// selected properties — NOT a cross-property comparison; the backend has
+  /// no combined prediction or report contract.
+  Component _outcomesPanel() {
+    return section(classes: 'panel asw-outcomes', [
+      div(classes: 'panel__head', [
+        span(classes: 'panel__title', [
+          Component.text('Selected assessments'),
+        ]),
+      ]),
+      div(classes: 'panel__body stack stack--md', [
+        p(classes: 'small asw-muted', [
+          Component.text(
+            'Every selected property has its own independent assessment '
+            'record — its own questionnaire, evidence, prediction and report. '
+            'Open one to continue its stages.',
+          ),
+        ]),
+        for (final outcome in _outcomes)
+          div(
+            classes: [
+              'asw-outcome',
+              if (outcome.failed) 'asw-outcome--failed',
+            ].join(' '),
+            [
+              div(classes: 'asw-outcome__main', [
+                span(classes: 'asw-outcome__title', [
+                  Component.text(
+                    outcome.title ?? 'Property ${outcome.ref}',
+                  ),
+                ]),
+                span(classes: 'small', [
+                  Component.text(
+                    outcome.failed
+                        ? outcome.failure!.message
+                        : outcome.resumed
+                            ? 'Existing assessment reopened — nothing was '
+                                'duplicated.'
+                            : 'New assessment created. Stage 1 is recorded as '
+                                'complete.',
+                  ),
+                ]),
+              ]),
+              if (!outcome.failed)
+                ActionLink(
+                  'Open assessment',
+                  href:
+                      '/entrepreneur/assessments?id=${Uri.encodeQueryComponent(outcome.ref)}',
+                  variant: 'secondary',
+                ),
+            ],
+          ),
+      ]),
+    ]);
+  }
+
   /// One saved property as a selectable card.
   ///
-  /// The radio input is the real control: exactly one card can be selected,
-  /// arrow keys move between them, and a property whose listing could not be
-  /// resolved is disabled rather than silently unselectable.
-  Component _stage1Card(SelectableProperty item) {
+  /// The checkbox is the real control: up to three cards can be selected,
+  /// the keyboard toggles them like any native checkbox, and a property whose
+  /// listing could not be resolved is disabled rather than silently
+  /// unselectable. When the shortlist is full the remaining checkboxes are
+  /// disabled so a fourth property cannot be added.
+  Component _stage1Card(SelectableProperty item, bool atLimit) {
     final property = item.property;
     final unavailable = property == null;
-    final selected = item.propertyRef == _selectedRef;
+    final selected = _selectedRefs.contains(item.propertyRef);
+    final locked = !selected && (atLimit || unavailable);
     final record = _history[item.propertyRef];
 
     return label(
       classes: [
         'asw-select-card',
         if (selected) 'is-selected',
-        if (unavailable) 'asw-select-card--unavailable',
+        if (locked) 'asw-select-card--locked',
       ].join(' '),
       [
         input<bool>(
-          type: InputType.radio,
+          type: InputType.checkbox,
           name: 'saved-property',
           value: item.propertyRef,
           checked: selected,
-          disabled: unavailable,
-          onChange: (value) => _select(item.propertyRef),
+          disabled: locked,
+          onChange: (_) => _toggleSelection(item.propertyRef),
         ),
         div(classes: 'asw-select-card__body', [
           if (property != null &&
@@ -2195,6 +2333,115 @@ class _ProgressPanel extends StatelessComponent {
         span(classes: 'small asw-muted', [
           Component.text('Last updated ${assessmentStamp(record.updatedAt!)}'),
         ]),
+    ]);
+  }
+}
+
+/// What the backend actually did for one selected property on Continue.
+class _SelectionOutcome {
+  const _SelectionOutcome({
+    required this.ref,
+    this.title,
+    this.resumed = false,
+    this.failure,
+  });
+
+  /// The catalogue ref, preserved exactly as selected.
+  final String ref;
+
+  /// The listing title from the record the backend returned; null when the
+  /// request failed before a record came back (the ref is shown instead).
+  final String? title;
+
+  /// True when an existing record was resumed rather than created.
+  final bool resumed;
+
+  /// The backend's refusal for THIS property. Other selections still proceed.
+  final AssessmentFailure? failure;
+
+  bool get failed => failure != null;
+}
+
+/// The compact selected-properties summary for Stage 1.
+///
+/// Deliberately NOT the full listing preview: with up to three properties the
+/// oversized images pushed the Continue action off-screen. Each row keeps a
+/// small thumbnail, the title, the two figures that matter for a shortlist
+/// (monthly rental, floor area) and an explicit remove action.
+class _SelectedSummary extends StatelessComponent {
+  final List<SelectableProperty> items;
+  final int maxCount;
+  final void Function(String propertyRef) onRemove;
+
+  const _SelectedSummary({
+    required this.items,
+    required this.maxCount,
+    required this.onRemove,
+  });
+
+  @override
+  Component build(BuildContext context) => section(classes: 'panel asw-selected', [
+    div(classes: 'panel__head', [
+      span(classes: 'panel__title', [Component.text('Selected properties')]),
+      span(classes: 'asw-select-count', [
+        Component.text('${items.length} of $maxCount selected'),
+      ]),
+    ]),
+    div(classes: 'panel__body stack stack--sm', [
+      p(classes: 'small asw-muted', [
+        Component.text(
+          'Each property keeps its own independent assessment — separate '
+          'questionnaire, evidence, prediction and report. The assessments '
+          'are not combined into one comparison.',
+        ),
+      ]),
+      for (final item in items) _row(item),
+    ]),
+  ]);
+
+  Component _row(SelectableProperty item) {
+    final property = item.property!;
+    return div(classes: 'asw-selected__row', [
+      if (property.imageUrl != null && property.imageUrl!.isNotEmpty)
+        img(
+          src: property.imageUrl!,
+          attributes: {'alt': property.title, 'loading': 'lazy'},
+          classes: 'asw-selected__thumb',
+        )
+      else
+        // No placeholder photograph: the style guide forbids one, and a fake
+        // image would misrepresent a listing that has none.
+        div(classes: 'asw-selected__noimg', [
+          Icon('image_not_supported', size: 'sm'),
+        ]),
+      div(classes: 'asw-selected__main', [
+        span(classes: 'asw-selected__title', [
+          Component.text(property.title),
+        ]),
+        span(classes: 'small', [
+          Component.text(
+            '${property.rentalDisplay} / month · '
+            '${property.sizeSqft.toStringAsFixed(0)} sq ft',
+          ),
+        ]),
+        span(classes: 'small asw-muted', [
+          Component.text(
+            [
+              'Property ${item.propertyRef}',
+              if (property.city.isNotEmpty) property.city,
+            ].join(' · '),
+          ),
+        ]),
+      ]),
+      button(
+        classes: 'asw-selected__remove',
+        attributes: {
+          'type': 'button',
+          'aria-label': 'Remove ${property.title} from the selection',
+        },
+        events: events(onClick: () => onRemove(item.propertyRef)),
+        [Component.text('Remove')],
+      ),
     ]);
   }
 }

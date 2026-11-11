@@ -48,37 +48,10 @@ class OwnerListingResult {
   }
 }
 
-/// Provider verdict for one address. Deliberately separate from property
-/// verification: a validated address never implies ownership or approval.
-class AddressCheckResult {
-  const AddressCheckResult({
-    required this.status,
-    this.formattedAddress,
-    this.granularity,
-    this.postalCode,
-    this.latitude,
-    this.longitude,
-  });
-
-  final String status; // validated | partially_validated | unconfirmed
-  final String? formattedAddress;
-  final String? granularity;
-  final String? postalCode;
-  final double? latitude;
-  final double? longitude;
-
-  bool get confirmed => status == 'validated';
-
-  factory AddressCheckResult.fromData(Map<String, dynamic> data) => AddressCheckResult(
-    status: '${data['status'] ?? 'unconfirmed'}',
-    formattedAddress: data['formatted_address'] as String?,
-    granularity: data['validation_granularity'] as String?,
-    postalCode: data['postal_code'] as String?,
-    latitude: (data['latitude'] as num?)?.toDouble(),
-    longitude: (data['longitude'] as num?)?.toDouble(),
-  );
-}
-
+/// Provider verdict for one address. The shape lives in `shared_logic`
+/// ([AddressValidationResult]) so the web and mobile forms parse the same
+/// contract; it is deliberately separate from property verification: a
+/// validated address never implies ownership or approval.
 class ApiPropertyRepository implements PropertyRepository {
   Future<List<CommercialProperty>>? _cached;
 
@@ -205,7 +178,7 @@ class ApiPropertyRepository implements PropertyRepository {
   /// The Google key stays on the server. A 503 means the provider is not
   /// enabled/configured — the thrown message says so explicitly, so the UI can
   /// distinguish "address rejected" from "service unavailable".
-  Future<AddressCheckResult> validateAddress({
+  Future<AddressValidationResult> validateAddress({
     required List<String> addressLines,
     String? city,
     String? state,
@@ -223,7 +196,7 @@ class ApiPropertyRepository implements PropertyRepository {
       },
     );
     final data = (response['data'] as Map?)?.cast<String, dynamic>() ?? const {};
-    return AddressCheckResult.fromData(data);
+    return AddressValidationResult.fromData(data);
   }
 }
 

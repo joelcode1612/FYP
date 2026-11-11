@@ -88,10 +88,15 @@ List<WebDestination> webDestinationsFor(AppRole role) => switch (role) {
   ],
   AppRole.entrepreneur => const [
     WebDestination(route: '/entrepreneur', icon: 'home', label: 'Home'),
+    // Discovery is ONE destination. Explore and Recommendations used to be two
+    // entries for the same job; the recommendation search now carries browsing
+    // (no-criteria searches are plain catalogue browses), so Explore is gone
+    // from the sidebar. Its route survives as a redirect — see
+    // `Router.redirect` in app.dart — so old links keep working.
     WebDestination(
-      route: '/entrepreneur/explore',
-      icon: 'explore',
-      label: 'Explore',
+      route: '/entrepreneur/recommendations',
+      icon: 'recommend',
+      label: 'Recommendations',
     ),
     // Saved location assessments. The workspace itself is a drill-in from a
     // property, so it has no nav entry of its own; this is where the records
@@ -135,15 +140,16 @@ String parentShellRoute(String route) {
     // shortlist), not a child of Home. Mapping it to '/entrepreneur' lit up the
     // Home pill while the preferences form was on screen.
     '/entrepreneur/preferences': '/entrepreneur/profile',
-    // The retired standalone map screen resolves to the combined Explore page,
-    // so a back/refresh on an old map link still lights the Explore pill.
-    '/entrepreneur/map': '/entrepreneur/explore',
-    '/entrepreneur/property-detail': '/entrepreneur/explore',
-    '/entrepreneur/property-analysis': '/entrepreneur/explore',
+    // Discovery moved to Recommendations. Every retired discovery route now
+    // highlights that one pill, so a deep link still shows where you are.
+    '/entrepreneur/explore': '/entrepreneur/recommendations',
+    '/entrepreneur/map': '/entrepreneur/recommendations',
+    '/entrepreneur/property-detail': '/entrepreneur/recommendations',
+    '/entrepreneur/property-analysis': '/entrepreneur/recommendations',
     '/entrepreneur/assessment': '/entrepreneur/assessments',
     '/entrepreneur/assessments/history': '/entrepreneur/assessments',
-    '/entrepreneur/tour': '/entrepreneur/explore',
-    '/entrepreneur/report': '/entrepreneur/explore',
+    '/entrepreneur/tour': '/entrepreneur/recommendations',
+    '/entrepreneur/report': '/entrepreneur/recommendations',
     '/entrepreneur/explanation': '/entrepreneur/recommendations',
     '/entrepreneur/my-properties': '/entrepreneur/my-properties',
     '/entrepreneur/add-property': '/entrepreneur/my-properties',

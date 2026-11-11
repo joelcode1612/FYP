@@ -83,7 +83,10 @@
     return 2 * 6371008.8 * Math.atan2(Math.sqrt(h), Math.sqrt(Math.max(0, 1 - h)));
   };
   const addReferenceMarker = entry => {
-    const isClose = entry.dist <= 500;
+    // Legacy "Both" distinguishes the 500 m ring from the 1 km ring by colour.
+    // In single-radius mode every marker already lies inside the one selected
+    // circle, so a fixed 500 m split would read as a second, unlabelled band.
+    const isClose = !single || entry.dist <= 500;
     const marker = L.circleMarker([entry.lat, entry.lon], {
       radius: 5.5, weight: 1.5, color: '#fff', fillOpacity: .9,
       fillColor: isClose ? '#0f9d86' : '#8a6bc7'
@@ -139,9 +142,15 @@
   if (single) {
     key('a', 'Selected property');
     legendEl.append(document.createTextNode('\u00a0'));
-    key('b', 'Research reference (≤500 m)');
-    legendEl.append(document.createTextNode('\u00a0'));
-    key('c', 'Research reference (farther)');
+    key('b', `Research reference within ${labelFor[radius]}`);
+    // The radius label changes with the active tab, so rebuild it on every
+    // click rather than printing a threshold that no longer applies.
+    const refKey = legendEl.querySelectorAll('.key')[1];
+    for (const b of tabsEl.querySelectorAll('button')) {
+      b.addEventListener('click', () => {
+        refKey.nextSibling.textContent = ` Research reference within ${labelFor[radius]}`;
+      });
+    }
   } else {
     key('a', 'Selected unit');
     legendEl.append(document.createTextNode('\u00a0'));

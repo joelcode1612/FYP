@@ -1,7 +1,8 @@
 import 'package:jaspr/dom.dart';
 import 'package:jaspr/jaspr.dart';
 import 'package:jaspr_riverpod/jaspr_riverpod.dart';
-import 'package:shared_logic/shared_logic.dart';
+// The KPI count uses the web catalogue repository, not the shared one.
+import 'package:shared_logic/shared_logic.dart' hide ApiPropertyRepository;
 
 import '../../components/ui.dart';
 import '../../data/assessment_api.dart';

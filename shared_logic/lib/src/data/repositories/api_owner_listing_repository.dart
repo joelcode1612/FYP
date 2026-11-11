@@ -1,4 +1,5 @@
 import '../../core/network/api_client.dart';
+import '../../domain/data/add_property_rules.dart';
 import '../../domain/entities/owner_listing.dart';
 
 /// Live owner-listing lifecycle over the authenticated FastAPI endpoints
@@ -17,7 +18,27 @@ import '../../domain/entities/owner_listing.dart';
 class ApiOwnerListingRepository {
   final ApiClient _client;
 
-  ApiOwnerListingRepository(this._client);
+  /// Called after a write the server confirmed (draft saved, photo uploaded,
+  /// photo removed). The workspace uses it to reload "My property listings"
+  /// when the user comes back from Add Property — previously that list only
+  /// refreshed when the screen was rebuilt from scratch, so a freshly saved
+  /// draft was invisible until the app restarted.
+  ///
+  /// Private on purpose: it is a wiring hook, not part of the repository
+  /// contract. A public field would become part of the implicit interface and
+  /// force every `implements` test double to re-declare it.
+  final void Function()? _onMutated;
+
+  ApiOwnerListingRepository(this._client, {void Function()? onMutated})
+    : _onMutated = onMutated;
+
+  void _mutated() {
+    try {
+      _onMutated?.call();
+    } catch (_) {
+      // A listener failure must never make a successful write look failed.
+    }
+  }
 
   OwnerListing _listing(Map<String, dynamic> payload) => OwnerListing.fromJson(
         payload['data'] is Map<String, dynamic>
@@ -27,18 +48,24 @@ class ApiOwnerListingRepository {
 
   /// Creates a NEW server-persisted draft. [fields] uses
   /// [OwnerListing.toDraftJson]; only `name` is required.
-  Future<OwnerListing> createDraft(Map<String, dynamic> fields) async =>
-      _listing(await _client.post(
-        '/api/v1/properties/listings/drafts',
-        fields,
-      ));
+  Future<OwnerListing> createDraft(Map<String, dynamic> fields) async {
+    final listing = _listing(await _client.post(
+      '/api/v1/properties/listings/drafts',
+      fields,
+    ));
+    _mutated();
+    return listing;
+  }
 
   /// Updates the SAME draft row — never creates a duplicate.
-  Future<OwnerListing> updateDraft(String id, Map<String, dynamic> fields) async =>
-      _listing(await _client.patch(
-        '/api/v1/properties/listings/$id',
-        fields,
-      ));
+  Future<OwnerListing> updateDraft(String id, Map<String, dynamic> fields) async {
+    final listing = _listing(await _client.patch(
+      '/api/v1/properties/listings/$id',
+      fields,
+    ));
+    _mutated();
+    return listing;
+  }
 
   /// One owned listing (any status) with its photos.
   Future<OwnerListing> getListing(String id) async =>
@@ -74,11 +101,13 @@ class ApiOwnerListingRepository {
       bytes: bytes,
       contentType: contentType,
     );
-    return OwnerListingPhoto.fromJson(
+    final photo = OwnerListingPhoto.fromJson(
       payload['data'] is Map<String, dynamic>
           ? payload['data'] as Map<String, dynamic>
           : payload,
     );
+    _mutated();
+    return photo;
   }
 
   Future<List<OwnerListingPhoto>> photos(String listingId) async {
@@ -91,12 +120,47 @@ class ApiOwnerListingRepository {
     );
   }
 
-  Future<void> deletePhoto(String listingId, int photoId) =>
-      _client.delete('/api/v1/properties/listings/$listingId/photos/$photoId');
+  Future<void> deletePhoto(String listingId, int photoId) async {
+    await _client.delete('/api/v1/properties/listings/$listingId/photos/$photoId');
+    _mutated();
+  }
 
-  Future<void> setPrimaryPhoto(String listingId, int photoId) =>
-      _client.post(
-        '/api/v1/properties/listings/$listingId/photos/$photoId/primary',
-        const {},
-      );
+  Future<void> setPrimaryPhoto(String listingId, int photoId) async {
+    await _client.post(
+      '/api/v1/properties/listings/$listingId/photos/$photoId/primary',
+      const {},
+    );
+    _mutated();
+  }
+
+  /// Ask the backend to validate an address with Google Address Validation.
+  ///
+  /// The Google key never leaves the FastAPI process. A 503 means the provider
+  /// is not configured/enabled; the thrown [AppFailure] carries the backend's
+  /// own explanation so the UI can distinguish "address rejected" from
+  /// "service unavailable". This never changes verification status.
+  Future<AddressValidationResult> validateAddress({
+    required List<String> addressLines,
+    String? city,
+    String? state,
+    String? postcode,
+  }) async {
+    final response = await _client.post(
+      '/api/v1/properties/validate-address',
+      <String, dynamic>{
+        'address_lines': addressLines
+            .where((line) => line.trim().isNotEmpty)
+            .toList(growable: false),
+        if (city != null && city.trim().isNotEmpty) 'city': city.trim(),
+        if (state != null && state.trim().isNotEmpty) 'state': state.trim(),
+        if (postcode != null && postcode.trim().isNotEmpty)
+          'postcode': postcode.trim(),
+        'region_code': 'MY',
+      },
+    );
+    final data = response['data'] is Map<String, dynamic>
+        ? response['data'] as Map<String, dynamic>
+        : const <String, dynamic>{};
+    return AddressValidationResult.fromData(data);
+  }
 }

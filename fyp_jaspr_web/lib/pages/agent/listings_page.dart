@@ -4,25 +4,23 @@ import 'package:shared_logic/shared_logic.dart';
 
 import '../../components/dashboard_kit.dart';
 import '../../components/ui.dart';
+import '../../data/admin_api.dart';
 import '../../data/agent_records.dart';
 import '../../layouts/app_layout.dart';
 
 /// Agent listing management — the workspace's main work surface.
 ///
-/// Modelled on PropertyGuru's AgentNet listing tabs (Active / Draft / Past /
-/// Suspended), but filtered through what Sitewise actually stores:
+/// The rows are the agent's REAL assignments: `GET /api/v1/staff/me/listings`
+/// resolves the Supabase assignment records from the verified bearer token
+/// server-side, so an agent can never see (or reach by editing the URL) a
+/// listing that was not assigned to them. The former suitability-rank
+/// selection survives only on the dashboard/performance displays, which label
+/// themselves as demonstration data.
 ///
-/// * Active, Draft and Suspended map onto `VerificationStatus.verified`,
-///   `.draft` and `.rejected`.
-/// * **Past has no counterpart.** Listings here have no expiry field, so the
-///   tab is named in the footnote rather than presented as an empty filter a
-///   user would read as "no expiring listings" when the truth is "this system
-///   does not track expiry".
-///
-/// Editing is deliberately absent. `ApiPropertyRepository` throws
-/// `UnsupportedError` from `updateProperty`, and agent write-authorisation is a
-/// server-side decision that does not exist yet — so the row actions navigate
-/// to a read-only record instead of offering a form that cannot save.
+/// Assignment rows carry the numeric listing id (the operational
+/// `fyp.rental_properties` id) and a display title — the verification state
+/// lives on the operational record and is shown on the management page, so no
+/// per-row status pill is fabricated here.
 @client
 class AgentListingsPage extends StatefulComponent {
   const AgentListingsPage({super.key});
@@ -32,27 +30,16 @@ class AgentListingsPage extends StatefulComponent {
 }
 
 class _AgentListingsPageState extends State<AgentListingsPage> {
-  /// `all` plus the [VerificationStatus] names the tabs filter on.
-  String _tab = 'all';
   String _query = '';
 
-  List<CommercialProperty> _matching(List<CommercialProperty> source) {
+  List<AgentAssignment> _matching(List<AgentAssignment> source) {
     final q = _query.toLowerCase();
-    return source.where((property) {
-      final tabOk = switch (_tab) {
-        'all' => true,
-        'verified' => property.verification == VerificationStatus.verified,
-        'draft' => property.verification == VerificationStatus.draft,
-        'rejected' => property.verification == VerificationStatus.rejected,
-        _ => property.verification == VerificationStatus.pending,
-      };
-      final queryOk =
-          q.isEmpty ||
-          '${property.title} ${property.city} ${property.address} '
-                  '${property.id}'
-              .toLowerCase()
-              .contains(q);
-      return tabOk && queryOk;
+    if (q.isEmpty) return source;
+    return source.where((assignment) {
+      final hay =
+          '${assignment.displayTitle} ${assignment.displayId} '
+          '${assignment.raw['city'] ?? ''}';
+      return hay.toLowerCase().contains(q);
     }).toList();
   }
 
@@ -63,79 +50,71 @@ class _AgentListingsPageState extends State<AgentListingsPage> {
       currentRoute: '/agent/listings',
       title: 'Assigned listings',
       subtitle:
-          'Every unit this agent handles, filterable by the state an '
-          'administrator can move it to.',
+          'Every unit an administrator assigned to you, with its management '
+          'workspace one click away.',
       eyebrow: 'Staff portal · agent',
       showPageHead: true,
-      child: FutureBuilder<List<CommercialProperty>>(
-        future: AgentRecords.assignedProperties(),
+      child: FutureBuilder<List<AgentAssignment>>(
+        future: AgentRecords.assignedListings(),
         builder: (context, snapshot) {
           if (!snapshot.hasData) {
-            return div(classes: 'loading', [
-              span(classes: 'spinner', []),
-              Component.text('Loading listings…'),
-            ]);
+            return snapshot.connectionState == ConnectionState.done
+                ? _errorState(snapshot.error)
+                : div(classes: 'loading', [
+                    span(classes: 'spinner', []),
+                    Component.text('Loading assignments…'),
+                  ]);
           }
           final all = snapshot.data!;
           final rows = _matching(all);
           return div(classes: 'stack', [
-            _tabs(all),
             SearchInput(
               ariaLabel: 'Search assigned listings',
-              placeholder: 'Search by listing name, location or id…',
+              placeholder: 'Search by listing name or id…',
               onInput: (value) => setState(() => _query = value),
             ),
             SectionCard(
-              title: '${rows.length} of ${all.length} listings',
+              title: '${rows.length} of ${all.length} assigned listings',
               flush: true,
               child: DataTable(
                 columns: const [
                   DataColumn('Listing'),
-                  DataColumn('Status'),
-                  DataColumn('Type'),
-                  DataColumn('Size', numeric: true),
-                  DataColumn('Rent', numeric: true),
-                  DataColumn('Score', numeric: true),
+                  DataColumn('Listing id', numeric: true),
                   DataColumn('Actions', actions: true),
                 ],
                 rows: [
-                  for (final property in rows)
+                  for (final assignment in rows)
                     [
                       CellIdentity(
-                        title: property.title,
+                        title: assignment.displayTitle.isEmpty
+                            ? 'Listing ${assignment.displayId}'
+                            : assignment.displayTitle,
                         caption:
-                            '${property.address}, ${property.city} '
-                            '${property.postcode}',
+                            assignment.raw['city'] is String &&
+                                (assignment.raw['city'] as String).isNotEmpty
+                            ? assignment.raw['city'] as String
+                            : 'Assigned by an administrator',
                       ),
-                      Pill(
-                        AgentRecords.listingLabel(property.verification),
-                        tone: AgentRecords.listingTone(property.verification),
-                      ),
-                      Component.text(property.propertyType),
-                      Component.text(
-                        '${property.sizeSqft.toStringAsFixed(0)} sqft',
-                      ),
-                      Component.text(property.rentalDisplay),
-                      Component.text(
-                        property.suitabilityScore.toStringAsFixed(0),
-                      ),
+                      Component.text('${assignment.listingId}'),
                       AppLink(
-                        to: '/agent/property-detail?id=${property.id}',
+                        to: '/agent/property-detail?id=${assignment.listingId}',
                         classes: 'text-action',
-                        children: [Component.text('View')],
+                        children: [Component.text('Manage')],
                       ),
                     ],
                 ],
                 emptyLabel: _query.isEmpty
-                    ? 'No listing sits in this state.'
-                    : 'Nothing matches “$_query” in this state.',
+                    ? 'No listings are assigned to your account yet. An '
+                          'administrator assigns listings from the agent '
+                          'directory.'
+                    : 'Nothing matches “$_query”.',
               ),
             ),
-            Callout(
-              'Tab names follow the agent workflow in the reference product. '
-              '“Past” is not offered: nothing in this dataset records a '
-              'listing expiry, and an empty tab would read as a fact about '
-              'the listings rather than about the missing field.',
+            const Callout(
+              '“Manage” opens the property management workspace: overview, '
+              'draft editing, media, activity and the administrator review '
+              'state of that one listing. Authorization is re-checked by the '
+              'backend on every call.',
               icon: 'info',
             ),
           ]);
@@ -144,38 +123,17 @@ class _AgentListingsPageState extends State<AgentListingsPage> {
     );
   }
 
-  Component _tabs(List<CommercialProperty> all) {
-    int count(VerificationStatus? status) => status == null
-        ? all.length
-        : all.where((l) => l.verification == status).length;
-    return div(classes: 'tabs', [
-      _tabButton('all', 'All', count(null)),
-      _tabButton('verified', 'Active', count(VerificationStatus.verified)),
-      _tabButton('draft', 'Draft', count(VerificationStatus.draft)),
-      _tabButton(
-        'pending',
-        'Pending review',
-        count(VerificationStatus.pending),
-      ),
-      _tabButton('rejected', 'Suspended', count(VerificationStatus.rejected)),
+  Component _errorState(Object? error) {
+    return div(classes: 'card stack', [
+      span(classes: 'title', [Component.text('Could not load assignments')]),
+      p(classes: 'body muted', [
+        Component.text(
+          error == null
+              ? 'The backend did not answer.'
+              : AdminApi.message(error),
+        ),
+      ]),
+      const ActionLink('Retry', href: '/agent/listings', variant: 'secondary'),
     ]);
-  }
-
-  Component _tabButton(String key, String label, int count) {
-    final selected = _tab == key;
-    return button(
-      classes: 'tab',
-      attributes: {
-        'type': 'button',
-        // `.tab[aria-selected="true"]` carries the active state; a page-level
-        // `aria-current` would be wrong for a filter that is not a location.
-        'aria-selected': selected ? 'true' : 'false',
-      },
-      events: events(onClick: () => setState(() => _tab = key)),
-      [
-        Component.text('$label '),
-        span(classes: 'tab__count', [Component.text('$count')]),
-      ],
-    );
   }
 }
