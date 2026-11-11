@@ -25,6 +25,7 @@ import '../../presentation/mobile/entrepreneur/pages/entrepreneur_saved_mobile_p
 import '../../presentation/mobile/entrepreneur/pages/entrepreneur_tour_mobile_page.dart';
 import '../../presentation/mobile/entrepreneur/pages/sitewise_add_property_mobile_page.dart';
 import '../../presentation/shared/pages/not_found_mobile_page.dart';
+import '../../presentation/shared/tour/ar_capture_mobile_page.dart';
 import '../../presentation/shared/tour/tour_preview_mobile_page.dart';
 
 /// Centralised route table for the Flutter app (mobile tree only).
@@ -45,6 +46,7 @@ String parentShellRoute(String route) {
     '/entrepreneur/preferences': '/entrepreneur/profile',
     '/entrepreneur/saved': '/entrepreneur/spaces',
     '/entrepreneur/add-property': '/entrepreneur/spaces',
+    '/owner/capture': '/entrepreneur/spaces',
     '/entrepreneur/compare': '/entrepreneur/spaces',
     // Discovery is the Recommendations tab. Every retired discovery route
     // (Explore, property detail, tour) highlights it, and the legacy
@@ -116,6 +118,18 @@ abstract final class AppRoutes {
         RouteAccess.workspace,
         () =>
             TourPreviewMobilePage(tourId: settings.arguments as String? ?? ''),
+      ),
+      // Guided 360° capture for one of the owner's listings. Arguments carry
+      // the listing id and name; a bare id (deep link) still resolves.
+      '/owner/capture' => (
+        RouteAccess.workspace,
+        () => ArCaptureMobilePage(
+          request: settings.arguments is ArCaptureRequest
+              ? settings.arguments as ArCaptureRequest
+              : ArCaptureRequest(
+                  propertyId: settings.arguments as String? ?? '',
+                ),
+        ),
       ),
       // Entrepreneur
       '/entrepreneur' => (

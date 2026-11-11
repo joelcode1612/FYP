@@ -3,6 +3,12 @@
          and profile manifests made every release build unable to reach
          Supabase Auth or the FastAPI /api/v1/auth/me verification endpoint. -->
     <uses-permission android:name="android.permission.INTERNET"/>
+    <!-- Guided 360° capture only. Not required, so the app still installs on
+         devices without a camera; the capture screen reports the absence. -->
+    <uses-permission android:name="android.permission.CAMERA"/>
+    <uses-feature android:name="android.hardware.camera" android:required="false"/>
+    <uses-feature android:name="android.hardware.sensor.accelerometer" android:required="false"/>
+    <uses-feature android:name="android.hardware.sensor.compass" android:required="false"/>
     <application
         android:label="fyp"
         android:name="${applicationName}"
