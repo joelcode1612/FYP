@@ -291,9 +291,7 @@ class _TourPreviewMobilePageState extends State<TourPreviewMobilePage> {
       itemCount: vm.frames.length,
       itemBuilder: (c, i) {
         final f = vm.frames[i];
-        return InkWell(
-          onTap: () => _retake(i),
-          child: Card(
+        return Card(
             clipBehavior: Clip.antiAlias,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -327,19 +325,8 @@ class _TourPreviewMobilePageState extends State<TourPreviewMobilePage> {
                 ),
               ],
             ),
-          ),
         );
       },
     );
-  }
-
-  Future<void> _retake(int index) async {
-    final tour = vm.tour;
-    if (tour == null) return;
-    _invalidateImageCaches();
-    await vm.retakeFrame(index, tour.propertyId);
-    if (mounted) {
-      Navigator.of(context).pushNamed('/capture', arguments: tour.propertyId);
-    }
   }
 }

@@ -24,7 +24,6 @@ import '../../presentation/mobile/entrepreneur/pages/entrepreneur_report_mobile_
 import '../../presentation/mobile/entrepreneur/pages/entrepreneur_saved_mobile_page.dart';
 import '../../presentation/mobile/entrepreneur/pages/entrepreneur_tour_mobile_page.dart';
 import '../../presentation/mobile/entrepreneur/pages/sitewise_add_property_mobile_page.dart';
-import '../../presentation/shared/capture/panorama_capture_page.dart';
 import '../../presentation/shared/pages/not_found_mobile_page.dart';
 import '../../presentation/shared/tour/tour_preview_mobile_page.dart';
 
@@ -62,9 +61,8 @@ String parentShellRoute(String route) {
     AppRoutes.assessmentHome: '/entrepreneur/assess',
     AppRoutes.assessmentQuestionnaire: '/entrepreneur/assess',
     AppRoutes.assessmentReview: '/entrepreneur/assess',
-    // The 360° capture and preview flow is role-neutral shared work; it is
-    // entered from a property tour, so it highlights the discovery tab.
-    '/capture': '/entrepreneur/recommendations',
+    // The 360° preview flow is role-neutral shared work; it is entered from
+    // a property tour, so it highlights the discovery tab.
     '/tour-preview': '/entrepreneur/recommendations',
   };
   // Normalise a trailing slash or query string before lookup, so a deep link
@@ -113,11 +111,6 @@ abstract final class AppRoutes {
       '/onboarding' => (
         RouteAccess.workspace,
         () => const OnboardingFlowPage(),
-      ),
-      // Shared 360° capture + preview flow (device-bound, no role namespace).
-      '/capture' => (
-        RouteAccess.workspace,
-        () => PanoramaCapturePage(propertyId: settings.arguments as String?),
       ),
       '/tour-preview' => (
         RouteAccess.workspace,

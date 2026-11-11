@@ -34,7 +34,6 @@ resolution: workspace
 dependencies:
   flutter:
     sdk: flutter
-  ar_flutter_plugin: ^0.7.3 # hosted on pub.dev
   vector_math: ^2.1.4 # already in Flutter
 
   # The following adds the Cupertino Icons font to your application.
