@@ -80,6 +80,10 @@ router.include_router(ml_predictions.router, prefix="/ml", tags=["ml_predictions
 # Requires separately reviewed schema migration and authorized instrument
 # version before it may be enabled in a controlled environment.
 from sitewise.core.config import settings
+if settings.project1_cp07_enabled:
+    from sitewise.api.v1 import project1_cp07
+    router.include_router(project1_cp07.router, prefix="/project1", tags=["project1_cp07_stage"])
+
 if settings.m2_upstream_enabled:
     from sitewise.api.v1 import m2
     router.include_router(m2.router, prefix="/m2", tags=["m2_upstream"])

@@ -1,3 +1,4 @@
+from pydantic import SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -39,6 +40,10 @@ class Settings(BaseSettings):
     # Owner/governance approval and a controlled migration; flipping this flag
     # alone does NOT activate any M2 endpoint or schema.
     m2_upstream_enabled: bool = False
+
+    # Separate staging bridge; does not enable the unresolved BDJ/M2 write router.
+    project1_cp07_enabled: bool = False
+    project1_cp07_uc_database_url: SecretStr = SecretStr("")
 
     # --- Supabase authentication ------------------------------------------
     # Identity provider. Registration/login happen in the frontend through the

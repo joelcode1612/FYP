@@ -1,0 +1,91 @@
+{
+  "target": "C:\\Users\\HP\\OneDrive\\Desktop\\sport-marketplace\\FYP\\backend",
+  "baseline_head": "bd386a7c203ea3688ce4df3838570eda325f0734",
+  "modified": [
+    "src/sitewise/api/v1/router.py",
+    "src/sitewise/core/config.py",
+    "src/sitewise/services/m2_service.py"
+  ],
+  "added": [
+    "src/sitewise/api/v1/project1_cp07.py",
+    "src/sitewise/repositories/uc_history_repository.py",
+    "tests/cp07/run_isolated.py",
+    "tests/cp07/test_http_postgres.py",
+    "tests/cp07/fixtures/stage_m2_schema.sql",
+    "tests/cp07/fixtures/stage_uc_schema.sql",
+    "tests/cp07/fixtures/README.md",
+    "docs/cp07/ACCEPTANCE.md",
+    "docs/cp07/README.md",
+    "docs/cp07/RECONCILIATION.md",
+    "docs/cp07/RESTRICTIONS_AND_RESPONSIBILITIES.md",
+    "docs/cp07/WORKFLOW_INPUTS_AND_EXITS.md",
+    "docs/cp07/FILE_INVENTORY.json"
+  ],
+  "existing_dependency_preserved": {
+    "path": "src/sitewise/repositories/uc_decision_gateway.py",
+    "sha256": "d0f75caa491942a9fbec95ff14ea890478f0a8de95ed70c52edd1c505b5a1e31",
+    "note": "Existing untracked user work, reused untouched; not CP07-owned"
+  },
+  "files": [
+    {
+      "path": "src/sitewise/api/v1/router.py",
+      "sha256": "86aeb3ae2890c8c259dafea9ed25d92b3262794d6d5ff19a00099903b4e76d67"
+    },
+    {
+      "path": "src/sitewise/core/config.py",
+      "sha256": "1e0a5135469d2a7b27d62156e663c3bcd9e92bf7f6672a141e070986e83b172e"
+    },
+    {
+      "path": "src/sitewise/services/m2_service.py",
+      "sha256": "d19b44fd4520a2f511742033eb6d93049d5ebce2106b99d38c9ac06e94373fc6"
+    },
+    {
+      "path": "src/sitewise/api/v1/project1_cp07.py",
+      "sha256": "b9c7d53a662327703a77e9e36f016e7d99acfc4c601bfbfd36e078239a293081"
+    },
+    {
+      "path": "src/sitewise/repositories/uc_history_repository.py",
+      "sha256": "be057fccde8a5ada56acc4cfd1d439e8f88af8acbc9b3329fdf9ab46b3fb601a"
+    },
+    {
+      "path": "tests/cp07/run_isolated.py",
+      "sha256": "2ac5ea8fbcad51048b7f9bb7c79b324b4882586fda1f100c38082c8945eecbbc"
+    },
+    {
+      "path": "tests/cp07/test_http_postgres.py",
+      "sha256": "23a1995baa0be0bb1aeaf18a04d041aa24e064b81a0e27d013fb5c02f887aff7"
+    },
+    {
+      "path": "tests/cp07/fixtures/stage_m2_schema.sql",
+      "sha256": "e4365347142e8f0010c80ce58ee00acc295f333b51cb8c81dddd8128ea15705d"
+    },
+    {
+      "path": "tests/cp07/fixtures/stage_uc_schema.sql",
+      "sha256": "f60fc824db3cb819d3e4cb948cf5316aac510f87ed5b9669c4ee6bae0933cc4e"
+    },
+    {
+      "path": "tests/cp07/fixtures/README.md",
+      "sha256": "fcd48173c69db87eab398540df43b8c19dd4884c05df1d4b389dd58d9eed08ca"
+    },
+    {
+      "path": "docs/cp07/ACCEPTANCE.md",
+      "sha256": "a500f1a6ea200ed6340638214f536547b58f8ec9fd22fa74b8ea2cb13aeeba5c"
+    },
+    {
+      "path": "docs/cp07/README.md",
+      "sha256": "b4310425ff752d4b7d089aab926924ae59500a092b0de39d40bc3cdd0c2b1039"
+    },
+    {
+      "path": "docs/cp07/RECONCILIATION.md",
+      "sha256": "b070e4bd3a20a215012d8755b2c685b6a70c77ac96a2383d743d5d68b30e1647"
+    },
+    {
+      "path": "docs/cp07/RESTRICTIONS_AND_RESPONSIBILITIES.md",
+      "sha256": "f6c7a7ead8e740a7a187eae55f37b2185efefb194e23f1efffd34b57c4e84cda"
+    },
+    {
+      "path": "docs/cp07/WORKFLOW_INPUTS_AND_EXITS.md",
+      "sha256": "01536b8ddf142bb70ba65b9911dbb83d47ffaee347c112cb1d9c6d9e59dec4ea"
+    }
+  ]
+}
