@@ -612,14 +612,14 @@ class SitewiseApp extends StatelessComponent {
           Route(
             path: '/entrepreneur/cafe-report',
             builder: (context, state) => _page(
-              const e_report_activity.CafeReportView(),
+              e_report_activity.CafeReportView(assessmentId: state.queryParams['assessment'] ?? ''),
               title: 'Café demand suitability report — Sitewise',
             ),
           ),
           Route(
             path: '/entrepreneur/activity-history',
             builder: (context, state) => _page(
-              const e_report_activity.ActivityHistoryView(),
+              e_report_activity.ActivityHistoryView(assessmentId: state.queryParams['assessment'] ?? ''),
               title: 'Activity history — Sitewise',
             ),
           ),

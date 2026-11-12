@@ -1,17 +1,15 @@
 import 'package:jaspr/dom.dart';
 import 'package:jaspr/jaspr.dart';
-import 'package:jaspr_router/jaspr_router.dart';
 import 'package:shared_logic/shared_logic.dart';
 
 import '../../layouts/app_layout.dart';
-import 'activity_history_page.dart';
-import 'cafe_demand_report_page.dart';
-import 'report_activity_demo_data.dart';
+import '../../components/project1_read_panel.dart';
 
 /// Route shell for the R01–R12 café demand report. The page supplies its own
 /// title, breadcrumb and toolbar, so the shell header is suppressed.
 class CafeReportView extends StatelessComponent {
-  const CafeReportView({super.key});
+  final String assessmentId;
+  const CafeReportView({super.key, this.assessmentId = ''});
 
   @override
   Component build(BuildContext context) => AppLayout(
@@ -20,17 +18,18 @@ class CafeReportView extends StatelessComponent {
     title: 'Café Demand Suitability Report',
     showPageHead: false,
     showBreadcrumbs: false,
-    child: CafeDemandReportPage(
-      snapshot: demoReportSnapshot,
-      onViewLogHistory: () =>
-          context.push('/entrepreneur/activity-history'),
-    ),
+    child: div(classes: 'stack stack--md', [
+      Project1ReadPanel(assessmentId: assessmentId, section: 'report'),
+      a(href: '/entrepreneur/activity-history${assessmentId.isEmpty ? '' : '?assessment=${Uri.encodeQueryComponent(assessmentId)}'}',
+        [Component.text('View activity history')]),
+    ]),
   );
 }
 
 /// Route shell for the engine activity history / audit timeline.
 class ActivityHistoryView extends StatelessComponent {
-  const ActivityHistoryView({super.key});
+  final String assessmentId;
+  const ActivityHistoryView({super.key, this.assessmentId = ''});
 
   @override
   Component build(BuildContext context) => AppLayout(
@@ -39,11 +38,6 @@ class ActivityHistoryView extends StatelessComponent {
     title: 'Activity History',
     showPageHead: false,
     showBreadcrumbs: false,
-    child: ActivityHistoryPage(
-      businessName: demoReportSnapshot.businessName,
-      assessmentId: demoReportSnapshot.assessmentId,
-      activities: demoActivities,
-      onBackToReport: () => context.push('/entrepreneur/cafe-report'),
-    ),
+    child: Project1ReadPanel(assessmentId: assessmentId, section: 'activity'),
   );
 }

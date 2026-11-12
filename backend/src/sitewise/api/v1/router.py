@@ -10,6 +10,7 @@ from sitewise.api.v1 import (
     personalised_recommendations,
     preferences,
     properties,
+    project1_read,
     property_verification,
     recommendations,
     reports,
@@ -24,6 +25,10 @@ from sitewise.api.v1 import (
 )
 
 router = APIRouter()
+
+# Availability has no activation flag: it only explains the verified holds.
+# This does not mount either standalone CQ factory or the staged write APIs.
+router.include_router(project1_read.router, prefix="/project1-read", tags=["project1_readiness"])
 
 router.include_router(auth.router, prefix="/auth", tags=["auth"])
 # Imported property catalogue (read-only, previously served by FYP/test).

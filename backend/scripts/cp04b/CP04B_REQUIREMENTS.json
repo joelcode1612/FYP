@@ -1,0 +1,160 @@
+{
+  "version": "CP04B-1.0",
+  "source": "Project1 user-provided CP04 static requirement matrix",
+  "requirements": [
+    {
+      "test_id": "API-01",
+      "intent": "Retrieve a known research source and version",
+      "expected": "exact stored record",
+      "kind": "requirement",
+      "must_execute": true
+    },
+    {
+      "test_id": "API-02",
+      "intent": "Retrieve supporting passage and verification",
+      "expected": "correct lineage",
+      "kind": "requirement",
+      "must_execute": true
+    },
+    {
+      "test_id": "API-03",
+      "intent": "Resolve an authorized claim to verified evidence",
+      "expected": "correct source and claim relationship",
+      "kind": "requirement",
+      "must_execute": true
+    },
+    {
+      "test_id": "API-04",
+      "intent": "Reject missing or mismatched source version",
+      "expected": "rejected",
+      "kind": "requirement",
+      "must_execute": true
+    },
+    {
+      "test_id": "API-05",
+      "intent": "Refuse unsupported evidence in A10",
+      "expected": "admission refused",
+      "kind": "requirement",
+      "must_execute": true
+    },
+    {
+      "test_id": "API-06",
+      "intent": "Resolve measured claim to EE-01",
+      "expected": "exact aggregate and ruleset",
+      "kind": "requirement",
+      "must_execute": true
+    },
+    {
+      "test_id": "API-07",
+      "intent": "Recalculate a reported figure",
+      "expected": "matches persisted measurement",
+      "kind": "requirement",
+      "must_execute": true
+    },
+    {
+      "test_id": "API-08",
+      "intent": "Reject explanation linked to wrong snapshot",
+      "expected": "rejected",
+      "kind": "requirement",
+      "must_execute": true
+    },
+    {
+      "test_id": "API-09",
+      "intent": "Reopen saved report artifact",
+      "expected": "same stored version and digest",
+      "kind": "requirement",
+      "must_execute": true
+    },
+    {
+      "test_id": "API-10",
+      "intent": "Reject cross-entrepreneur report access",
+      "expected": "access denied",
+      "kind": "requirement",
+      "must_execute": true
+    },
+    {
+      "test_id": "API-11",
+      "intent": "Invalidate stale current projection on dependency change",
+      "expected": "stale current projection",
+      "kind": "requirement",
+      "must_execute": true
+    },
+    {
+      "test_id": "API-12",
+      "intent": "Preserve historical report after later revision",
+      "expected": "historical snapshot preserved",
+      "kind": "requirement",
+      "must_execute": true
+    },
+    {
+      "test_id": "AUTH-01",
+      "intent": "Verify JWT signature, issuer, audience and expiration",
+      "expected": "invalid token rejected",
+      "kind": "requirement",
+      "must_execute": true
+    },
+    {
+      "test_id": "AUTH-02",
+      "intent": "Map authenticated sub to owner and local projection",
+      "expected": "consistent canonical identity",
+      "kind": "requirement",
+      "must_execute": true
+    },
+    {
+      "test_id": "M2-DB-01",
+      "intent": "Resolve M2 service DB injection",
+      "expected": "correct database owner after migration",
+      "kind": "requirement",
+      "must_execute": true
+    },
+    {
+      "test_id": "RLS-01",
+      "intent": "Verify restricted read/write and cross-owner denial on clone",
+      "expected": "permission enforced",
+      "kind": "requirement",
+      "must_execute": true
+    },
+    {
+      "test_id": "EV-01-01",
+      "intent": "Retrieve original PDF bytes and validate digest",
+      "expected": "bytes match approved SHA-256",
+      "kind": "requirement",
+      "must_execute": true
+    },
+    {
+      "test_id": "EV-02-01",
+      "intent": "Trace source/version/passage/fact to A10",
+      "expected": "exact auditable lineage",
+      "kind": "requirement",
+      "must_execute": true
+    },
+    {
+      "test_id": "ROUTE-01",
+      "intent": "Registered FastAPI routes correspond to source declarations",
+      "expected": "Registered route inventory with exact paths/methods/handlers",
+      "kind": "registration",
+      "must_execute": true
+    },
+    {
+      "test_id": "DI-01",
+      "intent": "M2 route resolves get_m2_service through approved database dependency",
+      "expected": "Registered DI chain; connection identity validated in clone",
+      "kind": "dependency",
+      "must_execute": true
+    },
+    {
+      "test_id": "CQ-01",
+      "intent": "Lane A and approved Lane B are governed and assigned to one campaign",
+      "expected": "Approved immutable assignments and correct ownership",
+      "kind": "requirement",
+      "must_execute": true
+    },
+    {
+      "test_id": "RESEARCH-UPLOAD-01",
+      "intent": "Research-paper upload persistence and immutable source link",
+      "expected": "Real research asset bytes and source versions, not property verification attachment",
+      "kind": "requirement",
+      "must_execute": true
+    }
+  ]
+}

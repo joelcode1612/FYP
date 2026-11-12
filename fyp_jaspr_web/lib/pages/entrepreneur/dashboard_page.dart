@@ -345,10 +345,16 @@ class _DashboardPageState extends State<DashboardPage> {
             );
           }
           final rows = load.value!.items.take(4).toList();
-          return div(classes: 'sw-dash-recent', [
-            if (rows.isEmpty) _recentEmpty() else ...[
-              for (final record in rows) _recentRow(record),
-            ],
+          if (rows.isEmpty) {
+            return div(classes: 'sw-dash-recent', [_recentEmpty()]);
+          }
+          final rest = rows.skip(1).toList();
+          return div(classes: 'sw-dash-recent-stack', [
+            _featuredCard(rows.first),
+            if (rest.isNotEmpty)
+              div(classes: 'sw-dash-recent', [
+                for (final record in rest) _recentRow(record),
+              ]),
           ]);
         },
       ),
@@ -389,6 +395,94 @@ class _DashboardPageState extends State<DashboardPage> {
           ]),
         ],
       ),
+    ]);
+  }
+
+  /// Featured card for the most recently updated assessment.
+  ///
+  /// The assessment API stores one property per assessment, so the rentals
+  /// strip lists only the bound listing. It is driven by that list, not a
+  /// fixed count: a real batch API can supply more rows later.
+  Component _featuredCard(AssessmentRecord record) {
+    final property = record.property;
+    final pct = record.progressPercent.clamp(0, 100);
+    final href = '/entrepreneur/assessment?id=${record.propertyId}';
+    return section(classes: 'sw-dash-featured', [
+      AppLink(
+        to: href,
+        classes: 'sw-dash-featured-head',
+        children: [
+          div(classes: 'sw-dash-featured-ico', [
+            Icon('layers', size: 'lg'),
+          ]),
+          div(classes: 'sw-dash-featured-copy', [
+            strong([
+              Component.text(
+                property?.title ?? 'Listing no longer in the catalogue',
+              ),
+            ]),
+            small([
+              Component.text(
+                'Compare and continue this shared assessment across selected '
+                'rentals.',
+              ),
+            ]),
+          ]),
+          StatusBadge(
+            record.isCompleted ? 'Completed' : 'In progress',
+            tone: record.isCompleted ? 'success' : 'action',
+          ),
+          span(
+            classes: 'sw-dash-featured-track'
+                '${record.isCompleted ? ' sw-dash-featured-track--done' : ''}',
+            [
+              span(styles: Styles(raw: {'width': '$pct%'}), []),
+            ],
+          ),
+          span(classes: 'sw-dash-featured-pct', [Component.text('$pct%')]),
+          Icon('chevron_right', size: 'sm'),
+        ],
+      ),
+      div(classes: 'sw-dash-rentals', [
+        strong(classes: 'sw-dash-rentals-title', [
+          Component.text(
+            'Selected rentals (${property == null ? 0 : 1})',
+          ),
+        ]),
+        div(classes: 'sw-dash-rentals-grid', [
+          if (property != null) _rentalCell(property),
+        ]),
+      ]),
+      div(classes: 'sw-dash-featured-actions', [
+        AppLink(
+          to: '/entrepreneur/my-properties',
+          classes: 'sw-dash-btn',
+          children: [Component.text('View Rentals')],
+        ),
+        AppLink(
+          to: href,
+          classes: 'sw-dash-btn sw-dash-btn--primary',
+          children: [
+            Component.text('Continue Assessment '),
+            span(attributes: const {'aria-hidden': 'true'}, [
+              Component.text('→'),
+            ]),
+          ],
+        ),
+      ]),
+    ]);
+  }
+
+  Component _rentalCell(CommercialProperty property) {
+    final place = [property.city, property.state]
+        .where((part) => part.trim().isNotEmpty)
+        .join(', ');
+    return div(classes: 'sw-dash-rental', [
+      _thumb(property.imageUrl, false),
+      div(classes: 'sw-dash-rental-copy', [
+        strong([Component.text(property.title)]),
+        if (place.isNotEmpty) small([Component.text(place)]),
+      ]),
     ]);
   }
 

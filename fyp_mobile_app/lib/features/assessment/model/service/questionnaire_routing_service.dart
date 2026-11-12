@@ -5,11 +5,11 @@ abstract class QuestionnaireRoutingService {
   List<QuestionnaireQuestion> resolve(AssessmentDraft draft);
 }
 
-/// This two-question path is a UI-only sample, NOT C0 or C1 scientific routing.
-/// Replace with a read-only adapter consuming your versioned authorized backend plan.
-class DemoQuestionnaireRoutingService implements QuestionnaireRoutingService {
-  const DemoQuestionnaireRoutingService();
+/// No authorized manifest is bound to the local draft. Never infer C0/C1
+/// from local answers or substitute a demonstration question bank.
+class HeldQuestionnaireRoutingService implements QuestionnaireRoutingService {
+  const HeldQuestionnaireRoutingService();
   @override
   List<QuestionnaireQuestion> resolve(AssessmentDraft draft) =>
-      demoQuestionBank;
+      const [];
 }

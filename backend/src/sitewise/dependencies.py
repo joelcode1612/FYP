@@ -271,6 +271,11 @@ from sitewise.repositories.m2_repository import (
     SqlModelM2Repository,
 )
 from sitewise.services.m2_service import M2Service
+from sitewise.services.bdj_service import BDJService
+from sitewise.services.confirmation_service import ConfirmationService
+from sitewise.db.analytics_session import get_analytics_db
+from sitewise.services.assessment_service import AssessmentService
+from sitewise.services.project1_read_service import Project1ReadService
 
 
 def get_m2_service(
@@ -278,6 +283,25 @@ def get_m2_service(
 ) -> M2Service:
     repository = SqlModelM2Repository(session)
     return M2Service(repository=repository)
+
+
+def get_bdj_service(
+    session: Annotated[Session, Depends(get_db)],
+) -> BDJService:
+    return BDJService(repository=SqlModelM2Repository(session))
+
+
+def get_confirmation_service(
+    session: Annotated[Session, Depends(get_db)],
+) -> ConfirmationService:
+    return ConfirmationService(repository=SqlModelM2Repository(session))
+
+
+def get_project1_read_service(
+    session: Annotated[Session, Depends(get_db)],
+    analytics: Annotated[Session, Depends(get_analytics_db)],
+) -> Project1ReadService:
+    return Project1ReadService(AssessmentService(session, analytics))
 
 # Convenience aliases for router signatures.
 CurrentUser = Annotated[AuthenticatedUser, Depends(get_current_user)]

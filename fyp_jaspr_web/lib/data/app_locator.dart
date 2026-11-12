@@ -29,6 +29,8 @@ import 'workspaces.dart';
 /// `AppLocator.verification`, …) exactly as before — only the state plumbing
 /// changed.
 abstract final class AppLocator {
+  static ApiProject1ReadRepository project1Read =
+      ApiProject1ReadRepository(const WebApiClient());
   // --- Repositories ---------------------------------------------------------
   // Properties and users come from the authenticated FastAPI backend (bearer
   // token via WebAuth); verification wraps the live property repo. Tours remain

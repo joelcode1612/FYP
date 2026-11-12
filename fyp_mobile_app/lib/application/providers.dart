@@ -29,7 +29,7 @@ final assessmentRepositoryProvider = Provider<AssessmentRepository>((ref) {
 
 final questionnaireRoutingServiceProvider =
     Provider<QuestionnaireRoutingService>((ref) {
-      return const DemoQuestionnaireRoutingService();
+      return const HeldQuestionnaireRoutingService();
     });
 
 final assessmentViewModelProvider =

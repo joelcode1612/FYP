@@ -1,12 +1,11 @@
+import 'fixtures/questionnaire_fixtures.dart';
 import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
-import 'package:fyp/features/assessment/model/entities/assessment.dart';
 import 'package:fyp/features/assessment/model/entities/assessment_draft.dart';
 import 'package:fyp/features/assessment/model/repository/assessment_repository.dart';
 import 'package:fyp/features/assessment/model/service/assessment_local_service.dart';
-import 'package:fyp/features/assessment/model/service/questionnaire_routing_service.dart';
 import 'package:fyp/features/assessment/viewmodel/assessment_view_model.dart';
 
 void main() {
@@ -23,6 +22,7 @@ void main() {
       AssessmentViewModel(
         repository: AssessmentRepository(localService: local),
         routingService: const DemoQuestionnaireRoutingService(),
+        availableOffers: demoAssessmentOffers,
       );
 
   setUpAll(sqfliteFfiInit);

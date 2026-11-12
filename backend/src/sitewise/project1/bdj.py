@@ -10,7 +10,7 @@ from sitewise.project1.projection import verify_projection
 
 RULE_MODULES = {
     'BDJ-EXPLICIT-FORMAT-0.1-CANDIDATE': 'sitewise.domain.bdj_rules',
-    'BDJ-RULESET-0.2-CAND': 'sitewise.db.bdj_rules',
+    'BDJ-RULESET-0.2-CAND': 'sitewise.domain.bdj_candidate_rules',
 }
 
 

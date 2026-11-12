@@ -6,7 +6,7 @@ An evaluation receipt proves software execution, not scientific validity.
 from uuid import UUID
 
 from sitewise.core.exceptions import NotFoundError
-from sitewise.domain.bdj_rules import (
+from sitewise.domain.bdj_candidate_rules import (
     RULE_VERSION, RULE_CATALOGUE, evaluate_candidate_issues,
     interpretation_notices,
 )

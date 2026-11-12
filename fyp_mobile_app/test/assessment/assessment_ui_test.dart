@@ -1,3 +1,5 @@
+import 'package:fyp/features/assessment/viewmodel/assessment_view_model.dart';
+import 'fixtures/questionnaire_fixtures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -6,11 +8,11 @@ import 'package:fyp/application/providers.dart';
 import 'package:fyp/core/routing/app_routes.dart';
 import 'package:fyp/core/routing/auth_route_guard.dart';
 import 'package:fyp/core/theme/sitewise_theme.dart';
-import 'package:fyp/features/assessment/model/entities/assessment.dart';
 import 'package:fyp/features/assessment/model/entities/assessment_draft.dart';
 import 'package:fyp/features/assessment/model/service/assessment_local_service.dart';
 import 'package:fyp/features/assessment/view/components/question_option_tile.dart';
 import '../support/fake_auth_repository.dart';
+import 'fixtures/preview_routes.dart';
 
 void main() {
   late _MemoryStorage storage;
@@ -33,6 +35,11 @@ void main() {
         ),
       ),
       assessmentLocalServiceProvider.overrideWithValue(storage),
+      assessmentViewModelProvider.overrideWith((ref) => AssessmentViewModel(
+        repository: ref.watch(assessmentRepositoryProvider),
+        routingService: const DemoQuestionnaireRoutingService(),
+        availableOffers: demoAssessmentOffers,
+      )),
     ],
     child: MaterialApp(
       theme: sitewiseTheme(),
@@ -42,10 +49,10 @@ void main() {
         ).copyWith(textScaler: TextScaler.linear(scale)),
         child: child!,
       ),
-      onGenerateRoute: AppRoutes.onGenerateRoute,
+      onGenerateRoute: previewRoute,
       initialRoute: initial ?? AppRoutes.assessmentHome,
       onGenerateInitialRoutes: (route) => [
-        AppRoutes.onGenerateRoute(
+        previewRoute(
           RouteSettings(name: route, arguments: arguments),
         )!,
       ],
@@ -83,7 +90,7 @@ void main() {
   );
 
   testWidgets(
-    'small phone completes consent, both questions and review through central routes',
+    'small phone completes consent, both questions and review through isolated fixture routes',
     (tester) async {
       surface(tester, const Size(320, 568));
       await tester.pumpWidget(app());

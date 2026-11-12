@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../../application/providers.dart';
-import '../../../core/routing/app_routes.dart';
-import '../../../core/theme/sitewise_theme.dart';
-import '../model/entities/assessment.dart';
-import '../model/entities/assessment_draft.dart';
-import 'components/assessment_card.dart';
+import 'package:fyp/application/providers.dart';
+import 'package:fyp/core/routing/app_routes.dart';
+import 'package:fyp/core/theme/sitewise_theme.dart';
+import 'package:fyp/features/assessment/model/entities/assessment.dart';
+import 'questionnaire_fixtures.dart';
+import 'package:fyp/features/assessment/model/entities/assessment_draft.dart';
+import 'package:fyp/features/assessment/view/components/assessment_card.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});

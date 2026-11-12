@@ -10,7 +10,9 @@ import '../model/service/questionnaire_routing_service.dart';
 class AssessmentViewModel extends ChangeNotifier {
   final AssessmentRepository repository;
   final QuestionnaireRoutingService routingService;
-  AssessmentViewModel({required this.repository, required this.routingService});
+  final List<AssessmentOffer> availableOffers;
+  AssessmentViewModel({required this.repository, required this.routingService,
+    this.availableOffers = const []});
 
   final Map<String, AssessmentDraft> _drafts = {};
   Future<void> _writes = Future<void>.value();
@@ -90,7 +92,7 @@ class AssessmentViewModel extends ChangeNotifier {
     if (existing.status == DraftStatus.previewCompleted) {
       throw StateError('This preview has already been completed.');
     }
-    final offer = demoAssessmentOffers.where((o) => o.id == id).firstOrNull;
+    final offer = availableOffers.where((o) => o.id == id).firstOrNull;
     if (offer == null || !existing.matches(offer)) {
       throw StateError('Version mismatch. The draft has been preserved.');
     }

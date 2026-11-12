@@ -10,7 +10,7 @@ from uuid import UUID
 
 from sitewise.core.exceptions import ConflictError, NotFoundError
 from sitewise.domain.m2_rules import missing_required_items
-from sitewise.domain.bdj_rules import RULE_VERSION
+from sitewise.domain.bdj_candidate_rules import RULE_VERSION
 from sitewise.services.ports.m2_repository_port import M2RepositoryPort
 
 

@@ -163,6 +163,8 @@ export 'src/application/services/recommendation_service.dart';
 export 'src/application/services/tour_service.dart';
 export 'src/application/services/upload_service.dart';
 export 'src/application/services/verification_service.dart';
+export 'src/domain/entities/project1_readiness.dart';
+export 'src/data/repositories/api_project1_read_repository.dart';
 
 // --- M2 assessment: domain, fixtures and ViewModel -------------------------
 //

@@ -12,6 +12,8 @@ import 'package:sitewise_jaspr_web/components/agent_assignment_control.dart'
     deferred as _agent_assignment_control;
 import 'package:sitewise_jaspr_web/components/agent_change_requests_panel.dart'
     deferred as _agent_change_requests_panel;
+import 'package:sitewise_jaspr_web/components/project1_read_panel.dart'
+    deferred as _project1_read_panel;
 import 'package:sitewise_jaspr_web/components/verification_detail_view.dart'
     deferred as _verification_detail_view;
 import 'package:sitewise_jaspr_web/pages/admin/activity_page.dart'
@@ -138,6 +140,13 @@ ClientOptions get defaultClientOptions => ClientOptions(
     'agent_change_requests_panel': ClientLoader(
       (p) => _agent_change_requests_panel.AgentChangeRequestsPanel(),
       loader: _agent_change_requests_panel.loadLibrary,
+    ),
+    'project1_read_panel': ClientLoader(
+      (p) => _project1_read_panel.Project1ReadPanel(
+        assessmentId: p['assessmentId'] as String,
+        section: p['section'] as String,
+      ),
+      loader: _project1_read_panel.loadLibrary,
     ),
     'location_insights': ClientLoader(
       (p) => _location_insights.LocationInsightsV4(

@@ -4,8 +4,8 @@
 // projection yet, so these values exist only to render the approved layout.
 // Replace them with the versioned report/audit reads before any real use.
 
-import 'activity_history_page.dart';
-import 'cafe_demand_report_page.dart';
+import '../../lib/pages/entrepreneur/activity_history_page.dart';
+import '../../lib/pages/entrepreneur/cafe_demand_report_page.dart';
 
 const CafeReportSnapshot demoReportSnapshot = CafeReportSnapshot(
   businessName: 'Morning Junction Café — A-DEMO-001',
