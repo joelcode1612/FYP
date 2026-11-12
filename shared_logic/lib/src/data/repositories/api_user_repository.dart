@@ -67,6 +67,7 @@ class ApiUserRepository implements UserRepository {
       joinedAt:
           (created == null ? null : DateTime.tryParse(created)) ??
           DateTime.fromMillisecondsSinceEpoch(0, isUtc: true),
+      listingCount: (row['listing_count'] as num?)?.toInt(),
     );
   }
 

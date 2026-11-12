@@ -46,6 +46,15 @@ class AdminState {
   /// the next operation or `clearReviewNotice`.
   final String? reviewNotice;
 
+  /// Unfiltered verification totals for the dashboard: the same SQL
+  /// projection as [reviewPage], requested with no filters. Kept separate so
+  /// a dashboard refresh cannot clobber the Listings page's filters/offset.
+  final VerificationQueuePage? verificationSummary;
+
+  /// Failure of [verificationSummary] alone. The rest of the dashboard stays
+  /// usable, so this must not land in [error].
+  final String? summaryError;
+
   const AdminState({
     this.loading = false,
     this.error,
@@ -59,6 +68,8 @@ class AdminState {
     this.reviewDetail,
     this.busyAction,
     this.reviewNotice,
+    this.verificationSummary,
+    this.summaryError,
   });
 
   AdminState copyWith({
@@ -78,6 +89,9 @@ class AdminState {
     bool clearBusyAction = false,
     String? reviewNotice,
     bool clearReviewNotice = false,
+    VerificationQueuePage? verificationSummary,
+    String? summaryError,
+    bool clearSummaryError = false,
   }) {
     return AdminState(
       loading: loading ?? this.loading,
@@ -94,6 +108,8 @@ class AdminState {
       reviewNotice: clearReviewNotice
           ? null
           : (reviewNotice ?? this.reviewNotice),
+      verificationSummary: verificationSummary ?? this.verificationSummary,
+      summaryError: clearSummaryError ? null : (summaryError ?? this.summaryError),
     );
   }
 }

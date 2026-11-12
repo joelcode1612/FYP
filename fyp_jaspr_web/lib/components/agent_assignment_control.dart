@@ -171,7 +171,14 @@ class _AgentAssignmentControlState extends State<AgentAssignmentControl> {
           ),
         ]),
         if (_error != null)
-          div(classes: 'notice notice-danger', [Component.text(_error!)]),
+          div(classes: 'notice notice-danger', [
+            Component.text(_error!),
+            ActionButton(
+              'Try again',
+              variant: 'secondary',
+              onClick: _busy ? null : () => unawaited(_load()),
+            ),
+          ]),
         if (_status != null)
           div(classes: 'notice notice-info', [Component.text(_status!)]),
         if (_agents.isEmpty)
@@ -184,8 +191,12 @@ class _AgentAssignmentControlState extends State<AgentAssignmentControl> {
           select(
             attributes: {'aria-label': 'Agent to assign'},
             events: events<List<String>>(
-              onInput: (values) =>
-                  _selectedUserId = values.isEmpty ? '' : values.first,
+              // setState, not a bare field write: the Assign button's enabled
+              // state is derived from this value, so without a rebuild it
+              // would stay disabled after an agent is chosen.
+              onInput: (values) => setState(
+                () => _selectedUserId = values.isEmpty ? '' : values.first,
+              ),
             ),
             [
               option(value: '', [Component.text('Select an agent…')]),

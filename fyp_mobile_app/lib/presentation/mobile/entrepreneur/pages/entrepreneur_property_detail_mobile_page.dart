@@ -13,6 +13,7 @@ import '../../../shared/widgets/sitewise_status_badge.dart';
 import '../../shell/mobile_app_shell.dart';
 import '../../widgets/m3_kit.dart';
 import '../../widgets/mobile_property_image.dart';
+import '../../widgets/mobile_insights_panel.dart';
 import '../../widgets/mobile_section_header.dart';
 import '../../widgets/mobile_skeleton.dart';
 import '../../widgets/mobile_suitability_badge.dart';
@@ -43,6 +44,13 @@ class _EntrepreneurPropertyDetailMobilePageState
   /// Resolved once per route (a FutureBuilder created inside `build` would
   /// refetch on every rebuild).
   late Future<CommercialProperty?> _propertyFuture = _loadProperty();
+
+  /// Real location insights for this catalogue property: the deployed model's
+  /// score and its SHAP decomposition. `null` when the backend cannot score the
+  /// listing, in which case the older assessment-derived block is shown instead
+  /// — the two scoring systems are never merged into one number.
+  late final Future<PropertyInsightsModel?> _insightsFuture =
+      ApiPropertyInsightsRepository(ServiceLocator.apiClient).fetch(widget.propertyId);
 
   @override
   void initState() {
@@ -508,63 +516,99 @@ class _EntrepreneurPropertyDetailMobilePageState
             ],
           ),
           const SizedBox(height: 16),
-          if (model.analysisLoading && a == null)
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 12),
-              child: MobileSkeletonBox(height: 14, width: 180),
-            )
-          else if (a != null) ...[
-            SitewiseEvidenceScore(score: a.suitabilityScore),
-            const Divider(height: 26),
-            Text(
-              a.demandSummary,
-              style: const TextStyle(
-                fontSize: 12.5,
-                height: 1.5,
-                color: SitewiseColors.muted,
-              ),
-            ),
-            const Divider(height: 26),
-            const Text(
-              'Why this location scores this way',
-              style: TextStyle(
-                fontSize: 12.5,
-                fontWeight: FontWeight.w800,
-                color: SitewiseColors.ink,
-              ),
-            ),
-            const SizedBox(height: 4),
-            for (final f in a.factors) SitewiseFactorRow(factor: f),
-          ] else if (error != null)
-            // A failed analysis read is a failure, not "no analysis exists":
-            // say so and offer the real retry.
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    error,
-                    style: const TextStyle(
-                      fontSize: 12,
-                      height: 1.4,
-                      color: SitewiseColors.danger,
-                    ),
-                  ),
-                ),
-                TextButton(
-                  onPressed: () => ref
-                      .read(entrepreneurNotifierProvider.notifier)
-                      .loadAnalysis(p.id),
-                  child: const Text('Retry', style: TextStyle(fontSize: 12)),
-                ),
-              ],
-            )
-          else
-            const Text(
-              'Location analysis is unavailable for this property.',
-              style: TextStyle(fontSize: 12.5, color: SitewiseColors.muted),
-            ),
+          FutureBuilder<PropertyInsightsModel?>(
+            future: _insightsFuture,
+            builder: (context, snapshot) {
+              if (snapshot.connectionState != ConnectionState.done) {
+                return const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 12),
+                  child: MobileSkeletonBox(height: 14, width: 180),
+                );
+              }
+              final insights = snapshot.data;
+              // A scored property always uses the model's own explanation. The
+              // assessment block below is a DIFFERENT scoring system, so it is
+              // only shown when Location Fit itself is unavailable — the two
+              // are never blended into one number.
+              if (insights != null) return MobileInsightsPanel(insights: insights);
+              return _assessmentBlock(p, model, a, error);
+            },
+          ),
         ],
       ),
+    );
+  }
+
+  /// Fallback when the insights endpoint returns nothing.
+  ///
+  /// This is the assessment-derived block that predates the Location Fit
+  /// index. It is kept so a listing without a verified model link still shows
+  /// what the system knows, but it is never mixed with the model's score.
+  Widget _assessmentBlock(
+    CommercialProperty p,
+    EntrepreneurState model,
+    LocationAnalysis? a,
+    String? error,
+  ) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (model.analysisLoading && a == null)
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 12),
+            child: MobileSkeletonBox(height: 14, width: 180),
+          )
+        else if (a != null) ...[
+          SitewiseEvidenceScore(score: a.suitabilityScore),
+          const Divider(height: 26),
+          Text(
+            a.demandSummary,
+            style: const TextStyle(
+              fontSize: 12.5,
+              height: 1.5,
+              color: SitewiseColors.muted,
+            ),
+          ),
+          const Divider(height: 26),
+          const Text(
+            'Why this location scores this way',
+            style: TextStyle(
+              fontSize: 12.5,
+              fontWeight: FontWeight.w800,
+              color: SitewiseColors.ink,
+            ),
+          ),
+          const SizedBox(height: 4),
+          for (final f in a.factors) SitewiseFactorRow(factor: f),
+        ] else if (error != null)
+          // A failed analysis read is a failure, not "no analysis exists":
+          // say so and offer the real retry.
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  error,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    height: 1.4,
+                    color: SitewiseColors.danger,
+                  ),
+                ),
+              ),
+              TextButton(
+                onPressed: () => ref
+                    .read(entrepreneurNotifierProvider.notifier)
+                    .loadAnalysis(p.id),
+                child: const Text('Retry', style: TextStyle(fontSize: 12)),
+              ),
+            ],
+          )
+        else
+          const Text(
+            'Location analysis is unavailable for this property.',
+            style: TextStyle(fontSize: 12.5, color: SitewiseColors.muted),
+          ),
+      ],
     );
   }
 

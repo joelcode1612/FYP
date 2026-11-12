@@ -6,8 +6,6 @@
 
 import 'package:jaspr/client.dart';
 
-import 'package:sitewise_jaspr_web/components/property_detail/location_insights.dart'
-    deferred as _location_insights;
 import 'package:sitewise_jaspr_web/components/agent_assignment_control.dart'
     deferred as _agent_assignment_control;
 import 'package:sitewise_jaspr_web/components/agent_change_requests_panel.dart'
@@ -54,6 +52,8 @@ import 'package:sitewise_jaspr_web/pages/entrepreneur/assessment_history_page.da
     deferred as _assessment_history_page;
 import 'package:sitewise_jaspr_web/pages/entrepreneur/assessment_workspace_page.dart'
     deferred as _assessment_workspace_page;
+import 'package:sitewise_jaspr_web/pages/entrepreneur/commercial_listing_page.dart'
+    deferred as _commercial_listing_page;
 import 'package:sitewise_jaspr_web/pages/entrepreneur/compare_page.dart'
     deferred as _compare_page;
 import 'package:sitewise_jaspr_web/pages/entrepreneur/dashboard_page.dart'
@@ -76,6 +76,8 @@ import 'package:sitewise_jaspr_web/pages/entrepreneur/recommendations_page.dart'
     deferred as _recommendations_page;
 import 'package:sitewise_jaspr_web/pages/entrepreneur/report_page.dart'
     deferred as _report_page;
+import 'package:sitewise_jaspr_web/pages/entrepreneur/reports_page.dart'
+    deferred as _reports_page;
 import 'package:sitewise_jaspr_web/pages/entrepreneur/saved_page.dart'
     deferred as _saved_page;
 import 'package:sitewise_jaspr_web/pages/entrepreneur/tour_page.dart'
@@ -138,14 +140,6 @@ ClientOptions get defaultClientOptions => ClientOptions(
     'agent_change_requests_panel': ClientLoader(
       (p) => _agent_change_requests_panel.AgentChangeRequestsPanel(),
       loader: _agent_change_requests_panel.loadLibrary,
-    ),
-    'location_insights': ClientLoader(
-      (p) => _location_insights.LocationInsightsV4(
-        propertyId: p['propertyId'] as String,
-        puScore: p['puScore'] as num?,
-        hasPuScore: p['hasPuScore'] as bool,
-      ),
-      loader: _location_insights.loadLibrary,
     ),
     'verification_detail_view': ClientLoader(
       (p) => _verification_detail_view.VerificationDetailView(),
@@ -241,6 +235,11 @@ ClientOptions get defaultClientOptions => ClientOptions(
       ),
       loader: _assessment_workspace_page.loadLibrary,
     ),
+    'commercial_listing_page': ClientLoader(
+      (p) =>
+          _commercial_listing_page.CommercialListingPage(id: p['id'] as String),
+      loader: _commercial_listing_page.loadLibrary,
+    ),
     'compare_page': ClientLoader(
       (p) => _compare_page.ComparePage(),
       loader: _compare_page.loadLibrary,
@@ -282,6 +281,7 @@ ClientOptions get defaultClientOptions => ClientOptions(
     'entrepreneur/property_detail_page': ClientLoader(
       (p) => _entrepreneur_property_detail_page.PropertyDetailPage(
         id: p['id'] as String,
+        resultId: p['resultId'] as String,
       ),
       loader: _entrepreneur_property_detail_page.loadLibrary,
     ),
@@ -294,6 +294,10 @@ ClientOptions get defaultClientOptions => ClientOptions(
     'report_page': ClientLoader(
       (p) => _report_page.ReportPage(id: p['id'] as String),
       loader: _report_page.loadLibrary,
+    ),
+    'reports_page': ClientLoader(
+      (p) => _reports_page.ReportsPage(),
+      loader: _reports_page.loadLibrary,
     ),
     'saved_page': ClientLoader(
       (p) => _saved_page.SavedPage(),

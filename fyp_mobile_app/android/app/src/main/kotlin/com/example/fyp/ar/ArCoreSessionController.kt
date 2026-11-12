@@ -323,7 +323,7 @@ internal class ArCoreSessionController(
      *
      * This is what the app runs when it goes to the background. Closing and
      * recreating the session would move ARCore's world origin, and every one of
-     * the station's 30 target positions is expressed in that origin — a restart
+     * the station's 26 target positions is expressed in that origin — a restart
      * would silently aim all of them at the wrong walls. `Session.pause()`
      * releases the camera device without discarding the world, so a resume
      * continues the same station.
@@ -502,26 +502,6 @@ internal class ArCoreSessionController(
             // Measure again from the first frame using the new geometry.
             imageAxisMeasured = false
             pendingDisplayGeometry = true
-        }
-    }
-
-    fun setPlaneDetection(enabled: Boolean, onDone: (ArOutcome) -> Unit) = post {
-        val s = session
-        if (s == null) {
-            onDone(ArOutcome(errorCode = "no_session", errorMessage = "No AR session is running."))
-            return@post
-        }
-        try {
-            val config = s.config
-            config.planeFindingMode = if (enabled) {
-                Config.PlaneFindingMode.HORIZONTAL_AND_VERTICAL
-            } else {
-                Config.PlaneFindingMode.DISABLED
-            }
-            s.configure(config)
-            onDone(ArOutcome(value = mapOf("planes" to enabled)))
-        } catch (e: Exception) {
-            onDone(ArOutcome(errorCode = "configure_failed", errorMessage = "$e"))
         }
     }
 

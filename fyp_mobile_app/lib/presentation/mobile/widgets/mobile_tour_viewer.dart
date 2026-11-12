@@ -3,7 +3,7 @@ import 'dart:typed_data';
 import 'package:shared_logic/shared_logic.dart';
 
 import 'package:flutter/material.dart';
-import 'package:panorama/panorama.dart';
+import 'package:panorama_viewer/panorama_viewer.dart';
 
 import '../../../core/theme/sitewise_theme.dart';
 import '../../../core/utils/pano_bytes.dart';
@@ -88,7 +88,7 @@ class _MobileTourViewerState extends State<MobileTourViewer> {
                 ),
               );
             }
-            return Panorama(child: Image.memory(bytes));
+            return PanoramaViewer(child: Image.memory(bytes));
           },
         ),
       ),

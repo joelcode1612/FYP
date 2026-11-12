@@ -436,6 +436,19 @@ class AdminApi {
         body: {'account_status': status},
       );
 
+  /// `POST /api/v1/staff/agents/{id}/mfa-recovery` — removes the agent's
+  /// verified TOTP factors so they can re-enroll on next sign-in. The server
+  /// requires a reason (3–500 chars) and audits the reset; no factor secret or
+  /// recovery code is ever returned.
+  Future<Map<String, dynamic>> resetAgentMfa({
+    required String userId,
+    required String reason,
+  }) => WebAuth.request(
+    '/api/v1/staff/agents/${Uri.encodeComponent(userId)}/mfa-recovery',
+    method: 'POST',
+    body: {'reason': reason},
+  );
+
   /// `GET /api/v1/staff/invitations` — Supabase invite tracking.
   Future<List<StaffInvitation>> listInvitations() async {
     final payload = await WebAuth.request('/api/v1/staff/invitations');

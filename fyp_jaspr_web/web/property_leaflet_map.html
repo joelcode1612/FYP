@@ -7,33 +7,72 @@
   <!-- Self-hosted Leaflet 1.9.4 (same vendored copy the Explore map uses);
        no CDN dependency and no API key. -->
   <link rel="stylesheet" href="/vendor/leaflet/leaflet.css" />
+  <link rel="stylesheet" href="/vendor/leaflet/MarkerCluster.css" />
+  <link rel="stylesheet" href="/vendor/leaflet/MarkerCluster.Default.css" />
   <style>
     html,body{margin:0;height:100%;font-family:Inter,system-ui,-apple-system,Segoe UI,Arial,sans-serif;background:#edf2f9;color:#172b4d}
     .layout{display:flex;flex-direction:column;height:100%;min-height:0}
     .toolbar{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;padding:8px 12px;background:#fff;border-bottom:1px solid #dce5f0}
     .toolbar strong{font-size:12px;font-weight:800}.toolbar span{font-size:11px;color:#64748b}
+    .toolbar__actions{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
     .tabs{display:flex;gap:4px}.tabs button{background:#f7f9fd;border:1px solid #d5dfed;border-radius:7px;padding:6px 10px;color:#36516e;font:inherit;font-weight:700;font-size:11px;cursor:pointer}
     .tabs button[aria-pressed=true]{background:#1d4ed8;color:#fff;border-color:#1d4ed8}
+    .iconbtn{display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;border-radius:7px;border:1px solid #d5dfed;background:#f7f9fd;color:#36516e;font-size:14px;line-height:1;cursor:pointer}
+    .iconbtn:hover{background:#eef3fb}.iconbtn[aria-pressed=true]{background:#1d4ed8;color:#fff;border-color:#1d4ed8}
+    /* Layer toggles: each chip carries the layer's own colour so the map key
+       and the control match. Unmapped layers are labelled "counts only". */
+    .layers{display:flex;align-items:center;gap:6px;flex-wrap:wrap;padding:7px 12px;background:#fbfdff;border-bottom:1px solid #e6edf6}
+    .layers__label{font-size:10.5px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:#7b8aa0;margin-right:2px}
+    .chip{display:inline-flex;align-items:center;gap:5px;background:#fff;border:1px solid #d5dfed;border-radius:999px;padding:4px 9px;font:inherit;font-size:11px;font-weight:600;color:#36516e;cursor:pointer}
+    .chip[aria-pressed=false]{opacity:.5;background:#f2f5fa}
+    .chip__dot{width:8px;height:8px;border-radius:50%;flex:0 0 auto}
+    .chip__count{font-weight:700;color:#1d4ed8}
+    .chip__tag{font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.03em;color:#94610a;background:#fdf1d6;border-radius:4px;padding:1px 4px}
     #map{flex:1;min-height:150px;width:100%}
     .footer{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;padding:6px 12px;background:#fff;border-top:1px solid #dce5f0;color:#52667c;font-size:10.5px}
-    .key{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:4px;vertical-align:middle}.key.a{background:#1d4ed8}.key.b{background:#0f9d86}.key.c{background:#8a6bc7}
+    .key{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:4px;vertical-align:middle}
     .notice{font-size:11px;padding:8px 12px;background:#fff4d9;color:#775216;border-bottom:1px solid #f0dda7}
+    .notice strong{font-weight:800}
     .leaflet-popup-content{max-width:260px;overflow-wrap:anywhere;font-size:12px;line-height:1.5}.leaflet-container{font-family:inherit}
-    @media (max-width:460px){.toolbar{padding:6px 8px}.toolbar strong{font-size:11px}.tabs button{padding:5px 8px}}
+    /* Ring labels sit on the circle edge, so the radius is readable in place. */
+    .sw-ring-label span{position:absolute;left:0;top:0;transform:translate(-50%,-50%);display:inline-block;padding:1px 5px;border-radius:4px;font-size:9.5px;font-weight:800;color:#fff;white-space:nowrap;box-shadow:0 1px 2px rgba(15,23,42,.25)}
+    /* The selected property reads as the subject, not as one more data point. */
+    .sw-selected-pin{filter:drop-shadow(0 0 0 #fff)}
+    @media (max-width:460px){
+      .toolbar{padding:6px 8px}.toolbar strong{font-size:11px}.tabs button{padding:5px 8px}
+      .layers{padding:6px 8px}.chip{font-size:10.5px;padding:3px 7px}
+    }
+    /* Narrow screens: the five chips would otherwise stack into three rows and
+       squeeze the map itself down to a sliver. One scrollable row keeps the
+       map as the dominant element. */
+    @media (max-width:560px){
+      .layers{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:thin}
+      .layers::-webkit-scrollbar{height:4px}
+      .chip{flex:0 0 auto}
+      .footer{gap:4px}
+    }
   </style>
 </head>
 <body>
   <div class="layout">
     <div class="toolbar"><div><strong>Property location</strong><span id="location-id"></span></div>
-      <!-- Radius tabs are built by property_leaflet_map.js: 500 m + 1 km "Both"
-           (legacy) unless ?radius selects the single-radius Full Analysis mode. -->
-      <div class="tabs" id="radius-tabs" role="group" aria-label="Catchment radius"></div>
+      <div class="toolbar__actions">
+        <!-- Radius tabs are built by property_leaflet_map.js: 500 m + 1 km
+             (legacy) unless ?radius selects the single-radius Full Analysis
+             mode. -->
+        <div class="tabs" id="radius-tabs" role="group" aria-label="Catchment radius"></div>
+        <button class="iconbtn" id="recenter" type="button" aria-label="Recentre map on the property" title="Recentre map">&#9678;</button>
+        <button class="iconbtn" id="fullscreen" type="button" aria-label="Toggle fullscreen map" aria-pressed="false" title="Fullscreen">&#9974;</button>
+      </div>
     </div>
+    <!-- Built by the adapter from the layer payload the page passes in. -->
+    <div class="layers" id="layer-toggles" role="group" aria-label="Map layers"></div>
     <div class="notice" id="map-alert" hidden></div>
     <div id="map" role="region" aria-label="Leaflet interactive property map with catchment circles"></div>
-    <div class="footer"><div id="map-legend"><span class="key a"></span>Selected unit &nbsp; <span class="key b"></span>0–500 m &nbsp; <span class="key c"></span>500 m–1 km</div><span id="nearby-label">Loading reference properties…</span></div>
+    <div class="footer"><div id="map-legend"></div><span id="nearby-label">Loading reference properties…</span></div>
   </div>
   <script src="/vendor/leaflet/leaflet.js"></script>
+  <script src="/vendor/leaflet/leaflet.markercluster.js"></script>
   <script defer src="/map-config.js"></script>
   <script defer src="/property_leaflet_map.js"></script>
 </body>

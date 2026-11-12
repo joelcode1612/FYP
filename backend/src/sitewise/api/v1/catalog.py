@@ -28,6 +28,7 @@ from sqlmodel import Session
 from sitewise.db.analytics_session import get_analytics_db
 from sitewise.dependencies import CurrentUser
 from sitewise.repositories.catalog_repository import PROPERTY_COLUMNS, CatalogRepository
+from sitewise.services.property_insights_service import PropertyInsightsService
 
 router = APIRouter()
 
@@ -126,3 +127,50 @@ def get_catalog_evidence(
             },
         )
     return repo.get_evidence(property_id)
+
+
+@router.get("/properties/{property_id}/insights")
+def get_catalog_insights(
+    property_id: str,
+    session: AnalyticsSession,
+    _user: CurrentUser,
+) -> dict:
+    """Location score plus genuine SHAP factors for one listing.
+
+    This is the read model behind the Property Detail page's "Location Fit" and
+    "Why this score?" sections. It answers with the *deployed* model's own
+    output and its permutation-SHAP decomposition over the property's resolved
+    47-feature vector.
+
+    Contract:
+
+    * a missing listing is 404;
+    * everything else is 200 — an unscoreable property returns
+      ``score.available: false`` with a stable ``reason.code`` rather than an
+      error, so the page can show an honest empty state;
+    * ``explanation.factors`` always carries plain-English labels; the raw
+      feature key is present only as ``technical`` for audit;
+    * the score is a research association index, never a success probability.
+
+    Computation is expensive (permutation SHAP over 47 features, ~13 s), so the
+    service caches per ``(model_version, property_id)`` and the first request
+    for a property pays the cost.
+    """
+    row = CatalogRepository(session).get_property(property_id)
+    if row is None:
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "code": "property_not_found",
+                "message": f"No property with id '{property_id}' exists in the catalogue.",
+            },
+        )
+    # Echo the catalogue's own coordinate so the map and the score describe the
+    # same point; the page must not re-derive a location for itself.
+    origin = None
+    lat, lon = row.get("latitude"), row.get("longitude")
+    if lat is not None and lon is not None:
+        origin = {"lat": float(lat), "lon": float(lon)}
+    return PropertyInsightsService(
+        session=session, analytics_session=session
+    ).insights(property_id, origin=origin)

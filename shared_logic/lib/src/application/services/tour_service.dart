@@ -25,6 +25,14 @@ class TourService {
   Future<VirtualTour?> tourForPropertyApproved(String propertyId) =>
       repo.getTourByProperty(propertyId);
 
+  /// The unfinished capture for [propertyId], if any.
+  ///
+  /// Backs the Add Property "Resume Previous Capture" action: it answers only
+  /// with a draft/processing tour, never with a finished one, so a completed
+  /// tour cannot be reopened as if it were an interrupted session.
+  Future<VirtualTour?> tourForPropertyDraft(String propertyId) =>
+      repo.tourForPropertyDraft(propertyId);
+
   Future<List<VirtualTour>> pendingTours() => repo.pendingTours();
 
   Future<VirtualTour?> tourById(String id) => repo.tourById(id);

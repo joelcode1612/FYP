@@ -98,6 +98,16 @@ class AdminNotifier extends Notifier<AdminState> {
     PropertyVerificationStatus status,
   ) => _controller.reviewCountOf(dimension, status);
 
+  // -- Authoritative dashboard totals ---------------------------------------
+
+  VerificationQueuePage? get verificationSummary =>
+      _controller.verificationSummary;
+
+  String? get summaryError => _controller.summaryError;
+
+  Future<void> loadVerificationSummary() =>
+      _controller.loadVerificationSummary();
+
   Future<void> loadReviewPage({VerificationQueueFilters? filters}) =>
       _controller.loadReviewPage(filters: filters);
 

@@ -39,24 +39,18 @@ List<WebDestination> webDestinationsFor(AppRole role) => switch (role) {
     // `people`, not `group`: the mobile bottom nav uses Icons.people_outline,
     // and Material Symbols renders `group` and `people` as different glyphs.
     WebDestination(route: '/admin/users', icon: 'people', label: 'Users'),
-    // The unified operations pages: Listings (verification review) → Agents →
-    // Surveys. Kept as separate sidebar/pill entries (no merged mega-menu),
-    // because each screen has its own route and its own audience among the
-    // admin tabs. Campaigns and Activity are no longer offered in the navbar —
-    // their routes, pages and the audit logging they read stay fully
-    // functional for direct links.
+    // The four primary Admin destinations. Surveys and Profile are no longer
+    // sidebar entries: Profile is reached through the avatar menu
+    // (`topbar_controls.dart`), and Surveys, Campaigns and Activity keep their
+    // registered routes, pages and audit reads for direct links. Removing an
+    // entry here changes navigation only — the router guard still authorizes
+    // every `/admin/*` route independently.
     WebDestination(route: '/admin/agents', icon: 'badge', label: 'Agents'),
-    WebDestination(
-      route: '/admin/surveys',
-      icon: 'how_to_vote',
-      label: 'Surveys',
-    ),
     WebDestination(
       route: '/admin/listings',
       icon: 'business',
       label: 'Listings',
     ),
-    WebDestination(route: '/admin/profile', icon: 'person', label: 'Profile'),
   ],
   AppRole.agent => const [
     WebDestination(route: '/agent', icon: 'dashboard', label: 'Dashboard'),

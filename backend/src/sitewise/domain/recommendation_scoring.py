@@ -869,24 +869,24 @@ def _physical_fit(c: PropertyCandidate, p: PreferenceProfile, cfg: ScoringConfig
     frontage = _saturating(c.frontage_ft, cfg.frontage_scale)
     depth = _saturating(c.depth_ft, cfg.depth_scale)
     if frontage is not None:
-        signals.append((frontage, f"frontage_ft={c.frontage_ft:,.0f}"))
+        signals.append((frontage, f"frontage {c.frontage_ft:,.0f} ft"))
     if depth is not None:
-        signals.append((depth, f"depth_ft={c.depth_ft:,.0f}"))
+        signals.append((depth, f"depth {c.depth_ft:,.0f} ft"))
 
     floor = (c.floor_level_text or "").strip().lower()
     if floor:
         if "ground" in floor:
-            signals.append((1.0, "floor_level=ground floor"))
+            signals.append((1.0, "ground floor"))
         elif "basement" in floor:
-            signals.append((0.2, "floor_level=basement"))
+            signals.append((0.2, "basement level"))
         else:
-            signals.append((0.4, f"floor_level={floor}"))
+            signals.append((0.4, f"{floor} floor level"))
     position = (c.unit_position or "").strip().lower()
     if position:
         if "corner" in position or "end" in position:
-            signals.append((1.0, f"unit_position={position}"))
+            signals.append((1.0, f"{position} unit position"))
         else:
-            signals.append((0.6, f"unit_position={position}"))
+            signals.append((0.6, f"{position} unit position"))
 
     if not signals:
         return _unknown(
@@ -900,6 +900,8 @@ def _physical_fit(c: PropertyCandidate, p: PreferenceProfile, cfg: ScoringConfig
 
     value = math.fsum(v for v, _ in signals) / len(signals)
     measured = [label for _, label in signals]
+    # Plain English, never the underlying column names: this string is shown
+    # verbatim to entrepreneurs on the recommendation explanation surfaces.
     reason = "Verified physical attributes: " + ", ".join(measured) + "."
 
     caution: str | None = None

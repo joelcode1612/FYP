@@ -5,6 +5,7 @@ import 'package:jaspr/jaspr.dart';
 import 'package:jaspr_riverpod/jaspr_riverpod.dart';
 import 'package:shared_logic/shared_logic.dart';
 
+import '../../components/dashboard_kit.dart';
 import '../../components/ui.dart';
 import '../../layouts/app_layout.dart';
 
@@ -15,11 +16,11 @@ import '../../layouts/app_layout.dart';
 ///
 /// Records are live: the user repository reads the authenticated FastAPI
 /// `/users` API (administrator + aal2 enforced server-side), not demo data.
-/// The screen is deliberately read-only status visibility — the backend
-/// supports role/status mutations, but this build does not expose them, so no
-/// change is ever simulated as persisted. A failed load surfaces an error
-/// state rather than an empty directory. The Listings column is derived from
-/// the admin listings slice, and Joined is the user's `joinedAt`.
+/// The screen is deliberately read-only status visibility — role and status
+/// are changed on the User Detail page, so no change is ever simulated here.
+/// A failed load surfaces an error state rather than an empty directory. The
+/// Listings column is the backend's per-owner count of operational listings;
+/// Joined is the user's `joinedAt`.
 @client
 class UsersPage extends StatefulComponent {
   const UsersPage({super.key});
@@ -65,16 +66,35 @@ class _Shells extends StatelessComponent {
   @override
   Component build(BuildContext context) {
     final slice = context.watch(
-      adminNotifierProvider.select((state) => (loading: state.loading, error: state.error)),
+      adminNotifierProvider.select(
+        (state) => (
+          loading: state.loading,
+          error: state.error,
+          hasUsers: state.users.isNotEmpty,
+        ),
+      ),
     );
-    if (slice.loading) {
+    if (slice.loading && !slice.hasUsers) {
       return SectionCard(
         title: 'Loading accounts…',
         flush: true,
         child: const Skeleton(variant: 'row', count: 6),
       );
     }
-    if (slice.error != null) return _Error(slice.error!);
+    if (slice.error != null && !slice.hasUsers) return _Error(slice.error!);
+    // A refresh that failed must not discard records the server already
+    // confirmed: keep them on screen and say the refresh did not complete.
+    if (slice.error != null) {
+      return div(classes: 'stack stack--sections', [
+        Callout(
+          'The account list could not be refreshed, so the records below are '
+          'the last ones loaded. ${slice.error!}',
+          tone: 'warning',
+          icon: 'error',
+        ),
+        const _Directory(),
+      ]);
+    }
     return const _Directory();
   }
 }
@@ -112,7 +132,27 @@ class _Directory extends StatefulComponent {
 class _DirectoryState extends State<_Directory> {
   String query = '';
   String statusFilter = 'all';
-  AppRole? roleFilter;
+
+  /// The selected `<option>` value, not its display label — comparing a label
+  /// against option values silently reset the selection on every rebuild.
+  String roleFilter = 'all';
+
+  /// Exactly `rbac.ALL_ROLES`. `owner` is a UI workspace, not a stored role, so
+  /// offering it would filter on a value no account can have.
+  static const List<(String, String)> _roleOptions = [
+    ('All roles', 'all'),
+    ('Entrepreneur', 'entrepreneur'),
+    ('Agent', 'agent'),
+    ('Administrator', 'admin'),
+  ];
+
+  /// Exactly `rbac.ACCOUNT_STATUSES`.
+  static const List<(String, String)> _statusOptions = [
+    ('All statuses', 'all'),
+    ('Pending', 'pending'),
+    ('Active', 'active'),
+    ('Suspended', 'suspended'),
+  ];
 
   List<SitewiseUser> _filtered(List<SitewiseUser> users) {
     final q = query.trim().toLowerCase();
@@ -122,7 +162,7 @@ class _DirectoryState extends State<_Directory> {
       final matchesStatus =
           statusFilter == 'all' ||
           user.status.toLowerCase() == statusFilter.toLowerCase();
-      final matchesRole = roleFilter == null || user.role == roleFilter;
+      final matchesRole = roleFilter == 'all' || _roleValue(user.role) == roleFilter;
       return matchesQ && matchesStatus && matchesRole;
     }).toList();
   }
@@ -132,9 +172,6 @@ class _DirectoryState extends State<_Directory> {
     final d = user.joinedAt.day.toString().padLeft(2, '0');
     return '${user.joinedAt.year}-$m-$d';
   }
-
-  int _listingCount(SitewiseUser user, List<CommercialProperty> listings) =>
-      listings.where((prop) => prop.ownerId == user.id).length;
 
   Component _selectField({
     required String labelText,
@@ -157,12 +194,9 @@ class _DirectoryState extends State<_Directory> {
   Component build(BuildContext context) {
     // One watch for the whole directory: the filters bar is cheap to re-render
     // and the layout chrome above it stays out of every rebuild.
-    final data = context.watch(
-      adminNotifierProvider.select(
-        (state) => (users: state.users, listings: state.listings),
-      ),
+    final users = _filtered(
+      context.watch(adminNotifierProvider.select((state) => state.users)),
     );
-    final users = _filtered(data.users);
     return div(classes: 'stack stack--sections', [
       div(classes: 'filters', [
         div(classes: 'grid-3', [
@@ -175,32 +209,14 @@ class _DirectoryState extends State<_Directory> {
           _selectField(
             labelText: 'Status',
             value: statusFilter,
-            options: const [
-              ('All statuses', 'all'),
-              ('Active', 'active'),
-              ('Suspended', 'suspended'),
-            ],
+            options: _statusOptions,
             onChanged: (v) => setState(() => statusFilter = v),
           ),
           _selectField(
             labelText: 'Role',
-            value: roleFilter?.label ?? 'all',
-            options: const [
-              ('All roles', 'all'),
-              ('Entrepreneur', 'entrepreneur'),
-              ('Owner', 'owner'),
-              ('Agent', 'agent'),
-              ('Administrator', 'admin'),
-            ],
-            onChanged: (v) => setState(() {
-              roleFilter = switch (v) {
-                'entrepreneur' => AppRole.entrepreneur,
-                'owner' => AppRole.owner,
-                'agent' => AppRole.agent,
-                'admin' => AppRole.admin,
-                _ => null,
-              };
-            }),
+            value: roleFilter,
+            options: _roleOptions,
+            onChanged: (v) => setState(() => roleFilter = v),
           ),
         ]),
       ]),
@@ -244,16 +260,19 @@ class _DirectoryState extends State<_Directory> {
                       span(classes: 'sub', [Component.text(user.email)]),
                     ]),
                     td([
-                      user.role == AppRole.admin
-                          ? span(classes: 'badge badge-info', [
-                              Component.text('Administrator'),
-                            ])
-                          : span(classes: 'badge badge-muted', [
-                              Component.text('User'),
-                            ]),
+                      span(
+                        classes: user.role == AppRole.admin
+                            ? 'badge badge-info'
+                            : 'badge badge-muted',
+                        [Component.text(_roleLabel(user.role))],
+                      ),
                     ]),
                     td([StatusBadge.forText(user.status)]),
-                    td([Component.text('${_listingCount(user, data.listings)}')]),
+                    td([
+                      Component.text(
+                        user.listingCount == null ? '—' : '${user.listingCount}',
+                      ),
+                    ]),
                     td([Component.text(_joined(user))]),
                     td([
                       div(classes: 'stack stack--xs', [
@@ -276,10 +295,25 @@ class _DirectoryState extends State<_Directory> {
         ),
       p(classes: 'stat-note', [
         Component.text(
-          'Only the fields needed to administer an account are shown. '
+          'Listings counts operational properties owned by the account, '
+          'counted by the backend. A dash means the count was not supplied. '
           'Passwords and other private credentials are never exposed.',
         ),
       ]),
     ]);
   }
 }
+
+/// The stored role id, matching `rbac.ALL_ROLES` and the filter option values.
+String _roleValue(AppRole role) => switch (role) {
+  AppRole.admin => 'admin',
+  AppRole.agent => 'agent',
+  _ => 'entrepreneur',
+};
+
+String _roleLabel(AppRole role) => switch (role) {
+  AppRole.admin => 'Administrator',
+  AppRole.agent => 'Agent',
+  AppRole.owner => 'Owner',
+  AppRole.entrepreneur => 'Entrepreneur',
+};

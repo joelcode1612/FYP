@@ -10,6 +10,11 @@ class SitewiseUser {
   final String location;
   final DateTime joinedAt;
 
+  /// Operational listings this account owns, counted server-side from
+  /// `fyp.rental_properties.owner_user_id`. Null means the count was not
+  /// supplied, which must render as unknown rather than as zero.
+  final int? listingCount;
+
   const SitewiseUser({
     required this.id,
     required this.name,
@@ -18,5 +23,6 @@ class SitewiseUser {
     required this.status,
     required this.location,
     required this.joinedAt,
+    this.listingCount,
   });
 }

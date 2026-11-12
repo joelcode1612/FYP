@@ -2,13 +2,21 @@
  * Leaflet + CARTO Voyager / OpenStreetMap. Reference markers are research
  * rental properties (U), NOT F&B competitors. Not a road-network catchment.
  *
- * Two modes, chosen by the ?radius query parameter:
+ * Two radius modes, chosen by the ?radius query parameter:
  *   legacy (no radius)   — 500 m + 1 km shown together, "Both" default. The
  *                          property-detail behaviour, unchanged.
  *   single (?radius=NNN) — one selectable straight-line radius among
  *                          500 / 1000 / 2000 / 3000 m. The Full Analysis page.
  * The circles are straight-line buffers, never travel-time or road-network
- * catchments.
+ * catchments, and no walking time is ever derived from them.
+ *
+ * Five layers are offered: Properties, Food Businesses, Nearby Places,
+ * Transport, Parking. The page passes their data as a compact JSON array in
+ * the ?layers parameter. Each entry carries `m` — whether the layer has stored
+ * coordinates. Only a mapped layer can be drawn as pins: the other four exist
+ * in this deployment as counts-within-a-radius on the property's feature
+ * vector, so they are reported as numbers with an explicit "counts only" tag
+ * rather than positioned markers the data cannot justify.
  */
 (() => {
   'use strict';
@@ -20,7 +28,19 @@
   const nearbyLabel = document.getElementById('nearby-label');
   const tabsEl = document.getElementById('radius-tabs');
   const legendEl = document.getElementById('map-legend');
+  const layersEl = document.getElementById('layer-toggles');
+  const recenterBtn = document.getElementById('recenter');
+  const fullscreenBtn = document.getElementById('fullscreen');
   const showAlert = message => { alertEl.textContent = message; alertEl.hidden = false; };
+  // Two independent notices share one bar: a tile failure must not erase the
+  // explanation of why a layer has no pins, and vice versa.
+  const notices = { layers: '', tiles: '' };
+  const paintNotice = () => {
+    const parts = [notices.layers, notices.tiles].filter(Boolean);
+    alertEl.textContent = parts.join(' ');
+    alertEl.hidden = parts.length === 0;
+  };
+  const clearAlert = () => { alertEl.hidden = true; alertEl.textContent = ''; };
   const valid = Number.isFinite(lat) && Number.isFinite(lon) &&
     lat >= -90 && lat <= 90 && lon >= -180 && lon <= 180 &&
     !(lat === 0 && lon === 0);
@@ -37,7 +57,38 @@
   }
   document.getElementById('location-id').textContent = ` · ${propertyId}`;
 
-  // Resolve the mode from the radius the caller asked for.
+  // -- layers ---------------------------------------------------------------
+  // Fallback mirrors the backend's five layers so the control still renders
+  // when the page has no insights payload (for example, an unscored listing).
+  const DEFAULT_LAYERS = [
+    { k: 'properties', l: 'Properties', c: '#1d4ed8', m: true },
+    { k: 'competitors', l: 'Food Businesses', c: '#d97706', m: false },
+    { k: 'demand_generators', l: 'Nearby Places', c: '#0f9d86', m: false },
+    { k: 'accessibility', l: 'Transport', c: '#7c3aed', m: false },
+    { k: 'parking', l: 'Parking', c: '#475569', m: false }
+  ];
+  let layers = DEFAULT_LAYERS;
+  try {
+    const parsed = JSON.parse(q.get('layers') || 'null');
+    if (Array.isArray(parsed) && parsed.length) {
+      layers = parsed
+        .filter(x => x && typeof x.k === 'string')
+        .map(x => ({
+          k: x.k,
+          l: typeof x.l === 'string' ? x.l : x.k,
+          c: typeof x.c === 'string' ? x.c : '#1d4ed8',
+          m: x.m === true,
+          a: typeof x.a === 'number' ? x.a : null,
+          b: typeof x.b === 'number' ? x.b : null,
+          n: typeof x.n === 'number' ? x.n : null
+        }));
+    }
+  } catch (err) {
+    layers = DEFAULT_LAYERS;
+  }
+  const active = new Set(layers.map(x => x.k));
+
+  // -- radius mode ----------------------------------------------------------
   const singleRadii = ['500', '1000', '2000', '3000'];
   const requested = q.get('radius');
   const single = requested !== null && singleRadii.includes(requested);
@@ -55,26 +106,37 @@
     attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/" target="_blank" rel="noopener">CARTO</a>'
   }).addTo(map);
   let tileErrors = 0;
-  tile.on('tileerror', () => { if (++tileErrors >= 3) showAlert('Basemap tiles could not load. The position and distance overlays may still be visible.'); });
+  tile.on('tileerror', () => {
+    if (++tileErrors < 3) return;
+    notices.tiles = 'Basemap tiles could not load. The position and distance overlays may still be visible.';
+    paintNotice();
+  });
   const origin = [lat, lon];
   map.setView(origin, zoomFor[radius] ?? 14.5);
-  L.circleMarker(origin, { radius: 10, color: '#fff', weight: 3, fillColor: '#1d4ed8', fillOpacity: 1 })
-    .addTo(map).bindPopup(`<strong>Selected property</strong><div id="selected-id"></div>`);
-  // This popup uses textContent rather than interpolation of property IDs.
-  map.eachLayer(layer => {
-    if (typeof layer.getPopup === 'function' && layer.getPopup()) {
-      const el = document.createElement('div');
-      const strong = document.createElement('strong');
-      strong.textContent = 'Selected property';
-      const name = document.createElement('div');
-      name.textContent = propertyId;
-      el.append(strong, name);
-      layer.bindPopup(el);
-    }
-  });
+
+  // The selected property is the subject of the page, so it is drawn larger
+  // than any reference marker and is never clustered.
+  const selectedPopup = () => {
+    const el = document.createElement('div');
+    const strong = document.createElement('strong');
+    strong.textContent = 'Selected property';
+    const name = document.createElement('div');
+    name.textContent = propertyId;
+    const note = document.createElement('div');
+    note.textContent = 'This is the listing being analysed.';
+    el.append(strong, name, note);
+    return el;
+  };
+  L.circleMarker(origin, { radius: 11, color: '#fff', weight: 3, fillColor: '#1d4ed8', fillOpacity: 1 })
+    .addTo(map)
+    .bindPopup(selectedPopup());
 
   const rings = L.layerGroup().addTo(map);
-  const nearMarkers = L.layerGroup().addTo(map);
+  const markers = (typeof L.markerClusterGroup === 'function')
+    ? L.markerClusterGroup({ chunkedLoading: true, maxClusterRadius: 50, disableClusteringAtZoom: 17 })
+    : L.layerGroup();
+  markers.addTo(map);
+
   let nearby = [];
   const meters = (a, b) => {
     const toR = Math.PI / 180;
@@ -82,6 +144,7 @@
     const h = Math.sin(dLat / 2) ** 2 + Math.cos(a.lat * toR) * Math.cos(b.lat * toR) * Math.sin(dLon / 2) ** 2;
     return 2 * 6371008.8 * Math.atan2(Math.sqrt(h), Math.sqrt(Math.max(0, 1 - h)));
   };
+
   const addReferenceMarker = entry => {
     // Legacy "Both" distinguishes the 500 m ring from the 1 km ring by colour.
     // In single-radius mode every marker already lies inside the one selected
@@ -96,27 +159,183 @@
     const title = document.createElement('div'); title.textContent = entry.title;
     const distance = document.createElement('div'); distance.textContent = `${Math.round(entry.dist)} m away · research reference property`;
     content.append(name, title, distance);
-    marker.bindPopup(content).addTo(nearMarkers);
+    marker.bindPopup(content);
+    markers.addLayer(marker);
   };
-  const render = () => {
-    rings.clearLayers(); nearMarkers.clearLayers();
+
+  // A permanent label on the ring itself, so the circle is readable without a
+  // legend lookup. It sits due east of the centre rather than due north: the
+  // northern edge of the outer ring is frequently clipped by the toolbar, which
+  // hid the label entirely at the default zoom.
+  const pointOnRing = (radiusM, bearingDeg) => {
+    const R = 6371008.8;
+    const br = (bearingDeg * Math.PI) / 180;
+    const latR = (lat * Math.PI) / 180;
+    const dLat = (radiusM * Math.cos(br)) / R;
+    const dLon = (radiusM * Math.sin(br)) / (R * Math.cos(latR));
+    return [lat + (dLat * 180) / Math.PI, lon + (dLon * 180) / Math.PI];
+  };
+  const addRingLabel = (radiusM, text, color) => {
+    const marker = L.marker(pointOnRing(radiusM, 90), {
+      interactive: false,
+      keyboard: false,
+      icon: L.divIcon({
+        className: 'sw-ring-label',
+        html: `<span style="background:${color}">${text}</span>`,
+        iconSize: [0, 0]
+      })
+    });
+    marker.addTo(rings);
+  };
+
+  const radiusMeters = () => (single ? Number(radius) : radius === '500' ? 500 : 1000);
+
+  const renderRings = () => {
+    rings.clearLayers();
     if (single) {
       const rM = Number(radius);
       L.circle(origin, { radius: rM, color: '#1d4ed8', weight: 2, fillColor: '#1d4ed8', fillOpacity: .06, interactive: false }).addTo(rings);
-      for (const entry of nearby) { if (entry.dist <= rM + 1e-6) addReferenceMarker(entry); }
-      const shown = nearby.filter(x => x.dist <= rM + 1e-6).length;
-      nearbyLabel.textContent = `${shown} research reference properties within ${labelFor[radius]} · not F&B competitors`;
-    } else {
-      if (radius !== '500') L.circle(origin, { radius: 1000, color: '#8a6bc7', weight: 2, fillColor: '#8a6bc7', fillOpacity: .07, dashArray: '6 5', interactive: false }).addTo(rings);
-      if (radius !== '1000') L.circle(origin, { radius: 500, color: '#0f9d86', weight: 2, fillColor: '#0f9d86', fillOpacity: .09, interactive: false }).addTo(rings);
-      for (const entry of nearby) { if (radius === '500' && entry.dist > 500) continue; addReferenceMarker(entry); }
-      const inner = nearby.filter(x => x.dist <= 500).length;
-      const outer = nearby.length - inner;
-      nearbyLabel.textContent = `${inner} within 500 m · ${outer} from 500 m–1 km`;
+      addRingLabel(rM, labelFor[radius], '#1d4ed8');
+      return;
+    }
+    if (radius !== '500') {
+      L.circle(origin, { radius: 1000, color: '#8a6bc7', weight: 2, fillColor: '#8a6bc7', fillOpacity: .07, dashArray: '6 5', interactive: false }).addTo(rings);
+      addRingLabel(1000, '1 km', '#8a6bc7');
+    }
+    if (radius !== '1000') {
+      L.circle(origin, { radius: 500, color: '#0f9d86', weight: 2, fillColor: '#0f9d86', fillOpacity: .09, interactive: false }).addTo(rings);
+      addRingLabel(500, '500 m', '#0f9d86');
     }
   };
 
-  // Tab controls, then the footer legend — both reflect the active mode.
+  const renderLegend = () => {
+    legendEl.innerHTML = '';
+    const key = (color, text) => {
+      const k = document.createElement('span');
+      k.className = 'key';
+      k.style.background = color;
+      legendEl.append(k, document.createTextNode(` ${text} `));
+    };
+    key('#1d4ed8', 'Selected property');
+    if (active.has('properties')) {
+      key('#0f9d86', 'Within 500 m');
+      key('#8a6bc7', '500 m–1 km');
+    }
+    for (const layer of layers) {
+      if (layer.k === 'properties' || !active.has(layer.k)) continue;
+      const text = layer.m
+        ? layer.l
+        : `${layer.l} (${countText(layer)})`;
+      key(layer.c, text);
+    }
+  };
+
+  const countText = layer => {
+    const parts = [];
+    if (typeof layer.a === 'number') parts.push(`${layer.a} within 500 m`);
+    if (typeof layer.b === 'number') parts.push(`${layer.b} within 1 km`);
+    return parts.length ? parts.join(' · ') : 'not measured';
+  };
+
+  const renderNotice = () => {
+    // Tile failures have their own slot; this line is only about layers.
+    const unmapped = layers.filter(x => active.has(x.k) && !x.m);
+    if (!unmapped.length) {
+      notices.layers = '';
+      return paintNotice();
+    }
+    const names = unmapped.map(x => x.l);
+    const listed = names.length === 1
+      ? names[0]
+      : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
+    notices.layers =
+      `Counts only for ${listed}: locations are not stored, so no pins are ` +
+      'drawn for those layers. The counts are in the legend below.';
+    paintNotice();
+  };
+
+  const render = () => {
+    renderRings();
+    markers.clearLayers();
+    const limit = radiusMeters();
+    const visible = nearby.filter(x => x.dist <= limit + 1e-6);
+    if (active.has('properties')) {
+      for (const entry of visible) addReferenceMarker(entry);
+    }
+    renderLegend();
+    renderNotice();
+
+    const shown = active.has('properties') ? visible.length : 0;
+    if (!active.has('properties')) {
+      nearbyLabel.textContent = 'Properties layer is off';
+    } else if (single) {
+      nearbyLabel.textContent = `${shown} research reference properties within ${labelFor[radius]} · not F&B competitors`;
+    } else {
+      const inner = visible.filter(x => x.dist <= 500).length;
+      nearbyLabel.textContent = `${inner} within 500 m · ${visible.length - inner} from 500 m–1 km`;
+    }
+
+    // The Properties chip shows the count the map actually drew, which is the
+    // only place that number can come from — the backend does not store it.
+    const badge = layersEl.querySelector('[data-count="properties"]');
+    if (badge) badge.textContent = active.has('properties') ? String(shown) : '';
+  };
+
+  // -- controls -------------------------------------------------------------
+  const buildChips = () => {
+    layersEl.innerHTML = '';
+    const label = document.createElement('span');
+    label.className = 'layers__label';
+    label.textContent = 'Layers';
+    layersEl.append(label);
+
+    for (const layer of layers) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'chip';
+      b.dataset.layer = layer.k;
+      b.dataset.mapped = String(layer.m);
+      b.setAttribute('aria-pressed', String(active.has(layer.k)));
+
+      const dot = document.createElement('span');
+      dot.className = 'chip__dot';
+      dot.style.background = layer.c;
+      const name = document.createElement('span');
+      name.textContent = layer.l;
+      b.append(dot, name);
+
+      if (layer.k === 'properties') {
+        const count = document.createElement('span');
+        count.className = 'chip__count';
+        count.dataset.count = 'properties';
+        b.append(count);
+      } else {
+        // The chip badge follows the selected radius; the legend always shows
+        // both totals.
+        const c = radius === '1000' ? layer.b : layer.a;
+        if (typeof c === 'number') {
+          const count = document.createElement('span');
+          count.className = 'chip__count';
+          count.textContent = String(c);
+          b.append(count);
+        }
+        if (!layer.m) {
+          const tag = document.createElement('span');
+          tag.className = 'chip__tag';
+          tag.textContent = 'counts only';
+          b.append(tag);
+        }
+      }
+
+      b.addEventListener('click', () => {
+        if (active.has(layer.k)) active.delete(layer.k); else active.add(layer.k);
+        b.setAttribute('aria-pressed', String(active.has(layer.k)));
+        render();
+      });
+      layersEl.append(b);
+    }
+  };
+
   tabsEl.innerHTML = '';
   for (const c of choices) {
     const b = document.createElement('button');
@@ -130,36 +349,33 @@
       // Only the single-radius mode fits the view to the chosen circle; the
       // legacy 500 m / 1 km / Both tabs keep the original zoom as before.
       if (single) map.setView(origin, zoomFor[radius] ?? 14.5);
+      buildChips();
       render();
     });
     tabsEl.append(b);
   }
-  legendEl.innerHTML = '';
-  const key = (cls, text) => {
-    const k = document.createElement('span'); k.className = `key ${cls}`;
-    legendEl.append(k, document.createTextNode(` ${text}`));
-  };
-  if (single) {
-    key('a', 'Selected property');
-    legendEl.append(document.createTextNode('\u00a0'));
-    key('b', `Research reference within ${labelFor[radius]}`);
-    // The radius label changes with the active tab, so rebuild it on every
-    // click rather than printing a threshold that no longer applies.
-    const refKey = legendEl.querySelectorAll('.key')[1];
-    for (const b of tabsEl.querySelectorAll('button')) {
-      b.addEventListener('click', () => {
-        refKey.nextSibling.textContent = ` Research reference within ${labelFor[radius]}`;
+
+  recenterBtn.addEventListener('click', () => {
+    map.setView(origin, zoomFor[radius] ?? 14.5);
+  });
+
+  fullscreenBtn.addEventListener('click', () => {
+    if (document.fullscreenElement) {
+      document.exitFullscreen?.();
+    } else if (document.documentElement.requestFullscreen) {
+      document.documentElement.requestFullscreen().catch(() => {
+        showAlert('Fullscreen is not available in this browser.');
       });
     }
-  } else {
-    key('a', 'Selected unit');
-    legendEl.append(document.createTextNode('\u00a0'));
-    key('b', '0–500 m');
-    legendEl.append(document.createTextNode('\u00a0'));
-    key('c', '500 m–1 km');
-  }
+  });
+  document.addEventListener('fullscreenchange', () => {
+    fullscreenBtn.setAttribute('aria-pressed', String(Boolean(document.fullscreenElement)));
+    setTimeout(() => map.invalidateSize(), 60);
+  });
 
+  buildChips();
   render();
+
   fetch('/property_reference_955.json', { credentials: 'same-origin' })
     .then(r => { if (!r.ok) throw new Error('Research reference file unavailable'); return r.json(); })
     .then(list => {

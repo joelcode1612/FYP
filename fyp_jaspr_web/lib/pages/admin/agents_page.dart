@@ -110,6 +110,12 @@ class _AdminAgentsPageState extends State<AdminAgentsPage> {
   bool _companySaving = false;
   String? _companyDialogError;
 
+  // --- Supervised MFA recovery ---------------------------------------------
+  String? _mfaId;
+  String _mfaReason = '';
+  bool _mfaBusy = false;
+  String? _mfaError;
+
   @override
   void initState() {
     super.initState();
@@ -377,6 +383,53 @@ class _AdminAgentsPageState extends State<AdminAgentsPage> {
     }
   }
 
+  /// Administrator-supervised MFA recovery through the existing authorised
+  /// endpoint. Only verified TOTP factors are removed server-side; the agent
+  /// keeps their identity, password and role, and must re-enroll on next
+  /// sign-in. The reason is mandatory and is stored in the audit event.
+  Future<void> _resetMfa(StaffAgent agent) async {
+    final reason = _mfaReason.trim();
+    if (reason.length < 3) {
+      setState(() => _mfaError = 'Enter a reason of at least 3 characters.');
+      return;
+    }
+    setState(() {
+      _mfaBusy = true;
+      _mfaError = null;
+    });
+    try {
+      final result = await AppLocator.adminApi.resetAgentMfa(
+        userId: agent.userId,
+        reason: reason,
+      );
+      await _load(silent: true);
+      if (!mounted) return;
+      final removed = (result['removed_factors'] as List?)?.length ?? 0;
+      setState(() {
+        _mfaId = null;
+        _mfaReason = '';
+        _mfaBusy = false;
+      });
+      _setNotice(
+        removed == 0
+            ? '${agent.displayName} has no verified authenticator factor to '
+                  'remove. Nothing was changed; they can enroll normally on '
+                  'next sign-in.${_auditSuffix(result)}'
+            : '$removed authenticator factor${removed == 1 ? '' : 's'} removed '
+                  'for ${agent.displayName}. Their password and role are '
+                  'unchanged; they must enroll a new authenticator on next '
+                  'sign-in.${_auditSuffix(result)}',
+        error: false,
+      );
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _mfaBusy = false;
+        _mfaError = AdminApi.message(error);
+      });
+    }
+  }
+
   Future<void> _saveCompany() async {
     final name = _companyDialogName.trim();
     if (name.length < 2) {
@@ -549,6 +602,24 @@ class _AdminAgentsPageState extends State<AdminAgentsPage> {
     });
     _focusOpenDialog();
   }
+
+  void _openMfaRecovery(String userId) {
+    setState(() {
+      _mfaId = userId;
+      _detailsId = null;
+      _mfaReason = '';
+      _mfaError = null;
+      _mfaBusy = false;
+    });
+    _focusOpenDialog();
+  }
+
+  void _closeMfaRecovery() => setState(() {
+    _mfaId = null;
+    _mfaReason = '';
+    _mfaError = null;
+    _mfaBusy = false;
+  });
 
   void _nextFromCompany() {
     setState(() {
@@ -1400,7 +1471,64 @@ class _AdminAgentsPageState extends State<AdminAgentsPage> {
           variant: 'secondary',
           onClick: () => setState(() => _detailsId = null),
         ),
+        ActionButton(
+          'Reset MFA',
+          variant: 'secondary',
+          icon: 'lock_reset',
+          onClick: () => _openMfaRecovery(agent.userId),
+        ),
         _statusAction(agent),
+      ],
+    );
+  }
+
+  Component _mfaDialog() {
+    final agent = _agents.where((row) => row.userId == _mfaId).firstOrNull;
+    if (agent == null) return const span([]);
+    final canSubmit = !_mfaBusy && _mfaReason.trim().length >= 3;
+    return SitewiseDialog(
+      title: 'Reset MFA for ${agent.displayName}?',
+      ariaLabel: 'Confirm MFA recovery',
+      onClose: _mfaBusy ? _noop : _closeMfaRecovery,
+      body: div(classes: 'stack', [
+        p(classes: 'body', [
+          Component.text(
+            'Removes the verified authenticator factors on ${agent.email} so '
+            'they can enroll a new device. Their password, role and account '
+            'status are unchanged, and no recovery code or factor secret is '
+            'shown to you. Until they re-enroll, staff routes that require MFA '
+            'will send them to the enrollment screen. The reset is recorded in '
+            'the audit log with your administrator identity and this reason.',
+          ),
+        ]),
+        if (_mfaError != null)
+          div(
+            attributes: const {'role': 'alert'},
+            [ActionNotice(_mfaError!, tone: 'danger')],
+          ),
+        Field(
+          labelText: 'Reason (required)',
+          error: _mfaError,
+          hint: 'Stored in the audit event, e.g. "Lost phone, identity verified by phone".',
+          child: _textInput(
+            value: _mfaReason,
+            placeholder: 'Why is this reset authorised?',
+            invalid: _mfaError != null,
+            onInput: (value) => setState(() => _mfaReason = value),
+          ),
+        ),
+      ]),
+      actions: [
+        ActionButton(
+          'Cancel',
+          variant: 'secondary',
+          onClick: _mfaBusy ? null : _closeMfaRecovery,
+        ),
+        ActionButton(
+          _mfaBusy ? 'Resetting…' : 'Remove authenticator factors',
+          variant: 'danger-outline',
+          onClick: canSubmit ? () => _resetMfa(agent) : null,
+        ),
       ],
     );
   }
@@ -1470,6 +1598,7 @@ class _AdminAgentsPageState extends State<AdminAgentsPage> {
         if (_companyDialogOpen) _companyDialog(),
         if (_detailsId != null) _detailsDialog(),
         if (_confirmingId != null) _confirmDialog(),
+        if (_mfaId != null) _mfaDialog(),
       ]),
     );
   }

@@ -27,6 +27,7 @@ import 'pages/entrepreneur/my_properties_page.dart' as e_my_properties;
 import 'pages/entrepreneur/add_property_page.dart' as e_add_property;
 import 'pages/entrepreneur/explanation_page.dart' as e_explanation;
 import 'pages/entrepreneur/ai_recommendations_page.dart' as e_ai;
+import 'pages/entrepreneur/commercial_listing_page.dart' as e_listing;
 import 'pages/entrepreneur/explore_page.dart' as e_explore;
 import 'pages/entrepreneur/preferences_page.dart' as e_preferences;
 import 'pages/entrepreneur/profile_page.dart' as e_profile;
@@ -515,12 +516,33 @@ class SitewiseApp extends StatelessComponent {
               title: 'AI recommendations — Sitewise',
             ),
           ),
+          // The verified commercial listing behind a recommendation, keyed by
+          // the NUMERIC rental id (`fyp.rental_properties.id`). Distinct from
+          // `/entrepreneur/property-detail`, which is keyed by the canonical
+          // research id. The backend serves 404 unless the listing is both
+          // approved and published, so unpublished rentals never render.
+          Route(
+            path: '/entrepreneur/listing',
+            builder: (context, state) => _page(
+              e_listing.CommercialListingPage(
+                key: ValueKey('listing-${state.queryParams['id'] ?? ''}'),
+                id: state.queryParams['id'] ?? '',
+              ),
+              title: 'Commercial listing — Sitewise',
+              description:
+                  'The verified rental listing linked to a recommended property.',
+            ),
+          ),
           Route(
             path: '/entrepreneur/property-detail',
             builder: (context, state) => _page(
               e_property_detail.PropertyDetailPage(
                 key: ValueKey('property-detail-${state.queryParams['id'] ?? ''}'),
                 id: state.queryParams['id'] ?? '',
+                // Optional recommendation result: when present, the page also
+                // explains why THIS unit matched the entrepreneur's saved
+                // preferences, using the persisted Layer 2 result.
+                resultId: state.queryParams['result'] ?? '',
               ),
               title: 'Property detail — Sitewise',
             ),

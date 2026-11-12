@@ -9,6 +9,7 @@ import '../../data/datasources/local/opencv_panorama_stitcher_stub.dart'
     if (dart.library.io) '../../data/datasources/local/opencv_panorama_stitcher.dart';
 import '../../data/repositories/mobile_api_client.dart';
 import '../../data/repositories/onboarding_repository_impl.dart';
+import '../../data/repositories/persistent_tour_repository.dart';
 import '../../data/repositories/supabase_auth_repository.dart';
 import 'assessment_session.dart';
 import 'capture_session_store.dart';
@@ -39,7 +40,13 @@ abstract final class ServiceLocator {
   static PropertyRepository propertyRepo = PropertyRepositoryImpl();
   static final RecommendationRepositoryImpl recommendationRepo =
       RecommendationRepositoryImpl();
-  static final TourRepositoryImpl tourRepo = TourRepositoryImpl();
+
+  /// One device-backed tour store shared by AR capture, frame-progress sync
+  /// and panorama stitching. Keeping this instance common prevents the three
+  /// lifecycle consumers from diverging after a process restart.
+  static final PersistentTourRepository tourRepo = PersistentTourRepository(
+    FileDraftLocalDataSource(),
+  );
 
   /// Bearer-aware transport for the shared API repositories. Constructed
   /// lazily-on-read (cheap: one HttpClient total) and only consumed when
@@ -198,8 +205,10 @@ abstract final class ServiceLocator {
 
   /// Re-scopes draft storage to the signed-in account (or back to `device`
   /// on sign-out). Called from the auth-state listeners in providers.dart.
-  static void scopeDraftsToAccount(String? userId) =>
-      drafts.setAccount(userId);
+  static void scopeDraftsToAccount(String? userId) {
+    drafts.setAccount(userId);
+    tourRepo.setAccount(userId);
+  }
 
   /// Fresh panorama session over the 26 local capture targets.
   static PanoramaCaptureService newPanoramaCaptureService([

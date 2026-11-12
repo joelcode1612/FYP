@@ -111,6 +111,25 @@ _SHAP_CACHE: dict[str, dict[str, Any]] = {}
 _SHAP_CACHE_LOCK = threading.Lock()
 
 
+def _feature_labels(shap_payload: dict[str, Any] | None) -> dict[str, str]:
+    """Plain-English labels for the features actually present in a SHAP payload.
+
+    Reuses the single 47-feature label map owned by
+    :mod:`sitewise.services.property_insights_service` rather than keeping a
+    second copy that could drift. Imported lazily to avoid a module cycle, and
+    a missing map degrades to an empty dict - a client then falls back to the
+    technical name instead of the endpoint failing.
+    """
+    if not shap_payload:
+        return {}
+    try:
+        from sitewise.services.property_insights_service import FEATURE_LABELS
+    except Exception:  # noqa: BLE001 - labels are presentation, never fatal
+        return {}
+    names = set((shap_payload.get("contributions") or {}).keys())
+    return {name: FEATURE_LABELS[name] for name in sorted(names) if name in FEATURE_LABELS}
+
+
 class RecommendationGenerationService:
     """Application service: framework-free orchestration over domain + repos."""
 
@@ -524,9 +543,15 @@ class RecommendationGenerationService:
         else:
             shap_status = {"available": True, "reason": None, "source": "cached"}
 
+        personalisation = record["personalisation"]
         personalised = {
             "engine": "rule_based",
-            "config_version": SCORING_CONFIG.version,
+            # The engine version is whatever actually scored this row (the
+            # five-question V3 engine for v3 preferences). Hardcoding the
+            # baseline config here would mislabel a V3 result as v1/v2.
+            "config_version": (
+                personalisation.get("config_version") or SCORING_CONFIG.version
+            ),
             "preference_reasons": base_explanation.get("preference_reasons", []),
             "cautions": base_explanation.get("cautions", []),
             "preference_match_score": record["personalisation"]["preference_match_score"],
@@ -558,6 +583,11 @@ class RecommendationGenerationService:
             "batch_id": record.get("batch_id"),
             "user_id": str(user_id),
             "property_id": record["property_id"],
+            # The stored property block, so the explanation surface can name
+            # the unit it explains and link onward without a second request.
+            # It carries the canonical id, the verified listing reference and
+            # the verification state - never a promise of availability.
+            "property": record.get("property") or {},
             "generated_at": record.get("generated_at"),
             "model": record["model"],
             "personalisation": record["personalisation"],
@@ -568,6 +598,11 @@ class RecommendationGenerationService:
                 "shap": shap_payload,
                 "shap_status": shap_status,
                 "score_meaning": SCORE_MEANING,
+                # Plain-English names for every model feature, so no client has
+                # to render a raw column name such as ``pop_500m`` or duplicate
+                # a 47-entry map of its own. Only features present in the
+                # deployed feature set are included.
+                "feature_labels": _feature_labels(shap_payload),
                 "sections": {
                     "pu_research_explanation": pu_section,
                     "personalised_recommendation_explanation": personalised,

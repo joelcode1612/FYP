@@ -169,10 +169,24 @@ class _ReviewSplitState extends State<ReviewSplit> {
           h2([Component.text(_countLine(data))]),
           if (items.isEmpty)
             EmptyState(
-              title: data.loading ? 'Loading…' : 'Queue is empty',
+              title: data.loading
+                  ? 'Loading…'
+                  : data.error != null && data.page == null
+                  ? 'Could not load the review queue'
+                  : 'Queue is empty',
               body: data.loading
                   ? 'Fetching the review queue from the server.'
+                  : data.error != null && data.page == null
+                  ? 'The server did not return the queue, so its contents are '
+                        'unknown. This is not an empty result.'
                   : 'No listing matches the current filters.',
+              action: data.error != null && data.page == null && !data.loading
+                  ? ActionButton(
+                      'Try again',
+                      variant: 'primary',
+                      onClick: () => unawaited(_notifier.loadReviewPage()),
+                    )
+                  : null,
             )
           else
             div(classes: 'queue', [
@@ -187,7 +201,26 @@ class _ReviewSplitState extends State<ReviewSplit> {
               body: 'Choose a listing on the left to review its evidence.',
             )
           else if (detailMatches)
-            const VerificationDetailView()
+            div(classes: 'stack', [
+              // Agent assignment lives on the standalone listing page. This is
+              // the queue's path to it — a second assignment form here would
+              // be a duplicate write surface for the same foreign key.
+              div(classes: 'row row--md', [
+                span(classes: 'grow small muted', [
+                  const Component.text(
+                    'Agent assignment is managed on the full listing record.',
+                  ),
+                ]),
+                ActionLink(
+                  'Open full listing record',
+                  href:
+                      '/admin/listing-detail?id=${Uri.encodeComponent(_selectedId!)}',
+                  variant: 'secondary',
+                  icon: 'open_in_new',
+                ),
+              ]),
+              const VerificationDetailView(),
+            ])
           else
             div(classes: 'card', [
               p(classes: 'body muted', [const Component.text('Loading…')]),

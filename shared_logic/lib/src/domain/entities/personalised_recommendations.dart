@@ -193,6 +193,12 @@ class PersonalisedExplanation {
   final ShapExplanation? shap;
   final ShapStatus shapStatus;
 
+  /// Plain-English names for the SHAP features, keyed by the exact technical
+  /// feature name. Supplied by the backend so no client keeps its own copy of
+  /// the 47-feature label map (and none can drift from the deployed model).
+  /// Empty when SHAP is unavailable.
+  final Map<String, String> featureLabels;
+
   const PersonalisedExplanation({
     required this.resultId,
     required this.propertyId,
@@ -205,7 +211,13 @@ class PersonalisedExplanation {
     this.coverage = const {},
     this.shap,
     required this.shapStatus,
+    this.featureLabels = const {},
   });
+
+  /// The friendly label for [feature], falling back to a de-underscored form
+  /// rather than ever showing a raw column name.
+  String labelFor(String feature) =>
+      featureLabels[feature] ?? feature.replaceAll('_', ' ');
 
   factory PersonalisedExplanation.fromJson(Map<String, dynamic> json) {
     final explanation = (json['explanation'] as Map<String, dynamic>?) ?? const {};
@@ -239,6 +251,10 @@ class PersonalisedExplanation {
           ? ShapExplanation.fromJson(shapJson)
           : null,
       shapStatus: ShapStatus.fromJson(statusJson),
+      featureLabels: (explanation['feature_labels'] as Map?)?.map(
+            (key, value) => MapEntry('$key', '$value'),
+          ) ??
+          const {},
     );
   }
 }

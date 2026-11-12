@@ -334,6 +334,31 @@ class _AiRecommendationCard extends ConsumerWidget {
                     _AssessButton(item: item),
                   ],
                 ),
+                const SizedBox(height: 8),
+                // Opens the research insights for this unit by its CANONICAL
+                // id (EP-/MD-). The numeric listing id addresses a different
+                // record and must never be passed here.
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed: () => Navigator.of(context).pushNamed(
+                      '/entrepreneur/property-detail',
+                      arguments: item.propertyId,
+                    ),
+                    icon: const Icon(Icons.place_outlined, size: 16),
+                    label: const Text('View property insights'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: SitewiseColors.ink,
+                      side: const BorderSide(
+                        color: SitewiseColors.borderStrong,
+                      ),
+                      textStyle: const TextStyle(
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
+                ),
               ],
             ),
           ),
@@ -501,14 +526,14 @@ class _ExplanationSheet extends ConsumerWidget {
               for (final feature
                   in explanation.shap!.topPositive.take(3))
                 _ShapRow(
-                  feature: feature.feature,
+                  label: explanation.labelFor(feature.feature),
                   contribution: feature.contribution,
                   positive: true,
                 ),
               for (final feature
                   in explanation.shap!.topNegative.take(3))
                 _ShapRow(
-                  feature: feature.feature,
+                  label: explanation.labelFor(feature.feature),
                   contribution: feature.contribution,
                   positive: false,
                 ),
@@ -659,12 +684,14 @@ class _ComponentRow extends StatelessWidget {
 }
 
 class _ShapRow extends StatelessWidget {
-  final String feature;
+  /// Plain-English name supplied by the backend, so the sheet never shows a
+  /// raw model column such as `pop_500m`.
+  final String label;
   final double contribution;
   final bool positive;
 
   const _ShapRow({
-    required this.feature,
+    required this.label,
     required this.contribution,
     required this.positive,
   });
@@ -684,7 +711,7 @@ class _ShapRow extends StatelessWidget {
           const SizedBox(width: 6),
           Expanded(
             child: Text(
-              feature.replaceAll('_', ' '),
+              label,
               overflow: TextOverflow.ellipsis,
               style: const TextStyle(
                 fontSize: 11,
