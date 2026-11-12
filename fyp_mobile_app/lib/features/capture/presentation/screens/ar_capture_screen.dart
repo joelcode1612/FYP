@@ -280,6 +280,13 @@ class _CaptureBody extends StatelessWidget {
   Widget build(BuildContext context) {
     final state = controller.state;
     final textureId = state.textureId;
+    final holdComplete =
+        state.capturing &&
+        state.activeTarget?.status.isCapturing == true &&
+        state.tracking == TrackingState.tracking &&
+        !state.trackingRecovering &&
+        state.activeAnchorTracking &&
+        (state.alignment?.withinTolerance ?? false);
 
     return PopScope(
       // SiteWise opens this screen from the Add Property wizard, so the system
@@ -310,28 +317,24 @@ class _CaptureBody extends StatelessWidget {
                 // so the pointer lagged the arithmetic it was meant to picture.
                 alignment: state.alignment,
                 withinTolerance: state.alignment?.withinTolerance ?? false,
-                // The ring fills with the stability window — but **only when
-                // every other capture condition already holds**. A ring at 100%
-                // now means `readyToCapture`, so a full ring can never sit above
-                // a shutter that is blocked on drift or an untracked anchor.
-                stabilityProgress:
-                    state.displayCaptureBlockReasonBeforeSettle == null
+                // The controller/VIO engine owns the only hold calculation.
+                // Do not show it through an unmet prerequisite; once that same
+                // genuine hold arms a shutter, keep its 100% green confirmation
+                // visible while the real JPEG is being saved.
+                stabilityProgress: holdComplete
+                    ? 1
+                    : state.displayCaptureBlockReasonBeforeSettle == null
                     ? state.stabilityProgress
                     : 0,
-                // Alignment alone cannot arm a shot: walking away from the
-                // calibrated station invalidates the composition. Keep the
-                // central reticle visually honest with the disabled shutter.
-                // With no target selected this is a neutral, persistent
-                // reticle after a completed shot.  A prior target's distance
-                // warning must not keep it amber; selecting the next target
-                // re-enables the real station-distance gate.
+                // A blocked, aligned target is amber so the operator can see
+                // that alignment is not sufficient. Misalignment stays neutral;
+                // tracking loss clears alignment and suspends the sweep.
                 captureBlocked:
                     state.guidanceTarget != null &&
-                    state.stationDriftWarningVisible &&
-                    // The amber reticle is presentation, not safety: the
-                    // shutter stays blocked by `captureBlockReason` either
-                    // way. Gated while tracking is debugged on a device.
-                    kStationDriftWarningVisualsEnabled,
+                    !holdComplete &&
+                    (state.alignment?.withinTolerance ?? false) &&
+                    state.displayCaptureBlockReasonBeforeSettle != null,
+                holdComplete: holdComplete,
                 // A paused anchor is now hidden rather than drawn from its
                 // stale pose, so the overlay must remain neutral too. The
                 // marker and its guidance therefore always appear and disappear

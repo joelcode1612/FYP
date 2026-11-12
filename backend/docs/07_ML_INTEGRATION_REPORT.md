@@ -1,6 +1,14 @@
 # 07 — ML Integration Report (actual status)
 
-## Verified precondition (2026-11-04)
+> **Historical-state warning (updated 2026-11-12):** The inventory below is a
+> snapshot of the repository on **2026-11-04**. Its statements that no model
+> artifacts exist and that all model inference is unavailable are no longer true.
+> The current tracked artifacts, runtime behavior, checksums, reproducible
+> property scores and remaining training-provenance gaps are documented in
+> `10_THREE_LAYER_RECOMMENDATION_SYSTEM.md` and
+> `ml_reference/pu_artifact_verification_2026_11_12.json`.
+
+## Verified precondition (2026-11-04; historical, superseded)
 
 * `ml/model_loader.py`, `ml/pu_learning.py`, `ml/shap_explainer.py` were empty
   stubs (`class X: pass`).

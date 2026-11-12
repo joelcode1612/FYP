@@ -377,18 +377,22 @@ class CaptureGeometryConfig {
   /// warning. `CaptureState.stationDrifted` is where it blocks the shutter.
   final double stationDriftWarningM;
 
-  /// Hard cap on the raw camera-to-station distance while turning in place.
+  /// Maximum phone-to-turn-pivot offset the body-rotation model will fit.
   ///
-  /// A person spinning with the phone near their torso moves the camera along
-  /// an arc; 0.75 m covers that arc without permitting the phone to leave the
-  /// capture volume. Beyond it the strict frozen-origin gate applies.
+  /// This is not the raw station-movement cap. The model only compensates when
+  /// camera translation follows the frozen yaw-dependent pivot trajectory.
   final double rotationInPlaceRadiusM;
 
-  /// How far the live arc radius may depart from the frozen one before the
-  /// rotation compensation is withdrawn.
+  /// Hard cap on raw camera displacement from the calibrated camera position
+  /// while following a validated rotation path. 1.05 m accommodates a phone
+  /// held 0.50 m forward through a 180° turn without removing the cap.
+  final double rotationMaxRawExcursionM;
+
+  /// Maximum position residual from the frozen pivot trajectory before
+  /// compensation is withdrawn.
   final double rotationRadialToleranceM;
 
-  /// Yaw sweep that must be observed before an in-place arc may be established.
+  /// One-direction yaw sweep required before the pivot fit is accepted.
   final double minRotationYawSweepDeg;
 
   /// How far the phone may wander in position across the window, in metres.
@@ -419,8 +423,9 @@ class CaptureGeometryConfig {
     this.maxPositionDriftM = VioSphereConstants.maxWindowPositionDriftM,
     this.stationDriftWarningM = VioSphereConstants.maxStationDriftM,
     this.rotationInPlaceRadiusM = 0.75,
+    this.rotationMaxRawExcursionM = 1.05,
     this.rotationRadialToleranceM = 0.10,
-    this.minRotationYawSweepDeg = 30,
+    this.minRotationYawSweepDeg = 40,
     this.maxSampleGap = VioSphereConstants.maxSampleGap,
     this.smootherTauSeconds = 0.12,
     this.smootherSnapAngleDeg = 25,

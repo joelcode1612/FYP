@@ -30,6 +30,11 @@ class CommercialProperty {
   final VerificationStatus verification;
   final double suitabilityScore; // 0–100
   final String ownerId;
+
+  /// Derived by the backend from an operational listing + owner/agent links.
+  /// A catalogue record without a proven manager stays unassigned.
+  final String managementLabel;
+  final String? managerName;
   final bool hasTour;
   final String? imageUrl;
 
@@ -135,6 +140,8 @@ class CommercialProperty {
     required this.suitabilityScore,
     this.hasSuitabilityScore = true,
     required this.ownerId,
+    this.managementLabel = 'Management not assigned',
+    this.managerName,
     required this.hasTour,
     this.imageUrl,
     this.sourceUrl,
@@ -207,6 +214,8 @@ class CommercialProperty {
     suitabilityScore: suitabilityScore,
     hasSuitabilityScore: hasSuitabilityScore,
     ownerId: ownerId,
+    managementLabel: managementLabel,
+    managerName: managerName,
     hasTour: hasTour,
     imageUrl: imageUrl ?? this.imageUrl,
     sourceUrl: sourceUrl,

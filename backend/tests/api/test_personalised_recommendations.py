@@ -508,14 +508,19 @@ def test_explanation_enforces_ownership_and_works_without_shap(
         in {"AVAILABLE", "VERIFIED_AVAILABLE", "CONFIRMED"}
     )
 
-    # The top-ranked property is NOT the supplied reference vector, so live
-    # 47-feature resolution fails closed. SHAP is omitted but everything else
-    # still works - the required "works without SHAP" behaviour.
-    assert body["property_id"] != REFERENCE_PROPERTY_ID
-    assert body["explanation"]["shap"] is None
-    assert body["explanation"]["shap_status"]["available"] is False
-    assert body["explanation"]["shap_status"]["reason"]
-    assert sections["pu_research_explanation"]["available"] is False
+    # A complete 47-feature vector may now resolve through the committed
+    # training bridge. Either result is valid: SHAP is optional, and when
+    # available it must explain the same artifact named on the ranked result.
+    if body["explanation"]["shap"] is None:
+        assert body["explanation"]["shap_status"]["available"] is False
+        assert body["explanation"]["shap_status"]["reason"]
+        assert sections["pu_research_explanation"]["available"] is False
+        return
+
+    shap = body["explanation"]["shap"]
+    assert shap["model_name"] == body["model"]["name"]
+    assert shap["relation_to_recommendation"]["same_artifact_as_ranked_model"] is True
+    assert shap["artifact_sha256"]
 
 
 @pytest.mark.slow
@@ -541,7 +546,10 @@ def test_shap_reconstruction_through_api_for_reference_property(client, identity
     shap = explanation["shap"]
     assert shap is not None, explanation["shap_status"]
     assert explanation["shap_status"]["available"] is True
-    assert shap["model_name"] == SELECTED_MODEL_NAME
+    assert shap["model_name"] == result["model"]["name"] == "pu_model"
+    assert shap["relation_to_recommendation"]["same_artifact_as_ranked_model"] is True
+    assert shap["artifact"] == "PU_model.joblib"
+    assert shap["artifact_sha256"] == "5c00c574cfe4cbcb76fe1fb21eb32e40cfea3a428ef1c70ea60c893c1e8c2f98"
     assert shap["explainer"] == "Permutation SHAP"
     assert shap["research_only"] is True
     assert shap["feature_count"] == 47

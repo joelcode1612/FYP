@@ -52,14 +52,14 @@ class ShapContributionChart extends StatelessComponent {
           h2(
             classes: 'sw-shap__title',
             attributes: const {'id': 'sw-shap-title'},
-            [Component.text('Why this location received this score')],
+            [Component.text('What affects this location score?')],
           ),
           p(classes: 'sw-shap__lede', [
             Component.text(
               explanation == null
                   ? 'An explanation is not available for this property.'
-                  : 'Each bar is one measured characteristic. Bars to the right '
-                      'pushed the score up; bars to the left pulled it down.',
+                  : 'Each bar shows something about the area. Bars on the right '
+                      'raised the score; bars on the left lowered it.',
             ),
           ]),
         ]),
@@ -76,9 +76,8 @@ class ShapContributionChart extends StatelessComponent {
           footer(classes: 'sw-shap__foot', [
             p(classes: 'sw-shap__method', [
               Component.text(
-                '${explanation.explainer} over ${explanation.featureCount} '
-                'measured features, compared with ${explanation.backgroundSize} '
-                'similar analysed locations.',
+                'This explanation uses ${explanation.featureCount} measurements '
+                'of the surrounding area.',
               ),
             ]),
             button(
@@ -90,7 +89,7 @@ class ShapContributionChart extends StatelessComponent {
               events: events(onClick: onToggleTechnical),
               [
                 Component.text(
-                  showTechnical ? 'Hide technical detail' : 'Show technical detail',
+                  showTechnical ? 'Hide score details' : 'See score details',
                 ),
               ],
             ),
@@ -109,8 +108,8 @@ class ShapContributionChart extends StatelessComponent {
     if (supporting.isEmpty && lowering.isEmpty) return const Component.fragment([]);
 
     return div(classes: 'sw-shap__summary', [
-      _summaryColumn('Factors supporting the result', supporting, true),
-      _summaryColumn('Factors lowering the result', lowering, false),
+      _summaryColumn('What helped the score', supporting, true),
+      _summaryColumn('What lowered the score', lowering, false),
     ]);
   }
 
@@ -121,8 +120,8 @@ class ShapContributionChart extends StatelessComponent {
         p(classes: 'sw-shap__col-empty', [
           Component.text(
             positive
-                ? 'No measured factor pushed this score up.'
-                : 'No measured factor pulled this score down.',
+                ? 'No measured factor increased this score.'
+                : 'No measured factor reduced this score.',
           ),
         ])
       else
@@ -132,7 +131,7 @@ class ShapContributionChart extends StatelessComponent {
               span(classes: 'sw-shap__col-label', [Component.text(factor.label)]),
               span(
                 classes: 'sw-shap__col-value',
-                attributes: {'title': 'Contribution ${_signed(factor.contribution)}'},
+                attributes: {'title': 'Effect on score: ${_signed(factor.contribution)}'},
                 [Component.text(_signed(factor.contribution))],
               ),
             ]),
@@ -146,7 +145,7 @@ class ShapContributionChart extends StatelessComponent {
     final all = explanation.factors;
     if (all.isEmpty) {
       return div(classes: 'sw-shap__empty', [
-        Component.text('No factor contributions were returned for this property.'),
+        Component.text('We do not have enough information to show which factors affected this score.'),
       ]);
     }
     final visible = showAll ? all : all.take(initialCount).toList();
@@ -156,7 +155,7 @@ class ShapContributionChart extends StatelessComponent {
     return div([
       div(classes: 'sw-shap__axis', attributes: const {'aria-hidden': 'true'}, [
         span(classes: 'sw-shap__axis-down', [Component.text('← lowers score')]),
-        span(classes: 'sw-shap__axis-baseline', [Component.text('baseline')]),
+        span(classes: 'sw-shap__axis-baseline', [Component.text('starting point')]),
         span(classes: 'sw-shap__axis-up', [Component.text('raises score →')]),
       ]),
       div(classes: 'sw-shap__rows', attributes: const {'role': 'list'}, [
@@ -170,7 +169,7 @@ class ShapContributionChart extends StatelessComponent {
           [
             Component.text(
               showAll
-                  ? 'Show the strongest $initialCount only'
+                  ? 'Show top $initialCount factors'
                   : 'Show all ${all.length} factors',
             ),
           ],
@@ -192,7 +191,7 @@ class ShapContributionChart extends StatelessComponent {
       attributes: {
         'role': 'listitem',
         'aria-label': spoken,
-        'title': '$spoken\nModel feature: ${factor.technical}',
+        'title': spoken,
       },
       [
         span(classes: 'sw-shap__label', [Component.text(factor.label)]),
@@ -200,7 +199,6 @@ class ShapContributionChart extends StatelessComponent {
           span(classes: 'sw-shap__bar', attributes: {'style': '--w:$width'}, const []),
         ]),
         span(classes: 'sw-shap__amount', [Component.text(_signed(factor.contribution))]),
-        if (showTechnical) span(classes: 'sw-shap__code', [Component.text(factor.technical)]),
       ],
     );
   }
@@ -211,30 +209,26 @@ class ShapContributionChart extends StatelessComponent {
     final total =
         explanation.factors.fold<double>(0, (sum, f) => sum + f.contribution);
     return div(classes: 'sw-shap__tech', [
-      h3([Component.text('Technical detail')]),
+      h3([Component.text('How the score is calculated')]),
       dl([
-        dt([Component.text('Model output (positive-label association)')]),
+        dt([Component.text('Calculation result')]),
         dd([Component.text(explanation.output.toStringAsFixed(6))]),
-        dt([Component.text('Baseline (background mean)')]),
+        dt([Component.text('Starting value for comparison')]),
         dd([Component.text(explanation.baseValue.toStringAsFixed(6))]),
-        dt([Component.text('Baseline + contributions')]),
+        dt([Component.text('Value after the changes shown above')]),
         dd([
           Component.text(
             '${(explanation.baseValue + total).toStringAsFixed(6)} '
             '${explanation.additivityOk ? '(reconciles)' : '(does not reconcile)'}',
           ),
         ]),
-        dt([Component.text('Model version')]),
-        dd([Component.text(explanation.modelVersion ?? insights.modelName)]),
-        dt([Component.text('Explainer')]),
-        dd([Component.text(explanation.explainer)]),
-        dt([Component.text('Background rows')]),
+        dt([Component.text('Locations used for comparison')]),
         dd([Component.text('${explanation.backgroundSize}')]),
       ]),
       p(classes: 'sw-shap__tech-note', [
         Component.text(
-          'Contributions are in the model output\'s own units, not points out of '
-          '100. They sum with the baseline to the output shown above.',
+          'These detailed values use a different scale from the 0–100 score '
+          'above. They explain the calculation, not your chances of success.',
         ),
       ]),
     ]);

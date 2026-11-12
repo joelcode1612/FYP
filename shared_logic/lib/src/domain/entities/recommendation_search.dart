@@ -113,11 +113,73 @@ class RecommendationMatch {
       : '$matchedCount of $verifiableCount requirements met';
 }
 
+/// Manager information resolved from existing backend relationships.
+///
+/// The backend derives the manager from a verified Agent assignment, an active
+/// Owner identity or a documented platform-stewardship policy — in that order.
+/// The display label is supplied by the backend so no client keeps its own copy
+/// of the rule, and a property with no valid manager reads "Manager Not
+/// Assigned" instead of borrowing a default name.
+class ListingManagement {
+  final String status;
+
+  /// ``agent`` | ``owner`` | ``platform`` | ``unresolved`` | ``unavailable``.
+  final String type;
+
+  /// Manager display name. Null for platform stewardship and unresolved
+  /// states — those have no person, and none is invented.
+  final String? name;
+
+  /// Backend-supplied display base, e.g. "Managed by Agent".
+  final String? label;
+
+  const ListingManagement({
+    this.status = 'unavailable',
+    this.type = 'unavailable',
+    this.name,
+    this.label,
+  });
+
+  factory ListingManagement.fromJson(Map<String, dynamic> json) =>
+      ListingManagement(
+        status: json['status'] as String? ?? 'unavailable',
+        type: json['type'] as String? ?? json['status'] as String? ?? 'unavailable',
+        name: json['name'] as String? ?? json['manager_name'] as String?,
+        label: json['label'] as String?,
+      );
+
+  /// Fallback label for a payload that predates ``label``. Kept minimal so the
+  /// backend stays the single source of the wording.
+  String get _fallbackLabel {
+    switch (status) {
+      case 'agent_managed':
+        return 'Managed by Agent';
+      case 'owner_managed':
+        return 'Managed by Owner';
+      case 'platform_managed':
+        return 'Managed by SiteWise';
+      case 'unresolved':
+      case 'unassigned':
+        return 'Manager Not Assigned';
+      default:
+        return 'Management unavailable';
+    }
+  }
+
+  String get display {
+    final base = (label ?? _fallbackLabel).trim();
+    final manager = name?.trim() ?? '';
+    if (manager.isEmpty) return base;
+    return '$base — $manager';
+  }
+}
+
 /// One ranked listing: the shared property entity plus its verdict.
 class RankedProperty {
   final CommercialProperty property;
   final String source;
   final RecommendationMatch match;
+  final ListingManagement management;
 
   /// Workbook P-vs-U association index (0–100). A relative research ranking
   /// input, never a probability of business success.
@@ -133,6 +195,7 @@ class RankedProperty {
   const RankedProperty({
     required this.property,
     required this.match,
+    this.management = const ListingManagement(),
     this.source = 'catalog',
     this.catalogSuitabilityScore,
     this.suitabilityAvailable = false,
@@ -147,6 +210,11 @@ class RankedProperty {
     final suitability = (research['catalog_suitability_score'] as num?)
         ?.toDouble();
     return RankedProperty(
+      management: ListingManagement.fromJson(
+        json['management'] is Map<String, dynamic>
+            ? json['management'] as Map<String, dynamic>
+            : const {},
+      ),
       source: json['property_source'] as String? ?? 'catalog',
       catalogSuitabilityScore: suitability,
       suitabilityAvailable:
@@ -259,6 +327,7 @@ class RecommendationSearchRequest {
   final String? propertyType;
   final List<String> layoutPreferences;
   final String? query;
+  final bool managedOnly;
   final int pageSize;
   final String? cursor;
 
@@ -280,6 +349,7 @@ class RecommendationSearchRequest {
     this.propertyType,
     this.layoutPreferences = const [],
     this.query,
+    this.managedOnly = false,
     this.pageSize = 20,
     this.cursor,
     this.sort,
@@ -340,6 +410,7 @@ class RecommendationSearchRequest {
       preferredArea == null &&
       propertyType == null &&
       layoutPreferences.isEmpty &&
+      !managedOnly &&
       query == null;
 
   Map<String, dynamic> toJson() => {
@@ -353,6 +424,7 @@ class RecommendationSearchRequest {
     if (propertyType != null) 'property_type': propertyType,
     if (layoutPreferences.isNotEmpty) 'layout_preferences': layoutPreferences,
     if (query != null) 'query': query,
+    'managed_only': managedOnly,
     'page_size': pageSize,
     if (cursor != null) 'cursor': cursor,
     if (sort != null) 'sort': sort,
@@ -372,6 +444,7 @@ class RecommendationSearchRequest {
     int? pageSize,
     String? cursor,
     String? sort,
+    bool? managedOnly,
     bool clearCursor = false,
     bool clearBusinessType = false,
     bool clearState = false,
@@ -398,6 +471,7 @@ class RecommendationSearchRequest {
     pageSize: pageSize ?? this.pageSize,
     cursor: clearCursor ? null : (cursor ?? this.cursor),
     sort: sort ?? this.sort,
+    managedOnly: managedOnly ?? this.managedOnly,
   );
 }
 

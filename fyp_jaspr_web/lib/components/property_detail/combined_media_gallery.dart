@@ -166,7 +166,7 @@ class CombinedMediaGallery extends StatelessComponent {
           attributes: const {'role': 'tablist', 'aria-label': 'Property media'},
           [
             _tabButton('Photos', 0, '${photos.length} photographs'),
-            _tabButton('360° Photo', 1, canPano ? 'Stitched panorama' : 'Not available'),
+            _tabButton('360° Photo', 1, canPano ? 'View the property in 360°' : 'Not available'),
           ],
         ),
         div(
@@ -200,8 +200,8 @@ class CombinedMediaGallery extends StatelessComponent {
   Component _photoStage(List<String> photos) {
     if (photos.isEmpty) {
       return _emptyStage(
-        'No photograph recorded',
-        'This listing has no photographs yet. Nothing is substituted.',
+        'No photos yet',
+        'There are no photos for this property yet.',
       );
     }
     final index = view.index.clamp(0, photos.length - 1);
@@ -288,10 +288,9 @@ class CombinedMediaGallery extends StatelessComponent {
   Component _panoramaStage() {
     if (!panorama.isReady) {
       return _emptyStage(
-        panorama.status == 'processing' ? 'Panorama still being stitched' : 'No 360° photo yet',
+        panorama.status == 'processing' ? '360° photo is being prepared' : 'No 360° photo yet',
         panorama.reason.isEmpty
-            ? 'A stitched panorama appears here only once its processing has '
-                'genuinely finished and the file is accessible.'
+            ? 'The 360° photo will appear here when it is ready.'
             : panorama.reason,
       );
     }

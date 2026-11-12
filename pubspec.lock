@@ -378,12 +378,11 @@ packages:
     source: hosted
     version: "2.2.2"
   dchs_motion_sensors:
-    dependency: transitive
+    dependency: "direct overridden"
     description:
-      name: dchs_motion_sensors
-      sha256: "0b09e2310b1f5f3edefaa45058c9d7bd6c5b292cdf36e733ae6bcec7db40526d"
-      url: "https://pub.dev"
-    source: hosted
+      path: "fyp_mobile_app/third_party/dchs_motion_sensors"
+      relative: true
+    source: path
     version: "2.0.2"
   dds:
     dependency: transitive

@@ -35,27 +35,25 @@ from sitewise.core.logging import logger
 from sitewise.domain.recommendation_scoring import (
     SCORE_MEANING,
     SCORING_CONFIG,
+    SCORING_CONFIG_V3,
     PropertyCandidate,
     eligibility_failures,
     preference_profile_from,
     rank_candidates,
     score_candidate,
 )
-from sitewise.domain.recommendation_scoring import (
-    SCORING_CONFIG_V3,
-)
+from sitewise.ml.feature_bridge import merge_bridge_features
 from sitewise.ml.model_loader import ModelLoader
 from sitewise.ml.property_features import PropertyFeatureRepository
-from sitewise.ml.pu_variant import experimental_prediction, resolve_variant
-from sitewise.ml.sitewise_recommender_v3 import load_snapshot
+from sitewise.ml.pu_variant import EXPERIMENTAL_MODEL_NAME, experimental_prediction, resolve_variant
 from sitewise.ml.selected_pu_integration import (
     SELECTED_MODEL_NAME,
     explain_selected_payload,
 )
+from sitewise.ml.sitewise_recommender_v3 import load_snapshot
 from sitewise.repositories.generated_recommendation_store import (
     DatabaseRecommendationStore,
     GeneratedRecommendationStore,
-    generated_recommendation_store,
 )
 from sitewise.repositories.recommendation_candidate_repository import (
     RecommendationCandidateRepository,
@@ -102,6 +100,20 @@ def _ml_reference_dir() -> Path:
 REFERENCE_DIR = _ml_reference_dir()
 BACKGROUND_CSV = REFERENCE_DIR / "shap_background_47.csv"
 EXAMPLE_VECTOR_JSON = REFERENCE_DIR / "example_property_47.json"
+
+
+def _artifact_sha256(filename: str | None) -> str | None:
+    if not filename:
+        return None
+    artifact_root = Path(__file__).resolve().parents[1] / "ml"
+    artifact_path = (artifact_root / Path(filename).name).resolve()
+    if artifact_root not in artifact_path.parents or not artifact_path.is_file():
+        return None
+    try:
+        return hashlib.sha256(artifact_path.read_bytes()).hexdigest()
+    except OSError:
+        return None
+
 
 # Permutation SHAP over 47 features and the 25 real background rows is
 # expensive (~1 minute for the first property). Cache the VERIFIED payload per
@@ -206,6 +218,7 @@ class RecommendationGenerationService:
         limit = max(1, min(int(limit), 100))
         settings = Settings()
         variant = resolve_variant(settings)
+        artifact_digest = _artifact_sha256(variant.artifact)
         payload = self.preferences.payload(user_id)
         stored = payload.get("preferences")
         profile = preference_profile_from(stored)
@@ -347,6 +360,16 @@ class RecommendationGenerationService:
         payloads = []
         for item in top:
             item_dict = item.as_dict()
+            # Pin artifact identity per result. This lets later SHAP calls load
+            # the same model version that actually supplied the ranking score.
+            item_dict["model"]["version"] = variant.version
+            item_dict["model"]["artifact"] = variant.artifact
+            item_dict["model"]["feature_count"] = variant.feature_count
+            item_dict["model"]["artifact_sha256"] = artifact_digest
+            item_dict["model"]["score_source_mode"] = (
+                "live_inference" if variant.key == "experimental47" else "stored_prediction"
+            )
+            item_dict["model"]["production_ready"] = variant.production_ready
             # Batch-level provenance travels on every stored row so an
             # unchanged-input reuse can reconstruct the full response.
             item_dict["generation_inputs_hash"] = inputs_hash
@@ -372,7 +395,7 @@ class RecommendationGenerationService:
                     "never as zero."
                 ),
             },
-            "model": self._model_section(variant),
+            "model": self._model_section(variant, artifact_digest),
             "layer2": self._layer2_section(recommender),
             "scoring": self._scoring_section(recommender),
             "candidate_summary": candidate_summary,
@@ -385,9 +408,12 @@ class RecommendationGenerationService:
 
     # ------------------------------------------------------------ sections
     @staticmethod
-    def _model_section(variant: Any) -> dict[str, Any]:
+    def _model_section(
+        variant: Any, artifact_digest: str | None = None
+    ) -> dict[str, Any]:
         """Layer-1 section describing the ACTIVE PU variant."""
         section = variant.as_dict()
+        section["artifact_sha256"] = artifact_digest or _artifact_sha256(variant.artifact)
         section["used_for_ranking"] = True
         section["selected_alternative"] = {
             "name": SELECTED_MODEL_NAME,
@@ -532,16 +558,43 @@ class RecommendationGenerationService:
             return None
 
         base_explanation = record.get("explanation") or {}
+        ranked_model = record.get("model") or {}
+        model_name = str(ranked_model.get("name") or "pu_model")
+        model_version = ranked_model.get("version")
+        artifact_name = ranked_model.get("artifact") or {
+            "pu_model": "PU_model.joblib",
+            SELECTED_MODEL_NAME: "sitewise_selected_pu_model.joblib",
+            EXPERIMENTAL_MODEL_NAME: "sitewise_pu_47_experimental.joblib",
+        }.get(model_name)
+        expected_artifact_sha256 = ranked_model.get("artifact_sha256") or _artifact_sha256(
+            str(artifact_name) if artifact_name else None
+        )
         shap_payload = self.store.shap_of(result_id, user_id)
+        if shap_payload is not None:
+            cached_relation = shap_payload.get("relation_to_recommendation") or {}
+            cache_is_for_ranked_model = (
+                shap_payload.get("model_name") == model_name
+                and (model_version is None or shap_payload.get("model_version") == model_version)
+                and expected_artifact_sha256 is not None
+                and shap_payload.get("artifact_sha256") == expected_artifact_sha256
+                and cached_relation.get("same_artifact_as_ranked_model") is True
+                and cached_relation.get("scores_agree") is True
+            )
+            if not cache_is_for_ranked_model:
+                # Old stored batches may contain SHAP from a different artifact;
+                # do not display it as if it explained this row.
+                shap_payload = None
         if shap_payload is None:
             shap_payload, shap_status = self._resolve_shap(
                 record["property_id"],
-                float(record["model"]["association_score"]),
+                float(ranked_model["association_score"]),
+                model_name=model_name,
+                model_version=model_version,
             )
             if shap_payload is not None:
                 self.store.attach_shap(result_id, user_id, shap_payload, shap_status)
         else:
-            shap_status = {"available": True, "reason": None, "source": "cached"}
+            shap_status = {"available": True, "reason": None, "source": "validated stored SHAP"}
 
         personalisation = record["personalisation"]
         personalised = {
@@ -612,7 +665,12 @@ class RecommendationGenerationService:
 
     # ------------------------------------------------------------- SHAP internals
     def _resolve_shap(
-        self, property_id: str, pu_score: float
+        self,
+        property_id: str,
+        pu_score: float,
+        *,
+        model_name: str,
+        model_version: str | None,
     ) -> tuple[dict[str, Any] | None, dict[str, Any]]:
         """Produce a VERIFIED SHAP explanation, or an explicit unavailable status.
 
@@ -622,18 +680,48 @@ class RecommendationGenerationService:
         the model score); or SHAP is unavailable and the recommendation still
         works with its rule-based explanation.
         """
+        if model_name == EXPERIMENTAL_MODEL_NAME:
+            return None, {
+                "available": False,
+                "reason": (
+                    "Experimental47 inference is research-gated; a matching SHAP "
+                    "background and its LandScan licence provenance are not verified."
+                ),
+            }
+        if model_name not in {"pu_model", SELECTED_MODEL_NAME}:
+            return None, {
+                "available": False,
+                "reason": f"No approved SHAP route for the ranked PU model {model_name!r}.",
+            }
         try:
-            loaded = ModelLoader().load(SELECTED_MODEL_NAME)
+            loaded = ModelLoader().load(model_name)
         except Exception as exc:  # noqa: BLE001 - optional subsystem: fail closed, never 500
             return None, {
                 "available": False,
-                "reason": f"Selected PU model could not be loaded: {exc}",
+                "reason": f"Ranked PU model could not be loaded for SHAP: {exc}",
             }
 
-        # The cache key includes the model version so replacing the artifact
-        # invalidates every cached explanation (safe invalidation); failures
-        # are never cached, so a transient problem can recover.
-        cache_key = f"{SELECTED_MODEL_NAME}:{loaded.meta.get('model_version')}:{property_id}"
+        artifact_path = Path(__file__).resolve().parents[1] / "ml" / str(
+            loaded.meta.get("artifact_filename") or ""
+        )
+        try:
+            artifact_sha256 = hashlib.sha256(artifact_path.read_bytes()).hexdigest()
+        except OSError:
+            return None, {
+                "available": False,
+                "reason": "The exact ranked artifact bytes could not be verified for SHAP.",
+            }
+        resolved_model_version = str(
+            model_version or loaded.meta.get("version") or loaded.meta.get("model_version")
+            or loaded.meta.get("feature_set") or "unspecified"
+        )
+
+        # Key on exact artifact identity, version, score and property: replacing
+        # binary bytes or changing the stored score cannot reuse stale SHAP.
+        cache_key = (
+            f"{model_name}:{resolved_model_version}:{artifact_sha256}:"
+            f"{property_id}:{pu_score:.17g}"
+        )
         with _SHAP_CACHE_LOCK:
             hit = _SHAP_CACHE.get(cache_key)
         if hit is not None:
@@ -659,18 +747,24 @@ class RecommendationGenerationService:
             resolved = PropertyFeatureRepository(self.analytics_session).get(
                 property_id, loaded.feature_names, source="catalog"
             )
-            if not resolved.missing_features:
-                features = dict(resolved.values)
+            coverage = merge_bridge_features(
+                resolved, expected_features=loaded.feature_names
+            )
+            if not coverage.missing_features:
+                features = {
+                    name: float(value)
+                    for name, value in coverage.values.items()
+                    if value is not None
+                }
                 provenance = (
-                    "sitewise_analytics.subject_features / demand_gen.features / "
-                    "fyp_features.property_population_spatial, resolved to the "
-                    "exact 47 saved features"
+                    "analytics feature tables plus committed training-population bridge, "
+                    "resolved to the exact 47 saved features"
                 )
             else:
                 failure_reason = (
                     "Live feature resolution is incomplete (missing "
-                    f"{len(resolved.missing_features)} of 47 features): "
-                    + ", ".join(resolved.missing_features[:8])
+                    f"{len(coverage.missing_features)} of 47 features): "
+                    + ", ".join(coverage.missing_features[:8])
                 )
         except Exception as exc:  # noqa: BLE001 - any resolver failure must fail closed
             failure_reason = (
@@ -703,7 +797,10 @@ class RecommendationGenerationService:
                 background = list(csv.DictReader(fp))
             if not background:
                 raise ValueError("ml_reference/shap_background_47.csv is empty")
-            raw = explain_selected_payload(features, background)
+            background_sha256 = hashlib.sha256(BACKGROUND_CSV.read_bytes()).hexdigest()
+            raw = explain_selected_payload(
+                features, background, model_name=model_name
+            )
         except Exception as exc:  # noqa: BLE001 - SHAP is optional; omit, do not 500
             logger.warning("SHAP explanation failed for %s: %s", property_id, exc)
             return None, {
@@ -728,7 +825,9 @@ class RecommendationGenerationService:
 
         shap_payload = {
             "model_name": raw["model_name"],
-            "model_version": loaded.meta.get("model_version"),
+            "model_version": resolved_model_version,
+            "artifact": str(loaded.meta.get("artifact_filename") or ""),
+            "artifact_sha256": artifact_sha256,
             "explainer": raw["explainer"],
             "score": score,
             "baseline": baseline,
@@ -742,6 +841,7 @@ class RecommendationGenerationService:
             "data_provenance": {
                 "feature_vector": provenance,
                 "background": "ml_reference/shap_background_47.csv (supplied real rows)",
+                "background_sha256": background_sha256,
                 "background_size": raw["background_size"],
                 "feature_set": loaded.meta.get("feature_set"),
             },
@@ -752,12 +852,12 @@ class RecommendationGenerationService:
                 "recommendation_pu_score": pu_score,
                 "shap_explained_score": score,
                 "scores_agree": abs(score - pu_score) <= 1e-6,
+                "same_artifact_as_ranked_model": raw["model_name"] == model_name,
                 "note": (
-                    "SHAP explains the optional selected PU artifact. The ranked "
-                    "recommendation uses the default pu_model association score "
-                    "stored for the catalogue row. Agreement is measured, not "
-                    "assumed; both artifacts currently use the same baseline_47 "
-                    "logistic estimator."
+                    "SHAP uses the same named PU artifact that supplied this "
+                    "result's ranking score. Its model output is compared with "
+                    "the displayed six-decimal score; mismatch withholds the "
+                    "explanation rather than substituting a different model."
                 ),
             },
         }

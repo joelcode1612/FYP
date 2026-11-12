@@ -486,3 +486,71 @@ def test_listing_can_be_created_without_coordinates(client, owner, cleanup_listi
     )
     assert s.status_code == 200, s.text
     assert s.json()["listing_status"] == "pending"
+
+
+# ---------------------------------------------------------------------------
+# Management projection over the owner endpoints
+# ---------------------------------------------------------------------------
+
+
+def test_owner_listing_reports_owner_management(client, owner, cleanup_listings):
+    """A draft owned by an active identity is OWNER-managed, by real name.
+
+    The manager is derived, not assumed: the listing carries ``owner_user_id``
+    and no Agent assignment, so the owner is the manager and the reported name
+    is the mirror's display name — never the email and never a placeholder.
+    """
+    created = create_draft(client, owner)
+    pid = created.json()["data"]["id"]
+    cleanup_listings.append(pid)
+
+    mine = client.get("/api/v1/properties/listings/mine", headers=auth(owner["token"]))
+    assert mine.status_code == 200
+    row = next(item for item in mine.json()["data"] if item["id"] == pid)
+    management = row["management"]
+    assert management["type"] == "owner"
+    assert management["status"] == "owner_managed"
+    assert management["manager_name"] == "Draft Owner"
+    assert management["assignment_status"] == "none"
+    assert management["owner_user_id"] == owner["sub"]
+    assert management["ownership_status"] == "verified"
+    # Ownership and management are reported separately, never conflated.
+    assert row["owner_user_id"] == owner["sub"]
+
+    detail = client.get(
+        f"/api/v1/properties/listings/{pid}", headers=auth(owner["token"])
+    )
+    assert detail.status_code == 200
+    assert detail.json()["data"]["management"]["type"] == "owner"
+
+
+def test_management_object_carries_the_documented_contract(
+    client, owner, cleanup_listings
+):
+    """The object exposes the §10 keys plus the label/name aliases clients read."""
+    created = create_draft(client, owner)
+    pid = created.json()["data"]["id"]
+    cleanup_listings.append(pid)
+
+    detail = client.get(
+        f"/api/v1/properties/listings/{pid}", headers=auth(owner["token"])
+    ).json()["data"]["management"]
+    for key in (
+        "type",
+        "status",
+        "label",
+        "name",
+        "manager_name",
+        "agent_id",
+        "owner_user_id",
+        "assignment_status",
+        "ownership_status",
+        "steward_role",
+        "reason",
+        "provenance",
+    ):
+        assert key in detail, f"management is missing {key}"
+    assert detail["label"] == "Managed by Owner"
+    assert detail["name"] == detail["manager_name"]
+    # A draft has no external reference, so its provenance is the owner draft.
+    assert detail["provenance"] == "owner_draft"

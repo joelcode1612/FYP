@@ -16,6 +16,9 @@ from sitewise.services.recommendation_search_service import (
     SearchCriteria,
 )
 from sitewise.services.recommendation_service import RecommendationService
+from sitewise.services.recommendation_management_service import (
+    ManagementLookupError, RecommendationManagementService, unavailable_management,
+)
 
 router = APIRouter()
 
@@ -50,6 +53,7 @@ class RecommendationSearchRequest(BaseModel):
     property_type: str | None = Field(default=None, max_length=120)
     layout_preferences: list[str] = Field(default_factory=list, max_length=12)
     query: str | None = Field(default=None, max_length=120)
+    managed_only: bool = False
     page_size: int = Field(default=20, ge=1, le=60)
     cursor: str | None = Field(default=None, max_length=512)
     sort: SortKey = Field(
@@ -82,6 +86,7 @@ def search_recommendations(
     body: RecommendationSearchRequest,
     _user: CurrentUser,
     session: Session = Depends(get_analytics_db),
+    operational_db: Session = Depends(get_db),
 ) -> dict:
     """Rank catalogue properties against the caller's requirements.
 
@@ -93,6 +98,14 @@ def search_recommendations(
     integrated, so ``recommendation.score`` is null and the ordering is the
     documented requirement-fit ordering. No score is fabricated.
     """
+    management = RecommendationManagementService(operational_db)
+    try:
+        assigned_ids = management.assigned_catalogue_ids() if body.managed_only else ()
+    except ManagementLookupError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail="Property assignments cannot be verified right now. Please retry.",
+        ) from exc
     criteria = SearchCriteria(
         business_type=body.business_type,
         preferred_state=body.preferred_state,
@@ -107,9 +120,21 @@ def search_recommendations(
         page_size=body.page_size,
         cursor=body.cursor,
         sort=body.sort,
+        managed_only=body.managed_only,
+        management_ids=assigned_ids,
     )
     try:
-        return RecommendationSearchService(session).search(criteria)
+        response = RecommendationSearchService(session).search(criteria)
+        ids = [row['property_id'] for row in response['data']]
+        try:
+            managers = management.resolve(ids)
+        except ManagementLookupError:
+            managers = {pid: unavailable_management() for pid in ids}
+        for row in response['data']:
+            row['management'] = managers.get(
+                row['property_id'], unavailable_management()
+            )
+        return response
     except ValueError as exc:
         # Cursor from another search / malformed cursor: the client must
         # restart from page 1 rather than page through the wrong ranking.
@@ -174,7 +199,7 @@ def create_recommendation(
     return RecommendationService(session).create_result(result)
 
 
-@router.delete("/{result_id}", status_code=204)
+@router.delete("/{result_id}", status_code=204, response_model=None)
 def delete_recommendation(
     result_id: uuid.UUID,
     session: Session = Depends(get_db),

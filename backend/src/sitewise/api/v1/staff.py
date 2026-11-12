@@ -41,6 +41,7 @@ from sitewise.services.user_service import UserService
 from sitewise.repositories.agent_assignment_repository import (
     AgentAssignmentRepository,
 )
+from sitewise.services.property_management_service import resolve_listings
 
 router = APIRouter()
 
@@ -928,6 +929,14 @@ def my_assigned_listings(
     listings = AgentAssignmentRepository(session).list_for_agent(
         int(profile["agent_id"])
     )
+    # The derived management state travels with each row so the workspace never
+    # has to assume "I am the manager" — a row reassigned elsewhere, or an
+    # assignment whose agent account was suspended, is reported truthfully.
+    management = resolve_listings(
+        session, [int(r["listing_id"]) for r in listings if r.get("property_exists")]
+    )
+    for row in listings:
+        row["management"] = management.get(int(row["listing_id"]))
     return {"agent": profile, "listings": listings}
 
 

@@ -1,0 +1,125 @@
+{
+  "agent_profiles": [
+    {
+      "agent_id": 2,
+      "agent_name": "Joel Personal",
+      "company_id": 1,
+      "user_id": "8de9ed3b-1431-4603-b680-731e40f53628",
+      "created_by_user_id": null,
+      "created_at": "2026-11-10T12:42:38.893555+00:00"
+    },
+    {
+      "agent_id": 3,
+      "agent_name": "Joel",
+      "company_id": 1,
+      "user_id": "dcbc87df-0911-49ed-806c-02305441439f",
+      "created_by_user_id": null,
+      "created_at": "2026-11-11T05:35:38.333972+00:00"
+    }
+  ],
+  "agent_profiles_error": null,
+  "identity_users": [
+    {
+      "user_id": "8de9ed3b-1431-4603-b680-731e40f53628",
+      "email": "joelstrengthpersonal@gmail.com",
+      "full_name": "Joel Personal",
+      "role": "agent",
+      "account_status": "active"
+    },
+    {
+      "user_id": "f69be94e-fc0e-46ff-adc4-99567a5d916d",
+      "email": "joelthj-wm23@student.tarc.edu.my",
+      "full_name": "TAN HOU JUN JOEL",
+      "role": "entrepreneur",
+      "account_status": "active"
+    },
+    {
+      "user_id": "3da08202-ed88-4b2f-8b0c-2bd444bd5ebc",
+      "email": "shizhe832@gmail.com",
+      "full_name": "Shizhe",
+      "role": "entrepreneur",
+      "account_status": "active"
+    },
+    {
+      "user_id": "32ef694a-69b0-4863-a77f-b9cf6c056b56",
+      "email": "tabhello1612@gmail.com",
+      "full_name": "Tab",
+      "role": "entrepreneur",
+      "account_status": "active"
+    },
+    {
+      "user_id": "3911bb2e-c829-4578-831a-5b01fd1ddefa",
+      "email": "admin.sitewise@gmail.com",
+      "full_name": "Sitewise Administrator",
+      "role": "admin",
+      "account_status": "active"
+    },
+    {
+      "user_id": "02183dc8-9f4e-4273-a8bd-afbcd705eb4b",
+      "email": "joelcode@gmail.com",
+      "full_name": "joel",
+      "role": "entrepreneur",
+      "account_status": "pending"
+    },
+    {
+      "user_id": "7947affa-a84c-4c6d-be30-3379a81adc36",
+      "email": "sitewise.fyp@gmail.com",
+      "full_name": "Sitewise Administrator FYP",
+      "role": "admin",
+      "account_status": "active"
+    },
+    {
+      "user_id": "9cc08037-4930-491d-b22a-63e03735f99a",
+      "email": "admin.sitewise1@gmail.com",
+      "full_name": "Sitewise Administrator1",
+      "role": "admin",
+      "account_status": "active"
+    },
+    {
+      "user_id": "dcbc87df-0911-49ed-806c-02305441439f",
+      "email": "joeltanhoujun@gmail.com",
+      "full_name": "Joel",
+      "role": "agent",
+      "account_status": "active"
+    },
+    {
+      "user_id": "42220ce3-d565-445e-96eb-b26902626461",
+      "email": "jedtanhoujie@gmail.com",
+      "full_name": "fff",
+      "role": "entrepreneur",
+      "account_status": "active"
+    },
+    {
+      "user_id": "f56fa3fa-6dde-4176-92e5-d8a460aafd01",
+      "email": "jedthj-wm23@student.tarc.edu.my",
+      "full_name": "fff",
+      "role": "entrepreneur",
+      "account_status": "active"
+    }
+  ],
+  "identity_users_error": null,
+  "auth_users": {
+    "8de9ed3b-1431-4603-b680-731e40f53628": {
+      "id": "8de9ed3b-1431-4603-b680-731e40f53628",
+      "email": "joelstrengthpersonal@gmail.com",
+      "email_confirmed_at": "2026-11-10T12:43:12.580342Z",
+      "confirmed_at": "2026-11-10T12:43:12.580342Z",
+      "banned_until": null,
+      "created_at": "2026-11-10T12:42:34.63937Z",
+      "last_sign_in_at": "2026-11-11T20:07:57.681076Z"
+    },
+    "dcbc87df-0911-49ed-806c-02305441439f": {
+      "id": "dcbc87df-0911-49ed-806c-02305441439f",
+      "email": "joeltanhoujun@gmail.com",
+      "email_confirmed_at": "2026-11-11T05:36:20.727221Z",
+      "confirmed_at": "2026-11-11T05:36:20.727221Z",
+      "banned_until": null,
+      "created_at": "2026-11-11T05:35:34.172236Z",
+      "last_sign_in_at": "2026-11-11T05:36:20.739691Z"
+    }
+  },
+  "supabase_listing_table": {
+    "rows": null,
+    "error": "HTTP 404: {\"code\":\"PGRST205\",\"details\":null,\"hint\":null,\"message\":\"Could not find the table 'public.listing' in the schema cache\"}"
+  }
+}

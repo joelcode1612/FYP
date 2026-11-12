@@ -58,7 +58,7 @@ separate design and validation plan.
 | Plane detection | Enabled at session start (`planes: true` → `HORIZONTAL_AND_VERTICAL`); per-pose `planeCount` / `planesTracked` / `walls` / `floors` / `ceilings` reach `CaptureState.planeSummary` and the status bar. |
 | 26 targets | World-anchored to a station anchor at frozen geometry via `PlaneAnchorService.placeAll`; NOT gated on detected planes. |
 | Drift safety | The temporary station-drift bypass was removed. The engine always resets and blocks outside the drift limit; rotation-in-place only supplies its verified drift reference. |
-| Panorama viewer | `panorama_viewer ^2.0.7` replaces the unmaintained `panorama ^0.4.1` / `motion_sensors 0.1.0` stack; both existing viewer screens use `PanoramaViewer`. |
+| Panorama viewer | `panorama_viewer ^2.0.7` replaces the unmaintained `panorama ^0.4.1` / `motion_sensors 0.1.0` stack; both existing viewer screens use `PanoramaViewer` in its default touch mode. Its unused `dchs_motion_sensors` bridge is a local no-native-plugin override at `fyp_mobile_app/third_party/dchs_motion_sensors/`. |
 | Backend tour authorization | All existing virtual-tour CRUD routes require property-owner access. The server resolves the legacy numeric id against `fyp.rental_properties`, denies another owner, lets an AAL2 admin act, and rejects unlinked rows. PATCH only accepts `url` and `status`. |
 
 ---
@@ -108,9 +108,9 @@ separate design and validation plan.
 | Complete | Step 3 photo dead code | Removed the unreachable `_buildPhotos` flow, its image-picker dependency and its orphaned state/handlers. Backend photo APIs and shared photo models remain intact. |
 | Complete | AR host cleanup | Removed the unused `setPlaneDetection` channel path and unreachable anchor-replacement/recovery code. Corrected the native 30-target comment to 26. |
 | Complete | Drift-gate safety | Removed the diagnostic bypass rather than relying on a production convention. All capture paths enforce the station-drift gate. |
-| Complete | `motion_sensors` build risk | Replaced `panorama` with `panorama_viewer ^2.0.7`, resolving `dchs_motion_sensors 2.0.2` instead of the obsolete `motion_sensors 0.1.0`. |
+| Complete | Panorama viewer Gradle-plugin warning | Retained `panorama_viewer ^2.0.7` for touch drag and pinch-to-zoom. Its unused `dchs_motion_sensors` bridge is overridden by `fyp_mobile_app/third_party/dchs_motion_sensors`, which declares no native plugin. Device-motion panorama navigation is deliberately unsupported until a maintained sensor implementation is selected and device-tested. |
 | Complete | Backend virtual-tour authorization | GET, POST, PATCH and DELETE now verify the canonical listing owner; test coverage includes 401, owner access, cross-owner 403, AAL2-admin access, unlinked rows, writes and prohibited reassignment. |
-| External validation required | Physical-device ARCore | No ARCore-capable device is attached to this workspace. Run the checklist in §5 before calling tracking, plane detection, body-spin capture or image/stitch quality production-verified. |
+| External validation required | Physical-device ARCore | `adb devices` returned no attached device in this workspace. Run the checklist in §5 before calling tracking, plane detection, body-spin capture or image/stitch quality production-verified. |
 | Deferred product work | Cross-device/server tour sync | The existing server `virtual_tour` schema remains intentionally narrow and does not model the mobile `VirtualTour` record or image upload. Local restart recovery is solved. Do not add a partial `HttpTourRepository`: a future cross-device design needs one owner-scoped schema/API plus media upload, status mapping and a migration plan. |
 
 ---
@@ -165,7 +165,7 @@ These are the completed results recorded when the AR implementation was
 produced. They are useful evidence, but are not a substitute for a serial
 rerun before handoff.
 
-- `flutter analyze` — **0 errors**; 4 warnings + 2 infos (all listed in OPEN-03/04 and pre-existing).
+- `flutter analyze` — **0 errors**; 4 warnings + 2 infos were recorded in the original AR handoff snapshot.
 - `flutter test test/ar_capture_integration_test.dart` — **22 passed**.
 - Full suite `flutter test` (re-run after Gradle finished) — **95 passed / 2 skipped**.
 - `flutter build apk --debug` — **succeeded** (381 s Gradle task), `build/app/outputs/flutter-apk/app-debug.apk`, 227,014,202 bytes. Both GLB models confirmed present inside the APK.
@@ -175,13 +175,15 @@ rerun before handoff.
 
 The focused checks were rerun serially after dependencies were resolved:
 
-- `flutter test --no-pub test\ar_capture_integration_test.dart test\persistent_tour_repository_test.dart` — **25 passed** (22 AR capture tests + 3 durable-tour tests).
-- Targeted `flutter analyze --no-pub` on the changed capture, persistence, Step 3 and viewer files — no errors. Two existing informational diagnostics remain in `capture_controller.dart` (null-aware operator / redundant `!`); they are unrelated to the completed cleanup.
+- `flutter test --no-pub test\ar_capture_integration_test.dart` — **22 passed**.
+- `flutter test --no-pub test\persistent_tour_repository_test.dart` — **3 passed**.
+- `flutter test --no-pub test\touch_only_panorama_sensors_test.dart` — **1 passed**; it verifies that the compatibility bridge exposes no motion data.
+- Targeted `flutter analyze --no-pub` on the changed capture, persistence, Step 3, viewer and touch-only bridge files — **No issues found**.
 - `backend/.venv/Scripts/python.exe -m ruff check …` — **passed**; focused virtual-tour API suite — **7 passed**. The test runner reports one upstream `starlette.testclient` deprecation warning.
-- `flutter pub get` now resolves `panorama_viewer 2.0.7` and `dchs_motion_sensors 2.0.2`; `motion_sensors 0.1.0` is no longer in the lockfile.
+- `flutter pub get` resolves `dchs_motion_sensors 2.0.2` from the local path override (`direct overridden`); the obsolete `motion_sensors 0.1.0` is absent from the lockfile. The local package contains no Flutter `plugin` declaration, so it is not registered as a native Android Gradle plugin.
+- `flutter build apk --debug --no-pub` — **succeeded**. Fresh `build/app/outputs/flutter-apk/app-debug.apk`: 275,739,583 bytes (written 2026-11-12 14:43:18 MYT).
 
-The current Android debug build is recorded separately once it has completed;
-do not infer a physical-device pass from a successful APK build.
+Do not infer a physical-device pass from a successful APK build.
 
 ### Device test checklist (OPEN-02 — must be done on an ARCore-capable phone)
 
@@ -231,6 +233,8 @@ do not infer a physical-device pass from a successful APK build.
 | `shared_logic/lib/src/domain/repositories/admin_repositories.dart` + impl + `tour_service.dart` | `tourForPropertyDraft` |
 | `fyp_mobile_app/lib/data/repositories/persistent_tour_repository.dart` | account-scoped device persistence for tour metadata |
 | `fyp_mobile_app/lib/application/services/service_locator.dart` | single shared persistent tour repository wiring |
+| `fyp_mobile_app/third_party/dchs_motion_sensors/` | local touch-only compatibility layer; no native plugin |
+| `fyp_mobile_app/test/touch_only_panorama_sensors_test.dart` | regression test for the inactive sensor bridge |
 | `backend/src/sitewise/db/models/virtual_tour.py` | existing narrow backend schema; timezone-aware defaults |
 | `backend/src/sitewise/api/v1/virtual_tours.py` | owner-scoped CRUD and PATCH allow-list |
 | `backend/tests/api/test_virtual_tours_authorization.py` | virtual-tour owner isolation API coverage |
@@ -247,3 +251,7 @@ do not infer a physical-device pass from a successful APK build.
   with owner checks; removed the unused photo/anchor/plane-detection paths and
   the station-drift bypass; migrated the panorama viewer dependency; corrected
   the 26-target documentation; and reran the focused automated checks.
+- **2026-11-12 — Android compatibility pass:** replaced the panorama viewer's
+  unused transitive native sensor bridge with a local touch-only compatibility
+  layer, added a regression test, and rebuilt the debug APK. Touch drag and
+  pinch-to-zoom remain supported; device-motion panorama navigation is not.

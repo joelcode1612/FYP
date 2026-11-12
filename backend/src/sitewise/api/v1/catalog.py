@@ -26,9 +26,11 @@ from sqlalchemy import text
 from sqlmodel import Session
 
 from sitewise.db.analytics_session import get_analytics_db
+from sitewise.db.session import get_db
 from sitewise.dependencies import CurrentUser
 from sitewise.repositories.catalog_repository import PROPERTY_COLUMNS, CatalogRepository
 from sitewise.services.property_insights_service import PropertyInsightsService
+from sitewise.services.property_management_service import resolve_management
 
 router = APIRouter()
 
@@ -87,6 +89,7 @@ def get_catalog_property(
     property_id: str,
     session: AnalyticsSession,
     _user: CurrentUser,
+    operational_session: Session = Depends(get_db),
 ) -> dict:
     """One catalogue listing by its text id (e.g. ``EP-01051``).
 
@@ -102,7 +105,10 @@ def get_catalog_property(
                 "message": f"No property with id '{property_id}' exists in the catalogue.",
             },
         )
-    return prop
+    return {
+        **prop,
+        "management": resolve_management(operational_session, catalogue_id=property_id),
+    }
 
 
 @router.get("/properties/{property_id}/evidence")
@@ -148,6 +154,9 @@ def get_catalog_insights(
     * everything else is 200 — an unscoreable property returns
       ``score.available: false`` with a stable ``reason.code`` rather than an
       error, so the page can show an honest empty state;
+    * score and explanation availability are independent: a valid stored or
+      live PU score remains visible when features/background/SHAP do not permit
+      an explanation;
     * ``explanation.factors`` always carries plain-English labels; the raw
       feature key is present only as ``technical`` for audit;
     * the score is a research association index, never a success probability.

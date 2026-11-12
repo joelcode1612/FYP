@@ -140,8 +140,60 @@ class ApiPropertyRepository implements PropertyRepository {
   }
 
   @override
-  Future<List<CommercialProperty>> getPropertiesByOwner(String ownerId) async =>
-      [];
+  Future<List<CommercialProperty>> getPropertiesByOwner(String ownerId) async {
+    // The backend derives the owner from the verified token, so `ownerId` is
+    // only here to satisfy the domain interface. This previously returned an
+    // empty list, which left "My Properties" blank even for owners with real
+    // listings; the owner-scoped endpoint is the authoritative source.
+    final response = await WebAuth.request(
+      '/api/v1/properties/listings/mine',
+    );
+    final rows = (response['data'] as List? ?? const [])
+        .whereType<Map<String, dynamic>>();
+    return List.unmodifiable(rows.map(_ownerRowToProperty));
+  }
+
+  /// Maps one `/properties/listings/mine` row to the shared entity.
+  ///
+  /// Management is whatever the backend derived — an assigned Agent, the Owner
+  /// themselves, platform stewardship or an unresolved state. Nothing is
+  /// assumed from the fact that this is the owner's own listing.
+  static CommercialProperty _ownerRowToProperty(Map<String, dynamic> row) {
+    final management = row['management'] is Map<String, dynamic>
+        ? row['management'] as Map<String, dynamic>
+        : const <String, dynamic>{};
+    final managerName = (management['name'] ?? management['manager_name'])
+        ?.toString()
+        .trim();
+    return CommercialProperty(
+      id: '${row['id'] ?? row['property_id'] ?? ''}',
+      title: '${row['name'] ?? ''}',
+      address: '${row['address'] ?? ''}',
+      city: '${row['city'] ?? ''}',
+      state: '${row['state'] ?? ''}',
+      postcode: '${row['postcode'] ?? ''}',
+      rentalRm: (row['rental_price'] as num?)?.toDouble() ?? 0,
+      sizeSqft: (row['size_sqft'] as num?)?.toDouble() ?? 0,
+      latitude: (row['latitude'] as num?)?.toDouble() ?? 0,
+      longitude: (row['longitude'] as num?)?.toDouble() ?? 0,
+      propertyType: '${row['property_type'] ?? ''}',
+      verification: _ownerVerification('${row['verification_status'] ?? 'draft'}'),
+      suitabilityScore: 0,
+      hasSuitabilityScore: false,
+      ownerId: '${row['owner_user_id'] ?? ''}',
+      managementLabel:
+          (management['label'] as String?) ?? 'Management not assigned',
+      managerName: (managerName?.isEmpty ?? true) ? null : managerName,
+      hasTour: false,
+    );
+  }
+
+  static VerificationStatus _ownerVerification(String raw) => switch (raw) {
+    'approved' || 'verified' => VerificationStatus.verified,
+    'pending' || 'under_review' => VerificationStatus.pending,
+    'rejected' => VerificationStatus.rejected,
+    _ => VerificationStatus.draft,
+  };
   Never _readOnly() => throw UnsupportedError(
     'Imported research properties are read-only. Owner listing submission is not connected yet.',
   );

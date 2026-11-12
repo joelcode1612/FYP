@@ -6,8 +6,10 @@
 /// computed client-side: this file only decodes and formats.
 ///
 /// Honesty rules encoded in the types:
-/// * [PropertyInsights.score] is `null` when the backend could not produce one,
-///   so the UI renders "Score not available" instead of a placeholder number;
+/// * [PropertyInsights.score] is `null` only when neither a validated stored
+///   score nor live inference is available; SHAP failure does not hide a score;
+/// * [LocationScore.sourceLabel] carries whether the score was stored or
+///   calculated live, rather than implying every score is a fresh prediction;
 /// * [InsightFactor.label] is always the plain-English label the backend
 ///   supplies; [InsightFactor.technical] keeps the raw column name for the
 ///   optional technical view and must never be the primary text;
@@ -119,6 +121,8 @@ class LocationScore {
   final String band;
   final String meaning;
   final String kindLabel;
+  final String source;
+  final String sourceLabel;
 
   const LocationScore({
     required this.label,
@@ -128,6 +132,8 @@ class LocationScore {
     required this.band,
     required this.meaning,
     required this.kindLabel,
+    required this.source,
+    required this.sourceLabel,
   });
 
   factory LocationScore.fromJson(Map<String, dynamic> json) => LocationScore(
@@ -138,6 +144,8 @@ class LocationScore {
     band: '${json['band'] ?? ''}',
     meaning: '${json['meaning'] ?? ''}',
     kindLabel: '${json['kind_label'] ?? 'Location similarity'}',
+    source: '${json['source'] ?? 'unknown'}',
+    sourceLabel: '${json['source_label'] ?? 'PU model output'}',
   );
 }
 
@@ -146,6 +154,9 @@ class InsightExplanation {
   final bool available;
   final String explainer;
   final String? modelVersion;
+  final String? artifact;
+  final String? artifactSha256;
+  final String? backgroundSha256;
   final int featureCount;
   final double baseValue;
   final double output;
@@ -159,6 +170,9 @@ class InsightExplanation {
     required this.available,
     required this.explainer,
     required this.modelVersion,
+    required this.artifact,
+    required this.artifactSha256,
+    required this.backgroundSha256,
     required this.featureCount,
     required this.baseValue,
     required this.output,
@@ -178,6 +192,9 @@ class InsightExplanation {
       available: json['available'] == true,
       explainer: '${json['explainer'] ?? 'SHAP'}',
       modelVersion: json['model_version']?.toString(),
+      artifact: json['artifact']?.toString(),
+      artifactSha256: json['artifact_sha256']?.toString(),
+      backgroundSha256: json['background_sha256']?.toString(),
       featureCount: (json['feature_count'] as num?)?.toInt() ?? 0,
       baseValue: (json['base_value'] as num?)?.toDouble() ?? 0,
       output: (json['output'] as num?)?.toDouble() ?? 0,
@@ -342,6 +359,10 @@ class PropertyInsights {
   final List<InsightCategory> categories;
   final String modelName;
   final String? modelVersion;
+  final String? modelArtifact;
+  final String? modelArtifactSha256;
+  final bool? modelProductionReady;
+  final List<String> modelNotes;
   final InsightReason? reason;
   final MapOrigin? origin;
   final List<MapLayer> mapLayers;
@@ -354,6 +375,10 @@ class PropertyInsights {
     required this.categories,
     required this.modelName,
     required this.modelVersion,
+    this.modelArtifact,
+    this.modelArtifactSha256,
+    this.modelProductionReady,
+    this.modelNotes = const [],
     this.reason,
     this.origin,
     this.mapLayers = const [],
@@ -385,6 +410,13 @@ class PropertyInsights {
       ],
       modelName: '${modelMap['layer1_model'] ?? modelMap['name'] ?? 'Unknown model'}',
       modelVersion: modelMap['version']?.toString(),
+      modelArtifact: modelMap['artifact']?.toString(),
+      modelArtifactSha256: modelMap['artifact_sha256']?.toString(),
+      modelProductionReady: modelMap['production_ready'] as bool?,
+      modelNotes: [
+        for (final note in (modelMap['notes'] as List? ?? const []))
+          if ('$note'.trim().isNotEmpty) '$note',
+      ],
       reason: reasonJson is Map<String, dynamic>
           ? InsightReason.fromJson(reasonJson)
           : null,

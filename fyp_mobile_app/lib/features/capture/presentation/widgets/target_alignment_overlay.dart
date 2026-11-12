@@ -33,6 +33,7 @@ class TargetAlignmentOverlay extends StatelessWidget {
     required this.withinTolerance,
     required this.stabilityProgress,
     this.captureBlocked = false,
+    this.holdComplete = false,
     required this.anchored,
     required this.poseValid,
     required this.displayFov,
@@ -66,6 +67,9 @@ class TargetAlignmentOverlay extends StatelessWidget {
   /// capture screen uses this for station drift, so the central reticle mirrors
   /// the native target's amber warning instead of looking ready.
   final bool captureBlocked;
+
+  /// The real hold completed and has authorized the shutter transaction.
+  final bool holdComplete;
 
   /// Whether the target is in the scene: placed, at a known world position.
   ///
@@ -109,6 +113,7 @@ class TargetAlignmentOverlay extends StatelessWidget {
             progress: withinTolerance ? stabilityProgress : 0,
             withinTolerance: withinTolerance,
             completed: completed,
+            holdComplete: holdComplete,
             captureBlocked: captureBlocked,
             bezel: bezel,
           ),
@@ -311,6 +316,7 @@ class _ArrowPainter extends CustomPainter {
       old.anchored != anchored ||
       old.poseValid != poseValid ||
       old.displayFov != displayFov ||
+      !identical(old.displayProjectionMatrix, displayProjectionMatrix) ||
       old.reticleSize != reticleSize;
 }
 

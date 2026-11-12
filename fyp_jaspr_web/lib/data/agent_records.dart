@@ -85,6 +85,19 @@ abstract final class AgentRecords {
   /// data-integrity problem, never as a normal listing.
   static bool propertyExists(AgentAssignment assignment) =>
       assignment.raw['property_exists'] != false;
+
+  /// The backend-derived management label for one assignment, e.g.
+  /// "Managed by Agent — Joel Personal". Returns null when the response did not
+  /// carry the block, so the table omits the cell instead of guessing that the
+  /// signed-in agent is the manager.
+  static String? managementDisplay(AgentAssignment assignment) {
+    final raw = assignment.raw['management'];
+    if (raw is! Map) return null;
+    final label = raw['label']?.toString().trim() ?? '';
+    if (label.isEmpty) return null;
+    final name = raw['name']?.toString().trim() ?? '';
+    return name.isEmpty ? label : '$label — $name';
+  }
 }
 
 /// A property enquiry.

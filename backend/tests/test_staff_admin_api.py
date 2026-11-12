@@ -255,6 +255,12 @@ def test_admin_assigns_listing_and_records_audit(client, cleanup_users, fake_adm
                 text("SELECT id FROM fyp.rental_properties ORDER BY id LIMIT 1")
             ).scalar_one()
         )
+        # This is a real operational listing; remember whether an Agent already
+        # manages it so the finally-block can restore that relationship.
+        prior_agent = session.execute(
+            text("SELECT agent_id FROM agent_listing_assignment WHERE listing_id = :l"),
+            {"l": listing_id},
+        ).scalar()
     try:
         r = client.post(f"/api/v1/staff/listings/{listing_id}/assign",
                         headers=auth(admin_token), json={"agent_user_id": agent_uid})
@@ -280,6 +286,14 @@ def test_admin_assigns_listing_and_records_audit(client, cleanup_users, fake_adm
                 text("DELETE FROM agent_listing_assignment WHERE listing_id = :l"),
                 {"l": listing_id},
             )
+            if prior_agent is not None:
+                session.execute(
+                    text(
+                        "INSERT INTO agent_listing_assignment (listing_id, agent_id) "
+                        "VALUES (:l, :a)"
+                    ),
+                    {"l": listing_id, "a": int(prior_agent)},
+                )
             session.commit()
 
 

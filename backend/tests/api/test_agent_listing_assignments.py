@@ -103,6 +103,23 @@ def listing_id():
         ).mappings().first()
     assert row is not None
     snapshot = dict(row)
+    # The chosen row is a real operational listing. If an Agent already manages
+    # it, that assignment must survive the test — otherwise cleanup silently
+    # revokes a live manager.
+    with Session(engine) as session:
+        prior_agent = session.execute(
+            text("SELECT agent_id FROM agent_listing_assignment WHERE listing_id = :lid"),
+            {"lid": int(row["id"])},
+        ).scalar()
+        # Clear it for the duration of the test: several cases assert the
+        # "no assignment" path, which only holds if the row starts unassigned.
+        # The teardown below puts the original relationship back.
+        if prior_agent is not None:
+            session.execute(
+                text("DELETE FROM agent_listing_assignment WHERE listing_id = :lid"),
+                {"lid": int(row["id"])},
+            )
+            session.commit()
     yield int(row["id"])
     with Session(engine) as session:
         session.execute(
@@ -126,6 +143,14 @@ def listing_id():
             text("DELETE FROM agent_listing_assignment WHERE listing_id = :lid"),
             {"lid": snapshot["id"]},
         )
+        if prior_agent is not None:
+            session.execute(
+                text(
+                    "INSERT INTO agent_listing_assignment (listing_id, agent_id) "
+                    "VALUES (:lid, :aid)"
+                ),
+                {"lid": int(snapshot["id"]), "aid": int(prior_agent)},
+            )
         session.commit()
 
 

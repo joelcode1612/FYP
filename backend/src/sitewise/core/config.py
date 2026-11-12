@@ -113,6 +113,20 @@ class Settings(BaseSettings):
     def staff_invite_redirect(self) -> str:
         if self.supabase_staff_invite_redirect_url:
             return self.supabase_staff_invite_redirect_url
+        return self._default_auth_redirect
+
+    @property
+    def entrepreneur_invite_redirect(self) -> str:
+        """Redirect embedded in a public (entrepreneur) invitation.
+
+        Entrepreneurs are not staff, so they must not be sent to the staff
+        password-setup target. Both land on the web app's auth callback, which
+        is the endpoint that exchanges the one-time code for a session.
+        """
+        return self._default_auth_redirect
+
+    @property
+    def _default_auth_redirect(self) -> str:
         origin = self.cors_origin_list[0] if self.cors_origin_list else "http://localhost:8090"
         return f"{origin}/auth/callback"
 

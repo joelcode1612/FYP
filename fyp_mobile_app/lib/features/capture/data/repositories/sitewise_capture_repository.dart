@@ -103,6 +103,19 @@ class SiteWiseCaptureRepository implements CaptureRepository {
   }
 
   @override
+  Future<void> saveCalibration(
+    CaptureStation station,
+    List<CaptureTarget> targets,
+  ) async {
+    await persistCaptureCalibrationFiles(
+      stationDirectory: await _stationDir(station.stationId),
+      station: station,
+      targets: targets,
+    );
+    _targets = List<CaptureTarget>.unmodifiable(targets);
+  }
+
+  @override
   Future<void> saveRecord(CaptureRecord record) async {
     final dir = await _stationDir(record.stationId);
     final file = File(p.join(dir, 'records.json'));
@@ -200,6 +213,9 @@ class SiteWiseCaptureRepository implements CaptureRepository {
     for (final entity in dir.listSync()) {
       if (entity is! Directory) continue;
       final id = p.basename(entity.path);
+      if (await File(p.join(entity.path, '.calibration.pending')).exists()) {
+        continue;
+      }
       if (await File(p.join(entity.path, 'station.json')).exists()) {
         result.add(id);
       }

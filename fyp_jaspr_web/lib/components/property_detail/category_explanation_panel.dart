@@ -73,12 +73,11 @@ class CategoryExplanationPanel extends StatelessComponent {
           h2(
             classes: 'sw-cats__title',
             attributes: const {'id': 'sw-cats-title'},
-            [Component.text('What is around this location')],
+            [Component.text('What shapes the location score?')],
           ),
           p(classes: 'sw-cats__lede', [
             Component.text(
-              'Pick a category to see which measurements sit behind the score, '
-              'and whether they raised or lowered it.',
+              'Choose a topic to see how it affected the location score.',
             ),
           ]),
         ]),
@@ -117,6 +116,15 @@ class CategoryExplanationPanel extends StatelessComponent {
     );
   }
 
+  String _simpleWhy(InsightCategory category) => switch (category.key) {
+    'population' => 'People living nearby may become customers, but this does not guarantee sales.',
+    'competitors' => 'Other food businesses nearby can attract customers, but you may also compete for them.',
+    'demand_generators' => 'Shops, offices, schools and other places may bring people to the area.',
+    'accessibility' => 'Consider whether customers can get here easily by road, walking or public transport.',
+    'parking' => 'Nearby parking can make visiting easier for customers who drive.',
+    _ => category.why,
+  };
+
   Component _panel(InsightCategory category) {
     final directionWord = category.contribution > 0
         ? 'raised'
@@ -132,21 +140,17 @@ class CategoryExplanationPanel extends StatelessComponent {
       [
         h3(classes: 'sw-cats__panel-title', [Component.text(category.label)]),
         p(classes: 'sw-cats__question', [Component.text(category.question)]),
-        p(classes: 'sw-cats__why', [Component.text(category.why)]),
+        p(classes: 'sw-cats__why', [Component.text(_simpleWhy(category))]),
         if (!category.available)
           div(classes: 'sw-cats__unavailable', [
             Component.text(
-              category.note ??
-                  'No model features are grouped under this category for this '
-                      'property, so there is nothing to explain here.',
+              'There is not enough information about this topic for this property.',
             ),
           ])
         else ...[
           p(classes: 'sw-cats__verdict', [
             Component.text(
-              'Together, the ${category.featureCount} '
-              '${category.featureCount == 1 ? 'measurement' : 'measurements'} in '
-              'this category $directionWord the score.',
+              'The information in this topic $directionWord the score.',
             ),
           ]),
           div(classes: 'sw-cats__list', attributes: const {'role': 'list'}, [
@@ -154,9 +158,8 @@ class CategoryExplanationPanel extends StatelessComponent {
           ]),
           p(classes: 'sw-cats__caveat', [
             Component.text(
-              'Contributions are relative to this model and this property. They '
-              'describe how the measurements moved the index, not what will '
-              'happen at the shop.',
+              'These details explain the location score. They do not predict '
+              'how many customers will visit.',
             ),
           ]),
         ],
@@ -177,7 +180,7 @@ class CategoryExplanationPanel extends StatelessComponent {
       attributes: {
         'role': 'listitem',
         'title': '${factor.label}: ${factor.valueDisplay}. '
-            'Contribution ${positive ? '+' : ''}${factor.contribution.toStringAsFixed(3)}.',
+            'Score change ${positive ? '+' : ''}${factor.contribution.toStringAsFixed(3)}.',
       },
       [
         span(classes: 'sw-cats__row-label', [Component.text(factor.label)]),

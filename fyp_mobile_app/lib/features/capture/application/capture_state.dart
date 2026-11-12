@@ -21,9 +21,9 @@ const bool kStationDriftWarningVisualsEnabled = true;
 
 /// Who fires the shutter.
 ///
-/// [manual] is the default: ARCore can refine a target's world pose after
-/// calibration, so the operator explicitly opts into unattended capture only
-/// after the scene has settled.
+/// Production capture starts in [automatic], and the controller independently
+/// validates the full ARCore/stability gate before each shutter. [manual] is a
+/// safe non-automatic mode; it never authorizes the controller's auto shutter.
 enum CaptureMode {
   automatic,
   manual;
@@ -134,7 +134,7 @@ class CaptureState {
     this.alignment,
     this.previousGuidance,
     this.alignedHeldMs = 0,
-    this.mode = CaptureMode.manual,
+    this.mode = CaptureMode.automatic,
     this.autoStage = AutoCaptureStage.idle,
     this.autoBlockReason,
     this.measurementFresh = false,
@@ -534,6 +534,11 @@ class CaptureState {
     if (tracking != TrackingState.tracking) return 'Waiting for AR tracking';
     if (trackingRecovering) return 'Verifying station reference';
     if (station == null) return 'Calibrate the station';
+    if (!measurementFresh) return 'Waiting for a fresh camera pose';
+    if (!mode.isAutomatic) return 'Manual mode — automatic capture disabled';
+    if (autoBlockReason == 'anchor-moving') {
+      return 'Waiting for station anchor tracking';
+    }
     if (phase == CapturePhase.unavailable || phase == CapturePhase.failed) {
       return message ?? 'AR is unavailable';
     }
@@ -660,6 +665,10 @@ class CaptureState {
     if (trackingRecovering) {
       return 'Verifying the station reference — keep the phone at the station.';
     }
+    if (!measurementFresh) return 'Waiting for a fresh camera pose…';
+    if (!mode.isAutomatic) {
+      return 'Manual mode is active — automatic capture is disabled.';
+    }
     if (station == null) return 'Calibrate the station first.';
     if (stationDriftWarningVisible) return _stationDriftMessage;
     final target = activeTarget;
@@ -698,6 +707,9 @@ class CaptureState {
       // confidence in the world, and a photograph taken without it is composed
       // from an estimate that is still moving.
       return 'Waiting for AR to stabilise the target…';
+    }
+    if (autoBlockReason == 'anchor-moving') {
+      return 'Waiting for the station anchor to settle…';
     }
     final alignment0 = alignment;
     if (alignment0 == null || !alignment0.usable) {
@@ -919,6 +931,7 @@ class CaptureState {
     ArCameraIntrinsics? intrinsics,
     ({double x, double y})? imageAxis,
     Float64List? displayProjectionMatrix,
+    bool clearDisplayProjectionMatrix = false,
     ArCameraQuality? cameraQuality,
     bool clearCameraQuality = false,
     CaptureStation? station,
@@ -974,8 +987,9 @@ class CaptureState {
     ceilings: ceilings ?? this.ceilings,
     intrinsics: intrinsics ?? this.intrinsics,
     imageAxis: imageAxis ?? this.imageAxis,
-    displayProjectionMatrix:
-        displayProjectionMatrix ?? this.displayProjectionMatrix,
+    displayProjectionMatrix: clearDisplayProjectionMatrix
+        ? null
+        : (displayProjectionMatrix ?? this.displayProjectionMatrix),
     cameraQuality: clearCameraQuality
         ? null
         : (cameraQuality ?? this.cameraQuality),

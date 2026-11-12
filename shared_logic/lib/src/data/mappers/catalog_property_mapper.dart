@@ -18,6 +18,9 @@ abstract final class CatalogPropertyMapper {
   ///  * `ownerId` is genuinely unknown for imported rows and stays ''.
   static CommercialProperty fromJson(Map<String, dynamic> row) {
     final score = (row['suitability_score'] as num?)?.toDouble();
+    final management = row['management'] is Map
+        ? (row['management'] as Map).cast<String, dynamic>()
+        : const <String, dynamic>{};
     return CommercialProperty(
       id: row['id'] as String,
       title: row['title'] as String,
@@ -34,6 +37,8 @@ abstract final class CatalogPropertyMapper {
       suitabilityScore: score ?? 0,
       hasSuitabilityScore: score != null,
       ownerId: '',
+      managementLabel: (management['label'] as String?) ?? 'Management not assigned',
+      managerName: management['name'] as String?,
       hasTour: false,
       imageUrl: row['image_url'] as String?,
       sourceUrl: row['source_url'] as String?,

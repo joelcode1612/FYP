@@ -254,7 +254,7 @@ def admin_update_user(
     }
 
 
-@router.delete("/{user_id}", status_code=204)
+@router.delete("/{user_id}", status_code=204, response_model=None)
 def delete_user(
     user_id: uuid.UUID,
     session: Session = Depends(get_db),

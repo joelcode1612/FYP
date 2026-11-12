@@ -57,6 +57,7 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
   String _maxSize = '';
   String _targetMarket = '';
   String _query = '';
+  bool _managedOnly = true;
 
   /// The active ordering. Held as the accepted server key, never a label, so a
   /// rename of the wording cannot silently change the request.
@@ -135,6 +136,7 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
         : request.maxSizeSqft!.toStringAsFixed(0);
     _targetMarket = request.layoutPreferences.join(', ');
     _query = request.query ?? '';
+    _managedOnly = request.managedOnly;
     _sort = request.sort ?? _sortBestMatch;
   }
 
@@ -158,8 +160,8 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
         prefs.preferredLocation.trim().isNotEmpty ||
         prefs.preferredAreas.isNotEmpty;
     return configured
-        ? RecommendationSearchRequest.fromPreferences(prefs)
-        : const RecommendationSearchRequest();
+        ? RecommendationSearchRequest.fromPreferences(prefs).copyWith(managedOnly: true)
+        : const RecommendationSearchRequest(managedOnly: true);
   }
 
   /// Applies the draft filters and re-runs from page 1.
@@ -178,6 +180,7 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
         layoutPreferences: _layoutPreferences,
         query: _query.trim().isEmpty ? null : _query.trim(),
         sort: _sort,
+        managedOnly: _managedOnly,
         pageSize: 20,
       ),
     );
@@ -201,7 +204,7 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
   }
 
   void _reset() {
-    const defaults = RecommendationSearchRequest();
+    const defaults = RecommendationSearchRequest(managedOnly: true);
     setState(() => _syncDraft(defaults));
     _notifier.applyRecommendationRequest(defaults);
   }
@@ -522,6 +525,16 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
             selected: _propertyType,
             onPick: (v) => setState(() => _propertyType = v),
           ),
+        label(classes: _managedOnly ? 'checkpill is-on' : 'checkpill', [
+          input(
+            attributes: {
+              'type': 'checkbox',
+              if (_managedOnly) 'checked': '',
+            },
+            events: events(onChange: (_) => setState(() => _managedOnly = !_managedOnly)),
+          ),
+          span([Component.text('Assigned properties only')]),
+        ]),
         div(classes: 'rec2__filters-actions', [
           ActionButton(
             state.recommendationRefreshing ? 'Searching…' : 'Find properties',
@@ -668,10 +681,17 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
   ]);
 
   Component _empty(EntrepreneurState state) => EmptyState(
-    title: state.recommendationRequest.isBrowseOnly
+    title: state.recommendationRequest.managedOnly
+        ? 'No assigned properties match'
+        : state.recommendationRequest.isBrowseOnly
         ? 'No PU-eligible properties'
         : 'No property matches these requirements',
-    body: state.recommendationRequest.isBrowseOnly
+    body: state.recommendationRequest.managedOnly
+        ? 'No approved, published property with a recorded manager '
+              'assignment passes the current search and PU eligibility '
+              'filters. Disable Assigned properties only to browse '
+              'the wider research catalogue.'
+        : state.recommendationRequest.isBrowseOnly
         ? 'No property in the catalogue has a PU research score above 50, so '
               'there is nothing eligible to recommend. That is a data '
               'condition, not a filter problem.'
@@ -721,6 +741,9 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
               if (prop.propertyType.isNotEmpty) prop.propertyType,
             ].join(' · '),
           ),
+        ]),
+        p(classes: 'rec2-card__meta', [
+          Component.text('Management: ${item.management.display}'),
         ]),
         div(classes: 'rec2-card__facts', [
           _fact('Rent', 'RM ${prop.rentalRm.toStringAsFixed(0)}/mo'),
@@ -857,6 +880,7 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
 
       div(classes: 'rec2-panel__block', [
         span(classes: 'rec2-panel__label', [Component.text('Listing facts')]),
+        _panelRow('Management', item.management.display),
         _panelRow('Monthly rental', 'RM ${prop.rentalRm.toStringAsFixed(0)}'),
         _panelRow('Floor area', '${prop.sizeSqft.toStringAsFixed(0)} sq ft'),
         _panelRow('Property type', prop.propertyType),

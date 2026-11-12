@@ -3,44 +3,56 @@
 This is the read model behind the redesigned Property Detail page. It answers
 three questions for one catalogue property, and nothing more:
 
-1. **What is the location score?** The stored/derived output of the *deployed*
-   PU artifact, scaled to a 0-100 index. It is a research positive-label
-   association, never a probability of business success.
-2. **Which features moved that score, and in which direction?** Genuine
-   permutation SHAP over the property's own resolved 47-feature vector, against
-   a real background matrix. Additivity is verified before anything is
-   returned: an explanation that cannot reconstruct the score is withheld.
+1. **What is the location score?** The original variant uses the stored
+   `research_p_association_score` that drives legacy ranking and compares it
+   with live inference when the complete exact feature vector resolves. The
+   experimental variant uses live inference only. Either is a 0-100 research
+   association index, never a probability of business success.
+2. **Which features moved that score, and in which direction?** Permutation
+   SHAP is computed over the same selected PU artifact and exact 47-feature
+   vector as the displayed score, against a verified real background. Additivity
+   and score identity are checked; an explanation that cannot reconstruct that
+   score is withheld without hiding an otherwise valid score.
 3. **What does that mean per category?** The same contributions grouped into
    the five categories the page presents, with entrepreneur-facing labels.
 
 Design constraints enforced here
 ================================
-* **No fabrication.** Every number is either resolved from the database, read
-  from the deployed artifact, or computed by SHAP. Missing inputs produce
-  ``available: false`` with a stable reason code, never a placeholder score.
+* **No fabrication.** Every number is either resolved from the database,
+  reproduced from the deployed artifact, or computed by SHAP. Missing inputs
+  produce an explicit reason; they never create a live score or placeholder.
+  A separately valid stored legacy score remains visible when SHAP is unavailable.
 * **No raw column names reach the UI.** ``FEATURE_LABELS`` maps all 47 model
   features to plain English; the technical name is retained under
   ``technical`` for the optional explanation and for authorised consumers.
 * **One artifact, one explanation.** The service loads whichever artifact
-  ``SITEWISE_PU_MODEL_VARIANT`` selects and stamps its version into the
-  payload. A cached explanation is only reused for the same model version, so
-  swapping the artifact can never surface a stale explanation.
-* **SHAP is cached, not recomputed per request.** Permutation SHAP costs
-  roughly 13 s for 47 features; a page load cannot pay that repeatedly. The
-  cache is keyed by ``(model_version, property_id)``.
+  ``SITEWISE_PU_MODEL_VARIANT`` selects and stamps its version and checksum into
+  the score/explanation payload. Cache keys include model version, artifact
+  SHA-256, property id and stored legacy score, so artifact or score changes
+  cannot surface stale explanations.
+* **SHAP is cached, not recomputed per request.** The cache is keyed by
+  ``(model_version, property_id)``. Measured latency is recorded separately in
+  ``ml_reference/recommender_eval/shap_latency.json``; a single local measurement
+  is not treated as a general latency guarantee.
 """
 
 from __future__ import annotations
 
+import csv
+import hashlib
+import math
 import threading
+from pathlib import Path
 from typing import Any
 
 from sqlalchemy import text
 from sqlmodel import Session
 
 from sitewise.core.exceptions import ModelUnavailableError
+from sitewise.ml.feature_bridge import merge_bridge_features
 from sitewise.ml.model_loader import ModelLoader
 from sitewise.ml.property_features import FeatureResolutionError, PropertyFeatureRepository
+from sitewise.ml.pu_learning import PULearning
 from sitewise.ml.pu_variant import LEGACY_MODEL_NAME, resolve_variant
 from sitewise.ml.shap_explainer import ShapExplainer
 from sitewise.services.explanation_service import (
@@ -279,6 +291,9 @@ SCORE_MEANING = (
     "business success and it does not guarantee revenue."
 )
 
+_SHAP_BACKGROUND_CSV = Path(__file__).resolve().parents[3] / "ml_reference" / "shap_background_47.csv"
+_STORED_PU_SCORE_TYPE = "UNCALIBRATED_PvU_RESEARCH_ASSOCIATION_NOT_SUCCESS_PROBABILITY"
+
 #: Cache of computed explanations, keyed by (model_version, property_id) so a
 #: replaced artifact can never serve a previous model's explanation.
 _EXPLANATION_CACHE: dict[tuple[str, str], dict[str, Any]] = {}
@@ -496,20 +511,20 @@ class PropertyInsightsService:
     # -- public -------------------------------------------------------------
 
     def insights(self, property_id: str, origin: dict[str, float] | None = None) -> dict[str, Any]:
-        """The full insight payload. Never raises for an unavailable model.
+        """Return the active PU score independently of optional SHAP.
 
-        ``origin`` is the property's own coordinate, supplied by the caller
-        from the catalogue row. It is echoed back so the map centres on the
-        same point the score describes, instead of re-deriving it.
+        The score and its explanation are separate products: a missing feature,
+        missing SHAP background or SHAP failure must not hide a valid stored or
+        live PU score. The catalogue ranking's legacy score remains
+        authoritative when the active variant is ``legacy``; any available
+        live inference is compared with it rather than silently substituted.
         """
         variant = self._variant()
         base: dict[str, Any] = {
             "property_id": property_id,
             "model": variant,
             "origin": origin,
-            "map": {
-                "layers": _layer_payloads({}, measured=False),
-            },
+            "map": {"layers": _layer_payloads({}, measured=False)},
             "panorama": self._panorama(property_id),
             "score": {"available": False, "label": "Location Fit", "meaning": SCORE_MEANING},
             "explanation": {"available": False},
@@ -545,112 +560,222 @@ class PropertyInsightsService:
         except ModelUnavailableError as exc:
             base["reason"] = {
                 "code": "model_unavailable",
-                "message": "The trained location model is not available, so no score can be shown.",
+                "message": "The configured PU artifact could not be loaded.",
                 "detail": str(exc),
             }
             return base
 
-        cache_key = (str(variant.get("version") or variant["layer1_model"]), property_id)
+        stored = self._stored_legacy_score(property_id) if variant.get("key") == "legacy" else None
+        artifact_digest = self._artifact_sha256(loaded.meta.get("artifact_filename")) or "unhashed"
+        cache_version = (
+            f"{variant.get('layer1_model') or variant['name']}:{variant.get('version') or 'unknown'}:"
+            f"{artifact_digest}:{stored['score'] if stored is not None else 'no-stored-score'}"
+        )
+        cache_key = (cache_version, property_id)
         with _EXPLANATION_CACHE_LOCK:
             cached = _EXPLANATION_CACHE.get(cache_key)
         if cached is not None:
             return {**base, **cached}
 
         repo = PropertyFeatureRepository(self.analytics)
+        bundle = None
+        coverage = None
+        resolution_error: str | None = None
         try:
             bundle = repo.get(property_id, loaded.feature_names, source="catalog")
+            coverage = merge_bridge_features(bundle, expected_features=loaded.feature_names)
+            values = dict(coverage.values)
+            base["feature_coverage"] = {
+                "available_features": coverage.available_count,
+                "feature_count": len(loaded.feature_names),
+                "missing_features": list(coverage.missing_features),
+                "unrecoverable_features": list(coverage.unrecoverable_features),
+                "value_sources": dict(coverage.sources),
+                "flags": list(coverage.flags),
+            }
+            base["map"] = {"layers": _layer_payloads(values)}
         except FeatureResolutionError as exc:
-            base["reason"] = {
-                "code": "features_unresolved",
-                "message": "This property has no usable location measurements yet.",
-                "detail": str(exc),
-            }
-            return base
+            values = {}
+            resolution_error = str(exc)
+        except Exception as exc:  # noqa: BLE001 - score fallback remains possible
+            values = {}
+            resolution_error = f"{type(exc).__name__}: {exc}"
 
-        if bundle.missing_features:
-            base["reason"] = {
-                "code": "features_missing",
-                "message": (
-                    f"{len(bundle.missing_features)} of {len(loaded.feature_names)} "
-                    "location measurements are missing, so no score can be shown."
-                ),
-                "missing_features": list(bundle.missing_features),
-            }
-            return base
-
-        background = repo.background(loaded.feature_names, limit=50)
-        if not background:
-            base["reason"] = {
-                "code": "shap_background_missing",
-                "message": "There are no comparable analysed locations to explain this score against.",
-            }
-            return base
-
-        features: dict[str, float] = {
-            name: float(value)  # type: ignore[arg-type]
-            for name, value in bundle.values.items()
+        features = {
+            name: float(value)
+            for name, value in values.items()
             if value is not None
         }
+        live_prediction: dict[str, Any] | None = None
+        if coverage is not None and not coverage.missing_features:
+            live_prediction = PULearning(model_name=variant["layer1_model"]).predict_or_report(
+                property_id, features, allow_model_imputation=False
+            )
+
+        pu_score: float | None = None
+        score_source = ""
+        source_label = ""
+        stored_comparison: dict[str, Any] | None = None
+        if stored is not None:
+            # The legacy recommender ranks on this exact stored catalogue value.
+            # Keep the property-detail score aligned with ranking, even when the
+            # current feature resolver or optional explanation is unavailable.
+            pu_score = float(stored["score"])
+            score_source = "stored_catalogue_prediction"
+            source_label = "Stored original PU prediction"
+            if live_prediction and live_prediction.get("available"):
+                difference = abs(float(live_prediction["score"]) - pu_score)
+                stored_comparison = {
+                    "stored_score": pu_score,
+                    "live_inference_score": float(live_prediction["score"]),
+                    "absolute_difference": difference,
+                    "tolerance": 1e-6,
+                    "verified": difference <= 1e-6,
+                }
+                if difference <= 1e-6:
+                    source_label = "Stored score · verified by live inference"
+                else:
+                    source_label = "Stored score · live inference differs"
+        elif live_prediction and live_prediction.get("available"):
+            pu_score = float(live_prediction["score"])
+            score_source = "live_model_inference"
+            source_label = "Live PU artifact inference"
+
+        if pu_score is not None and math.isfinite(pu_score) and 0.0 <= pu_score <= 1.0:
+            score_value = max(0, min(100, round(pu_score * 100)))
+            score_payload = {
+                "available": True,
+                "label": "Location Fit",
+                "value": score_value,
+                "scale": 100,
+                "raw": pu_score,
+                "band": score_band(score_value),
+                "meaning": SCORE_MEANING,
+                "kind": "pu_association",
+                "kind_label": "Location similarity to operating F&B sites",
+                "source": score_source,
+                "source_label": source_label,
+                "stored_score_comparison": stored_comparison,
+                "research_only": True,
+            }
+            base["score"] = score_payload
+            base["availability"]["score"] = True
+            base["model"] = {
+                **variant,
+                "artifact_sha256": artifact_digest,
+                "score_source": score_source,
+                "score_source_label": source_label,
+            }
+        else:
+            base["reason"] = {
+                "code": "features_missing" if resolution_error is None else "features_unresolved",
+                "message": (
+                    "No valid stored or live PU score is available for this property."
+                ),
+                "detail": resolution_error,
+                "missing_features": (
+                    list(coverage.missing_features) if coverage is not None else []
+                ),
+            }
+            return base
+
+        if coverage is None:
+            base["reason"] = {
+                "code": "features_unresolved",
+                "message": "The score is available, but its feature vector could not be resolved for SHAP.",
+                "detail": resolution_error,
+            }
+            return base
+
+        if coverage.missing_features:
+            base["reason"] = {
+                "code": "shap_features_missing",
+                "message": "The PU score is available, but SHAP is unavailable until all model features resolve.",
+                "missing_features": list(coverage.missing_features),
+                "source": score_source,
+            }
+            return base
+
+        # The experimental model card has no separately verified matching SHAP
+        # background/license lineage. Never explain it with the original
+        # baseline model's background merely because the column count matches.
+        if variant.get("key") == "experimental47":
+            base["reason"] = {
+                "code": "shap_background_unverified",
+                "message": "The live experimental PU score is available; a matching licensed SHAP background is not verified.",
+                "source": score_source,
+                "research_only": True,
+            }
+            return base
+
+        background = self._reference_background(loaded.feature_names)
+        background_sha256 = self._reference_background_sha256()
+        if not background or background_sha256 is None:
+            base["reason"] = {
+                "code": "shap_background_missing",
+                "message": "The PU score is available, but no exact-feature real SHAP background could be loaded.",
+                "source": score_source,
+            }
+            return base
 
         try:
-            explained = ShapExplainer(loader=ModelLoader(), model_name=variant["layer1_model"]).explain(
-                features, background=background
-            )
+            explained = ShapExplainer(
+                loader=ModelLoader(), model_name=variant["layer1_model"]
+            ).explain(features, background=background)
         except ModelUnavailableError as exc:
             base["reason"] = {
                 "code": "shap_unavailable",
-                "message": "The score could be computed but its explanation could not be.",
+                "message": "The PU score is available, but its explanation could not be computed.",
                 "detail": str(exc),
+                "source": score_source,
             }
             return base
 
         contributions: dict[str, float] = explained["contributions"]
         base_value = float(explained["baseline_association"])
         output = float(explained["positive_label_association"])
-        reconstructed = base_value + sum(contributions.values())
-
-        # Additivity is the guard that the explanation describes THIS score.
-        if abs(reconstructed - output) > _ADDITIVITY_TOLERANCE:
+        reconstructed = base_value + math.fsum(contributions.values())
+        additivity_error = abs(reconstructed - output)
+        if additivity_error > _ADDITIVITY_TOLERANCE:
             base["reason"] = {
                 "code": "shap_inconsistent",
-                "message": "The explanation did not reconstruct the score, so it was withheld.",
+                "message": "The PU score is available, but SHAP failed its additivity check and was withheld.",
+                "additivity_error": additivity_error,
+                "source": score_source,
             }
             return base
 
-        values: dict[str, float | None] = dict(bundle.values)
-        score_value = max(0, min(100, round(output * 100)))
+        score_difference = abs(output - pu_score)
+        if score_difference > _ADDITIVITY_TOLERANCE:
+            base["reason"] = {
+                "code": "shap_score_mismatch",
+                "message": "The PU score remains available, but this SHAP output does not match it and was withheld.",
+                "score_difference": score_difference,
+                "source": score_source,
+            }
+            return base
 
+        values = dict(coverage.values)
         ranked = sorted(contributions.items(), key=lambda kv: kv[1])
-        # Most influential first, regardless of direction. Ordering by signed
-        # value would put every positive factor ahead of every negative one, so
-        # a chart showing "the top N" would never display what pulled the score
-        # down — the half of the explanation the page exists to show.
         ordered = sorted(contributions.items(), key=lambda kv: -abs(kv[1]))
         factors = [_factor(name, value, values.get(name)) for name, value in ordered]
-
         payload: dict[str, Any] = {
-            "score": {
-                "available": True,
-                "label": "Location Fit",
-                "value": score_value,
-                "scale": 100,
-                "raw": round(output, 6),
-                "band": score_band(score_value),
-                "meaning": SCORE_MEANING,
-                "kind": "pu_association",
-                "kind_label": "Location similarity to operating F&B sites",
-                "research_only": True,
-            },
+            "score": base["score"],
             "explanation": {
                 "available": True,
                 "explainer": explained.get("explainer"),
                 "model": explained.get("model"),
+                "artifact": str(loaded.meta.get("artifact_filename") or ""),
+                "artifact_sha256": self._artifact_sha256(loaded.meta.get("artifact_filename")),
                 "model_version": variant.get("version"),
+                "background_sha256": background_sha256,
                 "feature_count": len(loaded.feature_names),
                 "base_value": round(base_value, 6),
                 "output": round(output, 6),
                 "reconstructed": round(reconstructed, 6),
+                "additivity_error": additivity_error,
                 "additivity_ok": True,
+                "score_matches_displayed_value": True,
                 "background_size": explained.get("background_size"),
                 "score_meaning": explained.get("score_meaning") or SCORE_MEANING,
                 "research_only": True,
@@ -671,10 +796,88 @@ class PropertyInsightsService:
                 "categories": True,
             },
         }
-
         with _EXPLANATION_CACHE_LOCK:
             _EXPLANATION_CACHE[cache_key] = payload
         return {**base, **payload}
+
+    def _stored_legacy_score(self, property_id: str) -> dict[str, Any] | None:
+        """Read a validated original ranking score; never use it for experimental47."""
+        if self.analytics is None:
+            return None
+        try:
+            row = self.analytics.execute(
+                text(
+                    """
+                    SELECT source_data->>'research_p_association_score' AS score,
+                           source_data->>'score_type' AS score_type,
+                           source_data->>'model_method' AS model_method,
+                           source_data->>'model_feature_set' AS feature_set,
+                           source_data->>'model_version' AS model_version
+                    FROM sitewise_app.properties
+                    WHERE id = :property_id
+                    """
+                ),
+                {"property_id": property_id},
+            ).mappings().first()
+        except Exception:  # noqa: BLE001 - an unavailable score source stays unavailable
+            return None
+        if row is None or row.get("score_type") != _STORED_PU_SCORE_TYPE:
+            return None
+        try:
+            score = float(row["score"])
+        except (TypeError, ValueError):
+            return None
+        if not math.isfinite(score) or not 0.0 <= score <= 1.0:
+            return None
+        return {**dict(row), "score": score}
+
+    @staticmethod
+    def _reference_background_sha256() -> str | None:
+        try:
+            digest = hashlib.sha256()
+            with _SHAP_BACKGROUND_CSV.open("rb") as stream:
+                for block in iter(lambda: stream.read(1024 * 1024), b""):
+                    digest.update(block)
+            return digest.hexdigest()
+        except OSError:
+            return None
+
+    @staticmethod
+    def _artifact_sha256(filename: Any) -> str | None:
+        if not isinstance(filename, str) or not filename:
+            return None
+        path = (Path(__file__).resolve().parent.parent / "ml" / filename).resolve()
+        allowed = (Path(__file__).resolve().parent.parent / "ml").resolve()
+        if allowed not in path.parents or not path.is_file():
+            return None
+        try:
+            digest = hashlib.sha256()
+            with path.open("rb") as stream:
+                for block in iter(lambda: stream.read(1024 * 1024), b""):
+                    digest.update(block)
+            return digest.hexdigest()
+        except OSError:
+            return None
+
+    @staticmethod
+    def _reference_background(feature_names: list[str]) -> list[dict[str, float]]:
+        """Load only complete, finite rows from the tracked real PU background."""
+        try:
+            with _SHAP_BACKGROUND_CSV.open(encoding="utf-8-sig", newline="") as stream:
+                reader = csv.DictReader(stream)
+                if not reader.fieldnames or not set(feature_names).issubset(reader.fieldnames):
+                    return []
+                rows = []
+                for row in reader:
+                    try:
+                        values = {name: float(row[name]) for name in feature_names}
+                    except (TypeError, ValueError):
+                        continue
+                    if all(math.isfinite(value) for value in values.values()):
+                        rows.append(values)
+                return rows[:100]
+        except OSError:
+            return []
 
     # -- internals ----------------------------------------------------------
 

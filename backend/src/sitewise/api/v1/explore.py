@@ -20,6 +20,7 @@ from sitewise.db.session import get_db
 from sitewise.dependencies import CurrentUser
 from sitewise.ingestion.state import RefreshState
 from sitewise.repositories.fyp_property_repository import FypPropertyRepository
+from sitewise.services.property_management_service import resolve_management
 
 router = APIRouter()
 
@@ -133,6 +134,7 @@ def explore_property_detail(
             "photos": repo.get_photos(property_id),
             "amenities": repo.get_amenities(property_id),
             "listing_sources": repo.get_listing_sources(property_id),
+            "management": resolve_management(session, listing_id=property_id),
         }
     }
 

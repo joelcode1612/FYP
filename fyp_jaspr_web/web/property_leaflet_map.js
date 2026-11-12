@@ -45,13 +45,13 @@
     lat >= -90 && lat <= 90 && lon >= -180 && lon <= 180 &&
     !(lat === 0 && lon === 0);
   if (!valid || typeof L === 'undefined') {
-    showAlert(valid ? 'Map library did not load. Check the browser connection.' : 'No valid coordinates for this property.');
+    showAlert(valid ? 'The map could not open. Please refresh this page.' : 'The map location is not available for this property.');
     nearbyLabel.textContent = 'Map unavailable';
     return;
   }
   const cartoKey = window.SITEWISE_MAP_CONFIG?.cartoBasemapsKey;
   if (!cartoKey) {
-    showAlert('CARTO basemap key missing. Generate map-config.js and rebuild SiteWise.');
+    showAlert('The map is unavailable right now. Please try again later.');
     nearbyLabel.textContent = 'Map unavailable';
     return;
   }
@@ -108,7 +108,7 @@
   let tileErrors = 0;
   tile.on('tileerror', () => {
     if (++tileErrors < 3) return;
-    notices.tiles = 'Basemap tiles could not load. The position and distance overlays may still be visible.';
+    notices.tiles = 'The map background could not load. Some location markers may still appear.';
     paintNotice();
   });
   const origin = [lat, lon];
@@ -123,7 +123,7 @@
     const name = document.createElement('div');
     name.textContent = propertyId;
     const note = document.createElement('div');
-    note.textContent = 'This is the listing being analysed.';
+    note.textContent = 'You are viewing this property.';
     el.append(strong, name, note);
     return el;
   };
@@ -234,7 +234,7 @@
     const parts = [];
     if (typeof layer.a === 'number') parts.push(`${layer.a} within 500 m`);
     if (typeof layer.b === 'number') parts.push(`${layer.b} within 1 km`);
-    return parts.length ? parts.join(' · ') : 'not measured';
+    return parts.length ? parts.join(' · ') : 'No information available';
   };
 
   const renderNotice = () => {
@@ -249,8 +249,8 @@
       ? names[0]
       : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
     notices.layers =
-      `Counts only for ${listed}: locations are not stored, so no pins are ` +
-      'drawn for those layers. The counts are in the legend below.';
+      `For ${listed}, we have nearby totals but not exact map locations. ` +
+      'See the numbers in the map key below.';
     paintNotice();
   };
 
@@ -267,9 +267,9 @@
 
     const shown = active.has('properties') ? visible.length : 0;
     if (!active.has('properties')) {
-      nearbyLabel.textContent = 'Properties layer is off';
+      nearbyLabel.textContent = 'Turn on Properties to see nearby property locations';
     } else if (single) {
-      nearbyLabel.textContent = `${shown} research reference properties within ${labelFor[radius]} · not F&B competitors`;
+      nearbyLabel.textContent = `${shown} other property locations within ${labelFor[radius]} · availability not confirmed`;
     } else {
       const inner = visible.filter(x => x.dist <= 500).length;
       nearbyLabel.textContent = `${inner} within 500 m · ${visible.length - inner} from 500 m–1 km`;
@@ -286,7 +286,7 @@
     layersEl.innerHTML = '';
     const label = document.createElement('span');
     label.className = 'layers__label';
-    label.textContent = 'Layers';
+    label.textContent = 'Show on map';
     layersEl.append(label);
 
     for (const layer of layers) {
@@ -322,7 +322,7 @@
         if (!layer.m) {
           const tag = document.createElement('span');
           tag.className = 'chip__tag';
-          tag.textContent = 'counts only';
+          tag.textContent = 'totals only';
           b.append(tag);
         }
       }
@@ -386,7 +386,7 @@
         .sort((a, b) => a.dist - b.dist);
       render();
     })
-    .catch(() => { nearbyLabel.textContent = 'Reference property markers unavailable'; });
+    .catch(() => { nearbyLabel.textContent = 'Nearby property locations could not be loaded'; });
   // Straight-line buffers only, not verified storefront position or travel time.
   setTimeout(() => map.invalidateSize(), 0);
 })();

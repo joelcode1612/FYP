@@ -394,6 +394,19 @@ class _ReviewSplitState extends State<ReviewSplit> {
                   : item.ownershipStatus,
             ),
           if (item.publicationEligible) const Pill('Live', tone: 'success'),
+          // Management responsibility as the backend derived it. An unresolved
+          // property is surfaced here so an administrator can act on it rather
+          // than the queue implying someone is already responsible.
+          if (item.management != null)
+            Pill(
+              item.management!.display,
+              tone: switch (item.management!.type) {
+                'agent' => 'action',
+                'owner' => 'neutral',
+                'platform' => 'neutral',
+                _ => 'warning',
+              },
+            ),
         ]),
       ],
     );

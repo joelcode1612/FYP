@@ -18,6 +18,10 @@ class LocationFitScore extends StatelessComponent {
   @override
   Component build(BuildContext context) {
     final score = insights.score;
+    final digest = insights.modelArtifactSha256;
+    final digestPrefix = digest == null || digest.length < 12
+        ? digest
+        : digest.substring(0, 12);
 
     return section(
       classes: 'sw-fit${score == null ? ' sw-fit--empty' : ''}',
@@ -39,7 +43,7 @@ class LocationFitScore extends StatelessComponent {
           ],
         ),
         div(classes: 'sw-fit__body', [
-          div(classes: 'sw-fit__eyebrow', [Component.text('Location Fit')]),
+          div(classes: 'sw-fit__eyebrow', [Component.text('Location suitability')]),
           h2(
             classes: 'sw-fit__title',
             attributes: const {'id': 'sw-fit-title'},
@@ -52,23 +56,32 @@ class LocationFitScore extends StatelessComponent {
           p(classes: 'sw-fit__band', [
             Component.text(
               score?.band ??
-                  insights.reason?.message ??
-                  'No location score has been produced for this property.',
+                  'A location score is not available for this property yet.',
             ),
           ]),
           if (score != null) ...[
             div(classes: 'sw-fit__meta', [
-              span(classes: 'sw-fit__kind', [Component.text(score.kindLabel)]),
+              span(classes: 'sw-fit__kind', [Component.text('How similar this area is to other food-business locations')]),
+              if (insights.modelArtifact != null) ...[
+                span(classes: 'sw-fit__dot', attributes: const {'aria-hidden': 'true'}, const []),
+                span([
+                  Component.text(
+                    '${insights.modelArtifact}'
+                    '${digestPrefix == null ? '' : ' · SHA-256 $digestPrefix'}',
+                  ),
+                ]),
+              ],
               span(classes: 'sw-fit__dot', attributes: const {'aria-hidden': 'true'}, const []),
-              span([
-                Component.text(
-                  insights.modelVersion == null
-                      ? insights.modelName
-                      : '${insights.modelName} · ${insights.modelVersion}',
-                ),
-              ]),
+              span([Component.text(score.sourceLabel)]),
             ]),
-            p(classes: 'sw-fit__note', [Component.text(score.meaning)]),
+            p(classes: 'sw-fit__note', [Component.text(
+              'This score compares the area with places where food businesses operate. '
+              'It does not predict sales or guarantee success.',
+            )]),
+            if (insights.modelNotes.isNotEmpty)
+              p(classes: 'sw-fit__note', [
+                Component.text(insights.modelNotes.join(' ')),
+              ]),
           ],
         ]),
       ],

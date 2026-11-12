@@ -1,0 +1,3 @@
+email,full_name,auth_user_id,supabase_profile,local_profile,email_verified,account_status,can_authenticate,property_id,outcome,detail
+example.ent.01@example.invalid,Nurul Izzah binti Rahman,,,,,,no,,would_provision,
+example.ent.02@example.invalid,Muhammad Haziq bin Ismail,,,,,,no,,would_provision,

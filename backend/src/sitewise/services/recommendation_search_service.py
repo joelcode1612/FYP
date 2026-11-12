@@ -161,6 +161,8 @@ class SearchCriteria:
     page_size: int = 20
     cursor: str | None = None
     sort: str = DEFAULT_SORT
+    managed_only: bool = False
+    management_ids: tuple[str, ...] = ()
 
     def cache_payload(self) -> dict[str, Any]:
         """Everything that changes the ranked result — and nothing else.
@@ -184,6 +186,11 @@ class SearchCriteria:
             "layout": [p.strip().lower() for p in self.layout_preferences if p.strip()],
             "q": (self.query or "").strip().lower(),
             "sort": self.sort if self.sort in SORT_OPTIONS else DEFAULT_SORT,
+            "managed_only": self.managed_only,
+            "management_scope": (
+                hashlib.sha256("\n".join(self.management_ids).encode()).hexdigest()[:16]
+                if self.managed_only else ""
+            ),
         }
 
 
@@ -428,6 +435,11 @@ class RecommendationSearchService:
             "p.suitability_score > CAST(:pu_threshold AS double precision)",
         ]
         params: dict[str, Any] = {"pu_threshold": PU_ELIGIBILITY_THRESHOLD}
+        if criteria.managed_only:
+            if not criteria.management_ids:
+                return []
+            where.append("p.id = ANY(:managed_ids)")
+            params["managed_ids"] = list(criteria.management_ids)
 
         if criteria.max_rental_rm is not None:
             where.append("p.rental_rm <= CAST(:max_rent AS double precision)")

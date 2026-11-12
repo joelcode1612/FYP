@@ -17,6 +17,8 @@
 /// property_verification_service.py`); every field is read defensively so an
 /// added backend column can never break a render.
 
+import 'recommendation_search.dart' show ListingManagement;
+
 /// Which review dimension an action, document or audit row belongs to.
 enum VerificationDimension { listing, ownership }
 
@@ -1036,6 +1038,10 @@ class VerificationQueueRow {
   final String? submittedAt;
   final String? updatedAt;
 
+  /// Derived management responsibility for the listing (Agent, Owner, platform
+  /// stewardship or unresolved). Null when the payload omits the block.
+  final ListingManagement? management;
+
   const VerificationQueueRow({
     required this.propertyId,
     required this.title,
@@ -1054,6 +1060,7 @@ class VerificationQueueRow {
     this.latestNote,
     this.submittedAt,
     this.updatedAt,
+    this.management,
   });
 
   String get displayName => title.isNotEmpty ? title : '#$propertyId';
@@ -1093,6 +1100,11 @@ class VerificationQueueRow {
             ? null
             : '${row['submitted_at']}',
         updatedAt: row['updated_at'] == null ? null : '${row['updated_at']}',
+        management: row['management'] is Map<String, dynamic>
+            ? ListingManagement.fromJson(
+                row['management'] as Map<String, dynamic>,
+              )
+            : null,
       );
 }
 

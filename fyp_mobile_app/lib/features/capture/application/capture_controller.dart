@@ -398,8 +398,10 @@ class CaptureController extends ChangeNotifier {
     _rotationMonitor = RotationInPlaceMonitor(
       stationOrigin: vio.Vec3(frame.origin.x, frame.origin.y, frame.origin.z),
       maxRotationRadiusM: geometry.rotationInPlaceRadiusM,
+      maxRawExcursionM: geometry.rotationMaxRawExcursionM,
       radialToleranceM: geometry.rotationRadialToleranceM,
       minYawSweepDeg: geometry.minRotationYawSweepDeg,
+      maxSampleGap: geometry.maxSampleGap,
     );
     final f = frame.forwardAxis;
     final yawRad = math.atan2(f.x, -f.z);
@@ -987,6 +989,11 @@ class CaptureController extends ChangeNotifier {
   /// branch — true only because the rebuild intentionally released it — and
   /// invalidates a station reference that the rebuild itself is replacing.
   bool _placing = false;
+  bool _calibrationInFlight = false;
+
+  /// Tail future every `_withPlacementSlot` body chains onto, so overlapping
+  /// placement operations execute strictly one after another.
+  Future<void> _placementTail = Future<void>.value();
 
   /// A target the user asked for while another placement was in flight. One
   /// slot: the last request wins, and it runs after the in-flight placement
@@ -1259,6 +1266,16 @@ class CaptureController extends ChangeNotifier {
         'AR is not available for calibration right now.',
       );
     }
+    if (_calibrationInFlight) {
+      return const CalibrationReadiness.blocked(
+        'Station calibration is in progress. Wait for the anchor to finish.',
+      );
+    }
+    if (_captureInFlight || _photos.busy) {
+      return const CalibrationReadiness.blocked(
+        'Wait for the current photograph to finish before recalibrating.',
+      );
+    }
     if (_stationInvalidationInFlight) {
       return const CalibrationReadiness.blocked(
         'Cleaning the invalid AR reference. Wait a moment before recalibrating.',
@@ -1305,27 +1322,27 @@ class CaptureController extends ChangeNotifier {
 
   /// Records the current AR camera pose as the station's reference pose.
   ///
-  /// Two things are stored, and the difference matters: the **station** pose is
-  /// captured once and never changes; the **camera** pose keeps arriving. Every
-  /// target direction, every raycast origin and every drift measurement is
-  /// relative to the first, never to the second.
-  ///
-  /// [completedImages] carries the photographs of an earlier visit to the same
-  /// station (target id → saved path) when the user has to calibrate again in a
-  /// new AR session. The frame is new, so the targets are placed from the new
-  /// station pose; the ids, the statuses and the saved files are kept.
-  ///
-  /// Returns `true` when the station was recorded; `false` when AR was not
-  /// ready or the reference could not be derived, in which case [state] carries
-  /// the sentence explaining why.
+  /// The shared anchor, all 26 local placements and both persisted calibration
+  /// files are one transaction: failure leaves no live anchor or published
+  /// station, and the repository restores any previous calibration metadata.
+  /// Existing accepted photographs are never touched by calibration rollback.
   Future<bool> calibrateStation({
     String? stationId,
     Map<int, String> completedImages = const <int, String>{},
     DateTime? createdAt,
   }) async {
-    // One-time calibration: once a station is calibrated, do not recalibrate
-    // (or create a second station anchor) during the same session unless the
-    // caller explicitly resets via recalibrateHere()/recalibrateAndContinue().
+    if (_calibrationInFlight) {
+      _emit(state.copyWith(message: 'Station calibration is already in progress.'));
+      return false;
+    }
+    if (_captureInFlight || _photos.busy) {
+      _emit(
+        state.copyWith(
+          message: 'Wait for the current photograph to finish before calibrating.',
+        ),
+      );
+      return false;
+    }
     if (state.station != null) {
       _emit(state.copyWith(message: 'Centre already calibrated.'));
       return true;
@@ -1337,22 +1354,141 @@ class CaptureController extends ChangeNotifier {
     }
     final pose = readiness.pose!;
     final referenceOrientation = readiness.referenceOrientation!;
-
     final id =
         stationId ??
         defaultStationId ??
         'station-${DateTime.now().millisecondsSinceEpoch}';
     final frame = StationFrame(
       origin: pose.position,
-      // The frozen reference: gravity-aligned, pitch- and roll-free, yaw from
-      // the direction the user was facing. Recorded once and never replaced
-      // by a later camera pose.
       orientation: referenceOrientation,
     );
-    // `_freezeStation` already cleared the guidance history — the pointer
-    // filter, the aligned latch and the automatic machine's stage. The display
-    // smoother is reset here as well because calibration is the explicit
-    // "start over" the brief names.
+    final station = CaptureStation(
+      stationId: id,
+      referencePosition: frame.origin,
+      referenceOrientation: frame.orientation,
+      createdAt: createdAt ?? _clock(),
+      trackingStatus: pose.tracking,
+      capturedCount: completedImages.length,
+      total: _specs.length,
+    );
+    final targets = <CaptureTarget>[
+      for (final spec in _specs)
+        CaptureTarget(
+          targetId: spec.targetId,
+          stationId: id,
+          yawDegrees: spec.yawDegrees,
+          pitchDegrees: spec.pitchDegrees,
+          stationLocalDirection: spec.direction,
+          status: completedImages.containsKey(spec.targetId)
+              ? CaptureTargetStatus.captured
+              : CaptureTargetStatus.pending,
+          imagePath: completedImages[spec.targetId],
+        ),
+    ];
+    var firstPending = 0;
+    for (final CaptureTarget target in targets) {
+      if (!target.status.isDone) {
+        firstPending = target.targetId;
+        break;
+      }
+    }
+
+    _calibrationInFlight = true;
+    List<CaptureTarget>? placedTargets;
+    try {
+      // Create one tracked ARCore station anchor, then stage the full 26-target
+      // local layout. Nothing is persisted or published before this succeeds.
+      final outcome = await _withPlacementSlot<PlacementOutcome>(
+        () => _anchors.placeAll(station: frame, specs: _specs),
+      );
+      final anchorIds = <String>{
+        for (final placement in outcome.placed.values) placement.anchor.id,
+      };
+      final allTracking = outcome.placed.values.every(
+        (AnchoredTarget placement) => placement.isTracking,
+      );
+      final complete =
+          outcome.allPlaced &&
+          outcome.placed.length == _specs.length &&
+          anchorIds.length == 1 &&
+          allTracking;
+      if (!complete) {
+        await _anchors.releaseAll();
+        final missing = <int>{
+          ...outcome.failures.keys,
+          for (final spec in _specs)
+            if (!outcome.placed.containsKey(spec.targetId)) spec.targetId,
+        }.toList()..sort();
+        _traceTransition(
+          'calibration anchor/placement rejected: ${outcome.failures}',
+        );
+        _emit(
+          state.copyWith(
+            message: outcome.placed.isEmpty
+                ? 'AR could not create a tracked shared station anchor. '
+                      'Move slowly, wait for tracking, and retry calibration.'
+                : 'Station placement was incomplete (${missing.join(', ')}). '
+                      'No calibration was saved; wait for AR tracking and retry.',
+          ),
+        );
+        return false;
+      }
+
+      var arranged = targets;
+      for (final entry in outcome.placed.entries) {
+        arranged = _withAnchorIn(arranged, entry.key, entry.value);
+      }
+
+      // Anchor creation can yield while ARCore continues to stream. Require a
+      // fresh, still-tracked camera pose at the commit boundary as well.
+      final livePose = _session.latest;
+      final receivedAt = _lastPoseReceivedAt;
+      if (livePose == null ||
+          livePose.tracking != TrackingState.tracking ||
+          receivedAt == null ||
+          _clock().difference(receivedAt) > state.geometry.maxMeasurementAge) {
+        await _anchors.releaseAll();
+        _emit(
+          state.copyWith(
+            message: 'AR tracking changed while the station anchor was being '
+                'created. Nothing was saved; wait for a fresh pose and retry.',
+          ),
+        );
+        return false;
+      }
+
+      // A repository commit stages and verifies station + target rows together.
+      // If it fails, the catch releases the just-created anchor and preserves
+      // any previous metadata, accepted records and JPEGs.
+      await _repository.saveCalibration(station, arranged);
+      placedTargets = arranged;
+      try {
+        _savedStationIds = await _repository.stationIds();
+      } catch (error) {
+        debugPrint('ARCORE_STATION: calibration saved; resume-list refresh failed: $error');
+        _savedStationIds = <String>[id, ..._savedStationIds.where((String old) => old != id)];
+      }
+    } catch (error) {
+      try {
+        await _anchors.releaseAll();
+      } catch (releaseError) {
+        debugPrint('ARCORE_ANCHOR: rollback detach failed: $releaseError');
+      }
+      debugPrint('ARCORE_STATION: calibration transaction failed: $error');
+      _emit(
+        state.copyWith(
+          message: 'Station calibration could not be saved. Existing photos '
+              'were kept. Correct the AR/storage issue and retry.',
+          lastError: '$error',
+        ),
+      );
+      return false;
+    } finally {
+      _calibrationInFlight = false;
+    }
+
+    // Publish the frozen station only after anchor placement and durable
+    // calibration metadata have both succeeded.
     _freezeStation(frame);
     _smoother.reset();
     _traceTransition(
@@ -1364,105 +1500,26 @@ class CaptureController extends ChangeNotifier {
       'station-reference set id=$id origin=${_formatVec(frame.origin)} '
       'q=${_formatQuat(frame.orientation)}',
     );
-
-    final station = CaptureStation(
-      stationId: id,
-      referencePosition: frame.origin,
-      referenceOrientation: frame.orientation,
-      createdAt: createdAt ?? _clock(),
-      trackingStatus: pose.tracking,
-      capturedCount: completedImages.length,
-      total: _specs.length,
-    );
-
-    final targets = <CaptureTarget>[
-      for (final spec in _specs)
-        CaptureTarget(
-          targetId: spec.targetId,
-          stationId: id,
-          yawDegrees: spec.yawDegrees,
-          pitchDegrees: spec.pitchDegrees,
-          stationLocalDirection: spec.direction,
-          // Photographs from an earlier session survive a recalibration: the
-          // station frame is new, but the target ids and the files are not.
-          status: completedImages.containsKey(spec.targetId)
-              ? CaptureTargetStatus.captured
-              : CaptureTargetStatus.pending,
-          imagePath: completedImages[spec.targetId],
-        ),
-    ];
-
-    var firstPending = 0;
-    for (final CaptureTarget t in targets) {
-      if (!t.status.isDone) {
-        firstPending = t.targetId;
-        break;
-      }
-    }
-
-    await _repository.saveStation(station);
-    await _repository.saveTargets(targets);
-    // A new station record exists now; the resume list must know about it.
-    _savedStationIds = await _repository.stationIds();
-
     _emit(
       state.copyWith(
-        phase: CapturePhase.capturing,
+        phase: firstPending == 0 ? CapturePhase.complete : CapturePhase.capturing,
         station: station,
-        targets: targets,
+        targets: placedTargets,
         activeTargetId: firstPending,
         message: null,
         clearMessage: true,
         clearAlignment: true,
-        // A calibration begins a new station-distance measurement. Do not show
-        // a stale value from the previous station while the first live anchor
-        // report is still arriving.
         driftM: 0,
+        rawStationDriftM: 0,
+        rotatingInPlace: false,
         stationDriftWarningActive: false,
       ),
     );
 
-    // Probe all 26 directions first — as *information*, never as a gate. The
-    // target sheet then says which directions happen to have a surface, but
-    // placement and capture do not depend on it: targets are placed at
-    // `station + radius × direction` whether or not any surface exists.
+    // Surface probes are informational and occur only after the calibration
+    // transaction is already valid. A failed probe cannot invalidate anchors.
     await probeTargets();
-
-    // Place the complete arrangement, once, before the first photograph. A
-    // single station anchor is created here and hosts all 26 placements for
-    // the whole sequence — one capture origin, not twenty-six independently
-    // refinable anchors — and a photograph never adds, removes or moves a
-    // node. `placeAll` is idempotent by target id, so a re-run (a failed
-    // calibration retried, a recovery after a drop) cannot produce a second
-    // node for one target.
-    final outcome = await _withPlacementSlot<PlacementOutcome>(
-      () => _anchors.placeAll(station: frame, specs: _specs),
-    );
-    var placedTargets = state.targets;
-    for (final entry in outcome.placed.entries) {
-      placedTargets = _withAnchorIn(placedTargets, entry.key, entry.value);
-    }
-    final missing = outcome.failures.keys.toList()..sort();
-    _emit(
-      state.copyWith(
-        targets: placedTargets,
-        message: outcome.allPlaced
-            ? 'Placed ${outcome.placedCount} targets.'
-            : 'Placed ${outcome.placedCount} of ${_specs.length} targets — '
-                  '${missing.join(', ')} could not be anchored.',
-      ),
-    );
-    if (!outcome.allPlaced) {
-      _traceTransition('placeAll failures: ${outcome.failures}');
-    }
-
-    // Start on the first target that still needs a photograph. A station whose
-    // records already cover all 26 — a recalibration after the sequence was
-    // finished — is complete, not reset to target 1.
-    if (firstPending == 0) {
-      _emit(state.copyWith(phase: CapturePhase.complete));
-      return true;
-    }
+    if (firstPending == 0) return true;
     await selectTarget(firstPending);
     return true;
   }
@@ -1599,6 +1656,14 @@ class CaptureController extends ChangeNotifier {
   /// Returns `false` when the station is missing or AR is not ready to record a
   /// new pose; the state carries the explanation.
   Future<bool> recalibrateAndContinue(String stationId) async {
+    if (_captureInFlight || _photos.busy || _calibrationInFlight) {
+      _emit(
+        state.copyWith(
+          message: 'Wait for the current AR/photo operation to finish before recalibrating.',
+        ),
+      );
+      return false;
+    }
     final station = await _repository.loadStation(stationId);
     if (station == null) return false;
     final records = await _repository.loadRecords(stationId);
@@ -1650,6 +1715,14 @@ class CaptureController extends ChangeNotifier {
   /// so the previous station's photographs and records are left untouched on
   /// disk; they are simply no longer the current station.
   Future<void> recalibrateHere() async {
+    if (_captureInFlight || _photos.busy || _calibrationInFlight) {
+      _emit(
+        state.copyWith(
+          message: 'Wait for the current AR/photo operation to finish before recalibrating.',
+        ),
+      );
+      return;
+    }
     _traceTransition('recalibrate here: releasing the old arrangement');
     await _releaseArrangement();
     await calibrateStation();
@@ -1925,24 +1998,36 @@ class CaptureController extends ChangeNotifier {
   /// behind it.
   ///
   /// Every placement in this controller — the calibration pass and the full
-  /// arrangement rebuild (`rescanActive`) — goes through this slot, so a
-  /// selection that arrives while anchors are being created queues instead of
-  /// interleaving with the creates.
-  Future<T> _withPlacementSlot<T>(Future<T> Function() body) async {
-    _placing = true;
-    try {
-      return await body();
-    } finally {
-      _placing = false;
-      final pending = _pendingSelection;
-      _pendingSelection = null;
-      if (pending != null && pending != state.activeTargetId) {
-        // The queued selection runs on a clean slate; if it queues another,
-        // its own drain handles it.
-        _traceTransition('running queued selection $pending');
-        selectTarget(pending);
+  /// arrangement rebuild (`rescanActive`) — goes through this slot. Calls are
+  /// **serialised on a tail future**, not merely flagged: two overlapping
+  /// placement bodies used to interleave their anchor creates, and a teardown
+  /// racing a creation could miss the pending anchor entirely. A selection that
+  /// arrives while anchors are being created queues behind the running body.
+  Future<T> _withPlacementSlot<T>(Future<T> Function() body) {
+    final completer = Completer<T>();
+    final scheduled = _placementTail.then((_) async {
+      _placing = true;
+      try {
+        completer.complete(await body());
+      } catch (error, stackTrace) {
+        completer.completeError(error, stackTrace);
+      } finally {
+        _placing = false;
+        final pending = _pendingSelection;
+        _pendingSelection = null;
+        if (pending != null && pending != state.activeTargetId) {
+          // The queued selection runs on a clean slate; if it queues another,
+          // its own drain handles it.
+          _traceTransition('running queued selection $pending');
+          selectTarget(pending);
+        }
       }
-    }
+    });
+    _placementTail = scheduled.then<void>(
+      (_) {},
+      onError: (Object _, StackTrace _) {},
+    );
+    return completer.future;
   }
 
   /// Re-arms the session, drops the stale anchors, and re-places the whole
@@ -2590,8 +2675,8 @@ class CaptureController extends ChangeNotifier {
       ceilings: pose.ceilings,
       intrinsics: pose.intrinsics ?? state.intrinsics,
       imageAxis: _session.imageAxis ?? state.imageAxis,
-      displayProjectionMatrix:
-          pose.displayProjectionMatrix ?? state.displayProjectionMatrix,
+      displayProjectionMatrix: pose.displayProjectionMatrix,
+      clearDisplayProjectionMatrix: pose.displayProjectionMatrix == null,
       // The camera config arrives on exactly one event per session. Reading it
       // from the service as well means a missed event in the state copy still
       // lands: the number the status detail shows must not depend on which
@@ -2862,16 +2947,15 @@ class CaptureController extends ChangeNotifier {
         // anchor-only or camera-only jump — which makes it the witness that
         // separates "the world map was corrected" from "the reference really
         // moved".
-        final liveStationPose =
-            matchingLive != null &&
-                matchingLive.tracking == TrackingState.tracking
+        final liveStationPose = matchingLive?.tracking == TrackingState.tracking
             ? matchingLive
             : null;
-        final stationLocalCamera = liveStationPose == null
-            ? null
-            : liveStationPose.orientation.conjugate.rotate(
-                pose.position - liveStationPose.position,
-              );
+        final stationLocalCamera = switch (liveStationPose) {
+          final stationPose? => stationPose.orientation.conjugate.rotate(
+            pose.position - stationPose.position,
+          ),
+          null => null,
+        };
         final poseFresh =
             timing.nowNanoseconds - timing.sampleNanoseconds <=
             state.geometry.maxMeasurementAge.inMicroseconds * 1000;
@@ -2887,10 +2971,10 @@ class CaptureController extends ChangeNotifier {
         // correction instead: the rendered image does not move, so it is
         // logged as a refinement and never starts recovery.
         final anchorDiscontinuity =
-            !_recoveryVerificationPending && liveAnchorTracked
+            !_recoveryVerificationPending && liveStationPose != null
             ? _stationAnchorTransformDiscontinuity(
                 anchorId: placement.anchor.id,
-                anchor: matchingLive!,
+                anchor: liveStationPose,
                 stationLocalCamera: stationLocalCamera,
               )
             : null;
@@ -2915,11 +2999,9 @@ class CaptureController extends ChangeNotifier {
         // aim at that same live position whenever ARCore tracks this selected
         // anchor. Before the event arrives, the placement is an honest fallback;
         // another target's live pose never is.
-        final targetPosition =
-            matchingLive != null &&
-                matchingLive.tracking == TrackingState.tracking
-            ? matchingLive.position +
-                  matchingLive.orientation.rotate(
+        final targetPosition = liveStationPose != null
+            ? liveStationPose.position +
+                  liveStationPose.orientation.rotate(
                     placement.stationLocalPosition,
                   )
             : placement.worldPosition;
@@ -2930,8 +3012,7 @@ class CaptureController extends ChangeNotifier {
         // capture window: the rendered target has moved, so require another
         // uninterrupted hold against its newly refined pose.
         final anchorRefined =
-            matchingLive != null &&
-            matchingLive.tracking == TrackingState.tracking &&
+            liveStationPose != null &&
             _hasAnchorRefined(
               // All 26 nodes share the calibrated station anchor.  Its id on
               // its own is therefore not a stability identity: reusing the
@@ -3070,6 +3151,7 @@ class CaptureController extends ChangeNotifier {
                 position: gatePose.position,
                 yawDeg: gatePose.rotation.cameraYawDeg,
                 at: now,
+                timestampNanoseconds: pose.raw.timestampNs,
               )
             : null;
         final gate = _engine.evaluateFrame(

@@ -116,7 +116,7 @@ def update_tour(
     return service.update(tour_id, _validated_update(data))
 
 
-@router.delete("/{tour_id}", status_code=204)
+@router.delete("/{tour_id}", status_code=204, response_model=None)
 def delete_tour(
     tour_id: uuid.UUID,
     session: DbSession,

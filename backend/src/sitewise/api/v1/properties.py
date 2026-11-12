@@ -19,6 +19,10 @@ from sitewise.services.address_validation_service import (
     validate_address,
 )
 from sitewise.services.property_enrichment_service import PropertyEnrichmentService
+from sitewise.services.property_management_service import (
+    resolve_listings,
+    resolve_management,
+)
 
 router = APIRouter()
 
@@ -215,8 +219,19 @@ def list_own_listings(
     session: Session = Depends(get_db),
     current: AuthenticatedUser = Depends(require_property_owner),
 ):
-    """The authenticated owner's submissions, drafts included (newest first)."""
-    return {"data": FypPropertyRepository(session).owner_listings(current.user_id)}
+    """The authenticated owner's submissions, drafts included (newest first).
+
+    Each row carries the derived management state so the owner can see when an
+    agent has been assigned to manage it. Ownership stays on the row; the agent
+    adds responsibility, it does not take the listing away.
+    """
+    rows = FypPropertyRepository(session).owner_listings(current.user_id)
+    management = resolve_listings(session, [int(r["id"]) for r in rows])
+    return {
+        "data": [
+            {**row, "management": management.get(int(row["id"]))} for row in rows
+        ]
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -303,7 +318,13 @@ def get_own_listing(
     read. Another owner's draft is 403, never leaked."""
     repo = FypPropertyRepository(session)
     listing = _owned_listing_or_error(repo, property_id, current)
-    return {"data": {**listing, "photos": repo.listing_photos(property_id)}}
+    return {
+        "data": {
+            **listing,
+            "photos": repo.listing_photos(property_id),
+            "management": resolve_management(session, listing_id=property_id),
+        }
+    }
 
 
 @router.patch("/listings/{property_id}")

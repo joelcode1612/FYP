@@ -596,8 +596,20 @@ class AdminPropertyReviewService:
             .all()
         )
 
+        items = [dict(row) for row in rows]
+        # Management responsibility is derived, not stored, so the reviewer sees
+        # the same answer the public surfaces show — including the cases where
+        # no valid manager exists.
+        from sitewise.services.property_management_service import resolve_listings
+
+        management = resolve_listings(
+            self.session, [int(item["property_id"]) for item in items]
+        )
+        for item in items:
+            item["management"] = management.get(int(item["property_id"]))
+
         return {
-            "items": [dict(row) for row in rows],
+            "items": items,
             "total": count,
             "offset": offset,
             "limit": limit,
@@ -663,8 +675,20 @@ class AdminPropertyReviewService:
             "verification": verification_payload(verification),
             "documents": [document_payload(d) for d in documents],
             "history": [audit_payload(a) for a in history],
+            "management": self._management(property_id),
             **self._location_context(property_id),
         }
+
+    def _management(self, property_id: int) -> dict[str, Any]:
+        """Derived management state, or an explicit lookup failure."""
+        from sitewise.services.property_management_service import resolve_management
+
+        try:
+            return resolve_management(self.session, listing_id=property_id)
+        except Exception:  # noqa: BLE001 - never guess a manager
+            from sitewise.domain.management import unavailable
+
+            return unavailable()
 
     def _location_context(self, property_id: int) -> dict[str, Any]:
         """Photos, amenities and geospatial intelligence for the Admin detail.

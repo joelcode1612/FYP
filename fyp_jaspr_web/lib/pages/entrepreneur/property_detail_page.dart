@@ -339,8 +339,17 @@ class _DetailState extends State<_Detail> {
   }
 
   String get _addressLine =>
-      '${property.address}, ${property.postcode} ${property.city}, '
-      '${property.state}';
+      [
+        property.address.trim(),
+        [property.postcode.trim(), property.city.trim()]
+            .where((part) => part.isNotEmpty)
+            .join(' '),
+        property.state.trim(),
+      ].where((part) => part.isNotEmpty).join(', ');
+
+  String get _simpleLocation => [property.city.trim(), property.state.trim()]
+      .where((part) => part.isNotEmpty)
+      .join(', ');
 
   List<String> get _images {
     final urls = imageUrls.where((url) => url.trim().isNotEmpty).toList();
@@ -353,14 +362,16 @@ class _DetailState extends State<_Detail> {
   /// and the boolean amenities. Nothing is inferred.
   List<String> get _facilities => <String>{
         if (property.hasParking == true) 'Parking',
-        if (property.isFnbSuitable == true) 'F&B suitable',
+        if (property.isFnbSuitable == true) 'Suitable for a food business',
         if (property.isCornerLot == true) 'Corner lot',
         if (property.isFreehold == true) 'Freehold',
         if (property.furnishing != null && property.furnishing!.trim().isNotEmpty)
           property.furnishing!,
         if (property.tenure != null && property.tenure!.trim().isNotEmpty)
           property.tenure!,
-        ...property.tags,
+        ...property.tags.where(
+          (tag) => tag != 'Imported dataset' && !tag.startsWith('Quality:'),
+        ),
         ...property.requirements,
       }.toList();
 
@@ -378,7 +389,7 @@ class _DetailState extends State<_Detail> {
     final ok = await copyText(_summary());
     if (!mounted) return;
     setState(() {
-      _copyMessage = ok ? 'Property summary copied.' : 'Copy is unavailable in this browser.';
+      _copyMessage = ok ? 'Property details copied.' : 'Could not copy the details. Please try again.';
     });
   }
 
@@ -418,7 +429,7 @@ class _DetailState extends State<_Detail> {
           final insights = snap.data ??
               PropertyInsights.unavailable(
                 property.id,
-                'The location analysis could not be loaded.',
+                'We could not load the area information right now.',
               );
           return div(classes: 'sw-pd__insights', [
             LocationFitScore(insights: insights),
@@ -458,22 +469,16 @@ class _DetailState extends State<_Detail> {
 
     if (info != null && info.status == 'processing') {
       return PanoramaMedia.processing(
-        info.reason ??
-            'A 360° panorama for this property is still being processed, so it '
-                'is not shown yet.',
+        'The 360° photo is being prepared.',
       );
     }
     if (property.hasTour) {
       return PanoramaMedia.unavailable(
-        info?.reason ??
-            'A tour record exists for this property, but no completed stitched '
-                'panorama file is stored or accessible, so there is nothing to '
-                'display.',
+        'The 360° photo is not ready to view yet.',
       );
     }
     return PanoramaMedia.unavailable(
-      info?.reason ??
-          'No 360° photo has been captured and stitched for this property yet.',
+      'No 360° photo is available for this property yet.',
     );
   }
 
@@ -492,7 +497,12 @@ class _DetailState extends State<_Detail> {
         ]),
         div(classes: 'sw-pd__badges', [
           StatusBadge(
-            'Verification: ${property.verification.label.toLowerCase()}',
+            switch (property.verification) {
+              VerificationStatus.verified => 'Listing verified',
+              VerificationStatus.pending => 'Verification pending',
+              VerificationStatus.draft => 'Listing not yet submitted',
+              VerificationStatus.rejected => 'Listing not approved',
+            },
             tone: toneForVerification(property.verification),
           ),
           if (property.availability != null)
@@ -510,7 +520,7 @@ class _DetailState extends State<_Detail> {
               : 'sw-pd__fact-value',
           [
             Component.text(
-              value == null || value.trim().isEmpty ? 'Not available' : value,
+              value == null || value.trim().isEmpty ? 'Not provided' : value,
             ),
           ],
         ),
@@ -524,16 +534,25 @@ class _DetailState extends State<_Detail> {
         span([Component.text('/ month')]),
       ]),
       div(classes: 'sw-pd__facts', [
-        _fact('Floor space', '${property.sizeSqft.toStringAsFixed(0)} sq ft'),
+        _fact('Space size', '${property.sizeSqft.toStringAsFixed(0)} sq ft'),
         _fact('Property type', property.propertyType),
-        _fact('Floor', property.floorLevel),
+        _fact('Floor level', property.floorLevel),
         _fact(
-          'Rental efficiency',
+          'Rent per sq ft',
           'RM${property.rentalPerSqft.toStringAsFixed(2)} / sq ft',
         ),
+         _fact(
+           'Management',
+           // The backend supplies the label ("Managed by Agent") and the
+           // manager's actual name separately; platform stewardship and
+           // unresolved states carry no name and render the label alone.
+           property.managerName == null || property.managerName!.trim().isEmpty
+               ? property.managementLabel
+               : '${property.managementLabel} — ${property.managerName}',
+         ),
       ]),
       if (facilities.isNotEmpty) ...[
-        h3(classes: 'sw-pd__section-label', [Component.text('Facilities')]),
+        h3(classes: 'sw-pd__section-label', [Component.text('Property features')]),
         div(classes: 'sw-pd__chips', [
           for (final facility in facilities.take(10))
             span(classes: 'sw-pd__chip', [Component.text(facility)]),
@@ -544,8 +563,8 @@ class _DetailState extends State<_Detail> {
           (property.description?.trim().isNotEmpty ?? false)
               ? property.description!
               : '${property.title} is a ${property.propertyType.toLowerCase()} '
-                  'of ${property.sizeSqft.toStringAsFixed(0)} sq ft in '
-                  '${property.city}, ${property.state}.',
+                  'with ${property.sizeSqft.toStringAsFixed(0)} sq ft'
+                  '${_simpleLocation.isEmpty ? '' : ' in $_simpleLocation'}.',
         ),
       ]),
       div(classes: 'sw-pd__actions', [
@@ -562,7 +581,7 @@ class _DetailState extends State<_Detail> {
           onClick: onToggleCompared,
         ),
         ActionLink(
-          'Assess this property',
+          'Check this property',
           href: '/entrepreneur/assessment?id=${property.id}',
           variant: 'secondary',
           icon: 'fact_check',
@@ -590,7 +609,7 @@ class _DetailState extends State<_Detail> {
           classes: value == null || value.trim().isEmpty ? 'is-absent' : null,
           [
             Component.text(
-              value == null || value.trim().isEmpty ? 'Not available' : value,
+              value == null || value.trim().isEmpty ? 'Not provided' : value,
             ),
           ],
         ),
@@ -598,15 +617,15 @@ class _DetailState extends State<_Detail> {
 
   Component _detailsPanel() {
     final rows = <(String, String?)>[
-      ('Unit size', '${property.sizeSqft.toStringAsFixed(0)} sq ft'),
+      ('Space size', '${property.sizeSqft.toStringAsFixed(0)} sq ft'),
       ('Floor level', property.floorLevel),
-      ('Bathrooms', property.bathrooms?.toString()),
+      ('Toilets / bathrooms', property.bathrooms?.toString()),
       ('Furnishing', property.furnishing),
       ('Tenure', property.tenure),
       ('Parking', property.hasParking == null
           ? null
           : (property.hasParking! ? 'Onsite parking' : 'No onsite parking')),
-      ('F&B suitable', property.isFnbSuitable == null
+      ('Suitable for a food business', property.isFnbSuitable == null
           ? null
           : (property.isFnbSuitable! ? 'Yes' : 'No')),
       ('Corner lot', property.isCornerLot == null
@@ -615,10 +634,6 @@ class _DetailState extends State<_Detail> {
       ('Freehold', property.isFreehold == null
           ? null
           : (property.isFreehold! ? 'Yes' : 'No')),
-      ('Coordinates', property.hasCoordinates
-          ? '${property.latitude.toStringAsFixed(4)}, ${property.longitude.toStringAsFixed(4)}'
-          : null),
-      ('Research link', property.hasResearchLink ? 'Verified' : null),
     ];
     return section(classes: 'sw-pd__details', [
       button(
@@ -651,14 +666,12 @@ class _DetailState extends State<_Detail> {
     if (future == null) return const Component.fragment([]);
     return section(classes: 'sw-pd__prefs', [
       h2(classes: 'sw-pd__h2', [
-        Component.text('Why this property matches your preferences'),
+        Component.text('How this property fits your needs'),
       ]),
       p(classes: 'sw-pd__prefs-lead', [
         Component.text(
-          'These reasons come from the recommendation engine\'s own rule '
-          'calculations against your saved requirements. The chart above '
-          'explains the research location model instead — the two are kept '
-          'separate on purpose.',
+          'This compares the property with your saved preferences. '
+          'The location score above looks at the surrounding area instead.',
         ),
       ]),
       FutureBuilder<PersonalisedExplanation?>(
@@ -674,46 +687,45 @@ class _DetailState extends State<_Detail> {
           if (e == null) {
             return p(classes: 'sw-pd__prefs-empty', [
               Component.text(
-                'This recommendation result could not be loaded, so no '
-                'preference explanation is shown. The location evidence and '
-                'research explanation on this page are unaffected.',
+                'We could not compare this property with your saved preferences right now. '
+                'You can still review its location details.',
               ),
             ]);
           }
           final pref = e.preferenceMatchScore == null
-              ? 'not scorable'
+              ? 'Not available'
               : '${(e.preferenceMatchScore! * 100).toStringAsFixed(0)}%';
           final finalPct = e.finalScore == null
               ? 'not available'
               : '${(e.finalScore! * 100).toStringAsFixed(0)}/100';
           return div(classes: 'sw-pd__prefs-body', [
             div(classes: 'sw-pd__prefs-figures', [
-              _prefFigure('Preference fit', pref),
-              _prefFigure('Recommendation score', finalPct),
-              _prefFigure('Rank', e.rank == null ? '—' : '#${e.rank}'),
+              _prefFigure('Matches your preferences', pref),
+              _prefFigure('Overall recommendation score', finalPct),
+              _prefFigure('Position in results', e.rank == null ? '—' : '#${e.rank}'),
             ]),
             if (e.preferenceReasons.isEmpty)
               p(classes: 'sw-pd__prefs-empty', [
                 Component.text(
-                  'No preference component could be scored for this property. '
-                  'Unknown requirements are excluded, never treated as zero.',
+                  'There is not enough information to compare this property with '
+                  'your preferences. Missing details do not count against it.',
                 ),
               ])
             else ...[
-              h3(classes: 'sw-pd__prefs-h3', [Component.text('What matched')]),
+              h3(classes: 'sw-pd__prefs-h3', [Component.text('What meets your needs')]),
               ul(classes: 'sw-pd__prefs-list', [
                 for (final reason in e.preferenceReasons.take(6))
                   li([Component.text(reason)]),
               ]),
             ],
             if (e.cautions.isNotEmpty) ...[
-              h3(classes: 'sw-pd__prefs-h3', [Component.text('Worth checking')]),
+              h3(classes: 'sw-pd__prefs-h3', [Component.text('Things to check')]),
               ul(classes: 'sw-pd__prefs-list sw-pd__prefs-list--caution', [
                 for (final caution in e.cautions.take(6))
                   li([Component.text(caution)]),
               ]),
             ],
-            h3(classes: 'sw-pd__prefs-h3', [Component.text('How each requirement scored')]),
+            h3(classes: 'sw-pd__prefs-h3', [Component.text('Match for each preference')]),
             div(classes: 'sw-pd__prefs-components', [
               for (final entry in e.components.entries)
                 div(classes: 'sw-pd__prefs-component', [
@@ -726,7 +738,7 @@ class _DetailState extends State<_Detail> {
                     [
                       Component.text(
                         entry.value.status == 'unknown' || entry.value.value == null
-                            ? 'not enough data'
+                            ? 'not enough information'
                             : '${(entry.value.value! * 100).toStringAsFixed(0)}%',
                       ),
                     ],
@@ -749,7 +761,7 @@ class _DetailState extends State<_Detail> {
   Component _mapPanel() {
     final layers = _insights?.mapLayers ?? const <MapLayer>[];
     return section(classes: 'sw-pd__map', [
-      h2(classes: 'sw-pd__h2', [Component.text('What is around this location')]),
+      h2(classes: 'sw-pd__h2', [Component.text('Explore the surrounding area')]),
       PropertyLeafletMap(
         property: property,
         height: 470,
@@ -761,10 +773,10 @@ class _DetailState extends State<_Detail> {
       // each other.
       p(classes: 'sw-pd__footnote', [
         Component.text(
-          'The shaded rings are straight-line 500 m and 1 km distances from the '
-          'property — not walking or driving catchments. Coordinates can be '
-          'approximate. Layers the data records only as counts are shown as '
-          'counts, without pins.',
+          'The circles show distances of 500 m and 1 km in a straight line, not '
+          'actual walking or driving distances. The location may be approximate. '
+          'Some nearby information is shown as totals because exact locations '
+          'are not available.',
         ),
       ]),
     ]);
@@ -773,27 +785,24 @@ class _DetailState extends State<_Detail> {
   // ------------------------------------------------------------------- notes
 
   Component _notShownPanel() => section(classes: 'sw-pd__notes', [
-        h2(classes: 'sw-pd__h2', [Component.text('What this page does not claim')]),
+        h2(classes: 'sw-pd__h2', [Component.text('Before you decide')]),
         ul([
-          li([
-            Component.text(
-              'Regulatory status (licensing, extraction, venting, grease trap) — '
-              'not verified by this system.',
-            ),
-          ]),
-          li([
-            Component.text(
-              'Revenue, footfall or customer-volume forecasts — this system does '
-              'not produce them.',
-            ),
-          ]),
-          li([Component.text('Owner contact details and internal verification notes.')]),
+          li([Component.text(
+            'Check with the local council about business licences, kitchen '
+            'ventilation and grease-trap requirements before renting.',
+          )]),
+          li([Component.text(
+            'The information here cannot tell you how many customers you '
+            'will get or how much your business will earn.',
+          )]),
+          li([Component.text(
+            "The owner's contact details may not be available for this property.",
+          )]),
         ]),
         p(classes: 'disclaimer', [
           Component.text(
-            'Location Fit is a relative decision-support index, not a probability '
-            'of business success, a revenue forecast, regulatory approval, or a '
-            'guarantee of any kind.',
+            'The location score helps you compare areas. It does not predict '
+            'profit, confirm regulatory approval or guarantee success.',
           ),
         ]),
       ]);
@@ -828,11 +837,11 @@ class _NotFound extends StatelessComponent {
   Component build(BuildContext context) => div([
         const PageHead(
           eyebrow: 'Property',
-          title: 'Record not found',
+          title: 'Property not found',
           description: 'This property could not be loaded.',
         ),
         EmptyState(
-          title: 'No property selected',
+          title: 'Property unavailable',
           body:
               'This property could not be loaded. It may have been removed, or '
               'the link is incomplete.',

@@ -635,6 +635,20 @@ class SupabaseAdminService:
             raise SupabaseAdminError(f"Agent profile write failed: {exc}") from exc
         return (result.data or [{}])[0]
 
+    def get_agent_profile_by_id(self, agent_id: int) -> dict[str, Any] | None:
+        """Read an assigned agent's display name by its real agent_id."""
+        try:
+            result = (
+                self.client.table("agent")
+                .select("agent_id,agent_name,user_id")
+                .eq("agent_id", int(agent_id))
+                .limit(1)
+                .execute()
+            )
+        except Exception as exc:
+            raise SupabaseAdminError("Agent profile lookup failed.") from exc
+        return (result.data or [None])[0]
+
     def get_agent_profile(self, user_id: uuid.UUID | str) -> dict[str, Any] | None:
         try:
             result = (

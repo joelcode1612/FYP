@@ -70,22 +70,29 @@ def _service(monkeypatch, *, features, background_rows, missing=None):
     """An insights service whose repository returns the supplied vectors."""
 
     class _Bundle:
-        values = features
-        missing_features = missing or []
-        flags: list[str] = []
-        value_sources: dict[str, str] = {}
+        def __init__(self, property_id):
+            self.property_id = property_id
+            self.subject_id = property_id
+            self.values = dict(features)
+            self.missing_features = list(missing or [])
+            for name in self.missing_features:
+                self.values[name] = None
+            self.flags = []
+            self.value_sources = {}
 
     class _Repo:
-        def __init__(self, session):  # noqa: D401 - signature match
+        def __init__(self, session):
             self.session = session
 
         def get(self, property_id, required, *, source="catalog"):
-            return _Bundle()
-
-        def background(self, required, *, limit=50):
-            return background_rows
+            return _Bundle(property_id)
 
     monkeypatch.setattr(svc, "PropertyFeatureRepository", _Repo)
+    monkeypatch.setattr(
+        svc.PropertyInsightsService,
+        "_reference_background",
+        staticmethod(lambda feature_names: background_rows),
+    )
     return svc.PropertyInsightsService(session=object(), analytics_session=object())
 
 
@@ -220,18 +227,23 @@ def test_different_properties_get_different_explanations(monkeypatch, reference_
 # -- honest failure modes ---------------------------------------------------
 
 
-def test_missing_background_withholds_the_score(monkeypatch, reference_features):
+def test_missing_background_keeps_live_score_and_withholds_shap(monkeypatch, reference_features):
     out = _service(monkeypatch, features=reference_features, background_rows=[]).insights(
         REFERENCE_PROPERTY_ID
     )
     assert out["reason"]["code"] == "shap_background_missing"
-    assert out["score"]["available"] is False
-    assert "value" not in out["score"]
+    assert out["score"]["available"] is True
+    assert out["score"]["source"] == "live_model_inference"
+    assert out["score"]["raw"] == pytest.approx(0.27255328732372, abs=1e-12)
+    assert out["availability"]["score"] is True
     assert out["explanation"]["available"] is False
+    assert out["availability"]["explanation"] is False
     assert all(c["available"] is False for c in out["categories"])
 
 
-def test_missing_features_withhold_the_score(monkeypatch, reference_features, background):
+def test_missing_features_without_a_stored_prediction_withhold_the_score(
+    monkeypatch, reference_features, background
+):
     out = _service(
         monkeypatch,
         features=reference_features,
@@ -241,6 +253,50 @@ def test_missing_features_withhold_the_score(monkeypatch, reference_features, ba
     assert out["reason"]["code"] == "features_missing"
     assert out["score"]["available"] is False
     assert out["reason"]["missing_features"] == ["pop_500m", "parking_facilities_1km"]
+
+
+def test_missing_features_keep_a_valid_stored_score(monkeypatch, reference_features, background):
+    service = _service(
+        monkeypatch,
+        features=reference_features,
+        background_rows=background,
+        missing=["pop_500m", "parking_facilities_1km"],
+    )
+    monkeypatch.setattr(
+        service,
+        "_stored_legacy_score",
+        lambda property_id: {
+            "score": 0.2725532873237277,
+            "score_type": svc._STORED_PU_SCORE_TYPE,
+            "model_method": "logistic",
+        },
+    )
+
+    out = service.insights(REFERENCE_PROPERTY_ID)
+
+    assert out["score"]["available"] is True
+    assert out["score"]["source"] == "stored_catalogue_prediction"
+    assert out["score"]["raw"] == pytest.approx(0.2725532873237277)
+    assert out["availability"]["score"] is True
+    assert out["explanation"]["available"] is False
+    assert out["availability"]["explanation"] is False
+    assert out["reason"]["code"] == "shap_features_missing"
+
+
+def test_experimental_score_is_not_explained_with_unverified_background(
+    monkeypatch, reference_features, background
+):
+    monkeypatch.setenv("SITEWISE_PU_MODEL_VARIANT", "experimental47")
+    service = _service(monkeypatch, features=reference_features, background_rows=background)
+
+    out = service.insights(REFERENCE_PROPERTY_ID)
+
+    assert out["model"]["production_ready"] is False
+    assert out["score"]["available"] is True
+    assert out["score"]["source"] == "live_model_inference"
+    assert out["explanation"]["available"] is False
+    assert out["reason"]["code"] == "shap_background_unverified"
+    assert any("LandScan" in note for note in out["model"]["notes"])
 
 
 def test_unavailable_categories_are_reported_not_invented(monkeypatch, reference_features, background):
@@ -279,13 +335,26 @@ def test_explanation_is_cached_per_model_version(monkeypatch, reference_features
     assert first["score"] == second["score"]
     assert first["explanation"]["factors"] == second["explanation"]["factors"]
 
-    # Replacing the artifact must invalidate the entry.
+    # Cache identity includes model version + artifact checksum + stored score.
     version = str(resolve_version())
-    key = (version, REFERENCE_PROPERTY_ID)
-    assert key in svc._EXPLANATION_CACHE
-    assert svc.clear_insights_cache() == 1
+    keys = list(svc._EXPLANATION_CACHE)
+    assert len(keys) == 1
+    assert keys[0][1] == REFERENCE_PROPERTY_ID
+    assert version in keys[0][0]
+    artifact_hash = keys[0][0].split(":")[2]
+    assert len(artifact_hash) == 64
+    assert keys[0][0].endswith(":no-stored-score")
+
+    # A replacement binary with the same semantic version has a new hash and
+    # cannot reuse the old explanation cache entry.
+    monkeypatch.setattr(
+        svc.PropertyInsightsService,
+        "_artifact_sha256",
+        staticmethod(lambda filename: "b" * 64),
+    )
     service.insights(REFERENCE_PROPERTY_ID)
     assert calls["n"] == 2
+    assert len(svc._EXPLANATION_CACHE) == 2
 
 
 def resolve_version() -> str:

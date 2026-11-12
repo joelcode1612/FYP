@@ -953,7 +953,7 @@ class FypPropertyRepository:
                 SELECT id, name, address, city, state, postcode, latitude,
                        longitude, rental_price, size_sqft, property_type,
                        availability, verification_status, is_published,
-                       address_validation_status, created_at
+                       address_validation_status, owner_user_id, created_at
                 FROM fyp.rental_properties
                 WHERE owner_user_id = :owner
                 ORDER BY created_at DESC

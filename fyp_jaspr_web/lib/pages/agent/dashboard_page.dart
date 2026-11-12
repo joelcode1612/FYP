@@ -177,6 +177,7 @@ class AgentDashboardPage extends StatelessComponent {
           DataColumn('Status'),
           DataColumn('Rent', numeric: true),
           DataColumn('Listing id', numeric: true),
+          DataColumn('Manager'),
           DataColumn('Manage', actions: true),
         ],
         rows: [
@@ -197,6 +198,12 @@ class AgentDashboardPage extends StatelessComponent {
               ),
               Component.text(AgentRecords.rentDisplay(assignment)),
               Component.text('${assignment.listingId}'),
+              // Derived by the backend: an assignment held by a suspended
+              // agent, or one whose property lost its manager, is reported
+              // truthfully instead of assuming "it is mine".
+              Component.text(
+                AgentRecords.managementDisplay(assignment) ?? 'Not reported',
+              ),
               AppLink(
                 to: '/agent/property-detail?id=${assignment.listingId}',
                 classes: 'text-action',
