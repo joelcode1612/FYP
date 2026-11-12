@@ -41,7 +41,6 @@ dependencies:
   cupertino_icons: ^1.0.8
   path: ^1.9.1
   path_provider: ^2.1.6
-  panorama: ^0.4.1
   opencv_dart: ^2.2.2
 
   # Framework-free domain + application logic shared with the Jaspr app.
@@ -78,10 +77,7 @@ hooks:
 dependency_overrides:
   permission_handler: ^12.0.3
   permission_handler_android: ^13.0.1
-  # `panorama` pulls motion_sensors 0.1.0 transitively from pub.dev. That release
-  # still calls the removed `jcenter()`, targets AGP 3.5.0 and declares no
-  # `namespace`; Android builds under AGP 9 / Gradle 9 may need a newer hosted
-  # release or an updated fork. No vendored third_party/ override is used.
+
 
 dev_dependencies:
   flutter_test:

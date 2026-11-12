@@ -1,8 +1,7 @@
-import 'package:shared_logic/shared_logic.dart';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
-import 'package:panorama/panorama.dart';
+import 'package:shared_logic/shared_logic.dart';
 
 import '../../../core/theme/sitewise_theme.dart';
 import '../../../core/utils/pano_bytes.dart';
@@ -15,8 +14,9 @@ import '../widgets/sitewise_secondary_button.dart';
 import '../../mobile/shell/mobile_app_shell.dart';
 import 'ar_capture_mobile_page.dart';
 
-/// Mobile tour preview: real 360° panorama, 26-frame grid with retake,
-/// regenerate, submit and delete. The capture screen resumes for retakes.
+/// Mobile tour preview: static image of a generated panoramic file, plus a
+/// 26-frame grid with retake, regenerate, submit and delete controls. The
+/// capture screen resumes for retakes; this widget does not provide 360° panning.
 
 class TourPreviewMobilePage extends StatefulWidget {
   final String tourId;
@@ -31,16 +31,14 @@ class _TourPreviewMobilePageState extends State<TourPreviewMobilePage> {
 
   /// Cached file reads, one future per path. Without this, every rebuild of
   /// the preview (regeneration stages, button state changes) re-read every
-  /// frame file and the panorama from disk — the "repeated image downloads"
   /// failure mode. A change of path (retake, regenerate) starts a new read.
   final Map<String, Future<Uint8List?>> _bytesCache = {};
 
   Future<Uint8List?> _bytesFor(String path) => _bytesCache.putIfAbsent(
     path,
-    () => readImageBytes(path).timeout(
-      const Duration(seconds: 8),
-      onTimeout: () => null,
-    ),
+    () => readImageBytes(
+      path,
+    ).timeout(const Duration(seconds: 8), onTimeout: () => null),
   );
 
   /// A retake or regeneration overwrites the files in place; dropping the
@@ -264,7 +262,18 @@ class _TourPreviewMobilePageState extends State<TourPreviewMobilePage> {
                 ),
               );
             }
-            return Panorama(child: Image.memory(bytes));
+            return Image.memory(
+              bytes,
+              width: double.infinity,
+              height: double.infinity,
+              fit: BoxFit.contain,
+              errorBuilder: (context, error, stackTrace) => const Center(
+                child: Text(
+                  'Preview image could not be displayed.',
+                  style: TextStyle(color: SitewiseColors.muted, fontSize: 12),
+                ),
+              ),
+            );
           },
         ),
       ),

@@ -10,6 +10,9 @@ import '../../data/app_locator.dart';
 import '../../data/assessment_api.dart';
 import '../../data/assessment_format.dart';
 import '../../layouts/app_layout.dart';
+import 'customer_questionnaire_preview_page.dart' as e_questionnaire_preview;
+import 'review_demo_data.dart';
+import 'review_portal_page.dart' as e_review_portal;
 
 /// The web decision-support workflow, in five persisted stages.
 ///
@@ -71,9 +74,15 @@ class AssessmentWorkspacePage extends StatefulComponent {
 class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
   static const _api = AssessmentApi();
 
-  /// The two stages whose body lives inside the workspace. The other three
-  /// hand over to pages that already exist.
-  static const _inlineStages = {'business_requirements', 'location_evidence'};
+  /// The stages whose body lives inside the workspace. Stage 3 (Location
+  /// evidence) now hosts the BDJ/QJ/QG review portal and stage 4 (AI
+  /// explanation) hosts the customer questionnaire preview; the remaining
+  /// stages hand over to pages that already exist.
+  static const _inlineStages = {
+    'business_requirements',
+    'location_evidence',
+    'ai_explanation',
+  };
 
   late Future<_Load> _future = _open(component.propertyId);
 
@@ -1158,9 +1167,12 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
           _questionnairePanel(record),
         ],
 
-        // Stage 3 still opens its evidence panel from the journey stepper;
-        // the old "Assessment record" card grid was removed from this page.
-        if (_openStage == 'location_evidence') _evidencePanel(record),
+        // Stage 3 hosts the BDJ / QJ / QG review portal; stage 4 hosts the
+        // read-only customer questionnaire preview. Each links to the other
+        // within the same assessment record.
+        if (_openStage == 'location_evidence') _reviewPortal(record),
+
+        if (_openStage == 'ai_explanation') _questionnairePreview(record),
 
         p(classes: 'disclaimer', [
           Component.text(
@@ -2309,6 +2321,51 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
   }
 
   // ------------------------------------------------------------- stage 3 body
+
+  /// Stage 3 — BDJ / QJ / QG review portal.
+  ///
+  /// No BDJ findings, QG candidates or audit events exist in the assessment
+  /// API yet, so the lists are empty and every panel shows its own "not
+  /// supplied" state rather than invented scientific content.
+  Component _reviewPortal(AssessmentRecord record) => section(
+    classes: 'panel asw-inline sw-review-panel',
+    [
+      div(classes: 'sw-review-portal', [
+        e_review_portal.ReviewPortalPage(
+          assessmentTitle: demoAssessmentTitle,
+          assessmentId: demoAssessmentId,
+          batchId: demoBatchId,
+          findings: demoFindings,
+          descriptionSections: const [],
+          candidates: demoCandidates,
+          auditHistory: demoAuditHistory,
+          qjQuestions: demoQjQuestions,
+          questionnairePreviewHref:
+              _workspaceHref(record.propertyId, 'ai_explanation'),
+        ),
+      ]),
+    ],
+  );
+
+  /// Stage 4 — read-only customer questionnaire preview.
+  ///
+  /// The verified Q01–Q13 instrument and owner-accepted QG additions are not
+  /// exposed by the API, so the bank and candidate lists stay empty.
+  Component _questionnairePreview(AssessmentRecord record) => section(
+    classes: 'panel asw-inline sw-review-panel',
+    [
+      div(classes: 'sw-questionnaire-preview', [
+        e_questionnaire_preview.CustomerQuestionnairePreviewPage(
+          bank: demoQuestionBank,
+          candidates: demoPreviewCandidates,
+          assessmentTitle: demoAssessmentTitle,
+          assessmentId: demoAssessmentId,
+          reviewPortalHref:
+              _workspaceHref(record.propertyId, 'location_evidence'),
+        ),
+      ]),
+    ],
+  );
 
   Component _evidencePanel(AssessmentRecord record) =>
       section(classes: 'panel asw-inline', [

@@ -107,6 +107,16 @@ List<WebDestination> webDestinationsFor(AppRole role) => switch (role) {
       label: 'Assessments',
     ),
     WebDestination(
+      route: '/entrepreneur/cafe-report',
+      icon: 'summarize',
+      label: 'Report',
+    ),
+    WebDestination(
+      route: '/entrepreneur/activity-history',
+      icon: 'history',
+      label: 'Activity History',
+    ),
+    WebDestination(
       route: '/entrepreneur/compare',
       icon: 'compare_arrows',
       label: 'Compare',

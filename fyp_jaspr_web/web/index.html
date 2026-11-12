@@ -30,6 +30,12 @@
   <!-- M2 Stage 2 workspace layout. Kept as its own file so the assessment
        journey stepper, progress panel and AppLayout topbar are untouched. -->
   <link rel="stylesheet" href="/m2_workspace_layout.css" />
+  <!-- Stage 3 review portal + Stage 4 questionnaire preview. Scoped under
+       .sw-review-portal / .sw-questionnaire-preview so shared class names
+       (card, pill, btn, q-row) are not redefined globally. -->
+  <link rel="stylesheet" href="/sitewise_review_pages.css" />
+  <!-- Café demand report (R01–R12) + activity history. Scoped to sr-*. -->
+  <link rel="stylesheet" href="/sitewise_report_activity.css" />
   <script src="/vendor/three.min.js" defer></script>
   <!-- Explore map: self-hosted Leaflet + markercluster (no CDN, no API key).
        Loaded with defer so execution order is leaflet -> cluster ->

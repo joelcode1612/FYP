@@ -34,6 +34,8 @@ import 'pages/entrepreneur/property_detail_page.dart' as e_property_detail;
 import 'pages/entrepreneur/property_analysis_page.dart' as e_property_analysis;
 import 'pages/entrepreneur/recommendations_page.dart' as e_recommendations;
 import 'pages/entrepreneur/report_page.dart' as e_report;
+import 'pages/entrepreneur/report_activity_views.dart'
+    as e_report_activity;
 import 'pages/entrepreneur/saved_page.dart' as e_saved;
 import 'pages/entrepreneur/tour_page.dart' as e_tour;
 import 'pages/admin/agents_page.dart';
@@ -603,6 +605,22 @@ class SitewiseApp extends StatelessComponent {
             builder: (context, state) => _page(
               e_report.ReportPage(id: state.queryParams['id'] ?? ''),
               title: 'Assessment report — Sitewise',
+            ),
+          ),
+          // R01–R12 café demand suitability report and the engine activity
+          // history. Both are top-level destinations in the entrepreneur nav.
+          Route(
+            path: '/entrepreneur/cafe-report',
+            builder: (context, state) => _page(
+              const e_report_activity.CafeReportView(),
+              title: 'Café demand suitability report — Sitewise',
+            ),
+          ),
+          Route(
+            path: '/entrepreneur/activity-history',
+            builder: (context, state) => _page(
+              const e_report_activity.ActivityHistoryView(),
+              title: 'Activity history — Sitewise',
             ),
           ),
           // Web decision-support workspace. `?id=` is the same catalogue
