@@ -311,7 +311,14 @@ def listing_detail(
     open_request = _open_request(session, listing_id, user.user_id)
     return {
         "listing": assignment or {},
-        "property": property_row,
+        # Numeric columns arrive as Decimal (Postgres `numeric`). Normalise
+        # the row so every client receives JSON numbers — the same
+        # normalisation the change-request summary below applies; a stray
+        # string here used to crash the agent workspace with
+        # `TypeError: String is not a subtype of type 'num'`.
+        "property": {key: _json_safe(value) for key, value in property_row.items()}
+        if property_row is not None
+        else None,
         "owner": _owner_reference(session, property_row),
         "photos": photos,
         "management": resolve_management(session, listing_id=listing_id),

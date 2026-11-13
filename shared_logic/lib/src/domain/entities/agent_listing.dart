@@ -8,6 +8,19 @@
 /// UI renders an explicit "not provided" state rather than inventing a value.
 library;
 
+/// Numeric wire values may arrive as JSON numbers **or** numeric strings.
+///
+/// The columns are Postgres `numeric`, but serialisers have drifted between
+/// float and string on this path (pydantic v2 emitted `"10000.00"` and the
+/// agent workspace threw a page-level `TypeError: String is not a subtype
+/// of type 'num'`). Parsing both keeps a wire-shape drift a *value*, not a
+/// crash. Unparseable text stays `null` — never a silently invented default.
+double? _numFromJson(dynamic value) {
+  if (value is num) return value.toDouble();
+  if (value is String) return double.tryParse(value.trim());
+  return null;
+}
+
 /// The Supabase assignment row (`GET /api/v1/staff/me/listings`).
 class AgentAssignment {
   /// The OPERATIONAL numeric listing id — the same value
@@ -107,11 +120,11 @@ class AgentListingFacts {
         city: row['city']?.toString(),
         state: row['state']?.toString(),
         postcode: row['postcode']?.toString(),
-        rentalPrice: (row['rental_price'] as num?)?.toDouble(),
-        sizeSqft: (row['size_sqft'] as num?)?.toDouble(),
-        psf: (row['psf'] as num?)?.toDouble(),
+        rentalPrice: _numFromJson(row['rental_price']),
+        sizeSqft: _numFromJson(row['size_sqft']),
+        psf: _numFromJson(row['psf']),
         availability: row['availability']?.toString(),
-        floorLevel: (row['floor_level'] as num?)?.toDouble(),
+        floorLevel: _numFromJson(row['floor_level']),
         hasParking: row['has_parking'] == true || row['has_parking'] == 1,
         isFnbSuitable:
             row['is_fnb_suitable'] == true || row['is_fnb_suitable'] == 1,

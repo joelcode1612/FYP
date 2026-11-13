@@ -59,10 +59,9 @@ class AgentDashboardPage extends StatelessComponent {
             if (listings.isEmpty)
               _noAssignments()
             else
-              div(classes: 'bento', [
-                _portfolioCard(listings),
-                _verificationCard(listings),
-              ]),
+              // No verification queue card: pending listings are not a
+              // separate work item on this dashboard.
+              _portfolioCard(listings),
           ]);
         },
       ),
@@ -216,45 +215,4 @@ class AgentDashboardPage extends StatelessComponent {
     ]);
   }
 
-  /// Pending property verification, driven by the same assignment rows as
-  /// every other panel on this page. When the queue is empty the panel says
-  /// so instead of padding itself with rows that do not exist.
-  Component _verificationCard(List<AgentAssignment> listings) {
-    final pending = listings
-        .where((l) => AgentRecords.wireStatus(l) == 'pending')
-        .toList();
-    return div(classes: 'bento-card', [
-      div(classes: 'bento-card__head', [
-        h3([Component.text('Pending verification')]),
-        span(classes: 'card-note', [
-          Component.text('${pending.length} waiting'),
-        ]),
-      ]),
-      if (pending.isEmpty)
-        EmptyState(
-          title: 'Nothing awaiting review',
-          body:
-              'No assigned listing currently sits in the pending state, so '
-              'there is no verification queue to work through.',
-        )
-      else
-        div(classes: 'aside-list', [
-          for (final assignment in pending)
-            AsideRow(
-              badge: '!',
-              tone: 'warning',
-              title: assignment.displayTitle.isEmpty
-                  ? 'Listing ${assignment.displayId}'
-                  : assignment.displayTitle,
-              caption:
-                  '${AgentRecords.locationDisplay(assignment)} · '
-                  '${AgentRecords.typeDisplay(assignment)}',
-              end: Pill(
-                AgentRecords.wireStatusLabel(AgentRecords.wireStatus(assignment)),
-                tone: AgentRecords.wireStatusTone(AgentRecords.wireStatus(assignment)),
-              ),
-            ),
-        ]),
-    ]);
-  }
 }

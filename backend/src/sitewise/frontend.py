@@ -93,7 +93,16 @@ def mount_frontend(app: FastAPI, dist_dir: Path | None = None) -> bool:
                 candidate.suffix.lower(),
                 guess_type(str(candidate))[0] or "application/octet-stream",
             )
-            return FileResponse(candidate, media_type=media_type)
+            # The compiled bundle keeps a FIXED filename
+            # (`main.client.dart.js`), so a cached copy outlives every rebuild
+            # and the browser silently keeps running the previous application.
+            # Revalidate instead: FileResponse supplies an ETag, so an
+            # unchanged asset costs a 304 and a rebuilt one is fetched at once.
+            return FileResponse(
+                candidate,
+                media_type=media_type,
+                headers={"Cache-Control": "no-cache"},
+            )
 
         # Extension-less navigation paths fall back to the SPA shell. Missing
         # assets (which always carry an extension) answer 404 instead.

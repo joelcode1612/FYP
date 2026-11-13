@@ -74,6 +74,4 @@ htmlcov/
 **/build/
 
 # Local runtime config (never commit generated keys)
-backend/.env
-fyp_jaspr_web/web/map-config.js
 *.carto-prepatch.bak

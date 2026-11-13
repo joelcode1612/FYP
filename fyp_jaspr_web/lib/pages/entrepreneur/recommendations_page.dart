@@ -57,7 +57,6 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
   String _maxSize = '';
   String _targetMarket = '';
   String _query = '';
-  bool _managedOnly = true;
 
   /// The active ordering. Held as the accepted server key, never a label, so a
   /// rename of the wording cannot silently change the request.
@@ -76,6 +75,25 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
     'size_asc': 'Smallest floor area',
     'pu_desc': 'Highest PU research index',
   };
+
+  // Reuse the business-category and target-customer vocabulary used by
+  // existing SiteWise preferences and the assessment questionnaire.
+  static const _businessTypeOptions = <String>[
+    'Cafe / Coffee Shop',
+    'Restaurant',
+    'Bakery / Dessert Shop',
+    'Fast Food / Quick Service',
+    'Beverage Shop / Kiosk',
+    'Other F&B',
+  ];
+
+  static const _targetMarketOptions = <String>[
+    'Nearby Residents',
+    'Office Workers',
+    'Students',
+    'Commuters',
+    'General Public',
+  ];
 
   /// One initial search per page instance.
   bool _seeded = false;
@@ -97,7 +115,18 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
       // the applied request — never re-seed from saved preferences, which
       // would silently overwrite what the entrepreneur applied.
       if (current.recommendationTotal != null) {
-        setState(() => _syncDraft(current.recommendationRequest));
+        final applied = current.recommendationRequest;
+        // A session may still carry results from the build that scoped this
+        // page to managed listings. That filter no longer exists in the UI, so
+        // leaving it set would strand the page on "0 properties" with no way
+        // to clear it. Re-run once, unscoped.
+        if (applied.managedOnly) {
+          final restored = applied.copyWith(managedOnly: false);
+          setState(() => _syncDraft(restored));
+          _notifier.applyRecommendationRequest(restored);
+          return;
+        }
+        setState(() => _syncDraft(applied));
         return;
       }
       final prefs = context.read(businessPreferencesProvider);
@@ -136,7 +165,6 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
         : request.maxSizeSqft!.toStringAsFixed(0);
     _targetMarket = request.layoutPreferences.join(', ');
     _query = request.query ?? '';
-    _managedOnly = request.managedOnly;
     _sort = request.sort ?? _sortBestMatch;
   }
 
@@ -159,9 +187,13 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
         prefs.businessType.trim().isNotEmpty ||
         prefs.preferredLocation.trim().isNotEmpty ||
         prefs.preferredAreas.isNotEmpty;
+    // Management scoping stays OFF here. The research catalogue this page
+    // ranks is `verification_status='pending'`, and the manager mapping is
+    // built only from approved+published operational listings, so scoping the
+    // search to managers matches zero of the 290 PU-eligible properties.
     return configured
-        ? RecommendationSearchRequest.fromPreferences(prefs).copyWith(managedOnly: true)
-        : const RecommendationSearchRequest(managedOnly: true);
+        ? RecommendationSearchRequest.fromPreferences(prefs)
+        : const RecommendationSearchRequest();
   }
 
   /// Applies the draft filters and re-runs from page 1.
@@ -180,7 +212,6 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
         layoutPreferences: _layoutPreferences,
         query: _query.trim().isEmpty ? null : _query.trim(),
         sort: _sort,
-        managedOnly: _managedOnly,
         pageSize: 20,
       ),
     );
@@ -204,7 +235,7 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
   }
 
   void _reset() {
-    const defaults = RecommendationSearchRequest(managedOnly: true);
+    const defaults = RecommendationSearchRequest();
     setState(() => _syncDraft(defaults));
     _notifier.applyRecommendationRequest(defaults);
   }
@@ -464,11 +495,13 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
       attributes: const {'id': 'rec2-filters'},
       [
         div(classes: 'rec2__filters-grid', [
-          _textField(
+          _comboField(
             caption: 'Business type',
+            fieldId: 'rec2-business-type',
             value: _businessType,
-            placeholder: 'e.g. Specialty coffee',
-            onInput: (v) => setState(() => _businessType = v),
+            emptyLabel: 'Any business type',
+            options: _businessTypeOptions,
+            onChanged: (v) => setState(() => _businessType = v),
           ),
           _textField(
             caption: 'Min monthly rent (RM)',
@@ -494,11 +527,13 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
             placeholder: 'e.g. 1800',
             onInput: (v) => setState(() => _maxSize = v),
           ),
-          _textField(
+          _comboField(
             caption: 'Target market',
+            fieldId: 'rec2-target-market',
             value: _targetMarket,
-            placeholder: 'e.g. Office workers, students',
-            onInput: (v) => setState(() => _targetMarket = v),
+            emptyLabel: 'Any target market',
+            options: _targetMarketOptions,
+            onChanged: (v) => setState(() => _targetMarket = v),
           ),
           _sortField(_sortOptions(state)),
           _textField(
@@ -525,16 +560,8 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
             selected: _propertyType,
             onPick: (v) => setState(() => _propertyType = v),
           ),
-        label(classes: _managedOnly ? 'checkpill is-on' : 'checkpill', [
-          input(
-            attributes: {
-              'type': 'checkbox',
-              if (_managedOnly) 'checked': '',
-            },
-            events: events(onChange: (_) => setState(() => _managedOnly = !_managedOnly)),
-          ),
-          span([Component.text('Assigned properties only')]),
-        ]),
+        // No management-scoping toggle: see `_initialRequest` for why the
+        // catalogue search must not be restricted to assigned listings.
         div(classes: 'rec2__filters-actions', [
           ActionButton(
             state.recommendationRefreshing ? 'Searching…' : 'Find properties',
@@ -611,6 +638,52 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
     ]),
   ]);
 
+  /// Editable combobox: a text input backed by a `<datalist>` of suggestions.
+  ///
+  /// A strict `<select>` cannot express a value outside its option list, but
+  /// both of these fields legitimately can: target market is a comma-separated
+  /// list of requirements, and older saved searches may hold custom business
+  /// types. Choosing a suggestion or typing a custom value both fire `input`,
+  /// so one handler covers both paths.
+  Component _comboField({
+    required String caption,
+    required String fieldId,
+    required String value,
+    required String emptyLabel,
+    required List<String> options,
+    required void Function(String) onChanged,
+  }) {
+    final listId = '$fieldId-options';
+    return label(classes: 'field', [
+      span(classes: 'field__label', [Component.text(caption)]),
+      input(
+        id: fieldId,
+        key: ValueKey(fieldId),
+        attributes: {
+          'type': 'text',
+          'value': value,
+          'placeholder': emptyLabel,
+          'list': listId,
+          'autocomplete': 'off',
+          'name': fieldId,
+          'aria-label': caption,
+        },
+        events: events<String>(onInput: onChanged),
+      ),
+      datalist(
+        [
+          // Keep an older custom value selectable until the field is changed,
+          // so rehydrating an applied search cannot silently narrow it.
+          if (value.isNotEmpty && !options.contains(value))
+            option([Component.text(value)], value: value),
+          for (final item in options)
+            option([Component.text(item)], value: item),
+        ],
+        id: listId,
+      ),
+    ]);
+  }
+
   Component _textField({
     required String caption,
     required String value,
@@ -681,17 +754,10 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
   ]);
 
   Component _empty(EntrepreneurState state) => EmptyState(
-    title: state.recommendationRequest.managedOnly
-        ? 'No assigned properties match'
-        : state.recommendationRequest.isBrowseOnly
+    title: state.recommendationRequest.isBrowseOnly
         ? 'No PU-eligible properties'
         : 'No property matches these requirements',
-    body: state.recommendationRequest.managedOnly
-        ? 'No approved, published property with a recorded manager '
-              'assignment passes the current search and PU eligibility '
-              'filters. Disable Assigned properties only to browse '
-              'the wider research catalogue.'
-        : state.recommendationRequest.isBrowseOnly
+    body: state.recommendationRequest.isBrowseOnly
         ? 'No property in the catalogue has a PU research score above 50, so '
               'there is nothing eligible to recommend. That is a data '
               'condition, not a filter problem.'

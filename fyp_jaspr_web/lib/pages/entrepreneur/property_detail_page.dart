@@ -485,28 +485,23 @@ class _DetailState extends State<_Detail> {
   // ------------------------------------------------------------------- title
 
   Component _titleRow() => div(classes: 'sw-pd__top', [
-        ActionLink(
-          'All properties',
-          href: '/entrepreneur/explore',
-          variant: 'ghost',
-          icon: 'arrow_back',
-        ),
-        div(classes: 'sw-pd__top-main', [
-          h1(classes: 'sw-pd__title', [Component.text(property.title)]),
-          p(classes: 'sw-pd__addr', [Component.text(_addressLine)]),
-        ]),
-        div(classes: 'sw-pd__badges', [
-          StatusBadge(
-            switch (property.verification) {
-              VerificationStatus.verified => 'Listing verified',
-              VerificationStatus.pending => 'Verification pending',
-              VerificationStatus.draft => 'Listing not yet submitted',
-              VerificationStatus.rejected => 'Listing not approved',
-            },
-            tone: toneForVerification(property.verification),
+        div(classes: 'sw-pd__top-nav', [
+          ActionLink(
+            'Back to recommendations',
+            href: '/entrepreneur/recommendations',
+            variant: 'ghost',
+            icon: 'arrow_back',
           ),
           if (property.availability != null)
             StatusBadge(property.availability!, tone: 'neutral'),
+        ]),
+        div(classes: 'sw-pd__top-main', [
+          span(classes: 'sw-pd__eyebrow', [
+            Component.text('Commercial property'),
+          ]),
+          h1(classes: 'sw-pd__title', [Component.text(property.title)]),
+          if (_addressLine.isNotEmpty)
+            p(classes: 'sw-pd__addr', [Component.text(_addressLine)]),
         ]),
       ]);
 
@@ -528,28 +523,35 @@ class _DetailState extends State<_Detail> {
 
   Component _summaryCard() {
     final facilities = _facilities;
+    final management = property.managerName == null ||
+            property.managerName!.trim().isEmpty
+        ? property.managementLabel
+        : '${property.managementLabel} — ${property.managerName}';
+    final description = property.description?.trim() ?? '';
+
     return div(classes: 'sw-pd__summary', [
-      div(classes: 'sw-pd__price', [
-        strong([Component.text(property.rentalDisplay)]),
-        span([Component.text('/ month')]),
+      div(classes: 'sw-pd__summary-intro', [
+        span(classes: 'sw-pd__eyebrow', [Component.text('Monthly rent')]),
+        div(classes: 'sw-pd__price', [
+          strong([Component.text(property.rentalDisplay)]),
+          span([Component.text('/ month')]),
+        ]),
       ]),
       div(classes: 'sw-pd__facts', [
-        _fact('Space size', '${property.sizeSqft.toStringAsFixed(0)} sq ft'),
+        _fact('Floor area', '${property.sizeSqft.toStringAsFixed(0)} sq ft'),
         _fact('Property type', property.propertyType),
-        _fact('Floor level', property.floorLevel),
         _fact(
           'Rent per sq ft',
           'RM${property.rentalPerSqft.toStringAsFixed(2)} / sq ft',
         ),
-         _fact(
-           'Management',
-           // The backend supplies the label ("Managed by Agent") and the
-           // manager's actual name separately; platform stewardship and
-           // unresolved states carry no name and render the label alone.
-           property.managerName == null || property.managerName!.trim().isEmpty
-               ? property.managementLabel
-               : '${property.managementLabel} — ${property.managerName}',
-         ),
+        if (property.floorLevel != null && property.floorLevel!.trim().isNotEmpty)
+          _fact('Floor level', property.floorLevel),
+      ]),
+      div(classes: 'sw-pd__management', [
+        span(classes: 'sw-pd__management-label', [
+          Component.text('Property management'),
+        ]),
+        strong(classes: 'sw-pd__management-value', [Component.text(management)]),
       ]),
       if (facilities.isNotEmpty) ...[
         h3(classes: 'sw-pd__section-label', [Component.text('Property features')]),
@@ -558,44 +560,43 @@ class _DetailState extends State<_Detail> {
             span(classes: 'sw-pd__chip', [Component.text(facility)]),
         ]),
       ],
-      p(classes: 'sw-pd__desc', [
-        Component.text(
-          (property.description?.trim().isNotEmpty ?? false)
-              ? property.description!
-              : '${property.title} is a ${property.propertyType.toLowerCase()} '
-                  'with ${property.sizeSqft.toStringAsFixed(0)} sq ft'
-                  '${_simpleLocation.isEmpty ? '' : ' in $_simpleLocation'}.',
-        ),
-      ]),
+      // Do not synthesize a repetitive description from the title.
+      if (description.isNotEmpty)
+        p(classes: 'sw-pd__desc', [Component.text(description)]),
       div(classes: 'sw-pd__actions', [
-        ActionButton(
-          saved ? 'Saved' : 'Save property',
-          variant: saved ? 'ghost' : 'primary',
-          icon: saved ? 'bookmark' : 'bookmark_border',
-          onClick: onToggleSaved,
-        ),
-        ActionButton(
-          compared ? 'In compare' : 'Add to compare',
-          variant: 'secondary',
-          icon: 'compare_arrows',
-          onClick: onToggleCompared,
-        ),
-        ActionLink(
-          'Check this property',
-          href: '/entrepreneur/assessment?id=${property.id}',
-          variant: 'secondary',
-          icon: 'fact_check',
-        ),
-        ActionButton(
-          'Copy summary',
-          variant: 'ghost',
-          icon: 'content_copy',
-          onClick: _copySummary,
-        ),
+        div(classes: 'sw-pd__primary-action', [
+          ActionLink(
+            'Check this property',
+            href: '/entrepreneur/assessment?id=${property.id}',
+            variant: 'primary',
+            icon: 'fact_check',
+          ),
+        ]),
+        div(classes: 'sw-pd__secondary-actions', [
+          ActionButton(
+            saved ? 'Saved' : 'Save property',
+            variant: 'secondary',
+            icon: saved ? 'bookmark' : 'bookmark_border',
+            onClick: onToggleSaved,
+          ),
+          ActionButton(
+            compared ? 'In compare' : 'Add to compare',
+            variant: 'secondary',
+            icon: 'compare_arrows',
+            onClick: onToggleCompared,
+          ),
+          ActionButton(
+            'Copy summary',
+            variant: 'ghost',
+            icon: 'content_copy',
+            onClick: _copySummary,
+          ),
+        ]),
       ]),
       if (saveMessage != null)
         span(classes: 'small text-success', [Component.text(saveMessage!)]),
-      if (_copyMessage != null) span(classes: 'small', [Component.text(_copyMessage!)]),
+      if (_copyMessage != null)
+        span(classes: 'small', [Component.text(_copyMessage!)]),
       if (compareLinkShown && compared)
         ActionLink('Open compare', href: '/entrepreneur/compare', variant: 'ghost'),
     ]);
