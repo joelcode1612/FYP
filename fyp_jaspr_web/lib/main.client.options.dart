@@ -14,8 +14,6 @@ import 'package:sitewise_jaspr_web/components/agent_change_requests_panel.dart'
     deferred as _agent_change_requests_panel;
 import 'package:sitewise_jaspr_web/components/m2_activity_panel.dart'
     deferred as _m2_activity_panel;
-import 'package:sitewise_jaspr_web/components/m2_entry_panel.dart'
-    deferred as _m2_entry_panel;
 import 'package:sitewise_jaspr_web/components/project1_read_panel.dart'
     deferred as _project1_read_panel;
 import 'package:sitewise_jaspr_web/components/verification_detail_view.dart'
@@ -58,16 +56,10 @@ import 'package:sitewise_jaspr_web/pages/entrepreneur/ai_recommendations_page.da
     deferred as _ai_recommendations_page;
 import 'package:sitewise_jaspr_web/pages/entrepreneur/assessment_history_page.dart'
     deferred as _assessment_history_page;
-import 'package:sitewise_jaspr_web/pages/entrepreneur/assessment_list_view.dart'
-    deferred as _assessment_list_view;
 import 'package:sitewise_jaspr_web/pages/entrepreneur/assessment_report_selector_view.dart'
     deferred as _assessment_report_selector_view;
-import 'package:sitewise_jaspr_web/pages/entrepreneur/assessment_workspace_page.dart'
-    deferred as _assessment_workspace_page;
 import 'package:sitewise_jaspr_web/pages/entrepreneur/compare_page.dart'
     deferred as _compare_page;
-import 'package:sitewise_jaspr_web/pages/entrepreneur/confirmed_business_review_page.dart'
-    deferred as _confirmed_business_review_page;
 import 'package:sitewise_jaspr_web/pages/entrepreneur/dashboard_page.dart'
     deferred as _entrepreneur_dashboard_page;
 import 'package:sitewise_jaspr_web/pages/entrepreneur/explanation_page.dart'
@@ -156,12 +148,6 @@ ClientOptions get defaultClientOptions => ClientOptions(
         assessmentId: p['assessmentId'] as String,
       ),
       loader: _m2_activity_panel.loadLibrary,
-    ),
-    'm2_entry_panel': ClientLoader(
-      (p) => _m2_entry_panel.M2EntryPanel(
-        assessmentId: p['assessmentId'] as String,
-      ),
-      loader: _m2_entry_panel.loadLibrary,
     ),
     'project1_read_panel': ClientLoader(
       (p) => _project1_read_panel.Project1ReadPanel(
@@ -265,36 +251,13 @@ ClientOptions get defaultClientOptions => ClientOptions(
       (p) => _assessment_history_page.AssessmentHistoryPage(),
       loader: _assessment_history_page.loadLibrary,
     ),
-    'assessment_list_view': ClientLoader(
-      (p) => _assessment_list_view.AssessmentListView(),
-      loader: _assessment_list_view.loadLibrary,
-    ),
     'assessment_report_selector_view': ClientLoader(
       (p) => _assessment_report_selector_view.AssessmentReportSelectorView(),
       loader: _assessment_report_selector_view.loadLibrary,
     ),
-    'assessment_workspace_page': ClientLoader(
-      (p) => _assessment_workspace_page.AssessmentWorkspacePage(
-        propertyId: p['propertyId'] as String,
-        stage: p['stage'] as String,
-        queue: p['queue'] as String,
-        entry: p['entry'] as String,
-        step: p['step'] as String,
-        assessmentId: p['assessmentId'] as String,
-      ),
-      loader: _assessment_workspace_page.loadLibrary,
-    ),
     'compare_page': ClientLoader(
       (p) => _compare_page.ComparePage(),
       loader: _compare_page.loadLibrary,
-    ),
-    'confirmed_business_review_page': ClientLoader(
-      (p) => _confirmed_business_review_page.ConfirmedBusinessReviewPage(
-        assessmentId: p['assessmentId'] as String,
-        confirmationId: p['confirmationId'] as String,
-        revision: p['revision'] as int,
-      ),
-      loader: _confirmed_business_review_page.loadLibrary,
     ),
     'entrepreneur/dashboard_page': ClientLoader(
       (p) => _entrepreneur_dashboard_page.DashboardPage(),
