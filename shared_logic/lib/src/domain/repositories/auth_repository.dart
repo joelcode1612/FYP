@@ -41,14 +41,36 @@ abstract class AuthRepository {
   ///
   /// [fullName] is stored on the profile when the implementation supports it;
   /// implementations must never accept a role from the client.
+  ///
+  /// [accountPurpose] is the *registration preference* chosen in the mobile
+  /// three-step flow ("entrepreneur" / "listing_provider"). It is written to
+  /// Supabase user metadata for onboarding only — it is NOT a role, and the
+  /// backend continues to assign the authoritative role from its own profile
+  /// row. Implementations must never turn this value into a permission.
   Future<SitewiseUser> signUpWithEmail({
     required String email,
     required String password,
     String? fullName,
+    String? accountPurpose,
+    bool acceptTerms = false,
   });
 
   /// Federated sign in (Apple / Google).
-  Future<SitewiseUser> signInWithProvider(AuthProvider provider);
+  ///
+  /// [accountPurpose] carries the same non-authoritative registration
+  /// preference through the OAuth flow, so a Google account created from the
+  /// sign-up funnel keeps the choice the user made at step 1. It is optional:
+  /// login and existing OAuth accounts pass nothing.
+  Future<SitewiseUser> signInWithProvider(
+    AuthProvider provider, {
+    String? accountPurpose,
+  });
+
+  /// Re-sends the sign-up confirmation email for an address whose account is
+  /// still waiting for verification. This never changes auth state and never
+  /// marks the address as verified — only the provider's emailed link can do
+  /// that. Throws an [AppFailure] subtype on failure.
+  Future<void> resendSignupVerificationEmail(String email);
 
   /// Sends a password-recovery email. [redirectTo] is the completion URL the
   /// provider puts in the link, when the flow finishes outside this app.

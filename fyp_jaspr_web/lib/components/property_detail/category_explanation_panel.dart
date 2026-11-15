@@ -3,14 +3,15 @@ import 'package:jaspr/jaspr.dart';
 
 import '../../data/property_insights_api.dart';
 
-/// The five location-analysis categories, each explaining its own SHAP
+/// The location-analysis categories, each explaining its own SHAP
 /// contributions.
 ///
-/// The tabs are the brief's five questions — People Nearby, Other Food
-/// Businesses, Nearby Places, Getting There, Parking Nearby — and the panel
-/// below shows only the contributions that belong to the selected one. The
-/// grouping is the backend's feature registry, so a category can never borrow
-/// another category's factors.
+/// The tabs are the brief's questions — People Nearby, Other Food Businesses,
+/// Nearby Places, Getting There, Parking Nearby — plus Housing Around, which
+/// the 2026-11-15 expanded 64-feature model contributes (the 47-feature
+/// baseline has no residential features, so its tab reports an honest empty
+/// state). The tabs are whatever the backend's feature registry returns, so a
+/// category can never borrow another category's factors.
 ///
 /// When a category has no valid contributions it says so. Nothing is padded
 /// with zeroes or a generic sentence.

@@ -44,6 +44,39 @@ class AuthPendingDestination {
   static void clear() => _current = null;
 }
 
+/// Payload for the authenticator screen when it is part of SIGN-IN, rather
+/// than a step-up requested from inside the workspace.
+///
+/// `pop(true)` would return to a login screen that has already been cleared,
+/// so an entry MFA step replaces the stack with [destination] instead. The
+/// existing in-workspace gate pushes `/provider/mfa` with NO arguments and
+/// keeps the old `pop(true)` + reload behaviour unchanged.
+class MfaEntryRequest {
+  const MfaEntryRequest({required this.destination});
+
+  /// Dashboard route to open once Supabase has issued the elevated session.
+  final String destination;
+}
+
+/// The single post-authentication navigation decision, shared by email/password
+/// sign-in, Google OAuth, the registration funnel and cold-start session
+/// restoration. Resolves from the **trusted backend role** and the
+/// server-verified assurance level, and consumes a permitted pending deep link
+/// exactly once. Returns null for a role with no mobile workspace.
+({String route, Object? arguments})? postAuthNavigation(SitewiseUser user) {
+  final landing = authLandingRouteFor(user);
+  if (landing == null) return null;
+  final destination =
+      AuthPendingDestination.takeFor(user.role) ?? mobileHomeRouteFor(user.role)!;
+  if (landing == '/provider/mfa') {
+    return (
+      route: landing,
+      arguments: MfaEntryRequest(destination: destination),
+    );
+  }
+  return (route: destination, arguments: null);
+}
+
 /// Who may enter a route.
 enum RouteAccess {
   /// Reachable with no session (Sign In, password recovery, the landing page).
@@ -64,9 +97,23 @@ enum RouteAccess {
 ///
 /// While the outcome is unknown it shows a spinner — never the page beneath.
 class AuthGuard extends ConsumerStatefulWidget {
-  const AuthGuard({super.key, required this.access, required this.builder});
+  const AuthGuard({
+    super.key,
+    required this.access,
+    required this.builder,
+    this.routeName,
+  });
 
   final RouteAccess access;
+
+  /// The route this guard is protecting.
+  ///
+  /// Passed in from the route table rather than read from `ModalRoute` in
+  /// `build`: the route's settings are not reliably available during the first
+  /// build of the page child, and a null name used to fall through to "allow".
+  /// A route that names itself here can never paint the wrong workspace, not
+  /// even for one frame.
+  final String? routeName;
 
   /// Built only once entry is granted, so a signed-out visit never even
   /// constructs the protected page.
@@ -127,6 +174,16 @@ class _AuthGuardState extends ConsumerState<AuthGuard> {
         // a workspace, and a missing one is never guessed at.
         if (role == null || mobileHomeRouteFor(role) == null) {
           return StaffWorkspaceRequiredView(role: role);
+        }
+        // A signed-in account may only paint its OWN workspace. The Provider
+        // and Entrepreneur surfaces are separate products; letting one render
+        // the other's shell would show an empty inbox that looks like a bug
+        // instead of a boundary. Data access is still the backend's decision.
+        final requestedRoute =
+            widget.routeName ?? ModalRoute.of(context)?.settings.name;
+        if (requestedRoute != null &&
+            !canEnterMobileRoute(role, requestedRoute)) {
+          return WorkspaceMismatchView(role: role);
         }
         return widget.builder(context);
       case AuthStatus.accountInactive:

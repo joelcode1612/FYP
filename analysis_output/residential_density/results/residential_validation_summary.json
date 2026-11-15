@@ -1,0 +1,187 @@
+{
+  "all_pass": true,
+  "failed_checks": [],
+  "checks": {
+    "combined_rows_1849": {
+      "pass": true,
+      "detail": "1849"
+    },
+    "positive_rows_894": {
+      "pass": true,
+      "detail": "894"
+    },
+    "unlabelled_rows_955": {
+      "pass": true,
+      "detail": "955"
+    },
+    "unique_subject_ids": {
+      "pass": true,
+      "detail": ""
+    },
+    "subject_set_matches_master": {
+      "pass": true,
+      "detail": ""
+    },
+    "no_dupe_rows": {
+      "pass": true,
+      "detail": ""
+    },
+    "counts_nonneg_int": {
+      "pass": true,
+      "detail": ""
+    },
+    "count_500_le_1000": {
+      "pass": true,
+      "detail": ""
+    },
+    "coverage_0_100": {
+      "pass": true,
+      "detail": ""
+    },
+    "union_area_nested_500_le_1000": {
+      "pass": true,
+      "detail": ""
+    },
+    "confirmed_zero_has_measured_zeros": {
+      "pass": true,
+      "detail": "129 rows"
+    },
+    "sparse_rows_are_null_not_zero": {
+      "pass": true,
+      "detail": ""
+    },
+    "density_recompute_500m": {
+      "pass": true,
+      "detail": ""
+    },
+    "density_recompute_1000m": {
+      "pass": true,
+      "detail": ""
+    },
+    "dwelling_fields_all_null": {
+      "pass": true,
+      "detail": "columns present: []"
+    },
+    "dwelling_reason_present": {
+      "pass": true,
+      "detail": ""
+    },
+    "sample_recalc_counts_within_2": {
+      "pass": true,
+      "detail": "10/10"
+    },
+    "sample_recalc_coverage_within_1.5pp": {
+      "pass": true,
+      "detail": "10/10"
+    }
+  },
+  "coverage_P": {
+    "calculated_500m": 817,
+    "confirmed_zero_500m": 73,
+    "manual_review_500m": 2,
+    "insufficient_coverage_500m": 2,
+    "res_buildings_present_500m": 817,
+    "median_res_count_500m": 82.5,
+    "median_res_density_500m_km2": 105.13499999999999,
+    "median_footprint_cov_500m_pct": 6.4795,
+    "median_landuse_cov_500m_pct": 10.625
+  },
+  "coverage_U": {
+    "calculated_500m": 856,
+    "confirmed_zero_500m": 56,
+    "manual_review_500m": 27,
+    "insufficient_coverage_500m": 16,
+    "res_buildings_present_500m": 856,
+    "median_res_count_500m": 109.5,
+    "median_res_density_500m_km2": 139.56,
+    "median_footprint_cov_500m_pct": 7.067,
+    "median_landuse_cov_500m_pct": 28.087
+  },
+  "dwelling_gap": {
+    "rows": 1849,
+    "dwelling_units_available": 0,
+    "reason": "no reliable licensed dwelling-unit source; OSM building:units covers 28 polygons nationwide; building counts not converted (spec prohibition)"
+  },
+  "sample_recalc": [
+    {
+      "subject_id": "0x31cc49a691a35359:0x74a75db06652784b",
+      "sample_class": "P",
+      "prod_count": 411,
+      "recalc_count": 411,
+      "prod_coverage_pct": 20.731,
+      "recalc_coverage_pct": 20.731
+    },
+    {
+      "subject_id": "0x31da0d382ee65d61:0x2de1b40a4de60663",
+      "sample_class": "P",
+      "prod_count": 5,
+      "recalc_count": 5,
+      "prod_coverage_pct": 1.284,
+      "recalc_coverage_pct": 1.284
+    },
+    {
+      "subject_id": "0x304ac5ec0106e497:0xf1c035f817116215",
+      "sample_class": "P",
+      "prod_count": 117,
+      "recalc_count": 117,
+      "prod_coverage_pct": 24.656,
+      "recalc_coverage_pct": 24.656
+    },
+    {
+      "subject_id": "0x31cdcb7f5d62eb5b:0x63d60cafa463d82",
+      "sample_class": "P",
+      "prod_count": 24,
+      "recalc_count": 24,
+      "prod_coverage_pct": 6.767,
+      "recalc_coverage_pct": 6.767
+    },
+    {
+      "subject_id": "0x31cc4b7a907b8533:0xb4218e6e01225111",
+      "sample_class": "P",
+      "prod_count": 798,
+      "recalc_count": 800,
+      "prod_coverage_pct": 20.392,
+      "recalc_coverage_pct": 20.392
+    },
+    {
+      "subject_id": "MD-01666",
+      "sample_class": "U",
+      "prod_count": 4,
+      "recalc_count": 4,
+      "prod_coverage_pct": 0.341,
+      "recalc_coverage_pct": 0.341
+    },
+    {
+      "subject_id": "MD-00230",
+      "sample_class": "U",
+      "prod_count": 483,
+      "recalc_count": 483,
+      "prod_coverage_pct": 7.868,
+      "recalc_coverage_pct": 7.868
+    },
+    {
+      "subject_id": "MD-03100",
+      "sample_class": "U",
+      "prod_count": 22,
+      "recalc_count": 22,
+      "prod_coverage_pct": 3.95,
+      "recalc_coverage_pct": 3.95
+    },
+    {
+      "subject_id": "MD-04393",
+      "sample_class": "U",
+      "prod_count": 82,
+      "recalc_count": 82,
+      "prod_coverage_pct": 13.691,
+      "recalc_coverage_pct": 13.691
+    },
+    {
+      "subject_id": "MD-02967",
+      "sample_class": "U",
+      "prod_count": 206,
+      "recalc_count": 206,
+      "prod_coverage_pct": 14.365,
+      "recalc_coverage_pct": 14.365
+    }
+  ]
+}

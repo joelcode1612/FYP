@@ -23,8 +23,8 @@ import 'pages/entrepreneur/assessment_history_page.dart'
 import 'pages/entrepreneur/assessment_workspace_page.dart' as e_assessment;
 import 'pages/entrepreneur/compare_page.dart';
 import 'pages/entrepreneur/dashboard_page.dart' as e_dashboard;
-import 'pages/entrepreneur/my_properties_page.dart' as e_my_properties;
-import 'pages/entrepreneur/add_property_page.dart' as e_add_property;
+import 'pages/entrepreneur/listing_management_denied_page.dart'
+    as e_listing_denied;
 import 'pages/entrepreneur/explanation_page.dart' as e_explanation;
 import 'pages/entrepreneur/ai_recommendations_page.dart' as e_ai;
 import 'pages/entrepreneur/commercial_listing_page.dart' as e_listing;
@@ -39,12 +39,8 @@ import 'pages/entrepreneur/reports_page.dart' as e_reports;
 import 'pages/entrepreneur/saved_page.dart' as e_saved;
 import 'pages/entrepreneur/tour_page.dart' as e_tour;
 import 'pages/admin/agents_page.dart';
-import 'pages/agent/dashboard_page.dart';
-import 'pages/agent/enquiries_page.dart';
-import 'pages/agent/listings_page.dart';
-import 'pages/agent/performance_page.dart';
-import 'pages/agent/profile_page.dart';
-import 'pages/agent/property_detail_page.dart';
+import 'pages/agent_retired_page.dart';
+import 'pages/owner_retired_page.dart';
 import 'pages/admin/activity_page.dart' as a_activity;
 import 'pages/admin/campaigns_page.dart' as a_campaigns;
 import 'pages/admin/dashboard_page.dart' as a_dashboard;
@@ -54,13 +50,6 @@ import 'pages/admin/profile_page.dart' as a_profile;
 import 'pages/admin/surveys_page.dart' as a_surveys;
 import 'pages/admin/user_detail_page.dart' as a_user_detail;
 import 'pages/admin/users_page.dart' as a_users;
-import 'pages/owner/add_property_page.dart' as o_add_property;
-import 'pages/owner/dashboard_page.dart' as o_dashboard;
-import 'pages/owner/profile_page.dart' as o_profile;
-import 'pages/owner/properties_page.dart' as o_properties;
-import 'pages/owner/property_detail_page.dart' as o_property_detail;
-import 'pages/owner/tour_preview_page.dart' as o_tour_preview;
-import 'pages/owner/tours_page.dart' as o_tours;
 
 /// Route table — the Jaspr counterpart to
 /// `lib/core/routing/app_routes.dart` in the Flutter app.
@@ -161,13 +150,15 @@ class SitewiseApp extends StatelessComponent {
           final requested = rolePath.group(1)!;
           // Workspace presentation is based on the backend-verified account
           // role. Client-controlled demo grants cannot authorize another role.
-          // Owner is a verified property capability within entrepreneur, not a
-          // standalone role. Legacy links resolve to My Properties.
-          if (requested == 'owner') {
-            return assigned == 'entrepreneur'
-                ? '/entrepreneur/my-properties'
-                : (_roleNamed(assigned)?.homeRoute ?? '/login');
-          }
+          //
+          // `owner` is no longer a workspace. An owner is an entrepreneur who
+          // also holds the verified property capability, and that capability is
+          // exercised in the SiteWise mobile app alongside agents. A legacy
+          // `/owner/*` link therefore falls through to the retired-workspace
+          // page below, which explains where the work moved and renders no
+          // record, draft or identity. It is never re-pointed at another role's
+          // authenticated surface.
+          if (requested == 'owner') return null;
           if (requested == assigned) return null;
           final role = _roleNamed(requested);
           if (role != null && Workspaces.canOpen(role)) return null;
@@ -381,61 +372,35 @@ class SitewiseApp extends StatelessComponent {
             ),
           ),
 
-          // --- Owner -----------------------------------------------------------
-          Route(
-            path: '/owner',
-            builder: (context, state) => _page(
-              const o_dashboard.DashboardPage(),
-              title: 'Owner overview — Sitewise',
-              description: 'Your units, tours and enquiries in one place.',
-            ),
-          ),
-          Route(
-            path: '/owner/properties',
-            builder: (context, state) => _page(
-              const o_properties.PropertiesPage(),
-              title: 'Your properties — Sitewise',
-            ),
-          ),
-          Route(
-            path: '/owner/property-detail',
-            builder: (context, state) => _page(
-              o_property_detail.PropertyDetailPage(
-                id: state.queryParams['id'] ?? '',
+          // --- Owner (retired) -------------------------------------------------
+          // The Owner web workspace is retired. It never had an independent
+          // product: an owner is an entrepreneur holding the verified property
+          // capability, and that capability is exercised in the SiteWise mobile
+          // app, in the SAME Provider workspace agents use. Every former
+          // `/owner/*` path resolves to one explanatory page instead of the
+          // management screens, so an old bookmark cannot reach a listing
+          // record, a draft, a tour or a profile through the browser. No query
+          // parameter is read here and no role is inferred from the path.
+          for (final retiredOwnerPath in const [
+            '/owner',
+            '/owner/properties',
+            '/owner/property-detail',
+            '/owner/add-property',
+            '/owner/tours',
+            '/owner/tour-preview',
+            '/owner/profile',
+            '/owner/capture',
+          ])
+            Route(
+              path: retiredOwnerPath,
+              builder: (context, state) => _page(
+                const OwnerRetiredPage(),
+                title: 'Your workspace is in the SiteWise app',
+                description:
+                    'The SiteWise Owner / Agent workspace moved to the '
+                    'SiteWise mobile application.',
               ),
-              title: 'Property — Sitewise owner',
             ),
-          ),
-          Route(
-            path: '/owner/add-property',
-            builder: (context, state) => _page(
-              o_add_property.AddPropertyPage(
-                editingId: state.queryParams['id'],
-              ),
-              title: 'List a property — Sitewise',
-            ),
-          ),
-          Route(
-            path: '/owner/tours',
-            builder: (context, state) => _page(
-              const o_tours.ToursPage(),
-              title: 'Virtual tours — Sitewise owner',
-            ),
-          ),
-          Route(
-            path: '/owner/tour-preview',
-            builder: (context, state) => _page(
-              o_tour_preview.TourPreviewPage(id: state.queryParams['id'] ?? ''),
-              title: 'Tour preview — Sitewise owner',
-            ),
-          ),
-          Route(
-            path: '/owner/profile',
-            builder: (context, state) => _page(
-              const o_profile.ProfilePage(),
-              title: 'Owner profile — Sitewise',
-            ),
-          ),
 
           // --- Entrepreneur ----------------------------------------------------
           Route(
@@ -537,12 +502,20 @@ class SitewiseApp extends StatelessComponent {
             path: '/entrepreneur/property-detail',
             builder: (context, state) => _page(
               e_property_detail.PropertyDetailPage(
-                key: ValueKey('property-detail-${state.queryParams['id'] ?? ''}'),
+                // The business type is part of the key: switching the
+                // entrepreneur's selection must rebuild the insights future,
+                // not reuse the previous category's explanation.
+                key: ValueKey(
+                  'property-detail-${state.queryParams['id'] ?? ''}'
+                  '-${state.queryParams['businessType'] ?? ''}',
+                ),
                 id: state.queryParams['id'] ?? '',
                 // Optional recommendation result: when present, the page also
                 // explains why THIS unit matched the entrepreneur's saved
                 // preferences, using the persisted Layer 2 result.
                 resultId: state.queryParams['result'] ?? '',
+                // The selected F&B business type, carried from Recommendations.
+                businessType: state.queryParams['businessType'] ?? '',
               ),
               title: 'Property detail — Sitewise',
             ),
@@ -606,21 +579,26 @@ class SitewiseApp extends StatelessComponent {
               title: 'Saved properties — Sitewise',
             ),
           ),
-          Route(
-            path: '/entrepreneur/my-properties',
-            builder: (context, state) => _page(
-              const e_my_properties.MyPropertiesPage(),
-              title: 'My Properties — Sitewise',
-              description: 'Properties you register for your own F&B business.',
+          // My Properties LEFT the Entrepreneur workspace. Registering and
+          // managing listings is the Provider (Owner / Agent) job and runs in
+          // the SiteWise mobile app. Both routes stay registered as a denied,
+          // explanatory landing: an old bookmark cannot reach a management
+          // form, and nothing here reads a listing id or another account's
+          // data. The sidebar destination is gone with them (navigation.dart).
+          for (final retiredListingPath in const [
+            '/entrepreneur/my-properties',
+            '/entrepreneur/add-property',
+          ])
+            Route(
+              path: retiredListingPath,
+              builder: (context, state) => _page(
+                const e_listing_denied.ListingManagementDeniedPage(),
+                title: 'My Properties — Sitewise',
+                description:
+                    'Listing management is a Property Owner / Agent capability '
+                    'in the SiteWise mobile application.',
+              ),
             ),
-          ),
-          Route(
-            path: '/entrepreneur/add-property',
-            builder: (context, state) => _page(
-              const e_add_property.AddPropertyPage(),
-              title: 'Register a property — Sitewise',
-            ),
-          ),
           Route(
             path: '/entrepreneur/reports',
             builder: (context, state) => _page(
@@ -652,6 +630,10 @@ class SitewiseApp extends StatelessComponent {
               e_assessment.AssessmentWorkspacePage(
                 propertyId: state.queryParams['id'] ?? '',
                 stage: state.queryParams['stage'] ?? '',
+                // The selected F&B business type, carried from Recommendations
+                // so the assessment draft opens with the entrepreneur's own
+                // choice instead of an empty field.
+                businessType: state.queryParams['businessType'] ?? '',
               ),
               title: 'Location Assessment Workspace — Sitewise',
               description:
@@ -681,6 +663,10 @@ class SitewiseApp extends StatelessComponent {
               e_assessment.AssessmentWorkspacePage(
                 propertyId: state.queryParams['id'] ?? '',
                 stage: state.queryParams['stage'] ?? '',
+                // The selected F&B business type, carried from Recommendations
+                // so the assessment draft opens with the entrepreneur's own
+                // choice instead of an empty field.
+                businessType: state.queryParams['businessType'] ?? '',
               ),
               title: 'Location Assessment Workspace — Sitewise',
               description:
@@ -696,62 +682,29 @@ class SitewiseApp extends StatelessComponent {
             ),
           ),
 
-          // --- Agent -----------------------------------------------------------
-          // The staff workspace. Reachable only through `Workspaces`; grants now
-          // survive navigation through the selection cookie.
-          Route(
-            path: '/agent',
-            builder: (context, state) => _page(
-              const AgentDashboardPage(),
-              title: 'Agent overview — Sitewise',
-              description: 'Assigned listings, enquiries and performance.',
+          // --- Retired Agent workspace -----------------------------------------
+          // Property management is the Flutter Owner / Agent app now. Every
+          // former `/agent/*` path resolves to a static notice, so an old
+          // bookmark can never reach a listing record, a draft or a manager
+          // identity through the browser. No query parameter is read here.
+          for (final retiredPath in const [
+            '/agent',
+            '/agent/listings',
+            '/agent/property-detail',
+            '/agent/enquiries',
+            '/agent/performance',
+            '/agent/profile',
+          ])
+            Route(
+              path: retiredPath,
+              builder: (context, state) => _page(
+                const AgentRetiredPage(),
+                title: 'Property management is in the SiteWise app',
+                description:
+                    'The Owner / Agent workspace moved to the SiteWise mobile '
+                    'application.',
+              ),
             ),
-          ),
-          Route(
-            path: '/agent/listings',
-            builder: (context, state) => _page(
-              const AgentListingsPage(),
-              title: 'Assigned listings — Sitewise agent',
-            ),
-          ),
-          Route(
-            path: '/agent/property-detail',
-            builder: (context, state) {
-              final id = state.queryParams['id'] ?? '';
-              // Keyed by id (same pattern as /admin/listing-detail):
-              // navigating between two listings must rebuild the state —
-              // jaspr reuses the State when type and position match, and
-              // switching listings must never show the previous draft.
-              return _page(
-                AgentPropertyDetailPage(
-                  key: ValueKey('agent-property-$id'),
-                  id: id,
-                ),
-                title: 'Manage property — Sitewise agent',
-              );
-            },
-          ),
-          Route(
-            path: '/agent/enquiries',
-            builder: (context, state) => _page(
-              const AgentEnquiriesPage(),
-              title: 'Enquiries — Sitewise agent',
-            ),
-          ),
-          Route(
-            path: '/agent/performance',
-            builder: (context, state) => _page(
-              const AgentPerformancePage(),
-              title: 'Performance — Sitewise agent',
-            ),
-          ),
-          Route(
-            path: '/agent/profile',
-            builder: (context, state) => _page(
-              const AgentProfilePage(),
-              title: 'Agent profile — Sitewise',
-            ),
-          ),
 
           // Unknown browser routes use errorBuilder above.
         ],

@@ -64,6 +64,17 @@ class Settings(BaseSettings):
     # cache expires or immediately when an unknown `kid` appears.
     supabase_jwks_cache_seconds: int = 600
 
+    # Public Entrepreneur registration when the project keeps email
+    # confirmation ON. True (default) lets the trusted backend create the
+    # identity already email-confirmed via the documented GoTrue admin API, so
+    # a fresh signup can obtain a GENUINE session from a real password sign-in
+    # without an email-verification screen. Set False to leave the project's
+    # global confirmation policy entirely in force: the registration endpoint
+    # then refuses with 503 and the app reports a configuration dependency
+    # instead of fabricating a session. This flag NEVER applies to staff
+    # invitations, administrator accounts or OAuth sign-in.
+    public_registration_autoconfirm: bool = True
+
     # --- Staff administration ----------------------------------------------
     # Redirect target Supabase embeds in agent invite / password-setup emails.
     # This URL must ALSO be allow-listed in Supabase Auth -> URL Configuration
@@ -81,6 +92,15 @@ class Settings(BaseSettings):
     google_maps_api_key: str = ""
     google_maps_timeout_seconds: int = 12
 
+    # --- WorldPop age-sex tile set (server-local, NOT in the repository) ---
+    # Directory holding the 42 GeoTIFFs (20 male + 20 female five-year bands
+    # + T_F + T_M, ~1.2 GB) that the ``age_population`` enrichment category
+    # reads. Provision with backend/scripts/data/fetch_worldpop_agesex.py,
+    # then point SITEWISE_AGE_RASTER_DIR at the directory. Empty (default) =>
+    # the category settles as "unavailable: not configured" for every
+    # property instead of guessing.
+    sitewise_age_raster_dir: str = ""
+
     # --- Layer-1 PU model variant ------------------------------------------
     # Which PU artifact the personalised recommender's Layer-1 score comes
     # from. "legacy" (default) keeps the stored production
@@ -93,15 +113,33 @@ class Settings(BaseSettings):
     # inside one ranking batch, and experimental scores are never written to
     # the legacy score columns. Research/testing only: the experimental
     # artifact is production_ready=false per its model card.
-    sitewise_pu_model_variant: str = "legacy"
+    #
+    # "expanded64" (2026-11-15) is the same live-inference policy for the
+    # 64-feature expanded Logistic artifact (44 baseline features minus
+    # LandScan + 12 WorldPop age + 8 residential). Its 16 new measurements
+    # exist only in the committed training data (the analytics DB has no
+    # values for them), so only the 1,796 research subjects with a complete
+    # expanded bridge record can score; everything else reports the missing
+    # fields and is excluded. production_ready=false per its model card.
+    #
+    # DEFAULT CHANGED to "expanded64" by the 2026-11-15 category-aware
+    # integration. The retrained Stage-2 category model is defined over the
+    # SAME 54 features (the 64-feature contract minus the ten competitor
+    # counts), and the brief forbids mixing the original 47-feature stored
+    # scores with the new 64-feature scores in one ranking. Keeping "legacy"
+    # as the default would do exactly that. Coverage measured on the live
+    # catalogue: 896/955 properties resolve a complete 64-feature vector and
+    # 351 pass the unchanged strictly-greater-than-50 gate. "legacy" and
+    # "experimental47" remain selectable for comparison and audit.
+    sitewise_pu_model_variant: str = "expanded64"
 
     @property
     def pu_model_variant(self) -> str:
         variant = (self.sitewise_pu_model_variant or "legacy").strip().lower()
-        if variant not in {"legacy", "experimental47"}:
+        if variant not in {"legacy", "experimental47", "expanded64"}:
             raise ValueError(
-                "SITEWISE_PU_MODEL_VARIANT must be 'legacy' or 'experimental47', "
-                f"got {self.sitewise_pu_model_variant!r}"
+                "SITEWISE_PU_MODEL_VARIANT must be 'legacy', 'experimental47' or "
+                f"'expanded64', got {self.sitewise_pu_model_variant!r}"
             )
         return variant
 

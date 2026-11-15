@@ -5,39 +5,47 @@ import 'package:jaspr/jaspr.dart';
 import 'package:jaspr_riverpod/jaspr_riverpod.dart';
 import 'package:shared_logic/shared_logic.dart';
 
+import '../../components/property_detail/business_match_panel.dart';
+import '../../components/property_detail/business_type_fit_panel.dart';
 import '../../components/property_detail/category_explanation_panel.dart';
 import '../../components/property_detail/combined_media_gallery.dart';
+import '../../components/property_detail/district_demographics_panel.dart';
 import '../../components/property_detail/location_fit_score.dart';
+import '../../components/property_detail/location_insights.dart';
 import '../../components/property_detail/shap_contribution_chart.dart';
 import '../../components/property_leaflet_map.dart';
 import '../../components/ui.dart';
 import '../../data/app_locator.dart';
 import '../../data/full_analysis_actions_browser.dart';
 import '../../data/location_evidence_api.dart';
-import '../../data/preference_labels.dart';
 import '../../data/property_insights_api.dart';
 import '../../layouts/app_layout.dart';
 
-/// Entrepreneur property detail — the V5 "Property Insights" layout.
+/// Entrepreneur property detail — the final "business-first" layout.
 ///
 /// ```text
 /// top        back · title · verification · address
 /// hero       combined Photos / 360° gallery  +  price, facts, facilities, actions
-/// fit        Location Fit index (real model output, rescaled to 0-100)
-/// why        SHAP contribution chart — what raised and lowered that score
-/// analysis   five category tabs, each with its own contributions
-/// map        interactive Leaflet map with 500 m / 1 km catchments
+/// details    collapsible listing facts — collapsed by default, sits directly
+///            above the business match so the primary answer stays first
+/// match      Why this property matches YOUR business — selected business,
+///            saved recommendation match ring and measured quick facts
+/// tabs       1 Your business match   reasons + things to check
+///            2 Why this area score?  Location Fit + SHAP contributions
+///            3 What's nearby         categories, DOSM district ages, map
 /// notes      what this page does not claim
 /// ```
 ///
 /// Data honesty: every number comes from the catalogue record, the evidence
 /// API or the insights endpoint, which runs the *deployed* PU artifact and its
-/// permutation-SHAP decomposition. A missing value is labelled, never printed
-/// as 0, and the index is never presented as a success probability.
+/// permutation-SHAP decomposition. The personalised match comes only from the
+/// persisted Layer 2 result carried by `?result=` — it is never derived from
+/// the PU score. A missing value is labelled, never printed as 0, and no
+/// score is ever presented as a success probability.
 ///
-/// The former separate "360° virtual tour" section at the bottom is gone: the
-/// panorama now lives inside the gallery's own tab, so there is one media
-/// control rather than two competing ones.
+/// The former four-business comparison (café / restaurant / bakery / takeaway
+/// ranking) is gone by design: the entrepreneur already chose their business,
+/// so this page explains the recommended property for THAT business.
 @client
 class PropertyDetailPage extends StatefulComponent {
   /// The property id from the `?id=` query param.
@@ -51,7 +59,20 @@ class PropertyDetailPage extends StatefulComponent {
   /// explanation and the two are never merged into one claim.
   final String resultId;
 
-  const PropertyDetailPage({super.key, required this.id, this.resultId = ''});
+  /// Optional `?businessType=` selection carried from Recommendations.
+  ///
+  /// It selects which category output the Stage-2 SHAP explanation describes.
+  /// An empty value means the visitor arrived without a selection, in which
+  /// case the backend explains the model's own top category and the page says
+  /// so instead of pretending a choice was made.
+  final String businessType;
+
+  const PropertyDetailPage({
+    super.key,
+    required this.id,
+    this.resultId = '',
+    this.businessType = '',
+  });
 
   @override
   State<PropertyDetailPage> createState() => _PropertyDetailPageState();
@@ -130,7 +151,13 @@ class _PropertyDetailPageState extends State<PropertyDetailPage> {
       final isCatalog = int.tryParse(id) == null;
       _detailFuture = _load(id);
       _evidenceFuture = LocationEvidenceApi.load(id, catalog: isCatalog);
-      _insightsFuture = PropertyInsightsApi.load(id, catalog: isCatalog);
+      _insightsFuture = PropertyInsightsApi.load(
+        id,
+        catalog: isCatalog,
+        businessType: component.businessType.isEmpty
+            ? null
+            : component.businessType,
+      );
       if (component.resultId.isNotEmpty) {
         _explanationFuture = AppLocator.personalisedRecommendations
             .explanation(component.resultId);
@@ -263,8 +290,20 @@ class _DetailState extends State<_Detail> {
   bool _shapShowAll = false;
   bool _shapTechnical = false;
 
+  /// Whether the "View all location details" list in the business-match hero
+  /// is expanded. Same page-owned disclosure pattern as [_shapShowAll].
+  bool _featureDetailsOpen = false;
+
   /// The category tab the entrepreneur chose; null opens the most influential.
   String? _categorySelected;
+
+  /// Which of the three insight tabs is open: `business`, `score`, `nearby`.
+  ///
+  /// The state lives here — the page is the `@client` boundary — so the tab
+  /// survives every panel rebuild and the panels themselves stay stateless.
+  /// Business opens first: the page's primary question is the match for the
+  /// business the entrepreneur already selected.
+  String _infoTab = 'business';
 
   /// The resolved payload, kept here so the gallery (panorama) and the map
   /// (layer counts, scored coordinate) can use it. They must not issue a second
@@ -310,6 +349,16 @@ class _DetailState extends State<_Detail> {
     });
   }
 
+  /// A thumbnail whose URL failed gets its own placeholder. This never affects
+  /// the main image or selects another photo: the user can still click it.
+  void _thumbError(int index) {
+    setState(() {
+      _gallery = _gallery.copyWith(
+        thumbFailed: <int>{..._gallery.thumbFailed, index},
+      );
+    });
+  }
+
   void _dragStart(double x, double y) {
     _dragX = x;
     _dragY = y;
@@ -346,10 +395,6 @@ class _DetailState extends State<_Detail> {
             .join(' '),
         property.state.trim(),
       ].where((part) => part.isNotEmpty).join(', ');
-
-  String get _simpleLocation => [property.city.trim(), property.state.trim()]
-      .where((part) => part.isNotEmpty)
-      .join(', ');
 
   List<String> get _images {
     final urls = imageUrls.where((url) => url.trim().isNotEmpty).toList();
@@ -413,6 +458,7 @@ class _DetailState extends State<_Detail> {
           onStep: _stepPhoto,
           onToggleFull: () => setState(() => _gallery = _gallery.copyWith(full: !_gallery.full)),
           onPhotoError: () => setState(() => _gallery = _gallery.copyWith(photoFailed: true)),
+          onThumbError: _thumbError,
           onDragStart: _dragStart,
           onDragMove: _dragMove,
           onDragEnd: () => setState(() => _gallery = _gallery.copyWith(dragging: false)),
@@ -421,38 +467,340 @@ class _DetailState extends State<_Detail> {
         ),
         _summaryCard(),
       ]),
-      FutureBuilder<PropertyInsights>(
-        future: component.insightsFuture,
-        builder: (c, snap) {
-          final loading = snap.connectionState != ConnectionState.done;
-          if (loading) return const _InsightsLoading();
-          final insights = snap.data ??
-              PropertyInsights.unavailable(
-                property.id,
-                'We could not load the area information right now.',
-              );
-          return div(classes: 'sw-pd__insights', [
-            LocationFitScore(insights: insights),
-            ShapContributionChart(
-              insights: insights,
-              showAll: _shapShowAll,
-              showTechnical: _shapTechnical,
-              onToggleAll: () => setState(() => _shapShowAll = !_shapShowAll),
-              onToggleTechnical: () => setState(() => _shapTechnical = !_shapTechnical),
-            ),
-            CategoryExplanationPanel(
-              insights: insights,
-              selectedKey: _categorySelected,
-              onSelect: (key) => setState(() => _categorySelected = key),
-            ),
-          ]);
-        },
-      ),
+      // Section order: gallery/summary, then the collapsed listing-details
+      // accordion, then "Your business & this property" and the tabs. The
+      // accordion reuses the existing detail rows — nothing is duplicated.
       _detailsPanel(),
-      _preferencePanel(),
-      _mapPanel(),
+      _businessMatchSection(),
+      _insightTabs(),
       _notShownPanel(),
     ]);
+  }
+
+  // ------------------------------------------------- business match section
+
+  /// "Why this property matches your business" — the section above the tabs.
+  ///
+  /// Rendered even without a result context: the hero then states that the
+  /// personalised match is unavailable while still naming the measured area
+  /// facts, so the section never shows a fabricated percentage.
+  Component _businessMatchSection() {
+    return FutureBuilder<PropertyEvidence>(
+      future: component.evidenceFuture,
+      builder: (c, evidenceSnap) {
+        final evidence =
+            evidenceSnap.connectionState == ConnectionState.done
+                ? evidenceSnap.data
+                : null;
+        final explanationFuture = component.explanationFuture;
+        if (explanationFuture == null) {
+          return BusinessMatchHero(
+            property: property,
+            evidence: evidence,
+            insights: _insights,
+            detailsOpen: _featureDetailsOpen,
+            onToggleDetails: () => setState(
+              () => _featureDetailsOpen = !_featureDetailsOpen,
+            ),
+          );
+        }
+        return FutureBuilder<PersonalisedExplanation?>(
+          future: explanationFuture,
+          builder: (c, snap) {
+            final loading = snap.connectionState != ConnectionState.done;
+            return BusinessMatchHero(
+              property: property,
+              explanation: snap.data,
+              loading: loading,
+              evidence: evidence,
+              insights: _insights,
+              detailsOpen: _featureDetailsOpen,
+              onToggleDetails: () => setState(
+                () => _featureDetailsOpen = !_featureDetailsOpen,
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  // -------------------------------------------------------------- info tabs
+
+  /// "Explore this property" — the three insight tabs.
+  ///
+  /// One panel is rendered at a time. Only the selected panel is mounted, so a
+  /// tab that owns a Leaflet map never initialises it inside a hidden
+  /// container (Leaflet measures its container once, and a `display:none`
+  /// parent would leave it with a 0×0 viewport).
+  Component _insightTabs() {
+    return section(
+      classes: 'sw-info',
+      attributes: const {'aria-labelledby': 'sw-info-title'},
+      [
+        div(classes: 'sw-info__head', [
+          span(classes: 'sw-info__eyebrow', [
+            Component.text('Explore this property'),
+          ]),
+          h2(
+            classes: 'sw-info__title',
+            attributes: const {'id': 'sw-info-title'},
+            [Component.text('Understand why this property fits your needs')],
+          ),
+          p(classes: 'sw-info__lede', [
+            Component.text(
+              'Review the reasons behind your selected-business '
+              'recommendation, understand the area score and explore nearby '
+              'services.',
+            ),
+          ]),
+        ]),
+        div(
+          classes: 'sw-info__tabs',
+          attributes: const {
+            'role': 'tablist',
+            'aria-label': 'Explore property information',
+          },
+          [
+            _infoTabButton(
+              key: 'business',
+              title: 'Your business match',
+              description: 'Why this property may suit you',
+              icon: _tabIcon('business'),
+            ),
+            _infoTabButton(
+              key: 'score',
+              title: 'Why this area score?',
+              description: 'Explore the measured area score',
+              icon: _tabIcon('score'),
+            ),
+            _infoTabButton(
+              key: 'nearby',
+              title: "What's nearby",
+              description: 'People, shops and travel',
+              icon: _tabIcon('nearby'),
+            ),
+          ],
+        ),
+        if (_infoTab == 'business') _businessTab(),
+        if (_infoTab == 'score') _scoreTab(),
+        if (_infoTab == 'nearby') _nearbyTab(),
+      ],
+    );
+  }
+
+  Component _infoTabButton({
+    required String key,
+    required String title,
+    required String description,
+    required Component icon,
+  }) {
+    final active = _infoTab == key;
+    return button(
+      classes: 'sw-info__tab${active ? ' is-active' : ''}',
+      attributes: {
+        'type': 'button',
+        'role': 'tab',
+        'id': 'sw-info-tab-$key',
+        'aria-selected': '$active',
+        'aria-controls': 'sw-info-panel-$key',
+      },
+      events: events(onClick: () => setState(() => _infoTab = key)),
+      [
+        span(
+          classes: 'sw-info__tab-icon',
+          attributes: const {'aria-hidden': 'true'},
+          [icon],
+        ),
+        span(classes: 'sw-info__tab-text', [
+          span(classes: 'sw-info__tab-title', [Component.text(title)]),
+          span(classes: 'sw-info__tab-desc', [Component.text(description)]),
+        ]),
+      ],
+    );
+  }
+
+  Component _tabPanel(String key, List<Component> children) => div(
+        classes: 'sw-info__panel',
+        attributes: {
+          'id': 'sw-info-panel-$key',
+          'role': 'tabpanel',
+          'aria-labelledby': 'sw-info-tab-$key',
+          'tabindex': '0',
+        },
+        children,
+      );
+
+  Component _tabIcon(String key) => svg(
+        classes: 'sw-info__glyph',
+        attributes: const {
+          'viewBox': '0 0 24 24',
+          'fill': 'none',
+          'stroke': 'currentColor',
+          'stroke-width': '1.85',
+          'stroke-linecap': 'round',
+          'stroke-linejoin': 'round',
+          'aria-hidden': 'true',
+        },
+        [
+          if (key == 'score') ...[
+            path(attributes: const {'d': 'M4 20V12m5 8V5m5 15v-9m5 9V8'}, const []),
+            path(attributes: const {'d': 'M2 20h20'}, const []),
+          ] else if (key == 'business') ...[
+            path(attributes: const {'d': 'M4 10h16l-1.3 10H5.3L4 10Z'}, const []),
+            path(attributes: const {'d': 'M3 10l2.5-5h13L21 10'}, const []),
+            path(attributes: const {'d': 'M9 20v-6h6v6'}, const []),
+          ] else ...[
+            path(attributes: const {
+              'd': 'M20 10c0 5.2-8 11-8 11S4 15.2 4 10a8 8 0 1 1 16 0Z',
+            }, const []),
+            circle(
+              attributes: const {'cx': '12', 'cy': '10', 'r': '2.6'},
+              const [],
+            ),
+          ],
+        ],
+      );
+
+  // ------------------------------------------------------------- tab: score
+
+  Component _scoreTab() {
+    final future = component.insightsFuture;
+    return _tabPanel('score', [
+      div(classes: 'sw-info__intro', [
+        h3([Component.text('How suitable is this area for a food business?')]),
+        p([
+          Component.text(
+            'This score compares the surrounding area with places where food '
+            'businesses already operate. It cannot predict how many customers '
+            'you will get or how much you will earn.',
+          ),
+        ]),
+      ]),
+      if (future == null)
+        div(classes: 'sw-info__note', [
+          Component.text(
+            'We could not load the area information for this property.',
+          ),
+        ])
+      else
+        FutureBuilder<PropertyInsights>(
+          future: future,
+          builder: (c, snap) {
+            final loading = snap.connectionState != ConnectionState.done;
+            if (loading) return const _InsightsLoading();
+            final insights = snap.data ??
+                PropertyInsights.unavailable(
+                  property.id,
+                  'We could not load the area information right now.',
+                );
+            return div(classes: 'sw-pd__insights', [
+              LocationFitScore(insights: insights),
+              // Stage 2 — the entrepreneur's own business type. Separate model,
+              // separate SHAP, separate wording; never merged into the PU score.
+              BusinessTypeFitPanel(insights: insights),
+              ShapContributionChart(
+                insights: insights,
+                showAll: _shapShowAll,
+                showTechnical: _shapTechnical,
+                onToggleAll: () => setState(() => _shapShowAll = !_shapShowAll),
+                onToggleTechnical: () =>
+                    setState(() => _shapTechnical = !_shapTechnical),
+              ),
+              CategoryExplanationPanel(
+                insights: insights,
+                selectedKey: _categorySelected,
+                onSelect: (key) => setState(() => _categorySelected = key),
+              ),
+            ]);
+          },
+        ),
+    ]);
+  }
+
+  // ---------------------------------------------------------- tab: business
+
+  /// Tab 1 — reasons to consider the location and things to check in person,
+  /// driven by the saved recommendation explanation plus measured evidence.
+  ///
+  /// Without a result context the panel still renders: the measured reasons
+  /// stand on their own and the source note explains that a personalised
+  /// explanation appears when the page is opened from a recommendation.
+  Component _businessTab() {
+    return _tabPanel('business', [
+      FutureBuilder<PropertyEvidence>(
+        future: component.evidenceFuture,
+        builder: (c, evidenceSnap) {
+          final evidence =
+              evidenceSnap.connectionState == ConnectionState.done
+                  ? evidenceSnap.data
+                  : null;
+          final explanationFuture = component.explanationFuture;
+          if (explanationFuture == null) {
+            return BusinessMatchDetail(
+              property: property,
+              evidence: evidence,
+            );
+          }
+          return FutureBuilder<PersonalisedExplanation?>(
+            future: explanationFuture,
+            builder: (c, snap) {
+              final loading = snap.connectionState != ConnectionState.done;
+              return BusinessMatchDetail(
+                property: property,
+                explanation: snap.data,
+                loading: loading,
+                evidence: evidence,
+              );
+            },
+          );
+        },
+      ),
+    ]);
+  }
+
+  // ------------------------------------------------------------ tab: nearby
+
+  Component _nearbyTab() {
+    final score = _insights?.score;
+    return _tabPanel('nearby', [
+      LocationInsightsV4(
+        propertyId: property.id,
+        puScore: score?.value,
+        hasPuScore: score != null,
+      ),
+      _districtSection(),
+      _mapPanel(),
+    ]);
+  }
+
+  /// The DOSM district demographics block, fed by the same cached evidence
+  /// response the nearby categories use. District figures stay clearly
+  /// separated from the 500 m / 1 km catchment estimates.
+  Component _districtSection() {
+    return FutureBuilder<PropertyEvidence>(
+      future: component.evidenceFuture,
+      builder: (c, snap) {
+        final evidence = snap.connectionState == ConnectionState.done
+            ? snap.data
+            : null;
+        return DistrictDemographicsPanel(
+          statistics: evidence?.districtStatistics,
+          residents500m: _evidenceMetric(evidence, 'pop_500m'),
+          residents1km: _evidenceMetric(evidence, 'pop_1000m'),
+        );
+      },
+    );
+  }
+
+  static EvidenceMetric? _evidenceMetric(PropertyEvidence? evidence, String key) {
+    if (evidence == null) return null;
+    for (final group in evidence.groups) {
+      for (final metric in group.metrics) {
+        if (metric.key == key) return metric;
+      }
+    }
+    return null;
   }
 
   /// The gallery's 360° source.
@@ -617,12 +965,26 @@ class _DetailState extends State<_Detail> {
       ]);
 
   Component _detailsPanel() {
+    // Optional rows are listed only when the source recorded a value — a
+    // missing fact is hidden rather than repeated as a "Not provided" row.
+    // Recorded zeros and explicit false stay visible: they are real answers.
+    String? sqft(double? v) =>
+        v == null ? null : '${v.toStringAsFixed(0)} sq ft';
+    String? feet(double? v) => v == null ? null : '${v.toStringAsFixed(0)} ft';
+    String? text(String? v) =>
+        (v == null || v.trim().isEmpty) ? null : v.trim();
     final rows = <(String, String?)>[
-      ('Space size', '${property.sizeSqft.toStringAsFixed(0)} sq ft'),
-      ('Floor level', property.floorLevel),
+      ('Space size', sqft(property.sizeSqft)),
+      ('Built-up area', sqft(property.builtUpSqft)),
+      ('Land area', sqft(property.landAreaSqft)),
+      ('Frontage', feet(property.frontageFt)),
+      ('Depth', feet(property.depthFt)),
+      ('Floor level', text(property.floorLevel)),
+      ('Unit position', text(property.unitPosition)),
+      ('Facing direction', text(property.facingDirection)),
       ('Toilets / bathrooms', property.bathrooms?.toString()),
-      ('Furnishing', property.furnishing),
-      ('Tenure', property.tenure),
+      ('Furnishing', text(property.furnishing)),
+      ('Tenure', text(property.tenure)),
       ('Parking', property.hasParking == null
           ? null
           : (property.hasParking! ? 'Onsite parking' : 'No onsite parking')),
@@ -635,127 +997,55 @@ class _DetailState extends State<_Detail> {
       ('Freehold', property.isFreehold == null
           ? null
           : (property.isFreehold! ? 'Yes' : 'No')),
-    ];
+      ('Availability', text(property.availability)),
+      if (property.availabilityVerifiedAt != null &&
+          property.availabilityVerifiedAt!.trim().isNotEmpty)
+        (
+          'Availability verified',
+          property.availabilityVerifiedAt!.split('T').first,
+        ),
+    ].where(((row) => row.$2 != null && row.$2!.trim().isNotEmpty)).toList();
+    final notice = text(property.listingDataNotice);
     return section(classes: 'sw-pd__details', [
+      // The whole header row is the button: keyboard activation (Enter/Space)
+      // comes free from the native <button>, and aria-expanded/aria-controls
+      // expose the disclosure semantics to assistive technology.
       button(
         classes: 'sw-pd__details-toggle',
-        attributes: {'type': 'button', 'aria-expanded': '$_detailsOpen'},
+        attributes: {
+          'type': 'button',
+          'aria-expanded': '$_detailsOpen',
+          'aria-controls': 'sw-pd-details-body',
+        },
         events: events(onClick: () => setState(() => _detailsOpen = !_detailsOpen)),
         [
           Component.text(_detailsOpen ? 'Hide listing details' : 'Show listing details'),
-          Component.text(_detailsOpen ? '  ▴' : '  ▾'),
+          span(classes: 'sw-pd__details-chevron', [
+            const Icon('expand_more', size: 'sm'),
+          ]),
         ],
       ),
-      if (_detailsOpen)
-        div(classes: 'sw-pd__detail-grid', [
-          for (final (label, value) in rows) _detailRow(label, value),
-        ]),
-    ]);
-  }
-
-  // --------------------------------------------------- preference explanation
-
-  /// "Why this property matches your preferences".
-  ///
-  /// Only rendered when the page was opened from a recommendation result.
-  /// The content is the Layer 2 rule engine's own component calculations —
-  /// deliberately kept apart from the SHAP chart above, which explains the
-  /// research PU model. Merging the two would let a model contribution stand
-  /// in for a preference judgement it never made.
-  Component _preferencePanel() {
-    final future = component.explanationFuture;
-    if (future == null) return const Component.fragment([]);
-    return section(classes: 'sw-pd__prefs', [
-      h2(classes: 'sw-pd__h2', [
-        Component.text('How this property fits your needs'),
-      ]),
-      p(classes: 'sw-pd__prefs-lead', [
-        Component.text(
-          'This compares the property with your saved preferences. '
-          'The location score above looks at the surrounding area instead.',
-        ),
-      ]),
-      FutureBuilder<PersonalisedExplanation?>(
-        future: future,
-        builder: (c, snap) {
-          if (snap.connectionState != ConnectionState.done) {
-            return div(classes: 'sw-pd__prefs-skel', [
-              span(classes: 'sw-skel sw-skel--line', []),
-              span(classes: 'sw-skel sw-skel--line', []),
-            ]);
-          }
-          final e = snap.data;
-          if (e == null) {
-            return p(classes: 'sw-pd__prefs-empty', [
-              Component.text(
-                'We could not compare this property with your saved preferences right now. '
-                'You can still review its location details.',
-              ),
-            ]);
-          }
-          final pref = e.preferenceMatchScore == null
-              ? 'Not available'
-              : '${(e.preferenceMatchScore! * 100).toStringAsFixed(0)}%';
-          final finalPct = e.finalScore == null
-              ? 'not available'
-              : '${(e.finalScore! * 100).toStringAsFixed(0)}/100';
-          return div(classes: 'sw-pd__prefs-body', [
-            div(classes: 'sw-pd__prefs-figures', [
-              _prefFigure('Matches your preferences', pref),
-              _prefFigure('Overall recommendation score', finalPct),
-              _prefFigure('Position in results', e.rank == null ? '—' : '#${e.rank}'),
-            ]),
-            if (e.preferenceReasons.isEmpty)
-              p(classes: 'sw-pd__prefs-empty', [
-                Component.text(
-                  'There is not enough information to compare this property with '
-                  'your preferences. Missing details do not count against it.',
-                ),
-              ])
-            else ...[
-              h3(classes: 'sw-pd__prefs-h3', [Component.text('What meets your needs')]),
-              ul(classes: 'sw-pd__prefs-list', [
-                for (final reason in e.preferenceReasons.take(6))
-                  li([Component.text(reason)]),
-              ]),
-            ],
-            if (e.cautions.isNotEmpty) ...[
-              h3(classes: 'sw-pd__prefs-h3', [Component.text('Things to check')]),
-              ul(classes: 'sw-pd__prefs-list sw-pd__prefs-list--caution', [
-                for (final caution in e.cautions.take(6))
-                  li([Component.text(caution)]),
-              ]),
-            ],
-            h3(classes: 'sw-pd__prefs-h3', [Component.text('Match for each preference')]),
-            div(classes: 'sw-pd__prefs-components', [
-              for (final entry in e.components.entries)
-                div(classes: 'sw-pd__prefs-component', [
-                  span(classes: 'sw-pd__prefs-name', [
-                    Component.text(componentLabel(entry.key)),
-                  ]),
-                  span(
-                    classes:
-                        'sw-pd__prefs-value${entry.value.status == 'unknown' ? ' is-unknown' : ''}',
-                    [
-                      Component.text(
-                        entry.value.status == 'unknown' || entry.value.value == null
-                            ? 'not enough information'
-                            : '${(entry.value.value! * 100).toStringAsFixed(0)}%',
-                      ),
-                    ],
-                  ),
-                ]),
-            ]),
-          ]);
+      // The body stays mounted so the grid-rows transition animates in both
+      // directions; collapsed it is clamped to zero height, clipped, and
+      // aria-hidden. Its rows are plain text — no focusables are ever trapped.
+      div(
+        classes: 'sw-pd__details-body${_detailsOpen ? ' is-open' : ''}',
+        attributes: {
+          'id': 'sw-pd-details-body',
+          'aria-hidden': _detailsOpen ? 'false' : 'true',
         },
+        [
+          div(classes: 'sw-pd__details-body-inner', [
+            div(classes: 'sw-pd__detail-grid', [
+              for (final (label, value) in rows) _detailRow(label, value),
+            ]),
+            if (notice != null)
+              p(classes: 'sw-pd__data-notice', [Component.text(notice)]),
+          ]),
+        ],
       ),
     ]);
   }
-
-  Component _prefFigure(String label, String value) => div(classes: 'sw-pd__prefs-figure', [
-        span(classes: 'sw-pd__prefs-figure-label', [Component.text(label)]),
-        span(classes: 'sw-pd__prefs-figure-value', [Component.text(value)]),
-      ]);
 
   // --------------------------------------------------------------------- map
 

@@ -54,5 +54,13 @@
             <action android:name="android.intent.action.PROCESS_TEXT"/>
             <data android:mimeType="text/plain"/>
         </intent>
+        <!-- Android 11+ package visibility: let url_launcher's canLaunchUrl
+             detect an installed mail client for the "Open Email App" action on
+             the email-verification step. Without this declaration the action
+             would be hidden even when an inbox app is installed. -->
+        <intent>
+            <action android:name="android.intent.action.VIEW"/>
+            <data android:scheme="mailto"/>
+        </intent>
     </queries>
 </manifest>

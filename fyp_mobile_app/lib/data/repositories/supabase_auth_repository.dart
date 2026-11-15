@@ -7,6 +7,8 @@ import 'package:http/http.dart' as http;
 import 'package:shared_logic/shared_logic.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../core/auth/account_purpose.dart';
+import '../../core/auth/signup_password_policy.dart';
 import '../../core/bootstrap/startup_trace.dart';
 import '../../core/config/mobile_endpoints.dart';
 import '../../core/config/mobile_runtime_config.dart';
@@ -25,6 +27,112 @@ abstract class IdentityProbe {
   /// [AuthTlsFailure] on a TLS handshake failure. Each class maps to its own
   /// UI state, so a wrong port is never reported as a server outage.
   Future<Map<String, dynamic>> fetch(String accessToken);
+}
+
+/// Trusted, server-side registration of a public (Entrepreneur) identity.
+///
+/// The live Supabase project keeps email confirmation ON globally, so a
+/// client-side `signUp` returns no session until an emailed link is opened.
+/// The backend creates the identity already email-confirmed through the
+/// documented GoTrue admin API and returns NO token. This client then performs
+/// a real `signInWithPassword`, so the session is issued by Supabase after a
+/// genuine password check — nothing is fabricated and no user is "marked
+/// verified" locally. Split out as a seam so the flow can be unit tested
+/// without a live backend.
+abstract class RegistrationClient {
+  Future<void> register({
+    required String email,
+    required String password,
+    String? fullName,
+    String? accountPurpose,
+    required bool acceptTerms,
+  });
+}
+
+class HttpRegistrationClient implements RegistrationClient {
+  HttpRegistrationClient({http.Client? client, Uri? endpoint})
+    : _client = client ?? http.Client(),
+      _endpoint = endpoint ?? MobileEndpoints.registrationUri;
+
+  final http.Client _client;
+  final Uri _endpoint;
+
+  static const Duration _timeout = Duration(seconds: 15);
+
+  @override
+  Future<void> register({
+    required String email,
+    required String password,
+    String? fullName,
+    String? accountPurpose,
+    required bool acceptTerms,
+  }) async {
+    http.Response response;
+    try {
+      response = await _client
+          .post(
+            _endpoint,
+            headers: const {
+              'content-type': 'application/json',
+              'accept': 'application/json',
+            },
+            body: jsonEncode(<String, dynamic>{
+              'email': email,
+              'password': password,
+              'full_name': ?fullName,
+              'account_purpose': ?accountPurpose,
+              'accept_terms': acceptTerms,
+            }),
+          )
+          .timeout(_timeout);
+    } on TimeoutException {
+      throw const AuthTimeoutFailure(
+        'Creating the account took too long. Check your connection and try again.',
+      );
+    } on SocketException {
+      throw const NetworkFailure();
+    } on HandshakeException {
+      throw const AuthTlsFailure();
+    } on TlsException {
+      throw const AuthTlsFailure();
+    } on http.ClientException {
+      throw const NetworkFailure();
+    }
+
+    switch (response.statusCode) {
+      case 200:
+      case 201:
+        return;
+      case 409:
+        throw const DuplicateEmailFailure();
+      case 422:
+        throw ValidationFailure(_detail(response.body));
+      case 503:
+        throw const AuthUnavailableFailure(
+          'Account registration is not available with this project\'s email '
+          'settings. Please contact SiteWise support.',
+        );
+      default:
+        throw const AuthUnavailableFailure(
+          'We could not create your account right now. Please try again.',
+        );
+    }
+  }
+
+  /// The backend's validation sentences are written for clients; nothing else
+  /// from the response (headers, host, stack traces) is ever surfaced.
+  String _detail(String body) {
+    try {
+      final decoded = jsonDecode(body);
+      final detail = decoded is Map ? decoded['detail'] : null;
+      if (detail is String && detail.trim().isNotEmpty && detail.length <= 220) {
+        return detail.trim();
+      }
+    } on Object {
+      // fall through to the generic sentence
+    }
+    return 'Please check your details and try again.';
+  }
 }
 
 class HttpIdentityProbe implements IdentityProbe {
@@ -118,13 +226,18 @@ class HttpIdentityProbe implements IdentityProbe {
 /// The Supabase session itself is persisted through
 /// `SecureSessionLocalStorage` (see `main.dart`), not in plaintext app storage.
 class SupabaseAuthRepository implements AuthRepository {
-  SupabaseAuthRepository({IdentityProbe? probe, GoTrueClient Function()? auth})
-    : _probe = probe ?? HttpIdentityProbe(),
-      _auth = auth ?? _defaultAuth;
+  SupabaseAuthRepository({
+    IdentityProbe? probe,
+    RegistrationClient? registration,
+    GoTrueClient Function()? auth,
+  }) : _probe = probe ?? HttpIdentityProbe(),
+       _registration = registration ?? HttpRegistrationClient(),
+       _auth = auth ?? _defaultAuth;
 
   static GoTrueClient _defaultAuth() => Supabase.instance.client.auth;
 
   final IdentityProbe _probe;
+  final RegistrationClient _registration;
   final GoTrueClient Function() _auth;
 
   // OAuth client IDs are public identifiers; the CLIENT SECRET must never
@@ -229,25 +342,44 @@ class SupabaseAuthRepository implements AuthRepository {
     required String email,
     required String password,
     String? fullName,
+    String? accountPurpose,
+    bool acceptTerms = false,
   }) async {
     final normalized = _normalize(email);
-    _requirePassword(password);
+    // Registration uses the stricter SiteWise policy; sign-in keeps the
+    // historical 6-character floor so existing accounts still work.
+    if (!SignupPasswordPolicy.isValid(password)) {
+      throw const ValidationFailure(
+        SignupPasswordPolicy.requirementMessage,
+      );
+    }
 
     final name = fullName?.trim();
+
+    // Step 1 - trusted provisioning. ONLY the display name and the
+    // non-authoritative onboarding preference go up; no role, status or
+    // assurance value is ever accepted from this app. The backend creates the
+    // identity already email-confirmed (the project keeps global confirmation
+    // ON for staff invites/OAuth) and returns NO session.
+    await _registration.register(
+      email: normalized,
+      password: password,
+      fullName: (name == null || name.isEmpty) ? null : name,
+      accountPurpose: (accountPurpose == null || accountPurpose.isEmpty)
+          ? null
+          : accountPurpose,
+      acceptTerms: acceptTerms, // the backend re-checks; never assumed here
+    );
+
+    // Step 2 - a GENUINE session. Supabase issues it only after a real
+    // password check; nothing below grants access on a local flag. If the
+    // provider still requires confirmation, mapSupabaseError reports the
+    // honest "email not confirmed" state instead of inventing a session.
     AuthResponse response;
     try {
-      // Only `full_name` goes up. Public registration can never assign a
-      // role: the backend provisions the profile (entrepreneur for the
-      // public flow) and the authoritative value is re-read from `/auth/me`.
       response = await _guard(
-        _client.signUp(
-          email: normalized,
-          password: password,
-          data: {if (name != null && name.isNotEmpty) 'full_name': name},
-          emailRedirectTo: MobileEndpoints.emailConfirmationRedirect.toString(),
-        ),
-        'Creating the account took too long. Check your connection and try '
-        'again.',
+        _client.signInWithPassword(email: normalized, password: password),
+        'Signing in took too long. Check your connection and try again.',
       );
     } on AuthException catch (error) {
       throw mapSupabaseError(error, email: normalized);
@@ -255,13 +387,41 @@ class SupabaseAuthRepository implements AuthRepository {
       throw const NetworkFailure();
     }
 
-    // A session only exists once the address is confirmed, so there is
-    // nothing to authorize and no access to grant.
+    // Step 3 - `/auth/me` provisions the local profile idempotently and
+    // returns the authoritative role, account status and `aal` claim.
     return _authorizeWithSession(response, fallbackEmail: normalized);
   }
 
   @override
-  Future<SitewiseUser> signInWithProvider(AuthProvider provider) async {
+  Future<void> resendSignupVerificationEmail(String email) async {
+    final normalized = _normalize(email);
+    if (normalized.isEmpty) {
+      throw const ValidationFailure('Please enter your email address first.');
+    }
+    try {
+      // A real gotrue resend: no local flag is flipped and no session is
+      // created. Only the emailed link changes the verification state.
+      await _guard(
+        _client.resend(
+          type: OtpType.signup,
+          email: normalized,
+          emailRedirectTo:
+              MobileEndpoints.emailConfirmationRedirect.toString(),
+        ),
+        'Sending another verification email took too long. Please try again.',
+      );
+    } on AuthException catch (error) {
+      throw mapSupabaseError(error, email: normalized);
+    } on SocketException {
+      throw const NetworkFailure();
+    }
+  }
+
+  @override
+  Future<SitewiseUser> signInWithProvider(
+    AuthProvider provider, {
+    String? accountPurpose,
+  }) async {
     if (provider != AuthProvider.google) {
       throw const _GoogleLoginFailure(
         'This sign-in provider is not yet supported on mobile.',
@@ -319,7 +479,31 @@ class SupabaseAuthRepository implements AuthRepository {
 
       // Preserve the existing fail-closed FastAPI /api/v1/auth/me role check.
       // No screen is opened on the strength of a Google identity token alone.
-      return _authorizeWithSession(response, fallbackEmail: account.email);
+      final user = await _authorizeWithSession(
+        response,
+        fallbackEmail: account.email,
+      );
+
+      // Keep the step-1 account purpose through the OAuth flow. Supabase has
+      // no pre-signup metadata hook for `signInWithIdToken`, so the choice is
+      // attached to the (new or existing) identity afterwards. This is a
+      // preference only — it never changes the backend role, and a metadata
+      // write failure must not invalidate an otherwise verified sign-in.
+      if (accountPurpose != null && accountPurpose.isNotEmpty) {
+        try {
+          await _guard(
+            _client.updateUser(
+              UserAttributes(
+                data: {AccountPurpose.metadataKey: accountPurpose},
+              ),
+            ),
+            'Saving your account preference took too long.',
+          );
+        } on Object {
+          // Best effort: the authoritative profile is already verified.
+        }
+      }
+      return user;
     } on GoogleSignInException catch (error) {
       if (error.code == GoogleSignInExceptionCode.canceled) {
         throw const _GoogleLoginFailure(
@@ -487,6 +671,7 @@ class SupabaseAuthRepository implements AuthRepository {
   }) {
     final email = (profile['email'] as String?)?.trim() ?? '';
     final name = (profile['full_name'] as String?)?.trim() ?? '';
+    final rawAal = (profile['assurance_level'] as String?)?.trim().toLowerCase();
     return SitewiseUser(
       id: profile['user_id'] as String,
       name: name.isNotEmpty ? name : _nameFromEmail(email),
@@ -498,6 +683,10 @@ class SupabaseAuthRepository implements AuthRepository {
       joinedAt:
           DateTime.tryParse(profile['created_at'] as String? ?? '') ??
           DateTime.now(),
+      // Verified `aal` claim off the signed token, echoed by /auth/me. Used
+      // ONLY to decide whether the login flow must show the MFA screen; the
+      // backend re-checks aal2 on every protected staff operation.
+      assuranceLevel: (rawAal == null || rawAal.isEmpty) ? null : rawAal,
     );
   }
 

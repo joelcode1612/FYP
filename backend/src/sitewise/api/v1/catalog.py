@@ -1,11 +1,13 @@
 """Read-only catalogue of the imported research-property workbook.
 
-The 955 normalised rows live in ``sitewise_app.properties`` in the analytics
-database (``Final_Location_Analysis``). That table was previously reachable
-only through the throwaway Express server in ``FYP/test`` (``/api/catalog/
-properties``). This endpoint exposes the SAME dataset through the intended
-FastAPI backend so the Jaspr frontend no longer needs the test folder at
-runtime.
+The 955 normalised rows are canonical property data in
+``fyp.rental_properties`` (research attributes in the ``catalogue_*``
+columns), exposed through the ``fyp.catalogue_properties`` view that
+preserves the original response contract. The dataset was previously
+reachable only through the throwaway Express server in ``FYP/test``
+(``/api/catalog/properties``). This endpoint exposes the SAME dataset
+through the intended FastAPI backend so the Jaspr frontend no longer needs
+the test folder at runtime.
 
 The row set is the 955 U-class commercial properties of
 ``SiteWise_PU_Property_Image_Scores_Merged``. The 894 P-class research rows in
@@ -29,6 +31,8 @@ from sitewise.db.analytics_session import get_analytics_db
 from sitewise.db.session import get_db
 from sitewise.dependencies import CurrentUser
 from sitewise.repositories.catalog_repository import PROPERTY_COLUMNS, CatalogRepository
+from sitewise.repositories.fyp_property_repository import FypPropertyRepository
+from sitewise.services.catalog_listing_details_service import CatalogListingDetailsService
 from sitewise.services.property_insights_service import PropertyInsightsService
 from sitewise.services.property_management_service import resolve_management
 
@@ -54,11 +58,11 @@ def list_catalog_properties(
     repository keeps working unchanged. The bearer token is verified by the
     same ``CurrentUser`` dependency used by every other protected endpoint.
     """
-    total = int(session.execute(text("SELECT count(*) FROM sitewise_app.properties")).scalar_one())
+    total = int(session.execute(text("SELECT count(*) FROM fyp.catalogue_properties")).scalar_one())
     rows = (
         session.execute(
             text(
-                f"SELECT {_SELECT_COLUMNS} FROM sitewise_app.properties "
+                f"SELECT {_SELECT_COLUMNS} FROM fyp.catalogue_properties "
                 "ORDER BY id LIMIT :limit OFFSET :offset"
             ),
             {"limit": limit, "offset": offset},
@@ -95,6 +99,11 @@ def get_catalog_property(
 
     The workspace needs a single-record read that distinguishes "this id does
     not exist" (404) from "the list happened to be paginated past it".
+
+    ``photos`` is the full ``fyp.property_photos`` set for this catalogue row,
+    resolved through the verified subject link (primary first). The single
+    ``image_url`` column stays in the payload as the documented fallback for
+    properties with no photo records; the two are never merged into one list.
     """
     prop = CatalogRepository(session).get_property(property_id)
     if prop is None:
@@ -107,7 +116,19 @@ def get_catalog_property(
         )
     return {
         **prop,
+        # Additive commercial-listing details, sourced from the recorded
+        # research subject features and — only for a verified, approved AND
+        # published match — the operational listing row. Unknown fields stay
+        # null; nothing is inferred or defaulted.
+        "listing_details": CatalogListingDetailsService(
+            analytics_session=session,
+            operational_session=operational_session,
+        ).get_details(property_id),
         "management": resolve_management(operational_session, catalogue_id=property_id),
+        # All photographs of THIS property only. The catalogue id is resolved
+        # to the numeric fyp.property_photos.property_id inside the repository;
+        # an empty list is a real "no photo records" state, not an error.
+        "photos": FypPropertyRepository(operational_session).get_catalogue_photos(property_id),
     }
 
 
@@ -140,6 +161,16 @@ def get_catalog_insights(
     property_id: str,
     session: AnalyticsSession,
     _user: CurrentUser,
+    operational_session: Session = Depends(get_db),
+    business_type: str | None = Query(
+        default=None,
+        max_length=120,
+        description=(
+            "The entrepreneur's selected F&B business type. It selects which "
+            "category output the Stage-2 SHAP explanation describes; it never "
+            "changes the general PU association score."
+        ),
+    ),
 ) -> dict:
     """Location score plus genuine SHAP factors for one listing.
 
@@ -159,11 +190,16 @@ def get_catalog_insights(
       an explanation;
     * ``explanation.factors`` always carries plain-English labels; the raw
       feature key is present only as ``technical`` for audit;
+    * ``category_model`` is the independent Stage-2 block: its own 54-feature
+      model, its own validation and its own SHAP. When ``business_type`` is
+      supplied, that category is scored and explained even if the model's own
+      top category differs;
     * the score is a research association index, never a success probability.
 
-    Computation is expensive (permutation SHAP over 47 features, ~13 s), so the
-    service caches per ``(model_version, property_id)`` and the first request
-    for a property pays the cost.
+    Computation is expensive (permutation SHAP over 47 or 64 features), so the
+    service caches per ``(model version, artifact checksum, resolved feature
+    vector, selected business type)`` and the first request for a property pays
+    the cost.
     """
     row = CatalogRepository(session).get_property(property_id)
     if row is None:
@@ -180,6 +216,12 @@ def get_catalog_insights(
     lat, lon = row.get("latitude"), row.get("longitude")
     if lat is not None and lon is not None:
         origin = {"lat": float(lat), "lon": float(lon)}
+    # The operational session enables the persistent validated-explanation
+    # cache: a precomputed explanation is served immediately, and a miss never
+    # blocks this request on SHAP (it returns the real PU score with a
+    # truthful pending state and schedules the background computation).
     return PropertyInsightsService(
-        session=session, analytics_session=session
-    ).insights(property_id, origin=origin)
+        session=session,
+        analytics_session=session,
+        cache_session=operational_session,
+    ).insights(property_id, origin=origin, business_type=business_type)

@@ -62,7 +62,14 @@ PUBLIC_REGISTRATION_ROLES = (ROLE_ENTREPRENEUR,)
 # Roles that may create / mutate property listings. Property ownership is an
 # ownership relationship on the property row, so entrepreneurs manage the
 # properties they own; administrators manage any property administratively.
-PROPERTY_MANAGEMENT_ROLES = (ROLE_ENTREPRENEUR, ROLE_ADMIN)
+#
+# Agents are included because the Owner / Agent workspace is a *provider*
+# workspace: an agent must be able to create a draft and maintain the listings
+# they represent. Role membership alone grants nothing on an existing record —
+# `sitewise.api.v1.properties` additionally requires either `owner_user_id`
+# equality or an `agent_listing_assignment` row for the caller's agent profile,
+# so an agent can never touch a property they are not assigned to.
+PROPERTY_MANAGEMENT_ROLES = (ROLE_ENTREPRENEUR, ROLE_AGENT, ROLE_ADMIN)
 
 # Staff portal roles (agents + administrators).
 STAFF_ROLES = (ROLE_AGENT, ROLE_ADMIN)

@@ -11,6 +11,7 @@ from sitewise.api.v1 import (
     preferences,
     properties,
     property_verification,
+    provider,
     recommendations,
     reports,
     saved_properties,
@@ -39,6 +40,20 @@ router.include_router(
     property_verification.staff_router, prefix="/staff/properties", tags=["property_verification"]
 )
 router.include_router(users.router, prefix="/users", tags=["users"])
+# Owner / Agent (Provider) workspace: the shared inbox, performance report and
+# account verification. One route set serves both provider roles — what differs
+# is the ownership / assignment relationship resolved server-side, not the API.
+router.include_router(provider.router, prefix="/provider", tags=["provider"])
+# Enquiry creation is the ENQUIRER's action, so it rides the listing prefix the
+# rest of the property surface uses.
+router.include_router(
+    provider.enquirer_router, prefix="/properties", tags=["provider"]
+)
+router.include_router(
+    provider.staff_router,
+    prefix="/staff/providers",
+    tags=["provider_verification"],
+)
 router.include_router(staff.router, prefix="/staff", tags=["staff"])
 # Agent listing management (assigned-listing edits, change requests,
 # listing photos). Separate module so staff.py is never modified; the

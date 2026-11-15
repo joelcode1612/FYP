@@ -1,0 +1,9 @@
+﻿variant,n_features,algorithm,mean_auc_P_vs_U,std_auc_P_vs_U,mean_average_precision,mean_balanced_accuracy
+baseline_44,44,Logistic,0.646985,0.081815,0.595909,0.611172
+baseline_44,44,HistogramGradientBoosting,0.662849,0.073969,0.623374,0.604679
+baseline_plus_age_56,56,Logistic,0.653943,0.043094,0.61096,0.613633
+baseline_plus_age_56,56,HistogramGradientBoosting,0.663486,0.070381,0.621648,0.619551
+baseline_plus_residential_52,52,Logistic,0.69834,0.065106,0.642856,0.65139
+baseline_plus_residential_52,52,HistogramGradientBoosting,0.677052,0.07638,0.644301,0.636434
+expanded_age_residential_64,64,Logistic,0.699824,0.039046,0.6784,0.662609
+expanded_age_residential_64,64,HistogramGradientBoosting,0.685416,0.067147,0.644539,0.638876

@@ -1,0 +1,7 @@
+﻿feature_subset,features,algorithm,mean_auc_P_vs_U,std_auc,mean_ap_P_vs_U,mean_bal_acc
+full_47_licence_hold,47,Logistic,0.645973,0.032739,0.620043,0.607188
+full_47_licence_hold,47,HistogramGradientBoosting,0.681201,0.080776,0.642435,0.626279
+no_landscan_44,44,Logistic,0.646985,0.081815,0.595909,0.611172
+no_landscan_44,44,HistogramGradientBoosting,0.662849,0.073969,0.623374,0.604679
+conservative_34,34,Logistic,0.63217,0.116123,0.587619,0.609661
+conservative_34,34,HistogramGradientBoosting,0.648603,0.061746,0.601142,0.60436

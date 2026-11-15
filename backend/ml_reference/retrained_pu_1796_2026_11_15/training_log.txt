@@ -1,0 +1,26 @@
+DATA (1796, 47) class Counter({np.int64(0): 916, np.int64(1): 880}) unique geo cells 84
+FOLD 1: train=1423 Counter({np.int64(1): 727, np.int64(0): 696}), validation=373 Counter({np.int64(0): 220, np.int64(1): 153}), heldout_grid_cells=20
+   full_47_licence_hold Logistic AUC 0.6082 AP 0.5209 BA 0.5654
+   full_47_licence_hold HistogramGradientBoosting AUC 0.6576 AP 0.5212 BA 0.564
+   no_landscan_44 Logistic AUC 0.7285 AP 0.6091 BA 0.6839
+   no_landscan_44 HistogramGradientBoosting AUC 0.7174 AP 0.5954 BA 0.6146
+   conservative_34 Logistic AUC 0.7305 AP 0.6132 BA 0.6968
+   conservative_34 HistogramGradientBoosting AUC 0.704 AP 0.5723 BA 0.6344
+FOLD 2: train=1521 Counter({np.int64(1): 773, np.int64(0): 748}), validation=275 Counter({np.int64(0): 168, np.int64(1): 107}), heldout_grid_cells=20
+   full_47_licence_hold Logistic AUC 0.6648 AP 0.5612 BA 0.5865
+   full_47_licence_hold HistogramGradientBoosting AUC 0.7711 AP 0.6812 BA 0.6957
+   no_landscan_44 Logistic AUC 0.5649 AP 0.4182 BA 0.5194
+   no_landscan_44 HistogramGradientBoosting AUC 0.6925 AP 0.5748 BA 0.5963
+   conservative_34 Logistic AUC 0.5041 AP 0.3733 BA 0.4731
+   conservative_34 HistogramGradientBoosting AUC 0.6597 AP 0.5236 BA 0.5814
+FOLD 3: train=1360 Counter({np.int64(0): 719, np.int64(1): 641}), validation=436 Counter({np.int64(1): 239, np.int64(0): 197}), heldout_grid_cells=20
+   full_47_licence_hold Logistic AUC 0.665 AP 0.778 BA 0.6697
+   full_47_licence_hold HistogramGradientBoosting AUC 0.6148 AP 0.725 BA 0.6191
+   no_landscan_44 Logistic AUC 0.6476 AP 0.7604 BA 0.6302
+   no_landscan_44 HistogramGradientBoosting AUC 0.5787 AP 0.7 BA 0.6032
+   conservative_34 Logistic AUC 0.6619 AP 0.7764 BA 0.6591
+   conservative_34 HistogramGradientBoosting AUC 0.5821 AP 0.7075 BA 0.5972
+SAVED MODEL /mnt/data/SiteWise_PU_Retraining_1796/SiteWise_PU_44_Features_recommended_research_ResearchOnly.joblib test first scores [0.898, 0.949, 0.88]
+SAVED MODEL /mnt/data/SiteWise_PU_Retraining_1796/SiteWise_PU_47_Features_full47_restricted_ResearchOnly.joblib test first scores [0.943, 0.971, 0.899]
+SELECTED {'feature_subset': 'no_landscan_44', 'features': 44, 'algorithm': 'HistogramGradientBoosting', 'mean_auc_P_vs_U': 0.662849, 'std_auc': 0.073969, 'mean_ap_P_vs_U': 0.623374, 'mean_bal_acc': 0.604679}
+FINISHED

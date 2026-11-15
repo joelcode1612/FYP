@@ -43,7 +43,7 @@ class PULearning:
 
     def _ensure_loaded(self) -> LoadedModel:
         if self._loaded is None:
-            self._loaded = self.loader.load(self.model_name)
+            self._loaded = self.loader.load_cached(self.model_name)
         return self._loaded
 
     def predict(
@@ -96,7 +96,12 @@ class PULearning:
             property_id=property_id,
             score=score,
             label=label,
-            model_version=str(loaded.meta.get("version") or loaded.meta.get("feature_set") or "unspecified"),
+            model_version=str(
+                loaded.meta.get("version")
+                or loaded.meta.get("feature_set")
+                or loaded.meta.get("model_variant")
+                or "unspecified"
+            ),
             available=True,
             missing_features=tuple(missing),
             score_meaning=str(loaded.meta.get("score_meaning") or PUPrediction.score_meaning),

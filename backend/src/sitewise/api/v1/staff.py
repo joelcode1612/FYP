@@ -42,6 +42,7 @@ from sitewise.repositories.agent_assignment_repository import (
     AgentAssignmentRepository,
 )
 from sitewise.services.property_management_service import resolve_listings
+from sitewise.services import security_audit_service as security_audit
 
 router = APIRouter()
 
@@ -898,6 +899,43 @@ def list_audit(
     affected_user_id: uuid.UUID | None = Query(default=None),
 ) -> list[dict]:
     return _admin_service().list_role_audit(affected_user_id)
+
+
+@router.get("/audit/security")
+def list_security_audit(
+    admin: AdminMfaUser,
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=25, ge=1, le=200),
+    category: str = Query(default="all", pattern="^(all|admin|auth|mfa)$"),
+    search: str = Query(default="", max_length=120),
+    result: str = Query(default="all", pattern="^(all|success|failed|info)$"),
+    role: str = Query(default="all", max_length=40),
+    date_from: str | None = Query(default=None, max_length=40),
+    date_to: str | None = Query(default=None, max_length=40),
+) -> dict:
+    """Normalized security + activity audit read for the System activity page.
+
+    ADDITIVE to ``GET /audit`` above, which keeps its exact response contract
+    for the admin dashboard and any existing consumer. This endpoint merges
+    the administrative feed with Supabase authentication/MFA events where the
+    deployment can actually read them, applies every filter server-side and
+    paginates, and reports each source's REAL availability — it never emits
+    fabricated events when a source is unreadable.
+
+    Authorization is identical to ``GET /audit``: an authenticated
+    administrator with completed MFA (`AdminMfaUser`).
+    """
+    return security_audit.list_security_audit(
+        _admin_service(),
+        page=page,
+        page_size=page_size,
+        category=category,
+        search=search,
+        result=result,
+        role=role,
+        date_from=date_from,
+        date_to=date_to,
+    )
 
 
 # ---------------------------------------------------------------------------

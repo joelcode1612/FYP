@@ -1,0 +1,307 @@
+{
+ "property_id": "EP-01051",
+ "available": true,
+ "analysis_status": "COMPLETED",
+ "reference_coverage": "OSM_INVENTORY_SNAPSHOT_2026_10_15",
+ "feature_snapshot_at": "2026-11-03",
+ "inventory_snapshot_at": "2026-10-15T12:33:15+08:00",
+ "data_completeness_pct": 100,
+ "self_exclusion_status": "NO_POSITIVE_SELF_MATCH",
+ "district": "Kuala Lumpur",
+ "state_dosm": "Selangor",
+ "coordinate_quality": "PLATFORM_COPIED_NOT_ROOFTOP_VERIFIED",
+ "district_statistics": {
+  "available": false,
+  "district": "Kuala Lumpur",
+  "state": "Selangor",
+  "reason": "No DOSM district age records for Kuala Lumpur, Selangor."
+ },
+ "join_status": {
+  "property": "MATCHED",
+  "demand": "MATCHED",
+  "accessibility": "MATCHED",
+  "district_income": "UNMATCHED_OR_UNKNOWN"
+ },
+ "groups": [
+  {
+   "key": "competition",
+   "label": "Competitor pressure",
+   "metrics": [
+    {
+     "key": "competitor_count_500m",
+     "label": "F&B competitors within 500 m",
+     "unit": "count",
+     "value": 47,
+     "status": "available",
+     "note": null
+    },
+    {
+     "key": "competitor_count_1000m",
+     "label": "F&B competitors within 1 km",
+     "unit": "count",
+     "value": 167,
+     "status": "available",
+     "note": null
+    },
+    {
+     "key": "nearest_competitor_distance_m",
+     "label": "Distance to the nearest competitor",
+     "unit": "m",
+     "value": 66.9,
+     "status": "available",
+     "note": "Little Caesars \u00b7 FAST_FOOD"
+    },
+    {
+     "key": "cafe_count_500m",
+     "label": "Cafes within 500 m",
+     "unit": "count",
+     "value": 8,
+     "status": "available",
+     "note": null
+    },
+    {
+     "key": "restaurant_count_500m",
+     "label": "Restaurants within 500 m",
+     "unit": "count",
+     "value": 27,
+     "status": "available",
+     "note": null
+    },
+    {
+     "key": "fast_food_count_500m",
+     "label": "Fast food within 500 m",
+     "unit": "count",
+     "value": 7,
+     "status": "available",
+     "note": null
+    },
+    {
+     "key": "fnb_competitors_2000m",
+     "label": "F&B competitors within 2 km",
+     "unit": "count",
+     "value": 279,
+     "status": "available",
+     "note": null
+    }
+   ]
+  },
+  {
+   "key": "accessibility",
+   "label": "Accessibility and movement",
+   "metrics": [
+    {
+     "key": "bus_stops_500m_walk",
+     "label": "Bus stops within a 500 m walk",
+     "unit": "count",
+     "value": 0,
+     "status": "available",
+     "note": null
+    },
+    {
+     "key": "rail_stations_1km_walk",
+     "label": "Rail stations within a 1 km walk",
+     "unit": "count",
+     "value": 0,
+     "status": "available",
+     "note": null
+    },
+    {
+     "key": "nearest_transit_walk_m",
+     "label": "Walk to the nearest transit stop",
+     "unit": "m",
+     "value": 1062.7,
+     "status": "available",
+     "note": null
+    },
+    {
+     "key": "nearest_major_road_m",
+     "label": "Distance to the nearest major road",
+     "unit": "m",
+     "value": 152.0,
+     "status": "available",
+     "note": null
+    },
+    {
+     "key": "road_length_density_500m_km_km2",
+     "label": "Road length density within 500 m",
+     "unit": "km/km\u00b2",
+     "value": 40.119,
+     "status": "available",
+     "note": null
+    },
+    {
+     "key": "weekday_departures_am",
+     "label": "Weekday AM departures within a 500 m walk",
+     "unit": "departures",
+     "value": 0,
+     "status": "available",
+     "note": null
+    },
+    {
+     "key": "weekday_departures_pm",
+     "label": "Weekday PM departures within a 500 m walk",
+     "unit": "departures",
+     "value": 0,
+     "status": "available",
+     "note": null
+    },
+    {
+     "key": "walk_isochrone_10min",
+     "label": "Area reachable on foot in 10 minutes",
+     "unit": "km\u00b2",
+     "value": 0.1578,
+     "status": "available",
+     "note": null
+    },
+    {
+     "key": "drive_isochrone_10min",
+     "label": "Area reachable by car in 10 minutes",
+     "unit": "km\u00b2",
+     "value": 213.6033,
+     "status": "available",
+     "note": null
+    }
+   ]
+  },
+  {
+   "key": "demand",
+   "label": "Catchment demand",
+   "metrics": [
+    {
+     "key": "district_population",
+     "label": "District population (DOSM)",
+     "unit": "persons",
+     "value": null,
+     "status": "unavailable",
+     "note": "No DOSM population record for Kuala Lumpur, Selangor."
+    },
+    {
+     "key": "district_income_median_myr",
+     "label": "Median district household income",
+     "unit": "RM/month",
+     "value": null,
+     "status": "unavailable",
+     "note": "The district join did not match; value unavailable."
+    },
+    {
+     "key": "office_pois_500m",
+     "label": "Offices within 500 m",
+     "unit": "count",
+     "value": 9,
+     "status": "available",
+     "note": null
+    },
+    {
+     "key": "office_pois_1000m",
+     "label": "Offices within 1 km",
+     "unit": "count",
+     "value": 73,
+     "status": "available",
+     "note": null
+    },
+    {
+     "key": "retail_pois_1000m",
+     "label": "Retail outlets within 1 km",
+     "unit": "count",
+     "value": 104,
+     "status": "available",
+     "note": null
+    },
+    {
+     "key": "schools_1000m",
+     "label": "Schools within 1 km",
+     "unit": "count",
+     "value": 12,
+     "status": "available",
+     "note": null
+    },
+    {
+     "key": "universities_1000m",
+     "label": "Universities and colleges within 1 km",
+     "unit": "count",
+     "value": 1,
+     "status": "available",
+     "note": null
+    },
+    {
+     "key": "malls_1000m",
+     "label": "Malls within 1 km",
+     "unit": "count",
+     "value": 0,
+     "status": "available",
+     "note": null
+    },
+    {
+     "key": "supermarkets_1000m",
+     "label": "Supermarkets within 1 km",
+     "unit": "count",
+     "value": 9,
+     "status": "available",
+     "note": null
+    },
+    {
+     "key": "hospitals_1000m",
+     "label": "Hospitals within 1 km",
+     "unit": "count",
+     "value": 1,
+     "status": "available",
+     "note": null
+    },
+    {
+     "key": "pop_500m",
+     "label": "Estimated residents within 500 m",
+     "unit": "people",
+     "value": 7702.4,
+     "status": "available",
+     "note": "WorldPop 2025 constrained 100 m estimate \u00b7 100% of the area covered"
+    },
+    {
+     "key": "pop_1000m",
+     "label": "Estimated residents within 1 km",
+     "unit": "people",
+     "value": 31366.4,
+     "status": "available",
+     "note": "WorldPop 2025 constrained 100 m estimate \u00b7 100% of the area covered"
+    }
+   ]
+  },
+  {
+   "key": "built_environment",
+   "label": "Built environment and parking",
+   "metrics": [
+    {
+     "key": "building_count_500m",
+     "label": "Buildings within 500 m",
+     "unit": "count",
+     "value": 953,
+     "status": "available",
+     "note": null
+    },
+    {
+     "key": "building_footprint_density_500m",
+     "label": "Building footprint density within 500 m",
+     "unit": "ratio",
+     "value": 35.3911,
+     "status": "available",
+     "note": null
+    },
+    {
+     "key": "parking_facilities_500m",
+     "label": "Parking facilities within 500 m",
+     "unit": "count",
+     "value": 5,
+     "status": "available",
+     "note": "Partial coverage: the open-data inventory is incomplete here."
+    },
+    {
+     "key": "nearest_parking_distance_m",
+     "label": "Distance to the nearest parking facility",
+     "unit": "m",
+     "value": 42.84,
+     "status": "available",
+     "note": null
+    }
+   ]
+  }
+ ]
+}

@@ -7,6 +7,7 @@ import '../../features/assessment/view/questionnaire_screen.dart';
 import '../../features/assessment/view/review_screen.dart';
 import '../../presentation/mobile/auth/pages/forgot_password_mobile_page.dart';
 import '../../presentation/mobile/auth/pages/mobile_auth_page.dart';
+import '../../presentation/mobile/auth/pages/signup_mobile_page.dart';
 import '../../presentation/mobile/auth/widgets/auth_tabs.dart';
 import '../../presentation/mobile/onboarding/pages/onboarding_flow_page.dart';
 import '../../presentation/mobile/start/app_start_gate.dart';
@@ -24,6 +25,11 @@ import '../../presentation/mobile/entrepreneur/pages/entrepreneur_report_mobile_
 import '../../presentation/mobile/entrepreneur/pages/entrepreneur_saved_mobile_page.dart';
 import '../../presentation/mobile/entrepreneur/pages/entrepreneur_tour_mobile_page.dart';
 import '../../presentation/mobile/entrepreneur/pages/sitewise_add_property_mobile_page.dart';
+import '../../presentation/mobile/provider/pages/provider_mfa_mobile_page.dart';
+import '../../presentation/mobile/provider/pages/provider_property_detail_mobile_page.dart';
+import '../../presentation/mobile/provider/pages/provider_verification_mobile_page.dart';
+import '../../presentation/mobile/provider/pages/property_management_moved_page.dart';
+import '../../presentation/mobile/provider/shell/provider_tab_host.dart';
 import '../../presentation/shared/pages/not_found_mobile_page.dart';
 import '../../presentation/shared/tour/ar_capture_mobile_page.dart';
 import '../../presentation/shared/tour/tour_preview_mobile_page.dart';
@@ -42,6 +48,16 @@ import '../../presentation/shared/tour/tour_preview_mobile_page.dart';
 /// code across the two apps.)
 String parentShellRoute(String route) {
   const parents = {
+    // Provider workspace. Add is a real dock destination now, so the form
+    // highlights Add rather than Home; a property is opened from Listings.
+    // Performance is a Dashboard shortcut, not a tab, so Home stays selected.
+    '/provider/add-property': '/provider/add-property',
+    '/provider/property-detail': '/provider/listings',
+    '/provider/performance': '/provider',
+    // Verification is reached from Profile, and MFA is a step of whichever
+    // protected staff flow pushed it — both keep Profile selected.
+    '/provider/verification': '/provider/profile',
+    '/provider/mfa': '/provider/profile',
     // Detail routes highlight their owning tab in the five-tab model.
     '/entrepreneur/preferences': '/entrepreneur/profile',
     '/entrepreneur/saved': '/entrepreneur/spaces',
@@ -96,14 +112,19 @@ abstract final class AppRoutes {
       // Public landing (kept reachable for demos and deep links).
       '/landing' => (RouteAccess.public, () => const LandingMobilePage()),
       // Authentication. `arguments` = 'login' | 'signUp'.
+      // Registration is the three-step funnel. Mapping the existing
+      // 'signUp' argument here keeps every current entry point (landing,
+      // onboarding and deep links) working without changing those screens or
+      // adding a second navigation stack.
       '/auth' => (
         RouteAccess.public,
-        () => MobileAuthPage(
-          initialTab: settings.arguments == 'signUp'
-              ? AuthTab.signUp
-              : AuthTab.login,
-        ),
+        () => settings.arguments == 'signUp'
+            ? const SignupMobilePage()
+            : const MobileAuthPage(initialTab: AuthTab.login),
       ),
+      // Direct deep link to the funnel. Kept as its own public route so a
+      // pending-verification link or a restored session can target it.
+      '/signup' => (RouteAccess.public, () => const SignupMobilePage()),
       '/forgot-password' => (
         RouteAccess.public,
         () => const ForgotPasswordMobilePage(),
@@ -131,6 +152,69 @@ abstract final class AppRoutes {
                 ),
         ),
       ),
+      // Owner / Agent provider workspace. This is the ONLY place property
+      // management lives now: the Jaspr web agent workspace is retired.
+      '/provider' => (
+        RouteAccess.workspace,
+        () => const ProviderTabHost(initialRoute: '/provider'),
+      ),
+      '/provider/listings' => (
+        RouteAccess.workspace,
+        () => const ProviderTabHost(initialRoute: '/provider/listings'),
+      ),
+      '/provider/profile' => (
+        RouteAccess.workspace,
+        () => const ProviderTabHost(initialRoute: '/provider/profile'),
+      ),
+      '/provider/enquiries' => (
+        RouteAccess.workspace,
+        () => const ProviderTabHost(initialRoute: '/provider/enquiries'),
+      ),
+      '/provider/performance' => (
+        RouteAccess.workspace,
+        () => const ProviderTabHost(initialRoute: '/provider/performance'),
+      ),
+      // Agent dock's Schedule tab. SiteWise records no viewings or
+      // appointments yet, so the page renders the workspace's honest empty
+      // state rather than an invented calendar.
+      '/provider/schedule' => (
+        RouteAccess.workspace,
+        () => const ProviderTabHost(initialRoute: '/provider/schedule'),
+      ),
+      // Account-level provider verification. Distinct from per-listing
+      // verification: this is the provider's own standing with SiteWise, and
+      // the screen renders the real server status rather than a placeholder.
+      '/provider/verification' => (
+        RouteAccess.workspace,
+        () => const ProviderVerificationMobilePage(),
+      ),
+      // Second-factor step for the staff (Agent) workspace. An
+      // `MfaEntryRequest` argument means it is a SIGN-IN / session-restore
+      // step that must hand off to the dashboard; without one it is an
+      // in-workspace step-up that pops back to the refused request.
+      '/provider/mfa' => (
+        RouteAccess.workspace,
+        () => ProviderMfaMobilePage(
+          entry: settings.arguments is MfaEntryRequest
+              ? settings.arguments as MfaEntryRequest
+              : null,
+        ),
+      ),
+      // The Add Property flow is shared with the previous owner experience —
+      // same draft, photo, enrichment and submission endpoints.
+      '/provider/add-property' => (
+        RouteAccess.workspace,
+        () => SitewiseAddPropertyMobilePage(
+          // Resume a saved draft: arguments = fyp.rental_properties id.
+          initialDraftId: settings.arguments as String?,
+        ),
+      ),
+      '/provider/property-detail' => (
+        RouteAccess.workspace,
+        () => ProviderPropertyDetailMobilePage(
+          listingId: int.tryParse('${settings.arguments ?? ''}') ?? 0,
+        ),
+      ),
       // Entrepreneur
       '/entrepreneur' => (
         RouteAccess.workspace,
@@ -147,10 +231,7 @@ abstract final class AppRoutes {
       ),
       '/entrepreneur/add-property' => (
         RouteAccess.workspace,
-        () => SitewiseAddPropertyMobilePage(
-          // Resume a saved draft: arguments = fyp.rental_properties id.
-          initialDraftId: settings.arguments as String?,
-        ),
+        () => const PropertyManagementMovedPage(),
       ),
       assessmentHome => (RouteAccess.workspace, () => const HomeScreen()),
       assessmentQuestionnaire || assessmentReview => (
@@ -249,7 +330,13 @@ abstract final class AppRoutes {
 
     return MaterialPageRoute(
       settings: settings,
-      builder: (_) => AuthGuard(access: entry.$1, builder: (_) => entry.$2()),
+      builder: (_) => AuthGuard(
+        access: entry.$1,
+        // Named explicitly: the guard decides which workspace may paint this
+        // route, and it must not have to guess the route from the widget tree.
+        routeName: settings.name,
+        builder: (_) => entry.$2(),
+      ),
     );
   }
 

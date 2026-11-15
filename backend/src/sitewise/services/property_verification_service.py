@@ -677,7 +677,30 @@ class AdminPropertyReviewService:
             "history": [audit_payload(a) for a in history],
             "management": self._management(property_id),
             **self._location_context(property_id),
+            "location_analysis": self._location_analysis(property_id),
         }
+
+    def _location_analysis(self, property_id: int) -> dict[str, Any]:
+        """Verification-support location analysis (Parts A/B/C + recommendation).
+
+        Read-only and failure-isolated: a problem assembling the analysis
+        reaches the UI as an explicit ``available: false`` payload and never
+        breaks the review detail. The analysis never changes verification
+        state — decisions stay with the administrator.
+        """
+        try:
+            from sitewise.services.location_analysis_service import (
+                LocationAnalysisService,
+            )
+
+            return LocationAnalysisService(self.session).analyze(property_id)
+        except Exception as exc:  # noqa: BLE001 — the review page must not fail on analysis
+            return {
+                "analysis_version": None,
+                "generated_at": None,
+                "available": False,
+                "error": f"Location analysis could not be assembled: {exc}",
+            }
 
     def _management(self, property_id: int) -> dict[str, Any]:
         """Derived management state, or an explicit lookup failure."""

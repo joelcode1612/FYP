@@ -800,6 +800,572 @@ class SourceProvenance {
       );
 }
 
+/// Server-assembled verification-support location analysis
+/// (`location_analysis` on the staff review detail). Read-only decision
+/// support: it never changes verification state.
+class LocationAnalysis {
+  final String? analysisVersion;
+  final String? generatedAt;
+  final bool available;
+  final String? error;
+  final LocationReadinessPart partA;
+  final LocationIntelligencePart partB;
+  final LocationConfidencePart partC;
+  final LocationRecommendation recommendation;
+
+  const LocationAnalysis({
+    this.analysisVersion,
+    this.generatedAt,
+    required this.available,
+    this.error,
+    required this.partA,
+    required this.partB,
+    required this.partC,
+    required this.recommendation,
+  });
+
+  static const LocationAnalysis unavailable = LocationAnalysis(
+    available: false,
+    partA: LocationReadinessPart(state: 'unavailable'),
+    partB: LocationIntelligencePart.empty,
+    partC: LocationConfidencePart.empty,
+    recommendation: LocationRecommendation(text: ''),
+  );
+
+  factory LocationAnalysis.fromJson(Map<String, dynamic> row) {
+    if (row.isEmpty) return LocationAnalysis.unavailable;
+    Map<String, dynamic>? block(Object? key) {
+      final value = row[key];
+      return value is Map<String, dynamic> ? value : null;
+    }
+
+    return LocationAnalysis(
+      analysisVersion: row['analysis_version']?.toString(),
+      generatedAt: row['generated_at']?.toString(),
+      available: row['available'] == true,
+      error: row['error']?.toString(),
+      partA: LocationReadinessPart.fromJson(block('part_a') ?? const {}),
+      partB: LocationIntelligencePart.fromJson(block('part_b') ?? const {}),
+      partC: LocationConfidencePart.fromJson(block('part_c') ?? const {}),
+      recommendation: LocationRecommendation.fromJson(
+        block('recommendation') ?? const {},
+      ),
+    );
+  }
+}
+
+/// Part A — listing verification readiness and its evidence checks.
+class LocationReadinessPart {
+  final String state;
+  final String listingStatus;
+  final String ownershipStatus;
+  final List<LocationCheck> checks;
+
+  const LocationReadinessPart({
+    required this.state,
+    this.listingStatus = '',
+    this.ownershipStatus = '',
+    this.checks = const [],
+  });
+
+  factory LocationReadinessPart.fromJson(Map<String, dynamic> row) =>
+      LocationReadinessPart(
+        state: row['state']?.toString() ?? 'unknown',
+        listingStatus: row['listing_status']?.toString() ?? '',
+        ownershipStatus: row['ownership_status']?.toString() ?? '',
+        checks: [
+          for (final check
+              in (row['checks'] as List? ?? const [])
+                  .whereType<Map<String, dynamic>>())
+            LocationCheck.fromJson(check),
+        ],
+      );
+}
+
+class LocationCheck {
+  final String id;
+  final String label;
+  final String status;
+  final String detail;
+
+  const LocationCheck({
+    required this.id,
+    required this.label,
+    required this.status,
+    required this.detail,
+  });
+
+  factory LocationCheck.fromJson(Map<String, dynamic> row) => LocationCheck(
+        id: row['id']?.toString() ?? '',
+        label: row['label']?.toString() ?? '',
+        status: row['status']?.toString() ?? '',
+        detail: row['detail']?.toString() ?? '',
+      );
+}
+
+/// Part B — the five measurement families. Each keeps its method/source and
+/// an explicit unavailable reason; absent values stay null, never zero.
+class LocationIntelligencePart {
+  final LocationPopulationFamily population;
+  final LocationSocioeconomicFamily socioeconomic;
+  final LocationFnbFamily fnbEnvironment;
+  final LocationAccessibilityFamily accessibility;
+  final LocationResearchAssociation researchAssociation;
+
+  const LocationIntelligencePart({
+    required this.population,
+    required this.socioeconomic,
+    required this.fnbEnvironment,
+    required this.accessibility,
+    required this.researchAssociation,
+  });
+
+  static const LocationIntelligencePart empty = LocationIntelligencePart(
+    population: LocationPopulationFamily.unavailable,
+    socioeconomic: LocationSocioeconomicFamily.unavailable,
+    fnbEnvironment: LocationFnbFamily.unavailable,
+    accessibility: LocationAccessibilityFamily.unavailable,
+    researchAssociation: LocationResearchAssociation.unavailable,
+  );
+
+  factory LocationIntelligencePart.fromJson(Map<String, dynamic> row) =>
+      LocationIntelligencePart(
+        population: LocationPopulationFamily.fromJson(
+          (row['population'] as Map<String, dynamic>?) ?? const {},
+        ),
+        socioeconomic: LocationSocioeconomicFamily.fromJson(
+          (row['socioeconomic'] as Map<String, dynamic>?) ?? const {},
+        ),
+        fnbEnvironment: LocationFnbFamily.fromJson(
+          (row['fnb_environment'] as Map<String, dynamic>?) ?? const {},
+        ),
+        accessibility: LocationAccessibilityFamily.fromJson(
+          (row['accessibility'] as Map<String, dynamic>?) ?? const {},
+        ),
+        researchAssociation: LocationResearchAssociation.fromJson(
+          (row['research_association'] as Map<String, dynamic>?) ?? const {},
+        ),
+      );
+}
+
+class LocationPopulationFamily {
+  final bool available;
+  final String method;
+  final String source;
+  final String? unavailableReason;
+  final double? pop500m;
+  final double? pop1km;
+  final double? pop3km;
+  final double? density1km;
+  final double? estimatedHouseholds1km;
+  final double? pctAge2034;
+  final double? pctAge1564;
+  final String? qualityFlag;
+  final double? rasterCoveragePct;
+  final String? districtKey;
+  final double? landscanAmbient1km;
+  final double? landscanAmbientRatio1km;
+  final String? landscanSourceYear;
+
+  const LocationPopulationFamily({
+    required this.available,
+    this.method = '',
+    this.source = '',
+    this.unavailableReason,
+    this.pop500m,
+    this.pop1km,
+    this.pop3km,
+    this.density1km,
+    this.estimatedHouseholds1km,
+    this.pctAge2034,
+    this.pctAge1564,
+    this.qualityFlag,
+    this.rasterCoveragePct,
+    this.districtKey,
+    this.landscanAmbient1km,
+    this.landscanAmbientRatio1km,
+    this.landscanSourceYear,
+  });
+
+  static const LocationPopulationFamily unavailable =
+      LocationPopulationFamily(available: false);
+
+  static double? _d(dynamic v) => (v is num) ? v.toDouble() : null;
+
+  factory LocationPopulationFamily.fromJson(Map<String, dynamic> row) =>
+      LocationPopulationFamily(
+        available: row['available'] == true,
+        method: row['method']?.toString() ?? '',
+        source: row['source']?.toString() ?? '',
+        unavailableReason: row['unavailable_reason']?.toString(),
+        pop500m: _d(row['pop_500m']),
+        pop1km: _d(row['pop_1km']),
+        pop3km: _d(row['pop_3km']),
+        density1km: _d(row['density_1km']),
+        estimatedHouseholds1km: _d(row['estimated_households_1km']),
+        pctAge2034: _d(row['pct_age_20_34_1km']),
+        pctAge1564: _d(row['pct_age_15_64_1km']),
+        qualityFlag: row['quality_flag']?.toString(),
+        rasterCoveragePct: _d(row['raster_coverage_pct']),
+        districtKey: row['district_key']?.toString(),
+        landscanAmbient1km: _d(row['landscan_ambient_1km']),
+        landscanAmbientRatio1km: _d(row['landscan_ambient_ratio_1km']),
+        landscanSourceYear: row['landscan_source_year']?.toString(),
+      );
+}
+
+class LocationSocioeconomicFamily {
+  final bool available;
+  final String method;
+  final String source;
+  final String? unavailableReason;
+  final double? incomeMedian;
+  final String? districtKey;
+
+  const LocationSocioeconomicFamily({
+    required this.available,
+    this.method = '',
+    this.source = '',
+    this.unavailableReason,
+    this.incomeMedian,
+    this.districtKey,
+  });
+
+  static const LocationSocioeconomicFamily unavailable =
+      LocationSocioeconomicFamily(available: false);
+
+  factory LocationSocioeconomicFamily.fromJson(Map<String, dynamic> row) =>
+      LocationSocioeconomicFamily(
+        available: row['available'] == true,
+        method: row['method']?.toString() ?? '',
+        source: row['source']?.toString() ?? '',
+        unavailableReason: row['unavailable_reason']?.toString(),
+        incomeMedian: (row['income_median'] is num)
+            ? (row['income_median'] as num).toDouble()
+            : null,
+        districtKey: row['district_key']?.toString(),
+      );
+}
+
+class LocationFnbFamily {
+  final bool available;
+  final String method;
+  final String source;
+  final String? unavailableReason;
+  final double? competitorCount500m;
+  final double? competitorCount1km;
+  final String? competitorStatus;
+  final Map<String, double?> competitorBreakdown500m;
+  final double? nearestCompetitorM;
+  final String? researchAnalysisStatus;
+  final double? demandGeneratorCount500m;
+  final double? demandGeneratorCount1km;
+  final Map<String, double?> nearbyAnchors;
+  final bool? ownerDeclaredFnbSuitable;
+
+  const LocationFnbFamily({
+    required this.available,
+    this.method = '',
+    this.source = '',
+    this.unavailableReason,
+    this.competitorCount500m,
+    this.competitorCount1km,
+    this.competitorStatus,
+    this.competitorBreakdown500m = const {},
+    this.nearestCompetitorM,
+    this.researchAnalysisStatus,
+    this.demandGeneratorCount500m,
+    this.demandGeneratorCount1km,
+    this.nearbyAnchors = const {},
+    this.ownerDeclaredFnbSuitable,
+  });
+
+  static const LocationFnbFamily unavailable =
+      LocationFnbFamily(available: false);
+
+  static double? _d(dynamic v) => (v is num) ? v.toDouble() : null;
+
+  static Map<String, double?> _numMap(dynamic raw) => {
+        for (final entry
+            in ((raw as Map<String, dynamic>?) ?? const {}).entries)
+          entry.key: _d(entry.value),
+      };
+
+  factory LocationFnbFamily.fromJson(Map<String, dynamic> row) =>
+      LocationFnbFamily(
+        available: row['available'] == true,
+        method: row['method']?.toString() ?? '',
+        source: row['source']?.toString() ?? '',
+        unavailableReason: row['unavailable_reason']?.toString(),
+        competitorCount500m: _d(row['competitor_count_500m']),
+        competitorCount1km: _d(row['competitor_count_1km']),
+        competitorStatus: row['competitor_status']?.toString(),
+        competitorBreakdown500m: _numMap(row['competitor_breakdown_500m']),
+        nearestCompetitorM: _d(row['nearest_competitor_m']),
+        researchAnalysisStatus: row['research_analysis_status']?.toString(),
+        demandGeneratorCount500m: _d(row['demand_generator_count_500m']),
+        demandGeneratorCount1km: _d(row['demand_generator_count_1km']),
+        nearbyAnchors: _numMap(row['nearby_anchors']),
+        ownerDeclaredFnbSuitable: (row['owner_declared_fnb_suitable'] is bool)
+            ? row['owner_declared_fnb_suitable'] as bool
+            : null,
+      );
+}
+
+class LocationAccessibilityFamily {
+  final bool available;
+  final String method;
+  final String source;
+  final String? unavailableReason;
+  final double? accessibilityScore;
+  final String? accessibilityStatus;
+  final double? roadKm1km;
+  final double? nearestMajorRoadM;
+  final Map<String, double?> transit;
+  final Map<String, double?> parking;
+  final String? parkingStatus;
+  final bool? ownerDeclaredParking;
+  final String? roadsTransportState;
+  final String? parkingState;
+
+  const LocationAccessibilityFamily({
+    required this.available,
+    this.method = '',
+    this.source = '',
+    this.unavailableReason,
+    this.accessibilityScore,
+    this.accessibilityStatus,
+    this.roadKm1km,
+    this.nearestMajorRoadM,
+    this.transit = const {},
+    this.parking = const {},
+    this.parkingStatus,
+    this.ownerDeclaredParking,
+    this.roadsTransportState,
+    this.parkingState,
+  });
+
+  static const LocationAccessibilityFamily unavailable =
+      LocationAccessibilityFamily(available: false);
+
+  static double? _d(dynamic v) => (v is num) ? v.toDouble() : null;
+
+  static Map<String, double?> _numMap(dynamic raw) => {
+        for (final entry
+            in ((raw as Map<String, dynamic>?) ?? const {}).entries)
+          entry.key: _d(entry.value),
+      };
+
+  factory LocationAccessibilityFamily.fromJson(Map<String, dynamic> row) =>
+      LocationAccessibilityFamily(
+        available: row['available'] == true,
+        method: row['method']?.toString() ?? '',
+        source: row['source']?.toString() ?? '',
+        unavailableReason: row['unavailable_reason']?.toString(),
+        accessibilityScore: _d(row['accessibility_score']),
+        accessibilityStatus: row['accessibility_status']?.toString(),
+        roadKm1km: _d(row['road_km_1km']),
+        nearestMajorRoadM: _d(row['nearest_major_road_m']),
+        transit: _numMap(row['transit']),
+        parking: _numMap(row['parking']),
+        parkingStatus: row['parking_status']?.toString(),
+        ownerDeclaredParking: (row['owner_declared_parking'] is bool)
+            ? row['owner_declared_parking'] as bool
+            : null,
+        roadsTransportState: row['roads_transport_state']?.toString(),
+        parkingState: row['parking_state']?.toString(),
+      );
+}
+
+/// §5E — strict PU research assessment: never a business-success probability.
+class LocationResearchAssociation {
+  final bool available;
+  final double? score;
+  final String? label;
+  final String? modelVersion;
+  final String scoreMeaning;
+  final int? featureCount;
+  final int? availableFeatures;
+  final List<String> missingFeatures;
+  final String? unavailableReason;
+
+  const LocationResearchAssociation({
+    required this.available,
+    this.score,
+    this.label,
+    this.modelVersion,
+    this.scoreMeaning = '',
+    this.featureCount,
+    this.availableFeatures,
+    this.missingFeatures = const [],
+    this.unavailableReason,
+  });
+
+  static const LocationResearchAssociation unavailable =
+      LocationResearchAssociation(available: false);
+
+  factory LocationResearchAssociation.fromJson(Map<String, dynamic> row) =>
+      LocationResearchAssociation(
+        available: row['available'] == true,
+        score: (row['score'] is num) ? (row['score'] as num).toDouble() : null,
+        label: row['label']?.toString(),
+        modelVersion: row['model_version']?.toString(),
+        scoreMeaning: row['score_meaning']?.toString() ?? '',
+        featureCount: (row['feature_count'] as num?)?.toInt(),
+        availableFeatures: (row['available_features'] as num?)?.toInt(),
+        missingFeatures: [
+          for (final name
+              in (row['missing_features'] as List? ?? const []))
+            name.toString(),
+        ],
+        unavailableReason: row['unavailable_reason']?.toString(),
+      );
+}
+
+/// Part C — data confidence.
+class LocationConfidencePart {
+  final int familiesTotal;
+  final int familiesAvailable;
+  final List<String> familiesAvailableNames;
+  final List<LocationDataGap> missing;
+  final List<LocationDataGap> outdated;
+  final List<String> resolutionNotes;
+  final List<LocationLicence> licences;
+
+  const LocationConfidencePart({
+    required this.familiesTotal,
+    required this.familiesAvailable,
+    this.familiesAvailableNames = const [],
+    this.missing = const [],
+    this.outdated = const [],
+    this.resolutionNotes = const [],
+    this.licences = const [],
+  });
+
+  static const LocationConfidencePart empty = LocationConfidencePart(
+    familiesTotal: 0,
+    familiesAvailable: 0,
+  );
+
+  factory LocationConfidencePart.fromJson(Map<String, dynamic> row) =>
+      LocationConfidencePart(
+        familiesTotal: (row['families_total'] as num?)?.toInt() ?? 0,
+        familiesAvailable: (row['families_available'] as num?)?.toInt() ?? 0,
+        familiesAvailableNames: [
+          for (final name
+              in (row['families_available_names'] as List? ?? const []))
+            name.toString(),
+        ],
+        missing: [
+          for (final gap in (row['missing'] as List? ?? const [])
+              .whereType<Map<String, dynamic>>())
+            LocationDataGap.fromJson(gap),
+        ],
+        outdated: [
+          for (final gap in (row['outdated'] as List? ?? const [])
+              .whereType<Map<String, dynamic>>())
+            LocationDataGap.fromJson(gap),
+        ],
+        resolutionNotes: [
+          for (final note
+              in (row['resolution_notes'] as List? ?? const []))
+            note.toString(),
+        ],
+        licences: [
+          for (final licence in (row['licences'] as List? ?? const [])
+              .whereType<Map<String, dynamic>>())
+            LocationLicence.fromJson(licence),
+        ],
+      );
+}
+
+class LocationDataGap {
+  final String family;
+  final String reason;
+  final String? status;
+  final String? detail;
+
+  const LocationDataGap({
+    required this.family,
+    required this.reason,
+    this.status,
+    this.detail,
+  });
+
+  factory LocationDataGap.fromJson(Map<String, dynamic> row) =>
+      LocationDataGap(
+        family: (row['family'] ?? row['what'])?.toString() ?? '',
+        reason: (row['reason'] ?? row['detail'])?.toString() ?? '',
+        status: row['status']?.toString(),
+        detail: row['detail']?.toString(),
+      );
+}
+
+class LocationLicence {
+  final String source;
+  final String? licence;
+
+  const LocationLicence({required this.source, this.licence});
+
+  factory LocationLicence.fromJson(Map<String, dynamic> row) =>
+      LocationLicence(
+        source: row['source']?.toString() ?? '',
+        licence: row['licence']?.toString(),
+      );
+}
+
+/// §9 — recommendation with explicit policy separation.
+class LocationRecommendation {
+  final String text;
+  final List<LocationPolicyItem> policySeparation;
+  final List<String> suggestedFocus;
+
+  const LocationRecommendation({
+    required this.text,
+    this.policySeparation = const [],
+    this.suggestedFocus = const [],
+  });
+
+  factory LocationRecommendation.fromJson(Map<String, dynamic> row) =>
+      LocationRecommendation(
+        text: row['text']?.toString() ?? '',
+        policySeparation: [
+          for (final item in (row['policy_separation'] as List? ?? const [])
+              .whereType<Map<String, dynamic>>())
+            LocationPolicyItem.fromJson(item),
+        ],
+        suggestedFocus: [
+          for (final item
+              in (row['suggested_focus'] as List? ?? const []))
+            item.toString(),
+        ],
+      );
+}
+
+class LocationPolicyItem {
+  final String domain;
+  final String? currentStatus;
+  final bool? isPublished;
+  final String note;
+
+  const LocationPolicyItem({
+    required this.domain,
+    this.currentStatus,
+    this.isPublished,
+    required this.note,
+  });
+
+  factory LocationPolicyItem.fromJson(Map<String, dynamic> row) =>
+      LocationPolicyItem(
+        domain: row['domain']?.toString() ?? '',
+        currentStatus: row['current_status']?.toString(),
+        isPublished: row['is_published'] is bool
+            ? row['is_published'] as bool
+            : null,
+        note: row['note']?.toString() ?? '',
+      );
+}
+
 class VerificationDetail {
   final VerificationProperty property;
   final VerificationOwner? owner;
@@ -831,6 +1397,10 @@ class VerificationDetail {
   /// Open-data source provenance/licences backing the calculated features.
   final List<SourceProvenance> provenance;
 
+  /// Server-assembled location analysis (Parts A/B/C + recommendation);
+  /// `available: false` payload when it could not be assembled.
+  final LocationAnalysis locationAnalysis;
+
   const VerificationDetail({
     required this.property,
     this.owner,
@@ -844,6 +1414,7 @@ class VerificationDetail {
     this.population,
     this.freshness,
     this.provenance = const [],
+    this.locationAnalysis = LocationAnalysis.unavailable,
   });
 
   factory VerificationDetail.fromJson(Map<String, dynamic> row) =>
@@ -909,6 +1480,11 @@ class VerificationDetail {
                   .whereType<Map<String, dynamic>>())
             SourceProvenance.fromJson(source),
         ],
+        locationAnalysis: row['location_analysis'] is Map<String, dynamic>
+            ? LocationAnalysis.fromJson(
+                row['location_analysis'] as Map<String, dynamic>,
+              )
+            : LocationAnalysis.unavailable,
       );
 }
 

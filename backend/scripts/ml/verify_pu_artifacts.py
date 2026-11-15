@@ -108,7 +108,7 @@ def _stored_score(connection: Any, property_id: str) -> dict[str, Any] | None:
                    source_data->>'model_method' AS model_method,
                    source_data->>'model_version' AS model_version,
                    source_data->>'feature_set' AS feature_set
-            FROM sitewise_app.properties
+            FROM fyp.catalogue_properties
             WHERE id = :property_id
             """
         ),

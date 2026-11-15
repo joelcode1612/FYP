@@ -1,0 +1,54 @@
+﻿subject_id,sample_class,canonical_property_id,subject_name,state_dosm,latitude,longitude,missing_feature_count,missing_feature_names
+0x31da6f48a519ebf9:0xb502c21dbe51482e,P,,365 Bakery @ Austin Crest,Johor,1.5771,103.7683,1,worldpop_walk_reachable_10min
+0x31da0b6146367c3d:0x303931f6d7db94b1,P,,PanKobo Japanese Bakery,Johor,1.4579,103.6443,1,worldpop_walk_reachable_10min
+0x304ac50033eea995:0xc0aceb7c81c42608,P,,Subway Penang Sentral Butterworth,Pulau Pinang,5.395,100.3653,1,worldpop_walk_reachable_10min
+0x304ac52abdb971c3:0x1eb4dd57c4febde4,P,,KFC Penang Sentral,Pulau Pinang,5.3947,100.3656,1,worldpop_walk_reachable_10min
+0x304ac458b457a9af:0x17fe6a59eef2b25f,P,,Kedai Kek Mokcik Wan,Pulau Pinang,5.4742,100.3827,1,worldpop_walk_reachable_10min
+0x31cc4db34e73b507:0xc9a977a79afba894,P,,Thirdwheel,Selangor,3.0751,101.5294,1,worldpop_walk_reachable_10min
+0x31cc5300570ed0a3:0x4e1d7cdf5b386f6f,P,,Whisk and Brew,Selangor,3.0869,101.4863,1,worldpop_walk_reachable_10min
+0x31cc5307246bdc91:0x3f791449256b3ca2,P,,Coppe Bee Coffee - Cahaya Alam,Selangor,3.0865,101.485,1,worldpop_walk_reachable_10min
+0x31cc4bd2752a16cd:0x3363c3adb71c7f95,P,,Terra | Eat. Explore. Escape,Selangor,3.0882,101.6405,1,worldpop_walk_reachable_10min
+0x31cdacaa0130ab41:0x38c884fd9e5212c7,P,,"33 Food Station, Klang",Selangor,3.0317,101.4341,1,worldpop_walk_reachable_10min
+0x31cc546315a8e1c9:0x99fc2bc8e85208e8,P,,KFC Klang Utama,Selangor,3.0793,101.4211,1,worldpop_walk_reachable_10min
+0x31cc53fd7b5fb82b:0x311edfcad248f71d,P,,Cake Jalan Tiung Seksyen 4,Selangor,3.0795,101.5091,1,worldpop_walk_reachable_10min
+0x31cc53f2442f28d1:0x7ca3d8c1a405e23d,P,,Kek Malaya Shah Alam,Selangor,3.0436,101.5171,1,transit_stops_1km_walk
+0x31cc52ab70fb2d83:0xeba29736cfc14673,P,,Modernecks Seksyen 24 Shah Alam,Selangor,3.0434,101.523,2,transit_stops_1km_walk; worldpop_walk_reachable_10min
+MD-03209,U,MD-03209,"For Rent: Prime Commercial Shoplot at Jalan Shahbandar, Batu Pahat",Johor,1.933333,103,7,transit_stops_500m_walk; transit_stops_1km_walk; weekday_transit_routes_1km_walk; weekday_departures_500m_walk_am; walk_isochrone_area_10min_km2; worldpop_walk_reachable_10min; drive_isochrone_area_10min_km2
+EP-03153,U,EP-03153,"First Floor Corner Shoplot, Renovated at Bayan Point, Bayan Lepas",Pulau Pinang,5.3207108,100.2681554,1,worldpop_walk_reachable_10min
+MD-01446,U,MD-01446,"Ground floor shop| Sri Gombak, Batu Caves| Strategic Location for rent",Selangor,3.3,101.7,8,nearest_transit_walk_m; transit_stops_500m_walk; transit_stops_1km_walk; weekday_transit_routes_1km_walk; weekday_departures_500m_walk_am; walk_isochrone_area_10min_km2; worldpop_walk_reachable_10min; drive_isochrone_area_10min_km2
+EP-02181,U,EP-02181,"Horizon Square @ Newly completed Shoplot Facing Main Road for Rent, Horizon Hills",Johor,1.4576014,103.6455504,1,worldpop_walk_reachable_10min
+EP-02013,U,EP-02013,"Austin Crest Ground Floor Shop Lot For Rent Near Mount Austin, Setia Indah, Taman Daya, Eco Palladium, Eco Cascadia, Seri Austin, Dato Onn, Tebrau",Johor,1.5768125,103.7698125,1,worldpop_walk_reachable_10min
+MD-03480,U,MD-03480,RENT Sri Penawar Shoplot rent Desaru Rapid Petronas Warehouse Business,Johor,1.3944226,104.2154903,7,transit_stops_500m_walk; transit_stops_1km_walk; weekday_transit_routes_1km_walk; weekday_departures_500m_walk_am; walk_isochrone_area_10min_km2; worldpop_walk_reachable_10min; drive_isochrone_area_10min_km2
+MD-04053,U,MD-04053,"End lot 2sty kota Emas 3, Pontian,Johor 1st floor shop",Johor,1.5,103.5,1,worldpop_walk_reachable_10min
+EP-01453,U,EP-01453,"Corner Lot - Ground Floor Shop @ Taman Desa, Kuala Lumpur",W.P. Kuala Lumpur,3.102996,101.684501,1,worldpop_walk_reachable_10min
+EP-02180,U,EP-02180,Horizon Hills@Horizon Square 2Storey Shoplot Facing Main Road for Rent,Johor,1.4585087,103.6450284,1,worldpop_walk_reachable_10min
+MD-00075,U,MD-00075,"[New Shop for rent] TownSquare Gamuda Cove, dengkil",Selangor,2.8884115,101.6180773,1,transit_stops_1km_walk
+MD-00130,U,MD-00130,Shop Lot Sg Manggis Banting,Selangor,2.8606367,101.4746422,1,worldpop_walk_reachable_10min
+MD-00179,U,MD-00179,"Taman Cheras Jaya / Balakong, Seri Kembangan / Shop",Selangor,3.0073911,101.737906,1,transit_stops_1km_walk
+MD-00253,U,MD-00253,Facing Main Road Shoplot Ecohill Semenyih For Rent,Selangor,2.9225542,101.840607,1,worldpop_walk_reachable_10min
+MD-00301,U,MD-00301,Alam Suria Bandar Puncak Alam Grond Floor Shop Lot For Rent,Selangor,3.2228425,101.4642052,1,worldpop_walk_reachable_10min
+MD-00670,U,MD-00670,"Taman Klang Jaya 1st Floor Shoplot Office RENT, Fully Furnished Unit",Selangor,3.0034886,101.4500228,1,worldpop_walk_reachable_10min
+MD-00756,U,MD-00756,Shop Alam Avenue 2 Seksyen 16 Shah Alam (limited),Selangor,3.0274575,101.5504193,1,worldpop_walk_reachable_10min
+MD-01097,U,MD-01097,Rimbayu Uptown Shoplot ~ Facing Main Road,Selangor,2.9500107,101.5489689,6,transit_stops_500m_walk; transit_stops_1km_walk; weekday_transit_routes_1km_walk; weekday_departures_500m_walk_am; walk_isochrone_area_10min_km2; worldpop_walk_reachable_10min
+MD-01289,U,MD-01289,2 Story Shop lot Facing Main Road @ Taman Rakan,Selangor,3.0328852,101.7808645,1,worldpop_walk_reachable_10min
+MD-01454,U,MD-01454,Ground Floor Shoplot Taman Batu Off Greenwood Park Batu Caves,Selangor,3.3144832,101.6991649,8,nearest_transit_walk_m; transit_stops_500m_walk; transit_stops_1km_walk; weekday_transit_routes_1km_walk; weekday_departures_500m_walk_am; walk_isochrone_area_10min_km2; worldpop_walk_reachable_10min; drive_isochrone_area_10min_km2
+MD-01571,U,MD-01571,Facing Main Road !! NEW Shop Lot !! Gamuda Cove !!,Selangor,2.8827801,101.6091032,3,transit_stops_1km_walk; worldpop_walk_reachable_10min; drive_isochrone_area_10min_km2
+MD-01600,U,MD-01600,"Selayang Jaya,shop for Rent same row with HongLeong Bank &near Maybank",Selangor,3.2302892,101.6283635,1,worldpop_walk_reachable_10min
+MD-01773,U,MD-01773,"Rawang Corner Shop , Taman M Residensi",Selangor,3.3233821,101.5063407,1,worldpop_walk_reachable_10min
+MD-01793,U,MD-01793,Bangi Kajang Bandar Seri Putra Corner Facing Main Road,Selangor,2.8856164,101.7794781,6,transit_stops_500m_walk; transit_stops_1km_walk; weekday_transit_routes_1km_walk; weekday_departures_500m_walk_am; walk_isochrone_area_10min_km2; worldpop_walk_reachable_10min
+MD-01983,U,MD-01983,FOR RENT Eco Somerset Eco Sanctuary Bandar Rimbayu 2-Storey intermedia,Selangor,2.9310621,101.528373,1,worldpop_walk_reachable_10min
+MD-03514,U,MD-03514,3 Storey Shop Lot End Lot Facing Main Road Parit Haji Baki Muar,Johor,2.0282769,102.5630923,1,worldpop_walk_reachable_10min
+MD-03578,U,MD-03578,Kota Tinggi Taman Kota Jaya Double Storey Shoplot For Rent,Johor,1.7376885,103.8889506,1,worldpop_walk_reachable_10min
+MD-03997,U,MD-03997,"Sutera Tanjung Danga Sutera, Ground Shoplot, 24x80sf Unblock View",Johor,1.5080923,103.677441,1,worldpop_walk_reachable_10min
+MD-04832,U,MD-04832,Taman Nagasari Perai Ground Floor Shop For Rent Facing Road,Pulau Pinang,5.3629266,100.4116463,1,worldpop_walk_reachable_10min
+MD-00172,U,MD-00172,"Eco Somerset @ Eco Sanctuary, Bandar Rimbayu Shoplot for RENTTTT",Selangor,2.8461378,101.4587033,6,transit_stops_500m_walk; transit_stops_1km_walk; weekday_transit_routes_1km_walk; weekday_departures_500m_walk_am; walk_isochrone_area_10min_km2; worldpop_walk_reachable_10min
+MD-00500,U,MD-00500,"1st-Floor Shop @ Impian Prisma 2, Alam Impian (Facing Main Road) RENT",Selangor,3.030997,101.511335,1,transit_stops_1km_walk
+MD-00664,U,MD-00664,"Ground Floor & 1st Floor Shoplot 24x75 For Rent, Sungai Kapar Indah",Selangor,3.100934553938,101.379901525276,1,worldpop_walk_reachable_10min
+MD-00904,U,MD-00904,"Setia Ecohill 2 Nadi, Brand new Ground Floor Corner, Main Road 42x75",Selangor,2.8931693,101.8454036,1,transit_stops_1km_walk
+MD-01385,U,MD-01385,"Kedai untuk disewa di Taman Sepakat, Kelanang, Banting",Selangor,2.795058,101.44199,1,worldpop_walk_reachable_10min
+MD-01642,U,MD-01642,Taman Putra Budiman Ground Floor Shop Lot For Rent [Bare + Main Road],Selangor,3.011302,101.7362621,1,transit_stops_1km_walk
+MD-02012,U,MD-02012,Taman Koperasi Polis - Ground floor shoplot 22x70sf - Limited Ground,W.P. Kuala Lumpur,3.2204805,101.6948987,1,worldpop_walk_reachable_10min
+MD-03544,U,MD-03544,"Endlot, G/F, Facing Mainroad, Shoplot @ Taman Mount Austin, Tebrau",Johor,1.5925229,103.7509002,1,worldpop_walk_reachable_10min
+MD-03877,U,MD-03877,"Nusa Sentral Iskandar Shop Rent, 22x70sf Level 1 / Level 2 Available",Johor,1.4713911,103.6216458,1,worldpop_walk_reachable_10min
+MD-04129,U,MD-04129,"Permas Jaya 10/, 24x75sf Ground Floor Shop, High Traffic, Main Road",Johor,1.5137243,103.8418991,1,worldpop_walk_reachable_10min
+MD-04205,U,MD-04205,"Kedai untuk Disewa Taman Mutiara Desaru, Bandar Penawar, Pengerang",Johor,1.3992743,104.1648919,7,transit_stops_500m_walk; transit_stops_1km_walk; weekday_transit_routes_1km_walk; weekday_departures_500m_walk_am; walk_isochrone_area_10min_km2; worldpop_walk_reachable_10min; drive_isochrone_area_10min_km2

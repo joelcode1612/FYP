@@ -6,8 +6,9 @@ Verification matrix for the strict ``PU score > 50`` rule (0-100 scale):
   exist in the live catalogue;
 * a score of exactly 50.0 is excluded; 50.0001 is included (fixture rows in a
   transaction that is ALWAYS rolled back — no catalogue row is modified);
-* NULL scores can never occur (column NOT NULL) and a NULL would fail the
-  gate anyway (``NULL > 50`` is NULL, not TRUE);
+* no live catalogue row has a NULL score (the importer refuses scoreless
+  workbook rows) and a NULL would fail the gate anyway (``NULL > 50`` is NULL,
+  not TRUE);
 * ordering prefers the higher PU score among equally-fitting properties,
   while requirement fit stays the primary key;
 * serialization reports the real PU score under both ``pu_score`` (explicit,
@@ -73,12 +74,14 @@ def _fixture_row(property_id: str, score: float) -> dict:
 
 INSERT_SQL = text(
     """
-    INSERT INTO sitewise_app.properties (
-        id, title, address, state, rental_rm, size_sqft, latitude, longitude,
-        property_type, suitability_score, dataset_validation, source_workbook,
-        source_sheet, source_row, source_data
+    INSERT INTO fyp.rental_properties (
+        listing_id, catalogue_id, name, address, state, rental_price,
+        size_sqft, latitude, longitude, property_type,
+        catalogue_suitability_score, catalogue_dataset_validation,
+        catalogue_source_workbook, catalogue_source_sheet,
+        catalogue_source_row, catalogue_source_data
     ) VALUES (
-        :id, :title, :address, :state, :rental_rm, :size_sqft, :latitude,
+        :id, :id, :title, :address, :state, :rental_rm, :size_sqft, :latitude,
         :longitude, :property_type, :suitability_score, :dataset_validation,
         :source_workbook, :source_sheet, :source_row, CAST(:source_data AS jsonb)
     )
@@ -118,7 +121,7 @@ def test_default_search_returns_only_pu_eligible_properties(client, user_token):
     with analytics_engine.connect() as conn:
         eligible = conn.execute(
             text(
-                "SELECT count(*) FROM sitewise_app.properties "
+                "SELECT count(*) FROM fyp.catalogue_properties "
                 "WHERE rental_rm IS NOT NULL AND size_sqft IS NOT NULL "
                 "AND suitability_score > :t"
             ),
@@ -158,17 +161,22 @@ def test_boundary_50_excluded_50_plus_included():
             transaction.rollback()
 
 
-def test_pu_column_is_not_null_and_gate_excludes_nulls():
-    """The schema forbids NULL PU scores; the SQL gate would exclude them."""
+def test_pu_column_gate_excludes_nulls():
+    """No live catalogue row has a NULL score; a NULL would fail the gate.
+
+    The importer refuses workbook rows without a research score
+    (``assert_workbook``), so the catalogue view must hold zero NULL
+    ``suitability_score`` values today; the SQL gate excludes them anyway
+    because ``NULL > 50`` is NULL, not TRUE.
+    """
     with analytics_engine.connect() as conn:
-        nullable = conn.execute(
+        null_scores = conn.execute(
             text(
-                "SELECT is_nullable FROM information_schema.columns "
-                "WHERE table_schema='sitewise_app' AND table_name='properties' "
-                "AND column_name='suitability_score'"
+                "SELECT count(*) FROM fyp.catalogue_properties "
+                "WHERE suitability_score IS NULL"
             )
         ).scalar()
-    assert nullable == "NO"
+    assert null_scores == 0
     # NULL > 50 evaluates to NULL (not TRUE): a null score can never pass the
     # WHERE clause. Assert the SQL semantics explicitly.
     with analytics_engine.connect() as conn:

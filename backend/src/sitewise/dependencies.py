@@ -257,10 +257,18 @@ def require_property_owner(
     """Property management. Ownership is a relationship on the property row,
     so entrepreneurs manage the properties they own; administrators act
     administratively. (The legacy ``property_owner`` role folded into
-    ``entrepreneur``.)"""
+    ``entrepreneur``.)
+
+    Agents reach the SAME surface as the agent side of the Owner / Agent
+    workspace, and an agent account carries mandatory TOTP MFA. The AAL2 check
+    therefore applies to every staff role here, exactly as it does to an
+    administrator: without it the mobile MFA step would be a screen the client
+    chose to show rather than a condition the server enforces. A property
+    owner (``entrepreneur``) is not staff and is not asked for a second factor.
+    """
     if not rbac.can_manage_properties(user.role):
         raise ForbiddenError("This action requires an entrepreneur (property owner) account.")
-    if (rbac.canonical_role(user.role) == rbac.ROLE_ADMIN
+    if (rbac.is_staff(user.role)
             and user.assurance_level != rbac.REQUIRED_STAFF_AAL):
         raise _staff_mfa_required()
     return user

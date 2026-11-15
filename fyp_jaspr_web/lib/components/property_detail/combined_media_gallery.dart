@@ -59,6 +59,10 @@ class GalleryView {
   /// Set when the current photo's `src` failed to load.
   final bool photoFailed;
 
+  /// Indices whose THUMBNAIL url failed. A broken thumbnail must not be
+  /// confused with a broken main image, so the two states are independent.
+  final Set<int> thumbFailed;
+
   const GalleryView({
     this.tab = 0,
     this.index = 0,
@@ -68,6 +72,7 @@ class GalleryView {
     this.zoom = 1,
     this.dragging = false,
     this.photoFailed = false,
+    this.thumbFailed = const <int>{},
   });
 
   GalleryView copyWith({
@@ -79,6 +84,7 @@ class GalleryView {
     double? zoom,
     bool? dragging,
     bool? photoFailed,
+    Set<int>? thumbFailed,
   }) =>
       GalleryView(
         tab: tab ?? this.tab,
@@ -89,6 +95,7 @@ class GalleryView {
         zoom: zoom ?? this.zoom,
         dragging: dragging ?? this.dragging,
         photoFailed: photoFailed ?? this.photoFailed,
+        thumbFailed: thumbFailed ?? this.thumbFailed,
       );
 }
 
@@ -120,6 +127,7 @@ class CombinedMediaGallery extends StatelessComponent {
   final void Function(int delta) onStep;
   final void Function() onToggleFull;
   final void Function() onPhotoError;
+  final void Function(int index) onThumbError;
 
   /// Pointer interactions. Coordinates are viewport pixels; the page keeps the
   /// drag origin and converts them to yaw/pitch.
@@ -140,6 +148,7 @@ class CombinedMediaGallery extends StatelessComponent {
     required this.onStep,
     required this.onToggleFull,
     required this.onPhotoError,
+    required this.onThumbError,
     required this.onDragStart,
     required this.onDragMove,
     required this.onDragEnd,
@@ -160,6 +169,39 @@ class CombinedMediaGallery extends StatelessComponent {
 
     return div(
       classes: 'sw-gallery${view.full ? ' is-full' : ''}',
+      attributes: {
+        'aria-label': 'Property media gallery',
+        // Fullscreen promotes the whole control over the page: make it
+        // focusable so keyboard navigation still works even when the
+        // thumbnail strip has scrolled out of reach.
+        if (view.full) 'tabindex': '0',
+      },
+      events: {
+        'keydown': (event) {
+          final key = (event as web.KeyboardEvent).key;
+          if ((key == 'Escape' || key == 'Esc') && view.full) {
+            onToggleFull();
+            return;
+          }
+          // Arrow/Home/End navigation belongs to the Photos tab only. The
+          // 360° tab keeps its own pointer-driven pan/tilt behaviour and is
+          // never fed ordinary photographs.
+          if (view.tab != 0 || photos.length < 2) return;
+          if (key == 'ArrowLeft') {
+            event.preventDefault();
+            onStep(-1);
+          } else if (key == 'ArrowRight') {
+            event.preventDefault();
+            onStep(1);
+          } else if (key == 'Home') {
+            event.preventDefault();
+            onIndex(0);
+          } else if (key == 'End') {
+            event.preventDefault();
+            onIndex(photos.length - 1);
+          }
+        },
+      },
       [
         div(
           classes: 'sw-gallery__tabs',
@@ -171,7 +213,14 @@ class CombinedMediaGallery extends StatelessComponent {
         ),
         div(
           classes: 'sw-gallery__stage',
-          attributes: {'style': '--sw-gallery-h:${height}px'},
+          attributes: {
+            'style': '--sw-gallery-h:${height}px',
+            'id': 'sw-gallery-stage',
+            'role': 'tabpanel',
+            'aria-label': view.tab == 0
+                ? 'Selected property photograph'
+                : '360 degree photograph',
+          },
           [if (view.tab == 0) _photoStage(photos) else _panoramaStage()],
         ),
         if (view.tab == 0 && photos.length > 1) _thumbnails(photos),
@@ -214,23 +263,44 @@ class CombinedMediaGallery extends StatelessComponent {
           'The image link is unavailable. Try another photo, or reload the page.',
         )
       else
-        Component.element(
-          tag: 'img',
-          classes: 'sw-gallery__image',
-          attributes: {
-            'src': url,
-            'alt': '$propertyTitle — photograph ${index + 1} of ${photos.length}',
-            'referrerpolicy': 'no-referrer',
-            'loading': index == 0 ? 'eager' : 'lazy',
-          },
-          // A broken image link must degrade to a readable message rather than
-          // a browser's broken-image glyph.
-          events: {'error': (_) => onPhotoError()},
-        ),
-      if (photos.length > 1) ...[
-        div(classes: 'sw-gallery__count', [
-          Component.text('${index + 1} / ${photos.length}'),
+        Component.fragment([
+          // A full-stage placeholder sits UNDER the image. It fills the fixed
+          // stage while a photo is decoding, so switching photos never leaves
+          // a blank hole or changes the page height. No load-event race: the
+          // opaque <img> simply covers it once decoded.
+          div(
+            classes: 'sw-gallery__placeholder',
+            attributes: const {'aria-hidden': 'true'},
+            [
+              span(classes: 'sw-gallery__placeholder-icon', [
+                Component.text('▣'),
+              ]),
+              span([Component.text('Loading photograph…')]),
+            ],
+          ),
+          Component.element(
+            tag: 'img',
+            classes: 'sw-gallery__image',
+            attributes: {
+              'src': url,
+              'alt': '$propertyTitle — photograph ${index + 1} of ${photos.length}',
+              'referrerpolicy': 'no-referrer',
+              // This is always the visible main image, even when it is not
+              // index 0, so it must never be lazily loaded.
+              'loading': 'eager',
+              'decoding': 'async',
+            },
+            // A broken image link must degrade to a readable message rather
+            // than a browser's broken-image glyph.
+            events: {'error': (_) => onPhotoError()},
+          ),
         ]),
+      if (photos.length > 1) ...[
+        div(
+          classes: 'sw-gallery__count',
+          attributes: const {'aria-live': 'polite', 'aria-atomic': 'true'},
+          [Component.text('${index + 1} / ${photos.length} Photos')],
+        ),
         _navButton('‹', 'Previous photograph', -1, 'prev'),
         _navButton('›', 'Next photograph', 1, 'next'),
       ],
@@ -254,21 +324,39 @@ class CombinedMediaGallery extends StatelessComponent {
         [Component.text(glyph)],
       );
 
-  Component _thumbnails(List<String> photos) => div(
-        classes: 'sw-gallery__thumbs',
-        attributes: const {'role': 'tablist', 'aria-label': 'Photographs'},
-        [
-          for (var i = 0; i < photos.length; i++)
-            button(
-              classes: 'sw-gallery__thumb${i == view.index ? ' is-active' : ''}',
-              attributes: {
-                'type': 'button',
-                'role': 'tab',
-                'aria-selected': i == view.index ? 'true' : 'false',
-                'aria-label': 'Show photograph ${i + 1}',
-              },
-              events: events(onClick: () => onIndex(i)),
-              [
+  Component _thumbnails(List<String> photos) {
+    final selected = view.index.clamp(0, photos.length - 1);
+    return div(
+      classes: 'sw-gallery__thumbs',
+      attributes: const {
+        'role': 'tablist',
+        'aria-label': 'Select a property photograph',
+      },
+      [
+        for (var i = 0; i < photos.length; i++)
+          button(
+            classes: 'sw-gallery__thumb${i == selected ? ' is-active' : ''}',
+            attributes: {
+              'type': 'button',
+              'role': 'tab',
+              'id': 'sw-gallery-thumb-$i',
+              'aria-controls': 'sw-gallery-stage',
+              'aria-selected': i == selected ? 'true' : 'false',
+              'aria-label': 'Show photograph ${i + 1} of ${photos.length}',
+              'title': 'Photograph ${i + 1} of ${photos.length}',
+              // Roving focus: one tab stop, then Arrow/Home/End (handled on
+              // the gallery root) moves the selection.
+              'tabindex': i == selected ? '0' : '-1',
+            },
+            events: events(onClick: () => onIndex(i)),
+            [
+              if (view.thumbFailed.contains(i))
+                span(
+                  classes: 'sw-gallery__thumb-fallback',
+                  attributes: const {'aria-hidden': 'true'},
+                  [Component.text('▣')],
+                )
+              else
                 Component.element(
                   tag: 'img',
                   attributes: {
@@ -277,11 +365,13 @@ class CombinedMediaGallery extends StatelessComponent {
                     'loading': 'lazy',
                     'referrerpolicy': 'no-referrer',
                   },
+                  events: {'error': (_) => onThumbError(i)},
                 ),
-              ],
-            ),
-        ],
-      );
+            ],
+          ),
+      ],
+    );
+  }
 
   // ------------------------------------------------------------------- panorama
 

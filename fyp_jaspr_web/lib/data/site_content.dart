@@ -63,8 +63,13 @@ abstract final class LandingContent {
           'Present commercial rental properties with structured details, '
           'availability information and immersive 360° tours for '
           'entrepreneurs evaluating a shortlist.',
-      linkLabel: 'See property presentation',
-      route: '/owner/tours',
+      // Owners and agents share one workspace, and it is the SiteWise mobile
+      // app — the web owner workspace is retired. `/owner` is the canonical
+      // retirement path, so the card lands on the page that says where the
+      // work moved instead of implying a browser surface that no longer
+      // exists.
+      linkLabel: 'Manage listings in the app',
+      route: '/owner',
     ),
   ];
 

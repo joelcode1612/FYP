@@ -1,0 +1,80 @@
+{
+  "generated_on": "2026-11-15",
+  "source": "SiteWise_PU_1849_Recovery_Verified.xlsx",
+  "training_rows": 1796,
+  "P": 880,
+  "U": 916,
+  "excluded_incomplete_rows": 53,
+  "no_imputation": true,
+  "artifact_status": "RESEARCH_ONLY_NOT_PRODUCTION_READY",
+  "files": {
+    "README.md": {
+      "bytes": 5894,
+      "sha256": "6645d64ba804530a3fd3bba410965b79576c0adcd1d42da018084daa54517f8b"
+    },
+    "SiteWise_PostgreSQL_Safe_PU_53_Training_Copy_Delete.sql": {
+      "bytes": 4387,
+      "sha256": "563cb39f1248b1c3411cb63c76b66947fb787f86070d8325536b8ad105880219"
+    },
+    "SiteWise_PU_53_Excluded_Incomplete_Records.csv": {
+      "bytes": 9018,
+      "sha256": "f01c75db88184e143d52a985340aa88ec8f9367ba5247a8a750b8d7e3fa06456"
+    },
+    "SiteWise_PU_1796_Observed_47_Features.csv": {
+      "bytes": 541779,
+      "sha256": "8cecbcae422fddb2221ac81c2bf5940d7be44c43c87c9730ad680ddcb2adb76a"
+    },
+    "SiteWise_PU_1796_Complete_Observed_Only.xlsx": {
+      "bytes": 574575,
+      "sha256": "89c1e12253e93dd47e0369130b1abb420c5d390d0feddadc46f2ef17acdbd9df"
+    },
+    "SiteWise_PU_44_Features_recommended_research_ResearchOnly.joblib": {
+      "bytes": 432315,
+      "sha256": "f96f2bf7d072660d9e6fff42f60620e867b5cf28f550945b9059bd42a375624e"
+    },
+    "SiteWise_PU_47_Features_full47_restricted_ResearchOnly.joblib": {
+      "bytes": 446126,
+      "sha256": "3b4e75ab5d3bd1656fc6b28fe9055fa68938e25c82e37a260776c6c3a5631f24"
+    },
+    "SiteWise_PU_Training_Results.json": {
+      "bytes": 6760,
+      "sha256": "2f22ffe70444f94993e22c37b6fc62a74ef4f53eda447d0640bc4c569d649cf4"
+    },
+    "SiteWise_PU_Model_Comparison.csv": {
+      "bytes": 537,
+      "sha256": "e5df67538a524699968a3deef3ef286eea24d2c8efbb0066f9cd9f2f1f3af266"
+    },
+    "SiteWise_PU_Spatial_Validation_Fold_Results.csv": {
+      "bytes": 1902,
+      "sha256": "51deb9549626ecdb4e4584f1c9575e66bfc2f72c2fb406c96bd7a985a4708e13"
+    },
+    "SiteWise_PU_Spatial_Validation_Predictions.csv": {
+      "bytes": 475042,
+      "sha256": "d4a68a5143e877b091783a1bfdec3b4d3189b4a55104944331d84b46d53c7602"
+    },
+    "SiteWise_PU_FYP_Methodology_Report.docx": {
+      "bytes": 42796,
+      "sha256": "abcfd3891ee9b176bffa8959642be70a92272b326fd0e73fa2f96ca35b5baade"
+    },
+    "SiteWise_PU_FYP_Methodology_Report.md": {
+      "bytes": 10700,
+      "sha256": "f897c55dccc29ec5eb7b9040cc2a43ebd84f7c0833fb7657d51670e357028320"
+    },
+    "train_sitewise_pu_1796.py": {
+      "bytes": 10717,
+      "sha256": "fc8af9978fcca69c207c6ca4f2a3634a05ad51ae10a58610b6689e6bad54150c"
+    },
+    "predict_research_pu.py": {
+      "bytes": 2154,
+      "sha256": "b362d419bbcb1a09a85480504e6f534dcde260f6de0368e491f93235913d9c77"
+    },
+    "SiteWise_PU_1796_Research_InSample_Scores.csv": {
+      "bytes": 235471,
+      "sha256": "bdc9f6e94bd669946160e949d4614937ae610fad1be4daa1d9a0c5bb71ecaad2"
+    },
+    "training_log.txt": {
+      "bytes": 2292,
+      "sha256": "479e3fd9a5ef10e18aa391a5f4ef724cb7bb69127e91abff156eb4ca9130add2"
+    }
+  }
+}

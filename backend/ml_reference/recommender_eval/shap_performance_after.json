@@ -1,0 +1,83 @@
+{
+  "scenarios": {
+    "1_first_request_precomputed_cold_process": {
+      "seconds": 0.7033,
+      "explanation_available": true,
+      "score_available": true
+    },
+    "target_3s_scenario1": {
+      "seconds": 0.7033
+    },
+    "2_repeat_request_warm": {
+      "seconds": 0.0285
+    },
+    "target_3s_scenario2": {
+      "seconds": 0.0285
+    },
+    "3_after_restart_new_property": {
+      "seconds": 0.3574,
+      "explanation_available": true
+    },
+    "target_3s_scenario3": {
+      "seconds": 0.3574
+    },
+    "4_simultaneous_same_property": {
+      "seconds": 1.2571,
+      "wall_seconds": 1.371,
+      "requests": 8,
+      "p95_seconds": 1.3316,
+      "all_served_real_explanations": true
+    },
+    "target_3s_scenario4": {
+      "seconds": 1.3706
+    },
+    "5_property_without_features": {
+      "seconds": 0.0147,
+      "score_available": false,
+      "reason_code": "features_unresolved"
+    },
+    "target_3s_scenario5": {
+      "seconds": 0.0147
+    },
+    "6_invalidated_explanation_changed_features": {
+      "seconds": 0.3453,
+      "explanation_available": true,
+      "score_available": true,
+      "note": "identity changed -> cache miss path; process warm so compute is synchronous"
+    },
+    "target_3s_scenario6": {
+      "seconds": 0.3453
+    },
+    "7_background_unavailable": {
+      "seconds": 0.2731,
+      "score_available": true,
+      "reason_code": "shap_background_missing"
+    },
+    "target_3s_scenario7": {
+      "seconds": 0.2731
+    },
+    "8a_recommendation_explanation_first_call": {
+      "seconds": 0.108,
+      "shap_available": true
+    },
+    "target_3s_scenario8a": {
+      "seconds": 0.108
+    },
+    "8a_recommendation_explanation_cached": {
+      "seconds": 0.0308
+    },
+    "target_3s_scenario8a_cached": {
+      "seconds": 0.0308
+    },
+    "8b_assessment_explanation_post": {
+      "seconds": 0.0,
+      "skipped": 403
+    },
+    "target_3s_scenario8b": {
+      "seconds": 0.0,
+      "skipped": true
+    }
+  },
+  "all_targets_under_3s": true,
+  "violations": []
+}

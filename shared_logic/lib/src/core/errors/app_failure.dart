@@ -230,3 +230,51 @@ String readableFailure(Object error, {required String fallback}) {
   if (error is AppFailure) return error.userMessage;
   return fallback;
 }
+
+// ---------------------------------------------------------------------------
+// Second-factor (authenticator) failures.
+//
+// These are deliberately separate from the sign-in failures above: the user is
+// already signed in, and the only thing that failed is the step-up. Telling
+// them their "sign-in failed" would send them off to reset a password that
+// works. Each maps to a different recovery action on the authenticator screen,
+// so callers branch on the TYPE rather than on provider message text.
+// ---------------------------------------------------------------------------
+
+/// The authenticator code did not match. The session is untouched and the user
+/// can simply try the next code.
+class MfaCodeRejectedFailure extends AuthFailure {
+  const MfaCodeRejectedFailure([
+    super.message = 'That authenticator code was not accepted.',
+  ]);
+
+  @override
+  String get userMessage =>
+      'That code was not accepted. Enter the current code from your '
+      'authenticator app — a code is only valid for about 30 seconds.';
+}
+
+/// The challenge the code was checked against has expired, so no code can
+/// succeed until a new one is requested.
+class MfaChallengeExpiredFailure extends AuthFailure {
+  const MfaChallengeExpiredFailure([
+    super.message = 'The authenticator challenge expired.',
+  ]);
+
+  @override
+  String get userMessage =>
+      'This verification took too long and expired. Request a new code.';
+}
+
+/// The account cannot start another enrolment, or the request contradicts the
+/// factors it already has (e.g. a second enrolment while one is in progress).
+class MfaEnrollmentConflictFailure extends AuthFailure {
+  const MfaEnrollmentConflictFailure([
+    super.message = 'The authenticator enrolment could not be started.',
+  ]);
+
+  @override
+  String get userMessage =>
+      'The authenticator setup could not be started. Finish or cancel the '
+      'enrolment you already began, then try again.';
+}

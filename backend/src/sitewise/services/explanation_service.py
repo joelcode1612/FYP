@@ -21,6 +21,8 @@ are ever returned.
 
 from __future__ import annotations
 
+import hashlib
+import json
 from typing import Any
 
 from sqlmodel import Session
@@ -28,9 +30,17 @@ from sqlmodel import Session
 from sitewise.core.exceptions import AssessmentError, ModelUnavailableError
 from sitewise.db.models.ai_explanation import AiExplanation
 from sitewise.db.models.assessment import Assessment
+from sitewise.ml import shap_explainer as shap_explainer_module
 from sitewise.ml.model_loader import ModelLoader
 from sitewise.ml.property_features import FeatureResolutionError, PropertyFeatureRepository
 from sitewise.ml.shap_explainer import ShapExplainer
+from sitewise.services.explanation_cache import (
+    ExplanationIdentity,
+    cached_file_sha256,
+    feature_digest,
+    get_ready_raw,
+    store_ready,
+)
 
 # Deterministic feature -> analysis category mapping. The five categories are
 # the ones the evidence stage presents, so a contribution is always shown next
@@ -64,6 +74,10 @@ _CATEGORY_RULES: tuple[tuple[str, str], ...] = (
     ("restaurant_count_", "competitors"),
     ("fast_food_count_", "competitors"),
     ("bakery_dessert_", "competitors"),
+    # 2026-11-15 expanded 64-feature contract: OSM residential
+    # building-density / coverage measurements form their own category so the
+    # page can show residential evidence separately from population totals.
+    ("residential_", "residential"),
 )
 
 CATEGORY_ORDER = (
@@ -72,6 +86,7 @@ CATEGORY_ORDER = (
     "accessibility",
     "parking",
     "competitors",
+    "residential",
 )
 
 CATEGORY_LABELS = {
@@ -80,6 +95,7 @@ CATEGORY_LABELS = {
     "accessibility": "Accessibility and transportation",
     "parking": "Parking",
     "competitors": "Competitors",
+    "residential": "Residential environment",
 }
 
 # Additivity tolerance. float64 permutation SHAP over <=47 features accumulates
@@ -163,7 +179,7 @@ class ExplanationService:
             )
 
         try:
-            loaded = ModelLoader().load("pu_model")
+            loaded = ModelLoader().load_cached("pu_model")
         except ModelUnavailableError as exc:
             raise AssessmentError(
                 "The trained PU model artifact cannot be loaded, so no "
@@ -206,6 +222,54 @@ class ExplanationService:
             for name, value in bundle.values.items()
             if value is not None
         }
+
+        # -- persistent validated-explanation cache --------------------------
+        # Identity: property + artifact checksum + resolved feature digest +
+        # THIS background's row checksum (the assessment background is read
+        # from the analytics database, so its identity is the canonical row
+        # content, not a file). A changed background or feature row yields a
+        # different key and can never serve another assessment's numbers.
+        background_canonical = json.dumps(background, sort_keys=True, separators=(",", ":"))
+        from pathlib import Path as _Path
+
+        artifact_file = _Path(ModelLoader().artifacts_dir) / str(
+            loaded.meta.get("artifact_filename") or ""
+        )
+        identity = ExplanationIdentity(
+            property_id=str(assessment.property_id),
+            model_name="pu_model",
+            model_version=(loaded.meta.get("version") or loaded.meta.get("feature_set")),
+            artifact_sha256=cached_file_sha256(artifact_file),
+            feature_digest=feature_digest(features),
+            background_sha256=hashlib.sha256(background_canonical.encode("utf-8")).hexdigest()[:16],
+            background_size=len(background),
+        )
+        cached_payload: dict[str, Any] | None = None
+        if self.session is not None:
+            candidate = get_ready_raw(self.session, identity.cache_key())
+            if (
+                candidate is not None
+                and candidate.get("available") is True
+                and candidate.get("property_id") == str(assessment.property_id)
+            ):
+                cached_payload = candidate
+        if cached_payload is not None:
+            # Cache hit: the stored core is re-stamped with THIS assessment's
+            # id and re-persisted through the existing AiExplanation record, so
+            # the per-assessment read path is unchanged.
+            payload = {**cached_payload, "assessment_id": str(assessment.assessment_id)}
+            self._persist(assessment, payload)
+            return payload
+        if self.session is not None and not shap_explainer_module.process_warm():
+            # Freshly started process: the one-off SHAP compilation is still
+            # running off-path. Report truthfully instead of blocking.
+            raise AssessmentError(
+                "The SHAP explanation engine is still warming up in this "
+                "freshly started backend process; please retry in a few "
+                "seconds. The assessment itself is unaffected.",
+                code="shap_pending",
+                status_code=503,
+            )
 
         try:
             explained = ShapExplainer(loader=ModelLoader()).explain(
@@ -267,6 +331,13 @@ class ExplanationService:
         }
 
         self._persist(assessment, payload)
+        # Persist the validated core so restarts (and later assessments of the
+        # same property against the same background) serve it immediately.
+        if self.session is not None:
+            try:
+                store_ready(self.session, identity, payload)
+            except Exception:  # noqa: BLE001 - persistence must never void a valid result
+                pass
         return payload
 
     def latest_for_assessment(self, assessment: Assessment) -> dict | None:

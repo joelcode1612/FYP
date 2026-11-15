@@ -165,21 +165,39 @@ class _SitewiseNetworkImageState extends State<SitewiseNetworkImage> {
         color: SitewiseColors.surface,
         alignment: Alignment.center,
         padding: const EdgeInsets.all(12),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              _exhausted ? Icons.image_not_supported_outlined : Icons.image_outlined,
-              size: 28,
-              color: SitewiseColors.muted,
+        // The fallback must fit ANY box the caller gives the image — the
+        // listing cards use 84x66 thumbnails, where the full sentence at
+        // natural size would overflow (yellow-stripe RenderFlex error).
+        // FittedBox scales the block down instead; in roomy boxes the scale
+        // is 1.0 and the appearance is unchanged.
+        child: FittedBox(
+          fit: BoxFit.scaleDown,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 180),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  _exhausted
+                      ? Icons.image_not_supported_outlined
+                      : Icons.image_outlined,
+                  size: 28,
+                  color: SitewiseColors.muted,
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  _exhausted
+                      ? 'Image not available. Tap to retry'
+                      : 'Loading image…',
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    fontSize: 11,
+                    color: SitewiseColors.muted,
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(height: 6),
-            Text(
-              _exhausted ? 'Image not available. Tap to retry' : 'Loading image…',
-              textAlign: TextAlign.center,
-              style: const TextStyle(fontSize: 11, color: SitewiseColors.muted),
-            ),
-          ],
+          ),
         ),
       ),
     );

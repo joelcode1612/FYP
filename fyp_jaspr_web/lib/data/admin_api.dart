@@ -261,6 +261,150 @@ class AuditEvent {
       affectedEmail.isNotEmpty ? affectedEmail : affectedUserId;
 }
 
+/// One normalized audit row from `GET /api/v1/staff/audit/security` — the
+/// administrative feed and (where the deployment can read it) Supabase
+/// authentication/MFA events, in one shape. `role` is null when the identity
+/// backend does not carry one for the affected account; the UI renders that
+/// as unknown rather than guessing.
+class SecurityAuditEvent {
+  final String id;
+  final String category; // admin | auth | mfa
+  final String action; // raw action, e.g. `staff.suspended`, `login`
+  final String title; // server-derived human label
+  final String summary; // safe server-written description
+  final String affectedEmail;
+  final String affectedUserId;
+  final String performedByEmail;
+  final String performedByUserId;
+
+  /// Human role of the affected account when known (Administrator / Agent /
+  /// Entrepreneur); null when not reliably available.
+  final String? role;
+  final String createdAt;
+  final String result; // success | failed | info
+  final String source; // `SiteWise staff audit` | `Supabase Auth`
+
+  /// Sanitized server side: already restricted to non-sensitive keys.
+  final Map<String, String> details;
+
+  const SecurityAuditEvent({
+    required this.id,
+    required this.category,
+    required this.action,
+    required this.title,
+    required this.summary,
+    required this.affectedEmail,
+    required this.affectedUserId,
+    required this.performedByEmail,
+    required this.performedByUserId,
+    required this.role,
+    required this.createdAt,
+    required this.result,
+    required this.source,
+    required this.details,
+  });
+
+  factory SecurityAuditEvent.fromJson(Map<String, dynamic> row) {
+    final rawDetails = row['details'];
+    final details = <String, String>{
+      if (rawDetails is Map<String, dynamic>)
+        for (final entry in rawDetails.entries)
+          if (entry.value != null && '${entry.value}'.isNotEmpty)
+            entry.key: '${entry.value}',
+    };
+    return SecurityAuditEvent(
+      id: '${row['id'] ?? ''}',
+      category: '${row['category'] ?? ''}',
+      action: '${row['action'] ?? ''}',
+      title: '${row['title'] ?? ''}',
+      summary: '${row['summary'] ?? ''}',
+      affectedEmail: '${row['affected_email'] ?? ''}',
+      affectedUserId: '${row['affected_user_id'] ?? ''}',
+      performedByEmail: '${row['performed_by_email'] ?? ''}',
+      performedByUserId: '${row['performed_by_user_id'] ?? ''}',
+      role: row['role'] == null ? null : '${row['role']}',
+      createdAt: '${row['created_at'] ?? ''}',
+      result: '${row['result'] ?? ''}',
+      source: '${row['source'] ?? ''}',
+      details: details,
+    );
+  }
+
+  String get categoryLabel => switch (category) {
+    'admin' => 'Administrative',
+    'auth' => 'Authentication',
+    'mfa' => 'MFA',
+    _ => 'System',
+  };
+
+  String get resultLabel => switch (result) {
+    'success' => 'Successful',
+    'failed' => 'Failed',
+    'info' => 'Info',
+    _ => 'Unknown',
+  };
+}
+
+/// Real availability of one audit source, straight from the backend probe —
+/// the page renders exactly this, never a hardcoded "ready" chip.
+class AuditSourceStatus {
+  final bool available;
+  final String detail;
+
+  const AuditSourceStatus({required this.available, required this.detail});
+
+  factory AuditSourceStatus.fromJson(dynamic row) => AuditSourceStatus(
+    available: row is Map<String, dynamic> && row['available'] == true,
+    detail: row is Map<String, dynamic> ? '${row['detail'] ?? ''}' : '',
+  );
+}
+
+/// One server page of `GET /api/v1/staff/audit/security`.
+class SecurityAuditPage {
+  final AuditSourceStatus administrative;
+  final AuditSourceStatus authentication;
+  final AuditSourceStatus mfa;
+  final List<SecurityAuditEvent> events;
+  final int total;
+  final int page;
+  final int pageSize;
+  final List<String> notes;
+
+  const SecurityAuditPage({
+    required this.administrative,
+    required this.authentication,
+    required this.mfa,
+    required this.events,
+    required this.total,
+    required this.page,
+    required this.pageSize,
+    required this.notes,
+  });
+
+  factory SecurityAuditPage.fromJson(Map<String, dynamic> body) =>
+      SecurityAuditPage(
+        administrative: AuditSourceStatus.fromJson(
+          (body['sources'] as Map<String, dynamic>?)?['administrative'],
+        ),
+        authentication: AuditSourceStatus.fromJson(
+          (body['sources'] as Map<String, dynamic>?)?['authentication'],
+        ),
+        mfa: AuditSourceStatus.fromJson(
+          (body['sources'] as Map<String, dynamic>?)?['mfa'],
+        ),
+        events: (body['events'] as List? ?? const [])
+            .whereType<Map<String, dynamic>>()
+            .map(SecurityAuditEvent.fromJson)
+            .toList(growable: false),
+        total: (body['total'] as num?)?.toInt() ?? 0,
+        page: (body['page'] as num?)?.toInt() ?? 1,
+        pageSize: (body['page_size'] as num?)?.toInt() ?? 25,
+        notes: (body['notes'] as List? ?? const [])
+            .whereType<String>()
+            .toList(growable: false),
+      );
+}
+
 /// One owner-linked listing from `GET /api/v1/properties/` — the real
 /// ownership-claim signal this backend keeps (`property.user_id` is stamped
 /// from the verified identity and cannot be set by a client).
@@ -564,6 +708,90 @@ class AdminApi {
           : '/api/v1/staff/audit?affected_user_id=${Uri.encodeQueryComponent(affectedUserId)}',
     );
     return _rows(payload).map(AuditEvent.fromJson).toList(growable: false);
+  }
+
+  /// `GET /api/v1/staff/audit/security` — the System activity page's read:
+  /// every filter is applied server-side and pagination is server-driven, so
+  /// a search never downloads the whole audit history. [pageSize] is capped
+  /// by the backend (200).
+  Future<SecurityAuditPage> fetchSecurityAudit({
+    int page = 1,
+    int pageSize = 25,
+    String category = 'all',
+    String search = '',
+    String result = 'all',
+    String role = 'all',
+    String? dateFrom,
+    String? dateTo,
+  }) async {
+    final params = <String>[
+      'page=$page',
+      'page_size=$pageSize',
+      'category=${Uri.encodeQueryComponent(category)}',
+      'result=${Uri.encodeQueryComponent(result)}',
+      'role=${Uri.encodeQueryComponent(role)}',
+    ];
+    final term = search.trim();
+    if (term.isNotEmpty) {
+      params.add('search=${Uri.encodeQueryComponent(term)}');
+    }
+    if (dateFrom != null && dateFrom.isNotEmpty) {
+      params.add('date_from=${Uri.encodeQueryComponent(dateFrom)}');
+    }
+    if (dateTo != null && dateTo.isNotEmpty) {
+      params.add('date_to=${Uri.encodeQueryComponent(dateTo)}');
+    }
+    final payload = await WebAuth.request(
+      '/api/v1/staff/audit/security?${params.join('&')}',
+    );
+    return SecurityAuditPage.fromJson(_object(payload));
+  }
+
+  /// RFC-4180 CSV of the authorized records the server returned for the
+  /// current filters (the page fetches a bounded window for export — the
+  /// same rows the administrator may already see). Cells that could be
+  /// interpreted as formulas by spreadsheet apps are neutralized with a
+  /// leading apostrophe, matching the reference behaviour.
+  static String securityAuditCsv(List<SecurityAuditEvent> events) {
+    String cell(Object? value) {
+      var text = '${value ?? ''}';
+      if (text.startsWith(RegExp(r'[=+\-@\t\r]'))) text = "'$text";
+      return '"${text.replaceAll('"', '""')}"';
+    }
+
+    const headers = [
+      'Event ID',
+      'Category',
+      'Action',
+      'Activity',
+      'Account',
+      'Role',
+      'Performed by',
+      'Date & time (UTC)',
+      'Result',
+      'Source',
+      'Summary',
+    ];
+    final buffer = StringBuffer('\uFEFF')
+      ..writeln(headers.map(cell).join(','));
+    for (final event in events) {
+      buffer.writeln(
+        [
+          event.id,
+          event.categoryLabel,
+          event.action,
+          event.title,
+          event.affectedEmail.isNotEmpty ? event.affectedEmail : event.affectedUserId,
+          event.role ?? '',
+          event.performedByEmail,
+          event.createdAt,
+          event.resultLabel,
+          event.source,
+          event.summary,
+        ].map(cell).join(','),
+      );
+    }
+    return buffer.toString();
   }
 
   // --- Ownership reviews ----------------------------------------------------

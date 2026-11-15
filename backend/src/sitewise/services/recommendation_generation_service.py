@@ -43,10 +43,13 @@ from sitewise.domain.recommendation_scoring import (
     score_candidate,
 )
 from sitewise.ml.feature_bridge import merge_bridge_features
+from sitewise.ml import shap_explainer as shap_explainer_module
 from sitewise.ml.model_loader import ModelLoader
 from sitewise.ml.property_features import PropertyFeatureRepository
 from sitewise.ml.pu_variant import EXPERIMENTAL_MODEL_NAME, experimental_prediction, resolve_variant
+from sitewise.ml.pu_expanded import EXPANDED_MODEL_NAME, merge_expanded_bridge_features
 from sitewise.ml.selected_pu_integration import (
+
     SELECTED_MODEL_NAME,
     explain_selected_payload,
 )
@@ -59,6 +62,13 @@ from sitewise.repositories.recommendation_candidate_repository import (
     RecommendationCandidateRepository,
 )
 from sitewise.services.preferences_service import PreferencesService
+from sitewise.services.explanation_cache import (
+    ExplanationIdentity,
+    cached_file_sha256,
+    feature_digest,
+    get_ready_raw,
+    store_ready,
+)
 
 LIMITATIONS: tuple[str, ...] = (
     (
@@ -636,6 +646,11 @@ class RecommendationGenerationService:
             "batch_id": record.get("batch_id"),
             "user_id": str(user_id),
             "property_id": record["property_id"],
+            # The entrepreneur's selected business, from the SAME stored
+            # preferences the recommendations pipeline ranks with. Surfaced so
+            # the property-detail page can name the business it explains
+            # without guessing it from the PU score or a query parameter.
+            "selected_business": self._selected_business(user_id),
             # The stored property block, so the explanation surface can name
             # the unit it explains and link onward without a second request.
             # It carries the canonical id, the verified listing reference and
@@ -663,6 +678,36 @@ class RecommendationGenerationService:
             },
         }
 
+    def _selected_business(self, user_id: uuid.UUID) -> dict[str, Any]:
+        """The entrepreneur's saved business type, or an explicit unsaved state.
+
+        Read from the one stored preferences record the recommendations
+        pipeline itself uses - never inferred from the property, the PU score
+        or the request. A preference read failure degrades to ``saved: False``
+        rather than failing the whole explanation.
+        """
+        try:
+            payload = self.preferences.payload(user_id)
+            stored = payload.get("preferences")
+            profile = preference_profile_from(stored)
+        except Exception:  # pragma: no cover - defensive, never blocks explain
+            logger.warning("selected_business preference read failed", exc_info=True)
+            return {"saved": False, "business_category": None, "fnb_concept": None}
+        return {
+            "saved": bool(payload.get("saved")) and bool(stored),
+            "business_category": profile.business_category,
+            "fnb_concept": profile.fnb_concept,
+            "service_model": profile.service_model,
+            "preferences_version": profile.preferences_version,
+            # Present tense matters: this is the CURRENTLY saved preference.
+            "note": (
+                None
+                if payload.get("saved")
+                else "No saved preferences on the account, so the selected "
+                "business is unavailable."
+            ),
+        }
+
     # ------------------------------------------------------------- SHAP internals
     def _resolve_shap(
         self,
@@ -688,13 +733,13 @@ class RecommendationGenerationService:
                     "background and its LandScan licence provenance are not verified."
                 ),
             }
-        if model_name not in {"pu_model", SELECTED_MODEL_NAME}:
+        if model_name not in {"pu_model", SELECTED_MODEL_NAME, EXPANDED_MODEL_NAME}:
             return None, {
                 "available": False,
                 "reason": f"No approved SHAP route for the ranked PU model {model_name!r}.",
             }
         try:
-            loaded = ModelLoader().load(model_name)
+            loaded = ModelLoader().load_cached(model_name)
         except Exception as exc:  # noqa: BLE001 - optional subsystem: fail closed, never 500
             return None, {
                 "available": False,
@@ -704,9 +749,10 @@ class RecommendationGenerationService:
         artifact_path = Path(__file__).resolve().parents[1] / "ml" / str(
             loaded.meta.get("artifact_filename") or ""
         )
-        try:
-            artifact_sha256 = hashlib.sha256(artifact_path.read_bytes()).hexdigest()
-        except OSError:
+        # mtime-keyed checksum: identical bytes reuse the previous hash, a
+        # replaced artifact invalidates automatically.
+        artifact_sha256 = cached_file_sha256(artifact_path)
+        if artifact_sha256 is None:
             return None, {
                 "available": False,
                 "reason": "The exact ranked artifact bytes could not be verified for SHAP.",
@@ -750,6 +796,12 @@ class RecommendationGenerationService:
             coverage = merge_bridge_features(
                 resolved, expected_features=loaded.feature_names
             )
+            if model_name == EXPANDED_MODEL_NAME:
+                # The 64-feature contract resolves only with the committed
+                # expanded training-data bridge (population-age + residential).
+                coverage = merge_expanded_bridge_features(
+                    coverage, expected_features=loaded.feature_names
+                )
             if not coverage.missing_features:
                 features = {
                     name: float(value)
@@ -758,17 +810,17 @@ class RecommendationGenerationService:
                 }
                 provenance = (
                     "analytics feature tables plus committed training-population bridge, "
-                    "resolved to the exact 47 saved features"
+                    f"resolved to the exact {len(loaded.feature_names)} saved features"
                 )
             else:
                 failure_reason = (
                     "Live feature resolution is incomplete (missing "
-                    f"{len(coverage.missing_features)} of 47 features): "
+                    f"{len(coverage.missing_features)} of {len(loaded.feature_names)} features): "
                     + ", ".join(coverage.missing_features[:8])
                 )
         except Exception as exc:  # noqa: BLE001 - any resolver failure must fail closed
             failure_reason = (
-                "Live 47-feature resolution is unavailable on this deployment: "
+                "Live feature resolution is unavailable on this deployment: "
                 f"{type(exc).__name__}: {exc}"
             )
 
@@ -792,12 +844,95 @@ class RecommendationGenerationService:
                     ),
                 }
 
-        try:
-            with BACKGROUND_CSV.open(encoding="utf-8-sig", newline="") as fp:
-                background = list(csv.DictReader(fp))
+        # Each ranked model is explained only against its OWN verified
+        # background: the supplied 47-feature CSV for the baseline artifacts,
+        # the training-observation background for the expanded model (the same
+        # verified file the property-insights path uses).
+        if model_name == EXPANDED_MODEL_NAME:
+            from sitewise.services.property_insights_service import (
+                _background_path,
+                _reference_background_rows,
+            )
+
+            background_file = _background_path("expanded64")
+            background = _reference_background_rows(loaded.feature_names, background_file)
             if not background:
-                raise ValueError("ml_reference/shap_background_47.csv is empty")
-            background_sha256 = hashlib.sha256(BACKGROUND_CSV.read_bytes()).hexdigest()
+                return None, {
+                    "available": False,
+                    "reason": "No complete verified background rows for the expanded PU model.",
+                }
+            background_sha256 = cached_file_sha256(background_file)
+            background_label = f"{background_file.name} (verified training observations)"
+        else:
+            try:
+                with BACKGROUND_CSV.open(encoding="utf-8-sig", newline="") as fp:
+                    background = list(csv.DictReader(fp))
+                if not background:
+                    raise ValueError("ml_reference/shap_background_47.csv is empty")
+            except Exception as exc:  # noqa: BLE001 - SHAP is optional; omit, do not 500
+                logger.warning("SHAP explanation failed for %s: %s", property_id, exc)
+                return None, {
+                    "available": False,
+                    "reason": f"SHAP computation unavailable: {type(exc).__name__}: {exc}",
+                }
+            background_sha256 = cached_file_sha256(BACKGROUND_CSV)
+            background_label = "ml_reference/shap_background_47.csv (supplied real rows)"
+
+        # -- persistent validated-SHAP cache ---------------------------------
+        # Identity: property + ranked model name/version + artifact checksum +
+        # RESOLVED feature-vector digest + background checksum + method. The
+        # exact 47-feature vector is resolved above, so a changed feature row
+        # yields a different key and can never serve a stale explanation.
+        persistent_identity = ExplanationIdentity(
+            property_id=property_id,
+            model_name=model_name,
+            model_version=resolved_model_version,
+            artifact_sha256=artifact_sha256,
+            feature_digest=feature_digest(features),
+            background_sha256=background_sha256,
+            background_size=len(background),
+        )
+        persistent_key = persistent_identity.cache_key()
+        cached_payload = None
+        if self.app_session is not None:
+            candidate = get_ready_raw(self.app_session, persistent_key)
+            if (
+                candidate is not None
+                and candidate.get("model_name") == model_name
+                and candidate.get("artifact_sha256") == artifact_sha256
+                and candidate.get("reconstruction_verified") is True
+            ):
+                cached_payload = candidate
+        if cached_payload is not None:
+            payload = copy.deepcopy(cached_payload)
+            relation = payload.get("relation_to_recommendation") or {}
+            relation["recommendation_pu_score"] = pu_score
+            relation["scores_agree"] = (
+                abs(float(payload.get("score", 0.0)) - pu_score) <= 1e-6
+            )
+            payload["relation_to_recommendation"] = relation
+            return payload, {
+                "available": True,
+                "reason": None,
+                "source": "persistent verified SHAP cache",
+                "reconstruction_verified": True,
+            }
+        if self.app_session is not None and not shap_explainer_module.process_warm():
+            # Freshly started process: the one-off SHAP compilation is still
+            # running off-path. Never block this request on it (measured at
+            # tens of seconds); the next request after warm-up computes in
+            # well under a second, and the rule-based explanation remains
+            # fully available meanwhile.
+            return None, {
+                "available": False,
+                "pending": True,
+                "reason": (
+                    "The SHAP explanation is not yet available in this freshly "
+                    "started backend process; please retry in a few seconds."
+                ),
+            }
+
+        try:
             raw = explain_selected_payload(
                 features, background, model_name=model_name
             )
@@ -840,7 +975,7 @@ class RecommendationGenerationService:
             "feature_count": len(contributions),
             "data_provenance": {
                 "feature_vector": provenance,
-                "background": "ml_reference/shap_background_47.csv (supplied real rows)",
+                "background": background_label,
                 "background_sha256": background_sha256,
                 "background_size": raw["background_size"],
                 "feature_set": loaded.meta.get("feature_set"),
@@ -863,6 +998,15 @@ class RecommendationGenerationService:
         }
         with _SHAP_CACHE_LOCK:
             _SHAP_CACHE[cache_key] = copy.deepcopy(shap_payload)
+        if self.app_session is not None:
+            # Persist the validated explanation so restarts serve it from the
+            # durable cache instead of recomputing permutation SHAP.
+            try:
+                store_ready(self.app_session, persistent_identity, shap_payload)
+            except Exception:  # noqa: BLE001 - persistence must never void a valid result
+                logger.warning(
+                    "Persistent SHAP cache store failed for %s", property_id, exc_info=True
+                )
         return shap_payload, {
             "available": True,
             "reason": None,

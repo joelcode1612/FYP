@@ -177,7 +177,10 @@ def merge_bridge_features(
         )
     else:
         for name in BRIDGE_FEATURES:
-            if values.get(name) is None and name in row.values:
+            # Only fill features the ACTIVE model contract actually declares:
+            # the 64-feature expanded contract excludes the LandScan fields,
+            # and they must not leak into its coverage report.
+            if name in expected_features and values.get(name) is None and name in row.values:
                 values[name] = row.values[name]
                 sources[name] = (
                     f"ml_reference/training_population_bridge_1849.csv (original "

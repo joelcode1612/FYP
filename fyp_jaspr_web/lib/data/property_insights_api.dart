@@ -207,6 +207,212 @@ class InsightExplanation {
   }
 }
 
+/// One category's conditional resemblance score (0-1).
+///
+/// This is the Stage-2 model's own probability among four observed F&B
+/// categories — never a success probability. The UI must not render it as a
+/// percentage or as "suitability".
+class CategoryRanking {
+  final String businessType;
+  final double score;
+  final int rank;
+
+  const CategoryRanking({
+    required this.businessType,
+    required this.score,
+    required this.rank,
+  });
+
+  factory CategoryRanking.fromJson(Map<String, dynamic> json) => CategoryRanking(
+    businessType: '${json['business_type'] ?? ''}',
+    score: (json['score'] as num?)?.toDouble() ?? 0,
+    rank: (json['rank'] as num?)?.toInt() ?? 0,
+  );
+}
+
+/// The entrepreneur's own business type, scored by the category model.
+///
+/// Distinct from [CategoryFit.topCategory]: the model's highest class is not
+/// the entrepreneur's choice, and the page must never substitute one for the
+/// other.
+class SelectedCategory {
+  final String businessType;
+  final double? score;
+  final int? rank;
+  final bool isModelTopCategory;
+
+  const SelectedCategory({
+    required this.businessType,
+    required this.score,
+    required this.rank,
+    required this.isModelTopCategory,
+  });
+
+  factory SelectedCategory.fromJson(Map<String, dynamic> json) =>
+      SelectedCategory(
+        businessType: '${json['business_type'] ?? ''}',
+        score: (json['score'] as num?)?.toDouble(),
+        rank: (json['rank'] as num?)?.toInt(),
+        isModelTopCategory: json['is_model_top_category'] == true,
+      );
+}
+
+/// The category model's documented validation, shipped with every result so
+/// the page can keep the exploratory wording instead of overclaiming.
+class CategoryReliability {
+  final double? macroF1;
+  final double? balancedAccuracy;
+  final double? top2Accuracy;
+  final double? chanceBalancedAccuracy;
+  final String status;
+  final String? note;
+
+  const CategoryReliability({
+    required this.macroF1,
+    required this.balancedAccuracy,
+    required this.top2Accuracy,
+    required this.chanceBalancedAccuracy,
+    required this.status,
+    this.note,
+  });
+
+  factory CategoryReliability.fromJson(Map<String, dynamic> json) =>
+      CategoryReliability(
+        macroF1: (json['macro_f1'] as num?)?.toDouble(),
+        balancedAccuracy: (json['balanced_accuracy'] as num?)?.toDouble(),
+        top2Accuracy: (json['top2_accuracy'] as num?)?.toDouble(),
+        chanceBalancedAccuracy:
+            (json['chance_balanced_accuracy'] as num?)?.toDouble(),
+        status: '${json['status'] ?? ''}',
+        note: json['note']?.toString(),
+      );
+
+  /// True when the backend itself flags weak discrimination — the page then
+  /// says "may fit", never "best business type".
+  bool get isWeak => status.contains('weak');
+}
+
+/// The category-model SHAP block for the entrepreneur's selected category.
+///
+/// [businessType] is the class the backend actually explained. When a selection
+/// was supplied it equals that selection; only an unselected visit falls back to
+/// the model's own top class.
+class CategoryFitExplanation {
+  final String businessType;
+  final double probability;
+  final double baseValue;
+  final double reconstructed;
+  final int backgroundSize;
+  final List<InsightFactor> factors;
+
+  const CategoryFitExplanation({
+    required this.businessType,
+    required this.probability,
+    required this.baseValue,
+    required this.reconstructed,
+    required this.backgroundSize,
+    required this.factors,
+  });
+
+  factory CategoryFitExplanation.fromJson(Map<String, dynamic> json) {
+    final output = json['explained_output'];
+    final outputMap = output is Map<String, dynamic> ? output : const <String, dynamic>{};
+    return CategoryFitExplanation(
+      businessType: '${outputMap['business_type'] ?? ''}',
+      probability: (outputMap['probability'] as num?)?.toDouble() ?? 0,
+      baseValue: (json['base_value'] as num?)?.toDouble() ?? 0,
+      reconstructed: (json['reconstructed'] as num?)?.toDouble() ?? 0,
+      backgroundSize: (json['background_size'] as num?)?.toInt() ?? 0,
+      factors: [
+        for (final f in (json['factors'] as List? ?? const []))
+          if (f is Map<String, dynamic>) InsightFactor.fromJson(f),
+      ],
+    );
+  }
+}
+
+/// Stage 2 of the research system: how closely this location resembles the
+/// observed operating patterns of each F&B category.
+///
+/// Deliberately separate from [LocationScore] (PU association) and from the
+/// entrepreneur's preference fit. Weak validation is surfaced, not hidden.
+class CategoryFit {
+  final bool available;
+  final String? modelVersion;
+  final List<CategoryRanking> rankings;
+  final String? topCategory;
+  final double? topScore;
+  final SelectedCategory? selectedCategory;
+  final CategoryReliability? reliability;
+  final CategoryFitExplanation? explanation;
+  final Map<String, double> competitionContext;
+  final String? unavailableReason;
+
+  const CategoryFit({
+    required this.available,
+    required this.modelVersion,
+    required this.rankings,
+    required this.topCategory,
+    required this.topScore,
+    required this.reliability,
+    required this.explanation,
+    required this.competitionContext,
+    required this.unavailableReason,
+    this.selectedCategory,
+  });
+
+  factory CategoryFit.fromJson(Map<String, dynamic>? json) {
+    if (json == null || json['available'] != true) {
+      final reason = json?['reason'];
+      final reasonMap = reason is Map<String, dynamic> ? reason : const <String, dynamic>{};
+      return CategoryFit(
+        available: false,
+        modelVersion: json?['model_version']?.toString(),
+        rankings: const [],
+        topCategory: null,
+        topScore: null,
+        reliability: null,
+        explanation: null,
+        competitionContext: const {},
+        unavailableReason: reasonMap['message']?.toString(),
+      );
+    }
+    final reliabilityJson = json['reliability'];
+    final explanationJson = json['explanation'];
+    final contextJson = json['competition_context_NOT_used_by_model'];
+    final selectedJson = json['selected_category'];
+    return CategoryFit(
+      available: true,
+      modelVersion: json['model_version']?.toString(),
+      rankings: [
+        for (final r in (json['rankings'] as List? ?? const []))
+          if (r is Map<String, dynamic>) CategoryRanking.fromJson(r),
+      ],
+      topCategory: json['top_category']?.toString(),
+      topScore: (json['top_score'] as num?)?.toDouble(),
+      selectedCategory: selectedJson is Map<String, dynamic>
+          ? SelectedCategory.fromJson(selectedJson)
+          : null,
+      reliability: reliabilityJson is Map<String, dynamic>
+          ? CategoryReliability.fromJson(reliabilityJson)
+          : null,
+      explanation: explanationJson is Map<String, dynamic> &&
+              explanationJson['available'] == true
+          ? CategoryFitExplanation.fromJson(explanationJson)
+          : null,
+      competitionContext: {
+        if (contextJson is Map)
+          for (final entry in contextJson.entries)
+            if (entry.value is num) '${entry.key}': (entry.value as num).toDouble(),
+      },
+      unavailableReason: null,
+    );
+  }
+
+  /// The strongest category only when the model itself reports usable output.
+  CategoryRanking? get lead => rankings.isEmpty ? null : rankings.first;
+}
+
 /// A stated reason the backend could not produce a score.
 class InsightReason {
   final String code;
@@ -351,6 +557,39 @@ class PanoramaInfo {
   );
 }
 
+/// The deployed PU artifact's input coverage for one property: how many of
+/// the artifact's own model features the record actually resolved.
+///
+/// This describes the *data record*, never suitability: a complete feature
+/// row means every measurement the model reads exists for this location, not
+/// that the location is good for a business. The UI must render the real
+/// counts from the backend and never assume a fixed total.
+class FeatureCoverage {
+  final int availableFeatures;
+  final int featureCount;
+  final List<String> missingFeatures;
+
+  const FeatureCoverage({
+    required this.availableFeatures,
+    required this.featureCount,
+    this.missingFeatures = const [],
+  });
+
+  factory FeatureCoverage.fromJson(Map<String, dynamic> json) =>
+      FeatureCoverage(
+        availableFeatures: (json['available_features'] as num?)?.toInt() ?? 0,
+        featureCount: (json['feature_count'] as num?)?.toInt() ?? 0,
+        missingFeatures: [
+          for (final f in (json['missing_features'] as List? ?? const [])) '$f',
+        ],
+      );
+
+  bool get isComplete =>
+      featureCount > 0 && availableFeatures >= featureCount;
+
+  bool get isUsable => featureCount > 0 && availableFeatures > 0;
+}
+
 /// The whole insights payload for one property.
 class PropertyInsights {
   final String propertyId;
@@ -368,6 +607,14 @@ class PropertyInsights {
   final List<MapLayer> mapLayers;
   final PanoramaInfo panorama;
 
+  /// Stage-2 business-type resemblance, independent of [score].
+  final CategoryFit? categoryFit;
+
+  /// Model-input coverage for this property's feature row, straight from the
+  /// backend's `feature_coverage` block. Null when the model could not
+  /// resolve any features at all.
+  final FeatureCoverage? featureCoverage;
+
   const PropertyInsights({
     required this.propertyId,
     required this.score,
@@ -383,6 +630,8 @@ class PropertyInsights {
     this.origin,
     this.mapLayers = const [],
     this.panorama = PanoramaInfo.unavailable,
+    this.categoryFit,
+    this.featureCoverage,
   });
 
   factory PropertyInsights.fromJson(Map<String, dynamic> json) {
@@ -437,6 +686,14 @@ class PropertyInsights {
       panorama: panoramaJson is Map<String, dynamic>
           ? PanoramaInfo.fromJson(panoramaJson)
           : PanoramaInfo.unavailable,
+      categoryFit: json['category_model'] is Map<String, dynamic>
+          ? CategoryFit.fromJson(json['category_model'] as Map<String, dynamic>)
+          : null,
+      featureCoverage: json['feature_coverage'] is Map<String, dynamic>
+          ? FeatureCoverage.fromJson(
+              json['feature_coverage'] as Map<String, dynamic>,
+            )
+          : null,
     );
   }
 
@@ -471,7 +728,17 @@ class PropertyInsightsApi {
 
   /// [catalog] is false for the legacy numeric id universe, which has no
   /// verified mapping to the research subject the model scores.
-  static Future<PropertyInsights> load(String propertyId, {bool catalog = true}) async {
+  ///
+  /// [businessType] is the entrepreneur's own selection from Recommendations
+  /// or Preferences. It selects which of the four category outputs the Stage-2
+  /// SHAP explanation describes, so a Café selection explains Café even when
+  /// the classifier ranks Restaurant higher. It never changes the general PU
+  /// association score.
+  static Future<PropertyInsights> load(
+    String propertyId, {
+    bool catalog = true,
+    String? businessType,
+  }) async {
     if (!catalog) {
       return PropertyInsights.unavailable(
         propertyId,
@@ -480,8 +747,12 @@ class PropertyInsightsApi {
       );
     }
     try {
+      final selected = (businessType ?? '').trim();
+      final query = selected.isEmpty
+          ? ''
+          : '?business_type=${Uri.encodeQueryComponent(selected)}';
       final response = await WebAuth.request(
-        '/api/v1/catalog/properties/${Uri.encodeComponent(propertyId)}/insights',
+        '/api/v1/catalog/properties/${Uri.encodeComponent(propertyId)}/insights$query',
       );
       return PropertyInsights.fromJson(response);
     } on Object catch (error) {

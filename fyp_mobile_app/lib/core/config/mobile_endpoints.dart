@@ -46,6 +46,13 @@ abstract final class MobileEndpoints {
 
   static Uri get profileUri => Uri.parse('$apiBaseUrl/api/v1/auth/me');
 
+  /// Trusted public registration. The backend creates the Supabase identity
+  /// already email-confirmed (the project keeps global confirmation ON for
+  /// staff), and this app then performs a REAL password sign-in to obtain the
+  /// session. No token is returned by this endpoint.
+  static Uri get registrationUri =>
+      Uri.parse('$apiBaseUrl/api/v1/auth/register');
+
   /// Confirmation-link target for new registrations. Supabase opens this in
   /// the browser, the web auth bridge exchanges the code there, and the user
   /// comes back to the app to sign in normally.

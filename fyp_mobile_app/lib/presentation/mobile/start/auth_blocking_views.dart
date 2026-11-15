@@ -4,6 +4,7 @@ import 'package:shared_logic/shared_logic.dart';
 
 import '../../../core/config/mobile_config.dart';
 import '../../../core/config/mobile_endpoints.dart';
+import '../../../core/routing/mobile_role.dart';
 import '../../../core/theme/sitewise_theme.dart';
 import '../../shared/widgets/sitewise_brand.dart';
 import '../../shared/widgets/sitewise_cta_button.dart';
@@ -52,6 +53,47 @@ class StaffWorkspaceRequiredView extends ConsumerWidget {
     await ref.read(authNotifierProvider.notifier).signOut();
     if (!context.mounted) return;
     Navigator.of(context).pushNamedAndRemoveUntil('/auth', (_) => false);
+  }
+}
+
+/// The right account in the wrong workspace.
+///
+/// The two mobile workspaces are separate products: an Entrepreneur discovers
+/// and assesses property, a Property Owner / Agent manages listings. A signed-in
+/// account that opens the other one is sent back to its own rather than shown a
+/// shell whose every request the backend would refuse. Nothing is rendered from
+/// the refused workspace — no listing, no inbox, no counter.
+class WorkspaceMismatchView extends StatelessWidget {
+  const WorkspaceMismatchView({super.key, required this.role});
+
+  final AppRole role;
+
+  @override
+  Widget build(BuildContext context) {
+    final home = mobileHomeRouteFor(role);
+    return _BlockingScaffold(
+      icon: Icons.swap_horiz_rounded,
+      title: 'That workspace is not yours',
+      body: Text(
+        role == AppRole.entrepreneur
+            ? 'This account finds and assesses commercial property. Listing '
+                  'management — drafts, photographs, 360° capture, enquiries '
+                  'and performance — belongs to a verified Property Owner or '
+                  'Agent account.'
+            : 'This account manages commercial property. Browsing, comparing '
+                  'and assessing the catalogue belongs to an F&B Entrepreneur '
+                  'account.',
+        style: _bodyStyle,
+      ),
+      actionLabel: 'Go to my workspace',
+      onAction: () {
+        if (home == null) {
+          Navigator.of(context).pushNamedAndRemoveUntil('/auth', (_) => false);
+          return;
+        }
+        Navigator.of(context).pushNamedAndRemoveUntil(home, (_) => false);
+      },
+    );
   }
 }
 

@@ -32,7 +32,7 @@ def catalog_ids():
     with Session(analytics_engine) as session:
         analysed = session.execute(
             text(
-                "SELECT p.id FROM sitewise_app.properties p "
+                "SELECT p.id FROM fyp.catalogue_properties p "
                 "JOIN sitewise_analytics.subject_features f "
                 "  ON f.canonical_property_id = p.id "
                 "ORDER BY p.id LIMIT 1"

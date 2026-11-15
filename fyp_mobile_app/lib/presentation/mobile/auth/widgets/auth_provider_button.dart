@@ -60,25 +60,29 @@ class AuthProviderButton extends StatelessWidget {
 }
 
 /// "Or continue with" rule between the primary form and the provider buttons.
+/// [label] lets the registration funnel say "Or sign up with" without adding
+/// a second divider widget.
 class AuthDividerText extends StatelessWidget {
-  const AuthDividerText({super.key});
+  const AuthDividerText({super.key, this.label = 'Or continue with'});
+
+  final String label;
 
   @override
-  Widget build(BuildContext context) => const Row(
-    children: [
-      Expanded(child: Divider(color: SitewiseColors.border)),
+  Widget build(BuildContext context) => Row(
+    children: <Widget>[
+      const Expanded(child: Divider(color: SitewiseColors.border)),
       Padding(
-        padding: EdgeInsets.symmetric(horizontal: 11),
+        padding: const EdgeInsets.symmetric(horizontal: 11),
         child: Text(
-          'Or continue with',
-          style: TextStyle(
+          label,
+          style: const TextStyle(
             fontSize: 11.5,
             color: SitewiseColors.muted,
             fontWeight: FontWeight.w600,
           ),
         ),
       ),
-      Expanded(child: Divider(color: SitewiseColors.border)),
+      const Expanded(child: Divider(color: SitewiseColors.border)),
     ],
   );
 }

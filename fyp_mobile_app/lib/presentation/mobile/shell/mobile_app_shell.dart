@@ -13,11 +13,11 @@ import 'mobile_topbar.dart';
 /// Pages own their scrolling/padding so full-bleed layouts (maps, viewers)
 /// are possible.
 ///
-/// The **entrepreneur** workspace opts into the Material 3 reference chrome
-/// (paper canvas, brand-lockup header, five-tab pill-indicator bar). Admin and
-/// owner keep their original shell, so this refresh cannot regress their
-/// screens. Detail routes under `/entrepreneur/*` inherit the same chrome and
-/// keep their back affordance via [MobileTopBar].
+/// The **entrepreneur** and the shared **Owner / Agent provider** workspaces
+/// opt into the Material 3 reference chrome (paper canvas, brand-lockup
+/// header, floating pill-indicator dock). Admin keeps the original classic
+/// shell. Detail routes inherit the same chrome as their workspace and keep
+/// their back affordance via [MobileTopBar].
 ///
 /// Set [embeddedHeader] when a page supplies its own Home-style header (the
 /// older pattern's compact menu / brand / utility row that scrolls with the
@@ -38,8 +38,14 @@ class MobileAppShell extends ConsumerWidget {
   final bool embeddedHeader;
 
   /// Force / override the Material 3 chrome. When null (default) it is enabled
-  /// automatically for the entrepreneur role.
+  /// automatically for the entrepreneur and provider roles.
   final bool? m3;
+
+  /// Explicit dock destinations. When null, they are resolved from the role.
+  /// A page that belongs to a specific workspace (e.g. the Provider Add form)
+  /// passes its own list so a stale role in the app notifier can never show
+  /// the other workspace's tabs.
+  final List<MobileDestination>? destinations;
 
   /// Force the header's back affordance on or off. When null (default) the
   /// arrow follows [Navigator.canPop]. Screens that are reached from the
@@ -57,6 +63,7 @@ class MobileAppShell extends ConsumerWidget {
     this.brandTitle = false,
     this.embeddedHeader = false,
     this.m3,
+    this.destinations,
     this.showBack,
   });
 
@@ -73,8 +80,14 @@ class MobileAppShell extends ConsumerWidget {
     // Only the role is observed: the shell must not repaint when a property is
     // saved or compared.
     final role = ref.watch(appNotifierProvider.select((s) => s.role));
-    final destinations = mobileDestinationsFor(role);
-    final useM3 = m3 ?? (role == AppRole.entrepreneur);
+    final navDestinations = destinations ?? mobileDestinationsFor(role);
+    // Owner and Agent share the Provider mobile workspace now, so their
+    // drill-in pages use the same Material 3 chrome and dock as the
+    // entrepreneur workspace. Admin keeps the classic shell.
+    final useM3 = m3 ??
+        (role == AppRole.entrepreneur ||
+            role == AppRole.owner ||
+            role == AppRole.agent);
 
     void go(String route) {
       if (route == currentRoute) return;
@@ -97,7 +110,7 @@ class MobileAppShell extends ConsumerWidget {
       body: !showTopBar ? SafeArea(bottom: false, child: body) : body,
       floatingActionButton: floatingActionButton,
       bottomNavigationBar: MobileBottomNav(
-        destinations: destinations,
+        destinations: navDestinations,
         currentRoute: currentRoute,
         onGo: go,
         m3: useM3,

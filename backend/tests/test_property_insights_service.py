@@ -66,7 +66,7 @@ def _clear_cache():
     svc.clear_insights_cache()
 
 
-def _service(monkeypatch, *, features, background_rows, missing=None):
+def _service(monkeypatch, *, features, background_rows, missing=None, stub_category=True):
     """An insights service whose repository returns the supplied vectors."""
 
     class _Bundle:
@@ -91,8 +91,22 @@ def _service(monkeypatch, *, features, background_rows, missing=None):
     monkeypatch.setattr(
         svc.PropertyInsightsService,
         "_reference_background",
-        staticmethod(lambda feature_names: background_rows),
+        staticmethod(lambda feature_names, path=None: background_rows),
     )
+    if stub_category:
+        # These tests target the PU path; the category block has its own
+        # focused tests and a real 12-second permutation SHAP per property.
+        monkeypatch.setattr(
+            svc.PropertyInsightsService,
+            "_category_payload",
+            lambda self, property_id: {
+                "available": False,
+                "reason": {
+                    "code": "category_model_unavailable",
+                    "message": "stubbed in the PU-focused tests",
+                },
+            },
+        )
     return svc.PropertyInsightsService(session=object(), analytics_session=object())
 
 
@@ -100,10 +114,18 @@ def _service(monkeypatch, *, features, background_rows, missing=None):
 
 
 def test_every_model_feature_has_a_label_and_a_category(feature_names):
-    assert len(svc.FEATURE_LABELS) == len(feature_names) == 47
+    # The label registry covers BOTH contracts: the 47-feature baseline this
+    # fixture loads and the 2026-11-15 expanded 64-feature contract (44
+    # baseline + 12 population-age + 8 residential). "other" would mean a
+    # contribution silently escapes the page's categories.
+    expanded = ModelLoader().load("sitewise_pu_64_expanded").feature_names
+    assert len(feature_names) == 47
+    assert len(expanded) == 64
     assert [f for f in feature_names if f not in svc.FEATURE_LABELS] == []
-    # "other" would mean a contribution silently escapes the five categories.
+    assert [f for f in expanded if f not in svc.FEATURE_LABELS] == []
+    assert len(svc.FEATURE_LABELS) == 67  # 47 baseline + 20 expanded-only
     assert [f for f in feature_names if category_of(f) == "other"] == []
+    assert [f for f in expanded if category_of(f) == "other"] == []
 
 
 def test_categories_match_the_documented_baseline_grouping(feature_names):
@@ -118,11 +140,23 @@ def test_categories_match_the_documented_baseline_grouping(feature_names):
         "parking": 3,
         "competitors": 10,
     }
+    # The expanded contract's 20 added features land in population (12 age;
+    # the 44-feature baseline holds 4 population features because the 3
+    # LandScan fields were excluded) and the dedicated residential
+    # category (8).
+    expanded = ModelLoader().load("sitewise_pu_64_expanded").feature_names
+    assert [f for f in expanded if f.startswith("landscan_")] == []
+    expanded_counts: dict[str, int] = {}
+    for name in expanded:
+        expanded_counts[category_of(name)] = expanded_counts.get(category_of(name), 0) + 1
+    assert expanded_counts["population"] == 4 + 12
+    assert expanded_counts["residential"] == 8
     assert [spec["label"] for spec in svc.CATEGORY_SPECS] == [
         "People Nearby",
         "Other Food Businesses",
         "Nearby Places",
         "Getting There",
+        "Housing Around",
         "Parking Nearby",
     ]
 
@@ -193,10 +227,16 @@ def test_all_five_categories_are_present_and_totals_reconcile(monkeypatch, refer
         "Other Food Businesses",
         "Nearby Places",
         "Getting There",
+        "Housing Around",
         "Parking Nearby",
     ]
-    assert all(c["available"] for c in categories)
-    assert all(c["feature_count"] > 0 for c in categories)
+    # The 47-feature baseline has no residential features, so that section is
+    # present but honestly empty for legacy explanations.
+    by_label = {c["label"]: c for c in categories}
+    assert by_label["Housing Around"]["available"] is False
+    assert by_label["Housing Around"]["feature_count"] == 0
+    assert all(c["available"] for c in categories if c["label"] != "Housing Around")
+    assert all(c["feature_count"] > 0 for c in categories if c["label"] != "Housing Around")
     assert all(c["question"] and c["why"] for c in categories)
 
     # Category totals plus the baseline must reconstruct the output too, or a
@@ -343,7 +383,11 @@ def test_explanation_is_cached_per_model_version(monkeypatch, reference_features
     assert version in keys[0][0]
     artifact_hash = keys[0][0].split(":")[2]
     assert len(artifact_hash) == 64
-    assert keys[0][0].endswith(":no-stored-score")
+    # The PU portion keeps the stored-score marker; the category artifact
+    # digest is appended after it, so replacing EITHER model invalidates the
+    # cached payload.
+    assert ":no-stored-score:cat:" in keys[0][0]
+    assert len(keys[0][0].rsplit(":cat:", 1)[1]) == 64
 
     # A replacement binary with the same semantic version has a new hash and
     # cannot reuse the old explanation cache entry.
@@ -482,3 +526,73 @@ def test_panorama_requires_a_completed_status(monkeypatch):
     service = svc.PropertyInsightsService(session=None, analytics_session=_Session([("https://x/p.jpg", "complete")]))
     out = service._panorama(REFERENCE_PROPERTY_ID)
     assert out == {"available": True, "status": "ready", "url": "https://x/p.jpg", "reason": None}
+
+
+# -- Stage 2: business-category block ---------------------------------------
+
+
+def test_category_block_is_always_present_and_never_fabricated(
+    monkeypatch, reference_features, background
+):
+    service = _service(monkeypatch, features=reference_features, background_rows=background)
+    out = service.insights(REFERENCE_PROPERTY_ID)
+
+    category = out.get("category_model")
+    assert isinstance(category, dict)
+    assert category["available"] is False
+    assert category["reason"]["code"] == "category_model_unavailable"
+    # The PU score must stay available: one model failing never hides the other.
+    assert out["score"]["available"] is True
+
+
+def test_category_block_is_separate_from_the_pu_explanation(
+    monkeypatch, reference_features, background
+):
+    service = _service(
+        monkeypatch,
+        features=reference_features,
+        background_rows=background,
+        stub_category=False,
+    )
+    # A real category SHAP is ~12 s per property; the reconstruction itself is
+    # covered by tests/test_fnb_category_model.py. Here the block wiring is
+    # what matters, so the explainer is canned.
+    monkeypatch.setattr(
+        svc,
+        "category_explanation",
+        lambda values: {
+            "explainer": "Permutation SHAP",
+            "model": "sitewise_fnb_category",
+            "model_version": "fnb_category_pu_v1_20261115",
+            "explained_output": {"business_type": "Restaurant", "probability": 0.63},
+            "base_value": 0.30,
+            "reconstructed": 0.63,
+            "reconstruction_error": 1e-16,
+            "background_size": 32,
+            "contributions": [
+                {"technical": "pop_1000m", "contribution": 0.05},
+                {"technical": "cafe_count_500m", "contribution": -0.02},
+            ],
+        },
+    )
+    out = service.insights(REFERENCE_PROPERTY_ID)
+
+    category = out["category_model"]
+    assert category["available"] is True
+    assert category["model_version"] == "fnb_category_pu_v1_20261115"
+    assert [r["business_type"] for r in category["rankings"]][0] == category["top_category"]
+    assert category["reliability"]["status"] == "weak_discrimination_research_only"
+    assert category["explanation"]["available"] is True
+    assert category["explanation"]["explained_output"]["business_type"] == "Restaurant"
+
+    # Separation: the PU explanation still explains the PU model only, and the
+    # two factor lists are independent objects (the category list carries the
+    # category model's contributions, not the PU model's 47 factors).
+    assert out["explanation"]["model"] == "pu_model"
+    assert out["explanation"]["feature_count"] == 47
+    assert len(out["explanation"]["factors"]) == 47
+    assert [f["technical"] for f in category["explanation"]["factors"]] == [
+        "pop_1000m",
+        "cafe_count_500m",
+    ]
+    assert category["explanation"]["factors"][0]["label"] == "People living within 1 km"

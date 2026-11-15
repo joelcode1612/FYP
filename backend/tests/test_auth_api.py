@@ -187,7 +187,7 @@ def test_saved_property_ownership(client, identity, cleanup_users):
 
     with Session(engine) as session:
         ref = session.execute(
-            text("SELECT id FROM sitewise_app.properties ORDER BY id LIMIT 1")
+            text("SELECT id FROM fyp.catalogue_properties ORDER BY id LIMIT 1")
         ).scalar()
     assert ref
 

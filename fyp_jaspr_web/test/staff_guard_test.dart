@@ -104,13 +104,35 @@ void main() {
       expect(decodeSession(r.rendered!.headers['cookie']!)['role'], 'entrepreneur');
     });
 
-    test('client-written role grants cannot open the owner workspace', () async {
+    test('retired /owner paths render the explanation page, not listing management', () async {
+      // The Owner web workspace is retired. A signed-in account must never be
+      // redirected into /entrepreneur/my-properties (itself now a denial page),
+      // and the retirement page reads no identity and exposes no records.
       final r = await run(
         req('/owner', cookie: 'sitewise_token=abc; sitewise_ui=forged'),
         id: identity(role: 'entrepreneur'),
       );
-      expect(r.response.statusCode, 302);
-      expect(r.response.headers['location'], '/entrepreneur/my-properties');
+      expect(r.response.statusCode, 200);
+      expect(r.rendered, isNotNull);
+      expect(r.response.headers['location'], isNull);
+      // The render isolate still receives only the backend-verified profile.
+      expect(decodeSession(r.rendered!.headers['cookie']!)['role'], 'entrepreneur');
+    });
+
+    test('a forged admin cookie cannot turn a retired owner path into staff UI', () async {
+      final forged =
+          'sitewise_token=abc; sitewise_session=${sessionValue({'role': 'admin', 'aal': 'aal2'})}';
+      final r = await run(
+        req('/owner/listings', cookie: forged),
+        id: identity(role: 'entrepreneur'),
+      );
+      expect(r.response.statusCode, 200);
+      expect(r.rendered, isNotNull);
+      // Backend truth overrides the attacker-written role on every protected
+      // workspace, including the retired owner paths.
+      final profile = decodeSession(r.rendered!.headers['cookie']!);
+      expect(profile['role'], 'entrepreneur');
+      expect(profile['role'], isNot('admin'));
     });
 
     test('the /staff/verify screen is not guarded (no redirect loop)', () async {

@@ -499,6 +499,7 @@ class _VerificationDetailBodyState extends State<_VerificationDetailBody> {
               'figure is invented here.',
             ),
           ]),
+        _analysisReadiness(detail),
         h4(classes: 'vd-group-title', [Component.text('Property location')]),
         div(classes: 'vd-map-layout', [
           PropertyLeafletMap(property: _mapProperty(property), height: 260),
@@ -637,6 +638,9 @@ class _VerificationDetailBodyState extends State<_VerificationDetailBody> {
         _demandGenerators(detail),
         h4(classes: 'vd-group-title', [Component.text('Surrounding amenities')]),
         _amenities(detail.amenities),
+        _analysisIntelligence(detail),
+        _analysisReliability(detail),
+        _analysisRecommendation(detail),
         p(classes: 'vd-notes', [
           Component.text(
             'Competition counts represent F&B outlets from the research '
@@ -692,6 +696,441 @@ class _VerificationDetailBodyState extends State<_VerificationDetailBody> {
       _infoRow('Remarks', _orNotProvided(amenities.remarks)),
     ]);
   }
+
+  // --- Structured location analysis (Parts A / B / C + recommendation) ----
+
+  /// Part A: readiness banner with the server's evidence checks. Rendered
+  /// even when the analysis is unavailable (then as a plain warning) so a
+  /// broken analysis never looks like a decision input.
+  Component _analysisReadiness(VerificationDetail detail) {
+    final analysis = detail.locationAnalysis;
+    if (!analysis.available) {
+      final message = (analysis.error ?? '').trim();
+      if (message.isEmpty) return Component.fragment([]);
+      return div(classes: 'vd-note vd-note--warning', [
+        span(classes: 'vd-note__symbol', [Component.text('!')]),
+        Component.text('Location analysis could not be assembled: $message'),
+      ]);
+    }
+    final partA = analysis.partA;
+    final (label, tone) = switch (partA.state) {
+      'ready_for_admin_review' => ('Ready for review', 'success'),
+      'additional_information_required' => (
+        'Additional information required',
+        'warning',
+      ),
+      'analysis_incomplete' => ('Analysis incomplete', 'warning'),
+      'validation_failed' => ('Validation failed', 'danger'),
+      'not_submitted' => ('Not yet submitted', 'neutral'),
+      final other => (other.replaceAll('_', ' '), 'neutral'),
+    };
+    return div(classes: 'stack', [
+      h4(classes: 'vd-group-title', [Component.text('Review readiness')]),
+      p(classes: 'small muted', [
+        Component.text(
+          'An automated check of what the listing already has on file. It '
+          'describes readiness only — it never approves or rejects anything.',
+        ),
+      ]),
+      div(classes: 'vd-freshness', [Pill(label, tone: tone)]),
+      div(classes: 'vd-info', [
+        for (final check in partA.checks)
+          div(classes: 'vd-row', [
+            span(classes: 'vd-row__label', [Component.text(check.label)]),
+            strong(classes: 'vd-row__value', [
+              Component.text(check.detail),
+            ]),
+          ]),
+      ]),
+    ]);
+  }
+
+  /// Part B: the five measurement families with their method and an explicit
+  /// unavailable reason when a family has no measurement. Rows with no value
+  /// stay hidden rather than showing zeros.
+  Component _analysisIntelligence(VerificationDetail detail) {
+    final partB = detail.locationAnalysis.partB;
+    return Component.fragment([
+      h4(classes: 'vd-group-title', [
+        Component.text('Population and catchment'),
+      ]),
+      p(classes: 'small muted', [Component.text(partB.population.method)]),
+      partB.population.available
+          ? div(classes: 'vd-info', [
+              for (final row in [
+                ('Population within 500 m', _num(partB.population.pop500m)),
+                ('Population within 1 km', _num(partB.population.pop1km)),
+                ('Population within 3 km', _num(partB.population.pop3km)),
+                (
+                  'Density per km² (1 km)',
+                  _num(partB.population.density1km),
+                ),
+                (
+                  'Estimated households · 1 km',
+                  _num(partB.population.estimatedHouseholds1km),
+                ),
+                (
+                  'Young adults share · 1 km (20–34)',
+                  partB.population.pctAge2034 == null
+                      ? null
+                      : '${_num(partB.population.pctAge2034)}%',
+                ),
+                (
+                  'Working-age share · 1 km (15–64)',
+                  partB.population.pctAge1564 == null
+                      ? null
+                      : '${_num(partB.population.pctAge1564)}%',
+                ),
+                ('Data source', partB.population.source),
+                (
+                  'Raster coverage of the area',
+                  partB.population.rasterCoveragePct == null
+                      ? null
+                      : '${_num(partB.population.rasterCoveragePct)}% · '
+                          'quality ${_orNotProvided(partB.population.qualityFlag)}',
+                ),
+                if (partB.population.landscanAmbient1km != null) ...[
+                  (
+                    'Ambient population · 1 km (LandScan '
+                    '${_orNotProvided(partB.population.landscanSourceYear)})',
+                    _num(partB.population.landscanAmbient1km),
+                  ),
+                  (
+                    'Ambient-to-resident ratio · 1 km',
+                    _num(partB.population.landscanAmbientRatio1km),
+                  ),
+                ],
+              ])
+                if (row.$2 != null)
+                  _infoRow(row.$1, row.$2!),
+            ])
+          : _unavailableNote(partB.population.unavailableReason),
+      if (partB.population.available)
+        p(classes: 'vd-source', [
+          Component.text(
+            'Resident estimates and the ambient (LandScan) figure are two '
+            'different measurements and are never added together.',
+          ),
+        ]),
+      h4(classes: 'vd-group-title', [Component.text('Income context')]),
+      p(classes: 'small muted', [Component.text(partB.socioeconomic.method)]),
+      partB.socioeconomic.available
+          ? div(classes: 'vd-info', [
+              _infoRow(
+                'District median household income',
+                'RM ${_num(partB.socioeconomic.incomeMedian)}',
+              ),
+              _infoRow(
+                'Reference area',
+                partB.socioeconomic.districtKey == null
+                    ? 'The district containing this listing (key not recorded)'
+                    : 'DOSM district · ${partB.socioeconomic.districtKey}',
+              ),
+            ])
+          : _unavailableNote(partB.socioeconomic.unavailableReason),
+      h4(classes: 'vd-group-title', [
+        Component.text('Food & beverage surroundings'),
+      ]),
+      p(classes: 'small muted', [Component.text(partB.fnbEnvironment.method)]),
+      partB.fnbEnvironment.available
+          ? div(classes: 'vd-info', [
+              for (final row in [
+                (
+                  'F&B competitors · 500 m',
+                  _num(partB.fnbEnvironment.competitorCount500m),
+                ),
+                (
+                  'F&B competitors · 1 km',
+                  _num(partB.fnbEnvironment.competitorCount1km),
+                ),
+                (
+                  'Cafés · 500 m',
+                  _num(partB.fnbEnvironment.competitorBreakdown500m['cafes_500m']),
+                ),
+                (
+                  'Restaurants · 500 m',
+                  _num(
+                    partB.fnbEnvironment.competitorBreakdown500m['restaurants_500m'],
+                  ),
+                ),
+                (
+                  'Fast food · 500 m',
+                  _num(
+                    partB.fnbEnvironment.competitorBreakdown500m['fast_food_500m'],
+                  ),
+                ),
+                (
+                  'Nearest competitor (straight line)',
+                  partB.fnbEnvironment.nearestCompetitorM == null
+                      ? null
+                      : '${_num(partB.fnbEnvironment.nearestCompetitorM)} m',
+                ),
+                (
+                  'Demand generators · 500 m',
+                  _num(partB.fnbEnvironment.demandGeneratorCount500m),
+                ),
+                (
+                  'Demand generators · 1 km',
+                  _num(partB.fnbEnvironment.demandGeneratorCount1km),
+                ),
+                (
+                  'Malls · 1 km',
+                  _num(partB.fnbEnvironment.nearbyAnchors['malls_1km']),
+                ),
+                (
+                  'Schools · 1 km',
+                  _num(partB.fnbEnvironment.nearbyAnchors['schools_1km']),
+                ),
+                (
+                  'Universities · 1 km',
+                  _num(partB.fnbEnvironment.nearbyAnchors['universities_1km']),
+                ),
+                (
+                  'Hospitals · 1 km',
+                  _num(partB.fnbEnvironment.nearbyAnchors['hospitals_1km']),
+                ),
+                (
+                  'Office premises · 500 m',
+                  _num(partB.fnbEnvironment.nearbyAnchors['office_poi_500m']),
+                ),
+                (
+                  'Owner declares the unit F&B-suitable',
+                  partB.fnbEnvironment.ownerDeclaredFnbSuitable == null
+                      ? null
+                      : (partB.fnbEnvironment.ownerDeclaredFnbSuitable!
+                            ? 'Yes'
+                            : 'No'),
+                ),
+              ])
+                if (row.$2 != null) _infoRow(row.$1, row.$2!),
+            ])
+          : _unavailableNote(partB.fnbEnvironment.unavailableReason),
+      if (partB.fnbEnvironment.available)
+        p(classes: 'vd-source', [
+          Component.text(
+            'Competitor counts describe how busy the area already is — '
+            'established food streets also draw customers. They are context '
+            'for your judgement, never a verdict on their own.',
+          ),
+        ]),
+      h4(classes: 'vd-group-title', [
+        Component.text('Getting there: roads, transit and parking'),
+      ]),
+      p(classes: 'small muted', [Component.text(partB.accessibility.method)]),
+      partB.accessibility.available
+          ? div(classes: 'vd-info', [
+              for (final row in [
+                ('Accessibility index', _num(partB.accessibility.accessibilityScore)),
+                (
+                  'Road length within 1 km',
+                  partB.accessibility.roadKm1km == null
+                      ? null
+                      : '${_num(partB.accessibility.roadKm1km)} km',
+                ),
+                (
+                  'Nearest major road (straight line)',
+                  partB.accessibility.nearestMajorRoadM == null
+                      ? null
+                      : '${_num(partB.accessibility.nearestMajorRoadM)} m',
+                ),
+                (
+                  'Bus stops within a 500 m walk',
+                  _num(partB.accessibility.transit['bus_stops_500m_walk']),
+                ),
+                (
+                  'Rail stations within a 1 km walk',
+                  _num(partB.accessibility.transit['rail_stations_1km_walk']),
+                ),
+                (
+                  'Nearest transit stop (walking distance)',
+                  partB.accessibility.transit['nearest_transit_walk_m'] == null
+                      ? null
+                      : '${_num(partB.accessibility.transit['nearest_transit_walk_m'])} m',
+                ),
+                (
+                  'Parking facilities · 500 m',
+                  _num(partB.accessibility.parking['facilities_500m']),
+                ),
+                (
+                  'Nearest parking (straight line)',
+                  partB.accessibility.parking['nearest_parking_m'] == null
+                      ? null
+                      : '${_num(partB.accessibility.parking['nearest_parking_m'])} m',
+                ),
+                (
+                  'Owner declares on-site parking',
+                  partB.accessibility.ownerDeclaredParking == null
+                      ? null
+                      : (partB.accessibility.ownerDeclaredParking!
+                            ? 'Yes'
+                            : 'No'),
+                ),
+              ])
+                if (row.$2 != null) _infoRow(row.$1, row.$2!),
+            ])
+          : _unavailableNote(partB.accessibility.unavailableReason),
+      h4(classes: 'vd-group-title', [
+        Component.text('AI research assessment (experimental)'),
+      ]),
+      p(classes: 'small muted', [
+        Component.text(
+          'A machine-learning score from the platform\'s research dataset. '
+          'It is experimental and is never used to verify a listing.',
+        ),
+      ]),
+      _researchAssociationPanel(partB.researchAssociation),
+    ]);
+  }
+
+  Component _researchAssociationPanel(LocationResearchAssociation research) {
+    if (!research.available) {
+      return Component.fragment([
+        _unavailableNote(research.unavailableReason),
+        p(classes: 'vd-source', [
+          Component.text(
+            'No score was generated. Missing features are never substituted '
+            'with another property\'s values or with zeros.',
+          ),
+        ]),
+      ]);
+    }
+    return div(classes: 'stack', [
+      div(classes: 'vd-info', [
+        _infoRow(
+          'Research association score',
+          _num(research.score),
+        ),
+        if ((research.label ?? '').trim().isNotEmpty)
+          _infoRow('Model band', research.label!),
+        _infoRow(
+          'Model features available',
+          '${research.availableFeatures ?? 0} of ${research.featureCount ?? 0}',
+        ),
+        if ((research.modelVersion ?? '').trim().isNotEmpty)
+          _infoRow('Model version', research.modelVersion!),
+      ]),
+      if (research.missingFeatures.isNotEmpty)
+        div(classes: 'vd-note vd-note--warning', [
+          span(classes: 'vd-note__symbol', [Component.text('!')]),
+          Component.text(
+            '${research.missingFeatures.length} model feature(s) were not '
+            'available for this listing: '
+            '${research.missingFeatures.join(', ')}.',
+          ),
+        ]),
+      p(classes: 'vd-source', [
+        Component.text(
+          'What this score means: ${research.scoreMeaning.isEmpty ? 'a '
+              'statistical association with positive examples in the research '
+              'dataset' : research.scoreMeaning}. It is not a probability of '
+          'business success.',
+        ),
+      ]),
+    ]);
+  }
+
+  /// Part C: data confidence — what is available, what is missing, what is
+  /// outdated, and which licences apply.
+  Component _analysisReliability(VerificationDetail detail) {
+    final partC = detail.locationAnalysis.partC;
+    return div(classes: 'stack', [
+      h4(classes: 'vd-group-title', [Component.text('Data reliability')]),
+      p(classes: 'small muted', [
+        Component.text(
+          '${partC.familiesAvailable} of ${partC.familiesTotal} measurement '
+          'families have data for this listing. A missing measurement is '
+          'reported as unavailable — it is never filled in with a zero.',
+        ),
+      ]),
+      if (partC.missing.isNotEmpty)
+        div(classes: 'vd-info', [
+          for (final gap in partC.missing)
+            div(classes: 'vd-row', [
+              span(classes: 'vd-row__label', [
+                Component.text(_familyLabel(gap.family)),
+              ]),
+              strong(classes: 'vd-row__value', [
+                Component.text(_orNotProvided(gap.reason)),
+              ]),
+            ]),
+        ]),
+      for (final gap in partC.outdated)
+        div(classes: 'vd-note vd-note--warning', [
+          span(classes: 'vd-note__symbol', [Component.text('!')]),
+          Component.text(
+            '${_familyLabel(gap.family)} is ${gap.status ?? 'outdated'}'
+            '${gap.detail == null || gap.detail!.isEmpty ? '' : ': ${gap.detail}'}',
+          ),
+        ]),
+      if (partC.licences.isNotEmpty)
+        p(classes: 'vd-source', [
+          Component.text(
+            'Sources: ${partC.licences.map((licence) => licence.licence == null || licence.licence!.isEmpty ? licence.source : '${licence.source} (${licence.licence})').join(' · ')}',
+          ),
+        ]),
+      for (final note in partC.resolutionNotes)
+        p(classes: 'vd-notes', [Component.text(note)]),
+    ]);
+  }
+
+  /// Recommendation (decision support). The policy rows state explicitly
+  /// that every status stays an administrator decision.
+  Component _analysisRecommendation(VerificationDetail detail) {
+    final recommendation = detail.locationAnalysis.recommendation;
+    if (recommendation.text.isEmpty) return Component.fragment([]);
+    return div(classes: 'stack', [
+      h4(classes: 'vd-group-title', [
+        Component.text('Automated summary for the reviewer'),
+      ]),
+      p(classes: 'body', [Component.text(recommendation.text)]),
+      if (recommendation.suggestedFocus.isNotEmpty)
+        div(classes: 'stack', [
+          for (final item in recommendation.suggestedFocus)
+            p(classes: 'small muted', [Component.text('• $item')]),
+        ]),
+      div(classes: 'vd-info', [
+        for (final policy in recommendation.policySeparation)
+          div(classes: 'vd-row', [
+            span(classes: 'vd-row__label', [
+              Component.text(_policyLabel(policy.domain)),
+            ]),
+            strong(classes: 'vd-row__value', [
+              Component.text(policy.note),
+            ]),
+          ]),
+      ]),
+    ]);
+  }
+
+  Component _unavailableNote(String? reason) {
+    return div(classes: 'vd-note vd-note--warning', [
+      span(classes: 'vd-note__symbol', [Component.text('!')]),
+      Component.text(
+        'Not available — ${_orNotProvided(reason)}. '
+        'The figure is reported as unavailable, not as zero.',
+      ),
+    ]);
+  }
+
+  static String _familyLabel(String family) => switch (family) {
+    'population' => 'Population',
+    'socioeconomic' => 'Income context',
+    'fnb_environment' => 'F&B surroundings',
+    'accessibility' => 'Accessibility',
+    'research_association' => 'AI research assessment',
+    'feature snapshot' => 'The feature snapshot',
+    final other => other.startsWith('measurement: ')
+        ? 'The ${other.substring('measurement: '.length).replaceAll('_', ' ')} measurement'
+        : other.replaceAll('_', ' '),
+  };
+
+  static String _policyLabel(String domain) => switch (domain) {
+    'listing_accuracy' => 'Listing accuracy',
+    'ownership' => 'Ownership',
+    'location_suitability' => 'Location suitability',
+    'publication_eligibility' => 'Publication eligibility',
+    final other => other.replaceAll('_', ' '),
+  };
 
   // --- Review sidebar (OUTSIDE the tabs) -----------------------------------------
 

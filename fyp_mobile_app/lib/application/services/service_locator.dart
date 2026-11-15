@@ -11,6 +11,7 @@ import '../../data/repositories/mobile_api_client.dart';
 import '../../data/repositories/onboarding_repository_impl.dart';
 import '../../data/repositories/persistent_tour_repository.dart';
 import '../../data/repositories/supabase_auth_repository.dart';
+import '../../data/repositories/supabase_staff_mfa_repository.dart';
 import 'assessment_session.dart';
 import 'capture_session_store.dart';
 import 'draft_repository.dart';
@@ -67,6 +68,17 @@ abstract final class ServiceLocator {
   /// shows the new record instead of the list captured on first build.
   static final ValueNotifier<int> listingsRevision = ValueNotifier<int>(0);
 
+  /// Owner / Agent listing management over the existing staff endpoints
+  /// (`GET /api/v1/staff/me/listings`, proposals, change requests, photos).
+  ///
+  /// Scope is decided server-side from `agent_listing_assignment`; the client
+  /// never filters by agent id. The staff endpoints require AAL2, so a session
+  /// that has not completed MFA receives the structured `staff_mfa_required`
+  /// 403 — the provider workspace turns that into the MFA gate rather than a
+  /// generic error.
+  static final ApiAgentListingRepository agentListings =
+      ApiAgentListingRepository(apiClient);
+
   /// The existing property-verification transport (evidence upload, submit,
   /// status) — the SAME subsystem the Admin review queue reads.
   static ApiPropertyVerificationRepository propertyVerification =
@@ -82,6 +94,15 @@ abstract final class ServiceLocator {
   /// role. Non-final so tests can inject a fake repository before
   /// `sitewiseOverrides()` reads it.
   static AuthService auth = AuthService(SupabaseAuthRepository());
+
+  /// Second factor for the staff workspace (SiteWise's `REQUIRED_STAFF_AAL`).
+  ///
+  /// Supabase Auth owns the enrollment and the code exchange; this repository
+  /// is only the transport plus the failure mapping the screen needs. The
+  /// elevated session it produces is what makes the staff endpoints succeed —
+  /// the gate is server-side (`require_property_owner`), so this screen can
+  /// never grant an authority the backend would not.
+  static StaffMfaRepository staffMfa = SupabaseStaffMfaRepository();
 
   /// Always built from the CURRENT [propertyRepo], so a swap in the
   /// composition root reaches every caller. `PropertyService` is a thin,

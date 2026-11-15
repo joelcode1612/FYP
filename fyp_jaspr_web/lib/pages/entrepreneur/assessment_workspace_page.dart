@@ -42,10 +42,18 @@ class AssessmentWorkspacePage extends StatefulComponent {
   /// Optional `?stage=` deep link into one of the two in-page stage panels.
   final String stage;
 
+  /// Optional `?businessType=` selection carried from Recommendations.
+  ///
+  /// Used ONLY to seed a draft when the assessment has no saved requirements
+  /// yet. An existing saved requirement is never overwritten: the entrepreneur's
+  /// recorded answer stays authoritative.
+  final String businessType;
+
   const AssessmentWorkspacePage({
     super.key,
     required this.propertyId,
     this.stage = '',
+    this.businessType = '',
   });
 
   @override
@@ -367,8 +375,12 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
       return;
     }
     final prefs = AppLocator.preferences;
+    // The recommendation the entrepreneur arrived from carries their own
+    // business type; prefer it over the shared preference, but never over an
+    // already-saved assessment requirement (handled above).
+    final carried = component.businessType.trim();
     _draft = _RequirementsDraft(
-      businessType: prefs.businessType,
+      businessType: carried.isNotEmpty ? carried : prefs.businessType,
       propertyType: prefs.propertyType,
       targetMarket: prefs.requirements.isEmpty ? '' : prefs.requirements.first,
       seatingModel: prefs.seatingModel,

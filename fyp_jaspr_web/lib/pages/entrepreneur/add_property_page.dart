@@ -1501,11 +1501,12 @@ class _AddPropertyPageState extends State<AddPropertyPage> {
     EnrichmentStatus.pending => 'neutral',
   };
 
-  /// The five categories in the order the wizard presents them: population
-  /// first (it is the one that can be genuinely unavailable), then the four
-  /// PostGIS categories.
+  /// The six categories in the order the wizard presents them: the two raster
+  /// categories first (population and age bands — the ones that can be
+  /// genuinely unavailable), then the four PostGIS categories.
   static const _analysisOrder = <(String, EnrichmentCategory)>[
     ('Population', EnrichmentCategory.population),
+    ('Age groups', EnrichmentCategory.agePopulation),
     ('F&B competitors', EnrichmentCategory.fnbCompetitors),
     ('Nearby places', EnrichmentCategory.demandGenerators),
     ('Transportation', EnrichmentCategory.roadsTransport),
@@ -1523,6 +1524,9 @@ class _AddPropertyPageState extends State<AddPropertyPage> {
       case EnrichmentCategory.population:
         return '500 m ${_measured(state.number('population_500m'))} · '
             '1 km ${_measured(state.number('population_1km'))}';
+      case EnrichmentCategory.agePopulation:
+        return '500 m 0-14 ${_measured(state.number('pop_age_0_14_500m'))} · '
+            '65+ ${_measured(state.number('pop_age_65_plus_500m'))}';
       case EnrichmentCategory.fnbCompetitors:
         return '500 m ${_measured(state.number('competitor_count_500m'))} · '
             '1 km ${_measured(state.number('competitor_count_1km'))}';
@@ -1555,6 +1559,45 @@ class _AddPropertyPageState extends State<AddPropertyPage> {
           ('Within 1 km', _measured(state.number('population_1km'))),
           if (source is String && source.isNotEmpty) ('Source', source),
           if (missing.isNotEmpty) ('No raster coverage', missing.join(', ')),
+        ];
+      case EnrichmentCategory.agePopulation:
+        // Shares are stored as fractions; coverage as percentages.
+        final source = state.provenance?['source'];
+        num? asPercent(String key) {
+          final value = state.number(key);
+          return value == null ? null : value * 100;
+        }
+
+        return [
+          ('0-14 within 500 m', _measured(state.number('pop_age_0_14_500m'))),
+          ('15-24 within 500 m', _measured(state.number('pop_age_15_24_500m'))),
+          ('25-34 within 500 m', _measured(state.number('pop_age_25_34_500m'))),
+          ('35-49 within 500 m', _measured(state.number('pop_age_35_49_500m'))),
+          ('50-64 within 500 m', _measured(state.number('pop_age_50_64_500m'))),
+          ('65+ within 500 m', _measured(state.number('pop_age_65_plus_500m'))),
+          (
+            'Ages 15-34 share · 500 m',
+            _measured(asPercent('share_age_15_34_500m'), unit: '%'),
+          ),
+          (
+            'Raster coverage · 500 m',
+            _measured(state.number('age_coverage_500m'), decimals: 1, unit: '%'),
+          ),
+          ('0-14 within 1 km', _measured(state.number('pop_age_0_14_1km'))),
+          ('15-24 within 1 km', _measured(state.number('pop_age_15_24_1km'))),
+          ('25-34 within 1 km', _measured(state.number('pop_age_25_34_1km'))),
+          ('35-49 within 1 km', _measured(state.number('pop_age_35_49_1km'))),
+          ('50-64 within 1 km', _measured(state.number('pop_age_50_64_1km'))),
+          ('65+ within 1 km', _measured(state.number('pop_age_65_plus_1km'))),
+          (
+            'Ages 15-34 share · 1 km',
+            _measured(asPercent('share_age_15_34_1km'), unit: '%'),
+          ),
+          (
+            'Raster coverage · 1 km',
+            _measured(state.number('age_coverage_1km'), decimals: 1, unit: '%'),
+          ),
+          if (source is String && source.isNotEmpty) ('Source', source),
         ];
       case EnrichmentCategory.fnbCompetitors:
         return [
@@ -1624,8 +1667,9 @@ class _AddPropertyPageState extends State<AddPropertyPage> {
         p(classes: 'sw-enrich-error', [Component.text(_enrichmentError!)]),
       p(classes: 'sw-reg-note', [
         Component.text(
-          'Measured from SiteWise PostGIS data and the population raster. A '
-          'category with no data is labelled “Not available”, never zero.',
+          'Measured from SiteWise PostGIS data and the population and '
+          'age-band rasters. A category with no data is labelled “Not '
+          'available”, never zero.',
         ),
       ]),
     ]);

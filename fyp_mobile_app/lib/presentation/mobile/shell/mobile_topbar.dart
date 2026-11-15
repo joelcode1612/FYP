@@ -34,6 +34,20 @@ class MobileTopBar extends ConsumerWidget implements PreferredSizeWidget {
   /// offer a back arrow that pops the whole workspace away.
   final bool? showBack;
 
+  /// Role pill rendered next to the brand lockup (`Agent`, `Property Owner`).
+  /// Null keeps the header exactly as it was — the entrepreneur workspace
+  /// passes nothing.
+  final String? roleBadge;
+
+  /// Real unread count for the notification affordance (server-derived, e.g.
+  /// `new` enquiries in the provider inbox). Null = no signal available —
+  /// the badge dot is suppressed rather than guessed; 0 = known none.
+  final int? unreadNotifications;
+
+  /// Where the notification button goes. Defaults to the historic no-op
+  /// snackbar so existing callers are untouched.
+  final VoidCallback? onNotifications;
+
   const MobileTopBar({
     super.key,
     required this.title,
@@ -41,6 +55,9 @@ class MobileTopBar extends ConsumerWidget implements PreferredSizeWidget {
     this.brandTitle = false,
     this.m3 = false,
     this.showBack,
+    this.roleBadge,
+    this.unreadNotifications,
+    this.onNotifications,
   });
 
   @override
@@ -120,6 +137,8 @@ class MobileTopBar extends ConsumerWidget implements PreferredSizeWidget {
         behavior: SnackBarBehavior.floating,
       ),
     );
+    final unread = unreadNotifications ?? 0;
+    final showUnread = (unreadNotifications != null) && unread > 0;
 
     return AppBar(
       automaticallyImplyLeading: false,
@@ -148,13 +167,56 @@ class MobileTopBar extends ConsumerWidget implements PreferredSizeWidget {
       shape: const Border(
         bottom: BorderSide(color: SitewiseM3.divider, width: 1),
       ),
-      title: const M3BrandLockup(),
+      title: Row(
+        children: [
+          const Flexible(child: M3BrandLockup()),
+          // Role pill (`Agent` / `Property Owner`). Sits beside the lockup and
+          // ellipsises before the lockup does on a narrow screen, so the two
+          // never push the bell off-screen.
+          if (roleBadge != null) ...[
+            const SizedBox(width: 8),
+            Flexible(
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 5,
+                ),
+                decoration: BoxDecoration(
+                  color: SitewiseM3.quiet,
+                  borderRadius: BorderRadius.circular(SitewiseM3.radiusPill),
+                  border: Border.all(color: SitewiseM3.brandBorder),
+                ),
+                child: Text(
+                  roleBadge!,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontFamily: kFontFamily,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w800,
+                    color: SitewiseColors.action,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
       actions: [
         ...?actions,
-        M3CircleButton(
-          icon: Icons.notifications_none_rounded,
-          tooltip: 'Notifications',
-          onTap: notify,
+        // Unread dot only when a REAL server-derived count says so — never a
+        // decorative badge.
+        Badge(
+          isLabelVisible: showUnread,
+          backgroundColor: SitewiseColors.danger,
+          offset: const Offset(3, 3),
+          child: M3CircleButton(
+            icon: Icons.notifications_none_rounded,
+            tooltip: showUnread
+                ? 'Notifications — $unread unread'
+                : 'Notifications',
+            onTap: onNotifications ?? notify,
+          ),
         ),
         // Single utility button — Notifications. The profile is reached via
         // the bottom navigation's Profile tab, so no person button here. The

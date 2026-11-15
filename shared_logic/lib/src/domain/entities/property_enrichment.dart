@@ -4,21 +4,22 @@
 ///
 /// * **Phase 1** — F&B competitors, demand generators, roads/transportation and
 ///   parking. Fast PostGIS aggregates, run while the owner is still on the page.
-/// * **Phase 2** — population. Raster work, started separately and the only
-///   category that can legitimately be *unavailable*.
+/// * **Phase 2** — population and age groups. Raster work, started separately;
+///   these are the categories that can legitimately be *unavailable*.
 ///
 /// Each category owns its own lifecycle, so one failure never hides the other
-/// four results. This file is the single definition of that vocabulary for both
+/// five results. This file is the single definition of that vocabulary for both
 /// the web and the mobile app: never hard-code the strings in a page.
 library;
 
-/// The five enrichment categories, in presentation order.
+/// The six enrichment categories, in presentation order.
 enum EnrichmentCategory {
   fnbCompetitors('fnb_competitors', 'F&B competitors', EnrichmentPhase.postgis),
   demandGenerators('demand_generators', 'Demand generators', EnrichmentPhase.postgis),
   roadsTransport('roads_transport', 'Roads & transportation', EnrichmentPhase.postgis),
   parking('parking', 'Parking', EnrichmentPhase.postgis),
-  population('population', 'Population', EnrichmentPhase.population);
+  population('population', 'Population', EnrichmentPhase.population),
+  agePopulation('age_population', 'Age groups', EnrichmentPhase.population);
 
   const EnrichmentCategory(this.wire, this.label, this.phase);
 
@@ -226,7 +227,7 @@ class PropertyEnrichmentSummary {
   bool get isRunning =>
       categories.values.any((state) => state.isRunning);
 
-  /// Progress across all five categories, 0..1, for the progress bar.
+  /// Progress across all six categories, 0..1, for the progress bar.
   double get progress {
     if (categories.isEmpty) return 0;
     final settled = categories.values

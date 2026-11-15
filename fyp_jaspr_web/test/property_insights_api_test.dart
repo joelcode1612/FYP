@@ -53,6 +53,40 @@ void main() {
     expect(insights.reason!.code, 'shap_unavailable');
   });
 
+  test('parses model-input feature coverage for the availability strip', () {
+    final insights = PropertyInsights.fromJson({
+      'property_id': 'MD-01755',
+      'model': {'layer1_model': 'pu_model', 'version': 'baseline_47'},
+      'feature_coverage': {
+        'available_features': 47,
+        'feature_count': 47,
+        'missing_features': <String>[],
+      },
+    });
+
+    expect(insights.featureCoverage, isNotNull);
+    expect(insights.featureCoverage!.availableFeatures, 47);
+    expect(insights.featureCoverage!.featureCount, 47);
+    expect(insights.featureCoverage!.isComplete, isTrue);
+
+    final partial = PropertyInsights.fromJson({
+      'property_id': 'MD-01755',
+      'feature_coverage': {
+        'available_features': 41,
+        'feature_count': 47,
+        'missing_features': ['frontage_m', 'depth_m'],
+      },
+    });
+    expect(partial.featureCoverage!.availableFeatures, 41);
+    expect(partial.featureCoverage!.isComplete, isFalse);
+    expect(partial.featureCoverage!.missingFeatures, ['frontage_m', 'depth_m']);
+
+    // No coverage block at all → null, so the UI renders nothing rather
+    // than a fabricated count.
+    final none = PropertyInsights.fromJson({'property_id': 'MD-01755'});
+    expect(none.featureCoverage, isNull);
+  });
+
   testComponents('renders a valid score while showing SHAP unavailable status', (tester) async {
     final insights = PropertyInsights.fromJson({
       'property_id': 'MD-01755',
@@ -89,8 +123,11 @@ void main() {
     ]));
 
     expect(find.text('98'), findsOneComponent);
-    expect(find.text('Stored score · verified by live inference'), findsOneComponent);
-    expect(find.text('Why this location received this score'), findsOneComponent);
+    // The entrepreneur-facing copy is deliberately plain-language: the model
+    // provenance stays in the parsed payload (asserted in the data test above)
+    // rather than being printed in the score card. Assert the copy actually
+    // rendered by LocationFitScore + ShapContributionChart.
+    expect(find.text('What affects this location score?'), findsOneComponent);
     expect(find.text('The PU score is available, but SHAP could not be computed.'), findsOneComponent);
   });
 
@@ -108,6 +145,7 @@ void main() {
     expect(insights.score, isNotNull);
     expect(insights.score!.raw, closeTo(0.9799711282139384, 1e-12));
     expect(insights.score!.source, 'stored_catalogue_prediction');
+    expect(insights.score!.sourceLabel, 'Stored score · verified by live inference');
     expect(insights.modelName, 'pu_model');
     expect(insights.modelVersion, 'baseline_47');
     expect(insights.modelArtifact, 'PU_model.joblib');
@@ -121,9 +159,20 @@ void main() {
 
     tester.pumpComponent(LocationFitScore(insights: insights));
     expect(find.text('98'), findsOneComponent);
-    expect(find.text('Stored score · verified by live inference'), findsOneComponent);
-    expect(find.text('pu_model · baseline_47'), findsOneComponent);
-    expect(find.text('PU_model.joblib · SHA-256 5c00c574cfe4'), findsOneComponent);
+    // Provenance (model/version/artifact/SHA) is verified on the parsed payload
+    // above; the public score card now shows only plain-language interpretation
+    // and the research-only caveat.
+    expect(
+      find.text('This location has many characteristics that may suit an F&B business.'),
+      findsOneComponent,
+    );
+    expect(
+      find.text(
+        'This score compares the area with places where food businesses operate. '
+        'It does not predict sales or guarantee success.',
+      ),
+      findsOneComponent,
+    );
   });
 
   test('preserves experimental model-card caveats for display', () {

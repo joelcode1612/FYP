@@ -31,10 +31,15 @@ def test_legacy_aliases_map_to_canonical_roles():
 
 def test_property_management_matrix():
     # Entrepreneurs manage properties they OWN; administrators act
-    # administratively. Agents never manage property records.
+    # administratively. Agents are part of the *provider* workspace (the Owner
+    # / Agent app), so they may hold listings they represent — but role
+    # membership alone authorises nothing on an existing record: the listing
+    # API additionally requires `owner_user_id` equality or an
+    # `agent_listing_assignment` row for the caller's own agent profile, and an
+    # suspended agent resolves to "unresolved" rather than to its assignment.
     assert rbac.can_manage_properties(rbac.ROLE_ENTREPRENEUR)
     assert rbac.can_manage_properties(rbac.ROLE_ADMIN)
-    assert not rbac.can_manage_properties(rbac.ROLE_AGENT)
+    assert rbac.can_manage_properties(rbac.ROLE_AGENT)
     # Legacy aliases still authorise on read (existing records keep working).
     assert rbac.can_manage_properties(rbac.ROLE_PROPERTY_OWNER)
     assert rbac.can_manage_properties(rbac.ROLE_ADMINISTRATOR)

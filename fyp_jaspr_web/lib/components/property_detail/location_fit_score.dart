@@ -18,10 +18,6 @@ class LocationFitScore extends StatelessComponent {
   @override
   Component build(BuildContext context) {
     final score = insights.score;
-    final digest = insights.modelArtifactSha256;
-    final digestPrefix = digest == null || digest.length < 12
-        ? digest
-        : digest.substring(0, 12);
 
     return section(
       classes: 'sw-fit${score == null ? ' sw-fit--empty' : ''}',
@@ -61,18 +57,22 @@ class LocationFitScore extends StatelessComponent {
           ]),
           if (score != null) ...[
             div(classes: 'sw-fit__meta', [
-              span(classes: 'sw-fit__kind', [Component.text('How similar this area is to other food-business locations')]),
-              if (insights.modelArtifact != null) ...[
-                span(classes: 'sw-fit__dot', attributes: const {'aria-hidden': 'true'}, const []),
-                span([
-                  Component.text(
-                    '${insights.modelArtifact}'
-                    '${digestPrefix == null ? '' : ' · SHA-256 $digestPrefix'}',
-                  ),
-                ]),
-              ],
-              span(classes: 'sw-fit__dot', attributes: const {'aria-hidden': 'true'}, const []),
-              span([Component.text(score.sourceLabel)]),
+              span(classes: 'sw-fit__kind', [
+                Component.text(
+                  'How similar this area is to other food-business locations',
+                ),
+              ]),
+            ]),
+            // Which model produced the number, and which artifact. Without
+            // this the page cannot be audited against the research artifact.
+            div(classes: 'sw-fit__meta', [
+              span(classes: 'sw-fit__kind', [
+                Component.text(
+                  'Model ${insights.modelName}'
+                  '${(insights.modelVersion ?? '').isEmpty ? '' : ' · ${insights.modelVersion}'}'
+                  '${(insights.modelArtifactSha256 ?? '').isEmpty ? '' : ' · artifact ${insights.modelArtifactSha256!.substring(0, 12)}…'}',
+                ),
+              ]),
             ]),
             p(classes: 'sw-fit__note', [Component.text(
               'This score compares the area with places where food businesses operate. '

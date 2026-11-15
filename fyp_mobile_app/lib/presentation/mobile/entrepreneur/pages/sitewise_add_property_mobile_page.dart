@@ -1,13 +1,16 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_logic/shared_logic.dart';
 
 import '../../../../application/services/service_locator.dart';
 import '../../../../core/config/mobile_config.dart';
+import '../../../../core/theme/sitewise_m3.dart';
+import '../../../../core/theme/sitewise_theme.dart';
 import '../../../../core/utils/capture_log.dart';
-import '../../shell/entrepreneur_tab_scope.dart';
 import '../../shell/mobile_app_shell.dart';
+import '../../shell/mobile_navigation.dart';
 import '../../../shared/tour/ar_capture_mobile_page.dart';
 
 /// SiteWise Add Property — REAL owner-listing workflow.
@@ -20,7 +23,7 @@ import '../../../shared/tour/ar_capture_mobile_page.dart';
 /// confirmation step shows the real database-assigned property ID.
 class SitewiseAddPropertyMobilePage extends StatefulWidget {
   /// Resume an existing draft (`fyp.rental_properties.id`) from
-  /// My Properties. Null starts a blank form.
+  /// My listings. Null starts a blank form.
   final String? initialDraftId;
 
   const SitewiseAddPropertyMobilePage({super.key, this.initialDraftId});
@@ -32,12 +35,15 @@ class SitewiseAddPropertyMobilePage extends StatefulWidget {
 
 class _SitewiseAddPropertyMobilePageState
     extends State<SitewiseAddPropertyMobilePage> {
-  static const Color _brand = Color(0xFF2F6FED);
-  static const Color _brandStrong = Color(0xFF1D4ED8);
-  static const Color _background = Color(0xFFF6F7F9);
-  static const Color _ink = Color(0xFF10151F);
-  static const Color _muted = Color(0xFF58677D);
-  static const Color _border = Color(0xFFE2E8F0);
+  // The Add Property form is the Provider workspace's Add destination. Its
+  // palette now points at the shared SiteWise design system instead of
+  // carrying a private copy that drifted from the entrepreneur screens.
+  static const Color _brand = SitewiseColors.action;
+  static const Color _brandStrong = SitewiseM3.primary;
+  static const Color _background = SitewiseM3.paper;
+  static const Color _ink = SitewiseM3.ink;
+  static const Color _muted = SitewiseM3.muted;
+  static const Color _border = SitewiseM3.line;
   static const Color _errorInk = Color(0xFFB42318);
   static const Color _errorBorder = Color(0xFFE7A6A0);
 
@@ -257,7 +263,7 @@ class _SitewiseAddPropertyMobilePageState
         _draftId = saved.id;
         _serverStatus = saved.verificationStatus;
         _serverMessage = 'Draft saved to Sitewise (ID ${saved.id}). '
-            'You can leave this page and resume it later from My Properties.';
+            'You can leave this page and resume it later from My listings.';
       });
     } on Object catch (error) {
       if (!mounted) return;
@@ -303,7 +309,7 @@ class _SitewiseAddPropertyMobilePageState
       if (!mounted) return;
       // The verification status changed on the server. The draft update above
       // already bumped the listings revision, but that happened BEFORE this
-      // call returned — bump again so My Properties refetches the record with
+      // call returned — bump again so My listings refetches the record with
       // its new "pending review" status instead of the "draft" it just read.
       ServiceLocator.listingsRevision.value++;
       setState(() {
@@ -437,15 +443,28 @@ class _SitewiseAddPropertyMobilePageState
         colorScheme: ColorScheme.fromSeed(
           seedColor: _brand,
           primary: _brand,
-          surface: Colors.white,
+          surface: SitewiseM3.surface,
         ),
-        fontFamily: 'Archivo',
+        fontFamily: kFontFamily,
       ),
-      child: MobileAppShell(
+      child: Consumer(
+        builder: (context, ref, _) {
+          // The Add form is the Owner dock's centre action, but an agent can
+          // reach the route too (it is inside the shared provider workspace).
+          // The dock follows the SIGNED-IN role so neither role ever sees the
+          // other one's tabs; the highlight resolves through
+          // `parentShellRoute('/provider/add-property')`.
+          final role = ref.watch(appNotifierProvider.select((s) => s.role));
+          return MobileAppShell(
         title: 'Add property',
-        currentRoute: '/entrepreneur/add-property',
-        // The Add Property flow is entered from the Spaces tab, so the header
-        // keeps no back arrow — the tab dock is the way back.
+        currentRoute: '/provider/add-property',
+        // This form is the Provider dock's Add destination: keep the exact
+        // Material 3 chrome and the role's provider tabs while it is open.
+        m3: true,
+        destinations: providerDestinationsFor(role),
+        // Entered from the Owner / Agent workspace as a top-level Add
+        // destination, so the header keeps no back arrow — the dock is the
+        // way back to the other tabs.
         showBack: false,
         body: SafeArea(
           child: LayoutBuilder(
@@ -488,6 +507,8 @@ class _SitewiseAddPropertyMobilePageState
             },
           ),
         ),
+          );
+        },
       ),
     );
   }
@@ -497,7 +518,7 @@ class _SitewiseAddPropertyMobilePageState
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
         const Text(
-          'ENTREPRENEUR WORKSPACE',
+          'PROVIDER WORKSPACE',
           style: TextStyle(
             color: _brandStrong,
             fontSize: 10,
@@ -897,7 +918,7 @@ class _SitewiseAddPropertyMobilePageState
         _buildInfoNotice(
           'SiteWise administrators separately verify the listing and '
           'ownership evidence after submission. Ownership evidence is '
-          'uploaded separately from My Properties.',
+          'uploaded separately from My listings.',
         ),
       ],
     );
@@ -1172,7 +1193,7 @@ class _SitewiseAddPropertyMobilePageState
               const SizedBox(height: 8),
               Text(
                 'The virtual tour will be linked to this property and can be '
-                'reviewed in My Properties.',
+                'reviewed in My listings.',
                 style: Theme.of(
                   context,
                 ).textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
@@ -1295,7 +1316,7 @@ class _SitewiseAddPropertyMobilePageState
           Text(
             submitted
                 ? 'Your property is now in the administrator review queue. '
-                      'Track its status in My Properties.'
+                      'Track its status in My listings.'
                 : 'This property record is persisted in Sitewise. Complete the '
                       'details and attach ownership evidence, then '
                       'submit it for verification.',
@@ -1413,8 +1434,8 @@ class _SitewiseAddPropertyMobilePageState
           SizedBox(
             width: double.infinity,
             child: OutlinedButton(
-              onPressed: () =>
-                  EntrepreneurTabScope.open(context, '/entrepreneur/spaces'),
+              onPressed: () => Navigator.of(context)
+                      .pushReplacementNamed('/provider/listings'),
               style: OutlinedButton.styleFrom(
                 foregroundColor: _ink,
                 side: const BorderSide(color: _border),
@@ -1424,7 +1445,7 @@ class _SitewiseAddPropertyMobilePageState
                 ),
               ),
               child: const Text(
-                'Go to My Properties',
+                'Go to My listings',
                 style: TextStyle(fontWeight: FontWeight.w800),
               ),
             ),
@@ -1696,9 +1717,9 @@ class _OptionSheet extends StatefulWidget {
 }
 
 class _OptionSheetState extends State<_OptionSheet> {
-  static const Color _ink = Color(0xFF10151F);
-  static const Color _muted = Color(0xFF58677D);
-  static const Color _brand = Color(0xFF2F6FED);
+  static const Color _ink = SitewiseM3.ink;
+  static const Color _muted = SitewiseM3.muted;
+  static const Color _brand = SitewiseColors.action;
 
   final TextEditingController _filter = TextEditingController();
   List<String> _visible = const <String>[];

@@ -1,0 +1,38 @@
+{
+  "subject_id": "MD-00510",
+  "model_version": "fnb_category_pu_v1_20261115",
+  "general_PU_association": 0.588861,
+  "category_rankings_exploratory": [
+    {
+      "business_type": "Restaurant",
+      "category_resemblance_score": 0.636622
+    },
+    {
+      "business_type": "Cafe / Coffee",
+      "category_resemblance_score": 0.270824
+    },
+    {
+      "business_type": "Bakery / Dessert / Beverage",
+      "category_resemblance_score": 0.07081
+    },
+    {
+      "business_type": "Fast Food / Takeaway",
+      "category_resemblance_score": 0.021745
+    }
+  ],
+  "competition_context_NOT_used_to_train_category_model": {
+    "bakery_dessert_beverage_count_1000m": 0.0,
+    "bakery_dessert_beverage_count_500m": 0.0,
+    "cafe_count_1000m": 0.0,
+    "cafe_count_500m": 0.0,
+    "fast_food_count_1000m": 1.0,
+    "fast_food_count_500m": 1.0,
+    "fnb_competitors_1000m": 5.0,
+    "fnb_competitors_500m": 1.0,
+    "restaurant_count_1000m": 3.0,
+    "restaurant_count_500m": 0.0
+  },
+  "research_only": true,
+  "production_ready": false,
+  "interpretation": "Categories resemble types of observed F&B outlets; scores are NOT viability, success or profitability probabilities"
+}

@@ -1,0 +1,158 @@
+{
+  "subject_id": "MD-00510",
+  "pu_positive_label_association": 0.5888606695885782,
+  "category_conditional_associations": {
+    "Bakery / Dessert / Beverage": 0.09575276452180663,
+    "Cafe / Coffee": 0.30426604080902137,
+    "Fast Food / Takeaway": 0.020674520952370143,
+    "Restaurant": 0.5793066737168018
+  },
+  "top_category_exploratory": "Restaurant",
+  "model_version": "category_recommender_v2_20261115",
+  "research_only": true,
+  "meaning": "Similarities to observed long-operating F&B categories, NOT success or survival probability",
+  "category_shap": {
+    "target": "Restaurant",
+    "score_type": "conditional_category_pattern_similarity_not_success_probability",
+    "model_version": "category_recommender_v2_20261115",
+    "model_output": 0.5793066737168018,
+    "shap_baseline": 0.33616399277318,
+    "reconstructed_prediction": 0.5793066737168019,
+    "max_additivity_error": 1.1102230246251565e-16,
+    "background_count": 32,
+    "top_contributions": [
+      {
+        "feature": "nearest_major_road_m",
+        "contribution": -0.0789766602579326,
+        "direction": "lowers association"
+      },
+      {
+        "feature": "worldpop_walk_reachable_10min",
+        "contribution": 0.05802978007575155,
+        "direction": "raises association"
+      },
+      {
+        "feature": "nearest_parking_distance_m",
+        "contribution": 0.05718325586460293,
+        "direction": "raises association"
+      },
+      {
+        "feature": "osm_walkway_length_density_500m_km_km2",
+        "contribution": 0.049905500785090234,
+        "direction": "raises association"
+      },
+      {
+        "feature": "walk_isochrone_area_10min_km2",
+        "contribution": 0.04807941953458289,
+        "direction": "raises association"
+      },
+      {
+        "feature": "road_length_density_500m_km_km2",
+        "contribution": 0.04646194429184852,
+        "direction": "raises association"
+      },
+      {
+        "feature": "road_intersection_density_500m_km2",
+        "contribution": 0.03840816230452285,
+        "direction": "raises association"
+      },
+      {
+        "feature": "drive_isochrone_area_10min_km2",
+        "contribution": 0.033270219282169666,
+        "direction": "raises association"
+      },
+      {
+        "feature": "residential_landuse_coverage_500m_pct",
+        "contribution": 0.0283705712127523,
+        "direction": "raises association"
+      },
+      {
+        "feature": "weekday_departures_500m_walk_am",
+        "contribution": 0.023891674803972918,
+        "direction": "raises association"
+      },
+      {
+        "feature": "pop_age_35_49_500m",
+        "contribution": -0.01684995562588984,
+        "direction": "lowers association"
+      },
+      {
+        "feature": "schools_count_500m",
+        "contribution": -0.015951562763562077,
+        "direction": "lowers association"
+      }
+    ]
+  },
+  "general_pu_shap": {
+    "target": "General F&B P-vs-U association",
+    "score_type": "PU_research_association_not_success_probability",
+    "model_version": "category_recommender_v2_20261115",
+    "model_output": 0.5888606695885782,
+    "shap_baseline": 0.5190363792329333,
+    "reconstructed_prediction": 0.5888606695885784,
+    "max_additivity_error": 2.220446049250313e-16,
+    "background_count": 32,
+    "top_contributions": [
+      {
+        "feature": "pop_age_0_14_500m",
+        "contribution": -0.2609827413771507,
+        "direction": "lowers association"
+      },
+      {
+        "feature": "walk_isochrone_area_10min_km2",
+        "contribution": -0.16973402011726066,
+        "direction": "lowers association"
+      },
+      {
+        "feature": "osm_walkway_length_density_500m_km_km2",
+        "contribution": -0.14756815058357764,
+        "direction": "lowers association"
+      },
+      {
+        "feature": "pop_age_0_14_1km",
+        "contribution": -0.14048181120051254,
+        "direction": "lowers association"
+      },
+      {
+        "feature": "pop_age_35_49_500m",
+        "contribution": 0.13454241571876785,
+        "direction": "raises association"
+      },
+      {
+        "feature": "worldpop_walk_reachable_10min",
+        "contribution": 0.1254415410375376,
+        "direction": "raises association"
+      },
+      {
+        "feature": "pop_age_25_34_1km",
+        "contribution": 0.08880962876447615,
+        "direction": "raises association"
+      },
+      {
+        "feature": "pop_age_25_34_500m",
+        "contribution": 0.08821139984800896,
+        "direction": "raises association"
+      },
+      {
+        "feature": "pop_age_50_64_500m",
+        "contribution": 0.08546529368186712,
+        "direction": "raises association"
+      },
+      {
+        "feature": "pop_age_65_plus_1km",
+        "contribution": -0.08029766786932202,
+        "direction": "lowers association"
+      },
+      {
+        "feature": "pop_age_65_plus_500m",
+        "contribution": -0.0746134872130989,
+        "direction": "lowers association"
+      },
+      {
+        "feature": "road_length_density_1km_km_km2",
+        "contribution": 0.07160079321327512,
+        "direction": "raises association"
+      }
+    ]
+  }
+}

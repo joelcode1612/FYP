@@ -33,6 +33,10 @@ dependencies = [
     "pyarrow>=18",
     "duckdb>=1.1",
     "shapely>=2",
+    # Raster reads for the add-property age-band extraction (WorldPop age-sex
+    # GeoTIFFs). Same optional-rasterio convention the population GeoTIFF
+    # fallback uses; without it the age category reports honestly unavailable.
+    "rasterio>=1.3",
     "geopandas>=1.0",
     "osmnx>=2.0",
     "apscheduler>=3.10,<4",

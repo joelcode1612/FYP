@@ -22,8 +22,9 @@ Design constraints enforced here
   reproduced from the deployed artifact, or computed by SHAP. Missing inputs
   produce an explicit reason; they never create a live score or placeholder.
   A separately valid stored legacy score remains visible when SHAP is unavailable.
-* **No raw column names reach the UI.** ``FEATURE_LABELS`` maps all 47 model
-  features to plain English; the technical name is retained under
+* **No raw column names reach the UI.** ``FEATURE_LABELS`` maps every model
+  feature of every variant (the 47-feature baseline and the expanded
+  64-feature contract) to plain English; the technical name is retained under
   ``technical`` for the optional explanation and for authorised consumers.
 * **One artifact, one explanation.** The service loads whichever artifact
   ``SITEWISE_PU_MODEL_VARIANT`` selects and stamps its version and checksum into
@@ -40,6 +41,7 @@ from __future__ import annotations
 
 import csv
 import hashlib
+import json
 import math
 import threading
 from pathlib import Path
@@ -49,12 +51,29 @@ from sqlalchemy import text
 from sqlmodel import Session
 
 from sitewise.core.exceptions import ModelUnavailableError
+from sitewise.ml import shap_explainer as _shap_module
 from sitewise.ml.feature_bridge import merge_bridge_features
+from sitewise.ml.fnb_category import (
+    CATEGORY_MODEL_NAME,
+    COMPETITOR_CONTEXT_FEATURES,
+    category_explanation,
+    competition_context,
+    match_business_type,
+    predict_categories,
+)
+from sitewise.ml.pu_expanded import (
+    EXPANDED_MODEL_NAME,
+    expanded_policy_split,
+    merge_expanded_bridge_features,
+)
 from sitewise.ml.model_loader import ModelLoader
 from sitewise.ml.property_features import FeatureResolutionError, PropertyFeatureRepository
 from sitewise.ml.pu_learning import PULearning
 from sitewise.ml.pu_variant import LEGACY_MODEL_NAME, resolve_variant
 from sitewise.ml.shap_explainer import ShapExplainer
+from sitewise.services import explanation_cache
+from sitewise.services.explanation_cache import ExplanationIdentity, ExplanationJob
+from sitewise.services.explanation_worker import get_explanation_worker
 from sitewise.services.explanation_service import (
     _ADDITIVITY_TOLERANCE,
     category_of,
@@ -112,6 +131,30 @@ FEATURE_LABELS: dict[str, str] = {
     "fast_food_count_1000m": "Fast-food outlets within 1 km",
     "bakery_dessert_beverage_count_500m": "Bakeries and drink shops within 500 m",
     "bakery_dessert_beverage_count_1000m": "Bakeries and drink shops within 1 km",
+    # --- 2026-11-15 expanded 64-feature model additions -------------------
+    # WorldPop Malaysia 2025 population-age counts (estimated raster
+    # summaries, not censused exact persons).
+    "pop_age_0_14_500m": "Children aged 0–14 living within 500 m",
+    "pop_age_15_24_500m": "Young people aged 15–24 living within 500 m",
+    "pop_age_25_34_500m": "Adults aged 25–34 living within 500 m",
+    "pop_age_35_49_500m": "Adults aged 35–49 living within 500 m",
+    "pop_age_50_64_500m": "Adults aged 50–64 living within 500 m",
+    "pop_age_65_plus_500m": "Seniors aged 65+ living within 500 m",
+    "pop_age_0_14_1km": "Children aged 0–14 living within 1 km",
+    "pop_age_15_24_1km": "Young people aged 15–24 living within 1 km",
+    "pop_age_25_34_1km": "Adults aged 25–34 living within 1 km",
+    "pop_age_35_49_1km": "Adults aged 35–49 living within 1 km",
+    "pop_age_50_64_1km": "Adults aged 50–64 living within 1 km",
+    "pop_age_65_plus_1km": "Seniors aged 65+ living within 1 km",
+    # OSM residential density / coverage measures.
+    "residential_building_count_500m": "Residential buildings within 500 m",
+    "residential_building_count_1000m": "Residential buildings within 1 km",
+    "residential_building_density_500m_km2": "Residential building density within 500 m",
+    "residential_building_density_1000m_km2": "Residential building density within 1 km",
+    "residential_footprint_coverage_500m_pct": "Land covered by residential buildings within 500 m",
+    "residential_footprint_coverage_1000m_pct": "Land covered by residential buildings within 1 km",
+    "residential_landuse_coverage_500m_pct": "Land zoned or used for housing within 500 m",
+    "residential_landuse_coverage_1000m_pct": "Land zoned or used for housing within 1 km",
 }
 
 #: Unit suffix per feature, used only for the value shown beside a factor.
@@ -131,6 +174,17 @@ for _name in FEATURE_LABELS:
         _FEATURE_UNITS[_name] = "people"
     else:
         _FEATURE_UNITS[_name] = ""
+# Expanded-model units the suffix rules cannot derive: building counts,
+# building densities and percentage coverages.
+for _name in FEATURE_LABELS:
+    if _name.startswith("residential_building_count_"):
+        _FEATURE_UNITS[_name] = "buildings"
+    elif _name.startswith("residential_building_density_"):
+        _FEATURE_UNITS[_name] = "buildings/km²"
+    elif _name.startswith("residential_footprint_coverage_") or _name.startswith(
+        "residential_landuse_coverage_"
+    ):
+        _FEATURE_UNITS[_name] = "%"
 # Distances and densities read badly with a bare number; give them a direction.
 _IS_DISTANCE = {n for n in FEATURE_LABELS if n.endswith("_m")}
 
@@ -171,6 +225,16 @@ CATEGORY_SPECS: tuple[dict[str, str], ...] = (
         "why": (
             "Roads, public transport and walkability decide how far customers "
             "will travel, and whether they can reach you without a car."
+        ),
+    },
+    {
+        "key": "residential",
+        "label": "Housing Around",
+        "question": "How residential is the surrounding area?",
+        "why": (
+            "Homes nearby mean regular daily footfall — people who live here "
+            "pass this location morning and evening. The model learns the "
+            "balance between housing and other nearby activity."
         ),
     },
     {
@@ -292,12 +356,34 @@ SCORE_MEANING = (
 )
 
 _SHAP_BACKGROUND_CSV = Path(__file__).resolve().parents[3] / "ml_reference" / "shap_background_47.csv"
+#: The expanded 64-feature model is explained ONLY against the retrained
+#: package's own background (``SHAP_Background_PU_64.csv``: real P and U
+#: observations) — never the 47-feature file, and never the older derived file.
+_SHAP_BACKGROUND_64_CSV = (
+    Path(__file__).resolve().parents[3]
+    / "ml_reference"
+    / "category_aware_retrain_2026_11_15"
+    / "SHAP_Background_PU_64.csv"
+)
 _STORED_PU_SCORE_TYPE = "UNCALIBRATED_PvU_RESEARCH_ASSOCIATION_NOT_SUCCESS_PROBABILITY"
+
+
+def _background_path(variant_key: str | None) -> Path:
+    """The verified SHAP background for the active variant."""
+    if variant_key == "expanded64":
+        return _SHAP_BACKGROUND_64_CSV
+    return _SHAP_BACKGROUND_CSV
 
 #: Cache of computed explanations, keyed by (model_version, property_id) so a
 #: replaced artifact can never serve a previous model's explanation.
 _EXPLANATION_CACHE: dict[tuple[str, str], dict[str, Any]] = {}
 _EXPLANATION_CACHE_LOCK = threading.Lock()
+
+#: Cache of the Stage-2 category block, keyed by (category model version,
+#: property_id). Separate from the PU explanation cache because the two models
+#: are replaced independently.
+_CATEGORY_CACHE: dict[tuple[str, str], dict[str, Any]] = {}
+_CATEGORY_CACHE_LOCK = threading.Lock()
 
 
 def clear_insights_cache() -> int:
@@ -305,7 +391,105 @@ def clear_insights_cache() -> int:
     with _EXPLANATION_CACHE_LOCK:
         count = len(_EXPLANATION_CACHE)
         _EXPLANATION_CACHE.clear()
-        return count
+    with _CATEGORY_CACHE_LOCK:
+        count += len(_CATEGORY_CACHE)
+        _CATEGORY_CACHE.clear()
+    return count
+
+
+def _feature_digest(values: dict[str, float | None]) -> str:
+    """Stable fingerprint of one property's resolved model inputs.
+
+    Cache identity must change when the *inputs* change, not only when the
+    artifact does: a re-imported feature row or a corrected WorldPop raster
+    would otherwise keep serving an explanation of the old vector.
+    """
+    payload = json.dumps(
+        {name: (None if value is None else round(float(value), 6)) for name, value in sorted(values.items())},
+        separators=(",", ":"),
+        sort_keys=True,
+    )
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:16]
+
+
+#: mtime-keyed file fingerprints. Hashing the artifact (up to a few MB) and
+#: parsing the background CSV on EVERY request — including cache hits — was
+#: measurable per-request overhead; keying on (path, mtime_ns, size) keeps the
+#: invalidation semantics exactly (a replaced file changes its identity).
+_FILE_SHA_CACHE: dict[tuple[str, int, int], str | None] = {}
+_FILE_SHA_LOCK = threading.Lock()
+
+#: Parsed background rows per (path, mtime_ns, size, feature signature).
+_BACKGROUND_CACHE: dict[tuple, list[dict[str, float]]] = {}
+_BACKGROUND_LOCK = threading.Lock()
+
+
+def _file_sha256(path: Path) -> str | None:
+    try:
+        stat = path.stat()
+    except OSError:
+        return None
+    key = (str(path), stat.st_mtime_ns, stat.st_size)
+    with _FILE_SHA_LOCK:
+        hit = _FILE_SHA_CACHE.get(key)
+    if hit is not None:
+        return hit
+    try:
+        digest = hashlib.sha256()
+        with path.open("rb") as stream:
+            for block in iter(lambda: stream.read(1024 * 1024), b""):
+                digest.update(block)
+        value: str | None = digest.hexdigest()
+    except OSError:
+        value = None
+    if value is not None:
+        with _FILE_SHA_LOCK:
+            _FILE_SHA_CACHE[key] = value
+    return value
+
+
+def _reference_background_rows(
+    feature_names: list[str], path: Path | None = None
+) -> list[dict[str, float]]:
+    """Load only complete, finite rows from the variant's tracked real background.
+
+    Module-level, mtime-keyed: the parsed rows are reused across requests and
+    across the precompute worker, and a changed file invalidates by identity.
+    """
+    source = path or _SHAP_BACKGROUND_CSV
+    try:
+        stat = source.stat()
+    except OSError:
+        return []
+    key = (
+        str(source),
+        stat.st_mtime_ns,
+        stat.st_size,
+        hashlib.sha256(",".join(feature_names).encode("utf-8")).hexdigest()[:16],
+    )
+    with _BACKGROUND_LOCK:
+        hit = _BACKGROUND_CACHE.get(key)
+    if hit is not None:
+        return hit
+    rows: list[dict[str, float]] = []
+    try:
+        with source.open(encoding="utf-8-sig", newline="") as stream:
+            reader = csv.DictReader(stream)
+            if reader.fieldnames and set(feature_names).issubset(reader.fieldnames):
+                for row in reader:
+                    try:
+                        values = {name: float(row[name]) for name in feature_names}
+                    except (TypeError, ValueError):
+                        continue
+                    if all(math.isfinite(value) for value in values.values()):
+                        rows.append(values)
+                rows = rows[:100]
+    except OSError:
+        rows = []
+    with _BACKGROUND_LOCK:
+        _BACKGROUND_CACHE[key] = rows
+    return rows
+
 
 
 def format_feature_value(feature: str, value: float | None) -> str:
@@ -501,24 +685,87 @@ def _layer_payloads(values: dict[str, float | None], measured: bool = True) -> l
     return layers
 
 
+#: Sentinel distinguishing "not passed" (use ``self.cache_session``) from an
+#: explicit ``None`` (force-disable the persistent cache).
+_UNSET = object()
+
+
 class PropertyInsightsService:
     """Compose score + SHAP + categories for one catalogue property."""
 
-    def __init__(self, session: Session, analytics_session: Session | None = None):
+    def __init__(
+        self,
+        session: Session,
+        analytics_session: Session | None = None,
+        cache_session: Session | None = None,
+    ):
         self.session = session
         self.analytics = analytics_session
+        #: Operational-database session enabling the persistent validated-
+        #: explanation cache. None keeps the historical in-memory-only
+        #: behaviour (used by the DB-less contract tests and the worker's own
+        #: synchronous compute pass).
+        self.cache_session = cache_session
 
     # -- public -------------------------------------------------------------
 
-    def insights(self, property_id: str, origin: dict[str, float] | None = None) -> dict[str, Any]:
-        """Return the active PU score independently of optional SHAP.
+    def insights(
+        self,
+        property_id: str,
+        origin: dict[str, float] | None = None,
+        business_type: str | None = None,
+    ) -> dict[str, Any]:
+        merged, _payload, _key = self._insights_full(
+            property_id, origin, business_type, cache_session=self.cache_session
+        )
+        return merged
 
-        The score and its explanation are separate products: a missing feature,
-        missing SHAP background or SHAP failure must not hide a valid stored or
-        live PU score. The catalogue ranking's legacy score remains
-        authoritative when the active variant is ``legacy``; any available
-        live inference is compared with it rather than silently substituted.
+    def _insights_full(
+        self,
+        property_id: str,
+        origin: dict[str, float] | None = None,
+        business_type: str | None = None,
+        *,
+        cache_session: Session | None | object = _UNSET,
+    ) -> tuple[dict[str, Any], dict[str, Any] | None, str | None]:
+        """Build the full insights read model.
+
+        ``cache_session`` defaults to the constructor-provided operational
+        session (``self.cache_session``); pass ``None`` explicitly to force
+        the historical in-memory-only behaviour (used by the worker's compute
+        pass and the precompute CLI, which persist under their own identity).
+
+        Returns ``(merged_response, cached_payload, persistent_cache_key)``.
+        ``cached_payload`` is the persistable explanation portion (score,
+        explanation, categories, map, availability) when one was resolved this
+        call, and ``persistent_cache_key`` the identity it belongs to. The
+        optional ``cache_session`` (operational database) enables the
+        persistent validated-explanation cache; without it the service keeps
+        its historical behaviour: in-memory cache plus synchronous computation
+        on a miss.
+
+        Contract (unchanged by the performance work):
+
+        * Returns the active PU score independently of optional SHAP. The
+          score and its explanation are separate products: a missing feature,
+          missing SHAP background or SHAP failure must not hide a valid stored
+          or live PU score. The catalogue ranking's legacy score remains
+          authoritative when the active variant is ``legacy``; any available
+          live inference is compared with it rather than silently substituted.
+        *         ``business_type`` is the entrepreneur's own selection. It selects
+        which of the four category outputs the Stage-2 explanation describes
+        — never the model's top category, unless no selection is known.
+        * With the persistent cache enabled, a validated stored explanation is
+          served immediately; on a miss the request either computes
+          synchronously (only when this process has completed its one-off SHAP
+          warm-up — measured, not assumed) or returns the real PU score with a
+          truthful ``pending`` status and schedules the computation on the
+          background worker. A blocking multi-second SHAP computation never
+          runs inside a request.
         """
+        if cache_session is _UNSET:
+            cache_session = self.cache_session
+        selected_category = match_business_type(business_type)
         variant = self._variant()
         base: dict[str, Any] = {
             "property_id": property_id,
@@ -528,6 +775,11 @@ class PropertyInsightsService:
             "panorama": self._panorama(property_id),
             "score": {"available": False, "label": "Location Fit", "meaning": SCORE_MEANING},
             "explanation": {"available": False},
+            "business_type": {
+                "requested": business_type,
+                "matched_category": selected_category,
+                "matched": selected_category is not None,
+            },
             "categories": [
                 {
                     **{k: spec[k] for k in ("key", "label", "question", "why")},
@@ -553,29 +805,30 @@ class PropertyInsightsService:
                 "code": "analytics_unavailable",
                 "message": "Location analysis is not configured for this deployment.",
             }
-            return base
+            return base, None, None
+
+        # Stage 2 is independent of the PU variant: the category model has its
+        # own 54-feature contract, its own validation and its own wording. A
+        # PU failure must never hide it, and vice versa.
+        base["category_model"] = self._category_payload(property_id, selected_category)
 
         try:
-            loaded = ModelLoader().load(variant["layer1_model"])
+            loaded = ModelLoader().load_cached(variant["layer1_model"])
         except ModelUnavailableError as exc:
             base["reason"] = {
                 "code": "model_unavailable",
                 "message": "The configured PU artifact could not be loaded.",
                 "detail": str(exc),
             }
-            return base
+            return base, None, None
 
         stored = self._stored_legacy_score(property_id) if variant.get("key") == "legacy" else None
         artifact_digest = self._artifact_sha256(loaded.meta.get("artifact_filename")) or "unhashed"
         cache_version = (
             f"{variant.get('layer1_model') or variant['name']}:{variant.get('version') or 'unknown'}:"
-            f"{artifact_digest}:{stored['score'] if stored is not None else 'no-stored-score'}"
+            f"{artifact_digest}:{stored['score'] if stored is not None else 'no-stored-score'}:"
+            f"cat:{self._artifact_sha256(CATEGORY_MODEL_NAME + '.joblib') or 'unhashed'}"
         )
-        cache_key = (cache_version, property_id)
-        with _EXPLANATION_CACHE_LOCK:
-            cached = _EXPLANATION_CACHE.get(cache_key)
-        if cached is not None:
-            return {**base, **cached}
 
         repo = PropertyFeatureRepository(self.analytics)
         bundle = None
@@ -584,6 +837,10 @@ class PropertyInsightsService:
         try:
             bundle = repo.get(property_id, loaded.feature_names, source="catalog")
             coverage = merge_bridge_features(bundle, expected_features=loaded.feature_names)
+            if variant.get("key") == "expanded64":
+                coverage = merge_expanded_bridge_features(
+                    coverage, expected_features=loaded.feature_names
+                )
             values = dict(coverage.values)
             base["feature_coverage"] = {
                 "available_features": coverage.available_count,
@@ -606,11 +863,43 @@ class PropertyInsightsService:
             for name, value in values.items()
             if value is not None
         }
-        live_prediction: dict[str, Any] | None = None
-        if coverage is not None and not coverage.missing_features:
-            live_prediction = PULearning(model_name=variant["layer1_model"]).predict_or_report(
-                property_id, features, allow_model_imputation=False
+
+        # The explanation cache is keyed on the RESOLVED vector, so a changed
+        # feature row, a replaced artifact or a different business-type
+        # selection can never reuse a previous explanation.
+        cache_key: tuple[str, str] | None = None
+        if coverage is not None:
+            cache_key = (
+                f"{cache_version}:feat:{_feature_digest(values)}:"
+                f"bt:{selected_category or 'top'}",
+                property_id,
             )
+            with _EXPLANATION_CACHE_LOCK:
+                cached = _EXPLANATION_CACHE.get(cache_key)
+            if cached is not None:
+                cached_score = cached.get("score") or {}
+                base["model"] = {
+                    **variant,
+                    "artifact_sha256": artifact_digest,
+                    "score_source": cached_score.get("source"),
+                    "score_source_label": cached_score.get("source_label"),
+                }
+                return {**base, **cached}, cached, None
+
+        live_prediction: dict[str, Any] | None = None
+        if coverage is not None:
+            if variant.get("key") == "expanded64":
+                # The saved preprocessing pipeline supports imputation ONLY for
+                # the residential measurements (the artifact's own contract).
+                imputable, required = expanded_policy_split(coverage.missing_features)
+                if not required:
+                    live_prediction = PULearning(model_name=variant["layer1_model"]).predict_or_report(
+                        property_id, features, allow_model_imputation=bool(imputable)
+                    )
+            elif not coverage.missing_features:
+                live_prediction = PULearning(model_name=variant["layer1_model"]).predict_or_report(
+                    property_id, features, allow_model_imputation=False
+                )
 
         pu_score: float | None = None
         score_source = ""
@@ -677,7 +966,7 @@ class PropertyInsightsService:
                     list(coverage.missing_features) if coverage is not None else []
                 ),
             }
-            return base
+            return base, None, None
 
         if coverage is None:
             base["reason"] = {
@@ -685,16 +974,27 @@ class PropertyInsightsService:
                 "message": "The score is available, but its feature vector could not be resolved for SHAP.",
                 "detail": resolution_error,
             }
-            return base
+            return base, None, None
 
         if coverage.missing_features:
             base["reason"] = {
-                "code": "shap_features_missing",
-                "message": "The PU score is available, but SHAP is unavailable until all model features resolve.",
+                "code": (
+                    "shap_imputed_features"
+                    if variant.get("key") == "expanded64"
+                    else "shap_features_missing"
+                ),
+                "message": (
+                    "The displayed score uses the artifact's own median "
+                    "imputation for the missing residential measurements, so "
+                    "no SHAP explanation is shown: the contributions would "
+                    "describe partially measured data."
+                    if variant.get("key") == "expanded64"
+                    else "The PU score is available, but SHAP is unavailable until all model features resolve."
+                ),
                 "missing_features": list(coverage.missing_features),
                 "source": score_source,
             }
-            return base
+            return base, None, None
 
         # The experimental model card has no separately verified matching SHAP
         # background/license lineage. Never explain it with the original
@@ -706,30 +1006,142 @@ class PropertyInsightsService:
                 "source": score_source,
                 "research_only": True,
             }
-            return base
+            return base, None, None
 
-        background = self._reference_background(loaded.feature_names)
-        background_sha256 = self._reference_background_sha256()
+        # Each variant is explained only against its own verified background:
+        # the legacy 47-feature file for the original model, the 64-feature
+        # training-observation background for the expanded model.
+        background_file = _background_path(variant.get("key"))
+        background = self._reference_background(loaded.feature_names, background_file)
+        background_sha256 = self._reference_background_sha256(background_file)
         if not background or background_sha256 is None:
             base["reason"] = {
                 "code": "shap_background_missing",
                 "message": "The PU score is available, but no exact-feature real SHAP background could be loaded.",
                 "source": score_source,
             }
-            return base
+            return base, None, None
+
+        # -- persistent validated-explanation cache --------------------------
+        # Identity: property + model name/version + artifact checksum + the
+        # RESOLVED feature vector digest + background checksum + method/config
+        # (see explanation_cache.METHOD_CONFIG). Any change to any of them
+        # yields a different key, so a stale explanation is unreachable. The
+        # identity deliberately excludes business_type: the stored payload is
+        # the PU explanation, which does not depend on the Stage-2 selection.
+        identity = ExplanationIdentity(
+            property_id=property_id,
+            model_name=variant["layer1_model"],
+            model_version=variant.get("version"),
+            artifact_sha256=artifact_digest if artifact_digest != "unhashed" else None,
+            feature_digest=_feature_digest(values),
+            background_sha256=background_sha256,
+            background_size=len(background),
+        )
+        persistent_key = identity.cache_key()
+
+        if cache_session is not None:
+            stored_payload = explanation_cache.get_ready(cache_session, persistent_key)
+            if stored_payload is not None:
+                # Cache hit: serve the real, validated explanation immediately.
+                # The raw model inference is never re-run for a hit.
+                cached_score = stored_payload.get("score") or {}
+                base["model"] = {
+                    **variant,
+                    "artifact_sha256": artifact_digest,
+                    "score_source": cached_score.get("source"),
+                    "score_source_label": cached_score.get("source_label"),
+                }
+                return {**base, **stored_payload}, stored_payload, persistent_key
+
+            if not _shap_module.process_warm():
+                # Cold process (worker booting, one-off SHAP compilation not
+                # finished): never block the request on it — the one-off cost
+                # measured at 13-35 s. Return the real PU score with a
+                # truthful pending/unavailable state and schedule the job.
+                row_status = explanation_cache.get_status(cache_session, persistent_key)
+                if row_status == "failed":
+                    reason = explanation_cache.failure_reason(
+                        cache_session, persistent_key
+                    )
+                    base["reason"] = {
+                        "code": "shap_failed",
+                        "message": (
+                            "The PU score is shown from live model inference. "
+                            "Its SHAP explanation could not be computed and "
+                            "was not shown rather than displayed incorrectly."
+                        ),
+                        "detail": reason,
+                        "source": score_source,
+                    }
+                    base["explanation"] = {
+                        "available": False,
+                        "status": "unavailable",
+                        "message": base["reason"]["message"],
+                    }
+                    return base, None, persistent_key
+
+                compute_now, _newly = explanation_cache.schedule(cache_session, identity)
+                scheduled = compute_now or row_status == "pending"
+                enqueued = False
+                if compute_now:
+                    enqueued = get_explanation_worker().enqueue(
+                        ExplanationJob(
+                            cache_key=persistent_key, property_id=property_id
+                        )
+                    )
+                if scheduled or enqueued:
+                    base["reason"] = {
+                        "code": "shap_pending",
+                        "message": (
+                            "The PU score is shown from live model inference. "
+                            "Its SHAP factor explanation is being precomputed "
+                            "and will appear automatically on the next refresh."
+                        ),
+                        "source": score_source,
+                    }
+                    base["explanation"] = {
+                        "available": False,
+                        "status": "pending",
+                        "message": base["reason"]["message"],
+                    }
+                    return base, None, persistent_key
+                # Unschedulable and cold: report pending truthfully rather
+                # than blocking this request on a multi-second computation.
+                base["reason"] = {
+                    "code": "shap_pending",
+                    "message": (
+                        "The PU score is shown from live model inference. Its "
+                        "SHAP factor explanation is queued for precomputation."
+                    ),
+                    "source": score_source,
+                }
+                base["explanation"] = {
+                    "available": False,
+                    "status": "pending",
+                    "message": base["reason"]["message"],
+                }
+                return base, None, persistent_key
+            # Warm process: fall through — synchronous computation here is
+            # measured at well under the 3-second deadline, and the result is
+            # persisted below so future processes never compute it again.
 
         try:
             explained = ShapExplainer(
                 loader=ModelLoader(), model_name=variant["layer1_model"]
             ).explain(features, background=background)
         except ModelUnavailableError as exc:
+            if cache_session is not None:
+                explanation_cache.mark_failed(
+                    cache_session, persistent_key, str(exc)
+                )
             base["reason"] = {
                 "code": "shap_unavailable",
                 "message": "The PU score is available, but its explanation could not be computed.",
                 "detail": str(exc),
                 "source": score_source,
             }
-            return base
+            return base, None, persistent_key
 
         contributions: dict[str, float] = explained["contributions"]
         base_value = float(explained["baseline_association"])
@@ -737,23 +1149,35 @@ class PropertyInsightsService:
         reconstructed = base_value + math.fsum(contributions.values())
         additivity_error = abs(reconstructed - output)
         if additivity_error > _ADDITIVITY_TOLERANCE:
+            if cache_session is not None:
+                explanation_cache.mark_failed(
+                    cache_session,
+                    persistent_key,
+                    f"additivity check failed (error {additivity_error:.3e})",
+                )
             base["reason"] = {
                 "code": "shap_inconsistent",
                 "message": "The PU score is available, but SHAP failed its additivity check and was withheld.",
                 "additivity_error": additivity_error,
                 "source": score_source,
             }
-            return base
+            return base, None, persistent_key
 
         score_difference = abs(output - pu_score)
         if score_difference > _ADDITIVITY_TOLERANCE:
+            if cache_session is not None:
+                explanation_cache.mark_failed(
+                    cache_session,
+                    persistent_key,
+                    f"SHAP output does not match the displayed PU score (difference {score_difference:.3e})",
+                )
             base["reason"] = {
                 "code": "shap_score_mismatch",
                 "message": "The PU score remains available, but this SHAP output does not match it and was withheld.",
                 "score_difference": score_difference,
                 "source": score_source,
             }
-            return base
+            return base, None, persistent_key
 
         values = dict(coverage.values)
         ranked = sorted(contributions.items(), key=lambda kv: kv[1])
@@ -796,9 +1220,185 @@ class PropertyInsightsService:
                 "categories": True,
             },
         }
-        with _EXPLANATION_CACHE_LOCK:
-            _EXPLANATION_CACHE[cache_key] = payload
-        return {**base, **payload}
+        if cache_key is not None:
+            with _EXPLANATION_CACHE_LOCK:
+                _EXPLANATION_CACHE[cache_key] = payload
+        if cache_session is not None:
+            # Persist the validated explanation so future processes serve it
+            # without recomputing (the persistent identity is the same one the
+            # lookup above used).
+            try:
+                explanation_cache.store_ready(cache_session, identity, payload)
+            except Exception:  # noqa: BLE001 - persistence must never void a valid result
+                pass
+        return {**base, **payload}, payload, persistent_key
+
+    # -- Stage 2: business-category resemblance -----------------------------
+
+    def _category_payload(
+        self, property_id: str, business_type: str | None = None
+    ) -> dict[str, Any]:
+        """The F&B category block for the entrepreneur's SELECTED category.
+
+        Uses the category model's OWN 54-feature contract (leakage-reduced:
+        the ten competitor-count columns are excluded) and its own SHAP
+        background. A category score is never explained with the PU
+        explanation, and vice versa. When ``business_type`` is known the block
+        reports and explains THAT class; the model's own top class is reported
+        separately and never substituted for the entrepreneur's choice.
+        Weak validation is reported with every result so the UI can keep the
+        exploratory wording.
+        """
+        try:
+            from sitewise.ml import category_aware
+
+            bundle = category_aware.load_bundle()
+        except Exception as exc:  # noqa: BLE001 - evidence is additive only
+            return {
+                "available": False,
+                "reason": {"code": "category_model_unavailable", "message": str(exc)},
+            }
+
+        # The Stage-2 explanation is also a permutation-SHAP computation. On a
+        # cold process (one-off SHAP compilation still running off-path) it
+        # must not block the request either: report truthfully and let the
+        # next refresh pick the warmed result up.
+        if self.cache_session is not None and not _shap_module.process_warm():
+            return {
+                "available": False,
+                "model_version": bundle.version,
+                "status": "pending",
+                "reason": {
+                    "code": "category_model_pending",
+                    "message": (
+                        "The category explanation engine is still warming up "
+                        "in this freshly started backend process; please "
+                        "refresh in a few seconds."
+                    ),
+                },
+            }
+
+        version = bundle.version
+        names = list(bundle.category_features)
+        context_names = [n for n in COMPETITOR_CONTEXT_FEATURES if n not in names]
+        required = [*names, *context_names]
+        try:
+            feature_bundle = PropertyFeatureRepository(self.analytics).get(
+                property_id, required, source="catalog"
+            )
+            coverage = merge_bridge_features(feature_bundle, expected_features=required)
+            coverage = merge_expanded_bridge_features(
+                coverage, expected_features=required
+            )
+        except FeatureResolutionError as exc:
+            return {
+                "available": False,
+                "model_version": version,
+                "reason": {"code": "features_unresolved", "message": str(exc)},
+            }
+        except Exception as exc:  # noqa: BLE001 - fail closed, never fabricate
+            return {
+                "available": False,
+                "model_version": version,
+                "reason": {
+                    "code": "features_unresolved",
+                    "message": f"{type(exc).__name__}: {exc}",
+                },
+            }
+
+        values = dict(coverage.values)
+        cache_key = (
+            f"{version}:{bundle.sha256[:16]}:feat:{_feature_digest(values)}:"
+            f"bt:{business_type or 'top'}",
+            property_id,
+        )
+        with _CATEGORY_CACHE_LOCK:
+            cached = _CATEGORY_CACHE.get(cache_key)
+        if cached is not None:
+            return cached
+
+        try:
+            result = predict_categories(values, business_type=business_type)
+        except ModelUnavailableError as exc:
+            return {
+                "available": False,
+                "model_version": version,
+                "reason": {
+                    "code": "category_inference_unavailable",
+                    "message": str(exc),
+                    "missing_features": [n for n in names if values.get(n) is None],
+                },
+            }
+
+        result["property_id"] = property_id
+        result["competition_context_NOT_used_by_model"] = competition_context(values)
+        result["feature_coverage"] = {
+            "available_features": sum(1 for n in names if values.get(n) is not None),
+            "feature_count": len(names),
+            "missing_features": [n for n in names if values.get(n) is None],
+            "flags": list(coverage.flags),
+        }
+        result["business_type"] = {
+            "requested": business_type,
+            "matched_category": business_type,
+            "matched": business_type is not None,
+        }
+        if any(values.get(n) is None for n in names):
+            result["explanation"] = {
+                "available": False,
+                "state": "withheld_imputed_features",
+                "reason": {
+                    "code": "category_shap_imputed",
+                    "message": (
+                        "The displayed category scores use the artifact's median "
+                        "imputation for missing residential measurements, so no "
+                        "SHAP explanation is shown."
+                    ),
+                },
+            }
+        else:
+            try:
+                explained = category_explanation(values, business_type)
+                factors = [
+                    _factor(
+                        item["technical"],
+                        item["contribution"],
+                        values.get(item["technical"]),
+                    )
+                    for item in explained["contributions"]
+                ]
+                result["explanation"] = {
+                    "available": True,
+                    "state": "ready",
+                    "explainer": explained["explainer"],
+                    "model": explained["model"],
+                    "model_version": explained["model_version"],
+                    "artifact_sha256": explained["artifact_sha256"],
+                    "explained_output": explained["explained_output"],
+                    "base_value": explained["base_value"],
+                    "reconstructed": explained["reconstructed"],
+                    "reconstruction_error": explained["reconstruction_error"],
+                    "additivity_tolerance": explained["additivity_tolerance"],
+                    "background_size": explained["background_size"],
+                    "research_only": True,
+                    "score_meaning": explained["score_meaning"],
+                    "factors": factors,
+                    "strongest_supporting": [
+                        f for f in factors if f["contribution"] > 0
+                    ][:4],
+                    "strongest_lowering": [
+                        f for f in factors if f["contribution"] < 0
+                    ][:4],
+                }
+            except ModelUnavailableError as exc:
+                result["explanation"] = {
+                    "available": False,
+                    "state": "unavailable",
+                    "reason": {"code": "category_shap_unavailable", "message": str(exc)},
+                }
+        with _CATEGORY_CACHE_LOCK:
+            _CATEGORY_CACHE[cache_key] = result
+        return result
 
     def _stored_legacy_score(self, property_id: str) -> dict[str, Any] | None:
         """Read a validated original ranking score; never use it for experimental47."""
@@ -813,7 +1413,7 @@ class PropertyInsightsService:
                            source_data->>'model_method' AS model_method,
                            source_data->>'model_feature_set' AS feature_set,
                            source_data->>'model_version' AS model_version
-                    FROM sitewise_app.properties
+                    FROM fyp.catalogue_properties
                     WHERE id = :property_id
                     """
                 ),
@@ -832,15 +1432,9 @@ class PropertyInsightsService:
         return {**dict(row), "score": score}
 
     @staticmethod
-    def _reference_background_sha256() -> str | None:
-        try:
-            digest = hashlib.sha256()
-            with _SHAP_BACKGROUND_CSV.open("rb") as stream:
-                for block in iter(lambda: stream.read(1024 * 1024), b""):
-                    digest.update(block)
-            return digest.hexdigest()
-        except OSError:
-            return None
+    def _reference_background_sha256(path: Path | None = None) -> str | None:
+        source = path or _SHAP_BACKGROUND_CSV
+        return _file_sha256(source)
 
     @staticmethod
     def _artifact_sha256(filename: Any) -> str | None:
@@ -850,34 +1444,14 @@ class PropertyInsightsService:
         allowed = (Path(__file__).resolve().parent.parent / "ml").resolve()
         if allowed not in path.parents or not path.is_file():
             return None
-        try:
-            digest = hashlib.sha256()
-            with path.open("rb") as stream:
-                for block in iter(lambda: stream.read(1024 * 1024), b""):
-                    digest.update(block)
-            return digest.hexdigest()
-        except OSError:
-            return None
+        return _file_sha256(path)
 
     @staticmethod
-    def _reference_background(feature_names: list[str]) -> list[dict[str, float]]:
-        """Load only complete, finite rows from the tracked real PU background."""
-        try:
-            with _SHAP_BACKGROUND_CSV.open(encoding="utf-8-sig", newline="") as stream:
-                reader = csv.DictReader(stream)
-                if not reader.fieldnames or not set(feature_names).issubset(reader.fieldnames):
-                    return []
-                rows = []
-                for row in reader:
-                    try:
-                        values = {name: float(row[name]) for name in feature_names}
-                    except (TypeError, ValueError):
-                        continue
-                    if all(math.isfinite(value) for value in values.values()):
-                        rows.append(values)
-                return rows[:100]
-        except OSError:
-            return []
+    def _reference_background(
+        feature_names: list[str], path: Path | None = None
+    ) -> list[dict[str, float]]:
+        """Complete, finite rows from the variant's tracked real background."""
+        return _reference_background_rows(feature_names, path)
 
     # -- internals ----------------------------------------------------------
 

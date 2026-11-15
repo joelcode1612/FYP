@@ -6,6 +6,8 @@
 
 import 'package:jaspr/client.dart';
 
+import 'package:sitewise_jaspr_web/components/property_detail/location_insights.dart'
+    deferred as _location_insights;
 import 'package:sitewise_jaspr_web/components/agent_assignment_control.dart'
     deferred as _agent_assignment_control;
 import 'package:sitewise_jaspr_web/components/agent_change_requests_panel.dart'
@@ -32,20 +34,6 @@ import 'package:sitewise_jaspr_web/pages/admin/user_detail_page.dart'
     deferred as _user_detail_page;
 import 'package:sitewise_jaspr_web/pages/admin/users_page.dart'
     deferred as _users_page;
-import 'package:sitewise_jaspr_web/pages/agent/dashboard_page.dart'
-    deferred as _agent_dashboard_page;
-import 'package:sitewise_jaspr_web/pages/agent/enquiries_page.dart'
-    deferred as _enquiries_page;
-import 'package:sitewise_jaspr_web/pages/agent/listings_page.dart'
-    deferred as _agent_listings_page;
-import 'package:sitewise_jaspr_web/pages/agent/performance_page.dart'
-    deferred as _performance_page;
-import 'package:sitewise_jaspr_web/pages/agent/profile_page.dart'
-    deferred as _agent_profile_page;
-import 'package:sitewise_jaspr_web/pages/agent/property_detail_page.dart'
-    deferred as _property_detail_page;
-import 'package:sitewise_jaspr_web/pages/entrepreneur/add_property_page.dart'
-    deferred as _add_property_page;
 import 'package:sitewise_jaspr_web/pages/entrepreneur/ai_recommendations_page.dart'
     deferred as _ai_recommendations_page;
 import 'package:sitewise_jaspr_web/pages/entrepreneur/assessment_history_page.dart'
@@ -62,8 +50,6 @@ import 'package:sitewise_jaspr_web/pages/entrepreneur/explanation_page.dart'
     deferred as _explanation_page;
 import 'package:sitewise_jaspr_web/pages/entrepreneur/explore_page.dart'
     deferred as _explore_page;
-import 'package:sitewise_jaspr_web/pages/entrepreneur/my_properties_page.dart'
-    deferred as _my_properties_page;
 import 'package:sitewise_jaspr_web/pages/entrepreneur/preferences_page.dart'
     deferred as _preferences_page;
 import 'package:sitewise_jaspr_web/pages/entrepreneur/profile_page.dart'
@@ -71,7 +57,7 @@ import 'package:sitewise_jaspr_web/pages/entrepreneur/profile_page.dart'
 import 'package:sitewise_jaspr_web/pages/entrepreneur/property_analysis_page.dart'
     deferred as _property_analysis_page;
 import 'package:sitewise_jaspr_web/pages/entrepreneur/property_detail_page.dart'
-    deferred as _entrepreneur_property_detail_page;
+    deferred as _property_detail_page;
 import 'package:sitewise_jaspr_web/pages/entrepreneur/recommendations_page.dart'
     deferred as _recommendations_page;
 import 'package:sitewise_jaspr_web/pages/entrepreneur/report_page.dart'
@@ -82,20 +68,6 @@ import 'package:sitewise_jaspr_web/pages/entrepreneur/saved_page.dart'
     deferred as _saved_page;
 import 'package:sitewise_jaspr_web/pages/entrepreneur/tour_page.dart'
     deferred as _tour_page;
-import 'package:sitewise_jaspr_web/pages/owner/add_property_page.dart'
-    deferred as _owner_add_property_page;
-import 'package:sitewise_jaspr_web/pages/owner/dashboard_page.dart'
-    deferred as _owner_dashboard_page;
-import 'package:sitewise_jaspr_web/pages/owner/profile_page.dart'
-    deferred as _owner_profile_page;
-import 'package:sitewise_jaspr_web/pages/owner/properties_page.dart'
-    deferred as _properties_page;
-import 'package:sitewise_jaspr_web/pages/owner/property_detail_page.dart'
-    deferred as _owner_property_detail_page;
-import 'package:sitewise_jaspr_web/pages/owner/tour_preview_page.dart'
-    deferred as _tour_preview_page;
-import 'package:sitewise_jaspr_web/pages/owner/tours_page.dart'
-    deferred as _tours_page;
 import 'package:sitewise_jaspr_web/pages/auth_callback_page.dart'
     deferred as _auth_callback_page;
 import 'package:sitewise_jaspr_web/pages/forgot_password_page.dart'
@@ -141,6 +113,14 @@ ClientOptions get defaultClientOptions => ClientOptions(
       (p) => _agent_change_requests_panel.AgentChangeRequestsPanel(),
       loader: _agent_change_requests_panel.loadLibrary,
     ),
+    'location_insights': ClientLoader(
+      (p) => _location_insights.LocationInsightsV4(
+        propertyId: p['propertyId'] as String,
+        puScore: p['puScore'] as num?,
+        hasPuScore: p['hasPuScore'] as bool,
+      ),
+      loader: _location_insights.loadLibrary,
+    ),
     'verification_detail_view': ClientLoader(
       (p) => _verification_detail_view.VerificationDetailView(),
       loader: _verification_detail_view.loadLibrary,
@@ -185,38 +165,9 @@ ClientOptions get defaultClientOptions => ClientOptions(
       (p) => _users_page.UsersPage(),
       loader: _users_page.loadLibrary,
     ),
-    'agent/dashboard_page': ClientLoader(
-      (p) => _agent_dashboard_page.AgentDashboardPage(),
-      loader: _agent_dashboard_page.loadLibrary,
-    ),
-    'enquiries_page': ClientLoader(
-      (p) => _enquiries_page.AgentEnquiriesPage(),
-      loader: _enquiries_page.loadLibrary,
-    ),
-    'agent/listings_page': ClientLoader(
-      (p) => _agent_listings_page.AgentListingsPage(),
-      loader: _agent_listings_page.loadLibrary,
-    ),
-    'performance_page': ClientLoader(
-      (p) => _performance_page.AgentPerformancePage(),
-      loader: _performance_page.loadLibrary,
-    ),
-    'agent/profile_page': ClientLoader(
-      (p) => _agent_profile_page.AgentProfilePage(),
-      loader: _agent_profile_page.loadLibrary,
-    ),
-    'property_detail_page': ClientLoader(
-      (p) =>
-          _property_detail_page.AgentPropertyDetailPage(id: p['id'] as String),
-      loader: _property_detail_page.loadLibrary,
-    ),
     'auth_callback_page': ClientLoader(
       (p) => _auth_callback_page.AuthCallbackPage(),
       loader: _auth_callback_page.loadLibrary,
-    ),
-    'add_property_page': ClientLoader(
-      (p) => _add_property_page.AddPropertyPage(),
-      loader: _add_property_page.loadLibrary,
     ),
     'ai_recommendations_page': ClientLoader(
       (p) => _ai_recommendations_page.AiRecommendationsPage(
@@ -232,6 +183,7 @@ ClientOptions get defaultClientOptions => ClientOptions(
       (p) => _assessment_workspace_page.AssessmentWorkspacePage(
         propertyId: p['propertyId'] as String,
         stage: p['stage'] as String,
+        businessType: p['businessType'] as String,
       ),
       loader: _assessment_workspace_page.loadLibrary,
     ),
@@ -261,10 +213,6 @@ ClientOptions get defaultClientOptions => ClientOptions(
       ),
       loader: _explore_page.loadLibrary,
     ),
-    'my_properties_page': ClientLoader(
-      (p) => _my_properties_page.MyPropertiesPage(),
-      loader: _my_properties_page.loadLibrary,
-    ),
     'preferences_page': ClientLoader(
       (p) => _preferences_page.PreferencesPage(),
       loader: _preferences_page.loadLibrary,
@@ -278,12 +226,13 @@ ClientOptions get defaultClientOptions => ClientOptions(
           _property_analysis_page.PropertyAnalysisPage(id: p['id'] as String),
       loader: _property_analysis_page.loadLibrary,
     ),
-    'entrepreneur/property_detail_page': ClientLoader(
-      (p) => _entrepreneur_property_detail_page.PropertyDetailPage(
+    'property_detail_page': ClientLoader(
+      (p) => _property_detail_page.PropertyDetailPage(
         id: p['id'] as String,
         resultId: p['resultId'] as String,
+        businessType: p['businessType'] as String,
       ),
-      loader: _entrepreneur_property_detail_page.loadLibrary,
+      loader: _property_detail_page.loadLibrary,
     ),
     'recommendations_page': ClientLoader(
       (p) => _recommendations_page.RecommendationsPage(
@@ -318,37 +267,6 @@ ClientOptions get defaultClientOptions => ClientOptions(
     'login_page': ClientLoader(
       (p) => _login_page.LoginPage(portal: p['portal'] as String?),
       loader: _login_page.loadLibrary,
-    ),
-    'owner/add_property_page': ClientLoader(
-      (p) => _owner_add_property_page.AddPropertyPage(
-        editingId: p['editingId'] as String?,
-      ),
-      loader: _owner_add_property_page.loadLibrary,
-    ),
-    'owner/dashboard_page': ClientLoader(
-      (p) => _owner_dashboard_page.DashboardPage(),
-      loader: _owner_dashboard_page.loadLibrary,
-    ),
-    'owner/profile_page': ClientLoader(
-      (p) => _owner_profile_page.ProfilePage(),
-      loader: _owner_profile_page.loadLibrary,
-    ),
-    'properties_page': ClientLoader(
-      (p) => _properties_page.PropertiesPage(),
-      loader: _properties_page.loadLibrary,
-    ),
-    'owner/property_detail_page': ClientLoader(
-      (p) =>
-          _owner_property_detail_page.PropertyDetailPage(id: p['id'] as String),
-      loader: _owner_property_detail_page.loadLibrary,
-    ),
-    'tour_preview_page': ClientLoader(
-      (p) => _tour_preview_page.TourPreviewPage(id: p['id'] as String),
-      loader: _tour_preview_page.loadLibrary,
-    ),
-    'tours_page': ClientLoader(
-      (p) => _tours_page.ToursPage(),
-      loader: _tours_page.loadLibrary,
     ),
     'reset_password_page': ClientLoader(
       (p) => _reset_password_page.ResetPasswordPage(),

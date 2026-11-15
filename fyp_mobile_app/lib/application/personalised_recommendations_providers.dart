@@ -1,24 +1,22 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_riverpod/legacy.dart' show StateNotifier, StateNotifierProvider;
+import 'package:flutter_riverpod/legacy.dart'
+    show StateNotifier, StateNotifierProvider;
 import 'package:shared_logic/shared_logic.dart';
 
 import 'services/service_locator.dart';
 
-/// Riverpod wiring for the Layer 2/3 personalised pipeline (new file, so the
-/// concurrently-maintained providers.dart stays untouched).
+/// Repository for the SiteWise personalised recommendation pipeline.
 ///
-/// The repository is injected through [ServiceLocator.apiClient] exactly like
-/// the other live repositories; without the live-API override the page
-/// reports the feature as unavailable instead of faking data.
-
+/// Uses the existing API client configured in ServiceLocator.
 final personalisedRecommendationRepositoryProvider =
     Provider<ApiPersonalisedRecommendationRepository>((ref) {
-  return ApiPersonalisedRecommendationRepository(ServiceLocator.apiClient);
-});
+      return ApiPersonalisedRecommendationRepository(ServiceLocator.apiClient);
+    });
 
-/// Lifecycle of one personalised-batch screen.
+/// Lifecycle states for a personalised recommendation batch.
 enum PersonalisedBatchStatus { idle, loading, ready, error, unavailable }
 
+/// State of the personalised recommendation screen.
 class PersonalisedBatchState {
   final PersonalisedBatchStatus status;
   final GeneratedBatch? batch;
@@ -50,38 +48,51 @@ class PersonalisedBatchState {
   }
 }
 
-class PersonalisedBatchNotifier
-    extends StateNotifier<PersonalisedBatchState> {
+/// Manages loading and generating personalised recommendation batches.
+class PersonalisedBatchNotifier extends StateNotifier<PersonalisedBatchState> {
   final ApiPersonalisedRecommendationRepository _repository;
-  final bool _liveApi;
 
-  PersonalisedBatchNotifier(this._repository, {required bool liveApi})
-      : _liveApi = liveApi,
-        super(const PersonalisedBatchState());
+  /// Indicates whether the live API is configured for this notifier.
+  final bool liveApi;
 
+  PersonalisedBatchNotifier(this._repository, {required this.liveApi})
+    : super(const PersonalisedBatchState());
+
+  /// Load the latest stored recommendation batch.
   Future<void> loadExisting() async {
-    if (!_liveApi) {
+    if (state.loading) return;
+
+    if (!liveApi) {
       state = const PersonalisedBatchState(
         status: PersonalisedBatchStatus.unavailable,
         error:
-            'Personalised recommendations need the live API connection. '
-            'This build has none configured.',
+            'Personalised recommendations require the live API. '
+            'This build has no live API configured.',
       );
       return;
     }
+
     state = state.copyWith(
       status: PersonalisedBatchStatus.loading,
       error: null,
       clearBatch: true,
+      reusedExistingBatch: false,
     );
+
     try {
       final batch = await _repository.latest();
+
+      if (!mounted) return;
+
       state = PersonalisedBatchState(
-        status:
-            batch == null ? PersonalisedBatchStatus.idle : PersonalisedBatchStatus.ready,
+        status: batch == null
+            ? PersonalisedBatchStatus.idle
+            : PersonalisedBatchStatus.ready,
         batch: batch,
       );
     } catch (err) {
+      if (!mounted) return;
+
       state = state.copyWith(
         status: PersonalisedBatchStatus.error,
         error: err.toString(),
@@ -89,39 +100,52 @@ class PersonalisedBatchNotifier
     }
   }
 
-  /// Regenerates. The backend itself reuses the stored batch (and reports
-  /// `reused_existing_batch`) when no scoring input changed.
+  /// Generate a personalised recommendation batch.
+  ///
+  /// The backend may reuse an existing batch when the scoring
+  /// inputs have not changed.
   Future<void> generate({int limit = 20}) async {
-    if (!_liveApi) {
+    if (state.loading) return;
+
+    if (!liveApi) {
       state = const PersonalisedBatchState(
         status: PersonalisedBatchStatus.unavailable,
         error:
-            'Personalised recommendations need the live API connection. '
-            'This build has none configured.',
+            'Personalised recommendations require the live API. '
+            'This build has no live API configured.',
       );
       return;
     }
+
     state = state.copyWith(
       status: PersonalisedBatchStatus.loading,
       error: null,
       clearBatch: true,
+      reusedExistingBatch: false,
     );
+
     try {
       final response = await _repository.generate(limit: limit);
+
+      if (!mounted) return;
+
       final results = (response['results'] as List?) ?? const [];
+
+      final batch = GeneratedBatch.fromJson({
+        'batch_id': response['batch_id'] ?? '',
+        'generated_at': response['generated_at'],
+        'result_count': results.length,
+        'results': results,
+      });
+
       state = PersonalisedBatchState(
-        status: results.isEmpty
-            ? PersonalisedBatchStatus.ready
-            : PersonalisedBatchStatus.ready,
-        batch: GeneratedBatch.fromJson({
-          'batch_id': response['batch_id'] ?? '',
-          'generated_at': response['generated_at'],
-          'result_count': results.length,
-          'results': results,
-        }),
+        status: PersonalisedBatchStatus.ready,
+        batch: batch,
         reusedExistingBatch: response['reused_existing_batch'] == true,
       );
     } catch (err) {
+      if (!mounted) return;
+
       state = state.copyWith(
         status: PersonalisedBatchStatus.error,
         error: err.toString(),
@@ -130,19 +154,23 @@ class PersonalisedBatchNotifier
   }
 }
 
+/// Riverpod provider for personalised recommendation state.
 final personalisedBatchProvider =
     StateNotifierProvider<PersonalisedBatchNotifier, PersonalisedBatchState>((
-  ref,
-) {
-  return PersonalisedBatchNotifier(
-    ref.read(personalisedRecommendationRepositoryProvider),
-    liveApi: true,
-  );
-});
+      ref,
+    ) {
+      return PersonalisedBatchNotifier(
+        ref.read(personalisedRecommendationRepositoryProvider),
+        liveApi: true,
+      );
+    });
 
-/// One explanation request per result id, cached for the screen's lifetime.
+/// Fetch one recommendation explanation per result ID.
+///
+/// The result is cached while the provider remains alive.
 final explanationProvider = FutureProvider.autoDispose
     .family<PersonalisedExplanation, String>((ref, resultId) async {
-  final repository = ref.read(personalisedRecommendationRepositoryProvider);
-  return repository.explanation(resultId);
-});
+      final repository = ref.read(personalisedRecommendationRepositoryProvider);
+
+      return repository.explanation(resultId);
+    });
