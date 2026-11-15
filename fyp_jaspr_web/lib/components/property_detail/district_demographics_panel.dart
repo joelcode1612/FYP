@@ -10,7 +10,15 @@ import '../../data/location_evidence_api.dart';
 /// 1 km of the property: DOSM publishes administrative-district statistics,
 /// and no validated method exists to redistribute district ages into a
 /// walking catchment. The nearby WorldPop estimates are shown next to the
-/// district total so the two scopes stay visibly separate.
+/// district total so the two scopes stay visibly separate, and neither the
+/// radius nor the property changes the district block.
+///
+/// Each block (population with its sex split, age bands, household income) is
+/// rendered from its own value and its own reference year, because the DOSM
+/// datasets cover different districts and different years. A figure that the
+/// source does not publish reads "Not available" with the backend's reason;
+/// nothing is estimated, rounded into existence, or carried over from another
+/// district to fill a gap.
 ///
 /// The horizontal age bars are plain DOM (a labelled track with a percentage
 /// fill), keyboard-reachable via the section itself, and carry per-bar
@@ -37,30 +45,47 @@ class DistrictDemographicsPanel extends StatelessComponent {
     '#cc8656',
   ];
 
+  static const _notAvailable = 'Not available';
+
+  /// A headcount or ringgit amount as whole units with thousands separators —
+  /// `2,082,300` and `8,837`. People are never counted in fractions, so the
+  /// one decimal place DOSM uses for its thousands is dropped here rather than
+  /// shown as `.0`. A null stays visibly missing instead of printing `0`.
   static String _fmt(num? value) {
-    if (value == null) return 'Not available';
-    final whole = value.toDouble();
-    if (whole == whole.roundToDouble()) {
-      return whole.round().toString().replaceAllMapped(
-            RegExp(r'(\d)(?=(\d{3})+(?!\d))'),
-            (m) => '${m[1]},',
-          );
-    }
-    return whole.toStringAsFixed(1);
+    if (value == null) return _notAvailable;
+    return value.round().toString().replaceAllMapped(
+      RegExp(r'(\d)(?=(\d{3})+(?!\d))'),
+      (m) => '${m[1]},',
+    );
+  }
+
+  /// "W.P. Kuala Lumpur" — DOSM publishes the federal territory as both the
+  /// state and the district, which would otherwise read twice.
+  static String _caption(String? district, String? state) {
+    final parts = [district?.trim() ?? '', state?.trim() ?? '']
+      ..removeWhere((part) => part.isEmpty);
+    return parts.toSet().join(', ');
   }
 
   String get _scopeLabel {
     final s = statistics;
     if (s == null || !s.available) return 'District data not available';
-    final district = s.district?.trim() ?? '';
-    final state = s.state?.trim() ?? '';
-    return [district, state].where((part) => part.isNotEmpty).join(', ');
+    final caption = _caption(s.district, s.state);
+    return caption.isEmpty ? 'District data not available' : caption;
+  }
+
+  /// The four-digit year of an ISO date string, or null when unusable.
+  static String? _yearOf(String? iso) {
+    if (iso == null || iso.length < 4) return null;
+    return iso.substring(0, 4);
   }
 
   @override
   Component build(BuildContext context) {
     final s = statistics;
-    final available = s != null && s.available && s.ageGroups.isNotEmpty;
+    final hasAgeGroups = s != null && s.available && s.ageGroups.isNotEmpty;
+    final districtPopulation = s?.districtPopulation;
+    final income = s?.incomeMedianMyr;
 
     return section(
       classes: 'sw-age',
@@ -93,21 +118,25 @@ class DistrictDemographicsPanel extends StatelessComponent {
                 strong([Component.text('Residents by age')]),
                 small([
                   Component.text(
-                    available
+                    hasAgeGroups
                         ? 'District-wide population estimates · DOSM'
                         : 'Official district-wide population estimates · DOSM',
                   ),
                 ]),
               ]),
-              span(
-                classes: 'sw-age__year',
-                [Component.text(available ? 'DOSM ${s.ageYear ?? ''}' : 'No age data')],
-              ),
+              span(classes: 'sw-age__year', [
+                Component.text(
+                  hasAgeGroups
+                      ? 'DOSM ${s.ageYear ?? 'year not stated'}'
+                      : 'No age data',
+                ),
+              ]),
             ]),
-            if (!available)
+            if (!hasAgeGroups)
               p(classes: 'sw-age__empty', [
                 Component.text(
-                  s?.reason ??
+                  s?.ageNote ??
+                      s?.reason ??
                       'Age-group figures for this district have not been '
                           'imported yet. Nothing is estimated in their place.',
                 ),
@@ -120,7 +149,13 @@ class DistrictDemographicsPanel extends StatelessComponent {
           aside(classes: 'sw-age__side', [
             div(classes: 'sw-age__stat', [
               span([Component.text('Estimated residents within 500 m')]),
-              strong([Component.text(_fmt(residents500m?.value))]),
+              strong([
+                Component.text(
+                  residents500m?.value == null
+                      ? _notAvailable
+                      : '${_fmt(residents500m?.value)} estimated residents',
+                ),
+              ]),
               small([
                 Component.text(
                   'Neighbourhood estimate · not a DOSM district count',
@@ -129,34 +164,36 @@ class DistrictDemographicsPanel extends StatelessComponent {
             ]),
             div(classes: 'sw-age__stat', [
               span([Component.text('Estimated residents within 1 km')]),
-              strong([Component.text(_fmt(residents1km?.value))]),
-              small([
+              strong([
                 Component.text(
-                  'Neighbourhood estimate · not an age breakdown',
+                  residents1km?.value == null
+                      ? _notAvailable
+                      : '${_fmt(residents1km?.value)} estimated residents',
                 ),
+              ]),
+              small([
+                Component.text('Neighbourhood estimate · not an age breakdown'),
               ]),
             ]),
             div(classes: 'sw-age__stat sw-age__stat--district', [
               span([Component.text('Residents in the whole district')]),
               strong([
                 Component.text(
-                  available ? _fmt(s.districtPopulation ?? s.totalPopulation) : 'Not available',
+                  districtPopulation == null
+                      ? _notAvailable
+                      : '${_fmt(districtPopulation)} people',
                 ),
               ]),
               small([
-                Component.text(
-                  available
-                      ? _districtPopulationNote(s)
-                      : 'Available when the district match succeeds',
-                ),
+                Component.text(s?.populationNote ?? _districtPopulationNote(s)),
               ]),
             ]),
-            if (available &&
-                (s.malePopulation != null || s.femalePopulation != null))
+            if (s?.malePopulation != null || s?.femalePopulation != null)
               div(classes: 'sw-age__people', [
                 Component.text(
-                  'District population by sex: ${_fmt(s.malePopulation)} male '
-                  '· ${_fmt(s.femalePopulation)} female (DOSM ${s.ageYear}).',
+                  'District population by sex: ${_fmt(s?.malePopulation)} male '
+                  '· ${_fmt(s?.femalePopulation)} female '
+                  '(DOSM ${_yearOf(s?.populationAsOf) ?? 'year not stated'}).',
                 ),
               ]),
           ]),
@@ -169,17 +206,20 @@ class DistrictDemographicsPanel extends StatelessComponent {
               Component.text(
                 'The district population, age groups and household income come '
                 'from official DOSM datasets stored in SiteWise\'s analytics '
-                'database, joined to this property\'s recorded district.',
+                'database, joined to the administrative district matched to '
+                'this property. Each figure carries the reference year of the '
+                'dataset it came from, so the years differ by design.',
               ),
             ]),
           ]),
           span(classes: 'sw-age__income', [
             Component.text(
-              available && s.incomeMedianMyr != null
+              income == null
                   ? 'Typical monthly household income in this district: '
-                      'RM ${_fmt(s.incomeMedianMyr)} (${_yearOf(s.incomeAsOf) ?? 'year not stated'})'
+                        '$_notAvailable'
                   : 'Typical monthly household income in this district: '
-                      'Not available',
+                        'RM ${_fmt(income)}/month '
+                        '(${_yearOf(s?.incomeAsOf) ?? 'year not stated'})',
             ),
           ]),
         ]),
@@ -187,27 +227,44 @@ class DistrictDemographicsPanel extends StatelessComponent {
     );
   }
 
-  /// The four-digit year of an ISO date string, or null when unusable.
-  static String? _yearOf(String? iso) {
-    if (iso == null || iso.length < 4) return null;
-    return iso.substring(0, 4);
-  }
-
-  static String _districtPopulationNote(DistrictStatistics stats) {
-    final year = _yearOf(stats.populationAsOf);
+  /// Fallback note for the district card when the backend states no reason for
+  /// a missing value — the year travels with the population dataset, never
+  /// with the age bands or the income survey.
+  static String _districtPopulationNote(DistrictStatistics? stats) {
+    final year = _yearOf(stats?.populationAsOf);
     return year == null
         ? 'DOSM district-wide population'
         : 'DOSM district-wide population · $year';
   }
 
   Component _ageSection(DistrictStatistics stats) {
+    // Shares come from the backend only when every displayed group holds its
+    // published bands. When they do not, the bars are still drawn to scale
+    // against the largest group so the shape stays readable, but the value
+    // text carries headcounts and no percentage is claimed.
+    final sharesAvailable = stats.ageGroups.every(
+      (group) => group.share != null,
+    );
+    final largest = stats.ageGroups.fold<int>(
+      0,
+      (best, group) => group.persons == null
+          ? best
+          : (group.persons! > best ? group.persons! : best),
+    );
     return div(classes: 'sw-age__available', [
+      if (stats.ageNote != null)
+        p(classes: 'sw-age__warning', [Component.text(stats.ageNote!)]),
       div(
         classes: 'sw-age__bars',
         attributes: const {'aria-live': 'polite'},
         [
           for (final (index, group) in stats.ageGroups.indexed)
-            _ageBar(group, _barColors[index % _barColors.length]),
+            _ageBar(
+              group,
+              _barColors[index % _barColors.length],
+              sharesAvailable: sharesAvailable,
+              largest: largest,
+            ),
         ],
       ),
       p(classes: 'sw-age__warning', [
@@ -221,31 +278,55 @@ class DistrictDemographicsPanel extends StatelessComponent {
     ]);
   }
 
-  Component _ageBar(DistrictAgeGroup group, String color) {
+  Component _ageBar(
+    DistrictAgeGroup group,
+    String color, {
+    required bool sharesAvailable,
+    required int largest,
+  }) {
+    final persons = group.persons;
     final share = group.share;
-    final pct = share == null ? 0.0 : (share * 100).clamp(0.0, 100.0);
-    final shareLabel = share == null ? '' : ' ${pct.toStringAsFixed(1)} percent';
+    final percent = persons == null
+        ? 0.0
+        : sharesAvailable && share != null
+        ? (share * 100).clamp(0.0, 100.0)
+        : (largest <= 0 ? 0.0 : persons / largest * 100).clamp(0.0, 100.0);
+    final hasShare = sharesAvailable && share != null;
+    final valueLabel = persons == null
+        ? 'No data'
+        : hasShare
+        ? '${percent.toStringAsFixed(1)}%'
+        : _fmt(persons);
     return div(
       classes: 'sw-age__bar',
       attributes: {
         'role': 'img',
-        'aria-label':
-            'Age ${group.label}: ${_fmt(group.persons)} people,$shareLabel',
+        'aria-label': persons == null
+            ? 'Age ${group.label}: no district figure published'
+            : 'Age ${group.label}: ${_fmt(persons)} people'
+                  '${hasShare ? ', ${percent.toStringAsFixed(1)} percent' : ''}',
       },
       [
-        span(classes: 'sw-age__bar-label', [
-          Component.text(group.label),
-        ]),
+        span(classes: 'sw-age__bar-label', [Component.text(group.label)]),
         span(classes: 'sw-age__track', [
           span(
             classes: 'sw-age__fill',
-            attributes: {'style': 'width:${pct.toStringAsFixed(2)}%;--sw-age-color:$color'},
+            attributes: {
+              'style':
+                  'width:${percent.toStringAsFixed(2)}%;--sw-age-color:$color',
+            },
             const [],
           ),
         ]),
         span(classes: 'sw-age__bar-value', [
-          Component.text(share == null ? _fmt(group.persons) : '${pct.toStringAsFixed(1)}%'),
-          small([Component.text('${_fmt(group.persons)} people')]),
+          Component.text(valueLabel),
+          small([
+            Component.text(
+              persons == null
+                  ? 'no published bands'
+                  : '${_fmt(persons)} people',
+            ),
+          ]),
         ]),
       ],
     );

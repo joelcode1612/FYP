@@ -119,12 +119,11 @@ class PropertyEvidence {
         dataCompletenessPct: json['data_completeness_pct'] is num
             ? json['data_completeness_pct'] as num
             : null,
-        districtStatistics:
-            json['district_statistics'] is Map<String, dynamic>
-                ? DistrictStatistics.fromJson(
-                    json['district_statistics'] as Map<String, dynamic>,
-                  )
-                : null,
+        districtStatistics: json['district_statistics'] is Map<String, dynamic>
+            ? DistrictStatistics.fromJson(
+                json['district_statistics'] as Map<String, dynamic>,
+              )
+            : null,
         groups: (json['groups'] as List? ?? const [])
             .whereType<Map>()
             .map(
@@ -146,10 +145,15 @@ class PropertyEvidence {
 class DistrictAgeGroup {
   final String key;
   final String label;
-  final int persons;
 
-  /// Share of the district's grouped population, 0-1. Null when the total is
-  /// zero, which the UI must never draw as a usable distribution.
+  /// Headcount, or null when the DOSM import holds none of the five-year bands
+  /// behind this group. Null is a missing category and must be rendered as
+  /// such; coercing it to 0 would claim a district with no children in it.
+  final int? persons;
+
+  /// Share of the district's grouped population, 0-1. Null when the groups are
+  /// partial or the total is zero, which the UI must never draw as a usable
+  /// distribution.
   final double? share;
 
   const DistrictAgeGroup({
@@ -163,7 +167,7 @@ class DistrictAgeGroup {
       DistrictAgeGroup(
         key: '${json['key'] ?? ''}',
         label: '${json['label'] ?? json['key'] ?? ''}',
-        persons: (json['persons'] as num?)?.toInt() ?? 0,
+        persons: (json['persons'] as num?)?.toInt(),
         share: (json['share'] as num?)?.toDouble(),
       );
 }
@@ -171,8 +175,12 @@ class DistrictAgeGroup {
 /// The official DOSM district demographics block of the evidence payload.
 ///
 /// [available] is false with a [reason] when the property has no verified
-/// district match or the district has no age records — the UI then shows an
-/// explicit unavailable state instead of an empty chart.
+/// district match, or when DOSM publishes none of these datasets for the
+/// matched district. When it is true each block is still resolved on its own:
+/// population, age bands and household income come from different datasets and
+/// different reference years, so a null value plus its note means that one
+/// figure is unpublished for this district and the UI says so instead of
+/// collapsing the whole section or inventing a number.
 class DistrictStatistics {
   final bool available;
   final String? reason;
@@ -181,15 +189,22 @@ class DistrictStatistics {
   final String? ageYear;
   final int totalPopulation;
   final List<DistrictAgeGroup> ageGroups;
+  final String? ageNote;
 
-  /// The DOSM tables publish no male/female split; these stay null and the UI
-  /// must not invent one.
+  /// DOSM's published district sex split, from the same dataset and date as
+  /// [districtPopulation]. Null when that dataset holds no split (or no record)
+  /// for the district — the UI must not invent one.
   final int? malePopulation;
   final int? femalePopulation;
   final int? districtPopulation;
   final String? populationAsOf;
+  final String? populationNote;
+
+  /// Median monthly household income from the DOSM household income survey,
+  /// whose reference year differs from the population estimates.
   final num? incomeMedianMyr;
   final String? incomeAsOf;
+  final String? incomeNote;
 
   const DistrictStatistics({
     required this.available,
@@ -199,12 +214,15 @@ class DistrictStatistics {
     this.district,
     this.state,
     this.ageYear,
+    this.ageNote,
     this.malePopulation,
     this.femalePopulation,
     this.districtPopulation,
     this.populationAsOf,
+    this.populationNote,
     this.incomeMedianMyr,
     this.incomeAsOf,
+    this.incomeNote,
   });
 
   factory DistrictStatistics.fromJson(Map<String, dynamic> json) =>
@@ -214,6 +232,7 @@ class DistrictStatistics {
         district: json['district']?.toString(),
         state: json['state']?.toString(),
         ageYear: json['age_year']?.toString(),
+        ageNote: json['age_note']?.toString(),
         totalPopulation: (json['total_population'] as num?)?.toInt() ?? 0,
         ageGroups: [
           for (final g in (json['age_groups'] as List? ?? const []))
@@ -223,8 +242,10 @@ class DistrictStatistics {
         femalePopulation: (json['female_population'] as num?)?.toInt(),
         districtPopulation: (json['district_population'] as num?)?.toInt(),
         populationAsOf: json['population_as_of']?.toString(),
+        populationNote: json['population_note']?.toString(),
         incomeMedianMyr: json['income_median_myr'] as num?,
         incomeAsOf: json['income_as_of']?.toString(),
+        incomeNote: json['income_note']?.toString(),
       );
 }
 

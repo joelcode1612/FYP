@@ -291,7 +291,7 @@ def _persons(value: Any) -> int | None:
     A zero is a measured zero and stays zero.
     """
     number = _number(value)
-    return None if number is None else int(round(number))
+    return None if number is None else round(number)
 
 
 def _metric(key: str, label: str, unit: str, value: Any, note: str | None = None) -> dict:
@@ -549,6 +549,7 @@ class CatalogRepository:
             }
 
         state, district, method = dosm_keys
+        caption = _district_caption(state, district)
         params = {"state": state, "district": district}
         base = {
             "district": district,
@@ -575,7 +576,7 @@ class CatalogRepository:
                 "total_population": 0,
                 "reason": (
                     f"The DOSM district datasets publish no population, age or "
-                    f"income records for {_district_caption(state, district)}."
+                    f"income records for {caption}."
                 ),
             }
 
@@ -616,7 +617,7 @@ class CatalogRepository:
         else:
             total = 0
             age_note = (
-                f"No DOSM district age bands are published for {_district_caption(state, district)}."
+                f"No DOSM district age bands are published for {caption}."
             )
 
         return {
@@ -644,7 +645,7 @@ class CatalogRepository:
             "population_note": (
                 None
                 if population_row is not None
-                else f"No DOSM district population estimate is published for {_district_caption(state, district)}."
+                else f"No DOSM district population estimate is published for {caption}."
             ),
             "income_median_myr": (
                 float(income_row["income_median"])
@@ -655,7 +656,7 @@ class CatalogRepository:
             "income_note": (
                 None
                 if income_row is not None and income_row["income_median"] is not None
-                else f"No DOSM household-income estimate is published for {_district_caption(state, district)}."
+                else f"No DOSM household-income estimate is published for {caption}."
             ),
             "reason": None,
         }
