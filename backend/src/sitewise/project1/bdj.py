@@ -32,6 +32,9 @@ def validate_candidates(raw, packet: dict, allowed_rules: set[str]) -> BDJOutput
         if issue.rule_id not in allowed_rules:
             raise WorkflowHeld('BDJ_RULE_NOT_REGISTERED')
         for ref in issue.source_refs:
+            current = packet.get("instrument_version") == "M2V1-20261114-1"
+            if ref.item_key.startswith("M2V1-") != current:
+                raise WorkflowHeld("BDJ_INSTRUMENT_REFERENCE_MISMATCH")
             source = sources.get(ref.item_key)
             if (not source or source['answer_state'] != 'ANSWERED' or
                     source['answer_revision_id'] != ref.answer_revision_id or

@@ -26,7 +26,7 @@ class StrictModel(BaseModel):
 
 
 class SourceRef(StrictModel):
-    item_key: str = Field(pattern=r'^M2-(?:\d{2}|O-0[12])$')
+    item_key: str = Field(pattern=r'^(?:M2-(?:\d{2}|O-0[12])|M2V1-(?:0[1-9]|1[01]))$')
     answer_revision_id: str = Field(min_length=1, max_length=64)
     item_version_id: str = Field(min_length=1, max_length=64)
     quote: str = Field(min_length=1, max_length=4000)

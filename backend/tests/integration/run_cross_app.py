@@ -20,18 +20,21 @@ def main():
     parser.add_argument('--output',type=Path,required=True)
     parser.add_argument('--worker',action='store_true')
     parser.add_argument('--mobile',action='store_true',help='Exercise the actual Flutter MobileApiClient')
+    parser.add_argument('--confirmed-review', action='store_true', help='Seed and read a private M2 confirmation through actual HTTP')
     args=parser.parse_args()
     root=Path(__file__).resolve().parents[2]
     if not args.worker:
         env=os.environ.copy()
         fake='postgresql+psycopg2://disabled:disabled@127.0.0.1:1/project1_http_lab'
         env.update(DATABASE_URL=fake,ANALYTICS_DATABASE_URL=fake,
-            M2_UPSTREAM_ENABLED='false',PROJECT1_CP07_ENABLED='false',PROJECT1_WORKFLOW_ENABLED='false',
+            M2_UPSTREAM_ENABLED='true' if args.confirmed_review else 'false',PROJECT1_CP07_ENABLED='false',PROJECT1_WORKFLOW_ENABLED='false',
+            M2_BCB_PERSISTENCE_ENABLED='false',
             PYTHONPATH=str(root/'src'),PYTHONIOENCODING='utf-8',P1_HTTP_LAB='1')
         args.output.mkdir(parents=True,exist_ok=True)
         command=[sys.executable,'-B',str(Path(__file__).resolve()),
             '--worker','--output',str(args.output.resolve())]
         if args.mobile: command.append('--mobile')
+        if args.confirmed_review: command.append('--confirmed-review')
         return subprocess.call(command,cwd=root,env=env)
     if os.environ.get('P1_HTTP_LAB')!='1': raise SystemExit('Private runner required.')
     import psycopg2
@@ -51,6 +54,7 @@ def main():
     from sitewise import dependencies as deps
     from sitewise.core.security import SupabaseJWTVerifier
     from sitewise.db.session import get_db
+    from sitewise.db.m2_session import get_m2_db
     from sitewise.db.analytics_session import get_analytics_db
     from sitewise.db.models.user import User
     from sitewise.db.models.assessment import Assessment
@@ -61,6 +65,17 @@ def main():
     db=create_engine('sqlite://',poolclass=StaticPool,connect_args={'check_same_thread':False})
     User.__table__.create(db)
     Assessment.__table__.create(db)
+    if args.confirmed_review:
+        from sitewise.db.models import m2_schema as m2
+        from uuid import uuid4
+        m2.m2_metadata.create_all(db)
+        iid, item = uuid4(), uuid4()
+        with db.begin() as connection:
+            connection.execute(m2.instruments.insert().values(id=iid,code='PRIVATE-HTTP-TEST',
+                version_tag='SYNTHETIC',approval_state='AUTHORIZED',schema_digest='c'*64))
+            connection.execute(m2.items.insert().values(id=item,instrument_id=iid,item_key='M2-04',
+                question_text='Synthetic private HTTP source',requiredness='OPTIONAL',answer_kind='TEXT',
+                option_values=[],allowed_states=['ANSWERED'],lifecycle='ACTIVE',sort_order=1))
     actor,other,aid=[UUID('00000000-0000-4000-8000-'+f'{i:012d}') for i in (1,2,3)]
     with Session(db) as session:
         for uid in [actor,other]:
@@ -71,6 +86,7 @@ def main():
     def memory_session():
         with Session(db) as session: yield session
     app.dependency_overrides[get_db]=memory_session
+    app.dependency_overrides[get_m2_db]=memory_session
     app.dependency_overrides[get_analytics_db]=memory_session
     key=ec.generate_private_key(ec.SECP256R1())
     public=jwt.algorithms.ECAlgorithm.to_jwk(key.public_key(),as_dict=True)
@@ -98,6 +114,20 @@ def main():
         env=os.environ.copy()
         env.update(P1_HTTP_BASE=f'http://127.0.0.1:{port}',P1_HTTP_TOKEN=token(actor),
             P1_HTTP_OTHER_TOKEN=token(other),P1_HTTP_ASSESSMENT=str(aid))
+        if args.confirmed_review:
+            import httpx
+            with httpx.Client(base_url=env['P1_HTTP_BASE'], headers={'Authorization':'Bearer '+env['P1_HTTP_TOKEN']}) as client:
+                def checked(method, path, body=None):
+                    response = client.request(method, path, json=body)
+                    response.raise_for_status()
+                    return response.json()
+                mid = checked('POST','/api/v1/m2/assessments', {'instrument_version_id':str(iid)})['id']
+                path = f'/api/v1/m2/assessments/{mid}'
+                checked('PUT',path+'/answers/M2-04',{'expected_revision':0,'answer_state':'ANSWERED','value':'Private HTTP synthetic declaration.'})
+                checked('POST',path+'/bdj/evaluate',{'expected_revision':1})
+                checked('POST',path+'/review',{'expected_revision':1})
+                cid = checked('POST',path+'/confirm',{'expected_revision':1,'acknowledged_issue_ids':[]})['id']
+                env.update(P1_HTTP_M2_ASSESSMENT=mid,P1_HTTP_M2_CONFIRMATION=cid)
         if args.mobile:
             command=[str(root.parent/'.fvm/flutter_sdk/bin/flutter.bat'),'test','--no-pub',
                 f'--dart-define=API_BASE_URL=http://127.0.0.1:{port}',
@@ -116,6 +146,7 @@ def main():
             'lifespan':'off','authentication':'real verifier, synthetic signed key',
             'CA-01':'HELD_BOUNDARY_TESTED; full journey BLOCKED',
             'CA-02':'HELD_BOUNDARY_TESTED; full journey BLOCKED',
+            'confirmed_review':args.confirmed_review,
             'live_database_access':False,'dependency_overrides':'get_db and get_analytics_db -> private SQLite',
         },indent=2),encoding='utf-8')
         print(result.stdout+result.stderr)

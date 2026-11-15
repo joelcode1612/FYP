@@ -1,0 +1,677 @@
+{
+  "document_id": "PROJECT1_CUSTOMER_EN_BM_REVIEW_DRAFT_Q01_Q13",
+  "candidate_version": "LANGUAGE-CANDIDATE-01",
+  "prepared_date": "2026-11-08",
+  "owner_review": {
+    "name": "Jed",
+    "state": "OWNER_ACCEPTED_CANDIDATE_FOR_FORMAL_REVIEW",
+    "date": "2026-11-08",
+    "signature_kind": "CONVERSATION_ATTRIBUTION_NOT_DIGITAL_SIGNATURE"
+  },
+  "qualified_human_bilingual_signoff": "PENDING",
+  "respondent_pretest": "NOT_COMPLETED",
+  "scientific_approval": "PENDING",
+  "production_bilingual_activation": "NOT_AUTHORIZED",
+  "source_of_source_en": "QUESTION_SPECIFICITY_AND_ADAPTIVE_FOLLOWUP_MATRIX.md from CUST03 recovery candidate, not released instrument",
+  "source_option_codes": "CUST03 frozen candidate; exact codes verified against matrix",
+  "draft_labels_note": "English display labels and Bahasa Melayu labels are reviewer drafts, not frozen original labels. Source stems are included separately.",
+  "questions": [
+    {
+      "question_id": "Q01",
+      "title": "Area relationship / Hubungan dengan kawasan",
+      "source_en_stem": "Which of the following describe your connection to [named area]? Select all that apply. If none apply, select one of: Rarely, Never, Not sure.",
+      "draft_en_stem": "Which of the following describe your connection to [named area]? Select all that apply. If none apply, select one of the remaining alternatives.",
+      "draft_bm_stem": "Antara yang berikut, yang manakah menerangkan hubungan anda dengan [nama kawasan]? Pilih semua yang berkenaan. Jika tiada yang berkenaan, pilih satu daripada pilihan selebihnya.",
+      "options": [
+        {
+          "source_code": "LIVE",
+          "draft_en_label": "I live in this area",
+          "draft_bm_label": "Saya tinggal di kawasan ini"
+        },
+        {
+          "source_code": "WORK",
+          "draft_en_label": "I work in this area",
+          "draft_bm_label": "Saya bekerja di kawasan ini"
+        },
+        {
+          "source_code": "STUDY",
+          "draft_en_label": "I study in this area",
+          "draft_bm_label": "Saya belajar di kawasan ini"
+        },
+        {
+          "source_code": "RUN_BUSINESS",
+          "draft_en_label": "I operate a business in this area",
+          "draft_bm_label": "Saya menjalankan perniagaan di kawasan ini"
+        },
+        {
+          "source_code": "VISIT_PURPOSE",
+          "draft_en_label": "I visit this area for activities or other purposes",
+          "draft_bm_label": "Saya datang ke kawasan ini untuk aktiviti atau tujuan lain"
+        },
+        {
+          "source_code": "PASS_THROUGH",
+          "draft_en_label": "I pass through this area",
+          "draft_bm_label": "Saya melalui kawasan ini"
+        },
+        {
+          "source_code": "RARELY",
+          "draft_en_label": "Rarely",
+          "draft_bm_label": "Jarang"
+        },
+        {
+          "source_code": "NEVER",
+          "draft_en_label": "Never",
+          "draft_bm_label": "Tidak pernah"
+        },
+        {
+          "source_code": "NOT_SURE",
+          "draft_en_label": "Not sure",
+          "draft_bm_label": "Tidak pasti"
+        }
+      ],
+      "review_notes": "RARELY has no defined period or count; historical terminal codes are retained. A revision must not silently redefine them.",
+      "owner_review_status": "ACCEPTED_FOR_FORMAL_REVIEW",
+      "bilingual_expert_review_status": "NOT_VERIFIED",
+      "scientific_approval_status": "PENDING",
+      "fielding_authorized": false
+    },
+    {
+      "question_id": "Q02",
+      "title": "Days physically present / Hari berada di kawasan",
+      "source_en_stem": "In the last four weeks, on how many days were you physically present in [named area]? Please count each day once, even if you were there more than once that day.",
+      "draft_en_stem": "In the last four weeks, on how many different days were you physically present in [named area]? Count each day only once, even if you visited more than once.",
+      "draft_bm_stem": "Dalam tempoh empat minggu yang lalu, pada berapa hari yang berbeza anda berada secara fizikal di [nama kawasan]? Kira setiap hari sekali sahaja, walaupun anda datang lebih daripada sekali.",
+      "options": [
+        {
+          "source_code": "NONE",
+          "draft_en_label": "0 days",
+          "draft_bm_label": "0 hari"
+        },
+        {
+          "source_code": "DAYS_1_3",
+          "draft_en_label": "1–3 days",
+          "draft_bm_label": "1–3 hari"
+        },
+        {
+          "source_code": "DAYS_4_10",
+          "draft_en_label": "4–10 days",
+          "draft_bm_label": "4–10 hari"
+        },
+        {
+          "source_code": "DAYS_11_20",
+          "draft_en_label": "11–20 days",
+          "draft_bm_label": "11–20 hari"
+        },
+        {
+          "source_code": "DAYS_GT_20",
+          "draft_en_label": "21–28 days",
+          "draft_bm_label": "21–28 hari"
+        },
+        {
+          "source_code": "PREFER_NOT_TO_ANSWER",
+          "draft_en_label": "Prefer not to answer",
+          "draft_bm_label": "Memilih untuk tidak menjawab"
+        }
+      ],
+      "review_notes": "Days are not visits; no distinct recall-difficulty response is present in this bank.",
+      "owner_review_status": "ACCEPTED_FOR_FORMAL_REVIEW",
+      "bilingual_expert_review_status": "NOT_VERIFIED",
+      "scientific_approval_status": "PENDING",
+      "fielding_authorized": false
+    },
+    {
+      "question_id": "Q03",
+      "title": "Hypothetical journey origin / Tempat permulaan perjalanan",
+      "source_en_stem": "If you decided to visit the café described above, where would you most likely begin that journey?",
+      "draft_en_stem": "If you decided to visit the café described above, where would you most likely begin that journey?",
+      "draft_bm_stem": "Jika anda memutuskan untuk mengunjungi kafe yang diterangkan di atas, dari manakah kemungkinan besar anda akan memulakan perjalanan tersebut?",
+      "options": [
+        {
+          "source_code": "HOME",
+          "draft_en_label": "Home",
+          "draft_bm_label": "Rumah"
+        },
+        {
+          "source_code": "WORKPLACE",
+          "draft_en_label": "Workplace",
+          "draft_bm_label": "Tempat kerja"
+        },
+        {
+          "source_code": "STUDY_LOCATION",
+          "draft_en_label": "Place of study",
+          "draft_bm_label": "Tempat belajar"
+        },
+        {
+          "source_code": "OTHER_ACTIVITY",
+          "draft_en_label": "Another activity location",
+          "draft_bm_label": "Tempat aktiviti lain"
+        },
+        {
+          "source_code": "VARIES",
+          "draft_en_label": "It varies",
+          "draft_bm_label": "Berubah-ubah"
+        },
+        {
+          "source_code": "DECLINE",
+          "draft_en_label": "Prefer not to answer",
+          "draft_bm_label": "Memilih untuk tidak menjawab"
+        },
+        {
+          "source_code": "NOT_SURE",
+          "draft_en_label": "Not sure",
+          "draft_bm_label": "Tidak pasti"
+        }
+      ],
+      "review_notes": "Hypothetical origin type, not a district, location, distance or real trip.",
+      "owner_review_status": "ACCEPTED_FOR_FORMAL_REVIEW",
+      "bilingual_expert_review_status": "NOT_VERIFIED",
+      "scientific_approval_status": "PENDING",
+      "fielding_authorized": false
+    },
+    {
+      "question_id": "Q04",
+      "title": "Existing café purchase occasions / Kekerapan pembelian di kafe sedia ada",
+      "source_en_stem": "In the past 30 days, on how many occasions have you bought food or a drink from an existing café?",
+      "draft_en_stem": "In the past 30 days, on how many occasions have you bought food or a drink from an existing café?",
+      "draft_bm_stem": "Dalam tempoh 30 hari yang lalu, berapa kali anda membeli makanan atau minuman daripada kafe yang sedia ada?",
+      "options": [
+        {
+          "source_code": "ZERO",
+          "draft_en_label": "0 occasions",
+          "draft_bm_label": "0 kali"
+        },
+        {
+          "source_code": "ONE",
+          "draft_en_label": "1 occasion",
+          "draft_bm_label": "1 kali"
+        },
+        {
+          "source_code": "TWO_THREE",
+          "draft_en_label": "2–3 occasions",
+          "draft_bm_label": "2–3 kali"
+        },
+        {
+          "source_code": "FOUR_SEVEN",
+          "draft_en_label": "4–7 occasions",
+          "draft_bm_label": "4–7 kali"
+        },
+        {
+          "source_code": "EIGHT_PLUS",
+          "draft_en_label": "8 or more occasions",
+          "draft_bm_label": "8 kali atau lebih"
+        },
+        {
+          "source_code": "CANNOT_REMEMBER",
+          "draft_en_label": "Cannot remember",
+          "draft_bm_label": "Tidak ingat"
+        },
+        {
+          "source_code": "PREFER_NOT_TO_ANSWER",
+          "draft_en_label": "Prefer not to answer",
+          "draft_bm_label": "Memilih untuk tidak menjawab"
+        }
+      ],
+      "review_notes": "Historical seven-day versus candidate 30-day window and definition of occasion require scientific reconciliation.",
+      "owner_review_status": "ACCEPTED_FOR_FORMAL_REVIEW",
+      "bilingual_expert_review_status": "NOT_VERIFIED",
+      "scientific_approval_status": "PENDING",
+      "fielding_authorized": false
+    },
+    {
+      "question_id": "Q05",
+      "title": "Stated future visiting intention / Niat berkunjung",
+      "source_en_stem": "If the café described in [concept_card_version] opened in [named area], how likely would you be to visit it at least once during its first three months?",
+      "draft_en_stem": "If the café described above opened in [named area], how likely would you be to visit it at least once during its first three months?",
+      "draft_bm_stem": "Jika kafe yang diterangkan di atas dibuka di [nama kawasan], sejauh manakah kemungkinan anda akan mengunjunginya sekurang-kurangnya sekali dalam tempoh tiga bulan pertama selepas pembukaannya?",
+      "options": [
+        {
+          "source_code": "DEF_NO",
+          "draft_en_label": "Definitely unlikely",
+          "draft_bm_label": "Pasti tidak akan"
+        },
+        {
+          "source_code": "PROB_NO",
+          "draft_en_label": "Probably unlikely",
+          "draft_bm_label": "Mungkin tidak akan"
+        },
+        {
+          "source_code": "UNSURE",
+          "draft_en_label": "Unsure",
+          "draft_bm_label": "Tidak pasti"
+        },
+        {
+          "source_code": "PROB_YES",
+          "draft_en_label": "Probably likely",
+          "draft_bm_label": "Mungkin akan"
+        },
+        {
+          "source_code": "DEF_YES",
+          "draft_en_label": "Definitely likely",
+          "draft_bm_label": "Pasti akan"
+        },
+        {
+          "source_code": "CANNOT_JUDGE",
+          "draft_en_label": "Cannot judge from the description",
+          "draft_bm_label": "Tidak dapat menilai berdasarkan penerangan"
+        },
+        {
+          "source_code": "PREFER_NOT_TO_ANSWER",
+          "draft_en_label": "Prefer not to answer",
+          "draft_bm_label": "Memilih untuk tidak menjawab"
+        }
+      ],
+      "review_notes": "Pasti akan/tidak akan may imply commitment; approved versioned concept card required. UNSURE is substantive in the original candidate; CANNOT_JUDGE is not.",
+      "owner_review_status": "ACCEPTED_FOR_FORMAL_REVIEW",
+      "bilingual_expert_review_status": "NOT_VERIFIED",
+      "scientific_approval_status": "PENDING",
+      "fielding_authorized": false
+    },
+    {
+      "question_id": "Q06",
+      "title": "Proposed menu-category interest / Minat terhadap kategori menu",
+      "source_en_stem": "Which of the following categories from this proposed café menu would you be interested in? Select up to three.",
+      "draft_en_stem": "Which of the following categories from this proposed café menu would you be interested in? Select up to three.",
+      "draft_bm_stem": "Antara kategori berikut dalam menu kafe yang dicadangkan, yang manakah menarik minat anda? Pilih sehingga tiga kategori.",
+      "options": [
+        {
+          "source_code": "COFFEE_ESPRESSO",
+          "draft_en_label": "Coffee or espresso drinks",
+          "draft_bm_label": "Minuman kopi atau espreso"
+        },
+        {
+          "source_code": "NON_COFFEE",
+          "draft_en_label": "Non-coffee drinks",
+          "draft_bm_label": "Minuman bukan kopi"
+        },
+        {
+          "source_code": "BAKED_PASTRY",
+          "draft_en_label": "Baked goods and pastries",
+          "draft_bm_label": "Produk bakeri dan pastri"
+        },
+        {
+          "source_code": "LIGHT_MEALS",
+          "draft_en_label": "Light meals",
+          "draft_bm_label": "Hidangan ringan"
+        },
+        {
+          "source_code": "DESSERTS",
+          "draft_en_label": "Desserts",
+          "draft_bm_label": "Pencuci mulut"
+        },
+        {
+          "source_code": "RETAIL",
+          "draft_en_label": "Retail products",
+          "draft_bm_label": "Produk runcit"
+        },
+        {
+          "source_code": "UNLISTED_CATEGORY_REPORTED",
+          "draft_en_label": "Another category not listed",
+          "draft_bm_label": "Kategori lain yang tidak disenaraikan"
+        },
+        {
+          "source_code": "NONE",
+          "draft_en_label": "None of these categories",
+          "draft_bm_label": "Tiada satu pun kategori ini"
+        },
+        {
+          "source_code": "NOT_SURE",
+          "draft_en_label": "Not sure",
+          "draft_bm_label": "Tidak pasti"
+        },
+        {
+          "source_code": "PREFER_NOT_TO_ANSWER",
+          "draft_en_label": "Prefer not to answer",
+          "draft_bm_label": "Memilih untuk tidak menjawab"
+        }
+      ],
+      "review_notes": "Selection cap and exclusive NONE/other handling require reconciliation; no additional free-text response is assumed.",
+      "owner_review_status": "ACCEPTED_FOR_FORMAL_REVIEW",
+      "bilingual_expert_review_status": "NOT_VERIFIED",
+      "scientific_approval_status": "PENDING",
+      "fielding_authorized": false
+    },
+    {
+      "question_id": "Q07",
+      "title": "Exact-offer price acceptability / Penerimaan harga tawaran khusus",
+      "source_en_stem": "How acceptable would paying [exact_rm_price] for [one_exact_product_size_quantity_fulfilment_and_charges] at the proposed café be to you?",
+      "draft_en_stem": "How acceptable would paying [exact RM price] for [exact product, size, quantity, service method and charges] at the proposed café be to you?",
+      "draft_bm_stem": "Sejauh manakah harga [harga tepat dalam RM] boleh anda terima untuk [produk, saiz, kuantiti, kaedah perkhidmatan dan caj yang dinyatakan dengan tepat] di kafe yang dicadangkan?",
+      "options": [
+        {
+          "source_code": "VERY_UNACCEPTABLE",
+          "draft_en_label": "Very unacceptable",
+          "draft_bm_label": "Sangat tidak boleh diterima"
+        },
+        {
+          "source_code": "SOMEWHAT_UNACCEPTABLE",
+          "draft_en_label": "Somewhat unacceptable",
+          "draft_bm_label": "Agak tidak boleh diterima"
+        },
+        {
+          "source_code": "NEITHER",
+          "draft_en_label": "Neither acceptable nor unacceptable",
+          "draft_bm_label": "Berkecuali"
+        },
+        {
+          "source_code": "SOMEWHAT_ACCEPTABLE",
+          "draft_en_label": "Somewhat acceptable",
+          "draft_bm_label": "Agak boleh diterima"
+        },
+        {
+          "source_code": "VERY_ACCEPTABLE",
+          "draft_en_label": "Very acceptable",
+          "draft_bm_label": "Sangat boleh diterima"
+        },
+        {
+          "source_code": "CANNOT_JUDGE",
+          "draft_en_label": "Cannot judge",
+          "draft_bm_label": "Tidak dapat menilai"
+        },
+        {
+          "source_code": "PREFER_NOT_TO_ANSWER",
+          "draft_en_label": "Prefer not to answer",
+          "draft_bm_label": "Memilih untuk tidak menjawab"
+        }
+      ],
+      "review_notes": "Berkecuali midpoint equivalence requires pretesting. Missing exact approved offer makes Q07 NOT_SHOWN.",
+      "owner_review_status": "ACCEPTED_FOR_FORMAL_REVIEW",
+      "bilingual_expert_review_status": "NOT_VERIFIED",
+      "scientific_approval_status": "PENDING",
+      "fielding_authorized": false
+    },
+    {
+      "question_id": "Q08",
+      "title": "Past café visiting occasions / Situasi kunjungan kafe terdahulu",
+      "source_en_stem": "Thinking only about the existing-café visits you reported in the past 30 days, on which occasions did you visit a café? Select all that apply.",
+      "draft_en_stem": "Thinking only about the existing-café visits you reported in the past 30 days, on which occasions did you visit a café? Select all that apply.",
+      "draft_bm_stem": "Dengan merujuk hanya kepada kunjungan ke kafe sedia ada yang anda laporkan dalam tempoh 30 hari lalu, dalam situasi manakah anda mengunjungi kafe? Pilih semua yang berkenaan.",
+      "options": [
+        {
+          "source_code": "WORK_BREAK",
+          "draft_en_label": "During a work break",
+          "draft_bm_label": "Semasa waktu rehat bekerja"
+        },
+        {
+          "source_code": "STUDY",
+          "draft_en_label": "While studying or taking a study break",
+          "draft_bm_label": "Semasa belajar atau berehat daripada belajar"
+        },
+        {
+          "source_code": "SOCIAL",
+          "draft_en_label": "To meet or spend time with others",
+          "draft_bm_label": "Untuk berjumpa atau meluangkan masa bersama orang lain"
+        },
+        {
+          "source_code": "ON_THE_GO",
+          "draft_en_label": "While travelling or passing by",
+          "draft_bm_label": "Semasa dalam perjalanan atau melalui kawasan tersebut"
+        },
+        {
+          "source_code": "UNLISTED_OCCASION_REPORTED",
+          "draft_en_label": "Another occasion not listed",
+          "draft_bm_label": "Situasi lain yang tidak disenaraikan"
+        },
+        {
+          "source_code": "CANNOT_REMEMBER",
+          "draft_en_label": "Cannot remember",
+          "draft_bm_label": "Tidak ingat"
+        },
+        {
+          "source_code": "PREFER_NOT_TO_ANSWER",
+          "draft_en_label": "Prefer not to answer",
+          "draft_bm_label": "Memilih untuk tidak menjawab"
+        }
+      ],
+      "review_notes": "Past existing-café occasions, not hypothetical Q09. Source occasion bank is provisional.",
+      "owner_review_status": "ACCEPTED_FOR_FORMAL_REVIEW",
+      "bilingual_expert_review_status": "NOT_VERIFIED",
+      "scientific_approval_status": "PENDING",
+      "fielding_authorized": false
+    },
+    {
+      "question_id": "Q09",
+      "title": "Hypothetical future occasions / Situasi kemungkinan kunjungan akan datang",
+      "source_en_stem": "If you visited this proposed café, on which occasions might you choose to visit? Select all that apply.",
+      "draft_en_stem": "If you visited this proposed café, on which occasions might you choose to visit? Select all that apply.",
+      "draft_bm_stem": "Sekiranya anda mengunjungi kafe yang dicadangkan ini, dalam situasi manakah anda mungkin memilih untuk datang? Pilih semua yang berkenaan.",
+      "options": [
+        {
+          "source_code": "WORK_BREAK",
+          "draft_en_label": "During a work break",
+          "draft_bm_label": "Semasa waktu rehat bekerja"
+        },
+        {
+          "source_code": "STUDY",
+          "draft_en_label": "While studying or taking a study break",
+          "draft_bm_label": "Semasa belajar atau berehat daripada belajar"
+        },
+        {
+          "source_code": "SOCIAL",
+          "draft_en_label": "To meet or spend time with others",
+          "draft_bm_label": "Untuk berjumpa atau meluangkan masa bersama orang lain"
+        },
+        {
+          "source_code": "ON_THE_GO",
+          "draft_en_label": "While travelling or passing by",
+          "draft_bm_label": "Semasa dalam perjalanan atau melalui kawasan tersebut"
+        },
+        {
+          "source_code": "UNLISTED_OCCASION_REPORTED",
+          "draft_en_label": "Another occasion not listed",
+          "draft_bm_label": "Situasi lain yang tidak disenaraikan"
+        },
+        {
+          "source_code": "NONE",
+          "draft_en_label": "None of these occasions",
+          "draft_bm_label": "Tiada satu pun situasi ini"
+        },
+        {
+          "source_code": "CANNOT_JUDGE",
+          "draft_en_label": "Cannot judge",
+          "draft_bm_label": "Tidak dapat menilai"
+        },
+        {
+          "source_code": "PREFER_NOT_TO_ANSWER",
+          "draft_en_label": "Prefer not to answer",
+          "draft_bm_label": "Memilih untuk tidak menjawab"
+        }
+      ],
+      "review_notes": "Hypothetical, not past or actual future visits. Occasion bank and OPEN_ROUTING_01 remain unapproved.",
+      "owner_review_status": "ACCEPTED_FOR_FORMAL_REVIEW",
+      "bilingual_expert_review_status": "NOT_VERIFIED",
+      "scientific_approval_status": "PENDING",
+      "fielding_authorized": false
+    },
+    {
+      "question_id": "Q10",
+      "title": "Importance of café features / Kepentingan ciri kafe",
+      "source_en_stem": "For each feature of the described café, how important would that feature be to you if you chose to visit?",
+      "draft_en_stem": "For each feature of the described café, how important would that feature be to you if you chose to visit?",
+      "draft_bm_stem": "Bagi setiap ciri kafe yang diterangkan, sejauh manakah pentingnya ciri tersebut kepada anda sekiranya anda memilih untuk mengunjunginya?",
+      "options": [
+        {
+          "source_code": "NOT_AT_ALL_IMPORTANT",
+          "draft_en_label": "Not at all important",
+          "draft_bm_label": "Langsung tidak penting"
+        },
+        {
+          "source_code": "SLIGHTLY_IMPORTANT",
+          "draft_en_label": "Slightly important",
+          "draft_bm_label": "Sedikit penting"
+        },
+        {
+          "source_code": "MODERATELY_IMPORTANT",
+          "draft_en_label": "Moderately important",
+          "draft_bm_label": "Sederhana penting"
+        },
+        {
+          "source_code": "VERY_IMPORTANT",
+          "draft_en_label": "Very important",
+          "draft_bm_label": "Sangat penting"
+        },
+        {
+          "source_code": "EXTREMELY_IMPORTANT",
+          "draft_en_label": "Extremely important",
+          "draft_bm_label": "Amat penting"
+        },
+        {
+          "source_code": "NOT_APPLICABLE",
+          "draft_en_label": "Not applicable",
+          "draft_bm_label": "Tidak berkenaan"
+        },
+        {
+          "source_code": "CANNOT_JUDGE",
+          "draft_en_label": "Cannot judge",
+          "draft_bm_label": "Tidak dapat menilai"
+        },
+        {
+          "source_code": "PREFER_NOT_TO_ANSWER",
+          "draft_en_label": "Prefer not to answer",
+          "draft_bm_label": "Memilih untuk tidak menjawab"
+        }
+      ],
+      "review_notes": "Adjacent Malay intensity labels require expert validation; source feature bank is null and OPEN_ROUTING_02 unresolved. No composite/causal score.",
+      "owner_review_status": "ACCEPTED_FOR_FORMAL_REVIEW",
+      "bilingual_expert_review_status": "NOT_VERIFIED",
+      "scientific_approval_status": "PENDING",
+      "fielding_authorized": false
+    },
+    {
+      "question_id": "Q11",
+      "title": "Preferred service format / Pilihan kaedah perkhidmatan",
+      "source_en_stem": "For the proposed café offer, which service format would you mainly choose?",
+      "draft_en_stem": "For the proposed café offer, which service format would you mainly choose?",
+      "draft_bm_stem": "Bagi tawaran kafe yang dicadangkan, kaedah perkhidmatan yang manakah akan menjadi pilihan utama anda?",
+      "options": [
+        {
+          "source_code": "DINE_IN",
+          "draft_en_label": "Dine-in",
+          "draft_bm_label": "Makan atau minum di premis"
+        },
+        {
+          "source_code": "TAKEAWAY",
+          "draft_en_label": "Takeaway",
+          "draft_bm_label": "Bawa pulang"
+        },
+        {
+          "source_code": "EITHER_EQUALLY",
+          "draft_en_label": "Either equally",
+          "draft_bm_label": "Kedua-duanya sama"
+        },
+        {
+          "source_code": "CANNOT_JUDGE",
+          "draft_en_label": "Cannot judge",
+          "draft_bm_label": "Tidak dapat menilai"
+        },
+        {
+          "source_code": "PREFER_NOT_TO_ANSWER",
+          "draft_en_label": "Prefer not to answer",
+          "draft_bm_label": "Memilih untuk tidak menjawab"
+        }
+      ],
+      "review_notes": "Optional research-only; no accepted A10 report destination.",
+      "owner_review_status": "ACCEPTED_FOR_FORMAL_REVIEW",
+      "bilingual_expert_review_status": "NOT_VERIFIED",
+      "scientific_approval_status": "PENDING",
+      "fielding_authorized": false
+    },
+    {
+      "question_id": "Q12",
+      "title": "Usual transport to the area / Pengangkutan biasa ke kawasan",
+      "source_en_stem": "What is your usual way of travelling to [named area]?",
+      "draft_en_stem": "What is your usual way of travelling to [named area]?",
+      "draft_bm_stem": "Apakah kaedah pengangkutan yang biasanya anda gunakan untuk pergi ke [nama kawasan]?",
+      "options": [
+        {
+          "source_code": "WALK",
+          "draft_en_label": "Walking",
+          "draft_bm_label": "Berjalan kaki"
+        },
+        {
+          "source_code": "MOTORCYCLE",
+          "draft_en_label": "Motorcycle",
+          "draft_bm_label": "Motosikal"
+        },
+        {
+          "source_code": "CAR",
+          "draft_en_label": "Car",
+          "draft_bm_label": "Kereta"
+        },
+        {
+          "source_code": "PUBLIC_TRANSPORT",
+          "draft_en_label": "Public transport",
+          "draft_bm_label": "Pengangkutan awam"
+        },
+        {
+          "source_code": "OTHER",
+          "draft_en_label": "Other",
+          "draft_bm_label": "Lain-lain"
+        },
+        {
+          "source_code": "NOT_SURE",
+          "draft_en_label": "Not sure",
+          "draft_bm_label": "Tidak pasti"
+        },
+        {
+          "source_code": "PREFER_NOT_TO_ANSWER",
+          "draft_en_label": "Prefer not to answer",
+          "draft_bm_label": "Memilih untuk tidak menjawab"
+        }
+      ],
+      "review_notes": "Usual has no defined timeframe; OTHER lacks a coding scheme. This is transport to area, not café-trip transport.",
+      "owner_review_status": "ACCEPTED_FOR_FORMAL_REVIEW",
+      "bilingual_expert_review_status": "NOT_VERIFIED",
+      "scientific_approval_status": "PENDING",
+      "fielding_authorized": false
+    },
+    {
+      "question_id": "Q13",
+      "title": "Expected price band / Julat harga dijangka",
+      "source_en_stem": "What would you expect to pay for [defined item: medium latte, dine-in]?",
+      "draft_en_stem": "What would you expect to pay for [defined medium latte, dine-in]?",
+      "draft_bm_stem": "Berapakah harga yang anda jangkakan untuk [latte saiz sederhana yang diminum di premis seperti yang ditakrifkan]?",
+      "options": [
+        {
+          "source_code": "LT_RM8",
+          "draft_en_label": "Below RM8",
+          "draft_bm_label": "Kurang daripada RM8"
+        },
+        {
+          "source_code": "RM8_TO_1199",
+          "draft_en_label": "RM8–RM11.99",
+          "draft_bm_label": "RM8 hingga RM11.99"
+        },
+        {
+          "source_code": "RM12_TO_1499",
+          "draft_en_label": "RM12–RM14.99",
+          "draft_bm_label": "RM12 hingga RM14.99"
+        },
+        {
+          "source_code": "RM15_TO_1799",
+          "draft_en_label": "RM15–RM17.99",
+          "draft_bm_label": "RM15 hingga RM17.99"
+        },
+        {
+          "source_code": "GE_RM18",
+          "draft_en_label": "RM18 or more",
+          "draft_bm_label": "RM18 atau lebih"
+        },
+        {
+          "source_code": "NOT_SURE",
+          "draft_en_label": "Not sure",
+          "draft_bm_label": "Tidak pasti"
+        },
+        {
+          "source_code": "PREFER_NOT_TO_ANSWER",
+          "draft_en_label": "Prefer not to answer",
+          "draft_bm_label": "Memilih untuk tidak menjawab"
+        }
+      ],
+      "review_notes": "Expected price is not Q07 price acceptability; explicit numeric band-edge definition is still pending.",
+      "owner_review_status": "ACCEPTED_FOR_FORMAL_REVIEW",
+      "bilingual_expert_review_status": "NOT_VERIFIED",
+      "scientific_approval_status": "PENDING",
+      "fielding_authorized": false
+    }
+  ]
+}

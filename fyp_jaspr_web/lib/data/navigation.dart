@@ -98,13 +98,15 @@ List<WebDestination> webDestinationsFor(AppRole role) => switch (role) {
       icon: 'recommend',
       label: 'Recommendations',
     ),
-    // Saved location assessments. The workspace itself is a drill-in from a
-    // property, so it has no nav entry of its own; this is where the records
-    // are collected and reopened.
+    // The **Assessment** destination. Since PROJECT1 v1.5 this opens the
+    // four-step research flow at `/entrepreneur/assessments`: the assessment
+    // overview list, then Steps 1–4. It no longer points at the read-only
+    // report index (`/entrepreneur/assessment-list`), which remains reachable
+    // by URL but is not a top-bar entry.
     WebDestination(
       route: '/entrepreneur/assessments',
       icon: 'fact_check',
-      label: 'Assessments',
+      label: 'Assessment',
     ),
     WebDestination(
       route: '/entrepreneur/cafe-report',
@@ -160,6 +162,9 @@ String parentShellRoute(String route) {
     '/entrepreneur/assessments/history': '/entrepreneur/assessments',
     '/entrepreneur/tour': '/entrepreneur/recommendations',
     '/entrepreneur/report': '/entrepreneur/recommendations',
+    // The report shell is now reached from the selector gate; both URLs keep
+    // the Report pill lit so the sidebar matches what is on screen.
+    '/entrepreneur/cafe-report/view': '/entrepreneur/cafe-report',
     '/entrepreneur/explanation': '/entrepreneur/recommendations',
     '/entrepreneur/my-properties': '/entrepreneur/my-properties',
     '/entrepreneur/add-property': '/entrepreneur/my-properties',

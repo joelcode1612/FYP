@@ -1,0 +1,555 @@
+{
+  "code": "M2V1",
+  "version_tag": "M2V1-20261114-1",
+  "source_sha256": "d09a7db532cbd2e41458d9776004de2830c67c91cacb0a264dc4cfbe5c432c6b",
+  "adoption": {
+    "scope": "Live entrepreneur M2 only",
+    "decision": "Owner explicitly adopted this document for live M2 in the current conversation on 2026-11-14",
+    "customer_fielding_authorized": false,
+    "scientific_review_status": "NOT_INDEPENDENTLY_VERIFIED"
+  },
+  "items": [
+    {
+      "item_key": "M2V1-01",
+      "title": "Intended Study Area",
+      "question_text": "Which area are you currently considering for your proposed café?",
+      "requiredness": "REQUIRED",
+      "answer_kind": "GEO",
+      "option_values": {
+        "contract": "m2-item-options/1",
+        "options": [
+          {
+            "code": "JOHOR",
+            "label": "Johor"
+          },
+          {
+            "code": "PENANG",
+            "label": "Penang"
+          },
+          {
+            "code": "SELANGOR",
+            "label": "Selangor"
+          },
+          {
+            "code": "KUALA_LUMPUR",
+            "label": "Kuala Lumpur"
+          },
+          {
+            "code": "UNDECIDED",
+            "label": "I have not decided on an area"
+          }
+        ],
+        "rules": {
+          "geography": {
+            "status": "AUTHORITY_UNVERIFIED",
+            "areas": [],
+            "catalogue_version": null,
+            "note": "An approved versioned GEO catalogue has not yet been connected. No premises location is inferred."
+          }
+        },
+        "source_rules": [
+          "Rule: Store the authorized area reference and catalogue version. Do not infer an exact business premises location."
+        ]
+      },
+      "allowed_states": [
+        "ANSWERED",
+        "NOT_PROVIDED"
+      ],
+      "lifecycle": "ACTIVE",
+      "sort_order": 0
+    },
+    {
+      "item_key": "M2V1-02",
+      "title": "Intended Service Format",
+      "question_text": "How do you currently plan to serve customers?",
+      "requiredness": "REQUIRED",
+      "answer_kind": "SINGLE",
+      "option_values": {
+        "contract": "m2-item-options/1",
+        "options": [
+          {
+            "code": "DINE_IN",
+            "label": "Primarily dine-in"
+          },
+          {
+            "code": "TAKEAWAY",
+            "label": "Primarily takeaway"
+          },
+          {
+            "code": "DELIVERY",
+            "label": "Primarily delivery"
+          },
+          {
+            "code": "HYBRID",
+            "label": "A combination of service formats"
+          },
+          {
+            "code": "UNDECIDED",
+            "label": "Not decided yet"
+          }
+        ],
+        "rules": {},
+        "source_rules": []
+      },
+      "allowed_states": [
+        "ANSWERED",
+        "NOT_PROVIDED"
+      ],
+      "lifecycle": "ACTIVE",
+      "sort_order": 1
+    },
+    {
+      "item_key": "M2V1-03",
+      "title": "Planned Product Categories",
+      "question_text": "Which product categories do you currently intend to offer?",
+      "requiredness": "REQUIRED",
+      "answer_kind": "MULTI",
+      "option_values": {
+        "contract": "m2-item-options/1",
+        "options": [
+          {
+            "code": "COFFEE",
+            "label": "Coffee and espresso beverages"
+          },
+          {
+            "code": "NON_COFFEE",
+            "label": "Non-coffee beverages"
+          },
+          {
+            "code": "BAKED_GOODS",
+            "label": "Pastries and baked goods"
+          },
+          {
+            "code": "LIGHT_MEALS",
+            "label": "Light meals"
+          },
+          {
+            "code": "DESSERTS",
+            "label": "Desserts"
+          },
+          {
+            "code": "OTHER_UNLISTED",
+            "label": "My intended category is not listed"
+          },
+          {
+            "code": "UNDECIDED",
+            "label": "I have not decided on the products"
+          }
+        ],
+        "rules": {
+          "exclusive": [
+            "UNDECIDED"
+          ]
+        },
+        "source_rules": [
+          "Rule: UNDECIDED cannot be combined with other selections."
+        ]
+      },
+      "allowed_states": [
+        "ANSWERED",
+        "NOT_PROVIDED"
+      ],
+      "lifecycle": "ACTIVE",
+      "sort_order": 2
+    },
+    {
+      "item_key": "M2V1-04",
+      "title": "Intended Customer Groups",
+      "question_text": "Which groups of customers do you currently intend to serve?",
+      "requiredness": "REQUIRED",
+      "answer_kind": "MULTI",
+      "option_values": {
+        "contract": "m2-item-options/1",
+        "options": [
+          {
+            "code": "STUDENTS",
+            "label": "Students"
+          },
+          {
+            "code": "OFFICE_WORKERS",
+            "label": "Office workers"
+          },
+          {
+            "code": "RESIDENTS",
+            "label": "Local residents"
+          },
+          {
+            "code": "VISITORS",
+            "label": "Shoppers and visitors"
+          },
+          {
+            "code": "REMOTE_WORKERS",
+            "label": "Remote workers"
+          },
+          {
+            "code": "OTHER_UNLISTED",
+            "label": "My intended customer group is not listed"
+          },
+          {
+            "code": "UNDECIDED",
+            "label": "I have not decided on my target customers"
+          }
+        ],
+        "rules": {
+          "exclusive": [
+            "UNDECIDED"
+          ]
+        },
+        "source_rules": [
+          "Rule: UNDECIDED cannot be combined with other selections."
+        ]
+      },
+      "allowed_states": [
+        "ANSWERED",
+        "NOT_PROVIDED"
+      ],
+      "lifecycle": "ACTIVE",
+      "sort_order": 3
+    },
+    {
+      "item_key": "M2V1-05",
+      "title": "Primary Intended Customer Group",
+      "question_text": "Among the customer groups you selected, which one is your primary intended group?",
+      "requiredness": "CONDITIONAL",
+      "answer_kind": "SINGLE",
+      "option_values": {
+        "contract": "m2-item-options/1",
+        "options": [],
+        "rules": {
+          "source_item": "M2V1-04",
+          "exclude": [
+            "UNDECIDED"
+          ],
+          "derive_single": true,
+          "allow_undecided": true
+        },
+        "source_rules": [
+          "Rules:"
+        ]
+      },
+      "allowed_states": [
+        "ANSWERED",
+        "NOT_PROVIDED",
+        "NOT_APPLICABLE"
+      ],
+      "lifecycle": "ACTIVE",
+      "sort_order": 4
+    },
+    {
+      "item_key": "M2V1-06",
+      "title": "Intended Concept Emphasis",
+      "question_text": "Which aspect do you currently plan to emphasize most in your café concept?",
+      "requiredness": "REQUIRED",
+      "answer_kind": "SINGLE",
+      "option_values": {
+        "contract": "m2-item-options/1",
+        "options": [
+          {
+            "code": "AFFORDABILITY",
+            "label": "Affordable pricing"
+          },
+          {
+            "code": "QUALITY",
+            "label": "Product quality or specialty"
+          },
+          {
+            "code": "CONVENIENCE",
+            "label": "Convenience"
+          },
+          {
+            "code": "AMBIENCE",
+            "label": "Ambience"
+          },
+          {
+            "code": "DISTINCTIVE_CONCEPT",
+            "label": "Distinctive products or theme"
+          },
+          {
+            "code": "OTHER_UNLISTED",
+            "label": "Another aspect not listed"
+          },
+          {
+            "code": "UNDECIDED",
+            "label": "Not decided yet"
+          }
+        ],
+        "rules": {},
+        "source_rules": []
+      },
+      "allowed_states": [
+        "ANSWERED",
+        "NOT_PROVIDED"
+      ],
+      "lifecycle": "ACTIVE",
+      "sort_order": 5
+    },
+    {
+      "item_key": "M2V1-07",
+      "title": "Intended Customer Occasion",
+      "question_text": "Which customer occasion do you mainly intend your café concept to support?",
+      "requiredness": "OPTIONAL",
+      "answer_kind": "SINGLE",
+      "option_values": {
+        "contract": "m2-item-options/1",
+        "options": [
+          {
+            "code": "QUICK_PURCHASE",
+            "label": "Quick purchase"
+          },
+          {
+            "code": "STUDY_WORK",
+            "label": "Studying or working"
+          },
+          {
+            "code": "SOCIAL",
+            "label": "Social meetings"
+          },
+          {
+            "code": "MEAL_SNACK",
+            "label": "A meal or snack break"
+          },
+          {
+            "code": "LEISURE",
+            "label": "Relaxation or leisure"
+          },
+          {
+            "code": "OTHER_UNLISTED",
+            "label": "Another occasion not listed"
+          },
+          {
+            "code": "UNDECIDED",
+            "label": "Not decided yet"
+          }
+        ],
+        "rules": {
+          "not_applicable_when": {
+            "item": "M2V1-02",
+            "value": "DELIVERY"
+          }
+        },
+        "source_rules": [
+          "Rule: Do not force an in-person visit occasion for a delivery-only concept. Preserve skipped and not-applicable states."
+        ]
+      },
+      "allowed_states": [
+        "ANSWERED",
+        "NOT_PROVIDED",
+        "SKIPPED_OPTIONAL",
+        "NOT_APPLICABLE"
+      ],
+      "lifecycle": "ACTIVE",
+      "sort_order": 6
+    },
+    {
+      "item_key": "M2V1-08",
+      "title": "Customer Information Already Available",
+      "question_text": "Which sources of information have you used to form your current expectations about potential customers?",
+      "requiredness": "REQUIRED",
+      "answer_kind": "MULTI",
+      "option_values": {
+        "contract": "m2-item-options/1",
+        "options": [
+          {
+            "code": "NONE",
+            "label": "I have no customer information yet"
+          },
+          {
+            "code": "PERSONAL_OBSERVATION",
+            "label": "My own observations"
+          },
+          {
+            "code": "INFORMAL_FEEDBACK",
+            "label": "Informal opinions from friends or family"
+          },
+          {
+            "code": "CUSTOMER_INTERVIEWS",
+            "label": "Previous customer interviews"
+          },
+          {
+            "code": "CUSTOMER_SURVEY",
+            "label": "A previous customer survey"
+          },
+          {
+            "code": "PUBLISHED_RESEARCH",
+            "label": "Published customer research"
+          },
+          {
+            "code": "UNKNOWN",
+            "label": "I am not sure"
+          }
+        ],
+        "rules": {
+          "exclusive": [
+            "NONE",
+            "UNKNOWN"
+          ]
+        },
+        "source_rules": [
+          "Rules: NONE and UNKNOWN are exclusive. Reported sources are entrepreneur declarations, not independently verified evidence."
+        ]
+      },
+      "allowed_states": [
+        "ANSWERED",
+        "NOT_PROVIDED"
+      ],
+      "lifecycle": "ACTIVE",
+      "sort_order": 7
+    },
+    {
+      "item_key": "M2V1-09",
+      "title": "Customer Research Topics",
+      "question_text": "Which aspects of your proposed café would you like to investigate with potential customers?",
+      "requiredness": "REQUIRED",
+      "answer_kind": "MULTI",
+      "option_values": {
+        "contract": "m2-item-options/1",
+        "options": [
+          {
+            "code": "CONCEPT_INTEREST",
+            "label": "Interest in my overall café concept"
+          },
+          {
+            "code": "PRODUCT_PREFERENCE",
+            "label": "Preferences between my planned products"
+          },
+          {
+            "code": "PRICE_ACCEPTABILITY",
+            "label": "Acceptability of a specific product price"
+          },
+          {
+            "code": "SERVICE_PREFERENCE",
+            "label": "Preferences for service formats"
+          },
+          {
+            "code": "EXPERIENCE_PREFERENCE",
+            "label": "Preferences for café features or experiences"
+          },
+          {
+            "code": "SEGMENT_INTEREST",
+            "label": "Interest among my intended customer group"
+          },
+          {
+            "code": "NONE",
+            "label": "I do not want to investigate these topics at present"
+          }
+        ],
+        "rules": {
+          "exclusive": [
+            "NONE"
+          ]
+        },
+        "source_rules": [
+          "Rule: NONE cannot be combined with other selections."
+        ]
+      },
+      "allowed_states": [
+        "ANSWERED",
+        "NOT_PROVIDED"
+      ],
+      "lifecycle": "ACTIVE",
+      "sort_order": 8
+    },
+    {
+      "item_key": "M2V1-10",
+      "title": "Primary Research Priority",
+      "question_text": "Which selected topic is most important for you to investigate first?",
+      "requiredness": "CONDITIONAL",
+      "answer_kind": "SINGLE",
+      "option_values": {
+        "contract": "m2-item-options/1",
+        "options": [],
+        "rules": {
+          "source_item": "M2V1-09",
+          "exclude": [
+            "NONE"
+          ],
+          "derive_single": true,
+          "allow_undecided": false
+        },
+        "source_rules": [
+          "Rules:"
+        ]
+      },
+      "allowed_states": [
+        "ANSWERED",
+        "NOT_PROVIDED",
+        "NOT_APPLICABLE"
+      ],
+      "lifecycle": "ACTIVE",
+      "sort_order": 9
+    },
+    {
+      "item_key": "M2V1-11",
+      "title": "Current Research Decision Status",
+      "question_text": "Which statement best describes your current position regarding this research topic?",
+      "requiredness": "CONDITIONAL",
+      "answer_kind": "SINGLE",
+      "option_values": {
+        "contract": "m2-item-options/1",
+        "options": [
+          {
+            "code": "UNDECIDED",
+            "label": "I have not decided between the available options"
+          },
+          {
+            "code": "VALIDATE_CHOICE",
+            "label": "I have a preferred choice but want customer feedback"
+          },
+          {
+            "code": "EXPLORE",
+            "label": "I want to understand customer responses before making a decision"
+          },
+          {
+            "code": "UNSURE",
+            "label": "I am not sure what I need to establish yet"
+          }
+        ],
+        "rules": {
+          "requires_priority": "M2V1-10"
+        },
+        "source_rules": [
+          "Rule: Show only when an active research priority exists."
+        ]
+      },
+      "allowed_states": [
+        "ANSWERED",
+        "NOT_PROVIDED",
+        "NOT_APPLICABLE"
+      ],
+      "lifecycle": "ACTIVE",
+      "sort_order": 10
+    },
+    {
+      "item_key": "M2-20",
+      "title": "Review",
+      "question_text": "I have reviewed my café concept and customer research selections.",
+      "requiredness": "ACTION",
+      "answer_kind": "ACTION",
+      "option_values": {
+        "contract": "m2-item-options/1",
+        "options": [],
+        "rules": {},
+        "source_rules": []
+      },
+      "allowed_states": [],
+      "lifecycle": "ACTIVE",
+      "sort_order": 11
+    },
+    {
+      "item_key": "M2-21",
+      "title": "Confirm",
+      "question_text": "I confirm that these selections represent my current plans and research intentions.",
+      "requiredness": "ACTION",
+      "answer_kind": "ACTION",
+      "option_values": {
+        "contract": "m2-item-options/1",
+        "options": [],
+        "rules": {},
+        "source_rules": []
+      },
+      "allowed_states": [],
+      "lifecycle": "ACTIVE",
+      "sort_order": 12
+    }
+  ]
+}

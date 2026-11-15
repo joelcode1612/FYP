@@ -7,6 +7,7 @@ import '../components/ui.dart';
 import '../data/breadcrumb_routes.dart';
 import '../data/navigation.dart';
 import '../data/site_content.dart';
+import '../data/dev_auth_bypass.dart';
 
 /// Authenticated app chrome.
 ///
@@ -204,6 +205,8 @@ class _AppLayoutState extends State<AppLayout> {
                   eyebrow: component.eyebrow,
                   actions: component.actions,
                 ),
+              if(devAuthBypassEnabled)p(classes:'panel',attributes:{'role':'status'},[
+                Component.text('DEVELOPMENT TESTING · Authentication bypass active. Backend identity and ownership checks still apply. No production fielding or report authority is granted.')]),
               component.child,
             ]),
           ]),

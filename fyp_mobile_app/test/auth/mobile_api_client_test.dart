@@ -26,6 +26,17 @@ void main() {
       expect(profile['account_status'], 'active');
     });
 
+    test('mobile consumes actual saved confirmation and rejects stale source and wrong owner', () async {
+      final mid = Platform.environment['P1_HTTP_M2_ASSESSMENT']!;
+      final cid = Platform.environment['P1_HTTP_M2_CONFIRMATION']!;
+      final data = await ApiConfirmedReviewRepository(client).read(assessmentId: mid, confirmationId: cid, revision: 1);
+      expect(data.answers.single.displayValue, 'Private HTTP synthetic declaration.');
+      expect(data.activity, hasLength(4));
+      await expectLater(ApiConfirmedReviewRepository(client).read(assessmentId: mid, confirmationId: cid, revision: 0), throwsA(isA<AppFailure>()));
+      final other = MobileApiClient(bearer: () => Platform.environment['P1_HTTP_OTHER_TOKEN']);
+      await expectLater(ApiConfirmedReviewRepository(other).read(assessmentId: mid, confirmationId: cid, revision: 1), throwsA(isA<NotFoundFailure>()));
+    }, skip: Platform.environment['P1_HTTP_M2_ASSESSMENT'] == null ? 'Pass --confirmed-review to the private lab.' : false);
+
     test('authenticated mobile reads the held Project1 contract', () async {
       final result = await ApiProject1ReadRepository(client).read(
         assessmentId: Platform.environment['P1_HTTP_ASSESSMENT'],

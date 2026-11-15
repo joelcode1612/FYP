@@ -4,7 +4,7 @@ import 'package:fyp/application/providers.dart';
 import 'package:fyp/core/routing/app_routes.dart';
 import 'package:fyp/core/theme/sitewise_theme.dart';
 import 'package:fyp/features/assessment/model/entities/assessment.dart';
-import 'questionnaire_fixtures.dart';
+import 'questionnaire_fixtures.dart' as fixtures;
 import 'package:fyp/features/assessment/model/entities/assessment_draft.dart';
 import 'package:fyp/features/assessment/view/components/assessment_card.dart';
 
@@ -105,7 +105,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   style: TextStyle(fontSize: 11, color: SitewiseColors.warning),
                 ),
                 const SizedBox(height: 22),
-                for (final offer in demoAssessmentOffers)
+                for (final offer in fixtures.demoAssessmentOffers)
                   AssessmentCard(
                     offer: offer,
                     draft: vm.getDraft(offer.id),

@@ -179,3 +179,8 @@ export 'src/data/repositories/api_project1_read_repository.dart';
 export 'src/domain/entities/m2_assessment.dart';
 export 'src/data/datasources/local/m2_prototype_data.dart';
 export 'src/application/notifiers/m2_assessment_notifier.dart';
+export 'src/domain/entities/confirmed_business_review.dart';
+export 'src/data/repositories/api_confirmed_review_repository.dart';
+export 'src/domain/entities/customer_questionnaire.dart';
+export 'src/data/repositories/api_customer_questionnaire_repository.dart';
+export 'src/data/repositories/api_m2_repository.dart';

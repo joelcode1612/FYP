@@ -4,6 +4,7 @@ import 'package:shared_logic/shared_logic.dart';
 
 import '../../layouts/app_layout.dart';
 import '../../components/project1_read_panel.dart';
+import '../../components/m2_activity_panel.dart';
 
 /// Route shell for the R01–R12 café demand report. The page supplies its own
 /// title, breadcrumb and toolbar, so the shell header is suppressed.
@@ -38,6 +39,6 @@ class ActivityHistoryView extends StatelessComponent {
     title: 'Activity History',
     showPageHead: false,
     showBreadcrumbs: false,
-    child: Project1ReadPanel(assessmentId: assessmentId, section: 'activity'),
+    child: M2ActivityPanel(assessmentId: assessmentId),
   );
 }

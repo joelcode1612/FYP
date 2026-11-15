@@ -243,6 +243,7 @@ abstract final class WebAuth {
       if (body != null) 'Content-Type': 'application/json',
     };
     return switch (method) {
+      'PUT' => _client.put(uri,headers:headers,body:body==null ? null : jsonEncode(body)),
       'POST' => _client.post(
         uri,
         headers: headers,

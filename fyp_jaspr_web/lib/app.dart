@@ -21,6 +21,9 @@ import 'pages/reset_password_page.dart';
 import 'pages/entrepreneur/assessment_history_page.dart'
     as e_assessment_history;
 import 'pages/entrepreneur/assessment_workspace_page.dart' as e_assessment;
+import 'components/m2_entry_panel.dart';
+import 'layouts/app_layout.dart';
+import 'pages/entrepreneur/confirmed_business_review_page.dart';
 import 'pages/entrepreneur/compare_page.dart';
 import 'pages/entrepreneur/dashboard_page.dart' as e_dashboard;
 import 'pages/entrepreneur/my_properties_page.dart' as e_my_properties;
@@ -36,6 +39,9 @@ import 'pages/entrepreneur/recommendations_page.dart' as e_recommendations;
 import 'pages/entrepreneur/report_page.dart' as e_report;
 import 'pages/entrepreneur/report_activity_views.dart'
     as e_report_activity;
+import 'pages/entrepreneur/assessment_report_selector_view.dart'
+    as e_report_selector;
+import 'pages/entrepreneur/assessment_list_view.dart' as e_assessment_list;
 import 'pages/entrepreneur/saved_page.dart' as e_saved;
 import 'pages/entrepreneur/tour_page.dart' as e_tour;
 import 'pages/admin/agents_page.dart';
@@ -601,6 +607,24 @@ class SitewiseApp extends StatelessComponent {
             ),
           ),
           Route(
+            path: '/entrepreneur/m2-entry',
+            builder:(context,state)=>_page(AppLayout(role:AppRole.entrepreneur,
+              currentRoute:'/entrepreneur/assessments',title:'Business requirements — M2',
+              child:M2EntryPanel(assessmentId:state.queryParams['assessment'] ?? '')),
+              title:'M2 questionnaire — Sitewise'),
+          ),
+          Route(
+            path: '/entrepreneur/m2-review',
+            builder: (context, state) => _page(
+              ConfirmedBusinessReviewPage(
+                assessmentId: state.queryParams['assessment'] ?? '',
+                confirmationId: state.queryParams['confirmation'] ?? '',
+                revision: int.tryParse(state.queryParams['revision'] ?? '') ?? -1,
+              ),
+              title: 'Confirmed business review — Sitewise',
+            ),
+          ),
+          Route(
             path: '/entrepreneur/report',
             builder: (context, state) => _page(
               e_report.ReportPage(id: state.queryParams['id'] ?? ''),
@@ -609,11 +633,36 @@ class SitewiseApp extends StatelessComponent {
           ),
           // R01–R12 café demand suitability report and the engine activity
           // history. Both are top-level destinations in the entrepreneur nav.
+          //
+          // `/entrepreneur/cafe-report` now opens the report *selector* first —
+          // the approved "Select Assessment to View Report" screen. Choosing a
+          // row and pressing View Report hands off to the original report shell
+          // at the `/view` path below.
+          //
+          // The longer `/view` path is declared FIRST. The matcher walks this
+          // list in declaration order and tests each path as a *prefix* of the
+          // location, so `/entrepreneur/cafe-report` is a prefix of
+          // `/entrepreneur/cafe-report/view`. It escapes that collision only
+          // because the shorter route has no nested sub-routes, and therefore
+          // bails instead of claiming the deeper location. Declaring the more
+          // specific path first keeps the ordering requirement explicit should
+          // sub-routes ever be added — the same reason
+          // `/entrepreneur/assessments/history` precedes
+          // `/entrepreneur/assessments`.
+          Route(
+            path: '/entrepreneur/cafe-report/view',
+            builder: (context, state) => _page(
+              e_report_activity.CafeReportView(
+                assessmentId: state.queryParams['assessment'] ?? '',
+              ),
+              title: 'Café demand suitability report — Sitewise',
+            ),
+          ),
           Route(
             path: '/entrepreneur/cafe-report',
             builder: (context, state) => _page(
-              e_report_activity.CafeReportView(assessmentId: state.queryParams['assessment'] ?? ''),
-              title: 'Café demand suitability report — Sitewise',
+              const e_report_selector.AssessmentReportSelectorView(),
+              title: 'Select assessment to view report — Sitewise',
             ),
           ),
           Route(
@@ -621,6 +670,21 @@ class SitewiseApp extends StatelessComponent {
             builder: (context, state) => _page(
               e_report_activity.ActivityHistoryView(assessmentId: state.queryParams['assessment'] ?? ''),
               title: 'Activity history — Sitewise',
+            ),
+          ),
+          // "Assessment" top-bar destination: a read-only index of the
+          // assessments already saved to the account, each row stating which
+          // report belongs to it. It has no create action. Registered before
+          // the `/entrepreneur/assessment*` workspace routes so the more
+          // specific path is always matched first.
+          Route(
+            path: '/entrepreneur/assessment-list',
+            builder: (context, state) => _page(
+              const e_assessment_list.AssessmentListView(),
+              title: 'Assessment — Sitewise',
+              description:
+                  'Assessments saved to your account and the report that '
+                  'belongs to each one.',
             ),
           ),
           // Web decision-support workspace. `?id=` is the same catalogue
@@ -632,9 +696,11 @@ class SitewiseApp extends StatelessComponent {
           // workflow and never routes here.
           //
           // This is the backward-compatible deep link: it still opens the
-          // workspace for one property. `/entrepreneur/assessments` is the
-          // canonical route now (it opens Stage 1 when no property is given),
-          // so this one keeps working for old bookmarks and shared links.
+          // workspace for one property. It is ALSO where Stage 1 (the
+          // saved-property selector) now lives, via `entry: 'select'`, because
+          // `/entrepreneur/assessments` became the Assessment destination for
+          // the four-step research flow. The overview's "+ New assessment"
+          // points here, so starting a new property assessment is unchanged.
           Route(
             path: '/entrepreneur/assessment',
             builder: (context, state) => _page(
@@ -642,6 +708,7 @@ class SitewiseApp extends StatelessComponent {
                 propertyId: state.queryParams['id'] ?? '',
                 stage: state.queryParams['stage'] ?? '',
                 queue: state.queryParams['queue'] ?? '',
+                entry: 'select',
               ),
               title: 'Location Assessment Workspace — Sitewise',
               description:
@@ -662,9 +729,15 @@ class SitewiseApp extends StatelessComponent {
                   'real progress and report availability.',
             ),
           ),
-          // The main Assessments destination: the five-stage workspace. With
-          // no `?id=` it opens Stage 1 — the saved-property selector — and
-          // never starts an assessment on its own.
+          // The **Assessment** top-bar destination (PROJECT1 v1.5).
+          //
+          // With no `?id=` this is the four-step research flow: the assessment
+          // overview list, or one of its steps via `?step=1..4`, scoped to the
+          // assessment named by `?assessment=`.
+          //
+          // With `?id=` it is still the five-stage property workspace, byte for
+          // byte the same page as before — every saved link, dashboard KPI and
+          // Explore/Saved hand-off keeps working.
           Route(
             path: '/entrepreneur/assessments',
             builder: (context, state) => _page(
@@ -672,11 +745,14 @@ class SitewiseApp extends StatelessComponent {
                 propertyId: state.queryParams['id'] ?? '',
                 stage: state.queryParams['stage'] ?? '',
                 queue: state.queryParams['queue'] ?? '',
+                step: state.queryParams['step'] ?? '',
+                assessmentId: state.queryParams['assessment'] ?? '',
               ),
-              title: 'Location Assessment Workspace — Sitewise',
+              title: 'Assessment — Sitewise',
               description:
-                  'A five-stage assessment of one commercial property, saved '
-                  'to your account as you go.',
+                  'The four-step research assessment: M2 business context, '
+                  'BDJ findings, question review and the customer '
+                  'questionnaire.',
             ),
           ),
           Route(

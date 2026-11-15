@@ -1,14 +1,15 @@
 import 'package:flutter/material.dart';
 
 import 'auth_route_guard.dart';
-import '../../features/assessment/view/collection_availability_page.dart';
+import '../../features/assessment/view/home_screen.dart';
+import '../../features/assessment/view/questionnaire_screen.dart';
+import '../../features/assessment/view/review_screen.dart';
 import '../../presentation/mobile/auth/pages/forgot_password_mobile_page.dart';
 import '../../presentation/mobile/auth/pages/mobile_auth_page.dart';
 import '../../presentation/mobile/auth/widgets/auth_tabs.dart';
 import '../../presentation/mobile/onboarding/pages/onboarding_flow_page.dart';
 import '../../presentation/mobile/start/app_start_gate.dart';
 import '../../presentation/mobile/shell/entrepreneur_tab_host.dart';
-import '../../presentation/mobile/entrepreneur/pages/entrepreneur_assessment_questions_mobile_page.dart';
 import '../../presentation/mobile/entrepreneur/pages/entrepreneur_assessment_summary_mobile_page.dart';
 import '../../presentation/mobile/entrepreneur/pages/entrepreneur_ai_recommendations_mobile_page.dart';
 import '../../presentation/mobile/entrepreneur/pages/entrepreneur_compare_mobile_page.dart';
@@ -149,10 +150,18 @@ abstract final class AppRoutes {
           initialDraftId: settings.arguments as String?,
         ),
       ),
-      assessmentHome => (RouteAccess.workspace, () => const CollectionAvailabilityPage()),
-      assessmentQuestionnaire || assessmentReview => (
+      assessmentHome => (RouteAccess.workspace, () => const HomeScreen()),
+      assessmentQuestionnaire => (
         RouteAccess.workspace,
-        () => const CollectionAvailabilityPage(),
+        () => QuestionnaireScreen(
+          assessmentId: settings.arguments as String? ?? '',
+        ),
+      ),
+      assessmentReview => (
+        RouteAccess.workspace,
+        () => ReviewScreen(
+          assessmentId: settings.arguments as String? ?? '',
+        ),
       ),
       '/entrepreneur/preferences' => (
         RouteAccess.workspace,
@@ -208,13 +217,12 @@ abstract final class AppRoutes {
           propertyId: settings.arguments as String? ?? '',
         ),
       ),
-      // Option A assessment flow. The setup step receives the chosen
-      // property id as arguments; the later steps read the session draft.
+      // Legacy deep link kept resolvable. The old Option A setup page is gone;
+      // the feature questionnaire home owns Start/Resume now, so an old link
+      // (or a saved shortcut) lands there instead of on a not-found page.
       '/entrepreneur/assessment-setup' => (
         RouteAccess.workspace,
-        () => EntrepreneurAssessmentQuestionsPage(
-          propertyId: settings.arguments as String? ?? '',
-        ),
+        () => const HomeScreen(),
       ),
       '/entrepreneur/assessment-evidence' => (
         RouteAccess.workspace,

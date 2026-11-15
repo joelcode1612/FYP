@@ -26,6 +26,12 @@ android {
     }
 
     buildTypes {
+        debug {
+            // Test-only APK identity preserves the installed app and its data.
+            if (System.getenv("SITEWISE_ISOLATED_DEVICE_TEST") == "1") {
+                applicationIdSuffix = ".parttwotest"
+            }
+        }
         release {
             // TODO: Add your own signing config for the release build.
             // Signing with the debug keys for now, so `flutter run --release` works.

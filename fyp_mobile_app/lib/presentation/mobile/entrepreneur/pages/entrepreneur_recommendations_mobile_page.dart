@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_logic/shared_logic.dart';
 
+import '../../../../core/routing/app_routes.dart';
 import '../../../../core/theme/sitewise_theme.dart';
 import '../../shell/mobile_app_shell.dart';
 import '../../widgets/m3_kit.dart';
@@ -744,10 +745,9 @@ class _InsightSheet extends StatelessWidget {
           OutlinedButton.icon(
             onPressed: () {
               Navigator.of(context).pop();
-              Navigator.of(context).pushNamed(
-                '/entrepreneur/assessment-setup',
-                arguments: prop.id,
-              );
+              // The feature questionnaire owns Start/Resume; a property id
+              // is not an assessment draft id.
+              Navigator.of(context).pushNamed(AppRoutes.assessmentHome);
             },
             icon: const Icon(Icons.assignment_outlined, size: 18),
             label: const Text('Assess this property'),

@@ -19,6 +19,39 @@ The shared Dart parser rejects another assessment, an unknown contract version,
 or attempted promotion of fielding/report release. Transport failures remain
 errors and expose retry rather than sample data or successful empty histories.
 
+## Confirmed business review
+
+The existing default-off M2 router now also exposes:
+
+`GET /api/v1/m2/assessments/{m2_uuid}/confirmed-review?confirmation_id={confirmation_uuid}&expected_revision={revision}`
+
+This read-only `project1-confirmed-review/1` projection reuses M2Service's persisted
+snapshot digest/current-answer checks and BDJService's actual worksheet. One
+owner-scoped assessment lock is retained through the complete projection and
+released by rollback on success or failure. Findings must reference the pinned
+answers and match the confirmed finding IDs. No evaluation or decision runs on GET.
+
+The projection includes at most 50 existing answer/evaluation/review/confirmation/
+clarification receipts through the selected revision, with an explicit truncation
+flag. It is a bounded M2 record view, not a complete downstream research audit.
+Actors absent from a source table remain unknown. A missing required table yields
+503 `M2_REVIEW_SOURCE_UNAVAILABLE`, never an invented empty history. Success and
+source-unavailable responses carry `Cache-Control: no-store`.
+
+Jaspr `/entrepreneur/m2-review?assessment={m2_uuid}&confirmation={confirmation_uuid}&revision={revision}`
+uses the shared DTO/client and the existing review/activity components. Missing or
+invalid source references, expired authentication, stale confirmation and incomplete
+storage show a source-required/unavailable state. No workspace-to-M2 mapping is
+inferred. QJ/QG counts, local demo decisions and fake notes are not displayed in
+this source view. Unconnected decision/note actions in the reusable review portal
+are disabled; a successful callback is not turned into a fabricated audit event.
+
+The shared client is exercised through both Dart HTTP and the actual mobile API
+transport in the private lab. This does not add an active mobile fielding flow.
+Existing confirmation snapshots do not pin the full BDJ explanation text or rule
+implementation digest; this view is a current candidate interpretation tied to
+confirmed declarations, not an immutable research/report snapshot.
+
 The CQ successor and customer candidate factories remain unregistered. Existing
 M2, workflow and CP07 flags remain default-off. Synthetic authorization exists
 only inside disposable test fixtures. No campaign or CQ_FORM_VERSION was added.
@@ -45,6 +78,8 @@ From `backend/`, using its existing virtual environment:
 .venv\Scripts\python.exe scripts\cp04b\verify.py --backend . --output <new-external-output-directory> --probe-registration --probe-negative-auth
 .venv\Scripts\python.exe scripts\run_project1_offline.py --output <external-output-directory>
 .venv\Scripts\python.exe tests\integration\run_cross_app.py --output <external-output-directory>
+.venv\Scripts\python.exe tests\integration\run_cross_app.py --confirmed-review --output <external-output-directory>
+.venv\Scripts\python.exe tests\integration\run_cross_app.py --mobile --confirmed-review --output <external-output-directory>
 ```
 
 The offline runner blocks external connections and permits only memory SQLite.
@@ -62,16 +97,18 @@ Their passing suites do not authorize the live schema or new fielding.
 
 Jaspr fixtures and retired preview material are under `fyp_jaspr_web/test/fixtures`.
 Flutter fixtures, old UI and the preview-only route harness are under
-`fyp_mobile_app/test/assessment/fixtures`; normal application routes never use them.
+`fyp_mobile_app/test/assessment/fixtures`. Production routing must continue to use
+honest unavailable states until real contracts and source bindings are adopted.
 Existing local drafts are preserved and never reclassified as customer evidence.
 
 ## Outstanding gates
 
 - Adopted workspace/M2 confirmation, approved bank and campaign bindings.
 - Scientific/fielding and consent authorization for Q01-Q13 and any successor.
-- Restricted database identity and schema compatibility: the inspected app target
-  was Final_Location_Analysis; M2 tables were in Dss, whose reviewed schema did not
-  yet contain `m2_clarification_events`.
+- Restricted database identity and schema compatibility: the November 13 read-only
+  recheck selected Dss, with 9 M2 tables but no `m2_clarification_events`.
+  Final_Location_Analysis still had no M2 tables. The inspected application role
+  was postgres with superuser/bypass-RLS privileges. No migration was performed.
 - Deterministic EE-01 lineage/aggregation, original research source bindings,
   A10/ReportAdmission and immutable R01-R12 persistence interfaces.
 - Full CA-01 and CA-02 acceptance, broader deployment validation and main-branch

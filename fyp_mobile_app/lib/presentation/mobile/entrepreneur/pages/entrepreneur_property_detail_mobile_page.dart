@@ -3,6 +3,7 @@ import 'package:shared_logic/shared_logic.dart';
 import 'package:flutter/material.dart';
 
 import '../../../../application/services/service_locator.dart';
+import '../../../../core/routing/app_routes.dart';
 import '../../../../core/theme/sitewise_theme.dart';
 import '../../../shared/widgets/sitewise_button.dart';
 import '../../../shared/widgets/sitewise_evidence_score.dart';
@@ -212,10 +213,9 @@ class _EntrepreneurPropertyDetailMobilePageState
                     const SizedBox(height: 18),
                     M3PrimaryButton(
                       label: 'Assess this property',
-                      onTap: () => _open(
-                        '/entrepreneur/assessment-setup',
-                        arguments: p.id,
-                      ),
+                      // The feature questionnaire owns Start/Resume; a
+                      // property id is not an assessment draft id.
+                      onTap: () => _open(AppRoutes.assessmentHome),
                     ),
                     const SizedBox(height: 8),
                     _actions(p, saved),

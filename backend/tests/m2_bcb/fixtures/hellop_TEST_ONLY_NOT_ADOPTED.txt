@@ -1,0 +1,203 @@
+### Section 1 — Business background and intended setting
+
+M2-01. What is your role in this venture? (Required — choose one)
+
+A. Founder/owner\
+B. Co-founder/partner\
+C. Pre-opening manager\
+D. Other (please specify)
+
+M2-02. How much food-and-beverage experience do you have? (Required — choose one)
+
+A. No food-and-beverage experience\
+B. Less than 1 year (but more than none)\
+C. 1 to 3 years\
+D. More than 3 years
+
+M2-03. Which best describes your intended location setting? (Required — choose one)
+
+A. City-centre commercial\
+B. Suburban shoplot\
+C. Residential-area shoplot\
+D. Mall/food-court\
+E. Other (please specify)
+
+### Section 2 — Café concept and intended customers
+
+M2-04. In one or two sentences, what kind of café do you plan to open? (Recommended — free text)
+
+Write your own business description.
+
+M2-05. What service format do you plan? (Required — choose one)
+
+A. Dine-in focused\
+B. Takeaway/delivery focused\
+C. Hybrid (meaningful volume of both)
+
+M2-06. Which product categories do you plan to offer? (Required — choose one or more)
+
+A. Coffee/espresso\
+B. Non-coffee drinks\
+C. Baked/pastry\
+D. Light meals\
+E. Desserts\
+F. Retail beans/merch\
+G. Other (please specify)
+
+M2-07. Who do you intend to serve? (Required — choose one or more and identify one primary group)
+
+A. Office workers\
+B. Students\
+C. Residents\
+D. Shoppers/tourists\
+E. Remote workers\
+F. Other (please specify)
+
+Primary intended customer group: \_\_\_\_\_\_
+
+M2-08. What is that segment view based on? (Optional — choose one)
+
+A. My own observation of the area\
+B. Local knowledge/familiarity\
+C. General assumption\
+D. Other (please specify)
+
+M2-09. What do you plan to compete on? (Optional — choose up to two)
+
+A. Price\
+B. Quality/specialty\
+C. Convenience/location\
+D. Ambience\
+E. Uniqueness\
+F. Other (please specify)
+
+### Section 3 — Pricing, finance and operations
+
+M2-10. For a medium latte, dine-in, what price do you plan? (Required — choose one)
+
+A. Below RM8\
+B. RM8–RM11.99\
+C. RM12–RM14.99\
+D. RM15–RM17.99\
+E. RM18 or more\
+F. Not decided
+
+M2-11. Compared with cafés you know in the area, is that price…? (Optional — currently deferred)
+
+A. Lower\
+B. Similar\
+C. Higher\
+D. Not sure
+
+Do not answer this for the current demonstration unless we specifically evaluate the deferred question.
+
+M2-12. How much startup capital do you plan to commit? (Required — choose one)
+
+A. Less than RM50,000\
+B. RM50,000 to under RM150,000\
+C. RM150,000 to under RM300,000\
+D. RM300,000 to under RM500,000\
+E. RM500,000 or more\
+F. Not decided
+
+M2-13. Which expense lines do you expect to dominate? (Required — choose up to three)
+
+A. Fit-out\
+B. Equipment\
+C. Rent deposit\
+D. Initial inventory\
+E. Staff\
+F. Marketing\
+G. Other (please specify)
+
+M2-14. How long do you assume until the business breaks even? (Optional — choose one)
+
+A. Under 6 months\
+B. 6 to 11 months\
+C. 12 to 23 months\
+D. 24 months or more\
+E. Not estimated
+
+M2-15. What is the funding source? (Optional — privacy review pending)
+
+A. Own savings\
+B. Family\
+C. Bank/SME loan\
+D. Partners\
+E. Mix
+
+You may leave this unanswered while its privacy review remains unresolved.
+
+M2-O-01. How many customers do you expect on a typical weekday once open? (Optional — choose one)
+
+A. Fewer than 10\
+B. 10–29\
+C. 30–59\
+D. 60–99\
+E. 100 or more\
+F. Not estimated
+
+M2-O-02. How many staff do you plan to employ at opening? (Optional — choose one)
+
+A. 0 (solo/self + family)\
+B. 1–2\
+C. 3–5\
+D. 6 or more\
+E. Not decided
+
+### Section 4 — Evidence inventory and decision readiness
+
+M2-16. What customer evidence do you currently hold? (Required — choose one or more)
+
+A. None\
+B. Friends/family opinion\
+C. Observation of the area\
+D. Competitor menu boards\
+E. A paid report\
+F. A prior survey I ran\
+G. Other (please specify)
+
+If you select A (None), do not select other options.
+
+M2-17. Which information is still missing for your decision? (Required — choose one or more)
+
+A. Demand for my concept\
+B. Competitor pricing\
+C. Rent/occupancy costs\
+D. Supplier costs\
+E. Licensing/regulations\
+F. Staffing\
+G. None missing
+
+If you select G (None missing), do not select other options.
+
+M2-18. How confident are you in your demand expectations? (Required — choose one)
+
+A. Not at all confident\
+B. Slightly confident\
+C. Moderately confident\
+D. Quite confident\
+E. Very confident
+
+M2-19. Where are you in the location decision? (Optional — choose one)
+
+A. Not started\
+B. Viewing options\
+C. Negotiating\
+D. Signed/committed
+
+### Section 5 — Review and confirmation
+
+M2-20. Review summary of all answers. (Required governance action)
+
+A. Confirm reviewed answers\
+B. Edit answers
+
+M2-21. Do you confirm that these are your planned figures and honest assumptions? (Required governance action)
+
+A. Yes, confirm\
+B. Revise answers
+
+These two steps are confirmation actions, not additional survey-answer fields. Your chat confirmation is for this demonstration; it is not an authorized database attestation.
+
+here are the question could you update on the jaspr there and also could you redesing the UI for me in images to me show me more variant instead one result only

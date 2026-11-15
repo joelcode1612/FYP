@@ -5,8 +5,8 @@
 // events yet, so these fixtures exist only to show the review UI. Replace
 // each list with the versioned read API before any real review.
 
-import '../../lib/pages/entrepreneur/customer_questionnaire_preview_page.dart';
-import '../../lib/pages/entrepreneur/review_portal_page.dart';
+import 'package:sitewise_jaspr_web/pages/entrepreneur/customer_questionnaire_preview_page.dart';
+import 'package:sitewise_jaspr_web/pages/entrepreneur/review_portal_page.dart';
 
 const String demoAssessmentTitle = 'Morning Junction Café';
 const String demoAssessmentId = 'A-DEMO-001';

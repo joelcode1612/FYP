@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_logic/shared_logic.dart';
 
 import '../../../core/theme/sitewise_m3.dart';
-import '../entrepreneur/pages/entrepreneur_assess_mobile_page.dart';
+import '../../../features/assessment/view/home_screen.dart';
 import '../entrepreneur/pages/entrepreneur_dashboard_mobile_page.dart';
 import '../entrepreneur/pages/entrepreneur_recommendations_mobile_page.dart';
 import '../entrepreneur/pages/entrepreneur_profile_mobile_page.dart';
@@ -67,7 +67,7 @@ class _EntrepreneurTabHostState extends State<EntrepreneurTabHost> {
     // and a ranked search — it never asks the host which one it is.
     '/entrepreneur/recommendations' =>
       const EntrepreneurRecommendationsMobilePage(),
-    '/entrepreneur/assess' => const EntrepreneurAssessMobilePage(),
+    '/entrepreneur/assess' => const HomeScreen(),
     '/entrepreneur/spaces' => const EntrepreneurSpacesMobilePage(),
     '/entrepreneur/profile' => const EntrepreneurProfileMobilePage(),
     _ => const SizedBox.shrink(),

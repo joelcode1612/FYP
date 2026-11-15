@@ -357,3 +357,85 @@ def test_model_cannot_hide_reproducible_conflict(repo):
     engine=BDJEngine(bdj_rules,lambda *args:{'issues':[],'overall_note':'Synthetic omission'})
     result=engine.review(packet,recheck_current=lambda:packet['source_fingerprint'])
     assert len(result['findings'])==1
+
+
+@pytest.mark.parametrize('status,code', [
+    (401, 'PROVIDER_CREDENTIALS_REJECTED'), (403, 'PROVIDER_CREDENTIALS_REJECTED'),
+    (429, 'PROVIDER_RATE_LIMITED'), (503, 'PROVIDER_TEMPORARILY_UNAVAILABLE'),
+])
+def test_failure_classification_never_automatically_replays_post(status, code):
+    calls = []
+    def handler(request):
+        calls.append(request)
+        return httpx.Response(status, text='private provider detail',
+                              headers={'Retry-After': '120'})
+    with pytest.raises(WorkflowHeld, match=code):
+        provider_with(handler=handler).complete([], BDJOutput)
+    assert len(calls) == 1
+
+
+@pytest.mark.parametrize('budget', [0, -1, float('nan'), float('inf'), True])
+def test_invalid_execution_budget_prevents_dispatch(budget):
+    provider = provider_with()
+    provider.timeout = budget
+    with pytest.raises(WorkflowHeld, match='PROVIDER_BUDGET_INVALID'):
+        provider.complete([], BDJOutput)
+
+
+def test_slow_stream_cannot_return_success_after_total_budget(monkeypatch):
+    from sitewise.project1 import provider as module
+    clock = [0.0]
+    monkeypatch.setattr(module.time, 'monotonic', lambda: clock[0])
+    closed, calls = [], []
+    class SlowStream(httpx.SyncByteStream):
+        def __iter__(self):
+            for chunk in [b'{', b'"model":', b'"never accepted"}']:
+                clock[0] += 0.6
+                yield chunk
+        def close(self):
+            closed.append(True)
+    def handler(request):
+        calls.append(request)
+        return httpx.Response(200, stream=SlowStream())
+    p = provider_with(handler=handler)
+    p.timeout = 1
+    with pytest.raises(WorkflowHeld, match='E_PROVIDER_TIMEOUT_OUTCOME_UNKNOWN'):
+        p.complete([], BDJOutput)
+    assert len(calls) == 1 and closed == [True]
+
+
+def test_local_validation_must_finish_within_budget(monkeypatch):
+    from sitewise.project1 import provider as module
+    clock = [0.0]
+    monkeypatch.setattr(module.time, 'monotonic', lambda: clock[0])
+    class SlowValidation:
+        @classmethod
+        def model_json_schema(cls):
+            return BDJOutput.model_json_schema()
+        @classmethod
+        def model_validate(cls, value):
+            clock[0] = 31.0
+            return BDJOutput.model_validate(value)
+    p = provider_with(envelope('{"issues":[],"overall_note":"Synthetic"}'))
+    with pytest.raises(WorkflowHeld, match='E_PROVIDER_TIMEOUT_OUTCOME_UNKNOWN'):
+        p.complete([], SlowValidation)
+
+@pytest.mark.parametrize('version,key,source_key,valid', [
+    ('M2V1-20261114-1','M2V1-04','M2V1-04',True),
+    ('M2V1-20261114-1','M2-04','M2-04',False),
+    ('historical','M2-04','M2-04',True),
+    ('historical','M2V1-04','M2V1-04',False),
+    ('M2V1-20261114-1','M2V1-12','M2V1-12',False),
+    ('M2V1-20261114-1','M2V1-04','M2V1-05',False),
+])
+def test_source_ref_instrument_namespace(version,key,source_key,valid):
+    packet={'instrument_version':version,'declarations':[dict(item_key=source_key,answer_state='ANSWERED',
+        value=['STUDENTS'],answer_revision_id='a',item_version_id='v')]}
+    raw=dict(overall_note='Synthetic source binding only',issues=[dict(rule_id='SYN',kind='INFORMATION_GAP',
+        source_refs=[dict(item_key=key,answer_revision_id='a',item_version_id='v',quote='STUDENTS')],
+        observed_condition='x',counterargument='x',justification='x',next_action='x')])
+    if valid:
+        assert validate_candidates(raw,packet,{'SYN'}).issues
+    else:
+        with pytest.raises((ValidationError,WorkflowHeld)):
+            validate_candidates(raw,packet,{'SYN'})

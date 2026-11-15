@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:shared_logic/shared_logic.dart' hide RecommendationExplanation;
 import '../../../../application/personalised_recommendations_providers.dart';
+import '../../../../core/routing/app_routes.dart';
 import '../../../../core/theme/sitewise_theme.dart';
 import '../../widgets/m3_kit.dart';
 
@@ -331,7 +332,7 @@ class _AiRecommendationCard extends ConsumerWidget {
                       ),
                     ),
                     const SizedBox(width: 8),
-                    _AssessButton(item: item),
+                    const _AssessButton(),
                   ],
                 ),
               ],
@@ -356,18 +357,15 @@ class _AiRecommendationCard extends ConsumerWidget {
 }
 
 class _AssessButton extends StatelessWidget {
-  final GeneratedRecommendation item;
-
-  const _AssessButton({required this.item});
+  const _AssessButton();
 
   @override
   Widget build(BuildContext context) {
     return OutlinedButton.icon(
       onPressed: () {
-        Navigator.of(context).pushNamed(
-          '/entrepreneur/assessment-setup',
-          arguments: item.propertyId,
-        );
+        // The feature questionnaire owns Start/Resume. A listing id is not an
+        // assessment draft id, so no route arguments are passed.
+        Navigator.of(context).pushNamed(AppRoutes.assessmentHome);
       },
       icon: const Icon(Icons.assignment_outlined, size: 16),
       label: const Text('Assess'),

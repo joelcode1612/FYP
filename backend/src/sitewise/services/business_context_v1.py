@@ -6,7 +6,7 @@ import hashlib
 import json
 from uuid import UUID
 
-from sitewise.domain.m2_rules import missing_required_items, validate_m2_answer
+from sitewise.domain.m2_rules import missing_required_items, validate_m2_answer, resolve_m2_items, derived_m2_selections
 from sitewise.services.ports.business_context_v1_port import (
     AuthorizationPort, ClockPort, ContextRequest, SnapshotPort,
 )
@@ -33,6 +33,50 @@ def require(condition: bool, code: str) -> None:
 def text_fields(row: dict, names: tuple[str, ...], code: str) -> None:
     require(all(isinstance(row.get(k), str) and bool(row[k].strip()) for k in names), code)
 
+
+def current_business_description(items, answers):
+    """Render only substantive declared attributes from the pinned M2V1 codebook."""
+    resolved = {item["item_key"]: item for item in resolve_m2_items(items, answers)}
+    sources = []
+
+    def phrase(number):
+        key = f"M2V1-{number:02d}"
+        item = resolved[key]
+        answer = answers.get(key, {})
+        value = item.get("derived_value")
+        if value is None and answer.get("answer_state") == "ANSWERED":
+            value = answer["value_json"]
+        if isinstance(value, dict):
+            value = value["jurisdiction"]
+        codes = value if isinstance(value, list) else [value]
+        labels = [item["option_labels"][code] for code in codes
+                  if code not in (None, "UNDECIDED", "OTHER_UNLISTED")]
+        if labels:
+            sources.append(key)
+        return ", ".join(labels)
+
+    area, service, products, groups, primary, emphasis = (phrase(i) for i in range(1, 7))
+    introduction = "The entrepreneur plans to establish a café"
+    if area:
+        introduction += f" in {area}"
+    if service:
+        introduction += f", using a {service} service model"
+    sentences = [introduction + "."]
+    if products:
+        sentences.append(f"The planned product categories include {products}.")
+    if groups:
+        audience = f"The intended customers include {groups}"
+        if primary:
+            audience += f", with {primary} as the primary intended audience"
+        sentences.append(audience + ".")
+    if emphasis:
+        sentences.append(f"The café intends to emphasize {emphasis}.")
+    if answers.get("M2V1-02", {}).get("value_json") != "DELIVERY":
+        occasion = phrase(7)
+        if occasion:
+            sentences.append(f"The intended customer occasion is {occasion}.")
+    return {"template_version": "V1", "source": "CONFIRMED_M2",
+            "text": " ".join(sentences), "source_question_ids": sources}
 
 def json_value(value):
     """Detached JSON projection; strict numbers and no mutable source aliases."""
@@ -141,13 +185,14 @@ class BusinessContextBuilderV1:
         for item in items:
             text_fields(item, ("id", "item_key", "question_text"), "ITEM_VERSIONS_INVALID")
         require(not missing_required_items(items, answers), "MANDATORY_CONTEXT_MISSING")
+        validation_items = {i["item_key"]: i for i in resolve_m2_items(items, answers)}
         confirmed_answers = []
         for key, answer in sorted(answers.items()):
             require(key in item_map, "ANSWER_VERSION_INVALID")
             item = item_map[key]
             require(answer["assessment_id"] == a["id"] and answer["item_version_id"] == item["id"]
                     and 0 <= answer["assessment_revision"] <= rev, "ANSWER_VERSION_INVALID")
-            validate_m2_answer(item, answer["answer_state"], answer["value_json"])
+            validate_m2_answer(validation_items[key], answer["answer_state"], answer["value_json"])
             confirmed_answers.append({"item_key": key, "answer_revision_id": answer["id"],
                                       "item_version_id": answer["item_version_id"],
                                       "answer_state": answer["answer_state"], "value": answer["value_json"]})
@@ -167,9 +212,14 @@ class BusinessContextBuilderV1:
         for key, item in sorted(item_map.items()):
             if item["lifecycle"] == "ACTIVE" and item["answer_kind"] != "ACTION" and key not in answers:
                 unknowns.append({"code": "M2_ANSWER_ABSENT", "reference": key})
-        description = next((x for x in declarations if x["item_key"] == "M2-04" and x["answer_state"] == "ANSWERED"), None)
-        if description is None:
-            unknowns.append({"code": "M2_04_MISSING", "reference": "M2-04"})
+        if instrument["version_tag"] == "M2V1-20261114-1":
+            require(s.get("derived_selections") == derived_m2_selections(items, answers),
+                    "M2_ANSWERS_CHANGED")
+            description = current_business_description(items, answers)
+        else:
+            description = next((x for x in declarations if x["item_key"] == "M2-04" and x["answer_state"] == "ANSWERED"), None)
+            if description is None:
+                unknowns.append({"code": "M2_04_MISSING", "reference": "M2-04"})
         concept = b["concept"]
         require(concept is not None, "CONCEPT_MISSING")
         self._scoped(concept, r)

@@ -11,6 +11,36 @@ import 'auth_service.dart';
 class WebApiClient implements ApiClient {
   const WebApiClient();
 
+  Future<Map<String, dynamic>> _request(
+    String path, {
+    String method = 'GET',
+    Map<String, dynamic>? body,
+  }) async {
+    final Map<String, dynamic> result;
+    try {
+      result = await WebAuth.requestDetailed(path, method: method, body: body);
+    } catch (_) {
+      throw apiOperationFailure(mutation: method != 'GET');
+    }
+    if (result['ok'] != true) {
+      throw apiOperationFailure(
+        status: result['status'] as int?,
+        code: result['code'] as String?,
+        message: result['message'] as String?,
+        mutation: method != 'GET',
+      );
+    }
+    final payload = result['body'];
+    if (payload is! Map<String, dynamic>) {
+      throw const ResponseFormatFailure();
+    }
+    return payload;
+  }
+
+  @override
+  Future<Map<String, dynamic>> put(String path, Map<String, dynamic> body) =>
+      _request(path, method: 'PUT', body: body);
+
   static String _withQuery(String path, Map<String, String>? query) {
     if (query == null || query.isEmpty) return path;
     final qs = query.entries
@@ -24,19 +54,19 @@ class WebApiClient implements ApiClient {
 
   @override
   Future<Map<String, dynamic>> get(String path, {Map<String, String>? query}) =>
-      WebAuth.request(_withQuery(path, query));
+      _request(_withQuery(path, query));
 
   @override
   Future<Map<String, dynamic>> post(String path, Map<String, dynamic> body) =>
-      WebAuth.request(path, method: 'POST', body: body);
+      _request(path, method: 'POST', body: body);
 
   @override
   Future<Map<String, dynamic>> patch(String path, Map<String, dynamic> body) =>
-      WebAuth.request(path, method: 'PATCH', body: body);
+      _request(path, method: 'PATCH', body: body);
 
   @override
   Future<Map<String, dynamic>> delete(String path) =>
-      WebAuth.request(path, method: 'DELETE');
+      _request(path, method: 'DELETE');
 
   @override
   Future<Map<String, dynamic>> uploadMultipart(

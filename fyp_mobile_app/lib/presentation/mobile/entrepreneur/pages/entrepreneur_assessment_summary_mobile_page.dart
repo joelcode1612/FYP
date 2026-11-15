@@ -3,6 +3,7 @@ import 'package:shared_logic/shared_logic.dart';
 
 import '../../../../application/services/assessment_session.dart';
 import '../../../../application/services/service_locator.dart';
+import '../../../../core/routing/app_routes.dart';
 import '../../../../core/theme/sitewise_m3.dart';
 import '../../../../core/theme/sitewise_theme.dart';
 import '../../../shared/widgets/sitewise_evidence_score.dart';
@@ -220,7 +221,7 @@ class EntrepreneurAssessmentSummaryMobilePage extends StatelessWidget {
           label: 'Edit business inputs',
           icon: Icons.edit_outlined,
           onPressed: () => Navigator.of(context).pushNamedAndRemoveUntil(
-            '/entrepreneur/assessment-setup',
+            AppRoutes.assessmentHome,
             (route) => route.isFirst,
           ),
         ),

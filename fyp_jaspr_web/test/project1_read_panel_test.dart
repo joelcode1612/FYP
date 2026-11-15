@@ -31,6 +31,14 @@ void main() {
   });
   tearDown(() => AppLocator.project1Read = original);
 
+  testComponents('research review displays the server hold', (tester) async {
+    tester.pumpComponent(const Project1ReadPanel(assessmentId: '', section: 'review'));
+    await tester.pump();
+    await tester.pump();
+    expect(find.text('Automated research review held'), findsOneComponent);
+    expect(find.text('Verified server hold for review.'), findsOneComponent);
+    expect(client.paths.single, '/api/v1/project1-read/readiness');
+  });
   testComponents('report renders server hold without invented snapshot or statistics', (tester) async {
     tester.pumpComponent(const Project1ReadPanel(assessmentId: '', section: 'report'));
     await tester.pump();

@@ -3,6 +3,7 @@ from concurrent.futures import ThreadPoolExecutor
 import os
 from pathlib import Path
 import secrets
+import json
 from uuid import uuid4
 
 import pytest
@@ -35,6 +36,18 @@ def db():
         conn.execute(text('INSERT INTO project1_ai.runs(id,owner_user_id,assessment_id,assessment_revision,source_fingerprint,policy_fingerprint,work_identity) VALUES (:r,:o,:a,2,:h,:h,:h)'),{'r':rid,'o':actor,'a':aid,'h':'b'*64})
     runtime=create_engine(url.set(username='p1ai_runtime',password=password),hide_parameters=True)
     yield admin,runtime,actor,rid
+    if os.environ.get('PROJECT1_LEDGER_EVIDENCE'):
+        out=Path(os.environ['PROJECT1_LEDGER_EVIDENCE']);out.mkdir(parents=True,exist_ok=True)
+        with admin.connect() as c:
+            attempts=c.execute(text('SELECT a.run_id,a.owner_user_id,a.attempt_no,a.stage,'
+                'a.prompt_version,a.prompt_hash,a.request_hash,a.reserved_at,r.outcome,r.output_digest '
+                'FROM project1_ai.attempts a LEFT JOIN project1_ai.attempt_receipts r '
+                'ON r.run_id=a.run_id AND r.attempt_no=a.attempt_no WHERE a.run_id=:id'),{'id':rid}).mappings().all()
+        with runtime.connect() as c:
+            role=c.execute(text('SELECT current_user,rolsuper,rolbypassrls FROM pg_roles WHERE rolname=current_user')).one()
+        (out/'restricted_ledger_readback.json').write_text(json.dumps({'scope':'PRIVATE_SYNTHETIC_ONLY',
+            'run_id':str(rid),'actor_id':str(actor),'role':list(role),
+            'attempts':[dict(row) for row in attempts]},indent=2,default=str),encoding='utf-8')
     runtime.dispose(); admin.dispose()
 
 

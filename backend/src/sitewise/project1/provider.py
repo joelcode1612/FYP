@@ -1,5 +1,7 @@
 """Server-only TokenHarbor adapter; no retry/downgrade and no body/error logging."""
 import json
+import math
+import time
 
 import httpx
 from pydantic import SecretStr
@@ -31,6 +33,20 @@ class TokenHarbor:
         self.timeout, self.transport = timeout, transport
 
     def complete(self, messages: list[dict], output_type):
+        # Socket inactivity timeouts alone allow a slow stream to run indefinitely.
+        # This acceptance deadline also covers serialization and local validation.
+        if (isinstance(self.timeout, bool) or not isinstance(self.timeout, (int, float))
+                or not math.isfinite(self.timeout) or self.timeout <= 0):
+            raise WorkflowHeld('PROVIDER_BUDGET_INVALID')
+        deadline = time.monotonic() + self.timeout
+
+        def remaining():
+            value = deadline - time.monotonic()
+            if value <= 0:
+                # A dispatched POST may have completed upstream. Do not retry.
+                raise WorkflowHeld('E_PROVIDER_TIMEOUT_OUTCOME_UNKNOWN')
+            return value
+
         if not self.enabled or not self._key.get_secret_value():
             raise WorkflowHeld('PROVIDER_NOT_CONFIGURED')
         if self.mode not in {'json_schema', 'json_object'}:
@@ -46,19 +62,29 @@ class TokenHarbor:
             raise WorkflowHeld('PROVIDER_INPUT_TOO_LARGE')
         try:
             # follow_redirects=False prevents redirecting the bearer credential.
-            with httpx.Client(timeout=httpx.Timeout(self.timeout, connect=5),
+            budget = remaining()
+            with httpx.Client(timeout=httpx.Timeout(budget, connect=min(5, budget)),
                               follow_redirects=False, transport=self.transport) as client:
                 with client.stream('POST', ENDPOINT, headers={
                         'Authorization': 'Bearer ' + self._key.get_secret_value(),
                         'Cache-Control': 'no-store', 'Content-Type': 'application/json'},
                         json=payload) as response:
+                    remaining()
                     if response.status_code != 200:
+                        if response.status_code in {401, 403}:
+                            raise WorkflowHeld('PROVIDER_CREDENTIALS_REJECTED')
+                        if response.status_code == 429:
+                            raise WorkflowHeld('PROVIDER_RATE_LIMITED')
+                        if 500 <= response.status_code < 600:
+                            raise WorkflowHeld('PROVIDER_TEMPORARILY_UNAVAILABLE')
                         raise WorkflowHeld('PROVIDER_HTTP_REJECTED')
                     body = bytearray()
                     for chunk in response.iter_bytes():
+                        remaining()
                         body.extend(chunk)
                         if len(body) > MAX_RESPONSE_BYTES:
                             raise WorkflowHeld('PROVIDER_RESPONSE_TOO_LARGE')
+            remaining()
             envelope = strict_json(body.decode('utf-8'))
             if envelope.get('model') != MODEL:
                 raise WorkflowHeld('PROVIDER_MODEL_MISMATCH')
@@ -71,7 +97,9 @@ class TokenHarbor:
             content = message['content']
             if not isinstance(content, str):
                 raise WorkflowHeld('PROVIDER_INVALID_ENVELOPE')
-            return output_type.model_validate(strict_json(content)).model_dump()
+            result = output_type.model_validate(strict_json(content)).model_dump()
+            remaining()
+            return result
         except httpx.TransportError:
             # Dispatch may have completed upstream. Never repeat a POST automatically.
             raise WorkflowHeld('E_PROVIDER_TIMEOUT_OUTCOME_UNKNOWN') from None

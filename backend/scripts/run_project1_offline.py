@@ -61,6 +61,7 @@ def main():
     env.update(DATABASE_URL=fake, ANALYTICS_DATABASE_URL=fake,
         PROJECT1_CP07_ENABLED='false', PROJECT1_WORKFLOW_ENABLED='false',
         M2_UPSTREAM_ENABLED='false', P1_OFFLINE_GUARD='1', PYTHONDONTWRITEBYTECODE='1',
+        M2_BCB_PERSISTENCE_ENABLED='false',
         PYTHONIOENCODING='utf-8', PYTHONPATH=str(root/'src')+os.pathsep+str(root))
     codes = []
     for suite in ([args.suite] if args.suite else suites):

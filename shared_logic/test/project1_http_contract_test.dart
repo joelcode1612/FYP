@@ -18,7 +18,8 @@ class PrivateHttpClient extends ApiClient {
   }
   @override
   Future<Map<String, dynamic>> get(String path, {Map<String, String>? query}) async {
-    final response = await request(path);
+    final location = query == null ? path : Uri(path: path, queryParameters: query).toString();
+    final response = await request(location);
     if (response.status != 200) throw HttpException('HTTP ${response.status}');
     return response.body;
   }
@@ -31,6 +32,20 @@ void main() {
     late PrivateHttpClient client;
     setUp(() => client = PrivateHttpClient(Platform.environment['P1_HTTP_TOKEN']));
     tearDown(() => client.transport.close(force: true));
+
+    test('reads a pinned actual M2 confirmation and its persisted history', () async {
+      final mid = Platform.environment['P1_HTTP_M2_ASSESSMENT']!;
+      final cid = Platform.environment['P1_HTTP_M2_CONFIRMATION']!;
+      final data = await ApiConfirmedReviewRepository(client).read(assessmentId: mid, confirmationId: cid, revision: 1);
+      expect(data.answers.single.displayValue, 'Private HTTP synthetic declaration.');
+      expect(data.activity.map((e) => e.kind).toSet(), {
+        'ANSWER_SAVED','BDJ_EVALUATED','REVIEW_RECORDED','CONTEXT_CONFIRMED'});
+      await expectLater(ApiConfirmedReviewRepository(client).read(assessmentId: mid, confirmationId: cid, revision: 0), throwsA(isA<HttpException>()));
+      final other = PrivateHttpClient(Platform.environment['P1_HTTP_OTHER_TOKEN']);
+      try {
+        await expectLater(ApiConfirmedReviewRepository(other).read(assessmentId: mid, confirmationId: cid, revision: 1), throwsA(isA<HttpException>()));
+      } finally { other.transport.close(force:true); }
+    }, skip: Platform.environment['P1_HTTP_M2_ASSESSMENT'] == null ? 'Pass --confirmed-review to the private lab.' : false);
 
     test('CA-01 holds the questionnaire without offering synthetic fielding', () async {
       final result = await ApiProject1ReadRepository(client).read();

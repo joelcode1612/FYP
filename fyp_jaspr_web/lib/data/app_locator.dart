@@ -29,6 +29,9 @@ import 'workspaces.dart';
 /// `AppLocator.verification`, …) exactly as before — only the state plumbing
 /// changed.
 abstract final class AppLocator {
+  static ApiM2Repository m2=ApiM2Repository(const WebApiClient());
+  static ApiConfirmedReviewRepository confirmedReview =
+      ApiConfirmedReviewRepository(const WebApiClient());
   static ApiProject1ReadRepository project1Read =
       ApiProject1ReadRepository(const WebApiClient());
   // --- Repositories ---------------------------------------------------------

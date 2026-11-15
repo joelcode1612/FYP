@@ -29,6 +29,8 @@ router = APIRouter()
 # Availability has no activation flag: it only explains the verified holds.
 # This does not mount either standalone CQ factory or the staged write APIs.
 router.include_router(project1_read.router, prefix="/project1-read", tags=["project1_readiness"])
+from sitewise.api.v1 import customer_questionnaire
+router.include_router(customer_questionnaire.router,prefix='/cq',tags=['customer_questionnaire'])
 
 router.include_router(auth.router, prefix="/auth", tags=["auth"])
 # Imported property catalogue (read-only, previously served by FYP/test).
@@ -96,7 +98,9 @@ if settings.project1_cp07_enabled:
 
 if settings.m2_upstream_enabled:
     from sitewise.api.v1 import m2
+    from sitewise.api.v1 import m2_business_context
     router.include_router(m2.router, prefix="/m2", tags=["m2_upstream"])
+    router.include_router(m2_business_context.router, prefix="/m2", tags=["m2_business_context"])
 
 # Additive OPTIONAL selected research PU model (Layer-1 alternate). Mounted
 # BESIDE the default /ml routes — nothing existing is replaced. Same

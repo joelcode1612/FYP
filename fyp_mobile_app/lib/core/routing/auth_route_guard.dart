@@ -113,7 +113,31 @@ class _AuthGuardState extends ConsumerState<AuthGuard> {
     // --dart-define SITEWISE_DEV_AUTH_BYPASS=true): render every route without
     // a session. Without this, AppStartGate's direct jump into the workspace
     // would be bounced straight back to Sign In by this guard.
-    if (devAuthBypassEnabled) return widget.builder(context);
+    if (devAuthBypassEnabled) {
+      return SafeArea(
+        bottom: false,
+        child: Column(
+          children: [
+            const Material(
+              color: Color(0xFFF1F3F5),
+              child: SizedBox(
+                width: double.infinity,
+                child: Padding(
+                  padding: EdgeInsets.symmetric(vertical: 2, horizontal: 8),
+                  child: Text(
+                    'Development access',
+                    key: Key('development-access-label'),
+                    textAlign: TextAlign.center,
+                    style: TextStyle(fontSize: 10, color: Color(0xFF495057)),
+                  ),
+                ),
+              ),
+            ),
+            Expanded(child: widget.builder(context)),
+          ],
+        ),
+      );
+    }
 
     // The whole session state is watched, so an expiry mid-session re-checks
     // authority here instead of leaving a guarded screen mounted.

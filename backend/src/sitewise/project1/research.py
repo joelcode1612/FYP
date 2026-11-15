@@ -26,10 +26,12 @@ def checked_context(builder, request):
     return packet
 
 
-def validate_measurement(measurement: Measurement, packet: dict, uncertainty_version: str):
+def validate_measurement(measurement: Measurement, packet: dict, uncertainty_version: str, objective_id=None):
     refs = {a['answer_revision_id'] for a in packet['m2_answers']}
     refs |= {s['id'] + '@' + s['version'] for s in packet['supporting_sources']}
     refs.add(packet['confirmed_uncertainty']['id'])
+    if objective_id is not None:
+        refs.add(objective_id)
     if (measurement.uncertainty_version != uncertainty_version or
             not set(measurement.source_refs) <= refs or
             len(set(measurement.source_refs)) != len(measurement.source_refs)):
@@ -66,11 +68,69 @@ class ResearchWorkflow:
 
     def execute(self, request):
         packet = checked_context(self.builder, request)
+        return self._evaluate(packet)
+
+    def execute_objective(self, request, objective_id, actor_id, revision, context_reader, *, clarification_policy=None, candidate_policy=None):
+        """Resolve the persisted objective before admission and after evaluation."""
+        context = context_reader.qj_context(objective_id, actor_id, revision)
+        packet = checked_context(self.builder, request)
+        source = context["source"]
+        identity, confirmation = packet["identity"], packet["confirmation"]
+        # The immutable context can anchor the original objective. A revised
+        # objective must descend from that exact record through persisted links.
+        anchor = packet["confirmed_uncertainty"]
+        ancestor = context
+        visited = set()
+        while ancestor["objective_id"] != anchor["id"]:
+            parent = ancestor["source"].get("parent_objective_id")
+            if not parent or parent in visited:
+                raise WorkflowHeld("OBJECTIVE_SOURCE_MISMATCH")
+            visited.add(parent)
+            ancestor = context_reader.qj_context(parent, actor_id, revision)
+            if ancestor["source"]["confirmation_id"] != source["confirmation_id"]:
+                raise WorkflowHeld("OBJECTIVE_SOURCE_MISMATCH")
+        if (identity["assessment_id"] != source["assessment_id"] or
+                identity["owner_id"] != str(actor_id) or
+                confirmation["id"] != source["confirmation_id"] or
+                confirmation["digest"] != source["snapshot_digest"] or
+                confirmation["revision"] != revision or
+                context["objective_id"] != str(objective_id) or
+                anchor["exact_text"] != ancestor["objective"]):
+            raise WorkflowHeld("OBJECTIVE_SOURCE_MISMATCH")
+        result = self._evaluate(packet, context)
+        if context_reader.qj_context(objective_id, actor_id, revision) != context:
+            raise WorkflowHeld("OBJECTIVE_SOURCE_CHANGED")
+        if result["qj"]["route"] == "HOLD" and clarification_policy is not None:
+            # A HOLD can also be scientific or jurisdictional. Only a trusted
+            # measurement policy may classify it as missing research details.
+            decision = clarification_policy(context, result["qj"])
+            if decision is not None:
+                limitation, proposal = decision
+                context_reader.record_qj_limitation(objective_id, actor_id, revision, limitation, proposal)
+        if candidate_policy and result["qg"] and result["qg"]["decision"] in {"REUSE_CANDIDATE", "DRAFT"}:
+            evidence = candidate_policy(context, result)
+            measurement = result["qj"]["measurement"]
+            options = evidence["options"]
+            if ([o["code"] for o in options] != measurement["response_codes"] or
+                    [o["label"] for o in options] != measurement["response_options"] or
+                    any(type(o.get("eligible")) is not bool for o in options) or
+                    not evidence["question"].strip() or not evidence["source_receipt"].strip()):
+                raise WorkflowHeld("CANDIDATE_SOURCE_MISMATCH")
+            if result["qg"]["decision"] == "DRAFT" and evidence["question"] != result["qg"]["question"]:
+                raise WorkflowHeld("CANDIDATE_SOURCE_MISMATCH")
+            if result["qg"]["decision"] == "REUSE_CANDIDATE" and evidence["source_version"] != result["qg"]["item_version"]:
+                raise WorkflowHeld("BANK_VERSION_MISMATCH")
+            result["candidate_version"] = context_reader.persist_candidate(objective_id, actor_id, revision,
+                                                                           context, result, evidence)
+        return result
+
+    def _evaluate(self, packet, objective=None):
         # Verifies current UC version/latest nonwithdrawn event, purpose, essential
         # conflict resolution, exact BCB version and adopted measurement policy.
         task = self.authority.admit_qj(packet)
         uncertainty_version = task['uncertainty_version']
-        qj = QJOutput.model_validate(self.runner('QJ', packet, QJOutput))
+        qj_input = packet if objective is None else {'context': packet, 'research_objective': objective}
+        qj = QJOutput.model_validate(self.runner('QJ', qj_input, QJOutput))
         self.authority.require_current(packet, task)
         result = {'qj': qj.model_dump(), 'qg': None, 'bank': 'not_checked',
                   'source_fingerprint': packet['packet_hash'], **no_authority()}
@@ -80,7 +140,8 @@ class ResearchWorkflow:
             return result
         if qj.measurement is None:
             raise WorkflowHeld('SURVEY_MEASUREMENT_INCOMPLETE')
-        validate_measurement(qj.measurement, packet, uncertainty_version)
+        validate_measurement(qj.measurement, packet, uncertainty_version,
+                             objective['objective_id'] if objective else None)
         # Independent adopted validator, not the same model asserting validity.
         self.authority.validate_measurement(packet, task, qj.measurement.model_dump())
         lookup = self.bank.lookup(qj.measurement.model_dump(), packet)

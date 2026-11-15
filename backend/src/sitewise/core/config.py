@@ -40,6 +40,15 @@ class Settings(BaseSettings):
     # Owner/governance approval and a controlled migration; flipping this flag
     # alone does NOT activate any M2 endpoint or schema.
     m2_upstream_enabled: bool = False
+    # Persisted BCB remains default-off pending reviewed migration and real
+    # tenant/concept/GEO/purpose authority adapters. No downstream activation.
+    m2_bcb_persistence_enabled: bool = False
+    # Separate only when needed: never silently move property/auth modules.
+    # Blank reuses DATABASE_URL only if it already names the expected target.
+    m2_database_url: SecretStr = SecretStr('')
+    m2_expected_database: str = 'Dss'
+    # CQ engineering adapter is separate from scientific/fielding authorization.
+    cq_runtime_enabled: bool = False
 
     # Separate staging bridge; does not enable the unresolved BDJ/M2 write router.
     project1_cp07_enabled: bool = False
