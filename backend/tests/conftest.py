@@ -59,6 +59,19 @@ def fake_jwks(monkeypatch):
     yield
 
 
+@pytest.fixture(scope="session", autouse=True)
+def _shap_process_warm():
+    """Tests exercise a BOOTED server: in production the lifespan warm-up
+    thread completes the one-off SHAP compilation seconds after start, after
+    which explanation paths compute synchronously on a cache miss. Mark the
+    test process warm up-front so that contract stays deterministic here (the
+    cold-process "pending" behaviour has its own focused tests)."""
+    from sitewise.ml import shap_explainer
+
+    shap_explainer.mark_warm()
+    yield
+
+
 @pytest.fixture()
 def client():
     with TestClient(app) as test_client:

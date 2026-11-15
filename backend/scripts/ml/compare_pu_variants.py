@@ -3,8 +3,8 @@
 Compares, over the SAME eligible research catalogue:
 
 * the ORIGINAL production model score stored per row
-  (``sitewise_app.properties.source_data.research_p_association_score`` — the
-  baseline_47 artifact's own saved output), against
+  (``fyp.rental_properties.catalogue_source_data.research_p_association_score``
+  — the baseline_47 artifact's own saved output), against
 * the NEW experimental bagged Histogram Gradient Boosting artifact
   (``sitewise_pu_47_experimental.joblib``, version
   ``hist_gradient_boosting@PU_47_CANDIDATE_2026_11_11``) scored LIVE from the

@@ -3,6 +3,9 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:shared_logic/shared_logic.dart';
 
+import 'package:flutter/material.dart';
+import 'package:panorama_viewer/panorama_viewer.dart';
+
 import '../../../core/theme/sitewise_theme.dart';
 import '../../../core/utils/pano_bytes.dart';
 
@@ -85,18 +88,7 @@ class _MobileTourViewerState extends State<MobileTourViewer> {
                 ),
               );
             }
-            return Image.memory(
-              bytes,
-              width: double.infinity,
-              height: double.infinity,
-              fit: BoxFit.contain,
-              errorBuilder: (context, error, stackTrace) => const Center(
-                child: Icon(
-                  Icons.image_not_supported_outlined,
-                  color: Colors.white70,
-                ),
-              ),
-            );
+            return PanoramaViewer(child: Image.memory(bytes));
           },
         ),
       ),

@@ -77,7 +77,7 @@ def catalogue_ref():
     """A real catalogue id — the endpoint must accept what the app displays."""
     with Session(engine) as session:
         row = session.execute(
-            text("SELECT id FROM sitewise_app.properties ORDER BY id LIMIT 1")
+            text("SELECT id FROM fyp.catalogue_properties ORDER BY id LIMIT 1")
         ).scalar()
     assert row
     return row

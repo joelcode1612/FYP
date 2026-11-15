@@ -45,7 +45,7 @@ EXPECTED_U_CLASS = 955
 DATASET_VALIDATION = "UNVERIFIED_RESEARCH_DATASET"
 SOURCE_SHEET = "PU Properties + Images"
 
-# Research fields carried into sitewise_app.properties.source_data.
+# Research fields carried into fyp.rental_properties.catalogue_source_data.
 SOURCE_DATA_KEYS = (
     "canonical_property_id", "subject_id", "sample_class", "district",
     "state_dosm", "data_completeness_pct", "coordinate_source",
@@ -165,7 +165,9 @@ def main() -> int:
             "SELECT count(*) FROM fyp.rental_properties WHERE owner_id IS NOT NULL"
         )
         owner_before = cur.fetchone()[0]
-        cur.execute("SELECT count(*) FROM sitewise_app.properties")
+        cur.execute(
+            "SELECT count(*) FROM fyp.rental_properties WHERE catalogue_id IS NOT NULL"
+        )
         catalogue_before = cur.fetchone()[0]
         cur.execute("SELECT count(*) FROM sitewise_analytics.subject_features")
         features_before = cur.fetchone()[0]
@@ -290,6 +292,7 @@ def main() -> int:
         cur.execute(
             """
             UPDATE fyp.rental_properties r SET
+                catalogue_id     = s.canonical_property_id,
                 name             = s.name,
                 property_type    = s.property_type,
                 address          = s.address,
@@ -321,12 +324,13 @@ def main() -> int:
         cur.execute(
             """
             INSERT INTO fyp.rental_properties
-                (listing_id, name, property_type, address, state, latitude, longitude,
-                 rental_price, size_sqft, psf, built_up_sqft, land_area_sqft,
-                 floor_level, unit_position, frontage_ft, depth_ft, tenure,
-                 facing_direction, availability, verification_status, is_published,
-                 created_at, updated_at)
-            SELECT s.canonical_property_id, s.name, s.property_type, s.address, s.state,
+                (listing_id, catalogue_id, name, property_type, address, state,
+                 latitude, longitude, rental_price, size_sqft, psf, built_up_sqft,
+                 land_area_sqft, floor_level, unit_position, frontage_ft, depth_ft,
+                 tenure, facing_direction, availability, verification_status,
+                 is_published, created_at, updated_at)
+            SELECT s.canonical_property_id, s.canonical_property_id, s.name,
+                   s.property_type, s.address, s.state,
                    s.latitude, s.longitude, s.rental_price, s.size_sqft, s.psf,
                    s.size_sqft, s.land_area_sqft, s.floor_level, s.unit_position,
                    s.frontage_ft, s.depth_ft, s.tenure, s.facing_direction, s.availability,
@@ -444,67 +448,66 @@ def main() -> int:
         links_inserted = cur.rowcount
         print(f"[property_subject_links] inserted {links_inserted}")
 
-        # ---- 5. sitewise_app.properties : replace the catalogue --------
+        # ---- 5. catalogue mirror columns on fyp.rental_properties ------
+        # The catalogue view (fyp.catalogue_properties) reads these columns,
+        # so a re-import refreshes them in place instead of a mirror table.
         cur.execute(
             """
-            INSERT INTO sitewise_app.properties
-                (id, title, address, city, state, postcode, rental_rm, size_sqft,
-                 latitude, longitude, property_type, image_url, source_url,
-                 suitability_score, dataset_validation, source_workbook,
-                 source_sheet, source_row, source_data, imported_at)
-            SELECT s.canonical_property_id, s.name, s.address, '', s.state, '',
-                   s.rental_price, s.size_sqft, s.latitude, s.longitude,
-                   s.property_type, s.primary_image_url, s.source_url,
-                   s.research_score * 100, %s, %s, %s, s.source_row,
-                   s.source_data, now()
+            UPDATE fyp.rental_properties r SET
+                catalogue_image_url       = s.primary_image_url,
+                catalogue_source_url      = s.source_url,
+                catalogue_suitability_score = s.research_score * 100,
+                catalogue_dataset_validation = %s,
+                catalogue_source_workbook = %s,
+                catalogue_source_sheet    = %s,
+                catalogue_source_row      = s.source_row,
+                catalogue_source_data     = s.source_data,
+                catalogue_imported_at     = now()
             FROM mig_stage.props s
-            ON CONFLICT (id) DO UPDATE SET
-                title              = EXCLUDED.title,
-                address            = EXCLUDED.address,
-                city               = EXCLUDED.city,
-                state              = EXCLUDED.state,
-                postcode           = EXCLUDED.postcode,
-                rental_rm          = EXCLUDED.rental_rm,
-                size_sqft          = EXCLUDED.size_sqft,
-                latitude           = EXCLUDED.latitude,
-                longitude          = EXCLUDED.longitude,
-                property_type      = EXCLUDED.property_type,
-                image_url          = EXCLUDED.image_url,
-                source_url         = EXCLUDED.source_url,
-                suitability_score  = EXCLUDED.suitability_score,
-                dataset_validation = EXCLUDED.dataset_validation,
-                source_workbook    = EXCLUDED.source_workbook,
-                source_sheet       = EXCLUDED.source_sheet,
-                source_row         = EXCLUDED.source_row,
-                source_data        = EXCLUDED.source_data,
-                imported_at        = now()
+            WHERE r.listing_id = s.canonical_property_id
+              AND r.owner_id IS NULL
             """,
             (DATASET_VALIDATION, WORKBOOK.name, SOURCE_SHEET),
         )
         catalogue_upserted = cur.rowcount
-        print(f"[sitewise_app.properties] upserted {catalogue_upserted}")
+        print(f"[rental_properties] catalogue mirror updated {catalogue_upserted}")
 
+        # Research rows no longer in the workbook leave the catalogue view
+        # (catalogue_* cleared) but the canonical rows are never deleted.
         cur.execute(
             """
-            DELETE FROM sitewise_app.properties p
-            WHERE NOT EXISTS (
-                SELECT 1 FROM mig_stage.props s WHERE s.canonical_property_id = p.id
-            )
+            UPDATE fyp.rental_properties r SET
+                catalogue_id                = NULL,
+                catalogue_image_url         = NULL,
+                catalogue_source_url        = NULL,
+                catalogue_suitability_score = NULL,
+                catalogue_dataset_validation = NULL,
+                catalogue_source_workbook   = NULL,
+                catalogue_source_sheet      = NULL,
+                catalogue_source_row        = NULL,
+                catalogue_source_data       = NULL,
+                catalogue_imported_at       = NULL
+            WHERE r.owner_id IS NULL
+              AND r.catalogue_id IS NOT NULL
+              AND NOT EXISTS (
+                SELECT 1 FROM mig_stage.props s
+                WHERE s.canonical_property_id = r.catalogue_id
+              )
             """
         )
         catalogue_deleted = cur.rowcount
-        print(f"[sitewise_app.properties] removed {catalogue_deleted} obsolete rows")
+        print(f"[rental_properties] removed {catalogue_deleted} obsolete catalogue rows")
 
         # ---- 6. in-transaction verification ----------------------------
         checks = {}
 
         cur.execute(
-            "SELECT count(*) FROM sitewise_app.properties WHERE id IN "
+            "SELECT count(*) FROM fyp.catalogue_properties WHERE id IN "
             "(SELECT canonical_property_id FROM mig_stage.props)"
         )
         checks["catalogue_matches_workbook"] = (cur.fetchone()[0], EXPECTED_PROPERTIES)
 
-        cur.execute("SELECT count(*) FROM sitewise_app.properties")
+        cur.execute("SELECT count(*) FROM fyp.catalogue_properties")
         checks["catalogue_total"] = (cur.fetchone()[0], EXPECTED_PROPERTIES)
 
         cur.execute(
@@ -536,7 +539,7 @@ def main() -> int:
 
         cur.execute(
             "SELECT count(*) FROM fyp.property_subject_links l "
-            "JOIN sitewise_app.properties p ON p.id = l.sitewise_property_id"
+            "JOIN fyp.catalogue_properties p ON p.id = l.sitewise_property_id"
         )
         checks["links_resolve_to_catalogue"] = (cur.fetchone()[0], EXPECTED_PROPERTIES)
 
@@ -569,12 +572,12 @@ def main() -> int:
         checks["listing_sources"] = (cur.fetchone()[0], EXPECTED_PROPERTIES)
 
         cur.execute(
-            "SELECT count(*) FROM sitewise_app.properties WHERE image_url IS NOT NULL"
+            "SELECT count(*) FROM fyp.catalogue_properties WHERE image_url IS NOT NULL"
         )
         checks["catalogue_with_image"] = (cur.fetchone()[0], EXPECTED_WITH_IMAGES)
 
         cur.execute(
-            "SELECT count(*) FROM sitewise_app.properties "
+            "SELECT count(*) FROM fyp.catalogue_properties "
             "WHERE suitability_score < 0 OR suitability_score > 100"
         )
         checks["score_in_range"] = (cur.fetchone()[0], 0)

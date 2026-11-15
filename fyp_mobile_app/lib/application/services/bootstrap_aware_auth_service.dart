@@ -52,13 +52,29 @@ class BootstrapAwareAuthService extends AuthService {
     required String email,
     required String password,
     String? fullName,
+    String? accountPurpose,
+    bool acceptTerms = false,
   }) => _afterBootstrap(
-    () => super.signUp(email: email, password: password, fullName: fullName),
+    () => super.signUp(
+      email: email,
+      password: password,
+      fullName: fullName,
+      accountPurpose: accountPurpose,
+      acceptTerms: acceptTerms,
+    ),
   );
 
   @override
-  Future<SitewiseUser> signInWithProvider(AuthProvider provider) =>
-      _afterBootstrap(() => super.signInWithProvider(provider));
+  Future<SitewiseUser> signInWithProvider(
+    AuthProvider provider, {
+    String? accountPurpose,
+  }) => _afterBootstrap(
+    () => super.signInWithProvider(provider, accountPurpose: accountPurpose),
+  );
+
+  @override
+  Future<void> resendSignupVerificationEmail(String email) =>
+      _afterBootstrap(() => super.resendSignupVerificationEmail(email));
 
   @override
   Future<void> sendPasswordRecoveryEmail(String email, {String? redirectTo}) =>

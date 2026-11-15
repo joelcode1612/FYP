@@ -36,7 +36,13 @@ export 'src/domain/entities/geo.dart';
 export 'src/domain/entities/location_intelligence.dart';
 export 'src/domain/entities/owner_listing.dart';
 export 'src/domain/entities/property_enrichment.dart';
-export 'src/domain/entities/property_verification.dart';
+// The staff verification detail carries its own `LocationAnalysis` (the
+// server's Part A/B/C report). Hide it from the barrel so the long-standing
+// entrepreneur `LocationAnalysis` from location_intelligence.dart remains the
+// one name exported here. The verification type is still reachable through
+// PropertyVerificationDetail.locationAnalysis and by direct library import.
+export 'src/domain/entities/property_verification.dart'
+    hide LocationAnalysis;
 export 'src/domain/entities/pu_feature_coverage.dart';
 export 'src/domain/entities/pu_prediction.dart';
 export 'src/domain/entities/recommendation.dart';
@@ -59,6 +65,7 @@ export 'src/domain/repositories/pu_prediction_repository.dart';
 export 'src/domain/repositories/recommendation_repository.dart';
 export 'src/domain/repositories/recommendation_search_repository.dart';
 export 'src/domain/repositories/saved_properties_repository.dart';
+export 'src/domain/repositories/staff_mfa_repository.dart';
 export 'src/domain/services/panorama_stitcher.dart';
 
 // --- Domain: use cases ------------------------------------------------------
@@ -77,11 +84,13 @@ export 'src/data/mappers/explore_property_mapper.dart';
 export 'src/data/mappers/property_mapper.dart';
 export 'src/data/models/commercial_property_model.dart';
 export 'src/data/models/location_intelligence_model.dart';
+export 'src/data/models/property_insights_model.dart';
 export 'src/data/models/user_model.dart';
 export 'src/data/repositories/admin_repositories_impl.dart';
 export 'src/data/repositories/api_agent_listing_repository.dart';
 export 'src/data/repositories/api_explore_repository.dart';
 export 'src/data/repositories/api_intelligence_repository.dart';
+export 'src/data/repositories/api_property_insights_repository.dart';
 export 'src/data/repositories/api_owner_listing_repository.dart';
 export 'src/data/repositories/api_owner_property_repository.dart';
 export 'src/data/repositories/api_property_verification_repository.dart';

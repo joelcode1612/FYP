@@ -13,11 +13,9 @@ from .fyp_research import (
     FypRentalProperty,
 )
 from .listing_change_request import ListingChangeAudit, ListingChangeRequest
+from .ml_explanation_cache import MlExplanationCache
 from .nearby_competitor import NearbyCompetitor
-from .property_feature import PropertyFeature
 from .property_foot_traffic import PropertyFootTraffic
-from .property_geospatial_feature import PropertyGeospatialFeature
-from .property_photo import PropertyPhoto
 from .property_verification import (
     PropertyVerification,
     VerificationAudit,
@@ -43,11 +41,9 @@ __all__ = [
     "FypRentalProperty",
     "ListingChangeAudit",
     "ListingChangeRequest",
+    "MlExplanationCache",
     "NearbyCompetitor",
-    "PropertyFeature",
     "PropertyFootTraffic",
-    "PropertyGeospatialFeature",
-    "PropertyPhoto",
     "PropertyVerification",
     "RecommendationResult",
     "User",

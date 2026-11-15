@@ -105,14 +105,22 @@ def predict_selected(property_id: str, features: dict) -> dict:
     )
 
 
-def explain_selected(features: dict, background: list[dict]) -> dict:
-    # Reuses your EXISTING ShapExplainer; no duplicate SHAP implementation.
-    return ShapExplainer(model_name=SELECTED_MODEL_NAME).explain(
-        features, background=background
-    )
+def explain_selected(
+    features: dict,
+    background: list[dict],
+    *,
+    model_name: str = SELECTED_MODEL_NAME,
+) -> dict:
+    """Run the common SHAP implementation for the explicitly named artifact."""
+    return ShapExplainer(model_name=model_name).explain(features, background=background)
 
 
-def explain_selected_payload(features: dict, background: list[dict]) -> dict:
+def explain_selected_payload(
+    features: dict,
+    background: list[dict],
+    *,
+    model_name: str = SELECTED_MODEL_NAME,
+) -> dict:
     """The existing SHAP engine's result reshaped into the API contract.
 
     Purely additive formatting on top of [explain_selected]: baseline +
@@ -121,7 +129,7 @@ def explain_selected_payload(features: dict, background: list[dict]) -> dict:
     explicitly so a SHAP contribution can never be presented as a
     Layer-2 personalised preference explanation.
     """
-    raw = explain_selected(features, background)
+    raw = explain_selected(features, background, model_name=model_name)
     contributions = {
         str(name): float(value)
         for name, value in (raw.get("contributions") or {}).items()

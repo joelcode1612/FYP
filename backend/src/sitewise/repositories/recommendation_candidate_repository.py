@@ -6,10 +6,11 @@ Verified field mappings (research workbook name -> production column)
 ============================  ==================================================
 Canonical field               Source
 ============================  ==================================================
-canonical_property_id         ``sitewise_app.properties.id`` (TEXT, EP-/MD- ids)
-property_type                 ``sitewise_app.properties.property_type``
-monthly_rental_myr            ``sitewise_app.properties.rental_rm``  (NOT price)
-built_up_sqft                 ``sitewise_app.properties.size_sqft``
+canonical_property_id         ``fyp.catalogue_properties.id`` (TEXT, EP-/MD- ids;
+                              canonical column ``fyp.rental_properties.catalogue_id``)
+property_type                 ``fyp.catalogue_properties.property_type``
+monthly_rental_myr            ``fyp.catalogue_properties.rental_rm``  (NOT price)
+built_up_sqft                 ``fyp.catalogue_properties.size_sqft``
 state / district              ``p.state`` / ``p.source_data->>'district'``
 floor_level_text,             NOT typed columns. Present for a SUBSET of rows
 unit_position, frontage_ft,   in ``subject_features.other_features`` under the
@@ -32,11 +33,12 @@ Two deliberate data-integrity decisions:
   (verified against the supplied ``example_property_47.json`` for MD-00510);
   the previous alphabetical ``ORDER BY source_record_type`` picked the
   ``PROPERTY_UNLABELED`` twin, which differs in the 4th significant digit.
-* Only the published **research catalogue** (``sitewise_app.properties``, 955
-  U-class rows) is read here. The 955 imported ``fyp.rental_properties`` rows
-  are ``verification_status='pending'`` and are deliberately NOT mixed in:
-  presenting them would violate the existing approved+published verification
-  policy. ``UNKNOWN_NOT_VERIFIED`` availability is surfaced as a caution and
+* Only the published **research catalogue** (the ``fyp.catalogue_properties``
+  view, 955 U-class rows) is read here. Those rows are the SAME canonical
+  ``fyp.rental_properties`` records with ``is_published = false`` and are
+  deliberately NOT mixed into the owner-listing flows: the approved+published
+  verification policy for entrepreneur-facing listings is untouched.
+  ``UNKNOWN_NOT_VERIFIED`` availability is surfaced as a caution and
   never as confirmed availability.
 
 Layer 1 provenance
@@ -84,7 +86,7 @@ SELECT
     to_jsonb(pop)                AS population_doc,
     link.listing_id              AS listing_id,
     link.detail_available        AS listing_detail_available
-FROM sitewise_app.properties p
+FROM fyp.catalogue_properties p
 LEFT JOIN LATERAL (
     SELECT l.property_id AS listing_id,
            (rp.is_published AND rp.verification_status = 'approved') AS detail_available
@@ -306,7 +308,7 @@ class RecommendationCandidateRepository:
             "pu_model_method": _first_text((source,), "model_method"),
             "pu_feature_set": _first_text((source,), "model_feature_set"),
             "pu_score_type": _first_text((source,), "score_type"),
-            "pu_score_source": "sitewise_app.properties.source_data.research_p_association_score",
+            "pu_score_source": "fyp.rental_properties.catalogue_source_data.research_p_association_score",
             "sample_class": _first_text((source, subject), "sample_class"),
             "availability_status": availability,
             "analysis_status": _first_text((source, subject), "analysis_status"),
@@ -314,8 +316,8 @@ class RecommendationCandidateRepository:
             "coordinate_quality": _first_text((source,), "coordinate_quality"),
             "reference_coverage": _first_text((source,), "reference_coverage"),
             "verification": {
-                "dataset": "sitewise_app.properties (955 U-class research catalogue rows)",
-                "source_schema": "sitewise_app",
+                "dataset": "fyp.catalogue_properties (955 U-class research catalogue rows)",
+                "source_schema": "fyp_catalogue",
                 "availability_status": availability,
                 "confirmed_available": confirmed,
                 "pending_verification": False,

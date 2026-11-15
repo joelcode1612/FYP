@@ -2,6 +2,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Optional
 
+from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, select
 
@@ -40,6 +41,32 @@ class UserRepository:
         self.session.commit()
         self.session.refresh(user)
         return user
+
+    def listing_counts_by_owner(self) -> dict[uuid.UUID, int]:
+        """Operational listings per owner, in ONE grouped query.
+
+        ``fyp.rental_properties.owner_user_id`` is the verified Supabase identity
+        stamped when the owner submits a listing. The imported research
+        catalogue has no owner column at all, so counting it would report every
+        account as owning nothing.
+        """
+        rows = self.session.execute(
+            text(
+                "SELECT owner_user_id, count(*) AS n FROM fyp.rental_properties "
+                "WHERE owner_user_id IS NOT NULL GROUP BY owner_user_id"
+            )
+        ).all()
+        return {row[0]: int(row[1]) for row in rows}
+
+    def listing_count_for(self, owner_user_id: uuid.UUID) -> int:
+        return int(
+            self.session.execute(
+                text(
+                    "SELECT count(*) FROM fyp.rental_properties WHERE owner_user_id = :owner"
+                ),
+                {"owner": str(owner_user_id)},
+            ).scalar_one()
+        )
 
     def delete(self, user_id: uuid.UUID) -> bool:
         user = self.get_by_id(user_id)

@@ -21,14 +21,25 @@ class AuthService {
     required String email,
     required String password,
     String? fullName,
+    String? accountPurpose,
+    bool acceptTerms = false,
   }) => repo.signUpWithEmail(
     email: email,
     password: password,
     fullName: fullName,
+    accountPurpose: accountPurpose,
+    acceptTerms: acceptTerms,
   );
 
-  Future<SitewiseUser> signInWithProvider(AuthProvider provider) =>
-      repo.signInWithProvider(provider);
+  Future<SitewiseUser> signInWithProvider(
+    AuthProvider provider, {
+    String? accountPurpose,
+  }) => repo.signInWithProvider(provider, accountPurpose: accountPurpose);
+
+  /// See [AuthRepository.resendSignupVerificationEmail]. Side-channel only:
+  /// no session, role or verification state is changed by this call.
+  Future<void> resendSignupVerificationEmail(String email) =>
+      repo.resendSignupVerificationEmail(email);
 
   Future<void> sendPasswordRecoveryEmail(String email, {String? redirectTo}) =>
       repo.sendPasswordRecoveryEmail(email, redirectTo: redirectTo);

@@ -1,7 +1,5 @@
 __pycache__/
 *.pyc
-.env
-.venv/
 .dart_tool/
 dist/
 build/
@@ -9,3 +7,7 @@ build/
 .alembic/
 alembic/versions/__pycache__/
 EOF
+
+# PU gap-recovery local datasets: heavy rasters/CSVs stay at the configured
+# external path (SITEWISE_PU_GAP_DATA_ROOT); only manifests are committed.
+local_data/pu_gap_recovery/data/

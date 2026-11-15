@@ -3,15 +3,12 @@ import 'package:flutter/material.dart';
 import 'package:shared_logic/shared_logic.dart';
 
 import '../../../../application/services/service_locator.dart';
-import '../../../../core/config/mobile_config.dart';
 import '../../../../core/theme/sitewise_m3.dart';
 import '../../../../core/theme/sitewise_theme.dart';
 import '../../shell/entrepreneur_tab_scope.dart';
 import '../../shell/mobile_app_shell.dart';
 import '../../widgets/async_section.dart';
 import '../../widgets/m3_kit.dart';
-import '../../../shared/tour/ar_capture_mobile_page.dart';
-import '../../../shared/widgets/sitewise_bottom_sheet.dart';
 import '../../../shared/widgets/sitewise_inline_notice.dart';
 
 /// **Spaces** — the fourth tab of the consolidated five-tab navigation.
@@ -40,12 +37,6 @@ class _EntrepreneurSpacesMobilePageState
   final GlobalKey<AsyncSectionState<List<CommercialProperty>>> _catalogueKey =
       GlobalKey<AsyncSectionState<List<CommercialProperty>>>();
 
-  /// The owner's own listing records live in their own section; pull-to-refresh
-  /// has to reach that request too, otherwise a draft created on another screen
-  /// stays stale until the tab is rebuilt.
-  final GlobalKey<AsyncSectionState<List<OwnerListing>>> _listingsKey =
-      GlobalKey<AsyncSectionState<List<OwnerListing>>>();
-
   @override
   void initState() {
     super.initState();
@@ -61,7 +52,6 @@ class _EntrepreneurSpacesMobilePageState
     await Future.wait([
       ref.read(appNotifierProvider.notifier).loadSaved(),
       _catalogueKey.currentState?.refresh() ?? Future<void>.value(),
-      _listingsKey.currentState?.refresh() ?? Future<void>.value(),
     ]);
   }
 
@@ -117,12 +107,6 @@ class _EntrepreneurSpacesMobilePageState
             ],
           ),
           const SizedBox(height: 16),
-          M3PrimaryButton(
-            label: 'Add property',
-            onTap: () => Navigator.of(context)
-                .pushNamed('/entrepreneur/add-property'),
-          ),
-          const SizedBox(height: 8),
           OutlinedButton.icon(
             onPressed: () => EntrepreneurTabScope.open(
               context,
@@ -131,7 +115,6 @@ class _EntrepreneurSpacesMobilePageState
             icon: const Icon(Icons.search_rounded),
             label: const Text('Browse recommendations'),
           ),
-          _OwnerListingsSection(refreshKey: _listingsKey),
           M3SectionRow(
             title: 'Property records',
             overline: '${appState.saved.length} SHORTLISTED',
@@ -198,203 +181,6 @@ class _EntrepreneurSpacesMobilePageState
           ),
         ],
         ),
-      ),
-    );
-  }
-}
-
-/// **My property listings** — the signed-in owner's REAL PostgreSQL records
-/// (`fyp.rental_properties` via `/properties/listings/mine`), with the
-/// verification lifecycle each one is in. Drafts and rejected/corrections
-/// records resume in the Add Property flow; pending/approved records open a
-/// read-only status sheet (the backend blocks edits awaiting review anyway).
-class _OwnerListingsSection extends StatelessWidget {
-  const _OwnerListingsSection({required this.refreshKey});
-
-  /// Supplied by the tab so pull-to-refresh can re-run this section's request.
-  final GlobalKey<AsyncSectionState<List<OwnerListing>>> refreshKey;
-
-  static String _statusLabel(String wire) => switch (wire) {
-        'draft' => 'Draft',
-        'pending' => 'Pending verification',
-        'approved' => 'Approved',
-        'rejected' => 'Rejected',
-        _ => wire,
-      };
-
-  static Color _statusColor(String wire) => switch (wire) {
-        'draft' => const Color(0xFF58677D),
-        'pending' => const Color(0xFF965410),
-        'approved' => const Color(0xFF087443),
-        'rejected' => const Color(0xFFB91C1C),
-        _ => const Color(0xFF58677D),
-      };
-
-  void _openListing(BuildContext context, OwnerListing listing) {
-    if (listing.locallyEditable) {
-      Navigator.of(context)
-          .pushNamed('/entrepreneur/add-property', arguments: listing.id);
-      return;
-    }
-    showSitewiseBottomSheet<void>(
-      context,
-      title: listing.name,
-      builder: (_) => Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text('Status: ${_statusLabel(listing.verificationStatus)}'),
-          const SizedBox(height: 4),
-          Text(
-            '${listing.propertyType ?? 'Property'} · '
-            '${listing.rentalPrice == null ? 'Rent on request' : 'RM ${listing.rentalPrice!.toStringAsFixed(0)}'}',
-          ),
-          if (listing.rejectionReason != null) ...[
-            const SizedBox(height: 8),
-            Text(
-              'Administrator note: ${listing.rejectionReason}',
-              style: const TextStyle(color: Color(0xFFB91C1C)),
-            ),
-          ],
-          const SizedBox(height: 12),
-          const Text(
-            'This record is awaiting or has passed review; its details can '
-            'no longer be edited.',
-          ),
-        ],
-      ),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    if (!MobileConfig.usesLiveApi) {
-      // Demo builds hold no owner records; the section stays honest by
-      // not pretending otherwise.
-      return const SizedBox.shrink();
-    }
-    // The list used to be fetched by a FutureBuilder built inside `build()`,
-    // so it re-requested on every rebuild, had no retry, and never noticed a
-    // draft saved on the Add Property screen. `listingsRevision` is bumped by
-    // the repository after each confirmed write, which reloads this section
-    // when the user returns.
-    return ValueListenableBuilder<int>(
-      valueListenable: ServiceLocator.listingsRevision,
-      builder: (context, revision, _) =>
-          AsyncSection<List<OwnerListing>>(
-        key: refreshKey,
-        revision: revision,
-        load: ServiceLocator.ownerListings.myListings,
-        errorTitle: 'Your property listings could not be loaded',
-        builder: (context, listings) {
-          return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            M3SectionRow(
-              title: 'My property listings',
-              overline: '${listings.length} RECORD(S)',
-            ),
-            if (listings.isEmpty)
-              const M3EmptyState(
-                icon: Icons.house_outlined,
-                title: 'No property records yet',
-                message:
-                    'Saved drafts and submitted properties appear here '
-                    'with their verification status.',
-              )
-            else
-              for (final listing in listings) ...[
-                const SizedBox(height: 10),
-                M3Card(
-                  onTap: () => _openListing(context, listing),
-                  padding: const EdgeInsets.all(14),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              listing.name,
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                fontFamily: kFontFamily,
-                                fontSize: 13,
-                                fontWeight: FontWeight.w800,
-                                color: SitewiseM3.rowTitle,
-                              ),
-                            ),
-                          ),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 8, vertical: 4),
-                            decoration: BoxDecoration(
-                              color: _statusColor(listing.verificationStatus)
-                                  .withValues(alpha: .1),
-                              borderRadius: BorderRadius.circular(999),
-                            ),
-                            child: Text(
-                              _statusLabel(listing.verificationStatus),
-                              style: TextStyle(
-                                fontFamily: kFontFamily,
-                                fontSize: 10,
-                                fontWeight: FontWeight.w800,
-                                color:
-                                    _statusColor(listing.verificationStatus),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        listing.rejectionReason != null
-                            ? 'Corrections requested: ${listing.rejectionReason}'
-                            : (listing.address ?? 'No address recorded yet'),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          fontFamily: kFontFamily,
-                          fontSize: 11,
-                          color: SitewiseM3.rowDesc,
-                        ),
-                      ),
-                      Align(
-                        alignment: Alignment.centerLeft,
-                        child: TextButton.icon(
-                          onPressed: () => Navigator.of(context).pushNamed(
-                            '/owner/capture',
-                            arguments: ArCaptureRequest(
-                              propertyId: listing.id,
-                              title: listing.name,
-                            ),
-                          ),
-                          icon: const Icon(Icons.threesixty_rounded, size: 16),
-                          label: const Text(
-                            'Capture 360° tour',
-                            style: TextStyle(
-                              fontFamily: kFontFamily,
-                              fontSize: 11.5,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                          style: TextButton.styleFrom(
-                            foregroundColor: SitewiseColors.action,
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 8, vertical: 6),
-                            minimumSize: Size.zero,
-                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-          ],
-          );
-        },
       ),
     );
   }

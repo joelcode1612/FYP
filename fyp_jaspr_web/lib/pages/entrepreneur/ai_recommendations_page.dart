@@ -4,6 +4,7 @@ import 'package:shared_logic/shared_logic.dart';
 
 import '../../components/ui.dart';
 import '../../data/app_locator.dart';
+import '../../data/preference_labels.dart';
 import '../../layouts/app_layout.dart';
 
 /// Entrepreneur **AI recommendations** — the personalised Layer 2/3 pipeline.
@@ -331,75 +332,130 @@ class _AiRecommendationCard extends StatelessComponent {
     final prefPct = item.preferenceMatchScore == null
         ? null
         : item.preferenceMatchScore! * 100;
-    return section(classes: 'panel', [
-      div(classes: 'panel-head', [
-        h2([
-          Component.text(
-            prop.title.isEmpty ? prop.propertyId : prop.title,
+    final image = (prop.imageUrl ?? '').trim();
+    final addressLine = [
+      if (prop.address.isNotEmpty) prop.address,
+      if (prop.city.isNotEmpty) prop.city,
+      if (prop.state.isNotEmpty) prop.state,
+    ].join(', ');
+    // `confirmed_available` is the backend's own verdict. Anything else is
+    // reported as unverified rather than dressed up as available.
+    final confirmed = prop.verification['confirmed_available'] == true;
+    final availabilityStatus =
+        '${prop.verification['availability_status'] ?? 'UNKNOWN_NOT_VERIFIED'}';
+    return section(classes: 'panel sw-rec', [
+      // A real photo when the catalogue row has one. Rendered as a background
+      // so a dead URL shows the placeholder colour instead of a broken-image
+      // icon, and no client-side state is needed for the error case.
+      div(
+        classes: 'sw-rec__media${image.isEmpty ? ' is-empty' : ''}',
+        styles: image.isEmpty ? null : Styles(raw: {'background-image': 'url("$image")'}),
+        [
+          if (image.isEmpty)
+            span(classes: 'sw-rec__media-empty', [Component.text('No photo recorded')]),
+        ],
+      ),
+      div(classes: 'sw-rec__body', [
+        div(classes: 'panel-head panel-head--split', [
+          h2([
+            Component.text(prop.title.isEmpty ? prop.propertyId : prop.title),
+          ]),
+          span(classes: 'pill', [
+            Component.text(item.rank == null ? '' : '#${item.rank}'),
+          ]),
+        ]),
+        if (addressLine.isNotEmpty)
+          p(classes: 'what', [Component.text(addressLine)]),
+        div(classes: 'metrics-row', [
+          _metric(
+            'Monthly rental',
+            prop.monthlyRentalMyr == null
+                ? 'not recorded'
+                : 'RM ${prop.monthlyRentalMyr!.toStringAsFixed(0)}',
+          ),
+          _metric(
+            'Floor area',
+            prop.builtUpSqft == null
+                ? 'not recorded'
+                : '${prop.builtUpSqft!.toStringAsFixed(0)} sq ft',
+          ),
+          _metric(
+            'Property type',
+            prop.propertyType.isEmpty ? 'not recorded' : prop.propertyType,
           ),
         ]),
-        span(classes: 'pill', [
-          Component.text(item.rank == null ? '' : '#${item.rank}'),
+        div(classes: 'metrics-row', [
+          _metric(
+            'Preference fit',
+            prefPct == null ? 'unknown' : '${prefPct.toStringAsFixed(0)}%',
+          ),
+          _metric(
+            'PU research index',
+            (item.puAssociationScore * 100).toStringAsFixed(1),
+          ),
+          _metric('Final score', item.finalScore.toStringAsFixed(3)),
         ]),
-      ]),
-      p(classes: 'what', [
-        Component.text(
-          [
-            if (prop.city.isNotEmpty) prop.city,
-            if (prop.state.isNotEmpty) prop.state,
-            if (prop.propertyType.isNotEmpty) prop.propertyType,
-          ].join(' · '),
-        ),
-      ]),
-      div(classes: 'metrics-row', [
-        _metric(
-          'Preference fit',
-          prefPct == null ? 'unknown' : '${prefPct.toStringAsFixed(0)}%',
-        ),
-        _metric(
-          'PU research index',
-          (item.puAssociationScore * 100).toStringAsFixed(1),
-        ),
-        _metric('Final score', item.finalScore.toStringAsFixed(3)),
-      ]),
-      if (item.preferenceReasons.isNotEmpty) ...[
-        h3([Component.text('Why it matches')]),
-        ul([
-          for (final reason in item.preferenceReasons.take(3))
-            li([Component.text(reason)]),
+        p(classes: 'sw-rec__verify${confirmed ? ' is-verified' : ''}', [
+          Component.text(
+            confirmed
+                ? 'Verified available'
+                : 'Availability not verified ($availabilityStatus)',
+          ),
         ]),
-      ],
-      if (item.cautions.isNotEmpty) ...[
-        h3([Component.text('Cautions')]),
-        ul(classes: 'cautions', [
-          for (final caution in item.cautions.take(3))
-            li([Component.text(caution)]),
-        ]),
-      ],
-      div(classes: 'actions-row', [
+        if (item.preferenceReasons.isNotEmpty) ...[
+          h3([Component.text('Why it matches')]),
+          ul([
+            for (final reason in item.preferenceReasons.take(3))
+              li([Component.text(reason)]),
+          ]),
+        ],
+        if (item.cautions.isNotEmpty) ...[
+          h3([Component.text('Cautions')]),
+          ul(classes: 'cautions', [
+            for (final caution in item.cautions.take(3))
+              li([Component.text(caution)]),
+          ]),
+        ],
+        div(classes: 'actions-row', [
         ActionLink(
-          'Why recommended (explanation)',
+          'View property insights',
+          // The canonical RESEARCH id (EP-/MD-). Never the numeric listing id:
+          // the insights and catalogue endpoints are keyed by the text id, so
+          // passing the bigint here produced a 404 record-not-found page.
           href:
-              '/entrepreneur/ai-recommendations?result=${item.resultId}&page=$returnPage',
+              '/entrepreneur/property-detail?id=${Uri.encodeQueryComponent(item.propertyId)}'
+              '&result=${Uri.encodeQueryComponent(item.resultId)}',
           variant: 'primary',
         ),
         ActionLink(
-          'Assess this property',
+          'Why recommended',
           href:
-              '/entrepreneur/assessment?property=${Uri.encodeQueryComponent(item.propertyId)}',
+              '/entrepreneur/ai-recommendations?result=${item.resultId}&page=$returnPage',
+          variant: 'secondary',
+        ),
+        ActionLink(
+          'Assess this property',
+          // The workspace reads `?id=`, not `?property=`. The previous query
+          // key was silently ignored, so the page opened with no property.
+          href:
+              '/entrepreneur/assessment?id=${Uri.encodeQueryComponent(item.propertyId)}',
           variant: 'secondary',
         ),
         if (ref != null && ref.detailAvailable)
           ActionLink(
-            'Property details',
-            href: '/entrepreneur/property-detail?id=${ref.listingId}',
+            'View commercial listing',
+            // The verified NUMERIC listing id (fyp.rental_properties.id), read
+            // by the approved+published-only explore detail endpoint. Only
+            // rendered when the backend reports the listing is accessible.
+            href: '/entrepreneur/listing?id=${ref.listingId}',
             variant: 'secondary',
           ),
       ]),
-      if (ref != null && !ref.detailAvailable)
-        p(classes: 'disclaimer', [
-          Component.text(ref.detailNote ?? ''),
-        ]),
+        if (ref != null && !ref.detailAvailable)
+          p(classes: 'disclaimer', [
+            Component.text(ref.detailNote ?? ''),
+          ]),
+      ]),
     ]);
   }
 
@@ -504,7 +560,7 @@ class _ExplanationViewState extends State<_ExplanationView> {
                 for (final entry in e.components.entries)
                   li([
                     Component.text(
-                      entry.key.replaceAll('_', ' '),
+                      componentLabel(entry.key),
                     ),
                     Component.text(
                       entry.value.value == null
@@ -529,14 +585,14 @@ class _ExplanationViewState extends State<_ExplanationView> {
                   for (final f in e.shap!.topPositive.take(4))
                     li([
                       Component.text(
-                        '+ ${f.feature.replaceAll('_', ' ')} '
+                        '+ ${e.labelFor(f.feature)} '
                         '(${f.contribution.toStringAsFixed(4)})',
                       ),
                     ]),
                   for (final f in e.shap!.topNegative.take(4))
                     li([
                       Component.text(
-                        '- ${f.feature.replaceAll('_', ' ')} '
+                        '- ${e.labelFor(f.feature)} '
                         '(${f.contribution.toStringAsFixed(4)})',
                       ),
                     ]),
@@ -555,9 +611,16 @@ class _ExplanationViewState extends State<_ExplanationView> {
             ]),
             div(classes: 'actions-row', [
               ActionLink(
+                'Open property insights',
+                href:
+                    '/entrepreneur/property-detail?id=${Uri.encodeQueryComponent(e.propertyId)}'
+                    '&result=${Uri.encodeQueryComponent(e.resultId)}',
+                variant: 'primary',
+              ),
+              ActionLink(
                 'Back to AI recommendations',
                 href: _returnToResults,
-                variant: 'primary',
+                variant: 'secondary',
               ),
             ]),
         ]);

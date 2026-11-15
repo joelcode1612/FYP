@@ -9,7 +9,9 @@ import '../../data/datasources/local/opencv_panorama_stitcher_stub.dart'
     if (dart.library.io) '../../data/datasources/local/opencv_panorama_stitcher.dart';
 import '../../data/repositories/mobile_api_client.dart';
 import '../../data/repositories/onboarding_repository_impl.dart';
+import '../../data/repositories/persistent_tour_repository.dart';
 import '../../data/repositories/supabase_auth_repository.dart';
+import '../../data/repositories/supabase_staff_mfa_repository.dart';
 import 'assessment_session.dart';
 import 'capture_session_store.dart';
 import 'draft_repository.dart';
@@ -39,7 +41,13 @@ abstract final class ServiceLocator {
   static PropertyRepository propertyRepo = PropertyRepositoryImpl();
   static final RecommendationRepositoryImpl recommendationRepo =
       RecommendationRepositoryImpl();
-  static final TourRepositoryImpl tourRepo = TourRepositoryImpl();
+
+  /// One device-backed tour store shared by AR capture, frame-progress sync
+  /// and panorama stitching. Keeping this instance common prevents the three
+  /// lifecycle consumers from diverging after a process restart.
+  static final PersistentTourRepository tourRepo = PersistentTourRepository(
+    FileDraftLocalDataSource(),
+  );
 
   /// Bearer-aware transport for the shared API repositories. Constructed
   /// lazily-on-read (cheap: one HttpClient total) and only consumed when
@@ -60,6 +68,17 @@ abstract final class ServiceLocator {
   /// shows the new record instead of the list captured on first build.
   static final ValueNotifier<int> listingsRevision = ValueNotifier<int>(0);
 
+  /// Owner / Agent listing management over the existing staff endpoints
+  /// (`GET /api/v1/staff/me/listings`, proposals, change requests, photos).
+  ///
+  /// Scope is decided server-side from `agent_listing_assignment`; the client
+  /// never filters by agent id. The staff endpoints require AAL2, so a session
+  /// that has not completed MFA receives the structured `staff_mfa_required`
+  /// 403 — the provider workspace turns that into the MFA gate rather than a
+  /// generic error.
+  static final ApiAgentListingRepository agentListings =
+      ApiAgentListingRepository(apiClient);
+
   /// The existing property-verification transport (evidence upload, submit,
   /// status) — the SAME subsystem the Admin review queue reads.
   static ApiPropertyVerificationRepository propertyVerification =
@@ -75,6 +94,15 @@ abstract final class ServiceLocator {
   /// role. Non-final so tests can inject a fake repository before
   /// `sitewiseOverrides()` reads it.
   static AuthService auth = AuthService(SupabaseAuthRepository());
+
+  /// Second factor for the staff workspace (SiteWise's `REQUIRED_STAFF_AAL`).
+  ///
+  /// Supabase Auth owns the enrollment and the code exchange; this repository
+  /// is only the transport plus the failure mapping the screen needs. The
+  /// elevated session it produces is what makes the staff endpoints succeed —
+  /// the gate is server-side (`require_property_owner`), so this screen can
+  /// never grant an authority the backend would not.
+  static StaffMfaRepository staffMfa = SupabaseStaffMfaRepository();
 
   /// Always built from the CURRENT [propertyRepo], so a swap in the
   /// composition root reaches every caller. `PropertyService` is a thin,
@@ -198,8 +226,10 @@ abstract final class ServiceLocator {
 
   /// Re-scopes draft storage to the signed-in account (or back to `device`
   /// on sign-out). Called from the auth-state listeners in providers.dart.
-  static void scopeDraftsToAccount(String? userId) =>
-      drafts.setAccount(userId);
+  static void scopeDraftsToAccount(String? userId) {
+    drafts.setAccount(userId);
+    tourRepo.setAccount(userId);
+  }
 
   /// Fresh panorama session over the 26 local capture targets.
   static PanoramaCaptureService newPanoramaCaptureService([

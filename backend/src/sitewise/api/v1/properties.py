@@ -12,6 +12,9 @@ from sitewise.core.exceptions import ForbiddenError
 from sitewise.db.session import get_db
 from sitewise.dependencies import AuthenticatedUser, require_property_owner
 from sitewise.domain import rbac
+from sitewise.repositories.agent_assignment_repository import (
+    AgentAssignmentRepository,
+)
 from sitewise.repositories.fyp_property_repository import FypPropertyRepository
 from sitewise.services.address_validation_service import (
     AddressValidationRejected,
@@ -19,6 +22,11 @@ from sitewise.services.address_validation_service import (
     validate_address,
 )
 from sitewise.services.property_enrichment_service import PropertyEnrichmentService
+from sitewise.services.property_management_service import (
+    resolve_listings,
+    resolve_management,
+)
+from sitewise.services import provider_scope
 
 router = APIRouter()
 
@@ -190,7 +198,16 @@ def create_owner_listing(
     body = payload.model_dump()
 
     repo = FypPropertyRepository(session)
-    row = repo.create_owner_listing(owner_user_id=current.user_id, payload=body)
+    agent_id = _provider_agent_id(session, current)
+    row = repo.create_owner_listing(
+        owner_user_id=None if agent_id is not None else current.user_id,
+        payload=body,
+    )
+    if agent_id is not None:
+        AgentAssignmentRepository(session).assign(
+            int(row["id"]), agent_id, assigned_by=None
+        )
+        row = repo.owner_listing(int(row["id"])) or row
     enrichment = _run_enrichment(repo, row)
     return {
         "data": row,
@@ -215,8 +232,19 @@ def list_own_listings(
     session: Session = Depends(get_db),
     current: AuthenticatedUser = Depends(require_property_owner),
 ):
-    """The authenticated owner's submissions, drafts included (newest first)."""
-    return {"data": FypPropertyRepository(session).owner_listings(current.user_id)}
+    """The authenticated owner's submissions, drafts included (newest first).
+
+    Each row carries the derived management state so the owner can see when an
+    agent has been assigned to manage it. Ownership stays on the row; the agent
+    adds responsibility, it does not take the listing away.
+    """
+    rows = FypPropertyRepository(session).owner_listings(current.user_id)
+    management = resolve_listings(session, [int(r["id"]) for r in rows])
+    return {
+        "data": [
+            {**row, "management": management.get(int(row["id"]))} for row in rows
+        ]
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -253,17 +281,76 @@ class OwnerDraftRequest(BaseModel):
     is_fnb_suitable: bool = False
 
 
+def _agent_id_for(session: Session, user_id) -> int | None:
+    """The caller's ``public.agent.agent_id``, or ``None`` when they are not one.
+
+    Delegates to the shared provider-scope helper so the staff endpoints, the
+    listing routes and the Owner / Agent workspace all resolve agent identity
+    through exactly one definition. Authorization fails closed: a Supabase
+    outage denies agent scope rather than silently granting it.
+    """
+    return provider_scope.agent_id_for_user(user_id)
+
+
+def _agent_manages_listing(
+    session: Session, property_id: int, current: AuthenticatedUser
+) -> bool:
+    """True only when an assignment row links this listing to this agent.
+
+    An agent's authority over an existing property is the assignment, never the
+    account role: an agent with no assignment manages nothing, and one agent
+    can never reach another agent's listings.
+    """
+    if not rbac.has_role(current.role, (rbac.ROLE_AGENT,)):
+        return False
+    agent_id = _agent_id_for(session, current.user_id)
+    if agent_id is None:
+        return False
+    row = session.execute(
+        text(
+            "SELECT 1 FROM agent_listing_assignment "
+            "WHERE listing_id = :lid AND agent_id = :aid"
+        ),
+        {"lid": property_id, "aid": agent_id},
+    ).first()
+    return row is not None
+
+
+def _provider_agent_id(session: Session, current: AuthenticatedUser) -> int | None:
+    """The agent id a NEW record should be assigned to, or ``None`` for owners.
+
+    Raises 403 when the account carries the agent role but has no agent
+    profile: such an account must not create a record nobody can manage.
+    """
+    if not rbac.has_role(current.role, (rbac.ROLE_AGENT,)):
+        return None
+    agent_id = _agent_id_for(session, current.user_id)
+    if agent_id is None:
+        raise ForbiddenError(
+            "This agent account has no agent profile, so it cannot create "
+            "property listings."
+        )
+    return agent_id
+
+
 def _owned_listing_or_error(
     repo: FypPropertyRepository, property_id: int, current: AuthenticatedUser
 ) -> dict:
     listing = repo.owner_listing(property_id)
     if listing is None:
         raise HTTPException(status_code=404, detail="Property not found.")
+    if rbac.can_administer_users(current.role):
+        return listing
     owner = listing.get("owner_user_id")
-    is_admin = rbac.can_administer_users(current.role)
-    if not is_admin and (owner is None or str(owner) != str(current.user_id)):
-        raise ForbiddenError("You can only manage your own property listings.")
-    return listing
+    if owner is not None and str(owner) == str(current.user_id):
+        return listing
+    # Owner / Agent workspace: an assigned agent maintains the record on the
+    # owner's behalf, so the assignment — not ownership — is what authorizes it.
+    if _agent_manages_listing(repo.session, property_id, current):
+        return listing
+    raise ForbiddenError(
+        "You can only manage property listings you own or are assigned to."
+    )
 
 
 @router.post("/listings/drafts", status_code=201)
@@ -280,9 +367,20 @@ def create_owner_draft(
             status_code=422, detail="A draft property needs at least a name."
         )
     repo = FypPropertyRepository(session)
+    # An agent creates the record ON BEHALF OF a provider, so the row is not
+    # given an owner it cannot prove. It is scoped to the agent through an
+    # assignment row instead, which is what the workspace and the admin queue
+    # both read. Owners keep the existing owner_user_id behaviour.
+    agent_id = _provider_agent_id(session, current)
     row = repo.create_owner_draft(
-        owner_user_id=current.user_id, payload=payload.model_dump()
+        owner_user_id=None if agent_id is not None else current.user_id,
+        payload=payload.model_dump(),
     )
+    if agent_id is not None:
+        AgentAssignmentRepository(session).assign(
+            int(row["id"]), agent_id, assigned_by=None
+        )
+        row = repo.owner_listing(int(row["id"])) or row
     return {
         "data": row,
         "meta": {
@@ -303,7 +401,13 @@ def get_own_listing(
     read. Another owner's draft is 403, never leaked."""
     repo = FypPropertyRepository(session)
     listing = _owned_listing_or_error(repo, property_id, current)
-    return {"data": {**listing, "photos": repo.listing_photos(property_id)}}
+    return {
+        "data": {
+            **listing,
+            "photos": repo.listing_photos(property_id),
+            "management": resolve_management(session, listing_id=property_id),
+        }
+    }
 
 
 @router.patch("/listings/{property_id}")
@@ -479,8 +583,13 @@ def _require_owned_listing(
     owner_uuid = row[0]
     if rbac.can_administer_users(current.role):
         return
-    if owner_uuid is None or str(owner_uuid) != str(current.user_id):
-        raise ForbiddenError("You can only enrich your own property listings.")
+    if owner_uuid is not None and str(owner_uuid) == str(current.user_id):
+        return
+    if _agent_manages_listing(session, property_id, current):
+        return
+    raise ForbiddenError(
+        "You can only enrich property listings you own or are assigned to."
+    )
 
 
 @router.post("/listings/{property_id}/enrich")
@@ -497,9 +606,10 @@ def enrich_listing(
     * ``phase="postgis"`` (Phase 1) computes F&B competitors, demand
       generators, roads/transportation and parking. Fast, and safe to call
       while the owner is still filling the form.
-    * ``phase="population"`` (Phase 2) runs the raster population chain on its
-      own. It is the only category that can legitimately be unavailable, and
-      calling it never recomputes Phase 1.
+    * ``phase="population"`` (Phase 2) runs the raster work on its own — the
+      population chain and the WorldPop age-band extraction. These are the
+      only categories that can legitimately be unavailable, and calling this
+      never recomputes Phase 1.
     * ``phase="all"`` (default, backward compatible with callers that send no
       body) runs both.
 

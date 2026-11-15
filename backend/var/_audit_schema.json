@@ -1,0 +1,2557 @@
+{
+  "database": "Final_Location_Analysis",
+  "tables": [
+    {
+      "schema": "demand_gen",
+      "table": "dedup_audit"
+    },
+    {
+      "schema": "demand_gen",
+      "table": "features"
+    },
+    {
+      "schema": "demand_gen",
+      "table": "pois_master"
+    },
+    {
+      "schema": "demand_gen",
+      "table": "pois_raw"
+    },
+    {
+      "schema": "demand_gen",
+      "table": "states"
+    },
+    {
+      "schema": "demand_gen",
+      "table": "subject_poi_pairs"
+    },
+    {
+      "schema": "demand_gen",
+      "table": "subjects"
+    },
+    {
+      "schema": "fnb_a",
+      "table": "candidate_group"
+    },
+    {
+      "schema": "fnb_a",
+      "table": "candidates"
+    },
+    {
+      "schema": "fnb_a",
+      "table": "coord_check"
+    },
+    {
+      "schema": "fnb_a",
+      "table": "demand_pois"
+    },
+    {
+      "schema": "fnb_a",
+      "table": "district_income"
+    },
+    {
+      "schema": "fnb_a",
+      "table": "district_population"
+    },
+    {
+      "schema": "fnb_a",
+      "table": "district_stats"
+    },
+    {
+      "schema": "fnb_a",
+      "table": "dup_pairs"
+    },
+    {
+      "schema": "fnb_a",
+      "table": "duplicate_review"
+    },
+    {
+      "schema": "fnb_a",
+      "table": "evidence"
+    },
+    {
+      "schema": "fnb_a",
+      "table": "extraction_batches"
+    },
+    {
+      "schema": "fnb_a",
+      "table": "f_competition_counts"
+    },
+    {
+      "schema": "fnb_a",
+      "table": "f_competition_scoped"
+    },
+    {
+      "schema": "fnb_a",
+      "table": "f_demand"
+    },
+    {
+      "schema": "fnb_a",
+      "table": "f_demand_extra"
+    },
+    {
+      "schema": "fnb_a",
+      "table": "f_population"
+    },
+    {
+      "schema": "fnb_a",
+      "table": "f_road_class"
+    },
+    {
+      "schema": "fnb_a",
+      "table": "f_roads"
+    },
+    {
+      "schema": "fnb_a",
+      "table": "f_socioeconomic"
+    },
+    {
+      "schema": "fnb_a",
+      "table": "f_transit"
+    },
+    {
+      "schema": "fnb_a",
+      "table": "fnb_outlet"
+    },
+    {
+      "schema": "fnb_a",
+      "table": "fnb_outlet_stage"
+    },
+    {
+      "schema": "fnb_a",
+      "table": "graph"
+    },
+    {
+      "schema": "fnb_a",
+      "table": "graph_nodes"
+    },
+    {
+      "schema": "fnb_a",
+      "table": "label_decision_log"
+    },
+    {
+      "schema": "fnb_a",
+      "table": "major_roads"
+    },
+    {
+      "schema": "fnb_a",
+      "table": "net_edges"
+    },
+    {
+      "schema": "fnb_a",
+      "table": "net_endpoints"
+    },
+    {
+      "schema": "fnb_a",
+      "table": "net_ends"
+    },
+    {
+      "schema": "fnb_a",
+      "table": "net_nodes"
+    },
+    {
+      "schema": "fnb_a",
+      "table": "osm_edit_times"
+    },
+    {
+      "schema": "fnb_a",
+      "table": "outlet_canonical"
+    },
+    {
+      "schema": "fnb_a",
+      "table": "outlet_geo"
+    },
+    {
+      "schema": "fnb_a",
+      "table": "outlet_labels"
+    },
+    {
+      "schema": "fnb_a",
+      "table": "outlet_labels_v2"
+    },
+    {
+      "schema": "fnb_a",
+      "table": "outlet_members"
+    },
+    {
+      "schema": "fnb_a",
+      "table": "outlet_names"
+    },
+    {
+      "schema": "fnb_a",
+      "table": "outlet_node"
+    },
+    {
+      "schema": "fnb_a",
+      "table": "outlet_positive_label"
+    },
+    {
+      "schema": "fnb_a",
+      "table": "outlet_scope"
+    },
+    {
+      "schema": "fnb_a",
+      "table": "outlet_source_ids"
+    },
+    {
+      "schema": "fnb_a",
+      "table": "outlet_verification"
+    },
+    {
+      "schema": "fnb_a",
+      "table": "outlets"
+    },
+    {
+      "schema": "fnb_a",
+      "table": "overture_match"
+    },
+    {
+      "schema": "fnb_a",
+      "table": "overture_places"
+    },
+    {
+      "schema": "fnb_a",
+      "table": "prohibited_source_quarantine"
+    },
+    {
+      "schema": "fnb_a",
+      "table": "property_geospatial_feature"
+    },
+    {
+      "schema": "fnb_a",
+      "table": "pu_competitors"
+    },
+    {
+      "schema": "fnb_a",
+      "table": "pu_features"
+    },
+    {
+      "schema": "fnb_a",
+      "table": "pu_points"
+    },
+    {
+      "schema": "fnb_a",
+      "table": "refresh_run"
+    },
+    {
+      "schema": "fnb_a",
+      "table": "road_junctions"
+    },
+    {
+      "schema": "fnb_a",
+      "table": "source_absence"
+    },
+    {
+      "schema": "fnb_a",
+      "table": "source_snapshot"
+    },
+    {
+      "schema": "fnb_a",
+      "table": "stage_runs"
+    },
+    {
+      "schema": "fnb_a",
+      "table": "study_area"
+    },
+    {
+      "schema": "fnb_a",
+      "table": "study_area_states"
+    },
+    {
+      "schema": "fnb_a",
+      "table": "transit_poi_node"
+    },
+    {
+      "schema": "fnb_a",
+      "table": "transit_pois"
+    },
+    {
+      "schema": "fnb_a",
+      "table": "union_edges"
+    },
+    {
+      "schema": "fyp",
+      "table": "activity_log"
+    },
+    {
+      "schema": "fyp",
+      "table": "ai_explanations"
+    },
+    {
+      "schema": "fyp",
+      "table": "entrepreneur_preferences"
+    },
+    {
+      "schema": "fyp",
+      "table": "favourite_properties"
+    },
+    {
+      "schema": "fyp",
+      "table": "ml_models"
+    },
+    {
+      "schema": "fyp",
+      "table": "property_enrichment_category"
+    },
+    {
+      "schema": "fyp",
+      "table": "property_feature_freshness"
+    },
+    {
+      "schema": "fyp",
+      "table": "property_features"
+    },
+    {
+      "schema": "fyp",
+      "table": "property_geospatial_features"
+    },
+    {
+      "schema": "fyp",
+      "table": "property_listing_sources"
+    },
+    {
+      "schema": "fyp",
+      "table": "property_listing_verification"
+    },
+    {
+      "schema": "fyp",
+      "table": "property_photos"
+    },
+    {
+      "schema": "fyp",
+      "table": "property_subject_links"
+    },
+    {
+      "schema": "fyp",
+      "table": "recommendation_results"
+    },
+    {
+      "schema": "fyp",
+      "table": "rental_properties"
+    },
+    {
+      "schema": "fyp",
+      "table": "users"
+    },
+    {
+      "schema": "fyp",
+      "table": "virtual_tours"
+    },
+    {
+      "schema": "fyp_features",
+      "table": "_b50"
+    },
+    {
+      "schema": "fyp_features",
+      "table": "a_family"
+    },
+    {
+      "schema": "fyp_features",
+      "table": "a_family2"
+    },
+    {
+      "schema": "fyp_features",
+      "table": "a_family_v2"
+    },
+    {
+      "schema": "fyp_features",
+      "table": "all_points"
+    },
+    {
+      "schema": "fyp_features",
+      "table": "b_family"
+    },
+    {
+      "schema": "fyp_features",
+      "table": "b_family_v2"
+    },
+    {
+      "schema": "fyp_features",
+      "table": "bufs"
+    },
+    {
+      "schema": "fyp_features",
+      "table": "building_support"
+    },
+    {
+      "schema": "fyp_features",
+      "table": "buildings_study"
+    },
+    {
+      "schema": "fyp_features",
+      "table": "c_intersections"
+    },
+    {
+      "schema": "fyp_features",
+      "table": "c_intersections_v2"
+    },
+    {
+      "schema": "fyp_features",
+      "table": "comp_size"
+    },
+    {
+      "schema": "fyp_features",
+      "table": "e_ped_junctions"
+    },
+    {
+      "schema": "fyp_features",
+      "table": "e_ped_v2"
+    },
+    {
+      "schema": "fyp_features",
+      "table": "gtfs_active_services"
+    },
+    {
+      "schema": "fyp_features",
+      "table": "gtfs_active_trips"
+    },
+    {
+      "schema": "fyp_features",
+      "table": "gtfs_calendar"
+    },
+    {
+      "schema": "fyp_features",
+      "table": "gtfs_calendar_dates"
+    },
+    {
+      "schema": "fyp_features",
+      "table": "gtfs_dep"
+    },
+    {
+      "schema": "fyp_features",
+      "table": "gtfs_routes"
+    },
+    {
+      "schema": "fyp_features",
+      "table": "gtfs_stop_modes"
+    },
+    {
+      "schema": "fyp_features",
+      "table": "gtfs_stop_routes"
+    },
+    {
+      "schema": "fyp_features",
+      "table": "gtfs_stop_times"
+    },
+    {
+      "schema": "fyp_features",
+      "table": "gtfs_stops"
+    },
+    {
+      "schema": "fyp_features",
+      "table": "gtfs_trips"
+    },
+    {
+      "schema": "fyp_features",
+      "table": "iso_edges"
+    },
+    {
+      "schema": "fyp_features",
+      "table": "iso_poly"
+    },
+    {
+      "schema": "fyp_features",
+      "table": "iso_poly_v2"
+    },
+    {
+      "schema": "fyp_features",
+      "table": "iso_pop"
+    },
+    {
+      "schema": "fyp_features",
+      "table": "iso_pop_v2"
+    },
+    {
+      "schema": "fyp_features",
+      "table": "landscan_fix_v2"
+    },
+    {
+      "schema": "fyp_features",
+      "table": "nearest_ext_routes_v2"
+    },
+    {
+      "schema": "fyp_features",
+      "table": "node_cost"
+    },
+    {
+      "schema": "fyp_features",
+      "table": "osm_transit_density_v2"
+    },
+    {
+      "schema": "fyp_features",
+      "table": "osm_transit_pts_v2"
+    },
+    {
+      "schema": "fyp_features",
+      "table": "ped_deg"
+    },
+    {
+      "schema": "fyp_features",
+      "table": "ped_junctions_v2"
+    },
+    {
+      "schema": "fyp_features",
+      "table": "pilot"
+    },
+    {
+      "schema": "fyp_features",
+      "table": "pilot2"
+    },
+    {
+      "schema": "fyp_features",
+      "table": "pilot3"
+    },
+    {
+      "schema": "fyp_features",
+      "table": "pilot3_reach"
+    },
+    {
+      "schema": "fyp_features",
+      "table": "pilot4"
+    },
+    {
+      "schema": "fyp_features",
+      "table": "pilot4_reach"
+    },
+    {
+      "schema": "fyp_features",
+      "table": "pilot_reach"
+    },
+    {
+      "schema": "fyp_features",
+      "table": "points"
+    },
+    {
+      "schema": "fyp_features",
+      "table": "pos_building"
+    },
+    {
+      "schema": "fyp_features",
+      "table": "positives"
+    },
+    {
+      "schema": "fyp_features",
+      "table": "prop_comp"
+    },
+    {
+      "schema": "fyp_features",
+      "table": "prop_input"
+    },
+    {
+      "schema": "fyp_features",
+      "table": "prop_input_v2"
+    },
+    {
+      "schema": "fyp_features",
+      "table": "prop_reach"
+    },
+    {
+      "schema": "fyp_features",
+      "table": "prop_reach2"
+    },
+    {
+      "schema": "fyp_features",
+      "table": "prop_reach_v2"
+    },
+    {
+      "schema": "fyp_features",
+      "table": "prop_snap"
+    },
+    {
+      "schema": "fyp_features",
+      "table": "prop_snap2"
+    },
+    {
+      "schema": "fyp_features",
+      "table": "prop_snap_v2"
+    },
+    {
+      "schema": "fyp_features",
+      "table": "prop_stop"
+    },
+    {
+      "schema": "fyp_features",
+      "table": "property_population_spatial"
+    },
+    {
+      "schema": "fyp_features",
+      "table": "road_deg"
+    },
+    {
+      "schema": "fyp_features",
+      "table": "road_junctions_v2"
+    },
+    {
+      "schema": "fyp_features",
+      "table": "road_metrics"
+    },
+    {
+      "schema": "fyp_features",
+      "table": "road_metrics_v2"
+    },
+    {
+      "schema": "fyp_features",
+      "table": "roads_v2"
+    },
+    {
+      "schema": "fyp_features",
+      "table": "stop_facility"
+    },
+    {
+      "schema": "fyp_features",
+      "table": "stop_facility2"
+    },
+    {
+      "schema": "fyp_features",
+      "table": "stop_snap"
+    },
+    {
+      "schema": "fyp_features",
+      "table": "study_area"
+    },
+    {
+      "schema": "fyp_features",
+      "table": "transit_density"
+    },
+    {
+      "schema": "fyp_features",
+      "table": "transit_density_v2"
+    },
+    {
+      "schema": "fyp_features",
+      "table": "walk_deg"
+    },
+    {
+      "schema": "fyp_features",
+      "table": "walk_edges"
+    },
+    {
+      "schema": "fyp_features",
+      "table": "walk_nodes"
+    },
+    {
+      "schema": "fyp_features",
+      "table": "walk_stop_pairs"
+    },
+    {
+      "schema": "fyp_features",
+      "table": "walk_stop_pairs2"
+    },
+    {
+      "schema": "fyp_features",
+      "table": "walk_stop_v2"
+    },
+    {
+      "schema": "fyp_features",
+      "table": "walk_vertices"
+    },
+    {
+      "schema": "fyp_features",
+      "table": "we_components"
+    },
+    {
+      "schema": "fyp_features",
+      "table": "we_edges"
+    },
+    {
+      "schema": "fyp_features",
+      "table": "worldpop_fix_v2"
+    },
+    {
+      "schema": "mrf_2026_11_06",
+      "table": "building_density"
+    },
+    {
+      "schema": "mrf_2026_11_06",
+      "table": "building_density_prior_comparison"
+    },
+    {
+      "schema": "mrf_2026_11_06",
+      "table": "gtfs_osm_reconciliation"
+    },
+    {
+      "schema": "mrf_2026_11_06",
+      "table": "gtfs_service_check"
+    },
+    {
+      "schema": "mrf_2026_11_06",
+      "table": "gtfs_stops_current"
+    },
+    {
+      "schema": "mrf_2026_11_06",
+      "table": "transportation_recovery"
+    },
+    {
+      "schema": "mrf_2026_11_06",
+      "table": "walk_reverification"
+    },
+    {
+      "schema": "popfeat",
+      "table": "agg"
+    },
+    {
+      "schema": "popfeat",
+      "table": "buf"
+    },
+    {
+      "schema": "popfeat",
+      "table": "district"
+    },
+    {
+      "schema": "popfeat",
+      "table": "feat"
+    },
+    {
+      "schema": "popfeat",
+      "table": "final"
+    },
+    {
+      "schema": "popfeat",
+      "table": "in_study"
+    },
+    {
+      "schema": "popfeat",
+      "table": "node_cands"
+    },
+    {
+      "schema": "popfeat",
+      "table": "node_dupes"
+    },
+    {
+      "schema": "popfeat",
+      "table": "node_src"
+    },
+    {
+      "schema": "popfeat",
+      "table": "pairs"
+    },
+    {
+      "schema": "popfeat",
+      "table": "poly_cands"
+    },
+    {
+      "schema": "popfeat",
+      "table": "poly_src"
+    },
+    {
+      "schema": "popfeat",
+      "table": "pop_disc"
+    },
+    {
+      "schema": "popfeat",
+      "table": "property_pass_locations"
+    },
+    {
+      "schema": "popfeat",
+      "table": "recheck_1000"
+    },
+    {
+      "schema": "popfeat",
+      "table": "recheck_3000"
+    },
+    {
+      "schema": "popfeat",
+      "table": "recheck_500"
+    },
+    {
+      "schema": "popfeat",
+      "table": "study_rings"
+    },
+    {
+      "schema": "popfeat",
+      "table": "tiles"
+    },
+    {
+      "schema": "popfeat",
+      "table": "tiles2"
+    },
+    {
+      "schema": "public",
+      "table": "_fnb_pts"
+    },
+    {
+      "schema": "public",
+      "table": "_poi_bus"
+    },
+    {
+      "schema": "public",
+      "table": "_wp_tiles"
+    },
+    {
+      "schema": "public",
+      "table": "address"
+    },
+    {
+      "schema": "public",
+      "table": "agent_listing_assignment"
+    },
+    {
+      "schema": "public",
+      "table": "ai_explanation"
+    },
+    {
+      "schema": "public",
+      "table": "alembic_version"
+    },
+    {
+      "schema": "public",
+      "table": "assessment"
+    },
+    {
+      "schema": "public",
+      "table": "combined_roads"
+    },
+    {
+      "schema": "public",
+      "table": "dbg_comp"
+    },
+    {
+      "schema": "public",
+      "table": "district_age_population"
+    },
+    {
+      "schema": "public",
+      "table": "district_demographic"
+    },
+    {
+      "schema": "public",
+      "table": "district_population"
+    },
+    {
+      "schema": "public",
+      "table": "district_road_metrics"
+    },
+    {
+      "schema": "public",
+      "table": "diva_roads"
+    },
+    {
+      "schema": "public",
+      "table": "dun_income"
+    },
+    {
+      "schema": "public",
+      "table": "entrepreneur_preferences"
+    },
+    {
+      "schema": "public",
+      "table": "favorite_property"
+    },
+    {
+      "schema": "public",
+      "table": "gadm_country"
+    },
+    {
+      "schema": "public",
+      "table": "gadm_districts"
+    },
+    {
+      "schema": "public",
+      "table": "gadm_states"
+    },
+    {
+      "schema": "public",
+      "table": "geography_columns"
+    },
+    {
+      "schema": "public",
+      "table": "geometry_columns"
+    },
+    {
+      "schema": "public",
+      "table": "hh_income_district"
+    },
+    {
+      "schema": "public",
+      "table": "hh_income_parlimen"
+    },
+    {
+      "schema": "public",
+      "table": "hies_malaysia_percentile"
+    },
+    {
+      "schema": "public",
+      "table": "labor_force_statistics_district"
+    },
+    {
+      "schema": "public",
+      "table": "landscan_2024"
+    },
+    {
+      "schema": "public",
+      "table": "listing_change_audit"
+    },
+    {
+      "schema": "public",
+      "table": "listing_change_request"
+    },
+    {
+      "schema": "public",
+      "table": "malaysia_admin_hierarchy"
+    },
+    {
+      "schema": "public",
+      "table": "nearby_competitor"
+    },
+    {
+      "schema": "public",
+      "table": "open_buildings"
+    },
+    {
+      "schema": "public",
+      "table": "osm2pgsql_properties"
+    },
+    {
+      "schema": "public",
+      "table": "pf_gtfs"
+    },
+    {
+      "schema": "public",
+      "table": "pf_pop"
+    },
+    {
+      "schema": "public",
+      "table": "pf_road"
+    },
+    {
+      "schema": "public",
+      "table": "pf_transit"
+    },
+    {
+      "schema": "public",
+      "table": "planet_osm_line"
+    },
+    {
+      "schema": "public",
+      "table": "planet_osm_nodes"
+    },
+    {
+      "schema": "public",
+      "table": "planet_osm_point"
+    },
+    {
+      "schema": "public",
+      "table": "planet_osm_polygon"
+    },
+    {
+      "schema": "public",
+      "table": "planet_osm_rels"
+    },
+    {
+      "schema": "public",
+      "table": "planet_osm_roads"
+    },
+    {
+      "schema": "public",
+      "table": "planet_osm_ways"
+    },
+    {
+      "schema": "public",
+      "table": "population_malaysia"
+    },
+    {
+      "schema": "public",
+      "table": "pp_ls_drive10"
+    },
+    {
+      "schema": "public",
+      "table": "pp_ls_walk10"
+    },
+    {
+      "schema": "public",
+      "table": "pp_wp_drive10"
+    },
+    {
+      "schema": "public",
+      "table": "pp_wp_drive15"
+    },
+    {
+      "schema": "public",
+      "table": "pp_wp_walk10"
+    },
+    {
+      "schema": "public",
+      "table": "pp_wp_walk15"
+    },
+    {
+      "schema": "public",
+      "table": "pr_car_iso"
+    },
+    {
+      "schema": "public",
+      "table": "pr_done"
+    },
+    {
+      "schema": "public",
+      "table": "pr_hit"
+    },
+    {
+      "schema": "public",
+      "table": "pr_props"
+    },
+    {
+      "schema": "public",
+      "table": "pr_snap"
+    },
+    {
+      "schema": "public",
+      "table": "pr_walk_iso"
+    },
+    {
+      "schema": "public",
+      "table": "pr_walk_poly"
+    },
+    {
+      "schema": "public",
+      "table": "pr_wd_hit"
+    },
+    {
+      "schema": "public",
+      "table": "pr_wd_hit_x"
+    },
+    {
+      "schema": "public",
+      "table": "pr_wt_reach"
+    },
+    {
+      "schema": "public",
+      "table": "pr_xdone"
+    },
+    {
+      "schema": "public",
+      "table": "property_feature"
+    },
+    {
+      "schema": "public",
+      "table": "property_foot_traffic"
+    },
+    {
+      "schema": "public",
+      "table": "property_geospatial_feature"
+    },
+    {
+      "schema": "public",
+      "table": "property_photo"
+    },
+    {
+      "schema": "public",
+      "table": "property_verification"
+    },
+    {
+      "schema": "public",
+      "table": "psense_assign"
+    },
+    {
+      "schema": "public",
+      "table": "psense_comp_strong"
+    },
+    {
+      "schema": "public",
+      "table": "psense_comp_und"
+    },
+    {
+      "schema": "public",
+      "table": "psense_comp_walk"
+    },
+    {
+      "schema": "public",
+      "table": "psense_edges"
+    },
+    {
+      "schema": "public",
+      "table": "psense_edges_undir"
+    },
+    {
+      "schema": "public",
+      "table": "psense_links"
+    },
+    {
+      "schema": "public",
+      "table": "psense_links_pair"
+    },
+    {
+      "schema": "public",
+      "table": "psense_nearest_station"
+    },
+    {
+      "schema": "public",
+      "table": "psense_oneway_rev"
+    },
+    {
+      "schema": "public",
+      "table": "psense_outlets"
+    },
+    {
+      "schema": "public",
+      "table": "psense_parking"
+    },
+    {
+      "schema": "public",
+      "table": "psense_parking_features"
+    },
+    {
+      "schema": "public",
+      "table": "psense_routes"
+    },
+    {
+      "schema": "public",
+      "table": "psense_snap"
+    },
+    {
+      "schema": "public",
+      "table": "psense_stations"
+    },
+    {
+      "schema": "public",
+      "table": "psense_street_parking"
+    },
+    {
+      "schema": "public",
+      "table": "psense_verts"
+    },
+    {
+      "schema": "public",
+      "table": "psense_vin"
+    },
+    {
+      "schema": "public",
+      "table": "psense_vkey"
+    },
+    {
+      "schema": "public",
+      "table": "psense_vnet_car_dst"
+    },
+    {
+      "schema": "public",
+      "table": "psense_vnet_car_out"
+    },
+    {
+      "schema": "public",
+      "table": "psense_vnet_undir"
+    },
+    {
+      "schema": "public",
+      "table": "psense_vnet_walk"
+    },
+    {
+      "schema": "public",
+      "table": "psense_vout"
+    },
+    {
+      "schema": "public",
+      "table": "pz_coords"
+    },
+    {
+      "schema": "public",
+      "table": "pz_geo"
+    },
+    {
+      "schema": "public",
+      "table": "pz_landscan"
+    },
+    {
+      "schema": "public",
+      "table": "pz_pop"
+    },
+    {
+      "schema": "public",
+      "table": "pz_props"
+    },
+    {
+      "schema": "public",
+      "table": "pz_worldpop"
+    },
+    {
+      "schema": "public",
+      "table": "pzu_landscan"
+    },
+    {
+      "schema": "public",
+      "table": "pzu_points"
+    },
+    {
+      "schema": "public",
+      "table": "pzu_worldpop"
+    },
+    {
+      "schema": "public",
+      "table": "raster_columns"
+    },
+    {
+      "schema": "public",
+      "table": "raster_overviews"
+    },
+    {
+      "schema": "public",
+      "table": "recommendation_result"
+    },
+    {
+      "schema": "public",
+      "table": "spatial_ref_sys"
+    },
+    {
+      "schema": "public",
+      "table": "state_hies"
+    },
+    {
+      "schema": "public",
+      "table": "state_population"
+    },
+    {
+      "schema": "public",
+      "table": "sw_positive_fnb_population_features"
+    },
+    {
+      "schema": "public",
+      "table": "u955_landscan"
+    },
+    {
+      "schema": "public",
+      "table": "uf_gtfs"
+    },
+    {
+      "schema": "public",
+      "table": "uf_pop"
+    },
+    {
+      "schema": "public",
+      "table": "uf_road"
+    },
+    {
+      "schema": "public",
+      "table": "uf_transit"
+    },
+    {
+      "schema": "public",
+      "table": "ug_calendar"
+    },
+    {
+      "schema": "public",
+      "table": "ug_calendar_date"
+    },
+    {
+      "schema": "public",
+      "table": "ug_feed"
+    },
+    {
+      "schema": "public",
+      "table": "ug_route"
+    },
+    {
+      "schema": "public",
+      "table": "ug_service_date"
+    },
+    {
+      "schema": "public",
+      "table": "ug_stop"
+    },
+    {
+      "schema": "public",
+      "table": "ug_stop_ref"
+    },
+    {
+      "schema": "public",
+      "table": "ug_stop_snap"
+    },
+    {
+      "schema": "public",
+      "table": "ug_stop_time"
+    },
+    {
+      "schema": "public",
+      "table": "ug_trip"
+    },
+    {
+      "schema": "public",
+      "table": "up_ls_drive10"
+    },
+    {
+      "schema": "public",
+      "table": "up_ls_walk10"
+    },
+    {
+      "schema": "public",
+      "table": "up_wp_drive10"
+    },
+    {
+      "schema": "public",
+      "table": "up_wp_drive15"
+    },
+    {
+      "schema": "public",
+      "table": "up_wp_walk10"
+    },
+    {
+      "schema": "public",
+      "table": "up_wp_walk15"
+    },
+    {
+      "schema": "public",
+      "table": "ur_car_iso"
+    },
+    {
+      "schema": "public",
+      "table": "ur_carnode"
+    },
+    {
+      "schema": "public",
+      "table": "ur_comp"
+    },
+    {
+      "schema": "public",
+      "table": "ur_done"
+    },
+    {
+      "schema": "public",
+      "table": "ur_fac_route"
+    },
+    {
+      "schema": "public",
+      "table": "ur_fac_service"
+    },
+    {
+      "schema": "public",
+      "table": "ur_facility"
+    },
+    {
+      "schema": "public",
+      "table": "ur_hit"
+    },
+    {
+      "schema": "public",
+      "table": "ur_road"
+    },
+    {
+      "schema": "public",
+      "table": "ur_routes"
+    },
+    {
+      "schema": "public",
+      "table": "ur_snap"
+    },
+    {
+      "schema": "public",
+      "table": "ur_stop_dk"
+    },
+    {
+      "schema": "public",
+      "table": "ur_vdeg"
+    },
+    {
+      "schema": "public",
+      "table": "ur_walk_iso"
+    },
+    {
+      "schema": "public",
+      "table": "ur_walk_poly"
+    },
+    {
+      "schema": "public",
+      "table": "ur_walknode"
+    },
+    {
+      "schema": "public",
+      "table": "ur_wd_hit"
+    },
+    {
+      "schema": "public",
+      "table": "ur_wd_hit_x"
+    },
+    {
+      "schema": "public",
+      "table": "ur_wt_reach"
+    },
+    {
+      "schema": "public",
+      "table": "ur_xdone"
+    },
+    {
+      "schema": "public",
+      "table": "usense_props"
+    },
+    {
+      "schema": "public",
+      "table": "user_tokens"
+    },
+    {
+      "schema": "public",
+      "table": "users"
+    },
+    {
+      "schema": "public",
+      "table": "verification_audit"
+    },
+    {
+      "schema": "public",
+      "table": "verification_document"
+    },
+    {
+      "schema": "public",
+      "table": "virtual_tour"
+    },
+    {
+      "schema": "public",
+      "table": "vw_latest_district_statistics"
+    },
+    {
+      "schema": "public",
+      "table": "worldpop_2025_constrained"
+    },
+    {
+      "schema": "rcv_2026_11_09",
+      "table": "recovery_values"
+    },
+    {
+      "schema": "rcv_2026_11_09",
+      "table": "rx_availability_1849"
+    },
+    {
+      "schema": "rcv_2026_11_09",
+      "table": "rx_car_iso"
+    },
+    {
+      "schema": "rcv_2026_11_09",
+      "table": "rx_characteristics_955"
+    },
+    {
+      "schema": "rcv_2026_11_09",
+      "table": "rx_competitor_category_map"
+    },
+    {
+      "schema": "rcv_2026_11_09",
+      "table": "rx_competitor_dedupe"
+    },
+    {
+      "schema": "rcv_2026_11_09",
+      "table": "rx_competitor_features_1849"
+    },
+    {
+      "schema": "rcv_2026_11_09",
+      "table": "rx_competitor_outlets"
+    },
+    {
+      "schema": "rcv_2026_11_09",
+      "table": "rx_density_955"
+    },
+    {
+      "schema": "rcv_2026_11_09",
+      "table": "rx_feature"
+    },
+    {
+      "schema": "rcv_2026_11_09",
+      "table": "rx_hit"
+    },
+    {
+      "schema": "rcv_2026_11_09",
+      "table": "rx_matrix_1849_recovered"
+    },
+    {
+      "schema": "rcv_2026_11_09",
+      "table": "rx_parking_audit"
+    },
+    {
+      "schema": "rcv_2026_11_09",
+      "table": "rx_parking_recovery_1849"
+    },
+    {
+      "schema": "rcv_2026_11_09",
+      "table": "rx_q1_q5_scores_955"
+    },
+    {
+      "schema": "rcv_2026_11_09",
+      "table": "rx_walk_iso"
+    },
+    {
+      "schema": "rcv_2026_11_09",
+      "table": "rx_walk_poly"
+    },
+    {
+      "schema": "rcv_2026_11_09",
+      "table": "rx_wd_hit"
+    },
+    {
+      "schema": "rcv_2026_11_09",
+      "table": "rx_wd_hit_x"
+    },
+    {
+      "schema": "rcv_2026_11_09",
+      "table": "rx_worldpop_status"
+    },
+    {
+      "schema": "rcv_2026_11_09",
+      "table": "rx_wp_overlay"
+    },
+    {
+      "schema": "rcv_2026_11_09",
+      "table": "rx_wt_reach"
+    },
+    {
+      "schema": "rcv_2026_11_09",
+      "table": "status_1849"
+    },
+    {
+      "schema": "sitewise_analytics",
+      "table": "subject_features"
+    },
+    {
+      "schema": "sitewise_analytics",
+      "table": "transit_stop_reconciliation"
+    },
+    {
+      "schema": "sitewise_app",
+      "table": "profiles"
+    },
+    {
+      "schema": "sitewise_app",
+      "table": "properties"
+    },
+    {
+      "schema": "tmp",
+      "table": "gm_props"
+    },
+    {
+      "schema": "topology",
+      "table": "layer"
+    },
+    {
+      "schema": "topology",
+      "table": "topology"
+    }
+  ],
+  "columns": [
+    {
+      "table_schema": "fyp",
+      "table_name": "property_subject_links",
+      "column_name": "property_id",
+      "data_type": "bigint",
+      "is_nullable": "NO",
+      "column_default": null
+    },
+    {
+      "table_schema": "fyp",
+      "table_name": "property_subject_links",
+      "column_name": "subject_id",
+      "data_type": "text",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_schema": "fyp",
+      "table_name": "property_subject_links",
+      "column_name": "sitewise_property_id",
+      "data_type": "text",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_schema": "fyp",
+      "table_name": "property_subject_links",
+      "column_name": "match_method",
+      "data_type": "text",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_schema": "fyp",
+      "table_name": "property_subject_links",
+      "column_name": "match_evidence",
+      "data_type": "text",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_schema": "fyp",
+      "table_name": "property_subject_links",
+      "column_name": "match_verified",
+      "data_type": "boolean",
+      "is_nullable": "NO",
+      "column_default": "false"
+    },
+    {
+      "table_schema": "fyp",
+      "table_name": "property_subject_links",
+      "column_name": "linked_at",
+      "data_type": "timestamp with time zone",
+      "is_nullable": "NO",
+      "column_default": "now()"
+    },
+    {
+      "table_schema": "fyp",
+      "table_name": "property_subject_links",
+      "column_name": "verified_at",
+      "data_type": "timestamp with time zone",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_schema": "fyp",
+      "table_name": "rental_properties",
+      "column_name": "id",
+      "data_type": "bigint",
+      "is_nullable": "NO",
+      "column_default": "nextval('fyp.rental_properties_id_seq'::regclass)"
+    },
+    {
+      "table_schema": "fyp",
+      "table_name": "rental_properties",
+      "column_name": "owner_id",
+      "data_type": "bigint",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_schema": "fyp",
+      "table_name": "rental_properties",
+      "column_name": "listing_id",
+      "data_type": "character varying",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_schema": "fyp",
+      "table_name": "rental_properties",
+      "column_name": "name",
+      "data_type": "character varying",
+      "is_nullable": "NO",
+      "column_default": null
+    },
+    {
+      "table_schema": "fyp",
+      "table_name": "rental_properties",
+      "column_name": "property_type",
+      "data_type": "character varying",
+      "is_nullable": "NO",
+      "column_default": "'Shop'::character varying"
+    },
+    {
+      "table_schema": "fyp",
+      "table_name": "rental_properties",
+      "column_name": "description",
+      "data_type": "text",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_schema": "fyp",
+      "table_name": "rental_properties",
+      "column_name": "address",
+      "data_type": "text",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_schema": "fyp",
+      "table_name": "rental_properties",
+      "column_name": "city",
+      "data_type": "character varying",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_schema": "fyp",
+      "table_name": "rental_properties",
+      "column_name": "state",
+      "data_type": "character varying",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_schema": "fyp",
+      "table_name": "rental_properties",
+      "column_name": "latitude",
+      "data_type": "double precision",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_schema": "fyp",
+      "table_name": "rental_properties",
+      "column_name": "longitude",
+      "data_type": "double precision",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_schema": "fyp",
+      "table_name": "rental_properties",
+      "column_name": "geom",
+      "data_type": "USER-DEFINED",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_schema": "fyp",
+      "table_name": "rental_properties",
+      "column_name": "rental_price",
+      "data_type": "numeric",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_schema": "fyp",
+      "table_name": "rental_properties",
+      "column_name": "size_sqft",
+      "data_type": "numeric",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_schema": "fyp",
+      "table_name": "rental_properties",
+      "column_name": "psf",
+      "data_type": "numeric",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_schema": "fyp",
+      "table_name": "rental_properties",
+      "column_name": "bathrooms",
+      "data_type": "numeric",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_schema": "fyp",
+      "table_name": "rental_properties",
+      "column_name": "floor_level",
+      "data_type": "numeric",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_schema": "fyp",
+      "table_name": "rental_properties",
+      "column_name": "frontage_ft",
+      "data_type": "numeric",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_schema": "fyp",
+      "table_name": "rental_properties",
+      "column_name": "depth_ft",
+      "data_type": "numeric",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_schema": "fyp",
+      "table_name": "rental_properties",
+      "column_name": "land_area_sqft",
+      "data_type": "numeric",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_schema": "fyp",
+      "table_name": "rental_properties",
+      "column_name": "built_up_sqft",
+      "data_type": "numeric",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_schema": "fyp",
+      "table_name": "rental_properties",
+      "column_name": "tenure",
+      "data_type": "character varying",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_schema": "fyp",
+      "table_name": "rental_properties",
+      "column_name": "furnishing",
+      "data_type": "character varying",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_schema": "fyp",
+      "table_name": "rental_properties",
+      "column_name": "availability",
+      "data_type": "character varying",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_schema": "fyp",
+      "table_name": "rental_properties",
+      "column_name": "is_corner_lot",
+      "data_type": "smallint",
+      "is_nullable": "NO",
+      "column_default": "0"
+    },
+    {
+      "table_schema": "fyp",
+      "table_name": "rental_properties",
+      "column_name": "has_parking",
+      "data_type": "smallint",
+      "is_nullable": "NO",
+      "column_default": "0"
+    },
+    {
+      "table_schema": "fyp",
+      "table_name": "rental_properties",
+      "column_name": "is_freehold",
+      "data_type": "smallint",
+      "is_nullable": "NO",
+      "column_default": "0"
+    },
+    {
+      "table_schema": "fyp",
+      "table_name": "rental_properties",
+      "column_name": "is_fnb_suitable",
+      "data_type": "smallint",
+      "is_nullable": "NO",
+      "column_default": "0"
+    },
+    {
+      "table_schema": "fyp",
+      "table_name": "rental_properties",
+      "column_name": "verification_status",
+      "data_type": "character varying",
+      "is_nullable": "NO",
+      "column_default": "'pending'::character varying"
+    },
+    {
+      "table_schema": "fyp",
+      "table_name": "rental_properties",
+      "column_name": "rejection_reason",
+      "data_type": "text",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_schema": "fyp",
+      "table_name": "rental_properties",
+      "column_name": "is_published",
+      "data_type": "boolean",
+      "is_nullable": "NO",
+      "column_default": "false"
+    },
+    {
+      "table_schema": "fyp",
+      "table_name": "rental_properties",
+      "column_name": "created_at",
+      "data_type": "timestamp with time zone",
+      "is_nullable": "NO",
+      "column_default": "now()"
+    },
+    {
+      "table_schema": "fyp",
+      "table_name": "rental_properties",
+      "column_name": "updated_at",
+      "data_type": "timestamp with time zone",
+      "is_nullable": "NO",
+      "column_default": "now()"
+    },
+    {
+      "table_schema": "fyp",
+      "table_name": "rental_properties",
+      "column_name": "floor_description",
+      "data_type": "text",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_schema": "fyp",
+      "table_name": "rental_properties",
+      "column_name": "unit_position",
+      "data_type": "text",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_schema": "fyp",
+      "table_name": "rental_properties",
+      "column_name": "facing_direction",
+      "data_type": "text",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_schema": "fyp",
+      "table_name": "rental_properties",
+      "column_name": "availability_verified_at",
+      "data_type": "timestamp with time zone",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_schema": "fyp",
+      "table_name": "rental_properties",
+      "column_name": "published_at",
+      "data_type": "timestamp with time zone",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_schema": "fyp",
+      "table_name": "rental_properties",
+      "column_name": "owner_user_id",
+      "data_type": "uuid",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_schema": "fyp",
+      "table_name": "rental_properties",
+      "column_name": "postcode",
+      "data_type": "character varying",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_schema": "fyp",
+      "table_name": "rental_properties",
+      "column_name": "address_validation_status",
+      "data_type": "character varying",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_schema": "fyp",
+      "table_name": "rental_properties",
+      "column_name": "address_formatted",
+      "data_type": "text",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_schema": "fyp",
+      "table_name": "rental_properties",
+      "column_name": "address_validated_at",
+      "data_type": "timestamp with time zone",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_schema": "fyp",
+      "table_name": "users",
+      "column_name": "id",
+      "data_type": "bigint",
+      "is_nullable": "NO",
+      "column_default": "nextval('fyp.users_id_seq'::regclass)"
+    },
+    {
+      "table_schema": "fyp",
+      "table_name": "users",
+      "column_name": "email",
+      "data_type": "character varying",
+      "is_nullable": "NO",
+      "column_default": null
+    },
+    {
+      "table_schema": "fyp",
+      "table_name": "users",
+      "column_name": "password_hash",
+      "data_type": "character varying",
+      "is_nullable": "NO",
+      "column_default": null
+    },
+    {
+      "table_schema": "fyp",
+      "table_name": "users",
+      "column_name": "full_name",
+      "data_type": "character varying",
+      "is_nullable": "NO",
+      "column_default": null
+    },
+    {
+      "table_schema": "fyp",
+      "table_name": "users",
+      "column_name": "phone",
+      "data_type": "character varying",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_schema": "fyp",
+      "table_name": "users",
+      "column_name": "role",
+      "data_type": "character varying",
+      "is_nullable": "NO",
+      "column_default": "'entrepreneur'::character varying"
+    },
+    {
+      "table_schema": "fyp",
+      "table_name": "users",
+      "column_name": "is_active",
+      "data_type": "boolean",
+      "is_nullable": "NO",
+      "column_default": "true"
+    },
+    {
+      "table_schema": "fyp",
+      "table_name": "users",
+      "column_name": "created_at",
+      "data_type": "timestamp with time zone",
+      "is_nullable": "NO",
+      "column_default": "now()"
+    },
+    {
+      "table_schema": "fyp",
+      "table_name": "users",
+      "column_name": "updated_at",
+      "data_type": "timestamp with time zone",
+      "is_nullable": "NO",
+      "column_default": "now()"
+    },
+    {
+      "table_schema": "public",
+      "table_name": "agent_listing_assignment",
+      "column_name": "listing_id",
+      "data_type": "bigint",
+      "is_nullable": "NO",
+      "column_default": null
+    },
+    {
+      "table_schema": "public",
+      "table_name": "agent_listing_assignment",
+      "column_name": "agent_id",
+      "data_type": "integer",
+      "is_nullable": "NO",
+      "column_default": null
+    },
+    {
+      "table_schema": "public",
+      "table_name": "agent_listing_assignment",
+      "column_name": "assigned_by_user_id",
+      "data_type": "uuid",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_schema": "public",
+      "table_name": "agent_listing_assignment",
+      "column_name": "created_at",
+      "data_type": "timestamp with time zone",
+      "is_nullable": "NO",
+      "column_default": "now()"
+    },
+    {
+      "table_schema": "public",
+      "table_name": "agent_listing_assignment",
+      "column_name": "updated_at",
+      "data_type": "timestamp with time zone",
+      "is_nullable": "NO",
+      "column_default": "now()"
+    },
+    {
+      "table_schema": "public",
+      "table_name": "property_verification",
+      "column_name": "verification_id",
+      "data_type": "uuid",
+      "is_nullable": "NO",
+      "column_default": null
+    },
+    {
+      "table_schema": "public",
+      "table_name": "property_verification",
+      "column_name": "property_id",
+      "data_type": "bigint",
+      "is_nullable": "NO",
+      "column_default": null
+    },
+    {
+      "table_schema": "public",
+      "table_name": "property_verification",
+      "column_name": "listing_status",
+      "data_type": "character varying",
+      "is_nullable": "NO",
+      "column_default": null
+    },
+    {
+      "table_schema": "public",
+      "table_name": "property_verification",
+      "column_name": "ownership_status",
+      "data_type": "character varying",
+      "is_nullable": "NO",
+      "column_default": null
+    },
+    {
+      "table_schema": "public",
+      "table_name": "property_verification",
+      "column_name": "submitted_by",
+      "data_type": "uuid",
+      "is_nullable": "NO",
+      "column_default": null
+    },
+    {
+      "table_schema": "public",
+      "table_name": "property_verification",
+      "column_name": "reviewed_by",
+      "data_type": "uuid",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_schema": "public",
+      "table_name": "property_verification",
+      "column_name": "publication_eligible",
+      "data_type": "boolean",
+      "is_nullable": "NO",
+      "column_default": null
+    },
+    {
+      "table_schema": "public",
+      "table_name": "property_verification",
+      "column_name": "latest_note",
+      "data_type": "character varying",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_schema": "public",
+      "table_name": "property_verification",
+      "column_name": "version",
+      "data_type": "integer",
+      "is_nullable": "NO",
+      "column_default": null
+    },
+    {
+      "table_schema": "public",
+      "table_name": "property_verification",
+      "column_name": "created_at",
+      "data_type": "timestamp without time zone",
+      "is_nullable": "NO",
+      "column_default": null
+    },
+    {
+      "table_schema": "public",
+      "table_name": "property_verification",
+      "column_name": "updated_at",
+      "data_type": "timestamp without time zone",
+      "is_nullable": "NO",
+      "column_default": null
+    },
+    {
+      "table_schema": "public",
+      "table_name": "users",
+      "column_name": "user_id",
+      "data_type": "uuid",
+      "is_nullable": "NO",
+      "column_default": null
+    },
+    {
+      "table_schema": "public",
+      "table_name": "users",
+      "column_name": "full_name",
+      "data_type": "character varying",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_schema": "public",
+      "table_name": "users",
+      "column_name": "email",
+      "data_type": "character varying",
+      "is_nullable": "NO",
+      "column_default": null
+    },
+    {
+      "table_schema": "public",
+      "table_name": "users",
+      "column_name": "phone_number",
+      "data_type": "character varying",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_schema": "public",
+      "table_name": "users",
+      "column_name": "role",
+      "data_type": "character varying",
+      "is_nullable": "NO",
+      "column_default": null
+    },
+    {
+      "table_schema": "public",
+      "table_name": "users",
+      "column_name": "profile_picture_url",
+      "data_type": "character varying",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_schema": "public",
+      "table_name": "users",
+      "column_name": "account_status",
+      "data_type": "character varying",
+      "is_nullable": "NO",
+      "column_default": null
+    },
+    {
+      "table_schema": "public",
+      "table_name": "users",
+      "column_name": "email_verified",
+      "data_type": "boolean",
+      "is_nullable": "NO",
+      "column_default": null
+    },
+    {
+      "table_schema": "public",
+      "table_name": "users",
+      "column_name": "last_login",
+      "data_type": "timestamp with time zone",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "table_schema": "public",
+      "table_name": "users",
+      "column_name": "created_at",
+      "data_type": "timestamp with time zone",
+      "is_nullable": "NO",
+      "column_default": null
+    },
+    {
+      "table_schema": "public",
+      "table_name": "users",
+      "column_name": "updated_at",
+      "data_type": "timestamp with time zone",
+      "is_nullable": "NO",
+      "column_default": null
+    }
+  ],
+  "constraints": [
+    {
+      "table_schema": "fyp",
+      "table_name": "property_subject_links",
+      "constraint_type": "FOREIGN KEY",
+      "constraint_name": "property_subject_links_sitewise_property_id_fkey",
+      "column_name": "sitewise_property_id",
+      "ref_schema": null,
+      "ref_table": null,
+      "ref_column": null
+    },
+    {
+      "table_schema": "fyp",
+      "table_name": "property_subject_links",
+      "constraint_type": "FOREIGN KEY",
+      "constraint_name": "property_subject_links_subject_id_fkey",
+      "column_name": "subject_id",
+      "ref_schema": null,
+      "ref_table": null,
+      "ref_column": null
+    },
+    {
+      "table_schema": "fyp",
+      "table_name": "property_subject_links",
+      "constraint_type": "FOREIGN KEY",
+      "constraint_name": "property_subject_links_property_id_fkey",
+      "column_name": "property_id",
+      "ref_schema": "fyp",
+      "ref_table": "rental_properties",
+      "ref_column": "id"
+    },
+    {
+      "table_schema": "fyp",
+      "table_name": "property_subject_links",
+      "constraint_type": "PRIMARY KEY",
+      "constraint_name": "property_subject_links_pkey",
+      "column_name": "property_id",
+      "ref_schema": "fyp",
+      "ref_table": "property_subject_links",
+      "ref_column": "property_id"
+    },
+    {
+      "table_schema": "fyp",
+      "table_name": "property_subject_links",
+      "constraint_type": "UNIQUE",
+      "constraint_name": "property_subject_links_sitewise_property_id_key",
+      "column_name": "sitewise_property_id",
+      "ref_schema": "fyp",
+      "ref_table": "property_subject_links",
+      "ref_column": "sitewise_property_id"
+    },
+    {
+      "table_schema": "fyp",
+      "table_name": "property_subject_links",
+      "constraint_type": "UNIQUE",
+      "constraint_name": "property_subject_links_subject_id_key",
+      "column_name": "subject_id",
+      "ref_schema": "fyp",
+      "ref_table": "property_subject_links",
+      "ref_column": "subject_id"
+    },
+    {
+      "table_schema": "fyp",
+      "table_name": "rental_properties",
+      "constraint_type": "FOREIGN KEY",
+      "constraint_name": "rental_properties_owner_id_fkey",
+      "column_name": "owner_id",
+      "ref_schema": "fyp",
+      "ref_table": "users",
+      "ref_column": "id"
+    },
+    {
+      "table_schema": "fyp",
+      "table_name": "rental_properties",
+      "constraint_type": "PRIMARY KEY",
+      "constraint_name": "rental_properties_pkey",
+      "column_name": "id",
+      "ref_schema": "fyp",
+      "ref_table": "rental_properties",
+      "ref_column": "id"
+    },
+    {
+      "table_schema": "fyp",
+      "table_name": "rental_properties",
+      "constraint_type": "UNIQUE",
+      "constraint_name": "rental_properties_listing_id_key",
+      "column_name": "listing_id",
+      "ref_schema": "fyp",
+      "ref_table": "rental_properties",
+      "ref_column": "listing_id"
+    },
+    {
+      "table_schema": "fyp",
+      "table_name": "users",
+      "constraint_type": "PRIMARY KEY",
+      "constraint_name": "users_pkey",
+      "column_name": "id",
+      "ref_schema": "fyp",
+      "ref_table": "users",
+      "ref_column": "id"
+    },
+    {
+      "table_schema": "fyp",
+      "table_name": "users",
+      "constraint_type": "UNIQUE",
+      "constraint_name": "users_email_key",
+      "column_name": "email",
+      "ref_schema": "fyp",
+      "ref_table": "users",
+      "ref_column": "email"
+    },
+    {
+      "table_schema": "public",
+      "table_name": "agent_listing_assignment",
+      "constraint_type": "FOREIGN KEY",
+      "constraint_name": "agent_listing_assignment_listing_id_fkey",
+      "column_name": "listing_id",
+      "ref_schema": null,
+      "ref_table": null,
+      "ref_column": null
+    },
+    {
+      "table_schema": "public",
+      "table_name": "agent_listing_assignment",
+      "constraint_type": "PRIMARY KEY",
+      "constraint_name": "agent_listing_assignment_pkey",
+      "column_name": "listing_id",
+      "ref_schema": "public",
+      "ref_table": "agent_listing_assignment",
+      "ref_column": "listing_id"
+    },
+    {
+      "table_schema": "public",
+      "table_name": "property_verification",
+      "constraint_type": "FOREIGN KEY",
+      "constraint_name": "property_verification_submitted_by_fkey",
+      "column_name": "submitted_by",
+      "ref_schema": "public",
+      "ref_table": "users",
+      "ref_column": "user_id"
+    },
+    {
+      "table_schema": "public",
+      "table_name": "property_verification",
+      "constraint_type": "FOREIGN KEY",
+      "constraint_name": "property_verification_reviewed_by_fkey",
+      "column_name": "reviewed_by",
+      "ref_schema": "public",
+      "ref_table": "users",
+      "ref_column": "user_id"
+    },
+    {
+      "table_schema": "public",
+      "table_name": "property_verification",
+      "constraint_type": "FOREIGN KEY",
+      "constraint_name": "property_verification_property_id_fkey",
+      "column_name": "property_id",
+      "ref_schema": null,
+      "ref_table": null,
+      "ref_column": null
+    },
+    {
+      "table_schema": "public",
+      "table_name": "property_verification",
+      "constraint_type": "PRIMARY KEY",
+      "constraint_name": "property_verification_pkey",
+      "column_name": "verification_id",
+      "ref_schema": "public",
+      "ref_table": "property_verification",
+      "ref_column": "verification_id"
+    },
+    {
+      "table_schema": "public",
+      "table_name": "property_verification",
+      "constraint_type": "UNIQUE",
+      "constraint_name": "uq_property_verification_property",
+      "column_name": "property_id",
+      "ref_schema": "public",
+      "ref_table": "property_verification",
+      "ref_column": "property_id"
+    },
+    {
+      "table_schema": "public",
+      "table_name": "users",
+      "constraint_type": "PRIMARY KEY",
+      "constraint_name": "users_pkey",
+      "column_name": "user_id",
+      "ref_schema": "public",
+      "ref_table": "users",
+      "ref_column": "user_id"
+    }
+  ],
+  "indexes": [
+    {
+      "schemaname": "public",
+      "tablename": "agent_listing_assignment",
+      "indexname": "agent_listing_assignment_pkey",
+      "indexdef": "CREATE UNIQUE INDEX agent_listing_assignment_pkey ON public.agent_listing_assignment USING btree (listing_id)"
+    },
+    {
+      "schemaname": "public",
+      "tablename": "agent_listing_assignment",
+      "indexname": "ix_agent_listing_assignment_agent",
+      "indexdef": "CREATE INDEX ix_agent_listing_assignment_agent ON public.agent_listing_assignment USING btree (agent_id)"
+    },
+    {
+      "schemaname": "fyp",
+      "tablename": "property_subject_links",
+      "indexname": "property_subject_links_pkey",
+      "indexdef": "CREATE UNIQUE INDEX property_subject_links_pkey ON fyp.property_subject_links USING btree (property_id)"
+    },
+    {
+      "schemaname": "fyp",
+      "tablename": "property_subject_links",
+      "indexname": "property_subject_links_sitewise_property_id_key",
+      "indexdef": "CREATE UNIQUE INDEX property_subject_links_sitewise_property_id_key ON fyp.property_subject_links USING btree (sitewise_property_id)"
+    },
+    {
+      "schemaname": "fyp",
+      "tablename": "property_subject_links",
+      "indexname": "property_subject_links_subject_id_key",
+      "indexdef": "CREATE UNIQUE INDEX property_subject_links_subject_id_key ON fyp.property_subject_links USING btree (subject_id)"
+    },
+    {
+      "schemaname": "public",
+      "tablename": "property_verification",
+      "indexname": "ix_property_verification_property_id",
+      "indexdef": "CREATE INDEX ix_property_verification_property_id ON public.property_verification USING btree (property_id)"
+    },
+    {
+      "schemaname": "public",
+      "tablename": "property_verification",
+      "indexname": "ix_property_verification_submitted_by",
+      "indexdef": "CREATE INDEX ix_property_verification_submitted_by ON public.property_verification USING btree (submitted_by)"
+    },
+    {
+      "schemaname": "public",
+      "tablename": "property_verification",
+      "indexname": "property_verification_pkey",
+      "indexdef": "CREATE UNIQUE INDEX property_verification_pkey ON public.property_verification USING btree (verification_id)"
+    },
+    {
+      "schemaname": "public",
+      "tablename": "property_verification",
+      "indexname": "uq_property_verification_property",
+      "indexdef": "CREATE UNIQUE INDEX uq_property_verification_property ON public.property_verification USING btree (property_id)"
+    },
+    {
+      "schemaname": "fyp",
+      "tablename": "rental_properties",
+      "indexname": "idx_rp_city",
+      "indexdef": "CREATE INDEX idx_rp_city ON fyp.rental_properties USING btree (city)"
+    },
+    {
+      "schemaname": "fyp",
+      "tablename": "rental_properties",
+      "indexname": "idx_rp_geom",
+      "indexdef": "CREATE INDEX idx_rp_geom ON fyp.rental_properties USING gist (geom)"
+    },
+    {
+      "schemaname": "fyp",
+      "tablename": "rental_properties",
+      "indexname": "idx_rp_listing",
+      "indexdef": "CREATE INDEX idx_rp_listing ON fyp.rental_properties USING btree (listing_id)"
+    },
+    {
+      "schemaname": "fyp",
+      "tablename": "rental_properties",
+      "indexname": "idx_rp_owner",
+      "indexdef": "CREATE INDEX idx_rp_owner ON fyp.rental_properties USING btree (owner_id)"
+    },
+    {
+      "schemaname": "fyp",
+      "tablename": "rental_properties",
+      "indexname": "idx_rp_price",
+      "indexdef": "CREATE INDEX idx_rp_price ON fyp.rental_properties USING btree (rental_price)"
+    },
+    {
+      "schemaname": "fyp",
+      "tablename": "rental_properties",
+      "indexname": "idx_rp_state",
+      "indexdef": "CREATE INDEX idx_rp_state ON fyp.rental_properties USING btree (state)"
+    },
+    {
+      "schemaname": "fyp",
+      "tablename": "rental_properties",
+      "indexname": "idx_rp_status",
+      "indexdef": "CREATE INDEX idx_rp_status ON fyp.rental_properties USING btree (verification_status, is_published)"
+    },
+    {
+      "schemaname": "fyp",
+      "tablename": "rental_properties",
+      "indexname": "ix_rental_properties_postcode",
+      "indexdef": "CREATE INDEX ix_rental_properties_postcode ON fyp.rental_properties USING btree (postcode)"
+    },
+    {
+      "schemaname": "fyp",
+      "tablename": "rental_properties",
+      "indexname": "rental_properties_listing_id_key",
+      "indexdef": "CREATE UNIQUE INDEX rental_properties_listing_id_key ON fyp.rental_properties USING btree (listing_id)"
+    },
+    {
+      "schemaname": "fyp",
+      "tablename": "rental_properties",
+      "indexname": "rental_properties_owner_user_idx",
+      "indexdef": "CREATE INDEX rental_properties_owner_user_idx ON fyp.rental_properties USING btree (owner_user_id)"
+    },
+    {
+      "schemaname": "fyp",
+      "tablename": "rental_properties",
+      "indexname": "rental_properties_pkey",
+      "indexdef": "CREATE UNIQUE INDEX rental_properties_pkey ON fyp.rental_properties USING btree (id)"
+    },
+    {
+      "schemaname": "public",
+      "tablename": "users",
+      "indexname": "ix_users_email",
+      "indexdef": "CREATE UNIQUE INDEX ix_users_email ON public.users USING btree (email)"
+    },
+    {
+      "schemaname": "fyp",
+      "tablename": "users",
+      "indexname": "users_email_key",
+      "indexdef": "CREATE UNIQUE INDEX users_email_key ON fyp.users USING btree (email)"
+    },
+    {
+      "schemaname": "fyp",
+      "tablename": "users",
+      "indexname": "users_pkey",
+      "indexdef": "CREATE UNIQUE INDEX users_pkey ON fyp.users USING btree (id)"
+    },
+    {
+      "schemaname": "public",
+      "tablename": "users",
+      "indexname": "users_pkey",
+      "indexdef": "CREATE UNIQUE INDEX users_pkey ON public.users USING btree (user_id)"
+    }
+  ]
+}

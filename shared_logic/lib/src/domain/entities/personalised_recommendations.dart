@@ -193,6 +193,21 @@ class PersonalisedExplanation {
   final ShapExplanation? shap;
   final ShapStatus shapStatus;
 
+  /// The entrepreneur's saved business type, echoed by the explanation
+  /// endpoint from the same stored preferences the ranking used. Null when the
+  /// account has no saved preferences — the UI must then say the selected
+  /// business is unavailable rather than guessing one.
+  final String? selectedBusinessCategory;
+
+  /// The finer concept line under [selectedBusinessCategory], when saved.
+  final String? selectedFnbConcept;
+
+  /// Plain-English names for the SHAP features, keyed by the exact technical
+  /// feature name. Supplied by the backend so no client keeps its own copy of
+  /// the 47-feature label map (and none can drift from the deployed model).
+  /// Empty when SHAP is unavailable.
+  final Map<String, String> featureLabels;
+
   const PersonalisedExplanation({
     required this.resultId,
     required this.propertyId,
@@ -205,7 +220,15 @@ class PersonalisedExplanation {
     this.coverage = const {},
     this.shap,
     required this.shapStatus,
+    this.featureLabels = const {},
+    this.selectedBusinessCategory,
+    this.selectedFnbConcept,
   });
+
+  /// The friendly label for [feature], falling back to a de-underscored form
+  /// rather than ever showing a raw column name.
+  String labelFor(String feature) =>
+      featureLabels[feature] ?? feature.replaceAll('_', ' ');
 
   factory PersonalisedExplanation.fromJson(Map<String, dynamic> json) {
     final explanation = (json['explanation'] as Map<String, dynamic>?) ?? const {};
@@ -217,6 +240,8 @@ class PersonalisedExplanation {
     final shapJson = explanation['shap'];
     final statusJson =
         (explanation['shap_status'] as Map<String, dynamic>?) ?? const {};
+    final selectedBusiness =
+        (json['selected_business'] as Map<String, dynamic>?) ?? const {};
     return PersonalisedExplanation(
       resultId: (json['result_id'] as String?) ?? '',
       propertyId: (json['property_id'] as String?) ?? '',
@@ -239,6 +264,18 @@ class PersonalisedExplanation {
           ? ShapExplanation.fromJson(shapJson)
           : null,
       shapStatus: ShapStatus.fromJson(statusJson),
+      featureLabels: (explanation['feature_labels'] as Map?)?.map(
+            (key, value) => MapEntry('$key', '$value'),
+          ) ??
+          const {},
+      selectedBusinessCategory:
+          (selectedBusiness['business_category'] as String?)?.trim().isNotEmpty == true
+              ? selectedBusiness['business_category'] as String
+              : null,
+      selectedFnbConcept:
+          (selectedBusiness['fnb_concept'] as String?)?.trim().isNotEmpty == true
+              ? selectedBusiness['fnb_concept'] as String
+              : null,
     );
   }
 }

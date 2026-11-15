@@ -29,6 +29,30 @@ import '../../layouts/app_layout.dart';
 ///   .rec2__main      filters · result count · ranked cards · load more
 ///   .rec2__side      sticky intelligence panel for the selected listing
 /// ```
+
+/// One sentence describing the entrepreneur's OWN category match.
+///
+/// The model's highest class is reported only as a comparison. Leading with it
+/// would silently replace the entrepreneur's selection — a Café search must
+/// read as a Café result even where Restaurant scores higher.
+String _categorySentence(CategoryEvidence category) {
+  final selected = category.selectedCategory;
+  final top = category.topCategory ?? '—';
+  final topScore = category.topScore?.toStringAsFixed(2) ?? '—';
+  if (selected == null) {
+    return 'Closest observed F&B pattern: $top ($topScore on a 0–1 resemblance '
+        'index). Choose your business type to see your own match.';
+  }
+  final own = '${selected.businessType} scores '
+      '${selected.score.toStringAsFixed(2)} on a 0–1 resemblance index'
+      '${selected.rank > 0 ? ' and ranks #${selected.rank} of 4' : ''}';
+  final comparison = selected.businessType == top
+      ? " — also the model's closest observed pattern here"
+      : "; the model's closest observed pattern here is $top ($topScore)";
+  return 'Your selected type $own$comparison. This is exploratory resemblance, '
+      'not a success probability.';
+}
+
 @client
 class RecommendationsPage extends StatefulComponent {
   const RecommendationsPage({super.key, this.initialPropertyId});
@@ -49,6 +73,16 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
   // (`state.recommendationRequest`); this draft is rehydrated from it on
   // every mount, so returning from a property detail restores the form.
   String _businessType = '';
+
+  /// `&businessType=<selection>` for links that must keep the entrepreneur's
+  /// chosen business type. Empty when nothing is selected, so the destination
+  /// never receives a blank parameter.
+  String get _businessTypeQuery {
+    final selected = _businessType.trim();
+    return selected.isEmpty
+        ? ''
+        : '&businessType=${Uri.encodeQueryComponent(selected)}';
+  }
   String _state = '';
   String _propertyType = '';
   String _minBudget = '';
@@ -76,6 +110,25 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
     'pu_desc': 'Highest PU research index',
   };
 
+  // Reuse the business-category and target-customer vocabulary used by
+  // existing SiteWise preferences and the assessment questionnaire.
+  static const _businessTypeOptions = <String>[
+    'Cafe / Coffee Shop',
+    'Restaurant',
+    'Bakery / Dessert Shop',
+    'Fast Food / Quick Service',
+    'Beverage Shop / Kiosk',
+    'Other F&B',
+  ];
+
+  static const _targetMarketOptions = <String>[
+    'Nearby Residents',
+    'Office Workers',
+    'Students',
+    'Commuters',
+    'General Public',
+  ];
+
   /// One initial search per page instance.
   bool _seeded = false;
 
@@ -96,7 +149,18 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
       // the applied request — never re-seed from saved preferences, which
       // would silently overwrite what the entrepreneur applied.
       if (current.recommendationTotal != null) {
-        setState(() => _syncDraft(current.recommendationRequest));
+        final applied = current.recommendationRequest;
+        // A session may still carry results from the build that scoped this
+        // page to managed listings. That filter no longer exists in the UI, so
+        // leaving it set would strand the page on "0 properties" with no way
+        // to clear it. Re-run once, unscoped.
+        if (applied.managedOnly) {
+          final restored = applied.copyWith(managedOnly: false);
+          setState(() => _syncDraft(restored));
+          _notifier.applyRecommendationRequest(restored);
+          return;
+        }
+        setState(() => _syncDraft(applied));
         return;
       }
       final prefs = context.read(businessPreferencesProvider);
@@ -157,6 +221,10 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
         prefs.businessType.trim().isNotEmpty ||
         prefs.preferredLocation.trim().isNotEmpty ||
         prefs.preferredAreas.isNotEmpty;
+    // Management scoping stays OFF here. The research catalogue this page
+    // ranks is `verification_status='pending'`, and the manager mapping is
+    // built only from approved+published operational listings, so scoping the
+    // search to managers matches zero of the 290 PU-eligible properties.
     return configured
         ? RecommendationSearchRequest.fromPreferences(prefs)
         : const RecommendationSearchRequest();
@@ -354,6 +422,14 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
           're-sequences the same eligible properties — it does not change '
           'which properties qualify, and it is not a model score.';
     }
+    if (model.isLivePuAssociation) {
+      // The expanded 64-feature variant: eligibility and tie-breaks come from
+      // LIVE PU inference, not from the stored research index.
+      return '${model.reason} The PU input is a research association index — '
+          'not a probability of business success — and a property whose '
+          'measured features are unavailable is excluded rather than guessed. '
+          'Business-type resemblance is shown separately on each card.';
+    }
     return model.available
         ? 'Scores come from the experimental preference-matching model '
               '(${model.version ?? 'unversioned'}). They measure agreement with '
@@ -461,11 +537,13 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
       attributes: const {'id': 'rec2-filters'},
       [
         div(classes: 'rec2__filters-grid', [
-          _textField(
+          _comboField(
             caption: 'Business type',
+            fieldId: 'rec2-business-type',
             value: _businessType,
-            placeholder: 'e.g. Specialty coffee',
-            onInput: (v) => setState(() => _businessType = v),
+            emptyLabel: 'Any business type',
+            options: _businessTypeOptions,
+            onChanged: (v) => setState(() => _businessType = v),
           ),
           _textField(
             caption: 'Min monthly rent (RM)',
@@ -491,11 +569,13 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
             placeholder: 'e.g. 1800',
             onInput: (v) => setState(() => _maxSize = v),
           ),
-          _textField(
+          _comboField(
             caption: 'Target market',
+            fieldId: 'rec2-target-market',
             value: _targetMarket,
-            placeholder: 'e.g. Office workers, students',
-            onInput: (v) => setState(() => _targetMarket = v),
+            emptyLabel: 'Any target market',
+            options: _targetMarketOptions,
+            onChanged: (v) => setState(() => _targetMarket = v),
           ),
           _sortField(_sortOptions(state)),
           _textField(
@@ -522,6 +602,8 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
             selected: _propertyType,
             onPick: (v) => setState(() => _propertyType = v),
           ),
+        // No management-scoping toggle: see `_initialRequest` for why the
+        // catalogue search must not be restricted to assigned listings.
         div(classes: 'rec2__filters-actions', [
           ActionButton(
             state.recommendationRefreshing ? 'Searching…' : 'Find properties',
@@ -597,6 +679,52 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
         ),
     ]),
   ]);
+
+  /// Editable combobox: a text input backed by a `<datalist>` of suggestions.
+  ///
+  /// A strict `<select>` cannot express a value outside its option list, but
+  /// both of these fields legitimately can: target market is a comma-separated
+  /// list of requirements, and older saved searches may hold custom business
+  /// types. Choosing a suggestion or typing a custom value both fire `input`,
+  /// so one handler covers both paths.
+  Component _comboField({
+    required String caption,
+    required String fieldId,
+    required String value,
+    required String emptyLabel,
+    required List<String> options,
+    required void Function(String) onChanged,
+  }) {
+    final listId = '$fieldId-options';
+    return label(classes: 'field', [
+      span(classes: 'field__label', [Component.text(caption)]),
+      input(
+        id: fieldId,
+        key: ValueKey(fieldId),
+        attributes: {
+          'type': 'text',
+          'value': value,
+          'placeholder': emptyLabel,
+          'list': listId,
+          'autocomplete': 'off',
+          'name': fieldId,
+          'aria-label': caption,
+        },
+        events: events<String>(onInput: onChanged),
+      ),
+      datalist(
+        [
+          // Keep an older custom value selectable until the field is changed,
+          // so rehydrating an applied search cannot silently narrow it.
+          if (value.isNotEmpty && !options.contains(value))
+            option([Component.text(value)], value: value),
+          for (final item in options)
+            option([Component.text(item)], value: item),
+        ],
+        id: listId,
+      ),
+    ]);
+  }
 
   Component _textField({
     required String caption,
@@ -709,7 +837,7 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
       div(classes: 'rec2-card__body', [
         h3(classes: 'rec2-card__title', [
           AppLink(
-            to: '/entrepreneur/property-detail?id=${Uri.encodeComponent(prop.id)}',
+            to: '/entrepreneur/property-detail?id=${Uri.encodeComponent(prop.id)}$_businessTypeQuery',
             children: [Component.text(prop.title)],
           ),
         ]),
@@ -721,6 +849,9 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
               if (prop.propertyType.isNotEmpty) prop.propertyType,
             ].join(' · '),
           ),
+        ]),
+        p(classes: 'rec2-card__meta', [
+          Component.text('Management: ${item.management.display}'),
         ]),
         div(classes: 'rec2-card__facts', [
           _fact('Rent', 'RM ${prop.rentalRm.toStringAsFixed(0)}/mo'),
@@ -755,12 +886,12 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
           ),
           ActionLink(
             'Details',
-            href: '/entrepreneur/property-detail?id=${Uri.encodeComponent(prop.id)}',
+            href: '/entrepreneur/property-detail?id=${Uri.encodeComponent(prop.id)}$_businessTypeQuery',
             variant: 'secondary',
           ),
           ActionLink(
             'Assess',
-            href: '/entrepreneur/assessment?id=${Uri.encodeComponent(prop.id)}',
+            href: '/entrepreneur/assessment?id=${Uri.encodeComponent(prop.id)}$_businessTypeQuery',
             variant: 'secondary',
           ),
           ActionButton(
@@ -857,6 +988,7 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
 
       div(classes: 'rec2-panel__block', [
         span(classes: 'rec2-panel__label', [Component.text('Listing facts')]),
+        _panelRow('Management', item.management.display),
         _panelRow('Monthly rental', 'RM ${prop.rentalRm.toStringAsFixed(0)}'),
         _panelRow('Floor area', '${prop.sizeSqft.toStringAsFixed(0)} sq ft'),
         _panelRow('Property type', prop.propertyType),
@@ -878,6 +1010,12 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
                 ? 'PU score: ${item.puScore?.toStringAsFixed(1) ?? '—'} / 100 '
                       '— the research association index (not a success '
                       'probability). Every listed recommendation exceeds 50.'
+                      '${item.puScoreSource == 'expanded64_live_inference' ? ' '
+                          'This score was computed live by the expanded '
+                          '64-feature research model '
+                          '(${item.puModelVersion ?? 'unversioned'}); the '
+                          'stored research index is a different model and is '
+                          'not shown here.' : ''}'
                 : 'No PU score is stored for this property, so it cannot pass '
                       'the eligibility threshold and is not recommended. The '
                       'PU model is a separate research model and is never '
@@ -892,15 +1030,32 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
         ),
       ]),
 
+      div(classes: 'rec2-panel__block', [
+        span(classes: 'rec2-panel__label', [
+          Component.text('How well this location matches your business type'),
+        ]),
+        if (item.category?.available == true) ...[
+          p(classes: 'small', [
+            Component.text(_categorySentence(item.category!)),
+          ]),
+        ] else
+          p(classes: 'small', [
+            Component.text(
+              item.category?.reason ??
+                  'Business-type resemblance is not available for this property.',
+            ),
+          ]),
+      ]),
+
       div(classes: 'rec2-panel__actions', [
         ActionLink(
           'View property',
-          href: '/entrepreneur/property-detail?id=${Uri.encodeComponent(prop.id)}',
+          href: '/entrepreneur/property-detail?id=${Uri.encodeComponent(prop.id)}$_businessTypeQuery',
           variant: 'primary',
         ),
         ActionLink(
           'Assess this property',
-          href: '/entrepreneur/assessment?id=${Uri.encodeComponent(prop.id)}',
+          href: '/entrepreneur/assessment?id=${Uri.encodeComponent(prop.id)}$_businessTypeQuery',
           variant: 'secondary',
         ),
         ActionLink(

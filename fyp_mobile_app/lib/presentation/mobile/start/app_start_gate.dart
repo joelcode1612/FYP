@@ -6,6 +6,7 @@ import '../../../core/bootstrap/startup_trace.dart';
 import '../../../core/config/dev_auth_bypass.dart';
 
 import '../../../application/services/service_locator.dart';
+import '../../../core/routing/auth_route_guard.dart' show postAuthNavigation;
 import '../../../core/routing/mobile_role.dart';
 import '../../../core/theme/sitewise_theme.dart';
 import '../../shared/widgets/sitewise_brand.dart';
@@ -24,9 +25,11 @@ import 'auth_blocking_views.dart';
 ///                                           workspace route itself stays
 ///                                           locked by [AuthGuard]
 ///   account suspended or pending .......... account-status screen
-///   signed in, onboarding incomplete ...... /onboarding
+///   signed in, onboarding incomplete ...... /onboarding (Entrepreneur only)
 ///   signed in as an Entrepreneur .......... that role's home route
-///   signed in as Admin or Agent ........... Staff Web Portal notice
+///   signed in as an Agent with `aal2` ..... Provider dashboard
+///   signed in as an Agent with `aal1` ..... /provider/mfa, then dashboard
+///   signed in as Admin .................... Staff Web Portal notice (unchanged)
 ///
 /// Nothing below the first line is reachable while the restore is still
 /// running — the same screen shows a spinner, never a glimpse of a dashboard.
@@ -48,6 +51,10 @@ class _AppStartGateState extends ConsumerState<AppStartGate> {
   /// One navigation per gate: a rebuild while the frame is pending must not
   /// queue a second replacement.
   bool _navigated = false;
+
+  /// Memoised trusted landing decision, so a permitted pending deep link is
+  /// consumed exactly once even though `build` may re-run.
+  ({String route, Object? arguments})? _landing;
 
   /// Set once auth has resolved far enough to know the draft namespace.
   bool _draftsScoped = false;
@@ -115,7 +122,7 @@ class _AppStartGateState extends ConsumerState<AppStartGate> {
     if (mounted) setState(() => _onboardingDone = completed);
   }
 
-  void _go(String route, {AppRole? enterRole}) {
+  void _go(String route, {AppRole? enterRole, Object? arguments}) {
     if (_navigated) return;
     _navigated = true;
     // Deferred: the decision can complete on a microtask inside build, and a
@@ -125,7 +132,7 @@ class _AppStartGateState extends ConsumerState<AppStartGate> {
       if (enterRole != null) {
         ref.read(appNotifierProvider.notifier).setRole(enterRole);
       }
-      Navigator.of(context).pushReplacementNamed(route);
+      Navigator.of(context).pushReplacementNamed(route, arguments: arguments);
     });
   }
 
@@ -145,7 +152,7 @@ class _AppStartGateState extends ConsumerState<AppStartGate> {
         if (role == null || mobileHomeRouteFor(role) == null) {
           return StaffWorkspaceRequiredView(role: role);
         }
-        return _afterSignIn(role);
+        return _afterSignIn(state);
       case AuthStatus.accountInactive:
         return AccountStatusView(message: state.message);
       case AuthStatus.error:
@@ -193,7 +200,7 @@ class _AppStartGateState extends ConsumerState<AppStartGate> {
 
   /// Signed in and verified: onboarding only ever sits between this point and
   /// the workspace, never before authentication.
-  Widget _afterSignIn(AppRole role) {
+  Widget _afterSignIn(AuthState state) {
     // Hold the splash until the draft restore finishes so the workspace's
     // first read of preferences/the assessment draft cannot race the file
     // read. Failures inside restoreDrafts never propagate (it swallows them).
@@ -205,16 +212,34 @@ class _AppStartGateState extends ConsumerState<AppStartGate> {
       });
       return _splash();
     }
+    final user = state.user!;
+    final role = user.role;
+    final home = mobileHomeRouteFor(role)!;
     if (_onboardingDone == null) {
       _readOnboarding();
       return _splash();
     }
-    final home = mobileHomeRouteFor(role)!;
-    if (_onboardingDone == false) {
-      _go('/onboarding');
+    // The onboarding questionnaire asks F&B business questions, so it belongs
+    // to the Entrepreneur workspace only. It runs BEFORE the landing decision
+    // so a saved deep link is not consumed by a session that is about to be
+    // routed through the intro flow instead.
+    if (_onboardingDone == false && role == AppRole.entrepreneur) {
+      _go('/onboarding', enterRole: role);
       return _splash();
     }
-    _go(home, enterRole: role);
+    // An Agent whose restored session is still `aal1` must complete the
+    // existing authenticator step BEFORE the provider workspace is opened.
+    // This uses the server-verified `aal` claim from `/auth/me`; the backend
+    // still re-checks aal2 on every protected call. An Agent already at aal2
+    // goes straight to the dashboard with no repeated MFA prompt.
+    // Memoised because build can re-run while the frame is pending: a pending
+    // destination must be consumed exactly once.
+    final navigation = _landing ??= postAuthNavigation(user);
+    _go(
+      navigation?.route ?? home,
+      enterRole: role,
+      arguments: navigation?.arguments,
+    );
     return _splash();
   }
 

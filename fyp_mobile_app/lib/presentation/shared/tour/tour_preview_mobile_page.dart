@@ -1,7 +1,7 @@
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
-import 'package:shared_logic/shared_logic.dart';
+import 'package:panorama_viewer/panorama_viewer.dart';
 
 import '../../../core/theme/sitewise_theme.dart';
 import '../../../core/utils/pano_bytes.dart';
@@ -262,18 +262,7 @@ class _TourPreviewMobilePageState extends State<TourPreviewMobilePage> {
                 ),
               );
             }
-            return Image.memory(
-              bytes,
-              width: double.infinity,
-              height: double.infinity,
-              fit: BoxFit.contain,
-              errorBuilder: (context, error, stackTrace) => const Center(
-                child: Text(
-                  'Preview image could not be displayed.',
-                  style: TextStyle(color: SitewiseColors.muted, fontSize: 12),
-                ),
-              ),
-            );
+            return PanoramaViewer(child: Image.memory(bytes));
           },
         ),
       ),

@@ -6,8 +6,9 @@ background) is covered by the existing suites. This module verifies the
 operational requirements:
 
 * the process-wide verified-SHAP cache returns the identical payload on the
-  second call with the model version in the key (safe invalidation when the
-  artifact is replaced);
+  second call with the explaining model's exact identity in the key (name,
+  version, artifact bytes and explained score), so replacing the artifact or
+  re-scoring the property cannot surface stale SHAP;
 * measured first-call vs cached-call latency is recorded to
   ``ml_reference/recommender_eval/shap_latency.json`` so the documentation
   reports measured numbers, not claims.
@@ -24,10 +25,7 @@ from pathlib import Path
 
 import pytest
 
-from sitewise.ml.model_loader import ModelLoader
-from sitewise.ml.selected_pu_integration import SELECTED_MODEL_NAME
 from sitewise.services.recommendation_generation_service import (
-    RecommendationGenerationService,
     _SHAP_CACHE,
     _SHAP_CACHE_LOCK,
 )
@@ -64,9 +62,6 @@ def _clean_cache():
 
 @pytest.mark.slow
 def test_shap_cache_is_version_keyed_and_latency_is_measured(client, identity):
-    loaded = ModelLoader().load(SELECTED_MODEL_NAME)
-    version = loaded.meta.get("model_version")
-
     generated = client.post(
         "/api/v1/recommendations/generate",
         json={"limit": 1, "property_ids": [REFERENCE_PROPERTY_ID]},
@@ -92,11 +87,19 @@ def test_shap_cache_is_version_keyed_and_latency_is_measured(client, identity):
     cached = second.json()["explanation"]["shap"]
     assert cached == shap
 
-    # The cache key must embed the model version: replacing the artifact
-    # invalidates every cached explanation.
+    # The cache key must embed the identity of the model that produced the
+    # explained score (name, version, artifact bytes) plus the score itself, so
+    # replacing the artifact or re-scoring the property cannot reuse stale SHAP.
+    ranked_model = body["results"][0]["model"]
+    ranked_version = ranked_model.get("version") or ranked_model.get("model_version")
     with _SHAP_CACHE_LOCK:
         keys = list(_SHAP_CACHE.keys())
-    assert keys and all(str(version) in key for key in keys), keys
+    assert keys, "expected at least one cached explanation"
+    for key in keys:
+        assert ranked_model["name"] in key, key
+        assert str(ranked_version) in key, key
+        assert f"{float(ranked_model['association_score']):.17g}" in key, key
+        assert len([part for part in key.split(":") if len(part) == 64]) == 1, key
 
     # Cached reads must be materially faster than the first SHAP computation.
     assert cached_latency < max(first_latency / 5.0, 0.05)
@@ -107,7 +110,9 @@ def test_shap_cache_is_version_keyed_and_latency_is_measured(client, identity):
             {
                 "measured_at": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
                 "property_id": REFERENCE_PROPERTY_ID,
-                "model_version": version,
+                "model_name": ranked_model["name"],
+                "model_version": ranked_version,
+                "artifact_sha256": ranked_model.get("artifact_sha256"),
                 "first_call_seconds": round(first_latency, 4),
                 "cached_call_seconds": round(cached_latency, 4),
                 "note": (

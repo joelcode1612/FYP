@@ -130,18 +130,46 @@ class AuthNotifier extends Notifier<AuthState> {
   );
 
   /// Registers a new account. Public registration always creates an
-  /// entrepreneur; the role is never taken from the caller.
+  /// entrepreneur; the role is never taken from the caller. [accountPurpose]
+  /// is a non-authoritative onboarding preference, not a role.
   Future<bool> signUp({
     required String email,
     required String password,
     String? fullName,
+    String? accountPurpose,
+    bool acceptTerms = false,
   }) => _attempt(
-    () => _auth.signUp(email: email, password: password, fullName: fullName),
+    () => _auth.signUp(
+      email: email,
+      password: password,
+      fullName: fullName,
+      accountPurpose: accountPurpose,
+      acceptTerms: acceptTerms,
+    ),
     pendingEmail: email,
   );
 
-  Future<bool> signInWithProvider(AuthProvider provider) =>
-      _attempt(() => _auth.signInWithProvider(provider));
+  Future<bool> signInWithProvider(
+    AuthProvider provider, {
+    String? accountPurpose,
+  }) => _attempt(
+    () => _auth.signInWithProvider(provider, accountPurpose: accountPurpose),
+  );
+
+  /// Re-sends the sign-up confirmation email. Deliberately NOT routed through
+  /// [_attempt]: it must never publish an authenticated state or clear the
+  /// pending confirmation state. Returns a safe, user-facing sentence.
+  Future<String> resendSignupVerification(String email) async {
+    try {
+      await _auth.resendSignupVerificationEmail(email);
+      return 'A new verification link is on its way. Please check your inbox.';
+    } on AppFailure catch (failure) {
+      return failure.userMessage;
+    } catch (_) {
+      return 'Sitewise could not send another verification email. '
+          'Please try again in a moment.';
+    }
+  }
 
   /// Ends the session and returns to [AuthStatus.unauthenticated].
   Future<void> signOut() async {

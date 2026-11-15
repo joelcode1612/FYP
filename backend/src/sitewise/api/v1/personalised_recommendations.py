@@ -36,6 +36,10 @@ from sqlmodel import Session
 from sitewise.db.analytics_session import get_analytics_db
 from sitewise.db.session import get_db
 from sitewise.dependencies import AuthenticatedUser, require_entrepreneur
+from sitewise.services.property_management_service import (
+    resolve_listings,
+    resolve_management,
+)
 from sitewise.services.recommendation_generation_service import (
     RecommendationGenerationService,
 )
@@ -45,6 +49,47 @@ router = APIRouter()
 EntrepreneurUser = Annotated[AuthenticatedUser, Depends(require_entrepreneur)]
 AppSession = Annotated[Session, Depends(get_db)]
 AnalyticsSession = Annotated[Session, Depends(get_analytics_db)]
+
+
+def _no_operational_listing() -> dict:
+    """A catalogue record with no verified operational listing behind it.
+
+    Reported as unresolved rather than given an invented manager: the research
+    catalogue row exists, but no property in ``fyp.rental_properties`` is linked
+    to it, so no owner or agent relationship can be read.
+    """
+    from sitewise.services.recommendation_management_service import (
+        unassigned_management,
+    )
+
+    return unassigned_management()
+
+
+def _attach_management(session: Session, payload: dict) -> dict:
+    """Add the derived management state to every ranked result.
+
+    The listing reference lives on the nested property block; results without a
+    verified link keep an explicit unresolved state. One batch lookup serves the
+    whole page — no per-card database or Supabase call.
+    """
+    rows = payload.get("results") or []
+    if not rows:
+        return payload
+    listing_ids: list[int] = []
+    for row in rows:
+        ref = ((row.get("property") or {}).get("listing_ref")) or {}
+        if ref.get("listing_id") is not None:
+            listing_ids.append(int(ref["listing_id"]))
+    management = resolve_listings(session, listing_ids) if listing_ids else {}
+    for row in rows:
+        ref = ((row.get("property") or {}).get("listing_ref")) or {}
+        listing_id = ref.get("listing_id")
+        row["management"] = (
+            management.get(int(listing_id))
+            if listing_id is not None
+            else _no_operational_listing()
+        )
+    return payload
 
 
 class GenerateRequest(BaseModel):
@@ -80,11 +125,14 @@ def generate_recommendations(
     confirmed.
     """
     try:
-        return RecommendationGenerationService(app_session, analytics_session).generate(
-            user.user_id,
-            limit=body.limit,
-            state=body.state,
-            property_ids=body.property_ids,
+        return _attach_management(
+            app_session,
+            RecommendationGenerationService(app_session, analytics_session).generate(
+                user.user_id,
+                limit=body.limit,
+                state=body.state,
+                property_ids=body.property_ids,
+            ),
         )
     except Exception as exc:  # database / repository failure, not a bad request
         # Fail closed: never substitute demonstration results when the real
@@ -110,8 +158,11 @@ def own_generated_recommendations(
     ``RecommendationResult`` rows unchanged; this endpoint returns the new
     Layer 2 pipeline's results instead. Both are ownership-scoped.
     """
-    return RecommendationGenerationService(app_session, analytics_session).latest(
-        user.user_id
+    return _attach_management(
+        app_session,
+        RecommendationGenerationService(app_session, analytics_session).latest(
+            user.user_id
+        ),
     )
 
 
@@ -140,4 +191,13 @@ def recommendation_explanation(
         # Ownership-scoped miss: a foreign result is indistinguishable from a
         # missing one, so this endpoint cannot be used to enumerate results.
         raise HTTPException(status_code=404, detail="Recommendation result not found")
+    # Management responsibility for the property this explanation describes.
+    # Catalogue ids resolve through the operational listing_id, which is how a
+    # research record is tied to the property that would actually be managed.
+    canonical = (result.get("property") or {}).get("canonical_property_id")
+    result["management"] = (
+        resolve_management(app_session, catalogue_id=str(canonical))
+        if canonical
+        else _no_operational_listing()
+    )
     return result

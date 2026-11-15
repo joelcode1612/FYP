@@ -3,7 +3,7 @@ from typing import Optional
 
 from sqlmodel import Session, select
 
-from sitewise.db.models.property_geospatial_feature import PropertyGeospatialFeature
+from sitewise.db.models.fyp_research import FypPropertyGeospatialFeature
 from sitewise.db.models.nearby_competitor import NearbyCompetitor
 from sitewise.db.models.property_foot_traffic import PropertyFootTraffic
 from sitewise.db.models.district_demographic import DistrictDemographic
@@ -13,35 +13,14 @@ class GeospatialRepository:
     def __init__(self, session: Session):
         self.session = session
 
-    # PropertyGeospatialFeature
-    def create_geo_feature(self, feature: PropertyGeospatialFeature) -> PropertyGeospatialFeature:
-        self.session.add(feature)
-        self.session.commit()
-        self.session.refresh(feature)
-        return feature
-
-    def get_geo_feature_by_property_id(self, property_id: int) -> Optional[PropertyGeospatialFeature]:
-        statement = select(PropertyGeospatialFeature).where(PropertyGeospatialFeature.property_id == property_id)
+    # FypPropertyGeospatialFeature (fyp.property_geospatial_features — the
+    # canonical precomputed per-property stats; the legacy public.property_
+    # geospatial_feature table was empty and has been retired)
+    def get_geo_feature_by_property_id(self, property_id: int) -> Optional[FypPropertyGeospatialFeature]:
+        statement = select(FypPropertyGeospatialFeature).where(
+            FypPropertyGeospatialFeature.property_id == property_id
+        )
         return self.session.exec(statement).first()
-
-    def update_geo_feature(self, property_id: int, data: dict) -> Optional[PropertyGeospatialFeature]:
-        feature = self.get_geo_feature_by_property_id(property_id)
-        if not feature:
-            return None
-        for key, value in data.items():
-            setattr(feature, key, value)
-        self.session.add(feature)
-        self.session.commit()
-        self.session.refresh(feature)
-        return feature
-
-    def delete_geo_feature(self, property_id: int) -> bool:
-        feature = self.get_geo_feature_by_property_id(property_id)
-        if not feature:
-            return False
-        self.session.delete(feature)
-        self.session.commit()
-        return True
 
     # NearbyCompetitor
     def create_competitor(self, competitor: NearbyCompetitor) -> NearbyCompetitor:

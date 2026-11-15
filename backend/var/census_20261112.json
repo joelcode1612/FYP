@@ -1,0 +1,1729 @@
+{
+  "local": {
+    "database": "Final_Location_Analysis",
+    "schema": [
+      {
+        "table_schema": "fyp",
+        "table_name": "rental_properties",
+        "column_name": "id",
+        "data_type": "bigint",
+        "is_nullable": "NO",
+        "column_default": "nextval('fyp.rental_properties_id_seq'::regclass)"
+      },
+      {
+        "table_schema": "fyp",
+        "table_name": "rental_properties",
+        "column_name": "owner_id",
+        "data_type": "bigint",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_schema": "fyp",
+        "table_name": "rental_properties",
+        "column_name": "listing_id",
+        "data_type": "character varying",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_schema": "fyp",
+        "table_name": "rental_properties",
+        "column_name": "name",
+        "data_type": "character varying",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "table_schema": "fyp",
+        "table_name": "rental_properties",
+        "column_name": "property_type",
+        "data_type": "character varying",
+        "is_nullable": "NO",
+        "column_default": "'Shop'::character varying"
+      },
+      {
+        "table_schema": "fyp",
+        "table_name": "rental_properties",
+        "column_name": "description",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_schema": "fyp",
+        "table_name": "rental_properties",
+        "column_name": "address",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_schema": "fyp",
+        "table_name": "rental_properties",
+        "column_name": "city",
+        "data_type": "character varying",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_schema": "fyp",
+        "table_name": "rental_properties",
+        "column_name": "state",
+        "data_type": "character varying",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_schema": "fyp",
+        "table_name": "rental_properties",
+        "column_name": "latitude",
+        "data_type": "double precision",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_schema": "fyp",
+        "table_name": "rental_properties",
+        "column_name": "longitude",
+        "data_type": "double precision",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_schema": "fyp",
+        "table_name": "rental_properties",
+        "column_name": "geom",
+        "data_type": "USER-DEFINED",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_schema": "fyp",
+        "table_name": "rental_properties",
+        "column_name": "rental_price",
+        "data_type": "numeric",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_schema": "fyp",
+        "table_name": "rental_properties",
+        "column_name": "size_sqft",
+        "data_type": "numeric",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_schema": "fyp",
+        "table_name": "rental_properties",
+        "column_name": "psf",
+        "data_type": "numeric",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_schema": "fyp",
+        "table_name": "rental_properties",
+        "column_name": "bathrooms",
+        "data_type": "numeric",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_schema": "fyp",
+        "table_name": "rental_properties",
+        "column_name": "floor_level",
+        "data_type": "numeric",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_schema": "fyp",
+        "table_name": "rental_properties",
+        "column_name": "frontage_ft",
+        "data_type": "numeric",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_schema": "fyp",
+        "table_name": "rental_properties",
+        "column_name": "depth_ft",
+        "data_type": "numeric",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_schema": "fyp",
+        "table_name": "rental_properties",
+        "column_name": "land_area_sqft",
+        "data_type": "numeric",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_schema": "fyp",
+        "table_name": "rental_properties",
+        "column_name": "built_up_sqft",
+        "data_type": "numeric",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_schema": "fyp",
+        "table_name": "rental_properties",
+        "column_name": "tenure",
+        "data_type": "character varying",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_schema": "fyp",
+        "table_name": "rental_properties",
+        "column_name": "furnishing",
+        "data_type": "character varying",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_schema": "fyp",
+        "table_name": "rental_properties",
+        "column_name": "availability",
+        "data_type": "character varying",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_schema": "fyp",
+        "table_name": "rental_properties",
+        "column_name": "is_corner_lot",
+        "data_type": "smallint",
+        "is_nullable": "NO",
+        "column_default": "0"
+      },
+      {
+        "table_schema": "fyp",
+        "table_name": "rental_properties",
+        "column_name": "has_parking",
+        "data_type": "smallint",
+        "is_nullable": "NO",
+        "column_default": "0"
+      },
+      {
+        "table_schema": "fyp",
+        "table_name": "rental_properties",
+        "column_name": "is_freehold",
+        "data_type": "smallint",
+        "is_nullable": "NO",
+        "column_default": "0"
+      },
+      {
+        "table_schema": "fyp",
+        "table_name": "rental_properties",
+        "column_name": "is_fnb_suitable",
+        "data_type": "smallint",
+        "is_nullable": "NO",
+        "column_default": "0"
+      },
+      {
+        "table_schema": "fyp",
+        "table_name": "rental_properties",
+        "column_name": "verification_status",
+        "data_type": "character varying",
+        "is_nullable": "NO",
+        "column_default": "'pending'::character varying"
+      },
+      {
+        "table_schema": "fyp",
+        "table_name": "rental_properties",
+        "column_name": "rejection_reason",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_schema": "fyp",
+        "table_name": "rental_properties",
+        "column_name": "is_published",
+        "data_type": "boolean",
+        "is_nullable": "NO",
+        "column_default": "false"
+      },
+      {
+        "table_schema": "fyp",
+        "table_name": "rental_properties",
+        "column_name": "created_at",
+        "data_type": "timestamp with time zone",
+        "is_nullable": "NO",
+        "column_default": "now()"
+      },
+      {
+        "table_schema": "fyp",
+        "table_name": "rental_properties",
+        "column_name": "updated_at",
+        "data_type": "timestamp with time zone",
+        "is_nullable": "NO",
+        "column_default": "now()"
+      },
+      {
+        "table_schema": "fyp",
+        "table_name": "rental_properties",
+        "column_name": "floor_description",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_schema": "fyp",
+        "table_name": "rental_properties",
+        "column_name": "unit_position",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_schema": "fyp",
+        "table_name": "rental_properties",
+        "column_name": "facing_direction",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_schema": "fyp",
+        "table_name": "rental_properties",
+        "column_name": "availability_verified_at",
+        "data_type": "timestamp with time zone",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_schema": "fyp",
+        "table_name": "rental_properties",
+        "column_name": "published_at",
+        "data_type": "timestamp with time zone",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_schema": "fyp",
+        "table_name": "rental_properties",
+        "column_name": "owner_user_id",
+        "data_type": "uuid",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_schema": "fyp",
+        "table_name": "rental_properties",
+        "column_name": "postcode",
+        "data_type": "character varying",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_schema": "fyp",
+        "table_name": "rental_properties",
+        "column_name": "address_validation_status",
+        "data_type": "character varying",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_schema": "fyp",
+        "table_name": "rental_properties",
+        "column_name": "address_formatted",
+        "data_type": "text",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_schema": "fyp",
+        "table_name": "rental_properties",
+        "column_name": "address_validated_at",
+        "data_type": "timestamp with time zone",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_schema": "public",
+        "table_name": "agent_listing_assignment",
+        "column_name": "listing_id",
+        "data_type": "bigint",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "table_schema": "public",
+        "table_name": "agent_listing_assignment",
+        "column_name": "agent_id",
+        "data_type": "integer",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "table_schema": "public",
+        "table_name": "agent_listing_assignment",
+        "column_name": "assigned_by_user_id",
+        "data_type": "uuid",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_schema": "public",
+        "table_name": "agent_listing_assignment",
+        "column_name": "created_at",
+        "data_type": "timestamp with time zone",
+        "is_nullable": "NO",
+        "column_default": "now()"
+      },
+      {
+        "table_schema": "public",
+        "table_name": "agent_listing_assignment",
+        "column_name": "updated_at",
+        "data_type": "timestamp with time zone",
+        "is_nullable": "NO",
+        "column_default": "now()"
+      },
+      {
+        "table_schema": "public",
+        "table_name": "users",
+        "column_name": "user_id",
+        "data_type": "uuid",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "table_schema": "public",
+        "table_name": "users",
+        "column_name": "full_name",
+        "data_type": "character varying",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_schema": "public",
+        "table_name": "users",
+        "column_name": "email",
+        "data_type": "character varying",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "table_schema": "public",
+        "table_name": "users",
+        "column_name": "phone_number",
+        "data_type": "character varying",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_schema": "public",
+        "table_name": "users",
+        "column_name": "role",
+        "data_type": "character varying",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "table_schema": "public",
+        "table_name": "users",
+        "column_name": "profile_picture_url",
+        "data_type": "character varying",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_schema": "public",
+        "table_name": "users",
+        "column_name": "account_status",
+        "data_type": "character varying",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "table_schema": "public",
+        "table_name": "users",
+        "column_name": "email_verified",
+        "data_type": "boolean",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "table_schema": "public",
+        "table_name": "users",
+        "column_name": "last_login",
+        "data_type": "timestamp with time zone",
+        "is_nullable": "YES",
+        "column_default": null
+      },
+      {
+        "table_schema": "public",
+        "table_name": "users",
+        "column_name": "created_at",
+        "data_type": "timestamp with time zone",
+        "is_nullable": "NO",
+        "column_default": null
+      },
+      {
+        "table_schema": "public",
+        "table_name": "users",
+        "column_name": "updated_at",
+        "data_type": "timestamp with time zone",
+        "is_nullable": "NO",
+        "column_default": null
+      }
+    ],
+    "properties": {
+      "total": 1187,
+      "with_owner_uuid": 3,
+      "legacy_only": 227,
+      "no_owner": 957,
+      "published": 227,
+      "approved": 227,
+      "pending": 955,
+      "draft": 5
+    },
+    "provenance": [
+      {
+        "provenance": "research_import",
+        "rows": 955,
+        "owner_uuid": 0,
+        "legacy_only": 0,
+        "no_owner": 955,
+        "published": 0
+      },
+      {
+        "provenance": "demo_seed",
+        "rows": 227,
+        "owner_uuid": 0,
+        "legacy_only": 227,
+        "no_owner": 0,
+        "published": 227
+      },
+      {
+        "provenance": "owner_draft",
+        "rows": 5,
+        "owner_uuid": 3,
+        "legacy_only": 0,
+        "no_owner": 2,
+        "published": 0
+      }
+    ],
+    "assignments": [],
+    "orphan_assignments": [],
+    "local_users": [
+      {
+        "role": "admin",
+        "account_status": "active",
+        "rows": 5
+      },
+      {
+        "role": "agent",
+        "account_status": "active",
+        "rows": 3
+      },
+      {
+        "role": "entrepreneur",
+        "account_status": "active",
+        "rows": 102
+      }
+    ],
+    "local_entrepreneurs": [
+      {
+        "user_id": "9cc08037-4930-491d-b22a-63e03735f99a",
+        "full_name": "Sitewise Administrator1",
+        "email": "admin.sitewise1@gmail.com",
+        "account_status": "active",
+        "email_verified": false,
+        "created_at": "2026-11-07 23:59:17.921417+08:00"
+      },
+      {
+        "user_id": "f69be94e-fc0e-46ff-adc4-99567a5d916d",
+        "full_name": "TAN HOU JUN JOEL",
+        "email": "joelthj-wm23@student.tarc.edu.my",
+        "account_status": "active",
+        "email_verified": false,
+        "created_at": "2026-11-08 00:41:19.318515+08:00"
+      },
+      {
+        "user_id": "f56fa3fa-6dde-4176-92e5-d8a460aafd01",
+        "full_name": "fff",
+        "email": "jedthj-wm23@student.tarc.edu.my",
+        "account_status": "active",
+        "email_verified": false,
+        "created_at": "2026-11-09 10:13:32.457592+08:00"
+      },
+      {
+        "user_id": "8d568a7b-c31b-46b6-bd7c-62ca823e5779",
+        "full_name": "RBAC Tester",
+        "email": "owner-8d568a7b@jwks-test.example",
+        "account_status": "active",
+        "email_verified": true,
+        "created_at": "2026-11-09 10:21:09.052229+08:00"
+      },
+      {
+        "user_id": "d575cf4d-39eb-4c11-859f-be787d38ecc1",
+        "full_name": "RBAC Tester",
+        "email": "owner-d575cf4d@jwks-test.example",
+        "account_status": "active",
+        "email_verified": true,
+        "created_at": "2026-11-09 10:21:17.518327+08:00"
+      },
+      {
+        "user_id": "3911bb2e-c829-4578-831a-5b01fd1ddefa",
+        "full_name": "Sitewise Administrator",
+        "email": "admin.sitewise@gmail.com",
+        "account_status": "active",
+        "email_verified": false,
+        "created_at": "2026-11-09 15:35:47.024231+08:00"
+      },
+      {
+        "user_id": "6b1d4d51-1ad1-4b39-b324-383ecba6baf1",
+        "full_name": "Test User",
+        "email": "verify-second-6b1d4d51@jwks-test.example",
+        "account_status": "active",
+        "email_verified": true,
+        "created_at": "2026-11-09 18:30:33.129195+08:00"
+      },
+      {
+        "user_id": "3b239e74-c279-4852-846b-4c80492e6176",
+        "full_name": "Test User",
+        "email": "verify-second-3b239e74@jwks-test.example",
+        "account_status": "active",
+        "email_verified": true,
+        "created_at": "2026-11-09 18:31:27.529965+08:00"
+      },
+      {
+        "user_id": "88c8e54b-1005-425f-9c68-6c165d5a817c",
+        "full_name": "Test User",
+        "email": "verify-second-88c8e54b@jwks-test.example",
+        "account_status": "active",
+        "email_verified": true,
+        "created_at": "2026-11-09 18:32:48.151910+08:00"
+      },
+      {
+        "user_id": "348b5f0c-bb55-434c-b22d-cd60d4bdf774",
+        "full_name": "Test User",
+        "email": "verify-second-348b5f0c@jwks-test.example",
+        "account_status": "active",
+        "email_verified": true,
+        "created_at": "2026-11-09 18:34:51.026676+08:00"
+      },
+      {
+        "user_id": "289c340d-45a6-4274-adf4-fdd59b743355",
+        "full_name": "Verification Owner",
+        "email": "verify-owner-289c340d@jwks-test.example",
+        "account_status": "active",
+        "email_verified": true,
+        "created_at": "2026-11-10 17:15:54.761044+08:00"
+      },
+      {
+        "user_id": "5129ff0b-a388-43f8-8cc8-373fdaf68c6d",
+        "full_name": "Verification Owner",
+        "email": "verify-owner-5129ff0b@jwks-test.example",
+        "account_status": "active",
+        "email_verified": true,
+        "created_at": "2026-11-10 17:25:51.176389+08:00"
+      },
+      {
+        "user_id": "03a3b678-4377-4355-b10d-5fd579eaf28f",
+        "full_name": "Verification Owner",
+        "email": "verify-owner-03a3b678@jwks-test.example",
+        "account_status": "active",
+        "email_verified": true,
+        "created_at": "2026-11-10 17:36:31.281657+08:00"
+      },
+      {
+        "user_id": "3ae02ed2-8e5e-406a-9e8a-389d35dc04d1",
+        "full_name": "Verification Owner",
+        "email": "verify-owner-3ae02ed2@jwks-test.example",
+        "account_status": "active",
+        "email_verified": true,
+        "created_at": "2026-11-10 17:46:50.493326+08:00"
+      },
+      {
+        "user_id": "11111111-1111-1111-1111-111111111111",
+        "full_name": "Test User",
+        "email": "ml-sel-11111111@jwks-test.example",
+        "account_status": "active",
+        "email_verified": true,
+        "created_at": "2026-11-10 21:02:08.262411+08:00"
+      },
+      {
+        "user_id": "22222222-2222-2222-2222-222222222222",
+        "full_name": "Test User",
+        "email": "ml-sel2-22222222@jwks-test.example",
+        "account_status": "active",
+        "email_verified": true,
+        "created_at": "2026-11-10 21:02:08.345998+08:00"
+      },
+      {
+        "user_id": "33333333-3333-3333-3333-333333333333",
+        "full_name": "Test User",
+        "email": "ml-def-33333333@jwks-test.example",
+        "account_status": "active",
+        "email_verified": true,
+        "created_at": "2026-11-10 21:02:08.658122+08:00"
+      },
+      {
+        "user_id": "d92f9cfa-36e6-45e9-b102-fecc5e6b440a",
+        "full_name": "Test User",
+        "email": "legacy-retired-d92f9cfa@jwks-test.example",
+        "account_status": "active",
+        "email_verified": true,
+        "created_at": "2026-11-10 21:46:01.866062+08:00"
+      },
+      {
+        "user_id": "aa9aba65-5aa2-401a-9211-12e49d329867",
+        "full_name": "Test User",
+        "email": "legacy-retired-aa9aba65@jwks-test.example",
+        "account_status": "active",
+        "email_verified": true,
+        "created_at": "2026-11-10 21:49:36.232167+08:00"
+      },
+      {
+        "user_id": "0d40265c-bd23-4d4f-a8fa-d0dc006b61be",
+        "full_name": "Test User",
+        "email": "legacy-retired-0d40265c@jwks-test.example",
+        "account_status": "active",
+        "email_verified": true,
+        "created_at": "2026-11-10 21:54:27.919178+08:00"
+      },
+      {
+        "user_id": "3ffbbc09-65df-4105-8ebf-8b3875a12a39",
+        "full_name": "Test User",
+        "email": "user@jwks-test.example",
+        "account_status": "active",
+        "email_verified": true,
+        "created_at": "2026-11-10 22:22:57.541813+08:00"
+      },
+      {
+        "user_id": "c0c505cf-0289-4888-a7ea-1846d83591b3",
+        "full_name": "Test User",
+        "email": "legacy-retired-c0c505cf@jwks-test.example",
+        "account_status": "active",
+        "email_verified": true,
+        "created_at": "2026-11-10 23:28:37.352364+08:00"
+      },
+      {
+        "user_id": "4285aeb5-306d-4887-94be-cc356e978b1e",
+        "full_name": "Test User",
+        "email": "legacy-retired-4285aeb5@jwks-test.example",
+        "account_status": "active",
+        "email_verified": true,
+        "created_at": "2026-11-10 23:30:23.778514+08:00"
+      },
+      {
+        "user_id": "c4c2bbd5-c277-4b50-9452-d775afb303fc",
+        "full_name": "Test User",
+        "email": "legacy-retired-c4c2bbd5@jwks-test.example",
+        "account_status": "active",
+        "email_verified": true,
+        "created_at": "2026-11-11 00:08:30.554641+08:00"
+      },
+      {
+        "user_id": "f94a25fd-a4e4-4082-8c17-7440541507c8",
+        "full_name": "Test User",
+        "email": "legacy-retired-f94a25fd@jwks-test.example",
+        "account_status": "active",
+        "email_verified": true,
+        "created_at": "2026-11-11 00:25:15.704186+08:00"
+      },
+      {
+        "user_id": "ded48f65-1886-4e02-afef-09f6b682f42e",
+        "full_name": "Test User",
+        "email": "legacy-retired-ded48f65@jwks-test.example",
+        "account_status": "active",
+        "email_verified": true,
+        "created_at": "2026-11-11 00:30:23.063388+08:00"
+      },
+      {
+        "user_id": "602e7061-0e0d-4165-9bb2-4a3208e65f5d",
+        "full_name": "Test User",
+        "email": "legacy-retired-602e7061@jwks-test.example",
+        "account_status": "active",
+        "email_verified": true,
+        "created_at": "2026-11-11 00:34:54.410363+08:00"
+      },
+      {
+        "user_id": "fe4ade8c-6b3f-4d92-a2f4-1048d578f0ce",
+        "full_name": "Test User",
+        "email": "legacy-retired-fe4ade8c@jwks-test.example",
+        "account_status": "active",
+        "email_verified": true,
+        "created_at": "2026-11-11 00:55:59.407629+08:00"
+      },
+      {
+        "user_id": "8af08167-6c4a-4a89-82a9-bc74031f8e10",
+        "full_name": "Test User",
+        "email": "legacy-retired-8af08167@jwks-test.example",
+        "account_status": "active",
+        "email_verified": true,
+        "created_at": "2026-11-11 01:04:13.147271+08:00"
+      },
+      {
+        "user_id": "d921f23b-1aa9-4d4c-b923-e1cfaa874378",
+        "full_name": "Test User",
+        "email": "legacy-retired-d921f23b@jwks-test.example",
+        "account_status": "active",
+        "email_verified": true,
+        "created_at": "2026-11-11 01:08:56.125777+08:00"
+      },
+      {
+        "user_id": "44444444-4444-4444-4444-444444444444",
+        "full_name": "Test User",
+        "email": "l1-cov-44444444@jwks-test.example",
+        "account_status": "active",
+        "email_verified": true,
+        "created_at": "2026-11-11 03:22:43.962152+08:00"
+      },
+      {
+        "user_id": "eacbfd43-fe08-4194-b008-b6ae9ca86e54",
+        "full_name": "Test User",
+        "email": "regen-eacbfd43@jwks-test.example",
+        "account_status": "active",
+        "email_verified": true,
+        "created_at": "2026-11-11 03:46:33.943122+08:00"
+      },
+      {
+        "user_id": "83dc911c-9490-4882-b0e9-d3ada06ce15e",
+        "full_name": "Test User",
+        "email": "legacy-retired-83dc911c@jwks-test.example",
+        "account_status": "active",
+        "email_verified": true,
+        "created_at": "2026-11-11 04:17:13.389044+08:00"
+      },
+      {
+        "user_id": "ae1de943-471b-4c4f-93f0-d8395aab453d",
+        "full_name": "Test User",
+        "email": "legacy-retired-ae1de943@jwks-test.example",
+        "account_status": "active",
+        "email_verified": true,
+        "created_at": "2026-11-11 04:19:32.208760+08:00"
+      },
+      {
+        "user_id": "b5003273-5cec-41e9-adad-9de56baac166",
+        "full_name": "Test User",
+        "email": "legacy-retired-b5003273@jwks-test.example",
+        "account_status": "active",
+        "email_verified": true,
+        "created_at": "2026-11-11 04:22:10.738368+08:00"
+      },
+      {
+        "user_id": "b4e814ed-da9d-4b7f-991c-f70a27ab1ecf",
+        "full_name": "Test User",
+        "email": "legacy-retired-b4e814ed@jwks-test.example",
+        "account_status": "active",
+        "email_verified": true,
+        "created_at": "2026-11-11 04:24:47.063630+08:00"
+      },
+      {
+        "user_id": "9e01a5f2-42d3-4fe0-b33d-2a776e3dd803",
+        "full_name": "Test User",
+        "email": "legacy-retired-9e01a5f2@jwks-test.example",
+        "account_status": "active",
+        "email_verified": true,
+        "created_at": "2026-11-11 09:42:39.582655+08:00"
+      },
+      {
+        "user_id": "9e1ccfff-a6a9-4308-aa61-139a0843072b",
+        "full_name": "Test User",
+        "email": "legacy-retired-9e1ccfff@jwks-test.example",
+        "account_status": "active",
+        "email_verified": true,
+        "created_at": "2026-11-11 09:46:10.914805+08:00"
+      },
+      {
+        "user_id": "8dcb828f-1129-4082-845f-0c7ce399dd1d",
+        "full_name": "Test User",
+        "email": "legacy-retired-8dcb828f@jwks-test.example",
+        "account_status": "active",
+        "email_verified": true,
+        "created_at": "2026-11-11 09:49:55.645115+08:00"
+      },
+      {
+        "user_id": "3fb96a9e-f1a8-4046-bd96-c4c03079e848",
+        "full_name": "Test User",
+        "email": "legacy-retired-3fb96a9e@jwks-test.example",
+        "account_status": "active",
+        "email_verified": true,
+        "created_at": "2026-11-11 09:53:02.594162+08:00"
+      },
+      {
+        "user_id": "af74a957-f60d-4795-93a8-e175bc110956",
+        "full_name": "Test User",
+        "email": "legacy-retired-af74a957@jwks-test.example",
+        "account_status": "active",
+        "email_verified": true,
+        "created_at": "2026-11-11 09:56:19.632945+08:00"
+      },
+      {
+        "user_id": "b45917d4-b81f-4e48-8b77-6be89a64cb38",
+        "full_name": "Test User",
+        "email": "geo-672e50c6@jwks-test.example",
+        "account_status": "active",
+        "email_verified": true,
+        "created_at": "2026-11-11 11:16:28.759907+08:00"
+      },
+      {
+        "user_id": "14cb1619-bfd1-4fb7-b99c-4c4d875f9a25",
+        "full_name": "Test User",
+        "email": "geo-edb68865@jwks-test.example",
+        "account_status": "active",
+        "email_verified": true,
+        "created_at": "2026-11-11 11:17:18.263996+08:00"
+      },
+      {
+        "user_id": "3651879a-55b7-4e51-99b6-5b759f50abe5",
+        "full_name": "Test User",
+        "email": "geo-f24d3aaa@jwks-test.example",
+        "account_status": "active",
+        "email_verified": true,
+        "created_at": "2026-11-11 11:18:11.147453+08:00"
+      },
+      {
+        "user_id": "06a012f6-622d-41b4-a6b5-edf54fb58ad3",
+        "full_name": "Test User",
+        "email": "geo-d6fed585@jwks-test.example",
+        "account_status": "active",
+        "email_verified": true,
+        "created_at": "2026-11-11 11:18:29.081953+08:00"
+      },
+      {
+        "user_id": "f1e162e8-eba4-4661-b04a-a07a55941181",
+        "full_name": "Test User",
+        "email": "geo-57be20be@jwks-test.example",
+        "account_status": "active",
+        "email_verified": true,
+        "created_at": "2026-11-11 11:18:44.771498+08:00"
+      },
+      {
+        "user_id": "854d3a61-f060-49c9-891e-1cef65a9ab98",
+        "full_name": "Test User",
+        "email": "geo-a1688284@jwks-test.example",
+        "account_status": "active",
+        "email_verified": true,
+        "created_at": "2026-11-11 11:19:05.959845+08:00"
+      },
+      {
+        "user_id": "efdf8300-a284-437d-8c71-c1865d5ad539",
+        "full_name": "Test User",
+        "email": "geo-68b7b27a@jwks-test.example",
+        "account_status": "active",
+        "email_verified": true,
+        "created_at": "2026-11-11 11:19:24.648771+08:00"
+      },
+      {
+        "user_id": "9365d4b7-52dd-4b92-b736-18b0e2adebcb",
+        "full_name": "Test User",
+        "email": "geo-36c16367@jwks-test.example",
+        "account_status": "active",
+        "email_verified": true,
+        "created_at": "2026-11-11 11:20:10.422116+08:00"
+      },
+      {
+        "user_id": "8c3855f5-c473-46b9-a1f9-9db0de3ceccb",
+        "full_name": "Test User",
+        "email": "legacy-retired-8c3855f5@jwks-test.example",
+        "account_status": "active",
+        "email_verified": true,
+        "created_at": "2026-11-11 11:21:39.829033+08:00"
+      },
+      {
+        "user_id": "0cd853fd-9421-4579-8e1d-8ea8f22bc598",
+        "full_name": "Test User",
+        "email": "geo-ce7838ea@jwks-test.example",
+        "account_status": "active",
+        "email_verified": true,
+        "created_at": "2026-11-11 11:24:47.549454+08:00"
+      },
+      {
+        "user_id": "1c973962-0674-4384-8070-ddbd6d03a3cd",
+        "full_name": "Test User",
+        "email": "legacy-retired-1c973962@jwks-test.example",
+        "account_status": "active",
+        "email_verified": true,
+        "created_at": "2026-11-11 11:25:38.952411+08:00"
+      },
+      {
+        "user_id": "1db66b8b-60b3-4e27-adb4-c11f2aaf8b36",
+        "full_name": "Test User",
+        "email": "geo-3c54e704@jwks-test.example",
+        "account_status": "active",
+        "email_verified": true,
+        "created_at": "2026-11-11 11:28:15.418868+08:00"
+      },
+      {
+        "user_id": "a6cae6b4-884d-4de8-b020-7f0e71c274c3",
+        "full_name": "Test User",
+        "email": "legacy-retired-a6cae6b4@jwks-test.example",
+        "account_status": "active",
+        "email_verified": true,
+        "created_at": "2026-11-11 11:29:44.702998+08:00"
+      },
+      {
+        "user_id": "56f8130c-af50-4554-bae3-0ca4ec59075e",
+        "full_name": "Test User",
+        "email": "geo-7bbc48a0@jwks-test.example",
+        "account_status": "active",
+        "email_verified": true,
+        "created_at": "2026-11-11 11:34:37.941784+08:00"
+      },
+      {
+        "user_id": "c4180d10-578a-4bdf-8e1f-5db477e1b11b",
+        "full_name": "Test User",
+        "email": "legacy-retired-c4180d10@jwks-test.example",
+        "account_status": "active",
+        "email_verified": true,
+        "created_at": "2026-11-11 11:35:39.395139+08:00"
+      },
+      {
+        "user_id": "63e495fe-342b-4899-96b4-4a1ae35ef81a",
+        "full_name": "Test User",
+        "email": "legacy-retired-63e495fe@jwks-test.example",
+        "account_status": "active",
+        "email_verified": true,
+        "created_at": "2026-11-11 11:35:51.505725+08:00"
+      },
+      {
+        "user_id": "134be95e-e1ba-4e0e-ab01-5e0abc67b542",
+        "full_name": "Test User",
+        "email": "geo-15684659@jwks-test.example",
+        "account_status": "active",
+        "email_verified": true,
+        "created_at": "2026-11-11 11:38:22.067060+08:00"
+      },
+      {
+        "user_id": "228b90b6-a26b-457d-ba41-10c31edec379",
+        "full_name": "Test User",
+        "email": "geo-778f59cf@jwks-test.example",
+        "account_status": "active",
+        "email_verified": true,
+        "created_at": "2026-11-11 11:38:28.764814+08:00"
+      },
+      {
+        "user_id": "cf4f8ec0-6293-4650-8d68-a37c464005c2",
+        "full_name": "Test User",
+        "email": "legacy-retired-cf4f8ec0@jwks-test.example",
+        "account_status": "active",
+        "email_verified": true,
+        "created_at": "2026-11-11 11:39:53.437971+08:00"
+      },
+      {
+        "user_id": "e1146c68-e4e2-4496-aa52-d24323e53744",
+        "full_name": "Test User",
+        "email": "geo-eba70d39@jwks-test.example",
+        "account_status": "active",
+        "email_verified": true,
+        "created_at": "2026-11-11 11:44:03.962205+08:00"
+      },
+      {
+        "user_id": "f866d855-b4aa-4bac-ad83-5abf9faa5f8b",
+        "full_name": "Test User",
+        "email": "legacy-retired-f866d855@jwks-test.example",
+        "account_status": "active",
+        "email_verified": true,
+        "created_at": "2026-11-11 11:45:36.611767+08:00"
+      },
+      {
+        "user_id": "fcfe913a-5af7-4a69-9cd5-7659e9dcfc0c",
+        "full_name": "Test User",
+        "email": "geo-e349967f@jwks-test.example",
+        "account_status": "active",
+        "email_verified": true,
+        "created_at": "2026-11-11 11:49:39.953140+08:00"
+      },
+      {
+        "user_id": "ed7ecdb2-87fa-44fc-8ea9-f8582bb24f70",
+        "full_name": "Test User",
+        "email": "legacy-retired-ed7ecdb2@jwks-test.example",
+        "account_status": "active",
+        "email_verified": true,
+        "created_at": "2026-11-11 11:52:43.793168+08:00"
+      },
+      {
+        "user_id": "e0f553b0-3fb0-4ac0-b166-f7b34ad611fa",
+        "full_name": "Test User",
+        "email": "geo-6454285d@jwks-test.example",
+        "account_status": "active",
+        "email_verified": true,
+        "created_at": "2026-11-11 11:57:31.649608+08:00"
+      },
+      {
+        "user_id": "715d4d73-b53f-4d46-911e-70366b473d3e",
+        "full_name": "Test User",
+        "email": "geo-b6fe8e81@jwks-test.example",
+        "account_status": "active",
+        "email_verified": true,
+        "created_at": "2026-11-11 11:58:00.320936+08:00"
+      },
+      {
+        "user_id": "4600052b-f763-4dd9-8911-514f55909ea3",
+        "full_name": "Test User",
+        "email": "legacy-retired-4600052b@jwks-test.example",
+        "account_status": "active",
+        "email_verified": true,
+        "created_at": "2026-11-11 11:59:52.759356+08:00"
+      },
+      {
+        "user_id": "b5cab923-f375-46e6-a698-4a2e9663a648",
+        "full_name": "Test User",
+        "email": "legacy-retired-b5cab923@jwks-test.example",
+        "account_status": "active",
+        "email_verified": true,
+        "created_at": "2026-11-11 12:02:09.259111+08:00"
+      },
+      {
+        "user_id": "c49dd684-a135-49a6-bb99-9db925bb8427",
+        "full_name": "Test User",
+        "email": "geo-cc7eb01d@jwks-test.example",
+        "account_status": "active",
+        "email_verified": true,
+        "created_at": "2026-11-11 12:02:21.150353+08:00"
+      },
+      {
+        "user_id": "f35ad481-01d3-4023-bb32-e335bcd08fc4",
+        "full_name": "Test User",
+        "email": "geo-c2e4a0e0@jwks-test.example",
+        "account_status": "active",
+        "email_verified": true,
+        "created_at": "2026-11-11 12:03:48.485662+08:00"
+      },
+      {
+        "user_id": "3344a9ab-96cf-4003-b7ed-44a551d335a3",
+        "full_name": "Test User",
+        "email": "legacy-retired-3344a9ab@jwks-test.example",
+        "account_status": "active",
+        "email_verified": true,
+        "created_at": "2026-11-11 12:05:40.319084+08:00"
+      },
+      {
+        "user_id": "aa599777-d8d4-4238-9740-2594df009d1b",
+        "full_name": "Test User",
+        "email": "geo-70007283@jwks-test.example",
+        "account_status": "active",
+        "email_verified": true,
+        "created_at": "2026-11-11 12:06:33.859576+08:00"
+      },
+      {
+        "user_id": "f3479611-8b6f-4e8d-b81d-a9d359d25543",
+        "full_name": "Test User",
+        "email": "legacy-retired-f3479611@jwks-test.example",
+        "account_status": "active",
+        "email_verified": true,
+        "created_at": "2026-11-11 12:09:12.998184+08:00"
+      },
+      {
+        "user_id": "09b7421b-1fab-40fa-90e7-fe71d4da7b11",
+        "full_name": "Test User",
+        "email": "geo-87d6e5ae@jwks-test.example",
+        "account_status": "active",
+        "email_verified": true,
+        "created_at": "2026-11-11 12:11:14.251312+08:00"
+      },
+      {
+        "user_id": "6b60d4b0-3700-4ae4-80b0-d7935be4ae7f",
+        "full_name": "Test User",
+        "email": "legacy-retired-6b60d4b0@jwks-test.example",
+        "account_status": "active",
+        "email_verified": true,
+        "created_at": "2026-11-11 12:13:33.000307+08:00"
+      },
+      {
+        "user_id": "c66707e7-d6e3-4b3a-9411-ad45275eb1d2",
+        "full_name": "Test User",
+        "email": "geo-f79183aa@jwks-test.example",
+        "account_status": "active",
+        "email_verified": true,
+        "created_at": "2026-11-11 12:13:41.154708+08:00"
+      },
+      {
+        "user_id": "3e5cca7f-6092-4b3a-8406-ab16a1b5b82d",
+        "full_name": "Test User",
+        "email": "legacy-retired-3e5cca7f@jwks-test.example",
+        "account_status": "active",
+        "email_verified": true,
+        "created_at": "2026-11-11 12:15:42.083245+08:00"
+      },
+      {
+        "user_id": "020cd144-dab5-45de-b5e8-cb4d8a00b08e",
+        "full_name": "Test User",
+        "email": "legacy-retired-020cd144@jwks-test.example",
+        "account_status": "active",
+        "email_verified": true,
+        "created_at": "2026-11-11 12:15:42.095795+08:00"
+      },
+      {
+        "user_id": "8b76d344-2e48-48ee-8093-e070fb9e3e7b",
+        "full_name": "Test User",
+        "email": "shap-lat-8b76d344@jwks-test.example",
+        "account_status": "active",
+        "email_verified": true,
+        "created_at": "2026-11-11 12:17:19.624987+08:00"
+      },
+      {
+        "user_id": "6cef8663-c712-468a-a649-61b0f86e346e",
+        "full_name": "Test User",
+        "email": "legacy-retired-6cef8663@jwks-test.example",
+        "account_status": "active",
+        "email_verified": true,
+        "created_at": "2026-11-11 12:23:34.427055+08:00"
+      },
+      {
+        "user_id": "54733a86-15f8-4d9b-850b-8ba57fba78d0",
+        "full_name": "Test User",
+        "email": "geo-b6e03d7e@jwks-test.example",
+        "account_status": "active",
+        "email_verified": true,
+        "created_at": "2026-11-11 12:25:35.762193+08:00"
+      },
+      {
+        "user_id": "e77df865-cda6-4ea4-9538-72658dc3f2b1",
+        "full_name": "Test User",
+        "email": "legacy-retired-e77df865@jwks-test.example",
+        "account_status": "active",
+        "email_verified": true,
+        "created_at": "2026-11-11 12:26:21.549315+08:00"
+      },
+      {
+        "user_id": "23d78bc1-3794-434b-bd37-7515b61eb766",
+        "full_name": "Test User",
+        "email": "geo-212cab66@jwks-test.example",
+        "account_status": "active",
+        "email_verified": true,
+        "created_at": "2026-11-11 12:28:09.867058+08:00"
+      },
+      {
+        "user_id": "24bb99b6-9716-46c7-a439-208db3c21184",
+        "full_name": "Test User",
+        "email": "geo-5cc1317e@jwks-test.example",
+        "account_status": "active",
+        "email_verified": true,
+        "created_at": "2026-11-11 12:28:26.258274+08:00"
+      },
+      {
+        "user_id": "1ebc9dd2-fecb-48b7-84fd-0c9fba3b9dfe",
+        "full_name": "Test User",
+        "email": "geo-1c21163f@jwks-test.example",
+        "account_status": "active",
+        "email_verified": true,
+        "created_at": "2026-11-11 12:30:09.932345+08:00"
+      },
+      {
+        "user_id": "24798572-a9ae-4324-9606-7af3dcb64faf",
+        "full_name": "Test User",
+        "email": "geo-aba0f85c@jwks-test.example",
+        "account_status": "active",
+        "email_verified": true,
+        "created_at": "2026-11-11 12:31:07.109180+08:00"
+      },
+      {
+        "user_id": "8b7fb154-a320-4a9a-9620-1797bcabb236",
+        "full_name": "Test User",
+        "email": "geo-1f1f0ba3@jwks-test.example",
+        "account_status": "active",
+        "email_verified": true,
+        "created_at": "2026-11-11 12:31:46.308520+08:00"
+      },
+      {
+        "user_id": "dc5ec434-d30e-46a5-9b4f-6a22b2fc1e79",
+        "full_name": "Test User",
+        "email": "geo-877797a6@jwks-test.example",
+        "account_status": "active",
+        "email_verified": true,
+        "created_at": "2026-11-11 12:32:15.174755+08:00"
+      },
+      {
+        "user_id": "a355459b-70f1-4e81-be58-f60a438cacc3",
+        "full_name": "Test User",
+        "email": "geo-c31779f6@jwks-test.example",
+        "account_status": "active",
+        "email_verified": true,
+        "created_at": "2026-11-11 12:40:43.366234+08:00"
+      },
+      {
+        "user_id": "123d1490-726b-447f-bff9-91275706ebac",
+        "full_name": "Test User",
+        "email": "geo-b4299956@jwks-test.example",
+        "account_status": "active",
+        "email_verified": true,
+        "created_at": "2026-11-11 12:41:03.333814+08:00"
+      },
+      {
+        "user_id": "1d626dc9-d596-461e-8fa7-2ae99b5e8e1f",
+        "full_name": "Test User",
+        "email": "geo-715684a9@jwks-test.example",
+        "account_status": "active",
+        "email_verified": true,
+        "created_at": "2026-11-11 12:42:46.861049+08:00"
+      },
+      {
+        "user_id": "9d49a685-7f6a-4bee-8ae5-598a808744b1",
+        "full_name": "Test User",
+        "email": "pu47-9d49a685@jwks-test.example",
+        "account_status": "active",
+        "email_verified": true,
+        "created_at": "2026-11-11 21:35:36.823920+08:00"
+      },
+      {
+        "user_id": "eb4114fc-28c3-4d90-9ef7-6707ffd86b6b",
+        "full_name": "Test User",
+        "email": "pu47-eb4114fc@jwks-test.example",
+        "account_status": "active",
+        "email_verified": true,
+        "created_at": "2026-11-11 21:35:39.177157+08:00"
+      },
+      {
+        "user_id": "c69f519b-4c12-4ea4-a10a-82f4c1d6f34b",
+        "full_name": "Test User",
+        "email": "pu47-c69f519b@jwks-test.example",
+        "account_status": "active",
+        "email_verified": true,
+        "created_at": "2026-11-11 21:35:41.018376+08:00"
+      },
+      {
+        "user_id": "64746a49-282f-4145-bfac-3b7b0e1da6f3",
+        "full_name": "Test User",
+        "email": "pu47-64746a49@jwks-test.example",
+        "account_status": "active",
+        "email_verified": true,
+        "created_at": "2026-11-11 21:35:57.212314+08:00"
+      },
+      {
+        "user_id": "5a8a690d-76f8-4080-a17f-70631db7c5c0",
+        "full_name": "Test User",
+        "email": "legacy-retired-5a8a690d@jwks-test.example",
+        "account_status": "active",
+        "email_verified": true,
+        "created_at": "2026-11-11 22:23:43.076397+08:00"
+      },
+      {
+        "user_id": "46f5c5ea-f3bc-4ff0-b560-fc868a423a22",
+        "full_name": "Test User",
+        "email": "geo-4bdd6f98@jwks-test.example",
+        "account_status": "active",
+        "email_verified": true,
+        "created_at": "2026-11-12 02:01:03.324113+08:00"
+      },
+      {
+        "user_id": "7d4d3be3-0df2-4845-9588-f8415ef4dcd1",
+        "full_name": "Test User",
+        "email": "legacy-retired-7d4d3be3@jwks-test.example",
+        "account_status": "active",
+        "email_verified": true,
+        "created_at": "2026-11-12 02:13:20.868159+08:00"
+      },
+      {
+        "user_id": "97be3600-db46-4c10-b16f-0f76ccce164c",
+        "full_name": "Test User",
+        "email": "geo-eb6f0cda@jwks-test.example",
+        "account_status": "active",
+        "email_verified": true,
+        "created_at": "2026-11-12 02:15:49.200634+08:00"
+      },
+      {
+        "user_id": "af95efe3-f7f4-4ba9-a2ae-e6a323e5a72d",
+        "full_name": "Test User",
+        "email": "legacy-retired-af95efe3@jwks-test.example",
+        "account_status": "active",
+        "email_verified": true,
+        "created_at": "2026-11-12 06:34:28.070275+08:00"
+      },
+      {
+        "user_id": "0634e45c-d776-43ac-a743-efa9adb3cff3",
+        "full_name": "Test User",
+        "email": "legacy-retired-0634e45c@jwks-test.example",
+        "account_status": "active",
+        "email_verified": true,
+        "created_at": "2026-11-12 06:38:26.049793+08:00"
+      },
+      {
+        "user_id": "723cbe0b-375d-4ff2-9a31-636e16d135db",
+        "full_name": "Test User",
+        "email": "legacy-retired-723cbe0b@jwks-test.example",
+        "account_status": "active",
+        "email_verified": true,
+        "created_at": "2026-11-12 06:42:59.170456+08:00"
+      }
+    ],
+    "legacy_owners": [
+      {
+        "owner_id": 8,
+        "listings": 227,
+        "with_uuid": 0
+      }
+    ],
+    "assignment_table_exists": true,
+    "users_table_exists": true
+  },
+  "supabase": {
+    "public_users": [
+      {
+        "user_id": "8de9ed3b-1431-4603-b680-731e40f53628",
+        "full_name": "Joel Personal",
+        "email": "joelstrengthpersonal@gmail.com",
+        "role": "agent",
+        "account_status": "active",
+        "email_verified": true,
+        "created_at": "2026-11-10T12:42:34.638398+00:00"
+      },
+      {
+        "user_id": "3da08202-ed88-4b2f-8b0c-2bd444bd5ebc",
+        "full_name": "Shizhe",
+        "email": "shizhe832@gmail.com",
+        "role": "entrepreneur",
+        "account_status": "active",
+        "email_verified": true,
+        "created_at": "2026-11-07T03:50:59.920888+00:00"
+      },
+      {
+        "user_id": "3911bb2e-c829-4578-831a-5b01fd1ddefa",
+        "full_name": "Sitewise Administrator",
+        "email": "admin.sitewise@gmail.com",
+        "role": "admin",
+        "account_status": "active",
+        "email_verified": true,
+        "created_at": "2026-11-05T21:16:31.980402+00:00"
+      },
+      {
+        "user_id": "02183dc8-9f4e-4273-a8bd-afbcd705eb4b",
+        "full_name": "joel",
+        "email": "joelcode@gmail.com",
+        "role": "entrepreneur",
+        "account_status": "pending",
+        "email_verified": false,
+        "created_at": "2026-11-12T02:27:31.522838+00:00"
+      },
+      {
+        "user_id": "7947affa-a84c-4c6d-be30-3379a81adc36",
+        "full_name": "Sitewise Administrator FYP",
+        "email": "sitewise.fyp@gmail.com",
+        "role": "admin",
+        "account_status": "active",
+        "email_verified": true,
+        "created_at": "2026-11-07T20:16:47.875002+00:00"
+      },
+      {
+        "user_id": "9cc08037-4930-491d-b22a-63e03735f99a",
+        "full_name": "Sitewise Administrator1",
+        "email": "admin.sitewise1@gmail.com",
+        "role": "admin",
+        "account_status": "active",
+        "email_verified": true,
+        "created_at": "2026-11-07T13:03:53.318824+00:00"
+      },
+      {
+        "user_id": "dcbc87df-0911-49ed-806c-02305441439f",
+        "full_name": "Joel",
+        "email": "joeltanhoujun@gmail.com",
+        "role": "agent",
+        "account_status": "active",
+        "email_verified": true,
+        "created_at": "2026-11-11T05:35:34.170321+00:00"
+      },
+      {
+        "user_id": "32ef694a-69b0-4863-a77f-b9cf6c056b56",
+        "full_name": "Tab",
+        "email": "tabhello1612@gmail.com",
+        "role": "entrepreneur",
+        "account_status": "active",
+        "email_verified": true,
+        "created_at": "2026-11-09T00:38:27.485865+00:00"
+      },
+      {
+        "user_id": "42220ce3-d565-445e-96eb-b26902626461",
+        "full_name": "fff",
+        "email": "jedtanhoujie@gmail.com",
+        "role": "entrepreneur",
+        "account_status": "active",
+        "email_verified": true,
+        "created_at": "2026-11-09T00:04:19.985289+00:00"
+      },
+      {
+        "user_id": "f69be94e-fc0e-46ff-adc4-99567a5d916d",
+        "full_name": "TAN HOU JUN JOEL",
+        "email": "joelthj-wm23@student.tarc.edu.my",
+        "role": "entrepreneur",
+        "account_status": "active",
+        "email_verified": true,
+        "created_at": "2026-11-01T14:58:24.833318+00:00"
+      },
+      {
+        "user_id": "f56fa3fa-6dde-4176-92e5-d8a460aafd01",
+        "full_name": "fff",
+        "email": "jedthj-wm23@student.tarc.edu.my",
+        "role": "entrepreneur",
+        "account_status": "active",
+        "email_verified": true,
+        "created_at": "2026-11-09T00:05:44.965109+00:00"
+      }
+    ],
+    "public_users_by_role": {
+      "agent/active": 2,
+      "entrepreneur/active": 5,
+      "admin/active": 3,
+      "entrepreneur/pending": 1
+    },
+    "agents": [
+      {
+        "agent_id": 2,
+        "agent_name": "Joel Personal",
+        "company_id": 1,
+        "user_id": "8de9ed3b-1431-4603-b680-731e40f53628",
+        "created_by_user_id": null,
+        "created_at": "2026-11-10T12:42:38.893555+00:00"
+      },
+      {
+        "agent_id": 3,
+        "agent_name": "Joel",
+        "company_id": 1,
+        "user_id": "dcbc87df-0911-49ed-806c-02305441439f",
+        "created_by_user_id": null,
+        "created_at": "2026-11-11T05:35:38.333972+00:00"
+      }
+    ],
+    "companies": [
+      {
+        "company_id": 1,
+        "company_name": "Sitewise",
+        "created_at": "2026-11-05T07:41:42.248738+00:00",
+        "company_type": "internal"
+      },
+      {
+        "company_id": 2,
+        "company_name": "Hello",
+        "created_at": "2026-11-09T13:24:18.194701+00:00",
+        "company_type": null
+      }
+    ],
+    "auth_user_count": 11,
+    "auth_users": [
+      {
+        "id": "02183dc8-9f4e-4273-a8bd-afbcd705eb4b",
+        "email": "joelcode@gmail.com",
+        "email_confirmed_at": "",
+        "confirmed_at": "",
+        "banned_until": "",
+        "last_sign_in_at": ""
+      },
+      {
+        "id": "dcbc87df-0911-49ed-806c-02305441439f",
+        "email": "joeltanhoujun@gmail.com",
+        "email_confirmed_at": "2026-11-11 05:36:20.727221+00:00",
+        "confirmed_at": "2026-11-11 05:36:20.727221+00:00",
+        "banned_until": "",
+        "last_sign_in_at": "2026-11-11 05:36:20.739691+00:00"
+      },
+      {
+        "id": "8de9ed3b-1431-4603-b680-731e40f53628",
+        "email": "joelstrengthpersonal@gmail.com",
+        "email_confirmed_at": "2026-11-10 12:43:12.580342+00:00",
+        "confirmed_at": "2026-11-10 12:43:12.580342+00:00",
+        "banned_until": "",
+        "last_sign_in_at": "2026-11-11 20:07:57.681076+00:00"
+      },
+      {
+        "id": "32ef694a-69b0-4863-a77f-b9cf6c056b56",
+        "email": "tabhello1612@gmail.com",
+        "email_confirmed_at": "2026-11-09 00:38:27.519626+00:00",
+        "confirmed_at": "2026-11-09 00:38:27.519626+00:00",
+        "banned_until": "",
+        "last_sign_in_at": "2026-11-12 09:03:43.529037+00:00"
+      },
+      {
+        "id": "f56fa3fa-6dde-4176-92e5-d8a460aafd01",
+        "email": "jedthj-wm23@student.tarc.edu.my",
+        "email_confirmed_at": "2026-11-09 00:06:44.388097+00:00",
+        "confirmed_at": "2026-11-09 00:06:44.388097+00:00",
+        "banned_until": "",
+        "last_sign_in_at": "2026-11-10 07:55:45.788806+00:00"
+      },
+      {
+        "id": "42220ce3-d565-445e-96eb-b26902626461",
+        "email": "jedtanhoujie@gmail.com",
+        "email_confirmed_at": "2026-11-09 00:05:19.463803+00:00",
+        "confirmed_at": "2026-11-09 00:05:19.463803+00:00",
+        "banned_until": "",
+        "last_sign_in_at": ""
+      },
+      {
+        "id": "7947affa-a84c-4c6d-be30-3379a81adc36",
+        "email": "sitewise.fyp@gmail.com",
+        "email_confirmed_at": "2026-11-07 20:16:47.923078+00:00",
+        "confirmed_at": "2026-11-07 20:16:47.923078+00:00",
+        "banned_until": "",
+        "last_sign_in_at": "2026-11-11 04:47:33.987666+00:00"
+      },
+      {
+        "id": "9cc08037-4930-491d-b22a-63e03735f99a",
+        "email": "admin.sitewise1@gmail.com",
+        "email_confirmed_at": "2026-11-07 13:03:53.365538+00:00",
+        "confirmed_at": "2026-11-07 13:03:53.365538+00:00",
+        "banned_until": "",
+        "last_sign_in_at": "2026-11-07 14:45:04.928586+00:00"
+      },
+      {
+        "id": "3da08202-ed88-4b2f-8b0c-2bd444bd5ebc",
+        "email": "shizhe832@gmail.com",
+        "email_confirmed_at": "2026-11-07 03:51:00.132455+00:00",
+        "confirmed_at": "2026-11-07 03:51:00.132455+00:00",
+        "banned_until": "",
+        "last_sign_in_at": "2026-11-07 03:52:11.775067+00:00"
+      },
+      {
+        "id": "3911bb2e-c829-4578-831a-5b01fd1ddefa",
+        "email": "admin.sitewise@gmail.com",
+        "email_confirmed_at": "2026-11-05 21:16:32.028971+00:00",
+        "confirmed_at": "2026-11-05 21:16:32.028971+00:00",
+        "banned_until": "",
+        "last_sign_in_at": "2026-11-07 12:45:18.198588+00:00"
+      },
+      {
+        "id": "f69be94e-fc0e-46ff-adc4-99567a5d916d",
+        "email": "joelthj-wm23@student.tarc.edu.my",
+        "email_confirmed_at": "2026-11-01 14:58:24.962658+00:00",
+        "confirmed_at": "2026-11-01 14:58:24.962658+00:00",
+        "banned_until": "",
+        "last_sign_in_at": "2026-11-12 10:48:38.091258+00:00"
+      }
+    ]
+  },
+  "sync": {
+    "auth_users": 11,
+    "supabase_public_users": 11,
+    "local_public_users": 110,
+    "auth_without_public_users": [],
+    "public_users_without_auth": [],
+    "supabase_without_local_mirror": [
+      "02183dc8-9f4e-4273-a8bd-afbcd705eb4b",
+      "32ef694a-69b0-4863-a77f-b9cf6c056b56",
+      "3da08202-ed88-4b2f-8b0c-2bd444bd5ebc",
+      "42220ce3-d565-445e-96eb-b26902626461"
+    ],
+    "local_without_supabase": [
+      "020cd144-dab5-45de-b5e8-cb4d8a00b08e",
+      "03a3b678-4377-4355-b10d-5fd579eaf28f",
+      "053c4400-f0a2-4c6b-a2a2-50d1470b3949",
+      "0634e45c-d776-43ac-a743-efa9adb3cff3",
+      "06a012f6-622d-41b4-a6b5-edf54fb58ad3",
+      "09b7421b-1fab-40fa-90e7-fe71d4da7b11",
+      "0cd853fd-9421-4579-8e1d-8ea8f22bc598",
+      "0d40265c-bd23-4d4f-a8fa-d0dc006b61be",
+      "11111111-1111-1111-1111-111111111111",
+      "123d1490-726b-447f-bff9-91275706ebac",
+      "134be95e-e1ba-4e0e-ab01-5e0abc67b542",
+      "14cb1619-bfd1-4fb7-b99c-4c4d875f9a25",
+      "1a2411cd-3b0f-4165-8e00-b72efda7b995",
+      "1c973962-0674-4384-8070-ddbd6d03a3cd",
+      "1d626dc9-d596-461e-8fa7-2ae99b5e8e1f",
+      "1db66b8b-60b3-4e27-adb4-c11f2aaf8b36",
+      "1ebc9dd2-fecb-48b7-84fd-0c9fba3b9dfe",
+      "22222222-2222-2222-2222-222222222222",
+      "228b90b6-a26b-457d-ba41-10c31edec379",
+      "23d78bc1-3794-434b-bd37-7515b61eb766",
+      "24798572-a9ae-4324-9606-7af3dcb64faf",
+      "24bb99b6-9716-46c7-a439-208db3c21184",
+      "289c340d-45a6-4274-adf4-fdd59b743355",
+      "33333333-3333-3333-3333-333333333333",
+      "3344a9ab-96cf-4003-b7ed-44a551d335a3",
+      "348b5f0c-bb55-434c-b22d-cd60d4bdf774",
+      "3651879a-55b7-4e51-99b6-5b759f50abe5",
+      "3ae02ed2-8e5e-406a-9e8a-389d35dc04d1",
+      "3b239e74-c279-4852-846b-4c80492e6176",
+      "3e5cca7f-6092-4b3a-8406-ab16a1b5b82d",
+      "3fb96a9e-f1a8-4046-bd96-c4c03079e848",
+      "3ffbbc09-65df-4105-8ebf-8b3875a12a39",
+      "4285aeb5-306d-4887-94be-cc356e978b1e",
+      "44444444-4444-4444-4444-444444444444",
+      "4600052b-f763-4dd9-8911-514f55909ea3",
+      "46f5c5ea-f3bc-4ff0-b560-fc868a423a22",
+      "4ce62dfc-e277-48ef-b1ad-5260b6abf1d6",
+      "5129ff0b-a388-43f8-8cc8-373fdaf68c6d",
+      "54733a86-15f8-4d9b-850b-8ba57fba78d0",
+      "56f8130c-af50-4554-bae3-0ca4ec59075e",
+      "5a8a690d-76f8-4080-a17f-70631db7c5c0",
+      "602e7061-0e0d-4165-9bb2-4a3208e65f5d",
+      "63e495fe-342b-4899-96b4-4a1ae35ef81a",
+      "64746a49-282f-4145-bfac-3b7b0e1da6f3",
+      "6b1d4d51-1ad1-4b39-b324-383ecba6baf1",
+      "6b60d4b0-3700-4ae4-80b0-d7935be4ae7f",
+      "6cef8663-c712-468a-a649-61b0f86e346e",
+      "715d4d73-b53f-4d46-911e-70366b473d3e",
+      "723cbe0b-375d-4ff2-9a31-636e16d135db",
+      "7d4d3be3-0df2-4845-9588-f8415ef4dcd1",
+      "83dc911c-9490-4882-b0e9-d3ada06ce15e",
+      "854d3a61-f060-49c9-891e-1cef65a9ab98",
+      "88c8e54b-1005-425f-9c68-6c165d5a817c",
+      "8af08167-6c4a-4a89-82a9-bc74031f8e10",
+      "8b76d344-2e48-48ee-8093-e070fb9e3e7b",
+      "8b7fb154-a320-4a9a-9620-1797bcabb236",
+      "8c3855f5-c473-46b9-a1f9-9db0de3ceccb",
+      "8d568a7b-c31b-46b6-bd7c-62ca823e5779",
+      "8dcb828f-1129-4082-845f-0c7ce399dd1d",
+      "9365d4b7-52dd-4b92-b736-18b0e2adebcb",
+      "97be3600-db46-4c10-b16f-0f76ccce164c",
+      "9d49a685-7f6a-4bee-8ae5-598a808744b1",
+      "9e01a5f2-42d3-4fe0-b33d-2a776e3dd803",
+      "9e1ccfff-a6a9-4308-aa61-139a0843072b",
+      "a355459b-70f1-4e81-be58-f60a438cacc3",
+      "a6cae6b4-884d-4de8-b020-7f0e71c274c3",
+      "aa599777-d8d4-4238-9740-2594df009d1b",
+      "aa9aba65-5aa2-401a-9211-12e49d329867",
+      "ae1de943-471b-4c4f-93f0-d8395aab453d",
+      "af74a957-f60d-4795-93a8-e175bc110956",
+      "af95efe3-f7f4-4ba9-a2ae-e6a323e5a72d",
+      "b45917d4-b81f-4e48-8b77-6be89a64cb38",
+      "b4e814ed-da9d-4b7f-991c-f70a27ab1ecf",
+      "b5003273-5cec-41e9-adad-9de56baac166",
+      "b5cab923-f375-46e6-a698-4a2e9663a648",
+      "c0c505cf-0289-4888-a7ea-1846d83591b3",
+      "c4180d10-578a-4bdf-8e1f-5db477e1b11b",
+      "c49dd684-a135-49a6-bb99-9db925bb8427",
+      "c4c2bbd5-c277-4b50-9452-d775afb303fc",
+      "c54db994-8a80-4788-9555-99b716ae1f28",
+      "c66707e7-d6e3-4b3a-9411-ad45275eb1d2",
+      "c69f519b-4c12-4ea4-a10a-82f4c1d6f34b",
+      "cf4f8ec0-6293-4650-8d68-a37c464005c2",
+      "d575cf4d-39eb-4c11-859f-be787d38ecc1",
+      "d921f23b-1aa9-4d4c-b923-e1cfaa874378",
+      "d92f9cfa-36e6-45e9-b102-fecc5e6b440a",
+      "dc5ec434-d30e-46a5-9b4f-6a22b2fc1e79",
+      "ded48f65-1886-4e02-afef-09f6b682f42e",
+      "e0f553b0-3fb0-4ac0-b166-f7b34ad611fa",
+      "e1146c68-e4e2-4496-aa52-d24323e53744",
+      "e77df865-cda6-4ea4-9538-72658dc3f2b1",
+      "eacbfd43-fe08-4194-b008-b6ae9ca86e54",
+      "eb4114fc-28c3-4d90-9ef7-6707ffd86b6b",
+      "ed7ecdb2-87fa-44fc-8ea9-f8582bb24f70",
+      "efdf8300-a284-437d-8c71-c1865d5ad539",
+      "f1e162e8-eba4-4661-b04a-a07a55941181",
+      "f3479611-8b6f-4e8d-b81d-a9d359d25543",
+      "f35ad481-01d3-4023-bb32-e335bcd08fc4",
+      "f866d855-b4aa-4bac-ad83-5abf9faa5f8b",
+      "f94a25fd-a4e4-4082-8c17-7440541507c8",
+      "fb4afb01-522e-49a7-9704-82f6b7ea360c",
+      "fcfe913a-5af7-4a69-9cd5-7659e9dcfc0c",
+      "fe4ade8c-6b3f-4d92-a2f4-1048d578f0ce"
+    ],
+    "agents": {
+      "2": {
+        "user_id": "8de9ed3b-1431-4603-b680-731e40f53628",
+        "in_auth": true,
+        "in_supabase_public_users": true,
+        "in_local_mirror": true,
+        "local_role": "agent",
+        "local_status": "active"
+      },
+      "3": {
+        "user_id": "dcbc87df-0911-49ed-806c-02305441439f",
+        "in_auth": true,
+        "in_supabase_public_users": true,
+        "in_local_mirror": true,
+        "local_role": "agent",
+        "local_status": "active"
+      }
+    }
+  }
+}

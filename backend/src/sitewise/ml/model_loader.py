@@ -14,6 +14,7 @@ from __future__ import annotations
 import json
 import re
 import sys
+import threading
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
@@ -22,6 +23,14 @@ from sitewise.core.exceptions import ModelUnavailableError
 
 ARTIFACTS_DIR = Path(__file__).resolve().parent
 _NAME = re.compile(r"^[A-Za-z0-9_-]+$")
+
+#: Process-wide deserialised-artifact cache, keyed by the artifact's exact
+#: identity (path, mtime_ns, size). A replaced or edited binary changes
+#: mtime/size and can never reuse the previous deserialisation, while the
+#: per-request ``joblib.load`` of an unchanged artifact — measured at up to
+#: 10 s on the first call of a worker process — is paid once.
+_LOAD_CACHE: dict[tuple[str, int, int], "LoadedModel"] = {}
+_LOAD_CACHE_LOCK = threading.Lock()
 
 
 @dataclass(frozen=True)
@@ -74,7 +83,40 @@ class ModelLoader:
         )
 
     def load(self, name: str = "pu_model") -> LoadedModel:
+        return self._load(name, use_cache=False)
+
+    def load_cached(self, name: str = "pu_model") -> LoadedModel:
+        """``load`` with process-wide deserialisation reuse.
+
+        Cache identity is the artifact file's (path, mtime_ns, size): a
+        replaced artifact invalidates automatically, and no test that swaps
+        artifacts via a different path can observe another file's model. The
+        returned object must be treated as read-only — the same instance is
+        shared by every caller in this process.
+        """
+        return self._load(name, use_cache=True)
+
+    def _load(self, name: str, *, use_cache: bool) -> LoadedModel:
         path = self._find_artifact(name)
+        cache_key = None
+        if use_cache:
+            try:
+                stat = path.stat()
+                cache_key = (str(path), stat.st_mtime_ns, stat.st_size)
+            except OSError:
+                cache_key = None
+            if cache_key is not None:
+                with _LOAD_CACHE_LOCK:
+                    hit = _LOAD_CACHE.get(cache_key)
+                if hit is not None:
+                    return hit
+        loaded = self._deserialize(name, path)
+        if cache_key is not None:
+            with _LOAD_CACHE_LOCK:
+                _LOAD_CACHE[cache_key] = loaded
+        return loaded
+
+    def _deserialize(self, name: str, path: Path) -> LoadedModel:
         try:
             import joblib
             # Required by the committed pickle: global pu_model.BaggedPUClassifier.
@@ -103,6 +145,65 @@ class ModelLoader:
                 and isinstance(v, (str, bool, int, float, type(None), tuple, list))
             }
             meta["artifact_type"] = "bundled_joblib"
+        elif (
+            isinstance(artifact, dict)
+            and isinstance(artifact.get("model_info"), dict)
+            and "estimators" in artifact
+        ):
+            # 2026-11-15 expanded PU packages: {model_info, estimators} dicts
+            # with no pickled wrapper class. The shim is built in-process and
+            # applies the training package's own inference recipe (mean of the
+            # bagged members' positive-class probabilities). The exact feature
+            # order comes from model_info["feature_names"] — never assumed.
+            from sitewise.ml.pu_model_compat import PUExpandedEnsemble
+
+            info = artifact["model_info"]
+            raw_names = info.get("feature_names")
+            if not isinstance(raw_names, (tuple, list)) or not raw_names:
+                raise ModelUnavailableError("Bagged PU artifact feature contract is missing")
+            names = [str(x) for x in raw_names]
+            estimators = artifact["estimators"]
+            if not isinstance(estimators, list) or not estimators:
+                raise ModelUnavailableError("Bagged PU artifact has no fitted estimators")
+            if not all(hasattr(e, "predict_proba") for e in estimators):
+                raise ModelUnavailableError("A bagged PU estimator lacks predict_proba")
+            ensemble = PUExpandedEnsemble()
+            ensemble.estimators = estimators
+            ensemble.estimators_ = list(estimators)  # PULearning imputer inspection
+            ensemble.feature_names = names
+            ensemble.n_features_in_ = len(names)
+            ensemble.feature_names_in_ = names
+            model = ensemble
+            meta = {
+                k: v for k, v in info.items()
+                if k != "feature_names"
+                and isinstance(v, (str, bool, int, float, type(None), tuple, list))
+            }
+            meta["artifact_type"] = "bagged_dict_2026_11_15"
+        elif (
+            isinstance(artifact, dict)
+            and isinstance(artifact.get("metadata"), dict)
+            and "category_model" in artifact
+        ):
+            # 2026-11-15 F&B category package: {metadata, category_model, ...}
+            # The estimator is a fitted sklearn Pipeline; the exact 54-feature
+            # contract (leakage-reduced: the ten competitor-count columns are
+            # excluded) comes from metadata["category_feature_names"].
+            info = artifact["metadata"]
+            raw_names = info.get("category_feature_names")
+            if not isinstance(raw_names, (tuple, list)) or not raw_names:
+                raise ModelUnavailableError("Category artifact feature contract is missing")
+            names = [str(x) for x in raw_names]
+            model = artifact["category_model"]
+            meta = {
+                k: v for k, v in info.items()
+                if k not in {"category_feature_names", "pu_feature_names"}
+                and isinstance(v, (str, bool, int, float, type(None), tuple, list))
+            }
+            # The PU contract is retained for auditability without exporting a
+            # 64-name list into every response.
+            meta["pu_feature_count"] = len(info.get("pu_feature_names") or [])
+            meta["artifact_type"] = "category_conditional_2026_11_15"
         else:
             model = artifact
             features_path = path.with_name(f"{name}_features.json")

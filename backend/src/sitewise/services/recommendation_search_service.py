@@ -4,10 +4,11 @@ Scope and honesty contract
 ==========================
 
 This service ranks **real, existing** catalogue listings
-(``sitewise_app.properties``, 955 rows) against the entrepreneur's stated
-requirements. It performs the whole pipeline server-side: SQL filtering →
-requirement evaluation → deterministic ordering → cursor pagination. Neither
-client sorts or loads the catalogue.
+(the ``fyp.catalogue_properties`` view over the canonical
+``fyp.rental_properties`` research rows, 955 rows) against the
+entrepreneur's stated requirements. It performs the whole pipeline
+server-side: SQL filtering → requirement evaluation → deterministic
+ordering → cursor pagination. Neither client sorts or loads the catalogue.
 
 What this build does NOT do: load the trained recommendation ``.joblib``.
 The artifact is not present in this repository, so the model seam reports
@@ -33,9 +34,10 @@ Deliberate distinctions
   index — not a probability of business success.
 * The catalogue is the product's published property catalogue — the same id
   space (``EP-``/``MD-``) that saved-properties, assessments, property detail
-  and the PU model use. It is NOT the ``fyp.rental_properties`` owner-listing
-  table, whose 955 imported rows are ``verification_status='pending'``; mixing
-  the two would break save/assess and present pending rows as verified.
+  and the PU model use. Those 955 research rows are the SAME canonical
+  ``fyp.rental_properties`` records, but with ``is_published = false`` so they
+  can never leak into the entrepreneur Explore listing flow, whose eligibility
+  rules (approved + published owner listings) are untouched here.
 
 Performance
 -----------
@@ -57,9 +59,11 @@ import base64
 import binascii
 import hashlib
 import json
+import math
 import threading
 from collections import OrderedDict
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
+from pathlib import Path
 from typing import Any
 
 from sqlalchemy import text
@@ -75,6 +79,55 @@ MODEL_UNAVAILABLE_REASON = (
 )
 
 # ---------------------------------------------------------------------------
+# Layer-1 PU variant
+# ---------------------------------------------------------------------------
+#
+# The eligible SET depends on the active PU variant. ``legacy`` (default)
+# gates on the stored catalogue suitability score — the original PU model's
+# output. ``expanded64`` gates on LIVE inference with the 2026-11-15 expanded
+# 64-feature artifact: a property is eligible only when its complete 64-feature
+# vector resolves (DB + committed training bridge), its live association score
+# passes the same strictly-above-50 gate on the 0-100 scale, and every
+# candidate in the ranking used the SAME model version. Stored legacy scores
+# are never used, displayed or mixed into an expanded64 ranking, and live
+# expanded scores are never written back into the stored columns.
+
+
+def _pu_variant_key() -> str:
+    """The configured Layer-1 PU variant, or ``legacy`` if unresolvable."""
+    try:
+        from sitewise.core.config import Settings
+
+        return Settings().pu_model_variant
+    except Exception:  # noqa: BLE001 - an unresolvable setting keeps legacy
+        return "legacy"
+
+
+def _expanded_model_token() -> str:
+    """Content fingerprint of the two research artifacts, for cache/cursor keys.
+
+    A replaced PU or category artifact changes every live score, so the
+    ranking cache and the cursor fingerprint must change with it. The digests
+    read the file bytes only (cheap); they do not deserialise the models.
+    """
+    import hashlib
+
+    from sitewise.ml.fnb_category import CATEGORY_MODEL_NAME
+    from sitewise.ml.pu_expanded import EXPANDED_MODEL_NAME
+
+    def digest(name: str) -> str:
+        path = Path(__file__).resolve().parent.parent / "ml" / f"{name}.joblib"
+        try:
+            return hashlib.sha256(path.read_bytes()).hexdigest()[:16]
+        except OSError:
+            return "missing"
+
+    return (
+        f"expanded64:{digest(EXPANDED_MODEL_NAME)}:"
+        f"cat:{digest(CATEGORY_MODEL_NAME)}"
+    )
+
+# ---------------------------------------------------------------------------
 # PU eligibility gate
 # ---------------------------------------------------------------------------
 #
@@ -83,8 +136,9 @@ MODEL_UNAVAILABLE_REASON = (
 #: score of exactly 50.0 is excluded.
 #:
 #: Scale verification (read-only audit of the live table, 2026-11-11):
-#: ``sitewise_app.properties.suitability_score`` is the stored Layer 1 PU
-#: research association score multiplied by 100 — exactly equal to
+#: ``fyp.catalogue_properties.suitability_score`` (canonical column
+#: ``fyp.rental_properties.catalogue_suitability_score``) is the stored Layer 1
+#: PU research association score multiplied by 100 — exactly equal to
 #: ``source_data->>'research_p_association_score' * 100`` on every sampled row
 #: (955 rows, 0 nulls, observed range 0.25-98.0, 290 rows above 50). It is NOT
 #: a probability of business success; it is the same uncalibrated P-vs-U
@@ -95,7 +149,7 @@ MODEL_UNAVAILABLE_REASON = (
 #: never lowered to fill a result page.
 PU_ELIGIBILITY_THRESHOLD = 50.0
 PU_SCORE_SCALE = "0-100"
-PU_ELIGIBILITY_COLUMN = "sitewise_app.properties.suitability_score"
+PU_ELIGIBILITY_COLUMN = "fyp.catalogue_properties.suitability_score"
 
 # ---------------------------------------------------------------------------
 # Ordering
@@ -107,6 +161,7 @@ PU_ELIGIBILITY_COLUMN = "sitewise_app.properties.suitability_score"
 #: properties qualify — only their sequence. Every key ends with the catalogue
 #: id, which keeps the order total and therefore cursor pagination safe.
 SORT_BEST_MATCH = "best_match"
+
 SORT_OPTIONS: dict[str, str] = {
     SORT_BEST_MATCH: "Best requirement match",
     "rent_asc": "Lowest monthly rent",
@@ -116,6 +171,93 @@ SORT_OPTIONS: dict[str, str] = {
     "pu_desc": "Highest PU research index",
 }
 DEFAULT_SORT = SORT_BEST_MATCH
+
+# ---------------------------------------------------------------------------
+# Contextual filter fields
+# ---------------------------------------------------------------------------
+#
+#: What each recommendation field actually does to the eligible set. This is
+#: declared once, here, and travels with the facets response so the UI cannot
+#: present a ranking-only or unverifiable field as an eligibility filter.
+#:
+#: ``hard_filter``  — applied in the search SQL; a selected value removes
+#:                    properties that do not satisfy it.
+#: ``ranking_only`` — never removes a property. ``business_type`` re-sequences
+#:                    the SAME eligible set (``_rank_key`` consults the
+#:                    Stage-2 resemblance for the selected category) and
+#:                    selects which category evidence a card reports.
+#: ``unverified``   — the catalogue records nothing that can answer it, so the
+#:                    field is reported per property as an unverifiable
+#:                    requirement and affects neither filtering nor ordering.
+#:                    "Target market" arrives as ``layout_preferences``; there
+#:                    is no customer-mix column in ``fyp.catalogue_properties``.
+FILTER_FIELDS: tuple[dict[str, str], ...] = (
+    {
+        "key": "preferred_state",
+        "label": "Preferred state",
+        "role": "hard_filter",
+        "effect": "Only listings in the selected state remain eligible.",
+    },
+    {
+        "key": "property_type",
+        "label": "Property type",
+        "role": "hard_filter",
+        "effect": "Only listings of the selected type remain eligible.",
+    },
+    {
+        "key": "rental_budget",
+        "label": "Monthly rental budget",
+        "role": "hard_filter",
+        "effect": "Only listings whose monthly rent falls in the selected "
+                  "range remain eligible.",
+    },
+    {
+        "key": "property_size",
+        "label": "Preferred property size",
+        "role": "hard_filter",
+        "effect": "Only listings whose floor area falls in the selected range "
+                  "remain eligible.",
+    },
+    {
+        "key": "preferred_area",
+        "label": "Preferred area",
+        "role": "hard_filter",
+        "effect": "Only listings whose city or address mentions the area "
+                  "remain eligible.",
+    },
+    {
+        "key": "query",
+        "label": "Search",
+        "role": "hard_filter",
+        "effect": "Only listings whose title, address, city, type or id "
+                  "match the text remain eligible.",
+    },
+    {
+        "key": "business_type",
+        "label": "Business type",
+        "role": "ranking_only",
+        "effect": "Orders the eligible set and selects the category evidence "
+                  "shown on each card. It does not remove properties.",
+    },
+    {
+        "key": "target_market",
+        "label": "Target market",
+        "role": "unverified",
+        "effect": "The catalogue records no customer-mix field, so this is "
+                  "reported per property as a requirement that cannot be "
+                  "verified. It neither filters nor ranks.",
+    },
+)
+
+#: The ``FILTER_FIELDS`` keys whose selection narrows the eligible set.
+HARD_FILTER_KEYS = tuple(f["key"] for f in FILTER_FIELDS if f["role"] == "hard_filter")
+
+#: Target number of rental/size options. The generated intervals are always
+#: non-overlapping; this only steers how many of them the data is cut into.
+FACET_TARGET_BUCKETS = 6
+
+#: Rounded interval widths, smallest first, used to pick a readable step.
+_FACET_STEP_MULTIPLES = (1.0, 2.0, 2.5, 5.0, 10.0)
 
 # Card payload: exactly what a listing card renders. Detail pages load the
 # full record separately, so no gallery/description is fetched here.
@@ -161,6 +303,8 @@ class SearchCriteria:
     page_size: int = 20
     cursor: str | None = None
     sort: str = DEFAULT_SORT
+    managed_only: bool = False
+    management_ids: tuple[str, ...] = ()
 
     def cache_payload(self) -> dict[str, Any]:
         """Everything that changes the ranked result — and nothing else.
@@ -184,6 +328,16 @@ class SearchCriteria:
             "layout": [p.strip().lower() for p in self.layout_preferences if p.strip()],
             "q": (self.query or "").strip().lower(),
             "sort": self.sort if self.sort in SORT_OPTIONS else DEFAULT_SORT,
+            "managed_only": self.managed_only,
+            "management_scope": (
+                hashlib.sha256("\n".join(self.management_ids).encode()).hexdigest()[:16]
+                if self.managed_only else ""
+            ),
+            # The PU variant and artifact fingerprint change the eligible SET,
+            # so they are part of the cache/cursor identity: a cursor issued
+            # under one model can never serve a page of another model's
+            # ranking, and replacing the artifact invalidates cached pages.
+            "pu_model": _expanded_model_token() if _pu_variant_key() == "expanded64" else "stored",
         }
 
 
@@ -217,17 +371,31 @@ class _Row:
     image_url: str | None
     suitability_score: float | None
     matches: list[_Match] = field(default_factory=list)
+    #: Live expanded64 association score (raw 0-1). Set ONLY by the expanded64
+    #: ranking path; legacy rows keep it None so the stored score is used.
+    expanded_score: float | None = None
+    #: The model version that produced [expanded_score], for provenance.
+    expanded_model_version: str | None = None
+    #: Stage-2 category resemblance (raw 0-1 per canonical category). Set only
+    #: when the category model scored this row from the same resolution pass.
+    category_scores: dict[str, float] | None = None
+    category_model_version: str | None = None
 
     @property
     def pu_score(self) -> float | None:
-        """The stored PU association index on the 0-100 scale.
+        """The ranking PU score on the 0-100 scale, whichever path produced it.
 
-        ``suitability_score`` IS that score x100 (verified against
-        ``source_data.research_p_association_score``); the gate guarantees it
-        is present and strictly above [PU_ELIGIBILITY_THRESHOLD] for every
-        row that reaches ranking.
+        Expanded64 rows carry the live model output x100; legacy rows carry
+        the stored catalogue value. The two never coexist on one row, and one
+        ranking batch only ever contains rows of one path.
         """
+        if self.expanded_score is not None:
+            return self.expanded_score * 100.0
         return self.suitability_score
+
+    @property
+    def pu_score_source(self) -> str:
+        return "expanded64_live_inference" if self.expanded_score is not None else "stored_catalogue"
 
     @property
     def met_count(self) -> int:
@@ -246,6 +414,248 @@ def _number(value: float) -> str:
     return f"{value:,.0f}"
 
 
+def _pu_eligibility() -> dict[str, Any]:
+    """The gate every facet count already respects."""
+    return {
+        "threshold": PU_ELIGIBILITY_THRESHOLD,
+        "scale": PU_SCORE_SCALE,
+        "comparison": "strictly_greater_than",
+        "column": (
+            "live_expanded64_inference"
+            if _pu_variant_key() == "expanded64"
+            else PU_ELIGIBILITY_COLUMN
+        ),
+        "score_meaning": (
+            "Uncalibrated P-vs-U research association index, not a probability "
+            "of commercial success."
+        ),
+    }
+
+
+def _has_selection(criteria: SearchCriteria, key: str) -> bool:
+    """Whether the entrepreneur currently holds a constraint for this field."""
+    values = {
+        "preferred_state": criteria.preferred_state,
+        "property_type": criteria.property_type,
+        "rental_budget": criteria.min_rental_rm if criteria.min_rental_rm is not None
+        else criteria.max_rental_rm,
+        "property_size": criteria.min_size_sqft if criteria.min_size_sqft is not None
+        else criteria.max_size_sqft,
+        "preferred_area": criteria.preferred_area,
+        "query": criteria.query,
+    }
+    value = values.get(key)
+    if isinstance(value, str):
+        return bool(value.strip())
+    return value is not None
+
+
+def _satisfies(row: _Row, criteria: SearchCriteria, *, excluding: str | None) -> bool:
+    """The Python mirror of the hard filters :meth:`_query` pushes into SQL.
+
+    Counting contextual options needs the same predicates applied to the rows
+    the search already returned, with one field released. The comparison is the
+    SQL comparison — inclusive bounds for rent and size, exact match for state
+    and type, case-insensitive substring for the area and free-text search —
+    and :mod:`tests.test_recommendation_facets` checks it against real queries
+    over the live catalogue, so a drift between the two is a failing test, not a
+    silently wrong count.
+    """
+    if excluding != "rental_budget":
+        if criteria.max_rental_rm is not None and row.rental_rm > criteria.max_rental_rm:
+            return False
+        if criteria.min_rental_rm is not None and row.rental_rm < criteria.min_rental_rm:
+            return False
+    if excluding != "property_size":
+        if criteria.min_size_sqft is not None and row.size_sqft < criteria.min_size_sqft:
+            return False
+        if criteria.max_size_sqft is not None and row.size_sqft > criteria.max_size_sqft:
+            return False
+    if excluding != "preferred_state" and criteria.preferred_state:
+        if row.state != criteria.preferred_state:
+            return False
+    if excluding != "property_type" and criteria.property_type:
+        if row.property_type != criteria.property_type:
+            return False
+    if excluding != "preferred_area" and criteria.preferred_area:
+        needle = criteria.preferred_area.lower()
+        if needle not in row.city.lower() and needle not in row.address.lower():
+            return False
+    if excluding != "query" and criteria.query:
+        needle = criteria.query.lower()
+        haystack = (
+            row.title,
+            row.address,
+            row.city,
+            row.property_type,
+            row.id,
+        )
+        if not any(needle in value.lower() for value in haystack):
+            return False
+    return True
+
+
+def _value_counts(
+    rows: list[_Row],
+    value_of: Any,
+    *,
+    keep: str | None,
+) -> list[dict[str, Any]]:
+    """Real values with real counts, most available first.
+
+    Blank values never become options. ``keep`` is the entrepreneur's own
+    selection: it stays listed with a count of zero when nothing matches it,
+    because a dropdown that silently drops the value on screen would be
+    clearing a choice nobody asked it to clear.
+    """
+    counts: dict[str, int] = {}
+    for row in rows:
+        value = str(value_of(row) or "").strip()
+        if not value:
+            continue
+        counts[value] = counts.get(value, 0) + 1
+    selected = (keep or "").strip()
+    if selected and selected not in counts:
+        counts[selected] = 0
+    return [
+        {"value": value, "total": total}
+        for value, total in sorted(counts.items(), key=lambda item: (-item[1], item[0]))
+    ]
+
+
+def _facet_step(lowest: float, highest: float) -> float:
+    """A readable interval width for the observed span.
+
+    Derived from the data, never a fixed list: RM 500–20,000 and 118–5,760
+    square feet need different steps, and a re-imported catalogue with a
+    different span gets different intervals without a code change.
+    """
+    raw = (highest - lowest) / FACET_TARGET_BUCKETS
+    if raw <= 0:
+        return 1.0
+    magnitude = 10 ** math.floor(math.log10(raw))
+    for multiple in _FACET_STEP_MULTIPLES:
+        step = multiple * magnitude
+        if step >= raw:
+            return max(step, 1.0)
+    return 10.0 * magnitude
+
+
+def _range_label(money: bool, low: float | None, high: float | None) -> str:
+    """The interval in words, matching the bounds it actually sends.
+
+    ``None`` on one side is a genuine open interval — a saved preference can
+    hold a ceiling with no floor — and is labelled as one rather than being
+    rounded into a number nobody chose.
+    """
+    if low is not None and high is not None and low == high:
+        return f"{_money(low)}" if money else f"{_number(high)} sq ft"
+    if money:
+        if low is None:
+            return f"Up to {_money(high)}" if high is not None else "Any available budget"
+        return f"{_money(low)} – {_money(high)}" if high is not None else f"From {_money(low)}"
+    if low is None:
+        return f"Up to {_number(high)} sq ft" if high is not None else "Any property size"
+    return (
+        f"{_number(low)} – {_number(high)} sq ft"
+        if high is not None
+        else f"{_number(low)}+ sq ft"
+    )
+
+
+def _numeric_ranges(
+    rows: list[_Row],
+    value_of: Any,
+    *,
+    keys: tuple[str, str],
+    money: bool,
+) -> list[dict[str, Any]]:
+    """Non-overlapping intervals built from the values that actually exist.
+
+    Each bound is an observed rental or floor-area figure from the scoped set,
+    so consecutive intervals can neither overlap (an upper bound is always
+    strictly below the next lower bound) nor leave a priced listing outside
+    every option (the bounds come from the listing's own value). The count is
+    then exactly what the ``min``/``max`` pair sent to the search returns — no
+    rounding of a boundary into or out of a range.
+    """
+    values: dict[float, int] = {}
+    for row in rows:
+        value = value_of(row)
+        if value is None:
+            continue
+        key = float(value)
+        values[key] = values.get(key, 0) + 1
+    if not values:
+        return []
+    distinct = sorted(values)
+    step = _facet_step(distinct[0], distinct[-1])
+    low_key, high_key = keys
+    options: list[dict[str, Any]] = []
+    index = 0
+    while index < len(distinct):
+        low = distinct[index]
+        limit = low + step
+        end = index
+        while end + 1 < len(distinct) and distinct[end + 1] < limit:
+            end += 1
+        options.append(
+            {
+                low_key: low,
+                high_key: distinct[end],
+                "total": sum(values[value] for value in distinct[index : end + 1]),
+                "label": _range_label(money, low, distinct[end]),
+            }
+        )
+        index = end + 1
+    return options
+
+
+def _selected_range(
+    low: float | None,
+    high: float | None,
+    options: list[dict[str, Any]],
+    low_key: str,
+    high_key: str,
+    *,
+    money: bool,
+    matching_total: int,
+) -> dict[str, Any] | None:
+    """The active interval, whether or not it is one of the generated options.
+
+    A saved preference can hold bounds the catalogue never offers as a bucket
+    (``max_rental_rm = 25000`` with no floor, for instance). Reporting it
+    separately keeps that choice visible and counted instead of pretending the
+    entrepreneur never made it.
+    """
+    if low is None and high is None:
+        return None
+    for option in options:
+        if option[low_key] == low and option[high_key] == high:
+            return {
+                low_key: low,
+                high_key: high,
+                "label": option["label"],
+                "total": option["total"],
+                "generated": True,
+            }
+    return {
+        low_key: low,
+        high_key: high,
+        "label": _range_label(money, low, high),
+        "total": matching_total,
+        "generated": False,
+    }
+
+
+def _span(rows: list[_Row], value_of: Any, *, lowest: bool) -> float | None:
+    """Observed bound over the eligible population, None when there is none."""
+    present = [float(value_of(row)) for row in rows if value_of(row) is not None]
+    if not present:
+        return None
+    return min(present) if lowest else max(present)
+
+
 class RecommendationSearchService:
     """Read-only ranking over the catalogue. One instance per request."""
 
@@ -259,6 +669,77 @@ class RecommendationSearchService:
 
     # -- public API ---------------------------------------------------------
 
+    def _model_metadata(self) -> dict[str, Any]:
+        """The Layer-1 PU provenance block for one search response."""
+        if _pu_variant_key() != "expanded64":
+            return {
+                "available": False,
+                "version": None,
+                "score_type": SCORE_TYPE_REQUIREMENT_FIT,
+                "reason": MODEL_UNAVAILABLE_REASON,
+                "research_only": True,
+                "category_model": {
+                    "available": False,
+                    "reason": (
+                        "Category evidence requires the expanded64 two-stage "
+                        "research variant; the default ranking is unchanged."
+                    ),
+                },
+            }
+        try:
+            from sitewise.ml.model_loader import ModelLoader
+            from sitewise.ml.pu_expanded import EXPANDED_MODEL_NAME
+
+            loaded = ModelLoader().load(EXPANDED_MODEL_NAME)
+            return {
+                "available": True,
+                "version": str(loaded.meta.get("model_variant") or "unknown"),
+                "feature_count": len(loaded.feature_names),
+                "artifact": loaded.meta.get("artifact_filename"),
+                "score_type": "live_pu_association_requirement_fit_ordering",
+                "reason": (
+                    "Ranking gates and tie-breaks on LIVE inference from the "
+                    "expanded 64-feature research artifact; every candidate in "
+                    "one ranking used this same model version."
+                ),
+                "research_only": True,
+                "production_ready": bool(loaded.meta.get("production_ready", False)),
+                "category_model": self._category_model_metadata(),
+            }
+        except Exception as exc:  # noqa: BLE001 - report honestly, never fake
+            return {
+                "available": False,
+                "version": None,
+                "score_type": SCORE_TYPE_REQUIREMENT_FIT,
+                "reason": f"The expanded64 artifact could not be loaded: {exc}",
+                "research_only": True,
+                "category_model": self._category_model_metadata(),
+            }
+
+    @staticmethod
+    def _category_model_metadata() -> dict[str, Any]:
+        """Stage-2 provenance: model version, artifact identity, validation."""
+        try:
+            from sitewise.ml import category_aware
+
+            bundle = category_aware.load_bundle()
+            return {
+                "available": True,
+                **bundle.identity(),
+                "reliability": category_aware.validation_summary(bundle),
+                "note": (
+                    "Stage-2 category resemblance is separate from the PU "
+                    "association score and from the preference fit. The "
+                    "entrepreneur's selected category — not the model's top "
+                    "class — is what the ranking tie-break and the explanation use."
+                ),
+            }
+        except Exception as exc:  # noqa: BLE001 - evidence stays optional
+            return {
+                "available": False,
+                "reason": f"The category artifact could not be loaded: {exc}",
+            }
+
     def search(self, criteria: SearchCriteria) -> dict[str, Any]:
         ranked = self._ranked_candidates(criteria)
         total = len(ranked)
@@ -270,7 +751,7 @@ class RecommendationSearchService:
 
         return {
             "data": [
-                self._serialise(row, rank=offset + index + 1)
+                self._serialise(row, rank=offset + index + 1, criteria=criteria)
                 for index, row in enumerate(page)
             ],
             "pagination": {
@@ -281,26 +762,27 @@ class RecommendationSearchService:
                 "total": total,
                 "page_size": criteria.page_size,
             },
-            "model": {
-                "available": False,
-                "version": None,
-                "score_type": SCORE_TYPE_REQUIREMENT_FIT,
-                "reason": MODEL_UNAVAILABLE_REASON,
-                "research_only": True,
-            },
+            "model": self._model_metadata(),
             "meta": {
-                "source": "sitewise_app.properties",
+                "source": "fyp.catalogue_properties",
                 "property_source": "catalog",
                 "criteria": criteria.cache_payload(),
                 "cached": self._last_cache_hit,
                 # Eligibility provenance: every result passed this gate BEFORE
                 # requirement-fit ranking. The threshold is never relaxed to
-                # reach a target count.
+                # reach a target count. Under expanded64 the gate runs on LIVE
+                # model scores after feature resolution (properties whose
+                # vector does not resolve are excluded with their missing
+                # fields reported), not on the stored catalogue column.
                 "pu_eligibility": {
                     "threshold": PU_ELIGIBILITY_THRESHOLD,
                     "scale": PU_SCORE_SCALE,
                     "comparison": "strictly_greater_than",
-                    "column": PU_ELIGIBILITY_COLUMN,
+                    "column": (
+                        "live_expanded64_inference"
+                        if _pu_variant_key() == "expanded64"
+                        else PU_ELIGIBILITY_COLUMN
+                    ),
                     "score_meaning": (
                         "Uncalibrated P-vs-U research association index, not a "
                         "probability of commercial success."
@@ -309,41 +791,50 @@ class RecommendationSearchService:
             },
         }
 
-    def facets(self) -> dict[str, Any]:
-        """Filter vocabulary straight from the catalogue.
+    def facets(self, criteria: SearchCriteria | None = None) -> dict[str, Any]:
+        """Filter vocabulary and ranges, contextualised to the selections.
 
         A hand-written list drifts: an option that matches no row filters every
-        listing out while still looking functional.
+        listing out while still looking functional. The counts are contextual in
+        the leave-one-out sense the UI needs: for each dropdown every OTHER
+        selected hard filter is applied and only that dropdown's own constraint
+        is dropped. Choosing Johor therefore prices the rental options with
+        Johor listings, and choosing a budget restates which states and types
+        still have anything inside it.
+
+        Everything is counted over the same PU-gated population the search
+        ranks, before pagination, and nothing is counted from a result page.
         """
-        states = self.session.execute(
-            text(
-                "SELECT state AS value, count(*) AS total "
-                "FROM sitewise_app.properties "
-                "WHERE state IS NOT NULL AND state <> '' "
-                "GROUP BY state ORDER BY total DESC, state"
-            )
-        ).mappings().all()
-        types = self.session.execute(
-            text(
-                "SELECT property_type AS value, count(*) AS total "
-                "FROM sitewise_app.properties "
-                "WHERE property_type IS NOT NULL AND property_type <> '' "
-                "GROUP BY property_type ORDER BY total DESC, property_type"
-            )
-        ).mappings().all()
-        bounds = self.session.execute(
-            text(
-                "SELECT min(rental_rm) AS min_rent, max(rental_rm) AS max_rent, "
-                "min(size_sqft) AS min_size, max(size_sqft) AS max_size, "
-                "count(*) AS total "
-                "FROM sitewise_app.properties"
-            )
-        ).mappings().first()
+        active = criteria or SearchCriteria()
+        universe = self._facet_universe(active)
+        keys = HARD_FILTER_KEYS
+        scoped = {
+            key: [r for r in universe if _satisfies(r, active, excluding=key)] for key in keys
+        }
+        matching = [r for r in universe if _satisfies(r, active, excluding=None)]
+
+        budget_options = _numeric_ranges(
+            scoped["rental_budget"],
+            lambda row: row.rental_rm,
+            keys=("min_rental_rm", "max_rental_rm"),
+            money=True,
+        )
+        size_options = _numeric_ranges(
+            scoped["property_size"],
+            lambda row: row.size_sqft,
+            keys=("min_size_sqft", "max_size_sqft"),
+            money=False,
+        )
+        labels = {field["key"]: field["label"] for field in FILTER_FIELDS}
         return {
-            "states": [{"value": r["value"], "total": int(r["total"])} for r in states],
-            "property_types": [
-                {"value": r["value"], "total": int(r["total"])} for r in types
-            ],
+            "states": _value_counts(
+                scoped["preferred_state"], lambda row: row.state, keep=active.preferred_state
+            ),
+            "property_types": _value_counts(
+                scoped["property_type"],
+                lambda row: row.property_type,
+                keep=active.property_type,
+            ),
             # The accepted orderings travel with the facets so the client does
             # not keep a second copy of this list. Order matters: the first
             # entry is the default.
@@ -351,18 +842,96 @@ class RecommendationSearchService:
                 {"value": value, "label": label}
                 for value, label in SORT_OPTIONS.items()
             ],
+            # Contextual rental/size choices. `options` never overlap and never
+            # leave a priced listing outside every interval, because each bound
+            # is a rental or floor-area value that exists in the scoped set;
+            # selecting one sends exactly those two bounds to the search.
+            "rental_ranges": {
+                "options": budget_options,
+                "unbounded_total": len(scoped["rental_budget"]),
+                "selected": _selected_range(
+                    active.min_rental_rm,
+                    active.max_rental_rm,
+                    budget_options,
+                    "min_rental_rm",
+                    "max_rental_rm",
+                    money=True,
+                    matching_total=len(matching),
+                ),
+            },
+            "size_ranges": {
+                "options": size_options,
+                "unbounded_total": len(scoped["property_size"]),
+                "selected": _selected_range(
+                    active.min_size_sqft,
+                    active.max_size_sqft,
+                    size_options,
+                    "min_size_sqft",
+                    "max_size_sqft",
+                    money=False,
+                    matching_total=len(matching),
+                ),
+            },
+            # Listings under every selection (the live "N properties match"
+            # figure) and under none of them, so an empty combination can be
+            # stated as a fact instead of an error.
+            "matching_total": len(matching),
+            "universe_total": len(universe),
+            "relaxations": sorted(
+                (
+                    {
+                        "field": key,
+                        "label": labels[key],
+                        "total": len(scoped[key]),
+                    }
+                    for key in keys
+                    if _has_selection(active, key)
+                ),
+                key=lambda item: (-item["total"], item["label"]),
+            ),
+            "fields": [dict(field) for field in FILTER_FIELDS],
+            "contextual": True,
+            "pu_eligibility": _pu_eligibility(),
             "ranges": {
-                "min_rental_rm": _as_float(bounds["min_rent"]),
-                "max_rental_rm": _as_float(bounds["max_rent"]),
-                "min_size_sqft": _as_float(bounds["min_size"]),
-                "max_size_sqft": _as_float(bounds["max_size"]),
-                "total": int(bounds["total"]),
+                # Bounds of the eligible population, not of the whole
+                # catalogue: the two differ and the UI quotes these.
+                "min_rental_rm": _span(universe, lambda row: row.rental_rm, lowest=True),
+                "max_rental_rm": _span(universe, lambda row: row.rental_rm, lowest=False),
+                "min_size_sqft": _span(universe, lambda row: row.size_sqft, lowest=True),
+                "max_size_sqft": _span(universe, lambda row: row.size_sqft, lowest=False),
+                "total": len(universe),
             },
         }
+
+    def _facet_universe(self, criteria: SearchCriteria) -> list[_Row]:
+        """Every listing the search could return, before the user's filters.
+
+        Built by the same ranking call the search uses, with the user's hard
+        filters removed, so the PU gate, the non-null rental/size requirement
+        and the management scope are applied exactly once and in exactly one
+        way — the model is never inferred a second time for the facets, and the
+        result shares the search's cache entry whenever nothing is selected.
+        """
+        browse = replace(
+            criteria,
+            preferred_state=None,
+            preferred_area=None,
+            min_rental_rm=None,
+            max_rental_rm=None,
+            min_size_sqft=None,
+            max_size_sqft=None,
+            property_type=None,
+            query=None,
+            sort=DEFAULT_SORT,
+            cursor=None,
+        )
+        return self._ranked_candidates(browse)
 
     # -- ranking ------------------------------------------------------------
 
     def _ranked_candidates(self, criteria: SearchCriteria) -> list[_Row]:
+        if _pu_variant_key() == "expanded64":
+            return self._ranked_candidates_expanded(criteria)
         revision = self._catalogue_revision()
         key = self._cache_key(criteria, revision)
         cached = self._cache_get(key)
@@ -374,7 +943,85 @@ class RecommendationSearchService:
         rows = self._query(criteria)
         for row in rows:
             row.matches = self._evaluate(row, criteria)
-        rows.sort(key=_sort_key(criteria.sort))
+        rows.sort(key=_sort_key(criteria.sort, criteria.business_type))
+        self._cache_put(key, rows)
+        return rows
+
+    def _ranked_candidates_expanded(self, criteria: SearchCriteria) -> list[_Row]:
+        """Rank on LIVE expanded64 inference — the stored score is not used.
+
+        Every candidate in one call is scored with the SAME artifact version
+        (the cache key carries the artifact digest, so a replaced artifact
+        cannot serve a stale ranking). A property whose 64-feature vector does
+        not resolve reports the missing fields and is EXCLUDED from this
+        ranking — it is never imputed, never borrowed, and never gated on the
+        stored legacy score it does have.
+        """
+        from sqlmodel import Session
+
+        from sitewise.db.analytics_session import analytics_engine
+        from sitewise.ml.pu_expanded import EXPANDED_MODEL_NAME, expanded_scores_many
+        from sitewise.ml.model_loader import ModelLoader
+
+        revision = self._catalogue_revision()
+        key = self._cache_key(criteria, revision, model_token=_expanded_model_token())
+        cached = self._cache_get(key)
+        if cached is not None:
+            self._last_cache_hit = True
+            return cached
+
+        self._last_cache_hit = False
+        rows = self._query_expanded(criteria)
+        if rows:
+            loaded = ModelLoader().load(EXPANDED_MODEL_NAME)
+            version = str(loaded.meta.get("model_variant") or "unknown")
+            coverage_sink: dict[str, dict[str, Any]] = {}
+            with Session(analytics_engine) as analytics:
+                scores = expanded_scores_many(
+                    analytics, [row.id for row in rows], coverage_sink=coverage_sink
+                )
+            eligible: list[_Row] = []
+            for row in rows:
+                row.matches = self._evaluate(row, criteria)
+                result = scores.get(row.id) or {}
+                if not result.get("available"):
+                    continue  # unavailable features: excluded, never fabricated
+                score = float(result["score"])
+                # Same strictly-above threshold on the 0-100 scale, applied to
+                # the LIVE score. The threshold was reviewed against the
+                # expanded model's own score distribution (47.7% of its
+                # training rows pass) before being applied here.
+                if not (score * 100.0 > PU_ELIGIBILITY_THRESHOLD):
+                    continue
+                row.expanded_score = score
+                row.suitability_score = None  # the stored value is a DIFFERENT model's output
+                row.expanded_model_version = version
+                eligible.append(row)
+            # Stage 2 — category resemblance, from the SAME resolved vectors.
+            # A category failure never removes a row from the PU-gated ranking;
+            # the row simply reports category evidence as unavailable.
+            if eligible:
+                try:
+                    from sitewise.ml.fnb_category import category_scores_from_coverage
+
+                    subset = {
+                        row.id: coverage_sink[row.id]
+                        for row in eligible
+                        if row.id in coverage_sink
+                    }
+                    category_results = category_scores_from_coverage(subset)
+                except Exception:  # noqa: BLE001 - evidence is additive only
+                    category_results = {}
+                for row in eligible:
+                    cat = category_results.get(row.id) or {}
+                    if cat.get("available"):
+                        row.category_scores = {
+                            item["business_type"]: float(item["score"])
+                            for item in cat.get("rankings", [])
+                        }
+                        row.category_model_version = cat.get("model_version")
+            rows = eligible
+        rows.sort(key=_sort_key(criteria.sort, criteria.business_type))
         self._cache_put(key, rows)
         return rows
 
@@ -388,15 +1035,15 @@ class RecommendationSearchService:
         row = self.session.execute(
             text(
                 "SELECT count(*) AS total, max(imported_at) AS newest "
-                "FROM sitewise_app.properties"
+                "FROM fyp.catalogue_properties"
             )
         ).mappings().first()
         return f"{int(row['total'])}:{row['newest']}"
 
     @staticmethod
-    def _cache_key(criteria: SearchCriteria, revision: str) -> str:
+    def _cache_key(criteria: SearchCriteria, revision: str, model_token: str = "") -> str:
         payload = json.dumps(
-            {"criteria": criteria.cache_payload(), "revision": revision},
+            {"criteria": criteria.cache_payload(), "revision": revision, "model": model_token},
             sort_keys=True,
             separators=(",", ":"),
         )
@@ -428,6 +1075,11 @@ class RecommendationSearchService:
             "p.suitability_score > CAST(:pu_threshold AS double precision)",
         ]
         params: dict[str, Any] = {"pu_threshold": PU_ELIGIBILITY_THRESHOLD}
+        if criteria.managed_only:
+            if not criteria.management_ids:
+                return []
+            where.append("p.id = ANY(:managed_ids)")
+            params["managed_ids"] = list(criteria.management_ids)
 
         if criteria.max_rental_rm is not None:
             where.append("p.rental_rm <= CAST(:max_rent AS double precision)")
@@ -458,7 +1110,61 @@ class RecommendationSearchService:
             params["q"] = f"%{criteria.query}%"
 
         sql = (
-            f"SELECT {', '.join(_CARD_COLUMNS)} FROM sitewise_app.properties p "
+            f"SELECT {', '.join(_CARD_COLUMNS)} FROM fyp.catalogue_properties p "
+            f"WHERE {' AND '.join(where)}"
+        )
+        rows = self.session.execute(text(sql), params).mappings().all()
+        return [_to_row(row) for row in rows]
+
+    def _query_expanded(self, criteria: SearchCriteria) -> list[_Row]:
+        """Candidate query for the expanded64 path — NO stored-score gate.
+
+        The stored ``suitability_score`` is the LEGACY model's output; gating
+        on it here would mix two model versions in one ranking. Eligibility is
+        applied after live expanded64 scoring in
+        :meth:`_ranked_candidates_expanded`.
+        """
+        where = [
+            "p.rental_rm IS NOT NULL",
+            "p.size_sqft IS NOT NULL",
+        ]
+        params: dict[str, Any] = {}
+        if criteria.managed_only:
+            if not criteria.management_ids:
+                return []
+            where.append("p.id = ANY(:managed_ids)")
+            params["managed_ids"] = list(criteria.management_ids)
+
+        if criteria.max_rental_rm is not None:
+            where.append("p.rental_rm <= CAST(:max_rent AS double precision)")
+            params["max_rent"] = criteria.max_rental_rm
+        if criteria.min_rental_rm is not None:
+            where.append("p.rental_rm >= CAST(:min_rent AS double precision)")
+            params["min_rent"] = criteria.min_rental_rm
+        if criteria.min_size_sqft is not None:
+            where.append("p.size_sqft >= CAST(:min_size AS double precision)")
+            params["min_size"] = criteria.min_size_sqft
+        if criteria.max_size_sqft is not None:
+            where.append("p.size_sqft <= CAST(:max_size AS double precision)")
+            params["max_size"] = criteria.max_size_sqft
+        if criteria.preferred_state:
+            where.append("p.state = :state")
+            params["state"] = criteria.preferred_state
+        if criteria.property_type:
+            where.append("p.property_type = :ptype")
+            params["ptype"] = criteria.property_type
+        if criteria.preferred_area:
+            where.append("(p.city ILIKE :area OR p.address ILIKE :area)")
+            params["area"] = f"%{criteria.preferred_area}%"
+        if criteria.query:
+            where.append(
+                "(p.title ILIKE :q OR p.address ILIKE :q OR p.city ILIKE :q "
+                "OR p.property_type ILIKE :q OR p.id ILIKE :q)"
+            )
+            params["q"] = f"%{criteria.query}%"
+
+        sql = (
+            f"SELECT {', '.join(_CARD_COLUMNS)} FROM fyp.catalogue_properties p "
             f"WHERE {' AND '.join(where)}"
         )
         rows = self.session.execute(text(sql), params).mappings().all()
@@ -531,7 +1237,7 @@ class RecommendationSearchService:
 
         return matches
 
-    def _serialise(self, row: _Row, *, rank: int) -> dict[str, Any]:
+    def _serialise(self, row: _Row, *, rank: int, criteria: SearchCriteria) -> dict[str, Any]:
         matched = [m.label for m in row.matches if m.met is True]
         unmatched = [m.label for m in row.matches if m.met is False]
         unverified = [m.label for m in row.matches if m.met is None]
@@ -552,22 +1258,26 @@ class RecommendationSearchService:
             "longitude": row.longitude,
             "research": {
                 # Workbook association index: a relative research ranking
-                # input, never a business-success probability. This value IS
-                # the PU score x100 (verified); it is exposed under both names
-                # so existing consumers keep working while new ones can read
-                # the explicit PU field.
+                # input, never a business-success probability. Under the
+                # default variant this value IS the stored PU score x100
+                # (verified); under expanded64 it is None — the stored value
+                # belongs to a DIFFERENT model and must not leak into an
+                # expanded ranking — and ``pu_score`` carries the LIVE
+                # expanded64 score x100 instead.
                 "catalog_suitability_score": row.suitability_score,
                 "suitability_available": row.suitability_score is not None,
                 "pu_score": row.pu_score,
                 "pu_available": row.pu_score is not None,
                 "pu_score_scale": PU_SCORE_SCALE,
+                "pu_score_source": row.pu_score_source,
+                "pu_model_version": row.expanded_model_version,
             },
             "recommendation": {
                 "available": False,
                 "rank": rank,
                 "score": None,
                 "score_type": SCORE_TYPE_REQUIREMENT_FIT,
-                "model_version": None,
+                "model_version": row.expanded_model_version,
                 "reason": MODEL_UNAVAILABLE_REASON,
                 "matched_requirements": matched,
                 "unmatched_requirements": unmatched,
@@ -578,6 +1288,7 @@ class RecommendationSearchService:
                 "matched_count": len(matched),
                 "verifiable_count": verifiable,
             },
+            "category": _category_block(row, criteria.business_type),
         }
 
     # -- cursor -------------------------------------------------------------
@@ -617,25 +1328,100 @@ class RecommendationSearchService:
         return offset
 
 
+def _category_block(row: _Row, business_type: str | None) -> dict[str, Any]:
+    """Stage-2 evidence for one card — always separate from PU and fit scores.
+
+    The entrepreneur's SELECTED category is the headline value. The model's own
+    highest class is reported separately as ``model_top_category`` and is never
+    presented as the entrepreneur's business type: a Café search stays a Café
+    search even when the classifier ranks Restaurant higher.
+    """
+    scores = row.category_scores or {}
+    if not scores:
+        return {
+            "available": False,
+            "reason": (
+                "Category evidence was not computed for this ranking. It is "
+                "available under the expanded64 two-stage research variant."
+            ),
+        }
+    from sitewise.ml.fnb_category import match_business_type, validation_summary
+
+    ranked = sorted(scores.items(), key=lambda kv: -kv[1])
+    payload: dict[str, Any] = {
+        "available": True,
+        "model_version": row.category_model_version,
+        "rankings": [
+            {"business_type": cls, "score": round(score, 6), "rank": index + 1}
+            for index, (cls, score) in enumerate(ranked)
+        ],
+        "model_top_category": ranked[0][0],
+        "top_category": ranked[0][0],
+        "top_score": round(ranked[0][1], 6),
+        "research_only": True,
+        "score_meaning": (
+            "Exploratory resemblance to observed operating F&B categories; not a "
+            "success, profitability or survival probability."
+        ),
+    }
+    try:
+        detail = validation_summary()
+        payload["reliability"] = str(detail.get("status") or "unavailable")
+        payload["reliability_detail"] = detail
+    except Exception:  # noqa: BLE001 - evidence stays optional
+        payload["reliability"] = "unavailable"
+    payload["note"] = (
+        "Exploratory resemblance to observed operating F&B categories; "
+        "not a success, profitability or survival probability."
+    )
+    selected = match_business_type(business_type)
+    if selected is not None:
+        score = scores.get(selected)
+        rank = next(
+            (index + 1 for index, (cls, _) in enumerate(ranked) if cls == selected),
+            None,
+        )
+        payload["selected_category"] = {
+            "business_type": selected,
+            "score": round(score, 6) if score is not None else None,
+            "rank": rank,
+            "is_model_top_category": selected == ranked[0][0],
+        }
+    return payload
+
+
 def _criteria_fingerprint(criteria: SearchCriteria) -> str:
     payload = json.dumps(criteria.cache_payload(), sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:16]
 
 
-def _rank_key(row: _Row) -> tuple:
-    """Deterministic requirement-fit ordering with a PU quality tie-break.
+def _rank_key(row: _Row, business_type: str | None = None) -> tuple:
+    """Deterministic requirement-fit ordering with category and PU tie-breaks.
 
-    Most requirements met first, fewest contradicted second, then HIGHER PU
+    Most requirements met first, fewest contradicted second, then HIGHER
+    association for the entrepreneur's SELECTED business type, then HIGHER PU
     score (all rows already passed the strict >50 eligibility gate), then the
-    largest budget headroom, then the largest size headroom, then the
-    catalogue id. Requirement fit therefore stays the primary ranking signal —
-    PU breaks ties among equally-fitting properties and never overrides a
-    requirement outcome. The final id tie-break makes the order total and
-    stable, which is what makes cursor pagination safe.
+    largest budget headroom, then the largest size headroom, then the catalogue
+    id.
+
+    Requirement fit therefore stays the primary ranking signal — an existing
+    preference outcome is never overridden by a research score, and no
+    undocumented weight is applied to either model output. The category output
+    only re-sequences properties that fit the entrepreneur's stated
+    requirements equally well. When no business type is selected, or the
+    category model could not score a property, the category term is zero for
+    every row and the ordering is exactly the previous requirement-fit order.
+    The final id tie-break makes the order total and stable, which is what
+    makes cursor pagination safe.
     """
+    from sitewise.ml.fnb_category import match_business_type
+
+    selected = match_business_type(business_type) if business_type else None
+    category_score = (row.category_scores or {}).get(selected) if selected else None
     return (
         -row.met_count,
         row.unmet_count,
+        -round(float(category_score), 6) if category_score is not None else 0.0,
         -round(row.pu_score or 0.0, 6),
         round(row.rental_rm, 2),  # cheaper first = more budget headroom
         -round(row.size_sqft, 2),  # larger floor area first = more space headroom
@@ -643,13 +1429,16 @@ def _rank_key(row: _Row) -> tuple:
     )
 
 
-def _sort_key(sort: str):
+def _sort_key(sort: str, business_type: str | None = None):
     """The ordering function for one accepted sort key.
 
     Every alternative ordering ends with the catalogue id so the sequence is
     total and stable — the same guarantee cursor pagination relies on. The
     eligible SET is identical for all of them; sort only re-sequences it, so no
     ordering can surface a property that failed the PU gate or the filters.
+
+    ``best_match`` is the only ordering that consults the selected business
+    type; the explicit rent/size/PU orderings stay purely numeric.
 
     An unknown value falls back to ``best_match`` rather than raising: the API
     layer already rejects unknown values with 422, and a stale client must
@@ -665,7 +1454,7 @@ def _sort_key(sort: str):
         return lambda row: (round(row.size_sqft, 2), row.id)
     if sort == "pu_desc":
         return lambda row: (-round(row.pu_score or 0.0, 6), row.id)
-    return _rank_key
+    return lambda row: _rank_key(row, business_type)
 
 
 def _as_float(value: Any) -> float | None:

@@ -9,9 +9,12 @@ into two phases that are started independently and can fail independently:
   transportation, parking. Every one of these is a PostGIS aggregate over a
   table that already exists in this deployment. Fast enough to run while the
   owner is still on the page.
-* **Phase 2 — ``population``**: raster work, deliberately separate. It is the
-  only category that depends on raster machinery, and the only one that is
-  legitimately *unavailable* for some coordinates.
+* **Phase 2 — ``population`` + ``age_population``**: raster work, deliberately
+  separate from the PostGIS phase. ``population`` resolves ring totals;
+  ``age_population`` (2026-11-15) extracts the six WorldPop age-sex band
+  counts around the property from the validated local tile set. These are
+  the categories that legitimately turn *unavailable* for some coordinates
+  or deployments.
 
 Each category has its own lifecycle (``pending``, ``running``, ``current``,
 ``unavailable``, ``failed``, ``stale``). A failure in one never writes a zero
@@ -28,7 +31,8 @@ Category                     Source                                        Rows
 ``demand_generators``        ``demand_gen.subjects``                        1,849
 ``roads_transport``          ``fnb_a.major_roads`` + ``transit_pois``     217,204 / 18,470
 ``parking``                  ``public.psense_parking``                      17,520
-``population``               ``public.landscan_2024`` raster + the         6,539 tiles
+``population``               ``public.worldpop_2025_constrained`` raster   2,677 tiles
+                             + ``public.landscan_2024`` raster + the        6,539 tiles
                              pre-computed WorldPop per-property rows          955
 ===========================  ============================================  =======
 
@@ -40,20 +44,41 @@ this service reuses it rather than inventing a second definition.
 
 Population honesty
 ------------------
-No WorldPop/LandScan GeoTIFF exists on this machine and ``rasterio`` is not
-installed, so the brief's literal "read the local raster with Rasterio" path
-cannot run here. Rather than fabricate a number, the service resolves
-population through an ordered chain and reports which link answered:
+Population resolves through an ordered chain and reports which link answered:
 
 1. the pre-computed WorldPop 100 m per-property row (existing catalogue);
-2. the live LandScan 2024 PostGIS raster, sampled with ``ST_SummaryStats``;
-3. a Rasterio GeoTIFF *if* ``SITEWISE_POPULATION_RASTER`` is configured and
+2. the live WorldPop 2025 constrained 100 m PostGIS raster
+   (``public.worldpop_2025_constrained``, CC-BY-4.0 — the same product the
+   PU training pipeline used, verified to reproduce its ring totals);
+3. the live LandScan 2024 PostGIS raster, sampled with ``ST_SummaryStats``
+   (coarse ~1 km, display fallback — never licensed for ML use);
+4. a Rasterio GeoTIFF *if* ``SITEWISE_POPULATION_RASTER`` is configured and
    ``rasterio`` is importable (the brief's method, wired and ready);
-4. otherwise ``unavailable`` with the precise reason.
+5. otherwise ``unavailable`` with the precise reason.
 
 A population value is therefore never printed as ``0`` because the data was
 missing — it is either a measured number with a named source, or it is
 ``unavailable``.
+
+Age-band honesty
+----------------
+``age_population`` has exactly one provider: the WorldPop age-sex structures
+tile set validated on 2026-11-15 (see ``age_band_raster_service``). There is
+no fallback chain, because no second source carries the same band semantics,
+and no re-derivation from ``demand_gen`` or district tables — that would be
+inference pretending to be measurement. The category is therefore honest by
+construction:
+
+* the tile set is optional infrastructure; without it the category settles
+  as ``unavailable`` with the precise structural reason (never an estimate);
+* a radius with no valued pixels contributes ``None`` columns — never zeros;
+* per-radius coverage and the recovery taxonomy travel with every measurement
+  (``age_coverage_500m`` / ``age_coverage_1km`` / ``age_data_status``), so
+  partial-coverage lower bounds are always distinguishable from complete ones.
+
+The PU model is deliberately untouched: it keeps resolving features through
+the verified ``fyp.property_subject_links`` mappings, and these new columns
+are never fed back into scoring.
 """
 
 from __future__ import annotations
@@ -62,6 +87,7 @@ import hashlib
 import logging
 import math
 import os
+import threading
 from collections.abc import Iterable, Sequence
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -69,6 +95,23 @@ from typing import Any
 from sqlalchemy import text
 from sqlmodel import Session
 
+from sitewise.core.config import settings
+from sitewise.services.age_band_raster_service import (
+    COVERAGE_STATUSES as AGE_COVERAGE_STATUSES,
+)
+from sitewise.services.age_band_raster_service import (
+    SOURCE_LICENCE as AGE_SOURCE_LICENCE,
+)
+from sitewise.services.age_band_raster_service import (
+    SOURCE_NAME as AGE_SOURCE_NAME,
+)
+from sitewise.services.age_band_raster_service import (
+    SOURCE_URL as AGE_SOURCE_URL,
+)
+from sitewise.services.age_band_raster_service import (
+    SOURCE_YEAR as AGE_SOURCE_YEAR,
+)
+from sitewise.services.age_band_raster_service import AgeBandRasterService
 from sitewise.services.enrichment_schema import (
     CATEGORIES,
     CATEGORY_PHASE,
@@ -80,8 +123,9 @@ from sitewise.services.enrichment_schema import (
 logger = logging.getLogger("sitewise.property_enrichment")
 
 #: Bumped when a measurement definition changes; part of the coordinate hash so
-#: a definition change invalidates previously stored values.
-CALCULATION_VERSION = "property-enrichment-v1"
+#: a definition change invalidates previously stored values. v2 adds the
+#: WorldPop 2025 constrained PostGIS raster as the population provider.
+CALCULATION_VERSION = "property-enrichment-v2"
 
 #: A ``running`` row older than this is treated as an abandoned job and may be
 #: reclaimed. Without it a crashed process would block its property forever.
@@ -101,6 +145,9 @@ SOURCE_LICENCES = {
     "fnb_a.major_roads": "OpenStreetMap ODbL 1.0 (attribution required)",
     "fnb_a.transit_pois": "OpenStreetMap ODbL 1.0 (attribution required)",
     "public.psense_parking": "OpenStreetMap ODbL 1.0 (attribution required)",
+    "public.worldpop_2025_constrained": (
+        "WorldPop R2025A v1 MYS 2025 constrained 100m (CC-BY-4.0)"
+    ),
     "public.landscan_2024": "LandScan 2024 (Oak Ridge National Laboratory)",
     "fyp_features.property_population_spatial": (
         "WorldPop R2025A v1 MYS 2025 constrained 100m (CC-BY-4.0)"
@@ -175,6 +222,24 @@ class _Outcome:
 
 #: Set once the additive DDL has run in this process.
 _SCHEMA_READY = False
+
+#: One age-band raster service per process, built lazily from settings. The
+#: 42 GeoTIFF datasets are opened on first use and cached inside the service,
+#: so they are opened once per worker, not once per property. Tests may swap
+#: this module attribute for a service pointed at synthetic tiles.
+_AGE_BAND_SERVICE: AgeBandRasterService | None = None
+_AGE_BAND_SERVICE_LOCK = threading.Lock()
+
+
+def _age_band_service() -> AgeBandRasterService:
+    global _AGE_BAND_SERVICE
+    if _AGE_BAND_SERVICE is None:
+        with _AGE_BAND_SERVICE_LOCK:
+            if _AGE_BAND_SERVICE is None:
+                _AGE_BAND_SERVICE = AgeBandRasterService(
+                    settings.sitewise_age_raster_dir
+                )
+    return _AGE_BAND_SERVICE
 
 
 class PropertyEnrichmentService:
@@ -569,6 +634,7 @@ class PropertyEnrichmentService:
             "roads_transport": self._roads_transport,
             "parking": self._parking,
             "population": self._population,
+            "age_population": self._age_population,
         }[category]
         return handler(lat, lon, row)
 
@@ -758,6 +824,13 @@ class PropertyEnrichmentService:
                 },
             )
 
+        worldpop = self._worldpop_population(lat, lon)
+        if worldpop is not None:
+            return _Outcome.current(
+                worldpop["measurement"],
+                {**worldpop["provenance"], "provider": "worldpop_postgis_raster"},
+            )
+
         raster = self._landscan_population(lat, lon)
         if raster is not None:
             return _Outcome.current(
@@ -778,6 +851,7 @@ class PropertyEnrichmentService:
                 "provider": "none",
                 "attempted": [
                     "worldpop_precomputed",
+                    "worldpop_postgis_raster",
                     "landscan_postgis_raster",
                     "rasterio_geotiff",
                 ],
@@ -786,6 +860,112 @@ class PropertyEnrichmentService:
                     "raster covers these coordinates. Population is reported as "
                     "unavailable rather than estimated."
                 ),
+            },
+        )
+
+    def _age_population(self, lat: float, lon: float, row: dict[str, Any]) -> _Outcome:
+        """Age-sex band counts from the WorldPop age-sex structures tiles.
+
+        Single provider, no fallback chain: nothing else carries the model's
+        band semantics, and re-deriving counts from district tables would be
+        inference pretending to be measurement. Every structural gap settles
+        as ``unavailable``; no band count is ever written as ``0`` because
+        data was missing.
+
+        The two radii fail independently. A radius with a coverage status
+        contributes its six group counts, the 15-34 share and its coverage
+        percentage; a structurally failed radius (out of raster, no valued
+        pixels, raster-edge truncation, ...) leaves its columns ``None`` —
+        never zeros — and is named in ``age_data_status``
+        ("500m:COMPLETED,1km:OUT_OF_RASTER").
+        """
+        service = _age_band_service()
+        ok, reason = service.availability()
+        if not ok:
+            return _Outcome.unavailable(
+                reason,
+                {
+                    "provider": "worldpop_age_sex_structures",
+                    "source": AGE_SOURCE_NAME,
+                    "source_url": AGE_SOURCE_URL,
+                },
+            )
+
+        try:
+            result = service.extract(lat, lon)
+        except Exception as exc:  # noqa: BLE001 - corrupt rasters must not fail the run
+            logger.warning("enrichment.age_extract_failed error=%s", exc)
+            return _Outcome.unavailable(
+                f"age_raster_extraction_error: {exc}",
+                {"provider": "worldpop_age_sex_structures"},
+            )
+
+        if result["status"] != "OK":  # defensive: availability() already gated this
+            return _Outcome.unavailable(
+                result["reason"], {"provider": "worldpop_age_sex_structures"}
+            )
+
+        radii = result["radii"]
+        measurement: dict[str, Any] = {
+            "age_data_source": AGE_SOURCE_NAME,
+            "age_data_year": AGE_SOURCE_YEAR,
+        }
+        per_radius: dict[str, Any] = {}
+        for label in ("500m", "1km"):
+            slot = radii.get(label) or {}
+            per_radius[label] = {
+                "status": slot.get("status"),
+                "coverage_pct": slot.get("coverage_pct"),
+                "total_mf": slot.get("total_mf"),
+                "bands_total": slot.get("bands_total"),
+                "band_total_relative_diff": slot.get("band_total_relative_diff"),
+                "band_bad_pixels": slot.get("band_bad_pixels"),
+            }
+            measurement[f"age_coverage_{label}"] = slot.get("coverage_pct")
+            groups = slot.get("groups") or {}
+            for group, value in groups.items():
+                measurement[f"{group}_{label}"] = value
+            measurement[f"share_age_15_34_{label}"] = slot.get("share_age_15_34")
+
+        status_text = ",".join(
+            f"{label}:{radii[label]['status']}" for label in ("500m", "1km")
+        )
+        measurement["age_data_status"] = status_text
+
+        measured = [
+            label
+            for label in ("500m", "1km")
+            if radii[label]["status"] in AGE_COVERAGE_STATUSES
+        ]
+        if not measured:
+            return _Outcome.unavailable(
+                f"no age-band pixels for either radius ({status_text})",
+                {
+                    "provider": "worldpop_age_sex_structures",
+                    "source": AGE_SOURCE_NAME,
+                    "per_radius": per_radius,
+                },
+            )
+
+        return _Outcome.current(
+            measurement,
+            {
+                "provider": "worldpop_age_sex_structures",
+                "source": AGE_SOURCE_NAME,
+                "source_year": AGE_SOURCE_YEAR,
+                "licence": AGE_SOURCE_LICENCE,
+                "source_url": AGE_SOURCE_URL,
+                "radii_m": [500, 1000],
+                "method": (
+                    "256-azimuth geodesic buffer; exact partial-pixel "
+                    "intersection-area weights in a local AEQD frame; "
+                    "per-band m+f sums cross-checked against T_F+T_M"
+                ),
+                "band_definitions": (
+                    "model bands 0-14/15-24/25-34/35-49/50-64/65+ (not the "
+                    "analytics legacy bands)"
+                ),
+                "per_radius": per_radius,
             },
         )
 
@@ -829,6 +1009,121 @@ class PropertyEnrichmentService:
                 "method": "pre-computed WorldPop 100 m ring totals",
             },
         }
+
+    def _worldpop_population(self, lat: float, lon: float) -> dict[str, Any] | None:
+        """Ring sums over the ingested WorldPop 2025 constrained 100 m raster.
+
+        This is the training product: ``mys_pop_2025_CN_100m_R2025A_v1`` under
+        CC-BY-4.0, already tiled in PostGIS, so no local file is read and no
+        dataset is ingested twice. The geodesic ``ST_Buffer`` ring + ``ST_Clip``
+        pattern is the same one the LandScan provider uses; it was verified on
+        2026-11-15 against the PU training contract for reference subject
+        MD-00510 (pop_500m/1000m within 0.02 %, 2000m/3000m within 0.05 %).
+
+        Coverage is the share of catchment pixels that carry a value; where
+        WorldPop has no data (sea, unmodelled forest) the training pipeline
+        treats the ring total as a lower bound, and this provider reports the
+        same quality flag instead of hiding the gap.
+        """
+        try:
+            rows = self.session.execute(
+                text(
+                    """
+                    WITH rings AS (
+                      SELECT r.radius_m,
+                             ST_Buffer(
+                               ST_SetSRID(ST_MakePoint(:lon, :lat), 4326)::geography,
+                               r.radius_m)::geometry AS buf
+                      FROM unnest(ARRAY[500, 1000, 2000, 3000]) AS r(radius_m)
+                    )
+                    SELECT
+                      r.radius_m,
+                      sum(agg.sum) AS pop,
+                      sum(agg.count) AS cells_valid,
+                      (pi() * r.radius_m ^ 2) / :pixel_area AS expected_cells
+                    FROM rings r
+                    CROSS JOIN LATERAL (
+                      SELECT s.sum, s.count
+                      FROM public.worldpop_2025_constrained l
+                      CROSS JOIN LATERAL ST_SummaryStats(ST_Clip(l.rast, r.buf), 1, true) s
+                      WHERE ST_Intersects(l.rast, r.buf)
+                    ) agg
+                    GROUP BY r.radius_m
+                    """
+                ),
+                {
+                    "lat": lat,
+                    "lon": lon,
+                    "pixel_area": float(
+                        110_574 * 0.000833333 * (111_320 * math.cos(math.radians(lat)))
+                        * 0.000833333
+                    ),
+                },
+            ).mappings().all()
+        except Exception as exc:  # noqa: BLE001 - raster extension may be absent
+            logger.info("enrichment.worldpop_unavailable error=%s", exc)
+            self.session.rollback()
+            return None
+
+        if not rows:
+            return None
+        by_radius = {int(r["radius_m"]): r for r in rows}
+        pop_1km = by_radius.get(1000, {}).get("pop")
+        if pop_1km is None:
+            return None
+
+        def _value(radius: int) -> float | None:
+            value = by_radius.get(radius, {}).get("pop")
+            return float(value) if value is not None else None
+
+        def _coverage(radius: int) -> float | None:
+            row = by_radius.get(radius)
+            if row is None or row["cells_valid"] is None:
+                return None
+            expected = float(row["expected_cells"] or 0.0)
+            if expected <= 0:
+                return None
+            return round(int(row["cells_valid"]) / expected, 4)
+
+        measurement = {
+            "population_500m": _value(500),
+            "population_1km": _value(1000),
+            "pop_2000m": _value(2000),
+            "pop_3000m": _value(3000),
+        }
+        coverages = {
+            f"worldpop_coverage_{label}_pct": (
+                round(cov * 100, 2) if (cov := _coverage(radius)) is not None else None
+            )
+            for label, radius in (("500m", 500), ("1000m", 1000),
+                                  ("2000m", 2000), ("3000m", 3000))
+        }
+        measured = [c for c in coverages.values() if c is not None]
+        low_coverage = bool(measured) and min(measured) < 99.0
+        radii_unavailable = [
+            f"{radius}m"
+            for radius in (500, 1000, 2000, 3000)
+            if by_radius.get(radius, {}).get("pop") is None
+        ]
+        provenance = {
+            "source": "public.worldpop_2025_constrained",
+            "source_dataset": "mys_pop_2025_CN_100m_R2025A_v1.tif",
+            "radii_m": [500, 1000, 2000, 3000],
+            "radii_unavailable": radii_unavailable,
+            "resolution_m": 100,
+            "quality_flag": "LOW_COVERAGE" if low_coverage else "OK",
+            "licence": SOURCE_LICENCES["public.worldpop_2025_constrained"],
+            "ml_eligible": True,
+            "method": "PostGIS ST_SummaryStats over ST_Clip of geodesic ST_Buffer ring",
+            **coverages,
+        }
+        if low_coverage:
+            provenance["lower_bound_note"] = (
+                "Some catchment pixels carry no WorldPop value (sea or unmodelled "
+                "area); ring totals are lower bounds, matching the training "
+                "pipeline's treatment."
+            )
+        return {"measurement": measurement, "provenance": provenance}
 
     def _landscan_population(self, lat: float, lon: float) -> dict[str, Any] | None:
         """Sample the live LandScan 2024 PostGIS raster.
@@ -1033,7 +1328,8 @@ class PropertyEnrichmentService:
 
 
 #: Which wide-table columns each category owns. A category may only write its
-#: own columns — that is what keeps the five lifecycles independent.
+#: own columns — that is what keeps the lifecycles independent. The second
+#: element documents the column kind; the SQL is type-agnostic.
 _MEASUREMENT_COLUMNS: dict[str, tuple[tuple[str, str], ...]] = {
     "fnb_competitors": (
         ("competitor_count_500m", "int"),
@@ -1057,6 +1353,30 @@ _MEASUREMENT_COLUMNS: dict[str, tuple[tuple[str, str], ...]] = {
     "population": (
         ("population_500m", "float"),
         ("population_1km", "float"),
+    ),
+    # Mirrors FEATURE_COLUMNS["age_population"] in enrichment_schema (19
+    # columns). Radii fail independently: a structurally failed radius writes
+    # None (never 0) for its columns, and age_data_status names what happened.
+    "age_population": (
+        ("pop_age_0_14_500m", "float"),
+        ("pop_age_15_24_500m", "float"),
+        ("pop_age_25_34_500m", "float"),
+        ("pop_age_35_49_500m", "float"),
+        ("pop_age_50_64_500m", "float"),
+        ("pop_age_65_plus_500m", "float"),
+        ("pop_age_0_14_1km", "float"),
+        ("pop_age_15_24_1km", "float"),
+        ("pop_age_25_34_1km", "float"),
+        ("pop_age_35_49_1km", "float"),
+        ("pop_age_50_64_1km", "float"),
+        ("pop_age_65_plus_1km", "float"),
+        ("share_age_15_34_500m", "float"),
+        ("share_age_15_34_1km", "float"),
+        ("age_coverage_500m", "float"),
+        ("age_coverage_1km", "float"),
+        ("age_data_source", "text"),
+        ("age_data_year", "int"),
+        ("age_data_status", "text"),
     ),
 }
 

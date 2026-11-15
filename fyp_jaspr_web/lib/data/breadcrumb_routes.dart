@@ -19,8 +19,7 @@
 /// Some detail pages pass their **parent section's route** as `currentRoute`
 /// (so the pill nav highlights it): admin user detail passes `/admin/users`,
 /// admin listing detail passes `/admin/listings`, agent listing detail passes
-/// `/agent/listings`, and the property-registration views pass
-/// `/entrepreneur/add-property`. For those the page's own `title` (already
+/// `/agent/listings`. For those the page's own `title` (already
 /// flowing into [AppLayout] for the page head) becomes the current crumb —
 /// `pageTitle: true` below — while the registered section becomes an
 /// intermediate link. An unknown route falls back to
@@ -71,23 +70,17 @@ const Map<String, _TrailSpec> _trails = {
   '/entrepreneur/assessments/history':
       _TrailSpec('Assessment history', sectionRoute: '/entrepreneur/assessments'),
   '/entrepreneur/report':
-      _TrailSpec('Suitability report', sectionRoute: '/entrepreneur/recommendations'),
+      _TrailSpec('Suitability report', sectionRoute: '/entrepreneur/reports'),
   '/entrepreneur/tour': _TrailSpec('360° tour', sectionRoute: '/entrepreneur/recommendations'),
   '/entrepreneur/explanation':
       _TrailSpec('Why this score', sectionRoute: '/entrepreneur/recommendations'),
   '/entrepreneur/recommendations': _TrailSpec('Recommendations'),
   '/entrepreneur/compare': _TrailSpec('Compare'),
   '/entrepreneur/saved': _TrailSpec('Saved'),
-  '/entrepreneur/my-properties': _TrailSpec('My Properties'),
-  // The registration wizard (and its draft-saved view) render their own
-  // styled in-page breadcrumb, so AppLayout suppresses the global one there;
-  // the spec is kept so the mapping stays explicit and `titleForRoute`
-  // fallbacks never fire for it.
-  '/entrepreneur/add-property': _TrailSpec(
-    'Register a property',
-    sectionRoute: '/entrepreneur/my-properties',
-    usePageTitle: true,
-  ),
+  // My Properties and the registration wizard left this workspace: listing
+  // management is a Provider (Owner / Agent) capability in the mobile app. The
+  // two paths still resolve, to a denied explanation page, and it renders its
+  // own empty state — so no trail is defined for either.
   '/entrepreneur/preferences':
       _TrailSpec('Preferences', sectionRoute: '/entrepreneur/profile'),
   '/entrepreneur/profile': _TrailSpec('Profile'),
@@ -114,18 +107,8 @@ const Map<String, _TrailSpec> _trails = {
   '/agent/performance': _TrailSpec('Performance'),
   '/agent/profile': _TrailSpec('Profile'),
 
-  // --- Owner (legacy links resolve into entrepreneur; routes stay live) ----
-  '/owner/properties': _TrailSpec('My Properties'),
-  '/owner/property-detail':
-      _TrailSpec('Property', sectionRoute: '/owner/properties'),
-  '/owner/add-property': _TrailSpec(
-    'Add Property',
-    sectionRoute: '/owner/properties',
-    usePageTitle: true,
-  ),
-  '/owner/tours': _TrailSpec('360° Tours'),
-  '/owner/tour-preview': _TrailSpec('Tour preview', sectionRoute: '/owner/tours'),
-  '/owner/profile': _TrailSpec('Profile'),
+  // --- Owner (retired; every path renders the retirement page) -------------
+  // No trails: the page is a terminal explanation with no parent section.
 };
 
 /// Builds the breadcrumb trail for one authenticated page.

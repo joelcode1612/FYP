@@ -17,6 +17,9 @@ class AuthField extends StatelessWidget {
   final void Function(String)? onSubmitted;
   final Iterable<String>? autofillHints;
 
+  /// Renders a red asterisk after the label for mandatory fields.
+  final bool required;
+
   const AuthField({
     super.key,
     required this.label,
@@ -29,6 +32,7 @@ class AuthField extends StatelessWidget {
     this.textInputAction,
     this.onSubmitted,
     this.autofillHints,
+    this.required = false,
   });
 
   @override
@@ -36,12 +40,21 @@ class AuthField extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          label,
-          style: const TextStyle(
-            fontSize: 13,
-            fontWeight: FontWeight.w700,
-            color: SitewiseColors.ink,
+        Text.rich(
+          TextSpan(
+            style: const TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+              color: SitewiseColors.ink,
+            ),
+            children: <InlineSpan>[
+              TextSpan(text: label),
+              if (required)
+                const TextSpan(
+                  text: ' *',
+                  style: TextStyle(color: SitewiseColors.danger),
+                ),
+            ],
           ),
         ),
         const SizedBox(height: 8),

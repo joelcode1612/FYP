@@ -260,17 +260,6 @@ class ArCoreCapturePlugin : FlutterPlugin, ActivityAware, MethodChannel.MethodCa
                 result.success(null)
             }
 
-            "setPlaneDetection" -> {
-                val existing = controller
-                if (existing == null) {
-                    result.error("no_session", "No AR session is running.", null)
-                    return
-                }
-                existing.setPlaneDetection(call.argument<Boolean>("enabled") ?: true) { outcome ->
-                    answer(result, outcome)
-                }
-            }
-
             "setMesh" -> {
                 val id = call.argument<String>("id") ?: "target"
                 val positions = toFloatArray(call.argument<Any?>("positions"))

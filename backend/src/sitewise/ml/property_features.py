@@ -126,7 +126,8 @@ class PropertyFeatureRepository:
 
         # Do not attempt to cast a catalogue ID into a rental BIGINT.
         present = _rows(self.session, """
-            SELECT id FROM sitewise_app.properties WHERE id = :id LIMIT 1
+            SELECT id FROM fyp.rental_properties
+            WHERE catalogue_id = :id LIMIT 1
         """, {"id": property_id})
         if not present:
             raise FeatureResolutionError("The catalogue property does not exist")

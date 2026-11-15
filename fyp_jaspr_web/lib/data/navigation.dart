@@ -39,53 +39,38 @@ List<WebDestination> webDestinationsFor(AppRole role) => switch (role) {
     // `people`, not `group`: the mobile bottom nav uses Icons.people_outline,
     // and Material Symbols renders `group` and `people` as different glyphs.
     WebDestination(route: '/admin/users', icon: 'people', label: 'Users'),
-    // The unified operations pages: Listings (verification review) → Agents →
-    // Surveys. Kept as separate sidebar/pill entries (no merged mega-menu),
-    // because each screen has its own route and its own audience among the
-    // admin tabs. Campaigns and Activity are no longer offered in the navbar —
-    // their routes, pages and the audit logging they read stay fully
-    // functional for direct links.
+    // The five primary Admin destinations. Surveys and Profile are not
+    // sidebar entries: Profile is reached through the avatar menu
+    // (`topbar_controls.dart`), and Surveys and Campaigns keep their
+    // registered routes, pages and audit reads for direct links. Removing an
+    // entry here changes navigation only — the router guard still authorizes
+    // every `/admin/*` route independently.
     WebDestination(route: '/admin/agents', icon: 'badge', label: 'Agents'),
-    WebDestination(
-      route: '/admin/surveys',
-      icon: 'how_to_vote',
-      label: 'Surveys',
-    ),
     WebDestination(
       route: '/admin/listings',
       icon: 'business',
       label: 'Listings',
     ),
-    WebDestination(route: '/admin/profile', icon: 'person', label: 'Profile'),
-  ],
-  AppRole.agent => const [
-    WebDestination(route: '/agent', icon: 'dashboard', label: 'Dashboard'),
+    // System activity is a primary Admin destination (the security & activity
+    // timeline). Its route was always registered and authorized — this entry
+    // only makes it reachable from the pill and the mobile drawer.
     WebDestination(
-      route: '/agent/listings',
-      icon: 'business',
-      label: 'Assigned Listings',
+      route: '/admin/activity',
+      icon: 'history',
+      label: 'System Activity',
     ),
-    // Enquiries and Performance are not part of the approved Agent scope —
-    // nothing server-side stores enquiries or interaction events — so they are
-    // no longer offered as navigation. Their routes stay registered so old
-    // links and the parent-shell mapping keep resolving.
-    WebDestination(route: '/agent/profile', icon: 'person', label: 'Profile'),
   ],
-  AppRole.owner => const [
-    WebDestination(route: '/owner', icon: 'home', label: 'Home'),
-    WebDestination(
-      route: '/owner/properties',
-      icon: 'store',
-      label: 'My Properties',
-    ),
-    WebDestination(
-      route: '/owner/add-property',
-      icon: 'add_business',
-      label: 'Add Property',
-    ),
-    WebDestination(route: '/owner/tours', icon: '360', label: '360° Tours'),
-    WebDestination(route: '/owner/profile', icon: 'person', label: 'Profile'),
-  ],
+  // The Agent web workspace is retired: property management is the Flutter
+  // Owner / Agent app. No destinations means the shell renders no sidebar for
+  // a role that no longer has web pages.
+  AppRole.agent => const [],
+  // The Owner web workspace is retired with it. Owners sign in to the SAME
+  // Flutter Provider workspace as agents — the two are one mobile product, and
+  // the split between them is decided server-side (ownership vs assignment),
+  // not by a second web UI. The `/owner/*` routes survive as explanatory
+  // redirects (see `app.dart`) so an old bookmark states where the work moved
+  // instead of 404ing, but nothing is reachable from here.
+  AppRole.owner => const [],
   AppRole.entrepreneur => const [
     WebDestination(route: '/entrepreneur', icon: 'home', label: 'Home'),
     // Discovery is ONE destination. Explore and Recommendations used to be two
@@ -119,6 +104,11 @@ List<WebDestination> webDestinationsFor(AppRole role) => switch (role) {
       label: 'Activity History',
     ),
     WebDestination(
+      route: '/entrepreneur/assessments/history',
+      icon: 'history',
+      label: 'History',
+    ),
+    WebDestination(
       route: '/entrepreneur/compare',
       icon: 'compare_arrows',
       label: 'Compare',
@@ -128,11 +118,12 @@ List<WebDestination> webDestinationsFor(AppRole role) => switch (role) {
       icon: 'bookmark',
       label: 'Saved',
     ),
-    WebDestination(
-      route: '/entrepreneur/my-properties',
-      icon: 'storefront',
-      label: 'My Properties',
-    ),
+    // My Properties is GONE from this workspace. Listing management is the
+    // Provider (Owner / Agent) job and lives in the Flutter app; an
+    // entrepreneur browsing the catalogue has no listings to manage, so the
+    // destination was an empty surface that also implied an authority the
+    // role does not hold. `/entrepreneur/my-properties` and
+    // `/entrepreneur/add-property` stay registered as denied redirects.
     WebDestination(
       route: '/entrepreneur/profile',
       icon: 'person',
@@ -159,22 +150,22 @@ String parentShellRoute(String route) {
     '/entrepreneur/property-detail': '/entrepreneur/recommendations',
     '/entrepreneur/property-analysis': '/entrepreneur/recommendations',
     '/entrepreneur/assessment': '/entrepreneur/assessments',
-    '/entrepreneur/assessments/history': '/entrepreneur/assessments',
+    '/entrepreneur/assessments/history': '/entrepreneur/assessments/history',
     '/entrepreneur/tour': '/entrepreneur/recommendations',
     '/entrepreneur/report': '/entrepreneur/recommendations',
     // The report shell is now reached from the selector gate; both URLs keep
     // the Report pill lit so the sidebar matches what is on screen.
     '/entrepreneur/cafe-report/view': '/entrepreneur/cafe-report',
     '/entrepreneur/explanation': '/entrepreneur/recommendations',
-    '/entrepreneur/my-properties': '/entrepreneur/my-properties',
-    '/entrepreneur/add-property': '/entrepreneur/my-properties',
+    // Listing management is retired from this workspace entirely, so the two
+    // routes that used to sit under My Properties have no pill to light up.
+    // They no longer resolve (see the denied redirects in `app.dart`); these
+    // entries only keep a stale cached shell from selecting nothing.
+    '/entrepreneur/my-properties': '/entrepreneur',
+    '/entrepreneur/add-property': '/entrepreneur',
     '/admin/user-detail': '/admin/users',
     '/admin/listing-detail': '/admin/listings',
     '/admin/agent-detail': '/admin/agents',
-    '/agent/property-detail': '/agent/listings',
-    '/owner/property-detail': '/owner/properties',
-    '/owner/tour-preview': '/owner/tours',
-    '/owner/capture': '/owner/tours',
   };
   return parents[route] ?? route;
 }
@@ -206,13 +197,12 @@ String titleForRoute(String route) {
     '/entrepreneur/property-detail': 'Property',
     '/entrepreneur/property-analysis': 'Location analysis',
     '/entrepreneur/tour': '360° Tour',
+    '/entrepreneur/reports': 'Reports',
     '/entrepreneur/report': 'Suitability Report',
     '/entrepreneur/explanation': 'Why this score',
     '/admin/user-detail': 'User',
     '/admin/verification-detail': 'Verification',
     '/admin/listing-detail': 'Listing',
-    '/owner/property-detail': 'Property',
-    '/owner/tour-preview': '360° Tour',
   };
   if (names.containsKey(route)) return names[route]!;
   final segment = route.split('/').where((s) => s.isNotEmpty).lastOrNull;

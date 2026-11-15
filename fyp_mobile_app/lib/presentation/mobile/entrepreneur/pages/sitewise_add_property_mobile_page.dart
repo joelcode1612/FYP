@@ -1,13 +1,16 @@
-import 'dart:typed_data';
+import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:image_picker/image_picker.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_logic/shared_logic.dart';
 
 import '../../../../application/services/service_locator.dart';
 import '../../../../core/config/mobile_config.dart';
-import '../../shell/entrepreneur_tab_scope.dart';
+import '../../../../core/theme/sitewise_m3.dart';
+import '../../../../core/theme/sitewise_theme.dart';
+import '../../../../core/utils/capture_log.dart';
 import '../../shell/mobile_app_shell.dart';
+import '../../shell/mobile_navigation.dart';
 import '../../../shared/tour/ar_capture_mobile_page.dart';
 
 /// SiteWise Add Property — REAL owner-listing workflow.
@@ -20,7 +23,7 @@ import '../../../shared/tour/ar_capture_mobile_page.dart';
 /// confirmation step shows the real database-assigned property ID.
 class SitewiseAddPropertyMobilePage extends StatefulWidget {
   /// Resume an existing draft (`fyp.rental_properties.id`) from
-  /// My Properties. Null starts a blank form.
+  /// My listings. Null starts a blank form.
   final String? initialDraftId;
 
   const SitewiseAddPropertyMobilePage({super.key, this.initialDraftId});
@@ -32,12 +35,15 @@ class SitewiseAddPropertyMobilePage extends StatefulWidget {
 
 class _SitewiseAddPropertyMobilePageState
     extends State<SitewiseAddPropertyMobilePage> {
-  static const Color _brand = Color(0xFF2F6FED);
-  static const Color _brandStrong = Color(0xFF1D4ED8);
-  static const Color _background = Color(0xFFF6F7F9);
-  static const Color _ink = Color(0xFF10151F);
-  static const Color _muted = Color(0xFF58677D);
-  static const Color _border = Color(0xFFE2E8F0);
+  // The Add Property form is the Provider workspace's Add destination. Its
+  // palette now points at the shared SiteWise design system instead of
+  // carrying a private copy that drifted from the entrepreneur screens.
+  static const Color _brand = SitewiseColors.action;
+  static const Color _brandStrong = SitewiseM3.primary;
+  static const Color _background = SitewiseM3.paper;
+  static const Color _ink = SitewiseM3.ink;
+  static const Color _muted = SitewiseM3.muted;
+  static const Color _border = SitewiseM3.line;
   static const Color _errorInk = Color(0xFFB42318);
   static const Color _errorBorder = Color(0xFFE7A6A0);
 
@@ -82,8 +88,13 @@ class _SitewiseAddPropertyMobilePageState
   bool _submitting = false;
   String? _serverMessage;
   String? _serverError;
-  List<OwnerListingPhoto> _photos = const [];
-  final Set<int> _uploadingPhotos = <int>{};
+
+  /// The unfinished 360° capture for this property, when one exists.
+  ///
+  /// Only a draft tour that already holds confirmed frames is resumable. A
+  /// draft with zero frames is an empty session, so offering "Resume" for it
+  /// would promise progress that was never made.
+  String? _resumableTourId;
 
   String get _propertyName => _nameController.text.trim();
   String get _monthlyRent => _rentController.text.trim();
@@ -151,7 +162,6 @@ class _SitewiseAddPropertyMobilePageState
     _draftId = listing.id;
     _serverStatus = listing.verificationStatus;
     _rejectionReason = listing.rejectionReason;
-    _photos = listing.photos;
     String text(TextEditingController c, String? v) {
       c.text = v ?? '';
       return c.text;
@@ -253,7 +263,7 @@ class _SitewiseAddPropertyMobilePageState
         _draftId = saved.id;
         _serverStatus = saved.verificationStatus;
         _serverMessage = 'Draft saved to Sitewise (ID ${saved.id}). '
-            'You can leave this page and resume it later from My Properties.';
+            'You can leave this page and resume it later from My listings.';
       });
     } on Object catch (error) {
       if (!mounted) return;
@@ -299,7 +309,7 @@ class _SitewiseAddPropertyMobilePageState
       if (!mounted) return;
       // The verification status changed on the server. The draft update above
       // already bumped the listings revision, but that happened BEFORE this
-      // call returned — bump again so My Properties refetches the record with
+      // call returned — bump again so My listings refetches the record with
       // its new "pending review" status instead of the "draft" it just read.
       ServiceLocator.listingsRevision.value++;
       setState(() {
@@ -325,94 +335,6 @@ class _SitewiseAddPropertyMobilePageState
   String _readableError(Object error, {required String fallback}) {
     if (error is AppFailure) return error.message;
     return fallback;
-  }
-
-  // ---------------------------------------------------------------------------
-  // Photos
-  // ---------------------------------------------------------------------------
-
-  Future<void> _pickAndUploadPhoto() async {
-    if (_draftId == null) {
-      setState(() {
-        _validationMessage =
-            'Save the draft first — photos attach to the saved property record.';
-      });
-      return;
-    }
-    try {
-      final picker = ImagePicker();
-      final picked = await picker.pickImage(
-        source: ImageSource.gallery,
-        imageQuality: 85,
-      );
-      if (picked == null || !mounted) return;
-      final bytes = await picked.readAsBytes();
-      final Uint8List data = bytes;
-      setState(() => _uploadingPhotos.add(-1));
-      await ServiceLocator.ownerListings.uploadPhoto(
-        listingId: _draftId!,
-        filename: picked.name,
-        bytes: data,
-        contentType: _contentTypeFor(picked.name),
-      );
-      if (!mounted) return;
-      final photos =
-          await ServiceLocator.ownerListings.photos(_draftId!);
-      if (!mounted) return;
-      setState(() {
-        _photos = photos;
-        _serverMessage = 'Photo uploaded.';
-      });
-    } on Object catch (error) {
-      if (!mounted) return;
-      setState(() {
-        _serverError = _readableError(
-          error,
-          fallback: 'The photo upload failed. Your draft is saved.',
-        );
-      });
-    } finally {
-      if (mounted) setState(() => _uploadingPhotos.clear());
-    }
-  }
-
-  Future<void> _deletePhoto(OwnerListingPhoto photo) async {
-    if (_draftId == null) return;
-    try {
-      await ServiceLocator.ownerListings.deletePhoto(_draftId!, photo.id);
-      if (!mounted) return;
-      setState(() {
-        _photos = _photos.where((p) => p.id != photo.id).toList();
-      });
-    } on Object catch (error) {
-      if (!mounted) return;
-      setState(() {
-        _serverError = _readableError(error, fallback: 'Could not remove the photo.');
-      });
-    }
-  }
-
-  Future<void> _makePrimary(OwnerListingPhoto photo) async {
-    if (_draftId == null) return;
-    try {
-      await ServiceLocator.ownerListings.setPrimaryPhoto(_draftId!, photo.id);
-      if (!mounted) return;
-      final photos = await ServiceLocator.ownerListings.photos(_draftId!);
-      if (!mounted) return;
-      setState(() => _photos = photos);
-    } on Object catch (error) {
-      if (!mounted) return;
-      setState(() {
-        _serverError = _readableError(error, fallback: 'Could not set the primary photo.');
-      });
-    }
-  }
-
-  static String _contentTypeFor(String filename) {
-    final lower = filename.toLowerCase();
-    if (lower.endsWith('.png')) return 'image/png';
-    if (lower.endsWith('.webp')) return 'image/webp';
-    return 'image/jpeg';
   }
 
   // ---------------------------------------------------------------------------
@@ -483,6 +405,9 @@ class _SitewiseAddPropertyMobilePageState
         }
       }
     });
+    // Entering Step 3 decides whether "Resume Previous Capture" may be shown,
+    // so the lookup runs for the footer path as well as the stepper.
+    if (_step == 3) unawaited(_refreshResumable());
   }
 
   void _goBack() {
@@ -498,6 +423,9 @@ class _SitewiseAddPropertyMobilePageState
       _step = step;
       _validationMessage = null;
     });
+    // Step 3 is the only step whose actions depend on persisted state: whether
+    // an interrupted capture exists decides if "Resume" may be shown at all.
+    if (step == 3) unawaited(_refreshResumable());
   }
 
   void _onTextChanged(String _) {
@@ -515,15 +443,28 @@ class _SitewiseAddPropertyMobilePageState
         colorScheme: ColorScheme.fromSeed(
           seedColor: _brand,
           primary: _brand,
-          surface: Colors.white,
+          surface: SitewiseM3.surface,
         ),
-        fontFamily: 'Archivo',
+        fontFamily: kFontFamily,
       ),
-      child: MobileAppShell(
+      child: Consumer(
+        builder: (context, ref, _) {
+          // The Add form is the Owner dock's centre action, but an agent can
+          // reach the route too (it is inside the shared provider workspace).
+          // The dock follows the SIGNED-IN role so neither role ever sees the
+          // other one's tabs; the highlight resolves through
+          // `parentShellRoute('/provider/add-property')`.
+          final role = ref.watch(appNotifierProvider.select((s) => s.role));
+          return MobileAppShell(
         title: 'Add property',
-        currentRoute: '/entrepreneur/add-property',
-        // The Add Property flow is entered from the Spaces tab, so the header
-        // keeps no back arrow — the tab dock is the way back.
+        currentRoute: '/provider/add-property',
+        // This form is the Provider dock's Add destination: keep the exact
+        // Material 3 chrome and the role's provider tabs while it is open.
+        m3: true,
+        destinations: providerDestinationsFor(role),
+        // Entered from the Owner / Agent workspace as a top-level Add
+        // destination, so the header keeps no back arrow — the dock is the
+        // way back to the other tabs.
         showBack: false,
         body: SafeArea(
           child: LayoutBuilder(
@@ -566,6 +507,8 @@ class _SitewiseAddPropertyMobilePageState
             },
           ),
         ),
+          );
+        },
       ),
     );
   }
@@ -575,7 +518,7 @@ class _SitewiseAddPropertyMobilePageState
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
         const Text(
-          'ENTREPRENEUR WORKSPACE',
+          'PROVIDER WORKSPACE',
           style: TextStyle(
             color: _brandStrong,
             fontSize: 10,
@@ -598,13 +541,9 @@ class _SitewiseAddPropertyMobilePageState
         Text(
           _draftId == null
               ? 'Create a real property record, save it as a draft and submit '
-                  'it for administrator verification.'
+                    'it for administrator verification.'
               : 'Editing saved property #$_draftId (status: $_serverStatus).',
-          style: const TextStyle(
-            color: _muted,
-            fontSize: 13,
-            height: 1.5,
-          ),
+          style: const TextStyle(color: _muted, fontSize: 13, height: 1.5),
         ),
       ],
     );
@@ -636,14 +575,14 @@ class _SitewiseAddPropertyMobilePageState
                         color: isCurrent
                             ? _brand
                             : isDone
-                                ? const Color(0xFFEDF4FF)
-                                : const Color(0xFFF6F8FC),
+                            ? const Color(0xFFEDF4FF)
+                            : const Color(0xFFF6F8FC),
                         border: Border.all(
                           color: isCurrent
                               ? _brand
                               : isDone
-                                  ? const Color(0xFFCFE0FD)
-                                  : const Color(0xFFD6DEEA),
+                              ? const Color(0xFFCFE0FD)
+                              : const Color(0xFFD6DEEA),
                         ),
                       ),
                       child: Center(
@@ -653,8 +592,8 @@ class _SitewiseAddPropertyMobilePageState
                             color: isCurrent
                                 ? Colors.white
                                 : isDone
-                                    ? _brandStrong
-                                    : const Color(0xFF59677C),
+                                ? _brandStrong
+                                : const Color(0xFF59677C),
                             fontSize: 12,
                             fontWeight: FontWeight.w900,
                           ),
@@ -879,8 +818,9 @@ class _SitewiseAddPropertyMobilePageState
                 });
               },
               style: OutlinedButton.styleFrom(
-                backgroundColor:
-                    selected ? const Color(0xFFEEF5FF) : Colors.white,
+                backgroundColor: selected
+                    ? const Color(0xFFEEF5FF)
+                    : Colors.white,
                 foregroundColor: selected ? _brandStrong : _muted,
                 side: BorderSide(
                   color: selected
@@ -915,8 +855,10 @@ class _SitewiseAddPropertyMobilePageState
 
   Widget _buildLocation() {
     final cityOptions = MalaysiaLocations.citiesFor(_stateName);
-    final postcodeOptions =
-        MalaysiaLocations.postcodesFor(_stateName, _district);
+    final postcodeOptions = MalaysiaLocations.postcodesFor(
+      _stateName,
+      _district,
+    );
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -976,7 +918,7 @@ class _SitewiseAddPropertyMobilePageState
         _buildInfoNotice(
           'SiteWise administrators separately verify the listing and '
           'ownership evidence after submission. Ownership evidence is '
-          'uploaded separately from My Properties.',
+          'uploaded separately from My listings.',
         ),
       ],
     );
@@ -1017,17 +959,19 @@ class _SitewiseAddPropertyMobilePageState
         InkWell(
           onTap: canOpen
               ? () => _openOptionPicker(
-                    title: label,
-                    options: options,
-                    selected: value,
-                    onSelected: onSelected,
-                  )
+                  title: label,
+                  options: options,
+                  selected: value,
+                  onSelected: onSelected,
+                )
               : null,
           borderRadius: BorderRadius.circular(11),
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
             decoration: BoxDecoration(
-              color: canOpen ? const Color(0xFFFAFBFD) : const Color(0xFFF2F4F7),
+              color: canOpen
+                  ? const Color(0xFFFAFBFD)
+                  : const Color(0xFFF2F4F7),
               border: Border.all(
                 color: error == null ? const Color(0xFFD5DDE9) : _errorBorder,
               ),
@@ -1088,19 +1032,39 @@ class _SitewiseAddPropertyMobilePageState
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
       ),
-      builder: (sheetContext) => _OptionSheet(
-        title: title,
-        options: options,
-        selected: selected,
-      ),
+      builder: (sheetContext) =>
+          _OptionSheet(title: title, options: options, selected: selected),
     );
     if (!mounted || picked == null) return;
     onSelected(picked);
   }
 
-
   // ------------------------------------------------------- AR 360 capture
   bool _startingCapture = false;
+
+  /// Looks for an interrupted capture belonging to the saved draft.
+  ///
+  /// The query is the tour service's property-scoped draft lookup, so it can
+  /// only ever answer with a draft/processing tour — never with a finished one.
+  /// The frame count comes from the tour record, which the capture screen keeps
+  /// in step with the JPEGs actually written.
+  Future<void> _refreshResumable() async {
+    final id = _draftId;
+    if (id == null || id.isEmpty) {
+      if (mounted && _resumableTourId != null) {
+        setState(() => _resumableTourId = null);
+      }
+      return;
+    }
+    try {
+      final tour = await ServiceLocator.tourService.tourForPropertyDraft(id);
+      final resumable = tour != null && tour.frameCount > 0 ? tour.id : null;
+      if (!mounted || resumable == _resumableTourId) return;
+      setState(() => _resumableTourId = resumable);
+    } catch (error) {
+      CaptureLog.log('Resumable capture lookup failed: $error');
+    }
+  }
 
   Future<void> _startArCapture() async {
     if (_startingCapture) return;
@@ -1123,7 +1087,10 @@ class _SitewiseAddPropertyMobilePageState
         '/owner/capture',
         arguments: ArCaptureRequest(propertyId: id),
       );
-      if (mounted) setState(() {});
+      if (mounted) {
+        setState(() {});
+        await _refreshResumable();
+      }
     } finally {
       if (mounted) setState(() => _startingCapture = false);
     }
@@ -1147,8 +1114,8 @@ class _SitewiseAddPropertyMobilePageState
                 Text(
                   body,
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: scheme.onSurfaceVariant,
-                      ),
+                    color: scheme.onSurfaceVariant,
+                  ),
                 ),
               ],
             ),
@@ -1189,8 +1156,9 @@ class _SitewiseAddPropertyMobilePageState
               _arGuidance(
                 Icons.grid_on_outlined,
                 'Follow 26 capture points',
-                'Stand at the centre and turn in place; each station is '
-                    'recorded automatically when it is aligned and steady.',
+                'Stand in one spot and turn your body slowly in a full '
+                    'circle. Hold steady at each point; ARCore records the '
+                    'direction when it is aligned and stable.',
               ),
               _arGuidance(
                 Icons.center_focus_strong_outlined,
@@ -1211,152 +1179,27 @@ class _SitewiseAddPropertyMobilePageState
                   _startingCapture ? 'Saving draft…' : 'Start AR Capture',
                 ),
               ),
+              // Only ever rendered for a real interrupted capture: the lookup
+              // returns draft tours that already hold frames, so this cannot
+              // promise progress that was not saved.
+              if (_resumableTourId != null) ...[
+                const SizedBox(height: 8),
+                OutlinedButton.icon(
+                  onPressed: _startingCapture ? null : _startArCapture,
+                  icon: const Icon(Icons.restart_alt),
+                  label: const Text('Resume Previous Capture'),
+                ),
+              ],
               const SizedBox(height: 8),
               Text(
                 'The virtual tour will be linked to this property and can be '
-                'reviewed in My Properties.',
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: scheme.onSurfaceVariant,
-                    ),
+                'reviewed in My listings.',
+                style: Theme.of(
+                  context,
+                ).textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
               ),
             ],
           ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildPhotos() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: <Widget>[
-        InkWell(
-          onTap: _uploadingPhotos.isNotEmpty ? null : _pickAndUploadPhoto,
-          borderRadius: BorderRadius.circular(15),
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 28),
-            decoration: BoxDecoration(
-              color: const Color(0xFFF7FAFF),
-              border: Border.all(
-                color: const Color(0xFFBBD0F3),
-                width: 1.5,
-              ),
-              borderRadius: BorderRadius.circular(15),
-            ),
-            child: Column(
-              children: <Widget>[
-                Icon(
-                  _uploadingPhotos.isNotEmpty
-                      ? Icons.hourglass_top_rounded
-                      : Icons.add_photo_alternate_outlined,
-                  color: _brandStrong,
-                  size: 43,
-                ),
-                const SizedBox(height: 12),
-                Text(
-                  _uploadingPhotos.isNotEmpty
-                      ? 'Uploading photo…'
-                      : 'Add property photos',
-                  style: const TextStyle(
-                    color: _ink,
-                    fontSize: 15,
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
-                const SizedBox(height: 7),
-                const Text(
-                  'JPG, PNG or WebP — up to 8 MB each. Photos upload to '
-                  'Sitewise storage and attach to the saved draft.',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(color: _muted, fontSize: 11, height: 1.5),
-                ),
-              ],
-            ),
-          ),
-        ),
-        if (_photos.isNotEmpty) ...<Widget>[
-          const SizedBox(height: 15),
-          GridView.builder(
-            itemCount: _photos.length,
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 3,
-              crossAxisSpacing: 8,
-              mainAxisSpacing: 8,
-              mainAxisExtent: 120,
-            ),
-            itemBuilder: (context, index) {
-              final photo = _photos[index];
-              return Container(
-                padding: const EdgeInsets.all(6),
-                decoration: BoxDecoration(
-                  border: Border.all(
-                    color: photo.isPrimary
-                        ? const Color(0xFF81A8FB)
-                        : const Color(0xFFDCE6F3),
-                    width: photo.isPrimary ? 1.5 : 1,
-                  ),
-                  borderRadius: BorderRadius.circular(11),
-                ),
-                child: Column(
-                  children: <Widget>[
-                    Expanded(
-                      child: Image.network(
-                        photo.url,
-                        fit: BoxFit.cover,
-                        width: double.infinity,
-                        errorBuilder: (_, _, _) => const Icon(
-                          Icons.image_outlined,
-                          color: Color(0xFF4D6380),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    if (photo.isPrimary)
-                      const Text(
-                        'Primary',
-                        style: TextStyle(
-                          color: _brandStrong,
-                          fontSize: 9,
-                          fontWeight: FontWeight.w900,
-                        ),
-                      )
-                    else
-                      GestureDetector(
-                        onTap: () => _makePrimary(photo),
-                        child: const Text(
-                          'Set primary',
-                          style: TextStyle(
-                            color: _muted,
-                            fontSize: 9,
-                            fontWeight: FontWeight.w700,
-                            decoration: TextDecoration.underline,
-                          ),
-                        ),
-                      ),
-                    GestureDetector(
-                      onTap: () => _deletePhoto(photo),
-                      child: const Text(
-                        'Remove',
-                        style: TextStyle(
-                          color: Color(0xFFB91C1C),
-                          fontSize: 9,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              );
-            },
-          ),
-        ],
-        const SizedBox(height: 14),
-        _buildInfoNotice(
-          'Ownership evidence documents are separate: upload them from My '
-          'Properties before submitting — at least one is required for '
-          'verification, and they stay private.',
         ),
       ],
     );
@@ -1385,17 +1228,6 @@ class _SitewiseAddPropertyMobilePageState
             _ReviewRow('State', _display(_stateName)),
             _ReviewRow('City / township', _display(_district)),
             _ReviewRow('Postcode', _display(_postcode)),
-          ],
-        ),
-        const SizedBox(height: 18),
-        _buildReviewSection(
-          title: 'Photos',
-          step: 3,
-          rows: <_ReviewRow>[
-            _ReviewRow(
-              'Attached photos',
-              _photos.isEmpty ? 'None yet' : '${_photos.length} photo(s)',
-            ),
           ],
         ),
         const SizedBox(height: 16),
@@ -1484,10 +1316,10 @@ class _SitewiseAddPropertyMobilePageState
           Text(
             submitted
                 ? 'Your property is now in the administrator review queue. '
-                    'Track its status in My Properties.'
+                      'Track its status in My listings.'
                 : 'This property record is persisted in Sitewise. Complete the '
-                    'details, attach photos and ownership evidence, then '
-                    'submit it for verification.',
+                      'details and attach ownership evidence, then '
+                      'submit it for verification.',
             textAlign: TextAlign.center,
             style: const TextStyle(color: _muted, fontSize: 12, height: 1.5),
           ),
@@ -1602,10 +1434,8 @@ class _SitewiseAddPropertyMobilePageState
           SizedBox(
             width: double.infinity,
             child: OutlinedButton(
-              onPressed: () => EntrepreneurTabScope.open(
-                context,
-                '/entrepreneur/spaces',
-              ),
+              onPressed: () => Navigator.of(context)
+                      .pushReplacementNamed('/provider/listings'),
               style: OutlinedButton.styleFrom(
                 foregroundColor: _ink,
                 side: const BorderSide(color: _border),
@@ -1615,7 +1445,7 @@ class _SitewiseAddPropertyMobilePageState
                 ),
               ),
               child: const Text(
-                'Go to My Properties',
+                'Go to My listings',
                 style: TextStyle(fontWeight: FontWeight.w800),
               ),
             ),
@@ -1639,7 +1469,9 @@ class _SitewiseAddPropertyMobilePageState
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
           Icon(
-            success ? Icons.check_circle_outline_rounded : Icons.error_outline_rounded,
+            success
+                ? Icons.check_circle_outline_rounded
+                : Icons.error_outline_rounded,
             color: success ? const Color(0xFF087443) : const Color(0xFF991B1B),
             size: 17,
           ),
@@ -1648,7 +1480,9 @@ class _SitewiseAddPropertyMobilePageState
             child: Text(
               message,
               style: TextStyle(
-                color: success ? const Color(0xFF0A5B36) : const Color(0xFF991B1B),
+                color: success
+                    ? const Color(0xFF0A5B36)
+                    : const Color(0xFF991B1B),
                 fontSize: 11,
                 height: 1.5,
                 fontWeight: FontWeight.w700,
@@ -1686,8 +1520,10 @@ class _SitewiseAddPropertyMobilePageState
           decoration: InputDecoration(
             filled: true,
             fillColor: const Color(0xFFFAFBFD),
-            contentPadding:
-                const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 12,
+              vertical: 14,
+            ),
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(11),
               borderSide: BorderSide(
@@ -1782,8 +1618,11 @@ class _SitewiseAddPropertyMobilePageState
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          const Icon(Icons.info_outline_rounded,
-              color: Color(0xFF245FCF), size: 17),
+          const Icon(
+            Icons.info_outline_rounded,
+            color: Color(0xFF245FCF),
+            size: 17,
+          ),
           const SizedBox(width: 9),
           Expanded(
             child: Text(
@@ -1878,9 +1717,9 @@ class _OptionSheet extends StatefulWidget {
 }
 
 class _OptionSheetState extends State<_OptionSheet> {
-  static const Color _ink = Color(0xFF10151F);
-  static const Color _muted = Color(0xFF58677D);
-  static const Color _brand = Color(0xFF2F6FED);
+  static const Color _ink = SitewiseM3.ink;
+  static const Color _muted = SitewiseM3.muted;
+  static const Color _brand = SitewiseColors.action;
 
   final TextEditingController _filter = TextEditingController();
   List<String> _visible = const <String>[];
@@ -1903,8 +1742,8 @@ class _OptionSheetState extends State<_OptionSheet> {
       _visible = needle.isEmpty
           ? widget.options
           : widget.options
-              .where((option) => option.toLowerCase().contains(needle))
-              .toList(growable: false);
+                .where((option) => option.toLowerCase().contains(needle))
+                .toList(growable: false);
     });
   }
 
@@ -1912,7 +1751,9 @@ class _OptionSheetState extends State<_OptionSheet> {
   Widget build(BuildContext context) {
     final height = MediaQuery.of(context).size.height * 0.68;
     return Padding(
-      padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+      padding: EdgeInsets.only(
+        bottom: MediaQuery.of(context).viewInsets.bottom,
+      ),
       child: SafeArea(
         top: false,
         child: SizedBox(
@@ -1953,11 +1794,16 @@ class _OptionSheetState extends State<_OptionSheet> {
                     isDense: true,
                     filled: true,
                     fillColor: const Color(0xFFF6F8FC),
-                    prefixIcon: const Icon(Icons.search_rounded,
-                        size: 18, color: _muted),
+                    prefixIcon: const Icon(
+                      Icons.search_rounded,
+                      size: 18,
+                      color: _muted,
+                    ),
                     hintText: 'Search ${widget.title.toLowerCase()}',
-                    hintStyle:
-                        const TextStyle(color: Color(0xFF7A8798), fontSize: 12),
+                    hintStyle: const TextStyle(
+                      color: Color(0xFF7A8798),
+                      fontSize: 12,
+                    ),
                     contentPadding: const EdgeInsets.symmetric(vertical: 12),
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(10),
@@ -1984,10 +1830,8 @@ class _OptionSheetState extends State<_OptionSheet> {
                       )
                     : ListView.separated(
                         itemCount: _visible.length,
-                        separatorBuilder: (_, _) => const Divider(
-                          height: 1,
-                          color: Color(0xFFEFF2F7),
-                        ),
+                        separatorBuilder: (_, _) =>
+                            const Divider(height: 1, color: Color(0xFFEFF2F7)),
                         itemBuilder: (context, index) {
                           final option = _visible[index];
                           final selected = option == widget.selected;
@@ -1998,13 +1842,17 @@ class _OptionSheetState extends State<_OptionSheet> {
                               style: TextStyle(
                                 color: selected ? _brand : _ink,
                                 fontSize: 13,
-                                fontWeight:
-                                    selected ? FontWeight.w800 : FontWeight.w500,
+                                fontWeight: selected
+                                    ? FontWeight.w800
+                                    : FontWeight.w500,
                               ),
                             ),
                             trailing: selected
-                                ? const Icon(Icons.check_rounded,
-                                    size: 18, color: _brand)
+                                ? const Icon(
+                                    Icons.check_rounded,
+                                    size: 18,
+                                    color: _brand,
+                                  )
                                 : null,
                             onTap: () => Navigator.of(context).pop(option),
                           );

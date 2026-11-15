@@ -1,7 +1,7 @@
 import uuid
 from typing import Literal
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field, model_validator
 from sqlmodel import Session, select
 
@@ -16,6 +16,9 @@ from sitewise.services.recommendation_search_service import (
     SearchCriteria,
 )
 from sitewise.services.recommendation_service import RecommendationService
+from sitewise.services.recommendation_management_service import (
+    ManagementLookupError, RecommendationManagementService, unavailable_management,
+)
 
 router = APIRouter()
 
@@ -50,6 +53,7 @@ class RecommendationSearchRequest(BaseModel):
     property_type: str | None = Field(default=None, max_length=120)
     layout_preferences: list[str] = Field(default_factory=list, max_length=12)
     query: str | None = Field(default=None, max_length=120)
+    managed_only: bool = False
     page_size: int = Field(default=20, ge=1, le=60)
     cursor: str | None = Field(default=None, max_length=512)
     sort: SortKey = Field(
@@ -82,6 +86,7 @@ def search_recommendations(
     body: RecommendationSearchRequest,
     _user: CurrentUser,
     session: Session = Depends(get_analytics_db),
+    operational_db: Session = Depends(get_db),
 ) -> dict:
     """Rank catalogue properties against the caller's requirements.
 
@@ -93,6 +98,14 @@ def search_recommendations(
     integrated, so ``recommendation.score`` is null and the ordering is the
     documented requirement-fit ordering. No score is fabricated.
     """
+    management = RecommendationManagementService(operational_db)
+    try:
+        assigned_ids = management.assigned_catalogue_ids() if body.managed_only else ()
+    except ManagementLookupError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail="Property assignments cannot be verified right now. Please retry.",
+        ) from exc
     criteria = SearchCriteria(
         business_type=body.business_type,
         preferred_state=body.preferred_state,
@@ -107,9 +120,21 @@ def search_recommendations(
         page_size=body.page_size,
         cursor=body.cursor,
         sort=body.sort,
+        managed_only=body.managed_only,
+        management_ids=assigned_ids,
     )
     try:
-        return RecommendationSearchService(session).search(criteria)
+        response = RecommendationSearchService(session).search(criteria)
+        ids = [row['property_id'] for row in response['data']]
+        try:
+            managers = management.resolve(ids)
+        except ManagementLookupError:
+            managers = {pid: unavailable_management() for pid in ids}
+        for row in response['data']:
+            row['management'] = managers.get(
+                row['property_id'], unavailable_management()
+            )
+        return response
     except ValueError as exc:
         # Cursor from another search / malformed cursor: the client must
         # restart from page 1 rather than page through the wrong ranking.
@@ -123,9 +148,77 @@ def search_recommendations(
 def recommendation_facets(
     _user: CurrentUser,
     session: Session = Depends(get_analytics_db),
+    operational_db: Session = Depends(get_db),
+    business_type: str | None = Query(default=None, max_length=120),
+    preferred_state: str | None = Query(default=None, max_length=120),
+    preferred_area: str | None = Query(default=None, max_length=120),
+    min_rental_rm: float | None = Query(default=None, ge=0, le=10_000_000),
+    max_rental_rm: float | None = Query(default=None, ge=0, le=10_000_000),
+    min_size_sqft: float | None = Query(default=None, ge=0, le=1_000_000),
+    max_size_sqft: float | None = Query(default=None, ge=0, le=1_000_000),
+    property_type: str | None = Query(default=None, max_length=120),
+    layout_preferences: list[str] = Query(default=[]),
+    query: str | None = Query(default=None, max_length=120),
+    managed_only: bool = False,
 ) -> dict:
-    """Filter vocabulary and numeric ranges read from the catalogue itself."""
-    return {"data": RecommendationSearchService(session).facets()}
+    """Filter vocabulary and ranges, counted over the listings the current
+    selections still leave eligible.
+
+    The same criteria the search accepts, so the options a dropdown offers are
+    computed from the same PU-gated population the search would rank. Each
+    facet is counted with all OTHER hard filters applied and only its own
+    constraint released — see
+    :meth:`RecommendationSearchService.facets`.
+
+    ``business_type`` and the target-market requirements are accepted and
+    echoed by the response, but they are not eligibility filters: the first
+    only re-sequences the set, the second cannot be verified from the
+    catalogue. A caller that treated either as a filter would be told so by
+    ``data.fields``.
+    """
+    if (
+        min_rental_rm is not None
+        and max_rental_rm is not None
+        and min_rental_rm > max_rental_rm
+    ):
+        raise HTTPException(
+            status_code=422,
+            detail={"code": "invalid_range",
+                    "message": "Minimum rental cannot exceed the maximum rental."},
+        )
+    if (
+        min_size_sqft is not None
+        and max_size_sqft is not None
+        and min_size_sqft > max_size_sqft
+    ):
+        raise HTTPException(
+            status_code=422,
+            detail={"code": "invalid_range",
+                    "message": "Minimum floor area cannot exceed the maximum."},
+        )
+    management = RecommendationManagementService(operational_db)
+    try:
+        assigned_ids = management.assigned_catalogue_ids() if managed_only else ()
+    except ManagementLookupError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail="Property assignments cannot be verified right now. Please retry.",
+        ) from exc
+    criteria = SearchCriteria(
+        business_type=business_type,
+        preferred_state=preferred_state,
+        preferred_area=preferred_area,
+        min_rental_rm=min_rental_rm,
+        max_rental_rm=max_rental_rm,
+        min_size_sqft=min_size_sqft,
+        max_size_sqft=max_size_sqft,
+        property_type=property_type,
+        layout_preferences=tuple(layout_preferences),
+        query=query,
+        managed_only=managed_only,
+        management_ids=assigned_ids,
+    )
+    return {"data": RecommendationSearchService(session).facets(criteria)}
 
 
 
@@ -174,7 +267,7 @@ def create_recommendation(
     return RecommendationService(session).create_result(result)
 
 
-@router.delete("/{result_id}", status_code=204)
+@router.delete("/{result_id}", status_code=204, response_model=None)
 def delete_recommendation(
     result_id: uuid.UUID,
     session: Session = Depends(get_db),

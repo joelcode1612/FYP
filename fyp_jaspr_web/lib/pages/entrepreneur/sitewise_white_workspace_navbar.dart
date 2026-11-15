@@ -75,7 +75,6 @@ class SitewiseWhiteWorkspaceNavbar extends StatelessComponent {
                 _navLink('Compare', '/entrepreneur/compare'),
                 _navLink('Saved', '/entrepreneur/saved'),
                 _navLink('Profile', '/entrepreneur/profile'),
-                _navLink('My Properties', '/entrepreneur/my-properties'),
               ],
             ),
           ],

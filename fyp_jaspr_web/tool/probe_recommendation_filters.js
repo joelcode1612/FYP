@@ -401,6 +401,95 @@ function pagePayload(body, items) {
     document.querySelector('.rec2__filters select[aria-label="Sort by"]')?.value,
   )) === 'best_match');
 
+  // --- Editable comboboxes and mandatory management scoping ------------------
+  const combos = await page.evaluate(() => {
+    const read = (label) => {
+      const input = document.querySelector(
+        `.rec2__filters input[aria-label="${label}"]`,
+      );
+      const listId = input?.getAttribute('list');
+      const list = listId ? document.getElementById(listId) : null;
+      return {
+        isInput: input?.tagName === 'INPUT',
+        editable: !!input && !input.readOnly && !input.disabled,
+        listId,
+        options: list
+          ? Array.from(list.querySelectorAll('option')).map((o) => o.value)
+          : [],
+      };
+    };
+    return {
+      business: read('Business type'),
+      market: read('Target market'),
+      assignedCheckbox: Array.from(
+        document.querySelectorAll('.rec2__filters label'),
+      ).some((l) => /Assigned properties only/i.test(l.textContent || '')),
+      legacySelects: document.querySelectorAll(
+        '.rec2__filters select[aria-label="Business type"], ' +
+          '.rec2__filters select[aria-label="Target market"]',
+      ).length,
+    };
+  });
+  ok(
+    'combo: Business type is an editable input with suggestions',
+    combos.business.isInput &&
+      combos.business.editable &&
+      combos.business.options.length >= 6,
+    JSON.stringify(combos.business),
+  );
+  ok(
+    'combo: Target market is an editable input with suggestions',
+    combos.market.isInput &&
+      combos.market.editable &&
+      combos.market.options.length >= 5,
+    JSON.stringify(combos.market),
+  );
+  ok(
+    'combo: each field is linked to its own datalist',
+    !!combos.business.listId &&
+      !!combos.market.listId &&
+      combos.business.listId !== combos.market.listId,
+  );
+  ok('combo: no strict <select> remains for these fields', combos.legacySelects === 0, String(combos.legacySelects));
+  ok('combo: "Assigned properties only" checkbox is gone', !combos.assignedCheckbox);
+  // The research catalogue is verification_status='pending', so a
+  // management-scoped search matches zero of the 290 PU-eligible rows. The
+  // page must therefore never send managed_only=true.
+  ok(
+    'scope: searches are not restricted to assigned properties',
+    posted.length > 0 && posted.every((p) => p.managed_only === false),
+    JSON.stringify(posted.map((p) => p.managed_only)),
+  );
+
+  // A value outside the suggestion list must still be usable, and a comma-
+  // separated target market must still travel as separate requirements.
+  await page.fill('input[aria-label="Business type"]', 'Custom Niche Retail');
+  await page.fill('input[aria-label="Target market"]', 'Office Workers, Students');
+  await page.click('button:has-text("Find properties")');
+  await page.waitForTimeout(900);
+  const customPost = posted[posted.length - 1];
+  ok(
+    'combo: custom business type is sent',
+    customPost.business_type === 'Custom Niche Retail',
+    JSON.stringify(customPost.business_type),
+  );
+  ok(
+    'combo: comma-separated market becomes a requirement list',
+    JSON.stringify(customPost.layout_preferences) ===
+      JSON.stringify(['Office Workers', 'Students']),
+    JSON.stringify(customPost.layout_preferences),
+  );
+  ok(
+    'combo: custom value stays visible',
+    (await page.inputValue('input[aria-label="Business type"]')) === 'Custom Niche Retail',
+  );
+  await page.click('button:has-text("Clear")');
+  await page.waitForTimeout(700);
+  ok(
+    'combo: Clear empties the editable field',
+    (await page.inputValue('input[aria-label="Business type"]')) === '',
+  );
+
   // --- Narrow viewport overflow ----------------------------------------------
   await page.setViewportSize({ width: 390, height: 900 });
   await page.waitForTimeout(600);

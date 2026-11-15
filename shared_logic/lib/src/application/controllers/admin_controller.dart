@@ -178,6 +178,39 @@ class AdminController extends StateController<AdminState> {
   void _setReviewError(Object e) =>
       setState(state.copyWith(error: e.toString()));
 
+  // -- Authoritative dashboard totals ---------------------------------------
+
+  VerificationQueuePage? get verificationSummary => state.verificationSummary;
+
+  String? get summaryError => state.summaryError;
+
+  /// Unfiltered verification totals from the same SQL projection the Listings
+  /// queue reads. `total` and both dimensions' status facets are separate
+  /// server-side aggregates, so they do not depend on the page size — one
+  /// row is requested and the numbers still cover every operational property.
+  ///
+  /// Separate from [reviewPage] on purpose: the Listings page owns that
+  /// field's filters and offset, and a dashboard refresh must not reset them.
+  /// Failures land in [summaryError] only, so the rest of the dashboard keeps
+  /// rendering, and a failed refresh keeps the previous totals visible.
+  Future<void> loadVerificationSummary() async {
+    if (_reviewUnavailable) {
+      setState(
+        state.copyWith(summaryError: const DemoModeFailure().toString()),
+      );
+      return;
+    }
+    setState(state.copyWith(clearSummaryError: true));
+    try {
+      final page = await _reviews!.queue(
+        const VerificationQueueFilters(limit: 1),
+      );
+      setState(state.copyWith(verificationSummary: page));
+    } catch (e) {
+      setState(state.copyWith(summaryError: e.toString()));
+    }
+  }
+
   /// Loads (or reloads) one queue page with the current filters. When
   /// [filters] is given it replaces the stored ones and the offset resets.
   Future<void> loadReviewPage({VerificationQueueFilters? filters}) async {

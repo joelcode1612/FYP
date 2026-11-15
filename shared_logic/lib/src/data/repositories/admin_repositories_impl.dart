@@ -70,6 +70,24 @@ class TourRepositoryImpl implements TourRepository {
   }
 
   @override
+  Future<VirtualTour?> tourForPropertyDraft(String propertyId) async {
+    VirtualTour? best;
+    for (final t in _store) {
+      if (t.propertyId != propertyId) continue;
+      if (t.status != VirtualTourStatus.draft &&
+          t.status != VirtualTourStatus.processing) {
+        continue;
+      }
+      if (best == null ||
+          t.capturedAt.isAfter(best.capturedAt) ||
+          (t.capturedAt == best.capturedAt && t.id.compareTo(best.id) > 0)) {
+        best = t;
+      }
+    }
+    return best;
+  }
+
+  @override
   Future<VirtualTour?> tourById(String id) async {
     for (final t in _store) {
       if (t.id == id) return t;

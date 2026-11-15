@@ -57,6 +57,7 @@ from sitewise.dependencies import (
 )
 from sitewise.repositories.fyp_property_repository import FypPropertyRepository
 from sitewise.services import photo_storage
+from sitewise.services.property_management_service import resolve_management
 from sitewise.services.photo_storage import (
     PhotoRejected,
     PhotoStorageUnavailable,
@@ -310,9 +311,17 @@ def listing_detail(
     open_request = _open_request(session, listing_id, user.user_id)
     return {
         "listing": assignment or {},
-        "property": property_row,
+        # Numeric columns arrive as Decimal (Postgres `numeric`). Normalise
+        # the row so every client receives JSON numbers — the same
+        # normalisation the change-request summary below applies; a stray
+        # string here used to crash the agent workspace with
+        # `TypeError: String is not a subtype of type 'num'`.
+        "property": {key: _json_safe(value) for key, value in property_row.items()}
+        if property_row is not None
+        else None,
         "owner": _owner_reference(session, property_row),
         "photos": photos,
+        "management": resolve_management(session, listing_id=listing_id),
         "change_request": _request_dict(open_request)
         if open_request is not None
         else None,
@@ -814,6 +823,15 @@ def admin_assignments(
     )
 
     rows = AgentAssignmentRepository(session).list_all(agent_id=agent_id)
+    # The overview must reflect the SAME derived rule as every other surface, so
+    # an assignment held by a suspended agent reads as a defect, not a manager.
+    from sitewise.services.property_management_service import resolve_listings
+
+    management = resolve_listings(
+        session, [int(r["listing_id"]) for r in rows if r.get("property_exists")]
+    )
+    for row in rows:
+        row["management"] = management.get(int(row["listing_id"]))
     return {"assignments": rows, "count": len(rows)}
 
 

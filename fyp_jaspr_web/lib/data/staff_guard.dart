@@ -18,8 +18,8 @@
 /// token, but their role/permission fields are untrusted; the server always
 /// calls FastAPI to validate the signed token and local authorization profile.
 /// Staff identities require AAL2 even when navigating to a nonstaff workspace.
-/// Legacy /owner routes redirect to /entrepreneur/my-properties, where
-/// per-property access remains a backend concern.
+/// Legacy /owner routes are rendered by their own retirement page (they reach
+/// no record), so the guard only rebuilds the verified session mirror for them.
 library;
 
 import 'dart:convert';
@@ -101,18 +101,18 @@ shelf.Middleware createStaffGuard(Uri backend, {http.Client? client}) {
       }
       final isAdminPath = path == '/admin' || path.startsWith('/admin/');
       final isAgentPath = path == '/agent' || path.startsWith('/agent/');
-      final isOwnerPath = path == '/owner' || path.startsWith('/owner/');
       if (isAdminPath && role != 'admin') return _redirect(_homeFor(role));
       if (isAgentPath && role != 'agent' && role != 'admin') {
         return _redirect(_homeFor(role));
       }
-      // The owner capability is an entrepreneur property-level permission,
-      // not a fourth account role or a demo cookie grant.
-      if (isOwnerPath) {
-        return _redirect(role == 'entrepreneur'
-            ? '/entrepreneur/my-properties'
-            : _homeFor(role));
-      }
+      // `/owner/*` is NOT redirected any more. It used to hop to
+      // `/entrepreneur/my-properties`, which handed an entrepreneur a listing
+      // management surface they had no business holding. The Owner workspace is
+      // retired, and every former path now renders one static explanation page
+      // (see `owner_retired_page.dart`) that reads no query, no listing id and
+      // no identity — so it is safe to fall through for any signed-in role, and
+      // the session mirror below is still rebuilt from FastAPI's verified
+      // profile before the render isolate sees it.
 
       // Rebuild the session mirror from FastAPI's verified identity for EVERY
       // protected workspace; never trust the browser's unsigned role cookie.

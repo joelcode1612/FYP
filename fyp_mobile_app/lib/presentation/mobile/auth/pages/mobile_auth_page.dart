@@ -2,7 +2,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_logic/shared_logic.dart';
 import 'package:flutter/material.dart';
 
-import '../../../../core/config/mobile_config.dart';
 import '../../../../core/routing/auth_route_guard.dart';
 import '../../../../core/routing/mobile_role.dart';
 import '../../../../core/theme/sitewise_theme.dart';
@@ -54,6 +53,8 @@ class _MobileAuthPageState extends ConsumerState<MobileAuthPage> {
   /// Set once a workspace entry navigation has been queued for this page
   /// instance, so a Retry that restores a saved session and a manual sign-in
   /// can never both trigger a push.
+  bool _retryingConnection = false;
+
   bool _enteredWorkspace = false;
 
   @override
@@ -84,6 +85,20 @@ class _MobileAuthPageState extends ConsumerState<MobileAuthPage> {
     _confirm.dispose();
     _name.dispose();
     super.dispose();
+  }
+
+  Future<void> _retryConnection() async {
+    if (_retryingConnection) return;
+    setState(() => _retryingConnection = true);
+    try {
+      // Keep the existing notifier's session-restore and error handling.
+      await ref.read(authNotifierProvider.notifier).retry();
+    } catch (_) {
+      // No credentials or internal diagnostics are displayed here.
+      // The auth notifier remains responsible for the connection state.
+    } finally {
+      if (mounted) setState(() => _retryingConnection = false);
+    }
   }
 
   bool _validate() {
@@ -131,6 +146,8 @@ class _MobileAuthPageState extends ConsumerState<MobileAuthPage> {
             email: email,
             password: pass,
             fullName: _name.text.trim(),
+            // The backend re-checks consent; it is never assumed locally.
+            acceptTerms: _terms,
           );
     if (!ok || !mounted) return;
     final user = ref.read(authNotifierProvider).user;
@@ -147,25 +164,25 @@ class _MobileAuthPageState extends ConsumerState<MobileAuthPage> {
     if (user != null) _enterWorkspace(user);
   }
 
-  /// Mobile ships the Entrepreneur workspace only. The role comes from the
-  /// backend profile, never from this screen, so a web-only account is turned
-  /// away here instead of being routed into a dashboard that does not exist.
+  /// One decision, shared with signup and the cold-start gate: the trusted
+  /// backend role chooses the workspace, and the server-verified `aal` claim
+  /// decides whether an Agent must complete MFA first. An Entrepreneur never
+  /// sees MFA or an email-confirmation step; an Administrator is turned away
+  /// here because the Admin workspace is web-only and unchanged.
   void _enterWorkspace(SitewiseUser user) {
     if (_enteredWorkspace) return;
-    _enteredWorkspace = true;
-    final home = mobileHomeRouteFor(user.role);
-    ref.read(appNotifierProvider.notifier).setRole(user.role);
-    if (home == null) {
-      setState(() {
-        _enteredWorkspace = false;
-        _fieldError = mobileUnsupportedRoleMessage(user.role);
-      });
+    final navigation = postAuthNavigation(user);
+    if (navigation == null) {
+      setState(() => _fieldError = mobileUnsupportedRoleMessage(user.role));
       return;
     }
-    final pending = AuthPendingDestination.takeFor(user.role);
-    Navigator.of(
-      context,
-    ).pushNamedAndRemoveUntil(pending ?? home, (_) => false);
+    _enteredWorkspace = true;
+    ref.read(appNotifierProvider.notifier).setRole(user.role);
+    Navigator.of(context).pushNamedAndRemoveUntil(
+      navigation.route,
+      (_) => false,
+      arguments: navigation.arguments,
+    );
   }
 
   @override
@@ -225,6 +242,8 @@ class _MobileAuthPageState extends ConsumerState<MobileAuthPage> {
                       state: state,
                       isLogin: isLogin,
                       fieldError: _fieldError,
+                      onRetry: _retryConnection,
+                      retrying: _retryingConnection,
                     ),
                     AuthField(
                       label: 'Email address',
@@ -339,30 +358,7 @@ class _MobileAuthPageState extends ConsumerState<MobileAuthPage> {
                           ? null
                           : () => _provider(AuthProvider.google),
                     ),
-                    // Retry for the non-blocking "service unavailable" state:
-                    // re-runs the session verification without discarding the
-                    // saved session, so a restored session continues onward
-                    // automatically (see the listener above).
-                    if (state.status == AuthStatus.error) ...[
-                      const SizedBox(height: 6),
-                      Center(
-                        child: TextButton(
-                          onPressed: busy
-                              ? null
-                              : () => ref
-                                    .read(authNotifierProvider.notifier)
-                                    .retry(),
-                          child: const Text(
-                            'Retry connection check',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: SitewiseColors.action,
-                              fontWeight: FontWeight.w800,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
+
                     const SizedBox(height: 15),
                     Center(
                       child: Wrap(
@@ -379,12 +375,23 @@ class _MobileAuthPageState extends ConsumerState<MobileAuthPage> {
                           GestureDetector(
                             onTap: busy
                                 ? null
-                                : () => setState(() {
-                                    _tab = isLogin
-                                        ? AuthTab.signUp
-                                        : AuthTab.login;
-                                    _fieldError = null;
-                                  }),
+                                : () {
+                                    if (isLogin) {
+                                      // The three-step registration funnel is
+                                      // a route, not a tab: keeping it out of
+                                      // this screen preserves the brand-only
+                                      // Login header and avoids a second
+                                      // sign-up implementation.
+                                      Navigator.of(
+                                        context,
+                                      ).pushNamed('/signup');
+                                    } else {
+                                      setState(() {
+                                        _tab = AuthTab.login;
+                                        _fieldError = null;
+                                      });
+                                    }
+                                  },
                             child: Text(
                               isLogin ? 'Sign up' : 'Log in',
                               style: const TextStyle(
@@ -433,15 +440,29 @@ class _Notice extends StatelessWidget {
   final AuthState state;
   final bool isLogin;
   final String? fieldError;
+  final VoidCallback onRetry;
+  final bool retrying;
 
   const _Notice({
     required this.state,
     required this.isLogin,
     required this.fieldError,
+    required this.onRetry,
+    required this.retrying,
   });
 
   @override
   Widget build(BuildContext context) {
+    if (retrying || state.status == AuthStatus.error) {
+      return Padding(
+        padding: const EdgeInsets.only(bottom: 12),
+        child: _CompactBackendNotice(
+          errorKind: state.errorKind,
+          retrying: retrying,
+          onRetry: onRetry,
+        ),
+      );
+    }
     final notice = _noticeFor();
     if (notice == null) return const SizedBox.shrink();
     return Padding(
@@ -478,40 +499,8 @@ class _Notice extends StatelessWidget {
           body: state.message ?? 'Please sign in again.',
         );
       case AuthStatus.error:
-        // The notifier now says WHICH component failed. A build without
-        // --dart-define values is a compile-time problem, not an internet
-        // outage; retrying it can never help, so it gets its own notice.
-        final reason =
-            state.message ?? 'Sitewise could not reach the sign-in service.';
-        if (state.errorKind == AuthErrorKind.configuration) {
-          return _NoticeContent(
-            tone: _NoticeTone.warning,
-            title: 'Sign-in is not configured in this build',
-            body: <String>[
-              reason,
-              if (MobileConfig.problems.isNotEmpty)
-                MobileConfig.problems.join('\n'),
-              'Start the backend and the app separately: '
-              '.\\run-sitewise.cmd starts FastAPI; Flutter needs its own '
-              '--dart-define-from-file=fyp_mobile_app/config/dev.json.',
-            ].join('\n\n'),
-          );
-        }
-        final diagnostics = <String>[
-          'API endpoint: ${MobileConfig.apiEndpoint} '
-          '(mode: ${MobileConfig.hostMode}).',
-          ...MobileConfig.problems,
-          for (final hint in MobileConfig.hints)
-            if (hint.contains('LAN IP') || hint.contains('adb reverse')) hint,
-        ];
-        return _NoticeContent(
-          tone: _NoticeTone.error,
-          title: _errorTitle(state.errorKind),
-          body:
-              '$reason No access was granted. If you were signed in, your '
-              'saved session is intact — tap "Retry connection check" once '
-              'the service is reachable.\n\n${diagnostics.join('\n')}',
-        );
+        return null;
+
       default:
         // Wrong credentials and duplicate emails keep the user on this form;
         // the notifier reports why in `state.message`, local validation in
@@ -527,16 +516,113 @@ class _Notice extends StatelessWidget {
         );
     }
   }
+}
 
-  /// Component-specific titles. A configuration problem never reaches here
-  /// (it has its own warning card), and no raw error text is used.
-  static String _errorTitle(AuthErrorKind kind) => switch (kind) {
-    AuthErrorKind.connectivity => 'Cannot reach the SiteWise backend',
-    AuthErrorKind.timeout => 'The SiteWise backend timed out',
-    AuthErrorKind.tls => 'Secure connection failed',
-    AuthErrorKind.unknown => 'Could not verify sign-in',
-    _ => 'Sign-in service unavailable',
-  };
+/// Compact, actionable service warning for login and signup.
+/// Never exposes host configuration, API ports, ADB instructions or raw errors.
+class _CompactBackendNotice extends StatelessWidget {
+  final AuthErrorKind errorKind;
+  final bool retrying;
+  final VoidCallback onRetry;
+
+  const _CompactBackendNotice({
+    required this.errorKind,
+    required this.retrying,
+    required this.onRetry,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final configuration = !retrying && errorKind == AuthErrorKind.configuration;
+    final message = retrying
+        ? 'Checking the SiteWise connection…'
+        : switch (errorKind) {
+            AuthErrorKind.configuration =>
+              'This app build is missing its sign-in settings. Please contact support.',
+            AuthErrorKind.timeout =>
+              'SiteWise is taking too long to respond. Please try again.',
+            AuthErrorKind.tls =>
+              'A secure connection could not be established. Please try again.',
+            _ =>
+              'Unable to connect to SiteWise. Check your connection and try again.',
+          };
+    final title = retrying
+        ? 'Reconnecting…'
+        : configuration
+        ? 'Sign-in setup required'
+        : 'Connection unavailable';
+
+    return Semantics(
+      liveRegion: true,
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(12, 11, 12, 7),
+        decoration: BoxDecoration(
+          color: SitewiseColors.warningWash,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: SitewiseColors.borderStrong),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(
+              configuration
+                  ? Icons.info_outline_rounded
+                  : Icons.wifi_off_rounded,
+              size: 19,
+              color: SitewiseColors.warning,
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      color: SitewiseColors.ink,
+                    ),
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    message,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      height: 1.3,
+                      color: SitewiseColors.muted,
+                    ),
+                  ),
+                  if (!configuration)
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: TextButton.icon(
+                        onPressed: retrying ? null : onRetry,
+                        icon: retrying
+                            ? const SizedBox(
+                                width: 14,
+                                height: 14,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : const Icon(Icons.refresh_rounded, size: 17),
+                        label: Text(retrying ? 'Checking…' : 'Retry'),
+                        style: TextButton.styleFrom(
+                          foregroundColor: SitewiseColors.action,
+                          minimumSize: const Size(70, 36),
+                          tapTargetSize: MaterialTapTargetSize.padded,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 class _NoticeContent {

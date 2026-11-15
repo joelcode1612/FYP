@@ -1,0 +1,228 @@
+listing_id,property_name,city,state,catalogue_ref,legacy_owner_id,owner_user_id,current_agent_id,target_agent_id,action
+89,USJ 9,Subang Jaya,Selangor,501493880,8,,,2,assign
+90,Caledonia Avenue Ijok Bestari Jaya Kuala Selangor,Ijok,Selangor,501578394,8,,,3,assign
+91,Caledonia Bestari Jaya Ijok Puncak Alam Shoplot,Bestari Jaya,Selangor,108180948,8,,2,2,unchanged
+92,1.5 Storey [20' x 65'] Enbloc Shop for RENT @ Jalan Puteri 5/16,Puchong,Selangor,501461706,8,,3,3,unchanged
+93,"SS15/4C Enbloc Shop for RENT, Available NOW",Subang Jaya,Selangor,501518973,8,,2,2,unchanged
+94,22' x 75' Ground Floor Shop for RENT @ Seksyen 7 Shah Alam,Shah Alam,Selangor,501375407,8,,3,3,unchanged
+95,Bandar Puteri Puchong,Puchong,Selangor,501578259,8,,2,2,unchanged
+96,Dwitasik Ground Floor Shop Facing Main Road Bandar Sri Permaisuri,Cheras,Kuala Lumpur,501578225,8,,3,3,unchanged
+97,Sunway Wellesley Uptown 2,Bukit Mertajam,Penang,500940657,8,,2,2,unchanged
+98,2 RIO XCHANGE / IOI RIO CITY,Puchong,Selangor,200194983,8,,3,3,unchanged
+99,BANDAR PUCHONG JAYA,Puchong,Selangor,501504653,8,,2,2,unchanged
+100,Bandar Puteri Puchong,Puchong,Selangor,501503553,8,,3,3,unchanged
+101,Setia Prima Shoplot,Setia Alam,Selangor,501577744,8,,2,2,unchanged
+102,Sunsuria 7th Avenue Setia Dagang,Setia Alam,Selangor,501267107,8,,3,3,unchanged
+103,Wisma RKT,Kuala Lumpur,Kuala Lumpur,200499280,8,,2,2,unchanged
+104,Cyber 1 / Setia Eco Glades Shop,Cyberjaya,Selangor,501327594,8,,3,3,unchanged
+105,"Village Square, Bandar Gamuda Gardens",Rawang,Selangor,501534656,8,,2,2,unchanged
+106,Rasah Prima,Senawang,Negeri Sembilan,501576855,8,,3,3,unchanged
+107,Reko Sentral,Kajang,Selangor,501459654,8,,2,2,unchanged
+108,Taman Kajang Utama,Kajang,Selangor,501468391,8,,3,3,unchanged
+109,Corner Shop Bandar Puteri Puchong,Puchong,Selangor,501037611,8,,2,2,unchanged
+110,The Courtyard Beach Street,George Town,Penang,501478127,8,,3,3,unchanged
+111,Oasis Square @ Oasis Ara Damansara,Petaling Jaya,Selangor,501484096,8,,2,2,unchanged
+112,SS15,Subang Jaya,Selangor,501518047,8,,3,3,unchanged
+113,Jalan Petaling / Jalan Sultan Chinatown,Kuala Lumpur,Kuala Lumpur,200459369,8,,2,2,unchanged
+114,"Plaza Arkadia (Shops, Offices, Sohos)",Kuala Lumpur,Kuala Lumpur,501058922,8,,3,3,unchanged
+115,Offices @ Tropicana Avenue,Petaling Jaya,Selangor,501359839,8,,2,2,unchanged
+116,Desa Latania,Shah Alam,Selangor,501565302,8,,3,3,unchanged
+117,Bandar Serenia Corak / Kota Warisan / Arena X Change Warisan Putri,Dengkil,Selangor,200211214,8,,2,2,unchanged
+118,Bandar Menjalara,Kuala Lumpur,Kuala Lumpur,501477346,8,,3,3,unchanged
+119,Corak Bandar Serenia City,Dengkil,Selangor,108478809,8,,2,2,unchanged
+120,Taman Menjalara,Kuala Lumpur,Kuala Lumpur,501477090,8,,3,3,unchanged
+121,Adjoining End Lot Ground Floor TTDI,Kuala Lumpur,Kuala Lumpur,501565530,8,,2,2,unchanged
+122,Corak Bandar Serenia City,Dengkil,Selangor,108497713,8,,3,3,unchanged
+123,Skyloft Avenue Bandar Puchong Jaya,Puchong,Selangor,501507925,8,,2,2,unchanged
+124,Kuchai Lama,Kuala Lumpur,Kuala Lumpur,501564621,8,,3,3,unchanged
+125,Prima Sri Gombak,Batu Caves,Selangor,500379738,8,,2,2,unchanged
+126,Prima Sri Gombak Ground Floor,Batu Caves,Selangor,101812671,8,,3,3,unchanged
+127,Uptown 8,Petaling Jaya,Selangor,500931888,8,,2,2,unchanged
+128,Setia Taipan 1,Setia Alam,Selangor,501562581,8,,3,3,unchanged
+129,Solaris Mont Kiara,Kuala Lumpur,Kuala Lumpur,501519323,8,,2,2,unchanged
+130,Setia Alam Precinct 7 / Setia Indah,Setia Alam,Selangor,200540459,8,,3,3,unchanged
+131,K Commercial Camellia Bukit Beruntung,Bukit Beruntung,Selangor,501518049,8,,2,2,unchanged
+132,Damansara Utama,Petaling Jaya,Selangor,501560742,8,,3,3,unchanged
+133,Cheras Traders Square,Cheras,Selangor,101812382,8,,2,2,unchanged
+134,One Square,Bayan Lepas,Penang,501556197,8,,3,3,unchanged
+135,Ground Floor Retail KLCC Jalan Pinang,Kuala Lumpur,Kuala Lumpur,501029169,8,,2,2,unchanged
+136,Sendayan Irama Biz,Labu,Negeri Sembilan,500089163,8,,3,3,unchanged
+137,TRX Retail Space,Kuala Lumpur,Kuala Lumpur,501396322,8,,2,2,unchanged
+138,3 Storey Showroom,Petaling Jaya,Selangor,105596235,8,,3,3,unchanged
+139,Prime Area in Sri Petaling,Kuala Lumpur,Kuala Lumpur,108261905,8,,2,2,unchanged
+140,Bandar Puteri Puchong,Puchong,Selangor,501546724,8,,3,3,unchanged
+141,Taman Molek,Johor Bahru,Johor,108473720,8,,2,2,unchanged
+142,First Subang (SS15 Courtyard),Subang Jaya,Selangor,501516351,8,,3,3,unchanged
+143,Bandar Puteri Puchong Ground Floor Corner Lot,Puchong,Selangor,501498307,8,,2,2,unchanged
+144,2-Storey Shophouse for Rent at Beach Street Georgetown | With Parking,George Town,Penang,501404664,8,,3,3,unchanged
+145,3-Storey Shop Office for Rent at Bukit Jambul | Main Road Frontage,Bayan Lepas,Penang,501394329,8,,2,2,unchanged
+146,Ground Floor Shop Lot for Rent at Bayan Lepas | Krystal Point,Bayan Lepas,Penang,501474211,8,,3,3,unchanged
+147,2-Storey Shophouse for Rent at Kimberley Street | Georgetown,George Town,Penang,501388605,8,,2,2,unchanged
+148,Double Storey Heritage Shophouse for Rent at Georgetown,George Town,Penang,501344116,8,,3,3,unchanged
+149,Office / Retail Space for Rent at The Amarene Sungai Ara | Main Road Frontage,Bayan Lepas,Penang,501387826,8,,2,2,unchanged
+150,[2275 sf] Puchong Bandar Puteri Puchong Ground Floor Shoplot,Puchong,Selangor,60068244,8,,3,3,unchanged
+151,"[Exclusive] Ground Floor Shop, Impian Prisma 2, Impian Prisma 1, Alam Impian",Shah Alam,Selangor,200190411,8,,2,2,unchanged
+152,"FACE BUSY MAIN ROAD, Ground Floor Shop, Impian Prisma, Alam Impian",Shah Alam,Selangor,107929709,8,,3,3,unchanged
+153,"[ FACE MAIN ROAD ] Ground Floor Shop, Impian Prisma, Shah Alam",Shah Alam,Selangor,500870372,8,,2,2,unchanged
+154,"Petaling Street, City Centre, Pudu, KL City Centre",Kuala Lumpur,Kuala Lumpur,501238997,8,,3,3,unchanged
+155,"Jade Hills, Kajang",Kajang,Selangor,103628579,8,,2,2,unchanged
+156,"Shaftsbury Square, Cyberjaya",Cyberjaya,Selangor,108484372,8,,3,3,unchanged
+157,Medan Putra Business Centre,Kepong,Kuala Lumpur,501138949,8,,2,2,unchanged
+158,Bandar Baru Sri Petaling,Sri Petaling,Kuala Lumpur,501550533,8,,3,3,unchanged
+159,Kepong GI Ground floor Excellent Exposure,Kepong,Kuala Lumpur,501193558,8,,2,2,unchanged
+160,Corak Serenia City Sepang,Dengkil,Selangor,200428248,8,,3,3,unchanged
+161,Bukit Tinggi Bayu Tinggi Klang Jaya Andalas,Klang,Selangor,501167206,8,,2,2,unchanged
+162,Bandar Puteri Puchong Ground Floor,Puchong,Selangor,501505637,8,,3,3,unchanged
+163,Bandar Puteri Puchong Ground Floor,Puchong,Selangor,501505280,8,,2,2,unchanged
+164,Bandar Puchong Jaya Ground Floor Facing Parking Lot,Puchong,Selangor,501549382,8,,3,3,unchanged
+165,Bangsar Baru Jalan Telawi Corner Ground Floor,Kuala Lumpur,Kuala Lumpur,200206593,8,,2,2,unchanged
+166,Puchong 2 Adjoining 22x75 Facing Main Road,Puchong,Selangor,500911733,8,,3,3,unchanged
+167,Puchong Facing Main Road 1.5 Storey High Ceiling,Puchong,Selangor,500908847,8,,2,2,unchanged
+168,"Kota Damansara, Damansara Damai",Petaling Jaya,Selangor,501425192,8,,3,3,unchanged
+169,"Hana Square, Eco Ardence",Setia Alam,Selangor,200434926,8,,2,2,unchanged
+170,Varia Shop Offices,Telok Panglima Garang,Selangor,501430700,8,,3,3,unchanged
+171,Taman Cheras Yulek Midah Connaught Kuala Lumpur,Cheras,Kuala Lumpur,501448535,8,,2,2,unchanged
+172,Dataran Glomac,Petaling Jaya,Selangor,501134386,8,,3,3,unchanged
+173,K Commercial Camellia Bukit Beruntung,Bukit Beruntung,Selangor,501518081,8,,2,2,unchanged
+174,K Commercial Camellia Bukit Beruntung,Bukit Beruntung,Selangor,501518071,8,,3,3,unchanged
+175,G-Floor Shop Lot Damansara Damai,Damansara Damai,Selangor,501443954,8,,2,2,unchanged
+176,EMHUB,Kota Damansara,Selangor,500934296,8,,3,3,unchanged
+177,Rental Below Market Price,1.82,"Jalan Puteri Bandar Puteri Puchong, Bandar Puteri Puchong, Puchong",501546673,8,,2,2,unchanged
+178,Temu @ City of Elmina,Shah Alam,Selangor,501281862,8,,3,3,unchanged
+179,Kota Damansara Petaling Jaya Sungai Buloh,Kota Damansara,Selangor,501419305,8,,2,2,unchanged
+180,PJ Sea Park Shop To Let,Petaling Jaya,Selangor,501541997,8,,3,3,unchanged
+181,"Bandar Sunway, Sunway",Sunway,Selangor,501515828,8,,2,2,unchanged
+182,Bukit Bintang Jalan Alor Ground Floor Shop Changkat Bukit Bintang,Kuala Lumpur,Kuala Lumpur,501317206,8,,3,3,unchanged
+183,"Setia Alam, Eco Ardence, Setia Alam",Setia Alam,Selangor,501010255,8,,2,2,unchanged
+184,Bandar Puteri Puchong,Puchong,Selangor,501544739,8,,3,3,unchanged
+185,Bandar Kinrara Seksyen 5,Bandar Kinrara,Selangor,501544502,8,,2,2,unchanged
+186,"Village Square, Bandar Gamuda Gardens",Rawang,Selangor,501543967,8,,3,3,unchanged
+187,Kotasas,Kuantan,Pahang,501070882,8,,2,2,unchanged
+188,"Tanjung Bungah, attach with private carparks",Tanjung Bungah,Penang,501480249,8,,3,3,unchanged
+189,"EMHUB, Kota Damansara",Kota Damansara,Selangor,501543363,8,,2,2,unchanged
+190,Setia EcoHill Walk,Semenyih,Selangor,501542983,8,,3,3,unchanged
+191,Horizon Hills,Iskandar Puteri,Johor,501542653,8,,2,2,unchanged
+192,Mutiara Point Business Park,Klang,Selangor,500575977,8,,3,3,unchanged
+193,Freehold Commercial Land Batu 9 Cheras,Cheras,Selangor,501067834,8,,2,2,unchanged
+194,Taman Sri Gombak,Gombak,Selangor,501542104,8,,3,3,unchanged
+195,Mont Kiara Solaris Shop,Mont Kiara,Kuala Lumpur,501337691,8,,2,2,unchanged
+196,Bangsar Baru Jalan Telawi Shop,Bangsar,Kuala Lumpur,500892204,8,,3,3,unchanged
+197,Pavilion Bukit Jalil Shop,Bukit Jalil,Kuala Lumpur,106547485,8,,2,2,unchanged
+198,Pavilion Bukit Jalil Corner Shop,Bukit Jalil,Kuala Lumpur,104989377,8,,3,3,unchanged
+199,Pavilion Bukit Jalil Shop Office,Bukit Jalil,Kuala Lumpur,103637591,8,,2,2,unchanged
+200,St Mary Raja Chulan KLCC Retail,Kuala Lumpur,Kuala Lumpur,104240426,8,,3,3,unchanged
+201,Salak South Garden GF Shop,Kuala Lumpur,Kuala Lumpur,501573773,8,,2,2,unchanged
+202,Bandar Seri Putra Corner Shop,Kajang,Selangor,501419521,8,,3,3,unchanged
+203,Jade Hills Corner Lot 1st Floor,Kajang,Selangor,105469388,8,,2,2,unchanged
+204,Jade Hills Large Corner Shop,Kajang,Selangor,106939277,8,,3,3,unchanged
+205,Berjaya Times Square Retail,Kuala Lumpur,Kuala Lumpur,101679356,8,,2,2,unchanged
+206,Setia Alam 2-Storey High Ceiling Shop,Setia Alam,Selangor,501492086,8,,3,3,unchanged
+207,3-Storey Whole Block Bandar Puteri Puchong,Puchong,Selangor,501480781,8,,2,2,unchanged
+208,Bandar Puteri Puchong Upper Floor Shop,Puchong,Selangor,106341441,8,,3,3,unchanged
+209,One Puchong Whole Floor Commercial Space,Puchong,Selangor,501400505,8,,2,2,unchanged
+210,Bandar Puteri Puchong First Floor Corner Lot,Puchong,Selangor,501400275,8,,3,3,unchanged
+211,Bandar Puteri Puchong Corner Shop,Puchong,Selangor,501094387,8,,2,2,unchanged
+212,Glomac Lakeside Boulevard Puchong Shop,Puchong,Selangor,501152491,8,,3,3,unchanged
+213,Wisma RKT,Kuala Lumpur,Kuala Lumpur,501578332,8,,2,2,unchanged
+214,2 RIO OFFICE PARK / IOI RIO CITY,Puchong,Selangor,501578276,8,,3,3,unchanged
+215,Taman Tun Dr Ismail (TTDI Shop Lot),Kuala Lumpur,Selangor,501415736,8,,2,2,unchanged
+216,PFCC Corporate Office Tower,Puchong,Selangor,200395131,8,,3,3,unchanged
+217,Bandar Puteri Puchong Corner Shop Lot,Puchong,Selangor,501504219,8,,2,2,unchanged
+218,Horizon Square / Eco Botanic / Bukit Indah / Sutera Utama,Iskandar Puteri,Johor,501578088,8,,3,3,unchanged
+219,BSA Shoplot Kota Kinabalu,Kota Kinabalu,Sabah,501377093,8,,2,2,unchanged
+220,Ground Floor Shop Kenari Bandar Puchong Jaya,Puchong,Selangor,501577887,8,,3,3,unchanged
+221,Sunway Metro Petaling Jaya,Petaling Jaya,Selangor,501480785,8,,2,2,unchanged
+222,Bangsar Baru Retail Office,Bangsar,Kuala Lumpur,108267103,8,,3,3,unchanged
+223,SetiaWalk Puchong,Puchong,Selangor,501273519,8,,2,2,unchanged
+224,Dana 1 Commercial Centre Petaling Jaya,Petaling Jaya,Selangor,501535261,8,,3,3,unchanged
+225,Wisma RKT KLCC,Kuala Lumpur,Kuala Lumpur,501520275,8,,2,2,unchanged
+226,Taman Melawati Ground Floor Shop,Ulu Kelang,Kuala Lumpur,501052945,8,,3,3,unchanged
+227,Village Square Gamuda Gardens,Rawang,Selangor,500958106,8,,2,2,unchanged
+228,Bandar Menjalara Shop Lot,Kuala Lumpur,Kuala Lumpur,501417181,8,,3,3,unchanged
+229,Taman Sri Tebrau Shop Lot,Johor Bahru,Johor,501571425,8,,2,2,unchanged
+230,Equine Park Commercial Centre,Seri Kembangan,Selangor,200192609,8,,3,3,unchanged
+231,Bandar Utama Shop Lot,Petaling Jaya,Selangor,501415556,8,,2,2,unchanged
+232,Prime Shoplot Bandar Puteri Puchong,Puchong,Selangor,501094452,8,,3,3,unchanged
+233,Glomac Lakeside Boulevard Shoplot,Puchong,Selangor,501329099,8,,2,2,unchanged
+234,KL Chinatown 4-Storey Shop Building,Kuala Lumpur,Kuala Lumpur,108326455,8,,3,3,unchanged
+235,Taman Cheras Shop Office,Kuala Lumpur,Kuala Lumpur,501570146,8,,2,2,unchanged
+236,SS2 Commercial Terrace Shop,Petaling Jaya,Selangor,501123542,8,,3,3,unchanged
+237,Jalan Sultan Ismail Retail Office,Kuala Lumpur,Kuala Lumpur,501569765,8,,2,2,unchanged
+238,2-Storey Shophouse at Chowrasta Market Area,George Town,Penang,501343163,8,,3,3,unchanged
+239,Office Lot Golden Triangle 2,Bayan Lepas,Penang,501458903,8,,2,2,unchanged
+240,Shop Lot SS2 Petaling Jaya,Petaling Jaya,Selangor,501569402,8,,3,3,unchanged
+241,Shop Office TTDI,Taman Tun Dr Ismail,Kuala Lumpur,108504709,8,,2,2,unchanged
+242,Shop Lot Bukit Bintang KL City Centre,Kuala Lumpur,Kuala Lumpur,103807084,8,,3,3,unchanged
+243,Bandar Puteri Puchong Shop,Puchong,Selangor,501221576,8,,2,2,unchanged
+244,Suria Industrial Park Sepang Shop Office,Sepang,Selangor,501300754,8,,3,3,unchanged
+245,Bukit Jalil Link 2 Shop Office,Bukit Jalil,Kuala Lumpur,501455115,8,,2,2,unchanged
+246,4 Adjoining 4-Storey Shop Lot KL City,Kuala Lumpur,Kuala Lumpur,501386313,8,,3,3,unchanged
+247,Pandan Indah Ampang Shop,Ampang,Selangor,500558408,8,,2,2,unchanged
+248,Bandar Puteri Puchong Spacious Ground Floor,Puchong,Selangor,501398146,8,,3,3,unchanged
+249,Temu 2 City of Elmina Shop,Shah Alam,Selangor,501557309,8,,2,2,unchanged
+250,Taiipan 2 @ Ara Damansara,Petaling Jaya,Selangor,501073311,8,,3,3,unchanged
+251,2 Storey Shophouse Off Jalan Macalister,George Town,Penang,501566916,8,,2,2,unchanged
+252,Bandar Puteri Puchong Ground Floor Shop,Puchong,Selangor,501431145,8,,3,3,unchanged
+253,Eco Majestic Commercial Cluster,Semenyih,Selangor,500621950,8,,2,2,unchanged
+254,Bangsar Ground Floor Shop Jalan Telawi,Bangsar,Kuala Lumpur,108294732,8,,3,3,unchanged
+255,KL City Centre Shop Lot,Kuala Lumpur,Kuala Lumpur,501279186,8,,2,2,unchanged
+256,Menara Mutiara Bangsar,Bangsar,Kuala Lumpur,501051476,8,,3,3,unchanged
+257,Jalan Klang Lama Shop Office,Kuala Lumpur,Kuala Lumpur,108412827,8,,2,2,unchanged
+258,Old Klang Road Shop Office,Kuala Lumpur,Kuala Lumpur,106920648,8,,3,3,unchanged
+259,Old Klang Road Large Shop Office,Kuala Lumpur,Kuala Lumpur,105506836,8,,2,2,unchanged
+260,Bandar Dato Onn Shop Lot,Johor Bahru,Johor,501565617,8,,3,3,unchanged
+261,Bandar Dato Onn Shop Unit,Johor Bahru,Johor,501565593,8,,2,2,unchanged
+262,Seksyen 13 Petaling Jaya Shop,Petaling Jaya,Selangor,501122274,8,,3,3,unchanged
+263,Bandar Puteri Puchong Main Road Shop,Puchong,Selangor,501449098,8,,2,2,unchanged
+264,TTDI Corner Lot Shop,Taman Tun Dr Ismail,Kuala Lumpur,501565286,8,,3,3,unchanged
+265,Bandar Puteri Klang Shop,Klang,Selangor,501387494,8,,2,2,unchanged
+266,Kenwingston Business Centre Cyberjaya,Cyberjaya,Selangor,103752086,8,,3,3,unchanged
+267,Austin Crest Shop Unit,Johor Bahru,Johor,501564387,8,,2,2,unchanged
+268,Austin V Square,Johor Bahru,Johor,501564308,8,,3,3,unchanged
+269,Vervo City Bandar Indahpura Kulai,Kulai,Johor,501564261,8,,2,2,unchanged
+270,Sungei Wang Plaza KL City Centre,Kuala Lumpur,Kuala Lumpur,501563538,8,,3,3,unchanged
+271,SS2 Petaling Jaya Shop,Petaling Jaya,Selangor,102599303,8,,2,2,unchanged
+272,Taman Kota Laksamana Jaya Shop,Melaka City,Melaka,501562887,8,,3,3,unchanged
+273,Hot Zone Ground Floor Shop Jalan Berangan,Kuala Lumpur,Kuala Lumpur,104190023,8,,2,2,unchanged
+274,Mall for Wellness Gym Snooker Entertainment KLCC,Kuala Lumpur,Kuala Lumpur,500697997,8,,3,3,unchanged
+275,Ground Floor Fully Furnished Resto Bar near KLCC,Kuala Lumpur,Kuala Lumpur,501080025,8,,2,2,unchanged
+276,Busy Road High Ceiling Sports Gym Wellness Bandar Utama,Petaling Jaya,Selangor,501446722,8,,3,3,unchanged
+277,Bandar Rimbayu Shop Office,Telok Panglima Garang,Selangor,501214710,8,,2,2,unchanged
+278,Laman Rimbunan Kepong Shop,Kuala Lumpur,Kuala Lumpur,501456231,8,,3,3,unchanged
+279,Bandar Menjalara Shop,Kuala Lumpur,Kuala Lumpur,107882384,8,,2,2,unchanged
+280,Pusat Bandar Puchong Shop,Puchong,Selangor,501562324,8,,3,3,unchanged
+281,Subang 2 Shop,Subang,Selangor,501495918,8,,2,2,unchanged
+282,2 Sty Commercial Terrace House SS2,Petaling Jaya,Selangor,501393045,8,,3,3,unchanged
+283,Ukay Boulevard Shop,Ampang,Selangor,500973623,8,,2,2,unchanged
+284,PJS 2 Taman Sri Medan Shop,Petaling Jaya,Selangor,501470077,8,,3,3,unchanged
+285,Bandar Baru Bangi Shop,Bangi,Selangor,501552617,8,,2,2,unchanged
+286,Bandar Seri Putra Shop Office,Kajang,Selangor,500850213,8,,3,3,unchanged
+287,Seksyen 22 Shah Alam Shop,Shah Alam,Selangor,501289188,8,,2,2,unchanged
+288,Saujana Perdana Sungai Buloh Shop,Sungai Buloh,Selangor,501415336,8,,3,3,unchanged
+289,Bandar Puteri Puchong Shop Lot,Puchong,Selangor,101649242,8,,2,2,unchanged
+290,Taman Sri Gombak Batu Caves Shop,Batu Caves,Selangor,501559800,8,,3,3,unchanged
+291,25th Floor Rooftop Retail KLCC,Kuala Lumpur,Kuala Lumpur,501422771,8,,2,2,unchanged
+292,Food Court Centre KL City Centre,Kuala Lumpur,Kuala Lumpur,501446072,8,,3,3,unchanged
+293,Retail Unit Next to Sultan Ismail,Kuala Lumpur,Kuala Lumpur,501525740,8,,2,2,unchanged
+294,Taman Damai Utama Puchong Shop,Puchong,Selangor,501295367,8,,3,3,unchanged
+295,Taipan USJ 10 Intermediate Shoplot,Subang Jaya,Selangor,107055112,8,,2,2,unchanged
+296,Kuchai Lama Shop Jalan Kuchai Maju,Kuala Lumpur,Kuala Lumpur,501557462,8,,3,3,unchanged
+297,Bandar Puteri Puchong Shop Office,Puchong,Selangor,200534693,8,,2,2,unchanged
+298,High Ceiling Large Retail Space TRX,Kuala Lumpur,Kuala Lumpur,501413884,8,,3,3,unchanged
+299,Ground Floor Corner Shop Bandar Seri Putra,Bangi,Selangor,501556005,8,,2,2,unchanged
+300,Kuchai Entrepreneurs Park Shop,Kuala Lumpur,Kuala Lumpur,501555848,8,,3,3,unchanged
+301,Petaling Jaya Large Shop,Petaling Jaya,Selangor,501325299,8,,2,2,unchanged
+302,Taman Bukit Mayang Emas Shop Office,Petaling Jaya,Selangor,108490809,8,,3,3,unchanged
+303,Puncak Bestari Puncak Alam Shop,Puncak Alam,Selangor,501475705,8,,2,2,unchanged
+304,Whitten Eco Majestic Semenyih Shop,Semenyih,Selangor,501554948,8,,3,3,unchanged
+305,Taman Tun Dr Ismail End Lot Shop,Taman Tun Dr Ismail,Kuala Lumpur,501545634,8,,2,2,unchanged
+306,Taman Sri Gombak Corner Shop,Gombak,Selangor,500684156,8,,3,3,unchanged
+307,Puncak Alam 2 Adjoining Shop Units,Puncak Alam,Selangor,200528512,8,,2,2,unchanged
+308,PJ New Town PJS 52 Corner Shop,Petaling Jaya,Selangor,501554594,8,,3,3,unchanged
+309,2-Storey Shophouse Beach Street Georgetown,George Town,Penang,501404349,8,,2,2,unchanged
+310,Ground Floor Shop-Office Georgetown,George Town,Penang,501344138,8,,3,3,unchanged
+311,Bandar Puteri 7 Puchong Shop,Puchong,Selangor,501268681,8,,2,2,unchanged
+312,KLCC Showroom Jalan Pinang,Kuala Lumpur,Kuala Lumpur,501554268,8,,3,3,unchanged
+313,IOI Boulevard Puchong Shop Office,Puchong,Selangor,501554178,8,,2,2,unchanged
+314,Sunway Geo Avenue Retail,Bandar Sunway,Selangor,501390860,8,,3,3,unchanged
+315,One Puchong Ground + Basement Retail,Puchong,Selangor,501551620,8,,2,2,unchanged

@@ -41,18 +41,52 @@ def real_listings():
         ids = session.execute(
             text("SELECT id FROM fyp.rental_properties ORDER BY id LIMIT 2")
         ).scalars().all()
-    assert len(ids) == 2
-    created: list[int] = []
-    yield ids, created
-    with Session(engine) as session:
-        if created:
+        # These are real operational rows, so any Agent assignment they already
+        # carry must be restored afterwards. Without this the fixture silently
+        # revoked a live manager when it cleaned up.
+        prior = {
+            int(row["listing_id"]): int(row["agent_id"])
+            for row in session.execute(
+                text(
+                    "SELECT listing_id, agent_id FROM agent_listing_assignment "
+                    "WHERE listing_id = ANY(:ids)"
+                ),
+                {"ids": list(ids)},
+            ).mappings().all()
+        }
+        # Scope tests need these listings to start UNASSIGNED, so clear any
+        # existing manager for the test's duration; teardown restores it.
+        if prior:
             session.execute(
                 text(
                     "DELETE FROM agent_listing_assignment WHERE listing_id = ANY(:ids)"
                 ),
-                {"ids": created},
+                {"ids": list(prior)},
             )
             session.commit()
+    assert len(ids) == 2
+    created: list[int] = []
+    yield ids, created
+    with Session(engine) as session:
+        # Restore unconditionally: the setup cleared `prior`, and a test that
+        # never called _assign still must not leave those listings unassigned.
+        touched = set(created) | set(prior)
+        if touched:
+            session.execute(
+                text(
+                    "DELETE FROM agent_listing_assignment WHERE listing_id = ANY(:ids)"
+                ),
+                {"ids": sorted(touched)},
+            )
+        for listing_id, agent_id in prior.items():
+            session.execute(
+                text(
+                    "INSERT INTO agent_listing_assignment (listing_id, agent_id) "
+                    "VALUES (:lid, :aid)"
+                ),
+                {"lid": listing_id, "aid": agent_id},
+            )
+        session.commit()
 
 
 def _assign(listing_id: int, agent_id: int, created: list[int]) -> None:

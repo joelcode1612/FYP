@@ -1,0 +1,61 @@
+{
+  "subject_id": "MD-00510",
+  "target": "conditional probability among observed F&B categories, not business success",
+  "predicted_category": "Restaurant",
+  "model_score": 0.636622,
+  "shap_baseline": 0.300863,
+  "shap_sum": 0.636622,
+  "reconstruction_absolute_error": 2.220446049250313e-16,
+  "top_12_contributions": [
+    {
+      "feature": "osm_walkway_length_density_500m_km_km2",
+      "shap_category_probability_contribution": 0.063423
+    },
+    {
+      "feature": "nearest_major_road_m",
+      "shap_category_probability_contribution": -0.05852
+    },
+    {
+      "feature": "road_intersection_density_500m_km2",
+      "shap_category_probability_contribution": 0.049973
+    },
+    {
+      "feature": "walk_isochrone_area_10min_km2",
+      "shap_category_probability_contribution": 0.04731
+    },
+    {
+      "feature": "worldpop_walk_reachable_10min",
+      "shap_category_probability_contribution": 0.046312
+    },
+    {
+      "feature": "drive_isochrone_area_10min_km2",
+      "shap_category_probability_contribution": 0.043371
+    },
+    {
+      "feature": "road_length_density_500m_km_km2",
+      "shap_category_probability_contribution": 0.040607
+    },
+    {
+      "feature": "nearest_parking_distance_m",
+      "shap_category_probability_contribution": 0.033938
+    },
+    {
+      "feature": "weekday_departures_500m_walk_am",
+      "shap_category_probability_contribution": 0.032676
+    },
+    {
+      "feature": "residential_landuse_coverage_1000m_pct",
+      "shap_category_probability_contribution": 0.031212
+    },
+    {
+      "feature": "residential_footprint_coverage_500m_pct",
+      "shap_category_probability_contribution": 0.020632
+    },
+    {
+      "feature": "residential_building_density_500m_km2",
+      "shap_category_probability_contribution": -0.019782
+    }
+  ],
+  "background_n": 32,
+  "research_only": true
+}

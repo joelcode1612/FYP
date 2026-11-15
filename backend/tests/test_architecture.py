@@ -1,11 +1,26 @@
 """Clean Architecture dependency-rule tests (spec 15 - architecture tests)."""
 
+import re
 from pathlib import Path
 
 SRC = Path(__file__).resolve().parents[1] / "src" / "sitewise"
 
 FORBIDDEN_IN_DOMAIN = ("fastapi", "supabase", "sqlmodel", "sqlalchemy", "pydantic_settings")
 FORBIDDEN_IN_ML = ("fastapi", "sqlmodel")
+
+#: `from sitewise.api...` / `import sitewise.api` — an actual dependency. The
+#: rule is about imports, not prose: a docstring that names the module which
+#: depends on this one is documentation of the relationship, while an import is
+#: the relationship itself.
+_IMPORT_RE = re.compile(r"^[ \t]*(?:from|import)[ \t]+(sitewise[\w.]*)", re.MULTILINE)
+
+
+def imports_module(source: str, module: str) -> bool:
+    """True when [source] imports [module] or one of its submodules."""
+    return any(
+        name == module or name.startswith(module + ".")
+        for name in _IMPORT_RE.findall(source)
+    )
 
 
 def _source_of(*parts: str) -> str:
@@ -69,11 +84,18 @@ def test_services_are_testable_with_fake_repositories():
 
 
 def test_no_circular_import_of_main_from_inner_layers():
+    """The domain layer never imports the presentation layer.
+
+    Checked against import statements rather than raw substrings: `rbac.py`
+    documents in prose which API module enforces its matrices, and that
+    documentation is not a dependency. A real `import sitewise.api...` (or
+    `from sitewise.api import ...`) still fails this test.
+    """
     domain_sources = "".join(
         p.read_text(encoding="utf-8") for p in (SRC / "domain").glob("*.py")
     )
-    assert "sitewise.main" not in domain_sources
-    assert "sitewise.api" not in domain_sources
+    assert not imports_module(domain_sources, "sitewise.main")
+    assert not imports_module(domain_sources, "sitewise.api")
 
 
 def test_identity_email_collision_fails_closed_without_rekey():

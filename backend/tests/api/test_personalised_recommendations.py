@@ -508,14 +508,19 @@ def test_explanation_enforces_ownership_and_works_without_shap(
         in {"AVAILABLE", "VERIFIED_AVAILABLE", "CONFIRMED"}
     )
 
-    # The top-ranked property is NOT the supplied reference vector, so live
-    # 47-feature resolution fails closed. SHAP is omitted but everything else
-    # still works - the required "works without SHAP" behaviour.
-    assert body["property_id"] != REFERENCE_PROPERTY_ID
-    assert body["explanation"]["shap"] is None
-    assert body["explanation"]["shap_status"]["available"] is False
-    assert body["explanation"]["shap_status"]["reason"]
-    assert sections["pu_research_explanation"]["available"] is False
+    # A complete 47-feature vector may now resolve through the committed
+    # training bridge. Either result is valid: SHAP is optional, and when
+    # available it must explain the same artifact named on the ranked result.
+    if body["explanation"]["shap"] is None:
+        assert body["explanation"]["shap_status"]["available"] is False
+        assert body["explanation"]["shap_status"]["reason"]
+        assert sections["pu_research_explanation"]["available"] is False
+        return
+
+    shap = body["explanation"]["shap"]
+    assert shap["model_name"] == body["model"]["name"]
+    assert shap["relation_to_recommendation"]["same_artifact_as_ranked_model"] is True
+    assert shap["artifact_sha256"]
 
 
 @pytest.mark.slow
@@ -541,7 +546,10 @@ def test_shap_reconstruction_through_api_for_reference_property(client, identity
     shap = explanation["shap"]
     assert shap is not None, explanation["shap_status"]
     assert explanation["shap_status"]["available"] is True
-    assert shap["model_name"] == SELECTED_MODEL_NAME
+    assert shap["model_name"] == result["model"]["name"] == "pu_model"
+    assert shap["relation_to_recommendation"]["same_artifact_as_ranked_model"] is True
+    assert shap["artifact"] == "PU_model.joblib"
+    assert shap["artifact_sha256"] == "5c00c574cfe4cbcb76fe1fb21eb32e40cfea3a428ef1c70ea60c893c1e8c2f98"
     assert shap["explainer"] == "Permutation SHAP"
     assert shap["research_only"] is True
     assert shap["feature_count"] == 47
@@ -561,3 +569,72 @@ def test_shap_reconstruction_through_api_for_reference_property(client, identity
     # SHAP and preference explanations stay in separate sections.
     assert explanation["sections"]["pu_research_explanation"]["available"] is True
     assert "SHAP" in explanation["sections"]["pu_research_explanation"]["note"]
+
+
+# -- explanation contract: property identity, labels, engine version ---------
+
+
+def test_feature_labels_are_plain_english_and_cover_every_contribution():
+    """The label map must make a raw model column unrenderable.
+
+    Clients are not allowed to keep their own 47-entry map (it would drift from
+    the deployed model), so the endpoint supplies the labels. Every feature in
+    the payload must get one, and none may still read as a database column.
+    """
+    from sitewise.services.recommendation_generation_service import _feature_labels
+
+    payload = {
+        "contributions": {
+            "pop_500m": 0.31,
+            "fnb_competitors_500m": -0.22,
+            "nearest_major_road_m": 0.04,
+        }
+    }
+    labels = _feature_labels(payload)
+    assert set(labels) == set(payload["contributions"])
+    assert labels["pop_500m"] == "People living within 500 m"
+    assert labels["fnb_competitors_500m"] == "Other F&B outlets within 500 m"
+    assert all("_" not in label for label in labels.values())
+
+
+def test_feature_labels_are_absent_when_shap_is_unavailable():
+    """No SHAP means no labels - never an empty-but-present claim."""
+    from sitewise.services.recommendation_generation_service import _feature_labels
+
+    assert _feature_labels(None) == {}
+    assert _feature_labels({}) == {}
+
+
+def test_explanation_names_the_property_and_reports_the_engine_that_scored_it(
+    client, generated, identity
+):
+    """The explanation must identify the unit and the real engine version.
+
+    Without the property block a client can only show a bare id; without the
+    stored engine version a V3 result would be mislabelled with the baseline
+    config.
+    """
+    result_id = generated["results"][0]["result_id"]
+    body = client.get(
+        f"/api/v1/recommendations/{result_id}/explanation",
+        headers=auth(identity["token"]),
+    ).json()
+
+    prop = body["property"]
+    assert prop["canonical_property_id"] == body["property_id"]
+    assert prop["property_id"] == body["property_id"]
+    assert prop["title"]
+    assert "verification" in prop
+    # The listing reference is present but never presented as confirmed
+    # availability on its own.
+    assert isinstance(prop.get("listing_ref"), (dict, type(None)))
+
+    personal = body["explanation"]["sections"][
+        "personalised_recommendation_explanation"
+    ]
+    assert personal["config_version"] == body["personalisation"]["config_version"]
+
+    # No SHAP on this row, so the label map is honestly empty rather than a
+    # full map implying an explanation exists.
+    if body["explanation"]["shap"] is None:
+        assert body["explanation"]["feature_labels"] == {}

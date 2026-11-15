@@ -59,6 +59,10 @@ class _UserDetailPageState extends State<UserDetailPage> {
   String? _notice;
   bool _noticeIsError = false;
 
+  /// A change that applied but was not audited is neither a clean success nor
+  /// a failure; it gets the warning tone.
+  bool _noticeIsWarning = false;
+
   @override
   void initState() {
     super.initState();
@@ -77,22 +81,27 @@ class _UserDetailPageState extends State<UserDetailPage> {
     final id = component.id.trim();
     if (id.isEmpty) return null;
 
-    // Existing repository contract — no new API surface, no demo records.
-    final user = await AppLocator.userRepo.getUserById(id);
-    if (user == null) return null;
-
-    // `SitewiseUser` (shared_logic) exposes neither phone_number nor
-    // last_login, and shared_logic cannot be changed from this file. Read
-    // those two optional fields from the SAME authorised `/users/{id}`
-    // payload through the existing bearer-aware bridge. A failure of this
-    // secondary read is non-fatal: the fields simply show "Not provided".
-    Map<String, dynamic> extra = const <String, dynamic>{};
-    try {
-      extra = await WebAuth.request('/api/v1/users/${Uri.encodeComponent(id)}');
-    } catch (_) {
-      extra = const <String, dynamic>{};
+    // One authoritative read of `/users/{id}`. The detailed variant keeps the
+    // status code, so "not found", "not authorised" and "service unavailable"
+    // are reported as what they are instead of all reading as a missing record.
+    final result = await WebAuth.requestDetailed(
+      '/api/v1/users/${Uri.encodeComponent(id)}',
+    );
+    if (result['ok'] != true) {
+      if (result['status'] == 404) return null;
+      throw StateError(_failureMessage(result));
+    }
+    final row = result['body'];
+    if (row is! Map<String, dynamic>) {
+      throw StateError(
+        'The account record returned by the service could not be read.',
+      );
     }
 
+    // Same mapper the directory uses, so the two screens cannot disagree about
+    // a role or status. `phone_number` / `last_login` are read from this same
+    // payload rather than a second request.
+    final user = ApiUserRepository.fromJson(row);
     _savedRole = _roleValue(user.role);
     _savedStatus = _statusValue(user.status);
     _role = _savedRole;
@@ -100,10 +109,12 @@ class _UserDetailPageState extends State<UserDetailPage> {
 
     return _UserRecord(
       user: user,
-      phone: _text(extra['phone_number']),
-      lastLogin: _text(extra['last_login']),
+      phone: _text(row['phone_number']),
+      lastLogin: _text(row['last_login']),
     );
   }
+
+  void _retry() => setState(() => _future = _load());
 
   Future<void> _save() async {
     if (_saving || !_isAdmin) return;
@@ -119,19 +130,44 @@ class _UserDetailPageState extends State<UserDetailPage> {
       _saving = true;
       _notice = null;
       _noticeIsError = false;
+      _noticeIsWarning = false;
     });
 
     try {
-      final response = await WebAuth.request(
+      final result = await WebAuth.requestDetailed(
         '/api/v1/users/${Uri.encodeComponent(component.id.trim())}',
         method: 'PATCH',
         body: body,
       );
       if (!mounted) return;
 
+      if (result['ok'] != true) {
+        // The backend distinguishes "nothing applied" (identity rejected),
+        // "partially applied" (identity updated, local mirror not) and a
+        // permission/MFA denial. Its own wording is the accurate one, so it is
+        // shown verbatim instead of a generic failure line.
+        setState(() {
+          _saving = false;
+          _noticeIsError = true;
+          _notice = _failureMessage(result);
+        });
+        return;
+      }
+
+      final response = result['body'];
+      if (response is! Map<String, dynamic>) {
+        setState(() {
+          _saving = false;
+          _noticeIsError = true;
+          _notice = 'The server returned a response this page cannot read, so '
+              'nothing was marked as saved. Reload the account to check its '
+              'current role and status.';
+        });
+        return;
+      }
+
       // Success is shown only when the server echoes back the values we asked
-      // for. A 403/422 is thrown by the bridge; a partial or unexpected
-      // response is treated as unconfirmed rather than as a save.
+      // for. A partial or unexpected response is treated as unconfirmed.
       final echoedRole = _canonicalRole(response['role'] as String?);
       final echoedStatus =
           (response['account_status'] as String?)?.toLowerCase().trim();
@@ -154,16 +190,15 @@ class _UserDetailPageState extends State<UserDetailPage> {
         _savedStatus = _status;
         _saving = false;
         _noticeIsError = false;
-        _notice = 'Changes saved. The server recorded the role and account '
-            'status change in its audit trail.';
+        _noticeIsWarning = response['audit_recorded'] == false;
+        _notice = _successMessage(response['audit_recorded']);
       });
-    } catch (_) {
+    } catch (error) {
       if (!mounted) return;
       setState(() {
         _saving = false;
         _noticeIsError = true;
-        _notice = 'Could not save changes. Check administrator permissions '
-            'and MFA, then try again.';
+        _notice = 'Could not save changes: $error';
       });
     }
   }
@@ -193,6 +228,8 @@ class _UserDetailPageState extends State<UserDetailPage> {
           div(
             classes: _noticeIsError
                 ? 'notice notice-danger'
+                : _noticeIsWarning
+                ? 'notice notice-warn'
                 : 'notice notice-info',
             attributes: {'role': _noticeIsError ? 'alert' : 'status'},
             [Component.text(_notice!)],
@@ -203,7 +240,12 @@ class _UserDetailPageState extends State<UserDetailPage> {
             if (snapshot.hasError) {
               return _empty(
                 'Unable to load user',
-                'The account could not be read. Refresh the page and try again.',
+                '${snapshot.error}',
+                action: ActionButton(
+                  'Try again',
+                  variant: 'primary',
+                  onClick: _retry,
+                ),
               );
             }
             if (snapshot.connectionState != ConnectionState.done) {
@@ -364,14 +406,15 @@ class _UserDetailPageState extends State<UserDetailPage> {
     ],
   );
 
-  Component _empty(String title, String body) => EmptyState(
+  Component _empty(String title, String body, {Component? action}) => EmptyState(
     title: title,
     body: body,
-    action: const ActionLink(
-      'Back to Users',
-      href: '/admin/users',
-      variant: 'secondary',
-    ),
+    action: action ??
+        const ActionLink(
+          'Back to Users',
+          href: '/admin/users',
+          variant: 'secondary',
+        ),
   );
 }
 
@@ -402,6 +445,37 @@ String _canonicalRole(String? raw) => switch ((raw ?? '').toLowerCase().trim()) 
   'entrepreneur' || 'property_owner' || 'user' || 'owner' => 'entrepreneur',
   _ => (raw ?? '').toLowerCase().trim(),
 };
+
+/// The backend's `audit_recorded` is three-valued: true = event written,
+/// false = the change applied but the audit write failed, null = no role or
+/// status change was made, so no event was due.
+String _successMessage(Object? auditRecorded) {
+  if (auditRecorded == false) {
+    return 'Changes saved and confirmed by the server, but the audit event '
+        'was NOT recorded. The role and account status are in effect; the '
+        'audit trail is incomplete for this change.';
+  }
+  if (auditRecorded == true) {
+    return 'Changes saved. The server confirmed the new values and recorded '
+        'the change in its audit trail.';
+  }
+  return 'Changes saved and confirmed by the server.';
+}
+
+String _failureMessage(Map<String, dynamic> result) {
+  final message = (result['message'] as String?)?.trim();
+  if (result['code'] == 'staff_mfa_required') {
+    return 'This change needs an administrator session with completed MFA. '
+        'Verify your second factor, then try again.';
+  }
+  if (message != null && message.isNotEmpty) return message;
+  return switch (result['status']) {
+    403 => 'You are not authorised to change this account.',
+    404 => 'This account no longer exists.',
+    422 => 'The selected role or account status was rejected as invalid.',
+    _ => 'Could not save changes. Nothing was marked as saved.',
+  };
+}
 
 String _statusValue(String raw) {
   final value = raw.toLowerCase().trim();

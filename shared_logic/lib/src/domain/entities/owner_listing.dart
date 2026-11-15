@@ -1,4 +1,5 @@
 import 'commercial_property.dart' show VerificationStatus;
+import 'recommendation_search.dart' show ListingManagement;
 
 /// One property photo of an owner listing (`fyp.property_photos`).
 class OwnerListingPhoto {
@@ -63,6 +64,11 @@ class OwnerListing {
   final String? updatedAt;
   final List<OwnerListingPhoto> photos;
 
+  /// Who manages this listing right now, derived by the backend. Null when the
+  /// response did not include the block (older server); the owner still sees
+  /// their own listing, so no manager is implied.
+  final ListingManagement? management;
+
   const OwnerListing({
     required this.id,
     required this.name,
@@ -90,6 +96,7 @@ class OwnerListing {
     this.createdAt,
     this.updatedAt,
     this.photos = const [],
+    this.management,
   });
 
   static double? _d(Object? v) => (v is num) ? v.toDouble() : null;
@@ -126,6 +133,9 @@ class OwnerListing {
             .whereType<Map<String, dynamic>>()
             .map(OwnerListingPhoto.fromJson)
             .toList(),
+        management: row['management'] is Map<String, dynamic>
+            ? ListingManagement.fromJson(row['management'] as Map<String, dynamic>)
+            : null,
       );
 
   /// The shared status vocabulary used by badges across the app.

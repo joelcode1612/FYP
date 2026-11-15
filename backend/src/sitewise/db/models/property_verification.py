@@ -55,7 +55,9 @@ class PropertyVerification(SQLModel, table=True):
     )
 
     verification_id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
-    property_id: int = Field(foreign_key="fyp.rental_properties.id", nullable=False, index=True)
+    # The unique constraint below provides the property_id index; a second
+    # model-level index would duplicate it.
+    property_id: int = Field(foreign_key="fyp.rental_properties.id", nullable=False)
     listing_status: str = Field(default="not_submitted", max_length=32, nullable=False)
     ownership_status: str = Field(default="not_submitted", max_length=32, nullable=False)
     submitted_by: uuid.UUID = Field(foreign_key="users.user_id", nullable=False, index=True)

@@ -1,0 +1,11 @@
+{
+  "subject_id": "MD-00510",
+  "pu_score": 0.5888606695885784,
+  "categories": {
+    "Bakery / Dessert / Beverage": 0.09575276452180663,
+    "Cafe / Coffee": 0.30426604080902137,
+    "Fast Food / Takeaway": 0.020674520952370143,
+    "Restaurant": 0.5793066737168018
+  },
+  "top_category": "Restaurant"
+}

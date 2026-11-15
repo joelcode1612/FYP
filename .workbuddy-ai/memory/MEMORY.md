@@ -1,139 +1,36 @@
 # FYP — Long-term project notes
 
-## Brand assets (since 2026-10-26)
-
-- App icon = user-uploaded rounded-square isometric map tile. Source
-  `fyp_jaspr_web/tool/_src/sitewise_icon_source.jpg`; regenerate with
-  `tool/make_app_icon.py` (web `sitewise-icon*`/`sitewise-mark-64` + Android/iOS/macOS
-  launchers). Do NOT reintroduce glyph/inline-SVG logos.
-- Web marks use `assets/sitewise-mark-64.png` (`components/ui.dart` Brand,
-  `landing_page.dart` nav, `auth_icons.dart`, `signup_page._brandMark`); favicon/touch
-  icons in `main.server.dart`. Mobile launchers use the square master
-  (`square_master` inpaints outside-of-squircle corners via cv2).
-- Signup hero = photographic `assets/signup-city.jpg` (cleaned by
-  `tool/extract_signup_bg.py`) as `<img class="su-hero__art">`, NOT inline SVG.
+## Brand assets
+- Icon = rounded-square isometric tile (`tool/_src/sitewise_icon_source.jpg`); regen `tool/make_app_icon.py`. No glyph/inline-SVG logos. Web marks `assets/sitewise-mark-64.png`; signup hero photo `assets/signup-city.jpg`.
 
 ## Build / verify (fyp_jaspr_web)
-
-- Build from `fyp_jaspr_web` only: `env -u HTTP_PROXY -u HTTPS_PROXY -u http_proxy
-  -u https_proxy dart run jaspr_cli:jaspr build` (proxy breaks the build daemon
-  websocket -> 502). It deletes `build/jaspr` — stop any server serving it first.
-- Auth bridge edit: `cd tool && npm run build-auth` FIRST, then `jaspr build`
-  (copies `web/` into `build/jaspr`).
-- App is CLIENT-rendered (`jaspr: mode: client`): static output, no `app.exe`; deep
-  routes resolve in `lib/app.dart` Router.redirect. Serve with SPA fallback:
-  `PORT=8090 node tool/dev_static_server.js`.
-- Probes need
-  `NODE_PATH=C:/Users/Lenovo/.workbuddy-ai/binaries/node/workspace/node_modules`
-  (playwright-core is there, not in `fyp_jaspr_web/node_modules`) and chromium
-  `args: ['--no-proxy-server']` (else goto 127.0.0.1 times out). Binary:
-  `C:/Users/Lenovo/AppData/Local/ms-playwright/chromium-1248/...`.
-- Probes: `probe_backend_integration.js` (43), `probe_ssr_mpa.js` (27),
-  `probe_explore_map.js` (27, Leaflet), `probe_agent_theme.js` (22),
-  `probe_social_final.js`, `probe_staff.js`, `probe_auth_flows.js`,
-  `probe_login.js` (flaky entrance animation — forced click). `probe_auth_e2e.js`
-  needs a creatable Supabase identity.
-- `tool/session_harness.js` installs a stand-in auth bridge + catalogue fixture
-  (`test/.data/jaspr_catalog_fixture.json`) so role routes render headlessly.
+- Build ONLY from `fyp_jaspr_web`: `env -u HTTP_PROXY -u HTTPS_PROXY -u http_proxy -u https_proxy dart run jaspr_cli:jaspr build` (proxy → daemon 502). Deletes `build/jaspr` — stop servers first. Auth-bridge edits: `cd tool && npm run build-auth` first.
+- Client-rendered SPA; deep routes via `lib/app.dart` redirect. Serve `PORT=8090 node tool/dev_static_server.js`.
+- Probes: NODE_PATH=C:/Users/Lenovo/.workbuddy-ai/binaries/node/workspace/node_modules; chromium `--no-proxy-server`; `tool/session_harness.js` = stand-in auth bridge + catalogue fixture for headless role routes.
+- Stale build_runner blocks build: kill dart.exe + `rm .dart_tool/build/asset_graph.json`. ENOSPC: clear `.dart_tool/build` + `__pycache__` (~800 MB).
 
 ## Framework gotchas
+- Never root a 3rd-party widget on a framework-owned element (Jaspr rewrites `class`; Leaflet mounts on `.swcx-map-mount` child).
+- Component asset refs MUST be root-absolute `/assets/...` (no `<base href>`); CSS `url('assets/…')` ok.
+- `main_()` renders `<main>`. Read whole CSS rule before editing. Can't view images — verify via headless DOM checks (naturalWidth, class/rect audits).
 
-- **A framework-owned element must never be a third-party widget's root.** Jaspr
-  rewrites `class` on every re-render; Leaflet adds `leaflet-container` at init and
-  losing it re-enables the global `styles.css img { max-width: 100% }` -> tiles
-  collapse to 0px, blank map with live markers. Mount Leaflet on a child the
-  framework never renders (`.swcx-map-mount`). Same class of bug for any JS-owned
-  DOM node inside a Jaspr tree.
-- **Jaspr component asset refs MUST be root-absolute `/assets/...`** (leading
-  slash). The served `web/index.html` has NO `<base href>` (client-rendered app;
-  `main.server.dart` dormant). A relative `assets/...` resolves against the current
-  route -> `/entrepreneur/assets/...` 404 on nested routes. The `<head>` already
-  uses `/assets/...`; match it. CSS `url('assets/...')` is fine (resolves against
-  the stylesheet, not the document).
-- `main_()` renders `<main>` (`main` is a Dart reserved word).
-- Read an entire CSS rule before editing — some continue past a `grep -A8` window.
-- Cannot view images here: verify visuals with Pillow pixel histograms or headless
-  DOM checks (`naturalWidth`, class/rect audits).
-- **`jaspr build` / `dart pub get` MUST run from `fyp_jaspr_web`, never `FYP`** (the
-  shell CWD defaults to `FYP`; there it fails with a misleading "Missing dependency
-  on jaspr in pubspec.yaml").
-- `tool/auth_client.js` `announceReady()` once blanket-set the Google `aria-label`
-  and re-enabled EVERY `.lp-social`. Scope social DOM fixes to
-  `.lp-social[data-provider="google"]` and tag each control with `data-provider`.
-- Stale `build_runner` daemon blocks `jaspr build` ("Incompatible options with
-  current running build daemon"): kill the `build_runner daemon` dart.exe and
-  `rm -f .dart_tool/build/asset_graph.json`.
+## Services
+- Backend `FYP/backend` FastAPI port 8000 (`sitewise.main:app`); `FYP/test` (3001) is legacy, NEVER the API. Ports: 8090 web / 8000 API / 5567 dev proxy / 8181 VM / 5432 PG.
+- `.\serve` → serve.cmd → serve.impl.ps1; NEVER create `serve.ps1` (AllSigned rejects unsigned .ps1).
+- Supabase: admin create-user P0001 + signup SMTP 500 are live blockers, not integration faults; only 1 real auth user — never modify.
 
-## Service architecture (verified 2026-11-05)
+## Mobile (fyp_mobile_app)
+- Auth screen: no back arrow, no top login/signup toggle (user request); mode via `/auth` args + inline link. `flutter test`: unset proxy envs. `dart analyze` clean (one pre-existing unused import).
 
-- Backend is `FYP/backend` — FastAPI/uvicorn **port 8000** (`sitewise.main:app`,
-  `/health`, `/api/v1/*`). `FYP/test` (Express 3001) is legacy research tooling,
-  NEVER the app API; do not switch ports on `ERR_CONNECTION_REFUSED`.
-- Jaspr proxies same-origin `/api/*` + `/health` to 8000 (`lib/data/api_proxy.dart`).
-  `lib/data/api_config.dart`: `SITEWISE_API_BASE` (default http://127.0.0.1:8000) +
-  `SITEWISE_PUBLIC_API_BASE` (empty = same-origin). `<meta name="sitewise-api">` is
-  EMPTY; `auth_client.js` has no localhost:8000 fallback; `/auth-config.json` must be
-  root-relative.
-- `web/auth-config.json` (public URL + publishable key only) via
-  `npm run gen-auth-config`; `auth_bundle.js` via `npm run build-auth`. Both
-  git-ignored, regenerated by `.\serve`.
-- **NEVER create `fyp_jaspr_web/serve.ps1`** — PowerShell resolves `.\serve` to `.ps1`
-  first and this machine's `AllSigned` policy rejects unsigned scripts. Chain:
-  `.\serve` -> `serve.cmd` -> `powershell -ExecutionPolicy Bypass -File serve.impl.ps1`.
-  Ports: 8090 web, 8000 API, 5567 Jaspr dev proxy, 8181 Dart VM, 5432 Postgres.
-- Live Supabase blockers (not integration faults): admin/create-user `P0001`
-  (public.users trigger; repo migration §4/§5 has the SECURITY DEFINER fix) and
-  signup 500 "Error sending confirmation email" (SMTP unconfigured). Only 1 real
-  auth user exists — never modify it for tests.
+## Role themes (2026-11-09)
+- Shell classes: `app-shell--admin`, `app-shell--agent` (light #E8EEF6/#FFF/#E2E8F0/#1D4ED8/#0D9488), else shared dark. Append scoped tokens at END of styles.css; never retheme `:root`.
+- Concurrent sessions edit repo live — `git status` + re-read files immediately before every Edit.
 
-## Mobile app (fyp_mobile_app)
+## Catalogue (2026-11-10)
+- `sitewise_app.properties` = 955 U-class rows; `fyp.rental_properties` = same 955 (`owner_id IS NULL`) + 227 owner listings (never touch). Photos 5,979 URLs. `suitability_score` = uncalibrated P-vs-U index ×100, not a probability.
 
-- Auth screen is brand-only at the top: NO back arrow, NO top `Log In / Sign Up`
-  switch (explicit user request). Mode lives in `_tab`/`AuthTab`
-  (`widgets/auth_tabs.dart`, still exporting the unused `AuthTabs`), set by `/auth`
-  route arguments (`'login' | 'signUp'`) and the inline link at the foot of the form.
-  Do not reintroduce the toggle.
-- `test/widget_test.dart` TEST 10 uses the inline `find.text('Sign up')` link (with
-  `ensureVisible`). Explore is a `CustomScrollView`, not a `ListView` — tests must
-  `ensureVisible` a card before tapping.
-- `flutter test` fails with "Invalid WebSocket upgrade request" when proxy vars are
-  set: prefix `env -u HTTP_PROXY -u HTTPS_PROXY -u http_proxy -u https_proxy
-  -u ALL_PROXY -u all_proxy`. `dart analyze` needs no workaround; only a pre-existing
-  unused import in `lib/core/routing/auth_route_guard.dart`.
-
-## Jaspr web role-scoped themes (2026-11-09)
-
-- `AppLayout` tags the shell per role: `app-shell--admin` (navy/charcoal, parallel
-  session), `app-shell--agent` (light palette), else shared dark `.app-shell`. NEVER
-  retheme the shared `:root`/`.app-shell` — append a scoped
-  `.app-shell.app-shell--<role>` token block at the END of `web/styles.css`.
-- Agent tokens: #E8EEF6 canvas / #F4F7FB paper / #FFF surfaces / #E2E8F0+#CBD5E1
-  borders / #0B0F19 ink / #1E293B text / #64748B muted / #1D4ED8 action / #3B82F6
-  accent; teal #0D9488 only for favourable status. Agent nav pill = royal blue;
-  inputs need `color-scheme: light`; `.btn--primary` flips via
-  `--contrast-surface: #0b0f19`.
-- Agent scope: Enquiries + Performance removed from nav/dashboard (KPI "Draft or
-  suspended"; "Pending verification" panel). Routes stay registered;
-  `demoEnquiries`/`demoTasks` stay (no business-logic deletion).
-- `probe_agent_theme.js` compares a fixture against the BUILT styles.css — wait
-  ≥600ms after injecting the 330KB sheet or computed colours race mid-parse.
-- Concurrent sessions edit this repo live — re-read (`git status` + grep) immediately
-  before every Edit; a mid-task commit once changed `app_layout.dart` under me.
-
-## Research-property catalogue (since 2026-11-10)
-
-- `sitewise_app.properties` = the 955 U-class rows of
-  `SiteWise_PU_Property_Image_Scores_Merged (1).xlsx` (was 2,126).
-  `fyp.rental_properties` holds the same 955 as imported rows (`owner_id IS NULL`,
-  `listing_id` == `canonical_property_id`) **plus 227 owner-submitted listings that
-  must never be touched**.
-- `fyp.property_photos` = 5,979 URLs (911 properties have images, 44 legitimately do
-  not). `fyp.property_subject_links` maps each property to its
-  `demand_gen.subjects` subject_id and catalogue id.
-- `sitewise_analytics.subject_features` stays 1,849 rows (894 P + 955 U); P-class
-  rows are model input, never listings. Do not "clean" them.
-- Re-run/recover: `backend/scripts/migration/replace_property_catalogue.py` (one
-  self-verifying transaction) + `verify_catalog_api.py`. Backup
-  `backend/backups/migration_20261110/` + in-DB schema `backup_20261110`.
-- `suitability_score` = `research_p_association_score * 100`: an uncalibrated P-vs-U
-  ranking index, never a success probability.
+## Category-aware Stage 2 (2026-11-15)
+- Artifact `sitewise_fnb_category_v2.joblib` (54 feats, research_only); contract `ml/category_aware.py`, orchestration `ml/fnb_category.py`; v1 preserved.
+- `SITEWISE_PU_MODEL_VARIANT` default `expanded64` (896/955 resolve, 351 pass >50); legacy = 47 feats — never mix 47- and 64-feature scores.
+- Selected business type drives Stage-2 SHAP target + rank tie-break. Insights cache keyed version+sha+feature-digest+type. `import shap` slow → lifespan warm-up thread in main.py.
+- Model weak (macro-F1 ~0.29 vs 0.25 chance) ⇒ wording: "how well this location matches your selected business type". Verify: `backend/scripts/ml/verify_category_aware_integration.py`.

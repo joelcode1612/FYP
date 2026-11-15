@@ -377,6 +377,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "2.2.2"
+  dchs_motion_sensors:
+    dependency: transitive
+    description:
+      name: dchs_motion_sensors
+      sha256: "0b09e2310b1f5f3edefaa45058c9d7bd6c5b292cdf36e733ae6bcec7db40526d"
+      url: "https://pub.dev"
+    source: hosted
+    version: "2.0.2"
   dds:
     dependency: transitive
     description:
@@ -465,38 +473,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "7.0.1"
-  file_selector_linux:
-    dependency: transitive
-    description:
-      name: file_selector_linux
-      sha256: da76400e7872ce7637ffdce12749ec24169c25f6195c28372208e65a24bcd2ab
-      url: "https://pub.dev"
-    source: hosted
-    version: "0.9.4+1"
-  file_selector_macos:
-    dependency: transitive
-    description:
-      name: file_selector_macos
-      sha256: d57c62362766b5e7ae739448650b66c6aab7a68ba7ecc65e04018652645ae0f4
-      url: "https://pub.dev"
-    source: hosted
-    version: "0.9.5+1"
-  file_selector_platform_interface:
-    dependency: transitive
-    description:
-      name: file_selector_platform_interface
-      sha256: "35e0bd61ebcdb91a3505813b055b09b79dfdc7d0aee9c09a7ba59ae4bb13dc85"
-      url: "https://pub.dev"
-    source: hosted
-    version: "2.7.0"
-  file_selector_windows:
-    dependency: transitive
-    description:
-      name: file_selector_windows
-      sha256: fbefc5fb92c6d3cbe8d284a2cd971b593bb07d2cd6da8557b81a862250b4acec
-      url: "https://pub.dev"
-    source: hosted
-    version: "0.9.3+6"
   fixnum:
     dependency: transitive
     description:
@@ -807,11 +783,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "0.2.2"
-  integration_test:
-    dependency: transitive
-    description: flutter
-    source: sdk
-    version: "0.0.0"
   intl:
     dependency: transitive
     description:
@@ -1076,6 +1047,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "2.2.0"
+  panorama_viewer:
+    dependency: transitive
+    description:
+      name: panorama_viewer
+      sha256: c6817bb2e202aad2d143d0bf7f95fc200b87791c2286971d7e3f29f8be916482
+      url: "https://pub.dev"
+    source: hosted
+    version: "2.0.7"
   passkeys_platform_interface:
     dependency: transitive
     description:
@@ -1276,6 +1255,22 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.7.0"
+  qr:
+    dependency: transitive
+    description:
+      name: qr
+      sha256: "5a1d2586170e172b8a8c8470bbbffd5eb0cd38a66c0d77155ea138d3af3a4445"
+      url: "https://pub.dev"
+    source: hosted
+    version: "3.0.2"
+  qr_flutter:
+    dependency: transitive
+    description:
+      name: qr_flutter
+      sha256: "5095f0fc6e3f71d08adef8feccc8cea4f12eec18a2e31c2e8d82cb6019f4b097"
+      url: "https://pub.dev"
+    source: hosted
+    version: "4.1.0"
   realtime_client:
     dependency: transitive
     description:

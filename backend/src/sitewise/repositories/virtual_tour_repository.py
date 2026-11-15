@@ -1,5 +1,5 @@
 import uuid
-from typing import Optional
+from datetime import UTC, datetime
 
 from sqlmodel import Session, select
 
@@ -7,6 +7,8 @@ from sitewise.db.models.virtual_tour import VirtualTour
 
 
 class VirtualTourRepository:
+    _MUTABLE_FIELDS = frozenset({"url", "status"})
+
     def __init__(self, session: Session):
         self.session = session
 
@@ -16,7 +18,7 @@ class VirtualTourRepository:
         self.session.refresh(tour)
         return tour
 
-    def get_by_id(self, tour_id: uuid.UUID) -> Optional[VirtualTour]:
+    def get_by_id(self, tour_id: uuid.UUID) -> VirtualTour | None:
         return self.session.get(VirtualTour, tour_id)
 
     def get_by_property_id(self, property_id: int) -> list[VirtualTour]:
@@ -27,12 +29,14 @@ class VirtualTourRepository:
         statement = select(VirtualTour).offset(offset).limit(limit)
         return list(self.session.exec(statement).all())
 
-    def update(self, tour_id: uuid.UUID, data: dict) -> Optional[VirtualTour]:
+    def update(self, tour_id: uuid.UUID, data: dict) -> VirtualTour | None:
         tour = self.get_by_id(tour_id)
         if not tour:
             return None
         for key, value in data.items():
-            setattr(tour, key, value)
+            if key in self._MUTABLE_FIELDS:
+                setattr(tour, key, value)
+        tour.updated_at = datetime.now(UTC)
         self.session.add(tour)
         self.session.commit()
         self.session.refresh(tour)

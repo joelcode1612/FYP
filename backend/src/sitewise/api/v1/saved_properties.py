@@ -112,7 +112,7 @@ def save_property(
     )
 
 
-@router.delete("/me/{property_ref}", status_code=204)
+@router.delete("/me/{property_ref}", status_code=204, response_model=None)
 def unsave_own_property(
     property_ref: str,
     session: AppSession,
@@ -150,7 +150,7 @@ def list_saved(
     return FavouriteRepository(session).get_by_user_id(user_id)
 
 
-@router.delete("/{favorite_id}", status_code=204)
+@router.delete("/{favorite_id}", status_code=204, response_model=None)
 def unsave_property(
     favorite_id: uuid.UUID,
     session: AppSession,

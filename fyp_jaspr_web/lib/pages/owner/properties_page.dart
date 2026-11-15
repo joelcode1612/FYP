@@ -168,6 +168,20 @@ class _Content extends StatelessComponent {
           dot: true,
         ),
         if (prop.hasTour) const StatusBadge('360° tour', tone: 'action'),
+        // Management responsibility comes from the backend, which derives it
+        // from a real Agent assignment, the Owner identity or a documented
+        // stewardship policy. An owner seeing "Managed by Agent" here means an
+        // administrator actually assigned one — never a UI default.
+        StatusBadge(
+          prop.managerName == null || prop.managerName!.trim().isEmpty
+              ? prop.managementLabel
+              : '${prop.managementLabel} — ${prop.managerName}',
+          tone: prop.managementLabel.contains('Agent')
+              ? 'action'
+              : prop.managementLabel.contains('SiteWise')
+                  ? 'neutral'
+                  : 'warning',
+        ),
       ]),
     ]),
     div(classes: 'row-actions', [

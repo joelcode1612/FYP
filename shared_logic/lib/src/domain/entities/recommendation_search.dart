@@ -113,11 +113,151 @@ class RecommendationMatch {
       : '$matchedCount of $verifiableCount requirements met';
 }
 
+/// Manager information resolved from existing backend relationships.
+///
+/// The backend derives the manager from a verified Agent assignment, an active
+/// Owner identity or a documented platform-stewardship policy — in that order.
+/// The display label is supplied by the backend so no client keeps its own copy
+/// of the rule, and a property with no valid manager reads "Manager Not
+/// Assigned" instead of borrowing a default name.
+class ListingManagement {
+  final String status;
+
+  /// ``agent`` | ``owner`` | ``platform`` | ``unresolved`` | ``unavailable``.
+  final String type;
+
+  /// Manager display name. Null for platform stewardship and unresolved
+  /// states — those have no person, and none is invented.
+  final String? name;
+
+  /// Backend-supplied display base, e.g. "Managed by Agent".
+  final String? label;
+
+  const ListingManagement({
+    this.status = 'unavailable',
+    this.type = 'unavailable',
+    this.name,
+    this.label,
+  });
+
+  factory ListingManagement.fromJson(Map<String, dynamic> json) =>
+      ListingManagement(
+        status: json['status'] as String? ?? 'unavailable',
+        type: json['type'] as String? ?? json['status'] as String? ?? 'unavailable',
+        name: json['name'] as String? ?? json['manager_name'] as String?,
+        label: json['label'] as String?,
+      );
+
+  /// Fallback label for a payload that predates ``label``. Kept minimal so the
+  /// backend stays the single source of the wording.
+  String get _fallbackLabel {
+    switch (status) {
+      case 'agent_managed':
+        return 'Managed by Agent';
+      case 'owner_managed':
+        return 'Managed by Owner';
+      case 'platform_managed':
+        return 'Managed by SiteWise';
+      case 'unresolved':
+      case 'unassigned':
+        return 'Manager Not Assigned';
+      default:
+        return 'Management unavailable';
+    }
+  }
+
+  String get display {
+    final base = (label ?? _fallbackLabel).trim();
+    final manager = name?.trim() ?? '';
+    if (manager.isEmpty) return base;
+    return '$base — $manager';
+  }
+}
+
 /// One ranked listing: the shared property entity plus its verdict.
+/// One category's conditional resemblance score (0–1) from the Stage-2 model.
+class CategoryResemblance {
+  final String businessType;
+  final double score;
+  final int rank;
+
+  const CategoryResemblance({
+    required this.businessType,
+    required this.score,
+    required this.rank,
+  });
+
+  factory CategoryResemblance.fromJson(Map<String, dynamic> json) =>
+      CategoryResemblance(
+        businessType: '${json['business_type'] ?? ''}',
+        score: (json['score'] as num?)?.toDouble() ?? 0,
+        rank: (json['rank'] as num?)?.toInt() ?? 0,
+      );
+}
+
+/// Stage-2 evidence attached to one ranked property.
+///
+/// The score is a conditional resemblance among four observed F&B categories
+/// — never a success probability, and never blended into the PU score or the
+/// preference fit.
+class CategoryEvidence {
+  final bool available;
+  final String? modelVersion;
+  final List<CategoryResemblance> rankings;
+  final String? topCategory;
+  final double? topScore;
+
+  /// The selected business type's own position, when the search carried one.
+  final CategoryResemblance? selectedCategory;
+  final String? reliability;
+  final String? note;
+  final String? reason;
+
+  const CategoryEvidence({
+    required this.available,
+    this.modelVersion,
+    this.rankings = const [],
+    this.topCategory,
+    this.topScore,
+    this.selectedCategory,
+    this.reliability,
+    this.note,
+    this.reason,
+  });
+
+  factory CategoryEvidence.fromJson(Map<String, dynamic> json) {
+    final selected = json['selected_category'];
+    return CategoryEvidence(
+      available: json['available'] == true,
+      modelVersion: json['model_version']?.toString(),
+      rankings: [
+        for (final r in (json['rankings'] as List? ?? const []))
+          if (r is Map<String, dynamic>) CategoryResemblance.fromJson(r),
+      ],
+      topCategory: json['top_category']?.toString(),
+      topScore: (json['top_score'] as num?)?.toDouble(),
+      selectedCategory: selected is Map<String, dynamic>
+          ? CategoryResemblance(
+              businessType: '${selected['business_type'] ?? ''}',
+              score: (selected['score'] as num?)?.toDouble() ?? 0,
+              rank: (selected['rank'] as num?)?.toInt() ?? 0,
+            )
+          : null,
+      reliability: json['reliability']?.toString(),
+      note: json['note']?.toString(),
+      reason: json['reason']?.toString(),
+    );
+  }
+
+  /// True when the backend flags weak discrimination (research-only model).
+  bool get isWeak => (reliability ?? '').contains('weak');
+}
+
 class RankedProperty {
   final CommercialProperty property;
   final String source;
   final RecommendationMatch match;
+  final ListingManagement management;
 
   /// Workbook P-vs-U association index (0–100). A relative research ranking
   /// input, never a probability of business success.
@@ -130,14 +270,31 @@ class RankedProperty {
   final double? puScore;
   final bool? puAvailable;
 
+  /// Where the ranking PU score came from: `stored_catalogue` (the original
+  /// model's stored output) or `expanded64_live_inference` (the 2026-11-15
+  /// expanded model's live prediction). Null on older payloads.
+  final String? puScoreSource;
+
+  /// The model version behind [puScore] when it was computed live.
+  final String? puModelVersion;
+
+  /// Stage-2 business-type resemblance, when the two-stage research variant
+  /// produced it. Deliberately separate from [puScore] and from the
+  /// requirement-fit fields: three scores, three meanings.
+  final CategoryEvidence? category;
+
   const RankedProperty({
     required this.property,
     required this.match,
+    this.management = const ListingManagement(),
     this.source = 'catalog',
     this.catalogSuitabilityScore,
     this.suitabilityAvailable = false,
     this.puScore,
     this.puAvailable,
+    this.puScoreSource,
+    this.puModelVersion,
+    this.category,
   });
 
   String get id => property.id;
@@ -147,12 +304,22 @@ class RankedProperty {
     final suitability = (research['catalog_suitability_score'] as num?)
         ?.toDouble();
     return RankedProperty(
+      management: ListingManagement.fromJson(
+        json['management'] is Map<String, dynamic>
+            ? json['management'] as Map<String, dynamic>
+            : const {},
+      ),
       source: json['property_source'] as String? ?? 'catalog',
       catalogSuitabilityScore: suitability,
       suitabilityAvailable:
           research['suitability_available'] == true && suitability != null,
       puScore: (research['pu_score'] as num?)?.toDouble(),
       puAvailable: research['pu_available'] as bool?,
+      puScoreSource: research['pu_score_source']?.toString(),
+      puModelVersion: research['pu_model_version']?.toString(),
+      category: json['category'] is Map<String, dynamic>
+          ? CategoryEvidence.fromJson(json['category'] as Map<String, dynamic>)
+          : null,
       match: RecommendationMatch.fromJson(
         json['recommendation'] as Map<String, dynamic>? ?? const {},
       ),
@@ -208,9 +375,24 @@ class RecommendationModelStatus {
 
   /// Shown next to the ranking, so a client can never present a
   /// requirement-fit ordering as a model score.
-  String get label => available
-      ? 'Experimental preference match${version == null ? '' : ' · $version'}'
-      : 'Requirement-fit ordering (model score unavailable)';
+  ///
+  /// The 2026-11-15 expanded 64-feature variant reports
+  /// `live_pu_association_requirement_fit_ordering`: the ranking is still
+  /// requirement-fit, but eligibility and tie-breaks come from LIVE PU
+  /// inference, so the label must say "research association", never
+  /// "preference match".
+  static const livePuScoreType =
+      'live_pu_association_requirement_fit_ordering';
+
+  bool get isLivePuAssociation => scoreType == livePuScoreType;
+
+  String get label => switch (scoreType) {
+        livePuScoreType when available =>
+          'Live PU research association${version == null ? '' : ' · $version'}',
+        _ when available =>
+          'Experimental preference match${version == null ? '' : ' · $version'}',
+        _ => 'Requirement-fit ordering (model score unavailable)',
+      };
 }
 
 /// One page of ranked results.
@@ -259,6 +441,7 @@ class RecommendationSearchRequest {
   final String? propertyType;
   final List<String> layoutPreferences;
   final String? query;
+  final bool managedOnly;
   final int pageSize;
   final String? cursor;
 
@@ -280,6 +463,7 @@ class RecommendationSearchRequest {
     this.propertyType,
     this.layoutPreferences = const [],
     this.query,
+    this.managedOnly = false,
     this.pageSize = 20,
     this.cursor,
     this.sort,
@@ -340,6 +524,7 @@ class RecommendationSearchRequest {
       preferredArea == null &&
       propertyType == null &&
       layoutPreferences.isEmpty &&
+      !managedOnly &&
       query == null;
 
   Map<String, dynamic> toJson() => {
@@ -353,6 +538,7 @@ class RecommendationSearchRequest {
     if (propertyType != null) 'property_type': propertyType,
     if (layoutPreferences.isNotEmpty) 'layout_preferences': layoutPreferences,
     if (query != null) 'query': query,
+    'managed_only': managedOnly,
     'page_size': pageSize,
     if (cursor != null) 'cursor': cursor,
     if (sort != null) 'sort': sort,
@@ -372,6 +558,7 @@ class RecommendationSearchRequest {
     int? pageSize,
     String? cursor,
     String? sort,
+    bool? managedOnly,
     bool clearCursor = false,
     bool clearBusinessType = false,
     bool clearState = false,
@@ -398,6 +585,7 @@ class RecommendationSearchRequest {
     pageSize: pageSize ?? this.pageSize,
     cursor: clearCursor ? null : (cursor ?? this.cursor),
     sort: sort ?? this.sort,
+    managedOnly: managedOnly ?? this.managedOnly,
   );
 }
 

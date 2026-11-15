@@ -1,8 +1,10 @@
 {
-  "measured_at": "2026-11-12T02:14:10+0800",
+  "measured_at": "2026-11-16T01:24:12+0800",
   "property_id": "MD-00510",
-  "model_version": "sitewise-pu-pvu-1.0",
-  "first_call_seconds": 0.061,
-  "cached_call_seconds": 0.0145,
+  "model_name": "sitewise_pu_64_expanded",
+  "model_version": "expanded_age_residential_64",
+  "artifact_sha256": "0371f4e4ef20a0e264cc4fa7b47f770e7fae23016787fc0d8f7bd42d3541676f",
+  "first_call_seconds": 0.1764,
+  "cached_call_seconds": 0.0432,
   "note": "First call = live Permutation SHAP over 47 features with the real 25-row background; cached call = process-wide verified-SHAP cache hit. Results are durable per user via recommendation_result.shap."
 }

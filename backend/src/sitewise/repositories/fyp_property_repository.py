@@ -3,8 +3,9 @@
 Every query is parameterized (bound values only — no string interpolation of
 user input) and read-only. The engine is the main application session
 (``sitewise.db.session.get_db``): the live database hosts ``public``,
-``fyp``, ``fnb_a``, ``demand_gen``, ``fyp_features`` and ``sitewise_app``
-together (verified 2026-11-09).
+``fyp``, ``fnb_a``, ``demand_gen`` and ``fyp_features`` together; all
+commercial-property records (research + operational) live in
+``fyp.rental_properties`` as the single source of truth.
 
 Gating rule (task §6C): entrepreneur-facing reads expose ONLY rows with
 ``verification_status = 'approved' AND is_published``. The 955 pending
@@ -357,6 +358,68 @@ class FypPropertyRepository:
             {"pid": property_id},
         ).mappings().all()
         return [dict(r) for r in rows]
+
+    def get_catalogue_photos(self, catalogue_id: str) -> list[dict]:
+        """Every display photo of one RESEARCH catalogue property.
+
+        A detail page addresses the catalogue with a text id (``MD-01755``)
+        while ``fyp.property_photos`` is keyed by the numeric operational id.
+        The verified chain is::
+
+            fyp.rental_properties.catalogue_id
+              -> fyp.property_subject_links.sitewise_property_id
+              -> fyp.property_subject_links.property_id
+              -> fyp.property_photos.property_id
+
+        The 955 imported rows also live in ``fyp.rental_properties`` with
+        ``listing_id``/``catalogue_id`` = canonical id; that mapping is used as
+        a fallback when a verified link is absent. Exactly ONE numeric target
+        is chosen (verified link first, then canonical row, lowest id wins), so
+        photos of different properties can never be combined. No publication
+        filter is applied: these are catalogue research images, not the
+        entrepreneur-facing published-listing gate.
+
+        Ordering is deterministic: primary first, then photo id ascending.
+        Blank urls and duplicate urls are dropped; the returned shape matches
+        :meth:`get_photos` so existing consumers need no new decoder.
+        """
+        rows = self.session.execute(
+            text(
+                """
+                WITH candidates AS (
+                    SELECT l.property_id, 0 AS priority
+                    FROM fyp.property_subject_links l
+                    WHERE l.sitewise_property_id = :pid
+                      AND l.match_verified IS TRUE
+                    UNION ALL
+                    SELECT p.id, 1 AS priority
+                    FROM fyp.rental_properties p
+                    WHERE (p.listing_id = :pid OR p.catalogue_id = :pid)
+                      AND p.owner_id IS NULL
+                ), target AS (
+                    SELECT property_id FROM candidates
+                    ORDER BY priority, property_id
+                    LIMIT 1
+                )
+                SELECT ph.id, ph.url, ph.caption, ph.is_primary, ph.created_at
+                FROM fyp.property_photos ph
+                JOIN target t ON t.property_id = ph.property_id
+                WHERE ph.url IS NOT NULL AND btrim(ph.url) <> ''
+                ORDER BY ph.is_primary DESC NULLS LAST, ph.id ASC
+                """
+            ),
+            {"pid": catalogue_id},
+        ).mappings().all()
+
+        photos: list[dict] = []
+        seen: set[str] = set()
+        for row in rows:
+            url = str(row["url"]).strip()
+            if url in seen:
+                continue
+            seen.add(url)
+            photos.append(dict(row) | {"url": url})
+        return photos
 
     def get_listing_sources(self, property_id: int) -> list[dict]:
         """Where the listing was imported from (platform + observed state)."""
@@ -918,7 +981,13 @@ class FypPropertyRepository:
                 """
             ),
             {
-                "owner_user_id": str(owner_user_id),
+                # An Agent-created record is genuinely unowned (scoped through
+                # `agent_listing_assignment` instead). Binding `str(None)` wrote
+                # the literal 'None' into a UUID column, so the same NULL rule
+                # as `create_owner_draft` applies here.
+                "owner_user_id": (
+                    str(owner_user_id) if owner_user_id is not None else None
+                ),
                 "name": payload["name"],
                 "property_type": payload.get("property_type") or "Shop",
                 "description": payload.get("description"),
@@ -953,7 +1022,7 @@ class FypPropertyRepository:
                 SELECT id, name, address, city, state, postcode, latitude,
                        longitude, rental_price, size_sqft, property_type,
                        availability, verification_status, is_published,
-                       address_validation_status, created_at
+                       address_validation_status, owner_user_id, created_at
                 FROM fyp.rental_properties
                 WHERE owner_user_id = :owner
                 ORDER BY created_at DESC
@@ -1024,6 +1093,13 @@ class FypPropertyRepository:
         is the point. Drafts never enter the admin queue: ``is_published``
         stays false and the verification workflow only starts on an explicit
         submit.
+
+        ``owner_user_id`` may be ``None``. An Agent creates a record on behalf
+        of a provider, so the row is left genuinely unowned and scoped to the
+        agent through an ``agent_listing_assignment`` row instead. Binding the
+        value as ``str(None)`` wrote the literal ``'None'`` into a UUID column
+        and failed the insert — the agent creation path could not complete at
+        all. A missing owner must be SQL NULL, never a string.
         """
         from sitewise.core.exceptions import ConflictError
 
@@ -1053,7 +1129,9 @@ class FypPropertyRepository:
                 """
             ),
             {
-                "owner_user_id": str(owner_user_id),
+                "owner_user_id": (
+                    str(owner_user_id) if owner_user_id is not None else None
+                ),
                 "name": name[:160],
                 "property_type": (payload.get("property_type") or "").strip()[:60],
                 "description": payload.get("description"),
@@ -1308,7 +1386,8 @@ class FypPropertyRepository:
 
         * numeric string → ``fyp.rental_properties.id`` (operational table)
         * workbook id (``EP-xxxxx`` / ``MD-xxxxx``) →
-          ``sitewise_app.properties.id`` (imported catalogue)
+          ``fyp.catalogue_properties`` (research attributes of the same
+          canonical ``fyp.rental_properties`` row)
 
         Both branches return the same coordinate/price shape so downstream
         spatial queries are universe-agnostic.
@@ -1342,8 +1421,8 @@ class FypPropertyRepository:
                     SELECT id AS property_id, title AS name, property_type,
                            address, city, state, latitude, longitude,
                            rental_rm AS rental_price, size_sqft,
-                           suitability_score, 'sitewise_app' AS source_schema
-                    FROM sitewise_app.properties WHERE id = :ref
+                           suitability_score, 'fyp_catalogue' AS source_schema
+                    FROM fyp.catalogue_properties WHERE id = :ref
                     """
                 ),
                 {"ref": ref},

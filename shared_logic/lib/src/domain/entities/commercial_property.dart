@@ -30,6 +30,11 @@ class CommercialProperty {
   final VerificationStatus verification;
   final double suitabilityScore; // 0–100
   final String ownerId;
+
+  /// Derived by the backend from an operational listing + owner/agent links.
+  /// A catalogue record without a proven manager stays unassigned.
+  final String managementLabel;
+  final String? managerName;
   final bool hasTour;
   final String? imageUrl;
 
@@ -79,6 +84,49 @@ class CommercialProperty {
   /// row has no computed psf; use [rentalPerSqft] only as a client-side
   /// fallback, clearly derived from rental and size.
   final double? psf;
+
+  /// --- Catalogue `listing_details` enrichment -------------------------------
+  ///
+  /// Sourced additively from `GET /api/v1/catalog/properties/{id}` ->
+  /// `listing_details`: recorded research subject features, enriched by the
+  /// operational row only when a verified, approved AND published listing
+  /// matches. Every field is null when the source does not record it; a null
+  /// is "not recorded", never a silent zero or false.
+
+  /// Ground-floor / upper-level position recorded for the unit
+  /// (`unit_position`), null when unrecorded.
+  final String? unitPosition;
+
+  /// Direction the unit faces (`facing_direction`), null when unrecorded.
+  final String? facingDirection;
+
+  /// Shop-front width in feet (`frontage_ft`), null when unrecorded.
+  final double? frontageFt;
+
+  /// Shop depth in feet (`depth_ft`), null when unrecorded.
+  final double? depthFt;
+
+  /// Land area in square feet (`land_area_sqft`), null when unrecorded.
+  final double? landAreaSqft;
+
+  /// Built-up area in square feet (`built_up_sqft`), null when unrecorded.
+  final double? builtUpSqft;
+
+  /// When the listing's availability was last verified
+  /// (`availability_verified_at`), null when never verified.
+  final String? availabilityVerifiedAt;
+
+  /// Research availability state recorded for the source row (e.g.
+  /// `UNKNOWN_NOT_VERIFIED`). Not an availability promise.
+  final String? researchAvailabilityStatus;
+
+  /// Backend data notice carried verbatim for research rows; explains that
+  /// research data is not proof of current availability or licensing.
+  final String? listingDataNotice;
+
+  /// True when the operational row that enriched this listing is a verified,
+  /// approved AND published match. False for pure research enrichment.
+  final bool verifiedListing;
 
   /// True when a verified research subject link exists
   /// (`fyp.property_subject_links.match_verified`). False is the honest
@@ -135,6 +183,8 @@ class CommercialProperty {
     required this.suitabilityScore,
     this.hasSuitabilityScore = true,
     required this.ownerId,
+    this.managementLabel = 'Management not assigned',
+    this.managerName,
     required this.hasTour,
     this.imageUrl,
     this.sourceUrl,
@@ -150,6 +200,16 @@ class CommercialProperty {
     this.hasParking,
     this.isCornerLot,
     this.isFreehold,
+    this.unitPosition,
+    this.facingDirection,
+    this.frontageFt,
+    this.depthFt,
+    this.landAreaSqft,
+    this.builtUpSqft,
+    this.availabilityVerifiedAt,
+    this.researchAvailabilityStatus,
+    this.listingDataNotice,
+    this.verifiedListing = false,
     this.psf,
     this.hasResearchLink = false,
     this.imageUrls = const [],
@@ -207,6 +267,8 @@ class CommercialProperty {
     suitabilityScore: suitabilityScore,
     hasSuitabilityScore: hasSuitabilityScore,
     ownerId: ownerId,
+    managementLabel: managementLabel,
+    managerName: managerName,
     hasTour: hasTour,
     imageUrl: imageUrl ?? this.imageUrl,
     sourceUrl: sourceUrl,
@@ -222,6 +284,16 @@ class CommercialProperty {
     hasParking: hasParking,
     isCornerLot: isCornerLot,
     isFreehold: isFreehold,
+    unitPosition: unitPosition,
+    facingDirection: facingDirection,
+    frontageFt: frontageFt,
+    depthFt: depthFt,
+    landAreaSqft: landAreaSqft,
+    builtUpSqft: builtUpSqft,
+    availabilityVerifiedAt: availabilityVerifiedAt,
+    researchAvailabilityStatus: researchAvailabilityStatus,
+    listingDataNotice: listingDataNotice,
+    verifiedListing: verifiedListing,
     psf: psf,
     hasResearchLink: hasResearchLink,
     imageUrls: imageUrls ?? this.imageUrls,

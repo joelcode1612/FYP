@@ -83,7 +83,7 @@ def resolve_variant(settings: Settings | None = None) -> VariantInfo:
     """Describe the ACTIVE Layer-1 variant (loads the artifact once)."""
     variant = (settings or Settings()).pu_model_variant
     if variant == "legacy":
-        loaded = ModelLoader().load(LEGACY_MODEL_NAME)
+        loaded = ModelLoader().load_cached(LEGACY_MODEL_NAME)
         return VariantInfo(
             key="legacy",
             layer1_model=LEGACY_MODEL_NAME,
@@ -93,7 +93,8 @@ def resolve_variant(settings: Settings | None = None) -> VariantInfo:
             research_only=True,
             production_ready=None,
             score_source=(
-                "sitewise_app.properties.source_data.research_p_association_score "
+                "fyp.rental_properties.catalogue_source_data."
+                "research_p_association_score "
                 "(stored output of the original PU model on the 47-feature baseline)"
             ),
             score_meaning=(
@@ -101,7 +102,47 @@ def resolve_variant(settings: Settings | None = None) -> VariantInfo:
                 "class; NOT a probability of commercial success."
             ),
         )
-    loaded = ModelLoader().load(EXPERIMENTAL_MODEL_NAME)
+    if variant == "expanded64":
+        from sitewise.ml.pu_expanded import EXPANDED_MODEL_NAME
+
+        loaded = ModelLoader().load_cached(EXPANDED_MODEL_NAME)
+        meta = loaded.meta
+        return VariantInfo(
+            key="expanded64",
+            layer1_model=EXPANDED_MODEL_NAME,
+            artifact=meta.get("artifact_filename", "sitewise_pu_64_expanded.joblib"),
+            version=meta.get("model_variant"),
+            feature_count=len(loaded.feature_names),
+            research_only=True,
+            production_ready=bool(meta.get("production_ready", False)),
+            score_source=(
+                "live inference: exact 64-feature vector resolved from the analytics "
+                "database + committed training-data bridge, scored by "
+                "sitewise_pu_64_expanded.joblib (sha256 "
+                "0371f4e4ef20a0e264cc4fa7b47f770e7fae23016787fc0d8f7bd42d3541676f)"
+            ),
+            score_meaning=(
+                "Uncalibrated bagged-LogisticRegression P-vs-U association index "
+                "(spatial CV AUROC 0.699824 on the 1,796-row research sample); NOT a "
+                "probability of commercial success."
+            ),
+            notes=(
+                "Expanded research model: production_ready=false per its model card.",
+                "The 16 population-age/residential measurements exist only in the "
+                "committed training data; properties without a complete "
+                "expanded-bridge record (including every newly submitted listing) "
+                "report their missing features and are excluded — never imputed, "
+                "never borrowed from another property.",
+                "WorldPop age-raster coverage is incomplete for some locations "
+                "(1,067 COMPLETED / 590 PARTIAL_COVERAGE / 139 LOW_COVERAGE on the "
+                "training sample); the status travels with every response.",
+                "Eligibility-threshold review (2026-11-15): the documented strictly-"
+                "greater-than-50 gate on the 0-100 scale retains 47.7% of the "
+                "model's own training rows (median 47.8), comparable to the legacy "
+                "stored-score scale, so the threshold is unchanged.",
+            ),
+        )
+    loaded = ModelLoader().load_cached(EXPERIMENTAL_MODEL_NAME)
     meta = loaded.meta
     return VariantInfo(
         key="experimental47",

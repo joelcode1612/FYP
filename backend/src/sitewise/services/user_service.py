@@ -31,6 +31,12 @@ class UserService:
     def delete_user(self, user_id: uuid.UUID) -> bool:
         return self.repo.delete(user_id)
 
+    def listing_counts_by_owner(self) -> dict[uuid.UUID, int]:
+        return self.repo.listing_counts_by_owner()
+
+    def listing_count_for(self, owner_user_id: uuid.UUID) -> int:
+        return self.repo.listing_count_for(owner_user_id)
+
     # ------------------------------------------------------------------
     # Supabase-backed identity handling
     # ------------------------------------------------------------------

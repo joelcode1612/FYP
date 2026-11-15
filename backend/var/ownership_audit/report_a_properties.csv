@@ -1,0 +1,1188 @@
+property_id,property_title,owner_uuid,agent_id,management_type,assignment_status,validation_result,legacy_owner_id,owner_email,owner_account_status,verification_status,is_published,catalogue_ref,provenance,created_at
+89,USJ 9,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,501493880,demo_seed,2026-09-20 14:49:59.919433+08:00
+90,Caledonia Avenue Ijok Bestari Jaya Kuala Selangor,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,501578394,demo_seed,2026-09-20 14:49:59.919433+08:00
+91,Caledonia Bestari Jaya Ijok Puncak Alam Shoplot,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,108180948,demo_seed,2026-09-20 14:49:59.919433+08:00
+92,1.5 Storey [20' x 65'] Enbloc Shop for RENT @ Jalan Puteri 5/16,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,501461706,demo_seed,2026-09-20 14:49:59.919433+08:00
+93,"SS15/4C Enbloc Shop for RENT, Available NOW",,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,501518973,demo_seed,2026-09-20 14:49:59.919433+08:00
+94,22' x 75' Ground Floor Shop for RENT @ Seksyen 7 Shah Alam,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,501375407,demo_seed,2026-09-20 14:49:59.919433+08:00
+95,Bandar Puteri Puchong,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,501578259,demo_seed,2026-09-20 14:49:59.919433+08:00
+96,Dwitasik Ground Floor Shop Facing Main Road Bandar Sri Permaisuri,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,501578225,demo_seed,2026-09-20 14:49:59.919433+08:00
+97,Sunway Wellesley Uptown 2,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,500940657,demo_seed,2026-09-20 14:49:59.919433+08:00
+98,2 RIO XCHANGE / IOI RIO CITY,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,200194983,demo_seed,2026-09-20 14:49:59.919433+08:00
+99,BANDAR PUCHONG JAYA,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,501504653,demo_seed,2026-09-20 14:49:59.919433+08:00
+100,Bandar Puteri Puchong,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,501503553,demo_seed,2026-09-20 14:49:59.919433+08:00
+101,Setia Prima Shoplot,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,501577744,demo_seed,2026-09-20 14:49:59.919433+08:00
+102,Sunsuria 7th Avenue Setia Dagang,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,501267107,demo_seed,2026-09-20 14:49:59.919433+08:00
+103,Wisma RKT,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,200499280,demo_seed,2026-09-20 14:49:59.919433+08:00
+104,Cyber 1 / Setia Eco Glades Shop,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,501327594,demo_seed,2026-09-20 14:49:59.919433+08:00
+105,"Village Square, Bandar Gamuda Gardens",,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,501534656,demo_seed,2026-09-20 14:49:59.919433+08:00
+106,Rasah Prima,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,501576855,demo_seed,2026-09-20 14:49:59.919433+08:00
+107,Reko Sentral,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,501459654,demo_seed,2026-09-20 14:49:59.919433+08:00
+108,Taman Kajang Utama,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,501468391,demo_seed,2026-09-20 14:49:59.919433+08:00
+109,Corner Shop Bandar Puteri Puchong,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,501037611,demo_seed,2026-09-20 14:49:59.919433+08:00
+110,The Courtyard Beach Street,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,501478127,demo_seed,2026-09-20 14:49:59.919433+08:00
+111,Oasis Square @ Oasis Ara Damansara,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,501484096,demo_seed,2026-09-20 14:49:59.919433+08:00
+112,SS15,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,501518047,demo_seed,2026-09-20 14:49:59.919433+08:00
+113,Jalan Petaling / Jalan Sultan Chinatown,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,200459369,demo_seed,2026-09-20 14:49:59.919433+08:00
+114,"Plaza Arkadia (Shops, Offices, Sohos)",,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,501058922,demo_seed,2026-09-20 14:49:59.919433+08:00
+115,Offices @ Tropicana Avenue,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,501359839,demo_seed,2026-09-20 14:49:59.919433+08:00
+116,Desa Latania,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,501565302,demo_seed,2026-09-20 14:49:59.919433+08:00
+117,Bandar Serenia Corak / Kota Warisan / Arena X Change Warisan Putri,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,200211214,demo_seed,2026-09-20 14:49:59.919433+08:00
+118,Bandar Menjalara,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,501477346,demo_seed,2026-09-20 14:49:59.919433+08:00
+119,Corak Bandar Serenia City,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,108478809,demo_seed,2026-09-20 14:49:59.919433+08:00
+120,Taman Menjalara,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,501477090,demo_seed,2026-09-20 14:49:59.919433+08:00
+121,Adjoining End Lot Ground Floor TTDI,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,501565530,demo_seed,2026-09-20 14:49:59.919433+08:00
+122,Corak Bandar Serenia City,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,108497713,demo_seed,2026-09-20 14:49:59.919433+08:00
+123,Skyloft Avenue Bandar Puchong Jaya,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,501507925,demo_seed,2026-09-20 14:49:59.919433+08:00
+124,Kuchai Lama,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,501564621,demo_seed,2026-09-20 14:49:59.919433+08:00
+125,Prima Sri Gombak,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,500379738,demo_seed,2026-09-20 14:49:59.919433+08:00
+126,Prima Sri Gombak Ground Floor,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,101812671,demo_seed,2026-09-20 14:49:59.919433+08:00
+127,Uptown 8,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,500931888,demo_seed,2026-09-20 14:49:59.919433+08:00
+128,Setia Taipan 1,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,501562581,demo_seed,2026-09-20 14:49:59.919433+08:00
+129,Solaris Mont Kiara,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,501519323,demo_seed,2026-09-20 14:49:59.919433+08:00
+130,Setia Alam Precinct 7 / Setia Indah,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,200540459,demo_seed,2026-09-20 14:49:59.919433+08:00
+131,K Commercial Camellia Bukit Beruntung,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,501518049,demo_seed,2026-09-20 14:49:59.919433+08:00
+132,Damansara Utama,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,501560742,demo_seed,2026-09-20 14:49:59.919433+08:00
+133,Cheras Traders Square,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,101812382,demo_seed,2026-09-20 14:49:59.919433+08:00
+134,One Square,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,501556197,demo_seed,2026-09-20 14:49:59.919433+08:00
+135,Ground Floor Retail KLCC Jalan Pinang,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,501029169,demo_seed,2026-09-20 14:49:59.919433+08:00
+136,Sendayan Irama Biz,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,500089163,demo_seed,2026-09-20 14:49:59.919433+08:00
+137,TRX Retail Space,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,501396322,demo_seed,2026-09-20 14:49:59.919433+08:00
+138,3 Storey Showroom,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,105596235,demo_seed,2026-09-20 14:49:59.919433+08:00
+139,Prime Area in Sri Petaling,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,108261905,demo_seed,2026-09-20 14:49:59.919433+08:00
+140,Bandar Puteri Puchong,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,501546724,demo_seed,2026-09-20 14:49:59.919433+08:00
+141,Taman Molek,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,108473720,demo_seed,2026-09-20 14:49:59.919433+08:00
+142,First Subang (SS15 Courtyard),,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,501516351,demo_seed,2026-09-20 14:49:59.919433+08:00
+143,Bandar Puteri Puchong Ground Floor Corner Lot,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,501498307,demo_seed,2026-09-20 14:49:59.919433+08:00
+144,2-Storey Shophouse for Rent at Beach Street Georgetown | With Parking,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,501404664,demo_seed,2026-09-20 14:49:59.919433+08:00
+145,3-Storey Shop Office for Rent at Bukit Jambul | Main Road Frontage,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,501394329,demo_seed,2026-09-20 14:49:59.919433+08:00
+146,Ground Floor Shop Lot for Rent at Bayan Lepas | Krystal Point,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,501474211,demo_seed,2026-09-20 14:49:59.919433+08:00
+147,2-Storey Shophouse for Rent at Kimberley Street | Georgetown,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,501388605,demo_seed,2026-09-20 14:49:59.919433+08:00
+148,Double Storey Heritage Shophouse for Rent at Georgetown,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,501344116,demo_seed,2026-09-20 14:49:59.919433+08:00
+149,Office / Retail Space for Rent at The Amarene Sungai Ara | Main Road Frontage,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,501387826,demo_seed,2026-09-20 14:49:59.919433+08:00
+150,[2275 sf] Puchong Bandar Puteri Puchong Ground Floor Shoplot,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,60068244,demo_seed,2026-09-20 14:49:59.919433+08:00
+151,"[Exclusive] Ground Floor Shop, Impian Prisma 2, Impian Prisma 1, Alam Impian",,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,200190411,demo_seed,2026-09-20 14:49:59.919433+08:00
+152,"FACE BUSY MAIN ROAD, Ground Floor Shop, Impian Prisma, Alam Impian",,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,107929709,demo_seed,2026-09-20 14:49:59.919433+08:00
+153,"[ FACE MAIN ROAD ] Ground Floor Shop, Impian Prisma, Shah Alam",,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,500870372,demo_seed,2026-09-20 14:49:59.919433+08:00
+154,"Petaling Street, City Centre, Pudu, KL City Centre",,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,501238997,demo_seed,2026-09-20 14:49:59.919433+08:00
+155,"Jade Hills, Kajang",,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,103628579,demo_seed,2026-09-20 14:49:59.919433+08:00
+156,"Shaftsbury Square, Cyberjaya",,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,108484372,demo_seed,2026-09-20 14:49:59.919433+08:00
+157,Medan Putra Business Centre,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,501138949,demo_seed,2026-09-20 14:49:59.919433+08:00
+158,Bandar Baru Sri Petaling,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,501550533,demo_seed,2026-09-20 14:49:59.919433+08:00
+159,Kepong GI Ground floor Excellent Exposure,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,501193558,demo_seed,2026-09-20 14:49:59.919433+08:00
+160,Corak Serenia City Sepang,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,200428248,demo_seed,2026-09-20 14:49:59.919433+08:00
+161,Bukit Tinggi Bayu Tinggi Klang Jaya Andalas,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,501167206,demo_seed,2026-09-20 14:49:59.919433+08:00
+162,Bandar Puteri Puchong Ground Floor,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,501505637,demo_seed,2026-09-20 14:49:59.919433+08:00
+163,Bandar Puteri Puchong Ground Floor,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,501505280,demo_seed,2026-09-20 14:49:59.919433+08:00
+164,Bandar Puchong Jaya Ground Floor Facing Parking Lot,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,501549382,demo_seed,2026-09-20 14:49:59.919433+08:00
+165,Bangsar Baru Jalan Telawi Corner Ground Floor,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,200206593,demo_seed,2026-09-20 14:49:59.919433+08:00
+166,Puchong 2 Adjoining 22x75 Facing Main Road,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,500911733,demo_seed,2026-09-20 14:49:59.919433+08:00
+167,Puchong Facing Main Road 1.5 Storey High Ceiling,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,500908847,demo_seed,2026-09-20 14:49:59.919433+08:00
+168,"Kota Damansara, Damansara Damai",,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,501425192,demo_seed,2026-09-20 14:49:59.919433+08:00
+169,"Hana Square, Eco Ardence",,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,200434926,demo_seed,2026-09-20 14:49:59.919433+08:00
+170,Varia Shop Offices,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,501430700,demo_seed,2026-09-20 14:49:59.919433+08:00
+171,Taman Cheras Yulek Midah Connaught Kuala Lumpur,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,501448535,demo_seed,2026-09-20 14:49:59.919433+08:00
+172,Dataran Glomac,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,501134386,demo_seed,2026-09-20 14:49:59.919433+08:00
+173,K Commercial Camellia Bukit Beruntung,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,501518081,demo_seed,2026-09-20 14:49:59.919433+08:00
+174,K Commercial Camellia Bukit Beruntung,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,501518071,demo_seed,2026-09-20 14:49:59.919433+08:00
+175,G-Floor Shop Lot Damansara Damai,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,501443954,demo_seed,2026-09-20 14:49:59.919433+08:00
+176,EMHUB,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,500934296,demo_seed,2026-09-20 14:49:59.919433+08:00
+177,Rental Below Market Price,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,501546673,demo_seed,2026-09-20 14:49:59.919433+08:00
+178,Temu @ City of Elmina,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,501281862,demo_seed,2026-09-20 14:49:59.919433+08:00
+179,Kota Damansara Petaling Jaya Sungai Buloh,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,501419305,demo_seed,2026-09-20 14:49:59.919433+08:00
+180,PJ Sea Park Shop To Let,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,501541997,demo_seed,2026-09-20 14:49:59.919433+08:00
+181,"Bandar Sunway, Sunway",,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,501515828,demo_seed,2026-09-20 14:49:59.919433+08:00
+182,Bukit Bintang Jalan Alor Ground Floor Shop Changkat Bukit Bintang,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,501317206,demo_seed,2026-09-20 14:49:59.919433+08:00
+183,"Setia Alam, Eco Ardence, Setia Alam",,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,501010255,demo_seed,2026-09-20 14:49:59.919433+08:00
+184,Bandar Puteri Puchong,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,501544739,demo_seed,2026-09-20 14:49:59.919433+08:00
+185,Bandar Kinrara Seksyen 5,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,501544502,demo_seed,2026-09-20 14:49:59.919433+08:00
+186,"Village Square, Bandar Gamuda Gardens",,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,501543967,demo_seed,2026-09-20 14:49:59.919433+08:00
+187,Kotasas,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,501070882,demo_seed,2026-09-20 14:49:59.919433+08:00
+188,"Tanjung Bungah, attach with private carparks",,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,501480249,demo_seed,2026-09-20 14:49:59.919433+08:00
+189,"EMHUB, Kota Damansara",,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,501543363,demo_seed,2026-09-20 14:49:59.919433+08:00
+190,Setia EcoHill Walk,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,501542983,demo_seed,2026-09-20 14:49:59.919433+08:00
+191,Horizon Hills,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,501542653,demo_seed,2026-09-20 14:49:59.919433+08:00
+192,Mutiara Point Business Park,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,500575977,demo_seed,2026-09-20 14:49:59.919433+08:00
+193,Freehold Commercial Land Batu 9 Cheras,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,501067834,demo_seed,2026-09-20 14:49:59.919433+08:00
+194,Taman Sri Gombak,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,501542104,demo_seed,2026-09-20 14:49:59.919433+08:00
+195,Mont Kiara Solaris Shop,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,501337691,demo_seed,2026-09-20 14:49:59.919433+08:00
+196,Bangsar Baru Jalan Telawi Shop,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,500892204,demo_seed,2026-09-20 14:49:59.919433+08:00
+197,Pavilion Bukit Jalil Shop,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,106547485,demo_seed,2026-09-20 14:49:59.919433+08:00
+198,Pavilion Bukit Jalil Corner Shop,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,104989377,demo_seed,2026-09-20 14:49:59.919433+08:00
+199,Pavilion Bukit Jalil Shop Office,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,103637591,demo_seed,2026-09-20 14:49:59.919433+08:00
+200,St Mary Raja Chulan KLCC Retail,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,104240426,demo_seed,2026-09-20 14:49:59.919433+08:00
+201,Salak South Garden GF Shop,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,501573773,demo_seed,2026-09-20 14:49:59.919433+08:00
+202,Bandar Seri Putra Corner Shop,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,501419521,demo_seed,2026-09-20 14:49:59.919433+08:00
+203,Jade Hills Corner Lot 1st Floor,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,105469388,demo_seed,2026-09-20 14:49:59.919433+08:00
+204,Jade Hills Large Corner Shop,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,106939277,demo_seed,2026-09-20 14:49:59.919433+08:00
+205,Berjaya Times Square Retail,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,101679356,demo_seed,2026-09-20 14:49:59.919433+08:00
+206,Setia Alam 2-Storey High Ceiling Shop,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,501492086,demo_seed,2026-09-20 14:49:59.919433+08:00
+207,3-Storey Whole Block Bandar Puteri Puchong,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,501480781,demo_seed,2026-09-20 14:49:59.919433+08:00
+208,Bandar Puteri Puchong Upper Floor Shop,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,106341441,demo_seed,2026-09-20 14:49:59.919433+08:00
+209,One Puchong Whole Floor Commercial Space,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,501400505,demo_seed,2026-09-20 14:49:59.919433+08:00
+210,Bandar Puteri Puchong First Floor Corner Lot,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,501400275,demo_seed,2026-09-20 14:49:59.919433+08:00
+211,Bandar Puteri Puchong Corner Shop,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,501094387,demo_seed,2026-09-20 14:49:59.919433+08:00
+212,Glomac Lakeside Boulevard Puchong Shop,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,501152491,demo_seed,2026-09-20 14:49:59.919433+08:00
+213,Wisma RKT,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,501578332,demo_seed,2026-09-20 14:49:59.919433+08:00
+214,2 RIO OFFICE PARK / IOI RIO CITY,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,501578276,demo_seed,2026-09-20 14:49:59.919433+08:00
+215,Taman Tun Dr Ismail (TTDI Shop Lot),,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,501415736,demo_seed,2026-09-20 14:49:59.919433+08:00
+216,PFCC Corporate Office Tower,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,200395131,demo_seed,2026-09-20 14:49:59.919433+08:00
+217,Bandar Puteri Puchong Corner Shop Lot,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,501504219,demo_seed,2026-09-20 14:49:59.919433+08:00
+218,Horizon Square / Eco Botanic / Bukit Indah / Sutera Utama,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,501578088,demo_seed,2026-09-20 14:49:59.919433+08:00
+219,BSA Shoplot Kota Kinabalu,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,501377093,demo_seed,2026-09-20 14:49:59.919433+08:00
+220,Ground Floor Shop Kenari Bandar Puchong Jaya,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,501577887,demo_seed,2026-09-20 14:49:59.919433+08:00
+221,Sunway Metro Petaling Jaya,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,501480785,demo_seed,2026-09-20 14:49:59.919433+08:00
+222,Bangsar Baru Retail Office,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,108267103,demo_seed,2026-09-20 14:49:59.919433+08:00
+223,SetiaWalk Puchong,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,501273519,demo_seed,2026-09-20 14:49:59.919433+08:00
+224,Dana 1 Commercial Centre Petaling Jaya,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,501535261,demo_seed,2026-09-20 14:49:59.919433+08:00
+225,Wisma RKT KLCC,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,501520275,demo_seed,2026-09-20 14:49:59.919433+08:00
+226,Taman Melawati Ground Floor Shop,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,501052945,demo_seed,2026-09-20 14:49:59.919433+08:00
+227,Village Square Gamuda Gardens,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,500958106,demo_seed,2026-09-20 14:49:59.919433+08:00
+228,Bandar Menjalara Shop Lot,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,501417181,demo_seed,2026-09-20 14:49:59.919433+08:00
+229,Taman Sri Tebrau Shop Lot,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,501571425,demo_seed,2026-09-20 14:49:59.919433+08:00
+230,Equine Park Commercial Centre,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,200192609,demo_seed,2026-09-20 14:49:59.919433+08:00
+231,Bandar Utama Shop Lot,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,501415556,demo_seed,2026-09-20 14:49:59.919433+08:00
+232,Prime Shoplot Bandar Puteri Puchong,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,501094452,demo_seed,2026-09-20 14:49:59.919433+08:00
+233,Glomac Lakeside Boulevard Shoplot,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,501329099,demo_seed,2026-09-20 14:49:59.919433+08:00
+234,KL Chinatown 4-Storey Shop Building,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,108326455,demo_seed,2026-09-20 14:49:59.919433+08:00
+235,Taman Cheras Shop Office,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,501570146,demo_seed,2026-09-20 14:49:59.919433+08:00
+236,SS2 Commercial Terrace Shop,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,501123542,demo_seed,2026-09-20 14:49:59.919433+08:00
+237,Jalan Sultan Ismail Retail Office,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,501569765,demo_seed,2026-09-20 14:49:59.919433+08:00
+238,2-Storey Shophouse at Chowrasta Market Area,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,501343163,demo_seed,2026-09-20 14:49:59.919433+08:00
+239,Office Lot Golden Triangle 2,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,501458903,demo_seed,2026-09-20 14:49:59.919433+08:00
+240,Shop Lot SS2 Petaling Jaya,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,501569402,demo_seed,2026-09-20 14:49:59.919433+08:00
+241,Shop Office TTDI,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,108504709,demo_seed,2026-09-20 14:49:59.919433+08:00
+242,Shop Lot Bukit Bintang KL City Centre,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,103807084,demo_seed,2026-09-20 14:49:59.919433+08:00
+243,Bandar Puteri Puchong Shop,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,501221576,demo_seed,2026-09-20 14:49:59.919433+08:00
+244,Suria Industrial Park Sepang Shop Office,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,501300754,demo_seed,2026-09-20 14:49:59.919433+08:00
+245,Bukit Jalil Link 2 Shop Office,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,501455115,demo_seed,2026-09-20 14:49:59.919433+08:00
+246,4 Adjoining 4-Storey Shop Lot KL City,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,501386313,demo_seed,2026-09-20 14:49:59.919433+08:00
+247,Pandan Indah Ampang Shop,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,500558408,demo_seed,2026-09-20 14:49:59.919433+08:00
+248,Bandar Puteri Puchong Spacious Ground Floor,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,501398146,demo_seed,2026-09-20 14:49:59.919433+08:00
+249,Temu 2 City of Elmina Shop,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,501557309,demo_seed,2026-09-20 14:49:59.919433+08:00
+250,Taiipan 2 @ Ara Damansara,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,501073311,demo_seed,2026-09-20 14:49:59.919433+08:00
+251,2 Storey Shophouse Off Jalan Macalister,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,501566916,demo_seed,2026-09-20 14:49:59.919433+08:00
+252,Bandar Puteri Puchong Ground Floor Shop,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,501431145,demo_seed,2026-09-20 14:49:59.919433+08:00
+253,Eco Majestic Commercial Cluster,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,500621950,demo_seed,2026-09-20 14:49:59.919433+08:00
+254,Bangsar Ground Floor Shop Jalan Telawi,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,108294732,demo_seed,2026-09-20 14:49:59.919433+08:00
+255,KL City Centre Shop Lot,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,501279186,demo_seed,2026-09-20 14:49:59.919433+08:00
+256,Menara Mutiara Bangsar,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,501051476,demo_seed,2026-09-20 14:49:59.919433+08:00
+257,Jalan Klang Lama Shop Office,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,108412827,demo_seed,2026-09-20 14:49:59.919433+08:00
+258,Old Klang Road Shop Office,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,106920648,demo_seed,2026-09-20 14:49:59.919433+08:00
+259,Old Klang Road Large Shop Office,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,105506836,demo_seed,2026-09-20 14:49:59.919433+08:00
+260,Bandar Dato Onn Shop Lot,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,501565617,demo_seed,2026-09-20 14:49:59.919433+08:00
+261,Bandar Dato Onn Shop Unit,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,501565593,demo_seed,2026-09-20 14:49:59.919433+08:00
+262,Seksyen 13 Petaling Jaya Shop,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,501122274,demo_seed,2026-09-20 14:49:59.919433+08:00
+263,Bandar Puteri Puchong Main Road Shop,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,501449098,demo_seed,2026-09-20 14:49:59.919433+08:00
+264,TTDI Corner Lot Shop,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,501565286,demo_seed,2026-09-20 14:49:59.919433+08:00
+265,Bandar Puteri Klang Shop,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,501387494,demo_seed,2026-09-20 14:49:59.919433+08:00
+266,Kenwingston Business Centre Cyberjaya,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,103752086,demo_seed,2026-09-20 14:49:59.919433+08:00
+267,Austin Crest Shop Unit,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,501564387,demo_seed,2026-09-20 14:49:59.919433+08:00
+268,Austin V Square,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,501564308,demo_seed,2026-09-20 14:49:59.919433+08:00
+269,Vervo City Bandar Indahpura Kulai,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,501564261,demo_seed,2026-09-20 14:49:59.919433+08:00
+270,Sungei Wang Plaza KL City Centre,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,501563538,demo_seed,2026-09-20 14:49:59.919433+08:00
+271,SS2 Petaling Jaya Shop,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,102599303,demo_seed,2026-09-20 14:49:59.919433+08:00
+272,Taman Kota Laksamana Jaya Shop,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,501562887,demo_seed,2026-09-20 14:49:59.919433+08:00
+273,Hot Zone Ground Floor Shop Jalan Berangan,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,104190023,demo_seed,2026-09-20 14:49:59.919433+08:00
+274,Mall for Wellness Gym Snooker Entertainment KLCC,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,500697997,demo_seed,2026-09-20 14:49:59.919433+08:00
+275,Ground Floor Fully Furnished Resto Bar near KLCC,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,501080025,demo_seed,2026-09-20 14:49:59.919433+08:00
+276,Busy Road High Ceiling Sports Gym Wellness Bandar Utama,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,501446722,demo_seed,2026-09-20 14:49:59.919433+08:00
+277,Bandar Rimbayu Shop Office,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,501214710,demo_seed,2026-09-20 14:49:59.919433+08:00
+278,Laman Rimbunan Kepong Shop,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,501456231,demo_seed,2026-09-20 14:49:59.919433+08:00
+279,Bandar Menjalara Shop,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,107882384,demo_seed,2026-09-20 14:49:59.919433+08:00
+280,Pusat Bandar Puchong Shop,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,501562324,demo_seed,2026-09-20 14:49:59.919433+08:00
+281,Subang 2 Shop,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,501495918,demo_seed,2026-09-20 14:49:59.919433+08:00
+282,2 Sty Commercial Terrace House SS2,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,501393045,demo_seed,2026-09-20 14:49:59.919433+08:00
+283,Ukay Boulevard Shop,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,500973623,demo_seed,2026-09-20 14:49:59.919433+08:00
+284,PJS 2 Taman Sri Medan Shop,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,501470077,demo_seed,2026-09-20 14:49:59.919433+08:00
+285,Bandar Baru Bangi Shop,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,501552617,demo_seed,2026-09-20 14:49:59.919433+08:00
+286,Bandar Seri Putra Shop Office,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,500850213,demo_seed,2026-09-20 14:49:59.919433+08:00
+287,Seksyen 22 Shah Alam Shop,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,501289188,demo_seed,2026-09-20 14:49:59.919433+08:00
+288,Saujana Perdana Sungai Buloh Shop,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,501415336,demo_seed,2026-09-20 14:49:59.919433+08:00
+289,Bandar Puteri Puchong Shop Lot,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,101649242,demo_seed,2026-09-20 14:49:59.919433+08:00
+290,Taman Sri Gombak Batu Caves Shop,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,501559800,demo_seed,2026-09-20 14:49:59.919433+08:00
+291,25th Floor Rooftop Retail KLCC,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,501422771,demo_seed,2026-09-20 14:49:59.919433+08:00
+292,Food Court Centre KL City Centre,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,501446072,demo_seed,2026-09-20 14:49:59.919433+08:00
+293,Retail Unit Next to Sultan Ismail,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,501525740,demo_seed,2026-09-20 14:49:59.919433+08:00
+294,Taman Damai Utama Puchong Shop,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,501295367,demo_seed,2026-09-20 14:49:59.919433+08:00
+295,Taipan USJ 10 Intermediate Shoplot,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,107055112,demo_seed,2026-09-20 14:49:59.919433+08:00
+296,Kuchai Lama Shop Jalan Kuchai Maju,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,501557462,demo_seed,2026-09-20 14:49:59.919433+08:00
+297,Bandar Puteri Puchong Shop Office,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,200534693,demo_seed,2026-09-20 14:49:59.919433+08:00
+298,High Ceiling Large Retail Space TRX,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,501413884,demo_seed,2026-09-20 14:49:59.919433+08:00
+299,Ground Floor Corner Shop Bandar Seri Putra,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,501556005,demo_seed,2026-09-20 14:49:59.919433+08:00
+300,Kuchai Entrepreneurs Park Shop,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,501555848,demo_seed,2026-09-20 14:49:59.919433+08:00
+301,Petaling Jaya Large Shop,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,501325299,demo_seed,2026-09-20 14:49:59.919433+08:00
+302,Taman Bukit Mayang Emas Shop Office,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,108490809,demo_seed,2026-09-20 14:49:59.919433+08:00
+303,Puncak Bestari Puncak Alam Shop,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,501475705,demo_seed,2026-09-20 14:49:59.919433+08:00
+304,Whitten Eco Majestic Semenyih Shop,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,501554948,demo_seed,2026-09-20 14:49:59.919433+08:00
+305,Taman Tun Dr Ismail End Lot Shop,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,501545634,demo_seed,2026-09-20 14:49:59.919433+08:00
+306,Taman Sri Gombak Corner Shop,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,500684156,demo_seed,2026-09-20 14:49:59.919433+08:00
+307,Puncak Alam 2 Adjoining Shop Units,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,200528512,demo_seed,2026-09-20 14:49:59.919433+08:00
+308,PJ New Town PJS 52 Corner Shop,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,501554594,demo_seed,2026-09-20 14:49:59.919433+08:00
+309,2-Storey Shophouse Beach Street Georgetown,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,501404349,demo_seed,2026-09-20 14:49:59.919433+08:00
+310,Ground Floor Shop-Office Georgetown,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,501344138,demo_seed,2026-09-20 14:49:59.919433+08:00
+311,Bandar Puteri 7 Puchong Shop,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,501268681,demo_seed,2026-09-20 14:49:59.919433+08:00
+312,KLCC Showroom Jalan Pinang,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,501554268,demo_seed,2026-09-20 14:49:59.919433+08:00
+313,IOI Boulevard Puchong Shop Office,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,501554178,demo_seed,2026-09-20 14:49:59.919433+08:00
+314,Sunway Geo Avenue Retail,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,501390860,demo_seed,2026-09-20 14:49:59.919433+08:00
+315,One Puchong Ground + Basement Retail,,,UNASSIGNED,none,LEGACY_OWNER_ONLY,8,,,approved,True,501551620,demo_seed,2026-09-20 14:49:59.919433+08:00
+316,"Shoplot Intermediate @ Impian Prisma 2 ,Alam Impian Shah Alam for rent",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00510,research_import,2026-11-08 08:45:11.567094+08:00
+317,Pusat Perniagaan Alma｜Bukit Mertajam Corner Second Floor Shop lot Rent,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-04816,research_import,2026-11-08 08:45:11.567094+08:00
+318,BRAND NEW UNIT 22x75!! Aman Perdana Klang Double Storey Shoplot,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00057,research_import,2026-11-08 08:45:11.567094+08:00
+319,Ground Floor Shoplot Jalan Ramin Ambang Botanic Klang with Office,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-01605,research_import,2026-11-08 08:45:11.567094+08:00
+320,Shop|Office|Retail Lot Ground Floor Megan Ambassy Jln Ampang KLCC KL,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-02575,research_import,2026-11-08 08:45:11.567094+08:00
+321,GROUND Floor Cafe Bar Shop Jalan Persiaran Ampang Point Desa Pahlawan,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-02950,research_import,2026-11-08 08:45:11.567094+08:00
+322,GROUND FLOOR | GOOD LOCATION ‼️ Commercial Lot Jalan Besar Ampang,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-01207,research_import,2026-11-08 08:45:11.567094+08:00
+323,D'aman Crimson Retail Ground Floor Shoplot Ara Damansara Petaling Jaya,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-01162,research_import,2026-11-08 08:45:11.567094+08:00
+324,"Ground Floor Corner Shoplot, Facing Main Road, High Visibility, BL Business Centre, Ayer Itam",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-03305,research_import,2026-11-08 08:45:11.567094+08:00
+325,"First Floor Shop Lot at Pine Valley Business Centre, Paya Terubong, Ayer Itam, Facing Main Road, High Visibility",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-03119,research_import,2026-11-08 08:45:11.567094+08:00
+326,"Facing Main Road 2 Sty Shoplot At Bagan Ajam, Butterworth For Rent",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-03549,research_import,2026-11-08 08:45:11.567094+08:00
+327,Shop for rent Ground floor  Batu 11 Jalan Balakong Cheras size 20 x100,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00631,research_import,2026-11-08 08:45:11.567094+08:00
+328,"Main Road - Ground Floor Shop @ Jalan Radin Bagus, Sri Petaling, Kuala Lumpur.",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-01455,research_import,2026-11-08 08:45:11.567094+08:00
+329,Ground Floor Jalan Mahogani Bandar Botanic Klang For Rent,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-01475,research_import,2026-11-08 08:45:11.567094+08:00
+330,1.5-Storey CORNER Shoplot For Rent @ Jalan Astaka Bandar Bukit Raja,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00293,research_import,2026-11-08 08:45:11.567094+08:00
+331,Ground floor Shop-Bandar Bukit Tinggi 1 @ Klang-Ready 15/1 or 30/1/27,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00556,research_import,2026-11-08 08:45:11.567094+08:00
+332,Facing MainRoad Ground Floor ShopLot for Rent at Bandar Mahkota Cheras,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00867,research_import,2026-11-08 08:45:11.567094+08:00
+333,[CORNER GROUND FLOOR] Menjalara KEPONG Shop KL (Near DESA PARKCITY),,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-02545,research_import,2026-11-08 08:45:11.567094+08:00
+334,Bandar Perda 2ND FLOOR SHOPLOT PARLTY RENOVATED RENT @ Bukit Mertajam,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-05452,research_import,2026-11-08 08:45:11.567094+08:00
+335,FACING MAINROAD !! 22x80 SD 7 G Floor Shoplot Bandar Sri Damansara,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-01658,research_import,2026-11-08 08:45:11.567094+08:00
+336,"Bandar Sunway Mentari, Corner Ground Floor Shop, Sunway, Petaling Jaya",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00742,research_import,2026-11-08 08:45:11.567094+08:00
+337,"Main Road Facing Ground Floor Shop for Rent @ Bandar Seri Putra, Bangi",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-01126,research_import,2026-11-08 08:45:11.567094+08:00
+338,"Telawi @ Bangsar Ground Floor Shop , 24 x 75 , Facing Road , B/Market",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-02937,research_import,2026-11-08 08:45:11.567094+08:00
+339,DATARAN MAYBANK BANGSAR JALAN KEMUJA SHOP FOR RENT,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-01806,research_import,2026-11-08 08:45:11.567094+08:00
+340,"Ground Floor Shop @ Jalan Telawi, Bangsar, Kuala Lumpur",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-01458,research_import,2026-11-08 08:45:11.567094+08:00
+341,Bangsar Jalan Telawi Ground Floor Shoplot Bare Unit Available Now,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-01767,research_import,2026-11-08 08:45:11.567094+08:00
+342,Menara Etiqa - Bangsar - Prime Retail Shops for F & B and Signature Outlets,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-01526,research_import,2026-11-08 08:45:11.567094+08:00
+343,UOA Bangsar - Prime Signature Shop-Office With Easy Public Access,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-01530,research_import,2026-11-08 08:45:11.567094+08:00
+344,"Bangsar - Telawi (ground floor, heavy traffic)",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-01795,research_import,2026-11-08 08:45:11.567094+08:00
+345,"UNTUK DISEWAKAN: Lot Kedai Tingkat Atas [Taman Langat Murni, Banting]",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00729,research_import,2026-11-08 08:45:11.567094+08:00
+346,Kedai Ground Floor @ Pinggiran Batu Caves [Menghadap Jalan],,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-01643,research_import,2026-11-08 08:45:11.567094+08:00
+347,"Ceria Square  Eco Horizon Batu Kawan New Shop Lot For Rent Ground Floor RM 8,000",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-03496,research_import,2026-11-08 08:45:11.567094+08:00
+348,"Sinaran Avenue @ Utropolis, Batu Kawan, Ground Floor Shoplot, Facing Main Road",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-03116,research_import,2026-11-08 08:45:11.567094+08:00
+349,Batu Maung Ground Floor Shoplot GOOD Location Near Bayan Lepas Factory,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-05069,research_import,2026-11-08 08:45:11.567094+08:00
+350,"For Rent: Prime Commercial Shoplot at Jalan Shahbandar, Batu Pahat",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-03209,research_import,2026-11-08 08:45:11.567094+08:00
+351,MAIN ROAD FIRST FLOOR SHOP LOT NEARBY SUNGAI DUA USM,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-03674,research_import,2026-11-08 08:45:11.567094+08:00
+352,D'PIAZZA Ground floor 1000sf Shoplot BAYAN BARU lepas piazza renovated,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-04688,research_import,2026-11-08 08:45:11.567094+08:00
+353,"First Floor Shoplot with 2 Carparks at Tingkat Mahsuri, Bayan Baru",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-03123,research_import,2026-11-08 08:45:11.567094+08:00
+354,Sunway Tunas Ground Floor 1200sf Bayan Baru Bayan Lepas near Dora,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-03410,research_import,2026-11-08 08:45:11.567094+08:00
+355,"Elit Avenue at Bayan Baru, Ground Floor Shop, High Visibility, Suitable For Many Types Of Businesses",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-03310,research_import,2026-11-08 08:45:11.567094+08:00
+356,"The Zen 6, Bayan Lepas, Penang , Ground Floor Shop Lot / For Rent /  1,300 sq.ft , Near Queensbay",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-03343,research_import,2026-11-08 08:45:11.567094+08:00
+357,FOR RENT - Bayan Indah Commercial Shop,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-03481,research_import,2026-11-08 08:45:11.567094+08:00
+358,Bukit Jambul - Jalan Rumbia 4 Adjoining Shop For RENT RM10k,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-03290,research_import,2026-11-08 08:45:11.567094+08:00
+359,"Krystal Square First Floor Shoplot at Jalan Bukit Gambier, Bukit Jambul, Fully Renovated",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-03331,research_import,2026-11-08 08:45:11.567094+08:00
+360,Golden Triangle Commercial Shop Office Second Floor 1481sf Sungai Ara,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-03402,research_import,2026-11-08 08:45:11.567094+08:00
+361,Summerskye Square Ground floor rare units Face Main Road 1230sf,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-03706,research_import,2026-11-08 08:45:11.567094+08:00
+362,Ground Floor Shoplot for Rent at Opposite Bukit Jambul Complex | High Traffic Flow,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-03546,research_import,2026-11-08 08:45:11.567094+08:00
+363,Ground Floor Shop Lot for Rent at Bayan Lepas | Krystal Point,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-03537,research_import,2026-11-08 08:45:11.567094+08:00
+364,Sunway Dora Ground Floor 1300sf Bayan Baru HotCake New CCC Bayan Lepas,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-03683,research_import,2026-11-08 08:45:11.567094+08:00
+365,BERTAM AVENUE GROUND FLOOR 2 UNIT COMBINING FOR RENT Nr SUNSHINE LOTUS,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-04492,research_import,2026-11-08 08:45:11.567094+08:00
+366,"Retail space (LEVEL 2 UNIT), Sungei Wang Plaza",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-02817,research_import,2026-11-08 08:45:11.567094+08:00
+367,Ground Floor Shop Jln Alor Bukit Bintang KL City Kuala Lumpur,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-01661,research_import,2026-11-08 08:45:11.567094+08:00
+368,Shoplot Bukit Bintang (w/ lift) Sephora Pavillion,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-01828,research_import,2026-11-08 08:45:11.567094+08:00
+369,"Berjaya Times Square, Bukit Bintang, Kuala Lumpur, Retail Space Hot Area, For Rent",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-01719,research_import,2026-11-08 08:45:11.567094+08:00
+370,| Ground Floor | Bayan Lepas Shoplot 1500sf Near BJ Complex,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-04886,research_import,2026-11-08 08:45:11.567094+08:00
+371,The CEO Shop Lot for Rent,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-03414,research_import,2026-11-08 08:45:11.567094+08:00
+372,"First Floor Corner Shoplot, Renovated at Bayan Point, Bayan Lepas",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-03153,research_import,2026-11-08 08:45:11.567094+08:00
+373,Juru Central Near Icon City Corner Unit Ground Floor Full Renovated !!,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-05292,research_import,2026-11-08 08:45:11.567094+08:00
+374,"For Rent Triple Storey shoplot Taman Seri Maju, Pusat Perniagaan Maju Jaya, Pusat Perniagaan Utama Kampung Baru Bukit Mertajam, Penang with Cargo Lift",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-03715,research_import,2026-11-08 08:45:11.567094+08:00
+375,"Ground Floor Shop Lot @ Jalan Berjaya, Bukit Mertajam, Facing Main Road, High Foot Traffic",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-03117,research_import,2026-11-08 08:45:11.567094+08:00
+376,"2nd Floor Shoplot, Corner Bare Unit @ Machang Bubok, Bukit Mertajam, High Visibility, Facing Main Road",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-03169,research_import,2026-11-08 08:45:11.567094+08:00
+377,"For Rent Renovated Ground Floor shoplot at Pusat Perniagaan Maju Jaya Pusat Perniagaan Maju Utama,  Jalan Maju, Kampung Baru, Bukit Mertajam, Penang",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-03716,research_import,2026-11-08 08:45:11.567094+08:00
+378,High Visibility Santuari Shop Semi D Shoplot Facing Mainroad Rare Units,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-03213,research_import,2026-11-08 08:45:11.567094+08:00
+379,"Facing Main Road Ground Floor 2 Sty Shoplot At Raja Uda ,Butterworth For Rent",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-03669,research_import,2026-11-08 08:45:11.567094+08:00
+380,Shop Lot Bagan Ajam Butterworth,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-03376,research_import,2026-11-08 08:45:11.567094+08:00
+381,High Visibility Big Size Shop Lot Rare in Market Raja Uda,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-03507,research_import,2026-11-08 08:45:11.567094+08:00
+382,Trion KL @ Chan Sow Lin Ground Floor Shop for Rent Sungai Besi,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-02579,research_import,2026-11-08 08:45:11.567094+08:00
+383,"Taman Midah Cheras, Ground floor shop office, 20 x 75 facing main road",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-02326,research_import,2026-11-08 08:45:11.567094+08:00
+384,"[ Limited Unit ] Yulek Ground Floor 22 x 70 Shop For Rent, Cheras , Jalan Durian",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-01357,research_import,2026-11-08 08:45:11.567094+08:00
+385,2 Adjoining Ground Floor Shops  Taman Midah,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-01505,research_import,2026-11-08 08:45:11.567094+08:00
+386,"Shoplot (1650 sqft) for rent @ Suakasih 1/3, Bandar Tun Hussein Onn",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-01522,research_import,2026-11-08 08:45:11.567094+08:00
+387,Petaling street corner level 3 &rooftop facing main road walk 10minlrt,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-02506,research_import,2026-11-08 08:45:11.567094+08:00
+388,(2nd Floor) Bigger Unit Commercial Cyberjaya Glomac Partition For Rent,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-01734,research_import,2026-11-08 08:45:11.567094+08:00
+389,Ground Floor Shoplot Damansara Damai✅Saujana Damansara Prima For Rent,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-01837,research_import,2026-11-08 08:45:11.567094+08:00
+390,Damansara Heights Cafe-Bistro-Restaurant Shops,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-01497,research_import,2026-11-08 08:45:11.567094+08:00
+391,"Damansara Heights Retail Ideal for Ground Floor Aesthetic Beauty/Health Care Clinic, steps away to Train station",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-01545,research_import,2026-11-08 08:45:11.567094+08:00
+392,Damansara Heights Prime Ground Floor Office/Retail To Let,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-01494,research_import,2026-11-08 08:45:11.567094+08:00
+393,Wisma E & C - Prime Retail Lot for Rent,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-01519,research_import,2026-11-08 08:45:11.567094+08:00
+394,FACING MAINROAD BANDAR SRI DAMANSARA PETALING JAYA SHOP,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-01856,research_import,2026-11-08 08:45:11.567094+08:00
+395,Ground Floor Corner Small Shop Lot for Rent - Perdana View Condominiun,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-01939,research_import,2026-11-08 08:45:11.567094+08:00
+396,"End Lot Shop lot @ DAMANSARA UPTOWN, PETALING JAYA",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-01405,research_import,2026-11-08 08:45:11.567094+08:00
+397,Uptown Damansara Corner Mezzanine Shop Office to Let,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-01051,research_import,2026-11-08 08:45:11.567094+08:00
+398,New shop lot Dengkil Jalan Deluxe Commercial Center Dengkil Selangor,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-01444,research_import,2026-11-08 08:45:11.567094+08:00
+399,Ground Floor Shop Lot Taman Maluri Desa Pandan Kuala Lumpur For Rent,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-02876,research_import,2026-11-08 08:45:11.567094+08:00
+400,Plaza Arkadia Desa Parkcity Ground Floor for rent,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-01415,research_import,2026-11-08 08:45:11.567094+08:00
+401,"I-Parc @ Tanjung Pelepas, Gelang Patah, 3sty Shoplot, Basic Condition",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-03239,research_import,2026-11-08 08:45:11.567094+08:00
+402,Summit Commercial Hub @ Gelang Patah 3 Storey Shop Lot For Rent,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-02053,research_import,2026-11-08 08:45:11.567094+08:00
+403,Main Road 2 Storey Shoplot Jalan Sultan Azlan Shah Gelugor Batu Uban,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-05210,research_import,2026-11-08 08:45:11.567094+08:00
+404,Gelugor 2-Storey Shop Office for Rent Facing Main Road,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-03052,research_import,2026-11-08 08:45:11.567094+08:00
+405,The Zen Ground Floor near to QueensbayMall Bayan Lepas High density,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-03526,research_import,2026-11-08 08:45:11.567094+08:00
+406,Wisma Mutiara Genting @ Ground Floor Retail/Office Space for Rent,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-01470,research_import,2026-11-08 08:45:11.567094+08:00
+407,"Pengkalan Weld, George Town, Penang / Ground Floor Shoplot / For Rent / Fully Renovated & Furnished",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-03350,research_import,2026-11-08 08:45:11.567094+08:00
+408,Sandiland Cloud 9 Georgetown 1100sf Suitable for office Face Main Road,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-03689,research_import,2026-11-08 08:45:11.567094+08:00
+409,3 Storey Shoplot @ Jalan Dato Keramat First Floor,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-03389,research_import,2026-11-08 08:45:11.567094+08:00
+410,MBF Tower Jalan Sultan Ahmad Shah Suitable for office 850sf,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-03709,research_import,2026-11-08 08:45:11.567094+08:00
+411,Tastefully Renovated 2 Storey Commercial Title Shophouse For Rent Georgetown End Lot Unit Kimberly Street TOURIST SPOT IN TOWN,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-03328,research_import,2026-11-08 08:45:11.567094+08:00
+412,(Lebuh Cintra) Intermediate Unit Double - Storey Shopoffice at Georgetown for Rent,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-03088,research_import,2026-11-08 08:45:11.567094+08:00
+413,"The Fifth Avenue, Georgetown , Lebuh Macallum , Penang / Ground Floor Shop Lot / For Rent / Main Road Frontage",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-03341,research_import,2026-11-08 08:45:11.567094+08:00
+414,SHOP LOT RENT AT GEORGETOWN LEBUH MELAYU RENOVATED UNIT,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-03603,research_import,2026-11-08 08:45:11.567094+08:00
+415,Shoplot 3rd Floor FACING MAIN ROAD Jln Gottlieb Pulau tikus Georgetown,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-04861,research_import,2026-11-08 08:45:11.567094+08:00
+416,Lebuh Campbell Shophouse Unit For Rent - Wide space,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-03439,research_import,2026-11-08 08:45:11.567094+08:00
+417,2 Adjoining Shophouse Kimberly Street Georgetown Tourist Area 3500sf,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-03326,research_import,2026-11-08 08:45:11.567094+08:00
+418,medan idaman business centre-ground floor shoplot-24x70-jalan gombak,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-02214,research_import,2026-11-08 08:45:11.567094+08:00
+419,"Ground floor shop| Sri Gombak, Batu Caves| Strategic Location for rent",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-01446,research_import,2026-11-08 08:45:11.567094+08:00
+420,SINGLE 1 STY JALAN MASJID NEGERI Shop Lot COMMERCIAL TITLE GREENLANE,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-04338,research_import,2026-11-08 08:45:11.567094+08:00
+421,"Horizon Square @ Newly completed Shoplot Facing Main Road for Rent, Horizon Hills",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-02181,research_import,2026-11-08 08:45:11.567094+08:00
+422,FOR RENT  Jalan Eka 2 @ Horizon Square Double storey shop lot,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-04280,research_import,2026-11-08 08:45:11.567094+08:00
+423,Eco Botanic  Eco Boulevard 2 Three Storey Shop For Rent Iskandar Puteri,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-02431,research_import,2026-11-08 08:45:11.567094+08:00
+424,"[Limited Unit] Good Location Kampung Batu 5, Jalan Ipoh KL",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-02129,research_import,2026-11-08 08:45:11.567094+08:00
+425,Jalan Kuching Boulevard Business Park Ground Floor 22'x73',,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-02216,research_import,2026-11-08 08:45:11.567094+08:00
+426,Ground Floor Shoplot Rent Jalan Perak Dato Keramat (Facing Main Road),,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-05009,research_import,2026-11-08 08:45:11.567094+08:00
+427,Jalan Jelutong Ground Floor Shop Lot Face Main Road Georgetown,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-03695,research_import,2026-11-08 08:45:11.567094+08:00
+428,Vantage Point First Floor Jelutong 1100sf Face Main Road,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-03523,research_import,2026-11-08 08:45:11.567094+08:00
+429,"Scientex Park 2 Storey Shoplot, Jenjarom Jalan Langat Banting",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00157,research_import,2026-11-08 08:45:11.567094+08:00
+430,Jinjang Utama 1st Floor Retail Shop Office RENT Kepong Baru Jalan Ipoh,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-02107,research_import,2026-11-08 08:45:11.567094+08:00
+431,Adda Height @Jln Adda 7 Ground Floor Shop For Rent (Facing Mainroad),,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-02850,research_import,2026-11-08 08:45:11.567094+08:00
+432,Taman Bukit Indah Double Storey Corner Shoplot For Rent 武吉英达双层角头店面出租,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-02583,research_import,2026-11-08 08:45:11.567094+08:00
+433,Permas Jaya 4-Storey Endlot Shoplot Whole Block For Rent Facing Main Road,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-02377,research_import,2026-11-08 08:45:11.567094+08:00
+434,Taman Austin Perdana Three Storey Shoplot Groundfloor and First Floor For Rent,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-02649,research_import,2026-11-08 08:45:11.567094+08:00
+435,Tun Aminah at Jalan Hang Jebat Double Storey Shoplot Facing Main Road For Rent,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-02638,research_import,2026-11-08 08:45:11.567094+08:00
+436,Jalan Indah Prime 2 @ Taman Bukit Indah / Brand New Superb Hot Location Prime Area,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-02094,research_import,2026-11-08 08:45:11.567094+08:00
+437,"Austin Crest Ground Floor Shop Lot For Rent Near Mount Austin, Setia Indah, Taman Daya, Eco Palladium, Eco Cascadia, Seri Austin, Dato Onn, Tebrau",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-02013,research_import,2026-11-08 08:45:11.567094+08:00
+438,Taman Desa Tebrau Three Storey Corner Commercial Shoplot First Floor and Ground Floor For Rent,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-02674,research_import,2026-11-08 08:45:11.567094+08:00
+439,Tun Aminah 2 Storey Shoplot Adjoining Unit For Rent,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-02346,research_import,2026-11-08 08:45:11.567094+08:00
+440,"Brand New 4-Storey Shoplot at Pelangi Avenue,JB",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-01875,research_import,2026-11-08 08:45:11.567094+08:00
+441,"Dato Onn Ground Floor Shop Lot End Lot For Rent Near Adda Heights, Bukit Mutiara, Taman Daya, Austin Duta, Setia Indah, Seri Austin, Nasa City, Kempas",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-02000,research_import,2026-11-08 08:45:11.567094+08:00
+442,"Taman Abad @ Nearby Ksl Mall, Single Storey Semi Detached Corner For Rent Commercial Title, Suitable Massage, Cafe, Clinic",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-02324,research_import,2026-11-08 08:45:11.567094+08:00
+443,For Rent: Single Storey Ground Floor Shop at Setia Indah,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-01943,research_import,2026-11-08 08:45:11.567094+08:00
+444,For Rent @ Taman Setia Eco Cascadia (3rd floor),,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-01927,research_import,2026-11-08 08:45:11.567094+08:00
+445,"Taman Sri Pelangi @ Jb Town, Ground Floor Shoplot For Rent",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-02294,research_import,2026-11-08 08:45:11.567094+08:00
+446,Johor Bahru Taman Tasek Shop for Rent Ground Floor,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-02559,research_import,2026-11-08 08:45:11.567094+08:00
+447,Austin Height Ground Floor Shoplot For Rent (Nanyang Street),,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-02382,research_import,2026-11-08 08:45:11.567094+08:00
+448,Nusa Bestari Three Storey Shoplot Ground Floor For Rent,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-02977,research_import,2026-11-08 08:45:11.567094+08:00
+449,Corner Lot Pelangi Indah Double Storey Shoplot For Rent 40x70,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-02384,research_import,2026-11-08 08:45:11.567094+08:00
+450,GROUND FLOOR CORNER COMMERCIAL UNIT FOR RENT | ECO PALLADIUM JOHOR BAHRU | HIGH TRAFFIC MAIN ROAD FRONTAGE,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-02341,research_import,2026-11-08 08:45:11.567094+08:00
+451,"2-Storey Shoplot 2 adjoined Gound Floor for Rent – Taman Bukit Indah, Indah Prima 2 For rent",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-02489,research_import,2026-11-08 08:45:11.567094+08:00
+452,Setia Tropika Double Storey Shoplot For Rent,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-02028,research_import,2026-11-08 08:45:11.567094+08:00
+453,Taman Pelangi @ Pelangi Avenue Ground Floor Shop Space (End Lot) For Rent,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-02178,research_import,2026-11-08 08:45:11.567094+08:00
+454,Kota Masai Jalan Mangga Big Shoplot End Lot Near Eco Business Park 3 for Rent/Sale,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-01937,research_import,2026-11-08 08:45:11.567094+08:00
+455,Taman Molek Jalan Molek 1/9 Ground Floor Shoplot 24 x 106 For Rent,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-02388,research_import,2026-11-08 08:45:11.567094+08:00
+456,🏢 Jalan Seri Impian Taman Impian Emas Double Shop End Lot Ground Floor For Rent 金山园角头店屋低层出租,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-02629,research_import,2026-11-08 08:45:11.567094+08:00
+457,"Facing main road, affordable rental",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-02175,research_import,2026-11-08 08:45:11.567094+08:00
+458,Taman Sri Tebrau Johor Bahru Facing Main Road Ground Floor for Rent,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-02254,research_import,2026-11-08 08:45:11.567094+08:00
+459,Taman Pelangi Indah Jalan Cantik Corner Lot Ground Floor Shoplot rent,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-02391,research_import,2026-11-08 08:45:11.567094+08:00
+460,"Juru  G Floor 1400 sf Shop Lot Suitable Office, Retail shop, F&B",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-05331,research_import,2026-11-08 08:45:11.567094+08:00
+461,Ground Floor Shop High Visibility Juru Shop Lot near Clinic Restaurant,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-03227,research_import,2026-11-08 08:45:11.567094+08:00
+462,"Ground floor kajang town ,jalan jelok 7 ,facing metro point kajang",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00555,research_import,2026-11-08 08:45:11.567094+08:00
+463,For Rent Rantau Panjang 3 Storey Shoplot Good Condition Prime Location,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-01593,research_import,2026-11-08 08:45:11.567094+08:00
+464,Bertam Avenue 1st Floor Shop Lot For Rent | Hot Area| Facing Main Road,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-04840,research_import,2026-11-08 08:45:11.567094+08:00
+465,"Brand New  Ground Floor Shop Lot @ M Nova, Kepong (Corner available)",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-02380,research_import,2026-11-08 08:45:11.567094+08:00
+466,Menjalara Medan Putra Ground Floor Shop,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-01377,research_import,2026-11-08 08:45:11.567094+08:00
+467,PRIME GROUND FLOOR CORNER LOT RETAIL SPACE FOR RENT – KEPONG GI SQUARE,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-01439,research_import,2026-11-08 08:45:11.567094+08:00
+468,"Kedai untuk Disewa (Taman Keramat, AU3)",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-02049,research_import,2026-11-08 08:45:11.567094+08:00
+469,Wisma GER - Prime Ground Floor F&B Shop,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-01495,research_import,2026-11-08 08:45:11.567094+08:00
+470,KL City Petaling Street Corner Ground floor shop,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-01387,research_import,2026-11-08 08:45:11.567094+08:00
+471,KL City Centre Sungei Wang Plaza,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-01570,research_import,2026-11-08 08:45:11.567094+08:00
+472,Ground Floor F&B Retail Space @ Wisma UOA II 2200sf,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-01464,research_import,2026-11-08 08:45:11.567094+08:00
+473,AIA Sentral KLCC - Prime Retail F &B Showroom Space with Frontage,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-01539,research_import,2026-11-08 08:45:11.567094+08:00
+474,Kenanga KWC Fashion Wholesale City Mall,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-01392,research_import,2026-11-08 08:45:11.567094+08:00
+475,"Yulek 2sty Corner 3100sf For Rent , Taman Cheras , Jalan Kaskas , Kuala Lumpur",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-01609,research_import,2026-11-08 08:45:11.567094+08:00
+476,"Plaza GM (Ground Floor) GM Plaza, Chow Kit, KL",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-01345,research_import,2026-11-08 08:45:11.567094+08:00
+477,Wisma RKT Ground Floor Retail Space at Jalan Raja Abdullah,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-01753,research_import,2026-11-08 08:45:11.567094+08:00
+478,3rd Nvenue Neu Suites Jalan Ampang KLCC Retail Shop TRX Pavilion LRT,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-02624,research_import,2026-11-08 08:45:11.567094+08:00
+479,Menara IMC - KLCC Prime Ground Floor Retail Showroom Space,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-01533,research_import,2026-11-08 08:45:11.567094+08:00
+480,Kluang Town Shop of Corner lot For rent/lokasi Depan bank rakyat Klg,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-03345,research_import,2026-11-08 08:45:11.567094+08:00
+481,"Ground Floor Nice Unit Jalan Teknologi 3/9, Bistari De Kota , Kota Dam",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-01844,research_import,2026-11-08 08:45:11.567094+08:00
+482,"For Rent – Brand New 2-Storey Shop Lot, Kemuning Greenville, Shah Alam",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-01868,research_import,2026-11-08 08:45:11.567094+08:00
+483,Kota Tinggi Bandar Kota Double Storey Shoplot Groundfloor For Rent,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-03758,research_import,2026-11-08 08:45:11.567094+08:00
+484,"Ground Floor Shop @ Taman Danau Desa, Taman Desa, Kuala Lumpur",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-01441,research_import,2026-11-08 08:45:11.567094+08:00
+485,Prime Area Shoplot for F&B - Jalan Telawi near Bangsar Village,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-01748,research_import,2026-11-08 08:45:11.567094+08:00
+486,"TAMAN TUN DR ISMAIL, KUALA LUMPUR, Kuala Lumpur, Shop Lot Ground Floor, For Rent",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-01727,research_import,2026-11-08 08:45:11.567094+08:00
+487,Kuchai lama Dataran Loka ground floor shop,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-01382,research_import,2026-11-08 08:45:11.567094+08:00
+488,Shoplot Ground & First Floor Happy Garden 1600sf 2 Storey Kuchai Lama,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-03023,research_import,2026-11-08 08:45:11.567094+08:00
+489,"Corner Lot - Ground Floor Shop Facing Main Road, Kuchai Lama, Kuala Lumpur.",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-01443,research_import,2026-11-08 08:45:11.567094+08:00
+490,Brand new single storey shop,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-02209,research_import,2026-11-08 08:45:11.567094+08:00
+491,"Taman Aman @ Senai, Double Storey Shoplot Ground Floor For Rent",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-02088,research_import,2026-11-08 08:45:11.567094+08:00
+492,Kulai Vervocity 3 Storey Shop Lot For Rent,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-02046,research_import,2026-11-08 08:45:11.567094+08:00
+493,Kulai New Town K-City Shoplot For Rent,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-02819,research_import,2026-11-08 08:45:11.567094+08:00
+494,Brand New Scientex Kundang Jaya 2 Storey Shop Lot 20x70 for Rent,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00929,research_import,2026-11-08 08:45:11.567094+08:00
+495,Eco Avenue 2 @ Jalan Ekoperniagaan 16 Ground Floor Intermediate shop,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-03675,research_import,2026-11-08 08:45:11.567094+08:00
+496,"Brand New Shop Lot For Rent at Permas Avenue, Bandar Baru Permas Ground Floor Available Johor Bahru",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-02425,research_import,2026-11-08 08:45:11.567094+08:00
+497,Permas Jaya @ Permas Near Aeon Permas Second Floor Shoplot New Renovated Per Rooms With Bathroom Total 6 Rooms For Rent,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-01877,research_import,2026-11-08 08:45:11.567094+08:00
+498,Muar Jalan Bentayan Shop Lot Ground Floor For Rent,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-03195,research_import,2026-11-08 08:45:11.567094+08:00
+499,"2-Storey Shoplot For Rent @ Taman Bukit Panchor, Nibong Tebal",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-04945,research_import,2026-11-08 08:45:11.567094+08:00
+500,2 Storey Corner Facing Mainroad High Exposure Shoplot for Rent at Nibong Tebal,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-03660,research_import,2026-11-08 08:45:11.567094+08:00
+501,Pusat Perniagaan Pekaka - Jalan Pekaka Nibong Tebal 1st floor RM900,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-03498,research_import,2026-11-08 08:45:11.567094+08:00
+502,Ground Floor ShopLot Medan 28 Jalan Klang Lama in Taman United KL,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-02369,research_import,2026-11-08 08:45:11.567094+08:00
+503,Shoplot Rent OUG 44*82 3600sf Ground Floor Jalan Hujan Rahmat Cafe F&B,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-02967,research_import,2026-11-08 08:45:11.567094+08:00
+504,Pandamaran Port Klang Double Storey Shoplot For Rent Highly Visible,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00254,research_import,2026-11-08 08:45:11.567094+08:00
+505,Pandan Indah Prime Main Road Frontage 1.5-Storey High Ceiling Shoplot,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-02166,research_import,2026-11-08 08:45:11.567094+08:00
+506,GROUND FLOOR Shop Lot Jalan Kg Pandan Taman Maluri Kuala Lumpur,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-02110,research_import,2026-11-08 08:45:11.567094+08:00
+507,GF Shop Lot near 1 Shamelin Mall Pandan Perdana KL (Cheapest),,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-02124,research_import,2026-11-08 08:45:11.567094+08:00
+508,Pasir Gudang Jalan Pengkalan Kampung Pasir Putih Shop Lot 1st Floor,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-03786,research_import,2026-11-08 08:45:11.567094+08:00
+509,Terubong Avenue / Ground Floor / 1100 sq.ft / For Retail / F&B,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-05433,research_import,2026-11-08 08:45:11.567094+08:00
+510,RENT Sri Penawar Shoplot rent Desaru Rapid Petronas Warehouse Business,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-03480,research_import,2026-11-08 08:45:11.567094+08:00
+511,"1st Floor Shop Lot, Jalan Baru, Perai, Renovated",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-04345,research_import,2026-11-08 08:45:11.567094+08:00
+512,Jalan layang taman perling shoplot ground first floor supersize 24x70,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-03251,research_import,2026-11-08 08:45:11.567094+08:00
+513,permas jaya shop lot for rent,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-02550,research_import,2026-11-08 08:45:11.567094+08:00
+514,"Gurney Drive, Persiaran Gurney, Penang / First Floor Shop Lot / For Rent /  High Visibility / Main Road Frontage",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-03245,research_import,2026-11-08 08:45:11.567094+08:00
+515,Bellisa Row 1st Floor Pulau Tikus Main Road Corner Jalan Burma 2675sf,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-03693,research_import,2026-11-08 08:45:11.567094+08:00
+516,"PJ Ground floor Shop @ Jalan Bukit, Seksyen 11, Petaling Jaya Selangor",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-01339,research_import,2026-11-08 08:45:11.567094+08:00
+517,"End lot 2sty kota Emas 3, Pontian,Johor 1st floor shop",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-04053,research_import,2026-11-08 08:45:11.567094+08:00
+518,"Port Klang Endlot Shoplot RENT 32×80 Ground Floor Shoplot, Pandamaran",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00134,research_import,2026-11-08 08:45:11.567094+08:00
+519,BIG 2000sqft Taman Kinrara ground floor shop Puteri Puchong OUG KL,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-02153,research_import,2026-11-08 08:45:11.567094+08:00
+520,PUDU Intermediate Shoplot 2400sf @Jalan Brunei Pudu,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-02597,research_import,2026-11-08 08:45:11.567094+08:00
+521,Ground floor shop,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-01568,research_import,2026-11-08 08:45:11.567094+08:00
+522,Pudu Kenanga Ground Floor Shop,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-01574,research_import,2026-11-08 08:45:11.567094+08:00
+523,Jalan Gottlieb Main Road Ground Floor 1800sf Shop Pulau Tikus Gurney,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-04911,research_import,2026-11-08 08:45:11.567094+08:00
+524,2 Storey Shophouse Jalan Burma Pulau Tikus Face Main Road High traffic,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-03323,research_import,2026-11-08 08:45:11.567094+08:00
+525,Ground Floor End Lot Shop Lot Esplanad Square Eco Grandeur Puncak Alam,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00655,research_import,2026-11-08 08:45:11.567094+08:00
+526,"[Ground floor Shop] face mainroad, PUJ 3/9, Taman Puncak Jalil",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00639,research_import,2026-11-08 08:45:11.567094+08:00
+527,"🏢 Prime Shop Lot（Corner Unit） for Rent – Raja Uda, Butterworth",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-03133,research_import,2026-11-08 08:45:11.567094+08:00
+528,"[ Ground Floor+Road ] Shoplot , Jalan Bandar Rawang 11 , Rawang Town",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-01034,research_import,2026-11-08 08:45:11.567094+08:00
+529,"For Rent 1st Floor Shoplot Bandar Baru Salak Tinggi,Dengkil Sepang Sel",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-01104,research_import,2026-11-08 08:45:11.567094+08:00
+530,Sungai Buloh Shop Lot Ground Floor Near Saujana Utama Below Market,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-01290,research_import,2026-11-08 08:45:11.567094+08:00
+531,"Shoplot For Rent in Sunway Jalan Todak, Seberang Jaya. Hot Busy Area",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-04791,research_import,2026-11-08 08:45:11.567094+08:00
+532,Bandar Sunway Seberang Jaya Ground Floor Shoplot For Rent,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-03506,research_import,2026-11-08 08:45:11.567094+08:00
+533,Office Lot at Sunway Business Park Seberang Jaya for Rent,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-03417,research_import,2026-11-08 08:45:11.567094+08:00
+534,"Hot Spot Area Ground Floor Shop For Rent @ Bandar Sunway Seberang Jaya ,near Highway,Penang Bridge, Industry",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-03385,research_import,2026-11-08 08:45:11.567094+08:00
+535,Sunway Perdana Ground Floor Shoplot For Rent,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-03504,research_import,2026-11-08 08:45:11.567094+08:00
+536,Ground Floor Shop for Rent High Visibility Sunway Area Perai,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-03180,research_import,2026-11-08 08:45:11.567094+08:00
+537,"ICON CITY, SEBERANG PERAI, PENANG , Ground & Mezzanine Shop Lot , FOR RENT , 2282 sq.ft, Rare In Market",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-03346,research_import,2026-11-08 08:45:11.567094+08:00
+538,Iconic Point 3 Storey Semi Commercial shop for rent,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-03600,research_import,2026-11-08 08:45:11.567094+08:00
+539,1st Floor Jalan Usahaniaga for Rent,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-03646,research_import,2026-11-08 08:45:11.567094+08:00
+540,"2-Storey Corner ShopOffice @ Taman Utama, Segamat | Prime Commercial Location",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-02314,research_import,2026-11-08 08:45:11.567094+08:00
+541,"Segambut , ground floor shop facing main road , jalan segambut",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-02052,research_import,2026-11-08 08:45:11.567094+08:00
+542,"Shoplot Apartment, Corner Unit, One Selayang Off Jalan Rawang-For Rent",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00850,research_import,2026-11-08 08:45:11.567094+08:00
+543,Prime Corner First Floor Shop for Rent | Main Road | Eco Majestic City,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00781,research_import,2026-11-08 08:45:11.567094+08:00
+544,Retail Warehouse Shoplot K-City Kulai Senai Saleng JPO Johor,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-04259,research_import,2026-11-08 08:45:11.567094+08:00
+545,"Renovated Ground and Mezzanine Floor Shoplot at JALAN SINAR SENTUL, KL",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-02108,research_import,2026-11-08 08:45:11.567094+08:00
+546,"20x80 - Ground Floor New Shop @ OUG, Old Klang Road, Kuala Lumpur.",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-01454,research_import,2026-11-08 08:45:11.567094+08:00
+547,"[Road Frontage] Ground and Mezzanine Floor at Jalan Ipoh  Sentul, Kuala Lumpur.",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-01710,research_import,2026-11-08 08:45:11.567094+08:00
+548,"Sentul, KL _ Ground Floor Of 6.5-sty Shop-Office FOR RENT",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-01471,research_import,2026-11-08 08:45:11.567094+08:00
+549,[Corner Lot][32x70] G Floor Shop Lot Salak Perdana Business Park Sepan,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-01767,research_import,2026-11-08 08:45:11.567094+08:00
+550,Setapak Jalan Genting Klang 3stry Corner High Traffic and Strong Deman,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-02101,research_import,2026-11-08 08:45:11.567094+08:00
+551,CORNER MAIN ROAD 2.5sty Shop Jalan Genting Klang Setapak Gombak Pahang,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-01851,research_import,2026-11-08 08:45:11.567094+08:00
+552,2nd Floor Shop Platinum Walk Taman Setapak Indah Crystal Ville PV128 Jalan Genting Klang,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-01849,research_import,2026-11-08 08:45:11.567094+08:00
+553,Limited GROUND FLOOR Shop Lot Available For Rent‼️Seria 88 Setia Alam,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-01077,research_import,2026-11-08 08:45:11.567094+08:00
+554,Bandar Dato Onn Shop Lot / Jalan Perjiranan 4/2 / Ground Floor Only,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-03525,research_import,2026-11-08 08:45:11.567094+08:00
+555,"Setia Tropika, Shoplot, end lot, ground floor, 24x70 unblock view,",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-03540,research_import,2026-11-08 08:45:11.567094+08:00
+556,"Ground Floor Shoplot, 2 shutter door front n back, Puncak Setiawangsa",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-02355,research_import,2026-11-08 08:45:11.567094+08:00
+557,"1st & 2nd FLOOR END LOT SHOP OFFICE @SEKSYEN 20 JALAN SINGA, SHAH ALAM",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00599,research_import,2026-11-08 08:45:11.567094+08:00
+558,Simpang Ampat Shoplot For Rent Facing Main Road 1st Floor Ground Floor,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-05082,research_import,2026-11-08 08:45:11.567094+08:00
+559,Ground Floor | Double Sty Shop Lot | Bandar Tasek Mutiara | Simpang Ampat | Penang L,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-03086,research_import,2026-11-08 08:45:11.567094+08:00
+560,"Eco Borealis, Simpang Ampat, Penang / Ceria Square / Shoplot / For Rent / Ground & First Floor / OC Pass December",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-03371,research_import,2026-11-08 08:45:11.567094+08:00
+561,"Iconic Point 2nd Floor Shoplot at Simpang Ampat, Partially Renovated",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-03307,research_import,2026-11-08 08:45:11.567094+08:00
+562,Shop Lot / shop office Facing Main Road at Simpang Ampat,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-03467,research_import,2026-11-08 08:45:11.567094+08:00
+563,"Second Floor Corner Shoplot, 1184 Sqft at Utropolis Utama, Batu Kawan FOR RENT",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-03303,research_import,2026-11-08 08:45:11.567094+08:00
+564,Jalan Bestari @ Nusa Bestari 3 Storey Shoplot Ground Floor For Rent,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-04176,research_import,2026-11-08 08:45:11.567094+08:00
+565,Sutera Square/ Sutera Utama/ New Shop For Rent,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-03041,research_import,2026-11-08 08:45:11.567094+08:00
+566,Sutera Utama Shop Facing Main Road,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-01881,research_import,2026-11-08 08:45:11.567094+08:00
+567,[Facing Mainroad] Sri Damansara Ara GF 20*85sqft Basic unit for rent,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-02969,research_import,2026-11-08 08:45:11.567094+08:00
+568,"GF Shoplot Plaza Damas 3 | 1,000sf | High Visibility | Sri Hartamas",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-02886,research_import,2026-11-08 08:45:11.567094+08:00
+569,Ground Floor Shop Lot Desa Sri Hartamas Near Mont Kiara Kuala Lumpur,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-01361,research_import,2026-11-08 08:45:11.567094+08:00
+570,"[24x80 Ground Floor Extend] Sri Petaling Shoplot, Jln Radin Bagus, KL",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-02554,research_import,2026-11-08 08:45:11.567094+08:00
+571,Shoplot for rent at Jalan Dato Ismail Hashim near Sungai Ara,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-05161,research_import,2026-11-08 08:45:11.567094+08:00
+572,"Flexible, Fully Furnished Office Spaces for Rent at Fraser Business Park!",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-01845,research_import,2026-11-08 08:45:11.567094+08:00
+573,Corner shop lot Kuala Lumpur,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-01372,research_import,2026-11-08 08:45:11.567094+08:00
+574,Corner Upper Floor Shop Office The Trillium Lake Fields Sungai Besi Sg Besi For Rent,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-01437,research_import,2026-11-08 08:45:11.567094+08:00
+575,"Ground Floor Shop Jalan Seroja, Selayang, Bandar Saujana Utama",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00344,research_import,2026-11-08 08:45:11.567094+08:00
+576,[OPPOSITE USM] SUNGAI DUA FIRST FLOOR SHOPLOT 1400sf MAIN ROAD GELUGOR,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-04857,research_import,2026-11-08 08:45:11.567094+08:00
+577,"Krystal Point Bayan Lepas Ground Floor Shoplot for Rent | 2,000 sqft",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-03101,research_import,2026-11-08 08:45:11.567094+08:00
+578,The Sun Commercial Ground Floor 1100sf Sungai Nibong Bayan Lepas,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-03687,research_import,2026-11-08 08:45:11.567094+08:00
+579,Ground Floor Shoplot Plaza Danau 2 Taman Danau Desa Rent,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-02204,research_import,2026-11-08 08:45:11.567094+08:00
+580,"Ground Floor Shop For Rent @ Taman Desa, Kuala Lumpur.",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-01436,research_import,2026-11-08 08:45:11.567094+08:00
+581,taman melawati-jalan bandar 3-ground floor shoplot-22x80-ulu kelang,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-02041,research_import,2026-11-08 08:45:11.567094+08:00
+582,TTTDI Jaya - Jln Opera @ Ground Floor Shop | RECOMMENDED | RENOVATED,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-01648,research_import,2026-11-08 08:45:11.567094+08:00
+583,1st Floor shop office for Rent at Jln Mohd Fuad 1,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-01740,research_import,2026-11-08 08:45:11.567094+08:00
+584,"TTDI, Jalan Wan Kadir, Kuala Lumpur – 1st Floor F&B Retail Space for Rent",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-01352,research_import,2026-11-08 08:45:11.567094+08:00
+585,Taman Sri Putra @ JB Double Storey (End Lot) Shop (Facing Main Road) F,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-03161,research_import,2026-11-08 08:45:11.567094+08:00
+586,FIRST 1ST FLOOR VANTAGE POINT SHOP LOT 1400sf MAIN ROAD EXCLUSIVE UNIT,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-04764,research_import,2026-11-08 08:45:11.567094+08:00
+587,Tree Square Tanjung Bungah Commercial Business Centre For Rent,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-03494,research_import,2026-11-08 08:45:11.567094+08:00
+588,Tasek Gelugor|2sty Shop Lot|1st Floor For Rent|Ready Partitioned Rooms,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-04841,research_import,2026-11-08 08:45:11.567094+08:00
+589,Entire Unit | Shop Lot | Taman Desa Ara  | Tasek Gelugor | Penang,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-03367,research_import,2026-11-08 08:45:11.567094+08:00
+590,taman molek 2/1 groundfloor shoplot 24x80 retail f&b showroom office,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-04178,research_import,2026-11-08 08:45:11.567094+08:00
+591,"Adda Heights Ground Floor Shop Lot For Rent Near Taman Daya, Dato Onn, Laman Permata, Bukit Mutiara, Austin Duta, Setia Indah, Seri Austin, Nasa City",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-01934,research_import,2026-11-08 08:45:11.567094+08:00
+592,Austin Heights/ Shop Office/ For Rent,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-02159,research_import,2026-11-08 08:45:11.567094+08:00
+593,Austin Heights/ Ground Floor Shop/ For Rent,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-02635,research_import,2026-11-08 08:45:11.567094+08:00
+594,Austin Perdana Mount Austin Corner Shop for Rent,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-01930,research_import,2026-11-08 08:45:11.567094+08:00
+595,Bandar Dato Onn/ 3 Storey Shoplot/ For Rent,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-02131,research_import,2026-11-08 08:45:11.567094+08:00
+596,FOR RENT PROMENADE IJM RIMBAYU 3 STOREY CORNER SHOP strategic location,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-01080,research_import,2026-11-08 08:45:11.567094+08:00
+597,"1st, 2nd Floor @4 Storey Shoplot at JALAN PAHANG, KL, (near Tawakkal)",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-02365,research_import,2026-11-08 08:45:11.567094+08:00
+598,Jalan Tanjong @ Desa Cemerlang Ulu Tiram 22x75sf First Floor Shop Rent,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-03880,research_import,2026-11-08 08:45:11.567094+08:00
+599,Double Storey Shoplot First Floor Facing Main Road at Jalan Cantik,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-02355,research_import,2026-11-08 08:45:11.567094+08:00
+600,USJ 10 Taipan Subang Jaya End Lot Shop 2000 Sf Face Main Road for Rent,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-01645,research_import,2026-11-08 08:45:11.567094+08:00
+601,taman sri rampai -jalan 42/26-griund floor shoplot-20x70-wangsa maju,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-02042,research_import,2026-11-08 08:45:11.567094+08:00
+602,GROUND Floor Shop Desa Setapak Wangsa Maju,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-01730,research_import,2026-11-08 08:45:11.567094+08:00
+603,Main Road Ground floor Shop Wangsa Setia Wangsa Melawati,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-01670,research_import,2026-11-08 08:45:11.567094+08:00
+604,1st Floor shop office for rent at Taipan USJ 10,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-01058,research_import,2026-11-08 08:45:11.567094+08:00
+605,"Ground Floor Shop for Rent! Newly renovated! Putrei 1, Bandar Puteri Puchong",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-01062,research_import,2026-11-08 08:45:11.567094+08:00
+606,1 st Floor Shop Office in Pandan Indah Ampang Facing Main Road & Easy Access Cheras Ampang,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-01397,research_import,2026-11-08 08:45:11.567094+08:00
+607,Jalan Ipoh Ground floor shop,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-01400,research_import,2026-11-08 08:45:11.567094+08:00
+608,F&B Retail Space @ KLCC,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-01450,research_import,2026-11-08 08:45:11.567094+08:00
+609,"Corner Lot - Ground Floor Shop @ Taman Desa, Kuala Lumpur",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-01453,research_import,2026-11-08 08:45:11.567094+08:00
+610,2 Storey Heritage Shop house for rent @ Kuala Lumpur City Center,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-01463,research_import,2026-11-08 08:45:11.567094+08:00
+611,Corner Shop,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-01507,research_import,2026-11-08 08:45:11.567094+08:00
+612,Bukit Bintang Jalan Alor Shop,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-01575,research_import,2026-11-08 08:45:11.567094+08:00
+613,Menjalara Kepong G.floor shop for rent,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-01743,research_import,2026-11-08 08:45:11.567094+08:00
+614,Desa Sri Hartamas Shop House First Floor with Lift,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-01760,research_import,2026-11-08 08:45:11.567094+08:00
+615,Facing Main Road Indah Prime 2 @ Taman Bukit Indah 2 Storey Shoplot For Rent,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-02087,research_import,2026-11-08 08:45:11.567094+08:00
+616,Horizon Hills@Horizon Square 2Storey Shoplot Facing Main Road for Rent,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-02180,research_import,2026-11-08 08:45:11.567094+08:00
+617,Danga Utama - 1st floor at Pusat Perdagangan Danga Utama,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-02197,research_import,2026-11-08 08:45:11.567094+08:00
+618,Permas Avenue Bandar Baru Permas Jaya 3 Storey Shop Whole Block for Rent,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-02251,research_import,2026-11-08 08:45:11.567094+08:00
+619,"Bukit Indah @ Indah Prime 2, iskandar Puteri, Double Storey Shoplot For Rent, Corner Lot, Adjoining Unit, Intermediate Lot",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-02321,research_import,2026-11-08 08:45:11.567094+08:00
+620,3-Storey End Lot Shoplot for Rent – Tropicana Uplands Gelang Patah | Main Road | Extra Land,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-02492,research_import,2026-11-08 08:45:11.567094+08:00
+621,Taman Desa Cemerlang Ground Floor Shop Lot for Rent 烈光镇底楼店屋出租,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-02621,research_import,2026-11-08 08:45:11.567094+08:00
+622,"🏢 Jalan Teratai, Johor Jaya Shop Lot Ground Floor For Rent 柔佛再也店屋底楼出租",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-02628,research_import,2026-11-08 08:45:11.567094+08:00
+623,Georgetown 2-Storey Shop Office for Rent | Facing Main Road,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-03069,research_import,2026-11-08 08:45:11.567094+08:00
+624,Krystal Point Bayan Lepas Ground Floor Shop for Rent,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-03100,research_import,2026-11-08 08:45:11.567094+08:00
+625,"First Floor Shoplot, Corner Unit at Pusat Perniagaan Alma, Bukit Mertajam, Fully Patitioned Office Layout",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-03124,research_import,2026-11-08 08:45:11.567094+08:00
+626,"Ground Floor Shoplot with Mezzanine FLoor, Renovated, Facing Main Road @ Machang Bubok, Alma",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-03128,research_import,2026-11-08 08:45:11.567094+08:00
+627,High Visibility Big Size Shop Lot Rare in Market,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-03178,research_import,2026-11-08 08:45:11.567094+08:00
+628,Brand New Unit 2-Storey Shoplot @ Santuary Row Alma Permatang Tinggi,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-03182,research_import,2026-11-08 08:45:11.567094+08:00
+629,SHOPLOT RENT AT TANJUNG BUNGAH FACING ROAD LOOKING FOR BUSINESS,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-03221,research_import,2026-11-08 08:45:11.567094+08:00
+630,"Lebuh Chulia, Georgetown, Penang / Ground Floor Shop Lot / For Rent / 2,000 sq.ft / Main Road Frontage",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-03235,research_import,2026-11-08 08:45:11.567094+08:00
+631,KL City Petaling Street Corner Upper Shop,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-01386,research_import,2026-11-08 08:45:11.567094+08:00
+632,Hartamas Ground Floor Shop,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-01388,research_import,2026-11-08 08:45:11.567094+08:00
+633,Petaling Street Market 2.5 Storey Shop Lot,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-01393,research_import,2026-11-08 08:45:11.567094+08:00
+634,TTDI Ground floor shop,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-01405,research_import,2026-11-08 08:45:11.567094+08:00
+635,Bandar Menjalara Ground Floor Shop,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-01407,research_import,2026-11-08 08:45:11.567094+08:00
+636,"22x75, Facing Main Road, Ground Floor Shop @ Kuchai Business Park, KL",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-01421,research_import,2026-11-08 08:45:11.567094+08:00
+637,"40x65 - Ground Floor Shop @ Pandan Indah, Cheras, Ampang.",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-01423,research_import,2026-11-08 08:45:11.567094+08:00
+638,"End Lot - Ground Floor Shop @ Taman Tun Dr Ismail, Kuala Lumpur.",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-01426,research_import,2026-11-08 08:45:11.567094+08:00
+639,"Corner Lot - Ground Floor Shop @ Kuchai Lama, Kuala Lumpur",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-01435,research_import,2026-11-08 08:45:11.567094+08:00
+640,Santuari Commercial Centre (Semi D Shoplot For Rent) Alma,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-03183,research_import,2026-11-08 08:45:11.567094+08:00
+641,JALAN JELUTONG 4-STOREY SHOPLOT FOR RENT | PENANG,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-03279,research_import,2026-11-08 08:45:11.567094+08:00
+642,"2 Storey Shoplot @ Jalan Burma, Pulau Tikus",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-03374,research_import,2026-11-08 08:45:11.567094+08:00
+643,2557sf 2nd Floor Shop Lot | Jalan Rozhan | Alma | Bukit Mertajam,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-03379,research_import,2026-11-08 08:45:11.567094+08:00
+644,2 Storey shophouse for Rent at Jalan Burma,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-03391,research_import,2026-11-08 08:45:11.567094+08:00
+645,3 Storey Shoplot @ Jalan Dato Keramat Second Floor,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-03411,research_import,2026-11-08 08:45:11.567094+08:00
+646,Kampung Baru Jalan Maju jaya Ground Floor Shoplot for rent mainroad bukit mertajam,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-03453,research_import,2026-11-08 08:45:11.567094+08:00
+647,Bandar Sunway Seberang Jaya Ground Floor Shop Lot For Rent,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-03505,research_import,2026-11-08 08:45:11.567094+08:00
+648,Bukit mertajam Jalan Maju 1st floor shop for Rent,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-03512,research_import,2026-11-08 08:45:11.567094+08:00
+649,1st Floor Jalan Perak Jelutong for Rent,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-03616,research_import,2026-11-08 08:45:11.567094+08:00
+650,3rd Floor Jalan Usahaniaga for Rent,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-03585,research_import,2026-11-08 08:45:11.567094+08:00
+651,Ground Floor Shoplot in Bandar Perda,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-03661,research_import,2026-11-08 08:45:11.567094+08:00
+652,"3 Shoplot At Jalan Perai Jaya, Perai For Rent",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-03664,research_import,2026-11-08 08:45:11.567094+08:00
+653,SHOP OFFICE FOR RENT - SKYpod SQUARE PUCHONG,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00002,research_import,2026-11-08 08:45:11.567094+08:00
+654,Ground Floor ENDLOT Shoplot For Rent@ Eleven Avenue Bandar Bukit Raja,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00018,research_import,2026-11-08 08:45:11.567094+08:00
+655,"Shoplot For Rent @ Jalan TS 6, Subang Jaya",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00031,research_import,2026-11-08 08:45:11.567094+08:00
+656,Taman Garing Permai Rawang 1st Floor Rent,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00065,research_import,2026-11-08 08:45:11.567094+08:00
+657,"[New Shop for rent] TownSquare Gamuda Cove, dengkil",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00075,research_import,2026-11-08 08:45:11.567094+08:00
+658,Double Storey Shoplot Pusat Perdagangan Hillpark Bandar Puncak Alam,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00076,research_import,2026-11-08 08:45:11.567094+08:00
+659,Cheras Taman Muda Shoplot for Rent,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00078,research_import,2026-11-08 08:45:11.567094+08:00
+660,"Shoplot DATARAN SURIA GROUND FLOOR, Puncak Alam -  FACING MAIN ROAD",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00084,research_import,2026-11-08 08:45:11.567094+08:00
+661,"Bayu Emas, Klang-2 Storey Shop For Rent",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00088,research_import,2026-11-08 08:45:11.567094+08:00
+662,Corner Retails Space Facing Main Road @ Mirai Residences Kajang 2,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00129,research_import,2026-11-08 08:45:11.567094+08:00
+663,Shop Lot Sg Manggis Banting,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00130,research_import,2026-11-08 08:45:11.567094+08:00
+664,Shop Lot Ground Floor Seksyen 3 Bangi,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00136,research_import,2026-11-08 08:45:11.567094+08:00
+665,Taman Sri Gombak Corner Shoplot For Rent@Batu Caves,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00153,research_import,2026-11-08 08:45:11.567094+08:00
+666,Amara Residence Ground Floor Shop Jalan Raintree Utama,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00168,research_import,2026-11-08 08:45:11.567094+08:00
+667,"Taman Cheras Jaya / Balakong, Seri Kembangan / Shop",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00179,research_import,2026-11-08 08:45:11.567094+08:00
+668,Taman Universiti indah seri kembangan ground floor shop for rent,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00185,research_import,2026-11-08 08:45:11.567094+08:00
+669,Corner Ground Floor Commercial Shoplot |Taman Bukit Serdang  | PSK 9,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00192,research_import,2026-11-08 08:45:11.567094+08:00
+670,SS15 Subang Jaya Intermediate Shoplot for Rent,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00204,research_import,2026-11-08 08:45:11.567094+08:00
+671,"Bandar Puteri Puchong, Puteri 5 Ground Floor For Rent",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00210,research_import,2026-11-08 08:45:11.567094+08:00
+672,BONUS 1st Floor Shop Office Renovated Subang Jaya USJ 9 10 11 Elite,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00211,research_import,2026-11-08 08:45:11.567094+08:00
+673,"Puchong perdana  , ground floor shop , facing main road",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00224,research_import,2026-11-08 08:45:11.567094+08:00
+674,Banting Jalan Bunga Pekan 2 Storey Shop Facing Main Road,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00240,research_import,2026-11-08 08:45:11.567094+08:00
+675,"Bandar Tun Hussein Onn, Balakong",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00241,research_import,2026-11-08 08:45:11.567094+08:00
+676,Damansara Bistari Petaling Jaya Shop For Rent,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00242,research_import,2026-11-08 08:45:11.567094+08:00
+677,Shop for rent TAMAN JASA,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00244,research_import,2026-11-08 08:45:11.567094+08:00
+678,Facing Main Road Shoplot Ecohill Semenyih For Rent,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00253,research_import,2026-11-08 08:45:11.567094+08:00
+679,Bandar Baru Bangi Shop Lots For Rent,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00255,research_import,2026-11-08 08:45:11.567094+08:00
+680,Taman sri muda Seksyen 25 Shah alam 4 storey shop 1st floor,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00256,research_import,2026-11-08 08:45:11.567094+08:00
+681,2 Storey Shoplot facing main road Jalan Cheras Batu 14 Kajang,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00263,research_import,2026-11-08 08:45:11.567094+08:00
+682,Facing Mainroad Bandar Botanic Klang Ground Floor Shoplot,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00269,research_import,2026-11-08 08:45:11.567094+08:00
+683,Batu Caves Taman Selasih ground floor shop for rent,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00281,research_import,2026-11-08 08:45:11.567094+08:00
+684,".🟥Bandar Sri Damansara, 22x80, SD 7🟥Facing Landed, Ground Floor",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00299,research_import,2026-11-08 08:45:11.567094+08:00
+685,Alam Suria Bandar Puncak Alam Grond Floor Shop Lot For Rent,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00301,research_import,2026-11-08 08:45:11.567094+08:00
+686,"Shop Lot Jalan Bunga Cempaka, Taman Muda, Ampang",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00310,research_import,2026-11-08 08:45:11.567094+08:00
+687,CORNER 2 Sty Shop Lot🔥Bandar Putera 2 Klang Jln Kebun- For Rent Now,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00323,research_import,2026-11-08 08:45:11.567094+08:00
+688,Gnd Floor Shop Lot - 20 x 65 - Bandar Baru Salak Tinggi Sepang,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00339,research_import,2026-11-08 08:45:11.567094+08:00
+689,Ground Floor Shop@Taman Bukit Mewah Kajang For Rent,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00345,research_import,2026-11-08 08:45:11.567094+08:00
+690,Shop Lot Seksyen 16 Alam Avenue Shah Alam For Rent,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00346,research_import,2026-11-08 08:45:11.567094+08:00
+691,THIRD AVENUE End Lot Corner unit Crowded Retail Shop Office Cyberjaya,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00347,research_import,2026-11-08 08:45:11.567094+08:00
+692,"Shoplot for Rent at Taman Mutiara Indah, Bandar Bukit Puchong",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00365,research_import,2026-11-08 08:45:11.567094+08:00
+693,Edusentral Shop Lot For Rent,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00371,research_import,2026-11-08 08:45:11.567094+08:00
+694,"3 Storey End lot Shop Office @ Bandar Kajang Town, Kajang",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00373,research_import,2026-11-08 08:45:11.567094+08:00
+695,"(FACING MAIN ROAD! HIGH TRAFFIC) 1st Floor Shoplot, Nadi Setia Ecohill",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00380,research_import,2026-11-08 08:45:11.567094+08:00
+696,Corner Ground Floor at Taman Puncak Jalil Seri Kembangan For Rent,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00408,research_import,2026-11-08 08:45:11.567094+08:00
+697,Bayu Tinggi Taipan Klang Ground Floor Corner Shoplot For Rent,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00051,research_import,2026-11-08 08:45:11.567094+08:00
+698,Corner Shoplot Jalan Kristal Seksyen 7 for rent,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00426,research_import,2026-11-08 08:45:11.567094+08:00
+699,1st floor shop office Seksyen 6 Kota Damansara,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00432,research_import,2026-11-08 08:45:11.567094+08:00
+700,FOR RENT PANDAMARAN EHSAN JAYA 1st Floor Shop Lot facing main road,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00450,research_import,2026-11-08 08:45:11.567094+08:00
+701,Bandar Baru Bangi Bangi Central First Floor Shop Office For Rent,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00453,research_import,2026-11-08 08:45:11.567094+08:00
+702,Shah Alam Seksyen 7 Ground floor shop for Rent,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00467,research_import,2026-11-08 08:45:11.567094+08:00
+703,BOLEH NEGO❗️Shop Office 2 Storey Eco Somerset Eco Sanctuary For Rent,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00474,research_import,2026-11-08 08:45:11.567094+08:00
+704,Shop Lot Tasik Kesuma Beranang Semenyih,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00491,research_import,2026-11-08 08:45:11.567094+08:00
+705,GROUND FLOOR Road Level 2-sty SHOPLOT TUN TEJA ALAM IMPIAN SHAH ALAM,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00503,research_import,2026-11-08 08:45:11.567094+08:00
+706,"CORNER 2 STOREY SHOP ✅ 3,200 sqft ✅ PJS9 ✅ BANDAR SUNWAY ✅ Subang Jaya",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00513,research_import,2026-11-08 08:45:11.567094+08:00
+707,Ground Floor Seksyen 7 Bangi Near JPJ,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00517,research_import,2026-11-08 08:45:11.567094+08:00
+708,[Corner Lot] Bayu Bukit Tinggi BIG CORNER 2sty Shoplot 44*70sqft for r,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00518,research_import,2026-11-08 08:45:11.567094+08:00
+709,"Taman Bayu Perdana, Klang Shoplot for Rent",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00531,research_import,2026-11-08 08:45:11.567094+08:00
+710,Setia Alam Setia Indah Ground Floor Shop For Rent,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00095,research_import,2026-11-08 08:45:11.567094+08:00
+711,Eco Ardence @ Setia Alam 1st Floor Shoplot for Rent,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00540,research_import,2026-11-08 08:45:11.567094+08:00
+712,Selangor Selayang Taman Bidara Ground Floor Shop For Rent,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00564,research_import,2026-11-08 08:45:11.567094+08:00
+713,Ground floor shop in Taman Sri Serdang,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00604,research_import,2026-11-08 08:45:11.567094+08:00
+714,Partial Furnished Ground Floor Shoplot For Rent@ Bandar Bestari Klang,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00606,research_import,2026-11-08 08:45:11.567094+08:00
+715,Renovated Shop Lot Office Rent【1st Floor】Bandar Baru Bukit Raja Klang,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00617,research_import,2026-11-08 08:45:11.567094+08:00
+716,"Cheras Prima / Taman Sutera, Balakong / Ground Floor Shop",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00618,research_import,2026-11-08 08:45:11.567094+08:00
+717,Ground Floor Shop Corner Lestari Perdana Bandar Putra Permai,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00624,research_import,2026-11-08 08:45:11.567094+08:00
+718,2 Storey Shoplot Taman Bintang Mas Dengkil,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00625,research_import,2026-11-08 08:45:11.567094+08:00
+719,"Ground Floor End Lot For Rent At Taman Equine, Seri Kembangan",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00649,research_import,2026-11-08 08:45:11.567094+08:00
+720,"Taman Klang Jaya 1st Floor Shoplot Office RENT, Fully Furnished Unit",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00670,research_import,2026-11-08 08:45:11.567094+08:00
+721,Ground Floor 2 Storey Shoplot Jalan Suakasih Bandar Tun Hussein Onn,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00672,research_import,2026-11-08 08:45:11.567094+08:00
+722,"[ GROUND FLOOR + FACING ROAD ] Laman Seri Business Park, Seksyen 13",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00676,research_import,2026-11-08 08:45:11.567094+08:00
+723,"Ground Floor Shoplot, Jalan PSK 8, Bukit Serdang, Seri Kembangan",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00686,research_import,2026-11-08 08:45:11.567094+08:00
+724,Commercial Bungalow For Rent Taman Selayang Baru Shoplot Ground floor,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00700,research_import,2026-11-08 08:45:11.567094+08:00
+725,"Bandar Kajang, Ground floor shop opposite Metro Kajang, renovated",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00705,research_import,2026-11-08 08:45:11.567094+08:00
+726,Seri Kembangan Taman Puncak Jalil Puj 3 Facing Main Road,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00706,research_import,2026-11-08 08:45:11.567094+08:00
+727,Damansara Damai Flat shoplot For Rent,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00710,research_import,2026-11-08 08:45:11.567094+08:00
+728,Kemuning Utama,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00721,research_import,2026-11-08 08:45:11.567094+08:00
+729,Esplanad Square   Eco Grandeur @ Puncak Alam,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00731,research_import,2026-11-08 08:45:11.567094+08:00
+730,"Ground Floor Shop Lot for Rent, Taman Berkeley Klang - Direct Owner",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00737,research_import,2026-11-08 08:45:11.567094+08:00
+731,Ground Floor Shoplot Taman Bukit Teratai Ampang,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00749,research_import,2026-11-08 08:45:11.567094+08:00
+732,"Ground Floor Shop for RENT / SALE @ Bandar Baru Klang, Jalan Tiara",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00752,research_import,2026-11-08 08:45:11.567094+08:00
+733,Shop Alam Avenue 2 Seksyen 16 Shah Alam (limited),,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00756,research_import,2026-11-08 08:45:11.567094+08:00
+734,CHEAPEST 18FT Hight Ceiling Single Storey Shoplot KESUMA SQUARE,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00762,research_import,2026-11-08 08:45:11.567094+08:00
+735,First Floor 22x75 Double Storey Shoplot Aman Perdana Kapar,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00768,research_import,2026-11-08 08:45:11.567094+08:00
+736,Ground Floor Shop Office for Rent at Bandar Bukit Puchong,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00804,research_import,2026-11-08 08:45:11.567094+08:00
+737,HIGH TRAFFIC MAINROAD🔥Bandar Bukit Tinggi Klang Ground Floor Shop Lot,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00805,research_import,2026-11-08 08:45:11.567094+08:00
+738,"Bandar Bukit Raja, 3-Storey Shop (27'x100')",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00810,research_import,2026-11-08 08:45:11.567094+08:00
+739,Limited Unit Ground Floor Shoplot For Rent at Taman Muda Ampang,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00811,research_import,2026-11-08 08:45:11.567094+08:00
+740,Bandar Puchong Jaya Skyloft Avenue Shop For Rent  {New},,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00860,research_import,2026-11-08 08:45:11.567094+08:00
+741,PJS 11 Bandar Sunway Petaling Jaya Subang Jaya Shop Factory,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00865,research_import,2026-11-08 08:45:11.567094+08:00
+742,"Taman koperasi polis fasa, ground floor unit for rent, batu caves,",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00868,research_import,2026-11-08 08:45:11.567094+08:00
+743,Bandar Bukit Raja Endlot 2nd Floor Shoplot For Rent,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00882,research_import,2026-11-08 08:45:11.567094+08:00
+744,"Ampang,Bandar Baru Ampang",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00883,research_import,2026-11-08 08:45:11.567094+08:00
+745,Corner lot Shop office Taman Sri Seri Gombak Batu Caves,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00885,research_import,2026-11-08 08:45:11.567094+08:00
+746,1st floor shop for rent in Kota Damansara,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00891,research_import,2026-11-08 08:45:11.567094+08:00
+747,Corner Lot Ground Floor Hot Prime Area Near LRT station n Bank,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00910,research_import,2026-11-08 08:45:11.567094+08:00
+748,Bandar Puteri Puchong  Facing Bank Area Ground Floor Shop Lot,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00911,research_import,2026-11-08 08:45:11.567094+08:00
+749,Setia Taipan 1 @ Setia Alam Shop Office for Rent,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00912,research_import,2026-11-08 08:45:11.567094+08:00
+750,1st Floor Shoplot For Rent at Taman Perindustrian Subang Jaya,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00913,research_import,2026-11-08 08:45:11.567094+08:00
+751,Bandar Puteri Puchong  1.5 storey Shop Lot Below Market Price,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00914,research_import,2026-11-08 08:45:11.567094+08:00
+752,"4 Sty Shoplot Facing Main Road at Batu 11 Balakong, Cheras",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00920,research_import,2026-11-08 08:45:11.567094+08:00
+753,Plaza Jelutong Bukit Jelutong Renovated Partition Office Room Selangor,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00922,research_import,2026-11-08 08:45:11.567094+08:00
+754,Ground Floor Shop Lot at Jalan Besar Ampang Pekan Ampang For Rent,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00925,research_import,2026-11-08 08:45:11.567094+08:00
+755,Bandar Botanic Klang 2 Storey Shoplot GF For Rent Near GM Klang,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00933,research_import,2026-11-08 08:45:11.567094+08:00
+756,Ground Floor Shop Lot Kampung Lindungan Petaling Jaya For Rent Sewa,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00934,research_import,2026-11-08 08:45:11.567094+08:00
+757,Gravit 8 Ground Floor Shop Kota Bayuemas Klang Basic Unit @ For Rent,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00952,research_import,2026-11-08 08:45:11.567094+08:00
+758,"End lot Ground floor Kajang East Avenue ,Vista valley semenyih",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00961,research_import,2026-11-08 08:45:11.567094+08:00
+759,Bandar Botanic Mahogani Ground Floor Shoplot,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00955,research_import,2026-11-08 08:45:11.567094+08:00
+760,"Corner Shoplot Jalan Kristal Seksyen 7, Shah Alam",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-01008,research_import,2026-11-08 08:45:11.567094+08:00
+761,"Bandar Sunway Mentari,Corner Ground Floor Shop For Rent,Petaling Jaya",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-01020,research_import,2026-11-08 08:45:11.567094+08:00
+762,Sea Park Petaling Jaya - Two storey END LOT shoplot for Rent,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-01039,research_import,2026-11-08 08:45:11.567094+08:00
+763,"Taman Sri Gombak CORNER Ground Floor Shop , 37x70 , Below Market",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-01054,research_import,2026-11-08 08:45:11.567094+08:00
+764,"Seri Kembangan,Ground Floor End Lot Shop For Rent,Jln Psk,Serdang",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-01066,research_import,2026-11-08 08:45:11.567094+08:00
+765,City Mall USJ19 Subang Jaya,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-01067,research_import,2026-11-08 08:45:11.567094+08:00
+766,FOR RENT KASUARINA BANDAR BOTANIC Klang CORNER SHOP LOT,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-01082,research_import,2026-11-08 08:45:11.567094+08:00
+767,Bayu Tinggi Klang ~ Shoplot Ground Floor For Rent,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-01096,research_import,2026-11-08 08:45:11.567094+08:00
+768,Rimbayu Uptown Shoplot ~ Facing Main Road,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-01097,research_import,2026-11-08 08:45:11.567094+08:00
+769,Semi-D Commercial Shop Bandar Puteri Puchong For Rent,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-01099,research_import,2026-11-08 08:45:11.567094+08:00
+770,"Bandar Tasik Kesuma Berenang Semenyih, Ground floor shop",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-01112,research_import,2026-11-08 08:45:11.567094+08:00
+771,"Pelangi Semenyih 2, Rinching, Tasik Kesuma, Shop office",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-01114,research_import,2026-11-08 08:45:11.567094+08:00
+772,Ground Floor Shoplot (22x70sf) Taman Putra Prima Puchong for rent,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-01122,research_import,2026-11-08 08:45:11.567094+08:00
+773,1st floor shop lot for rent Taman Kajang Utama,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-01130,research_import,2026-11-08 08:45:11.567094+08:00
+774,"Main Road frontage Shop @ Bandar Puchong Jaya, Puchong, Selangor",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-01133,research_import,2026-11-08 08:45:11.567094+08:00
+775,Facing Mainroad Eco Ardence Crest Shoplot For Rent,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00049,research_import,2026-11-08 08:45:11.567094+08:00
+776,Ss3 Taman Universiti Petaling Jaya Ground Floor Shop Intermediate Lot,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-01161,research_import,2026-11-08 08:45:11.567094+08:00
+777,3-Storey Shoplot Bandar Baru Bangi Seksyen 9 For Rent,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-01189,research_import,2026-11-08 08:45:11.567094+08:00
+778,Ground Floor Shoplot Taman TTDI Jaya FOR RENT,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-01202,research_import,2026-11-08 08:45:11.567094+08:00
+779,Klang Taman Sri Andalas Shop Lot Ground Floor,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-01203,research_import,2026-11-08 08:45:11.567094+08:00
+780,"CBD Perdana , Cyberjaya",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-01212,research_import,2026-11-08 08:45:11.567094+08:00
+781,"Mahkota Cheras G Floor Shop, Facing Main Road For Rent",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-01215,research_import,2026-11-08 08:45:11.567094+08:00
+782,Shop lot Ground floor Medan 88 at bandar baru salak tinggi  Selangor,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00460,research_import,2026-11-08 08:45:11.567094+08:00
+783,Setia Alam Taipan 2 Ground Floor Shop For Rent,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-01257,research_import,2026-11-08 08:45:11.567094+08:00
+784,Kota Damansara The Strand F/Furnished 3rd Floor Shop Office For Rent,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-01259,research_import,2026-11-08 08:45:11.567094+08:00
+785,"Sewa Kedai : Ground Floor + Facing main road Mahkota Cheras, Kajang",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-01264,research_import,2026-11-08 08:45:11.567094+08:00
+786,"Ground Floor Shoplot for Rent @ Jalan Anggerik Vanilla, Kota Kemuning",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-01272,research_import,2026-11-08 08:45:11.567094+08:00
+787,"Salak Perdana Business Park, Salak Tinggi, Sepang, Selangor End lot",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-01275,research_import,2026-11-08 08:45:11.567094+08:00
+788,Bandar Sunway Selangor Shop lot for rent Sunway University College,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-01279,research_import,2026-11-08 08:45:11.567094+08:00
+789,Petaling Jaya Lorong University Corner shop,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-01283,research_import,2026-11-08 08:45:11.567094+08:00
+790,2 Storey Shop Bandar Baru Sungai Buloh,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-01286,research_import,2026-11-08 08:45:11.567094+08:00
+791,2 Story Shop lot Facing Main Road @ Taman Rakan,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-01289,research_import,2026-11-08 08:45:11.567094+08:00
+792,First Floor Office Jalan Kasuarina Bandar Botanic Klang For Rent,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-01298,research_import,2026-11-08 08:45:11.567094+08:00
+793,"[Ground floor Shop] Jasper square, Bandar Sunsuria Dengkil, Sepang",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-01301,research_import,2026-11-08 08:45:11.567094+08:00
+794,Ground Floor Shoplot Facing Main Road Sri Damansara Petaling Jaya,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-01303,research_import,2026-11-08 08:45:11.567094+08:00
+795,Puchong Jaya Jalan Kenari 3rd Floor shop/office for rent,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-01304,research_import,2026-11-08 08:45:11.567094+08:00
+796,LIMITED CORNER Ground Floor shop Puchong Jaya Jalan Kenari for rent,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-01308,research_import,2026-11-08 08:45:11.567094+08:00
+797,Facing Road 22x75 Ground floor shop Bandar Puteri 5 Puchong Jaya,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-01307,research_import,2026-11-08 08:45:11.567094+08:00
+798,Shop Lot TTDI Jaya Shah Alam,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-01318,research_import,2026-11-08 08:45:11.567094+08:00
+799,Ground Floor Shoplot @ Taman Orkid Cheras Batu 9 for rent,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-01338,research_import,2026-11-08 08:45:11.567094+08:00
+800,"Retail Shop, Sunway D’Hill Residences, Kota Damansara,Petaling jaya",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-01350,research_import,2026-11-08 08:45:11.567094+08:00
+801,Banting Township Jalan Sultan Abdul Samad Shop For Rent,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-01351,research_import,2026-11-08 08:45:11.567094+08:00
+802,[Limited] Damansara Damai Vista Ground Floor Shop | 30x70 | 2min MRT,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-01357,research_import,2026-11-08 08:45:11.567094+08:00
+803,Corner Shop at Pusat Perdagangan Seri Kembangan PSK For Rent,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-01364,research_import,2026-11-08 08:45:11.567094+08:00
+804,Hot Area Ground Floor Shoplot Petaling Jaya For Rent,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-01392,research_import,2026-11-08 08:45:11.567094+08:00
+805,Office Shop lot for rent @ Bandar Puteri,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-01396,research_import,2026-11-08 08:45:11.567094+08:00
+806,"2sty Corner Shop for Rent @ Taman Scientex Jenjarom, Banting, Selangor",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-01412,research_import,2026-11-08 08:45:11.567094+08:00
+807,End Lot Facing Main Road Shop - Serenia City (McDonald’s Row),,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-01427,research_import,2026-11-08 08:45:11.567094+08:00
+808,Tropicana aman Triana Bandar rimbayu G floor shop,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-01428,research_import,2026-11-08 08:45:11.567094+08:00
+809,Shop Lot Astana Puncak Alam Phasa 3,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-01451,research_import,2026-11-08 08:45:11.567094+08:00
+810,Ground Floor Shoplot Taman Batu Off Greenwood Park Batu Caves,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-01454,research_import,2026-11-08 08:45:11.567094+08:00
+811,"Ground Floor Shop, Kajang East, Bandar Teknologi Kajang",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-01458,research_import,2026-11-08 08:45:11.567094+08:00
+812,2 Storey Shop💥Taman Dusun Jaya Semenyih,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-01488,research_import,2026-11-08 08:45:11.567094+08:00
+813,Bandar metro puchong new shop lot facing main road,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-01513,research_import,2026-11-08 08:45:11.567094+08:00
+814,FACING ROAD💥2 unit Shoplot Bangi Bandar Bukit Mahkota,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-01520,research_import,2026-11-08 08:45:11.567094+08:00
+815,bangi semenyih selangor serene square,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-01524,research_import,2026-11-08 08:45:11.567094+08:00
+816,2 Storey Shoplot @ Taman Lestari Perdana Seri Kembangan for rent,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-01532,research_import,2026-11-08 08:45:11.567094+08:00
+817,Second 2nd Floor Shop Bandar Baru Selayang Batu Caves Dataran Templer,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-01551,research_import,2026-11-08 08:45:11.567094+08:00
+818,Move In 1534sf Office Cascades Kota Damansara Next Giant The Strand,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-01552,research_import,2026-11-08 08:45:11.567094+08:00
+819,End-lot 1st floor shop-office in Bukit Jelutong. Near Mydin area.,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-01566,research_import,2026-11-08 08:45:11.567094+08:00
+820,Facing Main Road !! NEW Shop Lot !! Gamuda Cove !!,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-01571,research_import,2026-11-08 08:45:11.567094+08:00
+821,Facing Main Road Kota Bayuemas Port Klang Ground Floor Shop for Rent,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-01587,research_import,2026-11-08 08:45:11.567094+08:00
+822,"Selayang Jaya,shop for Rent same row with HongLeong Bank &near Maybank",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-01600,research_import,2026-11-08 08:45:11.567094+08:00
+823,GROUND FLOOR 2 STY SHOP Hillpark Avenue Puncak Alam UITM ECOWORLD,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-01624,research_import,2026-11-08 08:45:11.567094+08:00
+824,Taman Velox Rawang,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-01629,research_import,2026-11-08 08:45:11.567094+08:00
+825,FACING MAIN ROAD 1st Floor Shop Office Lot Bandar Puteri Bangi,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-01637,research_import,2026-11-08 08:45:11.567094+08:00
+826,Shop Lot AMAN UMARA 5 Bandar Tropicana Aman [ GROUND FLOOR ],,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-01641,research_import,2026-11-08 08:45:11.567094+08:00
+827,Ampang Bandar Baru Wawasan,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-01662,research_import,2026-11-08 08:45:11.567094+08:00
+828,Taman Sri serdang seri kembangan Shop main road for rent,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-01667,research_import,2026-11-08 08:45:11.567094+08:00
+829,Kota Kemuning Shah Alam Ground Floor Shop lot 22x75 1650sf Busy Area,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-01677,research_import,2026-11-08 08:45:11.567094+08:00
+830,Puncak Alam Hillpark Avenue Pusat Perdagangan Hillpark Shop 22x70,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-01685,research_import,2026-11-08 08:45:11.567094+08:00
+831,Ground Floor Shop Puncak Alam Hillpark Avenue 22x75 Good Condition,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-01686,research_import,2026-11-08 08:45:11.567094+08:00
+832,Taman Klang Utama - Klang Ground Floor Shoplot For Rent,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-01694,research_import,2026-11-08 08:45:11.567094+08:00
+833,Fiesta @Axis Pandan Shop Jalan Cempaka,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-01703,research_import,2026-11-08 08:45:11.567094+08:00
+834,"mc1128 🏢 Corner Ground Floor Shop Lot @ Taman Sri Muda, Shah Alam",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-01711,research_import,2026-11-08 08:45:11.567094+08:00
+835,"New Ground Floor Shoplot , Kajang East Avenue 2 for Rent",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-01715,research_import,2026-11-08 08:45:11.567094+08:00
+836,Selangor Bandar Sri Damansara Shop Lot For Rent,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-01746,research_import,2026-11-08 08:45:11.567094+08:00
+837,"Rawang Corner Shop , Taman M Residensi",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-01773,research_import,2026-11-08 08:45:11.567094+08:00
+838,Ground Floor Shop Taman Selayang Jaya Crowed & Traffic Area,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-01782,research_import,2026-11-08 08:45:11.567094+08:00
+839,"Rawang BG 1, Shop/Office @ Kampung Dato Lee Kim Sai",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-01783,research_import,2026-11-08 08:45:11.567094+08:00
+840,Bangi Kajang Bandar Seri Putra Corner Facing Main Road,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-01793,research_import,2026-11-08 08:45:11.567094+08:00
+841,"Ground Floor Shoplot,  Dataran Mentari PJS 8, Bandar Sunway, Selangor",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-01807,research_import,2026-11-08 08:45:11.567094+08:00
+842,First Floor Shop Bandar Baru Sungai Buloh Jalan 3/1,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-01822,research_import,2026-11-08 08:45:11.567094+08:00
+843,Facing Main Road 24x75 Bukit Raja Klang Astaka Ground Floor Shop,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-01826,research_import,2026-11-08 08:45:11.567094+08:00
+844,TO LET  1st Floor Shop Lot Persiaran Pegaga Taman Bayu Perdana Klang,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-01853,research_import,2026-11-08 08:45:11.567094+08:00
+845,Ground Floor Shoplot 22x80 Bandar Puchong Utama Puchong,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-01891,research_import,2026-11-08 08:45:11.567094+08:00
+846,Taman Bukit Ampang 1st Floor Office Corner Lot,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-01899,research_import,2026-11-08 08:45:11.567094+08:00
+847,Seri Kembangan Taman Putra Permai Ground Floor Shoplot,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-01902,research_import,2026-11-08 08:45:11.567094+08:00
+848,FOR Rent 3RD AVENUE BANDAR BUKIT RAJA KLANG DOUBLE STOREY corner shop,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-01923,research_import,2026-11-08 08:45:11.567094+08:00
+849,"Cheras Taman Putri jaya ground floor shop,renovated with furnished🔥",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-01928,research_import,2026-11-08 08:45:11.567094+08:00
+850,Impian Prisma 2 Ground Floor Shoplot for Rent at Alam Impian,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-01932,research_import,2026-11-08 08:45:11.567094+08:00
+851,Ground Floor Shoplot @ Taman Perindustrian UEP Subang Jaya,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-01955,research_import,2026-11-08 08:45:11.567094+08:00
+852,Setia Ecohill Walk Mall Ground Floor Shoplot,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-01957,research_import,2026-11-08 08:45:11.567094+08:00
+853,FIRST 2nd Floor Shop Bandar Kajang Jalan Tun Abdul Aziz,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-01959,research_import,2026-11-08 08:45:11.567094+08:00
+854,Taman Universiti Seri Kembangan Double Storey Shoplot For Rent,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-01971,research_import,2026-11-08 08:45:11.567094+08:00
+855,FOR RENT Eco Somerset Eco Sanctuary Bandar Rimbayu 2-Storey intermedia,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-01983,research_import,2026-11-08 08:45:11.567094+08:00
+856,Kepong Taman Daya Shop,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-02026,research_import,2026-11-08 08:45:11.567094+08:00
+857,Old Klang Road 3rd Mile Square End Lot Shop For Rent,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-02033,research_import,2026-11-08 08:45:11.567094+08:00
+858,Taman Cheras Jaya,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-02038,research_import,2026-11-08 08:45:11.567094+08:00
+859,Cheras Taman Bukit Anggerik Shop Lot  (1st Floor),,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-02043,research_import,2026-11-08 08:45:11.567094+08:00
+860,Fraser Business Park Ground Floor Shoplot Facing Main Road 1900sqft,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-02069,research_import,2026-11-08 08:45:11.567094+08:00
+861,"Ground floor Shop, Bandar Menjalara, Kepong [Matured/Hot Area]",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-02075,research_import,2026-11-08 08:45:11.567094+08:00
+862,Corner Ground Floor Shoplot Setapak Facing Main Road Jln Genting Klang,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-02096,research_import,2026-11-08 08:45:11.567094+08:00
+863,"Shoplot For Rent @ Desa Seri Hartamas, near Souled Out Hartamas",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-02103,research_import,2026-11-08 08:45:11.567094+08:00
+864,Taman Mastiara 2nd floor shop lot rental,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-02113,research_import,2026-11-08 08:45:11.567094+08:00
+865,Menara See Hoy Chan Shop Lot,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-02123,research_import,2026-11-08 08:45:11.567094+08:00
+866,Jinjang Utara / Kepong [ End Lot Shop ] For Rent ~,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-02125,research_import,2026-11-08 08:45:11.567094+08:00
+867,"Wisma Yakin, Masjid India",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-02134,research_import,2026-11-08 08:45:11.567094+08:00
+868,G Floor Shop Kuchai Lama Kuchai Entrepreneurs Park KL Kuala Lumpur,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-02136,research_import,2026-11-08 08:45:11.567094+08:00
+869,Facing Mainroad Ground Floor Shoplot @ Bandar Sri Damansara,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-02146,research_import,2026-11-08 08:45:11.567094+08:00
+870,"Ground Floor End-Lot Shop for Rent Taman Indrahana, Kuchai Lama",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-02152,research_import,2026-11-08 08:45:11.567094+08:00
+871,CORNER 2nd Floor Shop Metro Perdana Barat Taman Usahawan Kepong,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-02178,research_import,2026-11-08 08:45:11.567094+08:00
+872,Kuchai Entrepreneurs Park Shop,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-02180,research_import,2026-11-08 08:45:11.567094+08:00
+873,1st & 2nd floor Shop 22x80 @ Wangsa Maju Section 1 for Rent,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-02182,research_import,2026-11-08 08:45:11.567094+08:00
+874,"wangsa delima 20x80 ground floor shop ,wangsa maju",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-02184,research_import,2026-11-08 08:45:11.567094+08:00
+875,Taman Bukit Teratai Ampang Shop Lot Ground Floor For Rent,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-02187,research_import,2026-11-08 08:45:11.567094+08:00
+876,Ground Floor Shop Lot near KTM Segambut Taman Sri Sinar Kuala Lumpur,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-02194,research_import,2026-11-08 08:45:11.567094+08:00
+877,3rd Floor Shoplot Taman Mastiara Jalan Ipoh KL,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-02195,research_import,2026-11-08 08:45:11.567094+08:00
+878,Strategic Location Ground Floor Commercial Shoplot,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-02200,research_import,2026-11-08 08:45:11.567094+08:00
+879,Jalan Sentul - Ground floor (facing main road),,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-02202,research_import,2026-11-08 08:45:11.567094+08:00
+880,GROUND FLOOR 2 Storey Shoplot  Bandar Tun Hussein Onn Cheras FOR RENT,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-02211,research_import,2026-11-08 08:45:11.567094+08:00
+881,Oug Parklane Corner Ground Floor Shop Old Klang Road 3308sf,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-02231,research_import,2026-11-08 08:45:11.567094+08:00
+882,Sinar sentul shoplo,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-02235,research_import,2026-11-08 08:45:11.567094+08:00
+883,"Taman shanghai shoplot,Old Klang Road",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-02237,research_import,2026-11-08 08:45:11.567094+08:00
+884,"1st floor Shop Office @ Taman Tun Dr. Ismail, TTDI Kuala Lumpur",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-02258,research_import,2026-11-08 08:45:11.567094+08:00
+885,KL City - ground floor shop (700sf) facing main road,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-02273,research_import,2026-11-08 08:45:11.567094+08:00
+886,Second floor of shoplot to let immediately,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-02282,research_import,2026-11-08 08:45:11.567094+08:00
+887,Jalan Raja Laut Chow Kit Facing Main Road Shop For Rent,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-02294,research_import,2026-11-08 08:45:11.567094+08:00
+888,KL Titiwangsa Sentral Damai Complex Grd Floor For Rent,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-02315,research_import,2026-11-08 08:45:11.567094+08:00
+889,[Ground floor] Fraser business park 1716sf Jalan metro pudu KL,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-02319,research_import,2026-11-08 08:45:11.567094+08:00
+890,1st Floor Commercial Space for Rent - Taman Tun Dr. Ismail (TTDI),,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-02321,research_import,2026-11-08 08:45:11.567094+08:00
+891,"Ground Floor Shop Lot in Pandan Perdana, Cheras, KL",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-02322,research_import,2026-11-08 08:45:11.567094+08:00
+892,"[NEGO] Setiawangsa Business Suite Ground Floor Shop , 1450sf",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-02350,research_import,2026-11-08 08:45:11.567094+08:00
+893,"Retails Shoplot for F&B, near to KLCC, Kuala Lumpur",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-02354,research_import,2026-11-08 08:45:11.567094+08:00
+894,Chow kit Grd Floor Facing Mainroad For Rent,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-02363,research_import,2026-11-08 08:45:11.567094+08:00
+895,2 Storey GROUND+1st Floor ✨Taman Danau Desa Taman Desa,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-02373,research_import,2026-11-08 08:45:11.567094+08:00
+896,Ground Floor Retail Shop at Pandan Kapital Giant Pandan indah Ampang,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-02374,research_import,2026-11-08 08:45:11.567094+08:00
+897,"Ground Floor Shop, KL, Sri Petaling, High traffic Business Centre",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-02375,research_import,2026-11-08 08:45:11.567094+08:00
+898,"Shop For Rent at Jalan Besar Ampang, Pekan Ampang",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-02387,research_import,2026-11-08 08:45:11.567094+08:00
+899,"Taman Kok Doh, Ground Floor Shop For Let",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-02427,research_import,2026-11-08 08:45:11.567094+08:00
+900,"2sty Shop @ Taman Danau Desa, Taman Desa Old Klang Road, Kuala Lumpur",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-02447,research_import,2026-11-08 08:45:11.567094+08:00
+901,Sungai Besi Sri Petaling Desa Petaling ShowroomRetail Facing Main Road,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-02516,research_import,2026-11-08 08:45:11.567094+08:00
+902,"Ground floor shop. Walking distance Banks, LRT & Malls. Facing mall.",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-02591,research_import,2026-11-08 08:45:11.567094+08:00
+903,".🟥22x70, Sri Sinar Kepong🟥2 Storey Shop, Brand New, BU 2300sqft",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-02613,research_import,2026-11-08 08:45:11.567094+08:00
+904,Taman Melawati 2anjoining 2nd Floor Office For Rent,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-02615,research_import,2026-11-08 08:45:11.567094+08:00
+905,Shop For Rent in Taman Kok Lian Jalan Ipoh,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-02628,research_import,2026-11-08 08:45:11.567094+08:00
+906,Kuala Lumpur Desa Pandan Shop Lot For Rent,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-02638,research_import,2026-11-08 08:45:11.567094+08:00
+907,GROUND FLOOR 1.5 STOREY SHOPLOT FACING MAIN ROAD Pandan Indah,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-02646,research_import,2026-11-08 08:45:11.567094+08:00
+908,"1st Floor Shop Office @ Jalan Puchong, Old Klang Road, KL (Furnished)",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-02656,research_import,2026-11-08 08:45:11.567094+08:00
+909,"Spacious Corner 1st Floor 3 Storey Shoplot @ JALAN GENTING KLANG, KL,",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-02657,research_import,2026-11-08 08:45:11.567094+08:00
+910,medan idaman business centre-ground floor shop-24x70-end lot,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-02670,research_import,2026-11-08 08:45:11.567094+08:00
+911,2 Storey New Renovated titiwangsa Shop Jalan Pahang Kuala Lumpur,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-02673,research_import,2026-11-08 08:45:11.567094+08:00
+912,Hot Demand [ Kepong Barat Perdana GF End Lot Shop For Rent ],,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-02699,research_import,2026-11-08 08:45:11.567094+08:00
+913,Ground floor 24x80 rent rm15k neg same row the store supermarket,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-02700,research_import,2026-11-08 08:45:11.567094+08:00
+914,"PJS1 Taman Petaling Utama Petaling Jaya Ground Floor Shop, 20x80",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-02730,research_import,2026-11-08 08:45:11.567094+08:00
+915,"1.5 Story Shop Facing Main Road, Dual Frontage, Cheras",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-02763,research_import,2026-11-08 08:45:11.567094+08:00
+916,Mainroad KL Shop GF,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-02775,research_import,2026-11-08 08:45:11.567094+08:00
+917,"Ground Floor Shoplot @ TAMAN DATO SENU, SENTUL KL",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-02790,research_import,2026-11-08 08:45:11.567094+08:00
+918,Kuala Lumpur Taman Gembira Happy Garden 2nd Floor Shop Lot For Rent,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-02826,research_import,2026-11-08 08:45:11.567094+08:00
+919,Komplex Bandar Park Shop For Rent. Mezzanine Floor,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-02857,research_import,2026-11-08 08:45:11.567094+08:00
+920,Prime Location Gf Shoplot Taman Jinjang Baru @ Kepong For Rent !!,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-02861,research_import,2026-11-08 08:45:11.567094+08:00
+921,Ground Floor Endlot Shoplot Taman Bukit Pandan,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-02866,research_import,2026-11-08 08:45:11.567094+08:00
+922,"Ground Floor (GF) Shop Lot - Sentul Point, Jalan Sentul Pasar, Sentul",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-02878,research_import,2026-11-08 08:45:11.567094+08:00
+923,Ground Floor Shop at Lrg Datuk Sulaiman TTDI,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-02900,research_import,2026-11-08 08:45:11.567094+08:00
+924,"Ground Floor Shop Lot, Kuchai Lama, Old Klang Road, KL",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-02906,research_import,2026-11-08 08:45:11.567094+08:00
+925,Taman Bunga Raya Ground Floor Shoplot for rent (Near TARUMT Setapak),,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-02926,research_import,2026-11-08 08:45:11.567094+08:00
+926,Old Klang Road Medan 28 Ground Floor Facing Main Road Shop Lot To Let,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-02964,research_import,2026-11-08 08:45:11.567094+08:00
+927,Taman Castlefield Ground Floor Shop Available for Rent.,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-02974,research_import,2026-11-08 08:45:11.567094+08:00
+928,"Ground & 1st Floor Shop [ 2 Storey]@ Near Jalan Raja Laut, Chow Kit",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-02976,research_import,2026-11-08 08:45:11.567094+08:00
+929,SD 13 Bandar Sri Damansara Shoplot,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-02981,research_import,2026-11-08 08:45:11.567094+08:00
+930,Bangsar Lorong Ara Kiri 2 1st floor Shop Available for Rent.,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-02991,research_import,2026-11-08 08:45:11.567094+08:00
+931,Taman Kinrara  (tk2) Shop apartment,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-03095,research_import,2026-11-08 08:45:11.567094+08:00
+932,Taman Sierra Perdana @ Masai 3 Storey Renovated Ground Floor Shoplot (,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-03115,research_import,2026-11-08 08:45:11.567094+08:00
+933,"Kota Tinggi, Kota Kecil, Facing main road",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-03121,research_import,2026-11-08 08:45:11.567094+08:00
+934,Cheap / Permas Avenue @ Permas Jaya / 3 Sty Shoplot / Brand New,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-03147,research_import,2026-11-08 08:45:11.567094+08:00
+935,"1 st Floot for Rent @ Taman Gaya, Facing Main Road",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-03152,research_import,2026-11-08 08:45:11.567094+08:00
+936,3 Storey Shoplot For Rent @ Bandar Baru Uda,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-03160,research_import,2026-11-08 08:45:11.567094+08:00
+937,TUN AMINAH Skudai Shoplot Facing Mainroad / Jalan Nakhoda,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-03167,research_import,2026-11-08 08:45:11.567094+08:00
+938,Taman Sri Kluang Ground Floor Shop For Rent,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-03183,research_import,2026-11-08 08:45:11.567094+08:00
+939,Kota Tinggi Taman Sri Lalang Johor Double Storey Shoplot For Rent,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-03196,research_import,2026-11-08 08:45:11.567094+08:00
+940,Taman Senai Jaya Ground Floor Shop lot for Rent,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-03224,research_import,2026-11-08 08:45:11.567094+08:00
+941,Taman Daya @ Jln Rumbia Single Storey Shop Lot,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-03231,research_import,2026-11-08 08:45:11.567094+08:00
+942,Tmn Pulai Utama Skudai 2 Sty Shop Lot (Ground Floor) Facing Main Road,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-03263,research_import,2026-11-08 08:45:11.567094+08:00
+943,Taman Impian Emas Double Storey Corner Shop Lot Skudai Johor Bahru,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-03305,research_import,2026-11-08 08:45:11.567094+08:00
+944,Dato Onn 3 Storey Shoplot Facing Main Road,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-03330,research_import,2026-11-08 08:45:11.567094+08:00
+945,Jalan Utama 2 Senai Shophouse,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-03334,research_import,2026-11-08 08:45:11.567094+08:00
+946,Taman Kota Masai Double Storey Ground Floor Shop House Johor,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-03336,research_import,2026-11-08 08:45:11.567094+08:00
+947,Double Storey Shoplot / Taman Johor Jaya / Ground Floor / 22x70,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-03357,research_import,2026-11-08 08:45:11.567094+08:00
+948,Impian Emas @ Skudai 1st Floor Shoplot Facing Main Road For Rent,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-03375,research_import,2026-11-08 08:45:11.567094+08:00
+949,"2 Storey Shoplot @ Nusa Bestari, Ground Floor, Facing Main Road",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-03413,research_import,2026-11-08 08:45:11.567094+08:00
+950,"Eco Palladium @ Taman Ekoflora, Ground Floor, Corner Lot",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-03442,research_import,2026-11-08 08:45:11.567094+08:00
+951,Taman Universiti 3 Storey Shop For Rent,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-03485,research_import,2026-11-08 08:45:11.567094+08:00
+952,"G/F, Facing Main Road, Corner, Shoplot @ Eco Palladium, Setia Indah",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-03490,research_import,2026-11-08 08:45:11.567094+08:00
+953,Taman Kempas Indah Shoplot 1st Floor,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-03512,research_import,2026-11-08 08:45:11.567094+08:00
+954,3 Storey Shop Lot End Lot Facing Main Road Parit Haji Baki Muar,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-03514,research_import,2026-11-08 08:45:11.567094+08:00
+955,Taman Perling Flat Ground Floor Shoplot For Rent,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-03521,research_import,2026-11-08 08:45:11.567094+08:00
+956,3 Storey/ Shoplot/ Austin Crest/ Bandar Putra/ Ground Floor/ Tebrau,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-03535,research_import,2026-11-08 08:45:11.567094+08:00
+957,"Setia Tropika, Shop Lot office, 2nd floor, 22x70,",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-03543,research_import,2026-11-08 08:45:11.567094+08:00
+958,Taman Skudai Renovated Shop House For Rent🌹,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-03547,research_import,2026-11-08 08:45:11.567094+08:00
+959,Skudai/ Shoplot/ Senai/ Impian Emas/ Jalan Anggerik/ Ground Floor,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-03552,research_import,2026-11-08 08:45:11.567094+08:00
+960,"Taman Saujana, Kluang Ground Floor Shop For Rent",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-03573,research_import,2026-11-08 08:45:11.567094+08:00
+961,Kota Tinggi Taman Kota Jaya Double Storey Shoplot For Rent,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-03578,research_import,2026-11-08 08:45:11.567094+08:00
+962,Dato Onn. Johor Property. Shoplot. Facing Main Road. Bandar Dato Onn,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-03581,research_import,2026-11-08 08:45:11.567094+08:00
+963,Shoplot/ Taman Daya/ Tebrau/ Ground Floor/ Intermediate/ TD Central,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-03585,research_import,2026-11-08 08:45:11.567094+08:00
+964,crest austin jalan jaya putra shoplot 22x70 intermediate unit,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-03629,research_import,2026-11-08 08:45:11.567094+08:00
+965,"Taman Mount Austin Shoplot For Rent,Tebrau",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-03649,research_import,2026-11-08 08:45:11.567094+08:00
+966,"Taman Mount Austin, Corner 4 Storey Shop (For Rent)",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-03653,research_import,2026-11-08 08:45:11.567094+08:00
+967,"Double Storey Shoplot , Taman Daya , Ground Floor , 22x70",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-03664,research_import,2026-11-08 08:45:11.567094+08:00
+968,Bakri Facing main road 1st floor 2nd floor for rent,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-03687,research_import,2026-11-08 08:45:11.567094+08:00
+969,"Nusa Sentral Iskandar, 22x75sf Ground Floor Shop Rent, Good Location",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-03718,research_import,2026-11-08 08:45:11.567094+08:00
+970,Taman Bukit Kaze @ GF Shop For Rent,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-03743,research_import,2026-11-08 08:45:11.567094+08:00
+971,Taman Rinting @ GF Shop For Rent,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-03756,research_import,2026-11-08 08:45:11.567094+08:00
+972,Taman Kota Masai @ 3 Adjoining 2 storey Shop For Rent,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-03757,research_import,2026-11-08 08:45:11.567094+08:00
+973,2nd floor for rent@bandar uda utama,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-03801,research_import,2026-11-08 08:45:11.567094+08:00
+974,"Ground Floor, Facing Main Road, Shoplot, Mount Austin",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-03827,research_import,2026-11-08 08:45:11.567094+08:00
+975,Permas Mall 3 storey shoplot (2 adjoining ground floor only) for rent,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-03858,research_import,2026-11-08 08:45:11.567094+08:00
+976,Ground Floor Nusa Sentral 24 Facing Main Road,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-03890,research_import,2026-11-08 08:45:11.567094+08:00
+977,Cheap / Nusa Sentral / 3 Sty Shoplot / 1st Floor / Facing Main Road,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-03908,research_import,2026-11-08 08:45:11.567094+08:00
+978,Pasir Gudang Double Storey Shop Lot Facing Main Road,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-03959,research_import,2026-11-08 08:45:11.567094+08:00
+979,"Ground Floor, 2 Storey Shoplot @ Taman Daya, Jalan Sagu 5",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-03968,research_import,2026-11-08 08:45:11.567094+08:00
+980,Shoplot. Sierra Perdana. Facing Main Road. Masai. Johor Property Masai,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-03978,research_import,2026-11-08 08:45:11.567094+08:00
+981,Taman Nusa Bestari @ Ground Floor Shop For Rent,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-03990,research_import,2026-11-08 08:45:11.567094+08:00
+982,"Sutera Tanjung Danga Sutera, Ground Shoplot, 24x80sf Unblock View",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-03997,research_import,2026-11-08 08:45:11.567094+08:00
+983,Permas Jaya 10 Permas avenue 1st floor and 2nd floor shop brand new,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-04059,research_import,2026-11-08 08:45:11.567094+08:00
+984,Taman Daiman Jaya @ Kota Tinggi Double Storey Shoplot FOR RENT ‼️,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-04092,research_import,2026-11-08 08:45:11.567094+08:00
+985,bandar permas jaya 2100sqft,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-04100,research_import,2026-11-08 08:45:11.567094+08:00
+986,"For Rent|Eco Tropics, Eco Avenue 2 @ Kota Masai- 2 Sty Shoplot | 22x70",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-04161,research_import,2026-11-08 08:45:11.567094+08:00
+987,For Rent 2nd floor shop  Jalan Sri Perkasa Taman Tampoi Utama,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-04191,research_import,2026-11-08 08:45:11.567094+08:00
+988,For Rent Ground Floor Facing Main Road Eco Avenue Kota Masai,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-04196,research_import,2026-11-08 08:45:11.567094+08:00
+989,"Perling Jln Undan 16 ,Shop(1 Floor)",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-04212,research_import,2026-11-08 08:45:11.567094+08:00
+990,"Corner & Facing Main Road Shoplot @ Molek Hub, Taman Molek, G/Floor",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-04223,research_import,2026-11-08 08:45:11.567094+08:00
+991,Shop For Rent / Taman Bukit Indah / Ground Floor / D Inspire / Jb,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-04235,research_import,2026-11-08 08:45:11.567094+08:00
+992,Tun Aminah Facing Main Road Adjoining 2nd floor jln Pendekar 9,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-04252,research_import,2026-11-08 08:45:11.567094+08:00
+993,AAA Adda Avenue 3 Taman Adda Heights Ground Floor For Rent,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-04287,research_import,2026-11-08 08:45:11.567094+08:00
+994,Juru Sentral Ground Floor Corner Shop Lot 2800sqft Facing Main Road,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-04317,research_import,2026-11-08 08:45:11.567094+08:00
+995,Ceria Square (Ground Floor Shoplot For Rent) Batu Kawan Eco Horizon,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-04354,research_import,2026-11-08 08:45:11.567094+08:00
+996,METRO AVENUE 1300sf Ground floor shoplot CORNER JELUTONG for rent,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-04355,research_import,2026-11-08 08:45:11.567094+08:00
+997,Ground Floor Shoplot JALAN RANGOON road 2560sf GEORGETOWN mainroad,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-04367,research_import,2026-11-08 08:45:11.567094+08:00
+998,GROUND FLOOR THE MEG SHOP LOT 1001sf TANJONG TOKONG BUNGAH ANDAMAN,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-04393,research_import,2026-11-08 08:45:11.567094+08:00
+999,【Brand New】Semi D shop @ Taman Perdana Simpang Ampat,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-04425,research_import,2026-11-08 08:45:11.567094+08:00
+1000,Georgetown Freehold 2-Storey Shophouse Facing Main Road Vacant Now,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-04437,research_import,2026-11-08 08:45:11.567094+08:00
+1001,Farlim Square Ground Floor Shoplot Ayer Itam nr Sunshine Central Mall,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-04440,research_import,2026-11-08 08:45:11.567094+08:00
+1002,CORNER LOT 3 STOREY MAINROAD BANDAR PUTRA BERTAM FOR RENT Nr MYDIN,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-04489,research_import,2026-11-08 08:45:11.567094+08:00
+1003,Georgetown 1st Floor Office Shop Lot Newly Renovated Refurbished,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-04521,research_import,2026-11-08 08:45:11.567094+08:00
+1004,1st Floor Shoplot@University Height Commercial (Opposite Entrance USM),,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-04552,research_import,2026-11-08 08:45:11.567094+08:00
+1005,Ground Floor Shoplot @ Taman Usahaniaga for Rent,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-04556,research_import,2026-11-08 08:45:11.567094+08:00
+1006,1st Floor Shoplot For Rent At Farlim Ayer Air Itam Facing Main Road,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-04581,research_import,2026-11-08 08:45:11.567094+08:00
+1007,"Shoplot Taman Desa Murni, Sungai Dua Butterworth",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-04598,research_import,2026-11-08 08:45:11.567094+08:00
+1008,The Promenade Shop Office Lot FACING MAIN ROAD Bayan Baru Lepas,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-04603,research_import,2026-11-08 08:45:11.567094+08:00
+1009,Ground Floor |  Taman Sepadu Jaya | Tasek Gelugor,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-04617,research_import,2026-11-08 08:45:11.567094+08:00
+1010,Double storey shoplot for rent at Gelugor facing main road,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-04642,research_import,2026-11-08 08:45:11.567094+08:00
+1011,Bukit Tengah Ground Floor Shoplot 2200Sf Facing Main Road For Rent,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-04658,research_import,2026-11-08 08:45:11.567094+08:00
+1012,LEBUH KIMBERLEY STREET Ground floor Shop lot 800sf GEORGETOWN chualia,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-04695,research_import,2026-11-08 08:45:11.567094+08:00
+1013,"Farlim Business Park, farlim, 1400sft, facing mainroad, 4 rooms,toilet",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-04707,research_import,2026-11-08 08:45:11.567094+08:00
+1014,seberang jaya shop/ bandar sunway carnival,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-04717,research_import,2026-11-08 08:45:11.567094+08:00
+1015,Shophouse Facing Main Road Jalan Kelawai,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-04726,research_import,2026-11-08 08:45:11.567094+08:00
+1016,Shoplot At Pine Valley Facing Main Road Near Paya Terubong,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-04735,research_import,2026-11-08 08:45:11.567094+08:00
+1017,Tasek Gelugor Bunga Kemaju| Ground Floor Shop Lot| Facing Main Road |,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-04740,research_import,2026-11-08 08:45:11.567094+08:00
+1018,Golden Triangle 2 Commercial Shop Bayan Lepas,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-04750,research_import,2026-11-08 08:45:11.567094+08:00
+1019,Taman Pekaka Nibong Tebal,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-04751,research_import,2026-11-08 08:45:11.567094+08:00
+1020,Bandar Perai Jaya｜Shop Lots Around Pacific｜Ground Floor Shop for Rent,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-04802,research_import,2026-11-08 08:45:11.567094+08:00
+1021,Tasek Gelugor Ara Jaya| Ground Floor Shop Lot| Facing Main Road |,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-04835,research_import,2026-11-08 08:45:11.567094+08:00
+1022,First floor jalan todak seberang Jaya for rent,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-04860,research_import,2026-11-08 08:45:11.567094+08:00
+1023,The Zen Ground Floor Shop Lot Facing Main Road,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-04884,research_import,2026-11-08 08:45:11.567094+08:00
+1024,Ground Floor Shoplot Corner at Jalan Gottlieb (Facing Main Road),,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-04895,research_import,2026-11-08 08:45:11.567094+08:00
+1025,3 Storey Shoplot [SIMPANG AMPAT] UNFURNISHED Ready To Move In !!!,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-04909,research_import,2026-11-08 08:45:11.567094+08:00
+1026,Perai Taman Inderawasih Chain Ferry 1st Floor Shop Lot For Rent ｜,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-04940,research_import,2026-11-08 08:45:11.567094+08:00
+1027,Vivo Condominium Commercial Ground Floor Shoplot Looking For Rent !,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-04942,research_import,2026-11-08 08:45:11.567094+08:00
+1028,Vervea _ Ground Floor _ Facing Main Road _ Batu Kawan _ IKEA Borealis,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-04971,research_import,2026-11-08 08:45:11.567094+08:00
+1029,Juru Avenue Ground Floor Shop lot For Rent,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-04991,research_import,2026-11-08 08:45:11.567094+08:00
+1030,Sungai Dua USM shop office facing main road,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-05021,research_import,2026-11-08 08:45:11.567094+08:00
+1031,I-Santorini Commercial Shop Lot Tanjung Tokong,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-05025,research_import,2026-11-08 08:45:11.567094+08:00
+1032,Sunway Tunas Bayan Baru office lot 1200 sq ft renovated 5 airconds,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-05029,research_import,2026-11-08 08:45:11.567094+08:00
+1033,"Ground Floor Shop Lot at Sungai Ara, Main Road",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-05040,research_import,2026-11-08 08:45:11.567094+08:00
+1034,"Commercial G floor Fully Renovated Suitable all business,Georgetown",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-05053,research_import,2026-11-08 08:45:11.567094+08:00
+1035,"Bertam Walk, Kepala Batas | Corner Lot For RENT",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-05057,research_import,2026-11-08 08:45:11.567094+08:00
+1036,Juru Tok Kangar Shop lot 1st Floor For Rent,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-05077,research_import,2026-11-08 08:45:11.567094+08:00
+1037,Taman Nagasari Perai Ground Floor Shop For Rent Facing Road,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-04832,research_import,2026-11-08 08:45:11.567094+08:00
+1038,3 STOREY CORNER SHOPLOT BANDAR PUTRA BERTAM KEPALA BATAS Nr MYDIN,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-05235,research_import,2026-11-08 08:45:11.567094+08:00
+1039,Sunway Business Park｜Seberang Jaya｜First Floor Shop Lot for Rent,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-05267,research_import,2026-11-08 08:45:11.567094+08:00
+1040,Facing Main Road Shop Lot | Ong Yi How | Bagan Lalang | Butterworth,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-05272,research_import,2026-11-08 08:45:11.567094+08:00
+1041,Butterworth Bagan Lallang 3-Storey Commercial Shop Facing Mainroad !!,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-05296,research_import,2026-11-08 08:45:11.567094+08:00
+1042,Alma Machang Bubuk 2 Unit Ground Floor Shoplot Unit Facing Mainroad,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-05350,research_import,2026-11-08 08:45:11.567094+08:00
+1043,Facing Mainroad! Shop Lot High Exposure Lebuh Cecil Market Georgetown,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-05362,research_import,2026-11-08 08:45:11.567094+08:00
+1044,Bandar Perda Shop l Ground Floor For Rent l Facing Road,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-05407,research_import,2026-11-08 08:45:11.567094+08:00
+1045,Terubong Avenue Ground Floor Shop Lot Paya Terubong Pine,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-05437,research_import,2026-11-08 08:45:11.567094+08:00
+1046,Juru Taman Seri Delima| Ground Floor Shop For RENT,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-05457,research_import,2026-11-08 08:45:11.567094+08:00
+1047,"Yulek 2sty Whole Block 22 x 70 Busy Row Shop For Rent , Cheras , Jalan Lobak",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-01358,research_import,2026-11-08 08:45:11.567094+08:00
+1048,"Facing Main Road - Ground Floor Shop @ Jalan Tun Mohd Fuad, TTDI, Kuala Lumpur.",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-01432,research_import,2026-11-08 08:45:11.567094+08:00
+1049,Shop @ KL City Center,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-01561,research_import,2026-11-08 08:45:11.567094+08:00
+1050,"Jalan Iconic Point, Simpang Ampat, Penang / Three Storey Shop Lot / For Rent /  With Lift / Can Rent Separate",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-03337,research_import,2026-11-08 08:45:11.567094+08:00
+1051,"Gurney Drive, Persiaran Gurney, Penang / Shop Lot / For Rent / Main Road / 4600 sq.ft / Partly Renovated",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-03340,research_import,2026-11-08 08:45:11.567094+08:00
+1052,"Jalan Burma, Pulau Tikus, Penang / Ground Floor Shop Lot / For Rent /Premier Centre / Two Unit Total 2,600 sq.ft",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-03342,research_import,2026-11-08 08:45:11.567094+08:00
+1053,USJ 1 WareHouse/ Logistic/Online Retail Shop For Rent,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00004,research_import,2026-11-08 08:45:11.567094+08:00
+1054,[ Ground Floor Shop✅] Damansara Damai Shop For Rent / Move In Ready,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00032,research_import,2026-11-08 08:45:11.567094+08:00
+1055,"Elmina Temu 1 & 2, Shah Alam - Shops For Rent",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00079,research_import,2026-11-08 08:45:11.567094+08:00
+1056,Semenyih Kiara Plaza Shoplot For Rent,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00082,research_import,2026-11-08 08:45:11.567094+08:00
+1057,"Eco Somerset @ Eco Sanctuary, Bandar Rimbayu Shoplot for RENTTTT",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00172,research_import,2026-11-08 08:45:11.567094+08:00
+1058,Ground Floor Shop for rent at 5 min drive in Bandar Teknologi Kajang,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00173,research_import,2026-11-08 08:45:11.567094+08:00
+1059,Shop-Lot for rent | Ground Floor | Cornet Unit | 2590sqft,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00178,research_import,2026-11-08 08:45:11.567094+08:00
+1060,"Small Shop Pangsapuri Putra Permai D, Bandar Putra Permai Behind Mc D",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00190,research_import,2026-11-08 08:45:11.567094+08:00
+1061,Ground floor Shoplot @ Damansara Perdana Petaling Jaya,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00205,research_import,2026-11-08 08:45:11.567094+08:00
+1062,Lorong Temenggung Shop To Rent,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00228,research_import,2026-11-08 08:45:11.567094+08:00
+1063,"Taman Perindustrian puchong , puchong groud floor half shop for rent",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00230,research_import,2026-11-08 08:45:11.567094+08:00
+1064,"【 Main road, happening area 】 2 Storey Shoplot, Jalan Welman, Rawang",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00245,research_import,2026-11-08 08:45:11.567094+08:00
+1065,Selayang Point Shoplot,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00246,research_import,2026-11-08 08:45:11.567094+08:00
+1066,"Taipan Business Centre, USJ 10 – 2nd Floor Corner Shop Office for Rent",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00267,research_import,2026-11-08 08:45:11.567094+08:00
+1067,Kajang Ground Floor Shop For Rent,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00296,research_import,2026-11-08 08:45:11.567094+08:00
+1068,2 Adjoining Ground Shop & 1 unit 1st Floor Shop Kajang Mewah,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00320,research_import,2026-11-08 08:45:11.567094+08:00
+1069,Highly Traffic 1st Floor OFFICE Seksyen 8 Bangi nr Seksyen 9,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00321,research_import,2026-11-08 08:45:11.567094+08:00
+1070,"Corner Shop Lot for Rent @ Business Park, Salak Tinggi, Sepang",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00330,research_import,2026-11-08 08:45:11.567094+08:00
+1071,Corner 3rd Floor & Rooftop Shop-lot (20'x75') Taman Berkeley,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00338,research_import,2026-11-08 08:45:11.567094+08:00
+1072,"First Floor Shop at Taman Pelangi Semenyih, Semenyih",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00349,research_import,2026-11-08 08:45:11.567094+08:00
+1073,The Atmosphere Shop Lot,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00356,research_import,2026-11-08 08:45:11.567094+08:00
+1074,Aman Putri shop to let,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00376,research_import,2026-11-08 08:45:11.567094+08:00
+1075,"2 adjoining Ground Floor Shop for Rent @ TTDI Jaya, Shah Alam Selangor",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00389,research_import,2026-11-08 08:45:11.567094+08:00
+1076,Kota Damansara Ground floor shop for Rent Hot Location,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00391,research_import,2026-11-08 08:45:11.567094+08:00
+1077,Sea Park Paramount Two Storey Shop Lot Upper Floor Facing Main Road,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00403,research_import,2026-11-08 08:45:11.567094+08:00
+1078,Shop unit in front MRT Station Batu 11 Jalan Balakong Cheras,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00406,research_import,2026-11-08 08:45:11.567094+08:00
+1079,Bangi Gateway Street Mall Ground Floor Shoplot (Not Facing Road),,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00431,research_import,2026-11-08 08:45:11.567094+08:00
+1080,Nadi Setia Ecohill 2 Shop lot Semenyih Setia Ecohill Eco Forest,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00457,research_import,2026-11-08 08:45:11.567094+08:00
+1081,"Shop for Rent @ Taman Warisan Putra, End Lot, Main Road Frontage",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00465,research_import,2026-11-08 08:45:11.567094+08:00
+1082,"Shoplot (1,650 sq ft) for rent @ Suakasih 1/3, Bandar Tun Hussein Onn",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00487,research_import,2026-11-08 08:45:11.567094+08:00
+1083,Ground Floor Shop @ Puchong Mutiara Indah,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00496,research_import,2026-11-08 08:45:11.567094+08:00
+1084,"1st-Floor Shop @ Impian Prisma 2, Alam Impian (Facing Main Road) RENT",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00500,research_import,2026-11-08 08:45:11.567094+08:00
+1085,"Hillpark @ Saujana Utama, Saujana Perdana",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00597,research_import,2026-11-08 08:45:11.567094+08:00
+1086,1sty Corner Lot Shop / warehouse Bandar Bukit Puchong Open Facing Road,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00601,research_import,2026-11-08 08:45:11.567094+08:00
+1087,"SS 3 , Petaling Jaya",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00619,research_import,2026-11-08 08:45:11.567094+08:00
+1088,"Desa Latania GF Shop Lot for Rent , Jalan Nagasari, Shah Alam, Klang",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00641,research_import,2026-11-08 08:45:11.567094+08:00
+1089,Ground Floor Shop Kota Kemuning Bukit Rimau For Rent,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00657,research_import,2026-11-08 08:45:11.567094+08:00
+1090,"Ground Floor & 1st Floor Shoplot 24x75 For Rent, Sungai Kapar Indah",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00664,research_import,2026-11-08 08:45:11.567094+08:00
+1091,"Ground Floor Shoplot at Batu 11 Balakong Cheras, near to MRT",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00671,research_import,2026-11-08 08:45:11.567094+08:00
+1092,Ground Shoplot at Taman Koperasi Polis Fasa II at Batu Cave,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00696,research_import,2026-11-08 08:45:11.567094+08:00
+1093,2 Storey Shoplot Sea Park PJ Petaling Jaya,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00702,research_import,2026-11-08 08:45:11.567094+08:00
+1094,Kundang Business Center Rawang New Shoplot For Rent,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00713,research_import,2026-11-08 08:45:11.567094+08:00
+1095,"3 Stry Shop at Presint Alami, Persiaran Akuatik, Seksyen 13, Shah Alam",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00714,research_import,2026-11-08 08:45:11.567094+08:00
+1096,"Ground Floor Shop Lot, Perdana Business Center @ Damansara Perdana",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00718,research_import,2026-11-08 08:45:11.567094+08:00
+1097,Ground Floor GF Shoplot For Rent(Sungai Jati Taman Sentosa Klang),,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00735,research_import,2026-11-08 08:45:11.567094+08:00
+1098,Half Shop Lot For Rent Ukay perdana,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00746,research_import,2026-11-08 08:45:11.567094+08:00
+1099,[Good deal] Cheapest shop office in Bandar Rawang,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00767,research_import,2026-11-08 08:45:11.567094+08:00
+1100,"Shop Ground Floor at Kajang Perdana, TTDI Grove, Bandar Tek for rent",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00779,research_import,2026-11-08 08:45:11.567094+08:00
+1101,"Ground Floor Shop, Batu Caves Centrepoint [Facing Busy Road MRR2]",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00780,research_import,2026-11-08 08:45:11.567094+08:00
+1102,Kajang new shop lot rent ground floor hot area hurry call now!,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00814,research_import,2026-11-08 08:45:11.567094+08:00
+1103,"2 Storey Shoplot For Business or Commercial Taman Bintang Mas, Dengkil",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00840,research_import,2026-11-08 08:45:11.567094+08:00
+1104,"Setia Ecohill 2 Nadi, Brand new Ground Floor Corner, Main Road 42x75",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00904,research_import,2026-11-08 08:45:11.567094+08:00
+1105,Barbershop For Rent,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00916,research_import,2026-11-08 08:45:11.567094+08:00
+1106,Bandar Bestari Klang KSL Canary Garden Ground Floor Shop Main Road,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00918,research_import,2026-11-08 08:45:11.567094+08:00
+1107,"Jalan SBC 12 , taman sri batu caves , low cost shop for rent .",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00943,research_import,2026-11-08 08:45:11.567094+08:00
+1108,"2 Storey Corner Kajang East Avenue 2 ,Vista valley semenyih 40x75",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00966,research_import,2026-11-08 08:45:11.567094+08:00
+1109,Seksyen 17 First Floor Shop Lots For Rent,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00975,research_import,2026-11-08 08:45:11.567094+08:00
+1110,"LIMITED! STRATEGIC! HIGH-EXPOSURE COMMERCIAL SPACE! USJ 9, Subang Jaya",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00987,research_import,2026-11-08 08:45:11.567094+08:00
+1111,Rawang Bandar Tasik Puteri New Shop Lot For Rent,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00990,research_import,2026-11-08 08:45:11.567094+08:00
+1112,Wisma Damai Perdana Taman Connaught Shop Lot Lift,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-01019,research_import,2026-11-08 08:45:11.567094+08:00
+1113,Prima Selayang Ground Floor Shop Lot,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-01144,research_import,2026-11-08 08:45:11.567094+08:00
+1114,Prime Retail Lots at Tropicana Metropark – Southplace Shoppes,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-01160,research_import,2026-11-08 08:45:11.567094+08:00
+1115,Klang Sentral @ Klang 2nd Office Shop for Rent,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-01178,research_import,2026-11-08 08:45:11.567094+08:00
+1116,"Skyloft Avenue, Bandar Puchong Jaya (Retail Shop with Lift)",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-01221,research_import,2026-11-08 08:45:11.567094+08:00
+1117,Cheapest!! SHOPLOT FOR RENT @ PJCC! Petaling Jaya,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-01292,research_import,2026-11-08 08:45:11.567094+08:00
+1118,Shop Lot Serene Square Semenyih,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-01330,research_import,2026-11-08 08:45:11.567094+08:00
+1119,Medan Selayang Business Centra Shop Warehouse Office Batu Caves,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-01332,research_import,2026-11-08 08:45:11.567094+08:00
+1120,Bangi Gateway 3B Ground Floor Shoplot (Not Facing Main Road),,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-01349,research_import,2026-11-08 08:45:11.567094+08:00
+1121,Seria 88 Setia Alam Setia Taipan 4 Storey Shop Lot with Lift 23x70,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-01366,research_import,2026-11-08 08:45:11.567094+08:00
+1122,(✅BEST DEAL✅) GF One Selayang shop 22x75 Prima Selayang One Sierra,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-00341,research_import,2026-11-08 08:45:11.567094+08:00
+1123,Selayang Baru Shot lot 22x70 For Rent Suitable Online Bussiness,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-01374,research_import,2026-11-08 08:45:11.567094+08:00
+1124,puchong perdana kedai bawah utk sewa kampung bersatu ground floor shop,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-01376,research_import,2026-11-08 08:45:11.567094+08:00
+1125,"Kedai untuk disewa di Taman Sepakat, Kelanang, Banting",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-01385,research_import,2026-11-08 08:45:11.567094+08:00
+1126,Subang Jaya USJ 1 Edumetro At Segi College Ground Floor Shop To Let,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-01436,research_import,2026-11-08 08:45:11.567094+08:00
+1127,1.5 Sty Shop Office 2838 sf @ Salak Perdana Business Park Salak Tinggi,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-01440,research_import,2026-11-08 08:45:11.567094+08:00
+1128,Ground floor shop in tmn kota perdana seri kembangan for rent,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-01457,research_import,2026-11-08 08:45:11.567094+08:00
+1129,"[ Nice+Road+Limited ] 2sty shoplot , Taman Tun Teja ,Batu 16 , Rawang",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-01465,research_import,2026-11-08 08:45:11.567094+08:00
+1130,Ground Floor Shop For Rent at Ken Rimba | Seksyen 16 | Shah Alam,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-01482,research_import,2026-11-08 08:45:11.567094+08:00
+1131,MURAH SEWA🔥4 Sty Shop Lot Rent！Jln Goh Hock Huat Klang！Face Mainroad,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-01514,research_import,2026-11-08 08:45:11.567094+08:00
+1132,"Seri Kembangan Putra Permai Shop for Rent-Ground Floor, 660sqft",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-01540,research_import,2026-11-08 08:45:11.567094+08:00
+1133,Shop Lot Taman Orkid Batu 9 Cheras Taman Alam Jaya Cheras Awana,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-01543,research_import,2026-11-08 08:45:11.567094+08:00
+1134,Taman Perindustrian Air Hitam 3 Storey Shoplot Endlot Unit For Rent,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-01570,research_import,2026-11-08 08:45:11.567094+08:00
+1135,Taman Putra Budiman Ground Floor Shop Lot For Rent [Bare + Main Road],,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-01642,research_import,2026-11-08 08:45:11.567094+08:00
+1136,Facing Main Road Double Storey Shoplot For Rent Sg Kapar Indah,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-01666,research_import,2026-11-08 08:45:11.567094+08:00
+1137,"First Floor Shop at Taman Reko Sentral, Kajang",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-01681,research_import,2026-11-08 08:45:11.567094+08:00
+1138,2 storey shoplot Tepi Sungai Teluk Pulai Klang,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-01692,research_import,2026-11-08 08:45:11.567094+08:00
+1139,Kota Damansara The Strand Ground Floor Shop For Rent,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-01755,research_import,2026-11-08 08:45:11.567094+08:00
+1140,Hot Area🔥Shop Lot【Ground Floor】Bandar Botanic Klang Ramin 22x80 Rent,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-01758,research_import,2026-11-08 08:45:11.567094+08:00
+1141,[Ground Floor] Berjaya Park Shah alam Kota kemuning 2sty 22*80sqft,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-01776,research_import,2026-11-08 08:45:11.567094+08:00
+1142,Main Road Frontage Shop | Bangi Section 8 | High Traffic,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-01787,research_import,2026-11-08 08:45:11.567094+08:00
+1143,2nd Floor Shoplot | End Lot Unit | Bukit Jelutong,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-01825,research_import,2026-11-08 08:45:11.567094+08:00
+1144,New shop lot in Cheras Jaya Balakong,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-01832,research_import,2026-11-08 08:45:11.567094+08:00
+1145,Pusat Perdagangan Maisons @ Rawang,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-01836,research_import,2026-11-08 08:45:11.567094+08:00
+1146,"Ground Floor Shop Tmn Prima Selayang, Selayang",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-01856,research_import,2026-11-08 08:45:11.567094+08:00
+1147,SHOP FOR RENT | GROUND FLOOR + MEZZANINE | Batu Caves,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-01861,research_import,2026-11-08 08:45:11.567094+08:00
+1148,Ground Floor Shoplot 1650sqft Alam Budiman Shah Alam,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-01890,research_import,2026-11-08 08:45:11.567094+08:00
+1149,"Grd Flr shoplot in Saville@Kajang, Jln Reko, Kajang",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-01922,research_import,2026-11-08 08:45:11.567094+08:00
+1150,Serdang Raya Seri Kembangan,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-01954,research_import,2026-11-08 08:45:11.567094+08:00
+1151,"Ground Floor, Selayang Jaya, Batu Caves [Same row Mr DIY/HOT area!]",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-01963,research_import,2026-11-08 08:45:11.567094+08:00
+1152,"GM Klang Wholesale City, Retail Space for Rent, Block B",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-01965,research_import,2026-11-08 08:45:11.567094+08:00
+1153,1st Floor Shop Office in Kepong Facing Main Road Can Hang Signboard,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-02005,research_import,2026-11-08 08:45:11.567094+08:00
+1154,Taman Koperasi Polis - Ground floor shoplot 22x70sf - Limited Ground,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-02012,research_import,2026-11-08 08:45:11.567094+08:00
+1155,"wangsa maju ,delima delima ground floor shop 24x75.",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-02014,research_import,2026-11-08 08:45:11.567094+08:00
+1156,ShopLot MPAJ For Rent (Nov 2026),,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-02017,research_import,2026-11-08 08:45:11.567094+08:00
+1157,"Setapak, Jln Gombak Medan Idaman Business Centre",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-02040,research_import,2026-11-08 08:45:11.567094+08:00
+1158,gombak-medan idaman business centre-ground floor shoplot--24x70,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-02044,research_import,2026-11-08 08:45:11.567094+08:00
+1159,"Pusat Bandar Puchong, Jalan Bandar 16",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-02051,research_import,2026-11-08 08:45:11.567094+08:00
+1160,Kuchai Lama Shop Lot for Rent (Prime Location at Tmn Indrahana),,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-02059,research_import,2026-11-08 08:45:11.567094+08:00
+1161,[ Limited Shop] Aradia Lakecity Jalan Sibu Taman Wahyu,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-02064,research_import,2026-11-08 08:45:11.567094+08:00
+1162,"Shoplot Tingkat 2, Setiawangsa For Rent",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-02088,research_import,2026-11-08 08:45:11.567094+08:00
+1163,Ready for rent ground floor shop Menjalara,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-02094,research_import,2026-11-08 08:45:11.567094+08:00
+1164,"RENOVATED 2nd FLOOR SHOP OFFICE @ PLAZA DAMAS 3, SRI HARTAMAS, KL",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-02145,research_import,2026-11-08 08:45:11.567094+08:00
+1165,"Pandan Indah, Taman Shamelin Perkasa, Facing Main Road KL",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-02164,research_import,2026-11-08 08:45:11.567094+08:00
+1166,Etiqa Twins Retails / Shop Lot near Pavilion KL KLCC (Cheapest),,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-02190,research_import,2026-11-08 08:45:11.567094+08:00
+1167,"ikon Mall, Connaught",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-02198,research_import,2026-11-08 08:45:11.567094+08:00
+1168,Ground Floor Shop Platinum Walk Setapak Crystal Ville PV128,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-02215,research_import,2026-11-08 08:45:11.567094+08:00
+1169,GROUND Floor Shop Sky Awani Bandar Baru Sentul Pasar Maxim Citylight,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-02219,research_import,2026-11-08 08:45:11.567094+08:00
+1170,2nd Floor Shop Platinum Walk Setapak Crystal Ville PV128 Genting Klang,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-02223,research_import,2026-11-08 08:45:11.567094+08:00
+1171,Ground floor shop with Mazzenine @ Titiwangsa Sentral Kuala Lumpur,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-02288,research_import,2026-11-08 08:45:11.567094+08:00
+1172,"Shopping KL48 Retail Outlet @Chan Sow Lin, Sg. Besi",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-02291,research_import,2026-11-08 08:45:11.567094+08:00
+1173,"2nd & 3rd Floor Shop @ TAMAN SETIAWANGSA, KL (near GIANT, LRT Station)",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-02295,research_import,2026-11-08 08:45:11.567094+08:00
+1174,(✅SUPER DEAL✅) GF Office Bandar Menjalara Bukit Maluri Opposite Petron,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-02298,research_import,2026-11-08 08:45:11.567094+08:00
+1175,Pandan Perdana Corner Ground Floor Shop to Let,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-02299,research_import,2026-11-08 08:45:11.567094+08:00
+1176,Taman Melawati 1st floor 22x80 Shopoffice To Rent,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-02316,research_import,2026-11-08 08:45:11.567094+08:00
+1177,"Central Residence, Sungai Besi Ground floor Shoplot for Rent",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-02339,research_import,2026-11-08 08:45:11.567094+08:00
+1178,GF Shop Lot Greenpark Condo Block D Taman Yarl Old Klang Road KL,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-02361,research_import,2026-11-08 08:45:11.567094+08:00
+1179,Second Floor Shop Office for Rent at Taman Desa Business Park |KL,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-02370,research_import,2026-11-08 08:45:11.567094+08:00
+1180,"Ground Floor Shop Jln Kg Pasir Lama, Old Klang Road, PJ",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-02371,research_import,2026-11-08 08:45:11.567094+08:00
+1181,"Sentul, Ground Floor Shop For Let",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-02426,research_import,2026-11-08 08:45:11.567094+08:00
+1182,1st Floor Shop Retail @ Endah Promonande Sri Petaling,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-02449,research_import,2026-11-08 08:45:11.567094+08:00
+1183,Kl Plaza Gm Retail Lot For Rent,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-02464,research_import,2026-11-08 08:45:11.567094+08:00
+1184,Fiesta @Axis Pandan Shop Jalan Cempaka,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-02521,research_import,2026-11-08 08:45:11.567094+08:00
+1185,Ground Floor Retail Shop @ Liberty Arc Ampang Ukay,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-02527,research_import,2026-11-08 08:45:11.567094+08:00
+1186,Taman Bukit Maluri Kepong Kuala Lumpur Ground Shop 1760 Sf for Rent,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-02552,research_import,2026-11-08 08:45:11.567094+08:00
+1187,The Earth Bukit Jalil Ground Floor Facing Mainroad Pavilion,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-02563,research_import,2026-11-08 08:45:11.567094+08:00
+1188,"Kenanga Pudu, Ground Floor Shop For Let",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-02568,research_import,2026-11-08 08:45:11.567094+08:00
+1189,"KUALA LUMPUR, Jalan Taiping off Jalan Pahang",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-02599,research_import,2026-11-08 08:45:11.567094+08:00
+1190,"1st Floor Shop @ DESA SETAPAK, WANGSA MAJU, KL, (near LRT Station)",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-02659,research_import,2026-11-08 08:45:11.567094+08:00
+1191,Ground Floor Shop Lot in Sri Petaling Kuala Lumpur Face Main Road,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-02721,research_import,2026-11-08 08:45:11.567094+08:00
+1192,Kepong Taman Wangsa Permai First Floor Shop Massage Business For Rent,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-02833,research_import,2026-11-08 08:45:11.567094+08:00
+1193,First Floor Office space at Jalan Tun Mohd Fuad TTDI,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-02903,research_import,2026-11-08 08:45:11.567094+08:00
+1194,GROUND Floor Shop Cafe Bar Jalan Persiaran Ampang Point Desa Pahlawan,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-02401,research_import,2026-11-08 08:45:11.567094+08:00
+1195,Shoplot Rent Taman OUG 20*82 1760sf Ground Floor MCD Same Row F&B,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-02965,research_import,2026-11-08 08:45:11.567094+08:00
+1196,Shoplot Rent OUG 22*82 1804sf Ground Floor Jalan Hujan Rahmat Cafe F&B,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-02966,research_import,2026-11-08 08:45:11.567094+08:00
+1197,Petaling Jaya PJS 1 Near Old Klang Road Ground Floor Shop Lot To Let,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-02977,research_import,2026-11-08 08:45:11.567094+08:00
+1198,TTDI End Lot & Intermediate Shop Floors For Rent,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-03001,research_import,2026-11-08 08:45:11.567094+08:00
+1199,"Shop office (BARE UNIT), Pudu",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-03028,research_import,2026-11-08 08:45:11.567094+08:00
+1200,Kuchai Lama Taman OUG Square adjoing unit Shoplot for rent,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-03036,research_import,2026-11-08 08:45:11.567094+08:00
+1201,Shop lot for Rent @ First floor Near KFC Senai,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-03125,research_import,2026-11-08 08:45:11.567094+08:00
+1202,3 Storey Shop Lot @ Permas Avenue / Brand New / Below Rent / 22x80,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-03156,research_import,2026-11-08 08:45:11.567094+08:00
+1203,Taman Setia Indah @ Single Storey Medium Cost Shop,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-03271,research_import,2026-11-08 08:45:11.567094+08:00
+1204,"Taman Setia Tropika, 1st floor shop-Office, Non facing main road",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-03319,research_import,2026-11-08 08:45:11.567094+08:00
+1205,Taman Senai Utama @ Senai Renovated Three Storey Terrace Shop of 1st F,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-03390,research_import,2026-11-08 08:45:11.567094+08:00
+1206,Tampo utama ground floor shop for Rent same row Affin bank,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-03394,research_import,2026-11-08 08:45:11.567094+08:00
+1207,"Shop Endlot facing mainroad for Rent @ Taman Desa Molek, Pontian",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-03399,research_import,2026-11-08 08:45:11.567094+08:00
+1208,Whole Block Pahlawan 2 Shoplot (Direct to Owner),,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-03403,research_import,2026-11-08 08:45:11.567094+08:00
+1209,New shoplot Bandar primer @ kluang for rent,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-03414,research_import,2026-11-08 08:45:11.567094+08:00
+1210,"Segamat, Bukit Siput Shoplot Upperfloor for Rent!!!",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-03536,research_import,2026-11-08 08:45:11.567094+08:00
+1211,"Endlot, G/F, Facing Mainroad, Shoplot @ Taman Mount Austin, Tebrau",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-03544,research_import,2026-11-08 08:45:11.567094+08:00
+1212,For Rent Shoplot Ground Floor and 1st Floor Pasir Gudang/Pasir putih,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-03550,research_import,2026-11-08 08:45:11.567094+08:00
+1213,Taman Daya @ JB Double Storey Shop of Ground Floor Only FOR RENT 🔥,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-03568,research_import,2026-11-08 08:45:11.567094+08:00
+1214,Shop For Rent / Taman Skudai Kiri / 1st Floor / Near Bbu / Tampoi,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-03659,research_import,2026-11-08 08:45:11.567094+08:00
+1215,bandar baru uda shoplot ground floor unblock view main road padi emas,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-03669,research_import,2026-11-08 08:45:11.567094+08:00
+1216,"Facing Main Road, Next To Pbb, Ground Floor, Shoplot @ Taman Molek",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-03737,research_import,2026-11-08 08:45:11.567094+08:00
+1217,"Bandar Seri Alam, 24x80 (ground flr) very near Hospital",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-03814,research_import,2026-11-08 08:45:11.567094+08:00
+1218,Summit Commercial Hub (Gelang Patah),,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-03850,research_import,2026-11-08 08:45:11.567094+08:00
+1219,"Nusa Sentral Iskandar Shop Rent, 22x70sf Level 1 / Level 2 Available",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-03877,research_import,2026-11-08 08:45:11.567094+08:00
+1220,Permas mall block c Bandar baru Permas Jaya ground floor next to aeon,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-03951,research_import,2026-11-08 08:45:11.567094+08:00
+1221,Adjoining Shop lot masai utama facing mainroad very prominent place,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-04015,research_import,2026-11-08 08:45:11.567094+08:00
+1222,Bandar Baru Uda Same Row with Osman restaurant,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-04041,research_import,2026-11-08 08:45:11.567094+08:00
+1223,"Jalan Nusaria Gelang Patah, 22x70sf Shop Rent, Ground / First Floor",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-04126,research_import,2026-11-08 08:45:11.567094+08:00
+1224,"Permas Jaya 10/, 24x75sf Ground Floor Shop, High Traffic, Main Road",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-04129,research_import,2026-11-08 08:45:11.567094+08:00
+1225,"Sutera Square Shoplot, 24x80sf, First / Second Floor, Face Inner Road",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-04131,research_import,2026-11-08 08:45:11.567094+08:00
+1226,"Kedai untuk Disewa Taman Mutiara Desaru, Bandar Penawar, Pengerang",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-04205,research_import,2026-11-08 08:45:11.567094+08:00
+1227,Desa Cemerlang Tanjong 2 Level 2 Ulu Tiram Facing Main road,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-03901,research_import,2026-11-08 08:45:11.567094+08:00
+1228,2 Storey Shophouse Lebuh Dr Lim Chwee Leong Georgetown Face Main Road,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-04324,research_import,2026-11-08 08:45:11.567094+08:00
+1229,2 Storey Shophouse LORONG PRAGIN 2000sf renovated GEORGETOWN mainroad,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-04364,research_import,2026-11-08 08:45:11.567094+08:00
+1230,Prai Pacific Mega Mall Ground Floor shop lot near Gem Residence,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-04368,research_import,2026-11-08 08:45:11.567094+08:00
+1231,Sungai Ara Ground Floor Shop Lot Worth Rent,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-04375,research_import,2026-11-08 08:45:11.567094+08:00
+1232,Elit Avenue First Floor 1315sf Bayan Baru Suitable office Bayan Lepas,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-04451,research_import,2026-11-08 08:45:11.567094+08:00
+1233,1st Floor Corner Shoplot [ALMA BM] Renovated Facing Mainroad !!!,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-04458,research_import,2026-11-08 08:45:11.567094+08:00
+1234,BANDAR PUTRA BERTAM FIRST FLOOR OFFICE FOR RENT Nr BERTAM MYDIN,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-04484,research_import,2026-11-08 08:45:11.567094+08:00
+1235,MAINROAD Ground Floor commercial shoplot Jelutong,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-04566,research_import,2026-11-08 08:45:11.567094+08:00
+1236,Marina City @ Permatang Tinggi Bukit Mertajam 2-Storey Ground floor,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-04576,research_import,2026-11-08 08:45:11.567094+08:00
+1237,JALAN PERAK WISMA OFFICE LOT WITH LIFT 1500sf SHOPLOT JELUTONG SHOP,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-04593,research_import,2026-11-08 08:45:11.567094+08:00
+1238,Facing Main Road‼️1floor & 2 floor shoplot @ Tmn Machang Bubok,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-04630,research_import,2026-11-08 08:45:11.567094+08:00
+1239,Medan Angsana groundfloor shoplot for rent near air ayer itam farlim,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-04641,research_import,2026-11-08 08:45:11.567094+08:00
+1240,Machang Bubok Shoplot For Rent | Facing Main Road | High Visibility,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-04675,research_import,2026-11-08 08:45:11.567094+08:00
+1241,GELUGOR Semi-D Shop House FACING MAIN ROAD Big Car Porch Sungai Nibong,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-04677,research_import,2026-11-08 08:45:11.567094+08:00
+1242,JALAN FREE SCHOOL 2 Storey 2700sf Shop House JELUTONG mainroad RENT,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-04696,research_import,2026-11-08 08:45:11.567094+08:00
+1243,"1 St Floor Shop for Rent at Merbok, Nibong Tebal",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-04795,research_import,2026-11-08 08:45:11.567094+08:00
+1244,Taman Bukit Jambul 2 units 356sf Shop lots For Rent,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-04827,research_import,2026-11-08 08:45:11.567094+08:00
+1245,| Corner | Ground Floor Shoplot 1800sf Near Penang Plaza,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-04888,research_import,2026-11-08 08:45:11.567094+08:00
+1246,"Taman Sri Delima, Juru – Link Shop with Side Staircase",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-04957,research_import,2026-11-08 08:45:11.567094+08:00
+1247,Main Road - Approved Commercial Property 2-Storey Semi-D @ Batu Uban,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-04969,research_import,2026-11-08 08:45:11.567094+08:00
+1248,1st Floor Shop | Opp USM Sungai Dua University【Face Main Road】1100sf,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-05016,research_import,2026-11-08 08:45:11.567094+08:00
+1249,Main Road 2 Storey Shophouse at Jln Thean Teik (Ayer Itam),,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-05058,research_import,2026-11-08 08:45:11.567094+08:00
+1250,PRAI Inderawasih 2 Storey Shop Lot For Rent,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-05073,research_import,2026-11-08 08:45:11.567094+08:00
+1251,Retail Shop facing main road at Jalan Perak,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-05097,research_import,2026-11-08 08:45:11.567094+08:00
+1252,Pengkalan Weld Shoplot 1200sqft Facing Main Road Georgetown,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-05123,research_import,2026-11-08 08:45:11.567094+08:00
+1253,2 Storey Terrace Corner Shop for Rent @ Bertam Perdana,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-05165,research_import,2026-11-08 08:45:11.567094+08:00
+1254,2 Storey Shop House Jalan Ayer Itam Georgetown Greenlane Jelutong,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-05179,research_import,2026-11-08 08:45:11.567094+08:00
+1255,2-Storey Shop/Office for Rent at Jalan Jelutong | Main Road Frontage,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-05225,research_import,2026-11-08 08:45:11.567094+08:00
+1256,Bandar Sunway｜Seberang Jaya｜First Floor Retail Shop Lot for Rent,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-05265,research_import,2026-11-08 08:45:11.567094+08:00
+1257,Facing Main Road 2 Storey Shop at Taman Permatang Tinggi Indah for Ren,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-05277,research_import,2026-11-08 08:45:11.567094+08:00
+1258,"(FACING MAINROAD) GF Shoplot at Bandar Tasek Mutiara, Simpang Ampat",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-05464,research_import,2026-11-08 08:45:11.567094+08:00
+1259,"For Rent Renovated Ground Floor shoplot at Pusat Perniagaan Maju Jaya, Pusat Perniagaan Maju Utama Kampung Baru, Bukit Mertajam, Penang",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,EP-03717,research_import,2026-11-08 08:45:11.567094+08:00
+1260,gombak-medan idaman business centre-24x70-ground floor shoplot,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-02279,research_import,2026-11-08 08:45:11.567094+08:00
+1261,"Ground Foor Shop @ Taman Mastiara, Off Jalan Ipoh",,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-03020,research_import,2026-11-08 08:45:11.567094+08:00
+1262,Pandan Perdan Ground Floor Shop Lot,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-03040,research_import,2026-11-08 08:45:11.567094+08:00
+1263,VACANT COMMERCIAL LOT For RENT,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-03100,research_import,2026-11-08 08:45:11.567094+08:00
+1264,Brand New Shoplots for Rent in Bandar Perda,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-04429,research_import,2026-11-08 08:45:11.567094+08:00
+1265,Bandar Perda Extra Large 1st Floor Office,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-04563,research_import,2026-11-08 08:45:11.567094+08:00
+1266,2 STOREY MAIN ROAD SHOPLOT 【Commercial Title】Gelugor Sultan Azlan Shah,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-04680,research_import,2026-11-08 08:45:11.567094+08:00
+1267,Perai Taman Emas 2 Storey Biggest Shop lot For Rent,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-04756,research_import,2026-11-08 08:45:11.567094+08:00
+1268,Main Road Jalan Sultan Azlan Shah 2 Storey Shop Lot Gelugor,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-04960,research_import,2026-11-08 08:45:11.567094+08:00
+1269,2-storey Shoplot @ Taman Emas at Perai for Rent,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-05126,research_import,2026-11-08 08:45:11.567094+08:00
+1270,New Bob Centre GROUND floor 1588sf Face Main Road Pulau Tikus,,,UNKNOWN_OWNER,none,NO_OWNER,,,,pending,False,MD-05455,research_import,2026-11-08 08:45:11.567094+08:00
+1961,property qwe,f56fa3fa-6dde-4176-92e5-d8a460aafd01,,OWNER_MANAGED,none,OK_OWNER_UUID,,jedthj-wm23@student.tarc.edu.my,active,draft,False,,owner_draft,2026-11-10 21:04:47.864239+08:00
+2218,djdnd,f56fa3fa-6dde-4176-92e5-d8a460aafd01,,OWNER_MANAGED,none,OK_OWNER_UUID,,jedthj-wm23@student.tarc.edu.my,active,draft,False,,owner_draft,2026-11-10 22:00:57.375207+08:00
+5184,persist-check-e4847460-2570-4141-809b-4772a6ac20f3,,,UNKNOWN_OWNER,none,NO_OWNER_TEST_ARTIFACT,,,,draft,False,,owner_draft,2026-11-12 02:39:06.699536+08:00
+5185,persist-check-2ae7e700-e04c-4889-9a9c-23550a937d52,,,UNKNOWN_OWNER,none,NO_OWNER_TEST_ARTIFACT,,,,draft,False,,owner_draft,2026-11-12 02:39:19.180462+08:00
+5216,eerff,f69be94e-fc0e-46ff-adc4-99567a5d916d,,OWNER_MANAGED,none,OK_OWNER_UUID,,joelthj-wm23@student.tarc.edu.my,active,draft,False,,owner_draft,2026-11-12 06:18:04.558885+08:00

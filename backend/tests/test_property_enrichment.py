@@ -40,6 +40,10 @@ from sitewise.services.property_enrichment_service import (
 KL_LAT, KL_LON = 3.030927, 101.618782
 #: Open ocean: no F&B, no roads, and no population raster tile.
 EMPTY_LAT, EMPTY_LON = 0.0, 0.0
+#: Reference PU training subject MD-00510. The ingested WorldPop raster must
+#: reproduce the training pipeline's ring totals for these coordinates
+#: (recorded in ``backend/ml_reference/example_property_47.json``).
+MD00510_LAT, MD00510_LON = 3.02384, 101.5117943
 
 
 @pytest.fixture()
@@ -325,6 +329,47 @@ def test_no_raster_coverage_makes_population_unavailable(make_property):
     assert population["measurement"] is None
     assert population["provenance"]["reason"] == "no_population_raster_coverage"
     assert summary["population_unavailable"] is True
+
+
+def test_worldpop_provider_reproduces_training_ring_totals():
+    """The ingested raster is the training product: ring sums must match the
+    PU contract within tessellation tolerance (MD-00510, CC-BY-4.0)."""
+    with Session(engine) as session:
+        outcome = PropertyEnrichmentService(session)._worldpop_population(
+            MD00510_LAT, MD00510_LON
+        )
+
+    assert outcome is not None
+    measurement = outcome["measurement"]
+    assert measurement["population_500m"] == pytest.approx(1071.6, abs=0.5)
+    assert measurement["population_1km"] == pytest.approx(6430.9, rel=2e-3)
+    assert measurement["pop_2000m"] == pytest.approx(35472.8, rel=5e-3)
+    assert measurement["pop_3000m"] == pytest.approx(108745.1, rel=5e-3)
+
+    provenance = outcome["provenance"]
+    assert provenance["licence"].startswith("WorldPop")
+    assert provenance["ml_eligible"] is True
+    assert provenance["quality_flag"] in ("OK", "LOW_COVERAGE")
+    for label in ("500m", "1000m", "2000m", "3000m"):
+        coverage = provenance[f"worldpop_coverage_{label}_pct"]
+        assert coverage is not None and 0 < coverage <= 100, label
+
+
+def test_population_category_uses_worldpop_for_new_properties(make_property):
+    """An owner-submitted property (no catalogue row) gets measured WorldPop
+    rings from the PostGIS raster, with the licence in the provenance."""
+    pid = make_property()
+    with Session(engine) as session:
+        summary = PropertyEnrichmentService(session).run(pid, phase="population")
+
+    population = summary["categories"]["population"]
+    assert population["status"] == "current"
+    assert population["provenance"]["provider"] == "worldpop_postgis_raster"
+    assert population["measurement"]["population_1km"] > 0
+    assert population["measurement"]["pop_2000m"] >= population["measurement"][
+        "population_1km"
+    ]
+    assert population["provenance"]["ml_eligible"] is True
 
 
 def test_measured_absence_is_zero_not_unavailable(make_property):

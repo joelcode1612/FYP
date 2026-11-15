@@ -23,18 +23,24 @@ from __future__ import annotations
 from sqlalchemy import text
 from sqlmodel import Session
 
-#: The five enrichment categories, in the order the UI presents them.
+#: The six enrichment categories, in the order the UI presents them.
+#: ``age_population`` joins Phase 2 on 2026-11-15: WorldPop age-sex band
+#: extraction for newly added listings (validated single-point port of the
+#: 2026-11-15 gap-recovery pipeline). It has its OWN lifecycle because it can
+#: succeed while the total-population chain fails and vice versa.
 CATEGORIES: tuple[str, ...] = (
     "fnb_competitors",
     "demand_generators",
     "roads_transport",
     "parking",
     "population",
+    "age_population",
 )
 
 #: Phase 1 runs on PostGIS alone and never touches the raster machinery.
 PHASE_POSTGIS = "postgis"
-#: Phase 2 is population only and runs separately from Phase 1.
+#: Phase 2 is raster work (population + age bands) and runs separately from
+#: Phase 1.
 PHASE_POPULATION = "population"
 PHASES: tuple[str, ...] = (PHASE_POSTGIS, PHASE_POPULATION)
 
@@ -54,6 +60,7 @@ CATEGORY_PHASE: dict[str, str] = {
     "roads_transport": PHASE_POSTGIS,
     "parking": PHASE_POSTGIS,
     "population": PHASE_POPULATION,
+    "age_population": PHASE_POPULATION,
 }
 
 #: Extra measurement columns added to the wide feature table. Existing readers
@@ -67,6 +74,28 @@ FEATURE_COLUMNS: tuple[tuple[str, str], ...] = (
     ("coordinate_hash", "TEXT"),
     ("enrichment_status", "TEXT"),
     ("enrichment_provenance", "JSONB"),
+    # WorldPop age-sex band counts (model band definitions, partial-pixel
+    # weighted sums — see age_band_raster_service). DOUBLE PRECISION because
+    # partial-pixel weighting makes fractional counts correct, not dirty.
+    ("pop_age_0_14_500m", "DOUBLE PRECISION"),
+    ("pop_age_15_24_500m", "DOUBLE PRECISION"),
+    ("pop_age_25_34_500m", "DOUBLE PRECISION"),
+    ("pop_age_35_49_500m", "DOUBLE PRECISION"),
+    ("pop_age_50_64_500m", "DOUBLE PRECISION"),
+    ("pop_age_65_plus_500m", "DOUBLE PRECISION"),
+    ("pop_age_0_14_1km", "DOUBLE PRECISION"),
+    ("pop_age_15_24_1km", "DOUBLE PRECISION"),
+    ("pop_age_25_34_1km", "DOUBLE PRECISION"),
+    ("pop_age_35_49_1km", "DOUBLE PRECISION"),
+    ("pop_age_50_64_1km", "DOUBLE PRECISION"),
+    ("pop_age_65_plus_1km", "DOUBLE PRECISION"),
+    ("share_age_15_34_500m", "DOUBLE PRECISION"),
+    ("share_age_15_34_1km", "DOUBLE PRECISION"),
+    ("age_coverage_500m", "DOUBLE PRECISION"),
+    ("age_coverage_1km", "DOUBLE PRECISION"),
+    ("age_data_source", "TEXT"),
+    ("age_data_year", "INTEGER"),
+    ("age_data_status", "TEXT"),
 )
 
 DDL_STATEMENTS: tuple[str, ...] = (
@@ -88,7 +117,8 @@ DDL_STATEMENTS: tuple[str, ...] = (
         PRIMARY KEY (property_id, category),
         CONSTRAINT ck_pec_category CHECK (
             category IN ('fnb_competitors','demand_generators',
-                         'roads_transport','parking','population')),
+                         'roads_transport','parking','population',
+                         'age_population')),
         CONSTRAINT ck_pec_phase CHECK (phase IN ('postgis','population')),
         CONSTRAINT ck_pec_status CHECK (
             status IN ('pending','running','current','unavailable','failed','stale'))
@@ -108,6 +138,44 @@ DDL_STATEMENTS: tuple[str, ...] = (
     """,
 )
 
+#: The pre-age deployments carry CHECK constraints limited to the five
+#: original categories. This migration widens them; it runs ONLY when the
+#: live constraint definition does not already include ``age_population``, so
+#: repeated ``ensure_schema`` calls never churn the catalog.
+CONSTRAINT_MIGRATIONS: tuple[tuple[str, str, str], ...] = (
+    (
+        "ck_pec_category",
+        "age_population",
+        """
+        ALTER TABLE fyp.property_enrichment_category
+            DROP CONSTRAINT IF EXISTS ck_pec_category,
+            ADD CONSTRAINT ck_pec_category CHECK (
+                category IN ('fnb_competitors','demand_generators',
+                             'roads_transport','parking','population',
+                             'age_population'))
+        """,
+    ),
+    (
+        "ck_pec_phase",
+        "('postgis','population')",
+        """
+        ALTER TABLE fyp.property_enrichment_category
+            DROP CONSTRAINT IF EXISTS ck_pec_phase,
+            ADD CONSTRAINT ck_pec_phase CHECK (phase IN ('postgis','population'))
+        """,
+    ),
+    (
+        "ck_pec_status",
+        "('pending','running','current','unavailable','failed','stale')",
+        """
+        ALTER TABLE fyp.property_enrichment_category
+            DROP CONSTRAINT IF EXISTS ck_pec_status,
+            ADD CONSTRAINT ck_pec_status CHECK (
+                status IN ('pending','running','current','unavailable','failed','stale'))
+        """,
+    ),
+)
+
 
 def feature_column_ddl() -> tuple[str, ...]:
     return tuple(
@@ -125,6 +193,29 @@ def ensure_schema(session: Session) -> None:
     """
     for statement in DDL_STATEMENTS:
         session.execute(text(statement))
+    _migrate_constraints(session)
     for statement in feature_column_ddl():
         session.execute(text(statement))
     session.commit()
+
+
+def _migrate_constraints(session: Session) -> None:
+    """Widen the CHECK constraints on pre-age deployments, only when needed."""
+    for name, expected_fragment, statement in CONSTRAINT_MIGRATIONS:
+        current = session.execute(
+            text(
+                """
+                SELECT pg_get_constraintdef(oid) AS defn
+                FROM pg_constraint
+                WHERE conname = :name
+                  AND conrelid = 'fyp.property_enrichment_category'::regclass
+                """
+            ),
+            {"name": name},
+        ).scalar()
+        if current is None or expected_fragment in (current or ""):
+            # Either the table is fresh (created above with the new list, so
+            # the constraint already exists) or the constraint is already
+            # widened: nothing to do.
+            continue
+        session.execute(text(statement))

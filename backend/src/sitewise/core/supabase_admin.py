@@ -178,6 +178,54 @@ class SupabaseAdminService:
             raise SupabaseAdminError(f"Supabase invite failed: {message}") from exc
         return _normalize_auth_user(invited)
 
+    def create_confirmed_entrepreneur(
+        self,
+        *,
+        email: str,
+        password: str,
+        full_name: str | None = None,
+        account_purpose: str | None = None,
+    ) -> dict[str, Any]:
+        """Provision a public (Entrepreneur) identity that is email-confirmed.
+
+        The live project has ``mailer_autoconfirm = false`` globally, so the
+        ordinary ``/auth/v1/signup`` call returns NO session until the emailed
+        link is opened. Disabling confirmation project-wide would also change
+        the staff invitation and OAuth flows, so this uses Supabase's documented
+        admin ``POST /auth/v1/admin/users`` with ``email_confirm: true`` for
+        this ONE self-service registration instead. Global confirmation stays
+        ON for every other account path (agent invites, admin, OAuth).
+
+        This does NOT create a session and does NOT mark an existing unverified
+        user as confirmed: it only CREATES a new identity. The client obtains
+        its session afterwards through a real ``signInWithPassword`` password
+        check, and FastAPI provisions the local profile from the verified
+        bearer token on ``GET /auth/me``. A duplicate email is refused by
+        GoTrue (422) and mapped to [ConflictError] - never an overwrite.
+
+        ``user_metadata`` carries display/onboarding preference ONLY. No role,
+        account status, assurance level or permission is accepted here.
+        """
+        metadata: dict[str, Any] = {}
+        if full_name:
+            metadata["full_name"] = full_name
+        if account_purpose:
+            metadata["account_purpose"] = account_purpose
+        payload: dict[str, Any] = {
+            "email": email,
+            "password": password,
+            "email_confirm": True,
+            "user_metadata": metadata,
+        }
+        return _normalize_auth_user(
+            self._gotrue_admin_json(
+                "POST",
+                "admin/users",
+                json_body=payload,
+                conflict_status=422,
+            )
+        )
+
     def get_auth_user(self, auth_user_id: str) -> dict[str, Any] | None:
         """Fetch one Supabase Auth user via the documented admin REST endpoint.
 
@@ -233,19 +281,22 @@ class SupabaseAdminService:
         path: str,
         *,
         not_found_ok: bool = False,
+        json_body: dict[str, Any] | None = None,
+        conflict_status: int | None = None,
     ) -> dict[str, Any]:
         url = f"{settings.supabase_url.rstrip('/')}/auth/v1/{path}"
         headers = {
             "apikey": settings.supabase_secret_key,
             "Authorization": f"Bearer {settings.supabase_secret_key}",
         }
+        request_kwargs: dict[str, Any] = {
+            "headers": headers,
+            "timeout": settings.supabase_admin_timeout_seconds,
+        }
+        if json_body is not None:
+            request_kwargs["json"] = json_body
         try:
-            response = httpx.request(
-                method,
-                url,
-                headers=headers,
-                timeout=settings.supabase_admin_timeout_seconds,
-            )
+            response = httpx.request(method, url, **request_kwargs)
         except httpx.HTTPError as exc:
             raise AuthUnavailableError(
                 "The authentication service is temporarily unavailable."
@@ -253,6 +304,12 @@ class SupabaseAdminService:
         if response.status_code >= 400:
             if not_found_ok and response.status_code == 404:
                 return {}
+            if conflict_status and response.status_code == conflict_status:
+                raise ConflictError(
+                    "An account with this email already exists. Sign in instead."
+                )
+            # Never echo the provider's response body: it can contain project
+            # configuration detail. The status code is enough for the log.
             raise SupabaseAdminError(
                 f"GoTrue admin call failed ({response.status_code})."
             )
@@ -634,6 +691,20 @@ class SupabaseAdminService:
         except Exception as exc:
             raise SupabaseAdminError(f"Agent profile write failed: {exc}") from exc
         return (result.data or [{}])[0]
+
+    def get_agent_profile_by_id(self, agent_id: int) -> dict[str, Any] | None:
+        """Read an assigned agent's display name by its real agent_id."""
+        try:
+            result = (
+                self.client.table("agent")
+                .select("agent_id,agent_name,user_id")
+                .eq("agent_id", int(agent_id))
+                .limit(1)
+                .execute()
+            )
+        except Exception as exc:
+            raise SupabaseAdminError("Agent profile lookup failed.") from exc
+        return (result.data or [None])[0]
 
     def get_agent_profile(self, user_id: uuid.UUID | str) -> dict[str, Any] | None:
         try:

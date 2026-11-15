@@ -24,6 +24,9 @@ abstract final class ExplorePropertyMapper {
     final lat = _d(row['latitude']);
     final lon = _d(row['longitude']);
     final score = _d(row['overall_location_score']);
+    final management = row['management'] is Map
+        ? (row['management'] as Map).cast<String, dynamic>()
+        : const <String, dynamic>{};
     return CommercialProperty(
       id: '${row['property_id']}',
       title: _s(row['name']),
@@ -40,6 +43,8 @@ abstract final class ExplorePropertyMapper {
       suitabilityScore: score ?? 0,
       hasSuitabilityScore: score != null,
       ownerId: '',
+      managementLabel: (management['label'] as String?) ?? 'Management not assigned',
+      managerName: management['name'] as String?,
       hasTour: false,
       imageUrl: _ns(row['primary_image']),
       description: _ns(row['description']),
