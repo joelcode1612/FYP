@@ -1,7 +1,7 @@
 import uuid
 from typing import Literal
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field, model_validator
 from sqlmodel import Session, select
 
@@ -148,9 +148,77 @@ def search_recommendations(
 def recommendation_facets(
     _user: CurrentUser,
     session: Session = Depends(get_analytics_db),
+    operational_db: Session = Depends(get_db),
+    business_type: str | None = Query(default=None, max_length=120),
+    preferred_state: str | None = Query(default=None, max_length=120),
+    preferred_area: str | None = Query(default=None, max_length=120),
+    min_rental_rm: float | None = Query(default=None, ge=0, le=10_000_000),
+    max_rental_rm: float | None = Query(default=None, ge=0, le=10_000_000),
+    min_size_sqft: float | None = Query(default=None, ge=0, le=1_000_000),
+    max_size_sqft: float | None = Query(default=None, ge=0, le=1_000_000),
+    property_type: str | None = Query(default=None, max_length=120),
+    layout_preferences: list[str] = Query(default=[]),
+    query: str | None = Query(default=None, max_length=120),
+    managed_only: bool = False,
 ) -> dict:
-    """Filter vocabulary and numeric ranges read from the catalogue itself."""
-    return {"data": RecommendationSearchService(session).facets()}
+    """Filter vocabulary and ranges, counted over the listings the current
+    selections still leave eligible.
+
+    The same criteria the search accepts, so the options a dropdown offers are
+    computed from the same PU-gated population the search would rank. Each
+    facet is counted with all OTHER hard filters applied and only its own
+    constraint released — see
+    :meth:`RecommendationSearchService.facets`.
+
+    ``business_type`` and the target-market requirements are accepted and
+    echoed by the response, but they are not eligibility filters: the first
+    only re-sequences the set, the second cannot be verified from the
+    catalogue. A caller that treated either as a filter would be told so by
+    ``data.fields``.
+    """
+    if (
+        min_rental_rm is not None
+        and max_rental_rm is not None
+        and min_rental_rm > max_rental_rm
+    ):
+        raise HTTPException(
+            status_code=422,
+            detail={"code": "invalid_range",
+                    "message": "Minimum rental cannot exceed the maximum rental."},
+        )
+    if (
+        min_size_sqft is not None
+        and max_size_sqft is not None
+        and min_size_sqft > max_size_sqft
+    ):
+        raise HTTPException(
+            status_code=422,
+            detail={"code": "invalid_range",
+                    "message": "Minimum floor area cannot exceed the maximum."},
+        )
+    management = RecommendationManagementService(operational_db)
+    try:
+        assigned_ids = management.assigned_catalogue_ids() if managed_only else ()
+    except ManagementLookupError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail="Property assignments cannot be verified right now. Please retry.",
+        ) from exc
+    criteria = SearchCriteria(
+        business_type=business_type,
+        preferred_state=preferred_state,
+        preferred_area=preferred_area,
+        min_rental_rm=min_rental_rm,
+        max_rental_rm=max_rental_rm,
+        min_size_sqft=min_size_sqft,
+        max_size_sqft=max_size_sqft,
+        property_type=property_type,
+        layout_preferences=tuple(layout_preferences),
+        query=query,
+        managed_only=managed_only,
+        management_ids=assigned_ids,
+    )
+    return {"data": RecommendationSearchService(session).facets(criteria)}
 
 
 

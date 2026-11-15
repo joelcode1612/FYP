@@ -59,9 +59,10 @@ import base64
 import binascii
 import hashlib
 import json
+import math
 import threading
 from collections import OrderedDict
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
 
@@ -160,6 +161,7 @@ PU_ELIGIBILITY_COLUMN = "fyp.catalogue_properties.suitability_score"
 #: properties qualify — only their sequence. Every key ends with the catalogue
 #: id, which keeps the order total and therefore cursor pagination safe.
 SORT_BEST_MATCH = "best_match"
+
 SORT_OPTIONS: dict[str, str] = {
     SORT_BEST_MATCH: "Best requirement match",
     "rent_asc": "Lowest monthly rent",
@@ -169,6 +171,93 @@ SORT_OPTIONS: dict[str, str] = {
     "pu_desc": "Highest PU research index",
 }
 DEFAULT_SORT = SORT_BEST_MATCH
+
+# ---------------------------------------------------------------------------
+# Contextual filter fields
+# ---------------------------------------------------------------------------
+#
+#: What each recommendation field actually does to the eligible set. This is
+#: declared once, here, and travels with the facets response so the UI cannot
+#: present a ranking-only or unverifiable field as an eligibility filter.
+#:
+#: ``hard_filter``  — applied in the search SQL; a selected value removes
+#:                    properties that do not satisfy it.
+#: ``ranking_only`` — never removes a property. ``business_type`` re-sequences
+#:                    the SAME eligible set (``_rank_key`` consults the
+#:                    Stage-2 resemblance for the selected category) and
+#:                    selects which category evidence a card reports.
+#: ``unverified``   — the catalogue records nothing that can answer it, so the
+#:                    field is reported per property as an unverifiable
+#:                    requirement and affects neither filtering nor ordering.
+#:                    "Target market" arrives as ``layout_preferences``; there
+#:                    is no customer-mix column in ``fyp.catalogue_properties``.
+FILTER_FIELDS: tuple[dict[str, str], ...] = (
+    {
+        "key": "preferred_state",
+        "label": "Preferred state",
+        "role": "hard_filter",
+        "effect": "Only listings in the selected state remain eligible.",
+    },
+    {
+        "key": "property_type",
+        "label": "Property type",
+        "role": "hard_filter",
+        "effect": "Only listings of the selected type remain eligible.",
+    },
+    {
+        "key": "rental_budget",
+        "label": "Monthly rental budget",
+        "role": "hard_filter",
+        "effect": "Only listings whose monthly rent falls in the selected "
+                  "range remain eligible.",
+    },
+    {
+        "key": "property_size",
+        "label": "Preferred property size",
+        "role": "hard_filter",
+        "effect": "Only listings whose floor area falls in the selected range "
+                  "remain eligible.",
+    },
+    {
+        "key": "preferred_area",
+        "label": "Preferred area",
+        "role": "hard_filter",
+        "effect": "Only listings whose city or address mentions the area "
+                  "remain eligible.",
+    },
+    {
+        "key": "query",
+        "label": "Search",
+        "role": "hard_filter",
+        "effect": "Only listings whose title, address, city, type or id "
+                  "match the text remain eligible.",
+    },
+    {
+        "key": "business_type",
+        "label": "Business type",
+        "role": "ranking_only",
+        "effect": "Orders the eligible set and selects the category evidence "
+                  "shown on each card. It does not remove properties.",
+    },
+    {
+        "key": "target_market",
+        "label": "Target market",
+        "role": "unverified",
+        "effect": "The catalogue records no customer-mix field, so this is "
+                  "reported per property as a requirement that cannot be "
+                  "verified. It neither filters nor ranks.",
+    },
+)
+
+#: The ``FILTER_FIELDS`` keys whose selection narrows the eligible set.
+HARD_FILTER_KEYS = tuple(f["key"] for f in FILTER_FIELDS if f["role"] == "hard_filter")
+
+#: Target number of rental/size options. The generated intervals are always
+#: non-overlapping; this only steers how many of them the data is cut into.
+FACET_TARGET_BUCKETS = 6
+
+#: Rounded interval widths, smallest first, used to pick a readable step.
+_FACET_STEP_MULTIPLES = (1.0, 2.0, 2.5, 5.0, 10.0)
 
 # Card payload: exactly what a listing card renders. Detail pages load the
 # full record separately, so no gallery/description is fetched here.
@@ -325,6 +414,248 @@ def _number(value: float) -> str:
     return f"{value:,.0f}"
 
 
+def _pu_eligibility() -> dict[str, Any]:
+    """The gate every facet count already respects."""
+    return {
+        "threshold": PU_ELIGIBILITY_THRESHOLD,
+        "scale": PU_SCORE_SCALE,
+        "comparison": "strictly_greater_than",
+        "column": (
+            "live_expanded64_inference"
+            if _pu_variant_key() == "expanded64"
+            else PU_ELIGIBILITY_COLUMN
+        ),
+        "score_meaning": (
+            "Uncalibrated P-vs-U research association index, not a probability "
+            "of commercial success."
+        ),
+    }
+
+
+def _has_selection(criteria: SearchCriteria, key: str) -> bool:
+    """Whether the entrepreneur currently holds a constraint for this field."""
+    values = {
+        "preferred_state": criteria.preferred_state,
+        "property_type": criteria.property_type,
+        "rental_budget": criteria.min_rental_rm if criteria.min_rental_rm is not None
+        else criteria.max_rental_rm,
+        "property_size": criteria.min_size_sqft if criteria.min_size_sqft is not None
+        else criteria.max_size_sqft,
+        "preferred_area": criteria.preferred_area,
+        "query": criteria.query,
+    }
+    value = values.get(key)
+    if isinstance(value, str):
+        return bool(value.strip())
+    return value is not None
+
+
+def _satisfies(row: _Row, criteria: SearchCriteria, *, excluding: str | None) -> bool:
+    """The Python mirror of the hard filters :meth:`_query` pushes into SQL.
+
+    Counting contextual options needs the same predicates applied to the rows
+    the search already returned, with one field released. The comparison is the
+    SQL comparison — inclusive bounds for rent and size, exact match for state
+    and type, case-insensitive substring for the area and free-text search —
+    and :mod:`tests.test_recommendation_facets` checks it against real queries
+    over the live catalogue, so a drift between the two is a failing test, not a
+    silently wrong count.
+    """
+    if excluding != "rental_budget":
+        if criteria.max_rental_rm is not None and row.rental_rm > criteria.max_rental_rm:
+            return False
+        if criteria.min_rental_rm is not None and row.rental_rm < criteria.min_rental_rm:
+            return False
+    if excluding != "property_size":
+        if criteria.min_size_sqft is not None and row.size_sqft < criteria.min_size_sqft:
+            return False
+        if criteria.max_size_sqft is not None and row.size_sqft > criteria.max_size_sqft:
+            return False
+    if excluding != "preferred_state" and criteria.preferred_state:
+        if row.state != criteria.preferred_state:
+            return False
+    if excluding != "property_type" and criteria.property_type:
+        if row.property_type != criteria.property_type:
+            return False
+    if excluding != "preferred_area" and criteria.preferred_area:
+        needle = criteria.preferred_area.lower()
+        if needle not in row.city.lower() and needle not in row.address.lower():
+            return False
+    if excluding != "query" and criteria.query:
+        needle = criteria.query.lower()
+        haystack = (
+            row.title,
+            row.address,
+            row.city,
+            row.property_type,
+            row.id,
+        )
+        if not any(needle in value.lower() for value in haystack):
+            return False
+    return True
+
+
+def _value_counts(
+    rows: list[_Row],
+    value_of: Any,
+    *,
+    keep: str | None,
+) -> list[dict[str, Any]]:
+    """Real values with real counts, most available first.
+
+    Blank values never become options. ``keep`` is the entrepreneur's own
+    selection: it stays listed with a count of zero when nothing matches it,
+    because a dropdown that silently drops the value on screen would be
+    clearing a choice nobody asked it to clear.
+    """
+    counts: dict[str, int] = {}
+    for row in rows:
+        value = str(value_of(row) or "").strip()
+        if not value:
+            continue
+        counts[value] = counts.get(value, 0) + 1
+    selected = (keep or "").strip()
+    if selected and selected not in counts:
+        counts[selected] = 0
+    return [
+        {"value": value, "total": total}
+        for value, total in sorted(counts.items(), key=lambda item: (-item[1], item[0]))
+    ]
+
+
+def _facet_step(lowest: float, highest: float) -> float:
+    """A readable interval width for the observed span.
+
+    Derived from the data, never a fixed list: RM 500–20,000 and 118–5,760
+    square feet need different steps, and a re-imported catalogue with a
+    different span gets different intervals without a code change.
+    """
+    raw = (highest - lowest) / FACET_TARGET_BUCKETS
+    if raw <= 0:
+        return 1.0
+    magnitude = 10 ** math.floor(math.log10(raw))
+    for multiple in _FACET_STEP_MULTIPLES:
+        step = multiple * magnitude
+        if step >= raw:
+            return max(step, 1.0)
+    return 10.0 * magnitude
+
+
+def _range_label(money: bool, low: float | None, high: float | None) -> str:
+    """The interval in words, matching the bounds it actually sends.
+
+    ``None`` on one side is a genuine open interval — a saved preference can
+    hold a ceiling with no floor — and is labelled as one rather than being
+    rounded into a number nobody chose.
+    """
+    if low is not None and high is not None and low == high:
+        return f"{_money(low)}" if money else f"{_number(high)} sq ft"
+    if money:
+        if low is None:
+            return f"Up to {_money(high)}" if high is not None else "Any available budget"
+        return f"{_money(low)} – {_money(high)}" if high is not None else f"From {_money(low)}"
+    if low is None:
+        return f"Up to {_number(high)} sq ft" if high is not None else "Any property size"
+    return (
+        f"{_number(low)} – {_number(high)} sq ft"
+        if high is not None
+        else f"{_number(low)}+ sq ft"
+    )
+
+
+def _numeric_ranges(
+    rows: list[_Row],
+    value_of: Any,
+    *,
+    keys: tuple[str, str],
+    money: bool,
+) -> list[dict[str, Any]]:
+    """Non-overlapping intervals built from the values that actually exist.
+
+    Each bound is an observed rental or floor-area figure from the scoped set,
+    so consecutive intervals can neither overlap (an upper bound is always
+    strictly below the next lower bound) nor leave a priced listing outside
+    every option (the bounds come from the listing's own value). The count is
+    then exactly what the ``min``/``max`` pair sent to the search returns — no
+    rounding of a boundary into or out of a range.
+    """
+    values: dict[float, int] = {}
+    for row in rows:
+        value = value_of(row)
+        if value is None:
+            continue
+        key = float(value)
+        values[key] = values.get(key, 0) + 1
+    if not values:
+        return []
+    distinct = sorted(values)
+    step = _facet_step(distinct[0], distinct[-1])
+    low_key, high_key = keys
+    options: list[dict[str, Any]] = []
+    index = 0
+    while index < len(distinct):
+        low = distinct[index]
+        limit = low + step
+        end = index
+        while end + 1 < len(distinct) and distinct[end + 1] < limit:
+            end += 1
+        options.append(
+            {
+                low_key: low,
+                high_key: distinct[end],
+                "total": sum(values[value] for value in distinct[index : end + 1]),
+                "label": _range_label(money, low, distinct[end]),
+            }
+        )
+        index = end + 1
+    return options
+
+
+def _selected_range(
+    low: float | None,
+    high: float | None,
+    options: list[dict[str, Any]],
+    low_key: str,
+    high_key: str,
+    *,
+    money: bool,
+    matching_total: int,
+) -> dict[str, Any] | None:
+    """The active interval, whether or not it is one of the generated options.
+
+    A saved preference can hold bounds the catalogue never offers as a bucket
+    (``max_rental_rm = 25000`` with no floor, for instance). Reporting it
+    separately keeps that choice visible and counted instead of pretending the
+    entrepreneur never made it.
+    """
+    if low is None and high is None:
+        return None
+    for option in options:
+        if option[low_key] == low and option[high_key] == high:
+            return {
+                low_key: low,
+                high_key: high,
+                "label": option["label"],
+                "total": option["total"],
+                "generated": True,
+            }
+    return {
+        low_key: low,
+        high_key: high,
+        "label": _range_label(money, low, high),
+        "total": matching_total,
+        "generated": False,
+    }
+
+
+def _span(rows: list[_Row], value_of: Any, *, lowest: bool) -> float | None:
+    """Observed bound over the eligible population, None when there is none."""
+    present = [float(value_of(row)) for row in rows if value_of(row) is not None]
+    if not present:
+        return None
+    return min(present) if lowest else max(present)
+
+
 class RecommendationSearchService:
     """Read-only ranking over the catalogue. One instance per request."""
 
@@ -460,41 +791,50 @@ class RecommendationSearchService:
             },
         }
 
-    def facets(self) -> dict[str, Any]:
-        """Filter vocabulary straight from the catalogue.
+    def facets(self, criteria: SearchCriteria | None = None) -> dict[str, Any]:
+        """Filter vocabulary and ranges, contextualised to the selections.
 
         A hand-written list drifts: an option that matches no row filters every
-        listing out while still looking functional.
+        listing out while still looking functional. The counts are contextual in
+        the leave-one-out sense the UI needs: for each dropdown every OTHER
+        selected hard filter is applied and only that dropdown's own constraint
+        is dropped. Choosing Johor therefore prices the rental options with
+        Johor listings, and choosing a budget restates which states and types
+        still have anything inside it.
+
+        Everything is counted over the same PU-gated population the search
+        ranks, before pagination, and nothing is counted from a result page.
         """
-        states = self.session.execute(
-            text(
-                "SELECT state AS value, count(*) AS total "
-                "FROM fyp.catalogue_properties "
-                "WHERE state IS NOT NULL AND state <> '' "
-                "GROUP BY state ORDER BY total DESC, state"
-            )
-        ).mappings().all()
-        types = self.session.execute(
-            text(
-                "SELECT property_type AS value, count(*) AS total "
-                "FROM fyp.catalogue_properties "
-                "WHERE property_type IS NOT NULL AND property_type <> '' "
-                "GROUP BY property_type ORDER BY total DESC, property_type"
-            )
-        ).mappings().all()
-        bounds = self.session.execute(
-            text(
-                "SELECT min(rental_rm) AS min_rent, max(rental_rm) AS max_rent, "
-                "min(size_sqft) AS min_size, max(size_sqft) AS max_size, "
-                "count(*) AS total "
-                "FROM fyp.catalogue_properties"
-            )
-        ).mappings().first()
+        active = criteria or SearchCriteria()
+        universe = self._facet_universe(active)
+        keys = HARD_FILTER_KEYS
+        scoped = {
+            key: [r for r in universe if _satisfies(r, active, excluding=key)] for key in keys
+        }
+        matching = [r for r in universe if _satisfies(r, active, excluding=None)]
+
+        budget_options = _numeric_ranges(
+            scoped["rental_budget"],
+            lambda row: row.rental_rm,
+            keys=("min_rental_rm", "max_rental_rm"),
+            money=True,
+        )
+        size_options = _numeric_ranges(
+            scoped["property_size"],
+            lambda row: row.size_sqft,
+            keys=("min_size_sqft", "max_size_sqft"),
+            money=False,
+        )
+        labels = {field["key"]: field["label"] for field in FILTER_FIELDS}
         return {
-            "states": [{"value": r["value"], "total": int(r["total"])} for r in states],
-            "property_types": [
-                {"value": r["value"], "total": int(r["total"])} for r in types
-            ],
+            "states": _value_counts(
+                scoped["preferred_state"], lambda row: row.state, keep=active.preferred_state
+            ),
+            "property_types": _value_counts(
+                scoped["property_type"],
+                lambda row: row.property_type,
+                keep=active.property_type,
+            ),
             # The accepted orderings travel with the facets so the client does
             # not keep a second copy of this list. Order matters: the first
             # entry is the default.
@@ -502,14 +842,90 @@ class RecommendationSearchService:
                 {"value": value, "label": label}
                 for value, label in SORT_OPTIONS.items()
             ],
+            # Contextual rental/size choices. `options` never overlap and never
+            # leave a priced listing outside every interval, because each bound
+            # is a rental or floor-area value that exists in the scoped set;
+            # selecting one sends exactly those two bounds to the search.
+            "rental_ranges": {
+                "options": budget_options,
+                "unbounded_total": len(scoped["rental_budget"]),
+                "selected": _selected_range(
+                    active.min_rental_rm,
+                    active.max_rental_rm,
+                    budget_options,
+                    "min_rental_rm",
+                    "max_rental_rm",
+                    money=True,
+                    matching_total=len(matching),
+                ),
+            },
+            "size_ranges": {
+                "options": size_options,
+                "unbounded_total": len(scoped["property_size"]),
+                "selected": _selected_range(
+                    active.min_size_sqft,
+                    active.max_size_sqft,
+                    size_options,
+                    "min_size_sqft",
+                    "max_size_sqft",
+                    money=False,
+                    matching_total=len(matching),
+                ),
+            },
+            # Listings under every selection (the live "N properties match"
+            # figure) and under none of them, so an empty combination can be
+            # stated as a fact instead of an error.
+            "matching_total": len(matching),
+            "universe_total": len(universe),
+            "relaxations": sorted(
+                (
+                    {
+                        "field": key,
+                        "label": labels[key],
+                        "total": len(scoped[key]),
+                    }
+                    for key in keys
+                    if _has_selection(active, key)
+                ),
+                key=lambda item: (-item["total"], item["label"]),
+            ),
+            "fields": [dict(field) for field in FILTER_FIELDS],
+            "contextual": True,
+            "pu_eligibility": _pu_eligibility(),
             "ranges": {
-                "min_rental_rm": _as_float(bounds["min_rent"]),
-                "max_rental_rm": _as_float(bounds["max_rent"]),
-                "min_size_sqft": _as_float(bounds["min_size"]),
-                "max_size_sqft": _as_float(bounds["max_size"]),
-                "total": int(bounds["total"]),
+                # Bounds of the eligible population, not of the whole
+                # catalogue: the two differ and the UI quotes these.
+                "min_rental_rm": _span(universe, lambda row: row.rental_rm, lowest=True),
+                "max_rental_rm": _span(universe, lambda row: row.rental_rm, lowest=False),
+                "min_size_sqft": _span(universe, lambda row: row.size_sqft, lowest=True),
+                "max_size_sqft": _span(universe, lambda row: row.size_sqft, lowest=False),
+                "total": len(universe),
             },
         }
+
+    def _facet_universe(self, criteria: SearchCriteria) -> list[_Row]:
+        """Every listing the search could return, before the user's filters.
+
+        Built by the same ranking call the search uses, with the user's hard
+        filters removed, so the PU gate, the non-null rental/size requirement
+        and the management scope are applied exactly once and in exactly one
+        way — the model is never inferred a second time for the facets, and the
+        result shares the search's cache entry whenever nothing is selected.
+        """
+        browse = replace(
+            criteria,
+            preferred_state=None,
+            preferred_area=None,
+            min_rental_rm=None,
+            max_rental_rm=None,
+            min_size_sqft=None,
+            max_size_sqft=None,
+            property_type=None,
+            query=None,
+            sort=DEFAULT_SORT,
+            cursor=None,
+        )
+        return self._ranked_candidates(browse)
 
     # -- ranking ------------------------------------------------------------
 
