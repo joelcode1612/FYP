@@ -18,9 +18,8 @@ import 'pages/forgot_password_page.dart';
 import 'pages/staff_mfa_page.dart';
 import 'pages/staff_verify_page.dart';
 import 'pages/reset_password_page.dart';
-import 'pages/entrepreneur/assessment_history_page.dart'
-    as e_assessment_history;
-import 'layouts/app_layout.dart';
+import 'pages/entrepreneur/assessment_workspace_page.dart'
+    as e_assessment_workspace;
 import 'pages/entrepreneur/compare_page.dart';
 import 'pages/entrepreneur/dashboard_page.dart' as e_dashboard;
 import 'pages/entrepreneur/listing_management_denied_page.dart'
@@ -39,6 +38,7 @@ import 'pages/entrepreneur/report_activity_views.dart'
     as e_report_activity;
 import 'pages/entrepreneur/assessment_report_selector_view.dart'
     as e_report_selector;
+import 'pages/entrepreneur/reports_page.dart' as e_reports;
 import 'pages/entrepreneur/saved_page.dart' as e_saved;
 import 'pages/entrepreneur/tour_page.dart' as e_tour;
 import 'pages/admin/agents_page.dart';
@@ -154,14 +154,16 @@ class SitewiseApp extends StatelessComponent {
           // Workspace presentation is based on the backend-verified account
           // role. Client-controlled demo grants cannot authorize another role.
           //
-          // `owner` is no longer a workspace. An owner is an entrepreneur who
-          // also holds the verified property capability, and that capability is
-          // exercised in the SiteWise mobile app alongside agents. A legacy
-          // `/owner/*` link therefore falls through to the retired-workspace
-          // page below, which explains where the work moved and renders no
-          // record, draft or identity. It is never re-pointed at another role's
-          // authenticated surface.
-          if (requested == 'owner') return null;
+          // `owner` is a workspace again, in the sense that matters: an owner
+          // account is routed to `/owner`, which explains that the Owner
+          // workspace is the SiteWise mobile app. It is NOT re-pointed at the
+          // entrepreneur workspace, and an entrepreneur is no longer admitted
+          // to it — the two roles have different property authority and must not
+          // share a surface.
+          if (requested == 'owner' && assigned != 'owner' && assigned != 'admin') {
+            final home = _roleNamed(assigned);
+            return home == null ? '/login' : home.homeRoute;
+          }
           if (requested == assigned) return null;
           final role = _roleNamed(requested);
           if (role != null && Workspaces.canOpen(role)) return null;
@@ -636,7 +638,12 @@ class SitewiseApp extends StatelessComponent {
           Route(
             path: '/entrepreneur/assessments/history',
             builder: (context, state) => _page(
-              const e_assessment_history.AssessmentHistoryPage(),
+              // The engine activity shell (M2ActivityPanel) is the history
+              // surface now; ActivityHistoryPage is its embedded view and
+              // needs fetched activities, so the route goes through the shell.
+              e_report_activity.ActivityHistoryView(
+                assessmentId: state.queryParams['assessment'] ?? '',
+              ),
               title: 'Assessment history — Sitewise',
               description:
                   'Every location assessment saved to your account, with its '
@@ -652,6 +659,20 @@ class SitewiseApp extends StatelessComponent {
           // With `?id=` it is still the five-stage property workspace, byte for
           // byte the same page as before — every saved link, dashboard KPI and
           // Explore/Saved hand-off keeps working.
+          Route(
+            path: '/entrepreneur/assessments',
+            builder: (context, state) => _page(
+              e_assessment_workspace.AssessmentWorkspacePage(
+                propertyId: state.queryParams['id'] ?? '',
+                stage: state.queryParams['stage'] ?? '',
+                businessType: state.queryParams['businessType'] ?? '',
+              ),
+              title: 'Assessment workspace — Sitewise',
+              description:
+                  'Select a property, record your business preferences, review '
+                  'the location evidence and open the assessment report.',
+            ),
+          ),
 
           Route(
             path: '/entrepreneur/profile',
@@ -692,60 +713,6 @@ class SitewiseApp extends StatelessComponent {
             builder: (context, state) => _page(
               e_report.ReportPage(id: state.queryParams['id'] ?? ''),
               title: 'Assessment report — Sitewise',
-            ),
-          ),
-          // R01–R12 café demand suitability report and the engine activity
-          // history. Both are top-level destinations in the entrepreneur nav.
-          //
-          // `/entrepreneur/cafe-report` now opens the report *selector* first —
-          // the approved "Select Assessment to View Report" screen. Choosing a
-          // row and pressing View Report hands off to the original report shell
-          // at the `/view` path below.
-          //
-          // The longer `/view` path is declared FIRST. The matcher walks this
-          // list in declaration order and tests each path as a *prefix* of the
-          // location, so `/entrepreneur/cafe-report` is a prefix of
-          // `/entrepreneur/cafe-report/view`. It escapes that collision only
-          // because the shorter route has no nested sub-routes, and therefore
-          // bails instead of claiming the deeper location. Declaring the more
-          // specific path first keeps the ordering requirement explicit should
-          // sub-routes ever be added — the same reason
-          // `/entrepreneur/assessments/history` precedes
-          // `/entrepreneur/assessments`.
-          Route(
-            path: '/entrepreneur/cafe-report/view',
-            builder: (context, state) => _page(
-              e_report_activity.CafeReportView(
-                assessmentId: state.queryParams['assessment'] ?? '',
-              ),
-              title: 'Café demand suitability report — Sitewise',
-            ),
-          ),
-          Route(
-            path: '/entrepreneur/cafe-report',
-            builder: (context, state) => _page(
-              const e_report_selector.AssessmentReportSelectorView(),
-              title: 'Select assessment to view report — Sitewise',
-            ),
-          ),
-          Route(
-            path: '/entrepreneur/activity-history',
-            builder: (context, state) => _page(
-              e_report_activity.ActivityHistoryView(assessmentId: state.queryParams['assessment'] ?? ''),
-              title: 'Activity history — Sitewise',
-            ),
-          ),
-          // The assessment history lives under the workspace route. It is
-          // registered before the workspace itself so the history path is
-          // always matched by its own route.
-          Route(
-            path: '/entrepreneur/assessments/history',
-            builder: (context, state) => _page(
-              const e_assessment_history.AssessmentHistoryPage(),
-              title: 'Assessment history — Sitewise',
-              description:
-                  'Every location assessment saved to your account, with its '
-                  'real progress and report availability.',
             ),
           ),
         ],
@@ -790,10 +757,15 @@ AppRole? _roleNamed(String? name) {
 /// Mirrors the backend's legacy alias normalisation
 /// (`sitewise.domain.rbac.canonical_role`) so a session mirror written before
 /// canonicalisation still routes to the canonical workspace. Anything the
-/// three-role model does not define returns null and fails closed.
+/// four-role model does not define returns null and fails closed.
+///
+/// `property_owner` resolves to `owner`, not `entrepreneur`: the two are
+/// distinct roles now, and routing an owner into the entrepreneur workspace
+/// would hand them a surface with no property authority.
 String? _canonicalRoleName(String? name) => switch (name) {
   'administrator' => 'admin',
-  'property_owner' || 'user' => 'entrepreneur',
-  'entrepreneur' || 'agent' || 'admin' => name,
+  'property_owner' || 'propertyowner' || 'landlord' => 'owner',
+  'user' => 'entrepreneur',
+  'owner' || 'entrepreneur' || 'agent' || 'admin' => name,
   _ => null,
 };

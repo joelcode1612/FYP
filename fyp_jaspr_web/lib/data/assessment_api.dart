@@ -227,6 +227,22 @@ final class AssessmentRecord {
   /// True only once `report_generated_at` is set.
   final bool reportAvailable;
 
+  /// Optional participation counts. The history endpoint did not carry these
+  /// for a long time, and a deployed backend may still omit them — every
+  /// parser default is null and the UI renders "—" for null, never 0. A null
+  /// means "this response does not say", which keeps the honest-empty
+  /// contract intact while a backend that does know can surface real figures:
+  ///
+  ///   * `respondent_count` — distinct respondents registered across the
+  ///     assessment's questionnaire campaigns (`cq_participants`);
+  ///   * `response_count` — sessions that actually submitted
+  ///     (`cq_submission_receipts`);
+  ///   * `external_source_count` — external evidence sources attached to the
+  ///     assessment, when the backend can compute them.
+  final int? respondentCount;
+  final int? responseCount;
+  final int? externalSourceCount;
+
   /// The saved business requirements, or null when stage 2 has not been saved.
   final Map<String, dynamic>? requirements;
 
@@ -258,6 +274,9 @@ final class AssessmentRecord {
     required this.totalStages,
     required this.progressPercent,
     required this.reportAvailable,
+    this.respondentCount,
+    this.responseCount,
+    this.externalSourceCount,
     required this.requirements,
     required this.requirementsVersion,
     required this.stages,
@@ -289,6 +308,9 @@ final class AssessmentRecord {
       totalStages: (json['total_stages'] as num).toInt(),
       progressPercent: (json['progress_percent'] as num).toInt(),
       reportAvailable: json['report_available'] == true,
+      respondentCount: (json['respondent_count'] as num?)?.toInt(),
+      responseCount: (json['response_count'] as num?)?.toInt(),
+      externalSourceCount: (json['external_source_count'] as num?)?.toInt(),
       requirements: (json['requirements'] as Map?)?.cast<String, dynamic>(),
       requirementsVersion: (json['requirements_version'] as num?)?.toInt() ?? 0,
       stages: [
@@ -659,6 +681,13 @@ final class AssessmentApi {
     method: 'PATCH',
     body: {'complete_stage': stageKey},
     parse: AssessmentRecord.fromJson,
+  );
+
+  /// Permanently deletes the caller's own assessment record. Ownership is
+  /// enforced server-side (404 unknown, 403 foreign); a 204 with no body is
+  /// the success answer.
+  Future<ApiResult<void>> deleteAssessment(String assessmentId) => _callVoid(
+    '/api/v1/assessments/$assessmentId',
   );
 
   /// Stage 3's evidence read. `available: false` is a successful call — it

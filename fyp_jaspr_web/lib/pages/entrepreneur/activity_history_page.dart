@@ -1,6 +1,8 @@
 import 'package:jaspr/dom.dart';
 import 'package:jaspr/jaspr.dart';
 
+import '../../components/ui.dart' show Icon;
+
 /// Immutable read-only event projection returned by the existing audit API.
 /// Normalize timestamps to UTC ISO 8601 before rendering/sorting.
 class AssessmentActivity {
@@ -36,7 +38,19 @@ class AssessmentActivity {
 }
 
 /// Not `@client`: it is mounted inside the `@client` route shell, and the
-/// `@client` codegen rejects custom model parameters.
+/// `@client` codegen rejects custom model parameters. Its interactive state
+/// (filters, selection, pagination) is hydrated because the parent
+/// `M2ActivityPanel` is the client anchor.
+///
+/// Layout follows the approved reference
+/// (SiteWise_Activity_History_With_Assessment_Selector.html): page heading
+/// with back action, assessment picker, identity + context-stats card,
+/// filters, workflow coverage, timeline + detail grid, footnote. Rendered
+/// inside the existing AppLayout — no sidebar of its own.
+///
+/// Governance contract unchanged: every event, count and coverage line comes
+/// from the panel's authenticated M2 source; nothing is invented, and an
+/// unavailable source renders its honest message instead of substitute rows.
 class ActivityHistoryPage extends StatefulComponent {
   final String businessName;
   final String assessmentId;
@@ -46,7 +60,14 @@ class ActivityHistoryPage extends StatefulComponent {
   final VoidCallback? onBackToReport;
   final void Function(String eventId)? onViewFullLog;
 
-  /// Optional caller-owned selector, rendered before Activity History heading.
+  /// Caller-owned refresh of the loaded history; null hides the action.
+  final VoidCallback? onRefresh;
+
+  /// Existing navigation target for the questionnaire workspace; null hides
+  /// the link. Rendered as an outline button in the heading actions group.
+  final String? openQuestionnaireHref;
+
+  /// Optional caller-owned selector, rendered in the picker card.
   final Component? assessmentSelector;
   final bool workflowHistory;
   final List<String> sourceCoverage;
@@ -60,6 +81,8 @@ class ActivityHistoryPage extends StatefulComponent {
     this.availabilityMessage,
     this.onBackToReport,
     this.onViewFullLog,
+    this.onRefresh,
+    this.openQuestionnaireHref,
     this.assessmentSelector,
     this.workflowHistory = false,
     this.sourceCoverage = const [],
@@ -90,31 +113,29 @@ class _ActivityHistoryPageState extends State<ActivityHistoryPage> {
     }
   }
 
+  List<AssessmentActivity> get _source => component.activitiesAvailable
+      ? component.activities
+      : const <AssessmentActivity>[];
+
   List<AssessmentActivity> get _filtered {
-    final items =
-        (component.activitiesAvailable
-                ? component.activities
-                : const <AssessmentActivity>[])
-            .where((event) {
-              final utc = DateTime.tryParse(
-                event.occurredAtIso,
-              )?.toUtc().toIso8601String();
-              final date = utc?.substring(0, 10) ?? '';
-              if (_engine.isNotEmpty && event.engine != _engine) return false;
-              if (_activityType.isNotEmpty &&
-                  event.activityType != _activityType) {
-                return false;
-              }
-              if (_status.isNotEmpty && event.status != _status) return false;
-              if (_startDate.isNotEmpty && date.compareTo(_startDate) < 0) {
-                return false;
-              }
-              if (_endDate.isNotEmpty && date.compareTo(_endDate) > 0) {
-                return false;
-              }
-              return true;
-            })
-            .toList();
+    final items = _source.where((event) {
+      final utc = DateTime.tryParse(
+        event.occurredAtIso,
+      )?.toUtc().toIso8601String();
+      final date = utc?.substring(0, 10) ?? '';
+      if (_engine.isNotEmpty && event.engine != _engine) return false;
+      if (_activityType.isNotEmpty && event.activityType != _activityType) {
+        return false;
+      }
+      if (_status.isNotEmpty && event.status != _status) return false;
+      if (_startDate.isNotEmpty && date.compareTo(_startDate) < 0) {
+        return false;
+      }
+      if (_endDate.isNotEmpty && date.compareTo(_endDate) > 0) {
+        return false;
+      }
+      return true;
+    }).toList();
     final unique = <String, AssessmentActivity>{};
     for (final item in items) {
       unique.putIfAbsent(
@@ -164,6 +185,52 @@ class _ActivityHistoryPageState extends State<ActivityHistoryPage> {
         '$hour:$minute';
   }
 
+  /// Status → badge tone. Unrecognised statuses stay neutral: a status the
+  /// backend sends that this build does not classify must not read as success.
+  String _tone(String status) {
+    final text = status.toLowerCase();
+    if (text.contains('completed') || text.contains('persisted')) {
+      return 'success';
+    }
+    if (text.contains('review') || text.contains('pending')) {
+      return 'warning';
+    }
+    if (text.contains('fail')) {
+      return 'danger';
+    }
+    return 'neutral';
+  }
+
+  Component _statusBadge(String status) => span(
+    [Component.text(status)],
+    classes: 'sr-status sr-status--${_tone(status)}',
+  );
+
+  Component _icon(String name) => span(
+    classes: 'sr-icon',
+    attributes: {'aria-hidden': 'true'},
+    [Icon(name)],
+  );
+
+  Component _button(
+    String label,
+    VoidCallback? handler, {
+    bool primary = false,
+    String? icon,
+  }) => button(
+    classes: 'sr-button${primary ? ' sr-button--primary' : ''}',
+    attributes: {'type': 'button', if (handler == null) 'disabled': ''},
+    events: events(
+      onClick: () {
+        if (handler != null) handler();
+      },
+    ),
+    [
+      if (icon != null) _icon(icon),
+      Component.text(label),
+    ],
+  );
+
   Component _selectFilter(
     String label,
     String current,
@@ -209,87 +276,129 @@ class _ActivityHistoryPageState extends State<ActivityHistoryPage> {
     ),
   ]);
 
-  Component _button(String label, VoidCallback? handler) => button(
-    classes: 'sr-button',
-    attributes: {'type': 'button', if (handler == null) 'disabled': ''},
-    events: events(
-      onClick: () {
-        if (handler != null) handler();
-      },
-    ),
-    [Component.text(label)],
-  );
-
-  Component _referenceList(String title, List<String> refs) =>
-      section(classes: 'sr-detail-section', [
-        h4([Component.text(title)]),
+  Component _referenceList(String title, String icon, List<String> refs) =>
+      section(classes: 'sr-reference-panel', [
+        h4([_icon(icon), Component.text(title)]),
         if (refs.isEmpty)
-          p([Component.text('No references supplied.')])
+          p([Component.text('No references supplied.')], classes: 'sr-empty-copy')
         else
-          ul([
+          ul(classes: 'sr-reference-list', [
             for (final ref in refs) li([Component.text(ref)]),
           ]),
       ]);
 
   Component _details(AssessmentActivity? item) {
+    final head = section(classes: 'sr-card-head sr-card-head--detail', [
+      h2([_icon('description'), Component.text('Activity details')]),
+      span(
+        classes: 'sr-event-id',
+        [Component.text(item == null ? 'Select an event' : 'Event ${item.eventId}')],
+      ),
+    ]);
     if (item == null) {
       return section(classes: 'sr-card sr-detail', [
-        h3([Component.text('Activity Details')]),
-        p([
-          Component.text(
-            component.activitiesAvailable
-                ? 'Select a recorded activity to see its full details.'
-                : component.availabilityMessage ??
-                      'Activity records are unavailable.',
-          ),
+        head,
+        div(classes: 'sr-detail-placeholder', [
+          span(classes: 'sr-icon', attributes: {'aria-hidden': 'true'}, [
+            Icon(component.activitiesAvailable ? 'description' : 'report_problem'),
+          ]),
+          h3([
+            Component.text(
+              component.activitiesAvailable
+                  ? 'No activity selected'
+                  : 'Activity unavailable',
+            ),
+          ]),
+          p([
+            Component.text(
+              component.activitiesAvailable
+                  ? 'Select an event in the timeline to see its audit details.'
+                  : component.availabilityMessage ??
+                        'Activity records are unavailable.',
+            ),
+          ]),
         ]),
       ]);
     }
     return section(classes: 'sr-card sr-detail', [
-      div(classes: 'sr-panel-heading', [
-        h3([Component.text('Activity Details')]),
-        _button(
-          'View full log (JSON)',
-          component.onViewFullLog == null
-              ? null
-              : () => component.onViewFullLog!(item.eventId),
-        ),
-      ]),
-      h3([Component.text(item.title)]),
-      p(classes: 'sr-subtitle', [
-        Component.text(
-          '${_fmt(item.occurredAtIso)} · ${item.engine} · ${item.status}',
-        ),
-      ]),
-      section(classes: 'sr-detail-section', [
-        h4([Component.text('Activity summary')]),
-        p([Component.text(item.summary)]),
-        if (item.reason != null)
-          p([Component.text('Recorded reason: ${item.reason}')]),
-        if (item.sourceIsCurrent != null)
+      head,
+      div(classes: 'sr-detail-content', [
+        div(classes: 'sr-detail-title-row', [
+          div(classes: 'sr-detail-title-wrap', [
+            h3([Component.text(item.title)]),
+            p(classes: 'sr-detail-subline', [
+              Component.text('${item.engine} · ${_fmt(item.occurredAtIso)}'),
+            ]),
+          ]),
+          _statusBadge(item.status),
+        ]),
+        section(classes: 'sr-summary-block', [
+          h4([_icon('info'), Component.text('What happened')]),
+          p([Component.text(item.summary)]),
+          if (item.reason != null)
+            p([
+              Component.text('Recorded reason: ${item.reason}'),
+            ], classes: 'sr-reference-list'),
+          if (item.sourceIsCurrent != null)
+            p([
+              Component.text(
+                item.sourceIsCurrent!
+                    ? 'Source revision matches the current saved revision.'
+                    : 'Historical source revision — original outcome retained; not a current handoff.',
+              ),
+            ]),
+        ]),
+        div(classes: 'sr-reference-grid', [
+          _referenceList('Inputs', 'input', item.inputReferences),
+          _referenceList('Outputs', 'output', item.outputReferences),
+        ]),
+        section(classes: 'sr-info-block', [
+          h4([_icon('settings'), Component.text('Processing details')]),
+          dl(classes: 'sr-data-list', [
+            div([
+              dt([Component.text('Engine / module')]),
+              dd([Component.text(item.engine)]),
+            ]),
+            div([
+              dt([Component.text('Activity type')]),
+              dd([Component.text(item.activityType)]),
+            ]),
+            div([
+              dt([Component.text('Version')]),
+              dd([Component.text(item.version)]),
+            ]),
+            div([
+              dt([Component.text('Event ID')]),
+              dd([Component.text(item.eventId)]),
+            ]),
+          ]),
+        ]),
+        section(classes: 'sr-info-block', [
+          h4([_icon('schedule'), Component.text('Audit information')]),
+          dl(classes: 'sr-data-list', [
+            div([
+              dt([Component.text('Recorded by')]),
+              dd([Component.text(item.actor)]),
+            ]),
+            div([
+              dt([Component.text('Recorded at')]),
+              dd([Component.text(_fmt(item.occurredAtIso))]),
+            ]),
+          ]),
           p([
             Component.text(
-              item.sourceIsCurrent!
-                  ? 'Source revision matches the current saved revision.'
-                  : 'Historical source revision — original outcome retained; not a current handoff.',
+              'This projection is read-only. Audit corrections require a new authorized backend event.',
             ),
-          ]),
-      ]),
-      _referenceList('Inputs', item.inputReferences),
-      _referenceList('Outputs', item.outputReferences),
-      section(classes: 'sr-detail-section', [
-        h4([Component.text('Engine details')]),
-        p([Component.text('Engine: ${item.engine}')]),
-        p([Component.text('Activity type: ${item.activityType}')]),
-        p([Component.text('Event ID: ${item.eventId}')]),
-      ]),
-      section(classes: 'sr-detail-section', [
-        h4([Component.text('Audit and version history')]),
-        p([Component.text('Recorded by: ${item.actor}')]),
-        p([Component.text('Version: ${item.version}')]),
-        p([
-          Component.text(
-            'This projection is read-only. Audit corrections require a new authorized backend event.',
+          ], classes: 'sr-audit-note'),
+        ]),
+        div(classes: 'sr-detail-actions', [
+          _button(
+            'View full log (JSON)',
+            component.onViewFullLog == null
+                ? null
+                : () => component.onViewFullLog!(item.eventId),
+            primary: true,
+            icon: 'code',
           ),
         ]),
       ]),
@@ -336,38 +445,125 @@ class _ActivityHistoryPageState extends State<ActivityHistoryPage> {
       }
     }
     if (selected == null && visible.isNotEmpty) selected = visible.first;
+    final latest = all.isEmpty ? null : all.first;
 
     return main_(classes: 'sr-workspace', [
-      if (component.assessmentSelector != null) component.assessmentSelector!,
       div(classes: 'sr-page-heading', [
-        p(classes: 'sr-breadcrumb', [
-          Component.text('Project1 › Review Portal › Activity History'),
-        ]),
-        h1([Component.text('Activity History')]),
-        p(classes: 'sr-subtitle', [
-          Component.text(
-            'A record of processing activities, decisions and updates with engine-level tracking.',
-          ),
-        ]),
-      ]),
-      section(classes: 'sr-card sr-history-header', [
-        div([
-          h3([Component.text(component.businessName)]),
-          p([
+        div(classes: 'sr-page-heading__copy', [
+          p(classes: 'sr-breadcrumb', [
+            Component.text('Assessments › Review portal › Activity history'),
+          ]),
+          h1([_icon('history'), Component.text('Activity history')]),
+          p(classes: 'sr-subtitle', [
             Component.text(
-              component.assessmentId.isEmpty
-                  ? 'No assessment selected · Activity and engine logs'
-                  : 'Assessment ${component.assessmentId} · Activity and engine logs',
+              'See what has happened during this assessment, including '
+              'processing steps, decisions and updates. Saved workflow '
+              'metadata only — private answers, business text and model '
+              'payloads are not shown.',
             ),
           ]),
         ]),
-        _button('Back to report', component.onBackToReport),
+        div(classes: 'sr-page-actions', [
+          if (component.openQuestionnaireHref != null)
+            a(
+              classes: 'sr-button',
+              href: component.openQuestionnaireHref!,
+              [Component.text('Open M2 questionnaire')],
+            ),
+          _button(
+            'Refresh saved activity',
+            component.onRefresh,
+            icon: 'refresh',
+          ),
+          _button('Back to report', component.onBackToReport, icon: 'arrow_back'),
+        ]),
+      ]),
+      if (component.assessmentSelector != null)
+        section(
+          classes: 'sr-card sr-assessment-picker',
+          attributes: {'aria-label': 'Select assessment'},
+          [
+            div(classes: 'sr-picker-label', [
+              span(classes: 'sr-picker-icon', attributes: {'aria-hidden': 'true'}, [
+                Icon('folder_open'),
+              ]),
+              Component.text('Selected assessment'),
+            ]),
+            div(classes: 'sr-picker-field', [component.assessmentSelector!]),
+          ],
+        ),
+      section(classes: 'sr-card sr-history-header', [
+        div(classes: 'sr-assessment-identity', [
+          div(classes: 'sr-assessment-icon', attributes: {'aria-hidden': 'true'}, [
+            Icon('insights'),
+          ]),
+          div(classes: 'sr-assessment-copy', [
+            span(classes: 'sr-overline', [Component.text('CURRENT ASSESSMENT')]),
+            h2([Component.text(component.businessName)]),
+            p([
+              Component.text(
+                component.assessmentId.isEmpty
+                    ? 'No assessment selected · Activity and engine logs'
+                    : 'Assessment ${component.assessmentId}',
+              ),
+            ]),
+          ]),
+        ]),
+        div(classes: 'sr-context-stats', [
+          div(classes: 'sr-context-stat', [
+            span(classes: 'sr-context-stat__label', [
+              Component.text('Recorded activities'),
+            ]),
+            strong([Component.text('${component.activities.length}')]),
+          ]),
+          div(classes: 'sr-context-stat', [
+            span(classes: 'sr-context-stat__label', [
+              Component.text('Modules in current view'),
+            ]),
+            strong([
+              Component.text('${all.map((e) => e.engine).toSet().length}'),
+            ]),
+          ]),
+          div(classes: 'sr-context-stat', [
+            span(classes: 'sr-context-stat__label', [
+              Component.text('Latest matching activity'),
+            ]),
+            strong([
+              Component.text(
+                latest == null ? 'No matching activity' : _fmt(latest.occurredAtIso),
+              ),
+            ]),
+          ]),
+        ]),
       ]),
       section(classes: 'sr-card sr-filters', [
-        h3([Component.text('Filters')]),
+        div(classes: 'sr-section-heading', [
+          div([
+            h2([_icon('filter_list'), Component.text('Filter activities')]),
+            p([
+              Component.text(
+                'Narrow the history by module, action, status, or date.',
+              ),
+            ]),
+          ]),
+          _button(
+            'Reset filters',
+            !component.activitiesAvailable
+                ? null
+                : () => setState(() {
+                    _engine = '';
+                    _activityType = '';
+                    _status = '';
+                    _startDate = '';
+                    _endDate = '';
+                    _resetSelection();
+                  }),
+            icon: 'restart_alt',
+          ),
+        ]),
         div(classes: 'sr-filter-grid', [
           _selectFilter(
-            'Engine / Module',
+            'Engine / module',
             _engine,
             engines,
             (v) => _engine = v,
@@ -385,68 +581,67 @@ class _ActivityHistoryPageState extends State<ActivityHistoryPage> {
             _status,
             statuses,
             (v) => _status = v,
-            allLabel: 'All status',
+            allLabel: 'All statuses',
           ),
           _dateFilter('Start date', _startDate, (v) => _startDate = v),
           _dateFilter('End date', _endDate, (v) => _endDate = v),
-          _button(
-            'Reset',
-            !component.activitiesAvailable
-                ? null
-                : () => setState(() {
-                    _engine = '';
-                    _activityType = '';
-                    _status = '';
-                    _startDate = '';
-                    _endDate = '';
-                    _resetSelection();
-                  }),
-          ),
         ]),
       ]),
       if (component.workflowHistory)
-        section(classes: 'sr-card', [
-          h3([Component.text('Workflow history coverage')]),
-          p([
-            Component.text(
-              'Coverage describes available sources, not workflow execution or authorization. Missing history does not mean NOT_STARTED, FAILED or COMPLETED.',
-            ),
-          ]),
-          ul([
-            for (final source in component.sourceCoverage)
-              li([Component.text(source)]),
-          ]),
-          h4([
-            Component.text('Latest BCB status snapshots — not attempt history'),
-          ]),
-          p([
-            Component.text(
-              'Earlier failed build attempts may have been overwritten by recovery. No synthetic failure or invalidation events are created.',
-            ),
-          ]),
-          if (component.currentSnapshots.isEmpty)
+        section(classes: 'sr-card sr-coverage', [
+          div(classes: 'sr-coverage-group', [
+            h3([Component.text('Workflow history coverage')]),
             p([
               Component.text(
-                'No BCB status snapshot was loaded; execution is not verified.',
+                'Coverage describes available sources, not workflow execution or authorization. Missing history does not mean NOT_STARTED, FAILED or COMPLETED.',
               ),
-            ])
-          else
-            ul([
-              for (final snapshot in component.currentSnapshots)
-                li([Component.text(snapshot)]),
             ]),
+            ul([
+              for (final source in component.sourceCoverage)
+                li([Component.text(source)]),
+            ]),
+          ]),
+          div(classes: 'sr-coverage-group', [
+            h3([
+              Component.text('Latest BCB status snapshots — not attempt history'),
+            ]),
+            p([
+              Component.text(
+                'Earlier failed build attempts may have been overwritten by recovery. No synthetic failure or invalidation events are created.',
+              ),
+            ]),
+            if (component.currentSnapshots.isEmpty)
+              p([
+                Component.text(
+                  'No BCB status snapshot was loaded; execution is not verified.',
+                ),
+              ])
+            else
+              ul([
+                for (final snapshot in component.currentSnapshots)
+                  li([Component.text(snapshot)]),
+              ]),
+          ]),
         ]),
       div(classes: 'sr-history-grid', [
         section(classes: 'sr-card sr-timeline', [
-          h3([
-            Component.text(
-              component.activitiesAvailable
-                  ? 'Activity Timeline (${all.length})'
-                  : 'Activity Timeline — unavailable',
-            ),
+          div(classes: 'sr-card-head', [
+            div([
+              h2([_icon('timeline'), Component.text('Activity timeline')]),
+              p([
+                Component.text(
+                  component.activitiesAvailable
+                      ? '${all.length} matching '
+                          '${all.length == 1 ? 'activity' : 'activities'}'
+                          ' · Newest first'
+                      : 'Timeline unavailable',
+                ),
+              ]),
+            ]),
           ]),
           if (!component.activitiesAvailable)
-            p(
+            div(
+              classes: 'sr-list-message',
               attributes: {'role': 'status'},
               [
                 Component.text(
@@ -456,38 +651,61 @@ class _ActivityHistoryPageState extends State<ActivityHistoryPage> {
               ],
             )
           else if (visible.isEmpty)
-            p([Component.text('No recorded activity matches these filters.')])
-          else
-            for (final event in visible)
-              button(
-                classes: selected?.eventId == event.eventId
-                    ? 'sr-event selected'
-                    : 'sr-event',
-                attributes: {
-                  'type': 'button',
-                  'data-event-id': event.eventId,
-                  'data-event-time': event.occurredAtIso,
-                },
-                events: events(
-                  onClick: () =>
-                      setState(() => _selectedEventId = event.eventId),
+            div(classes: 'sr-empty-history', [
+              span(classes: 'sr-icon', attributes: {'aria-hidden': 'true'}, [
+                Icon('filter_list_off'),
+              ]),
+              h3([
+                Component.text(
+                  _source.isEmpty
+                      ? 'No activities recorded yet'
+                      : 'No matching activities',
                 ),
-                [
-                  div(classes: 'sr-event-heading', [
-                    strong([Component.text(event.title)]),
-                    span(classes: 'sr-status', [Component.text(event.status)]),
-                  ]),
-                  p([
-                    Component.text(
-                      '${event.engine} · ${_fmt(event.occurredAtIso)}',
-                    ),
-                  ]),
-                  p([Component.text(event.summary)]),
-                ],
-              ),
+              ]),
+              p([
+                Component.text(
+                  _source.isEmpty
+                      ? 'This assessment has no recorded events to show.'
+                      : 'Try clearing some filters.',
+                ),
+              ]),
+            ])
+          else
+            div(classes: 'sr-event-list', [
+              for (final event in visible)
+                button(
+                  classes: selected?.eventId == event.eventId
+                      ? 'sr-event selected'
+                      : 'sr-event',
+                  attributes: {
+                    'type': 'button',
+                    'data-event-id': event.eventId,
+                    'aria-pressed':
+                        '${selected?.eventId == event.eventId}',
+                  },
+                  events: events(
+                    onClick: () =>
+                        setState(() => _selectedEventId = event.eventId),
+                  ),
+                  [
+                    div(classes: 'sr-event-top', [
+                      strong([Component.text(event.title)]),
+                      _statusBadge(event.status),
+                    ]),
+                    p(classes: 'sr-event-meta', [
+                      Component.text(
+                        '${event.engine} · ${_fmt(event.occurredAtIso)}',
+                      ),
+                    ]),
+                    p(classes: 'sr-event-summary', [
+                      Component.text(event.summary),
+                    ]),
+                  ],
+                ),
+            ]),
           div(classes: 'sr-pagination', [
             _button(
-              'Previous',
+              '‹ Previous',
               page > 0
                   ? () => setState(() {
                       _page = page - 1;
@@ -503,7 +721,7 @@ class _ActivityHistoryPageState extends State<ActivityHistoryPage> {
               ),
             ]),
             _button(
-              'Next',
+              'Next ›',
               page + 1 < pages
                   ? () => setState(() {
                       _page = page + 1;
@@ -516,6 +734,7 @@ class _ActivityHistoryPageState extends State<ActivityHistoryPage> {
         _details(selected),
       ]),
       p(classes: 'sr-footnote', [
+        _icon('info'),
         Component.text(
           'Engine completion is not scientific acceptance, owner approval, report admission, or evidence sufficiency. All events must be backend-sourced.',
         ),

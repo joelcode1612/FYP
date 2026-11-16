@@ -71,13 +71,19 @@ class _AssessmentReportSelectorViewState
 
           final items = selectorItemsFrom(result.value!.items);
           if (items.isEmpty) {
-            return const EmptyState(
+            // Same honest empty state as the report directory: no assessment
+            // is invented here, but the reader gets a real next step instead
+            // of a dead end — the workspace is where assessments are created.
+            return EmptyState(
               title: 'No assessments yet',
-              body:
-                  'Assessments saved to your account appear here with the '
-                  'report that belongs to each one.',
-              // No create CTA: this page only selects existing
-              // assessments and their reports.
+              body: 'Assessments saved to your account appear here with the '
+                  'report that belongs to each one. Complete an assessment '
+                  'and its report view will open from this page.',
+              action: ActionLink(
+                'Start an assessment',
+                href: '/entrepreneur/assessments',
+                variant: 'primary',
+              ),
             );
           }
 
@@ -119,10 +125,11 @@ String? assessmentLocationReportHref(
 ///
 /// Every value comes from the record the server returned:
 ///
-///   * three of the five counters are simply **not** in this read model
-///     (`respondentCount`, `responseCount`, `externalSourceCount`), so they are
-///     passed as null and the page renders "—". They are never coerced to 0,
-///     which would read as "zero were recorded";
+///   * the three participation counters (`respondentCount`, `responseCount`,
+///     `externalSourceCount`) pass straight through from the parsed record —
+///     they are null when the backend response does not carry them, and the
+///     page renders "—" for null. They are never coerced to 0, which would
+///     read as "zero were recorded";
 ///   * report access is taken from the persisted `report_available` flag plus
 ///     the stage progress the server computed — never guessed from the client.
 List<AssessmentListItem> selectorItemsFrom(List<AssessmentRecord> records) => [
@@ -155,10 +162,12 @@ AssessmentListItem _selectorItem(AssessmentRecord record) {
     // A saved business-requirements payload is the one profile this workflow
     // stores; nothing else is counted here.
     businessProfileCount: requirementsSaved ? 1 : 0,
-    // Not carried by this read model — see the doc comment above.
-    respondentCount: null,
-    responseCount: null,
-    externalSourceCount: null,
+    // Counts come from the record when the backend provides them; when the
+    // deployed API omits the fields the parser yields null and the tiles
+    // render "—" — never a fabricated 0.
+    respondentCount: record.respondentCount,
+    responseCount: record.responseCount,
+    externalSourceCount: record.externalSourceCount,
     reportAccess: _reportAccess(record),
     selectedRentals: property == null
         ? const []

@@ -47,9 +47,13 @@ class _ReportsPageState extends State<ReportsPage> {
     subtitle:
         'Review reports from your saved property assessments, or continue an assessment to generate one.',
     actions: const [
+      // The directory is the flat, paginated view of the same records the
+      // selector gate presents. Both are reachable; the gate is the sidebar
+      // destination because it scopes a report to one assessment before
+      // opening it.
       ActionLink(
-        'Assessment history',
-        href: '/entrepreneur/assessments/history',
+        'Select assessment',
+        href: '/entrepreneur/cafe-report',
         variant: 'secondary',
       ),
     ],

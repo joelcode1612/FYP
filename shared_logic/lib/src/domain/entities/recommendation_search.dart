@@ -512,6 +512,32 @@ class RecommendationSearchRequest {
     );
   }
 
+  /// The criteria a contextual facets call needs.
+  ///
+  /// Only the hard filters are sent, because only they can change a count:
+  /// `business_type` re-sequences the eligible set and `layout_preferences` is
+  /// a requirement the catalogue records no column for, so neither adds nor
+  /// removes a listing. Both the GET parameter names and their values are the
+  /// search request's own — one vocabulary, so an option can never be priced
+  /// by a rule the search does not apply.
+  Map<String, String> get facetsQuery => {
+    if (preferredState != null) 'preferred_state': preferredState!,
+    if (preferredArea != null) 'preferred_area': preferredArea!,
+    if (minRentalRm != null) 'min_rental_rm': _plain(minRentalRm!),
+    if (maxRentalRm != null) 'max_rental_rm': _plain(maxRentalRm!),
+    if (minSizeSqft != null) 'min_size_sqft': _plain(minSizeSqft!),
+    if (maxSizeSqft != null) 'max_size_sqft': _plain(maxSizeSqft!),
+    if (propertyType != null) 'property_type': propertyType!,
+    if (query != null) 'query': query!,
+    if (managedOnly) 'managed_only': 'true',
+  };
+
+  /// Query parameters are compared as text, so a whole number must not arrive
+  /// as `3000.0` while the search sends `3000`.
+  static String _plain(double value) => value == value.roundToDouble()
+      ? value.toStringAsFixed(0)
+      : '$value';
+
   /// True when nothing constrains the search — a plain browse. The UI uses
   /// this to show "browse all properties" instead of an empty-state that
   /// demands preferences the user may not have yet.
@@ -589,7 +615,15 @@ class RecommendationSearchRequest {
   );
 }
 
-/// Filter vocabulary and ranges read from the catalogue itself.
+/// Filter vocabulary and intervals, counted over the listings the CURRENT
+/// selections still leave eligible.
+///
+/// The server prices each field leave-one-out: every OTHER hard filter is
+/// applied and only that field's own constraint is released. Choosing Johor
+/// therefore re-counts the property types, budgets and sizes over Johor
+/// listings, and choosing a budget restates which states still have anything
+/// inside it. Nothing here is derived locally — a hand-built option list
+/// drifts, and an option that matches no row silently filters everything out.
 class RecommendationFacets {
   final List<FacetOption> states;
   final List<FacetOption> propertyTypes;
@@ -599,21 +633,67 @@ class RecommendationFacets {
   /// this list; empty when the facets call failed.
   final Map<String, String> sortOptions;
 
-  final double? minRentalRm;
-  final double? maxRentalRm;
-  final double? minSizeSqft;
-  final double? maxSizeSqft;
-  final int total;
+  /// Monthly-rent intervals of the scoped set. `low`/`high` are the exact
+  /// `min_rental_rm`/`max_rental_rm` a search must receive to return them.
+  final List<FacetRange> rentalRanges;
+
+  /// Floor-area intervals of the scoped set, keyed to `min_size_sqft`/
+  /// `max_size_sqft`.
+  final List<FacetRange> sizeRanges;
+
+  /// Listings the scoped set holds with NO budget chosen, and with no size
+  /// chosen — the counts the "any" option carries.
+  final int rentalUnboundedTotal;
+  final int sizeUnboundedTotal;
+
+  /// The interval the selections describe, whether or not the server generated
+  /// it as a bucket. A saved preference can hold a bound the catalogue never
+  /// offers as a range (a ceiling with no floor); reporting it separately keeps
+  /// that choice visible and counted instead of pretending it was never made.
+  final FacetRange? selectedRentalRange;
+  final FacetRange? selectedSizeRange;
+
+  /// Listings matching every selection, counted before pagination over the
+  /// whole eligible population — never from the current result page. Null
+  /// until the first facets response arrives.
+  final int? matchingTotal;
+
+  /// Listings in the PU-gated population the search ranks.
+  final int universeTotal;
+
+  /// Each active hard filter with the number of listings that remain if ONLY
+  /// it is released. These are the alternatives a conflict panel can offer
+  /// with real counts, in the server's own most-promising-first order.
+  final List<FilterRelaxation> relaxations;
+
+  /// What each input actually does, so the form can tell a hard filter from a
+  /// ranking input and from a requirement the catalogue cannot verify.
+  final List<FilterInput> fields;
+
+  /// The PU eligibility gate these counts already respect, so the UI quotes
+  /// the threshold the backend applied instead of its own copy.
+  final double? puThreshold;
+
+  /// False when the server predates contextual facets (its counts are
+  /// catalogue-wide) or the response carried no flag.
+  final bool contextual;
 
   const RecommendationFacets({
     this.states = const [],
     this.propertyTypes = const [],
     this.sortOptions = const {},
-    this.minRentalRm,
-    this.maxRentalRm,
-    this.minSizeSqft,
-    this.maxSizeSqft,
-    this.total = 0,
+    this.rentalRanges = const [],
+    this.sizeRanges = const [],
+    this.rentalUnboundedTotal = 0,
+    this.sizeUnboundedTotal = 0,
+    this.selectedRentalRange,
+    this.selectedSizeRange,
+    this.matchingTotal,
+    this.universeTotal = 0,
+    this.relaxations = const [],
+    this.fields = const [],
+    this.puThreshold,
+    this.contextual = false,
   });
 
   factory RecommendationFacets.fromJson(Map<String, dynamic> json) {
@@ -625,7 +705,24 @@ class RecommendationFacets {
             total: (row['total'] as num?)?.toInt() ?? 0,
           ),
     ];
-    final ranges = json['ranges'] as Map<String, dynamic>? ?? const {};
+    FacetRange? block(String key, String lowKey, String highKey) {
+      final section = json[key] as Map<String, dynamic>? ?? const {};
+      final selected = section['selected'];
+      return selected is Map<String, dynamic>
+          ? FacetRange.fromJson(selected, lowKey: lowKey, highKey: highKey)
+          : null;
+    }
+
+    List<FacetRange> blocks(String key, String lowKey, String highKey) {
+      final section = json[key] as Map<String, dynamic>? ?? const {};
+      return [
+        for (final row in (section['options'] as List? ?? const []))
+          if (row is Map<String, dynamic>)
+            FacetRange.fromJson(row, lowKey: lowKey, highKey: highKey),
+      ];
+    }
+
+    final eligibility = json['pu_eligibility'] as Map<String, dynamic>?;
     return RecommendationFacets(
       states: options('states'),
       propertyTypes: options('property_types'),
@@ -634,12 +731,69 @@ class RecommendationFacets {
           if (row is Map<String, dynamic> && row['value'] != null)
             '${row['value']}': '${row['label'] ?? row['value']}',
       },
-      minRentalRm: (ranges['min_rental_rm'] as num?)?.toDouble(),
-      maxRentalRm: (ranges['max_rental_rm'] as num?)?.toDouble(),
-      minSizeSqft: (ranges['min_size_sqft'] as num?)?.toDouble(),
-      maxSizeSqft: (ranges['max_size_sqft'] as num?)?.toDouble(),
-      total: (ranges['total'] as num?)?.toInt() ?? 0,
+      rentalRanges: blocks('rental_ranges', 'min_rental_rm', 'max_rental_rm'),
+      sizeRanges: blocks('size_ranges', 'min_size_sqft', 'max_size_sqft'),
+      rentalUnboundedTotal:
+          ((json['rental_ranges'] as Map?)?['unbounded_total'] as num?)
+              ?.toInt() ??
+          0,
+      sizeUnboundedTotal:
+          ((json['size_ranges'] as Map?)?['unbounded_total'] as num?)?.toInt() ??
+          0,
+      selectedRentalRange: block(
+        'rental_ranges',
+        'min_rental_rm',
+        'max_rental_rm',
+      ),
+      selectedSizeRange: block('size_ranges', 'min_size_sqft', 'max_size_sqft'),
+      matchingTotal: (json['matching_total'] as num?)?.toInt(),
+      universeTotal: (json['universe_total'] as num?)?.toInt() ?? 0,
+      relaxations: [
+        for (final row in (json['relaxations'] as List? ?? const []))
+          if (row is Map<String, dynamic>)
+            FilterRelaxation(
+              field: '${row['field']}',
+              label: '${row['label']}',
+              total: (row['total'] as num?)?.toInt() ?? 0,
+            ),
+      ],
+      fields: [
+        for (final row in (json['fields'] as List? ?? const []))
+          if (row is Map<String, dynamic>)
+            FilterInput(
+              key: '${row['key']}',
+              label: '${row['label']}',
+              role: FilterRole.fromWire(row['role']?.toString()),
+              effect: '${row['effect'] ?? ''}',
+            ),
+      ],
+      puThreshold: (eligibility?['threshold'] as num?)?.toDouble(),
+      contextual: json['contextual'] == true,
     );
+  }
+
+  /// The role a field plays, for the form's own wording. A key the server did
+  /// not describe falls back to [FilterRole.hardFilter], because that is what
+  /// the search applies to everything it currently lists in `FILTER_FIELDS`.
+  FilterRole roleOf(String key) {
+    for (final field in fields) {
+      if (field.key == key) return field.role;
+    }
+    return FilterRole.hardFilter;
+  }
+
+  String labelOf(String key, {required String fallback}) {
+    for (final field in fields) {
+      if (field.key == key) return field.label;
+    }
+    return fallback;
+  }
+
+  String effectOf(String key) {
+    for (final field in fields) {
+      if (field.key == key) return field.effect;
+    }
+    return '';
   }
 }
 
@@ -649,4 +803,96 @@ class FacetOption {
   final int total;
 
   const FacetOption({required this.value, this.total = 0});
+}
+
+/// Whether an input changes WHICH properties qualify, only their order, or
+/// neither (because the catalogue cannot answer it).
+enum FilterRole {
+  /// Applied as a hard constraint on the eligible set.
+  hardFilter,
+
+  /// Re-sequences the eligible set; removes nothing.
+  rankingOnly,
+
+  /// Recorded nowhere in the catalogue; reported per property as a requirement
+  /// that cannot be verified.
+  unverified;
+
+  static FilterRole fromWire(String? value) => switch (value) {
+    'ranking_only' => FilterRole.rankingOnly,
+    'unverified' => FilterRole.unverified,
+    _ => FilterRole.hardFilter,
+  };
+}
+
+/// What one filter input does, in the server's own words.
+class FilterInput {
+  final String key;
+  final String label;
+  final FilterRole role;
+  final String effect;
+
+  const FilterInput({
+    required this.key,
+    required this.label,
+    required this.role,
+    this.effect = '',
+  });
+
+  bool get isHardFilter => role == FilterRole.hardFilter;
+}
+
+/// An active filter that could be released, with the count releasing it would
+/// restore.
+class FilterRelaxation {
+  /// One of the server's `FILTER_FIELDS` keys, e.g. `rental_budget`.
+  final String field;
+  final String label;
+  final int total;
+
+  const FilterRelaxation({
+    required this.field,
+    required this.label,
+    required this.total,
+  });
+}
+
+/// One numeric interval from the catalogue, with the listings inside it.
+///
+/// The bounds are observed listing values, so consecutive intervals neither
+/// overlap nor leave a priced listing outside every option, and the count is
+/// exactly what sending these two bounds to the search returns.
+class FacetRange {
+  /// Inclusive lower bound. Null only for a selected open interval, which a
+  /// saved preference can hold but a generated bucket never is.
+  final double? low;
+  final double? high;
+  final int total;
+  final String label;
+
+  /// False when this is a saved selection the generated buckets do not offer.
+  final bool generated;
+
+  const FacetRange({
+    this.low,
+    this.high,
+    this.total = 0,
+    this.label = '',
+    this.generated = true,
+  });
+
+  factory FacetRange.fromJson(
+    Map<String, dynamic> json, {
+    required String lowKey,
+    required String highKey,
+  }) => FacetRange(
+    low: (json[lowKey] as num?)?.toDouble(),
+    high: (json[highKey] as num?)?.toDouble(),
+    total: (json['total'] as num?)?.toInt() ?? 0,
+    label: '${json['label'] ?? ''}',
+    generated: json['generated'] != false,
+  );
+
+  /// Whether this interval is the one the two request fields carry.
+  bool matches(double? min, double? max) => low == min && high == max;
 }

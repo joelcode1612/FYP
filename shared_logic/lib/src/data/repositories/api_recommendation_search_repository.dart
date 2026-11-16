@@ -29,8 +29,13 @@ class ApiRecommendationSearchRepository implements RecommendationSearchRepositor
   }
 
   @override
-  Future<RecommendationFacets> facets() async {
-    final response = await _client.get('/api/v1/recommendations/facets');
+  Future<RecommendationFacets> facets([
+    RecommendationSearchRequest? request,
+  ]) async {
+    final response = await _client.get(
+      '/api/v1/recommendations/facets',
+      query: (request ?? const RecommendationSearchRequest()).facetsQuery,
+    );
     final data = response['data'];
     return RecommendationFacets.fromJson(
       data is Map<String, dynamic> ? data : const {},

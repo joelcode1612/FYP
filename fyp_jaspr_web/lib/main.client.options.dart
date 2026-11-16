@@ -40,8 +40,6 @@ import 'package:sitewise_jaspr_web/pages/admin/users_page.dart'
     deferred as _users_page;
 import 'package:sitewise_jaspr_web/pages/entrepreneur/ai_recommendations_page.dart'
     deferred as _ai_recommendations_page;
-import 'package:sitewise_jaspr_web/pages/entrepreneur/assessment_history_page.dart'
-    deferred as _assessment_history_page;
 import 'package:sitewise_jaspr_web/pages/entrepreneur/assessment_report_selector_view.dart'
     deferred as _assessment_report_selector_view;
 import 'package:sitewise_jaspr_web/pages/entrepreneur/assessment_workspace_page.dart'
@@ -194,10 +192,6 @@ ClientOptions get defaultClientOptions => ClientOptions(
       ),
       loader: _ai_recommendations_page.loadLibrary,
     ),
-    'assessment_history_page': ClientLoader(
-      (p) => _assessment_history_page.AssessmentHistoryPage(),
-      loader: _assessment_history_page.loadLibrary,
-    ),
     'assessment_report_selector_view': ClientLoader(
       (p) => _assessment_report_selector_view.AssessmentReportSelectorView(),
       loader: _assessment_report_selector_view.loadLibrary,
@@ -206,6 +200,7 @@ ClientOptions get defaultClientOptions => ClientOptions(
       (p) => _assessment_workspace_page.AssessmentWorkspacePage(
         propertyId: p['propertyId'] as String,
         stage: p['stage'] as String,
+        businessType: p['businessType'] as String,
       ),
       loader: _assessment_workspace_page.loadLibrary,
     ),

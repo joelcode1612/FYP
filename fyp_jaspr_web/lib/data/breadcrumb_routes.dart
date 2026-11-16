@@ -69,8 +69,17 @@ const Map<String, _TrailSpec> _trails = {
   '/entrepreneur/assessments': _TrailSpec('Assessment'),
   '/entrepreneur/assessments/history':
       _TrailSpec('Assessment history', sectionRoute: '/entrepreneur/assessments'),
+  // The Report destination is the selector gate: it names the assessment
+  // first, so a report is never opened without knowing which record it
+  // belongs to. The read shell and the standalone report page both hang off
+  // it, so the trail always shows the gate as their parent section.
+  '/entrepreneur/cafe-report': _TrailSpec('Report'),
+  '/entrepreneur/cafe-report/view':
+      _TrailSpec('Report view', sectionRoute: '/entrepreneur/cafe-report'),
   '/entrepreneur/report':
-      _TrailSpec('Suitability report', sectionRoute: '/entrepreneur/reports'),
+      _TrailSpec('Suitability report', sectionRoute: '/entrepreneur/cafe-report'),
+  '/entrepreneur/reports':
+      _TrailSpec('Report directory', sectionRoute: '/entrepreneur/cafe-report'),
   '/entrepreneur/tour': _TrailSpec('360° tour', sectionRoute: '/entrepreneur/recommendations'),
   '/entrepreneur/explanation':
       _TrailSpec('Why this score', sectionRoute: '/entrepreneur/recommendations'),

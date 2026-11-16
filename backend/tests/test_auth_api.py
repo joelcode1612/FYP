@@ -224,8 +224,9 @@ def test_saved_property_ownership(client, identity, cleanup_users):
 
 
 def test_property_creation_requires_owner_role(client, identity, cleanup_users):
-    """Entrepreneurs own properties (the legacy property_owner role folded
-    into entrepreneur), so the denial case is now the AGENT role."""
+    """Entrepreneurs keep the property surface they had under the old model
+    (the legacy property_owner role folded into entrepreneur then, and owners
+    now have their own role), so the denial case is the AGENT role."""
     from sqlmodel import Session
 
     from sitewise.db.session import engine
