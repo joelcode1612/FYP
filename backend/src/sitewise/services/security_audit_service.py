@@ -178,9 +178,10 @@ def _prettify_role(role: str | None) -> str | None:
     """``admin`` -> ``Administrator`` etc. Legacy aliases first."""
     if not role:
         return None
-    canonical = rbac.LEGACY_ROLE_ALIASES.get(role, role)
+    canonical = rbac.canonical_role(role)
     return {
         rbac.ROLE_ADMIN: "Administrator",
+        rbac.ROLE_OWNER: "Property Owner",
         rbac.ROLE_AGENT: "Agent",
         rbac.ROLE_ENTREPRENEUR: "Entrepreneur",
     }.get(canonical)

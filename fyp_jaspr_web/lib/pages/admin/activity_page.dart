@@ -59,12 +59,14 @@ class _ActivityState extends State<AdminActivityPage> {
     ('info', 'Informational'),
   ];
 
-  /// The roles the identity backend actually has (rbac): administrator,
-  /// agent, entrepreneur. There is no separate owner role — owners are
-  /// entrepreneurs with properties — so no invented "Property owner" option.
+  /// The roles the identity backend actually has (`rbac.ALL_ROLES`):
+  /// administrator, property owner, agent, entrepreneur. Owner is its own role,
+  /// not an entrepreneur who happens to hold property — filtering by it is how
+  /// an administrator reviews owner-role changes.
   static const _roles = <(String, String)>[
     ('all', 'All roles'),
     ('admin', 'Administrator'),
+    ('owner', 'Property Owner'),
     ('agent', 'Agent'),
     ('entrepreneur', 'Entrepreneur'),
   ];

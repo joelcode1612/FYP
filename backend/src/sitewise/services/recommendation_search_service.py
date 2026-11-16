@@ -462,34 +462,32 @@ def _satisfies(row: _Row, criteria: SearchCriteria, *, excluding: str | None) ->
     silently wrong count.
     """
     if excluding != "rental_budget":
-        if criteria.max_rental_rm is not None and row.rental_rm > criteria.max_rental_rm:
+        max_rent, min_rent = criteria.max_rental_rm, criteria.min_rental_rm
+        if max_rent is not None and row.rental_rm > max_rent:
             return False
-        if criteria.min_rental_rm is not None and row.rental_rm < criteria.min_rental_rm:
+        if min_rent is not None and row.rental_rm < min_rent:
             return False
     if excluding != "property_size":
-        if criteria.min_size_sqft is not None and row.size_sqft < criteria.min_size_sqft:
+        min_size, max_size = criteria.min_size_sqft, criteria.max_size_sqft
+        if min_size is not None and row.size_sqft < min_size:
             return False
-        if criteria.max_size_sqft is not None and row.size_sqft > criteria.max_size_sqft:
+        if max_size is not None and row.size_sqft > max_size:
             return False
-    if excluding != "preferred_state" and criteria.preferred_state:
-        if row.state != criteria.preferred_state:
-            return False
-    if excluding != "property_type" and criteria.property_type:
-        if row.property_type != criteria.property_type:
-            return False
-    if excluding != "preferred_area" and criteria.preferred_area:
-        needle = criteria.preferred_area.lower()
+    state = "" if excluding == "preferred_state" else (criteria.preferred_state or "")
+    if state and row.state != state:
+        return False
+    ptype = "" if excluding == "property_type" else (criteria.property_type or "")
+    if ptype and row.property_type != ptype:
+        return False
+    area = "" if excluding == "preferred_area" else (criteria.preferred_area or "")
+    if area:
+        needle = area.lower()
         if needle not in row.city.lower() and needle not in row.address.lower():
             return False
-    if excluding != "query" and criteria.query:
-        needle = criteria.query.lower()
-        haystack = (
-            row.title,
-            row.address,
-            row.city,
-            row.property_type,
-            row.id,
-        )
+    term = "" if excluding == "query" else (criteria.query or "")
+    if term:
+        needle = term.lower()
+        haystack = (row.title, row.address, row.city, row.property_type, row.id)
         if not any(needle in value.lower() for value in haystack):
             return False
     return True
@@ -548,18 +546,20 @@ def _range_label(money: bool, low: float | None, high: float | None) -> str:
     hold a ceiling with no floor — and is labelled as one rather than being
     rounded into a number nobody chose.
     """
+    def amount(value: float) -> str:
+        return f"RM {value:,.0f}" if money else f"{value:,.0f}"
+
     if low is not None and high is not None and low == high:
-        return f"{_money(low)}" if money else f"{_number(high)} sq ft"
-    if money:
-        if low is None:
-            return f"Up to {_money(high)}" if high is not None else "Any available budget"
-        return f"{_money(low)} – {_money(high)}" if high is not None else f"From {_money(low)}"
+        return amount(low) + ("" if money else " sq ft")
     if low is None:
-        return f"Up to {_number(high)} sq ft" if high is not None else "Any property size"
+        if high is None:
+            return "Any available budget" if money else "Any property size"
+        return f"Up to {amount(high)}" + ("" if money else " sq ft")
+    if high is None:
+        return f"From {amount(low)}" + ("" if money else " sq ft")
     return (
-        f"{_number(low)} – {_number(high)} sq ft"
-        if high is not None
-        else f"{_number(low)}+ sq ft"
+        f"{amount(low)} – {amount(high)}"
+        + ("" if money else " sq ft")
     )
 
 

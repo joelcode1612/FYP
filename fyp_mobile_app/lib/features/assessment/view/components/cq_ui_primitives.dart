@@ -51,14 +51,8 @@ class CqPageFrame extends StatelessWidget {
   );
 }
 
-
 class CqHero extends StatelessWidget {
-  const CqHero({
-    super.key,
-    required this.title,
-    required this.subtitle,
-  });
-
+  const CqHero({super.key, required this.title, required this.subtitle});
   final String title;
   final String subtitle;
 
@@ -77,10 +71,7 @@ class CqHero extends StatelessWidget {
       const SizedBox(height: 5),
       Text(
         subtitle,
-        style: const TextStyle(
-          color: CqUiColors.secondary,
-          height: 1.45,
-        ),
+        style: const TextStyle(color: CqUiColors.secondary, height: 1.45),
       ),
     ],
   );

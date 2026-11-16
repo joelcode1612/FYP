@@ -10,12 +10,19 @@ require('dotenv').config({ path: path.join(__dirname, '..', '..', 'test', '.env'
 const db = require('../../test/db.js');
 
 // Mirrors `columns` in test/app-api.js — keep in step if that list changes.
+// rental_rm / size_sqft are `numeric` in fyp.rental_properties: node-pg would
+// return them as strings, while the FastAPI backend serialises them as JSON
+// numbers — cast so the fixture matches the real payload shape.
 const COLUMNS =
-  'id,title,address,city,state,postcode,rental_rm,size_sqft,latitude,longitude,' +
+  'id,title,address,city,state,postcode,rental_rm::double precision AS rental_rm,' +
+  'size_sqft::double precision AS size_sqft,latitude,longitude,' +
   'property_type,image_url,source_url,suitability_score,dataset_validation';
 
 (async () => {
-  const rows = await db.query(`SELECT ${COLUMNS} FROM sitewise_app.properties ORDER BY id`);
+  // `sitewise_app.properties` was removed; the catalogue now lives in the
+  // `fyp.catalogue_properties` view over `fyp.rental_properties` (the 955
+  // research rows; owner-submitted listings are excluded by the view).
+  const rows = await db.query(`SELECT ${COLUMNS} FROM fyp.catalogue_properties ORDER BY id`);
   const out = path.join(__dirname, '..', '..', 'test', '.data', 'jaspr_catalog_fixture.json');
   fs.mkdirSync(path.dirname(out), { recursive: true });
   fs.writeFileSync(out, JSON.stringify({ rows: rows.rows }));

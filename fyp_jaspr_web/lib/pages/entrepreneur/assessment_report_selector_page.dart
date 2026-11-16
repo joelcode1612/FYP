@@ -1,6 +1,8 @@
 import 'package:jaspr/dom.dart';
 import 'package:jaspr/jaspr.dart';
 
+import '../../components/ui.dart' show Icon;
+
 /// UI-facing read model; construct it from your authenticated repository/API.
 /// This page never invents assessment records, rental status or admission.
 enum AssessmentStatus { draft, inProgress, completed, onHold }
@@ -84,7 +86,7 @@ class AssessmentListItem {
 ///   * Deliberately **not** `@client`: the `@client` codegen only accepts
 ///     primitive constructor parameters, and this page takes a
 ///     [List] of [AssessmentListItem] plus callbacks. It is instead mounted
-///     inside the `@client`, param-less [AssessmentReportSelectorView] shell,
+///     inside the `@client`, param-less [shell] (`AssessmentReportSelectorView`),
 ///     which is the same arrangement `ActivityHistoryPage` uses inside the
 ///     `@client` `M2ActivityPanel`. The search / status-filter / sort /
 ///     pagination state is still hydrated in the browser — it simply does not
@@ -95,6 +97,13 @@ class AssessmentListItem {
 ///     showing a hardcoded 0 would assert "no respondents recorded" — a claim
 ///     the source does not make. A null means "this build does not know",
 ///     which is exactly what the uploaded README requires.
+///
+/// UI contract (v2 redesign): the read model, the state logic and the
+/// callbacks are unchanged. The redesign only touches presentation — shell
+/// tokens instead of hardcoded whites (the entrepreneur shell is dark), a
+/// per-row report-readiness chip and stage mini-progress so the reader can
+/// tell which rows open a report before clicking, and Material Symbols
+/// glyphs instead of unicode stand-ins.
 class AssessmentReportSelectorPage extends StatefulComponent {
   final List<AssessmentListItem> assessments;
   final void Function(String assessmentId)? onViewReport;
@@ -180,6 +189,18 @@ class _AssessmentReportSelectorState extends State<AssessmentReportSelectorPage>
         AssessmentStatus.onHold => 'hold',
       };
 
+  String _accessText(ReportAccess access) => switch (access) {
+        ReportAccess.admitted => 'Report ready',
+        ReportAccess.draftPreview => 'Preview only',
+        ReportAccess.unavailable => 'No report yet',
+      };
+
+  String _accessClass(ReportAccess access) => switch (access) {
+        ReportAccess.admitted => 'ready',
+        ReportAccess.draftPreview => 'preview',
+        ReportAccess.unavailable => 'none',
+      };
+
   Component _button(
     String label,
     VoidCallback? onPressed, {
@@ -199,46 +220,78 @@ class _AssessmentReportSelectorState extends State<AssessmentReportSelectorPage>
         classes: 'sra-badge ${_statusClass(status)}',
       );
 
-  Component _progress(int percent) => div([
-        div([
+  /// The row-level chip that states, before any click, whether the report
+  /// opens. Same source of truth as the detail card's CTA label.
+  Component _accessChip(ReportAccess access) => span(
+        [
+          Icon(
+            switch (access) {
+              ReportAccess.admitted => 'check_circle',
+              ReportAccess.draftPreview => 'preview',
+              ReportAccess.unavailable => 'block',
+            },
+            size: 'sm',
+          ),
+          Component.text(_accessText(access)),
+        ],
+        classes: 'sra-access ${_accessClass(access)}',
+      );
+
+  Component _track(int percent, {String? extraClass}) => div(
+        [
           div([], classes: 'sra-progress-fill', attributes: {
             'style': 'width: $percent%;',
           }),
-        ], classes: 'sra-progress-track', attributes: {
+        ],
+        classes: 'sra-progress-track${extraClass == null ? '' : ' $extraClass'}',
+        attributes: {
           'role': 'progressbar',
           'aria-valuenow': '$percent',
           'aria-valuemin': '0',
           'aria-valuemax': '100',
           'aria-label': 'Assessment stage progress',
-        }),
+        },
+      );
+
+  Component _progress(int percent) => div([
+        _track(percent),
         strong([Component.text('$percent%')]),
       ], classes: 'sra-progress');
 
-  Component _assessmentRow(AssessmentListItem a) => button(
-        [
-          div([Component.text('▤')], classes: 'sra-icon'),
+  Component _assessmentRow(AssessmentListItem a) {
+    final isSelected = a.id == selected?.id;
+    return button(
+      [
+        div([Icon('fact_check')], classes: 'sra-icon'),
+        div([
           div([
             strong([Component.text(a.businessName)]),
-            span([Component.text(a.id)], classes: 'sra-muted'),
-          ], classes: 'sra-assessment-name'),
-          span([
-            Component.text('${a.selectedRentals.length} '
-                '${a.selectedRentals.length == 1 ? 'rental' : 'rentals'}'),
-          ], classes: 'sra-rental-count'),
+            _statusBadge(a.status),
+          ], classes: 'sra-assessment-name-top'),
+          span([Component.text(a.id)], classes: 'sra-muted sra-row-id'),
+          div([
+            _track(a.progressPercent, extraClass: 'mini'),
+            span([Component.text('${a.completedStages}/${a.totalStages} stages')],
+                classes: 'sra-muted'),
+          ], classes: 'sra-row-progress'),
+        ], classes: 'sra-assessment-name'),
+        div([
+          _accessChip(a.reportAccess),
           span([Component.text('Updated ${a.updatedAtLabel}')],
-              classes: 'sra-row-date'),
-          _statusBadge(a.status),
-          span([Component.text('›')], classes: 'sra-chevron'),
-        ],
-        classes: 'sra-assessment-row${a.id == selected?.id ? ' selected' : ''}',
-        attributes: {'aria-pressed': '${a.id == selected?.id}'},
-        onClick: () => setState(() => selectedAssessmentId = a.id),
-      );
+              classes: 'sra-muted sra-row-date'),
+        ], classes: 'sra-row-side'),
+        Icon('chevron_right', label: 'Open details'),
+      ],
+      classes: 'sra-assessment-row${isSelected ? ' selected' : ''}',
+      attributes: {'aria-pressed': '$isSelected'},
+      onClick: () => setState(() => selectedAssessmentId = a.id),
+    );
+  }
 
   /// [count] is nullable on purpose: a source that does not carry the figure
   /// renders "—", never a fabricated 0.
   Component _stat(String label, int? count, String glyph) => div([
-        span([Component.text(glyph)], classes: 'sra-stat-icon'),
+        Icon(glyph, label: label),
         div([
           strong([Component.text(count?.toString() ?? '—')]),
           span([Component.text(label)], classes: 'sra-muted'),
@@ -259,7 +312,7 @@ class _AssessmentReportSelectorState extends State<AssessmentReportSelectorPage>
           classes: 'sra-rental-photo',
         )
       else
-        div([Component.text('⌂')], classes: 'sra-rental-photo placeholder'),
+        div([Icon('storefront')], classes: 'sra-rental-photo placeholder'),
       div([
         strong([Component.text(r.title)]),
         span([Component.text(r.locality)], classes: 'sra-muted'),
@@ -276,7 +329,7 @@ class _AssessmentReportSelectorState extends State<AssessmentReportSelectorPage>
         span([Component.text('Listing status')], classes: 'sra-muted'),
         strong([Component.text(r.availabilityLabel)]),
       ], classes: 'sra-rental-meta'),
-      span([Component.text('›')], classes: 'sra-chevron'),
+      Icon('chevron_right', label: 'Open rental details'),
     ],
         classes: 'sra-rental-row',
         disabled: !enabled,
@@ -286,31 +339,34 @@ class _AssessmentReportSelectorState extends State<AssessmentReportSelectorPage>
   Component _details(AssessmentListItem? a) {
     if (a == null) {
       return section([
+        div([Icon('description')], classes: 'sra-icon large'),
         h2([Component.text('Assessment Details')]),
-        p([Component.text('No assessment has been loaded.')]),
-      ], classes: 'sra-card sra-details');
+        p([Component.text('No assessment has been loaded.')], classes: 'sra-muted'),
+      ], classes: 'sra-card sra-details sra-details--empty');
     }
     final reportAction = a.reportAccess == ReportAccess.unavailable ||
             component.onViewReport == null
         ? null
         : () => component.onViewReport!(a.id);
     final reportLabel = a.reportAccess == ReportAccess.admitted
-        ? 'View Report →'
+        ? 'View Report'
         : a.reportAccess == ReportAccess.draftPreview
-            ? 'Preview Report →'
+            ? 'Preview Report'
             : 'Report unavailable';
 
     return section([
       div([
-        h2([Component.text('▤  Assessment Details')]),
-        _button(reportLabel, reportAction, primary: true),
+        h2([Component.text('Assessment Details')]),
+        _button(reportLabel, reportAction,
+            primary: a.reportAccess != ReportAccess.unavailable),
       ], classes: 'sra-panel-header'),
       div([
-        div([Component.text('▣')], classes: 'sra-icon large'),
+        div([Icon('description')], classes: 'sra-icon large'),
         div([
-          h3([Component.text('${a.businessName} — ${a.id}')]),
-          p([Component.text('Location assessment · Café demand report')],
-              classes: 'sra-muted'),
+          h3([Component.text(a.businessName)]),
+          p([
+            Component.text('Location assessment · Café demand report · ${a.id}'),
+          ], classes: 'sra-muted'),
         ], classes: 'sra-assessment-title'),
         _statusBadge(a.status),
       ], classes: 'sra-detail-heading'),
@@ -331,11 +387,11 @@ class _AssessmentReportSelectorState extends State<AssessmentReportSelectorPage>
         p([Component.text('Current stage: ${a.currentStageLabel}')],
             classes: 'sra-muted'),
         div([
-          _stat('Business profiles', a.businessProfileCount, '▧'),
-          _stat('Selected rentals', a.selectedRentals.length, '⌖'),
-          _stat('Respondents', a.respondentCount, '♧'),
-          _stat('Survey responses', a.responseCount, '▤'),
-          _stat('External sources', a.externalSourceCount, '▥'),
+          _stat('Business profiles', a.businessProfileCount, 'business_center'),
+          _stat('Selected rentals', a.selectedRentals.length, 'home_work'),
+          _stat('Respondents', a.respondentCount, 'group'),
+          _stat('Survey responses', a.responseCount, 'forum'),
+          _stat('External sources', a.externalSourceCount, 'public'),
         ], classes: 'sra-stats'),
       ], classes: 'sra-inner'),
       section([
@@ -343,7 +399,7 @@ class _AssessmentReportSelectorState extends State<AssessmentReportSelectorPage>
           h3([
             Component.text('Selected Rentals (${a.selectedRentals.length})'),
           ]),
-          _button('View all rental details →',
+          _button('View all rental details',
               component.onViewRentals == null
                   ? null
                   : () => component.onViewRentals!(a.id)),
@@ -354,8 +410,11 @@ class _AssessmentReportSelectorState extends State<AssessmentReportSelectorPage>
         else
           for (final rental in a.selectedRentals) _rentalRow(a, rental),
       ], classes: 'sra-inner'),
-      if (a.reportAccess != ReportAccess.admitted)
-        p([
+      if (a.reportAccess != ReportAccess.admitted)        p([
+          Icon(
+            a.reportAccess == ReportAccess.draftPreview ? 'info' : 'lock',
+            size: 'sm',
+          ),
           Component.text(
             a.reportAccess == ReportAccess.draftPreview
                 ? 'Report preview only. Claim admission and PDF release are separately governed.'
@@ -369,6 +428,30 @@ class _AssessmentReportSelectorState extends State<AssessmentReportSelectorPage>
         span([Component.text(label)], classes: 'sra-muted'),
         strong([Component.text(value)]),
       ], classes: 'sra-info');
+
+  /// Header summary chips. Derived only from the records already in the read
+  /// model — no extra requests, no invented figures.
+  Component _summaryChips() {
+    final total = component.assessments.length;
+    if (total == 0) return const Component.empty();
+    final ready = component.assessments
+        .where((item) => item.reportAccess == ReportAccess.admitted)
+        .length;
+    final active = component.assessments
+        .where((item) =>
+            item.status == AssessmentStatus.inProgress ||
+            item.status == AssessmentStatus.draft)
+        .length;
+    Component chip(String glyph, String text, String tone) => span(
+          [Icon(glyph, size: 'sm'), Component.text(text)],
+          classes: 'sra-summary-chip $tone',
+        );
+    return div([
+      chip('fact_check', '$total assessments', 'total'),
+      if (ready > 0) chip('task_alt', '$ready report${ready == 1 ? '' : 's'} ready', 'ready'),
+      if (active > 0) chip('pending', '$active in progress', 'active'),
+    ], classes: 'sra-summary');
+  }
 
   @override
   Component build(BuildContext context) {
@@ -385,10 +468,11 @@ class _AssessmentReportSelectorState extends State<AssessmentReportSelectorPage>
         Component.text('Choose an assessment to inspect its inputs, selected rentals '
             'and available report view.'),
       ], classes: 'sra-subtitle'),
+      _summaryChips(),
       div([
         section([
           div([
-            h2([Component.text('▤  Assessments (${component.assessments.length})')]),
+            h2([Component.text('Assessments (${component.assessments.length})')]),
             // No "New Assessment" action: this page is a report selector only.
             // Assessment creation stays on the workspace routes.
           ], classes: 'sra-panel-header'),
@@ -435,7 +519,7 @@ class _AssessmentReportSelectorState extends State<AssessmentReportSelectorPage>
               p([Component.text('No assessments match the selected filters.')],
                   classes: 'sra-muted')
             else
-              for (final a in pageItems) _assessmentRow(a),
+              for (final row in pageItems) _assessmentRow(row),
           ], classes: 'sra-list'),
           div([
             _button('← Previous', safePage > 0

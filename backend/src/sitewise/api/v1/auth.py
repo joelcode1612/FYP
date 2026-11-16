@@ -56,8 +56,11 @@ def _identity_payload(user: AuthenticatedUser) -> dict:
         "full_name": profile.full_name,
         "phone_number": profile.phone_number,
         "profile_picture_url": profile.profile_picture_url,
-        # Canonical three-role model (legacy aliases normalised on read) so the
+        # Canonical four-role model (legacy aliases normalised on read) so the
         # client never has to special-case ``administrator`` / ``property_owner``.
+        # ``property_owner`` now resolves to ``owner``, not ``entrepreneur``: an
+        # owner folded into an entrepreneur would reach the client with no
+        # property authority at all.
         "role": rbac.canonical_role(profile.role) or profile.role,
         "account_status": profile.account_status,
         "email_verified": profile.email_verified,

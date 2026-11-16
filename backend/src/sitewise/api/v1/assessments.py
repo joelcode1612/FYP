@@ -153,6 +153,22 @@ def update_assessment(
     return {"assessment": service.payload(assessment)}
 
 
+@router.delete("/{assessment_id}", status_code=204)
+def delete_assessment(
+    assessment_id: uuid.UUID,
+    session: AppSession,
+    analytics: AnalyticsSession,
+    user: EntrepreneurUser,
+) -> None:
+    """Permanently delete the caller's own assessment record.
+
+    Ownership comes from the verified token, so a foreign record is 403 and an
+    unknown id is 404. The row is self-contained, so nothing else is removed
+    with it; the empty 204 tells the client the record is gone.
+    """
+    _service(session, analytics).delete_owned(assessment_id, user.user_id)
+
+
 @router.post("/{assessment_id}/explanation")
 def explain_assessment(
     assessment_id: uuid.UUID,

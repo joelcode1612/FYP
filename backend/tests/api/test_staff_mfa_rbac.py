@@ -160,7 +160,7 @@ def test_password_only_admin_reads_own_status_but_not_staff_data(client, cleanup
     "stored,canonical",
     [
         ("administrator", "admin"),
-        ("property_owner", "entrepreneur"),
+        ("property_owner", "owner"),
         ("user", "entrepreneur"),
         ("agent", "agent"),
         ("admin", "admin"),
@@ -168,8 +168,13 @@ def test_password_only_admin_reads_own_status_but_not_staff_data(client, cleanup
     ],
 )
 def test_auth_me_canonicalizes_role(client, cleanup_users, stored, canonical):
-    """F5: legacy role aliases are normalised to the canonical three-role model
-    on read, so clients never have to special-case deprecated values."""
+    """F5: legacy role aliases are normalised to the canonical four-role model
+    on read, so clients never have to special-case deprecated values.
+
+    ``property_owner`` resolves to ``owner``. It used to resolve to
+    ``entrepreneur``, which was only correct while Property Owner was not a
+    role: ownership was then purely a relationship on the property row.
+    """
     _, token = _mirror(cleanup_users, role=stored, aal="aal2")
     r = client.get("/api/v1/auth/me", headers=auth(token))
     assert r.status_code == 200, r.text
