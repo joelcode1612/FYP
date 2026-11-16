@@ -15,11 +15,16 @@ abstract final class Workspaces {
     final name = WebAuth.profile?['role'] as String?;
     final canonical = switch (name) {
       'administrator' => 'admin',
-      'property_owner' || 'user' => 'entrepreneur',
+      // `property_owner` used to be folded into `entrepreneur`. It is now its
+      // own role, and folding it would route an owner into a workspace that has
+      // no property authority.
+      'property_owner' || 'propertyowner' || 'landlord' => 'owner',
+      'user' => 'entrepreneur',
       _ => name,
     };
     for (final role in AppRole.values) {
-      if (role.name == canonical && role != AppRole.owner) return role;
+      // `owner` is no longer excluded: it is a real role with its own surface.
+      if (role.name == canonical) return role;
     }
     return null;
   }

@@ -5963,7 +5963,7 @@ details.advanced .grid-3 {
 }
 
 /* ==========================================================================
-   Workspace kit — callouts, aside rows, numeric columns, funnel
+   Workspace kit — callouts, aside rows, numeric columns
    ==========================================================================
    Shared by the agent workspace, the admin roster and the profile access
    request. Only these four structures are new; the table reuses `.audit-table`,
@@ -6149,64 +6149,6 @@ details.advanced .grid-3 {
   font-size: 11px;
   font-weight: 900;
   opacity: 0.72;
-}
-
-/* The four-stage enquiry funnel. Every stage renders empty by design — see
-   `pages/agent/performance_page.dart` — so the value slot is a placeholder
-   glyph rather than a number. */
-.funnel {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 10px;
-}
-
-.funnel__stage {
-  display: grid;
-  gap: 3px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--alt-surface);
-  padding: 12px;
-}
-
-.funnel__name {
-  font-size: 10.5px;
-  font-weight: 800;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--muted);
-}
-
-.funnel__value {
-  font-family: var(--font-display);
-  font-size: 24px;
-  font-weight: 900;
-  line-height: 1;
-  color: var(--overline);
-}
-
-.funnel__def {
-  font-size: 12px;
-  font-weight: 700;
-  color: var(--text);
-}
-
-.funnel__gap {
-  font-size: 11.5px;
-  line-height: 1.5;
-  color: var(--overline-text);
-}
-
-@media (max-width: 790px) {
-  .funnel {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-
-@media (max-width: 540px) {
-  .funnel {
-    grid-template-columns: 1fr;
-  }
 }
 
 /* ==========================================================================

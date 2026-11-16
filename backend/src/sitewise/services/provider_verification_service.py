@@ -124,9 +124,11 @@ def ensure_schema(session: Session) -> None:
 def provider_role_for(role: str) -> str:
     """Which provider relationship the account acts under.
 
-    The backend keeps exactly three roles, so an ``agent`` account is the
-    agent side of the provider workspace and everyone else who reaches this
-    surface (``entrepreneur``, i.e. a property owner) is the owner side.
+    This returns the *relationship side* of the provider workspace, not an
+    ``AppRole``. An ``agent`` account is the agent side; the owner side is taken
+    by ``owner`` and — for accounts provisioned before the role split — by
+    ``entrepreneur``. Which records either side reaches is decided by
+    ``provider_scope`` from ownership and assignment rows, never from this label.
     """
     return "agent" if (role or "").strip().lower() == "agent" else "owner"
 

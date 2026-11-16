@@ -254,10 +254,15 @@ def require_entrepreneur(
 def require_property_owner(
     user: Annotated[AuthenticatedUser, Depends(get_active_user)],
 ) -> AuthenticatedUser:
-    """Property management. Ownership is a relationship on the property row,
-    so entrepreneurs manage the properties they own; administrators act
-    administratively. (The legacy ``property_owner`` role folded into
-    ``entrepreneur``.)
+    """Property management. Ownership is a relationship on the property row, so
+    an ``owner`` manages the properties recorded against its own account,
+    entrepreneurs manage the properties they own, and administrators act
+    administratively. (The legacy ``property_owner`` role now maps to ``owner``;
+    it no longer folds into ``entrepreneur``.)
+
+    Passing this dependency is only the coarse gate. The record-level check —
+    ``owner_user_id`` equality, an agent assignment, or an explicit grant — is
+    what authorises a specific property.
 
     Agents reach the SAME surface as the agent side of the Owner / Agent
     workspace, and an agent account carries mandatory TOTP MFA. The AAL2 check
@@ -267,7 +272,9 @@ def require_property_owner(
     owner (``entrepreneur``) is not staff and is not asked for a second factor.
     """
     if not rbac.can_manage_properties(user.role):
-        raise ForbiddenError("This action requires an entrepreneur (property owner) account.")
+        raise ForbiddenError(
+            "This action requires a property owner, entrepreneur or agent account."
+        )
     if (rbac.is_staff(user.role)
             and user.assurance_level != rbac.REQUIRED_STAFF_AAL):
         raise _staff_mfa_required()

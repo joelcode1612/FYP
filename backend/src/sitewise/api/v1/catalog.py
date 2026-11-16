@@ -33,6 +33,7 @@ from sitewise.dependencies import CurrentUser
 from sitewise.repositories.catalog_repository import PROPERTY_COLUMNS, CatalogRepository
 from sitewise.repositories.fyp_property_repository import FypPropertyRepository
 from sitewise.services.catalog_listing_details_service import CatalogListingDetailsService
+from sitewise.services.nearby_places_service import NearbyPlacesService
 from sitewise.services.property_insights_service import PropertyInsightsService
 from sitewise.services.property_management_service import resolve_management
 
@@ -130,6 +131,52 @@ def get_catalog_property(
         # an empty list is a real "no photo records" state, not an error.
         "photos": FypPropertyRepository(operational_session).get_catalogue_photos(property_id),
     }
+
+
+@router.get("/properties/{property_id}/nearby-places")
+def get_catalog_nearby_places(
+    property_id: str,
+    session: AnalyticsSession,
+    _user: CurrentUser,
+    radius_m: int = Query(default=1000, ge=100, le=3000),
+) -> dict:
+    """Individual verified locations around one listing, for the map's markers.
+
+    The insights endpoint reports how many competitors, nearby places, transit
+    stops and parking facilities fall inside each radius; this endpoint
+    returns the locations those totals describe, each with a stable id, its
+    category and subtype, its coordinate, its source, its operating status
+    where the source records one, the straight-line distance from the
+    catalogue's own coordinate and the date the record was observed. A missing
+    listing is 404; a listing without usable coordinates is 200 with honest
+    zero counts, never fabricated places.
+
+    The radius-based aggregate statistics stay owned by the insights payload —
+    nothing here changes them. Recorded totals and mapped locations can
+    legitimately differ (deduplication, operating-status gates, coordinate
+    validation), and the map shows both rather than forcing one onto the other.
+    Large catchments are capped per category at the nearest 800 locations and
+    say so via ``truncated``.
+    """
+    row = CatalogRepository(session).get_property(property_id)
+    if row is None:
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "code": "property_not_found",
+                "message": f"No property with id '{property_id}' exists in the catalogue.",
+            },
+        )
+    # The same coordinate the insights score describes: markers and score must
+    # never disagree about where the property is.
+    lat, lon = row.get("latitude"), row.get("longitude")
+    origin = {"lat": float(lat), "lon": float(lon)} if lat is not None and lon is not None else None
+    result = NearbyPlacesService(session).nearby(
+        origin["lat"] if origin else None,
+        origin["lon"] if origin else None,
+        radius_m,
+    )
+    return {"property_id": property_id, "origin": origin, **result}
 
 
 @router.get("/properties/{property_id}/evidence")

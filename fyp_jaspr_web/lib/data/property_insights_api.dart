@@ -762,4 +762,26 @@ class PropertyInsightsApi {
       );
     }
   }
+
+  /// Fetches the individual verified nearby locations for the property map's
+  /// markers. The recorded radius counts stay owned by [load]; this payload
+  /// only adds the "where exactly" half.
+  ///
+  /// Returns null when the request fails or the payload is malformed, so the
+  /// map keeps its recorded-counts state instead of inventing pins.
+  static Future<Map<String, dynamic>?> loadNearbyPlaces(
+    String propertyId, {
+    int radiusM = 1000,
+  }) async {
+    try {
+      final response = await WebAuth.request(
+        '/api/v1/catalog/properties/${Uri.encodeComponent(propertyId)}'
+        '/nearby-places?radius_m=$radiusM',
+      );
+      final places = response['places'];
+      return places is List ? response : null;
+    } on Object {
+      return null;
+    }
+  }
 }

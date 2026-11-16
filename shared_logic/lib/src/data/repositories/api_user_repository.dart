@@ -24,18 +24,27 @@ class ApiUserRepository implements UserRepository {
   /// Same canonicalisation the backend applies on read (`rbac.LEGACY_ROLE_ALIASES`).
   /// `_profile_payload` returns the stored role verbatim, so legacy values can
   /// still arrive here and must be normalised before mapping to [AppRole].
+  ///
+  /// `property_owner` maps to [AppRole.owner], not entrepreneur: Property Owner
+  /// is a stored role now, and folding it into entrepreneur would label every
+  /// owner in the administrator's user list with the wrong role.
   static const Map<String, String> _roleAliases = {
     'administrator': 'admin',
-    'property_owner': 'entrepreneur',
+    'property_owner': 'owner',
+    'propertyowner': 'owner',
+    'landlord': 'owner',
     'user': 'entrepreneur',
   };
 
   static AppRole _role(String? raw) {
-    final canonical = raw == null ? '' : (_roleAliases[raw] ?? raw);
+    final normalised = (raw ?? '').trim().toLowerCase().replaceAll('-', '_');
+    final canonical = normalised.isEmpty
+        ? ''
+        : (_roleAliases[normalised] ?? normalised);
     return switch (canonical) {
       'admin' => AppRole.admin,
-      'agent' => AppRole.agent,
       'owner' => AppRole.owner,
+      'agent' => AppRole.agent,
       _ => AppRole.entrepreneur,
     };
   }

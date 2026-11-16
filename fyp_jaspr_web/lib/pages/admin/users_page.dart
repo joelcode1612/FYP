@@ -137,13 +137,15 @@ class _DirectoryState extends State<_Directory> {
   /// against option values silently reset the selection on every rebuild.
   String roleFilter = 'all';
 
-  /// Exactly `rbac.ALL_ROLES`. `owner` is a UI workspace, not a stored role, so
-  /// offering it would filter on a value no account can have.
+  /// Exactly `rbac.ALL_ROLES`. `owner` is a stored role now, so it is both
+  /// assignable and filterable — leaving it out would hide every Property Owner
+  /// from the administrator's user list.
   static const List<(String, String)> _roleOptions = [
     ('All roles', 'all'),
-    ('Entrepreneur', 'entrepreneur'),
-    ('Agent', 'agent'),
     ('Administrator', 'admin'),
+    ('Property Owner', 'owner'),
+    ('Agent', 'agent'),
+    ('Entrepreneur', 'entrepreneur'),
   ];
 
   /// Exactly `rbac.ACCOUNT_STATUSES`.
@@ -314,6 +316,6 @@ String _roleValue(AppRole role) => switch (role) {
 String _roleLabel(AppRole role) => switch (role) {
   AppRole.admin => 'Administrator',
   AppRole.agent => 'Agent',
-  AppRole.owner => 'Owner',
+  AppRole.owner => 'Property Owner',
   AppRole.entrepreneur => 'Entrepreneur',
 };

@@ -102,8 +102,6 @@ const Map<String, _TrailSpec> _trails = {
   '/agent/listings': _TrailSpec('Assigned listings', usePageTitle: true),
   '/agent/property-detail':
       _TrailSpec('Listing', sectionRoute: '/agent/listings'),
-  '/agent/enquiries': _TrailSpec('Enquiries'),
-  '/agent/performance': _TrailSpec('Performance'),
   '/agent/profile': _TrailSpec('Profile'),
 
   // --- Owner (retired; every path renders the retirement page) -------------

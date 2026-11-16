@@ -151,14 +151,16 @@ class SitewiseApp extends StatelessComponent {
           // Workspace presentation is based on the backend-verified account
           // role. Client-controlled demo grants cannot authorize another role.
           //
-          // `owner` is no longer a workspace. An owner is an entrepreneur who
-          // also holds the verified property capability, and that capability is
-          // exercised in the SiteWise mobile app alongside agents. A legacy
-          // `/owner/*` link therefore falls through to the retired-workspace
-          // page below, which explains where the work moved and renders no
-          // record, draft or identity. It is never re-pointed at another role's
-          // authenticated surface.
-          if (requested == 'owner') return null;
+          // `owner` is a workspace again, in the sense that matters: an owner
+          // account is routed to `/owner`, which explains that the Owner
+          // workspace is the SiteWise mobile app. It is NOT re-pointed at the
+          // entrepreneur workspace, and an entrepreneur is no longer admitted
+          // to it — the two roles have different property authority and must not
+          // share a surface.
+          if (requested == 'owner' && assigned != 'owner' && assigned != 'admin') {
+            final home = _roleNamed(assigned);
+            return home == null ? '/login' : home.homeRoute;
+          }
           if (requested == assigned) return null;
           final role = _roleNamed(requested);
           if (role != null && Workspaces.canOpen(role)) return null;
@@ -691,8 +693,6 @@ class SitewiseApp extends StatelessComponent {
             '/agent',
             '/agent/listings',
             '/agent/property-detail',
-            '/agent/enquiries',
-            '/agent/performance',
             '/agent/profile',
           ])
             Route(
@@ -749,10 +749,15 @@ AppRole? _roleNamed(String? name) {
 /// Mirrors the backend's legacy alias normalisation
 /// (`sitewise.domain.rbac.canonical_role`) so a session mirror written before
 /// canonicalisation still routes to the canonical workspace. Anything the
-/// three-role model does not define returns null and fails closed.
+/// four-role model does not define returns null and fails closed.
+///
+/// `property_owner` resolves to `owner`, not `entrepreneur`: the two are
+/// distinct roles now, and routing an owner into the entrepreneur workspace
+/// would hand them a surface with no property authority.
 String? _canonicalRoleName(String? name) => switch (name) {
   'administrator' => 'admin',
-  'property_owner' || 'user' => 'entrepreneur',
-  'entrepreneur' || 'agent' || 'admin' => name,
+  'property_owner' || 'propertyowner' || 'landlord' => 'owner',
+  'user' => 'entrepreneur',
+  'owner' || 'entrepreneur' || 'agent' || 'admin' => name,
   _ => null,
 };

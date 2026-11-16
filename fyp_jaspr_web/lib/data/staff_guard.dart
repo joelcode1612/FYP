@@ -38,9 +38,15 @@ final RegExp _workspacePath = RegExp(r'^/(admin|agent|entrepreneur|owner)(/|$)')
 const Set<String> _staffRoles = {'agent', 'admin'};
 
 /// Legacy aliases normalised exactly as the backend's `rbac.canonical_role`.
+///
+/// `property_owner` resolves to `owner`, not `entrepreneur`: Property Owner is a
+/// distinct role now, and the old fold would demote an owner into a workspace
+/// with no property authority.
 const Map<String, String> _roleAliases = {
   'administrator': 'admin',
-  'property_owner': 'entrepreneur',
+  'property_owner': 'owner',
+  'propertyowner': 'owner',
+  'landlord': 'owner',
   'user': 'entrepreneur',
 };
 
@@ -50,6 +56,7 @@ String _canonicalRole(String? role) =>
 String _homeFor(String role) => switch (role) {
   'admin' => '/admin',
   'agent' => '/agent',
+  'owner' => '/owner',
   _ => '/entrepreneur',
 };
 
@@ -94,25 +101,31 @@ shelf.Middleware createStaffGuard(Uri backend, {http.Client? client}) {
       final status = (identity['account_status'] as String? ?? '').toLowerCase();
       final aal = identity['assurance_level'] as String?;
       if (role.isEmpty || status != 'active') return _redirect(login);
-      if (!{'entrepreneur', ..._staffRoles}.contains(role)) return _redirect(login);
+      if (!{'entrepreneur', 'owner', ..._staffRoles}.contains(role)) {
+        return _redirect(login);
+      }
       // Every staff account needs AAL2 irrespective of which UI it requests.
       if (_staffRoles.contains(role) && aal != 'aal2') {
         return _redirect('/staff/verify');
       }
       final isAdminPath = path == '/admin' || path.startsWith('/admin/');
       final isAgentPath = path == '/agent' || path.startsWith('/agent/');
+      final isOwnerPath = path == '/owner' || path.startsWith('/owner/');
       if (isAdminPath && role != 'admin') return _redirect(_homeFor(role));
       if (isAgentPath && role != 'agent' && role != 'admin') {
         return _redirect(_homeFor(role));
       }
-      // `/owner/*` is NOT redirected any more. It used to hop to
-      // `/entrepreneur/my-properties`, which handed an entrepreneur a listing
-      // management surface they had no business holding. The Owner workspace is
-      // retired, and every former path now renders one static explanation page
-      // (see `owner_retired_page.dart`) that reads no query, no listing id and
-      // no identity — so it is safe to fall through for any signed-in role, and
-      // the session mirror below is still rebuilt from FastAPI's verified
-      // profile before the render isolate sees it.
+      if (isOwnerPath && role != 'owner' && role != 'admin') {
+        return _redirect(_homeFor(role));
+      }
+      // `/owner/*` renders one static explanation page
+      // (`owner_retired_page.dart`) for the owner account: the Owner workspace
+      // is the SiteWise mobile app, and the browser route reads no query, no
+      // listing id and no record. It is now gated to the `owner` role (and
+      // administrators) rather than being reachable by any signed-in account —
+      // an entrepreneur has no owner surface, and the legacy redirect that used
+      // to hand them one is gone. The session mirror below is still rebuilt
+      // from FastAPI's verified profile before the render isolate sees it.
 
       // Rebuild the session mirror from FastAPI's verified identity for EVERY
       // protected workspace; never trust the browser's unsigned role cookie.

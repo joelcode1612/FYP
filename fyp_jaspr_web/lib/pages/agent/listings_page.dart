@@ -14,8 +14,8 @@ import '../../layouts/app_layout.dart';
 /// resolves the Supabase assignment records from the verified bearer token
 /// server-side, so an agent can never see (or reach by editing the URL) a
 /// listing that was not assigned to them. The former suitability-rank
-/// selection survives only on the dashboard/performance displays, which label
-/// themselves as demonstration data.
+/// selection survives only on the dashboard display, which labels itself as
+/// demonstration data.
 ///
 /// Assignment rows carry the numeric listing id (the operational
 /// `fyp.rental_properties` id) and a display title — the verification state

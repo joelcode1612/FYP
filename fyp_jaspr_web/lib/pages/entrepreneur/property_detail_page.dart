@@ -310,6 +310,12 @@ class _DetailState extends State<_Detail> {
   /// request, and they must describe the same payload the score shows.
   PropertyInsights? _insights;
 
+  /// Individual verified nearby locations for the map's markers, fetched once
+  /// at the legacy mode's widest radius and sliced per selected radius inside
+  /// the frame. Null means the fetch failed or has not finished: the map then
+  /// keeps its recorded-counts state and says so, rather than inventing pins.
+  Map<String, dynamic>? _nearbyPlaces;
+
   @override
   void initState() {
     super.initState();
@@ -325,6 +331,12 @@ class _DetailState extends State<_Detail> {
         // keep their photos-only and coordinates-only defaults.
       },
     );
+    // The markers do not depend on the insights payload: both fetches run in
+    // parallel and the map applies whichever arrives first.
+    PropertyInsightsApi.loadNearbyPlaces(property.id).then<void>((value) {
+      if (!mounted || value == null) return;
+      setState(() => _nearbyPlaces = value);
+    });
   }
 
   CommercialProperty get property => component.property;
@@ -1058,16 +1070,15 @@ class _DetailState extends State<_Detail> {
         height: 470,
         layers: layers,
         origin: _insights?.origin,
+        nearby: _nearbyPlaces,
       ),
-      // The map explains its own layers inside the frame; this line only
-      // covers what the map cannot say about itself, so the two do not repeat
-      // each other.
+      // The map explains its own layers inside the frame (which categories
+      // have markers and which only totals); this line only covers what the
+      // map cannot say about itself, so the two do not repeat each other.
       p(classes: 'sw-pd__footnote', [
         Component.text(
           'The circles show distances of 500 m and 1 km in a straight line, not '
-          'actual walking or driving distances. The location may be approximate. '
-          'Some nearby information is shown as totals because exact locations '
-          'are not available.',
+          'actual walking or driving distances. The location may be approximate.',
         ),
       ]),
     ]);

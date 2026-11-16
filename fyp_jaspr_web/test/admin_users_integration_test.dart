@@ -32,15 +32,18 @@ void main() {
       expect(ApiUserRepository.fromJson(row()).listingCount, isNull);
     });
 
-    test('the three stored roles map to their own workspace role', () {
+    test('the four stored roles map to their own workspace role', () {
       AppRole roleOf(String raw) =>
           ApiUserRepository.fromJson(row()..['role'] = raw).role;
       expect(roleOf('entrepreneur'), AppRole.entrepreneur);
+      expect(roleOf('owner'), AppRole.owner);
       expect(roleOf('agent'), AppRole.agent);
       expect(roleOf('admin'), AppRole.admin);
       // Legacy aliases canonicalise exactly as the backend does.
       expect(roleOf('administrator'), AppRole.admin);
-      expect(roleOf('property_owner'), AppRole.entrepreneur);
+      // `property_owner` used to fold into entrepreneur. It is a distinct role
+      // now, and the fold would mislabel every owner in the admin user list.
+      expect(roleOf('property_owner'), AppRole.owner);
     });
 
     test('every stored account status is representable', () {

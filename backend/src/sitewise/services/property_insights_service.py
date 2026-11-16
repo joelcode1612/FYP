@@ -677,8 +677,9 @@ def _layer_payloads(values: dict[str, float | None], measured: bool = True) -> l
             layer["note"] = "No counts were recorded for this property."
         else:
             layer["note"] = (
-                "Recorded as counts within each radius. Individual locations are "
-                "not stored, so no pins are drawn for this layer."
+                "Recorded as counts within each radius. This payload carries no "
+                "coordinates; the map draws individual locations from the "
+                "nearby-places endpoint when verified ones exist."
             )
         layers.append(layer)
 

@@ -7,7 +7,7 @@ import 'app_locator.dart';
 /// ## One authoritative assignment dataset
 ///
 /// Every assigned-listing surface (dashboard KPIs and portfolio, Assigned
-/// Listings, performance, the notification bell) reads the SAME authorized
+/// Listings, the notification bell) reads the SAME authorized
 /// source: `GET /api/v1/staff/me/listings` resolves the authenticated
 /// agent's Supabase profile from the verified bearer token, then returns the
 /// rows of the local `agent_listing_assignment` table. Each row's
@@ -99,72 +99,3 @@ abstract final class AgentRecords {
     return name.isEmpty ? label : '$label — $name';
   }
 }
-
-/// A property enquiry.
-///
-/// **No backing exists.** There is no `enquiries` table, no contact-button
-/// event and no endpoint that could store one. These rows are prototype
-/// content, kept to the five fields the brief lists so the screen reads as a
-/// proposed extension rather than a customer-relationship system.
-typedef AgentEnquiry = ({
-  String id,
-  String enquirer,
-  String contact,
-  String property,
-  String received,
-  String status,
-});
-
-const List<AgentEnquiry> demoEnquiries = [
-  (
-    id: 'ENQ-01',
-    enquirer: 'Café operator, SS2',
-    contact: 'via listing contact button',
-    property: 'SS2 Corner Retail Lot',
-    received: 'This week',
-    status: 'New',
-  ),
-  (
-    id: 'ENQ-02',
-    enquirer: 'Bakery group, Damansara',
-    contact: 'via listing contact button',
-    property: 'Damansara Uptown Shoplot',
-    received: 'This week',
-    status: 'Follow up',
-  ),
-  (
-    id: 'ENQ-03',
-    enquirer: 'Bubble tea franchise',
-    contact: 'via listing contact button',
-    property: 'Subang Commercial Unit',
-    received: 'Earlier',
-    status: 'Closed',
-  ),
-];
-
-/// A pending agent task.
-///
-/// Also **no backing** — nothing in the domain layer models work items. Shown
-/// because the brief's Section D asks for it, and clearly marked.
-typedef AgentTask = ({String title, String detail, String status, bool done});
-
-List<AgentTask> demoTasks({int completed = 0}) => [
-  (
-    title: 'Confirm listing availability',
-    detail: 'Availability is not a stored field yet',
-    status: completed > 0 ? 'Complete' : 'Pending',
-    done: completed > 0,
-  ),
-  (
-    title: 'Review property media',
-    detail: 'No photo table is connected to the catalog',
-    status: 'Pending',
-    done: false,
-  ),
-  (
-    title: 'Answer 1 enquiry',
-    detail: 'Enquiry storage is a proposed extension',
-    status: 'Pending',
-    done: false,
-  ),
-];
