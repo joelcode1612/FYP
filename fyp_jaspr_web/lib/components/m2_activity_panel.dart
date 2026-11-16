@@ -2,12 +2,11 @@ import 'dart:convert';
 
 import 'package:jaspr/dom.dart';
 import 'package:jaspr/jaspr.dart';
-import 'package:jaspr_router/jaspr_router.dart';
 
 import '../data/app_locator.dart';
 import '../data/full_analysis_actions.dart';
 import '../pages/entrepreneur/activity_history_page.dart';
-import 'saved_assessment_dropdown.dart';
+import 'saved_assessment_dropdown.dart' show SavedAssessmentChoice;
 
 @client
 class M2ActivityPanel extends StatefulComponent {
@@ -164,21 +163,16 @@ class _M2ActivityState extends State<M2ActivityPanel> {
       key: ValueKey(_selected),
       businessName: 'Saved M2 assessment',
       assessmentId: _selected,
-      assessmentSelector: SavedAssessmentDropdown(
-        assessments: _savedChoices,
-        selectedAssessmentId: _selected.isEmpty ? null : _selected,
-        loading: busy,
-        error: error,
-        onSelectAssessment: (id) {
-          // Only IDs provided by the authenticated M2 list can be selected.
-          if (!busy && assessments.any((row) => row['id'] == id)) _load(id);
-        },
-      ),
+      // Native dropdown picker: options come only from the authenticated M2
+      // list, and the callback is gated again in the parent before loading.
+      savedAssessments: _savedChoices,
+      selectedAssessmentId: _selected.isEmpty ? null : _selected,
+      savedAssessmentsLoading: busy,
+      onSelectAssessment: (id) {
+        if (!busy && assessments.any((row) => row['id'] == id)) _load(id);
+      },
       activitiesAvailable: !busy && error == null && activity != null,
       workflowHistory: true,
-      onBackToReport: () => context.push('/entrepreneur/cafe-report'),
-      onRefresh: busy ? null : () => _load(_selected),
-      openQuestionnaireHref: '/entrepreneur/m2-entry',
       onViewFullLog: _openJson,
       sourceCoverage: [
         'M2 / Business Understanding: ${activity == null

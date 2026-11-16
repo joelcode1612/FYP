@@ -51,6 +51,10 @@ class Settings(BaseSettings):
     cq_runtime_enabled: bool = False
     # No fallback to property/analytics or superuser connections for reporting.
     ee01_database_url: SecretStr = SecretStr('')
+    # Candidate-only explanation surface. Default-off; the route stays mounted
+    # so the hold is discoverable, but generation returns 503 until an admitted
+    # measurement, disclosure adapter and reviewed attempt ledger row exist.
+    ee01_explanation_enabled: bool = False
 
     # Separate staging bridge; does not enable the unresolved BDJ/M2 write router.
     project1_cp07_enabled: bool = False

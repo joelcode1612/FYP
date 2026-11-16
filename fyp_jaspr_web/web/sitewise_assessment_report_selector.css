@@ -45,11 +45,15 @@
 .sra-panel-header { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 14px; }
 .sra-panel-header .ms { color: var(--sra-accent); margin-right: 6px; }
 
-.sra-button { display: inline-flex; align-items: center; justify-content: center; gap: 7px; border: 1px solid var(--sra-line-strong); background: transparent; border-radius: 9px; padding: 9px 13px; min-height: 38px; color: var(--sra-text); font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; text-align: center; }
+.sra-button { display: inline-flex; align-items: center; justify-content: center; gap: 7px; border: 1px solid var(--sra-line-strong); background: transparent; border-radius: 9px; padding: 9px 13px; min-height: 38px; color: var(--sra-text); font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; text-align: center; transition: background .12s ease, filter .12s ease, transform .08s ease; }
 .sra-button:hover:not(:disabled) { background: var(--sra-neutral); }
 .sra-button.primary { background: var(--sra-action); border-color: var(--sra-action); color: #fff; }
 .sra-button.primary:hover:not(:disabled) { background: var(--sra-action); filter: brightness(1.12); }
 .sra-button:disabled { opacity: .45; cursor: not-allowed; }
+/* Press feedback. Without this the Report tab's CTAs were the only buttons in
+   the workspace that did not move under the pointer — the Assessment tab's
+   `.asw-row-btn` now presses by 1px, so both tabs answer a click the same way. */
+.sra-button:active:not(:disabled) { transform: translateY(1px); }
 .sra-button:focus-visible, .sra-assessment-row:focus-visible, .sra-rental-row:focus-visible, .sra-search:focus-visible, .sra-select:focus-visible { outline: 3px solid var(--sra-accent); outline-offset: 2px; }
 
 .sra-filters { display: grid; grid-template-columns: minmax(160px, 1fr) 126px 140px; gap: 9px; margin: 0 0 14px; }

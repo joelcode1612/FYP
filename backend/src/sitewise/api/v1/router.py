@@ -32,6 +32,10 @@ router = APIRouter()
 router.include_router(project1_read.router, prefix="/project1-read", tags=["project1_readiness"])
 from sitewise.api.v1 import customer_questionnaire
 router.include_router(customer_questionnaire.router,prefix='/cq',tags=['customer_questionnaire'])
+# Candidate EE-01 explanations: always mounted so the hold is visible; the
+# request-time gate returns 503 until the feature is deliberately activated.
+from sitewise.api.v1 import ee01_explanation
+router.include_router(ee01_explanation.router, prefix='/cq', tags=['ee01_explanation'])
 
 router.include_router(auth.router, prefix="/auth", tags=["auth"])
 # Imported property catalogue (read-only, previously served by FYP/test).

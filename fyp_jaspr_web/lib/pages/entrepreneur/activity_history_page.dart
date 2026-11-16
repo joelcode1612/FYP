@@ -2,6 +2,8 @@ import 'package:jaspr/dom.dart';
 import 'package:jaspr/jaspr.dart';
 
 import '../../components/ui.dart' show Icon;
+import '../../components/saved_assessment_dropdown.dart'
+    show SavedAssessmentChoice;
 
 /// Immutable read-only event projection returned by the existing audit API.
 /// Normalize timestamps to UTC ISO 8601 before rendering/sorting.
@@ -57,18 +59,16 @@ class ActivityHistoryPage extends StatefulComponent {
   final List<AssessmentActivity> activities;
   final bool activitiesAvailable;
   final String? availabilityMessage;
-  final VoidCallback? onBackToReport;
   final void Function(String eventId)? onViewFullLog;
 
-  /// Caller-owned refresh of the loaded history; null hides the action.
-  final VoidCallback? onRefresh;
+  /// Saved assessments come only from the panel's authenticated M2 list. The
+  /// dropdown renders those choices as a native <select>; only an id supplied
+  /// by the parent may be selected, and the parent owns the subsequent load.
+  final List<SavedAssessmentChoice> savedAssessments;
+  final String? selectedAssessmentId;
+  final void Function(String assessmentId)? onSelectAssessment;
+  final bool savedAssessmentsLoading;
 
-  /// Existing navigation target for the questionnaire workspace; null hides
-  /// the link. Rendered as an outline button in the heading actions group.
-  final String? openQuestionnaireHref;
-
-  /// Optional caller-owned selector, rendered in the picker card.
-  final Component? assessmentSelector;
   final bool workflowHistory;
   final List<String> sourceCoverage;
   final List<String> currentSnapshots;
@@ -79,11 +79,11 @@ class ActivityHistoryPage extends StatefulComponent {
     required this.activities,
     this.activitiesAvailable = true,
     this.availabilityMessage,
-    this.onBackToReport,
     this.onViewFullLog,
-    this.onRefresh,
-    this.openQuestionnaireHref,
-    this.assessmentSelector,
+    this.savedAssessments = const [],
+    this.selectedAssessmentId,
+    this.onSelectAssessment,
+    this.savedAssessmentsLoading = false,
     this.workflowHistory = false,
     this.sourceCoverage = const [],
     this.currentSnapshots = const [],
@@ -463,35 +463,54 @@ class _ActivityHistoryPageState extends State<ActivityHistoryPage> {
             ),
           ]),
         ]),
-        div(classes: 'sr-page-actions', [
-          if (component.openQuestionnaireHref != null)
-            a(
-              classes: 'sr-button',
-              href: component.openQuestionnaireHref!,
-              [Component.text('Open M2 questionnaire')],
-            ),
-          _button(
-            'Refresh saved activity',
-            component.onRefresh,
-            icon: 'refresh',
+      ]),
+      // Native dropdown picker. Unlike the custom button+menu, this stays
+      // readable in every state: loading, error, empty, and with real choices.
+      section(classes: 'sr-card sr-assessment-picker', [
+        div(classes: 'sr-picker-label', [
+          span(classes: 'sr-picker-icon', attributes: {'aria-hidden': 'true'}, [
+            Icon('folder_open'),
+          ]),
+          Component.text('Selected assessment'),
+        ]),
+        div(classes: 'sr-picker-field', [
+          select(
+            classes: 'sr-select',
+            disabled: component.savedAssessmentsLoading ||
+                component.onSelectAssessment == null ||
+                component.savedAssessments.isEmpty,
+            attributes: {
+              'aria-label': 'Choose a saved assessment',
+              'data-testid': 'saved-assessment-select',
+            },
+            onChange: (values) {
+              final id = values.isEmpty ? '' : values.first;
+              if (id.isNotEmpty) component.onSelectAssessment!(id);
+            },
+            [
+              option(
+                value: '',
+                selected: component.selectedAssessmentId == null,
+                [
+                  Component.text(
+                    component.savedAssessmentsLoading
+                        ? 'Loading saved assessments…'
+                        : component.savedAssessments.isEmpty
+                        ? 'No saved assessments'
+                        : 'Select a saved assessment',
+                  ),
+                ],
+              ),
+              for (final choice in component.savedAssessments)
+                option(
+                  value: choice.assessmentId,
+                  selected: choice.assessmentId == component.selectedAssessmentId,
+                  [Component.text(choice.displayLabel)],
+                ),
+            ],
           ),
-          _button('Back to report', component.onBackToReport, icon: 'arrow_back'),
         ]),
       ]),
-      if (component.assessmentSelector != null)
-        section(
-          classes: 'sr-card sr-assessment-picker',
-          attributes: {'aria-label': 'Select assessment'},
-          [
-            div(classes: 'sr-picker-label', [
-              span(classes: 'sr-picker-icon', attributes: {'aria-hidden': 'true'}, [
-                Icon('folder_open'),
-              ]),
-              Component.text('Selected assessment'),
-            ]),
-            div(classes: 'sr-picker-field', [component.assessmentSelector!]),
-          ],
-        ),
       section(classes: 'sr-card sr-history-header', [
         div(classes: 'sr-assessment-identity', [
           div(classes: 'sr-assessment-icon', attributes: {'aria-hidden': 'true'}, [

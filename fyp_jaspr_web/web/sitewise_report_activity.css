@@ -56,8 +56,6 @@
   font-weight: 800; letter-spacing: -.75px; line-height: 1.2; }
 .sr-page-heading h1 .sr-icon { background: var(--sr-selected); color: var(--sr-blue); width: 43px; height: 43px; font-size: 21px; border-radius: 11px; }
 .sr-page-heading h1 .sr-icon .ms { font-size: 22px; }
-.sr-page-actions { display: flex; flex-direction: column; gap: 9px; align-items: stretch; flex: none; }
-.sr-page-actions .sr-button { text-decoration: none; }
 .sr-subtitle { margin-top: 8px !important; color: var(--sr-secondary); font-size: 14px; line-height: 1.65; max-width: 800px; }
 
 .sr-button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 42px;

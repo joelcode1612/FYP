@@ -26,6 +26,7 @@ library;
 import 'package:shared_logic/shared_logic.dart' hide ApiPropertyRepository;
 
 import 'api_property_repository.dart';
+import 'assessment_report.dart';
 import 'auth_service.dart';
 
 /// Why a call failed, reduced to the states the workspace must render.
@@ -727,6 +728,19 @@ final class AssessmentApi {
           const {},
     ),
   );
+
+  /// The whole five-stage report document for an assessment.
+  ///
+  /// The same endpoint [targetMatching] reads, decoded in full instead of one
+  /// section. It assembles from stored data and never advances a stage or runs
+  /// SHAP, so the report step can load it on open. Sections the backend cannot
+  /// back are returned unavailable with a reason — the page shows that reason
+  /// rather than a zero.
+  Future<ApiResult<AssessmentReportPayload>> report(String assessmentId) =>
+      _call(
+        '/api/v1/assessments/$assessmentId/report',
+        parse: AssessmentReportPayload.fromJson,
+      );
 
   /// The catalogue's real `property_type` vocabulary.
   ///

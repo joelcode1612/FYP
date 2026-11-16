@@ -137,8 +137,8 @@ function record(fixture, i, overrides) {
     waitUntil: 'networkidle',
     timeout: 30000,
   });
-  await page.waitForSelector('.asw-list-controls', { timeout: 15000 });
-  await page.waitForSelector('.audit-table tbody tr', { timeout: 15000 });
+  await page.waitForSelector('.asw-entry', { timeout: 15000 });
+  await page.waitForSelector('.asw-ecard', { timeout: 15000 });
   await page.waitForTimeout(600);
   await page.screenshot({
     path: path.join(outdir, 'assessments_listing.png'),
@@ -147,7 +147,7 @@ function record(fixture, i, overrides) {
 
   // --- 2. the create dialog --------------------------------------------------
   await page
-    .locator('.page-head__actions button', { hasText: 'New Assessment' })
+    .locator('.page-head__actions button', { hasText: 'Create assessment' })
     .click();
   await page.waitForSelector('.overlay .dialog', { timeout: 15000 });
   await page.waitForTimeout(600);
@@ -170,8 +170,8 @@ function record(fixture, i, overrides) {
     waitUntil: 'networkidle',
     timeout: 30000,
   });
-  await page3.waitForSelector('.audit-table tbody tr', { timeout: 15000 });
-  await page3.locator('.audit-table button.asw-row-btn--danger').first().click();
+  await page3.waitForSelector('.asw-ecard', { timeout: 15000 });
+  await page3.locator('.asw-ecard__remove').first().click();
   await page3.waitForSelector('.overlay .dialog', { timeout: 15000 });
   await page3.waitForTimeout(600);
   await page3.screenshot({
@@ -193,7 +193,7 @@ function record(fixture, i, overrides) {
     waitUntil: 'networkidle',
     timeout: 30000,
   });
-  await page2.waitForSelector('.asw-list-controls', { timeout: 15000 });
+  await page2.waitForSelector('.asw-entry', { timeout: 15000 });
   await page2.waitForSelector('.empty', { timeout: 15000 });
   await page2.waitForTimeout(600);
   await page2.screenshot({
@@ -294,13 +294,11 @@ function record(fixture, i, overrides) {
     waitUntil: 'networkidle',
     timeout: 30000,
   });
-  await page4.waitForSelector('.audit-table tbody tr', { timeout: 15000 });
+  await page4.waitForSelector('.asw-ecard', { timeout: 15000 });
   const urlBefore = page4.url();
-  await page4
-    .locator('.audit-table tbody tr', { hasText: 'In progress' })
-    .first()
-    .locator('button.asw-row-btn:not(.asw-row-btn--danger)')
-    .click();
+  // Select the in-progress card, then take the detail panel's primary action.
+  await page4.locator('.asw-ecard', { hasText: 'In progress' }).first().click();
+  await page4.locator('.asw-entry__detailactions .btn').first().click();
   // The workspace swaps in at the record's OWN progress step (the fixture
   // record is at step 3, so the Location evidence checkpoint opens) — and
   // the URL is unchanged (no navigation).
@@ -328,10 +326,12 @@ function record(fixture, i, overrides) {
 
   // Back to assessments restores the listing in the same page.
   await page4
-    .locator('.page-head__actions button', { hasText: 'Back to assessments' })
+    .locator('.asw-inline-detail__actions button', {
+      hasText: 'Back to assessments',
+    })
     .click();
-  await page4.waitForSelector('.asw-list-controls', { timeout: 15000 });
-  await page4.waitForSelector('.audit-table tbody tr', { timeout: 15000 });
+  await page4.waitForSelector('.asw-entry', { timeout: 15000 });
+  await page4.waitForSelector('.asw-ecard', { timeout: 15000 });
   await page4.waitForTimeout(600);
   await page4.screenshot({
     path: path.join(outdir, 'assessments_inplace_back_to_list.png'),

@@ -1,0 +1,736 @@
+  // ------------------------------------ step 4: research question review
+
+  /// Step 4 in the reference's layout: customer-research question candidates,
+  /// grouped by how well Step 3's measured evidence supports them, each with an
+  /// approve / reject decision, beside the review progress, the derived
+  /// research objective and the Step 3 evidence context.
+  ///
+  /// The candidates are **derived** from the business preferences saved in
+  /// Step 2 and from the measured evidence of Step 3. The production API has no
+  /// question-generator endpoint (the M2/BDJ generator is governance-gated), so
+  /// nothing here is presented as a model output and nothing is persisted.
+  List<Component> _reviewStep(AssessmentRecord record, AssessmentStage stage) =>
+      [
+        _stepHeading(
+          kicker: 'Step 4 of 5',
+          title: 'Research question review',
+          icon: 'fact_check',
+          description:
+              'Review the suggested questions, check how well they match your '
+              'research objective, and decide which to include.',
+        ),
+        FutureBuilder<ApiResult<EvidencePayload>>(
+          future: _evidence(record.propertyId),
+          builder: (context, snapshot) {
+            final payload = snapshot.data?.ok == true
+                ? snapshot.data!.value
+                : null;
+            final evidence = payload != null && payload.available
+                ? payload
+                : null;
+            final candidates = _reviewCandidates(record, evidence);
+            final decided = candidates
+                .where((item) => _reviewDecisions.containsKey(item.id))
+                .length;
+            final approved = candidates
+                .where((item) => _reviewDecisions[item.id] == 'approve')
+                .length;
+            final rejected = candidates
+                .where((item) => _reviewDecisions[item.id] == 'reject')
+                .length;
+            final pending = candidates.length - approved - rejected;
+            final visible = _reviewFilter == 'decided'
+                ? candidates
+                      .where((item) => _reviewDecisions.containsKey(item.id))
+                      .toList()
+                : candidates;
+
+            return div(classes: 'asw-rqr', [
+              div(classes: 'asw-rqr__main', [
+                div(classes: 'asw-rqr__tabsbar', [
+                  div(classes: 'asw-rqr__tabs', [
+                    _reviewTab('Question candidates', candidates.length, 'all'),
+                    _reviewTab('Decided', decided, 'decided'),
+                  ]),
+                  if (!_reviewAddOpen)
+                    button(
+                      classes: 'asw-rqr__add',
+                      attributes: const {
+                        'type': 'button',
+                        'aria-expanded': 'false',
+                      },
+                      events: events(
+                        onClick: () => setState(() {
+                          _reviewAddOpen = true;
+                          _reviewAddError = null;
+                        }),
+                      ),
+                      [
+                        Icon('add', size: 'sm'),
+                        Component.text('Add a question'),
+                      ],
+                    ),
+                ]),
+                if (_reviewAddOpen) _reviewAddForm(),
+                if (visible.isEmpty)
+                  div(classes: 'asw-rqr__empty', [
+                    Component.text(
+                      _reviewFilter == 'decided'
+                          ? 'No reviewed questions yet. Choose '
+                                '“Question candidates” to make a decision.'
+                          : 'No question candidates yet. Save your business '
+                                'preferences in Step 2 to derive them.',
+                    ),
+                  ])
+                else
+                  div(classes: 'asw-rqr__groups', [
+                    for (final group in const ['high', 'low', 'custom'])
+                      ..._reviewGroup(
+                        group,
+                        visible
+                            .where((item) => item.group == group)
+                            .toList(),
+                      ),
+                  ]),
+                div(classes: 'asw-rqr__actions', [
+                  ActionButton(
+                    'Back to Step 3',
+                    variant: 'secondary',
+                    icon: 'arrow_back',
+                    onClick: () => _openCheckpoint('location_evidence'),
+                  ),
+                  div(classes: 'asw-rqr__actionright', [
+                    if (pending > 0)
+                      span(
+                        classes: 'asw-rqr__status',
+                        attributes: const {'aria-live': 'polite'},
+                        [Component.text('$pending still to decide')],
+                      ),
+                    ActionButton(
+                      'Continue to Step 5',
+                      icon: 'arrow_forward',
+                      onClick: () => _openCheckpoint('assessment_report'),
+                    ),
+                  ]),
+                ]),
+                p(classes: 'asw-rqr__note', [
+                  Component.text(
+                    'Questions are derived from the business preferences you '
+                    'saved in Step 2. “Relevance” marks whether Step 3 '
+                    'measured evidence for the same theme — it is a coverage '
+                    'hint, not a model score. Decisions stay in this session '
+                    'and are not written to your assessment.',
+                  ),
+                ]),
+              ]),
+              aside(classes: 'asw-rqr__aside', [
+                section(classes: 'asw-rqr__box', [
+                  h3(classes: 'asw-rqr__boxhead', [
+                    Icon('monitoring', size: 'sm'),
+                    Component.text('Review progress'),
+                  ]),
+                  div(classes: 'asw-rqr__kvs', [
+                    _reviewKv('Total candidates', '${candidates.length}'),
+                    _reviewKv(
+                      'Approved',
+                      '$approved',
+                      mark: '✓',
+                      tone: 'ok',
+                    ),
+                    _reviewKv(
+                      'Rejected',
+                      '$rejected',
+                      mark: '×',
+                      tone: 'bad',
+                    ),
+                    _reviewKv(
+                      'Pending decision',
+                      '$pending',
+                      mark: '○',
+                      tone: 'wait',
+                    ),
+                  ]),
+                  div(
+                    classes: 'asw-rqr__track',
+                    attributes: {
+                      'role': 'progressbar',
+                      'aria-valuemin': '0',
+                      'aria-valuemax': '100',
+                      'aria-valuenow': candidates.isEmpty
+                          ? '0'
+                          : '${(100 * decided / candidates.length).round()}',
+                      'aria-label': 'Questions reviewed',
+                    },
+                    [
+                      div(
+                        classes: 'asw-rqr__fill',
+                        styles: Styles(
+                          width: Unit.percent(
+                            candidates.isEmpty
+                                ? 0
+                                : 100 * decided / candidates.length,
+                          ),
+                        ),
+                        const [],
+                      ),
+                    ],
+                  ),
+                ]),
+                section(classes: 'asw-rqr__box', [
+                  h3(classes: 'asw-rqr__boxhead', [
+                    Icon('target', size: 'sm'),
+                    Component.text('Research objective'),
+                    span(classes: 'asw-rqr__ro', [
+                      Component.text('Read only'),
+                    ]),
+                  ]),
+                  p(classes: 'asw-rqr__objective', [
+                    Component.text(_reviewObjective(record)),
+                  ]),
+                ]),
+                section(classes: 'asw-rqr__box', [
+                  h3(classes: 'asw-rqr__boxhead', [
+                    Icon('description', size: 'sm'),
+                    Component.text('Findings & context'),
+                  ]),
+                  p(classes: 'asw-rqr__aside-label', [
+                    Component.text('From Step 3'),
+                  ]),
+                  ul(classes: 'asw-rqr__context', [
+                    for (final line in _reviewContext(evidence))
+                      li([Component.text(line)]),
+                  ]),
+                  div(classes: 'asw-rqr__boxfoot', [
+                    ActionLink(
+                      'Open the full analysis',
+                      href:
+                          '/entrepreneur/explanation?property=${Uri.encodeComponent(record.propertyId)}',
+                      variant: 'ghost',
+                    ),
+                  ]),
+                ]),
+              ]),
+            ]);
+          },
+        ),
+      ];
+
+  Component _reviewTab(String label, int count, String value) => button(
+    classes: 'asw-rqr__tab${_reviewFilter == value ? ' is-active' : ''}',
+    attributes: {
+      'type': 'button',
+      'aria-pressed': _reviewFilter == value ? 'true' : 'false',
+    },
+    events: events(onClick: () => setState(() => _reviewFilter = value)),
+    [
+      Component.text(label),
+      span(classes: 'asw-rqr__tabcount', [Component.text('$count')]),
+    ],
+  );
+
+  List<Component> _reviewGroup(String group, List<_ReviewCandidate> items) {
+    if (items.isEmpty) return const [];
+    final (icon, title, description) = switch (group) {
+      'high' => (
+        'check_circle',
+        'High relevance',
+        'Strongly aligned with the research objective and business context.',
+      ),
+      'low' => (
+        'warning',
+        'Low relevance',
+        'Partially related or useful for exploration. Decide whether to '
+            'include.',
+      ),
+      _ => (
+        'add_circle',
+        'Added by you',
+        'Your suggested questions for potential customer research.',
+      ),
+    };
+    return [
+      section(classes: 'asw-rqr__group asw-rqr__group--$group', [
+        div(classes: 'asw-rqr__grouphead', [
+          Icon(icon, size: 'sm'),
+          strong([Component.text('$title (${items.length})')]),
+          span([Component.text(description)]),
+        ]),
+        for (final item in items) _reviewCandidateRow(item),
+      ]),
+    ];
+  }
+
+  Component _reviewCandidateRow(_ReviewCandidate candidate) {
+    final decision = _reviewDecisions[candidate.id];
+    final expanded =
+        _reviewExpanded[candidate.id] ?? (candidate.group == 'high');
+    final relevance = switch (candidate.group) {
+      'high' => 'High',
+      'low' => 'Low',
+      _ => 'Added',
+    };
+    return article(classes: 'asw-rqr__cand', [
+      div(classes: 'asw-rqr__candtop', [
+        div(classes: 'asw-rqr__info', [
+          div(classes: 'asw-rqr__titleline', [
+            span(classes: 'asw-rqr__id', [Component.text(candidate.id)]),
+            h4(classes: 'asw-rqr__q', [Component.text(candidate.question)]),
+          ]),
+          div(classes: 'asw-rqr__meta', [
+            span(
+              classes:
+                  'asw-rqr__rel asw-rqr__rel--${candidate.group}',
+              [
+                Component.text('Relevance: $relevance'),
+              ],
+            ),
+            span(classes: 'asw-rqr__metaitem', [
+              Component.text('Source: ${candidate.source}'),
+            ]),
+            span(classes: 'asw-rqr__metaitem', [
+              Component.text('Version: ${candidate.version}'),
+            ]),
+          ]),
+          if (expanded)
+            div(classes: 'asw-rqr__notes', [
+              div(classes: 'asw-rqr__note asw-rqr__note--good', [
+                h5([
+                  Icon('verified', size: 'sm'),
+                  Component.text(
+                    candidate.group == 'custom'
+                        ? 'Why this question matters'
+                        : 'Key strengths',
+                  ),
+                ]),
+                ul([
+                  for (final line in candidate.strengths)
+                    li([Component.text(line)]),
+                ]),
+              ]),
+              div(classes: 'asw-rqr__note', [
+                h5([
+                  Icon('info', size: 'sm'),
+                  Component.text('Evidence / context'),
+                ]),
+                ul([
+                  for (final line in candidate.evidence)
+                    li([Component.text(line)]),
+                ]),
+              ]),
+            ]),
+          button(
+            classes: 'asw-rqr__toggle',
+            attributes: {
+              'type': 'button',
+              'aria-expanded': expanded ? 'true' : 'false',
+            },
+            events: events(
+              onClick: () => setState(
+                () => _reviewExpanded[candidate.id] = !expanded,
+              ),
+            ),
+            [
+              Component.text(
+                expanded ? 'Hide reasoning' : 'View reasoning',
+              ),
+              Icon(expanded ? 'expand_less' : 'expand_more', size: 'sm'),
+            ],
+          ),
+        ]),
+        div(
+          classes: 'asw-rqr__decision',
+          attributes: {'role': 'group', 'aria-label': 'Decision'},
+          [
+            span(classes: 'asw-rqr__decisiontitle', [
+              Component.text('Your decision '),
+              span([Component.text('*')]),
+            ]),
+            _reviewDecision(candidate, 'approve', 'Approve', 'check_circle'),
+            _reviewDecision(candidate, 'reject', 'Reject', 'cancel'),
+            if (decision != null)
+              button(
+                classes: 'asw-rqr__undo',
+                attributes: const {'type': 'button'},
+                events: events(
+                  onClick: () => setState(
+                    () => _reviewDecisions.remove(candidate.id),
+                  ),
+                ),
+                [Component.text('Undo decision')],
+              ),
+          ],
+        ),
+      ]),
+    ]);
+  }
+
+  Component _reviewDecision(
+    _ReviewCandidate candidate,
+    String value,
+    String label,
+    String icon,
+  ) {
+    final on = _reviewDecisions[candidate.id] == value;
+    return label(classes: 'asw-rqr__decopt is-$value${on ? ' is-on' : ''}', [
+      input(
+        type: InputType.radio,
+        name: 'aswReview${candidate.id}',
+        checked: on,
+        events: events(
+          onChange: (_) =>
+              setState(() => _reviewDecisions[candidate.id] = value),
+        ),
+      ),
+      Icon(icon, size: 'sm'),
+      Component.text(label),
+    ]);
+  }
+
+  Component _reviewKv(
+    String label,
+    String value, {
+    String? mark,
+    String tone = '',
+  }) => div(classes: 'asw-rqr__kv', [
+    span(classes: 'asw-rqr__kvlabel', [
+      if (mark != null)
+        span(classes: 'asw-rqr__mark asw-rqr__mark--$tone', [
+          Component.text(mark),
+        ]),
+      Component.text(label),
+    ]),
+    strong([Component.text(value)]),
+  ]);
+
+  Component _reviewAddForm() => div(classes: 'asw-rqr__addform', [
+    h3([Component.text('Add your own question')]),
+    p([
+      Component.text(
+        'Include something you would like to ask potential customers.',
+      ),
+    ]),
+    label([
+      Component.text('Research question '),
+      span(classes: 'asw-rqr__req', [Component.text('*')]),
+    ]),
+    textarea(
+      const [],
+      rows: 3,
+      placeholder: 'e.g. How often would you visit a café near this location?',
+      attributes: const {
+        'maxlength': '240',
+        'aria-label': 'Research question',
+      },
+      onInput: (value) => _reviewDraftQuestion = value,
+    ),
+    label([
+      Component.text('Reason for asking '),
+      span(classes: 'asw-rqr__optional', [Component.text('(optional)')]),
+    ]),
+    textarea(
+      const [],
+      rows: 2,
+      placeholder: 'What do you hope to learn from the answers?',
+      attributes: const {
+        'maxlength': '400',
+        'aria-label': 'Reason for asking',
+      },
+      onInput: (value) => _reviewDraftContext = value,
+    ),
+    if (_reviewAddError != null)
+      p(classes: 'asw-rqr__adderror', [Component.text(_reviewAddError!)]),
+    div(classes: 'asw-rqr__addactions', [
+      ActionButton(
+        'Cancel',
+        variant: 'secondary',
+        onClick: () => setState(() {
+          _reviewAddOpen = false;
+          _reviewDraftQuestion = '';
+          _reviewDraftContext = '';
+          _reviewAddError = null;
+        }),
+      ),
+      ActionButton('Add question', onClick: _addReviewQuestion),
+    ]),
+  ]);
+
+  void _addReviewQuestion() {
+    final question = _reviewDraftQuestion.trim();
+    if (question.length < 8) {
+      setState(
+        () => _reviewAddError = 'Please enter a complete question.',
+      );
+      return;
+    }
+    setState(() {
+      _reviewCustom.add((
+        question: question,
+        context: _reviewDraftContext.trim(),
+      ));
+      _reviewAddOpen = false;
+      _reviewDraftQuestion = '';
+      _reviewDraftContext = '';
+      _reviewAddError = null;
+      _reviewFilter = 'all';
+    });
+  }
+
+  /// The candidates shown in step 4, derived deterministically from the saved
+  /// requirements and the measured evidence. Order follows the questionnaire so
+  /// an id stays attached to the same question across rebuilds.
+  List<_ReviewCandidate> _reviewCandidates(
+    AssessmentRecord record,
+    EvidencePayload? evidence,
+  ) {
+    final stored = record.requirements ?? const <String, dynamic>{};
+    final backed = <String>{
+      if (evidence != null)
+        for (final group in evidence.groups)
+          if (group.availableCount > 0) group.key,
+    };
+    final stamp = _reviewVersionStamp(record);
+    final concept = _answerText(stored, 'fnb_concept');
+    final customers = _answerText(stored, 'target_customers');
+    final service = _answerText(stored, 'service_model');
+    final priority = _answerText(stored, 'recommendation_priority');
+    final space = _answerText(stored, 'space_size_preference');
+    final conceptName = (concept ?? 'business').toLowerCase();
+    var counter = 0;
+    String nextId() => 'Q-${(++counter).toString().padLeft(2, '0')}';
+
+    final candidates = <_ReviewCandidate>[];
+
+    if (concept != null) {
+      final competitors = _reviewMetric(evidence, 'fnb_competitors_1000m');
+      candidates.add(
+        _ReviewCandidate(
+          id: nextId(),
+          group: backed.contains('competitor_pressure') ? 'high' : 'low',
+          question:
+              'How interested would you be in a $conceptName near this '
+              'location?',
+          source: 'Your answers',
+          version: stamp,
+          strengths: [
+            'Asks directly about the $conceptName you plan to open.',
+            'Simple wording that a customer can answer without explanation.',
+          ],
+          evidence: [
+            'From Step 2: business type is ${concept.toLowerCase()}.',
+            if (competitors != null)
+              'From Step 3: ${competitors.label} — '
+                  '${_metricValue(competitors)}.',
+          ],
+        ),
+      );
+    }
+
+    if (customers != null) {
+      final population = _reviewMetric(evidence, 'pop_total_1km');
+      candidates.add(
+        _ReviewCandidate(
+          id: nextId(),
+          group: backed.contains('catchment_demand') ? 'high' : 'low',
+          question:
+              'How often would ${customers.toLowerCase()} visit a '
+              '$conceptName within walking distance?',
+          source: 'Your answers',
+          version: stamp,
+          strengths: [
+            'Checks whether the customer groups you named actually visit this '
+                'area.',
+            'Matches your stated target customers '
+                '(${customers.toLowerCase()}).',
+          ],
+          evidence: [
+            'From Step 2: target customers are ${customers.toLowerCase()}.',
+            if (population != null)
+              'From Step 3: ${population.label} — '
+                  '${_metricValue(population)}.',
+          ],
+        ),
+      );
+    }
+
+    if (priority != null) {
+      final theme = switch (stored['recommendation_priority']) {
+        'high_nearby_population' => 'catchment_demand',
+        'easy_customer_accessibility' => 'accessibility',
+        'active_commercial_surroundings' => 'competitor_pressure',
+        _ => null,
+      };
+      final support = theme == null
+          ? null
+          : _reviewGroupMetric(evidence, theme);
+      candidates.add(
+        _ReviewCandidate(
+          id: nextId(),
+          group: theme != null && backed.contains(theme) ? 'high' : 'low',
+          question:
+              'What matters most to you when choosing a $conceptName nearby?',
+          source: 'Your answers',
+          version: stamp,
+          strengths: [
+            'Tests whether customers share the priority you set '
+                '(${priority.toLowerCase()}).',
+          ],
+          evidence: [
+            'From Step 2: choosing priority is ${priority.toLowerCase()}.',
+            if (support != null)
+              'From Step 3: ${support.label} — ${_metricValue(support)}.'
+            else
+              'No Step 3 metric covers this priority, so the answer stays '
+                  'qualitative.',
+          ],
+        ),
+      );
+    }
+
+    if (service != null) {
+      candidates.add(
+        _ReviewCandidate(
+          id: nextId(),
+          group: 'low',
+          question:
+              'How would you prefer to buy from a $conceptName — dine in, '
+              'takeaway or delivery?',
+          source: 'Your answers',
+          version: stamp,
+          strengths: [
+            'Shows whether your planned ${service.toLowerCase()} format '
+                'matches how customers actually buy.',
+          ],
+          evidence: [
+            'From Step 2: service model is ${service.toLowerCase()}.',
+            'Step 3 measures catchment and access, not service format, so '
+                'treat the answer as qualitative.',
+          ],
+        ),
+      );
+    }
+
+    if (space != null) {
+      candidates.add(
+        _ReviewCandidate(
+          id: nextId(),
+          group: 'low',
+          question:
+              'What size of seating area would you expect in a '
+              '$conceptName?',
+          source: 'Your answers',
+          version: stamp,
+          strengths: [
+            'Keeps the question about comfort rather than floor area.',
+          ],
+          evidence: [
+            'From Step 2: space size preference is ${space.toLowerCase()}.',
+            'Customers rarely judge floor area in square feet, so this is '
+                'exploratory.',
+          ],
+        ),
+      );
+    }
+
+    for (final custom in _reviewCustom) {
+      candidates.add(
+        _ReviewCandidate(
+          id: nextId(),
+          group: 'custom',
+          question: custom.question,
+          source: 'You',
+          version: 'Added in this session',
+          strengths: [
+            custom.context.isEmpty
+                ? 'A question you want to explore with potential customers.'
+                : custom.context,
+          ],
+          evidence: ['Added by you for customer research.'],
+        ),
+      );
+    }
+
+    return candidates;
+  }
+
+  /// The one-sentence objective shown in the aside, derived from the answers.
+  String _reviewObjective(AssessmentRecord record) {
+    final stored = record.requirements ?? const <String, dynamic>{};
+    final concept = _answerText(stored, 'fnb_concept');
+    final customers = _answerText(stored, 'target_customers');
+    if (concept == null) {
+      return 'Choose your business preferences in Step 2 to build a research '
+          'objective.';
+    }
+    if (customers != null) {
+      return 'Assess interest in the ${concept.toLowerCase()} you plan to '
+          'open and whether ${customers.toLowerCase()} would visit this '
+          'location.';
+    }
+    return 'Assess interest in the ${concept.toLowerCase()} you plan to open '
+        'at this location.';
+  }
+
+  /// The measured evidence Step 3 established, as context bullets.
+  List<String> _reviewContext(EvidencePayload? evidence) {
+    if (evidence == null) {
+      return ['Step 3 has no measured evidence for this property yet.'];
+    }
+    final metrics = [
+      for (final group in evidence.groups)
+        for (final metric in group.metrics)
+          if (metric.isAvailable) metric,
+    ].take(4).toList();
+    if (metrics.isEmpty) {
+      return ['Step 3 has no measured evidence for this property yet.'];
+    }
+    return [
+      for (final (index, metric) in metrics.indexed)
+        'F${(index + 1).toString().padLeft(2, '0')} — ${metric.label}: '
+            '${_metricValue(metric)}',
+    ];
+  }
+
+  static String _reviewVersionStamp(AssessmentRecord record) {
+    final iso = record.updatedAt;
+    final date = iso.length >= 10 ? iso.substring(0, 10) : '';
+    final version = 'v${record.requirementsVersion}';
+    return date.isEmpty ? version : '$version ($date)';
+  }
+
+  static EvidenceMetric? _reviewMetric(EvidencePayload? payload, String key) {
+    if (payload == null) return null;
+    for (final group in payload.groups) {
+      for (final metric in group.metrics) {
+        if (metric.key == key && metric.isAvailable) return metric;
+      }
+    }
+    return null;
+  }
+
+  static EvidenceMetric? _reviewGroupMetric(
+    EvidencePayload? payload,
+    String groupKey,
+  ) {
+    if (payload == null) return null;
+    for (final group in payload.groups) {
+      if (group.key != groupKey) continue;
+      for (final metric in group.metrics) {
+        if (metric.isAvailable) return metric;
+      }
+    }
+    return null;
+  }
+
+  /// A stored requirement rendered with the questionnaire's own option labels.
+  String? _answerText(Map<String, dynamic> stored, String id) {
+    final raw = stored[id];
+    if (raw == null) return null;
+    final question = _questions.firstWhere((item) => item.id == id);
+    if (raw is List) {
+      final parts = [for (final item in raw) _optionCaption(question, '$item')];
+      return parts.isEmpty ? null : parts.join(', ');
+    }
+    final text = _optionCaption(question, '$raw');
+    return text.isEmpty ? null : text;
+  }
+

@@ -150,6 +150,120 @@ function stage(key, number, title, status, completedAt) {
         }),
       }),
     );
+    // Step 5 assembles from GET /assessments/{id}/report. The evidence and
+    // explanation blocks are deliberately unavailable so this checkpoint
+    // proves the honest-empty states, not just the happy path.
+    await page.route('**/api/v1/assessments/*/report', (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          assessment_id: record.assessment_id,
+          property_id: prop.id,
+          status: record.status,
+          generated_at: '2026-11-16T05:46:00Z',
+          requirements_version: 3,
+          questionnaire: { available: true, data: record.requirements },
+          property: {
+            available: true,
+            data: {
+              name: prop.title,
+              property_type: prop.property_type,
+              address: prop.address,
+              city: prop.city,
+              rental_price: prop.rental_price,
+              size_sqft: prop.size_sqft,
+            },
+          },
+          listing_media: {
+            available: false,
+            reason: 'No photos or listing sources are stored for this property.',
+          },
+          geospatial_features: {
+            available: true,
+            data: { competitor_count_500m: 47, population_1km: 31366 },
+          },
+          evidence_categories: {
+            available: true,
+            data: [
+              {
+                key: 'competitor_pressure',
+                label: 'Competitor pressure',
+                metrics: [
+                  { key: 'fnb_competitors_1000m', label: 'F&B competitors within 1 km', unit: 'count', value: 47, status: 'available' },
+                  { key: 'fnb_density_index', label: 'Competitor density index', unit: 'ratio', value: 35.4, status: 'available' },
+                ],
+              },
+              {
+                key: 'catchment_demand',
+                label: 'Catchment demand',
+                metrics: [
+                  { key: 'pop_total_1km', label: 'People living within 1 km', unit: 'people', value: 31366, status: 'available' },
+                  { key: 'avg_income_1km', label: 'Average household income within 1 km', unit: 'RM/month', value: 8837, status: 'available' },
+                ],
+              },
+              {
+                key: 'accessibility',
+                label: 'Accessibility',
+                metrics: [
+                  { key: 'nearest_transit_walk_m', label: 'Nearest public transport (walk)', unit: 'm', value: 1100, status: 'available' },
+                  { key: 'parking_bays_500m', label: 'Parking bays within 500 m', unit: 'count', value: null, status: 'unavailable' },
+                ],
+              },
+            ],
+          },
+          research_association: {
+            available: true,
+            data: {
+              score: 61.4,
+              base_value: 0.5,
+              model_version: 'expanded64',
+              feature_set: 'expanded64',
+              score_meaning:
+                'research_positive_label_association_NOT_business_success_probability',
+            },
+          },
+          explanation: {
+            available: false,
+            reason: 'No verified SHAP explanation is available for this property.',
+          },
+          requirement_matching: {
+            checks: [
+              {
+                key: 'affordability',
+                label: 'Affordability (monthly rent)',
+                verdict: 'match',
+                detail: 'Asking RM 4,800 vs ceiling RM 6,000.',
+              },
+              {
+                key: 'floor_area',
+                label: 'Floor area requirement',
+                verdict: 'mismatch',
+                detail: 'Listing 900 sq ft vs minimum 1,200 sq ft.',
+              },
+            ],
+            matched: 1,
+            mismatched: 1,
+            unknown: 0,
+            note:
+              'Constraint checks only. No personalized compatibility percentage is produced because no scoring methodology has been approved.',
+          },
+          missing_information: ['No verified SHAP explanation was produced.'],
+          model_information: {
+            model: 'pu_model',
+            feature_set: 'expanded64',
+            explainer: 'permutation_shap',
+            research_only: true,
+          },
+          export: {
+            pdf: false,
+            reason:
+              'No server-side PDF generator is configured. The report is complete and printable from the browser; a PDF is not produced.',
+          },
+          meta: { scores_are_research_indexes: true },
+        }),
+      }),
+    );
     // Stage 3's evidence read — same shape the real endpoint returns
     // (top-level payload; `available: false` would be the honest empty state).
     await page.route('**/api/v1/catalog/properties/**/evidence**', (route) =>

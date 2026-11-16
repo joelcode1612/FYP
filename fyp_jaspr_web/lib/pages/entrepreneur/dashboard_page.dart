@@ -5,7 +5,6 @@ import 'package:jaspr_riverpod/jaspr_riverpod.dart';
 import 'package:shared_logic/shared_logic.dart' hide ApiPropertyRepository;
 
 import '../../components/ui.dart';
-import '../../data/app_locator.dart';
 import '../../data/assessment_api.dart';
 import '../../data/api_property_repository.dart';
 import '../../data/auth_service.dart';
@@ -103,7 +102,6 @@ class _DashboardPageState extends State<DashboardPage> {
         styles: Styles(raw: {'gap': 'clamp(16px, 2vw, 24px)'}),
         [
           _head(name),
-          const _CandidateAssignments(),
           // KPI row: each counter degrades to an em dash when its own read
           // fails; the other cards keep their real values.
           _kpis(saved),
@@ -739,58 +737,4 @@ class _CurrentAssessmentState extends State<_CurrentAssessment> {
       ]),
     ]);
   }
-}
-
-class _CandidateAssignments extends StatefulComponent {
-  const _CandidateAssignments();
-  @override
-  State<_CandidateAssignments> createState() => _CandidateAssignmentsState();
-}
-
-class _CandidateAssignmentsState extends State<_CandidateAssignments> {
-  List<dynamic>? rows;
-  final notes = <String,String>{};
-  bool busy = false;
-  String? error;
-
-  Future<void> load([String? id, String? decision]) async {
-    if (busy) return;
-    setState(() { busy = true; error = null; });
-    try {
-      if (id != null) {
-        await AppLocator.m2.client.post('/api/v1/m2/research-questions/$id/owner-review',
-          {'decision': decision, 'rationale':notes[id]!.trim()});
-      }
-      final result = await AppLocator.m2.client.get('/api/v1/m2/candidate-review-assignments');
-      if (mounted) setState(()=>rows=result['assignments'] as List);
-    } catch (_) {
-      if (mounted) setState(() { rows=null; error='Review unavailable. Reload your assignments.'; });
-    } finally {
-      if (mounted) setState(()=>busy=false);
-    }
-  }
-
-  @override
-  Component build(BuildContext context) => section(classes:'panel stack stack--sm', [
-    ActionButton('Load assigned research reviews',onClick:busy ? null : ()=>load()),
-    if (error != null) p(attributes:{'role':'alert'},[Component.text(error!)]),
-    if (rows?.isEmpty == true) p([Component.text('No current candidate assignments.')]),
-    for (final row in rows ?? []) ...[
-      h3([Component.text(row['question'] as String)]),
-      p([Component.text('Objective: ${row["exact_text"]} · revision ${row["assessment_revision"]}')]),
-      p([Component.text('Version ${row["id"]} · ${row["classification"] ?? "Classification unavailable"}')]),
-      for (final option in row['options']) p([Component.text('${option["code"]} · ${option["label"]}')]),
-      if (row['measurement'] != null)
-        p([Component.text('${row["measurement"]["construct"]} · ${row["measurement"]["population"]}. ${row["measurement"]["limitations"]}')]),
-      if (row['projection_sequence'] != null)
-        p([Component.text('Workflow snapshot ${row["projection_sequence"]}. Model execution: ${row["model_execution"]}.')]),
-      p([Component.text('Scientific authorization pending. Customer fielding held.')]),
-      if (row['decision'] != null) p([Component.text('${row["decision"]} · ${row["rationale"]} · ${row["recorded_at"]}')])
-      else ...[
-        textarea(attributes:{'aria-label':'Review rationale'},onInput:(v)=>setState(()=>notes[row['id']]=v),[]),
-        for (final action in {'APPROVE_FOR_REVIEW':'Approve for continued review','REJECT':'Reject candidate'}.entries)
-          ActionButton(action.value,onClick:busy || (notes[row['id']] ?? '').trim().isEmpty ? null : ()=>load(row['id'],action.key)),
-      ],
-    ],
-  ]);
 }

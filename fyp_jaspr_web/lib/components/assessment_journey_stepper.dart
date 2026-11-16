@@ -57,7 +57,7 @@ class AssessmentJourneyStepper extends StatelessComponent {
   }
 
   Component _stage(AssessmentStage stage) {
-    final label = _displayLabel(stage.key, stage.title);
+    final label = displayLabel(stage.key, stage.title);
     final selectedKey = selectedStageKey ?? record.currentStageKey;
     final isSelected = stage.key == selectedKey;
     final state = stage.isComplete
@@ -115,11 +115,14 @@ class AssessmentJourneyStepper extends StatelessComponent {
     ]);
   }
 
-  static String _displayLabel(String key, String serverLabel) => switch (key) {
+  /// Client-side step labels. The backend keys are the contract; the label for
+  /// `ai_explanation` follows the step-4 redesign (research question review),
+  /// so the stepper, the breadcrumb and the step heading agree.
+  static String displayLabel(String key, String serverLabel) => switch (key) {
     'select_property' => 'Select property',
     'business_requirements' => 'Business preferences',
     'location_evidence' => 'Location evidence',
-    'ai_explanation' => 'AI explanation',
+    'ai_explanation' => 'Question review',
     'assessment_report' => 'Assessment report',
     _ => serverLabel,
   };

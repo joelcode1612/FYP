@@ -149,9 +149,17 @@ const activity = {
   // Headless verification of what actually rendered (the image tool dedupes
   // identical screenshots, so text assertions are the reliable evidence).
   const text = await page.evaluate(() => document.body.innerText);
+  const pickerInfo = await page.evaluate(() => {
+    const el = document.querySelector('[data-testid="saved-assessment-select"]');
+    return el ? { tag: el.tagName, options: el.options.length, disabled: el.disabled } : null;
+  });
   const checks = {
     'heading + breadcrumb': text.includes('Activity history') && text.includes('Review portal'),
-    'picker card': text.includes('Selected assessment'),
+    'heading actions removed': !text.includes('Open M2 questionnaire') &&
+      !text.includes('Refresh saved activity') && !text.includes('Back to report'),
+    'picker is native select': pickerInfo?.tag === 'SELECT' && pickerInfo.options >= 1,
+    'picker has real options': pickerInfo ? pickerInfo.options === 3 : false,
+    'no legacy unavailable card': !text.includes('Saved assessment activity unavailable'),
     'identity card': text.includes('CURRENT ASSESSMENT') && text.includes('Recorded activities'),
     'filter card': text.includes('Filter activities') && text.includes('Narrow the history'),
     'coverage card': text.includes('Workflow history coverage'),
