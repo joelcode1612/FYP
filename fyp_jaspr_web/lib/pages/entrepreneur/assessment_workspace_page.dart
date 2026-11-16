@@ -8,9 +8,6 @@ import '../../components/dashboard_kit.dart' show SitewiseDialog;
 import '../../components/ui.dart';
 import '../../data/app_locator.dart';
 import '../../data/assessment_api.dart';
-// assessmentStamp / assessmentStampOrNull — used by the stage cards, progress
-// panel and evidence view below.
-import '../../data/assessment_format.dart';
 import '../../data/dev_auth_bypass.dart';
 
 /// The web decision-support workflow, in five persisted stages.
@@ -1562,7 +1559,14 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
         if (selected.key == 'assessment_report')
           ..._reportStep(record, selected),
 
-        _stepFooter(record, selected),
+        // Steps 1 and 2 carry their own forward action (the saved-property
+        // button and the questionnaire footer), so the shared footer only
+        // appears where the reference shows one: steps 3 and 4, plus a back
+        // link on step 5.
+        if (selected.key == 'location_evidence' ||
+            selected.key == 'ai_explanation' ||
+            selected.key == 'assessment_report')
+          _stepFooter(record, selected),
 
         p(classes: 'disclaimer', [
           Component.text(
@@ -1579,13 +1583,34 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
 
   // ------------------------------------------------- checkpoint step layouts
 
+  /// What each step is for, keyed by the backend's stage keys so the wording
+  /// and the stages can never drift apart.
+  static String _stageDescription(String stageKey) => switch (stageKey) {
+    'select_property' =>
+      'This assessment is bound to its property. Review it, then move on to '
+          'your business preferences.',
+    'business_requirements' =>
+      'Answer the preference questions — they shape how the location is '
+          'scored against your concept.',
+    'location_evidence' =>
+      'Review the measured catchment, accessibility and competitor evidence '
+          'for this property.',
+    'ai_explanation' =>
+      'Open the validated model explanation to see why this location scores '
+          'the way it does.',
+    'assessment_report' =>
+      'Assemble and review the full suitability report for this assessment.',
+    _ => 'Continue this assessment to move closer to your report.',
+  };
+
   /// The reference's per-step heading: icon tile, kicker, title, description.
   Component _stepHeading({
     required String kicker,
     required String title,
     required String description,
+    String icon = 'flag',
   }) => div(classes: 'asw-stephead', [
-    div(classes: 'asw-stephead__icon', [Icon('flag', size: 'sm')]),
+    div(classes: 'asw-stephead__icon', [Icon(icon, size: 'sm')]),
     div(classes: 'asw-stephead__copy', [
       p(classes: 'asw-stephead__kicker', [Component.text(kicker)]),
       h2(classes: 'asw-stephead__title', [Component.text(title)]),
@@ -1594,6 +1619,20 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
   ]);
 
   // ------------------------------------------------------------ step 1: saved
+
+  /// A panel head with the reference's icon tile in front of the title. The
+  /// tile is decoration only — the title still carries the meaning.
+  Component _panelHead({
+    required String icon,
+    required String title,
+    Component? trailing,
+  }) => div(classes: 'panel__head asw-phead', [
+    div(classes: 'asw-phead__title', [
+      span(classes: 'asw-phead__icon', [Icon(icon, size: 'sm')]),
+      span(classes: 'panel__title', [Component.text(title)]),
+    ]),
+    ?trailing,
+  ]);
 
   /// Step 1 in the reference's layout: the saved-property list with the
   /// assessment's bound property checked, then a continue button. Only the
@@ -1628,23 +1667,24 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
           final total = others.length + (bound == null ? 0 : 1);
 
           return section(classes: 'panel asw-inline', [
-            div(classes: 'panel__head', [
-              span(classes: 'panel__title', [
-                Component.text('Your saved properties'),
-              ]),
-              span(classes: 'small asw-muted', [
+            _panelHead(
+              icon: 'bookmark',
+              title: 'Your saved properties',
+              trailing: span(classes: 'small asw-muted', [
                 Component.text(
                   total == 0 ? 'None saved' : '1 of $total bound',
                 ),
               ]),
-            ]),
+            ),
             div(classes: 'panel__body stack stack--md', [
-              SearchInput(
-                label: 'Search saved properties',
-                placeholder: 'Search saved properties…',
-                ariaLabel: 'Search saved properties',
-                onInput: (value) => setState(() => _propSearch = value),
-              ),
+              div(classes: 'asw-search', [
+                SearchInput(
+                  label: 'Search saved properties',
+                  placeholder: 'Search saved properties…',
+                  ariaLabel: 'Search saved properties',
+                  onInput: (value) => setState(() => _propSearch = value),
+                ),
+              ]),
               if (bound != null) _savedPropertyRow(bound, bound: true),
               for (final item in others)
                 _savedPropertyRow(item.property!, bound: false),
@@ -1683,13 +1723,13 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
     CommercialProperty property, {
     required bool bound,
   }) => label(classes: 'asw-proprow${bound ? ' is-on' : ''}', [
+    // `checked`/`disabled` must go through the typed parameters: the component
+    // writes those two keys itself, so an entry in the attributes map is lost.
     input(
-      attributes: {
-        'type': 'radio',
-        'name': 'aswBoundProperty',
-        if (bound) 'checked': '',
-        if (!bound) 'disabled': '',
-      },
+      type: InputType.radio,
+      name: 'aswBoundProperty',
+      checked: bound,
+      disabled: !bound,
     ),
     span(classes: 'asw-proprow__thumb', [
       if (property.imageUrl != null && property.imageUrl!.isNotEmpty)
@@ -1753,6 +1793,7 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
     _stepHeading(
       kicker: 'Step 3 of 5',
       title: 'Findings & objectives',
+      icon: 'layers',
       description:
           'Review what the measured evidence says about this property and '
           'confirm it for the assessment.',
@@ -1771,11 +1812,7 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
         builder: (context, snapshot) {
           if (snapshot.connectionState != ConnectionState.done) {
             return section(classes: 'panel asw-inline', [
-              div(classes: 'panel__head', [
-                span(classes: 'panel__title', [
-                  Component.text('Location evidence'),
-                ]),
-              ]),
+              _panelHead(icon: 'analytics', title: 'Location evidence'),
               div(classes: 'panel__body stack stack--md', [
                 Skeleton(variant: 'row'),
                 Skeleton(variant: 'row', count: 4),
@@ -1786,11 +1823,7 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
           final payload = result?.ok == true ? result!.value : null;
           if (payload == null || !payload.available) {
             return section(classes: 'panel asw-inline', [
-              div(classes: 'panel__head', [
-                span(classes: 'panel__title', [
-                  Component.text('Location evidence'),
-                ]),
-              ]),
+              _panelHead(icon: 'analytics', title: 'Location evidence'),
               div(classes: 'panel__body', [
                 EmptyState(
                   title: 'Evidence unavailable',
@@ -1830,19 +1863,18 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
           }).toList();
 
           return section(classes: 'panel asw-inline', [
-            div(classes: 'panel__head', [
-              span(classes: 'panel__title', [
-                Component.text('Location evidence (${metrics.length})'),
-              ]),
-              Pill(
+            _panelHead(
+              icon: 'analytics',
+              title: 'Location evidence (${metrics.length})',
+              trailing: Pill(
                 '$measured of ${metrics.length} measured',
                 tone: missing == 0 ? 'success' : 'neutral',
               ),
-            ]),
+            ),
             div(classes: 'panel__body stack stack--md', [
               div(classes: 'asw-findtools', [
                 div(classes: 'tabs', [
-                  _evidenceFilterTab('All ($metrics.length)', 'all'),
+                  _evidenceFilterTab('All (${metrics.length})', 'all'),
                   _evidenceFilterTab('Measured ($measured)', 'measured'),
                   _evidenceFilterTab('Not measured ($missing)', 'missing'),
                 ]),
@@ -1923,9 +1955,10 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
   Component _stageDecisionPanel(AssessmentRecord record, AssessmentStage stage) {
     final canComplete = !stage.isComplete && !stage.isUnavailable && !_busy;
     return section(classes: 'panel asw-inline', [
-      div(classes: 'panel__head', [
-        span(classes: 'panel__title', [Component.text('Stage decision')]),
-        Pill(
+      _panelHead(
+        icon: 'target',
+        title: 'Stage decision',
+        trailing: Pill(
           stage.isComplete
               ? 'Complete'
               : stage.isUnavailable
@@ -1937,7 +1970,7 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
                   ? 'warning'
                   : 'action',
         ),
-      ]),
+      ),
       div(classes: 'panel__body stack stack--md', [
         div(classes: 'asw-objective', [
           p(classes: 'asw-objective__label', [
@@ -2016,6 +2049,7 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
       _stepHeading(
         kicker: 'Step 4 of 5',
         title: 'AI explanation',
+        icon: 'psychology',
         description:
             'Review which factors raised or lowered this location\'s score, '
             'and how strongly — from the validated model explanation.',
@@ -2046,15 +2080,14 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
           ];
           return div(classes: 'asw-2col asw-2col--aside', [
             section(classes: 'panel asw-inline', [
-              div(classes: 'panel__head', [
-                span(classes: 'panel__title', [
-                  Component.text('Explanation factors (${factors.length})'),
-                ]),
-                Pill(
+              _panelHead(
+                icon: 'psychology',
+                title: 'Explanation factors (${factors.length})',
+                trailing: Pill(
                   available ? 'Available' : 'Not available',
                   tone: available ? 'success' : 'warning',
                 ),
-              ]),
+              ),
               div(classes: 'panel__body stack stack--md', [
                 if (!available)
                   EmptyState(
@@ -2121,7 +2154,7 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
               ]),
             ]),
             div(classes: 'asw-aside', [
-              _asideBox('Review progress', [
+              _asideBox('monitoring', 'Review progress', [
                 div(classes: 'asw-kv', [
                   span([Component.text('Stages completed')]),
                   strong([
@@ -2146,8 +2179,16 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
                   ),
                 ]),
               ]),
-              _asideBox('Business preferences', _preferenceRows(record)),
-              _asideBox('Evidence context', _evidenceContextRows(record)),
+              _asideBox(
+                'tune',
+                'Business preferences',
+                _preferenceRows(record),
+              ),
+              _asideBox(
+                'analytics',
+                'Evidence context',
+                _evidenceContextRows(record),
+              ),
             ]),
           ]);
         },
@@ -2228,11 +2269,9 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
       )];
 
   /// One bordered aside box in the reference's right column.
-  Component _asideBox(String title, List<Component> children) =>
+  Component _asideBox(String icon, String title, List<Component> children) =>
       section(classes: 'panel asw-asidebox', [
-        div(classes: 'panel__head', [
-          span(classes: 'panel__title', [Component.text(title)]),
-        ]),
+        _panelHead(icon: icon, title: title),
         div(classes: 'panel__body stack stack--xs', children),
       ]);
 
@@ -2263,22 +2302,24 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
       _stepHeading(
         kicker: 'Step 5 of 5',
         title: 'Assessment report',
+        icon: 'description',
         description:
             'Review what the report contains, then open it to read, print or '
             'download. Nothing is generated until you open it.',
       ),
       div(classes: 'asw-2col asw-2col--aside', [
         section(classes: 'panel asw-inline', [
-          div(classes: 'panel__head', [
-            span(classes: 'panel__title', [Component.text('Report contents')]),
-            Pill(
+          _panelHead(
+            icon: 'description',
+            title: 'Report contents',
+            trailing: Pill(
               reportReady ? 'Report available' : 'Not available',
               tone: reportReady ? 'success' : 'warning',
             ),
-          ]),
+          ),
           div(classes: 'panel__body', [
             div(classes: 'table-scroll', [
-              table(classes: 'audit-table', [
+              table(classes: 'audit-table asw-reporttable', [
                 thead([
                   tr([
                     th([Component.text('Section')]),
@@ -2304,7 +2345,7 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
           ]),
         ]),
         div(classes: 'asw-aside', [
-          _asideBox('Review progress', [
+          _asideBox('monitoring', 'Review progress', [
             div(classes: 'asw-kv', [
               span([Component.text('Stages completed')]),
               strong([
@@ -2328,7 +2369,7 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
               ]),
             ]),
           ]),
-          _asideBox('Stage decision', [
+          _asideBox('fact_check', 'Stage decision', [
             p(classes: 'small asw-muted', [
               Component.text(
                 reportReady
@@ -2662,16 +2703,10 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
         .length;
     final progress = (answered / _questions.length * 100).round();
 
-    return section(classes: 'panel asw-inline', [
-      div(classes: 'panel__head', [
-        span(classes: 'panel__title', [
-          Component.text('Business preferences'),
-        ]),
-        span(classes: 'small asw-muted', [
-          Component.text('Property ${record.propertyId}'),
-        ]),
-      ]),
-      div(classes: 'asw-qlayout', [
+    // The reference puts the question navigator and the question card straight
+    // on the page (each with its own border), so the step bar above already
+    // names the step — no second panel head repeating "Business preferences".
+    return div(classes: 'asw-qlayout', [
         // Left: question navigator.
         aside(classes: 'asw-qnav', [
           div(classes: 'asw-qnav__head', [
@@ -2764,11 +2799,11 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
                 classes: 'asw-answer${_isPicked(q, token) ? ' is-on' : ''}',
                 [
                   input(
-                    attributes: {
-                      'type': q.kind == 'multi' ? 'checkbox' : 'radio',
-                      'name': 'aswQ${q.id}',
-                      if (_isPicked(q, token)) 'checked': '',
-                    },
+                    type: q.kind == 'multi'
+                        ? InputType.checkbox
+                        : InputType.radio,
+                    name: 'aswQ${q.id}',
+                    checked: _isPicked(q, token),
                     events: events(
                       onChange: (_) => setState(() {
                         _toggleAnswer(q, token);
@@ -2786,6 +2821,9 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
             div(classes: 'notice notice-warn', [
               Component.text(_answerError!),
             ]),
+          // Footer split like the reference: Previous on the left, the forward
+          // action (next question, or save-and-complete on the last one) on
+          // the right.
           div(classes: 'asw-qcard__footer', [
             div(classes: 'asw-qcard__group', [
               ActionButton(
@@ -2798,6 +2836,8 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
                         _answerError = null;
                       }),
               ),
+            ]),
+            div(classes: 'asw-qcard__group', [
               if (isLast)
                 ActionButton(
                   _busy ? 'Saving…' : 'Save and complete stage 2',
@@ -2806,6 +2846,7 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
               else
                 ActionButton(
                   'Next question',
+                  icon: 'arrow_forward',
                   onClick: () {
                     if (!_stepValid(q.kind, _answers[q.id])) {
                       setState(
@@ -2823,7 +2864,6 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
             ]),
           ]),
         ]),
-      ]),
     ]);
   }
 
@@ -3037,11 +3077,9 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
                 : 'checkpill',
             [
               input(
-                attributes: {
-                  'type': 'radio',
-                  'name': 'aswPropertyType',
-                  if (option == draft.propertyType) 'checked': '',
-                },
+                type: InputType.radio,
+                name: 'aswPropertyType',
+                checked: option == draft.propertyType,
                 events: events(
                   onChange: (_) => setState(() => draft.propertyType = option),
                 ),

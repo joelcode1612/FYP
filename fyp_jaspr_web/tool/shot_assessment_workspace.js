@@ -88,6 +88,68 @@ function stage(key, number, title, status, completedAt) {
         body: JSON.stringify({ assessment: record }),
       }),
     );
+    // Catalogue detail reads return the BARE row (no {ok, data} wrapper), as
+    // the real backend does — the saved-property resolver parses it directly.
+    await page.route('**/api/v1/catalog/properties/**', (route) => {
+      const url = new URL(route.request().url());
+      if (url.pathname.includes('/evidence')) return route.fallback();
+      const id = decodeURIComponent(url.pathname.split('/').pop());
+      const row = fixture.rows.find((r) => r.id === id);
+      if (!row) return route.fulfill({ status: 404, body: '{}' });
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(row),
+      });
+    });
+    // Step 1's saved-property list (the repository reads `saved[].property_ref`).
+    await page.route('**/api/v1/saved-properties/me', (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          saved: [
+            { property_ref: fixture.rows[1].id },
+            { property_ref: fixture.rows[2].id },
+            { property_ref: fixture.rows[3].id },
+          ],
+          unresolved: [],
+        }),
+      }),
+    );
+    // Step 4's persisted explanation (`{explanation: {...}}` envelope).
+    await page.route('**/api/v1/assessments/*/explanation', (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          explanation: {
+            property_id: prop.id,
+            assessment_id: record.assessment_id,
+            available: true,
+            model: 'pu',
+            model_version: 'expanded64',
+            explainer: 'TreeSHAP',
+            score_meaning:
+              'Relative suitability index from the trained P-vs-U model.',
+            research_only: true,
+            base_value: 0.42,
+            output: 0.61,
+            reconstructed: 0.61,
+            additivity_ok: true,
+            strongest_positive: [
+              { feature: 'pop_total_1km', contribution: 0.074 },
+              { feature: 'fnb_competitors_1000m', contribution: 0.051 },
+              { feature: 'nearest_transit_walk_m', contribution: 0.038 },
+            ],
+            strongest_negative: [
+              { feature: 'avg_household_income_1km', contribution: -0.029 },
+              { feature: 'parking_bays_500m', contribution: -0.017 },
+            ],
+          },
+        }),
+      }),
+    );
     // Stage 3's evidence read — same shape the real endpoint returns
     // (top-level payload; `available: false` would be the honest empty state).
     await page.route('**/api/v1/catalog/properties/**/evidence**', (route) =>
@@ -162,7 +224,8 @@ function stage(key, number, title, status, completedAt) {
       timeout: 30000,
     });
     await page.waitForSelector('.sw-assessment-journey', { timeout: 15000 });
-    await page.waitForTimeout(600);
+    // Long enough for the page-head letter-reveal animation to settle.
+    await page.waitForTimeout(1400);
     await page.screenshot({
       path: path.join(outdir, `workspace_checkpoint_${key}.png`),
       fullPage: true,

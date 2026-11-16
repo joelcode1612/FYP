@@ -34,9 +34,10 @@ class UserDetailPage extends StatefulComponent {
 /// Backend values are lowercase; the second element of each pair is the label.
 /// These are exactly `rbac.ALL_ROLES` and `rbac.ACCOUNT_STATUSES`.
 const List<(String, String)> _roles = [
-  ('entrepreneur', 'Entrepreneur'),
-  ('agent', 'Agent'),
   ('admin', 'Administrator'),
+  ('owner', 'Property Owner'),
+  ('agent', 'Agent'),
+  ('entrepreneur', 'Entrepreneur'),
 ];
 
 const List<(String, String)> _statuses = [
@@ -483,9 +484,10 @@ String _statusValue(String raw) {
 }
 
 String _pretty(String value) => switch (value) {
-  'entrepreneur' => 'Entrepreneur',
-  'agent' => 'Agent',
   'admin' => 'Administrator',
+  'owner' => 'Property Owner',
+  'agent' => 'Agent',
+  'entrepreneur' => 'Entrepreneur',
   'pending' => 'Pending',
   'active' => 'Active',
   'suspended' => 'Suspended',

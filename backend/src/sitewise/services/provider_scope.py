@@ -4,8 +4,12 @@ An Owner and an Agent reach the SAME operational records through *different*
 relationships, so "which properties may this account manage" can never be
 answered from a role name. It is resolved from the database:
 
-* an **owner** (canonical ``entrepreneur`` role) reaches the rows whose
+* an **owner** (canonical ``owner`` role) reaches the rows whose
   ``fyp.rental_properties.owner_user_id`` is their verified identity;
+* an **entrepreneur** reaches the rows it owns under the same predicate. The
+  role no longer *means* owner — the two are distinct — but accounts provisioned
+  before the role split own properties recorded against their identity, and the
+  ownership row is what authorises them, not the role name;
 * an **agent** reaches rows through ``public.agent_listing_assignment`` — a
   real foreign key to ``fyp.rental_properties.id`` — never through a name and
   never through ownership the agent does not hold;
