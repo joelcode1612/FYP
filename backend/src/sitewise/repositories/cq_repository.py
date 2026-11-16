@@ -99,6 +99,18 @@ class CqUnit:
         self.session.execute(update(db.effective).where(db.effective.c.session_id==sid).values(
             answer_event_id=None,state='NOT_SHOWN',revision=revision))
     def insert_receipt(self,**row): self.session.execute(insert(db.receipts).values(**row))
+    def paused(self,sid):
+        action=self.session.execute(select(db.lifecycle.c.action).where(db.lifecycle.c.session_id==sid)
+            .order_by(db.lifecycle.c.revision.desc()).limit(1)).scalar_one_or_none()
+        return action=='PAUSE'
+    def lifecycle_retry(self,sid,rid): return self.one(db.lifecycle,[db.lifecycle.c.session_id==sid,db.lifecycle.c.request_id==rid])
+    def insert_lifecycle(self,**row): self.session.execute(insert(db.lifecycle).values(**row))
+    def rendered(self,sid,pid): return self.one(db.renders,[db.renders.c.session_id==sid,db.renders.c.display_id==pid])
+    def render(self,**row): self.session.execute(insert(db.renders).values(**row).on_conflict_do_nothing())
+    def rejected_retry(self,sid,rid): return self.one(db.rejected,[db.rejected.c.session_id==sid,db.rejected.c.request_id==rid])
+    def reject_answer(self,**row): self.session.execute(insert(db.rejected).values(**row))
+    def insert_control(self,**row): self.session.execute(insert(db.controls).values(**row).on_conflict_do_nothing())
+    def control(self,sid): return self.one(db.controls,[db.controls.c.session_id==sid])
     def commit(self): self.session.commit()
 
 

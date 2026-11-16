@@ -3,7 +3,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+    model_config = SettingsConfigDict(env_file=(".env", ".env.local"), extra="ignore")
 
     # --- Databases ---------------------------------------------------------
     # Application database (user profiles, saved properties, preferences).
@@ -49,6 +49,8 @@ class Settings(BaseSettings):
     m2_expected_database: str = 'Dss'
     # CQ engineering adapter is separate from scientific/fielding authorization.
     cq_runtime_enabled: bool = False
+    # No fallback to property/analytics or superuser connections for reporting.
+    ee01_database_url: SecretStr = SecretStr('')
 
     # Separate staging bridge; does not enable the unresolved BDJ/M2 write router.
     project1_cp07_enabled: bool = False

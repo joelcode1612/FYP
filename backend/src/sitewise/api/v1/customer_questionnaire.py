@@ -1,5 +1,6 @@
 """Authenticated CQ application API; production fielding is default-held."""
 from typing import Annotated
+from functools import lru_cache
 from uuid import UUID
 
 from fastapi import APIRouter,Depends,HTTPException,Response
@@ -42,6 +43,37 @@ def get_cq_withdrawal_service():
 WithdrawalService=Annotated[object,Depends(get_cq_withdrawal_service)]
 
 
+def get_ee01_service():
+    from sqlalchemy.engine import make_url
+    from sitewise.services.ee01_service import Ee01Service
+    raw=settings.ee01_database_url.get_secret_value()
+    if not raw:
+        raise HTTPException(503,detail={'code':'EE01_DATABASE_TARGET_UNVERIFIED'})
+    url=make_url(raw)
+    if url.drivername!='postgresql+psycopg2' or url.database!=settings.m2_expected_database or url.username!='p1_ee01_runtime':
+        raise HTTPException(503,detail={'code':'EE01_DATABASE_TARGET_UNVERIFIED'})
+    return Ee01Service(_ee01_engine(raw))
+
+
+@lru_cache(maxsize=2)
+def _ee01_engine(raw):
+    from sqlalchemy import create_engine
+    return create_engine(raw,hide_parameters=True,pool_pre_ping=True)
+
+
+Ee01=Annotated[object,Depends(get_ee01_service)]
+
+
+@router.get('/assessments/{assessment_id}/campaigns/{campaign_id}/measurements/{snapshot_id}')
+def measurement_readback(assessment_id:UUID,campaign_id:UUID,snapshot_id:UUID,user:Owner,service:Ee01,response:Response):
+    return call(response,lambda:service.read(user.user_id,assessment_id,campaign_id,snapshot_id))
+
+
+@router.get('/assessments/{assessment_id}/campaigns/{campaign_id}/measurements/{snapshot_id}/report-readback')
+def measurement_report_readback(assessment_id:UUID,campaign_id:UUID,snapshot_id:UUID,user:Owner,service:Ee01,response:Response):
+    return call(response,lambda:service.report_readback(user.user_id,assessment_id,campaign_id,snapshot_id))
+
+
 def call(response,operation):
     response.headers['Cache-Control']='no-store'
     try: return operation()
@@ -73,6 +105,7 @@ class Answer(Version):
     slot_id:str=Field(max_length=100)
     value:str|list[str]|None
 class Submit(Version): request_id:UUID
+class Rendered(Version): display_id:UUID
 
 
 @router.get('/availability')
@@ -144,6 +177,24 @@ def answer(session_id:UUID,body:Answer,user:Actor,service:Service,response:Respo
 def submit(session_id:UUID,body:Submit,user:Actor,service:Service,response:Response):
     return call(response,lambda:service.submit(session_id,user.user_id,revision=body.expected_revision,
         manifest_hash=body.manifest_hash,request_id=body.request_id))
+
+
+@router.post('/sessions/{session_id}/pause')
+def pause(session_id:UUID,body:Submit,user:Actor,service:Service,response:Response):
+    return call(response,lambda:service.lifecycle(session_id,user.user_id,action='PAUSE',
+        revision=body.expected_revision,manifest_hash=body.manifest_hash,request_id=body.request_id))
+
+
+@router.post('/sessions/{session_id}/resume')
+def resume(session_id:UUID,body:Submit,user:Actor,service:Service,response:Response):
+    return call(response,lambda:service.lifecycle(session_id,user.user_id,action='RESUME',
+        revision=body.expected_revision,manifest_hash=body.manifest_hash,request_id=body.request_id))
+
+
+@router.post('/sessions/{session_id}/rendered')
+def rendered(session_id:UUID,body:Rendered,user:Actor,service:Service,response:Response):
+    return call(response,lambda:service.rendered(session_id,user.user_id,revision=body.expected_revision,
+        manifest_hash=body.manifest_hash,display_id=body.display_id))
 
 
 @router.get('/sessions/{session_id}/history')

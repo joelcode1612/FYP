@@ -29,3 +29,11 @@ effective=table('cq_effective_answers',[('session_id',Uuid),('slot_id',String(10
     ('state',String(32)),('context_digest',String(64)),('revision',Integer)],('session_id','slot_id'))
 receipts=table('cq_submission_receipts',[('id',Uuid),('session_id',Uuid),('request_id',Uuid),('request_hash',String(64)),
     ('revision',Integer),('receipt_hash',String(64)),('payload_json',JSONB)])
+
+lifecycle=table('cq_lifecycle_events',[('id',Uuid),('session_id',Uuid),('revision',Integer),
+    ('request_id',Uuid),('request_hash',String(64)),('action',String(8))])
+renders=table('cq_render_events',[('id',Uuid),('session_id',Uuid),('display_id',Uuid),('slot_id',String(100)),('revision',Integer)])
+rejected=table('cq_rejected_answer_events',[('id',Uuid),('session_id',Uuid),('display_id',Uuid),('revision',Integer),
+    ('request_id',Uuid),('request_hash',String(64)),('slot_id',String(100)),('raw_value',JSONB),('reason',String(100))])
+controls=table('cq_session_controls',[('session_id',Uuid),('research_mode',String(32)),('eligibility',String(24)),
+    ('qualification_version',String),('source_json',JSONB),('source_hash',String(64))],('session_id',))

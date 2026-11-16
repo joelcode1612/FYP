@@ -84,6 +84,22 @@ def lab():
         def do_GET(self):
             self.send_response(200);self.send_header('Content-Type','application/json');self.end_headers()
             self.wfile.write(json.dumps({'keys':[jwk]}).encode())
+        def do_POST(self):
+            # Native tests are uninstalled by Flutter at completion. Preserve
+            # captures before teardown through this private test-only server.
+            try:
+                jwt.decode(self.headers.get('Authorization','').removeprefix('Bearer '),key.public_key(),
+                           algorithms=['ES256'],audience='authenticated',issuer='http://cq.test/auth/v1')
+                name=self.path.removeprefix('/capture/')
+                if name not in {'cq_paused','cq_resumed','cq_receipt','cq_before_consent'}: raise ValueError()
+                size=int(self.headers['Content-Length'])
+                if not 0<size<5000000: raise ValueError()
+                data=self.rfile.read(size)
+                if not data.startswith(b'\x89PNG'): raise ValueError()
+                (Path(os.environ['CQ_EVIDENCE'])/(name+'.png')).write_bytes(data)
+                self.send_response(204);self.end_headers()
+            except (ValueError,jwt.PyJWTError):
+                self.send_response(403);self.end_headers()
         def log_message(self,*args): pass
     keys=ThreadingHTTPServer(('127.0.0.1',0),Keys);kt=threading.Thread(target=keys.serve_forever,daemon=True);kt.start()
     os.environ.update(SUPABASE_URL='http://cq.test',SUPABASE_JWKS_URL=f'http://127.0.0.1:{keys.server_port}/keys')
@@ -108,7 +124,8 @@ def lab():
     assert server.started
     client=httpx.Client(base_url=base+'/api/v1/cq',timeout=20)
     state={'db':db,'app':app,'owner':owner,'respondent':respondent,'other':other,'suspended':suspended,
-        'iid':iid,'case':'setup','traces':[],'base':base,'readbacks':[]}
+        'iid':iid,'case':'setup','traces':[],'base':base,'readbacks':[],
+        'capture_base':f'http://127.0.0.1:{keys.server_port}'}
     def token(uid):
         now=int(time.time())
         return jwt.encode({'sub':str(uid),'email':f'{uid}@test.invalid','email_verified':True,
@@ -134,7 +151,7 @@ def lab():
                 elif data.get('contract_version')=='cq-release/1':
                     assert c.execute(text('SELECT manifest_json FROM cq_manifest_releases WHERE id=:id'),{'id':data['release_id']}).scalar_one()==data['manifest']
                     used=['cq_manifest_releases','cq_bank_versions','cq_question_assignments'];readback={'kind':'INDEPENDENT_MANIFEST_READBACK','result':'PASS'}
-                elif 'assessment_id' in data:
+                elif 'assessment_id' in data and not data.get('contract_version'):
                     assert str(c.execute(text('SELECT assessment_id FROM cq_campaigns WHERE id=:id'),{'id':data['id']}).scalar_one())==data['assessment_id']
                     used=['m2_assessments','cq_campaigns'];readback={'kind':'INDEPENDENT_CAMPAIGN_READBACK','result':'PASS'}
                 elif 'respondent_id' in data:
@@ -308,8 +325,8 @@ def test_CQ06_auth_ownership_consent_and_forbidden_presentation(lab):
     d=post(lab,s,'presentations')
     data={'request_id':str(uuid4()),'display_id':d['presentation']['display_id'],'slot_id':'Q01','value':['LIVE','NEVER']}
     post(lab,d,'answers',data,422)
-    post(lab,d,'answers',{**data,'value':['MADE_UP']},422)
-    post(lab,d,'answers',{**data,'value':None},422)
+    post(lab,d,'answers',{**data,'request_id':str(uuid4()),'value':['MADE_UP']},422)
+    post(lab,d,'answers',{**data,'request_id':str(uuid4()),'value':None},422)
     post(lab,d,'answers',{**data,'value':['LIVE'],'manifest_hash':'0'*64},409)
     post(lab,d,'answers',{**data,'value':['LIVE'],'expected_revision':999},409)
     post(lab,d,'answers',{**data,'value':['LIVE'],'owner_id':str(lab['owner'])},422)
@@ -453,12 +470,30 @@ def test_CQ14_Flutter_FastAPI_widget_exchange(lab):
     # verifies real signed HTTP without weakening packaged auth/test-access guards.
     print('CQ_WIDGET_SCOPE='+('EXPLICIT_TEST_REPOSITORY' if injected else 'DEFAULT_PRIVATE_COMPOSITION'),flush=True)
     defines.write_text(json.dumps({'API_BASE_URL':lab['base'],'CQ_TEST_BASE':lab['base'],
-        'CQ_TEST_TOKEN':env['CQ_TEST_TOKEN'],'SITEWISE_DEV_AUTH_BYPASS':not injected,
+        'CQ_TEST_TOKEN':env['CQ_TEST_TOKEN'],'CQ_TEST_SESSION':s['session_id'],
+        'CQ_TEST_C1_SESSION':c1['session_id'],'CQ_CAPTURE_BASE':lab['capture_base'],'SITEWISE_DEV_AUTH_BYPASS':not injected,
         'SITEWISE_ISOLATED_CQ_TEST':not injected}),encoding='utf-8')
+    native=os.environ.get('CQ_NATIVE_DEVICE')
+    target='test/cq_runtime/cq_api_widget_test.dart'
+    device_args=[]
+    if native:
+        adb=Path(os.environ['LOCALAPPDATA'])/'Android/Sdk/platform-tools/adb.exe'
+        subprocess.run([str(adb),'-s',native,'reverse','tcp:'+lab['base'].rsplit(':',1)[1],
+            'tcp:'+lab['base'].rsplit(':',1)[1]],check=True,capture_output=True)
+        capture_port=lab['capture_base'].rsplit(':',1)[1]
+        subprocess.run([str(adb),'-s',native,'reverse','tcp:'+capture_port,'tcp:'+capture_port],check=True,capture_output=True)
+        env['SITEWISE_ISOLATED_DEVICE_TEST']='1'
+        target='integration_test/part_two_customer_test.dart';device_args=['-d',native]
     try:
-        outcome=subprocess.run([str(root/'.fvm/flutter_sdk/bin/flutter.bat'),'test','--no-pub','test/cq_runtime/cq_api_widget_test.dart',
-            '--dart-define-from-file='+str(defines)],
-            cwd=root/'fyp_mobile_app',env=env,capture_output=True,text=True,encoding='utf-8',timeout=420)
+        outcome=subprocess.run([str(root/'.fvm/flutter_sdk/bin/flutter.bat'),'test','--no-pub',target,
+            *device_args,'--dart-define-from-file='+str(defines)],
+            cwd=root/'fyp_mobile_app',env=env,capture_output=True,text=True,encoding='utf-8',timeout=900)
+        if native:
+            for name in ('cq_paused','cq_resumed','cq_receipt','cq_before_consent'):
+                shot=subprocess.run([str(adb),'-s',native,'exec-out','run-as','com.example.fyp.parttwotest',
+                    'cat','files/cq_evidence/'+name+'.png'],capture_output=True)
+                if shot.returncode==0 and shot.stdout.startswith(b'\x89PNG'):
+                    (Path(os.environ['CQ_EVIDENCE'])/(name+'.png')).write_bytes(shot.stdout)
     finally: defines.unlink(missing_ok=True)
     (Path(os.environ['CQ_EVIDENCE'])/'flutter_api_widget.log').write_text(outcome.stdout+outcome.stderr,encoding='utf-8')
     assert outcome.returncode==0,outcome.stdout+outcome.stderr
@@ -474,11 +509,11 @@ def test_CQ14_Flutter_FastAPI_widget_exchange(lab):
 
 def test_CQ15_registered_routes_and_auth_dependency_execution(lab):
     paths={p:ops for p,ops in lab['app'].openapi()['paths'].items() if p.startswith('/api/v1/cq')}
-    assert sum(len(ops) for ops in paths.values())==14
+    assert sum(len(ops) for ops in paths.values())==19
     for path,ops in paths.items():
         for method in ops:
             concrete=path
-            for param in ('release_id','assessment_id','campaign_id','session_id'):
+            for param in ('release_id','assessment_id','campaign_id','session_id','snapshot_id'):
                 concrete=concrete.replace('{'+param+'}',str(uuid4()))
             lab['request'](method.upper(),concrete.removeprefix('/api/v1/cq'),401,uid=None,
                 **({'json':{}} if method=='post' else {}))
@@ -587,3 +622,16 @@ def test_CQ22_english_only_change_does_not_authorize_invalid_locale_manifests(la
         c.execute(assessments.insert().values(id=aid,owner_user_id=lab['owner'],instrument_id=lab['iid'],revision=0))
     refused=lab['request']('POST',f'/assessments/{aid}/campaign',409,uid=lab['owner'],json={'release_id':rid})
     assert refused['detail']['code']=='CQ_QUESTION_AUTHORITY_INVALID'
+
+
+from pause_checks import (test_CQ23_pause_resume_same_session_idempotency_and_storage,
+    test_CQ24_pause_write_failure_rolls_back_and_withdraw_is_available,
+    test_CQ25_render_ack_not_prepared_delivery_and_invalid_audit)
+
+from ee01_checks import (test_EE01_persisted_cutoff_reference_security_and_held_report,
+    test_EE02_zero_denominator_and_snapshot_transaction_rollback,
+    test_EE03_multiselect_distinct_units_and_feature_denominators)
+
+from persistence_verification_checks import (
+    test_VP01_Q01_Q13_revisions_pause_submit_to_saved_EE_context,
+    test_VP02_independent_eligibility_vs_area_and_termination_evidence)

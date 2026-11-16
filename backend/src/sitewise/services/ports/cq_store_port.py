@@ -8,6 +8,7 @@ class CqGrant:
     scope: str
     receipt: str
     production_fielding_authorized: bool = False
+    measurement_context: dict | None = None
 
 
 class CqAuthorityPort(Protocol):

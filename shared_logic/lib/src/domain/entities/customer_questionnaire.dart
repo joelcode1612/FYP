@@ -68,7 +68,7 @@ class CqSession {
         !_hash.hasMatch(d['manifest_hash'] as String? ?? '') ||
         d['revision'] is! int ||
         (d['revision'] as int) < 0 ||
-        !['ACTIVE', 'SUBMITTED', 'WITHDRAWN'].contains(d['status']) ||
+        !['ACTIVE', 'PAUSED', 'SUBMITTED', 'WITHDRAWN'].contains(d['status']) ||
         d['consented'] is! bool ||
         d['can_submit'] is! bool ||
         !['EN', 'BM'].contains(d['locale'])) {
@@ -90,8 +90,11 @@ class CqSession {
     }
     final questions = (m['questions'] as List).cast<Map<String, dynamic>>();
     final policy = m['test_placement'];
-    final extended = allowIsolatedTesting && d['execution_scope'] == 'ISOLATED_TEST' &&
-        policy == 'isolated-last/1' && questions.length == 14 &&
+    final extended =
+        allowIsolatedTesting &&
+        d['execution_scope'] == 'ISOLATED_TEST' &&
+        policy == 'isolated-last/1' &&
+        questions.length == 14 &&
         questions.last['id'] == 'Q14' &&
         _uuid.hasMatch(questions.last['version'] as String? ?? '') &&
         questions.last['required_for_answer'] == false &&
@@ -116,11 +119,18 @@ class CqSession {
           codes.any((c) => labels[c] is! String)) {
         throw const FormatException('Invalid CQ codebook.');
       }
-      if (extended && i == 13 &&
-          (q['option_version'] != cqDigest([for (final code in codes) [code, labels[code]]]) ||
-           (q['stimulus_text'] as String).trim().isEmpty ||
-           q['type'] != 'single_select' || q['required_for_presentation'] != true)) {
-        throw const FormatException('Invalid isolated question or option version.');
+      if (extended &&
+          i == 13 &&
+          (q['option_version'] !=
+                  cqDigest([
+                    for (final code in codes) [code, labels[code]],
+                  ]) ||
+              (q['stimulus_text'] as String).trim().isEmpty ||
+              q['type'] != 'single_select' ||
+              q['required_for_presentation'] != true)) {
+        throw const FormatException(
+          'Invalid isolated question or option version.',
+        );
       }
       final features = (q['feature_ids'] as List).cast<String>();
       if (features.isEmpty) {

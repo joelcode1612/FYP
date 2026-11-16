@@ -81,6 +81,9 @@ class ApiCustomerQuestionnaireRepository {
       'presentations': {'edit_slot_id'},
       'answers': {'request_id', 'display_id', 'slot_id', 'value'},
       'submit': {'request_id'},
+      'pause': {'request_id'},
+      'resume': {'request_id'},
+      'rendered': {'display_id'},
     };
     if (!fields.containsKey(action) ||
         body.keys.any((k) => !fields[action]!.contains(k))) {
@@ -125,6 +128,12 @@ class ApiCustomerQuestionnaireRepository {
   });
   Future<CqSession> submit(CqSession s, String requestId) =>
       mutate(s, 'submit', {'request_id': requestId});
+  Future<CqSession> pause(CqSession s, String requestId) =>
+      mutate(s, 'pause', {'request_id': requestId});
+  Future<CqSession> resume(CqSession s, String requestId) =>
+      mutate(s, 'resume', {'request_id': requestId});
+  Future<CqSession> rendered(CqSession s) =>
+      mutate(s, 'rendered', {'display_id': s.presentation!['display_id']});
   Future<Map<String, dynamic>> withdraw(CqSession s, String requestId) async {
     final d = await client.post('/api/v1/cq/sessions/${s.id}/withdraw', {
       ...s.version,

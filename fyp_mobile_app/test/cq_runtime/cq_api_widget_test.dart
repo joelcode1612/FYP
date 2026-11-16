@@ -21,6 +21,7 @@ String? cqTestValue(String key) {
     'CQ_TEST_TOKEN': String.fromEnvironment('CQ_TEST_TOKEN'),
     'CQ_TEST_SESSION': String.fromEnvironment('CQ_TEST_SESSION'),
     'CQ_TEST_C1_SESSION': String.fromEnvironment('CQ_TEST_C1_SESSION'),
+    'CQ_CAPTURE_BASE': String.fromEnvironment('CQ_CAPTURE_BASE'),
   };
   final value = compiled[key];
   return value != null && value.isNotEmpty ? value : Platform.environment[key];
@@ -57,8 +58,51 @@ Future<T> pumpNetwork<T>(
   return value as T;
 }
 
+bool _surfaceConverted = false;
+
+Future<void> nativeCapture(WidgetTester tester, String name) async {
+  final binding = WidgetsBinding.instance;
+  if (binding is! IntegrationTestWidgetsFlutterBinding || !Platform.isAndroid) {
+    return;
+  }
+  if (!_surfaceConverted) {
+    await binding.convertFlutterSurfaceToImage();
+    _surfaceConverted = true;
+  }
+  await tester.pump();
+  final bytes = await binding.takeScreenshot(name);
+  final folder = Directory(
+    '/data/user/0/com.example.fyp.parttwotest/files/cq_evidence',
+  );
+  folder.createSync(recursive: true);
+  File('${folder.path}/$name.png').writeAsBytesSync(bytes);
+  final base = cqTestValue('CQ_CAPTURE_BASE');
+  if (base != null) {
+    await tester.runAsync(() async {
+      final client = HttpClient();
+      try {
+        final request = await client.postUrl(Uri.parse('$base/capture/$name'));
+        request.headers.set(
+          'Authorization',
+          'Bearer ${cqTestValue('CQ_TEST_TOKEN')}',
+        );
+        request.contentLength = bytes.length;
+        request.add(bytes);
+        final response = await request.close();
+        expect(response.statusCode, 204);
+        await response.drain<void>();
+      } finally {
+        client.close(force: true);
+      }
+    });
+  }
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  setUp(() {
+    _surfaceConverted = false;
+  });
   // This explicitly isolated test needs actual loopback HTTP, not the default
   // flutter_test network interceptor. No production server address is accepted.
   HttpOverrides.global = null;
@@ -113,12 +157,21 @@ void main() {
       }
       final vm = container.read(cqViewModelProvider(sid));
       Future<void> settle() async {
-        for (var i = 0; i < 300; i++) {
+        var stable = 0;
+        for (var i = 0; i < 600; i++) {
           await tester.runAsync(
             () => Future<void>.delayed(const Duration(milliseconds: 20)),
           );
           await tester.pump();
-          if (!vm.busy && (vm.session != null || vm.error != null)) break;
+          final p = vm.session?.presentation;
+          final ready =
+              !vm.busy &&
+              (vm.session != null || vm.error != null) &&
+              (p == null ||
+                  vm.session?.data['render_ack_version'] != 'cq-render/1' ||
+                  p['rendered'] == true);
+          stable = ready ? stable + 1 : 0;
+          if (stable >= 3) break;
         }
         await tester.pumpAndSettle();
         expect(vm.busy, isFalse);
@@ -141,28 +194,43 @@ void main() {
       final previewDir = Platform.environment['CQ_PREVIEW_EVIDENCE'];
       if (previewDir != null) {
         await tester.runAsync(() async {
-          final font = await File(Platform.environment['CQ_PREVIEW_FONT']!).readAsBytes();
-          await (FontLoader('PreviewText')..addFont(Future.value(ByteData.sublistView(font)))).load();
+          final font = await File(
+            Platform.environment['CQ_PREVIEW_FONT']!,
+          ).readAsBytes();
+          await (FontLoader(
+            'PreviewText',
+          )..addFont(Future.value(ByteData.sublistView(font)))).load();
         });
       }
       final boundary = GlobalKey();
       Future<void> capture(String name) async {
         if (previewDir == null) return;
         await tester.runAsync(() async {
-        final image = await (boundary.currentContext!.findRenderObject() as RenderRepaintBoundary).toImage();
-        final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
-        await File('$previewDir/$name.png').writeAsBytes(bytes!.buffer.asUint8List());
-        image.dispose();
+          final image =
+              await (boundary.currentContext!.findRenderObject()
+                      as RenderRepaintBoundary)
+                  .toImage();
+          final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
+          await File(
+            '$previewDir/$name.png',
+          ).writeAsBytes(bytes!.buffer.asUint8List());
+          image.dispose();
         });
       }
+
       await tester.pumpWidget(
-        RepaintBoundary(key: boundary, child: UncontrolledProviderScope(
-          container: container,
-          child: MaterialApp(
-            theme: previewDir == null ? null : ThemeData(fontFamily: 'PreviewText'),
-            home: Scaffold(body: CqSessionPage(sessionId: sid)),
+        RepaintBoundary(
+          key: boundary,
+          child: UncontrolledProviderScope(
+            container: container,
+            child: MaterialApp(
+              theme: previewDir == null
+                  ? null
+                  : ThemeData(fontFamily: 'PreviewText'),
+              home: Scaffold(body: CqSessionPage(sessionId: sid)),
+            ),
           ),
-        )),
+        ),
       );
       await settle();
       await tap(const Key('cq-consent'));
@@ -176,6 +244,19 @@ void main() {
         final exact = (s.question(step.$1)['wording'] as Map)['EN'] as String;
         expect(find.text(exact), findsOneWidget);
         expect(s.manifest, original.manifest);
+        if (step.$1 == 'Q02') {
+          await tap(const Key('cq-pause'));
+          expect(vm.session!.data['status'], 'PAUSED');
+          expect(find.byKey(const Key('cq-submit')), findsNothing);
+          await nativeCapture(tester, 'cq_paused');
+          await pumpNetwork(tester, vm.load);
+          await tester.pump();
+          expect(vm.session!.data['status'], 'PAUSED');
+          await tap(const Key('cq-resume'));
+          expect(vm.session!.data['session_id'], sid);
+          expect(vm.session!.presentation!['slot_id'], 'Q02');
+          await nativeCapture(tester, 'cq_resumed');
+        }
         if (step.$1 == 'Q04') await capture('before-extra');
         await tap(ValueKey('cq-option-${step.$2}'));
         await tap(const Key('cq-answer'));
@@ -206,10 +287,11 @@ void main() {
       await tap(const Key('cq-submit'));
       expect(find.byKey(const Key('cq-submitted')), findsOneWidget);
       await capture('receipt');
+      await nativeCapture(tester, 'cq_receipt');
       final saved = await pumpNetwork(tester, () => repo.read(sid));
       expect(saved.data['receipt'], vm.session!.data['receipt']);
       expect(saved.data['status'], 'SUBMITTED');
-      print(
+      debugPrint(
         'Verified real HTTP manifest ${saved.manifestHash}; saved receipt ${saved.data['receipt']['receipt_id']}.',
       );
       await tester.pumpWidget(const SizedBox.shrink());
@@ -250,12 +332,21 @@ void main() {
       }
       final vm = container.read(cqViewModelProvider(sid));
       Future<void> settle() async {
-        for (var i = 0; i < 300; i++) {
+        var stable = 0;
+        for (var i = 0; i < 600; i++) {
           await tester.runAsync(
             () => Future<void>.delayed(const Duration(milliseconds: 20)),
           );
           await tester.pump();
-          if (!vm.busy && (vm.session != null || vm.error != null)) break;
+          final p = vm.session?.presentation;
+          final ready =
+              !vm.busy &&
+              (vm.session != null || vm.error != null) &&
+              (p == null ||
+                  vm.session?.data['render_ack_version'] != 'cq-render/1' ||
+                  p['rendered'] == true);
+          stable = ready ? stable + 1 : 0;
+          if (stable >= 3) break;
         }
         await tester.pumpAndSettle();
         expect(vm.busy, isFalse);
@@ -288,19 +379,7 @@ void main() {
         reason: 'Native questionnaire source did not finish loading.',
       );
       expect(identical(vm, container.read(cqViewModelProvider(sid))), isTrue);
-      final binding = WidgetsBinding.instance;
-      if (binding is IntegrationTestWidgetsFlutterBinding &&
-          Platform.isAndroid) {
-        await binding.convertFlutterSurfaceToImage();
-        await tester.pump();
-        final bytes = await binding.takeScreenshot('cq_before_consent');
-        File(
-          '${Directory.systemTemp.path}/cq_before_consent.png',
-        ).writeAsBytesSync(bytes);
-        print(
-          'Native CQ consent screen captured; revision ${vm.session!.revision}.',
-        );
-      }
+      await nativeCapture(tester, 'cq_before_consent');
       await tap(const Key('cq-consent'));
       final presented = <String>[];
       var stimuli = 0;
@@ -338,7 +417,7 @@ void main() {
       expect(find.byKey(const Key('cq-submitted')), findsOneWidget);
       final saved = await pumpNetwork(tester, () => repo.read(sid));
       expect(saved.data['receipt'], vm.session!.data['receipt']);
-      print(
+      debugPrint(
         'C1 BM: 14 distinct question cells, five delivered test stimuli, receipt ${saved.data['receipt']['receipt_id']}.',
       );
       await tester.pumpWidget(const SizedBox.shrink());

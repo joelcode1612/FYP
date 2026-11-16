@@ -2,6 +2,8 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:panorama_viewer/panorama_viewer.dart';
+import 'package:shared_logic/shared_logic.dart'
+    show VirtualTour, VirtualTourStatus, CaptureTargetDataSource;
 
 import '../../../core/theme/sitewise_theme.dart';
 import '../../../core/utils/pano_bytes.dart';

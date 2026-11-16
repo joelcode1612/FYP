@@ -88,6 +88,26 @@ class CustomerQuestionnaireService:
             if locale not in m['locales']: raise CqRefused('CQ_LOCALE_NOT_AUTHORIZED',422)
             session=unit.create_session(campaign,actor,locale)
             if session['locale']!=locale: raise CqRefused('CQ_SESSION_ALREADY_PINNED_TO_LOCALE')
+            if g.measurement_context is not None:
+                context=dict(g.measurement_context)
+                if (g.scope!='ISOLATED_TEST' or context.get('source_class')!='SYNTHETIC_FIXTURE'
+                    or context.get('research_mode') not in {'COGNITIVE_PRETEST','CUSTOMER_DEMAND_SURVEY','DEVELOPER_PREVIEW'}
+                    or context.get('eligibility') not in {'ELIGIBLE','INELIGIBLE','UNRESOLVED'}
+                    or not context.get('qualification_version') or not context.get('receipt')):
+                    raise CqRefused('CQ_QUALIFICATION_SOURCE_UNVERIFIED',503)
+                context.update(session_id=str(session['id']),assessment_id=str(campaign['assessment_id']),
+                    campaign_id=str(cid),owner_user_id=str(campaign['owner_user_id']),respondent_user_id=str(actor),
+                    manifest_hash=manifest_hash,instrument_version=m['version'],bank_version=m['bank_version'],
+                    routing_version=m['policy_version'],consent_version=m['consent_version'],
+                    consent_hash=digest(m['consent_text'][locale]))
+                existing=unit.control(session['id'])
+                if existing and existing['source_hash']!=digest(context):
+                    raise CqRefused('CQ_QUALIFICATION_SOURCE_CHANGED')
+                if not existing:
+                    unit.insert_control(session_id=session['id'],research_mode=context['research_mode'],
+                        eligibility=context['eligibility'],qualification_version=context['qualification_version'],
+                        source_json=context,source_hash=digest(context))
+            session['_paused']=unit.paused(session['id'])
             result=self._view(unit,session,release,m,p,g);unit.commit();return result
 
     def _load(self,unit,sid,actor,lock=False):
@@ -97,6 +117,7 @@ class CustomerQuestionnaireService:
         campaign=unit.campaign(session['campaign_id'])
         if campaign is None or campaign['release_id']!=session['release_id'] or not unit.participant(campaign['id'],actor):
             raise CqRefused('CQ_SESSION_BINDING_INVALID',403)
+        session['_paused']=unit.paused(sid)
         return session,release,m,p,g
 
     @staticmethod
@@ -104,6 +125,7 @@ class CustomerQuestionnaireService:
         if manifest_hash!=release['manifest_hash']: raise CqRefused('CQ_STALE_MANIFEST')
         if session['revision']!=revision: raise CqRefused('CQ_STALE_REVISION')
         if session['state']!='ACTIVE': raise CqRefused('CQ_SESSION_CLOSED')
+        if session.get('_paused'): raise CqRefused('CQ_SESSION_PAUSED')
         if consent and not session['consented']: raise CqRefused('CQ_CONSENT_REQUIRED',403)
 
     def _view(self,unit,s,release,m,p,g):
@@ -111,7 +133,7 @@ class CustomerQuestionnaireService:
         if s['state']=='WITHDRAWN':
             rows=[{**r,'verdict':'NOT_SHOWN','reason':'CONSENT_WITHDRAWN','state':'NOT_SHOWN','event_id':None,'value':None} for r in rows]
             effective={}
-        can_act=s['consented'] and s['state']=='ACTIVE'
+        can_act=s['consented'] and s['state']=='ACTIVE' and not s.get('_paused')
         next_slot=next((r['slot_id'] for r in rows if r['verdict']=='SHOWN' and r['state']=='PENDING'),None) if can_act else None
         screen=next((r for r in rows if r['question_id']=='Q01'),{})
         from sitewise.domain.customer_questionnaire import q01_screen
@@ -131,7 +153,8 @@ class CustomerQuestionnaireService:
         return {'contract_version':'cq-session/1','session_id':s['id'],'campaign_id':s['campaign_id'],
             'release_id':s['release_id'],'manifest_hash':release['manifest_hash'],
             'manifest':m,'execution_scope':g.scope,'production_fielding_authorized':g.production_fielding_authorized,
-            'revision':s['revision'],'status':s['state'],'consented':s['consented'],
+            'revision':s['revision'],'status':'PAUSED' if s['state']=='ACTIVE' and s.get('_paused') else s['state'],'consented':s['consented'],
+            'lifecycle_version':'cq-lifecycle/1','render_ack_version':'cq-render/1',
             'locale':s['locale'],'routing':rows,'next_slot_id':next_slot if stimulus is None else None,
             'next_stimulus_kind':stimulus,'can_submit':can_act and next_slot is None and stimulus is None,
             'screen_disposition':disposition,'receipt':receipt['payload_json'] if receipt else None}
@@ -200,6 +223,10 @@ class CustomerQuestionnaireService:
             if retry:
                 if retry['request_hash']!=body: raise CqRefused('CQ_IDEMPOTENCY_CONFLICT')
                 return self._view(unit,s,release,m,p,g)
+            rejected=unit.rejected_retry(sid,request_id)
+            if rejected:
+                if rejected['request_hash']!=body: raise CqRefused('CQ_IDEMPOTENCY_CONFLICT')
+                raise CqRefused(rejected['reason'],422)
             self._active(s,revision,manifest_hash,release)
             view=self._view(unit,s,release,m,p,g)
             current=next((r for r in view['routing'] if r['slot_id']==slot_id),None)
@@ -211,6 +238,10 @@ class CustomerQuestionnaireService:
             question=next(q for q in m['questions'] if q['id']==current['question_id'])
             state,reason=classify_answer(question['validation'],value,p['q01_option_state_map'])
             if state=='INVALID' or state=='SKIPPED' and question['required_for_answer']:
+                unit.reject_answer(id=uuid4(),session_id=sid,display_id=display_id,revision=revision,
+                    request_id=request_id,request_hash=body,slot_id=slot_id,raw_value=value,
+                    reason=reason or 'CQ_ANSWER_REQUIRED')
+                unit.commit()
                 raise CqRefused(reason or 'CQ_ANSWER_REQUIRED',422)
             unit.insert_answer(id=uuid4(),session_id=sid,slot_id=slot_id,revision=revision+1,
                 request_id=request_id,request_hash=body,display_id=display_id,state=state,
@@ -251,6 +282,40 @@ class CustomerQuestionnaireService:
         with self.store.open() as unit:
             self._load(unit,sid,actor)
             return {'contract_version':'cq-history/1','session_id':sid,'answers':unit.history(sid)}
+
+    def lifecycle(self,sid,actor,*,action,revision,manifest_hash,request_id):
+        if action not in {'PAUSE','RESUME'}: raise CqRefused('CQ_LIFECYCLE_ACTION_INVALID',422)
+        with self.store.open() as unit:
+            s,release,m,p,g=self._load(unit,sid,actor,True)
+            body=digest([revision,manifest_hash,action]);retry=unit.lifecycle_retry(sid,request_id)
+            if retry:
+                if retry['request_hash']!=body: raise CqRefused('CQ_IDEMPOTENCY_CONFLICT')
+                return self._view(unit,s,release,m,p,g)
+            if manifest_hash!=release['manifest_hash']: raise CqRefused('CQ_STALE_MANIFEST')
+            if s['revision']!=revision: raise CqRefused('CQ_STALE_REVISION')
+            if s['state']!='ACTIVE' or not s['consented']: raise CqRefused('CQ_SESSION_CLOSED')
+            if bool(s.get('_paused'))==(action=='PAUSE'): raise CqRefused('CQ_LIFECYCLE_ALREADY_APPLIED')
+            unit.insert_lifecycle(id=uuid4(),session_id=sid,revision=revision+1,
+                request_id=request_id,request_hash=body,action=action)
+            unit.update_session(sid,revision);s.update(revision=revision+1,_paused=action=='PAUSE')
+            result=self._view(unit,s,release,m,p,g);unit.commit();return result
+
+    def rendered(self,sid,actor,*,revision,manifest_hash,display_id):
+        with self.store.open() as unit:
+            s,release,m,p,g=self._load(unit,sid,actor,True)
+            self._active(s,revision,manifest_hash,release)
+            d=unit.display(display_id)
+            if not d or d['session_id']!=sid or d['revision']!=revision:
+                raise CqRefused('CQ_CURRENT_PRESENTATION_REQUIRED')
+            view=self._view(unit,s,release,m,p,g)
+            row=next((r for r in view['routing'] if r['slot_id']==d['slot_id']),None)
+            if row is None or row['verdict']!='SHOWN' or row['context_digest']!=d['context_digest']:
+                raise CqRefused('CQ_CURRENT_PRESENTATION_REQUIRED')
+            unit.render(id=uuid4(),session_id=sid,display_id=display_id,slot_id=d['slot_id'],revision=revision)
+            view['presentation']={'display_id':d['id'],'slot_id':d['slot_id'],'question_id':row['question_id'],
+                'question_version':next(q['version'] for q in m['questions'] if q['id']==row['question_id']),
+                'context_digest':d['context_digest'],'delivered_at':d['created_at'],'rendered':True}
+            unit.commit();return view
 
     def withdraw(self,sid,actor,*,revision,manifest_hash,request_id):
         # Withdrawal stays available to the owning respondent after authority

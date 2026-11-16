@@ -18,6 +18,7 @@ class CqSessionPage extends ConsumerStatefulWidget {
 class _CqSessionPageState extends ConsumerState<CqSessionPage> {
   final _scroll = ScrollController(keepScrollOffset: false);
   String? _viewToken;
+  String? _renderedDisplay;
 
   @override
   void initState() {
@@ -138,6 +139,27 @@ class _CqSessionPageState extends ConsumerState<CqSessionPage> {
             ),
           ),
         );
+      } else if (s.data['status'] == 'PAUSED') {
+        children.add(
+          CqPanel(
+            title: 'Questionnaire paused',
+            icon: Icons.pause_circle_outline,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const Text(
+                  'Your saved answers are retained. Resume this same questionnaire to continue.',
+                ),
+                const SizedBox(height: 16),
+                CqFullWidthAction(
+                  text: 'Resume questionnaire',
+                  actionKey: const Key('cq-resume'),
+                  onPressed: vm.busy || error != null ? null : vm.resume,
+                ),
+              ],
+            ),
+          ),
+        );
       } else if (s.data['status'] == 'WITHDRAWN') {
         children.add(
           const CqNotice(
@@ -204,6 +226,22 @@ class _CqSessionPageState extends ConsumerState<CqSessionPage> {
         );
       } else if (s.presentation != null) {
         final p = s.presentation!;
+        if (s.data['render_ack_version'] == 'cq-render/1' &&
+            _renderedDisplay != p['display_id'] &&
+            !vm.busy &&
+            error == null) {
+          final display = p['display_id'] as String;
+          _renderedDisplay = display;
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) {
+              vm.acknowledgeRendered(display).whenComplete(() {
+                if (mounted && vm.session?.presentation?['rendered'] != true) {
+                  _renderedDisplay = null;
+                }
+              });
+            }
+          });
+        }
         final q = vm.question!;
         final labels = (q['labels'] as Map)[locale] as Map;
         final multiSelect = (q['type'] as String).startsWith('multi_select');
@@ -287,7 +325,12 @@ class _CqSessionPageState extends ConsumerState<CqSessionPage> {
                   text: 'Save answer',
                   icon: Icons.save_outlined,
                   actionKey: const Key('cq-answer'),
-                  onPressed: vm.busy || error != null || vm.selected.isEmpty
+                  onPressed:
+                      vm.busy ||
+                          error != null ||
+                          vm.selected.isEmpty ||
+                          s.data['render_ack_version'] == 'cq-render/1' &&
+                              p['rendered'] != true
                       ? null
                       : vm.answer,
                 ),
@@ -361,6 +404,20 @@ class _CqSessionPageState extends ConsumerState<CqSessionPage> {
         );
       }
 
+      if (s.data['lifecycle_version'] == 'cq-lifecycle/1' &&
+          s.data['status'] == 'ACTIVE' &&
+          s.data['consented'] == true) {
+        children.add(
+          Center(
+            child: TextButton.icon(
+              key: const Key('cq-pause'),
+              onPressed: vm.busy || error != null ? null : vm.pause,
+              icon: const Icon(Icons.pause_circle_outline),
+              label: const Text('Pause questionnaire'),
+            ),
+          ),
+        );
+      }
       if (s.data['status'] != 'WITHDRAWN') {
         children.add(
           Center(

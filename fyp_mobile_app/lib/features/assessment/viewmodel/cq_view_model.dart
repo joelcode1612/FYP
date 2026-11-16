@@ -195,6 +195,33 @@ class CqViewModel extends ChangeNotifier {
   Future<void> edit(String slot) => _run(() async {
     _set(await repository.present(session!, editSlotId: slot));
   });
+  Future<void> pause() {
+    final s = session!, id = requestId();
+    return _run(() async {
+      _set(await repository.pause(s, id));
+    });
+  }
+
+  Future<void> resume() {
+    final s = session!, id = requestId();
+    return _run(() async {
+      _set(await repository.resume(s, id));
+      await _presentNext();
+    });
+  }
+
+  Future<void> acknowledgeRendered(String displayId) {
+    final s = session;
+    if (s == null ||
+        s.presentation?['display_id'] != displayId ||
+        s.presentation?['rendered'] == true) {
+      return Future.value();
+    }
+    return _run(() async {
+      _set(await repository.rendered(s));
+    });
+  }
+
   Future<void> submit() {
     final s = session!, id = requestId();
     return _run(() async {
