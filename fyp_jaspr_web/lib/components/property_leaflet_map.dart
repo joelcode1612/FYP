@@ -8,6 +8,23 @@ import 'package:universal_web/web.dart' as web;
 
 import '../data/property_insights_api.dart';
 
+/// Google Maps "Maps URLs" directions link for the point, or null when the
+/// coordinates are not usable. Keyless by design: Maps URLs never carry the
+/// Address Validation key, and the user leaves the app to Google's own
+/// branded page instead of Google data being merged into the Leaflet view.
+String? googleMapsDirectionsUrl(double lat, double lon) {
+  final usable =
+      lat.isFinite &&
+      lon.isFinite &&
+      lat >= -90 &&
+      lat <= 90 &&
+      lon >= -180 &&
+      lon <= 180 &&
+      !(lat == 0 && lon == 0);
+  if (!usable) return null;
+  return 'https://www.google.com/maps/dir/?api=1&destination=$lat,$lon';
+}
+
 /// Interactive Leaflet map hosted in a first-party iframe. The iframe runs
 /// regular JavaScript without introducing JS interop in the Dart model layer.
 /// No third-party API key or client-side access to PostgreSQL is required.

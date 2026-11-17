@@ -6,7 +6,6 @@ import 'package:shared_logic/shared_logic.dart' hide ApiPropertyRepository;
 
 import '../../components/ui.dart';
 import '../../data/assessment_api.dart';
-import '../../data/api_property_repository.dart';
 import '../../data/auth_service.dart';
 import '../../layouts/app_layout.dart';
 
@@ -49,18 +48,21 @@ class _DashboardPageState extends State<DashboardPage> {
   /// Assessment history for the Assessments/Reports KPIs and the Recent
   /// Assessments list. Failure travels as data with the backend's message.
   Future<HistoryLoad> _loadHistory() async {
-    final history = await const AssessmentApi().history(limit: 50);
+    final history = await const AssessmentApi().history(limit: 4);
     if (!history.ok) {
       return HistoryLoad(failure: history.failure);
     }
     return HistoryLoad(value: history.value!);
   }
 
-  /// Catalogue size for the Explore KPI. Null (a failed read) shows an em
-  /// dash on one KPI instead of failing anything else.
+  /// Ask the server for its catalogue total with ONE tiny response.
+  /// The old KPI downloaded every listing just to count the records.
   Future<int?> _loadCatalogueCount() async {
     try {
-      return (await ApiPropertyRepository().getProperties()).length;
+      final response = await WebAuth.request(
+        '/api/v1/catalog/properties?limit=1&offset=0',
+      );
+      return ((response['meta'] as Map?)?['total'] as num?)?.toInt();
     } on Object {
       return null;
     }
@@ -161,8 +163,7 @@ class _DashboardPageState extends State<DashboardPage> {
         'description',
         '#475569',
         'Reports',
-        _historyKpiValue((history) =>
-            '${history.items.where((r) => r.reportAvailable).length}'),
+        _historyKpiValue((history) => '${history.reportsTotal}'),
         _reportsKpiNote(),
         '/entrepreneur/assessments',
       ),
@@ -213,7 +214,7 @@ class _DashboardPageState extends State<DashboardPage> {
         final reports = (snapshot.connectionState == ConnectionState.done &&
                 load != null &&
                 load.failure == null)
-            ? load.value!.items.where((r) => r.reportAvailable).length
+            ? load.value!.reportsTotal
             : null;
         return Component.text(reports == 1 ? 'Report ready' : 'Reports ready');
       },
@@ -227,9 +228,6 @@ class _DashboardPageState extends State<DashboardPage> {
       ]),
       h1(classes: 'sw-dash-title', [
         Component.text(name.isEmpty ? 'Welcome back' : 'Welcome back, $name'),
-        span(classes: 'sw-dash-wave', attributes: const {'aria-hidden': 'true'}, [
-          Component.text('👋'),
-        ]),
       ]),
       p(classes: 'sw-dash-sub', [
         Component.text(
@@ -323,7 +321,7 @@ class _DashboardPageState extends State<DashboardPage> {
           children: [
             Component.text('View All'),
             span(attributes: const {'aria-hidden': 'true'}, [
-              Component.text('→'),
+              Icon('arrow_forward', size: 'sm'),
             ]),
           ],
         ),
@@ -385,7 +383,7 @@ class _DashboardPageState extends State<DashboardPage> {
         children: [
           Component.text('Find a property to assess '),
           span(attributes: const {'aria-hidden': 'true'}, [
-            Component.text('→'),
+            Icon('arrow_forward', size: 'sm'),
           ]),
         ],
       ),
@@ -522,7 +520,7 @@ class _CurrentAssessmentState extends State<_CurrentAssessment> {
         children: [
           Component.text('View all assessments'),
           span(attributes: const {'aria-hidden': 'true'}, [
-            Component.text('→'),
+            Icon('arrow_forward', size: 'sm'),
           ]),
         ],
       ),
@@ -544,7 +542,7 @@ class _CurrentAssessmentState extends State<_CurrentAssessment> {
       classes: 'sw-home-primary',
       children: [
         Component.text('Find a property to assess '),
-        span(attributes: const {'aria-hidden': 'true'}, [Component.text('→')]),
+        span(attributes: const {'aria-hidden': 'true'}, [Icon('arrow_forward', size: 'sm')]),
       ],
     ),
   ]);

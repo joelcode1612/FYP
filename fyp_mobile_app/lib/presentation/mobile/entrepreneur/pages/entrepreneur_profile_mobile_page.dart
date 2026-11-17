@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../../../../core/theme/sitewise_theme.dart';
 import '../../../shared/widgets/sitewise_inline_notice.dart';
+import '../../shell/entrepreneur_tab_scope.dart';
 import '../../shell/mobile_app_shell.dart';
 
 /// Mobile entrepreneur profile: identity, business preferences and account
@@ -97,12 +98,14 @@ class _EntrepreneurProfileMobilePageState
               ),
               _Tile(
                 icon: Icons.bookmark_border_rounded,
-                title: 'Saved properties',
+                title: 'My favourites',
                 subtitle: appState.savedError == null
                     ? '${appState.saved.length} saved'
                     : 'Could not be loaded',
-                onTap: () =>
-                    Navigator.of(context).pushNamed('/entrepreneur/saved'),
+                onTap: () => EntrepreneurTabScope.open(
+                  context,
+                  '/entrepreneur/favourites',
+                ),
               ),
               _Tile(
                 icon: Icons.compare_arrows,

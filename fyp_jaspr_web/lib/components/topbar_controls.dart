@@ -134,7 +134,7 @@ class SearchControlState extends State<SearchControl> {
                     events: events(
                       onClick: () => setState(() => _open = false),
                     ),
-                    [Component.text('✕')],
+                    [Icon('close', size: 'sm')],
                   ),
                 ]),
                 _SearchResults(query: _query, role: component.role),

@@ -29,7 +29,12 @@ import '../pages/provider_schedule_mobile_page.dart';
 /// * **Property Owner** — `Home | Properties | Add | Messages | Profile`.
 ///   `Add` is an action, not a page: the form is pushed as a drill-in, so the
 ///   current tab stays alive behind it.
-/// * **Agent** — `Home | Listings | Enquiries | Schedule | Profile`.
+/// * **Agent** — `Home | Listings | Enquiries | Schedule | Profile`. The dock
+///   has no Add slot, so an agent opens the SAME form from the `Add Property`
+///   action on the shared listing screen.
+///
+/// Saving from either entry point returns to the shared `/provider/listings`
+/// page, which is the same screen for both roles.
 ///
 /// Both names point at the same shared pages (`/provider/listings`,
 /// `/provider/enquiries`); nothing is duplicated per role. `Performance`
@@ -114,10 +119,20 @@ class _ProviderTabHostState extends ConsumerState<ProviderTabHost> {
 
   /// The Add Property form is a drill-in, not a tab, so it is pushed and the
   /// current tab stays selected behind it.
+  ///
+  /// Saving hands back [addPropertyDoneResult], which lands BOTH roles on the
+  /// shared `/provider/listings` page they came from; a plain cancel returns to
+  /// the tab that was open before. Either way the listing-backed pages are
+  /// re-keyed so a new or edited draft shows immediately.
   Future<void> _addProperty() async {
-    await Navigator.of(context).pushNamed('/provider/add-property');
+    final result = await Navigator.of(context).pushNamed(
+      '/provider/add-property',
+    );
     if (!mounted) return;
     setState(() {
+      if (result == addPropertyDoneResult) {
+        _pageIndex = ProviderTabHost.indexForRoute('/provider/listings');
+      }
       _revision++;
     });
     // A new draft (or an edited one) changes every dashboard figure.

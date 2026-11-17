@@ -29,6 +29,10 @@ class MobilePropertyCard extends StatelessWidget {
   final VoidCallback? onToggleCompare;
   final String? rankBanner;
 
+  /// Optional explicit "View Details" affordance for lists whose whole card is
+  /// also tappable (Favourites). Left null the card keeps its compact row.
+  final VoidCallback? onViewDetails;
+
   const MobilePropertyCard({
     super.key,
     required this.property,
@@ -38,6 +42,7 @@ class MobilePropertyCard extends StatelessWidget {
     this.compared = false,
     this.onToggleCompare,
     this.rankBanner,
+    this.onViewDetails,
   });
 
   /// True only when the listing records a ground-level unit.
@@ -135,7 +140,7 @@ class MobilePropertyCard extends StatelessWidget {
                   ? Icons.bookmark_rounded
                   : Icons.bookmark_border_rounded,
               active: saved,
-              tooltip: saved ? 'Remove from saved' : 'Save property',
+              tooltip: saved ? 'Remove from favourites' : 'Save property',
               onTap: onToggleSaved!,
             ),
         ],
@@ -179,6 +184,27 @@ class MobilePropertyCard extends StatelessWidget {
       const SizedBox(height: 2),
       _metaRow(),
       if (_badges().isNotEmpty) ...[const SizedBox(height: 7), _badgeRow()],
+      if (onViewDetails != null) ...[
+        const SizedBox(height: 2),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: TextButton(
+            onPressed: onViewDetails,
+            style: TextButton.styleFrom(
+              foregroundColor: SitewiseColors.action,
+              visualDensity: VisualDensity.compact,
+              padding: const EdgeInsets.symmetric(horizontal: 6),
+              minimumSize: const Size(0, 44),
+              tapTargetSize: MaterialTapTargetSize.padded,
+              textStyle: const TextStyle(
+                fontSize: 12.5,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            child: const Text('View Details'),
+          ),
+        ),
+      ],
     ],
   );
 
@@ -593,12 +619,16 @@ class _IconAction extends StatelessWidget {
     child: InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(SitewiseSpacing.radiusLg),
-      child: Padding(
-        padding: const EdgeInsets.all(5),
-        child: Icon(
-          icon,
-          size: 20,
-          color: active ? SitewiseColors.action : SitewiseColors.muted,
+      // 44x44: the accessibility floor for a touch target, around a 20 glyph.
+      child: SizedBox(
+        width: 44,
+        height: 44,
+        child: Center(
+          child: Icon(
+            icon,
+            size: 20,
+            color: active ? SitewiseColors.action : SitewiseColors.muted,
+          ),
         ),
       ),
     ),

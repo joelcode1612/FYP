@@ -126,10 +126,15 @@ class _SitewiseNetworkImageState extends State<SitewiseNetworkImage> {
 
   void _onError(Object error, StackTrace? stack) {
     if (_disposed || !mounted) return;
+    // errorBuilder re-fires a cached failure on every rebuild (route
+    // transitions, parent repaints). One in-flight backoff timer per attempt
+    // keeps the promise that dispose() can cancel *all* pending recovery —
+    // a replaced timer would leak an un-cancellable retry.
+    if (_backoffTimer != null) return;
     if (_attempt >= widget.maxAttempts + 1) {
       // Retry budget spent: stop here. The fallback carries a manual retry,
       // so recovery stays possible without an uncontrolled loop.
-      setState(() => _exhausted = true);
+      if (!_exhausted) setState(() => _exhausted = true);
       return;
     }
     final attempt = ++_attempt;
@@ -138,6 +143,7 @@ class _SitewiseNetworkImageState extends State<SitewiseNetworkImage> {
     final exponential = widget.baseDelay * (1 << (attempt - 1).clamp(0, 2));
     final jittered = exponential * (0.85 + 0.30 * Random(attempt).nextDouble());
     _backoffTimer = Timer(jittered, () {
+      _backoffTimer = null;
       if (_disposed || !mounted) return;
       // Bump the epoch into the image URL's key so Image.network re-attempts
       // instead of replaying a cached failure.

@@ -827,6 +827,7 @@ class AssessmentService:
             ],
             "meta": {
                 "total": self.repo.count_by_user(user_id),
+                "reports_total": self.repo.count_reports_by_user(user_id),
                 "limit": limit,
                 "offset": offset,
             },

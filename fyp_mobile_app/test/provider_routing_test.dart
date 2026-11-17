@@ -174,6 +174,7 @@ void main() {
           '/entrepreneur',
           '/entrepreneur/assess',
           '/entrepreneur/spaces',
+          '/entrepreneur/favourites',
           '/entrepreneur/recommendations',
           '/entrepreneur/saved',
           '/entrepreneur/profile',

@@ -516,6 +516,12 @@ class SitewiseApp extends StatelessComponent {
                 // explains why THIS unit matched the entrepreneur's saved
                 // preferences, using the persisted Layer 2 result.
                 resultId: state.queryParams['result'] ?? '',
+                // The applied search filters, carried from Recommendations as
+                // the raw `?filters=` JSON string (client components accept
+                // only primitive parameters; the page parses it itself).
+                // They power an honest "your filters vs this property" table;
+                // a saved ?result= explanation always takes precedence.
+                appliedFiltersJson: state.queryParams['filters'] ?? '',
                 // The selected F&B business type, carried from Recommendations.
                 businessType: state.queryParams['businessType'] ?? '',
               ),

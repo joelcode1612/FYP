@@ -63,6 +63,7 @@ import math
 import threading
 from collections import OrderedDict
 from dataclasses import dataclass, field, replace
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
@@ -103,6 +104,15 @@ def _pu_variant_key() -> str:
         return "legacy"
 
 
+@lru_cache(maxsize=12)
+def _artifact_digest_cached(path: str, mtime_ns: int, size: int) -> str:
+    """Hash a trusted artifact once per file identity, not on every request."""
+    try:
+        return hashlib.sha256(Path(path).read_bytes()).hexdigest()[:16]
+    except OSError:
+        return "missing"
+
+
 def _expanded_model_token() -> str:
     """Content fingerprint of the two research artifacts, for cache/cursor keys.
 
@@ -110,15 +120,14 @@ def _expanded_model_token() -> str:
     ranking cache and the cursor fingerprint must change with it. The digests
     read the file bytes only (cheap); they do not deserialise the models.
     """
-    import hashlib
-
     from sitewise.ml.fnb_category import CATEGORY_MODEL_NAME
     from sitewise.ml.pu_expanded import EXPANDED_MODEL_NAME
 
     def digest(name: str) -> str:
         path = Path(__file__).resolve().parent.parent / "ml" / f"{name}.joblib"
         try:
-            return hashlib.sha256(path.read_bytes()).hexdigest()[:16]
+            stat = path.stat()
+            return _artifact_digest_cached(str(path), stat.st_mtime_ns, stat.st_size)
         except OSError:
             return "missing"
 
@@ -407,7 +416,10 @@ class _Row:
 
 
 def _money(value: float) -> str:
-    return f"RM{value:,.0f}"
+    # Malaysian Ringgit with a space between the symbol and the grouped
+    # amount: "RM 3,000", never "RM3000". Used by the range labels the
+    # monthly-rental dropdown shows verbatim.
+    return f"RM {value:,.0f}"
 
 
 def _number(value: float) -> str:
@@ -690,7 +702,7 @@ class RecommendationSearchService:
             from sitewise.ml.model_loader import ModelLoader
             from sitewise.ml.pu_expanded import EXPANDED_MODEL_NAME
 
-            loaded = ModelLoader().load(EXPANDED_MODEL_NAME)
+            loaded = ModelLoader().load_cached(EXPANDED_MODEL_NAME)
             return {
                 "available": True,
                 "version": str(loaded.meta.get("model_variant") or "unknown"),
@@ -973,7 +985,7 @@ class RecommendationSearchService:
         self._last_cache_hit = False
         rows = self._query_expanded(criteria)
         if rows:
-            loaded = ModelLoader().load(EXPANDED_MODEL_NAME)
+            loaded = ModelLoader().load_cached(EXPANDED_MODEL_NAME)
             version = str(loaded.meta.get("model_variant") or "unknown")
             coverage_sink: dict[str, dict[str, Any]] = {}
             with Session(analytics_engine) as analytics:

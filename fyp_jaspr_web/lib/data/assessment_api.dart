@@ -464,8 +464,14 @@ final class EvidencePayload {
 final class AssessmentHistory {
   final List<AssessmentRecord> items;
   final int total;
+  /// Number of completed reports across all assessments, not just this page.
+  final int reportsTotal;
 
-  const AssessmentHistory({required this.items, required this.total});
+  const AssessmentHistory({
+    required this.items,
+    required this.total,
+    this.reportsTotal = 0,
+  });
 
   factory AssessmentHistory.fromJson(Map<String, dynamic> json) =>
       AssessmentHistory(
@@ -474,6 +480,11 @@ final class AssessmentHistory {
             AssessmentRecord.fromJson((row as Map).cast<String, dynamic>()),
         ],
         total: ((json['meta'] as Map?)?['total'] as num?)?.toInt() ?? 0,
+        reportsTotal:
+            ((json['meta'] as Map?)?['reports_total'] as num?)?.toInt() ??
+            (json['data'] as List? ?? const [])
+                .where((row) => row is Map && row['report_available'] == true)
+                .length,
       );
 }
 

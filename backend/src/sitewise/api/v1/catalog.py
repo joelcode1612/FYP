@@ -30,6 +30,7 @@ from sqlmodel import Session
 from sitewise.db.analytics_session import get_analytics_db
 from sitewise.db.session import get_db
 from sitewise.dependencies import CurrentUser
+from sitewise.ingestion.sources.gtfs_importer import is_transit_stale
 from sitewise.repositories.catalog_repository import PROPERTY_COLUMNS, CatalogRepository
 from sitewise.repositories.fyp_property_repository import FypPropertyRepository
 from sitewise.services.catalog_listing_details_service import CatalogListingDetailsService
@@ -147,9 +148,21 @@ def get_catalog_nearby_places(
     returns the locations those totals describe, each with a stable id, its
     category and subtype, its coordinate, its source, its operating status
     where the source records one, the straight-line distance from the
-    catalogue's own coordinate and the date the record was observed. A missing
-    listing is 404; a listing without usable coordinates is 200 with honest
-    zero counts, never fabricated places.
+    catalogue's own coordinate and the date the record was observed. Five
+    categories are served from their real tables: the research catalogue's
+    other properties, F&B outlets, demand-generating POIs, GTFS stops (with
+    each stop's distinct routes and its published scheduled departures —
+    never live arrivals) and parking facilities. A missing listing is 404; a
+    listing without usable coordinates is 200 with honest zero counts, never
+    fabricated places.
+
+    Every category carries an explicit ``state`` — ``mapped``,
+    ``measured_zero``, ``source_unavailable`` or ``data_stale`` (accessibility
+    only, when every official GTFS feed on this host is past the freshness
+    SLA; markers still come back) — so a failed source is never converted
+    into a zero, and one source failing never removes the others.
+    The response's ``distance_method`` names the straight-line spherical
+    computation shared with the score.
 
     The radius-based aggregate statistics stay owned by the insights payload —
     nothing here changes them. Recorded totals and mapped locations can
@@ -171,10 +184,14 @@ def get_catalog_nearby_places(
     # never disagree about where the property is.
     lat, lon = row.get("latitude"), row.get("longitude")
     origin = {"lat": float(lat), "lon": float(lon)} if lat is not None and lon is not None else None
+    # Feed freshness is decided by the importer's status file (missing or
+    # unreadable -> False/unknown), so a corrupt status never fakes staleness.
     result = NearbyPlacesService(session).nearby(
         origin["lat"] if origin else None,
         origin["lon"] if origin else None,
         radius_m,
+        exclude_property_id=property_id,
+        transit_stale=is_transit_stale(),
     )
     return {"property_id": property_id, "origin": origin, **result}
 

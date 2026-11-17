@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_logic/shared_logic.dart';
 
 import '../../../../core/theme/sitewise_theme.dart';
+import '../../shell/entrepreneur_tab_scope.dart';
 import '../../shell/mobile_app_shell.dart';
 import '../../../shared/widgets/sitewise_inline_notice.dart';
 import '../../widgets/m3_kit.dart';
@@ -17,7 +18,7 @@ import '../../widgets/m3_kit.dart';
 /// **No invented records.** Both overview tiles are wired to real state:
 /// `entrepreneurNotifierProvider`'s `recommendations` (ranked from the property
 /// repository) and `appNotifierProvider`'s `saved` (the user's shortlist). Labels say what the data is —
-/// "Recommendations" and "Saved spaces" — rather than copying the prototype's
+/// "Recommendations" and "Favourites" — rather than copying the prototype's
 /// "Assessments" / "My properties", which would imply entities this app does
 /// not have.
 ///
@@ -153,12 +154,12 @@ class _EntrepreneurDashboardMobilePageState
                 const SizedBox(width: 10),
                 Expanded(
                   child: M3MetricTile(
-                    label: 'Saved spaces',
+                    label: 'Favourites',
                     value: savedKnown ? '$saved' : '—',
                     caption: savedKnown
-                        ? 'Shortlisted property records'
+                        ? 'Properties you saved'
                         : 'Could not be loaded',
-                    icon: Icons.storefront_outlined,
+                    icon: Icons.bookmark_border_rounded,
                     teal: true,
                   ),
                 ),
@@ -167,9 +168,9 @@ class _EntrepreneurDashboardMobilePageState
             M3DataNote(
               text: recommendationsKnown && savedKnown
                   ? 'Live workspace loaded · $recommendations matched '
-                        'recommendations, $saved saved spaces and $compared '
+                        'recommendations, $saved favourites and $compared '
                         'properties in comparison. Counts come from the shared '
-                        'property repository and your shortlist.'
+                        'property repository and your saved list.'
                   : 'Some workspace counts could not be loaded. Pull down or '
                         'tap Retry to read them again — the figures are not '
                         'shown as zero.',
@@ -184,23 +185,18 @@ class _EntrepreneurDashboardMobilePageState
               onTap: () => _open('/entrepreneur/assess'),
             ),
             M3QuickActionRow(
-              icon: Icons.storefront_outlined,
-              title: 'Manage my spaces',
-              subtitle: 'Review your shortlisted property records',
-              onTap: () => _open('/entrepreneur/spaces'),
+              icon: Icons.bookmark_border_rounded,
+              title: 'My favourites',
+              subtitle: 'Open the properties you saved',
+              onTap: () =>
+                  EntrepreneurTabScope.open(context, '/entrepreneur/favourites'),
             ),
 
             // ── SECONDARY LINKS ────────────────────────────────────────
-            // The prototype ends at Quick actions. These two compact links
-            // keep the pre-existing Saved / Compare routes one tap away
-            // now that they are no longer bottom-nav tabs.
-            const M3SectionRow(title: 'Your shortlist'),
-            M3QuickActionRow(
-              icon: Icons.bookmark_border_rounded,
-              title: 'Saved properties',
-              subtitle: savedKnown ? '$saved saved for later' : 'Unavailable',
-              onTap: () => _open('/entrepreneur/saved'),
-            ),
+            // Comparison is not a tab, so it stays one tap away from Home.
+            // The saved list now IS the Favourites tab, so its old shortcut is
+            // gone rather than being a second entry to the same screen.
+            const M3SectionRow(title: 'Comparison'),
             M3QuickActionRow(
               icon: Icons.compare_arrows_rounded,
               title: 'Compare properties',

@@ -278,7 +278,7 @@ def expanded_prediction(analytics_session: Session, property_id: str) -> dict[st
     failures are explicit (``available: false`` names the exact missing
     features) and successful results are cached per (model version, property).
     """
-    loaded = ModelLoader().load(EXPANDED_MODEL_NAME)
+    loaded = ModelLoader().load_cached(EXPANDED_MODEL_NAME)
     model_version = str(loaded.meta.get("model_variant") or "unknown")
     cache_key = (model_version, str(property_id))
     with _SCORE_CACHE_LOCK:
@@ -387,11 +387,34 @@ def expanded_scores_many(
     """
     if not property_ids:
         return {}
-    loaded = ModelLoader().load(EXPANDED_MODEL_NAME)
+    loaded = ModelLoader().load_cached(EXPANDED_MODEL_NAME)
     expected = loaded.feature_names
 
-    # --- batched resolution (mirrors PropertyFeatureRepository._resolve/get) ---
+    # Reuse previously resolved predictions AND feature vectors; the
+    # category model must receive the same features as the PU model.
+    # If a vector is missing, fall back to the original batch query.
     ids = [str(p) for p in property_ids]
+    model_version = str(loaded.meta.get("model_variant") or "unknown")
+    with _SCORE_CACHE_LOCK:
+        cached_scores = {pid: _SCORE_CACHE.get((model_version, pid)) for pid in ids}
+    if all(result is not None for result in cached_scores.values()):
+        if coverage_sink is None:
+            return {pid: cached_scores[pid] for pid in ids}
+        with _COVERAGE_CACHE_LOCK:
+            cached_vectors = {
+                pid: _COVERAGE_CACHE.get((model_version, pid)) for pid in ids
+            }
+        if all(
+            not cached_scores[pid].get("available") or cached_vectors[pid] is not None
+            for pid in ids
+        ):
+            coverage_sink.update({
+                pid: vector for pid, vector in cached_vectors.items()
+                if vector is not None
+            })
+            return {pid: cached_scores[pid] for pid in ids}
+
+    # --- batched resolution (mirrors PropertyFeatureRepository._resolve/get) ---
     rows = [dict(r) for r in analytics_session.execute(
         sql_text("""
             SELECT p.catalogue_id AS catalogue_id, l.subject_id

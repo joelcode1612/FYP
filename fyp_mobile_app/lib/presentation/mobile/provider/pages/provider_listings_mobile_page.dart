@@ -124,6 +124,12 @@ class _ProviderListingsMobilePageState
     _open('/provider/add-property', arguments: '${listing.id}');
   }
 
+  /// Create a new listing. Owners and agents are sent to the SAME Add Property
+  /// form (`/provider/add-property`): the backend stamps the creator from the
+  /// verified token, recording an owner's row as owned and an agent's row as an
+  /// assignment, so the mobile app needs no per-role form.
+  void _addProperty() => _open('/provider/add-property');
+
   @override
   Widget build(BuildContext context) {
     final role = ref.watch(authNotifierProvider.select((s) => s.user?.role));
@@ -166,6 +172,7 @@ class _ProviderListingsMobilePageState
             onRetry: _load,
             onOpenDetail: _openDetail,
             onOpenEditor: _openEditor,
+            onAddProperty: _addProperty,
             searchController: _search,
           );
         },
@@ -186,6 +193,7 @@ class _PageBody extends StatelessWidget {
     required this.onRetry,
     required this.onOpenDetail,
     required this.onOpenEditor,
+    required this.onAddProperty,
     required this.searchController,
   });
 
@@ -199,6 +207,7 @@ class _PageBody extends StatelessWidget {
   final VoidCallback onRetry;
   final ValueChanged<ProviderListing> onOpenDetail;
   final ValueChanged<ProviderListing> onOpenEditor;
+  final VoidCallback onAddProperty;
   final TextEditingController searchController;
 
   bool get isAgent => role == AppRole.agent || scope.isAgent;
@@ -210,7 +219,7 @@ class _PageBody extends StatelessWidget {
       physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.fromLTRB(0, 0, 0, providerDockClearance),
       children: [
-        _HeaderBanner(isAgent: isAgent),
+        _HeaderBanner(isAgent: isAgent, onAddProperty: onAddProperty),
         const SizedBox(height: 14),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: providerGutter),
@@ -265,10 +274,16 @@ class _PageBody extends StatelessWidget {
 ///
 /// Very light blue → white, with two soft decorative circles kept inside a
 /// clipped stack so they can never cause horizontal overflow.
+///
+/// The Add Property action lives here, on the ONE listing screen both roles
+/// share, because the agent dock has no Add slot of its own. It is rendered
+/// identically for an owner and an agent: both push the same existing
+/// `/provider/add-property` form, so no role gets its own create screen.
 class _HeaderBanner extends StatelessWidget {
-  const _HeaderBanner({required this.isAgent});
+  const _HeaderBanner({required this.isAgent, required this.onAddProperty});
 
   final bool isAgent;
+  final VoidCallback onAddProperty;
 
   @override
   Widget build(BuildContext context) {
@@ -314,16 +329,25 @@ class _HeaderBanner extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      'My Listings',
-                      style: TextStyle(
-                        fontFamily: kFontFamily,
-                        fontSize: 26,
-                        height: 1.15,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: -0.6,
-                        color: SitewiseM3.ink,
-                      ),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Expanded(
+                          child: Text(
+                            'My Listings',
+                            style: TextStyle(
+                              fontFamily: kFontFamily,
+                              fontSize: 26,
+                              height: 1.15,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: -0.6,
+                              color: SitewiseM3.ink,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        _AddPropertyButton(onTap: onAddProperty),
+                      ],
                     ),
                     const SizedBox(height: 5),
                     Text(
@@ -342,6 +366,47 @@ class _HeaderBanner extends StatelessWidget {
                 ),
               ),
             ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The create-listing action shown in the shared listing header.
+///
+/// Deliberately not role-aware: it pushes `/provider/add-property`, which is the
+/// one Add Property form the whole Provider workspace shares.
+class _AddPropertyButton extends StatelessWidget {
+  const _AddPropertyButton({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: true,
+      label: 'Add property',
+      child: FilledButton.icon(
+        onPressed: onTap,
+        icon: const Icon(Icons.add_rounded, size: 18),
+        label: const Text(
+          'Add Property',
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(
+            fontFamily: kFontFamily,
+            fontSize: 12.5,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+        style: FilledButton.styleFrom(
+          backgroundColor: SitewiseColors.action,
+          foregroundColor: SitewiseM3.surface,
+          minimumSize: const Size(0, 44),
+          padding: const EdgeInsets.symmetric(horizontal: 14),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(SitewiseM3.radiusPill),
           ),
         ),
       ),

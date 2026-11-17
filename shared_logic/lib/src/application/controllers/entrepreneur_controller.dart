@@ -348,10 +348,12 @@ class EntrepreneurController extends StateController<EntrepreneurState> {
       );
 
       // Filter vocabulary is enhancement data: a failure leaves the chips
-      // empty rather than failing the whole page.
+      // empty rather than failing the whole page. It is counted for the SAME
+      // criteria the ranking used, so a count quoted by a filter can never
+      // disagree with the eligible set behind the cards.
       if (state.recommendationFacets == null) {
         try {
-          final facets = await repo.facets();
+          final facets = await repo.facets(criteria: criteria);
           if (seq == _recommendationSeq && !isDisposed) {
             setState(state.copyWith(recommendationFacets: facets));
           }
@@ -373,6 +375,21 @@ class EntrepreneurController extends StateController<EntrepreneurState> {
         ),
       );
     }
+  }
+
+  /// Contextual filter choices for the caller's CURRENT DRAFT criteria.
+  ///
+  /// This is a read-only facet fetch: it neither re-runs the ranked search nor
+  /// publishes into the shared state, so changing a draft filter updates the
+  /// available choices without changing the results on screen. Stale-response
+  /// ordering and error presentation belong to the caller, which owns the
+  /// draft; the backend returns the same PU-gated counts the search uses.
+  Future<RecommendationFacets?> fetchRecommendationFacets(
+    RecommendationSearchRequest criteria,
+  ) async {
+    final repo = _recommendationSearchRepository;
+    if (repo == null || isDisposed) return null;
+    return repo.facets(criteria: criteria);
   }
 
   /// Appends the next page of the CURRENT ranking.

@@ -109,7 +109,8 @@ function pagePayload(body, items) {
   await installHarnessSession(page, { role: 'entrepreneur' });
 
   const posted = [];
-  await page.route('**/api/v1/recommendations/facets', (route) =>
+  // The trailing * matters: draft facet reads carry query parameters now.
+  await page.route('**/api/v1/recommendations/facets*', (route) =>
     route.fulfill({
       status: 200,
       contentType: 'application/json',
@@ -138,6 +139,20 @@ function pagePayload(body, items) {
             max_size_sqft: 8000,
             total: 955,
           },
+          rental_ranges: {
+            options: [
+              { min_rental_rm: 500, max_rental_rm: 4999, label: 'RM 500 – RM 4,999', total: 400 },
+              { min_rental_rm: 5000, max_rental_rm: 8000, label: 'RM 5,000 – RM 8,000', total: 12 },
+              { min_rental_rm: 8001, max_rental_rm: 9999, label: 'RM 8,001 – RM 9,999', total: 8 },
+            ],
+            unbounded_total: 955,
+            selected: null,
+          },
+          size_ranges: { options: [], unbounded_total: 955, selected: null },
+          matching_total: 955,
+          universe_total: 955,
+          relaxations: [],
+          contextual: true,
         },
       }),
     }),
@@ -200,7 +215,7 @@ function pagePayload(body, items) {
   ok('default: cards show PU score', initial.puFacts >= 3, String(initial.puFacts));
 
   // --- Apply the example filter set -----------------------------------------
-  await page.fill('input[aria-label="Max monthly rent (RM)"]', '8000');
+  await page.selectOption('select[aria-label="Monthly rental (RM)"]', '5000|8000');
   await page.fill('input[aria-label="Minimum size (sq ft)"]', '800');
   await page.fill('input[aria-label="Maximum size (sq ft)"]', '1800');
   await page.click('.checkpill:has-text("Selangor") input');
@@ -219,7 +234,7 @@ function pagePayload(body, items) {
         document.querySelector('.rec2__insufficient')?.textContent || ''
       ).trim(),
       cards: document.querySelectorAll('.rec2-card').length,
-      budgetValue: document.querySelector('input[aria-label="Max monthly rent (RM)"]')?.value,
+      budgetValue: document.querySelector('select[aria-label="Monthly rental (RM)"]')?.value,
     };
   });
   const lastPost = posted[posted.length - 1];
@@ -230,7 +245,7 @@ function pagePayload(body, items) {
   ok('apply: default ordering sent', lastPost.sort === 'best_match', JSON.stringify(lastPost));
   ok('apply: chips rendered', applied.chips.includes('Selangor') &&
     applied.chips.includes('Shoplot') &&
-    applied.chips.includes('RM 8000 max') &&
+    applied.chips.includes('RM 5,000 – RM 8,000') &&
     applied.chips.includes('800–1800 sq ft'), applied.chips.join('|'));
   ok('apply: 2 results shown', applied.cards === 2, String(applied.cards));
   ok('apply: insufficient note', /Only 2 properties match your current criteria and have PU scores above 50/.test(applied.insufficient), applied.insufficient);
@@ -239,7 +254,7 @@ function pagePayload(body, items) {
   // In-app navigation (Jaspr Link = client-side pushState), NOT a full page
   // reload: a browser reload legitimately starts a new session.
   const postsBeforeNav = posted.length;
-  await page.click('a[href="/entrepreneur/property-detail?id=EP-901"]');
+  await page.click('a[href^="/entrepreneur/property-detail?id=EP-901"]');
   await page.waitForTimeout(1200);
   await page.goBack();
   await page.waitForTimeout(1500);
@@ -250,57 +265,57 @@ function pagePayload(body, items) {
     );
     return {
       chips,
-      budgetValue: document.querySelector('input[aria-label="Max monthly rent (RM)"]')?.value,
+      budgetValue: document.querySelector('select[aria-label="Monthly rental (RM)"]')?.value,
       stateOn: !!document.querySelector('.checkpill.is-on'),
       cards: document.querySelectorAll('.rec2-card').length,
       insufficient: /Only 2 properties/.test(document.body.innerText),
     };
   });
-  ok('return: chips retained', afterReturn.chips.includes('RM 8000 max') && afterReturn.chips.includes('Selangor'), afterReturn.chips.join('|'));
-  ok('return: budget input retained', afterReturn.budgetValue === '8000', afterReturn.budgetValue);
+  ok('return: chips retained', afterReturn.chips.includes('RM 5,000 – RM 8,000') && afterReturn.chips.includes('Selangor'), afterReturn.chips.join('|'));
+  ok('return: rental interval retained', afterReturn.budgetValue === '5000|8000', afterReturn.budgetValue);
   ok('return: state chip still selected', afterReturn.stateOn);
   ok('return: filtered results retained', afterReturn.cards === 2, String(afterReturn.cards));
   ok('return: no re-seed search fired', posted.length === postsBeforeNav, `${posted.length} vs ${postsBeforeNav}`);
   ok('return: insufficient note retained', afterReturn.insufficient);
 
   // --- Draft edit without applying must not change applied state ------------
-  await page.fill('input[aria-label="Max monthly rent (RM)"]', '9999');
-  await page.click('a[href="/entrepreneur/property-detail?id=EP-901"]');
+  await page.selectOption('select[aria-label="Monthly rental (RM)"]', '8001|9999');
+  await page.click('a[href^="/entrepreneur/property-detail?id=EP-901"]');
   await page.waitForTimeout(1000);
   await page.goBack();
   await page.waitForTimeout(1200);
   const afterCancel = await page.evaluate(() => ({
-    budgetValue: document.querySelector('input[aria-label="Max monthly rent (RM)"]')?.value,
+    budgetValue: document.querySelector('select[aria-label="Monthly rental (RM)"]')?.value,
     chips: Array.from(document.querySelectorAll('.rec2__chip')).map((c) =>
       (c.textContent || '').replace('×', '').trim(),
     ),
   }));
-  ok('cancel: draft discarded, applied retained', afterCancel.budgetValue === '8000', afterCancel.budgetValue);
-  ok('cancel: chips unchanged', afterCancel.chips.includes('RM 8000 max'));
+  ok('cancel: draft discarded, applied retained', afterCancel.budgetValue === '5000|8000', afterCancel.budgetValue);
+  ok('cancel: chips unchanged', afterCancel.chips.includes('RM 5,000 – RM 8,000'));
 
   // --- Remove one chip only ---------------------------------------------------
-  await page.click('.rec2__chip:has-text("RM 8000 max") .rec2__chip-remove');
+  await page.click('.rec2__chip:has-text("RM 5,000 – RM 8,000") .rec2__chip-remove');
   await page.waitForTimeout(900);
   const afterRemove = await page.evaluate(() => ({
     chips: Array.from(document.querySelectorAll('.rec2__chip')).map((c) =>
       (c.textContent || '').replace('×', '').trim(),
     ),
-    budgetValue: document.querySelector('input[aria-label="Max monthly rent (RM)"]')?.value,
+    budgetValue: document.querySelector('select[aria-label="Monthly rental (RM)"]')?.value,
   }));
   const removePost = posted[posted.length - 1];
   ok('remove: rent ceiling cleared in request', removePost.max_rental_rm === undefined, JSON.stringify(removePost));
-  ok('remove: only that chip removed', !afterRemove.chips.includes('RM 8000 max') &&
+  ok('remove: only that chip removed', !afterRemove.chips.includes('RM 5,000 – RM 8,000') &&
     afterRemove.chips.includes('Selangor') &&
     afterRemove.chips.includes('Shoplot') &&
     afterRemove.chips.includes('800–1800 sq ft'), afterRemove.chips.join('|'));
   ok('remove: budget input cleared', afterRemove.budgetValue === '', afterRemove.budgetValue);
 
   // --- Rapid changes: the slower earlier response must not win ---------------
-  await page.fill('input[aria-label="Max monthly rent (RM)"]', '8000');
+  await page.selectOption('select[aria-label="Monthly rental (RM)"]', '5000|8000');
   await page.click('button:has-text("Find properties")');
   await page.waitForTimeout(1200);
   // Now two chip removals: rent (slow 800ms) then state (fast 50ms).
-  await page.click('.rec2__chip:has-text("RM 8000 max") .rec2__chip-remove');
+  await page.click('.rec2__chip:has-text("RM 5,000 – RM 8,000") .rec2__chip-remove');
   await page.waitForTimeout(80);
   await page.click('.rec2__chip:has-text("Selangor") .rec2__chip-remove');
   await page.waitForTimeout(1400);
@@ -311,7 +326,7 @@ function pagePayload(body, items) {
     cards: document.querySelectorAll('.rec2-card').length,
   }));
   ok('race: latest applied state wins', !afterRace.chips.includes('Selangor') &&
-    !afterRace.chips.includes('RM 8000 max'), afterRace.chips.join('|'));
+    !afterRace.chips.includes('RM 5,000 – RM 8,000'), afterRace.chips.join('|'));
   ok('race: results match latest request', afterRace.cards === 3, String(afterRace.cards));
 
   // --- Clear ------------------------------------------------------------------
@@ -319,7 +334,7 @@ function pagePayload(body, items) {
   await page.waitForTimeout(900);
   const afterClear = await page.evaluate(() => ({
     chips: document.querySelectorAll('.rec2__chip').length,
-    budgetValue: document.querySelector('input[aria-label="Max monthly rent (RM)"]')?.value,
+    budgetValue: document.querySelector('select[aria-label="Monthly rental (RM)"]')?.value,
     cards: document.querySelectorAll('.rec2-card').length,
   }));
   ok('clear: no chips', afterClear.chips === 0, String(afterClear.chips));
@@ -348,8 +363,7 @@ function pagePayload(body, items) {
   });
   for (const caption of [
     'Business type',
-    'Min monthly rent (RM)',
-    'Max monthly rent (RM)',
+    'Monthly rental (RM)',
     'Minimum size (sq ft)',
     'Maximum size (sq ft)',
     'Target market',
@@ -390,7 +404,7 @@ function pagePayload(body, items) {
   ok('sort: header states the ordering', /Ordered by lowest monthly rent/i.test(await page.evaluate(() => document.body.innerText)));
 
   // Applying filters later must keep the chosen ordering.
-  await page.fill('input[aria-label="Max monthly rent (RM)"]', '8000');
+  await page.selectOption('select[aria-label="Monthly rental (RM)"]', '5000|8000');
   await page.click('button:has-text("Find properties")');
   await page.waitForTimeout(1000);
   ok('sort: survives a later "Find properties"', posted[posted.length - 1].sort === 'rent_asc', JSON.stringify(posted[posted.length - 1]));

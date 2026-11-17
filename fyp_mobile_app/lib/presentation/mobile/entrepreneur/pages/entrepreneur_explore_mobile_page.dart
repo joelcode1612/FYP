@@ -371,8 +371,8 @@ class _EntrepreneurExploreMobilePageState
     context,
   ).pushNamed('/entrepreneur/property-detail', arguments: id);
 
-  /// Save/unsave against the account's shortlist first. The Saved tab reads
-  /// that server list, so a local-only toggle would silently disagree with it.
+  /// Save/unsave against the account's favourites first. The Favourites tab
+  /// reads that server list, so a local-only toggle would silently disagree.
   Future<void> _toggleSaved(String id) async {
     final messenger = ScaffoldMessenger.of(context);
     final wantSaved = !ref.read(appNotifierProvider).saved.contains(id);
@@ -385,8 +385,8 @@ class _EntrepreneurExploreMobilePageState
         content: Text(
           failure ??
               (wantSaved
-                  ? 'Saved to your shortlist.'
-                  : 'Removed from saved.'),
+                  ? 'Added to favourites.'
+                  : 'Removed from favourites.'),
         ),
         behavior: SnackBarBehavior.floating,
       ),

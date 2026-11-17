@@ -1,6 +1,7 @@
 import 'package:jaspr/dom.dart';
 import 'package:jaspr/jaspr.dart';
 
+import '../../components/ui.dart';
 import 'add_property_fields.dart';
 
 /// Step 3 — Photo gallery presentation only (no file upload).
@@ -10,7 +11,11 @@ class AddPropertyPhotosStep extends StatelessComponent {
   @override
   Component build(BuildContext context) => div([
     div(classes: 'swap-upload', [
-      div(classes: 'swap-upload-symbol', [Component.text('▣')]),
+      div(
+        classes: 'swap-upload-symbol',
+        attributes: const {'aria-hidden': 'true'},
+        [Icon('add_photo_alternate')],
+      ),
       h3([Component.text('Property photo gallery')]),
       p([
         Component.text(
@@ -27,7 +32,11 @@ class AddPropertyPhotosStep extends StatelessComponent {
         'Floor layout',
       ])
         div(classes: 'swap-photo', [
-          span(classes: 'swap-photo-symbol', [Component.text('▧')]),
+          span(
+            classes: 'swap-photo-symbol',
+            attributes: const {'aria-hidden': 'true'},
+            [Icon('image')],
+          ),
           span([Component.text(title)]),
         ]),
     ]),

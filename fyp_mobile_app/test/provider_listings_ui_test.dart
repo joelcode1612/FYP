@@ -259,6 +259,65 @@ void main() {
       expect(find.text('No listings yet'), findsOneWidget);
     });
   });
+
+  // The reuse contract for Add Property: ONE form, entered from the ONE listing
+  // screen by both provider roles. An agent previously had no path into it at
+  // all, which is what made the shared form unreachable rather than duplicated.
+  group('shared Add Property entry point', () {
+    Future<List<String>> openAs(WidgetTester tester, AppRole role) async {
+      // Real phone width, so the header Row (title + action) is exercised
+      // against the layout that actually ships.
+      tester.view.physicalSize = const Size(390, 844);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+
+      final visited = <String>[];
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            authNotifierProvider.overrideWith(
+              () => _FixedAuthNotifier(_authenticatedAs(role)),
+            ),
+          ],
+          child: MaterialApp(
+            onGenerateRoute: (settings) {
+              visited.add(settings.name ?? '');
+              return MaterialPageRoute<void>(
+                settings: settings,
+                builder: (_) => const Scaffold(body: Text('add form')),
+              );
+            },
+            home: Scaffold(
+              body: ProviderListingsMobilePage(
+                loadOverride: (_) async =>
+                    ProviderWorkspace(isAgent: role == AppRole.agent, listings: const []),
+                enquiriesOverride: () async => const <int, int>{},
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      // Exactly one create affordance, worded the same for either role.
+      expect(find.text('Add Property'), findsOneWidget);
+      await tester.tap(find.text('Add Property'));
+      await tester.pumpAndSettle();
+      return visited;
+    }
+
+    for (final role in const [AppRole.owner, AppRole.agent]) {
+      testWidgets('a $role listing opens the shared /provider/add-property form',
+          (tester) async {
+        final visited = await openAs(tester, role);
+        expect(
+          visited,
+          ['/provider/add-property'],
+          reason:
+              'both roles must resolve the one existing form, never a per-role copy',
+        );
+      });
+    }
+  });
 }
 
 ProviderListing _listing(

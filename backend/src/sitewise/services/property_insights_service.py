@@ -250,12 +250,13 @@ CATEGORY_SPECS: tuple[dict[str, str], ...] = (
 
 _CATEGORY_BY_KEY = {spec["key"]: spec for spec in CATEGORY_SPECS}
 
-#: The five map layers the page offers, in display order. Only ``properties``
-#: has stored coordinates in this deployment; the other four are recorded on
-#: the property's feature vector as *counts within a radius*, with no
-#: individual outlet positions. They are therefore reported with their true
-#: totals and an explicit ``mapped: false`` flag rather than invented markers —
-#: the map draws no pin it cannot place.
+#: The five map layers the page offers, in display order. Every layer draws
+#: from a real coordinate-carrying source table (catalogue properties,
+#: fnb_outlet, pois_master, gtfs_stops, psense_parking), so all five are
+#: ``mapped`` — the nearby-places endpoint returns the individual locations
+#: and the frame draws exactly what it receives, never an invented pin.
+#: The feature-vector counts below still power the research panels: markers
+#: and research counts answer different questions and stay separate.
 MAP_LAYER_SPECS: tuple[dict[str, Any], ...] = (
     {
         "key": "properties",
@@ -269,28 +270,28 @@ MAP_LAYER_SPECS: tuple[dict[str, Any], ...] = (
         "label": "Food Businesses",
         "color": "#d97706",
         "description": "Other food and beverage outlets already trading nearby.",
-        "mapped": False,
+        "mapped": True,
     },
     {
         "key": "demand_generators",
         "label": "Nearby Places",
         "color": "#0f9d86",
         "description": "Shops, malls, offices, schools and clinics that bring people in.",
-        "mapped": False,
+        "mapped": True,
     },
     {
         "key": "accessibility",
         "label": "Transport",
         "color": "#7c3aed",
         "description": "Public transport stops and routes within walking distance.",
-        "mapped": False,
+        "mapped": True,
     },
     {
         "key": "parking",
         "label": "Parking",
         "color": "#475569",
         "description": "Parking facilities recorded around the property.",
-        "mapped": False,
+        "mapped": True,
     },
 )
 
@@ -338,6 +339,83 @@ _LAYER_FEATURES: dict[str, dict[str, Any]] = {
 #: Statuses that mean a stitched panorama finished successfully. Anything else
 #: (``pending``, ``processing``, ``failed``) must not be presented as a tour.
 PANORAMA_COMPLETE_STATUSES = frozenset({"complete", "completed", "ready", "succeeded"})
+
+PANORAMA_UNAVAILABLE_REASON = (
+    "No completed 360° panorama is linked to this property."
+)
+PANORAMA_UNAVAILABLE: dict[str, Any] = {
+    "available": False,
+    "status": "unavailable",
+    "url": None,
+    "reason": PANORAMA_UNAVAILABLE_REASON,
+}
+
+
+def panoramas_by_catalogue_ids(
+    session: Any, catalogue_ids: list[str]
+) -> dict[str, dict[str, Any]]:
+    """Batched :meth:`PropertyInsightsService._panorama` for search pages.
+
+    ONE query resolves many catalogue ids. The authority chain is identical:
+    ``fyp.property_subject_links`` with ``match_verified IS TRUE`` joined to
+    ``public.virtual_tour`` on the *numeric* property id — the catalogue text
+    id and the legacy integer key are never compared directly — and the most
+    recently updated tour row per property wins (``updated_at DESC NULLS
+    LAST``). The per-id payload has exactly the same shape and honesty rules
+    as the insights endpoint: only a completed status *with* a URL is
+    ``ready``; a linked-but-unfinished job is ``processing``. Ids with no
+    linked tour row are absent from the mapping (callers use
+    ``PANORAMA_UNAVAILABLE``). A missing tour table must never fail the
+    search request, so any query error degrades to an empty mapping.
+    """
+    ids = [cid for cid in dict.fromkeys(catalogue_ids) if cid]
+    if not ids or session is None:
+        return {}
+    try:
+        rows = session.execute(
+            text(
+                """
+                WITH requested (cid) AS (
+                    SELECT unnest(CAST(:pids AS text[]))
+                ), ranked AS (
+                    SELECT r.cid, vt.url, vt.status,
+                           ROW_NUMBER() OVER (
+                               PARTITION BY r.cid
+                               ORDER BY vt.updated_at DESC NULLS LAST
+                           ) AS rn
+                    FROM requested r
+                    JOIN fyp.property_subject_links AS l
+                      ON l.sitewise_property_id = r.cid
+                     AND l.match_verified IS TRUE
+                    JOIN public.virtual_tour AS vt
+                      ON vt.property_id = l.property_id
+                )
+                SELECT cid, url, status FROM ranked WHERE rn = 1
+                """
+            ),
+            {"pids": ids},
+        ).fetchall()
+    except Exception:  # noqa: BLE001 - a missing tour table must not fail search
+        return {}
+
+    result: dict[str, dict[str, Any]] = {}
+    for row in rows:
+        cid = str(row[0])
+        url, status = row[1], (row[2] or "").strip().lower()
+        if url and status in PANORAMA_COMPLETE_STATUSES:
+            result[cid] = {"available": True, "status": "ready",
+                           "url": url, "reason": None}
+        else:
+            result[cid] = {
+                "available": False,
+                "status": "processing",
+                "url": None,
+                "reason": (
+                    "A 360° panorama for this property is still being "
+                    "processed, so it is not shown yet."
+                ),
+            }
+    return result
 
 #: Score bands. Wording is deliberately hedged: the index ranks locations
 #: against each other, it does not predict commercial success.
@@ -1470,12 +1548,7 @@ class PropertyInsightsService:
         a URL. A ``pending`` or failed stitching job is reported as processing
         so the gallery can say so instead of showing a broken viewer.
         """
-        unavailable = {
-            "available": False,
-            "status": "unavailable",
-            "url": None,
-            "reason": "No completed 360° panorama is linked to this property.",
-        }
+        unavailable = PANORAMA_UNAVAILABLE
         if self.analytics is None:
             return unavailable
 

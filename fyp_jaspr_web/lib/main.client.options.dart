@@ -230,6 +230,7 @@ ClientOptions get defaultClientOptions => ClientOptions(
       (p) => _property_detail_page.PropertyDetailPage(
         id: p['id'] as String,
         resultId: p['resultId'] as String,
+        appliedFiltersJson: p['appliedFiltersJson'] as String,
         businessType: p['businessType'] as String,
       ),
       loader: _property_detail_page.loadLibrary,

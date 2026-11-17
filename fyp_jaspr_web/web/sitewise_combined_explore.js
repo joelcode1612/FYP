@@ -2,34 +2,59 @@
  * SiteWise Combined Explore map.
  * Property coordinates come only from the existing authenticated FastAPI
  * catalogue, serialized by ExplorePage.dart. No static/Excel data is loaded.
- * Optional transport stops are fetched from OSM Overpass on explicit opt-in.
+ *
+ * The four surrounding-area layers (Food Businesses, Nearby Places, Transport,
+ * Parking) are the backend's nearby-places payload — the same authenticated
+ * endpoint the property detail map uses — pushed by Dart through the
+ * `data-nearby` attribute. No client-side Overpass fetch: every record comes
+ * from its verified source table (fnb_outlet, pois_master, gtfs_stops,
+ * psense_parking), and the chips carry the same honest states the detail map
+ * reports (mapped / no data / source unavailable / may be out of date).
  */
 (() => {
   'use strict';
 
   const ROOT_ID = 'swcx-leaflet';
   const BRIDGE_ID = 'swcx-selection-bridge';
-  const STATUS_ID = 'swcx-transport-status';
-  const LIST_ID = 'swcx-transport-results';
-  const OVERPASS = 'https://overpass-api.de/api/interpreter';
   const DEFAULT = [3.139, 101.687];
-  const OSM_CACHE_TTL = 15 * 60 * 1000;
-  const MAX_STOPS = 120;
+
+  // Same category palette and letters as the property-detail map frame, so
+  // both surfaces read as one product.
+  const NEARBY_LAYERS = [
+    { k: 'competitors', l: 'Food Businesses', c: '#d97706', g: 'F' },
+    { k: 'demand_generators', l: 'Nearby Places', c: '#0f9d86', g: 'R' },
+    { k: 'accessibility', l: 'Transport', c: '#7c3aed', g: 'T' },
+    { k: 'parking', l: 'Parking', c: '#475569', g: 'P' }
+  ];
+  const STATUS_TEXT = {
+    likely_open: 'Operating status: likely open',
+    possibly_closed: 'Operating status: possibly closed',
+    unknown: 'Operating status unverified'
+  };
+  const SOURCE_TEXT = {
+    osm: 'OpenStreetMap-derived, deduplicated for this analysis',
+    gtfs: 'official GTFS transit feed',
+    catalogue: 'research property catalogue'
+  };
 
   let map = null;
   let root = null;
   let markerLayer = null;
   const propertyMarkers = new Map(); // cached by stable catalogue ID
-  let transportLayer = null;
   let radiusCircle = null;
   let previousState = '';
+  let previousNearby = '';
   let previousCenter = null;
   let viewInitialized = false;
   let pendingFrame = false;
-  let transitRequest = null;
-  let transitRequestGeneration = 0;
-  let displayedTransitKey = null;
-  const transitCache = new Map();
+
+  // Nearby-places state: the pushed payload plus the render context it must
+  // be drawn against. Layer groups are created lazily per category so
+  // toggling one layer never disturbs the others' clusters.
+  let nearbyPayload = null;
+  let lastRender = null; // { selectedId, radiusM }
+  const nearbyGroups = new Map();
+  const activeNearby = new Set(NEARBY_LAYERS.map(x => x.k));
 
   function isValidPoint(obj) {
     if (!obj) return false;
@@ -41,23 +66,7 @@
     return String(value ?? '').replace(/[&<>"']/g, ch =>
       ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[ch]);
   }
-  function setTransportStatus(text) {
-    const el = document.getElementById(STATUS_ID);
-    if (el) el.textContent = text;
-  }
-  function clearTransitList() {
-    const el = document.getElementById(LIST_ID);
-    if (el) el.replaceChildren();
-  }
-  function abortTransitRequest() {
-    transitRequestGeneration++;
-    if (transitRequest) {
-      transitRequest.abort();
-      transitRequest = null;
-    }
-  }
   function destroy() {
-    abortTransitRequest();
     if (map) { try { map.remove(); } catch (_) { /* detached node */ } }
     // The panes live inside the mount element, which this script owns.
     const mount = root ? root.querySelector(':scope > .swcx-map-mount') : null;
@@ -66,12 +75,14 @@
     root = null;
     markerLayer = null;
     propertyMarkers.clear();
-    transportLayer = null;
     radiusCircle = null;
     previousState = '';
+    previousNearby = '';
     previousCenter = null;
     viewInitialized = false;
-    displayedTransitKey = null;
+    nearbyPayload = null;
+    lastRender = null;
+    nearbyGroups.clear();
   }
   function mapUnavailable(el, message) {
     if (el.querySelector('.swcx-map-error')) return;
@@ -128,8 +139,8 @@
         ? L.markerClusterGroup({ maxClusterRadius: 42, showCoverageOnHover: false })
         : L.layerGroup();
       markerLayer.addTo(map);
-      transportLayer = L.layerGroup().addTo(map);
       root = el;
+      buildLayerChips(mountFor(el));
       return true;
     } catch (_) {
       destroy();
@@ -164,6 +175,202 @@
       iconAnchor: selected ? [12, 12] : [9, 9],
     });
   }
+
+  // -- surrounding-area layers ----------------------------------------------
+
+  function nearbyGroup(key) {
+    if (!nearbyGroups.has(key)) {
+      const group = (typeof L.markerClusterGroup === 'function')
+        ? L.markerClusterGroup({ maxClusterRadius: 42, showCoverageOnHover: false })
+        : L.layerGroup();
+      nearbyGroups.set(key, group);
+    }
+    return nearbyGroups.get(key);
+  }
+
+  function categoryMeta(key) {
+    return nearbyPayload?.categories?.[key] || null;
+  }
+
+  function mappedCount(key, radiusM) {
+    if (!nearbyPayload || !Array.isArray(nearbyPayload.places)) return 0;
+    return nearbyPayload.places.reduce(
+      (n, p) => (p && p.category === key &&
+        typeof p.distance_m === 'number' && p.distance_m <= radiusM ? n + 1 : n), 0);
+  }
+
+  function subtypeLabel(place) {
+    const s = String(place.subtype || '').trim();
+    if (!s) return '';
+    return s.replace(/[_/]+/g, ' ').trim().replace(/\b\w/g, ch => ch.toUpperCase());
+  }
+
+  function placePopup(place) {
+    const content = document.createElement('div');
+    content.className = 'swcx-popup';
+    const name = document.createElement('strong');
+    name.textContent = place.name || 'Unnamed place';
+    content.append(name);
+    const kind = String(place.detail || '').trim();
+    const label = subtypeLabel(place);
+    if (kind && kind !== place.subtype) {
+      const d = document.createElement('small');
+      d.textContent = label ? `${label} · ${kind}` : kind;
+      content.append(d);
+    } else if (label) {
+      const d = document.createElement('small');
+      d.textContent = label;
+      content.append(d);
+    }
+    if (typeof place.distance_m === 'number') {
+      const d = document.createElement('small');
+      d.textContent = `~${place.distance_m} m straight line`;
+      content.append(d);
+    }
+    if (place.operating_status && STATUS_TEXT[place.operating_status]) {
+      const d = document.createElement('small');
+      d.textContent = STATUS_TEXT[place.operating_status];
+      content.append(d);
+    }
+    const bits = [];
+    if (place.source) bits.push(SOURCE_TEXT[place.source] || String(place.source));
+    if (place.observed_at) bits.push(`observed ${String(place.observed_at).slice(0, 10)}`);
+    if (place.source === 'gtfs' && place.detail) {
+      // GTFS rows carry routes + scheduled departures as their detail line;
+      // these are the published timetable, never live arrivals.
+      bits.unshift(String(place.detail));
+    }
+    if (bits.length) {
+      const d = document.createElement('small');
+      d.textContent = bits.join(' · ');
+      content.append(d);
+    }
+    return content;
+  }
+
+  function drawNearby() {
+    const radiusM = lastRender?.radiusM ?? 1000;
+    for (const layer of NEARBY_LAYERS) {
+      const group = nearbyGroup(layer.k);
+      group.clearLayers();
+      if (map.hasLayer(group)) map.removeLayer(group);
+      if (!nearbyPayload || !activeNearby.has(layer.k)) continue;
+      const places = Array.isArray(nearbyPayload.places) ? nearbyPayload.places : [];
+      let count = 0;
+      for (const p of places) {
+        if (!p || p.category !== layer.k) continue;
+        if (typeof p.distance_m !== 'number' || p.distance_m > radiusM) continue;
+        if (!isValidPoint({ lat: p.lat, lon: p.lng })) continue;
+        const marker = L.marker([p.lat, p.lng], {
+          title: `${layer.l} — ${p.name || 'Unnamed place'}`,
+          icon: L.divIcon({
+            className: 'swcx-cat-icon',
+            html: `<span style="background:${layer.c}" aria-hidden="true">${layer.g}</span>`,
+            iconSize: [18, 18],
+            iconAnchor: [9, 9],
+          }),
+        });
+        marker.bindPopup(placePopup(p));
+        group.addLayer(marker);
+        count++;
+      }
+      if (count > 0) group.addTo(map);
+    }
+    updateLayerChips(radiusM);
+  }
+
+  function buildLayerChips(mount) {
+    let bar = mount.querySelector(':scope > .swcx-layers');
+    if (!bar) {
+      bar = document.createElement('div');
+      bar.className = 'swcx-layers';
+      const label = document.createElement('span');
+      label.className = 'swcx-layers__label';
+      label.textContent = 'Surrounding layers';
+      bar.append(label);
+      for (const layer of NEARBY_LAYERS) {
+        const chip = document.createElement('button');
+        chip.type = 'button';
+        chip.className = 'swcx-layer-chip';
+        chip.dataset.layer = layer.k;
+        chip.setAttribute('aria-pressed', 'true');
+        const dot = document.createElement('span');
+        dot.className = 'swcx-layer-chip__dot';
+        dot.style.background = layer.c;
+        const name = document.createElement('span');
+        name.className = 'swcx-layer-chip__name';
+        name.textContent = layer.l;
+        const count = document.createElement('span');
+        count.className = 'swcx-layer-chip__count';
+        const tag = document.createElement('span');
+        tag.className = 'swcx-layer-chip__tag';
+        chip.append(dot, name, count, tag);
+        chip.addEventListener('click', () => {
+          if (activeNearby.has(layer.k)) activeNearby.delete(layer.k);
+          else activeNearby.add(layer.k);
+          chip.setAttribute('aria-pressed', String(activeNearby.has(layer.k)));
+          drawNearby();
+        });
+        bar.append(chip);
+      }
+      mount.append(bar);
+    }
+    updateLayerChips(lastRender?.radiusM ?? 1000);
+  }
+
+  function updateLayerChips(radiusM) {
+    if (!root) return;
+    const mount = root.querySelector(':scope > .swcx-map-mount');
+    if (!mount) return;
+    const hasCenter = Boolean(lastRender?.selectedId);
+    for (const layer of NEARBY_LAYERS) {
+      const chip = mount.querySelector(`.swcx-layer-chip[data-layer="${layer.k}"]`);
+      if (!chip) continue;
+      const count = chip.querySelector('.swcx-layer-chip__count');
+      const tag = chip.querySelector('.swcx-layer-chip__tag');
+      const meta = categoryMeta(layer.k);
+      const state = meta ? meta.state : null;
+      const mapped = mappedCount(layer.k, radiusM);
+      count.textContent = !hasCenter
+        ? ''
+        : nearbyPayload ? String(mapped) : '–';
+      tag.textContent = '';
+      if (!hasCenter) {
+        chip.title = 'Select a property to load its surrounding records';
+      } else if (state === 'source_unavailable') {
+        tag.textContent = 'source unavailable';
+        chip.title = 'This source could not be read just now; other layers are unaffected.';
+      } else if (state === 'data_stale') {
+        tag.textContent = 'may be out of date';
+        chip.title = 'The official GTFS feeds on this host are past their refresh window; markers may not reflect current timetables.';
+      } else if (nearbyPayload && mapped === 0) {
+        tag.textContent = 'no data';
+        chip.title = `No verified ${layer.l.toLowerCase()} within ${radiusM} m of the selected property.`;
+      } else if (nearbyPayload && meta?.truncated) {
+        tag.textContent = 'nearest only';
+        chip.title = 'Large catchment: only the nearest locations per layer are drawn.';
+      } else {
+        chip.title = `${layer.l} recorded around the selected property (straight-line distances).`;
+      }
+    }
+  }
+
+  function applyNearby(raw) {
+    if (!raw) {
+      nearbyPayload = null;
+      drawNearby();
+      return;
+    }
+    try {
+      const parsed = JSON.parse(raw);
+      nearbyPayload = parsed && typeof parsed === 'object' ? parsed : null;
+    } catch (_) {
+      // A malformed push is ignored; the previous state stays honest.
+      return;
+    }
+    drawNearby();
+  }
+
   function renderProperties(data) {
     const points = Array.isArray(data.properties) ? data.properties.filter(isValidPoint) : [];
     const selectedId = data.selectedId == null ? null : String(data.selectedId);
@@ -239,146 +446,8 @@
     previousCenter = selectedId;
     viewInitialized = true;
     requestAnimationFrame(() => { if (map) map.invalidateSize(); });
-    syncTransport(center, radiusM, Boolean(data.showTransport));
-  }
-
-  function osmType(tags) {
-    if (!tags) return 'Transport stop';
-    if (tags.railway === 'station' || tags.railway === 'halt' ||
-        tags.station === 'subway' || tags.station === 'light_rail') return 'Rail station';
-    if (tags.railway === 'tram_stop') return 'Tram stop';
-    if (tags.amenity === 'bus_station') return 'Bus terminal';
-    if (tags.highway === 'bus_stop' || tags.bus === 'yes') return 'Bus stop';
-    if (tags.public_transport === 'platform') return 'Transport platform';
-    if (tags.public_transport === 'station') return 'Transport station';
-    return 'Transit point';
-  }
-
-  function normaliseStops(data, center, radiusM) {
-    const rows = Array.isArray(data?.elements) ? data.elements : [];
-    const used = new Set();
-    const stops = [];
-    for (const row of rows) {
-      const lat = row.lat ?? row.center?.lat;
-      const lon = row.lon ?? row.center?.lon;
-      const point = { lat: Number(lat), lon: Number(lon) };
-      if (!isValidPoint(point)) continue;
-      const metres = metersBetween(point, center);
-      if (metres > radiusM + 5) continue;
-      const tags = row.tags || {};
-      const name = tags.name || tags['name:en'] || osmType(tags);
-      const kind = osmType(tags);
-      // Multiple OSM objects can refer to the same physical platform/stop.
-      const key = `${name.toLowerCase().trim()}|${Math.round(point.lat * 10000)}|${Math.round(point.lon * 10000)}`;
-      if (used.has(key)) continue;
-      used.add(key);
-      stops.push({ name: String(name), kind, ...point, distanceM: Math.round(metres) });
-    }
-    stops.sort((a, b) => a.distanceM - b.distanceM);
-    return stops.slice(0, MAX_STOPS);
-  }
-
-  function overpassQuery(center, radiusM) {
-    const lat = Number(center.lat).toFixed(7);
-    const lon = Number(center.lon).toFixed(7);
-    const around = `(around:${radiusM},${lat},${lon})`;
-    return `[out:json][timeout:20];(` +
-      `node${around}["highway"="bus_stop"];` +
-      `nwr${around}["amenity"="bus_station"];` +
-      `nwr${around}["railway"~"^(station|halt|tram_stop)$"];` +
-      `nwr${around}["public_transport"~"^(platform|station)$"];` +
-      `);out center;`;
-  }
-
-  function showStops(stops) {
-    if (!transportLayer) return;
-    transportLayer.clearLayers();
-    clearTransitList();
-    const list = document.getElementById(LIST_ID);
-    if (!stops.length) {
-      setTransportStatus('No transport stops were returned from OpenStreetMap for this radius. Coverage may be incomplete.');
-      return;
-    }
-    for (const item of stops) {
-      L.circleMarker([item.lat, item.lon], {
-        radius: 6, weight: 2, color: '#fff', fillColor: '#0d9488', fillOpacity: 1,
-      }).bindPopup(`<strong>${escapeHtml(item.name)}</strong><br>` +
-        `${escapeHtml(item.kind)} · ${item.distanceM} m (straight-line)`)
-        .addTo(transportLayer);
-    }
-    setTransportStatus(`${stops.length} OpenStreetMap transport points plotted in the chosen radius. Not real-time service availability.`);
-    if (list) {
-      for (const item of stops.slice(0, 6)) {
-        const row = document.createElement('div');
-        row.className = 'swcx-transport-item';
-        const left = document.createElement('span');
-        const name = document.createElement('strong');
-        name.textContent = item.name;
-        const kind = document.createElement('small');
-        kind.textContent = item.kind;
-        left.append(name, kind);
-        const dist = document.createElement('b');
-        dist.textContent = `${item.distanceM} m`;
-        row.append(left, dist);
-        list.appendChild(row);
-      }
-    }
-  }
-
-  async function loadTransport(center, radiusM, key, controller, generation) {
-    const timeout = setTimeout(() => controller.abort(), 26000);
-    try {
-      const response = await fetch(OVERPASS, {
-        method: 'POST',
-        body: new URLSearchParams({ data: overpassQuery(center, radiusM) }),
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8' },
-        signal: controller.signal,
-      });
-      if (!response.ok) throw new Error('Overpass unavailable');
-      const data = await response.json();
-      if (generation !== transitRequestGeneration || !root?.isConnected) return;
-      const stops = normaliseStops(data, center, radiusM);
-      if (transitCache.size >= 24) transitCache.delete(transitCache.keys().next().value);
-      transitCache.set(key, { timestamp: Date.now(), stops });
-      showStops(stops);
-    } catch (_) {
-      if (generation !== transitRequestGeneration) return;
-      transportLayer?.clearLayers();
-      clearTransitList();
-      setTransportStatus('Transport map data is unavailable right now. Turn the layer off and on to retry; property listings are unaffected.');
-    } finally {
-      clearTimeout(timeout);
-      if (transitRequest === controller) transitRequest = null;
-    }
-  }
-
-  function syncTransport(center, radiusM, enabled) {
-    if (!enabled || !center) {
-      abortTransitRequest();
-      displayedTransitKey = null;
-      transportLayer?.clearLayers();
-      clearTransitList();
-      setTransportStatus(center
-        ? 'Turn on Transport stops to load nearby OpenStreetMap records.'
-        : 'Select a property, then turn on Transport stops.');
-      return;
-    }
-    const key = `${Number(center.lat).toFixed(6)}:${Number(center.lon).toFixed(6)}:${radiusM}`;
-    if (key === displayedTransitKey) return;
-    displayedTransitKey = key;
-    abortTransitRequest();
-    transportLayer?.clearLayers();
-    clearTransitList();
-    const cached = transitCache.get(key);
-    if (cached && Date.now() - cached.timestamp < OSM_CACHE_TTL) {
-      showStops(cached.stops);
-      return;
-    }
-    setTransportStatus('Loading mapped bus stops, rail stations and public transport platforms…');
-    const controller = new AbortController();
-    transitRequest = controller;
-    const generation = transitRequestGeneration;
-    void loadTransport(center, radiusM, key, controller, generation);
+    lastRender = { selectedId, radiusM };
+    drawNearby();
   }
 
   function sync() {
@@ -386,6 +455,11 @@
     if (!el) { if (root) destroy(); return; }
     if (root && root !== el) destroy();
     if (!map && !initialize(el)) return;
+    const nearby = el.getAttribute('data-nearby') || '';
+    if (nearby !== previousNearby) {
+      previousNearby = nearby;
+      applyNearby(nearby || null);
+    }
     const payload = el.getAttribute('data-state');
     if (!payload || payload === previousState) return;
     previousState = payload;
@@ -400,10 +474,12 @@
   function boot() {
     const observer = new MutationObserver(records => {
       if (records.some(r => r.type === 'childList' ||
-          (r.type === 'attributes' && r.attributeName === 'data-state'))) schedule();
+          (r.type === 'attributes' &&
+            (r.attributeName === 'data-state' || r.attributeName === 'data-nearby')))) schedule();
     });
     observer.observe(document.documentElement, {
-      childList: true, subtree: true, attributes: true, attributeFilter: ['data-state'],
+      childList: true, subtree: true, attributes: true,
+      attributeFilter: ['data-state', 'data-nearby'],
     });
     window.addEventListener('resize', () => { if (map) map.invalidateSize(); });
     schedule();

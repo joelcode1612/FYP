@@ -12,10 +12,21 @@ themselves are built from:
   status and the evidence behind it;
 * ``demand_gen.pois_master`` — the deduplicated POI table
   (``active_for_analysis``) covering schools, universities, malls,
-  supermarkets, retail, offices and hospitals;
+  supermarkets, retail, offices and hospitals (``demand_gen.subjects`` is the
+  P-class research cohort, not a POI table, and is deliberately not listed);
 * ``fyp_features.gtfs_stops`` — GTFS transit stops joined with
-  ``gtfs_stop_modes`` for bus/rail mode;
-* ``public.psense_parking`` (``kept IS TRUE``) — parking facilities.
+  ``gtfs_stop_modes`` for bus/rail mode, each enriched with its distinct
+  routes (``gtfs_stop_routes`` → ``gtfs_routes``) and scheduled departures
+  per day type (``gtfs_dep``). Departures are the published timetable, never
+  live arrivals;
+* ``public.psense_parking`` (``kept IS TRUE``) — parking facilities;
+* ``fyp.catalogue_properties`` — the other researched commercial properties
+  around the selected one (the centre property excludes itself).
+
+All coordinates are EPSG:4326 (the sources store plain lat/lon columns; the
+geometry columns, where present, are SRID 4326 too), so distances are
+straight-line great-circle values from ``ST_DistanceSphere`` — the same
+origin the insights score describes.
 
 What this endpoint adds is the "where exactly" half. It deliberately does NOT
 recompute the recorded radius counts: those stay owned by the insights
@@ -23,8 +34,22 @@ payload, so the map can show recorded totals and mapped locations side by
 side. The two may legitimately differ (deduplication, status filtering,
 coordinate gates), and the UI says so instead of pretending they match.
 
-Straight-line distances are computed with ``ST_DistanceSphere`` from the
-catalogue's own coordinate — the same origin the insights score describes.
+Every category reports an explicit ``state`` so absence is never silently
+converted into a number:
+
+* ``mapped`` — coordinates were read from the source; ``total_in_radius`` is
+  the honest count (which may be a measured zero);
+* ``measured_zero`` — the source was queried successfully and holds no
+  in-radius records with usable coordinates;
+* ``source_unavailable`` — the source query failed; ``total_in_radius`` is
+  ``None`` and an ``error`` note says why. One failing source never removes
+  the other categories from the response;
+* ``data_stale`` — the accessibility category only: every official GTFS feed
+  on this host is past the freshness SLA (see
+  ``ingestion.sources.gtfs_importer.is_transit_stale``). The markers are
+  still returned — stale is a quality warning about the timetable, not an
+  absence of data — and the UI says the data may be out of date.
+
 Read-only, no new tables, no new data pipeline, no scoring.
 """
 
@@ -42,15 +67,57 @@ from sqlmodel import Session
 _CAP_PER_CATEGORY = 800
 
 _CATEGORY_SOURCES = {
+    "properties": "fyp.catalogue_properties (research property catalogue)",
     "competitors": "fnb_a.fnb_outlet joined with fnb_a.outlet_labels_v2",
     "demand_generators": "demand_gen.pois_master (active_for_analysis)",
-    "accessibility": "fyp_features.gtfs_stops (GTFS feeds)",
+    "accessibility": "fyp_features.gtfs_stops (official GTFS feeds)",
     "parking": "public.psense_parking (kept IS TRUE)",
 }
+
+#: State values reported per category. ``source_not_integrated`` is part of
+#: the contract so a future category with no wired source can say so plainly
+#: instead of pretending to be an empty source; no current category uses it.
+STATES = (
+    "mapped",
+    "measured_zero",
+    "source_unavailable",
+    "source_not_integrated",
+    "data_stale",
+)
 
 # One bbox prefilter keeps the exact distance check cheap; 1 degree of
 # latitude is ~111.32 km, and longitude degrees only shrink from there.
 _DEG_PER_METRE = 1.0 / 111_320.0
+
+_PROPERTIES_SQL = """
+SELECT 'prop:' || c.id AS id,
+       COALESCE(NULLIF(btrim(c.title), ''), c.id) AS name,
+       c.property_type AS subtype,
+       NULLIF(btrim(c.address), '') AS detail,
+       c.latitude AS lat,
+       c.longitude AS lng,
+       'catalogue' AS source,
+       c.id AS source_id,
+       NULL AS operating_status,
+       NULL AS status_evidence,
+       NULL AS coords_verified,
+       round(ST_DistanceSphere(
+           ST_SetSRID(ST_MakePoint(c.longitude, c.latitude), 4326),
+           ST_SetSRID(ST_MakePoint(:lon, :lat), 4326)))::int AS distance_m,
+       NULL AS observed_at,
+       count(*) OVER () AS total
+FROM fyp.catalogue_properties c
+WHERE c.id <> :exclude_id
+  AND c.latitude IS NOT NULL
+  AND c.longitude IS NOT NULL
+  AND c.latitude BETWEEN :lat - :pad AND :lat + :pad
+  AND c.longitude BETWEEN :lon - :pad AND :lon + :pad
+  AND ST_DistanceSphere(
+      ST_SetSRID(ST_MakePoint(c.longitude, c.latitude), 4326),
+      ST_SetSRID(ST_MakePoint(:lon, :lat), 4326)) <= :radius_m
+ORDER BY distance_m
+LIMIT :cap
+"""
 
 _COMPETITOR_SQL = """
 SELECT 'fnb:' || o.outlet_id AS id,
@@ -161,11 +228,17 @@ ORDER BY distance_m
 LIMIT :cap
 """
 
+# Each stop carries its distinct routes (route short names via
+# gtfs_stop_routes -> gtfs_routes) and its published scheduled departures per
+# day type from gtfs_dep. These are the timetable the feed publishes — they
+# are never live arrivals, and the UI says so.
 _TRANSIT_SQL = """
 SELECT 'gtfs:' || s.stop_uid AS id,
        COALESCE(NULLIF(btrim(s.name), ''), 'Transit stop') AS name,
        m.mode AS subtype,
-       NULL AS detail,
+       rn.route_names AS route_names,
+       dd.weekday_departures AS weekday_departures,
+       dd.weekend_departures AS weekend_departures,
        s.lat AS lat,
        s.lon AS lng,
        'gtfs:' || s.feed AS source,
@@ -180,6 +253,22 @@ SELECT 'gtfs:' || s.stop_uid AS id,
        count(*) OVER () AS total
 FROM fyp_features.gtfs_stops s
 LEFT JOIN fyp_features.gtfs_stop_modes m USING (stop_uid)
+LEFT JOIN LATERAL (
+    SELECT array_agg(DISTINCT COALESCE(
+               NULLIF(btrim(r.short), ''), NULLIF(btrim(r.long), '')
+           ) ORDER BY COALESCE(NULLIF(btrim(r.short), ''), NULLIF(btrim(r.long), '')))
+               FILTER (WHERE COALESCE(NULLIF(btrim(r.short), ''), NULLIF(btrim(r.long), '')) IS NOT NULL)
+               AS route_names
+    FROM fyp_features.gtfs_stop_routes sr
+    JOIN fyp_features.gtfs_routes r ON r.route_uid = sr.route_uid
+    WHERE sr.stop_uid = s.stop_uid
+) rn ON TRUE
+LEFT JOIN LATERAL (
+    SELECT count(*) FILTER (WHERE d.daytype = 'WEEKDAY') AS weekday_departures,
+           count(*) FILTER (WHERE d.daytype = 'WEEKEND') AS weekend_departures
+    FROM fyp_features.gtfs_dep d
+    WHERE d.stop_uid = s.stop_uid
+) dd ON TRUE
 WHERE s.lat IS NOT NULL
   AND s.lon IS NOT NULL
   AND s.lat BETWEEN :lat - :pad AND :lat + :pad
@@ -192,6 +281,7 @@ LIMIT :cap
 """
 
 _QUERIES = (
+    ("properties", _PROPERTIES_SQL),
     ("competitors", _COMPETITOR_SQL),
     ("demand_generators", _POI_SQL),
     ("accessibility", _TRANSIT_SQL),
@@ -205,14 +295,29 @@ class NearbyPlacesService:
     def __init__(self, session: Session):
         self.session = session
 
-    def nearby(self, lat: float | None, lon: float | None, radius_m: int) -> dict[str, Any]:
+    def nearby(
+        self,
+        lat: float | None,
+        lon: float | None,
+        radius_m: int,
+        exclude_property_id: str | None = None,
+        transit_stale: bool = False,
+    ) -> dict[str, Any]:
         """Places within ``radius_m`` of ``(lat, lon)``, nearest first.
 
         A missing origin is not an error: every category reports an honest
         zero and the caller shows its own "no usable coordinates" state. Each
-        category carries its own totals so the UI can tell "no records in
-        radius" (a measured absence) apart from "this category has no
-        individual-coordinate source" (which does not occur here).
+        category carries its own totals and an explicit ``state`` so the UI
+        can tell "no records in radius" (a measured absence), "the source
+        could not be read" (unavailable, total unknown) and "records exist
+        but have no stored coordinates" (the map's totals-only view) apart.
+
+        ``exclude_property_id`` keeps the selected catalogue property out of
+        its own ``properties`` category: it is the origin, not a nearby place.
+
+        ``transit_stale`` is the caller's freshness verdict on the GTFS feeds
+        (``is_transit_stale()``); when true the accessibility category keeps
+        its places but reports ``data_stale`` instead of ``mapped``.
         """
         radius = int(radius_m)
         pad = radius * _DEG_PER_METRE
@@ -223,19 +328,36 @@ class NearbyPlacesService:
             cap = _CAP_PER_CATEGORY
             if lat is None or lon is None:
                 categories[key] = {
+                    "state": "mapped",
                     "returned": 0,
                     "total_in_radius": 0,
                     "truncated": False,
                     "source": _CATEGORY_SOURCES[key],
                 }
                 continue
-            rows = self.session.execute(
-                text(sql), {**args, "cap": cap + 1}
-            ).mappings().all()
+            try:
+                rows = self.session.execute(
+                    text(sql),
+                    {**args, "cap": cap + 1, "exclude_id": exclude_property_id},
+                ).mappings().all()
+            except Exception as exc:  # one failing source must not hide the rest
+                categories[key] = {
+                    "state": "source_unavailable",
+                    "returned": 0,
+                    "total_in_radius": None,
+                    "truncated": False,
+                    "source": _CATEGORY_SOURCES[key],
+                    "error": str(exc)[:200],
+                }
+                continue
             truncated = len(rows) > cap
             rows = rows[:cap]
             total = int(rows[0]["total"]) if rows else 0
+            state = "mapped" if total > 0 else "measured_zero"
+            if key == "accessibility" and transit_stale:
+                state = "data_stale"
             categories[key] = {
+                "state": state,
                 "returned": len(rows),
                 "total_in_radius": total,
                 "truncated": truncated,
@@ -243,15 +365,23 @@ class NearbyPlacesService:
             }
             places.extend(self._place(key, row) for row in rows)
         places.sort(key=lambda place: (place["distance_m"], place["id"]))
-        return {"radius_m": radius, "categories": categories, "places": places}
+        return {
+            "radius_m": radius,
+            "distance_method": "straight_line_spherical",
+            "categories": categories,
+            "places": places,
+        }
 
     def _place(self, category: str, row: Any) -> dict[str, Any]:
+        # Transit rows select route/departure columns instead of a detail
+        # column, so the summary is composed here rather than read.
+        detail = self._transit_detail(row) if category == "accessibility" else row["detail"]
         return {
             "id": str(row["id"]),
             "name": row["name"],
             "category": category,
             "subtype": row["subtype"],
-            "detail": row["detail"],
+            "detail": detail,
             "lat": float(row["lat"]),
             "lng": float(row["lng"]),
             "source": row["source"],
@@ -261,4 +391,30 @@ class NearbyPlacesService:
             "coords_verified": None if row["coords_verified"] is None else bool(row["coords_verified"]),
             "distance_m": int(row["distance_m"]),
             "observed_at": row["observed_at"],
+            "source_updated_at": row["observed_at"],
         }
+
+    @staticmethod
+    def _transit_detail(row: Any) -> str | None:
+        """Human summary of a stop's routes and published departures.
+
+        Departure counts come from the feed's own timetable (``gtfs_dep``) and
+        describe scheduled service only — never live arrivals.
+        """
+        parts: list[str] = []
+        routes = list(row.get("route_names") or [])
+        if routes:
+            shown = ", ".join(str(r) for r in routes[:5])
+            if len(routes) > 5:
+                shown += f" +{len(routes) - 5}"
+            parts.append(f"Routes {shown}")
+        weekday = row.get("weekday_departures")
+        weekend = row.get("weekend_departures")
+        if weekday:
+            departures = f"{int(weekday)} weekday scheduled departures"
+            if weekend:
+                departures += f" · {int(weekend)} weekend"
+            parts.append(departures)
+        elif weekend:
+            parts.append(f"{int(weekend)} weekend scheduled departures")
+        return " · ".join(parts) or None

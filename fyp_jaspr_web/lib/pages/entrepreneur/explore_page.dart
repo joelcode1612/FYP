@@ -12,6 +12,7 @@ import '../../components/map_dom.dart';
 import '../../components/property_card.dart';
 import '../../components/ui.dart';
 import '../../data/app_locator.dart';
+import '../../data/property_insights_api.dart';
 import '../../layouts/app_layout.dart';
 
 /// Combined SiteWise Entrepreneur Explore page.
@@ -34,9 +35,12 @@ import '../../layouts/app_layout.dart';
 /// dataset from the F&B competitor research counts, which stay on their own
 /// analysis endpoint and are never shown as property counts.
 ///
-/// The optional public-transport layer fetches OpenStreetMap/Overpass records
-/// from the browser only after a user opts in (cached, user-initiated, honest
-/// empty/error states); OSM stops are NOT live service schedules.
+/// When a property is selected the page also fetches the backend's
+/// nearby-places payload ([PropertyInsightsApi.loadNearbyPlaces]) for the
+/// current radius and hands it to the map through the `data-nearby`
+/// attribute. Those four surrounding layers (Food Businesses, Nearby Places,
+/// Transport, Parking) are the same verified source tables the property
+/// detail map draws — no client-side fetch of third-party map data.
 @client
 class ExplorePage extends StatefulComponent {
   /// Retained for existing app.dart route compatibility: `?id=map` scrolls to
@@ -81,7 +85,15 @@ class _ExplorePageState extends State<ExplorePage> {
   /// Applied catchment radius. 500 m and 1 km are the documented research
   /// radii; the 1 km count CONTAINS the 500 m ring.
   int radiusM = 1000;
-  bool showTransport = false;
+
+  /// The backend's nearby-places payload for the selection, and the
+  /// (property id, radius) pair it was fetched for. A payload whose key no
+  /// longer matches the current selection or radius is stale by definition
+  /// and is never rendered; null means "not loaded for this selection", and
+  /// the map shows no surrounding markers rather than inventing any.
+  Map<String, dynamic>? _nearbyPlaces;
+  String? _nearbyPlacesFor;
+  int _nearbyRadius = 0;
   int visibleLimit = 24;
   Timer? _queryDebounce;
   Future<LocationAnalysis?>? _analysisFuture;
@@ -275,15 +287,44 @@ class _ExplorePageState extends State<ExplorePage> {
     }
   }
 
+  /// Loads the surrounding-area payload for [propertyId] at [metres]. A
+  /// failed fetch leaves [_nearbyPlaces] null — the map's surrounding chips
+  /// then say the records are not loaded instead of showing empty layers that
+  /// would read as a measured absence. Stale responses (selection or radius
+  /// changed meanwhile) are discarded.
+  Future<void> _loadNearby(String propertyId, int metres) async {
+    final payload =
+        await PropertyInsightsApi.loadNearbyPlaces(propertyId, radiusM: metres);
+    if (!mounted) return;
+    setState(() {
+      if (selectedId == propertyId && radiusM == metres) {
+        _nearbyPlaces = payload;
+        _nearbyPlacesFor = propertyId;
+        _nearbyRadius = metres;
+      }
+    });
+  }
+
+  /// The nearby payload to hand the map, or null when it does not describe
+  /// the current selection and radius. Clearing the selection clears it.
+  Map<String, dynamic>? get _currentNearby =>
+      _nearbyPlacesFor == selectedId && _nearbyRadius == radiusM
+          ? _nearbyPlaces
+          : null;
+
   void _choose(CommercialProperty property, {bool scrollToMap = false}) {
     if (!_validPoint(property)) return;
     setState(() {
       if (selectedId != property.id) {
         _analysisFuture = _readAnalysis(property.id);
+        _nearbyPlaces = null;
+        _nearbyPlacesFor = null;
+        _nearbyRadius = 0;
       }
       selectedId = property.id;
       visibleLimit = 24;
     });
+    unawaited(_loadNearby(property.id, radiusM));
     if (scrollToMap) {
       Future.delayed(const Duration(milliseconds: 40), () {
         if (mounted) scrollDomIntoView('swcx-map-section');
@@ -294,7 +335,9 @@ class _ExplorePageState extends State<ExplorePage> {
   void _clearCenter() => setState(() {
     selectedId = null;
     _analysisFuture = null;
-    showTransport = false;
+    _nearbyPlaces = null;
+    _nearbyPlacesFor = null;
+    _nearbyRadius = 0;
     visibleLimit = 24;
   });
 
@@ -305,7 +348,9 @@ class _ExplorePageState extends State<ExplorePage> {
     if (_center == null) {
       selectedId = null;
       _analysisFuture = null;
-      showTransport = false;
+      _nearbyPlaces = null;
+      _nearbyPlacesFor = null;
+      _nearbyRadius = 0;
     }
   });
 
@@ -319,7 +364,9 @@ class _ExplorePageState extends State<ExplorePage> {
       // cluster rule ON (it is a default, not a chosen filter).
       nearbyOnly = true;
       selectedId = null;
-      showTransport = false;
+      _nearbyPlaces = null;
+      _nearbyPlacesFor = null;
+      _nearbyRadius = 0;
       _analysisFuture = null;
       visibleLimit = 24;
     });
@@ -503,32 +550,20 @@ class _ExplorePageState extends State<ExplorePage> {
               'Select ${metres == 500 ? '500 metres' : '1 kilometre'} radius',
             },
             events: events(
-              onClick: () => setState(() {
-                radiusM = metres;
-                visibleLimit = 24;
-              }),
+              onClick: () {
+                final id = selectedId;
+                setState(() {
+                  radiusM = metres;
+                  visibleLimit = 24;
+                  // The old payload describes a different radius.
+                  _nearbyPlaces = null;
+                  _nearbyRadius = 0;
+                });
+                if (id != null) unawaited(_loadNearby(id, metres));
+              },
             ),
             [Component.text(metres == 500 ? '500 m' : '1 km')],
           ),
-        button(
-          classes: showTransport ? 'swcx-tool swcx-tool--active' : 'swcx-tool',
-          attributes: {
-            'type': 'button',
-            'aria-pressed': showTransport ? 'true' : 'false',
-            if (center == null) 'disabled': '',
-            'title': center == null
-                ? 'Select a property before loading nearby transport stops'
-                : 'Show OpenStreetMap-recorded public transport stops',
-          },
-          events: events(
-            onClick: () {
-              if (_center != null) {
-                setState(() => showTransport = !showTransport);
-              }
-            },
-          ),
-          [Icon('directions_bus', size: 'sm'), Component.text('Transport')],
-        ),
         if (center != null)
           button(
             classes: 'swcx-tool',
@@ -542,12 +577,12 @@ class _ExplorePageState extends State<ExplorePage> {
 
   Component _mapPanel() {
     final center = _center;
+    final nearby = _currentNearby;
     // Map contains the full FILTERED property set. Radius membership controls
     // marker appearance and the list. The chosen center remains selectable.
     final json = jsonEncode({
       'selectedId': center?.id,
       'radiusM': radiusM,
-      'showTransport': showTransport && center != null,
       'properties': [
         for (final p in _filtered)
           if (_validPoint(p))
@@ -565,6 +600,12 @@ class _ExplorePageState extends State<ExplorePage> {
             },
       ],
     });
+    // The surrounding-area payload travels in its own attribute so a selection
+    // change never forces the property set to be re-parsed by the map, and the
+    // payload is only present when it describes the CURRENT selection/radius
+    // (see _currentNearby). Null is sent as an empty attribute: the map clears
+    // its surrounding layers rather than keeping stale markers.
+    final nearbyJson = nearby == null ? '' : jsonEncode(nearby);
     return section(
       classes: 'swcx-map-panel',
       attributes: const {'id': 'swcx-map-section'},
@@ -585,6 +626,7 @@ class _ExplorePageState extends State<ExplorePage> {
           attributes: {
             'id': 'swcx-leaflet',
             'data-state': json,
+            'data-nearby': nearbyJson,
             'role': 'region',
             'aria-label': 'Interactive commercial property map',
           },
@@ -627,44 +669,15 @@ class _ExplorePageState extends State<ExplorePage> {
               i(classes: 'swcx-dot swcx-dot--other', []),
               Component.text('Other listings'),
             ]),
-            span([
-              i(classes: 'swcx-dot swcx-dot--transport', []),
-              Component.text('Transport'),
-            ]),
           ]),
           p(classes: 'small', [
             Component.text(
               'Distances are straight-line estimates from catalogue coordinates, '
-                  'not travel times. 500 m is included in the 1 km total.',
+                  'not travel times. 500 m is included in the 1 km total. The '
+                  'surrounding layers on the map draw verified backend records — '
+                  'scheduled transit data, never live arrivals.',
             ),
           ]),
-        ]),
-        div(classes: 'swcx-transport-block', [
-          div(classes: 'swcx-transport-heading', [
-            h3([Component.text('Nearby public transport')]),
-            span([Component.text('OpenStreetMap · not real-time')]),
-          ]),
-          p(
-            classes: 'swcx-transport-status',
-            attributes: const {
-              'id': 'swcx-transport-status',
-              'aria-live': 'polite',
-            },
-            [
-              Component.text(
-                center == null
-                    ? 'Select a property, then turn on Transport.'
-                    : showTransport
-                    ? 'Checking mapped stops near this property…'
-                    : 'Turn on Transport to load available map records.',
-              ),
-            ],
-          ),
-          div(
-            classes: 'swcx-transport-results',
-            attributes: const {'id': 'swcx-transport-results'},
-            [],
-          ),
         ]),
       ],
     );

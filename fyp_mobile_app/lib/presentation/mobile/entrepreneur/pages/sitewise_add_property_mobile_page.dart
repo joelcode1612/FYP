@@ -13,7 +13,14 @@ import '../../shell/mobile_app_shell.dart';
 import '../../shell/mobile_navigation.dart';
 import '../../../shared/tour/ar_capture_mobile_page.dart';
 
-/// SiteWise Add Property — REAL owner-listing workflow.
+/// SiteWise Add Property — the ONE create/edit form for the whole Provider
+/// workspace, reused unchanged by Property Owners and Agents.
+///
+/// `/provider/add-property` is its only live route and both provider roles are
+/// sent there; no role gets its own copy. What differs between them is decided
+/// server-side from the verified token — an owner's new row records ownership,
+/// an agent's records the existing management assignment — never by a second
+/// form.
 ///
 /// Drafts persist in PostgreSQL (`fyp.rental_properties` with
 /// ``verification_status='draft'``) through the authenticated FastAPI
@@ -434,6 +441,31 @@ class _SitewiseAddPropertyMobilePageState
     });
   }
 
+  /// Leave the form for the signed-in role's property listing.
+  ///
+  /// The form is normally a drill-in above the shared Provider workspace, so it
+  /// pops back with [addPropertyDoneResult] and `ProviderTabHost` re-selects
+  /// `/provider/listings`. Replacing the route instead would stack a second
+  /// workspace shell over the one that opened this form. A cold deep link has
+  /// no shell underneath it, and only that case rebuilds the stack.
+  void _goToListings() {
+    final navigator = Navigator.of(context);
+    if (navigator.canPop()) {
+      navigator.pop(addPropertyDoneResult);
+    } else {
+      navigator.pushNamedAndRemoveUntil('/provider/listings', (route) => false);
+    }
+  }
+
+  /// The dock route to highlight while the form is open.
+  ///
+  /// The owner dock carries an Add slot; the agent dock does not, so the agent
+  /// keeps their listing tab selected rather than falling back to Home.
+  String _dockRouteFor(List<MobileDestination> destinations) =>
+      destinations.any((d) => d.route == '/provider/add-property')
+      ? '/provider/add-property'
+      : '/provider/listings';
+
   @override
   Widget build(BuildContext context) {
     return Theme(
@@ -449,19 +481,19 @@ class _SitewiseAddPropertyMobilePageState
       ),
       child: Consumer(
         builder: (context, ref, _) {
-          // The Add form is the Owner dock's centre action, but an agent can
-          // reach the route too (it is inside the shared provider workspace).
-          // The dock follows the SIGNED-IN role so neither role ever sees the
-          // other one's tabs; the highlight resolves through
-          // `parentShellRoute('/provider/add-property')`.
+          // ONE form serves the whole Provider workspace: an owner and an agent
+          // both land here, and the only thing that differs between them is the
+          // role-scoped dock and what the backend records against the new row
+          // (ownership for an owner, an agent assignment for an agent).
           final role = ref.watch(appNotifierProvider.select((s) => s.role));
+          final destinations = providerDestinationsFor(role);
           return MobileAppShell(
         title: 'Add property',
-        currentRoute: '/provider/add-property',
+        currentRoute: _dockRouteFor(destinations),
         // This form is the Provider dock's Add destination: keep the exact
         // Material 3 chrome and the role's provider tabs while it is open.
         m3: true,
-        destinations: providerDestinationsFor(role),
+        destinations: destinations,
         // Entered from the Owner / Agent workspace as a top-level Add
         // destination, so the header keeps no back arrow — the dock is the
         // way back to the other tabs.
@@ -1434,8 +1466,7 @@ class _SitewiseAddPropertyMobilePageState
           SizedBox(
             width: double.infinity,
             child: OutlinedButton(
-              onPressed: () => Navigator.of(context)
-                      .pushReplacementNamed('/provider/listings'),
+              onPressed: _goToListings,
               style: OutlinedButton.styleFrom(
                 foregroundColor: _ink,
                 side: const BorderSide(color: _border),

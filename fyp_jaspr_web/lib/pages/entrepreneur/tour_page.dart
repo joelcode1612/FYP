@@ -84,12 +84,18 @@ class _TourBody extends StatelessComponent {
               ]),
               div(classes: 'tour-controls', [
                 button(
-                  attributes: const {'type': 'button'},
-                  [Component.text('−')],
+                  attributes: const {
+                    'type': 'button',
+                    'aria-label': 'Zoom out',
+                  },
+                  [Icon('remove', size: 'sm')],
                 ),
                 button(
-                  attributes: const {'type': 'button'},
-                  [Component.text('+')],
+                  attributes: const {
+                    'type': 'button',
+                    'aria-label': 'Zoom in',
+                  },
+                  [Icon('add', size: 'sm')],
                 ),
                 button(
                   attributes: const {'type': 'button'},

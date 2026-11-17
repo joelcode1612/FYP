@@ -8,6 +8,7 @@ import '../../data/app_locator.dart';
 import '../../data/assessment_api.dart';
 import '../../data/full_analysis_actions.dart';
 import '../../data/full_analysis_format.dart';
+import '../../data/property_insights_api.dart';
 import '../../layouts/app_layout.dart';
 
 /// The Full Analysis page — the web decision-support drill-down for one
@@ -63,6 +64,24 @@ class _PropertyAnalysisPageState extends State<PropertyAnalysisPage> {
 
   /// Whether the last copy action succeeded, shown briefly on the button.
   bool _copied = false;
+
+  /// Individual verified nearby locations for the full-analysis map's layer
+  /// chips, fetched once at the endpoint's widest radius (3000 m) so every
+  /// radius ring the map frame offers slices from real records. Null means
+  /// the fetch failed or has not finished: the map keeps its
+  /// coordinates-only state and every other section is unaffected.
+  Map<String, dynamic>? _nearbyPlaces;
+
+  @override
+  void initState() {
+    super.initState();
+    final id = component.id;
+    if (id.isEmpty) return;
+    PropertyInsightsApi.loadNearbyPlaces(id, radiusM: 3000).then<void>((value) {
+      if (!mounted || value == null) return;
+      setState(() => _nearbyPlaces = value);
+    });
+  }
 
   /// Reads every source defensively and joins them into one [FullAnalysis].
   ///
@@ -218,6 +237,7 @@ class _PropertyAnalysisPageState extends State<PropertyAnalysisPage> {
         final encodedId = Uri.encodeComponent(analysis.propertyId);
         return FullAnalysisBody(
           analysis: analysis,
+          nearby: _nearbyPlaces,
           selectedCategory: _selectedCategory,
           onSelectCategory: (key) => setState(() => _selectedCategory = key),
           search: _search,

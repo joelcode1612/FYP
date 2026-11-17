@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:jaspr/dom.dart';
 import 'package:jaspr/jaspr.dart';
@@ -83,14 +84,39 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
         ? ''
         : '&businessType=${Uri.encodeQueryComponent(selected)}';
   }
+
+  /// The APPLIED criteria travel with every property-detail link so the
+  /// comparison tab can show the filters that produced this result. Draft
+  /// edits are never carried: they have not been searched yet.
+  String get _filterQuery {
+    final applied =
+        context.read(entrepreneurNotifierProvider).recommendationRequest;
+    return '&filters=${Uri.encodeQueryComponent(jsonEncode(applied.toJson()))}';
+  }
   String _state = '';
   String _propertyType = '';
-  String _minBudget = '';
-  String _budget = '';
+
+  /// The selected monthly-rental interval, as `"min|max"`; empty means
+  /// "Any monthly rental" (both request boundaries cleared). A saved range
+  /// the backend does not generate is kept under the same key until changed,
+  /// so a custom preference is never silently discarded.
+  String _rentKey = '';
   String _minSize = '';
   String _maxSize = '';
   String _targetMarket = '';
   String _query = '';
+
+  /// Contextual choices for the DRAFT criteria. The applied choices remain in
+  /// the session-scoped notifier state; the results list is never rebuilt
+  /// from this payload.
+  RecommendationFacets? _draftFacets;
+  bool _facetLoading = false;
+  String? _facetError;
+
+  /// Draft facet requests are read-only and cheap relative to ranking, but a
+  /// slower earlier response must never overwrite a newer selection.
+  int _facetSeq = 0;
+  Timer? _facetTimer;
 
   /// The active ordering. Held as the accepted server key, never a label, so a
   /// rename of the wording cannot silently change the request.
@@ -158,9 +184,11 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
           final restored = applied.copyWith(managedOnly: false);
           setState(() => _syncDraft(restored));
           _notifier.applyRecommendationRequest(restored);
+          _refreshFacets();
           return;
         }
         setState(() => _syncDraft(applied));
+        _refreshFacets();
         return;
       }
       final prefs = context.read(businessPreferencesProvider);
@@ -170,13 +198,41 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
       // with the results.
       setState(() => _syncDraft(request));
       await _notifier.searchRecommendations(request: request);
+      if (!mounted) return;
       final wanted = component.initialPropertyId;
-      if (!mounted || wanted == null || wanted.isEmpty) return;
-      final state = context.read(entrepreneurNotifierProvider);
-      if (state.ranked.any((row) => row.property.id == wanted)) {
-        _notifier.selectRanked(wanted);
+      if (wanted != null && wanted.isNotEmpty) {
+        final state = context.read(entrepreneurNotifierProvider);
+        if (state.ranked.any((row) => row.property.id == wanted)) {
+          _notifier.selectRanked(wanted);
+        }
       }
+      _refreshFacets();
     });
+  }
+
+  @override
+  void dispose() {
+    _facetTimer?.cancel();
+    super.dispose();
+  }
+
+  /// A stable key for a pair of rental boundaries. The option list is
+  /// regenerated as filters change, but the selected budget must stay visible
+  /// and comparable by value, never by a label that may be reworded.
+  static String _rangeKey(double? min, double? max) =>
+      '${min ?? ''}|${max ?? ''}';
+
+  /// Draft rental boundaries, read back from the selected key. A saved range
+  /// with one open side is legitimate; an inverted pair is normalised before
+  /// it can ever reach FastAPI (which rejects it with 422).
+  ({double? min, double? max}) get _rentBounds {
+    final bounds = FacetRangeOption.boundsFromKey(_rentKey);
+    final min = bounds.min;
+    final max = bounds.max;
+    if (min != null && max != null && min > max) {
+      return (min: max, max: min);
+    }
+    return (min: min, max: max);
   }
 
   /// Draft <- applied. Called on mount and after any applied-state change
@@ -185,12 +241,21 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
     _businessType = request.businessType ?? '';
     _state = request.preferredState ?? '';
     _propertyType = request.propertyType ?? '';
-    _minBudget = request.minRentalRm == null
+    final rentMin = request.minRentalRm;
+    final rentMax = request.maxRentalRm;
+    // Preserve a saved custom range by value. It stays selected until the
+    // entrepreneur picks another interval or clears it, even when the backend
+    // does not generate that exact interval for the current filters.
+    _rentKey = rentMin == null && rentMax == null
         ? ''
-        : request.minRentalRm!.toStringAsFixed(0);
-    _budget = request.maxRentalRm == null
-        ? ''
-        : request.maxRentalRm!.toStringAsFixed(0);
+        : _rangeKey(
+            rentMin != null && rentMax != null && rentMin > rentMax
+                ? rentMax
+                : rentMin,
+            rentMin != null && rentMax != null && rentMin > rentMax
+                ? rentMin
+                : rentMax,
+          );
     _minSize = request.minSizeSqft == null
         ? ''
         : request.minSizeSqft!.toStringAsFixed(0);
@@ -230,26 +295,75 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
         : const RecommendationSearchRequest();
   }
 
-  /// Applies the draft filters and re-runs from page 1.
-  void _apply() {
-    _notifier.applyRecommendationRequest(
-      RecommendationSearchRequest(
-        businessType: _businessType.trim().isEmpty
-            ? null
-            : _businessType.trim(),
-        preferredState: _state.isEmpty ? null : _state,
-        propertyType: _propertyType.isEmpty ? null : _propertyType,
-        minRentalRm: double.tryParse(_minBudget.trim()),
-        maxRentalRm: double.tryParse(_budget.trim()),
-        minSizeSqft: double.tryParse(_minSize.trim()),
-        maxSizeSqft: double.tryParse(_maxSize.trim()),
-        layoutPreferences: _layoutPreferences,
-        query: _query.trim().isEmpty ? null : _query.trim(),
-        sort: _sort,
-        pageSize: 20,
-      ),
+  /// The request the form currently describes. Used for both the facets read
+  /// and "Find properties", so quoted counts and the ranked set can never be
+  /// computed from different criteria.
+  RecommendationSearchRequest get _draftRequest {
+    final rent = _rentBounds;
+    return RecommendationSearchRequest(
+      businessType: _businessType.trim().isEmpty
+          ? null
+          : _businessType.trim(),
+      preferredState: _state.isEmpty ? null : _state,
+      propertyType: _propertyType.isEmpty ? null : _propertyType,
+      minRentalRm: rent.min,
+      maxRentalRm: rent.max,
+      minSizeSqft: double.tryParse(_minSize.trim()),
+      maxSizeSqft: double.tryParse(_maxSize.trim()),
+      layoutPreferences: _layoutPreferences,
+      query: _query.trim().isEmpty ? null : _query.trim(),
+      sort: _sort,
+      pageSize: 20,
     );
   }
+
+  /// Applies the draft filters and re-runs from page 1.
+  void _apply() {
+    final request = _draftRequest;
+    _notifier.applyRecommendationRequest(request);
+    _refreshFacets();
+  }
+
+  /// A draft control changed. Facets refresh for the complete draft, while
+  /// the ranked results stay as they were until "Find properties" is pressed.
+  /// Text and numeric fields use a short debounce; a selection is immediate.
+  void _onDraftChange({Duration debounce = Duration.zero}) =>
+      _refreshFacets(debounce: debounce);
+
+  /// Reads contextual choices for the current draft. The previous choices
+  /// stay visible while loading and after a failed request; only the response
+  /// for the latest request is published.
+  void _refreshFacets({Duration debounce = Duration.zero}) {
+    _facetTimer?.cancel();
+    _facetTimer = Timer(debounce, () async {
+      if (!mounted) return;
+      final seq = ++_facetSeq;
+      final request = _draftRequest;
+      setState(() {
+        _facetLoading = true;
+        _facetError = null;
+      });
+      try {
+        final facets = await _notifier.fetchRecommendationFacets(request);
+        if (!mounted || seq != _facetSeq) return;
+        setState(() {
+          _draftFacets = facets;
+          _facetLoading = false;
+        });
+      } on Object {
+        if (!mounted || seq != _facetSeq) return;
+        setState(() {
+          _facetLoading = false;
+          _facetError = 'Filter choices could not be updated.';
+        });
+      }
+    });
+  }
+
+  /// The applied facets until a draft refresh completes, so a failed or slow
+  /// contextual read never blanks the controls.
+  RecommendationFacets? _facetsFor(EntrepreneurState state) =>
+      _draftFacets ?? state.recommendationFacets;
 
   /// Ordering is a view of the SAME result set, so it is committed the moment
   /// it changes instead of waiting for "Find properties". It is built from the
@@ -266,12 +380,14 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
   void _applyRequest(RecommendationSearchRequest request) {
     setState(() => _syncDraft(request));
     _notifier.applyRecommendationRequest(request);
+    _refreshFacets();
   }
 
   void _reset() {
     const defaults = RecommendationSearchRequest();
     setState(() => _syncDraft(defaults));
     _notifier.applyRecommendationRequest(defaults);
+    _refreshFacets();
   }
 
   /// Saves/removes a property. A signed-in account persists server-side first
@@ -521,17 +637,11 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
     return 'Up to ${n(max!)} sq ft';
   }
 
-  static String _rentChipLabel(RecommendationSearchRequest request) {
-    final min = request.minRentalRm;
-    final max = request.maxRentalRm;
-    String n(double value) => value.toStringAsFixed(0);
-    if (min != null && max != null) return 'RM ${n(min)}–${n(max)}';
-    if (min != null) return 'RM ${n(min)}+';
-    return 'RM ${n(max!)} max';
-  }
+  static String _rentChipLabel(RecommendationSearchRequest request) =>
+      _rentText(request.minRentalRm, request.maxRentalRm);
 
   Component _filters(EntrepreneurState state) {
-    final facets = state.recommendationFacets;
+    final facets = _facetsFor(state);
     return div(
       classes: 'rec2__filters',
       attributes: const {'id': 'rec2-filters'},
@@ -543,31 +653,29 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
             value: _businessType,
             emptyLabel: 'Any business type',
             options: _businessTypeOptions,
-            onChanged: (v) => setState(() => _businessType = v),
+            onChanged: (v) {
+              setState(() => _businessType = v);
+              _onDraftChange();
+            },
           ),
-          _textField(
-            caption: 'Min monthly rent (RM)',
-            value: _minBudget,
-            placeholder: 'e.g. 3000',
-            onInput: (v) => setState(() => _minBudget = v),
-          ),
-          _textField(
-            caption: 'Max monthly rent (RM)',
-            value: _budget,
-            placeholder: 'e.g. 8000',
-            onInput: (v) => setState(() => _budget = v),
-          ),
+          _rentalField(facets),
           _textField(
             caption: 'Minimum size (sq ft)',
             value: _minSize,
             placeholder: 'e.g. 800',
-            onInput: (v) => setState(() => _minSize = v),
+            onInput: (v) {
+              setState(() => _minSize = v);
+              _onDraftChange(debounce: const Duration(milliseconds: 300));
+            },
           ),
           _textField(
             caption: 'Maximum size (sq ft)',
             value: _maxSize,
             placeholder: 'e.g. 1800',
-            onInput: (v) => setState(() => _maxSize = v),
+            onInput: (v) {
+              setState(() => _maxSize = v);
+              _onDraftChange(debounce: const Duration(milliseconds: 300));
+            },
           ),
           _comboField(
             caption: 'Target market',
@@ -575,32 +683,45 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
             value: _targetMarket,
             emptyLabel: 'Any target market',
             options: _targetMarketOptions,
-            onChanged: (v) => setState(() => _targetMarket = v),
+            onChanged: (v) {
+              setState(() => _targetMarket = v);
+              _onDraftChange();
+            },
           ),
           _sortField(_sortOptions(state)),
           _textField(
             caption: 'Search',
             value: _query,
             placeholder: 'Area, title or property id',
-            onInput: (v) => setState(() => _query = v),
+            onInput: (v) {
+              setState(() => _query = v);
+              _onDraftChange(debounce: const Duration(milliseconds: 300));
+            },
           ),
         ]),
+        _facetStatus(state),
         // Chips, not <select>: the values come from the catalogue itself, so
-        // an option can never match zero rows. Counts are shown because they
-        // are real.
+        // an option can never match zero rows. Counts are refreshed for the
+        // DRAFT criteria and are real counts, never fabricated.
         if (facets != null && facets.states.isNotEmpty)
           _chipRow(
             caption: 'Preferred state',
             options: facets.states,
             selected: _state,
-            onPick: (v) => setState(() => _state = v),
+            onPick: (v) {
+              setState(() => _state = v);
+              _onDraftChange();
+            },
           ),
         if (facets != null && facets.propertyTypes.isNotEmpty)
           _chipRow(
             caption: 'Property type',
             options: facets.propertyTypes,
             selected: _propertyType,
-            onPick: (v) => setState(() => _propertyType = v),
+            onPick: (v) {
+              setState(() => _propertyType = v);
+              _onDraftChange();
+            },
           ),
         // No management-scoping toggle: see `_initialRequest` for why the
         // catalogue search must not be restricted to assigned listings.
@@ -615,6 +736,204 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
         ]),
       ],
     );
+  }
+
+  /// One dropdown built from `rental_ranges.options`, never from a hand typed
+  /// list. The label is the full interval and its real matching count; the
+  /// value is the exact pair of boundaries sent to FastAPI.
+  Component _rentalField(RecommendationFacets? facets) {
+    final options = facets?.rentalRanges ?? const <FacetRangeOption>[];
+    final hasSelection = _rentKey.isNotEmpty;
+    final generated = hasSelection
+        ? options.where((item) => item.key == _rentKey).toList()
+        : const <FacetRangeOption>[];
+    final custom = hasSelection && generated.isEmpty;
+    final bounds = _rentBounds;
+    final selectedLabel = facets?.selectedRental?.label ??
+        (custom ? _rentText(bounds.min, bounds.max) : '');
+
+    return div(classes: 'field rec2__field--wide', [
+      label(classes: 'field__label', [
+        Component.text('Monthly rental (RM)'),
+      ]),
+      select(
+        id: 'rec2-monthly-rental',
+        attributes: const {
+          'aria-label': 'Monthly rental (RM)',
+          'name': 'rec2-monthly-rental',
+        },
+        events: events<List<String>>(
+          onInput: (values) {
+            final value = values.isEmpty ? '' : values.first;
+            if (value == _rentKey) return;
+            setState(() => _rentKey = value);
+            _onDraftChange();
+          },
+        ),
+        [
+          option(
+            key: const ValueKey('rent-any'),
+            value: '',
+            selected: !hasSelection,
+            [Component.text('Any monthly rental')],
+          ),
+          // A saved range (or a range that has just become unavailable) stays
+          // visible and selected until it is changed or explicitly cleared.
+          if (custom)
+            option(
+              key: ValueKey('rent-custom-$_rentKey'),
+              value: _rentKey,
+              selected: true,
+              [
+                Component.text(
+                  '$selectedLabel (${_unavailableRent(facets) ? 'unavailable' : 'saved range'})',
+                ),
+              ],
+            ),
+          for (final item in options)
+            option(
+              key: ValueKey('rent-${item.key}'),
+              value: item.key,
+              selected: item.key == _rentKey,
+              [
+                Component.text(
+                  '${item.label} (${item.total} ${item.total == 1 ? 'property' : 'properties'})',
+                ),
+              ],
+            ),
+        ],
+      ),
+      if (custom && _rentKey.isNotEmpty)
+        div(classes: 'rec2__rent-note', [
+          Component.text(
+            _unavailableRent(facets)
+                ? 'This rental range currently matches no eligible properties.'
+                : 'Your saved rental range is not one of the current intervals. '
+                    'It stays applied until you choose another.',
+          ),
+          if (_unavailableRent(facets))
+            button(
+              classes: 'rec2__link-button',
+              attributes: const {
+                'type': 'button',
+                'aria-label': 'Clear rental filter',
+              },
+              events: events(onClick: _rentChangedToAny),
+              [Component.text('Clear rental filter')],
+            ),
+        ]),
+    ]);
+  }
+
+  bool _unavailableRent(RecommendationFacets? facets) =>
+      _rentKey.isNotEmpty &&
+      facets != null &&
+      facets.rentalRanges.isNotEmpty &&
+      !facets.rentalRanges.any((item) => item.key == _rentKey) &&
+      facets.matchingTotal == 0;
+
+  void _rentChangedToAny() {
+    setState(() => _rentKey = '');
+    _onDraftChange();
+  }
+
+  /// Small status line above the filter chips: loading, failure with retry,
+  /// a real contextual count, or the empty state with recovery actions.
+  Component _facetStatus(EntrepreneurState state) {
+    if (_facetError != null) {
+      return div(classes: 'rec2__facet-status is-error', attributes: const {
+        'role': 'status',
+      }, [
+        Component.text('$_facetError Previous choices are still shown.'),
+        button(
+          classes: 'rec2__link-button',
+          attributes: const {'type': 'button'},
+          events: events(onClick: () => _refreshFacets()),
+          [Component.text('Retry')],
+        ),
+      ]);
+    }
+    if (_facetLoading) {
+      return div(classes: 'rec2__facet-status', attributes: const {
+        'role': 'status',
+      }, [Component.text('Updating filter choices…')]);
+    }
+    final facets = _draftFacets;
+    if (facets == null) return Component.fragment([]);
+    final total = facets.matchingTotal;
+    if (total == 0) {
+      final applied = state.recommendationRequest;
+      return div(classes: 'rec2__facet-status is-empty', [
+        strong([Component.text('No properties match all your current filters.')]),
+        if (_rentKey.isNotEmpty)
+          button(
+            classes: 'rec2__link-button',
+            attributes: const {'type': 'button'},
+            events: events(onClick: _rentChangedToAny),
+            [Component.text('Clear rental filter')],
+          ),
+        for (final relaxation in facets.relaxations.take(3))
+          button(
+            classes: 'rec2__link-button',
+            attributes: {'type': 'button'},
+            events: events(
+              onClick: () => _applyRequest(
+                _clearFacetField(applied, relaxation.field),
+              ),
+            ),
+            [Component.text('Remove ${relaxation.label}')],
+          ),
+        button(
+          classes: 'rec2__link-button',
+          attributes: const {'type': 'button'},
+          events: events(onClick: _reset),
+          [Component.text('Clear all filters')],
+        ),
+      ]);
+    }
+    return div(classes: 'rec2__facet-status', attributes: const {
+      'role': 'status',
+    }, [
+      Component.text(
+        '$total ${total == 1 ? 'property matches' : 'properties match'} '
+        'all your current filters.',
+      ),
+    ]);
+  }
+
+  /// Maps a backend relaxation key to the matching request clear flag. Only
+  /// hard filters appear in `relaxations`; ranking-only inputs never do.
+  RecommendationSearchRequest _clearFacetField(
+    RecommendationSearchRequest request,
+    String field,
+  ) => switch (field) {
+    'preferred_state' => request.copyWith(clearState: true),
+    'property_type' => request.copyWith(clearPropertyType: true),
+    'rental_budget' => request.copyWith(clearRentRange: true),
+    'property_size' => request.copyWith(clearSizeRange: true),
+    'preferred_area' => request.copyWith(clearArea: true),
+    'query' => request.copyWith(clearQuery: true),
+    _ => request,
+  };
+
+  /// Ringgit grouping for chip and custom-range labels.
+  static String _money(double value) {
+    final digits = value.toStringAsFixed(0);
+    final grouped = StringBuffer();
+    for (var i = 0; i < digits.length; i++) {
+      if (i > 0 && (digits.length - i) % 3 == 0) grouped.write(',');
+      grouped.write(digits[i]);
+    }
+    return 'RM $grouped';
+  }
+
+  static String _rentText(double? min, double? max) {
+    if (min != null && max != null) {
+      return min == max ? _money(min) : '${_money(min)} – ${_money(max)}';
+    }
+    if (min != null) return 'From ${_money(min)}';
+    if (max != null) return 'Up to ${_money(max)}';
+    return 'Any monthly rental';
   }
 
   /// Ordering control. Applied on change rather than on "Find properties":
@@ -658,14 +977,16 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
     div(classes: 'chips', [
       for (final option in [const FacetOption(value: ''), ...options])
         label(
+          key: ValueKey('$caption-${option.value}'),
           classes: option.value == selected ? 'checkpill is-on' : 'checkpill',
           [
             input(
-              attributes: {
-                'type': 'radio',
-                'name': caption,
-                if (option.value == selected) 'checked': '',
-              },
+              type: InputType.radio,
+              name: caption,
+              // Jaspr manages `checked` as a DOM property, not a string
+              // attribute: pass the boolean explicitly so assistive tech and
+              // keyboard focus agree with the visible `.is-on` state.
+              checked: option.value == selected,
               events: events(onChange: (_) => onPick(option.value)),
             ),
             span([
@@ -795,23 +1116,48 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
     ),
   ]);
 
-  Component _empty(EntrepreneurState state) => EmptyState(
-    title: state.recommendationRequest.isBrowseOnly
-        ? 'No PU-eligible properties'
-        : 'No property matches these requirements',
-    body: state.recommendationRequest.isBrowseOnly
-        ? 'No property in the catalogue has a PU research score above 50, so '
-              'there is nothing eligible to recommend. That is a data '
-              'condition, not a filter problem.'
-        : 'Nothing in the catalogue satisfies every constraint AND has a PU '
-              'score above 50. Widen the budget or reduce the minimum floor '
-              'area and search again.',
-    action: ActionButton(
-      'Clear filters',
-      variant: 'primary',
-      onClick: _reset,
-    ),
-  );
+  Component _empty(EntrepreneurState state) {
+    final request = state.recommendationRequest;
+    final browseOnly = request.isBrowseOnly;
+    final facets = _facetsFor(state);
+    final hasRent = request.minRentalRm != null || request.maxRentalRm != null;
+    return EmptyState(
+      title: browseOnly
+          ? 'No PU-eligible properties'
+          : 'No properties match all your current filters.',
+      body: browseOnly
+          ? 'No property in the catalogue has a PU research score above 50, so '
+                'there is nothing eligible to recommend. That is a data '
+                'condition, not a filter problem.'
+          : 'Nothing in the catalogue satisfies every constraint AND has a PU '
+                'score above 50. Remove a restrictive filter or clear them all '
+                'and search again.',
+      action: div(classes: 'rec2__empty-actions', [
+        if (hasRent)
+          ActionButton(
+            'Clear rental filter',
+            variant: 'secondary',
+            onClick: () =>
+                _applyRequest(request.copyWith(clearRentRange: true)),
+          ),
+        // The backend suggests only hard filters whose removal actually
+        // recovers rows; ranking-only inputs are never offered here.
+        for (final relaxation in (facets?.relaxations ?? const []).take(3))
+          if (relaxation.field != 'rental_budget' || !hasRent)
+            ActionButton(
+              'Remove ${relaxation.label}',
+              variant: 'secondary',
+              onClick: () =>
+                  _applyRequest(_clearFacetField(request, relaxation.field)),
+            ),
+        ActionButton(
+          'Clear all filters',
+          variant: 'primary',
+          onClick: _reset,
+        ),
+      ]),
+    );
+  }
 
   Component _card(
     RankedProperty item,
@@ -837,7 +1183,7 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
       div(classes: 'rec2-card__body', [
         h3(classes: 'rec2-card__title', [
           AppLink(
-            to: '/entrepreneur/property-detail?id=${Uri.encodeComponent(prop.id)}$_businessTypeQuery',
+            to: '/entrepreneur/property-detail?id=${Uri.encodeComponent(prop.id)}$_businessTypeQuery$_filterQuery',
             children: [Component.text(prop.title)],
           ),
         ]),
@@ -886,7 +1232,7 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
           ),
           ActionLink(
             'Details',
-            href: '/entrepreneur/property-detail?id=${Uri.encodeComponent(prop.id)}$_businessTypeQuery',
+            href: '/entrepreneur/property-detail?id=${Uri.encodeComponent(prop.id)}$_businessTypeQuery$_filterQuery',
             variant: 'secondary',
           ),
           ActionLink(
@@ -1050,7 +1396,7 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
       div(classes: 'rec2-panel__actions', [
         ActionLink(
           'View property',
-          href: '/entrepreneur/property-detail?id=${Uri.encodeComponent(prop.id)}$_businessTypeQuery',
+          href: '/entrepreneur/property-detail?id=${Uri.encodeComponent(prop.id)}$_businessTypeQuery$_filterQuery',
           variant: 'primary',
         ),
         ActionLink(

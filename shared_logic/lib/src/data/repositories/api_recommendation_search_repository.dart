@@ -29,8 +29,34 @@ class ApiRecommendationSearchRepository implements RecommendationSearchRepositor
   }
 
   @override
-  Future<RecommendationFacets> facets() async {
-    final response = await _client.get('/api/v1/recommendations/facets');
+  Future<RecommendationFacets> facets({
+    RecommendationSearchRequest? criteria,
+  }) async {
+    // The facets endpoint takes the same hard-filter vocabulary as search.
+    // Business type and target-market preferences are deliberately NOT hard
+    // eligibility filters on the backend, so sending them may change nothing;
+    // layout preferences are omitted because the GET transport cannot carry
+    // repeated keys and the backend does not count them anyway.
+    final query = <String, String>{};
+    final c = criteria;
+    if (c != null) {
+      if (c.businessType != null) query['business_type'] = c.businessType!;
+      if (c.preferredState != null) {
+        query['preferred_state'] = c.preferredState!;
+      }
+      if (c.preferredArea != null) query['preferred_area'] = c.preferredArea!;
+      if (c.minRentalRm != null) query['min_rental_rm'] = '${c.minRentalRm}';
+      if (c.maxRentalRm != null) query['max_rental_rm'] = '${c.maxRentalRm}';
+      if (c.minSizeSqft != null) query['min_size_sqft'] = '${c.minSizeSqft}';
+      if (c.maxSizeSqft != null) query['max_size_sqft'] = '${c.maxSizeSqft}';
+      if (c.propertyType != null) query['property_type'] = c.propertyType!;
+      if (c.query != null) query['query'] = c.query!;
+      if (c.managedOnly) query['managed_only'] = 'true';
+    }
+    final response = await _client.get(
+      '/api/v1/recommendations/facets',
+      query: query,
+    );
     final data = response['data'];
     return RecommendationFacets.fromJson(
       data is Map<String, dynamic> ? data : const {},

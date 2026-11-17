@@ -5,12 +5,13 @@ import 'package:shared_logic/shared_logic.dart';
 import '../../../../core/theme/sitewise_theme.dart';
 import '../../shell/mobile_app_shell.dart';
 import '../../widgets/m3_kit.dart';
+import '../../widgets/mobile_property_gallery.dart';
 import '../../widgets/mobile_property_image.dart';
 
 /// Entrepreneur discovery — **Recommendations** (mobile).
 ///
 /// Replaces the old "Listing" tab. The five-destination navigation is
-/// unchanged: Home · Recommendations · Assess · Spaces · Profile.
+/// unchanged: Home · Recommendations · Assess · Favourites · Profile.
 ///
 /// All ranking comes from `POST /api/v1/recommendations/search` through the
 /// shared [EntrepreneurNotifier]; this screen never sorts or filters locally
@@ -127,7 +128,7 @@ class _EntrepreneurRecommendationsMobilePageState
             final rowIndex = index - 1;
             if (rowIndex < state.ranked.length) {
               final item = state.ranked[rowIndex];
-              return _RecommendationCard(
+              return RecommendationCard(
                 item: item,
                 isSaved: saved.contains(item.id),
                 isCompared: compared.contains(item.id),
@@ -151,7 +152,6 @@ class _EntrepreneurRecommendationsMobilePageState
     final prefs = state.preferences;
     final total = state.recommendationTotal;
     final model = state.recommendationModel;
-    final criteria = _criteriaSummary(prefs);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -177,9 +177,9 @@ class _EntrepreneurRecommendationsMobilePageState
                     child: Text(
                       'Your requirements',
                       style: TextStyle(
-                        fontSize: 11,
+                        fontSize: 12.5,
                         fontWeight: FontWeight.w800,
-                        letterSpacing: .4,
+                        letterSpacing: .3,
                         color: SitewiseColors.muted,
                       ),
                     ),
@@ -214,16 +214,24 @@ class _EntrepreneurRecommendationsMobilePageState
                   ),
                 ],
               ),
-              const SizedBox(height: 2),
-              Text(
-                criteria,
-                style: const TextStyle(
-                  fontSize: 12.5,
-                  height: 1.45,
-                  color: SitewiseColors.ink,
-                  fontWeight: FontWeight.w600,
+              const SizedBox(height: 6),
+              _requirementsGrid(prefs),
+              if (prefs.businessType.trim().isEmpty &&
+                  prefs.preferredLocation.trim().isEmpty &&
+                  prefs.maxBudgetRm <= 0 &&
+                  prefs.minSizeSqft <= 0) ...[
+                const SizedBox(height: 8),
+                const Text(
+                  'No requirements set yet — every eligible listing is '
+                  'shown. Tap Edit to set your business, location, budget '
+                  'and space.',
+                  style: TextStyle(
+                    fontSize: 14,
+                    height: 1.4,
+                    color: SitewiseColors.text,
+                  ),
                 ),
-              ),
+              ],
             ],
           ),
         ),
@@ -236,7 +244,7 @@ class _EntrepreneurRecommendationsMobilePageState
                     ? 'Ranked properties'
                     : '$total ${total == 1 ? 'property' : 'properties'}',
                 style: const TextStyle(
-                  fontSize: 14,
+                  fontSize: 15,
                   fontWeight: FontWeight.w800,
                   color: SitewiseColors.ink,
                 ),
@@ -252,12 +260,19 @@ class _EntrepreneurRecommendationsMobilePageState
         ),
         if (model != null) ...[
           const SizedBox(height: 4),
+          // Entrepreneur-facing wording only. The internal model identifier
+          // and version stay in `state.recommendationModel` for diagnostics
+          // and are deliberately never rendered here.
           Text(
             model.available
-                ? 'Experimental preference match'
-                      '${model.version == null ? '' : ' · ${model.version}'}'
-                : 'Ordered by requirement fit — model score unavailable',
-            style: const TextStyle(fontSize: 11, color: SitewiseColors.muted),
+                ? 'Ranked by how well each property fits your requirements.'
+                : 'Ordered by requirement fit — the research score is '
+                      'unavailable for this browse.',
+            style: const TextStyle(
+              fontSize: 14,
+              height: 1.35,
+              color: SitewiseColors.muted,
+            ),
           ),
         ],
         const SizedBox(height: 12),
@@ -265,21 +280,63 @@ class _EntrepreneurRecommendationsMobilePageState
     );
   }
 
-  String _criteriaSummary(BusinessPreferences prefs) {
-    if (prefs.businessType.trim().isEmpty &&
-        prefs.preferredLocation.trim().isEmpty &&
-        prefs.maxBudgetRm <= 0) {
-      return 'No requirements set — showing every published catalogue '
-          'property. Tap Edit to rank by budget, size and location.';
-    }
-    return [
-      if (prefs.businessType.trim().isNotEmpty) prefs.businessType,
-      if (prefs.preferredLocation.trim().isNotEmpty) prefs.preferredLocation,
-      if (prefs.maxBudgetRm > 0)
-        'up to RM${prefs.maxBudgetRm.toStringAsFixed(0)}/mo',
-      if (prefs.minSizeSqft > 0)
-        'min ${prefs.minSizeSqft.toStringAsFixed(0)} sq ft',
-    ].join(' · ');
+  /// The four requirements, each as a labelled value. Values stay readable
+  /// even when nothing is configured ("Any location" is a statement, not an
+  /// empty gap).
+  Widget _requirementsGrid(BusinessPreferences prefs) {
+    Widget field(String label, String value) => _RequirementField(
+      label: label,
+      value: value,
+    );
+    return Column(
+      children: [
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: field(
+                'Business',
+                prefs.businessType.trim().isEmpty
+                    ? 'Any F&B business'
+                    : prefs.businessType.trim(),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: field(
+                'Location',
+                prefs.preferredLocation.trim().isEmpty
+                    ? 'Anywhere'
+                    : prefs.preferredLocation.trim(),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: field(
+                'Budget',
+                prefs.maxBudgetRm > 0
+                    ? 'Up to ${_ringgitPerMonth(prefs.maxBudgetRm)}'
+                    : 'Any budget',
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: field(
+                'Minimum space',
+                prefs.minSizeSqft > 0
+                    ? 'From ${_squareFeet(prefs.minSizeSqft)}'
+                    : 'Any size',
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
   }
 
   // -- footer states --------------------------------------------------------
@@ -334,7 +391,11 @@ class _EntrepreneurRecommendationsMobilePageState
         else
           const Text(
             'End of results',
-            style: TextStyle(fontSize: 11, color: SitewiseColors.muted),
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: SitewiseColors.muted,
+            ),
           ),
         const SizedBox(height: 6),
         const Text(
@@ -342,7 +403,7 @@ class _EntrepreneurRecommendationsMobilePageState
           'research score is a separate model and is shown separately.',
           textAlign: TextAlign.center,
           style: TextStyle(
-            fontSize: 10.5,
+            fontSize: 12.5,
             height: 1.5,
             color: SitewiseColors.muted,
           ),
@@ -356,8 +417,8 @@ class _EntrepreneurRecommendationsMobilePageState
   Future<void> _toggleSaved(String id) async {
     final messenger = ScaffoldMessenger.of(context);
     final wantSaved = !ref.read(appNotifierProvider).saved.contains(id);
-    // Server first: the Saved tab reads the account's shortlist, so a purely
-    // local toggle would look saved here and then be missing there.
+    // Server first: the Favourites tab reads the account's saved list, so a
+    // purely local toggle would look saved here and be missing there.
     final failure = await ref
         .read(appNotifierProvider.notifier)
         .persistSaved(id, wantSaved: wantSaved);
@@ -367,8 +428,8 @@ class _EntrepreneurRecommendationsMobilePageState
         content: Text(
           failure ??
               (wantSaved
-                  ? 'Saved to your shortlist.'
-                  : 'Removed from saved.'),
+                  ? 'Added to favourites.'
+                  : 'Removed from favourites.'),
         ),
         behavior: SnackBarBehavior.floating,
       ),
@@ -408,9 +469,48 @@ class _EntrepreneurRecommendationsMobilePageState
   }
 }
 
-/// One ranked result: photograph, facts, requirement chips and the two
-/// toggles. Tapping the card opens the insight sheet.
-class _RecommendationCard extends StatelessWidget {
+/// One labelled requirement cell inside the header card.
+class _RequirementField extends StatelessWidget {
+  final String label;
+  final String value;
+
+  const _RequirementField({required this.label, required this.value});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: const TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+            color: SitewiseColors.muted,
+            height: 1.25,
+          ),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          value,
+          style: const TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w700,
+            color: SitewiseColors.ink,
+            height: 1.3,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// One ranked result: full-width 16:9 media (swipeable photo gallery with
+/// rank, bookmark, counter and a 360° action only when the backend verified
+/// a ready panorama), clearly separated rent/area metrics, the requirement
+/// verdict in plain wording, and the three aligned actions. Tapping the
+/// card body opens the insight sheet.
+class RecommendationCard extends StatelessWidget {
   final RankedProperty item;
   final bool isSaved;
   final bool isCompared;
@@ -419,7 +519,8 @@ class _RecommendationCard extends StatelessWidget {
   final VoidCallback onSave;
   final VoidCallback onCompare;
 
-  const _RecommendationCard({
+  const RecommendationCard({
+    super.key,
     required this.item,
     required this.isSaved,
     required this.isCompared,
@@ -428,6 +529,15 @@ class _RecommendationCard extends StatelessWidget {
     required this.onSave,
     required this.onCompare,
   });
+
+  void _openPanorama(BuildContext context) {
+    final url = item.panoramaUrl;
+    if (url == null) return;
+    Navigator.of(context).pushNamed(
+      '/entrepreneur/panorama',
+      arguments: {'url': url, 'title': item.property.title},
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -451,132 +561,136 @@ class _RecommendationCard extends StatelessWidget {
                 width: isSelected ? 1.6 : 1,
               ),
             ),
-            padding: const EdgeInsets.all(10),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Stack(
-                  children: [
-                    MobilePropertyImage(
-                      property: prop,
-                      height: 140,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    Positioned(
-                      top: 8,
-                      left: 8,
-                      child: _RankBadge(rank: match.rank),
-                    ),
-                    Positioned(
-                      top: 4,
-                      right: 4,
-                      child: _IconToggle(
-                        icon: isSaved ? Icons.bookmark : Icons.bookmark_border,
-                        active: isSaved,
-                        label: isSaved ? 'Remove from saved' : 'Save property',
-                        onTap: onSave,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 9),
-                Text(
-                  prop.title,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontSize: 14.5,
-                    fontWeight: FontWeight.w800,
-                    height: 1.3,
-                    color: SitewiseColors.ink,
+                MobilePropertyGallery(
+                  property: prop,
+                  urls: prop.imageUrls,
+                  rankBadge: _RankBadge(rank: match.rank),
+                  bookmarkButton: _IconToggle(
+                    icon: isSaved ? Icons.bookmark : Icons.bookmark_border,
+                    active: isSaved,
+                    label: isSaved
+                        ? 'Remove from favourites'
+                        : 'Save property',
+                    onTap: onSave,
                   ),
+                  // Only a backend-verified ready panorama earns this action.
+                  // An ordinary wide photo is never presented as 360°.
+                  tourAction: item.hasPanorama
+                      ? _PanoramaAction(
+                          onTap: () => _openPanorama(context),
+                          label: prop.title,
+                        )
+                      : null,
                 ),
-                const SizedBox(height: 3),
-                Text(
-                  [
-                    if (prop.city.isNotEmpty) prop.city,
-                    if (prop.state.isNotEmpty) prop.state,
-                    if (prop.propertyType.isNotEmpty) prop.propertyType,
-                  ].join(' · '),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontSize: 11.5,
-                    color: SitewiseColors.muted,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    _Fact(
-                      label: 'Rent',
-                      value: 'RM ${prop.rentalRm.toStringAsFixed(0)}/mo',
-                    ),
-                    const SizedBox(width: 16),
-                    _Fact(
-                      label: 'Floor area',
-                      value: '${prop.sizeSqft.toStringAsFixed(0)} sq ft',
-                    ),
-                    const Spacer(),
-                    _FitBadge(match: match),
-                  ],
-                ),
-                if (match.matched.isNotEmpty || match.unmatched.isNotEmpty) ...[
-                  const SizedBox(height: 9),
-                  Wrap(
-                    spacing: 6,
-                    runSpacing: 6,
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      for (final reason in match.matched.take(3))
-                        _ReasonChip(label: reason.label, met: true),
-                      for (final reason in match.unmatched.take(2))
-                        _ReasonChip(label: reason.label, met: false),
-                    ],
-                  ),
-                ],
-                const SizedBox(height: 6),
-                // The action row is width-bounded: "Insight" + "In compare" +
-                // "Details" is a hair wider than a 390dp phone at some text
-                // scales, so the two icon actions live in an Expanded Wrap and
-                // drop to a second line instead of overflowing the card.
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    Expanded(
-                      child: Wrap(
-                        spacing: 4,
-                        runSpacing: 4,
+                      Text(
+                        prop.title,
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w800,
+                          height: 1.3,
+                          color: SitewiseColors.ink,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        [
+                          if (prop.city.isNotEmpty) prop.city,
+                          if (prop.state.isNotEmpty) prop.state,
+                          if (prop.propertyType.isNotEmpty) prop.propertyType,
+                        ].join(' · '),
+                        style: const TextStyle(
+                          fontSize: 14,
+                          height: 1.35,
+                          fontWeight: FontWeight.w500,
+                          color: SitewiseColors.text,
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          _InlineAction(
-                            icon: Icons.insights_rounded,
-                            label: 'Insight',
-                            onTap: onOpen,
+                          Expanded(
+                            child: _Metric(
+                              label: 'Monthly rent',
+                              value: _ringgitPerMonth(prop.rentalRm),
+                            ),
                           ),
-                          _InlineAction(
-                            icon: isCompared
-                                ? Icons.check_circle_outline
-                                : Icons.compare_arrows_rounded,
-                            label: isCompared ? 'In compare' : 'Compare',
-                            onTap: onCompare,
+                          Container(
+                            width: 1,
+                            height: 42,
+                            color: SitewiseColors.border,
+                          ),
+                          Expanded(
+                            child: _Metric(
+                              label: 'Floor area',
+                              value: _squareFeet(prop.sizeSqft),
+                            ),
                           ),
                         ],
                       ),
-                    ),
-                    TextButton(
-                      onPressed: () => Navigator.of(context).pushNamed(
-                        '/entrepreneur/property-detail',
-                        arguments: prop.id,
-                      ),
-                      child: const Text(
-                        'Details',
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w800,
-                          color: SitewiseColors.action,
+                      const SizedBox(height: 10),
+                      _RequirementVerdict(match: match),
+                      if (match.matched.isNotEmpty ||
+                          match.unmatched.isNotEmpty) ...[
+                        const SizedBox(height: 9),
+                        Wrap(
+                          spacing: 6,
+                          runSpacing: 6,
+                          children: [
+                            for (final reason in match.matched.take(3))
+                              _ReasonChip(label: reason.label, met: true),
+                            for (final reason in match.unmatched.take(2))
+                              _ReasonChip(label: reason.label, met: false),
+                          ],
                         ),
+                      ],
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          Expanded(
+                            flex: 5,
+                            child: _CardActionButton(
+                              label: 'View Details',
+                              icon: Icons.arrow_forward_rounded,
+                              primary: true,
+                              onTap: () => Navigator.of(context).pushNamed(
+                                '/entrepreneur/property-detail',
+                                arguments: prop.id,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            flex: 3,
+                            child: _CardActionButton(
+                              label: 'Insights',
+                              icon: Icons.insights_rounded,
+                              onTap: onOpen,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            flex: 3,
+                            child: _CardActionButton(
+                              label: isCompared ? 'In compare' : 'Compare',
+                              icon: isCompared
+                                  ? Icons.check_circle_outline
+                                  : Icons.compare_arrows_rounded,
+                              onTap: onCompare,
+                            ),
+                          ),
+                        ],
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ],
             ),
@@ -585,6 +699,231 @@ class _RecommendationCard extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Emphasised value over its label — rent and floor area read as two
+/// clearly separated metrics, never squeezed into one grey line.
+class _Metric extends StatelessWidget {
+  final String label;
+  final String value;
+
+  const _Metric({required this.label, required this.value});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            label,
+            style: const TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: SitewiseColors.muted,
+              height: 1.25,
+            ),
+          ),
+          const SizedBox(height: 3),
+          Text(
+            value,
+            style: const TextStyle(
+              fontSize: 15.5,
+              fontWeight: FontWeight.w800,
+              color: SitewiseColors.ink,
+              height: 1.25,
+              fontFeatures: [FontFeature.tabularFigures()],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// The recommendation result in understandable wording. Colour never carries
+/// the meaning alone — every state pairs a distinct icon with a full
+/// sentence, and "nothing to verify" says exactly what is missing instead
+/// of showing a bare `no criteria` pill.
+class _RequirementVerdict extends StatelessWidget {
+  final RecommendationMatch match;
+
+  const _RequirementVerdict({required this.match});
+
+  @override
+  Widget build(BuildContext context) {
+    final verifiable = match.verifiableCount > 0;
+    final (icon, color) = verifiable
+        ? (Icons.verified_rounded, SitewiseColors.success)
+        : (Icons.info_outline_rounded, SitewiseColors.muted);
+    return Semantics(
+      label: verifiable
+          ? 'Meets ${match.matchedCount} of ${match.verifiableCount} '
+              'of your requirements'
+          : 'Requirement fit is not available yet',
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(top: 2),
+            child: Icon(icon, size: 18, color: color),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              verifiable
+                  ? 'Meets ${match.matchedCount} of ${match.verifiableCount} '
+                        'of your requirements.'
+                  : 'Fit not verified yet — set your business requirements '
+                        'to see how well this listing matches them.',
+              style: TextStyle(
+                fontSize: 14,
+                height: 1.35,
+                fontWeight: verifiable ? FontWeight.w700 : FontWeight.w500,
+                color: verifiable
+                    ? SitewiseColors.ink
+                    : SitewiseColors.text,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// `360° View` pill over the media. Rendered ONLY when the backend reported
+/// a ready, verified panorama for this property.
+class _PanoramaAction extends StatelessWidget {
+  final VoidCallback onTap;
+  final String label;
+
+  const _PanoramaAction({required this.onTap, required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: true,
+      label: 'Open 360° panorama view of $label',
+      child: Material(
+        color: SitewiseColors.ink.withValues(alpha: 0.82),
+        borderRadius: BorderRadius.circular(999),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(999),
+          child: const SizedBox(
+            height: 44,
+            child: Padding(
+              padding: EdgeInsets.symmetric(horizontal: 14),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Icons.threesixty_rounded,
+                    size: 19,
+                    color: Colors.white,
+                  ),
+                  SizedBox(width: 6),
+                  Text(
+                    '360° View',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                      height: 1.1,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// One aligned card action, at least 44dp tall. Labels scale down instead
+/// of clipping when the system text size grows.
+class _CardActionButton extends StatelessWidget {
+  final String label;
+  final IconData icon;
+  final bool primary;
+  final VoidCallback onTap;
+
+  const _CardActionButton({
+    required this.label,
+    required this.icon,
+    required this.onTap,
+    this.primary = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final color = primary ? SitewiseColors.action : SitewiseColors.ink;
+    return SizedBox(
+      height: 46,
+      child: FilledButton.icon(
+        style: FilledButton.styleFrom(
+          backgroundColor:
+              primary ? SitewiseColors.action : SitewiseColors.surface,
+          foregroundColor: color,
+          side: primary
+              ? null
+              : const BorderSide(color: SitewiseColors.borderStrong),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 8),
+          visualDensity: VisualDensity.standard,
+        ),
+        onPressed: onTap,
+        icon: Icon(icon, size: 17),
+        label: FittedBox(
+          fit: BoxFit.scaleDown,
+          alignment: Alignment.centerLeft,
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w700,
+              color: color,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// `RM 7,500/mo` — thousands grouped, no dangling decimals.
+String _ringgitPerMonth(double amount) {
+  final rounded = amount.round();
+  final digits = rounded.abs().toString();
+  final grouped = StringBuffer(rounded < 0 ? '-RM ' : 'RM ');
+  for (var i = 0; i < digits.length; i++) {
+    grouped.write(digits[i]);
+    final remaining = digits.length - i - 1;
+    if (remaining > 0 && remaining % 3 == 0) grouped.write(',');
+  }
+  grouped.write('/mo');
+  return grouped.toString();
+}
+
+/// `1,760 sq ft` with the same grouping.
+String _squareFeet(double size) {
+  final rounded = size.round();
+  final digits = rounded.abs().toString();
+  final grouped = StringBuffer(rounded < 0 ? '-' : '');
+  for (var i = 0; i < digits.length; i++) {
+    grouped.write(digits[i]);
+    final remaining = digits.length - i - 1;
+    if (remaining > 0 && remaining % 3 == 0) grouped.write(',');
+  }
+  grouped.write(' sq ft');
+  return grouped.toString();
 }
 
 /// Full intelligence for one listing: requirement-by-requirement verdict,
@@ -953,43 +1292,12 @@ class _SectionLabel extends StatelessWidget {
     child: Text(
       text.toUpperCase(),
       style: const TextStyle(
-        fontSize: 9.5,
+        fontSize: 11,
         fontWeight: FontWeight.w800,
         letterSpacing: .7,
         color: SitewiseColors.muted,
       ),
     ),
-  );
-}
-
-class _Fact extends StatelessWidget {
-  final String label;
-  final String value;
-
-  const _Fact({required this.label, required this.value});
-
-  @override
-  Widget build(BuildContext context) => Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      Text(
-        label.toUpperCase(),
-        style: const TextStyle(
-          fontSize: 8.5,
-          fontWeight: FontWeight.w800,
-          letterSpacing: .6,
-          color: SitewiseColors.muted,
-        ),
-      ),
-      Text(
-        value,
-        style: const TextStyle(
-          fontSize: 12.5,
-          fontWeight: FontWeight.w800,
-          color: SitewiseColors.ink,
-        ),
-      ),
-    ],
   );
 }
 
@@ -1000,64 +1308,21 @@ class _RankBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
     decoration: BoxDecoration(
       color: const Color(0xCC0B0F19),
       borderRadius: BorderRadius.circular(7),
     ),
     child: Text(
       '#$rank',
+      semanticsLabel: 'Rank $rank',
       style: const TextStyle(
-        fontSize: 10,
+        fontSize: 11.5,
         fontWeight: FontWeight.w800,
         color: Colors.white,
       ),
     ),
   );
-}
-
-class _FitBadge extends StatelessWidget {
-  final RecommendationMatch match;
-
-  const _FitBadge({required this.match});
-
-  @override
-  Widget build(BuildContext context) {
-    final hasCriteria = match.verifiableCount > 0;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
-      decoration: BoxDecoration(
-        color: hasCriteria
-            ? SitewiseColors.infoWash
-            : SitewiseColors.background,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: SitewiseColors.borderStrong),
-      ),
-      child: Column(
-        children: [
-          Text(
-            hasCriteria
-                ? '${match.matchedCount}/${match.verifiableCount}'
-                : '—',
-            style: const TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w800,
-              color: SitewiseColors.ink,
-            ),
-          ),
-          Text(
-            hasCriteria ? 'met' : 'no criteria',
-            style: const TextStyle(
-              fontSize: 8.5,
-              fontWeight: FontWeight.w700,
-              letterSpacing: .3,
-              color: SitewiseColors.muted,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
 }
 
 class _ReasonChip extends StatelessWidget {
@@ -1088,7 +1353,7 @@ class _ReasonChip extends StatelessWidget {
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
-                fontSize: 10,
+                fontSize: 12,
                 fontWeight: FontWeight.w700,
                 color: color,
               ),
@@ -1098,41 +1363,6 @@ class _ReasonChip extends StatelessWidget {
       ),
     );
   }
-}
-
-class _InlineAction extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final VoidCallback onTap;
-
-  const _InlineAction({
-    required this.icon,
-    required this.label,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) => InkWell(
-    onTap: onTap,
-    borderRadius: BorderRadius.circular(10),
-    child: Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-      child: Row(
-        children: [
-          Icon(icon, size: 15, color: SitewiseColors.action),
-          const SizedBox(width: 4),
-          Text(
-            label,
-            style: const TextStyle(
-              fontSize: 11.5,
-              fontWeight: FontWeight.w800,
-              color: SitewiseColors.action,
-            ),
-          ),
-        ],
-      ),
-    ),
-  );
 }
 
 class _IconToggle extends StatelessWidget {
@@ -1158,10 +1388,10 @@ class _IconToggle extends StatelessWidget {
       child: InkWell(
         onTap: onTap,
         customBorder: const CircleBorder(),
-        // 48x48 touch target.
+        // 44x44: the accessibility floor for a touch target.
         child: SizedBox(
-          width: 40,
-          height: 40,
+          width: 44,
+          height: 44,
           child: Icon(
             icon,
             size: 19,

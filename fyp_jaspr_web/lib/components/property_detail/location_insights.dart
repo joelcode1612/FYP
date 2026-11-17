@@ -268,8 +268,8 @@ class _LocationInsightsV4State extends State<LocationInsightsV4> {
         ]),
         span(classes: 'sw-v4__metric-note', [
           Component.text(
-            'The analysis pipeline has no measurement for this topic at the '
-            'selected distance. Switch the radius to see what is recorded.',
+            'We do not have a measurement for this topic at the selected '
+            'distance. Switch the radius to see what is recorded.',
           ),
         ]),
       ]);

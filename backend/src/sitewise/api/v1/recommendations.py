@@ -10,6 +10,11 @@ from sitewise.db.models.recommendation_result import RecommendationResult
 from sitewise.db.session import get_db
 from sitewise.dependencies import AuthenticatedUser, CurrentUser, get_active_user, require_admin_mfa
 from sitewise.domain import rbac
+from sitewise.repositories.fyp_property_repository import FypPropertyRepository
+from sitewise.services.property_insights_service import (
+    PANORAMA_UNAVAILABLE,
+    panoramas_by_catalogue_ids,
+)
 from sitewise.services.recommendation_search_service import (
     SORT_BEST_MATCH,
     RecommendationSearchService,
@@ -97,6 +102,12 @@ def search_recommendations(
     ``model.available`` is ``false`` in this build: the trained artifact is not
     integrated, so ``recommendation.score`` is null and the ordering is the
     documented requirement-fit ordering. No score is fabricated.
+
+    Each page is batch-enriched with display media: ``photos`` (URL list, the
+    verified catalogue-photo chain) and ``panorama`` (the same honest
+    ``ready``/``processing``/``unavailable`` payload as the insights endpoint).
+    Both resolve in ONE query per page — never per card — and media failures
+    degrade to empty media instead of failing the search.
     """
     management = RecommendationManagementService(operational_db)
     try:
@@ -130,10 +141,21 @@ def search_recommendations(
             managers = management.resolve(ids)
         except ManagementLookupError:
             managers = {pid: unavailable_management() for pid in ids}
+        try:
+            photo_urls = FypPropertyRepository(
+                operational_db
+            ).get_catalogue_photo_urls_batch(ids)
+        except Exception:  # noqa: BLE001 - media must never fail the search
+            photo_urls = {}
+        panoramas = panoramas_by_catalogue_ids(operational_db, ids)
         for row in response['data']:
             row['management'] = managers.get(
                 row['property_id'], unavailable_management()
             )
+            row['photos'] = photo_urls.get(row['property_id'], [])
+            row['panorama'] = panoramas.get(
+                row['property_id']
+            ) or dict(PANORAMA_UNAVAILABLE)
         return response
     except ValueError as exc:
         # Cursor from another search / malformed cursor: the client must

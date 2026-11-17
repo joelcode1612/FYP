@@ -21,6 +21,11 @@ import 'ui.dart';
 /// category, table search, copy feedback) and passes it down with callbacks.
 class FullAnalysisBody extends StatelessComponent {
   final FullAnalysis analysis;
+
+  /// The nearby-places payload fetched by the page at the widest radius, so
+  /// the map frame can draw the five surrounding-area layers from verified
+  /// records. Null keeps the map coordinates-only.
+  final Map<String, dynamic>? nearby;
   final String selectedCategory;
   final void Function(String) onSelectCategory;
   final String search;
@@ -39,6 +44,7 @@ class FullAnalysisBody extends StatelessComponent {
   const FullAnalysisBody({
     super.key,
     required this.analysis,
+    this.nearby,
     required this.selectedCategory,
     required this.onSelectCategory,
     required this.search,
@@ -59,7 +65,7 @@ class FullAnalysisBody extends StatelessComponent {
       _Intro(copied: copied, onCopy: onCopy, onPrint: onPrint),
       _Notice(signedIn: signedIn),
       _Overview(analysis: analysis, property: property),
-      _MapRow(analysis: analysis, property: property),
+      _MapRow(analysis: analysis, property: property, nearby: nearby),
       _Evidence(
         analysis: analysis,
         selectedCategory: selectedCategory,
@@ -156,7 +162,7 @@ class _Notice extends StatelessComponent {
       Component.text(
         'The score is an uncalibrated positive-versus-unlabeled research '
         'association, not the likelihood of business success. '
-        '${signedIn ? 'Explanation and target matching read your persisted assessment; loading this page never computes SHAP or advances a stage.' : 'Sign in to read your persisted explanation and business-target matching.'}',
+        '${signedIn ? 'Explanation and target matching read your persisted assessment; opening this page never recomputes explanations or advances a stage.' : 'Sign in to read your persisted explanation and business-target matching.'}',
       ),
     ]),
   ]);
@@ -324,7 +330,7 @@ class _ScorePanel extends StatelessComponent {
 
     return div(classes: 'fa-panel fa-score', [
       span(classes: 'fa-score__label', [
-        Component.text('PU research association score'),
+        Component.text('Research association score'),
       ]),
       div(classes: 'fa-score__number', [
         Component.text(
@@ -356,7 +362,7 @@ class _ScorePanel extends StatelessComponent {
         span([Component.text('Selected property score')]),
         strong([
           Component.text(
-            'SHAP baseline: ${hasShap ? faPct(explanation!.baseValue) : 'Not generated'}',
+            'Model baseline: ${hasShap ? faPct(explanation!.baseValue) : 'Not generated'}',
           ),
         ]),
       ]),
@@ -410,7 +416,12 @@ class _ScorePanel extends StatelessComponent {
 class _MapRow extends StatelessComponent {
   final FullAnalysis analysis;
   final CommercialProperty property;
-  const _MapRow({required this.analysis, required this.property});
+  final Map<String, dynamic>? nearby;
+  const _MapRow({
+    required this.analysis,
+    required this.property,
+    this.nearby,
+  });
 
   @override
   Component build(BuildContext context) {
@@ -433,7 +444,12 @@ class _MapRow extends StatelessComponent {
               ]),
             ]),
           ]),
-          PropertyLeafletMap(property: property, height: 340, radius: 500),
+          PropertyLeafletMap(
+            property: property,
+            height: 340,
+            radius: 500,
+            nearby: nearby,
+          ),
           p(classes: 'fa-map-caption', [
             Component.text('Coordinates: '),
             strong([Component.text(coords)]),
@@ -441,6 +457,20 @@ class _MapRow extends StatelessComponent {
               ' · Radius selectable inside the map · © OpenStreetMap contributors, © CARTO when tiles load',
             ),
           ]),
+          if (googleMapsDirectionsUrl(property.latitude, property.longitude)
+              case final directions?)
+            p(classes: 'fa-map-caption', [
+              // Keyless Google Maps URLs: routing runs on Google's page, so
+              // no Google data or key ever enters the Leaflet frame.
+              a(
+                href: directions,
+                attributes: const {
+                  'target': '_blank',
+                  'rel': 'noopener noreferrer',
+                },
+                [Component.text('Get directions in Google Maps (opens a new tab)')],
+              ),
+            ]),
         ]),
         div(classes: 'fa-panel fa-pad fa-facts', [
           div(classes: 'fa-section-head', [
@@ -537,7 +567,7 @@ class _Evidence extends StatelessComponent {
             p([
               Component.text(
                 'Choose a category. Each one shows its key measurements, every '
-                'available model feature, the SHAP impact and the evidence '
+                'available model feature, the score impact and the evidence '
                 'limitations.',
               ),
             ]),
@@ -621,8 +651,8 @@ class _CategoryCard extends StatelessComponent {
           [
             Component.text(
               contribution == null
-                  ? 'SHAP not generated'
-                  : '${faSigned(contribution)} SHAP · net',
+                  ? 'Score effect not generated'
+                  : '${faSigned(contribution)} net score effect',
             ),
           ],
         ),
@@ -684,7 +714,7 @@ class _CategoryDetail extends StatelessComponent {
               th([Component.text('Geospatial feature')]),
               th([Component.text('Measured value')]),
               th([Component.text('Unit')]),
-              th([Component.text('SHAP effect')]),
+              th([Component.text('Score effect')]),
             ]),
           ]),
           tbody([
@@ -763,9 +793,9 @@ class _CategoryGuide extends StatelessComponent {
         p([
           Component.text(
             strongest == null
-                ? 'No validated SHAP explanation yet, so model influence is not shown.'
+                ? 'No verified factor explanation yet, so model influence is not shown.'
                 : '${faFeatureLabel(strongest.name)} has the largest absolute '
-                      'SHAP effect in this category (${faSigned(strongest.shap, decimals: 4)}); '
+                      'score effect in this category (${faSigned(strongest.shap, decimals: 4)}); '
                       'its recorded feature value is ${faNum(strongest.value, decimals: 3)}. '
                       'This is model influence, not evidence of cause.',
           ),
@@ -849,13 +879,13 @@ class _Explanation extends StatelessComponent {
           _DriversPanel(analysis: analysis),
         ] else
           div(classes: 'fa-panel fa-pad fa-unavailable', [
-            h3([Component.text('No validated SHAP explanation to show')]),
+            h3([Component.text('No verified score explanation to show')]),
             p([
               Component.text(
                 explanationNote ??
                     'Generate the AI explanation in your assessment workspace '
-                        '(Stage 4). Reading this page never computes SHAP or '
-                        'advances a stage.',
+                        '(Stage 4). Opening this page never recomputes '
+                        'explanations or advances a stage.',
               ),
             ]),
             ActionLink(
@@ -887,7 +917,7 @@ class _WaterfallPanel extends StatelessComponent {
     return div(classes: 'fa-panel fa-pad fa-shap-main', [
       div(classes: 'fa-section-head', [
         div([
-          h3([Component.text('Simple SHAP waterfall')]),
+          h3([Component.text('How the model reaches this score')]),
           p([
             Component.text('Baseline + category contributions = model output'),
           ]),
@@ -900,7 +930,7 @@ class _WaterfallPanel extends StatelessComponent {
         ]),
         span(classes: 'fa-op', [Component.text('+')]),
         div([
-          small([Component.text('Net SHAP effect')]),
+          small([Component.text('Net effect')]),
           b([
             Component.text(
               '${faSigned(e.netContribution * 100, decimals: 2)} pp',
@@ -925,7 +955,7 @@ class _WaterfallPanel extends StatelessComponent {
       ]),
       p(classes: 'fa-chart-caption', [
         Component.text(
-          'The chart groups all feature-level SHAP contributions into five net '
+          'The chart groups all feature-level contributions into five net '
           'category totals. Individual positive and negative feature effects '
           'can cancel within a category.',
         ),
@@ -941,7 +971,7 @@ Component _waterfallSvg(
   ResearchExplanation e,
   List<GeospatialCategorySummary> categories,
 ) {
-  final bars = <_Bar>[_Bar('SHAP baseline', 0, e.baseValue, _BarKind.base, 0)];
+  final bars = <_Bar>[_Bar('Model baseline', 0, e.baseValue, _BarKind.base, 0)];
   var current = e.baseValue;
   for (final c in categories) {
     final effect = c.contribution ?? 0;
@@ -1073,7 +1103,7 @@ Component _waterfallSvg(
       'role': 'img',
       'aria-label':
           'Waterfall chart of the signed contributions of the five categories '
-          'from the SHAP baseline to the model output',
+          'from the model baseline to the model output',
     },
     children: children,
   );
@@ -1107,7 +1137,7 @@ class _NarrativePanel extends StatelessComponent {
         ]),
       ]),
       span(classes: 'fa-explain-tag', [
-        Component.text('Deterministic template · no live LLM'),
+        Component.text('Deterministic template · no live AI'),
       ]),
       div(classes: 'fa-llm-summary', [
         _llmBlock('What the score means', narrative.intro, ''),
@@ -1122,8 +1152,8 @@ class _NarrativePanel extends StatelessComponent {
       p(classes: 'fa-explain-foot', [
         Component.text(
           'This text is deterministically assembled from the saved model '
-          'outputs. It demonstrates what a properly grounded LLM could '
-          'explain, but no live LLM was called.',
+          'outputs. It demonstrates what a properly grounded AI assistant '
+          'could explain, but no live AI service was called.',
         ),
       ]),
     ]);
@@ -1223,7 +1253,7 @@ class _AdvancedTable extends StatelessComponent {
               'Model: ${e?.featureSet ?? analysis.model?.featureSet ?? '—'}'
               '${e?.modelVersion == null ? '' : ' · version ${e!.modelVersion}'}'
               '${e?.explainer == null ? '' : ' · ${e!.explainer}'}'
-              '${e?.backgroundSize == null ? '' : ' · ${e!.backgroundSize} background observations'}. '
+              '${e?.backgroundSize == null ? '' : ' · ${e!.backgroundSize} reference locations'}. '
               'Each contribution must match this property and model version. '
               'Missing values read "Not recorded", never zero.',
             ),
@@ -1231,7 +1261,7 @@ class _AdvancedTable extends StatelessComponent {
           div(classes: 'fa-advanced-search', [
             SearchInput(
               placeholder: 'Search feature or category…',
-              ariaLabel: 'Filter SHAP feature table',
+              ariaLabel: 'Filter model feature table',
               onInput: onSearch,
             ),
           ]),
@@ -1243,7 +1273,7 @@ class _AdvancedTable extends StatelessComponent {
                   th([Component.text('Model feature')]),
                   th([Component.text('Value')]),
                   th([Component.text('Unit')]),
-                  th([Component.text('Signed SHAP')]),
+                  th([Component.text('Signed contribution')]),
                 ]),
               ]),
               tbody([
@@ -1314,7 +1344,7 @@ class _Targets extends StatelessComponent {
             span(classes: 'fa-step-label', [
               Component.text('03 / BUSINESS PREFERENCE MATCHING'),
             ]),
-            h2([Component.text('Separate business targets from SHAP')]),
+            h2([Component.text('Separate business targets from the model score')]),
             p([
               Component.text(
                 'Read-only deterministic checks against your saved Stage 2 '
@@ -1462,7 +1492,7 @@ class _Summary extends StatelessComponent {
             _reportItem('Property', '${property.id} · $location'),
             _reportItem(
               'Research association',
-              '${faPct(analysis.score?.positiveLabelAssociation)} (P/U research only)',
+              '${faPct(analysis.score?.positiveLabelAssociation)} (research estimate)',
             ),
             _reportItem(
               'Model / explanation',
@@ -1472,7 +1502,7 @@ class _Summary extends StatelessComponent {
           p(classes: 'fa-report-body', [
             Component.text(
               narrative?.plain ??
-                  'No validated SHAP explanation has been generated for this '
+                  'No verified factor explanation has been generated for this '
                       'assessment yet.',
             ),
           ]),
@@ -1486,7 +1516,7 @@ class _Summary extends StatelessComponent {
                   : 'Business criteria: ${targets.matched} achieved, '
                         '${targets.mismatched} not achieved, ${targets.unknown} '
                         'require verification. These checks are separate from '
-                        'the PU and SHAP model.',
+                        'the research model.',
             ),
           ]),
           div(classes: 'fa-notice fa-notice--warn', [

@@ -99,7 +99,7 @@ def _service(monkeypatch, *, features, background_rows, missing=None, stub_categ
         monkeypatch.setattr(
             svc.PropertyInsightsService,
             "_category_payload",
-            lambda self, property_id: {
+            lambda self, property_id, business_type=None: {
                 "available": False,
                 "reason": {
                     "code": "category_model_unavailable",
@@ -441,9 +441,10 @@ def test_map_exposes_the_five_layers_in_display_order(monkeypatch, reference_fea
         "Transport",
         "Parking",
     ]
-    # Only the catalogue has coordinates. Claiming otherwise would put pins on
-    # the map that no stored location can justify.
-    assert [layer["mapped"] for layer in layers] == [True, False, False, False, False]
+    # Every layer draws from a real coordinate-carrying source table via the
+    # nearby-places endpoint, so all five are mapped; the recorded counts
+    # below stay the research totals and are kept separate from markers.
+    assert [layer["mapped"] for layer in layers] == [True, True, True, True, True]
     assert out["origin"] == {"lat": 3.02, "lon": 101.51}
 
 

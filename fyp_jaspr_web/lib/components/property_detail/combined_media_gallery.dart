@@ -2,6 +2,8 @@ import 'package:jaspr/dom.dart';
 import 'package:jaspr/jaspr.dart';
 import 'package:universal_web/web.dart' as web;
 
+import '../ui.dart';
+
 /// A completed stitched panorama, or the reason there is none.
 ///
 /// The application has **no** stitching pipeline and no completed-panorama
@@ -273,7 +275,7 @@ class CombinedMediaGallery extends StatelessComponent {
             attributes: const {'aria-hidden': 'true'},
             [
               span(classes: 'sw-gallery__placeholder-icon', [
-                Component.text('▣'),
+                Icon('image', size: 'sm'),
               ]),
               span([Component.text('Loading photograph…')]),
             ],
@@ -312,7 +314,9 @@ class CombinedMediaGallery extends StatelessComponent {
           'aria-label': view.full ? 'Exit fullscreen' : 'View photograph fullscreen',
         },
         events: events(onClick: onToggleFull),
-        [Component.text(view.full ? '✕' : '⤢')],
+        [
+          Icon(view.full ? 'close' : 'open_in_full', size: 'sm'),
+        ],
       ),
     ]);
   }
@@ -354,7 +358,7 @@ class CombinedMediaGallery extends StatelessComponent {
                 span(
                   classes: 'sw-gallery__thumb-fallback',
                   attributes: const {'aria-hidden': 'true'},
-                  [Component.text('▣')],
+                  [Icon('broken_image', size: 'sm')],
                 )
               else
                 Component.element(
@@ -422,7 +426,9 @@ class CombinedMediaGallery extends StatelessComponent {
           'aria-label': view.full ? 'Exit fullscreen' : 'View panorama fullscreen',
         },
         events: events(onClick: onToggleFull),
-        [Component.text(view.full ? '✕' : '⤢')],
+        [
+          Icon(view.full ? 'close' : 'open_in_full', size: 'sm'),
+        ],
       ),
     ]);
   }
@@ -432,13 +438,15 @@ class CombinedMediaGallery extends StatelessComponent {
           classes: 'sw-pano__tool',
           attributes: {'type': 'button', 'aria-label': 'Zoom in'},
           events: events(onClick: () => onZoom(view.zoom + 0.25)),
-          [Component.text('+')],
+          // Supported Material Symbols instead of typed +/- glyphs: the
+          // minus sign in particular rendered as a box on some font stacks.
+          [Icon('add', size: 'sm')],
         ),
         button(
           classes: 'sw-pano__tool',
           attributes: {'type': 'button', 'aria-label': 'Zoom out'},
           events: events(onClick: () => onZoom(view.zoom - 0.25)),
-          [Component.text('−')],
+          [Icon('remove', size: 'sm')],
         ),
         button(
           classes: 'sw-pano__tool sw-pano__tool--wide',
@@ -459,7 +467,9 @@ class CombinedMediaGallery extends StatelessComponent {
           div(
             classes: 'sw-gallery__empty-icon',
             attributes: const {'aria-hidden': 'true'},
-            [Component.text(view.tab == 1 ? '360' : '▣')],
+            [view.tab == 1
+                ? Component.text('360')
+                : Icon('no_photography', size: 'sm')],
           ),
           strong([Component.text(title)]),
           p([Component.text(body)]),

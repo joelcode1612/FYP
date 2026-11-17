@@ -13,9 +13,11 @@
 - Never root a 3rd-party widget on a framework-owned element (Jaspr rewrites `class`; Leaflet mounts on `.swcx-map-mount` child).
 - Component asset refs MUST be root-absolute `/assets/...` (no `<base href>`); CSS `url('assets/…')` ok.
 - `main_()` renders `<main>`. Read whole CSS rule before editing. Can't view images — verify via headless DOM checks (naturalWidth, class/rect audits).
+- Jaspr `@client` components accept ONLY primitive params — pass raw strings (e.g. `?filters=` JSON) and parse inside the component; complex objects fail codegen ("only support parameters of p...").
+- Status cells mix Icon span + label span; probes must read the LAST `span` (icon ligature pollutes textContent).
 
 ## Services
-- Backend `FYP/backend` FastAPI port 8000 (`sitewise.main:app`); `FYP/test` (3001) is legacy, NEVER the API. Ports: 8090 web / 8000 API / 5567 dev proxy / 8181 VM / 5432 PG.
+- Backend `FYP/backend` FastAPI port 8000 (`sitewise.main:app`); `FYP/test` (3001) is legacy, NEVER the API. Ports: 8090 web / 8000 API / 5567 dev proxy / 8181 VM / 5432 PG. A uvicorn `--reload` on 8090 = misport: kill BOTH parent and the orphaned `multiprocessing.spawn` child (child inherits the socket; Get-NetTCPConnection shows empty State for dead PIDs).
 - `.\serve` → serve.cmd → serve.impl.ps1; NEVER create `serve.ps1` (AllSigned rejects unsigned .ps1).
 - Supabase: admin create-user P0001 + signup SMTP 500 are live blockers, not integration faults; only 1 real auth user — never modify.
 

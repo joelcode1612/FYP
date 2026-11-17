@@ -1,6 +1,8 @@
 import 'package:jaspr/dom.dart';
 import 'package:jaspr/jaspr.dart';
 
+import '../../components/ui.dart';
+
 /// Reusable, controlled text field for the Add Property wizard.
 class AddPropertyTextField extends StatelessComponent {
   const AddPropertyTextField({
@@ -58,7 +60,7 @@ class AddPropertyTextField extends StatelessComponent {
 
 /// Shared note styling. No persistence or API behavior is implied.
 Component addPropertyNotice(String message) => div(classes: 'swap-notice', [
-  span(classes: 'swap-notice-icon', [Component.text('ⓘ')]),
+  span(classes: 'swap-notice-icon', [Icon('info', size: 'sm')]),
   span([Component.text(message)]),
 ]);
 

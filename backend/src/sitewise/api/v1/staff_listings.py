@@ -712,6 +712,60 @@ def decide_change_request(
     }
 
 
+@router.delete("/listings/{listing_id}")
+def delete_listing_admin(
+    listing_id: int,
+    admin: AuthenticatedUser = Depends(require_admin_mfa),  # noqa: B008 - FastAPI dependency idiom
+    session: Session = Depends(get_db),  # noqa: B008 - FastAPI dependency idiom
+) -> dict:
+    """Administrator deletion of one canonical property master row.
+
+    The ONLY property-deletion endpoint. The request resolves through
+    ``fyp.rental_properties.id``; agents have no deletion authority at all
+    (``require_admin_mfa``, not the assignment check). Research-linked rows
+    (catalogue imports, verified subject links) and rows carrying
+    verification / change-request history are refused with 409 — the
+    historical record is never destroyed. Operational children (photos,
+    features, geospatial features, favourites, recommendations, tours,
+    assignments, enquiries) cascade inside the same transaction and are
+    reported in the response.
+    """
+    summary = FypPropertyRepository(session).admin_delete_listing(listing_id)
+    if not summary["found"]:
+        raise HTTPException(status_code=404, detail="Property not found.")
+    if summary["protected"]:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "research_property_protected",
+                "message": (
+                    "This property is part of the verified research dataset; "
+                    "its master record cannot be deleted."
+                ),
+                "protected": summary["protected"],
+            },
+        )
+    if summary["blocked"]:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "verification_history_exists",
+                "message": (
+                    "This property has verification or change-request history "
+                    "that must be preserved; it cannot be deleted."
+                ),
+                "blocked": summary["blocked"],
+            },
+        )
+    return {
+        "data": {
+            "deleted": listing_id,
+            "name": summary["name"],
+            "related_removed": summary["children"],
+        }
+    }
+
+
 # ---------------------------------------------------------------------------
 # Administrator queue: agent change requests + assignments
 # ---------------------------------------------------------------------------

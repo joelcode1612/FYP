@@ -6,7 +6,7 @@ import '../entrepreneur/pages/entrepreneur_assess_mobile_page.dart';
 import '../entrepreneur/pages/entrepreneur_dashboard_mobile_page.dart';
 import '../entrepreneur/pages/entrepreneur_recommendations_mobile_page.dart';
 import '../entrepreneur/pages/entrepreneur_profile_mobile_page.dart';
-import '../entrepreneur/pages/entrepreneur_spaces_mobile_page.dart';
+import '../entrepreneur/pages/entrepreneur_favourites_mobile_page.dart';
 import 'entrepreneur_tab_scope.dart';
 import 'mobile_bottom_nav.dart';
 import 'mobile_navigation.dart';
@@ -68,7 +68,7 @@ class _EntrepreneurTabHostState extends State<EntrepreneurTabHost> {
     '/entrepreneur/recommendations' =>
       const EntrepreneurRecommendationsMobilePage(),
     '/entrepreneur/assess' => const EntrepreneurAssessMobilePage(),
-    '/entrepreneur/spaces' => const EntrepreneurSpacesMobilePage(),
+    '/entrepreneur/favourites' => const EntrepreneurFavouritesMobilePage(),
     '/entrepreneur/profile' => const EntrepreneurProfileMobilePage(),
     _ => const SizedBox.shrink(),
   };

@@ -15,18 +15,20 @@ class EntrepreneurTabScope extends InheritedWidget {
     '/entrepreneur',
     '/entrepreneur/recommendations',
     '/entrepreneur/assess',
-    '/entrepreneur/spaces',
+    '/entrepreneur/favourites',
     '/entrepreneur/profile',
   };
 
   /// Retired tab route → current tab route.
   ///
   /// `/entrepreneur/explore` was the discovery tab until Recommendations
-  /// absorbed it. Dozens of in-page shortcuts still point at the old route, and
-  /// a raw lookup would fail to find a destination and silently do nothing, so
-  /// every tab entry point resolves through here first.
+  /// absorbed it, and `/entrepreneur/spaces` was the shortlist tab until it
+  /// became Favourites. Dozens of in-page shortcuts still point at the old
+  /// routes, and a raw lookup would fail to find a destination and silently do
+  /// nothing, so every tab entry point resolves through here first.
   static const Map<String, String> retiredTabRoutes = <String, String>{
     '/entrepreneur/explore': '/entrepreneur/recommendations',
+    '/entrepreneur/spaces': '/entrepreneur/favourites',
   };
 
   /// Rewrites a retired tab route to the destination that replaced it.

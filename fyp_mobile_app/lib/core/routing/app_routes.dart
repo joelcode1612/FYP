@@ -22,8 +22,9 @@ import '../../presentation/mobile/entrepreneur/pages/entrepreneur_preferences_mo
 import '../../presentation/mobile/entrepreneur/pages/entrepreneur_property_detail_mobile_page.dart';
 import '../../presentation/mobile/entrepreneur/pages/entrepreneur_explore_mobile_page.dart';
 import '../../presentation/mobile/entrepreneur/pages/entrepreneur_report_mobile_page.dart';
-import '../../presentation/mobile/entrepreneur/pages/entrepreneur_saved_mobile_page.dart';
+import '../../presentation/mobile/entrepreneur/pages/entrepreneur_favourites_mobile_page.dart';
 import '../../presentation/mobile/entrepreneur/pages/entrepreneur_tour_mobile_page.dart';
+import '../../presentation/mobile/entrepreneur/pages/property_panorama_mobile_page.dart';
 import '../../presentation/mobile/entrepreneur/pages/sitewise_add_property_mobile_page.dart';
 import '../../presentation/mobile/provider/pages/provider_mfa_mobile_page.dart';
 import '../../presentation/mobile/provider/pages/provider_property_detail_mobile_page.dart';
@@ -58,12 +59,15 @@ String parentShellRoute(String route) {
     // protected staff flow pushed it — both keep Profile selected.
     '/provider/verification': '/provider/profile',
     '/provider/mfa': '/provider/profile',
-    // Detail routes highlight their owning tab in the five-tab model.
+    // Detail routes highlight their owning tab in the five-tab model. The
+    // shortlist and the property-record shortcuts all belong to Favourites,
+    // which is what the retired `/entrepreneur/spaces` tab became.
     '/entrepreneur/preferences': '/entrepreneur/profile',
-    '/entrepreneur/saved': '/entrepreneur/spaces',
-    '/entrepreneur/add-property': '/entrepreneur/spaces',
-    '/owner/capture': '/entrepreneur/spaces',
-    '/entrepreneur/compare': '/entrepreneur/spaces',
+    '/entrepreneur/saved': '/entrepreneur/favourites',
+    '/entrepreneur/spaces': '/entrepreneur/favourites',
+    '/entrepreneur/add-property': '/entrepreneur/favourites',
+    '/owner/capture': '/entrepreneur/favourites',
+    '/entrepreneur/compare': '/entrepreneur/favourites',
     // Discovery is the Recommendations tab. Every retired discovery route
     // (Explore, property detail, tour) highlights it, and the legacy
     // `/entrepreneur/explore` path maps onto it so an old link never lands on
@@ -71,6 +75,7 @@ String parentShellRoute(String route) {
     '/entrepreneur/explore': '/entrepreneur/recommendations',
     '/entrepreneur/property-detail': '/entrepreneur/recommendations',
     '/entrepreneur/tour': '/entrepreneur/recommendations',
+    '/entrepreneur/panorama': '/entrepreneur/recommendations',
     '/entrepreneur/report': '/entrepreneur/assess',
     // The Option A assessment flow keeps the Assess tab highlighted.
     '/entrepreneur/assessment-setup': '/entrepreneur/assess',
@@ -200,8 +205,11 @@ abstract final class AppRoutes {
               : null,
         ),
       ),
-      // The Add Property flow is shared with the previous owner experience —
-      // same draft, photo, enrichment and submission endpoints.
+      // The single Add Property form for BOTH provider roles — same screen,
+      // fields, validation and endpoints, and the same draft, photo,
+      // enrichment and submission flow the owner experience already used.
+      // Ownership vs. agent assignment is decided by the backend from the
+      // verified token, so no per-role create route exists.
       '/provider/add-property' => (
         RouteAccess.workspace,
         () => SitewiseAddPropertyMobilePage(
@@ -220,14 +228,22 @@ abstract final class AppRoutes {
         RouteAccess.workspace,
         () => const EntrepreneurTabHost(initialRoute: '/entrepreneur'),
       ),
-      // Material 3 five-tab workspace: Assess and Spaces.
+      // Material 3 five-tab workspace: Assess and Favourites.
       '/entrepreneur/assess' => (
         RouteAccess.workspace,
         () => const EntrepreneurTabHost(initialRoute: '/entrepreneur/assess'),
       ),
+      '/entrepreneur/favourites' => (
+        RouteAccess.workspace,
+        () =>
+            const EntrepreneurTabHost(initialRoute: '/entrepreneur/favourites'),
+      ),
+      // Retired tab path: it opens the tab that replaced it, so an old deep
+      // link lands on Favourites instead of the not-found page.
       '/entrepreneur/spaces' => (
         RouteAccess.workspace,
-        () => const EntrepreneurTabHost(initialRoute: '/entrepreneur/spaces'),
+        () =>
+            const EntrepreneurTabHost(initialRoute: '/entrepreneur/favourites'),
       ),
       '/entrepreneur/add-property' => (
         RouteAccess.workspace,
@@ -272,6 +288,22 @@ abstract final class AppRoutes {
           propertyId: settings.arguments as String? ?? '',
         ),
       ),
+      // Immersive 360° viewer for a server-verified catalogue panorama.
+      // arguments: {'url': <ready panorama URL>, 'title': <property title>}.
+      '/entrepreneur/panorama' => (
+        RouteAccess.workspace,
+        () {
+          final args = settings.arguments;
+          final url = args is Map
+              ? '${args['url'] ?? ''}'
+              : '${args ?? ''}';
+          final title = args is Map ? '${args['title'] ?? ''}' : '';
+          return PropertyPanoramaMobilePage(
+            panoramaUrl: url,
+            propertyTitle: title,
+          );
+        },
+      ),
       '/entrepreneur/recommendations' => (
         RouteAccess.workspace,
         () => EntrepreneurTabHost(
@@ -289,9 +321,12 @@ abstract final class AppRoutes {
         RouteAccess.workspace,
         () => const EntrepreneurCompareMobilePage(),
       ),
+      // Old shortlist path. It renders the Favourites tab's own screen rather
+      // than a second list implementation, so there is exactly one saved
+      // property list in the app.
       '/entrepreneur/saved' => (
         RouteAccess.workspace,
-        () => const EntrepreneurSavedMobilePage(),
+        () => const EntrepreneurFavouritesMobilePage(),
       ),
       '/entrepreneur/report' => (
         RouteAccess.workspace,

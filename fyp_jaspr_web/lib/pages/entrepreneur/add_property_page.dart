@@ -1700,7 +1700,7 @@ class _AddPropertyPageState extends State<AddPropertyPage> {
       span(
         classes: 'sw-analysis__chev',
         attributes: const {'aria-hidden': 'true'},
-        [Component.text('▾')],
+        [Icon('expand_more', size: 'sm')],
       ),
     ];
 

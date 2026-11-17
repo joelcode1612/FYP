@@ -12,7 +12,7 @@ import '../../../shared/widgets/sitewise_secondary_button.dart';
 import '../../../shared/widgets/sitewise_status_badge.dart';
 import '../../shell/mobile_app_shell.dart';
 import '../../widgets/m3_kit.dart';
-import '../../widgets/mobile_property_image.dart';
+import '../../widgets/mobile_property_gallery.dart';
 import '../../widgets/mobile_insights_panel.dart';
 import '../../widgets/mobile_section_header.dart';
 import '../../widgets/mobile_skeleton.dart';
@@ -43,7 +43,7 @@ class _EntrepreneurPropertyDetailMobilePageState
     extends ConsumerState<EntrepreneurPropertyDetailMobilePage> {
   /// Resolved once per route (a FutureBuilder created inside `build` would
   /// refetch on every rebuild).
-  late Future<CommercialProperty?> _propertyFuture = _loadProperty();
+  late Future<_PropertyRecord?> _propertyFuture = _loadProperty();
 
   /// Real location insights for this catalogue property: the deployed model's
   /// score and its SHAP decomposition. `null` when the backend cannot score the
@@ -65,23 +65,45 @@ class _EntrepreneurPropertyDetailMobilePageState
     });
   }
 
-  /// Resolves the listing against the SAME authoritative dataset the Explore
-  /// list used: the live `/explore/properties/{id}` repository in live mode
-  /// (numeric `fyp.rental_properties` ids), the demo store in demo mode. A
-  /// 404 from the backend means "not published" and surfaces as the
-  /// unavailable state; other failures surface as a retryable error instead
-  /// of pretending the property is gone.
-  Future<CommercialProperty?> _loadProperty() async {
-    final repo = ref.read(exploreRepositoryProvider);
-    if (repo != null) {
-      try {
-        final detail = await repo.detail(widget.propertyId);
-        return detail.property;
-      } on NotFoundShape {
-        return null;
-      }
+  /// Resolves the listing in whichever id space the entry point carried, and
+  /// brings back the whole photo set with it.
+  ///
+  /// Two id universes reach this route. The ranked recommendations and the AI
+  /// workspace carry the canonical research id (`EP-`/`MD-`), which only
+  /// `/catalog/properties/{id}` can address; Explore, Spaces and Saved carry
+  /// the numeric `fyp.rental_properties` id, which only
+  /// `/explore/properties/{id}` can address and which FastAPI refuses outright
+  /// on the catalogue route's shape. The catalogue is therefore read first:
+  /// a numeric id simply is not a catalogue row, and
+  /// `ApiPropertyRepository.getPropertyById` maps that 404 to `null` while a
+  /// genuine service failure still throws — so an outage stays a retryable
+  /// error instead of degrading into "no longer available".
+  ///
+  /// Photos ride back with the record rather than a second request:
+  /// `/explore/...` returns them as `detail.photos`, the catalogue mapper as
+  /// `property.imageUrls`, each already ordered primary-first server-side.
+  Future<_PropertyRecord?> _loadProperty() async {
+    final id = widget.propertyId;
+    if (id.isEmpty) return null;
+    // Read before the first await: the route may pop while the catalogue
+    // request is in flight, and `ref` is dead afterwards.
+    final explore = ref.read(exploreRepositoryProvider);
+    final catalog = await ServiceLocator.properties.detail(id);
+    if (catalog != null) {
+      return _PropertyRecord(property: catalog, photos: catalog.imageUrls);
     }
-    return ServiceLocator.properties.detail(widget.propertyId);
+    if (explore == null || int.tryParse(id) == null) return null;
+    try {
+      final detail = await explore.detail(id);
+      return _PropertyRecord(
+        property: detail.property,
+        photos: [for (final photo in detail.photos) photo.url],
+      );
+    } on NotFoundShape {
+      // 404 here means "exists but not approved+published", which is
+      // indistinguishable from absent for an entrepreneur by design.
+      return null;
+    }
   }
 
   void _reload() {
@@ -93,7 +115,7 @@ class _EntrepreneurPropertyDetailMobilePageState
     );
   }
 
-  /// Saves/unsaves against the server first, so the shortlist the Saved tab
+  /// Saves/unsaves against the server first, so the list the Favourites tab
   /// reads is the authoritative one. The old `toggleSaved` only moved the
   /// in-memory set: the bookmark looked saved, then disappeared on restart.
   Future<void> _toggleSaved(String id, bool wantSaved) async {
@@ -107,8 +129,8 @@ class _EntrepreneurPropertyDetailMobilePageState
         content: Text(
           failure ??
               (wantSaved
-                  ? 'Saved to your shortlist.'
-                  : 'Removed from saved.'),
+                  ? 'Added to favourites.'
+                  : 'Removed from favourites.'),
         ),
         behavior: SnackBarBehavior.floating,
       ),
@@ -139,7 +161,7 @@ class _EntrepreneurPropertyDetailMobilePageState
             body: RefreshIndicator(
               color: SitewiseColors.action,
               onRefresh: () async => _reload(),
-              child: FutureBuilder<CommercialProperty?>(
+              child: FutureBuilder<_PropertyRecord?>(
               future: _propertyFuture,
               builder: (c, snap) {
                 if (snap.connectionState != ConnectionState.done) {
@@ -178,18 +200,19 @@ class _EntrepreneurPropertyDetailMobilePageState
                     ),
                   );
                 }
-                final p = snap.data;
-                if (p == null) {
+                final record = snap.data;
+                if (record == null) {
                   return const Center(
                     child: Text('This property is no longer available.'),
                   );
                 }
+                final p = record.property;
                 final saved = appState.saved.contains(p.id);
                 return ListView(
                   padding: const EdgeInsets.fromLTRB(16, 14, 16, 122),
                   physics: const AlwaysScrollableScrollPhysics(),
                   children: [
-                    _hero(p, saved),
+                    _heroWithPanorama(p, record.photos, saved),
                     const SizedBox(height: 16),
                     _identity(p),
                     const SizedBox(height: 18),
@@ -241,37 +264,74 @@ class _EntrepreneurPropertyDetailMobilePageState
     );
   }
 
-  Widget _hero(CommercialProperty p, bool saved) => Stack(
-    children: [
-      MobilePropertyImage(
+  /// Media block over the house gallery: every photograph the record returned,
+  /// primary first, with the fullscreen viewer behind the counter and the
+  /// saved toggle on top.
+  ///
+  /// [panoramaUrl] only ever arrives as the backend's `ready` panorama, so the
+  /// chip is the single 360° entry and it always routes to the spherical
+  /// viewer — the gallery never paints an equirectangular frame as a flat
+  /// photo. A listing with no panorama gets no chip rather than a dead
+  /// control, and the owner-captured device tour keeps its own button below,
+  /// because that is a different record read from device storage.
+  Widget _hero(
+    CommercialProperty p,
+    List<String> photos,
+    bool saved,
+    String? panoramaUrl,
+  ) =>
+      MobilePropertyGallery(
         property: p,
-        height: 210,
-        width: double.infinity,
+        urls: photos,
         borderRadius: BorderRadius.circular(18),
-        badge: p.hasTour ? '360° tour' : null,
-      ),
-      Positioned(
-        top: 10,
-        right: 10,
-        child: Material(
-          color: SitewiseColors.surface.withValues(alpha: 0.94),
-          shape: const CircleBorder(),
-          child: InkWell(
-            customBorder: const CircleBorder(),
-            onTap: () => _toggleSaved(p.id, !saved),
-            child: SizedBox(
-              width: 40,
-              height: 40,
-              child: Icon(
-                saved ? Icons.bookmark_rounded : Icons.bookmark_border_rounded,
-                size: 20,
-                color: saved ? SitewiseColors.action : SitewiseColors.ink,
+        bookmarkButton: Semantics(
+          button: true,
+          label: saved ? 'Remove from favourites' : 'Save property',
+          child: Material(
+            color: SitewiseColors.surface.withValues(alpha: 0.94),
+            shape: const CircleBorder(),
+            child: InkWell(
+              customBorder: const CircleBorder(),
+              onTap: () => _toggleSaved(p.id, !saved),
+              // 44x44: the accessibility floor for a touch target.
+              child: SizedBox(
+                width: 44,
+                height: 44,
+                child: Icon(
+                  saved
+                      ? Icons.bookmark_rounded
+                      : Icons.bookmark_border_rounded,
+                  size: 20,
+                  color: saved ? SitewiseColors.action : SitewiseColors.ink,
+                ),
               ),
             ),
           ),
         ),
-      ),
-    ],
+        tourAction: panoramaUrl == null
+            ? null
+            : _PanoramaChip(
+                label: p.title,
+                onTap: () => _open(
+                  '/entrepreneur/panorama',
+                  arguments: {'url': panoramaUrl, 'title': p.title},
+                ),
+              ),
+      );
+
+  /// The hero waits on the insights read for one reason: the 360° chip.
+  ///
+  /// It shares `_insightsFuture` with the location card and the 360° fact cell
+  /// — the future memoizes, so three readers cost one request and the chip and
+  /// the fact cell cannot disagree about whether a panorama exists.
+  Widget _heroWithPanorama(
+    CommercialProperty p,
+    List<String> photos,
+    bool saved,
+  ) => FutureBuilder<PropertyInsightsModel?>(
+    future: _insightsFuture,
+    builder: (context, snap) =>
+        _hero(p, photos, saved, snap.data?.panorama.readyUrl),
   );
 
   Widget _identity(CommercialProperty p) => Column(
@@ -436,10 +496,18 @@ class _EntrepreneurPropertyDetailMobilePageState
               ),
             ),
             const SizedBox(width: 12),
+            // The same promise as the 360° chip on the media above, so the
+            // same evidence: a stitched research panorama and a
+            // device-captured tour are two sources of one 360° view, and
+            // reading `hasTour` alone printed "Not yet" while the chip
+            // below it opened a working viewer.
             Expanded(
-              child: _Fact(
-                label: '360° tour',
-                value: p.hasTour ? 'Available' : 'Not yet',
+              child: FutureBuilder<PropertyInsightsModel?>(
+                future: _insightsFuture,
+                builder: (context, snap) => _Fact(
+                  label: '360° view',
+                  value: _tourState(p, snap),
+                ),
               ),
             ),
           ],
@@ -539,6 +607,22 @@ class _EntrepreneurPropertyDetailMobilePageState
     );
   }
 
+  /// Wording for the 360° fact cell, across every state the insights read can
+  /// land in.
+  ///
+  /// A settled `null` means the request FAILED, not that no panorama exists —
+  /// so it earns the same honest marker F&B approval uses, and only a
+  /// completed read that actually said "no panorama" says "Not yet". The
+  /// device tour still answers on its own when insights are unavailable.
+  String _tourState(
+    CommercialProperty p,
+    AsyncSnapshot<PropertyInsightsModel?> snap,
+  ) {
+    if (snap.connectionState != ConnectionState.done) return 'Checking…';
+    if (p.hasTour || snap.data?.panorama.readyUrl != null) return 'Available';
+    return snap.data == null ? 'Unknown' : 'Not yet';
+  }
+
   /// Fallback when the insights endpoint returns nothing.
   ///
   /// This is the assessment-derived block that predates the Location Fit
@@ -620,7 +704,7 @@ class _EntrepreneurPropertyDetailMobilePageState
     return Column(
       children: [
         SitewiseButton(
-          label: saved ? 'Saved ✓' : 'Save property',
+          label: saved ? 'Remove from favourites' : 'Save property',
           icon: saved ? Icons.bookmark_rounded : Icons.bookmark_border_rounded,
           onPressed: () => _toggleSaved(p.id, !saved),
         ),
@@ -642,6 +726,76 @@ class _EntrepreneurPropertyDetailMobilePageState
       ],
     );
   }
+}
+
+/// The 360° overlay on the media block, matching the chip the ranked cards
+/// supply to the same gallery.
+///
+/// Private to this page for the same reason `_IconToggle` and `_RankBadge` are
+/// private to theirs: it is four lines of chrome whose meaning is fixed by the
+/// backend's `ready` panorama state, not a component with independent
+/// callers. Only the verified URL gets one; a pending or failed stitching job
+/// must not offer a view that cannot paint.
+class _PanoramaChip extends StatelessWidget {
+  final VoidCallback onTap;
+  final String label;
+
+  const _PanoramaChip({required this.onTap, required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: true,
+      label: 'Open 360° panorama view of $label',
+      child: Material(
+        color: SitewiseColors.ink.withValues(alpha: 0.82),
+        borderRadius: BorderRadius.circular(999),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(999),
+          child: const SizedBox(
+            height: 44,
+            child: Padding(
+              padding: EdgeInsets.symmetric(horizontal: 14),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Icons.threesixty_rounded,
+                    size: 19,
+                    color: Colors.white,
+                  ),
+                  SizedBox(width: 6),
+                  Text(
+                    '360° View',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                      height: 1.1,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// One resolved listing plus the photographs the backend sent with it.
+///
+/// The photo set arrives differently per source — `ExplorePropertyDetail
+/// .photos` for a numeric listing, `CommercialProperty.imageUrls` for a
+/// catalogue row — and only the record that answered knows which. Carrying it
+/// beside the entity keeps the gallery from guessing.
+class _PropertyRecord {
+  final CommercialProperty property;
+  final List<String> photos;
+
+  const _PropertyRecord({required this.property, required this.photos});
 }
 
 class _Fact extends StatelessWidget {

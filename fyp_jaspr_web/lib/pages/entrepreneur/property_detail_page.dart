@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:jaspr/dom.dart';
 import 'package:jaspr/jaspr.dart';
@@ -16,6 +17,7 @@ import '../../components/property_detail/shap_contribution_chart.dart';
 import '../../components/property_leaflet_map.dart';
 import '../../components/ui.dart';
 import '../../data/app_locator.dart';
+import '../../data/assessment_api.dart' hide EvidenceMetric;
 import '../../data/full_analysis_actions_browser.dart';
 import '../../data/location_evidence_api.dart';
 import '../../data/property_insights_api.dart';
@@ -59,6 +61,14 @@ class PropertyDetailPage extends StatefulComponent {
   /// explanation and the two are never merged into one claim.
   final String resultId;
 
+  /// The APPLIED criteria from the Recommendations search that opened this
+  /// page, carried as the raw `?filters=` JSON string. `@client` components
+  /// accept only primitive parameters, so the page parses the string itself.
+  /// A saved `?result=` explanation always wins; these filters are the honest
+  /// fallback for comparing the search inputs with this listing. Empty means
+  /// the visitor arrived without filter context.
+  final String appliedFiltersJson;
+
   /// Optional `?businessType=` selection carried from Recommendations.
   ///
   /// It selects which category output the Stage-2 SHAP explanation describes.
@@ -71,6 +81,7 @@ class PropertyDetailPage extends StatefulComponent {
     super.key,
     required this.id,
     this.resultId = '',
+    this.appliedFiltersJson = '',
     this.businessType = '',
   });
 
@@ -84,6 +95,43 @@ class _PropertyDetailPageState extends State<PropertyDetailPage> {
   Future<PropertyDetailLoad?>? _detailFuture;
   Future<PropertyEvidence>? _evidenceFuture;
   Future<PropertyInsights>? _insightsFuture;
+
+  /// The applied filters decoded from the raw `?filters=` JSON the route
+  /// passed in. Malformed or stale links simply compare nothing — they never
+  /// fabricate criteria.
+  RecommendationSearchRequest? get _appliedFilters {
+    final raw = component.appliedFiltersJson;
+    if (raw.isEmpty) return null;
+    final candidates = <String>[raw];
+    try {
+      candidates.add(Uri.decodeComponent(raw));
+    } on Object {
+      // Already decoded by the router, or not a valid escape sequence.
+    }
+    for (final candidate in candidates) {
+      try {
+        final decoded = jsonDecode(candidate);
+        if (decoded is Map<String, dynamic>) {
+          return RecommendationSearchRequest.fromJson(decoded);
+        }
+      } on Object {
+        // Try the next representation, then fall through to no context.
+      }
+    }
+    return null;
+  }
+
+  /// The F&B type the business-match hero scores, resolved once per mount:
+  /// the Recommendations URL selection first, then the signed-in account's
+  /// saved preference, then this browser's stored selection. Empty means the
+  /// visitor has no selection anywhere, so the hero asks instead of scoring
+  /// another category.
+  String _resolvedBusinessType = '';
+
+  /// Where [_resolvedBusinessType] came from — 'recommendations', 'account'
+  /// or 'browser' — shown on the hero so the score's provenance is never
+  /// hidden. Empty when no type resolved.
+  String _typeSource = '';
 
   /// The persisted recommendation result, when the card that opened this page
   /// carried one. Null means the visitor arrived without a result context, so
@@ -120,12 +168,17 @@ class _PropertyDetailPageState extends State<PropertyDetailPage> {
       notifier.toggleSaved(id);
       final nowSaved = context.read(appNotifierProvider).saved.contains(id);
       setState(() {
-        _saveMessage = nowSaved ? 'Saved to your shortlist.' : 'Removed from saved.';
+        _saveMessage = nowSaved
+            ? 'Saved to your shortlist.'
+            : 'Removed from saved.';
       });
       return;
     }
     final savedNow = context.read(appNotifierProvider).saved.contains(id);
-    final failure = await AppLocator.persistToggleSaved(id, wantSaved: !savedNow);
+    final failure = await AppLocator.persistToggleSaved(
+      id,
+      wantSaved: !savedNow,
+    );
     if (!mounted) return;
     if (failure != null) {
       setState(() {
@@ -151,16 +204,11 @@ class _PropertyDetailPageState extends State<PropertyDetailPage> {
       final isCatalog = int.tryParse(id) == null;
       _detailFuture = _load(id);
       _evidenceFuture = LocationEvidenceApi.load(id, catalog: isCatalog);
-      _insightsFuture = PropertyInsightsApi.load(
-        id,
-        catalog: isCatalog,
-        businessType: component.businessType.isEmpty
-            ? null
-            : component.businessType,
-      );
+      _insightsFuture = _loadInsights(id, isCatalog: isCatalog);
       if (component.resultId.isNotEmpty) {
-        _explanationFuture = AppLocator.personalisedRecommendations
-            .explanation(component.resultId);
+        _explanationFuture = AppLocator.personalisedRecommendations.explanation(
+          component.resultId,
+        );
       }
       Future.microtask(() {
         if (!mounted) return;
@@ -169,6 +217,49 @@ class _PropertyDetailPageState extends State<PropertyDetailPage> {
         );
       });
     }
+  }
+
+  /// Loads the insights payload the hero and the score tab share, after
+  /// resolving which F&B type it must score.
+  ///
+  /// Priority: ① the `?businessType=` selection carried from Recommendations;
+  /// ② the signed-in account's saved preference (`/preferences/me`); ③ this
+  /// browser's stored selection. No `?result=` is required — a valid saved
+  /// preference alone produces the score. When nothing resolves, the request
+  /// is sent without `business_type` and the hero shows the ask-to-select
+  /// state rather than scoring the model's own top category. Demo Mode never
+  /// reads the account preference: it has no authenticated session.
+  Future<PropertyInsights> _loadInsights(
+    String id, {
+    required bool isCatalog,
+  }) async {
+    var type = component.businessType.trim();
+    var source = '';
+    if (type.isNotEmpty) {
+      source = 'recommendations';
+    } else if (AppLocator.isSignedIn) {
+      final result = await const AssessmentApi().preferences();
+      final saved =
+          result.value?.asBusinessPreferences()?.businessType.trim() ?? '';
+      if (saved.isNotEmpty) {
+        type = saved;
+        source = 'account';
+      }
+    }
+    if (type.isEmpty) {
+      type = AppLocator.preferences.businessType.trim();
+      if (type.isNotEmpty) source = 'browser';
+    }
+    if (type != _resolvedBusinessType || source != _typeSource) {
+      _resolvedBusinessType = type;
+      _typeSource = source;
+      if (mounted) setState(() {});
+    }
+    return PropertyInsightsApi.load(
+      id,
+      catalog: isCatalog,
+      businessType: type.isEmpty ? null : type,
+    );
   }
 
   @override
@@ -204,6 +295,9 @@ class _PropertyDetailPageState extends State<PropertyDetailPage> {
                   evidenceFuture: _evidenceFuture,
                   insightsFuture: _insightsFuture,
                   explanationFuture: _explanationFuture,
+                  appliedFilters: _appliedFilters,
+                  businessType: _resolvedBusinessType,
+                  typeSource: _typeSource,
                   saved: saved.contains(p.id),
                   compared: compared.contains(p.id),
                   saveMessage: _saveMessage,
@@ -247,6 +341,18 @@ class _Detail extends StatefulComponent {
   final Future<PropertyEvidence>? evidenceFuture;
   final Future<PropertyInsights>? insightsFuture;
   final Future<PersonalisedExplanation?>? explanationFuture;
+
+  /// Applied Recommendations filters carried into this detail view.
+  final RecommendationSearchRequest? appliedFilters;
+
+  /// The resolved F&B type the hero scores (see
+  /// [_PropertyDetailPageState._loadInsights]); empty means none resolved and
+  /// the hero asks for a selection.
+  final String businessType;
+
+  /// The resolution source: 'recommendations' | 'account' | 'browser' | ''.
+  final String typeSource;
+
   final bool saved;
   final bool compared;
   final String? saveMessage;
@@ -262,6 +368,9 @@ class _Detail extends StatefulComponent {
     required this.evidenceFuture,
     required this.insightsFuture,
     this.explanationFuture,
+    this.appliedFilters,
+    this.businessType = '',
+    this.typeSource = '',
     required this.saved,
     required this.compared,
     required this.onToggleSaved,
@@ -399,14 +508,14 @@ class _DetailState extends State<_Detail> {
     setState(() => _gallery = _gallery.copyWith(yaw: 50, pitch: 50, zoom: 1));
   }
 
-  String get _addressLine =>
-      [
-        property.address.trim(),
-        [property.postcode.trim(), property.city.trim()]
-            .where((part) => part.isNotEmpty)
-            .join(' '),
-        property.state.trim(),
-      ].where((part) => part.isNotEmpty).join(', ');
+  String get _addressLine => [
+    property.address.trim(),
+    [
+      property.postcode.trim(),
+      property.city.trim(),
+    ].where((part) => part.isNotEmpty).join(' '),
+    property.state.trim(),
+  ].where((part) => part.isNotEmpty).join(', ');
 
   List<String> get _images {
     final urls = imageUrls.where((url) => url.trim().isNotEmpty).toList();
@@ -418,35 +527,37 @@ class _DetailState extends State<_Detail> {
   /// Facilities are the real recorded attributes — tags, stated requirements
   /// and the boolean amenities. Nothing is inferred.
   List<String> get _facilities => <String>{
-        if (property.hasParking == true) 'Parking',
-        if (property.isFnbSuitable == true) 'Suitable for a food business',
-        if (property.isCornerLot == true) 'Corner lot',
-        if (property.isFreehold == true) 'Freehold',
-        if (property.furnishing != null && property.furnishing!.trim().isNotEmpty)
-          property.furnishing!,
-        if (property.tenure != null && property.tenure!.trim().isNotEmpty)
-          property.tenure!,
-        ...property.tags.where(
-          (tag) => tag != 'Imported dataset' && !tag.startsWith('Quality:'),
-        ),
-        ...property.requirements,
-      }.toList();
+    if (property.hasParking == true) 'Parking',
+    if (property.isFnbSuitable == true) 'Suitable for a food business',
+    if (property.isCornerLot == true) 'Corner lot',
+    if (property.isFreehold == true) 'Freehold',
+    if (property.furnishing != null && property.furnishing!.trim().isNotEmpty)
+      property.furnishing!,
+    if (property.tenure != null && property.tenure!.trim().isNotEmpty)
+      property.tenure!,
+    ...property.tags.where(
+      (tag) => tag != 'Imported dataset' && !tag.startsWith('Quality:'),
+    ),
+    ...property.requirements,
+  }.toList();
 
   String _summary() => [
-        property.title,
-        _addressLine,
-        '${property.rentalDisplay} per month',
-        '${property.sizeSqft.toStringAsFixed(0)} sq ft',
-        property.propertyType,
-        if (property.floorLevel != null) 'Floor ${property.floorLevel}',
-        if (property.availability != null) property.availability!,
-      ].join(' · ');
+    property.title,
+    _addressLine,
+    '${property.rentalDisplay} per month',
+    '${property.sizeSqft.toStringAsFixed(0)} sq ft',
+    property.propertyType,
+    if (property.floorLevel != null) 'Floor ${property.floorLevel}',
+    if (property.availability != null) property.availability!,
+  ].join(' · ');
 
   Future<void> _copySummary() async {
     final ok = await copyText(_summary());
     if (!mounted) return;
     setState(() {
-      _copyMessage = ok ? 'Property details copied.' : 'Could not copy the details. Please try again.';
+      _copyMessage = ok
+          ? 'Property details copied.'
+          : 'Could not copy the details. Please try again.';
     });
   }
 
@@ -462,18 +573,27 @@ class _DetailState extends State<_Detail> {
           view: _gallery,
           height: 430,
           onTab: (tab) => setState(
-            () => _gallery = _gallery.copyWith(tab: tab, full: false, photoFailed: false),
+            () => _gallery = _gallery.copyWith(
+              tab: tab,
+              full: false,
+              photoFailed: false,
+            ),
           ),
           onIndex: (index) => setState(
-            () => _gallery = _gallery.copyWith(index: index, photoFailed: false),
+            () =>
+                _gallery = _gallery.copyWith(index: index, photoFailed: false),
           ),
           onStep: _stepPhoto,
-          onToggleFull: () => setState(() => _gallery = _gallery.copyWith(full: !_gallery.full)),
-          onPhotoError: () => setState(() => _gallery = _gallery.copyWith(photoFailed: true)),
+          onToggleFull: () => setState(
+            () => _gallery = _gallery.copyWith(full: !_gallery.full),
+          ),
+          onPhotoError: () =>
+              setState(() => _gallery = _gallery.copyWith(photoFailed: true)),
           onThumbError: _thumbError,
           onDragStart: _dragStart,
           onDragMove: _dragMove,
-          onDragEnd: () => setState(() => _gallery = _gallery.copyWith(dragging: false)),
+          onDragEnd: () =>
+              setState(() => _gallery = _gallery.copyWith(dragging: false)),
           onZoom: _setZoom,
           onResetView: _resetView,
         ),
@@ -491,45 +611,50 @@ class _DetailState extends State<_Detail> {
 
   // ------------------------------------------------- business match section
 
-  /// "Why this property matches your business" — the section above the tabs.
+  /// "Your business & this property" — the section above the tabs.
   ///
-  /// Rendered even without a result context: the hero then states that the
-  /// personalised match is unavailable while still naming the measured area
-  /// facts, so the section never shows a fabricated percentage.
+  /// The hero's score is the Stage-2 category suitability for the resolved
+  /// business type, read from the SAME insights payload the score tab uses.
+  /// The insights future is awaited here (not via the state mirror) so the
+  /// hero can distinguish loading from a failed request instead of spinning
+  /// forever. The personalised Layer-2 explanation stays in tab 1 only.
   Component _businessMatchSection() {
     return FutureBuilder<PropertyEvidence>(
       future: component.evidenceFuture,
       builder: (c, evidenceSnap) {
-        final evidence =
-            evidenceSnap.connectionState == ConnectionState.done
-                ? evidenceSnap.data
-                : null;
-        final explanationFuture = component.explanationFuture;
-        if (explanationFuture == null) {
+        final evidence = evidenceSnap.connectionState == ConnectionState.done
+            ? evidenceSnap.data
+            : null;
+        final insightsFuture = component.insightsFuture;
+        if (insightsFuture == null) {
           return BusinessMatchHero(
             property: property,
             evidence: evidence,
-            insights: _insights,
+            insightsFailed: true,
+            businessType: component.businessType,
+            typeSource: component.typeSource,
             detailsOpen: _featureDetailsOpen,
-            onToggleDetails: () => setState(
-              () => _featureDetailsOpen = !_featureDetailsOpen,
-            ),
+            onToggleDetails: () =>
+                setState(() => _featureDetailsOpen = !_featureDetailsOpen),
           );
         }
-        return FutureBuilder<PersonalisedExplanation?>(
-          future: explanationFuture,
+        return FutureBuilder<PropertyInsights>(
+          future: insightsFuture,
           builder: (c, snap) {
             final loading = snap.connectionState != ConnectionState.done;
             return BusinessMatchHero(
               property: property,
-              explanation: snap.data,
-              loading: loading,
+              // The measured real-area facts come from the evidence future in
+              // BOTH branches. Dropping it when insights are configured made
+              // every quick fact read "Not available" despite a real payload.
               evidence: evidence,
-              insights: _insights,
+              insights: snap.data,
+              insightsFailed: !loading && snap.data == null,
+              businessType: component.businessType,
+              typeSource: component.typeSource,
               detailsOpen: _featureDetailsOpen,
-              onToggleDetails: () => setState(
-                () => _featureDetailsOpen = !_featureDetailsOpen,
-              ),
+              onToggleDetails: () =>
+                  setState(() => _featureDetailsOpen = !_featureDetailsOpen),
             );
           },
         );
@@ -633,46 +758,49 @@ class _DetailState extends State<_Detail> {
   }
 
   Component _tabPanel(String key, List<Component> children) => div(
-        classes: 'sw-info__panel',
-        attributes: {
-          'id': 'sw-info-panel-$key',
-          'role': 'tabpanel',
-          'aria-labelledby': 'sw-info-tab-$key',
-          'tabindex': '0',
-        },
-        children,
-      );
+    classes: 'sw-info__panel',
+    attributes: {
+      'id': 'sw-info-panel-$key',
+      'role': 'tabpanel',
+      'aria-labelledby': 'sw-info-tab-$key',
+      'tabindex': '0',
+    },
+    children,
+  );
 
   Component _tabIcon(String key) => svg(
-        classes: 'sw-info__glyph',
-        attributes: const {
-          'viewBox': '0 0 24 24',
-          'fill': 'none',
-          'stroke': 'currentColor',
-          'stroke-width': '1.85',
-          'stroke-linecap': 'round',
-          'stroke-linejoin': 'round',
-          'aria-hidden': 'true',
-        },
-        [
-          if (key == 'score') ...[
-            path(attributes: const {'d': 'M4 20V12m5 8V5m5 15v-9m5 9V8'}, const []),
-            path(attributes: const {'d': 'M2 20h20'}, const []),
-          ] else if (key == 'business') ...[
-            path(attributes: const {'d': 'M4 10h16l-1.3 10H5.3L4 10Z'}, const []),
-            path(attributes: const {'d': 'M3 10l2.5-5h13L21 10'}, const []),
-            path(attributes: const {'d': 'M9 20v-6h6v6'}, const []),
-          ] else ...[
-            path(attributes: const {
-              'd': 'M20 10c0 5.2-8 11-8 11S4 15.2 4 10a8 8 0 1 1 16 0Z',
-            }, const []),
-            circle(
-              attributes: const {'cx': '12', 'cy': '10', 'r': '2.6'},
-              const [],
-            ),
-          ],
-        ],
-      );
+    classes: 'sw-info__glyph',
+    attributes: const {
+      'viewBox': '0 0 24 24',
+      'fill': 'none',
+      'stroke': 'currentColor',
+      'stroke-width': '1.85',
+      'stroke-linecap': 'round',
+      'stroke-linejoin': 'round',
+      'aria-hidden': 'true',
+    },
+    [
+      if (key == 'score') ...[
+        path(attributes: const {'d': 'M4 20V12m5 8V5m5 15v-9m5 9V8'}, const []),
+        path(attributes: const {'d': 'M2 20h20'}, const []),
+      ] else if (key == 'business') ...[
+        path(attributes: const {'d': 'M4 10h16l-1.3 10H5.3L4 10Z'}, const []),
+        path(attributes: const {'d': 'M3 10l2.5-5h13L21 10'}, const []),
+        path(attributes: const {'d': 'M9 20v-6h6v6'}, const []),
+      ] else ...[
+        path(
+          attributes: const {
+            'd': 'M20 10c0 5.2-8 11-8 11S4 15.2 4 10a8 8 0 1 1 16 0Z',
+          },
+          const [],
+        ),
+        circle(
+          attributes: const {'cx': '12', 'cy': '10', 'r': '2.6'},
+          const [],
+        ),
+      ],
+    ],
+  );
 
   // ------------------------------------------------------------- tab: score
 
@@ -701,7 +829,8 @@ class _DetailState extends State<_Detail> {
           builder: (c, snap) {
             final loading = snap.connectionState != ConnectionState.done;
             if (loading) return const _InsightsLoading();
-            final insights = snap.data ??
+            final insights =
+                snap.data ??
                 PropertyInsights.unavailable(
                   property.id,
                   'We could not load the area information right now.',
@@ -732,39 +861,33 @@ class _DetailState extends State<_Detail> {
 
   // ---------------------------------------------------------- tab: business
 
-  /// Tab 1 — reasons to consider the location and things to check in person,
-  /// driven by the saved recommendation explanation plus measured evidence.
+  /// Tab 1 — the entrepreneur's saved preferences compared against this
+  /// property, driven by the saved recommendation explanation when the page
+  /// carries a `?result=` context.
   ///
-  /// Without a result context the panel still renders: the measured reasons
-  /// stand on their own and the source note explains that a personalised
-  /// explanation appears when the page is opened from a recommendation.
+  /// Without a result context the panel still renders: it invites the
+  /// entrepreneur to create a recommendation rather than substituting
+  /// generic location facts as personalised matches.
   Component _businessTab() {
+    final explanationFuture = component.explanationFuture;
+    if (explanationFuture == null) {
+      return _tabPanel('business', [
+        BusinessMatchDetail(
+          property: property,
+          appliedFilters: component.appliedFilters,
+        ),
+      ]);
+    }
     return _tabPanel('business', [
-      FutureBuilder<PropertyEvidence>(
-        future: component.evidenceFuture,
-        builder: (c, evidenceSnap) {
-          final evidence =
-              evidenceSnap.connectionState == ConnectionState.done
-                  ? evidenceSnap.data
-                  : null;
-          final explanationFuture = component.explanationFuture;
-          if (explanationFuture == null) {
-            return BusinessMatchDetail(
-              property: property,
-              evidence: evidence,
-            );
-          }
-          return FutureBuilder<PersonalisedExplanation?>(
-            future: explanationFuture,
-            builder: (c, snap) {
-              final loading = snap.connectionState != ConnectionState.done;
-              return BusinessMatchDetail(
-                property: property,
-                explanation: snap.data,
-                loading: loading,
-                evidence: evidence,
-              );
-            },
+      FutureBuilder<PersonalisedExplanation?>(
+        future: explanationFuture,
+        builder: (c, snap) {
+          final loading = snap.connectionState != ConnectionState.done;
+          return BusinessMatchDetail(
+            property: property,
+            explanation: snap.data,
+            appliedFilters: component.appliedFilters,
+            loading: loading,
           );
         },
       ),
@@ -805,7 +928,10 @@ class _DetailState extends State<_Detail> {
     );
   }
 
-  static EvidenceMetric? _evidenceMetric(PropertyEvidence? evidence, String key) {
+  static EvidenceMetric? _evidenceMetric(
+    PropertyEvidence? evidence,
+    String key,
+  ) {
     if (evidence == null) return null;
     for (final group in evidence.groups) {
       for (final metric in group.metrics) {
@@ -828,9 +954,7 @@ class _DetailState extends State<_Detail> {
     if (ready != null) return PanoramaMedia.ready(ready);
 
     if (info != null && info.status == 'processing') {
-      return PanoramaMedia.processing(
-        'The 360° photo is being prepared.',
-      );
+      return PanoramaMedia.processing('The 360° photo is being prepared.');
     }
     if (property.hasTour) {
       return PanoramaMedia.unavailable(
@@ -845,46 +969,44 @@ class _DetailState extends State<_Detail> {
   // ------------------------------------------------------------------- title
 
   Component _titleRow() => div(classes: 'sw-pd__top', [
-        div(classes: 'sw-pd__top-nav', [
-          ActionLink(
-            'Back to recommendations',
-            href: '/entrepreneur/recommendations',
-            variant: 'ghost',
-            icon: 'arrow_back',
-          ),
-          if (property.availability != null)
-            StatusBadge(property.availability!, tone: 'neutral'),
-        ]),
-        div(classes: 'sw-pd__top-main', [
-          span(classes: 'sw-pd__eyebrow', [
-            Component.text('Commercial property'),
-          ]),
-          h1(classes: 'sw-pd__title', [Component.text(property.title)]),
-          if (_addressLine.isNotEmpty)
-            p(classes: 'sw-pd__addr', [Component.text(_addressLine)]),
-        ]),
-      ]);
+    div(classes: 'sw-pd__top-nav', [
+      ActionLink(
+        'Back to recommendations',
+        href: '/entrepreneur/recommendations',
+        variant: 'ghost',
+        icon: 'arrow_back',
+      ),
+      if (property.availability != null)
+        StatusBadge(property.availability!, tone: 'neutral'),
+    ]),
+    div(classes: 'sw-pd__top-main', [
+      span(classes: 'sw-pd__eyebrow', [Component.text('Commercial property')]),
+      h1(classes: 'sw-pd__title', [Component.text(property.title)]),
+      if (_addressLine.isNotEmpty)
+        p(classes: 'sw-pd__addr', [Component.text(_addressLine)]),
+    ]),
+  ]);
 
   // ----------------------------------------------------------------- summary
 
   Component _fact(String label, String? value) => div(classes: 'sw-pd__fact', [
-        span(classes: 'sw-pd__fact-label', [Component.text(label)]),
-        span(
-          classes: value == null || value.trim().isEmpty
-              ? 'sw-pd__fact-value is-absent'
-              : 'sw-pd__fact-value',
-          [
-            Component.text(
-              value == null || value.trim().isEmpty ? 'Not provided' : value,
-            ),
-          ],
+    span(classes: 'sw-pd__fact-label', [Component.text(label)]),
+    span(
+      classes: value == null || value.trim().isEmpty
+          ? 'sw-pd__fact-value is-absent'
+          : 'sw-pd__fact-value',
+      [
+        Component.text(
+          value == null || value.trim().isEmpty ? 'Not provided' : value,
         ),
-      ]);
+      ],
+    ),
+  ]);
 
   Component _summaryCard() {
     final facilities = _facilities;
-    final management = property.managerName == null ||
-            property.managerName!.trim().isEmpty
+    final management =
+        property.managerName == null || property.managerName!.trim().isEmpty
         ? property.managementLabel
         : '${property.managementLabel} — ${property.managerName}';
     final description = property.description?.trim() ?? '';
@@ -904,17 +1026,22 @@ class _DetailState extends State<_Detail> {
           'Rent per sq ft',
           'RM${property.rentalPerSqft.toStringAsFixed(2)} / sq ft',
         ),
-        if (property.floorLevel != null && property.floorLevel!.trim().isNotEmpty)
+        if (property.floorLevel != null &&
+            property.floorLevel!.trim().isNotEmpty)
           _fact('Floor level', property.floorLevel),
       ]),
       div(classes: 'sw-pd__management', [
         span(classes: 'sw-pd__management-label', [
           Component.text('Property management'),
         ]),
-        strong(classes: 'sw-pd__management-value', [Component.text(management)]),
+        strong(classes: 'sw-pd__management-value', [
+          Component.text(management),
+        ]),
       ]),
       if (facilities.isNotEmpty) ...[
-        h3(classes: 'sw-pd__section-label', [Component.text('Property features')]),
+        h3(classes: 'sw-pd__section-label', [
+          Component.text('Property features'),
+        ]),
         div(classes: 'sw-pd__chips', [
           for (final facility in facilities.take(10))
             span(classes: 'sw-pd__chip', [Component.text(facility)]),
@@ -958,23 +1085,27 @@ class _DetailState extends State<_Detail> {
       if (_copyMessage != null)
         span(classes: 'small', [Component.text(_copyMessage!)]),
       if (compareLinkShown && compared)
-        ActionLink('Open compare', href: '/entrepreneur/compare', variant: 'ghost'),
+        ActionLink(
+          'Open compare',
+          href: '/entrepreneur/compare',
+          variant: 'ghost',
+        ),
     ]);
   }
 
   // ----------------------------------------------------------------- details
 
-  Component _detailRow(String label, String? value) => div(classes: 'sw-pd__detail-row', [
-        span([Component.text(label)]),
-        span(
-          classes: value == null || value.trim().isEmpty ? 'is-absent' : null,
-          [
-            Component.text(
-              value == null || value.trim().isEmpty ? 'Not provided' : value,
-            ),
-          ],
-        ),
-      ]);
+  Component _detailRow(
+    String label,
+    String? value,
+  ) => div(classes: 'sw-pd__detail-row', [
+    span([Component.text(label)]),
+    span(classes: value == null || value.trim().isEmpty ? 'is-absent' : null, [
+      Component.text(
+        value == null || value.trim().isEmpty ? 'Not provided' : value,
+      ),
+    ]),
+  ]);
 
   Component _detailsPanel() {
     // Optional rows are listed only when the source recorded a value — a
@@ -997,18 +1128,30 @@ class _DetailState extends State<_Detail> {
       ('Toilets / bathrooms', property.bathrooms?.toString()),
       ('Furnishing', text(property.furnishing)),
       ('Tenure', text(property.tenure)),
-      ('Parking', property.hasParking == null
-          ? null
-          : (property.hasParking! ? 'Onsite parking' : 'No onsite parking')),
-      ('Suitable for a food business', property.isFnbSuitable == null
-          ? null
-          : (property.isFnbSuitable! ? 'Yes' : 'No')),
-      ('Corner lot', property.isCornerLot == null
-          ? null
-          : (property.isCornerLot! ? 'Yes' : 'No')),
-      ('Freehold', property.isFreehold == null
-          ? null
-          : (property.isFreehold! ? 'Yes' : 'No')),
+      (
+        'Parking',
+        property.hasParking == null
+            ? null
+            : (property.hasParking! ? 'Onsite parking' : 'No onsite parking'),
+      ),
+      (
+        'Suitable for a food business',
+        property.isFnbSuitable == null
+            ? null
+            : (property.isFnbSuitable! ? 'Yes' : 'No'),
+      ),
+      (
+        'Corner lot',
+        property.isCornerLot == null
+            ? null
+            : (property.isCornerLot! ? 'Yes' : 'No'),
+      ),
+      (
+        'Freehold',
+        property.isFreehold == null
+            ? null
+            : (property.isFreehold! ? 'Yes' : 'No'),
+      ),
       ('Availability', text(property.availability)),
       if (property.availabilityVerifiedAt != null &&
           property.availabilityVerifiedAt!.trim().isNotEmpty)
@@ -1029,9 +1172,13 @@ class _DetailState extends State<_Detail> {
           'aria-expanded': '$_detailsOpen',
           'aria-controls': 'sw-pd-details-body',
         },
-        events: events(onClick: () => setState(() => _detailsOpen = !_detailsOpen)),
+        events: events(
+          onClick: () => setState(() => _detailsOpen = !_detailsOpen),
+        ),
         [
-          Component.text(_detailsOpen ? 'Hide listing details' : 'Show listing details'),
+          Component.text(
+            _detailsOpen ? 'Hide listing details' : 'Show listing details',
+          ),
           span(classes: 'sw-pd__details-chevron', [
             const Icon('expand_more', size: 'sm'),
           ]),
@@ -1063,8 +1210,13 @@ class _DetailState extends State<_Detail> {
 
   Component _mapPanel() {
     final layers = _insights?.mapLayers ?? const <MapLayer>[];
+    final lat = _insights?.origin?.lat ?? property.latitude;
+    final lon = _insights?.origin?.lon ?? property.longitude;
+    final directions = googleMapsDirectionsUrl(lat, lon);
     return section(classes: 'sw-pd__map', [
-      h2(classes: 'sw-pd__h2', [Component.text('Explore the surrounding area')]),
+      h2(classes: 'sw-pd__h2', [
+        Component.text('Explore the surrounding area'),
+      ]),
       PropertyLeafletMap(
         property: property,
         height: 470,
@@ -1080,6 +1232,19 @@ class _DetailState extends State<_Detail> {
           'The circles show distances of 500 m and 1 km in a straight line, not '
           'actual walking or driving distances. The location may be approximate.',
         ),
+        // Google is a separate, keyless, provider-branded experience: routing
+        // happens on Google's page, never inside the Leaflet frame.
+        if (directions != null) ...[
+          const Component.text(' '),
+          a(
+            href: directions,
+            attributes: const {
+              'target': '_blank',
+              'rel': 'noopener noreferrer',
+            },
+            [Component.text('Get directions in Google Maps (opens a new tab)')],
+          ),
+        ],
       ]),
     ]);
   }
@@ -1087,27 +1252,33 @@ class _DetailState extends State<_Detail> {
   // ------------------------------------------------------------------- notes
 
   Component _notShownPanel() => section(classes: 'sw-pd__notes', [
-        h2(classes: 'sw-pd__h2', [Component.text('Before you decide')]),
-        ul([
-          li([Component.text(
-            'Check with the local council about business licences, kitchen '
-            'ventilation and grease-trap requirements before renting.',
-          )]),
-          li([Component.text(
-            'The information here cannot tell you how many customers you '
-            'will get or how much your business will earn.',
-          )]),
-          li([Component.text(
-            "The owner's contact details may not be available for this property.",
-          )]),
-        ]),
-        p(classes: 'disclaimer', [
-          Component.text(
-            'The location score helps you compare areas. It does not predict '
-            'profit, confirm regulatory approval or guarantee success.',
-          ),
-        ]),
-      ]);
+    h2(classes: 'sw-pd__h2', [Component.text('Before you decide')]),
+    ul([
+      li([
+        Component.text(
+          'Check with the local council about business licences, kitchen '
+          'ventilation and grease-trap requirements before renting.',
+        ),
+      ]),
+      li([
+        Component.text(
+          'The information here cannot tell you how many customers you '
+          'will get or how much your business will earn.',
+        ),
+      ]),
+      li([
+        Component.text(
+          "The owner's contact details may not be available for this property.",
+        ),
+      ]),
+    ]),
+    p(classes: 'disclaimer', [
+      Component.text(
+        'The location score helps you compare areas. It does not predict '
+        'profit, confirm regulatory approval or guarantee success.',
+      ),
+    ]),
+  ]);
 }
 
 /// Shown while the insights request is in flight — a skeleton, not a spinner
@@ -1116,7 +1287,8 @@ class _InsightsLoading extends StatelessComponent {
   const _InsightsLoading();
 
   @override
-  Component build(BuildContext context) => div(classes: 'sw-pd__insights is-loading', [
+  Component build(BuildContext context) =>
+      div(classes: 'sw-pd__insights is-loading', [
         div(classes: 'sw-skel sw-skel--fit', const []),
         div(classes: 'sw-skel sw-skel--chart', const []),
       ]);
@@ -1127,9 +1299,9 @@ class _Loading extends StatelessComponent {
 
   @override
   Component build(BuildContext context) => div(classes: 'loading', [
-        span(classes: 'spinner', []),
-        Component.text('Loading property…'),
-      ]);
+    span(classes: 'spinner', []),
+    Component.text('Loading property…'),
+  ]);
 }
 
 class _NotFound extends StatelessComponent {
@@ -1137,21 +1309,21 @@ class _NotFound extends StatelessComponent {
 
   @override
   Component build(BuildContext context) => div([
-        const PageHead(
-          eyebrow: 'Property',
-          title: 'Property not found',
-          description: 'This property could not be loaded.',
-        ),
-        EmptyState(
-          title: 'Property unavailable',
-          body:
-              'This property could not be loaded. It may have been removed, or '
-              'the link is incomplete.',
-          action: const ActionLink(
-            'Browse properties',
-            href: '/entrepreneur/explore',
-            variant: 'primary',
-          ),
-        ),
-      ]);
+    const PageHead(
+      eyebrow: 'Property',
+      title: 'Property not found',
+      description: 'This property could not be loaded.',
+    ),
+    EmptyState(
+      title: 'Property unavailable',
+      body:
+          'This property could not be loaded. It may have been removed, or '
+          'the link is incomplete.',
+      action: const ActionLink(
+        'Browse properties',
+        href: '/entrepreneur/explore',
+        variant: 'primary',
+      ),
+    ),
+  ]);
 }

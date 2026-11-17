@@ -13,10 +13,9 @@
  * Five layers are offered: Properties, Food Businesses, Nearby Places,
  * Transport, Parking. The page passes their recorded counts as a compact JSON
  * array in the ?layers parameter. Each entry carries `m` — whether the layer
- * has stored coordinates. Only a mapped layer can be drawn as pins: the other
- * four exist in this deployment as counts-within-a-radius on the property's
- * feature vector, so they are reported as numbers with an explicit "counts
- * only" tag rather than positioned markers the data cannot justify.
+ * is served from a coordinate-carrying source table (all five are; every
+ * marker comes from the nearby-places payload). Recorded research counts and
+ * mapped locations stay separate registers, and the chips show both.
  *
  * Individual verified locations arrive separately: the page fetches
  * /api/v1/catalog/properties/{id}/nearby-places through the authenticated API
@@ -74,10 +73,10 @@
   // when the page has no insights payload (for example, an unscored listing).
   const DEFAULT_LAYERS = [
     { k: 'properties', l: 'Properties', c: '#1d4ed8', m: true },
-    { k: 'competitors', l: 'Food Businesses', c: '#d97706', m: false },
-    { k: 'demand_generators', l: 'Nearby Places', c: '#0f9d86', m: false },
-    { k: 'accessibility', l: 'Transport', c: '#7c3aed', m: false },
-    { k: 'parking', l: 'Parking', c: '#475569', m: false }
+    { k: 'competitors', l: 'Food Businesses', c: '#d97706', m: true },
+    { k: 'demand_generators', l: 'Nearby Places', c: '#0f9d86', m: true },
+    { k: 'accessibility', l: 'Transport', c: '#7c3aed', m: true },
+    { k: 'parking', l: 'Parking', c: '#475569', m: true }
   ];
   let layers = DEFAULT_LAYERS;
   try {
@@ -388,6 +387,20 @@
       ? names[0]
       : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
   };
+  // User-facing names for notices: full words, correct F&B capitalisation,
+  // no internal category or source vocabulary.
+  const PLAIN_NAMES = {
+    competitors: 'food and beverage businesses',
+    demand_generators: 'nearby places',
+    accessibility: 'public transport stops',
+    parking: 'parking facilities',
+  };
+  const plainNames = items => {
+    const words = items.map(x => PLAIN_NAMES[x.k] || x.l.toLowerCase());
+    return words.length === 1
+      ? words[0]
+      : `${words.slice(0, -1).join(', ')} and ${words[words.length - 1]}`;
+  };
   const presentStyles = layer => {
     if (!placesPayload || !active.has(layer.k)) return [];
     const limit = radiusMeters();
@@ -456,6 +469,12 @@
     return parts.length ? parts.join(' · ') : 'No information available';
   };
 
+  const categoryState = layer => {
+    if (!placesPayload || !placesPayload.categories) return null;
+    const meta = placesPayload.categories[layer.k];
+    return meta && typeof meta.state === 'string' ? meta.state : null;
+  };
+
   const renderNotice = () => {
     // Tile failures have their own slot; this line is only about layers.
     const parts = [];
@@ -466,13 +485,29 @@
         parts.push('Large catchment: only the nearest locations per layer are drawn.');
       }
     }
+    // A failing source is never converted into an empty map: the layer keeps
+    // its chip, says it could not be read, and the other layers are unaffected.
+    const unavailable = layers.filter(x =>
+      active.has(x.k) && x.k !== 'properties' && categoryState(x) === 'source_unavailable');
+    if (unavailable.length) {
+      parts.push(
+        `We could not load nearby ${listNames(unavailable)} just now. ` +
+        'Other map layers are unaffected.');
+    }
+    const stale = layers.filter(x =>
+      active.has(x.k) && categoryState(x) === 'data_stale');
+    if (stale.length) {
+      parts.push(`${listNames(stale)} timetable data may be out of date.`);
+    }
     const totalsOnly = layers.filter(x =>
       active.has(x.k) && x.k !== 'properties' &&
+      categoryState(x) !== 'source_unavailable' &&
       mappedFor(x) === 0 && (recordedFor(x) ?? 0) > 0);
     if (totalsOnly.length) {
       parts.push(
-        `For ${listNames(totalsOnly)}, we have nearby totals but no mappable ` +
-        'locations in this radius yet.');
+        `${plainNames(totalsOnly)} ${totalsOnly.length === 1 ? 'has' : 'have'} ` +
+        `been counted nearby, but ${totalsOnly.length === 1 ? 'its' : 'their'} ` +
+        `exact locations are not available on the map within ${radiusPhrase()}.`);
     }
     // §7: the recorded research count and the mapped locations are separate
     // registers (recorded = the analysis feature vector's curated register;
@@ -484,9 +519,9 @@
       mappedFor(x) !== recordedFor(x));
     if (mismatched.length) {
       parts.push(
-        `${listNames(mismatched)}: the recorded research totals and the mapped ` +
-        'locations come from different registers, so the two numbers can ' +
-        'differ — the chips show both.');
+        `${plainNames(mismatched)}: the counted total and the number of ` +
+        'locations shown on the map come from different sources, so the two ' +
+        'numbers may differ. The map chips show both.');
     }
     notices.layers = parts.join(' ');
     paintNotice();
@@ -580,21 +615,28 @@
         count.className = 'chip__count';
         if (m > 0 && typeof r === 'number' && r > 0 && r !== m) {
           count.textContent = `${m}/${r}`;
-          b.title = `${m} locations mapped of ${r} recorded within ${radiusPhrase()}`;
+          b.title = `${m} locations shown on the map of ${r} counted within ${radiusPhrase()}`;
         } else if (m > 0) {
           count.textContent = String(m);
           b.title = typeof r === 'number' && r > 0
-            ? `${m} locations mapped within ${radiusPhrase()}; ${r} recorded`
-            : `${m} locations mapped within ${radiusPhrase()}; recorded count not measured`;
+            ? `${m} locations shown on the map within ${radiusPhrase()}; ${r} counted`
+            : `${m} locations shown on the map within ${radiusPhrase()}; no total is available`;
         } else if (typeof r === 'number') {
           count.textContent = String(r);
-          if (r > 0) b.title = `${r} recorded within ${radiusPhrase()}`;
+          if (r > 0) b.title = `${r} counted within ${radiusPhrase()}`;
         }
         if (m > 0 || typeof r === 'number') b.append(count);
         if (m > 0) {
           const tag = document.createElement('span');
           tag.className = 'chip__tag';
-          tag.textContent = 'mapped';
+          tag.textContent = categoryState(layer) === 'data_stale'
+            ? 'may be out of date'
+            : 'mapped';
+          b.append(tag);
+        } else if (placesSettled && categoryState(layer) === 'source_unavailable') {
+          const tag = document.createElement('span');
+          tag.className = 'chip__tag';
+          tag.textContent = 'source unavailable';
           b.append(tag);
         } else if (placesSettled && typeof r === 'number' && r > 0) {
           const tag = document.createElement('span');
@@ -602,9 +644,10 @@
           tag.textContent = 'totals only';
           b.append(tag);
         } else if (placesSettled && typeof r === 'number' && r === 0) {
+          // A measured zero is a real result, not missing information.
           const tag = document.createElement('span');
           tag.className = 'chip__tag';
-          tag.textContent = 'no data';
+          tag.textContent = 'none found';
           b.append(tag);
         }
       }
