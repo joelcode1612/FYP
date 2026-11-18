@@ -270,6 +270,54 @@ class ProviderVerificationService:
         logger.info("provider verification submitted user=%s", user_id)
         return self.status_for(user_id=user_id, role=role)
 
+    # ---------------------------------------------------- invitation evidence
+
+    def verify_from_invitation(
+        self,
+        *,
+        user_id: Any,
+        role: str,
+        full_name: str = "",
+        contact_phone: str = "",
+    ) -> dict[str, Any]:
+        """Approve an invited agent from accepted-invitation evidence.
+
+        An agent whose official invitation was accepted and whose activation
+        has completed is verified without a submission — the invitation
+        lifecycle is stronger evidence than the self-submission the review
+        queue exists for. Trusted backend paths only (``complete_onboarding``
+        and the reconciliation read); nothing here is reachable by client
+        input. Idempotent: ``user_id`` is the primary key so repeated
+        completions can never create duplicate records, and the update arm
+        refuses to overwrite a ``rejected`` decision an administrator made.
+        """
+        ensure_schema(self.session)
+        self.session.execute(
+            text(
+                """
+                INSERT INTO public.provider_verification (
+                    user_id, provider_role, status, business_name,
+                    contact_phone, updated_at
+                ) VALUES (
+                    :uid, :role, 'approved', :name, :phone, now()
+                )
+                ON CONFLICT (user_id) DO UPDATE SET
+                    status = 'approved',
+                    updated_at = now()
+                WHERE public.provider_verification.status IN ('pending', 'approved')
+                """
+            ),
+            {
+                "uid": str(user_id),
+                "role": provider_role_for(role),
+                "name": (full_name or "").strip(),
+                "phone": (contact_phone or "").strip(),
+            },
+        )
+        self.session.commit()
+        logger.info("provider verification approved via invitation user=%s", user_id)
+        return self.status_for(user_id=user_id, role=role)
+
     # ----------------------------------------------------------------- admin
 
     def queue(

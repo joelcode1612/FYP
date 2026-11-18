@@ -237,12 +237,24 @@ def list_own_listings(
     Each row carries the derived management state so the owner can see when an
     agent has been assigned to manage it. Ownership stays on the row; the agent
     adds responsibility, it does not take the listing away.
+
+    Each row also carries its display photos, exactly as the single-listing read
+    does. Without them the workspace cannot thumbnail a listing, and a draft
+    that already has photographs still reads as needing them.
     """
-    rows = FypPropertyRepository(session).owner_listings(current.user_id)
-    management = resolve_listings(session, [int(r["id"]) for r in rows])
+    repo = FypPropertyRepository(session)
+    rows = repo.owner_listings(current.user_id)
+    ids = [int(row["id"]) for row in rows]
+    management = resolve_listings(session, ids)
+    photos = repo.listing_photos_by_ids(ids)
     return {
         "data": [
-            {**row, "management": management.get(int(row["id"]))} for row in rows
+            {
+                **row,
+                "management": management.get(int(row["id"])),
+                "photos": photos.get(int(row["id"]), []),
+            }
+            for row in rows
         ]
     }
 

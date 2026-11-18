@@ -53,14 +53,6 @@ from sqlmodel import Session
 from sitewise.core.exceptions import ModelUnavailableError
 from sitewise.ml import shap_explainer as _shap_module
 from sitewise.ml.feature_bridge import merge_bridge_features
-from sitewise.ml.fnb_category import (
-    CATEGORY_MODEL_NAME,
-    COMPETITOR_CONTEXT_FEATURES,
-    category_explanation,
-    competition_context,
-    match_business_type,
-    predict_categories,
-)
 from sitewise.ml.pu_expanded import (
     EXPANDED_MODEL_NAME,
     expanded_policy_split,
@@ -457,21 +449,12 @@ def _background_path(variant_key: str | None) -> Path:
 _EXPLANATION_CACHE: dict[tuple[str, str], dict[str, Any]] = {}
 _EXPLANATION_CACHE_LOCK = threading.Lock()
 
-#: Cache of the Stage-2 category block, keyed by (category model version,
-#: property_id). Separate from the PU explanation cache because the two models
-#: are replaced independently.
-_CATEGORY_CACHE: dict[tuple[str, str], dict[str, Any]] = {}
-_CATEGORY_CACHE_LOCK = threading.Lock()
-
 
 def clear_insights_cache() -> int:
     """Test/admin hook: drop cached explanations. Returns the number dropped."""
     with _EXPLANATION_CACHE_LOCK:
         count = len(_EXPLANATION_CACHE)
         _EXPLANATION_CACHE.clear()
-    with _CATEGORY_CACHE_LOCK:
-        count += len(_CATEGORY_CACHE)
-        _CATEGORY_CACHE.clear()
     return count
 
 
@@ -831,9 +814,10 @@ class PropertyInsightsService:
           or live PU score. The catalogue ranking's legacy score remains
           authoritative when the active variant is ``legacy``; any available
           live inference is compared with it rather than silently substituted.
-        *         ``business_type`` is the entrepreneur's own selection. It selects
-        which of the four category outputs the Stage-2 explanation describes
-        — never the model's top category, unless no selection is known.
+        *         ``business_type`` is the entrepreneur's own stated selection.
+          It is recorded in the response so callers can see what was asked;
+          it does not select any model output and does not change the score
+          or its explanation.
         * With the persistent cache enabled, a validated stored explanation is
           served immediately; on a miss the request either computes
           synchronously (only when this process has completed its one-off SHAP
@@ -844,7 +828,6 @@ class PropertyInsightsService:
         """
         if cache_session is _UNSET:
             cache_session = self.cache_session
-        selected_category = match_business_type(business_type)
         variant = self._variant()
         base: dict[str, Any] = {
             "property_id": property_id,
@@ -854,11 +837,7 @@ class PropertyInsightsService:
             "panorama": self._panorama(property_id),
             "score": {"available": False, "label": "Location Fit", "meaning": SCORE_MEANING},
             "explanation": {"available": False},
-            "business_type": {
-                "requested": business_type,
-                "matched_category": selected_category,
-                "matched": selected_category is not None,
-            },
+            "business_type": {"requested": business_type},
             "categories": [
                 {
                     **{k: spec[k] for k in ("key", "label", "question", "why")},
@@ -886,11 +865,6 @@ class PropertyInsightsService:
             }
             return base, None, None
 
-        # Stage 2 is independent of the PU variant: the category model has its
-        # own 54-feature contract, its own validation and its own wording. A
-        # PU failure must never hide it, and vice versa.
-        base["category_model"] = self._category_payload(property_id, selected_category)
-
         try:
             loaded = ModelLoader().load_cached(variant["layer1_model"])
         except ModelUnavailableError as exc:
@@ -905,8 +879,7 @@ class PropertyInsightsService:
         artifact_digest = self._artifact_sha256(loaded.meta.get("artifact_filename")) or "unhashed"
         cache_version = (
             f"{variant.get('layer1_model') or variant['name']}:{variant.get('version') or 'unknown'}:"
-            f"{artifact_digest}:{stored['score'] if stored is not None else 'no-stored-score'}:"
-            f"cat:{self._artifact_sha256(CATEGORY_MODEL_NAME + '.joblib') or 'unhashed'}"
+            f"{artifact_digest}:{stored['score'] if stored is not None else 'no-stored-score'}"
         )
 
         repo = PropertyFeatureRepository(self.analytics)
@@ -950,7 +923,7 @@ class PropertyInsightsService:
         if coverage is not None:
             cache_key = (
                 f"{cache_version}:feat:{_feature_digest(values)}:"
-                f"bt:{selected_category or 'top'}",
+                f"bt:{business_type or 'none'}",
                 property_id,
             )
             with _EXPLANATION_CACHE_LOCK:
@@ -1311,173 +1284,6 @@ class PropertyInsightsService:
             except Exception:  # noqa: BLE001 - persistence must never void a valid result
                 pass
         return {**base, **payload}, payload, persistent_key
-
-    # -- Stage 2: business-category resemblance -----------------------------
-
-    def _category_payload(
-        self, property_id: str, business_type: str | None = None
-    ) -> dict[str, Any]:
-        """The F&B category block for the entrepreneur's SELECTED category.
-
-        Uses the category model's OWN 54-feature contract (leakage-reduced:
-        the ten competitor-count columns are excluded) and its own SHAP
-        background. A category score is never explained with the PU
-        explanation, and vice versa. When ``business_type`` is known the block
-        reports and explains THAT class; the model's own top class is reported
-        separately and never substituted for the entrepreneur's choice.
-        Weak validation is reported with every result so the UI can keep the
-        exploratory wording.
-        """
-        try:
-            from sitewise.ml import category_aware
-
-            bundle = category_aware.load_bundle()
-        except Exception as exc:  # noqa: BLE001 - evidence is additive only
-            return {
-                "available": False,
-                "reason": {"code": "category_model_unavailable", "message": str(exc)},
-            }
-
-        # The Stage-2 explanation is also a permutation-SHAP computation. On a
-        # cold process (one-off SHAP compilation still running off-path) it
-        # must not block the request either: report truthfully and let the
-        # next refresh pick the warmed result up.
-        if self.cache_session is not None and not _shap_module.process_warm():
-            return {
-                "available": False,
-                "model_version": bundle.version,
-                "status": "pending",
-                "reason": {
-                    "code": "category_model_pending",
-                    "message": (
-                        "The category explanation engine is still warming up "
-                        "in this freshly started backend process; please "
-                        "refresh in a few seconds."
-                    ),
-                },
-            }
-
-        version = bundle.version
-        names = list(bundle.category_features)
-        context_names = [n for n in COMPETITOR_CONTEXT_FEATURES if n not in names]
-        required = [*names, *context_names]
-        try:
-            feature_bundle = PropertyFeatureRepository(self.analytics).get(
-                property_id, required, source="catalog"
-            )
-            coverage = merge_bridge_features(feature_bundle, expected_features=required)
-            coverage = merge_expanded_bridge_features(
-                coverage, expected_features=required
-            )
-        except FeatureResolutionError as exc:
-            return {
-                "available": False,
-                "model_version": version,
-                "reason": {"code": "features_unresolved", "message": str(exc)},
-            }
-        except Exception as exc:  # noqa: BLE001 - fail closed, never fabricate
-            return {
-                "available": False,
-                "model_version": version,
-                "reason": {
-                    "code": "features_unresolved",
-                    "message": f"{type(exc).__name__}: {exc}",
-                },
-            }
-
-        values = dict(coverage.values)
-        cache_key = (
-            f"{version}:{bundle.sha256[:16]}:feat:{_feature_digest(values)}:"
-            f"bt:{business_type or 'top'}",
-            property_id,
-        )
-        with _CATEGORY_CACHE_LOCK:
-            cached = _CATEGORY_CACHE.get(cache_key)
-        if cached is not None:
-            return cached
-
-        try:
-            result = predict_categories(values, business_type=business_type)
-        except ModelUnavailableError as exc:
-            return {
-                "available": False,
-                "model_version": version,
-                "reason": {
-                    "code": "category_inference_unavailable",
-                    "message": str(exc),
-                    "missing_features": [n for n in names if values.get(n) is None],
-                },
-            }
-
-        result["property_id"] = property_id
-        result["competition_context_NOT_used_by_model"] = competition_context(values)
-        result["feature_coverage"] = {
-            "available_features": sum(1 for n in names if values.get(n) is not None),
-            "feature_count": len(names),
-            "missing_features": [n for n in names if values.get(n) is None],
-            "flags": list(coverage.flags),
-        }
-        result["business_type"] = {
-            "requested": business_type,
-            "matched_category": business_type,
-            "matched": business_type is not None,
-        }
-        if any(values.get(n) is None for n in names):
-            result["explanation"] = {
-                "available": False,
-                "state": "withheld_imputed_features",
-                "reason": {
-                    "code": "category_shap_imputed",
-                    "message": (
-                        "The displayed category scores use the artifact's median "
-                        "imputation for missing residential measurements, so no "
-                        "SHAP explanation is shown."
-                    ),
-                },
-            }
-        else:
-            try:
-                explained = category_explanation(values, business_type)
-                factors = [
-                    _factor(
-                        item["technical"],
-                        item["contribution"],
-                        values.get(item["technical"]),
-                    )
-                    for item in explained["contributions"]
-                ]
-                result["explanation"] = {
-                    "available": True,
-                    "state": "ready",
-                    "explainer": explained["explainer"],
-                    "model": explained["model"],
-                    "model_version": explained["model_version"],
-                    "artifact_sha256": explained["artifact_sha256"],
-                    "explained_output": explained["explained_output"],
-                    "base_value": explained["base_value"],
-                    "reconstructed": explained["reconstructed"],
-                    "reconstruction_error": explained["reconstruction_error"],
-                    "additivity_tolerance": explained["additivity_tolerance"],
-                    "background_size": explained["background_size"],
-                    "research_only": True,
-                    "score_meaning": explained["score_meaning"],
-                    "factors": factors,
-                    "strongest_supporting": [
-                        f for f in factors if f["contribution"] > 0
-                    ][:4],
-                    "strongest_lowering": [
-                        f for f in factors if f["contribution"] < 0
-                    ][:4],
-                }
-            except ModelUnavailableError as exc:
-                result["explanation"] = {
-                    "available": False,
-                    "state": "unavailable",
-                    "reason": {"code": "category_shap_unavailable", "message": str(exc)},
-                }
-        with _CATEGORY_CACHE_LOCK:
-            _CATEGORY_CACHE[cache_key] = result
-        return result
 
     def _stored_legacy_score(self, property_id: str) -> dict[str, Any] | None:
         """Read a validated original ranking score; never use it for experimental47."""

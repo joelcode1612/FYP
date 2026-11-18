@@ -230,9 +230,10 @@ def get_catalog_insights(
         default=None,
         max_length=120,
         description=(
-            "The entrepreneur's selected F&B business type. It selects which "
-            "category output the Stage-2 SHAP explanation describes; it never "
-            "changes the general PU association score."
+            "The entrepreneur's stated F&B business type, kept for "
+            "backward compatibility. It is recorded with the response and "
+            "never changes the general PU association score or its SHAP "
+            "explanation."
         ),
     ),
 ) -> dict:
@@ -254,15 +255,13 @@ def get_catalog_insights(
       an explanation;
     * ``explanation.factors`` always carries plain-English labels; the raw
       feature key is present only as ``technical`` for audit;
-    * ``category_model`` is the independent Stage-2 block: its own 54-feature
-      model, its own validation and its own SHAP. When ``business_type`` is
-      supplied, that category is scored and explained even if the model's own
-      top category differs;
+    * ``business_type`` is recorded as the entrepreneur's stated selection; it
+      selects no model output;
     * the score is a research association index, never a success probability.
 
     Computation is expensive (permutation SHAP over 47 or 64 features), so the
     service caches per ``(model version, artifact checksum, resolved feature
-    vector, selected business type)`` and the first request for a property pays
+    vector, stated business type)`` and the first request for a property pays
     the cost.
     """
     row = CatalogRepository(session).get_property(property_id)

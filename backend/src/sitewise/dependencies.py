@@ -181,9 +181,10 @@ def require_roles(*allowed):
     ) -> AuthenticatedUser:
         if not rbac.has_role(user.role, tuple(flat)):
             raise ForbiddenError("You do not have permission to perform this action.")
-        # An administrator acting through a broadly scoped dependency still
-        # requires the same signed AAL2 assurance as an admin-only endpoint.
-        if (rbac.canonical_role(user.role) == rbac.ROLE_ADMIN
+        # A verified password session is insufficient for Owner, Agent or
+        # Admin operations even when an endpoint uses a broad role dependency.
+        if ((rbac.canonical_role(user.role) == rbac.ROLE_OWNER
+             or rbac.is_staff(user.role))
                 and user.assurance_level != rbac.REQUIRED_STAFF_AAL):
             raise _staff_mfa_required()
         return user
@@ -198,9 +199,9 @@ def _staff_mfa_required() -> HTTPException:
         detail={
             "code": "staff_mfa_required",
             "message": (
-                "Staff access requires completed multi-factor authentication "
-                "(aal2). Sign in again and complete the TOTP challenge or "
-                "enrollment."
+                "This account must complete multi-factor authentication "
+                "before accessing property-management or staff features. "
+                "Complete the authenticator challenge or enrollment."
             ),
         },
     )
@@ -264,18 +265,16 @@ def require_property_owner(
     ``owner_user_id`` equality, an agent assignment, or an explicit grant — is
     what authorises a specific property.
 
-    Agents reach the SAME surface as the agent side of the Owner / Agent
-    workspace, and an agent account carries mandatory TOTP MFA. The AAL2 check
-    therefore applies to every staff role here, exactly as it does to an
-    administrator: without it the mobile MFA step would be a screen the client
-    chose to show rather than a condition the server enforces. A property
-    owner (``entrepreneur``) is not staff and is not asked for a second factor.
+    Property Owners and Agents share the Provider workspace. Both roles,
+    along with Administrators, require verified TOTP (`aal2`) on property
+    management operations. Entrepreneurs remain exempt from mandatory MFA.
     """
     if not rbac.can_manage_properties(user.role):
         raise ForbiddenError(
             "This action requires a property owner, entrepreneur or agent account."
         )
-    if (rbac.is_staff(user.role)
+    if ((rbac.canonical_role(user.role) == rbac.ROLE_OWNER
+         or rbac.is_staff(user.role))
             and user.assurance_level != rbac.REQUIRED_STAFF_AAL):
         raise _staff_mfa_required()
     return user

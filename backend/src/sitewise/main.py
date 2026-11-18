@@ -30,9 +30,9 @@ def _warm_explainers() -> None:
     explainer evaluation compiles its numba kernels (measured 13-35 s). Paying
     that inside a user request would miss the 3-second explanation target by
     an order of magnitude, so it is done once per worker in a daemon thread:
-    first the category model's kernels, then the PU explainer path with the
-    ACTIVE variant's own artifact and verified background (the kernels are
-    dtype-keyed, so this readies every later explanation). A failure is logged
+    the PU explainer path with the ACTIVE variant's own artifact and verified
+    background (the kernels are dtype-keyed, so this readies every later
+    explanation). A failure is logged
     and ignored: explanations then degrade to their documented "pending"/
     "unavailable" states instead of preventing startup. On completion the
     process is marked warm, which re-enables synchronous explanation
@@ -41,13 +41,6 @@ def _warm_explainers() -> None:
     import threading
 
     def run() -> None:
-        try:
-            from sitewise.ml.category_aware import warm_up
-
-            result = warm_up()
-            logger.info("SHAP warm-up finished: %s", result)
-        except Exception:  # noqa: BLE001 - warm-up must never break the app
-            logger.warning("SHAP warm-up failed; explanations stay lazy", exc_info=True)
         try:
             from sitewise.ml import shap_explainer
 

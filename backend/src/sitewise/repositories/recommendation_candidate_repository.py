@@ -163,10 +163,14 @@ class RecommendationCandidateRepository:
     def list_candidates(self, *, max_rent: float | None = None,
                         min_size: float | None = None,
                         state: str | None = None,
+                        property_ids: list[str] | None = None,
                         limit: int | None = None) -> list[dict[str, Any]]:
         """Return canonical-name dictionaries ready for the domain layer.
 
-        ``max_rent`` / ``min_size`` / ``state`` are *pre-filters* pushed into
+        ``property_ids`` restricts the read to an explicit id set (used by
+        Compare for at most three catalogue ids). It is pushed into the SAME
+        query — no second repository and no full-catalogue scan.
+        ``max_rent`` / ``min_size`` / ``state`` are pre-filters pushed into
         SQL for efficiency; the domain layer re-applies eligibility so the rule
         has a single authoritative implementation regardless of caller.
         """
@@ -181,6 +185,12 @@ class RecommendationCandidateRepository:
         if state:
             filters.append("AND p.state ILIKE :state")
             params["state"] = state.strip()
+        if property_ids is not None:
+            ids = list(dict.fromkeys(str(value) for value in property_ids if value))
+            if not ids:
+                return []
+            filters.append("AND p.id = ANY(:property_ids)")
+            params["property_ids"] = ids
         limit_clause = ""
         if limit is not None:
             limit = max(1, int(limit))
@@ -258,6 +268,11 @@ class RecommendationCandidateRepository:
                 (population,), "pop_ring_0_500m", "pop_total_200m"
             ),
             "population_1000m": _first_number((population, extra), "pop_total_1km"),
+            # Exact 500 m ring only. ``pop_total_200m`` is a DIFFERENT radius
+            # and is deliberately not used as a 500 m fallback here.
+            "population_500m_exact": _first_number(
+                (population,), "pop_ring_0_500m"
+            ),
             # Demand generators (office / education / retail).
             "office_pois_500m": _first_number(
                 sources, "office_pois_500m", "office_poi_count_500m"
@@ -275,6 +290,9 @@ class RecommendationCandidateRepository:
             ),
             "fnb_competitors_1000m": _first_number(
                 sources, "fnb_competitors_1000m", "competitor_count_1000m"
+            ),
+            "nearest_competitor_distance_m": _first_number(
+                (subject, extra), "nearest_competitor_distance_m"
             ),
             "cafe_count_500m": _first_number(sources, "cafe_count_500m"),
             "restaurant_count_500m": _first_number(sources, "restaurant_count_500m"),

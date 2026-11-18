@@ -41,7 +41,7 @@ class PhotoStorageUnavailable(Exception):
 
 
 def validate_photo(
-    original_filename: str, content_type: str, size: int
+    original_filename: str, content_type: str, size: int, max_bytes: int = DEFAULT_MAX_BYTES
 ) -> str:
     """Validate type/size and return the canonical extension (with dot)."""
     name = (original_filename or "").lower()
@@ -57,13 +57,56 @@ def validate_photo(
         )
     if size <= 0:
         raise PhotoRejected("The photo file is empty.")
-    max_bytes = DEFAULT_MAX_BYTES
     if size > max_bytes:
         raise PhotoRejected(
             f"Photos must be {max_bytes // (1024 * 1024)} MB or smaller.",
             oversized=True,
         )
     return ext
+
+
+#: A stitched 360° panorama is one wide equirectangular image (a device
+#: capture produced 9596 × 4313). That is several times a gallery photo, so
+#: the panorama upload gets its own ceiling instead of the 8 MB photo one.
+PANORAMA_MAX_BYTES = 32 * 1024 * 1024
+
+
+def validate_panorama(original_filename: str, content_type: str, size: int) -> str:
+    """Validate a stitched panorama and return the canonical extension."""
+    ext = validate_photo(
+        original_filename, content_type, size, max_bytes=PANORAMA_MAX_BYTES
+    )
+    return ext
+
+
+def save_panorama(data: bytes, ext: str, content_type: str) -> str:
+    """Upload one stitched panorama and return its permanent public URL.
+
+    Same public bucket and URL contract as listing photos — display media
+    that must be reachable by plain ``<img>`` tags — but under a dedicated
+    ``panoramas/`` prefix so the two file families never interleave.
+    """
+    client = _client()
+    storage = client.storage.from_(BUCKET)
+    path = f"panoramas/{uuid.uuid4().hex}{ext}"
+    content_type_value = (content_type or "").split(";")[0] or "image/jpeg"
+    try:
+        storage.upload(path, data, {"content-type": content_type_value})
+    except Exception as exc:  # noqa: BLE001
+        message = str(exc)
+        if "not found" in message.lower() or "does not exist" in message.lower():
+            _ensure_bucket(client)
+            storage.upload(path, data, {"content-type": content_type_value})
+        else:
+            raise PhotoStorageUnavailable(
+                "The panorama upload failed. The capture frames are kept "
+                "on the device; please retry the upload."
+            ) from exc
+    return PUBLIC_URL_TEMPLATE.format(
+        base=settings.supabase_url.rstrip("/"),
+        bucket=BUCKET,
+        path=path,
+    )
 
 
 def _client():

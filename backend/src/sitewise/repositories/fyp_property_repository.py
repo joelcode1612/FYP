@@ -22,6 +22,7 @@ the confirmed ``fnb_a.overture_match`` decisions.
 """
 
 import math
+from collections.abc import Sequence
 from datetime import datetime, timezone
 from typing import Any
 
@@ -1344,6 +1345,34 @@ class FypPropertyRepository:
             {"pid": property_id},
         ).mappings().all()
         return [dict(r) for r in rows]
+
+    def listing_photos_by_ids(
+        self, property_ids: Sequence[int]
+    ) -> dict[int, list[dict]]:
+        """Display photos for many listings in ONE query, primary first.
+
+        The list endpoints omitted photos altogether, so every card fell back to
+        the placeholder image and a draft that already had photographs was still
+        reported as needing them. A listing with no usable photo is simply
+        absent from the mapping. Blank URLs are excluded because the card would
+        reserve an image box for an image that cannot load.
+        """
+        wanted = [int(pid) for pid in property_ids]
+        if not wanted:
+            return {}
+        rows = self.session.execute(
+            text(
+                f"{self._PHOTO_SELECT} WHERE property_id = ANY(:ids) "
+                "AND url IS NOT NULL AND btrim(url) <> '' "
+                "ORDER BY is_primary DESC NULLS LAST, id ASC"
+            ),
+            {"ids": wanted},
+        ).mappings().all()
+        grouped: dict[int, list[dict]] = {}
+        for row in rows:
+            photo = dict(row)
+            grouped.setdefault(int(photo["property_id"]), []).append(photo)
+        return grouped
 
     def add_listing_photo(
         self, property_id: int, url: str, caption: str, is_primary: bool

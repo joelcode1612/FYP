@@ -79,7 +79,11 @@ def _identity(cleanup_users, *, role: str, aal: str | None = None):
 
 @pytest.fixture()
 def owner(cleanup_users):
-    _, token = _identity(cleanup_users, role="owner")
+    # Property management now requires a verified aal2 session for BOTH
+    # provider roles (require_property_owner); the owner fixture presents an
+    # elevated session so draft creation succeeds and the deletion POLICY
+    # (admin-only) is what these tests actually exercise.
+    _, token = _identity(cleanup_users, role="owner", aal="aal2")
     return token
 
 

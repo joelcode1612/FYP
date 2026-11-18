@@ -60,6 +60,13 @@ _JSON_METRICS: tuple[tuple[str, str, str, str, str], ...] = (
         "count",
     ),
     (
+        "bakery_dessert_beverage_count_500m",
+        "competition",
+        "bakery_dessert_beverage_count_500m",
+        "Bakeries and drink shops within 500 m",
+        "count",
+    ),
+    (
         "weekday_departures_500m_walk_am",
         "accessibility",
         "weekday_departures_am",
@@ -86,6 +93,27 @@ _JSON_METRICS: tuple[tuple[str, str, str, str, str], ...] = (
         "drive_isochrone_10min",
         "Area reachable by car in 10 minutes",
         "km²",
+    ),
+    (
+        "weekday_transit_routes_1km_walk",
+        "accessibility",
+        "weekday_transit_routes_1km_walk",
+        "Transit routes within a 1 km walk",
+        "routes",
+    ),
+    (
+        "osm_walkway_length_density_500m_km_km2",
+        "accessibility",
+        "walking_path_density_500m",
+        "Walking path density within 500 m",
+        "km/km²",
+    ),
+    (
+        "parking_facilities_1km",
+        "built_environment",
+        "parking_facilities_1km",
+        "Parking facilities within 1 km",
+        "count",
     ),
     ("office_pois_500m", "demand", "office_pois_500m", "Offices within 500 m", "count"),
     ("office_pois_1000m", "demand", "office_pois_1000m", "Offices within 1 km", "count"),
@@ -426,6 +454,8 @@ class CatalogRepository:
             for radius_m, key, label in (
                 (500, "pop_500m", "Estimated residents within 500 m"),
                 (1000, "pop_1000m", "Estimated residents within 1 km"),
+                (2000, "pop_2000m", "Estimated residents within 2 km"),
+                (3000, "pop_3000m", "Estimated residents within 3 km"),
             ):
                 coverage = _number(pop_block.get(f"worldpop_coverage_{radius_m}m_pct"))
                 note = None

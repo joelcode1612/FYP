@@ -4,6 +4,7 @@ from sitewise.api.v1 import (
     assessments,
     auth,
     catalog,
+    compare,
     explore,
     geospatial,
     ml_predictions,
@@ -61,6 +62,8 @@ router.include_router(staff.router, prefix="/staff", tags=["staff"])
 # exactly one authorization definition for staff listing access.
 router.include_router(staff_listings.router, prefix="/staff", tags=["staff_listings"])
 router.include_router(recommendations.router, prefix="/recommendations", tags=["recommendations"])
+# Direct shortlist comparison — separate from ranking, never a second scorer.
+router.include_router(compare.router, prefix="/compare", tags=["compare"])
 # Layer 2/3 personalised pipeline. Separate router so the existing
 # recommendations module (and its in-progress /search, /facets work) is never
 # modified. Registered AFTER it: existing static paths keep priority.

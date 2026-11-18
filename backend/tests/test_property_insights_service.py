@@ -66,7 +66,7 @@ def _clear_cache():
     svc.clear_insights_cache()
 
 
-def _service(monkeypatch, *, features, background_rows, missing=None, stub_category=True):
+def _service(monkeypatch, *, features, background_rows, missing=None):
     """An insights service whose repository returns the supplied vectors."""
 
     class _Bundle:
@@ -93,20 +93,6 @@ def _service(monkeypatch, *, features, background_rows, missing=None, stub_categ
         "_reference_background",
         staticmethod(lambda feature_names, path=None: background_rows),
     )
-    if stub_category:
-        # These tests target the PU path; the category block has its own
-        # focused tests and a real 12-second permutation SHAP per property.
-        monkeypatch.setattr(
-            svc.PropertyInsightsService,
-            "_category_payload",
-            lambda self, property_id, business_type=None: {
-                "available": False,
-                "reason": {
-                    "code": "category_model_unavailable",
-                    "message": "stubbed in the PU-focused tests",
-                },
-            },
-        )
     return svc.PropertyInsightsService(session=object(), analytics_session=object())
 
 
@@ -383,11 +369,9 @@ def test_explanation_is_cached_per_model_version(monkeypatch, reference_features
     assert version in keys[0][0]
     artifact_hash = keys[0][0].split(":")[2]
     assert len(artifact_hash) == 64
-    # The PU portion keeps the stored-score marker; the category artifact
-    # digest is appended after it, so replacing EITHER model invalidates the
-    # cached payload.
-    assert ":no-stored-score:cat:" in keys[0][0]
-    assert len(keys[0][0].rsplit(":cat:", 1)[1]) == 64
+    # The PU portion keeps the stored-score marker, so a replaced artifact or
+    # a different stored score invalidates the cached payload.
+    assert ":no-stored-score" in keys[0][0]
 
     # A replacement binary with the same semantic version has a new hash and
     # cannot reuse the old explanation cache entry.
@@ -528,72 +512,3 @@ def test_panorama_requires_a_completed_status(monkeypatch):
     out = service._panorama(REFERENCE_PROPERTY_ID)
     assert out == {"available": True, "status": "ready", "url": "https://x/p.jpg", "reason": None}
 
-
-# -- Stage 2: business-category block ---------------------------------------
-
-
-def test_category_block_is_always_present_and_never_fabricated(
-    monkeypatch, reference_features, background
-):
-    service = _service(monkeypatch, features=reference_features, background_rows=background)
-    out = service.insights(REFERENCE_PROPERTY_ID)
-
-    category = out.get("category_model")
-    assert isinstance(category, dict)
-    assert category["available"] is False
-    assert category["reason"]["code"] == "category_model_unavailable"
-    # The PU score must stay available: one model failing never hides the other.
-    assert out["score"]["available"] is True
-
-
-def test_category_block_is_separate_from_the_pu_explanation(
-    monkeypatch, reference_features, background
-):
-    service = _service(
-        monkeypatch,
-        features=reference_features,
-        background_rows=background,
-        stub_category=False,
-    )
-    # A real category SHAP is ~12 s per property; the reconstruction itself is
-    # covered by tests/test_fnb_category_model.py. Here the block wiring is
-    # what matters, so the explainer is canned.
-    monkeypatch.setattr(
-        svc,
-        "category_explanation",
-        lambda values: {
-            "explainer": "Permutation SHAP",
-            "model": "sitewise_fnb_category",
-            "model_version": "fnb_category_pu_v1_20261115",
-            "explained_output": {"business_type": "Restaurant", "probability": 0.63},
-            "base_value": 0.30,
-            "reconstructed": 0.63,
-            "reconstruction_error": 1e-16,
-            "background_size": 32,
-            "contributions": [
-                {"technical": "pop_1000m", "contribution": 0.05},
-                {"technical": "cafe_count_500m", "contribution": -0.02},
-            ],
-        },
-    )
-    out = service.insights(REFERENCE_PROPERTY_ID)
-
-    category = out["category_model"]
-    assert category["available"] is True
-    assert category["model_version"] == "fnb_category_pu_v1_20261115"
-    assert [r["business_type"] for r in category["rankings"]][0] == category["top_category"]
-    assert category["reliability"]["status"] == "weak_discrimination_research_only"
-    assert category["explanation"]["available"] is True
-    assert category["explanation"]["explained_output"]["business_type"] == "Restaurant"
-
-    # Separation: the PU explanation still explains the PU model only, and the
-    # two factor lists are independent objects (the category list carries the
-    # category model's contributions, not the PU model's 47 factors).
-    assert out["explanation"]["model"] == "pu_model"
-    assert out["explanation"]["feature_count"] == 47
-    assert len(out["explanation"]["factors"]) == 47
-    assert [f["technical"] for f in category["explanation"]["factors"]] == [
-        "pop_1000m",
-        "cafe_count_500m",
-    ]
-    assert category["explanation"]["factors"][0]["label"] == "People living within 1 km"

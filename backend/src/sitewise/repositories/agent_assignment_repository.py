@@ -26,6 +26,10 @@ from sqlmodel import Session
 
 #: Columns exposed for the assigned-listings screen. Kept aligned with
 #: ``AgentAssignment.fromJson`` (shared_logic) and the admin queue.
+#: ``image_url`` is the listing's primary photograph: the workspace thumbnails
+#: every assigned row, and without it a card cannot show the property it names.
+#: The lateral join is additive display data — a listing with no usable photo
+#: simply reports ``None``.
 _LIST_SELECT = """
 SELECT
     a.listing_id,
@@ -45,9 +49,17 @@ SELECT
     p.is_published,
     p.verification_status,
     p.owner_user_id,
+    photo.url AS image_url,
     (p.id IS NOT NULL) AS property_exists
 FROM agent_listing_assignment a
 LEFT JOIN fyp.rental_properties p ON p.id = a.listing_id
+LEFT JOIN LATERAL (
+    SELECT url FROM fyp.property_photos ph
+    WHERE ph.property_id = p.id
+      AND ph.url IS NOT NULL AND btrim(ph.url) <> ''
+    ORDER BY ph.is_primary DESC NULLS LAST, ph.id ASC
+    LIMIT 1
+) photo ON TRUE
 """
 
 
