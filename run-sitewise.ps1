@@ -68,6 +68,10 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+# pwsh 7.3+: native-command stderr must never trip ErrorActionPreference.
+# (Windows PowerShell 5.1 ignores this variable; the cmd.exe wrapping below is
+# what protects this script there.)
+$PSNativeCommandUseErrorActionPreference = $false
 $root = Split-Path -Parent $MyInvocation.MyCommand.Path
 $backendDir = Join-Path $root 'backend'
 $distDir = Join-Path $root 'fyp_jaspr_web\build\jaspr'
@@ -121,13 +125,32 @@ if (-not $adbExe) {
     if (Test-Path -LiteralPath $sdkCandidate) { $adbExe = $sdkCandidate }
 }
 
+# --- adb helper -------------------------------------------------------------
+# adb writes progress notices ("* daemon not running; starting now at
+# tcp:5037") to stderr. With $ErrorActionPreference='Stop' (top of file),
+# Windows PowerShell 5.1 promotes any redirected native-stderr line into a
+# terminating NativeCommandError - even through 2>$null or 2>&1, which is what
+# killed this launcher at the `adb devices` call. Running adb through cmd.exe
+# keeps its stderr inside cmd (merged into stdout or sent to NUL), so
+# PowerShell only ever receives plain strings. cmd /c propagates adb's exit
+# code, so $LASTEXITCODE keeps its meaning.
+function Invoke-Adb {
+    param(
+        [Parameter(Mandatory = $true)][string[]]$AdbArgs,
+        [switch]$MergeStderr
+    )
+    $stderrTarget = if ($MergeStderr) { '2>&1' } else { '2>nul' }
+    $cmdLine = "`"$adbExe`" $($AdbArgs -join ' ') $stderrTarget"
+    return @(& cmd.exe /c $cmdLine)
+}
+
 $reverseInstalled = $false
 if ($adbExe) {
-    $deviceLines = @(& $adbExe devices 2>$null)
+    $deviceLines = @(Invoke-Adb -AdbArgs @('devices'))
     $ready = @($deviceLines | Where-Object { $_ -match '^\S+\s+device\s*$' })
     if ($ready.Count -gt 0) {
         $portArg = "tcp:$Port"
-        & $adbExe reverse $portArg $portArg 2>&1 |
+        Invoke-Adb -AdbArgs @('reverse', $portArg, $portArg) -MergeStderr |
             ForEach-Object { Write-Host "  adb:      $_" -ForegroundColor DarkGray }
         if ($LASTEXITCODE -eq 0) {
             $reverseInstalled = $true
@@ -180,13 +203,18 @@ Write-Host ''
 
 Push-Location $backendDir
 try {
-    & $pythonExe -m uvicorn sitewise.main:app --host $BindHost --port $Port
+    # uvicorn logs to stderr. On Windows PowerShell 5.1 each native-stderr
+    # line would render as a NativeCommandError banner and, once redirected,
+    # terminate under $ErrorActionPreference='Stop' exactly like the adb
+    # daemon notice did. Stream it through cmd.exe with 2>&1 so the logs
+    # reach the console as plain text; Ctrl+C still stops Python.
+    & cmd.exe /c "`"$pythonExe`" -m uvicorn sitewise.main:app --host $BindHost --port $Port 2>&1"
     exit $LASTEXITCODE
 } finally {
     Pop-Location
     # The rule is only useful while this server is up; remove it so a later
     # device session does not forward into a closed port.
     if ($reverseInstalled -and $adbExe) {
-        & $adbExe reverse --remove "tcp:$Port" 2>&1 | Out-Null
+        Invoke-Adb -AdbArgs @('reverse', '--remove', "tcp:$Port") | Out-Null
     }
 }

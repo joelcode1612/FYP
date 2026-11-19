@@ -8,14 +8,15 @@ import 'package:shared_logic/shared_logic.dart';
 
 import '../../components/ui.dart';
 import '../../data/app_locator.dart';
+import '../../data/recommendation_filter_store.dart';
 import '../../layouts/app_layout.dart';
 
 /// Entrepreneur discovery — **Recommendations**.
 ///
 /// This page replaced the separate Explore destination (`data/navigation.dart`;
-/// `/entrepreneur/explore` redirects here in `app.dart`). Filters remain
-/// visible initially, but ranked results are requested only after someone
-/// explicitly enters requirements and presses "Find properties".
+/// `/entrepreneur/explore` redirects here in `app.dart`). Filter
+/// selections automatically refresh ranked results. Text inputs are debounced,
+/// and a first visit remains empty until a requirement is selected.
 ///
 /// Everything the list shows comes from `POST /api/v1/recommendations/search`:
 /// the server filters, orders and pages. This component never sorts, never
@@ -41,11 +42,10 @@ class RecommendationsPage extends StatefulComponent {
 }
 
 class _RecommendationsPageState extends State<RecommendationsPage> {
-  // Filter DRAFT. Kept local until "Find properties" so typing a budget does
-  // not fire a request per keystroke — the server call is the expensive part.
-  // The APPLIED criteria live in the session-scoped entrepreneur state
-  // (`state.recommendationRequest`); this draft is rehydrated from it on
-  // every mount, so returning from a property detail restores the form.
+  // Form edits are local until a brief debounce completes; then the
+  // current criteria become the applied request. This avoids sending a search
+  // for every character. The session state restores applied filters on return
+  // from property details, and the server still owns ranking and pagination.
   /// The APPLIED criteria travel with every property-detail link so the
   /// comparison tab can show the filters that produced this result. Draft
   /// edits are never carried: they have not been searched yet.
@@ -83,6 +83,7 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
   /// slower earlier response must never overwrite a newer selection.
   int _facetSeq = 0;
   Timer? _facetTimer;
+  Timer? _autoSearchTimer;
 
   /// The active ordering. Held as the accepted server key, never a label, so a
   /// rename of the wording cannot silently change the request.
@@ -113,18 +114,25 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
   /// The shared notifier holds the applied request/results across navigation.
   bool _seeded = false;
   bool _hasSearched = false;
-  bool _needsCriteria = false;
 
   static bool _hasSearchCriteria(RecommendationSearchRequest request) =>
       (request.businessType?.trim().isNotEmpty ?? false) ||
       (request.preferredState?.trim().isNotEmpty ?? false) ||
       (request.preferredArea?.trim().isNotEmpty ?? false) ||
+      (request.city?.trim().isNotEmpty ?? false) ||
       (request.propertyType?.trim().isNotEmpty ?? false) ||
       (request.query?.trim().isNotEmpty ?? false) ||
+      (request.floorLevel?.trim().isNotEmpty ?? false) ||
+      (request.demandGenerator?.trim().isNotEmpty ?? false) ||
       request.minRentalRm != null ||
       request.maxRentalRm != null ||
       request.minSizeSqft != null ||
       request.maxSizeSqft != null ||
+      request.transitMaxM != null ||
+      request.nearbyParkingMin != null ||
+      request.fnbCompetitionMax != null ||
+      request.populationMin1000m != null ||
+      request.populationMax1000m != null ||
       request.layoutPreferences.isNotEmpty;
 
   EntrepreneurNotifier get _notifier =>
@@ -141,6 +149,7 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
       final applied = current.recommendationRequest;
       // Restore a previous *user-initiated* search, not a default browse.
       if (current.recommendationTotal != null && _hasSearchCriteria(applied)) {
+        RecommendationFilterStore.write(applied);
         if (applied.managedOnly) {
           final restored = applied.copyWith(managedOnly: false);
           setState(() {
@@ -165,6 +174,25 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
         _refreshFacets();
         return;
       }
+      // Restore this signed-in user's last filters after a full browser reload.
+      // The selected values are rehydrated BEFORE fetching the new results.
+      final persisted = RecommendationFilterStore.read();
+      if (persisted != null && _hasSearchCriteria(persisted)) {
+        setState(() {
+          _syncDraft(persisted);
+          _hasSearched = true;
+          _moreOpen = persisted.floorLevel != null ||
+              persisted.transitMaxM != null ||
+              persisted.nearbyParkingMin != null ||
+              persisted.fnbCompetitionMax != null ||
+              persisted.demandGenerator != null ||
+              persisted.populationMin1000m != null ||
+              persisted.populationMax1000m != null;
+        });
+        _notifier.applyRecommendationRequest(persisted);
+        _refreshFacets();
+        return;
+      }
       // New visit: no property-search API call and no misleading saved
       // preference defaults. The initial Recommendations view is genuinely empty.
       setState(() {
@@ -179,6 +207,7 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
   @override
   void dispose() {
     _facetTimer?.cancel();
+    _autoSearchTimer?.cancel();
     super.dispose();
   }
 
@@ -248,9 +277,8 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
       if (part.trim().isNotEmpty) part.trim(),
   ];
 
-  /// The request the form currently describes. Used for both the facets read
-  /// and "Find properties", so quoted counts and the ranked set can never be
-  /// computed from different criteria.
+  /// The request described by the form. Contextual facets and the
+  /// automatically applied search use the same criteria.
   RecommendationSearchRequest get _draftRequest {
     final rent = _rentBounds;
     final size = FacetRangeOption.boundsFromKey(_sizeKey);
@@ -290,27 +318,50 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
     );
   }
 
-  /// Applies the draft filters and re-runs from page 1.
-  void _apply() {
+  /// Apply a choice automatically, coalescing rapid changes into one
+  /// request. The shared controller already ignores stale search responses.
+  /// No search runs without any selected criterion, preserving the empty
+  /// first-visit state instead of starting an unsolicited full browse.
+  void _scheduleAutoSearch({
+    Duration debounce = const Duration(milliseconds: 160),
+  }) {
+    _autoSearchTimer?.cancel();
     final request = _draftRequest;
     if (!_hasSearchCriteria(request)) {
-      setState(() => _needsCriteria = true);
+      if (_hasSearched) {
+        setState(() => _hasSearched = false);
+        // Invalidate any in-flight result request before it can repaint the
+        // empty selection after the last filter is cleared.
+        _notifier.clearRecommendationSearch();
+      }
       return;
     }
-    setState(() {
-      _hasSearched = true;
-      _needsCriteria = false;
+    _autoSearchTimer = Timer(debounce, () {
+      if (!mounted) return;
+      final next = _draftRequest;
+      if (!_hasSearchCriteria(next)) return;
+      final applied =
+          context.read(entrepreneurNotifierProvider).recommendationRequest;
+      // The active criteria are written synchronously by the controller, so
+      // comparing request payloads prevents duplicate network calls.
+      if (_hasSearched &&
+          jsonEncode(next.toJson()) == jsonEncode(applied.toJson())) {
+        return;
+      }
+      setState(() => _hasSearched = true);
+      _notifier.applyRecommendationRequest(next);
     });
-    _notifier.applyRecommendationRequest(request);
-    _refreshFacets();
   }
 
-  /// A draft control changed. Facets refresh for the complete draft, while
-  /// the ranked results stay as they were until "Find properties" is pressed.
-  /// Text and numeric fields use a short debounce; a selection is immediate.
-  void _onDraftChange({Duration debounce = Duration.zero}) {
-    if (_needsCriteria) setState(() => _needsCriteria = false);
+  /// Dropdowns update quickly. Typing waits 450 ms after the last keystroke.
+  /// Facets remain independent; failure to load dropdown options does not
+  /// prevent the ranked results from updating.
+  void _onDraftChange({
+    Duration debounce = const Duration(milliseconds: 160),
+  }) {
+    RecommendationFilterStore.write(_draftRequest);
     _refreshFacets(debounce: debounce);
+    _scheduleAutoSearch(debounce: debounce);
   }
 
   /// Reads contextual choices for the current draft. The previous choices
@@ -318,9 +369,10 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
   /// for the latest request is published.
   void _refreshFacets({Duration debounce = Duration.zero}) {
     _facetTimer?.cancel();
+    // Invalidate a slower prior response immediately, before this timer runs.
+    final seq = ++_facetSeq;
     _facetTimer = Timer(debounce, () async {
-      if (!mounted) return;
-      final seq = ++_facetSeq;
+      if (!mounted || seq != _facetSeq) return;
       final request = _draftRequest;
       setState(() {
         _facetLoading = true;
@@ -348,21 +400,19 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
   RecommendationFacets? _facetsFor(EntrepreneurState state) =>
       _draftFacets ?? state.recommendationFacets;
 
-  /// Ordering is a view of the SAME result set, so it is committed the moment
-  /// it changes instead of waiting for "Find properties". It is built from the
-  /// APPLIED request, never the draft: changing the sort must not silently
-  /// apply a budget the entrepreneur has typed but not submitted.
+  /// Sorting changes the same live criteria as every other control.
+  /// If a text input is waiting for its debounce, the sort change applies
+  /// both changes together instead of accidentally dropping the typed filter.
   void _applySort(String value) {
-    // Sorting before Find properties must not initiate a default browse.
-    if (!_hasSearched) return;
-    final applied = context.read(entrepreneurNotifierProvider).recommendationRequest;
-    if ((applied.sort ?? _sortBestMatch) == value) return;
-    _notifier.applyRecommendationRequest(applied.copyWith(sort: value));
+    RecommendationFilterStore.write(_draftRequest);
+    _scheduleAutoSearch(debounce: Duration.zero);
   }
 
   /// Commits a new APPLIED request originating outside the form (chip
   /// removal) and mirrors it into the draft so the form cannot disagree.
   void _applyRequest(RecommendationSearchRequest request) {
+    RecommendationFilterStore.write(request);
+    _autoSearchTimer?.cancel();
     // Removing the last active constraint returns to the initial empty state.
     if (!_hasSearchCriteria(request)) {
       _reset();
@@ -371,21 +421,20 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
     setState(() {
       _syncDraft(request);
       _hasSearched = true;
-      _needsCriteria = false;
     });
     _notifier.applyRecommendationRequest(request);
     _refreshFacets();
   }
 
   void _reset() {
+    RecommendationFilterStore.clear();
+    _autoSearchTimer?.cancel();
     const defaults = RecommendationSearchRequest();
     setState(() {
       _syncDraft(defaults);
       _hasSearched = false;
-      _needsCriteria = false;
     });
-    // Clear the *session* result set too, so navigating away and coming back
-    // does not restore the cards that Clear just hid.
+    // Clear the session's results and invalidate in-flight searches.
     _notifier.clearRecommendationSearch();
     _refreshFacets();
   }
@@ -454,9 +503,9 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
             _resultHead(state),
           if (!_hasSearched)
             const EmptyState(
-              title: 'No recommendations yet',
-              body: 'Enter at least one preference above, then select Find '
-                  'properties to see matching commercial spaces.',
+              title: 'Choose your property filters',
+              body: 'Select a location, rental range or other preference '
+                  'above. Matching properties appear automatically.', 
             )
           else if (state.recommendationLoading)
             const _Loading()
@@ -698,12 +747,31 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
     final cities = _optionPairs(facets?.cities ?? const <FacetOption>[]);
     final types = _optionPairs(facets?.propertyTypes ?? const <FacetOption>[]);
     final sizes = _rangePairs(facets?.sizeRanges ?? const <FacetRangeOption>[]);
-    final count = _draftFacets?.matchingTotal ?? state.recommendationTotal;
+    final count = _hasSearched
+        ? (_draftFacets?.matchingTotal ?? state.recommendationTotal)
+        : null;
 
     return div(
       classes: 'rec2__filters',
       attributes: const {'id': 'rec2-filters'},
       [
+        div(classes: 'rec2__filter-intro', [
+          div(classes: 'rec2__filter-intro-copy', [
+            span(classes: 'rec2__eyebrow', [
+              Icon('tune', size: 'sm'),
+              Component.text('PROPERTY SEARCH'),
+            ]),
+            h2(classes: 'rec2__filter-title', [
+              Component.text('Find the right space'),
+            ]),
+            p(classes: 'rec2__filter-description', [
+              Component.text(
+                'Filter by location, budget and size. Open Advanced filters '
+                'for parking, transport, competition and nearby demand.',
+              ),
+            ]),
+          ]),
+        ]),
         // Row 1 — location and property class. Every option comes from the
         // catalogue; each dropdown is contextual to the other selections.
         div(classes: 'rec2__filters-grid', [
@@ -758,7 +826,7 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
             },
           ),
           _dropdownField(
-            caption: 'Target market',
+            caption: 'Target market (preference)',
             fieldId: 'rec2-target-market',
             value: _targetMarket,
             emptyLabel: 'Any target market',
@@ -770,7 +838,7 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
           ),
           // Row 3 — ordering and text search.
           _sortField(_sortOptions(state)),
-          div(classes: 'field rec2__field--wide', [
+          div(classes: 'field rec2__field--wide rec2__field--search', [
             span(classes: 'field__label', [Component.text('Search')]),
             input(
               attributes: {
@@ -782,7 +850,7 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
               },
               events: events<String>(onInput: (value) {
                 setState(() => _query = value);
-                _onDraftChange(debounce: const Duration(milliseconds: 300));
+                _onDraftChange(debounce: const Duration(milliseconds: 450));
               }),
             ),
           ]),
@@ -796,7 +864,7 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
           events: events(onClick: () => setState(() => _moreOpen = !_moreOpen)),
           [
             Icon('tune', size: 'sm'),
-            span([Component.text('More filters')]),
+            span([Component.text('Advanced filters')]),
             Icon(_moreOpen ? 'expand_less' : 'expand_more', size: 'sm'),
           ],
         ),
@@ -820,28 +888,17 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
             ),
           ]),
         _facetStatus(state),
-        if (_needsCriteria)
-          p(
-            classes: 'rec2__criteria-hint',
-            attributes: const {'role': 'status'},
-            [Component.text(
-              'Choose at least one requirement before finding properties.',
-            )],
-          ),
         div(classes: 'rec2__filters-actions', [
-          ActionButton(
-            state.recommendationRefreshing ? 'Searching…' : 'Find properties',
-            variant: 'primary',
-            icon: 'search',
-            onClick: state.recommendationRefreshing ? null : _apply,
-          ),
           span(classes: 'rec2__match-count', [
-            Component.text(
-              count == null
-                  ? 'Matching properties update when you search'
-                  : '$count ${count == 1 ? 'matching property' : 'matching properties'}',
-            ),
+            Icon('autorenew', size: 'sm'),
+            Component.text('Results update automatically'),
           ]),
+          if (count != null)
+            span(classes: 'rec2__match-count', [
+              Component.text(
+                '$count ${count == 1 ? 'matching property' : 'matching properties'}',
+              ),
+            ]),
           ActionButton('Clear all', variant: 'secondary', onClick: _reset),
           span(classes: 'rec2__compare-bar', [
             Component.text('$compareCount of 3 in comparison'),
@@ -1071,9 +1128,12 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
     }
     final facets = _draftFacets;
     if (facets == null) return Component.fragment([]);
+    if (!_hasSearched && !_hasSearchCriteria(_draftRequest)) {
+      return Component.fragment([]);
+    }
     final total = facets.matchingTotal;
     if (total == 0) {
-      final applied = state.recommendationRequest;
+      final applied = _draftRequest;
       return div(classes: 'rec2__facet-status is-empty', [
         strong([Component.text('No properties match all your current filters.')]),
         if (_rentKey.isNotEmpty)
@@ -1102,7 +1162,7 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
         ),
       ]);
     }
-    return div(classes: 'rec2__facet-status', attributes: const {
+    return div(classes: 'rec2__facet-status is-count', attributes: const {
       'role': 'status',
     }, [
       Component.text(
