@@ -82,51 +82,55 @@ verified TOTP factor go to `/staff/mfa`. Remember me selects localStorage vs
 sessionStorage; the SSR session mirror is kept in `sitewise_session` /
 `sitewise_token` cookies and refreshed on `SIGNED_IN` / `TOKEN_REFRESHED`.
 
-## Start on your laptop
+## Unified local development — only FastAPI :8090
+
+**One process:** FastAPI hosts the compiled Jaspr client, `/api/v1/*`,
+`/health` and `/docs`, all on **port 8090**. Do **not** start a separate
+Jaspr SSR server or FastAPI instance on port 8000.
+
+Initial setup: configure `backend/.env` locally (do not commit secret keys),
+install the backend virtual environment, and build the client assets:
 
 ```powershell
-cd C:\Users\Lenovo\AndroidStudioProjects\FYP\fyp_jaspr_web
-.\serve
-```
-
-`.\serve` resolves to `serve.cmd`, which invokes `serve.impl.ps1` with a
-process-scoped `-ExecutionPolicy Bypass` (PowerShell 5.1 compatible):
-
-1. Frees the Jaspr ports 8090 / 5567 — **only** for Dart-owned processes.
-2. Health-checks `http://127.0.0.1:8000/health`; starts
-   `FYP/backend/start-api.ps1` in its own window only when unhealthy, and never
-   starts a duplicate if the port is occupied.
-3. Regenerates `web/auth-config.json` / `web/auth_bundle.js` if stale.
-4. Sets `NO_PROXY` for localhost and starts Jaspr SSR on 8090.
-
-> There is deliberately **no `serve.ps1`**: PowerShell resolves a bare
-> `.\serve` to `serve.ps1` before it checks `serve.cmd`, and this machine's
-> `AllSigned` policy rejects the unsigned script. The PowerShell implementation
-> is named `serve.impl.ps1` so `.\serve` reaches the `.cmd` wrapper.
-
-The root-level `start-sitewise.ps1` is a convenience wrapper around the same
-script. To run the backend by itself:
-
-```powershell
-cd FYP\backend
-.\start-api.ps1
-```
-
-Open `http://localhost:8090/login`. For a production build:
-
-```powershell
-npm run build-auth --prefix tool
+cd C:\Users\Lenovo\AndroidStudioProjects\FYP\fyp_jaspr_web\tool
+npm install
+npm run gen-auth-config
+npm run build-auth
+cd ..
 jaspr build
-cd ..\..\
+```
+
+Start the app from the FYP project root:
+
+```powershell
+cd C:\Users\Lenovo\AndroidStudioProjects\FYP
 .\run-sitewise.cmd
 ```
 
-> The SSR flow above is DEPRECATED since the unified-server migration: Jaspr
-> now compiles in client mode and `run-sitewise.cmd` starts ONE FastAPI server
-> that serves both the compiled frontend (`build/jaspr`, including
-> `web/index.html`) and the REST API on :8090 — no `app.exe`, no proxy, no
-> second server. `serve.cmd` / `serve.impl.ps1` are retained only until the
-> unified flow is fully validated.
+`run-sitewise.cmd` launches `run-sitewise.ps1`, which starts **one** Uvicorn
+instance on `127.0.0.1:8090`. Legacy `fyp_jaspr_web/serve.cmd`,
+`serve.impl.ps1` and `backend/start-api.ps1` now delegate to that launcher.
+
+Verify **both** routes; a response that is merely HTTP 200 or HTML is not
+proof the API is up:
+
+```powershell
+Invoke-RestMethod http://127.0.0.1:8090/health
+Invoke-RestMethod http://127.0.0.1:8090/api/v1/health
+```
+
+Both should return JSON, and the database health endpoint should report
+`status: ok`. Open `http://127.0.0.1:8090/login`.
+
+For a USB-connected Android device, use `adb reverse tcp:8090 tcp:8090`
+and `API_BASE_URL=http://127.0.0.1:8090` on the device. The compiled mobile
+app must be rebuilt/restarted if its Dart defines change. An emulator without
+adb reverse can use `http://10.0.2.2:8090`.
+
+After modifying `tool/auth_client.js`, run `npm run build-auth` **from
+`fyp_jaspr_web/tool`**, then `jaspr build` from `fyp_jaspr_web`. A stale
+`auth_bundle.js` can keep displaying the old port-8000 message even when
+FastAPI is running properly.
 
 ## Property dataset
 

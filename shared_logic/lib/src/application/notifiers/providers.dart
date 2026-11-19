@@ -4,6 +4,7 @@ import '../../domain/entities/app_role.dart';
 import '../../domain/entities/recommendation.dart';
 import '../../domain/repositories/admin_repositories.dart';
 import '../../domain/repositories/explore_repository.dart';
+import '../../domain/repositories/property_compare_repository.dart';
 import '../../domain/repositories/property_verification_repository.dart';
 import '../../domain/repositories/recommendation_search_repository.dart';
 import '../../domain/repositories/saved_properties_repository.dart';
@@ -86,6 +87,11 @@ final savedPropertiesRepositoryProvider = Provider<SavedPropertiesRepository?>(
 /// of the endpoint is that the server owns filtering, ordering and paging.
 final recommendationSearchRepositoryProvider =
     Provider<RecommendationSearchRepository?>((ref) => null);
+
+/// Optional direct-comparison backend (`POST /api/v1/compare`).
+/// Null means the platform has no live comparison service.
+final propertyCompareRepositoryProvider =
+    Provider<PropertyCompareRepository?>((ref) => null);
 
 /// Write-back hook fired when the entrepreneur updates their preferences.
 /// The composition root decides where preferences persist (local file on

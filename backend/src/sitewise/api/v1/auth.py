@@ -221,9 +221,21 @@ def register_entrepreneur(
         full_name=name,
         account_purpose=purpose,
     )
+    # Write the authoritative Supabase identity row with trusted, fixed
+    # values. The unauthenticated caller cannot influence role or status;
+    # user_metadata remains display/onboarding information only.
+    upsert = getattr(admin, "upsert_identity_profile", None)
+    if callable(upsert):
+        upsert(
+            user_id=created["id"],
+            email=email,
+            full_name=name,
+            role=rbac.ROLE_ENTREPRENEUR,
+            account_status=rbac.STATUS_ACTIVE,
+        )
     # No local profile is written from an unauthenticated request. The first
-    # verified ``/auth/me`` creates it exactly once, keyed by this Supabase
-    # UUID, with role=entrepreneur and account_status=active.
+    # verified ``/auth/me`` reconciles the local mirror from the authoritative
+    # Supabase row, keyed by this Supabase UUID.
     return {
         "registered": True,
         "user_id": created["id"],

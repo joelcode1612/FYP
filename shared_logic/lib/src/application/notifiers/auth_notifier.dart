@@ -1,6 +1,7 @@
 import 'package:riverpod/riverpod.dart';
 
 import '../../core/errors/app_failure.dart';
+import '../../domain/entities/app_role.dart';
 import '../../domain/entities/user.dart';
 import '../../domain/repositories/auth_repository.dart';
 import '../services/auth_service.dart';
@@ -117,6 +118,34 @@ class AuthNotifier extends Notifier<AuthState> {
       );
     } finally {
       _starting = false;
+    }
+  }
+
+  /// Refresh a real Supabase `aal2` session AFTER a completed authenticator
+  /// challenge, without briefly publishing `initializing`. Publishing that
+  /// state from the MFA screen would unmount the guarded MFA route mid-await.
+  /// The verified backend profile, not a client flag, updates assurance.
+  Future<bool> refreshVerifiedSessionAfterMfa() async {
+    if (_starting || _busy || !state.isAuthenticated) return false;
+    final previous = state.user!;
+    if (previous.role != AppRole.owner && previous.role != AppRole.agent) {
+      return false;
+    }
+    try {
+      final updated = await _auth.currentUser();
+      if (!ref.mounted ||
+          updated == null ||
+          updated.id != previous.id ||
+          updated.role != previous.role ||
+          !updated.hasStaffAssurance) {
+        return false;
+      }
+      _hadAuthenticatedSession = true;
+      state = AuthState(status: AuthStatus.authenticated, user: updated);
+      return true;
+    } catch (_) {
+      // Keep the existing aal1 state and the MFA screen; no Provider access.
+      return false;
     }
   }
 

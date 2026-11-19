@@ -11,13 +11,13 @@ import 'package:fyp/features/virtual_tour/domain/math/vectors.dart';
 /// The 26 spherical capture directions of the VIO sphere specification.
 ///
 /// The layout is fixed by [VioSphereConstants] and is **not** adapted to
-/// anything: 8 horizontal at 0° every 45°, 8 upper at +45° every 45°, 8 lower
-/// at −45° every 45°, one zenith at +90°, one nadir at −90°.
+/// anything: 8 horizontal at 0° every 45°, 8 upper at +40° every 45°, 8 lower
+/// at −40° every 45°, one zenith at +90°, one nadir at −90°.
 ///
 /// ```
 /// index  0 –  7   Horizontal   elevation   0°   azimuth  0° … 315°
-/// index  8 – 15   Upper        elevation +45°   azimuth  0° … 315°
-/// index 16 – 23   Lower        elevation −45°   azimuth  0° … 315°
+/// index  8 – 15   Upper        elevation +40°   azimuth  0° … 315°
+/// index 16 – 23   Lower        elevation −40°   azimuth  0° … 315°
 /// index 24        Zenith       elevation +90°
 /// index 25        Nadir        elevation −90°
 /// ```

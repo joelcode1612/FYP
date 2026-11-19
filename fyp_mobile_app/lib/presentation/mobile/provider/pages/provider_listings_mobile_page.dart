@@ -2,11 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_logic/shared_logic.dart';
 
+import '../../../../application/services/service_locator.dart';
 import '../../../../core/theme/sitewise_m3.dart';
 import '../../../../core/theme/sitewise_theme.dart';
+import '../shell/provider_tab_scope.dart';
 import 'provider_models.dart';
 import 'provider_ui.dart';
-import 'provider_workspace_service.dart';
 
 /// My Listings — every record the signed-in provider may manage.
 ///
@@ -22,23 +23,17 @@ import 'provider_workspace_service.dart';
 ///
 /// Performance honesty: SiteWise does not track views or saves (the backend
 /// reports engagement `tracked: false`), so those slots show an explicit
-/// unavailable state instead of a fabricated number. Enquiries are real
-/// server rows grouped by property — and only when the fetch returned the
-/// whole inbox (`returned == total`); a truncated inbox reports unavailable
-/// rather than an undercount.
+/// unavailable state instead of a fabricated number. The Enquiries metric was
+/// removed with the Enquiries feature.
 class ProviderListingsMobilePage extends ConsumerStatefulWidget {
   const ProviderListingsMobilePage({
     super.key,
     @visibleForTesting this.loadOverride,
-    @visibleForTesting this.enquiriesOverride,
   });
 
   /// Test seam: replaces [ProviderListingsService.load] so a widget test can
   /// exercise the UI against fixture rows without faking the transport.
   final Future<ProviderWorkspace> Function(AppRole role)? loadOverride;
-
-  /// Test seam: replaces the per-property enquiry grouping.
-  final Future<Map<int, int>> Function()? enquiriesOverride;
 
   @override
   ConsumerState<ProviderListingsMobilePage> createState() =>
@@ -49,11 +44,6 @@ class _ProviderListingsMobilePageState
     extends ConsumerState<ProviderListingsMobilePage> {
   Future<ProviderWorkspace>? _future;
 
-  /// Per-property enquiry counts, or `null` when the counts cannot be trusted
-  /// (failed fetch or a truncated inbox). Distinct from the listings future so
-  /// a metrics hiccup never hides the listings themselves.
-  Future<Map<int, int>?>? _enquiryCounts;
-
   /// The selected status chip. Kept as the enum, not a label, so renaming a
   /// chip cannot change which rows are shown.
   ProviderListingsFilter _filter = ProviderListingsFilter.all;
@@ -63,50 +53,44 @@ class _ProviderListingsMobilePageState
   void initState() {
     super.initState();
     _load();
+    // The Add Property repository bumps this only after a real draft/photo
+    // mutation, so returning to an unchanged list never refetches it.
+    ServiceLocator.listingsRevision.addListener(_reloadOnMutation);
   }
 
   @override
   void dispose() {
+    ServiceLocator.listingsRevision.removeListener(_reloadOnMutation);
     _search.dispose();
     super.dispose();
   }
 
-  Future<Map<int, int>?> _loadEnquiryCounts() async {
-    if (widget.enquiriesOverride != null) {
-      return widget.enquiriesOverride!();
-    }
-    // Asking for more rows than the inbox default; the completeness check
-    // against `metrics.total` below decides whether the grouping is exact.
-    final response = await ProviderWorkspaceService.enquiries(limit: 200);
-    if (response.enquiries.length < response.metrics.total) {
-      return null; // truncated: grouping would undercount some properties
-    }
-    final counts = <int, int>{};
-    for (final enquiry in response.enquiries) {
-      counts[enquiry.propertyId] = (counts[enquiry.propertyId] ?? 0) + 1;
-    }
-    return counts;
+  void _reloadOnMutation() {
+    if (mounted) _load();
   }
 
   Future<void> _load() async {
     final role = ref.read(authNotifierProvider).user?.role ?? AppRole.owner;
     final request = (widget.loadOverride ?? ProviderListingsService.load)(role);
-    final counts = _loadEnquiryCounts();
     if (!mounted) return;
     // Block bodies are required: an arrow-bodied assignment returns the
     // Future itself, and Flutter's setState rejects that with a red screen.
     setState(() {
       _future = request;
-      _enquiryCounts = counts;
     });
     await settleRefresh(request);
-    await settleRefresh(counts);
   }
 
   void _open(String route, {Object? arguments}) {
-    Navigator.of(context).pushNamed(route, arguments: arguments).then((_) {
-      if (mounted) _load();
-    });
+    final scope = ProviderTabScope.maybeOf(context);
+    if (scope != null && scope.handlesRoute(route)) {
+      scope.go(route, arguments: arguments);
+      return;
+    }
+    // Returning from a detail view must not refetch an unchanged list. A real
+    // draft/photo/status mutation bumps `listingsRevision` and reloads via the
+    // listener registered in initState.
+    Navigator.of(context).pushNamed(route, arguments: arguments);
   }
 
   void _openDetail(ProviderListing listing) =>
@@ -166,7 +150,6 @@ class _ProviderListingsMobilePageState
             role: role,
             filter: _filter,
             query: _search.text,
-            enquiryCounts: _enquiryCounts,
             onFilterChanged: (filter) => setState(() => _filter = filter),
             onSearchChanged: (text) => setState(() {}),
             onRetry: _load,
@@ -187,7 +170,6 @@ class _PageBody extends StatelessWidget {
     required this.role,
     required this.filter,
     required this.query,
-    required this.enquiryCounts,
     required this.onFilterChanged,
     required this.onSearchChanged,
     required this.onRetry,
@@ -201,7 +183,6 @@ class _PageBody extends StatelessWidget {
   final AppRole? role;
   final ProviderListingsFilter filter;
   final String query;
-  final Future<Map<int, int>?>? enquiryCounts;
   final ValueChanged<ProviderListingsFilter> onFilterChanged;
   final ValueChanged<String> onSearchChanged;
   final VoidCallback onRetry;
@@ -246,25 +227,23 @@ class _PageBody extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: providerGutter),
             child: _EmptyState(filter: filter, query: query, onRetry: onRetry),
           )
-        else
-          ...[
-            for (final listing in visible)
-              Padding(
-                padding: const EdgeInsets.fromLTRB(
-                  providerGutter,
-                  6,
-                  providerGutter,
-                  6,
-                ),
-                child: ProviderListingCard(
-                  listing: listing,
-                  isAgentSession: isAgent,
-                  enquiryCounts: enquiryCounts,
-                  onOpen: () => onOpenDetail(listing),
-                  onEdit: () => onOpenEditor(listing),
-                ),
+        else ...[
+          for (final listing in visible)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                providerGutter,
+                6,
+                providerGutter,
+                6,
               ),
-          ],
+              child: ProviderListingCard(
+                listing: listing,
+                isAgentSession: isAgent,
+                onOpen: () => onOpenDetail(listing),
+                onEdit: () => onOpenEditor(listing),
+              ),
+            ),
+        ],
       ],
     );
   }
@@ -275,8 +254,8 @@ class _PageBody extends StatelessWidget {
 /// Very light blue → white, with two soft decorative circles kept inside a
 /// clipped stack so they can never cause horizontal overflow.
 ///
-/// The Add Property action lives here, on the ONE listing screen both roles
-/// share, because the agent dock has no Add slot of its own. It is rendered
+/// The Add Property action lives here too, so the ONE listing screen both roles
+/// share is self-sufficient whichever tab it was opened from. It renders
 /// identically for an owner and an agent: both push the same existing
 /// `/provider/add-property` form, so no role gets its own create screen.
 class _HeaderBanner extends StatelessWidget {
@@ -325,7 +304,12 @@ class _HeaderBanner extends StatelessWidget {
                 ),
               ),
               Padding(
-                padding: const EdgeInsets.fromLTRB(providerGutter, 18, providerGutter, 14),
+                padding: const EdgeInsets.fromLTRB(
+                  providerGutter,
+                  18,
+                  providerGutter,
+                  14,
+                ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -584,7 +568,10 @@ class _SearchField extends StatelessWidget {
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(16),
-          borderSide: const BorderSide(color: SitewiseColors.action, width: 1.4),
+          borderSide: const BorderSide(
+            color: SitewiseColors.action,
+            width: 1.4,
+          ),
         ),
         suffixIcon: ValueListenableBuilder<TextEditingValue>(
           valueListenable: controller,
@@ -736,7 +723,13 @@ class _EmptyState extends StatelessWidget {
         Icons.filter_list_rounded,
       ),
     };
-    return ProviderMessage(icon: icon, title: title, body: body, onRetry: onRetry, retryLabel: 'Refresh');
+    return ProviderMessage(
+      icon: icon,
+      title: title,
+      body: body,
+      onRetry: onRetry,
+      retryLabel: 'Refresh',
+    );
   }
 }
 
@@ -746,16 +739,12 @@ class ProviderListingCard extends StatelessWidget {
     super.key,
     required this.listing,
     required this.isAgentSession,
-    required this.enquiryCounts,
     required this.onOpen,
     required this.onEdit,
   });
 
   final ProviderListing listing;
   final bool isAgentSession;
-
-  /// Future of per-property enquiry counts, or null when unavailable.
-  final Future<Map<int, int>?>? enquiryCounts;
   final VoidCallback onOpen;
   final VoidCallback onEdit;
 
@@ -801,10 +790,7 @@ class ProviderListingCard extends StatelessWidget {
                 children: [
                   _TopSection(listing: listing),
                   const SizedBox(height: 12),
-                  _MetricsRow(
-                    listing: listing,
-                    enquiryCounts: enquiryCounts,
-                  ),
+                  _MetricsRow(listing: listing),
                   const SizedBox(height: 12),
                   _ActionsRow(
                     canEdit: canEdit,
@@ -1001,13 +987,12 @@ class _Thumbnail extends StatelessWidget {
             : Image.network(
                 url,
                 fit: BoxFit.cover,
-                errorBuilder: (_, _, _) => _placeholder(Icons.broken_image_outlined),
+                errorBuilder: (_, _, _) =>
+                    _placeholder(Icons.broken_image_outlined),
                 // A thumbnail loads eagerly but small; keep the frame filled
                 // while the network answers so the card never jumps.
                 frameBuilder: (context, child, frame, wasSync) =>
-                    wasSync || (frame ?? 0) > 0
-                    ? child
-                    : _placeholder(null),
+                    wasSync || (frame ?? 0) > 0 ? child : _placeholder(null),
               ),
       ),
     );
@@ -1091,17 +1076,16 @@ class _StatusBadge extends StatelessWidget {
   }
 }
 
-/// Views / Enquiries / Saved, plus the management attribution.
+/// Views / Saved, plus the management attribution.
 ///
 /// Views and saves are NOT tracked by this backend (`engagement.tracked` is
 /// false and no event store exists), so those slots render an explicit
-/// unavailable state instead of a fabricated count. Enquiries show the real
-/// per-property count only when the inbox fetch returned every row.
+/// unavailable state instead of a fabricated count. The Enquiries slot was
+/// removed with the Enquiries feature.
 class _MetricsRow extends StatelessWidget {
-  const _MetricsRow({required this.listing, required this.enquiryCounts});
+  const _MetricsRow({required this.listing});
 
   final ProviderListing listing;
-  final Future<Map<int, int>?>? enquiryCounts;
 
   @override
   Widget build(BuildContext context) {
@@ -1121,25 +1105,6 @@ class _MetricsRow extends StatelessWidget {
               value: null,
               label: 'Views',
               unavailableReason: 'Views are not tracked by SiteWise yet',
-            ),
-          ),
-          const _MetricDivider(),
-          Expanded(
-            child: FutureBuilder<Map<int, int>?>(
-              future: enquiryCounts,
-              builder: (context, snapshot) {
-                final counts = snapshot.data;
-                final value = counts?[listing.id];
-                return _Metric(
-                  icon: Icons.chat_bubble_outline_rounded,
-                  value: value,
-                  label: 'Enquiries',
-                  unavailableReason: snapshot.connectionState !=
-                          ConnectionState.done
-                      ? 'Enquiry count is loading'
-                      : 'Enquiry count is unavailable right now',
-                );
-              },
             ),
           ),
           const _MetricDivider(),
@@ -1179,11 +1144,17 @@ class _Metric extends StatelessWidget {
   Widget build(BuildContext context) {
     final known = value != null;
     return Semantics(
-      label: known ? '$label: $value' : '$label: unavailable — $unavailableReason',
+      label: known
+          ? '$label: $value'
+          : '$label: unavailable — $unavailableReason',
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(icon, size: 15, color: known ? SitewiseM3.ink : SitewiseM3.muted),
+          Icon(
+            icon,
+            size: 15,
+            color: known ? SitewiseM3.ink : SitewiseM3.muted,
+          ),
           const SizedBox(width: 6),
           Text(
             known ? '$value' : '—',
@@ -1243,7 +1214,11 @@ class _ManagementBlock extends StatelessWidget {
         Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.person_outline_rounded, size: 13, color: SitewiseColors.action),
+            const Icon(
+              Icons.person_outline_rounded,
+              size: 13,
+              color: SitewiseColors.action,
+            ),
             const SizedBox(width: 4),
             Flexible(
               child: Container(
@@ -1343,11 +1318,11 @@ class _ActionsRow extends StatelessWidget {
               label: const Text('Edit'),
               style: OutlinedButton.styleFrom(
                 foregroundColor: SitewiseColors.action,
-                disabledForegroundColor: SitewiseM3.muted.withValues(alpha: 0.6),
+                disabledForegroundColor: SitewiseM3.muted.withValues(
+                  alpha: 0.6,
+                ),
                 side: BorderSide(
-                  color: canEdit
-                      ? SitewiseColors.action
-                      : SitewiseM3.line,
+                  color: canEdit ? SitewiseColors.action : SitewiseM3.line,
                 ),
                 minimumSize: const Size.fromHeight(44),
                 shape: RoundedRectangleBorder(

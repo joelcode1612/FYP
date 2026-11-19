@@ -8,10 +8,10 @@ library;
 
 import 'dart:io' show Platform;
 
-/// Origin of the intended backend (`FYP/backend`, uvicorn on port 8000).
+/// Legacy SSR-only reference; the active client build uses same-origin FastAPI :8090.
 ///
 /// Used by two server-side consumers:
-///  * the same-origin `/api/*` proxy installed in `main.server.dart`, and
+///  * the retired `/api/*` proxy in `main.server.dart` (not a production path), and
 ///  * the SSR HTTP client in `auth_stub.dart` that replays the request's bearer
 ///    token when a page is rendered on the server.
 ///
@@ -19,10 +19,10 @@ import 'dart:io' show Platform;
 /// value is NEVER embedded in a browser asset — the browser talks to this
 /// server, which proxies to the backend.
 final Uri kBackendApiBase = Uri.parse(
-  Platform.environment['SITEWISE_API_BASE'] ?? 'http://127.0.0.1:8000',
+  Platform.environment['SITEWISE_API_BASE'] ?? 'http://127.0.0.1:8090',
 );
 
-/// Public API base the browser should use, emitted as `<meta name="sitewise-api">`.
+/// Legacy SSR-only public base. Active client output uses web/index.html's meta tag.
 ///
 /// Empty (the default) means **same-origin**: the browser requests `/api/v1/...`
 /// on the Jaspr server and the server-side proxy forwards it. No host or port is

@@ -4,64 +4,18 @@ import '../../../../application/services/service_locator.dart';
 import 'provider_models.dart';
 
 /// Transport for the shared Provider workspace surfaces that are NOT listing
-/// reads: the enquiry inbox, the performance report and account verification.
+/// reads: the performance report and account verification.
 ///
-/// All three answer the SAME question on the server — "which properties may
-/// this account manage" — resolved from ownership or assignment, so nothing
-/// here filters by role or agent id on the client. An owner and an agent call
+/// Both answer the SAME question on the server — "which properties may this
+/// account manage" — resolved from ownership or assignment, so nothing here
+/// filters by role or agent id on the client. An owner and an agent call
 /// identical endpoints; the server decides what comes back.
+///
+/// The Enquiries transport was removed with the feature: the mobile Provider
+/// workspace no longer reads or displays an enquiry inbox. The backend
+/// endpoints and stored records are untouched.
 abstract final class ProviderWorkspaceService {
-  /// Enquiries received for the listings this account manages.
-  ///
-  /// [status] filters server-side; passing null returns every state. [limit]
-  /// caps the rows so a caller that groups by property can ask for more than
-  /// the inbox default — it must compare `metrics.total` against the returned
-  /// row count to know whether the grouping saw the whole inbox.
-  static Future<({List<ProviderEnquiry> enquiries, ProviderEnquiryMetrics metrics})>
-  enquiries({ProviderEnquiryStatus? status, int limit = 100}) async {
-    final response = await ServiceLocator.apiClient.get(
-      '/api/v1/provider/enquiries',
-      query: {
-        if (status != null && status.isSettable) 'status': status.wire,
-        'limit': '$limit',
-      },
-    );
-    return (
-      enquiries: [
-        for (final row in (response['data'] as List? ?? const [])
-            .whereType<Map<String, dynamic>>())
-          ProviderEnquiry.fromJson(row),
-      ],
-      metrics: ProviderEnquiryMetrics.fromJson(
-        response['meta'] as Map<String, dynamic>? ?? const {},
-      ),
-    );
-  }
-
-  /// Move one enquiry forward. Returns the server's own updated row so the
-  /// screen never predicts the new state.
-  static Future<ProviderEnquiry> updateEnquiry({
-    required int enquiryId,
-    required ProviderEnquiryStatus status,
-    String? reply,
-  }) async {
-    final response = await ServiceLocator.apiClient.patch(
-      '/api/v1/provider/enquiries/${enquiryId.toInt()}',
-      {
-        'status': status.wire,
-        if (reply != null && reply.trim().isNotEmpty) 'reply': reply.trim(),
-      },
-    );
-    final row = response['data'];
-    if (row is! Map<String, dynamic>) {
-      throw const ResponseFormatFailure(
-        'The server did not return the updated enquiry.',
-      );
-    }
-    return ProviderEnquiry.fromJson(row);
-  }
-
-  /// Listing and enquiry figures over the managed properties.
+  /// Listing figures over the managed properties.
   static Future<ProviderPerformance> performance() async {
     final response = await ServiceLocator.apiClient.get(
       '/api/v1/provider/performance',

@@ -192,10 +192,26 @@ void main() {
       expect(nav?.arguments, isNull);
     });
 
-    test('a property owner is not asked for agent-specific MFA', () {
+    test('a property owner must finish MFA before Provider workspace', () {
       final owner = user(AppRole.owner, aal: 'aal1');
+      expect(requiresStaffMfa(owner), isTrue);
+      expect(authLandingRouteFor(owner), '/provider/mfa');
+      final nav = postAuthNavigation(owner);
+      expect(nav?.route, '/provider/mfa');
+      expect(nav?.arguments, isA<MfaEntryRequest>());
+      expect((nav!.arguments! as MfaEntryRequest).destination, '/provider');
+    });
+
+    test('an owner with verified aal2 enters Provider without MFA loop', () {
+      final owner = user(AppRole.owner, aal: 'aal2');
       expect(requiresStaffMfa(owner), isFalse);
       expect(authLandingRouteFor(owner), '/provider');
+      expect(postAuthNavigation(owner)?.route, '/provider');
+      expect(postAuthNavigation(owner)?.arguments, isNull);
+    });
+
+    test('unknown owner assurance requires MFA', () {
+      expect(requiresStaffMfa(user(AppRole.owner)), isTrue);
     });
 
     test('an agent with aal1 must complete MFA before the dashboard', () {
@@ -229,11 +245,11 @@ void main() {
     });
 
     test('an allowed deep link survives sign-in; a foreign one does not', () {
-      AuthPendingDestination.save('/provider/enquiries', null);
+      AuthPendingDestination.save('/provider/listings', null);
       final nav = postAuthNavigation(user(AppRole.agent, aal: 'aal1'));
       expect(
         (nav!.arguments! as MfaEntryRequest).destination,
-        '/provider/enquiries',
+        '/provider/listings',
       );
       // Consumed exactly once.
       expect(
@@ -241,10 +257,10 @@ void main() {
         '/provider',
       );
 
-      AuthPendingDestination.save('/provider/listings', null);
+      AuthPendingDestination.save('/entrepreneur/favourites', null);
       expect(
         postAuthNavigation(user(AppRole.entrepreneur))?.route,
-        '/entrepreneur',
+        '/entrepreneur/favourites',
       );
     });
 

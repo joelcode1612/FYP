@@ -140,6 +140,33 @@ class SiteWiseCaptureRepository implements CaptureRepository {
     onProgress?.call(existing.length);
   }
 
+  /// Forget one target: its record and its JPEG go, everything else stays.
+  ///
+  /// The controller rebuilds its target list from `records.json`, so a cleared
+  /// target reads as pending on the next resume and the shutter revisits it.
+  /// Only the named photograph is deleted, which is what keeps a retake from
+  /// turning into a full recapture.
+  Future<void> clearRecord(String stationId, int targetId) async {
+    final stored = await loadRecords(stationId);
+    final remaining = List<CaptureRecord>.of(stored)
+      ..removeWhere((CaptureRecord r) => r.targetId == targetId);
+    if (remaining.length == stored.length) return;
+    // The removed record carries the path its JPEG was actually written to,
+    // which is stronger than re-deriving it from the file-name convention.
+    for (final CaptureRecord removed in stored.where(
+      (CaptureRecord r) => r.targetId == targetId,
+    )) {
+      await frameStore.deleteFrame(removed.imagePath);
+    }
+    final file = File(p.join(await _stationDir(stationId), 'records.json'));
+    await file.writeAsString(
+      jsonEncode(remaining.map((CaptureRecord r) => r.toJson()).toList()),
+      flush: true,
+    );
+    await _writeManifest(stationId, remaining);
+    onProgress?.call(remaining.length);
+  }
+
   Future<void> _writeManifest(
     String stationId,
     List<CaptureRecord> records,

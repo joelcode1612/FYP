@@ -81,7 +81,7 @@ def managed_property_ids(
         if agent_id is not None:
             assigned = session.execute(
                 text(
-                    "SELECT listing_id FROM agent_listing_assignment "
+                    "SELECT listing_id FROM public.agent_listing_assignment "
                     "WHERE agent_id = :aid"
                 ),
                 {"aid": agent_id},

@@ -35,6 +35,7 @@ from sitewise.db.models.property_verification import (
     can_resubmit,
 )
 from sitewise.repositories.fyp_property_repository import FypPropertyRepository
+from sitewise.services import provider_scope
 from sitewise.services import verification_storage as storage
 
 DECISIONABLE = ("pending", "under_review")
@@ -242,22 +243,53 @@ class PropertyVerificationService:
     # -- lookups ------------------------------------------------------------
 
     def get_property_owned(
-        self, property_id: int, user_id: uuid.UUID, is_admin: bool = False
+        self,
+        property_id: int,
+        user_id: uuid.UUID,
+        is_admin: bool = False,
+        role: str | None = None,
     ) -> dict[str, Any]:
-        """The owner's rental listing, ownership checked against the verified
-        Supabase identity (``fyp.rental_properties.owner_user_id``)."""
+        """The submitter's rental listing, access checked against the verified
+        Supabase identity (``fyp.rental_properties.owner_user_id``) or the
+        ``public.agent_listing_assignment`` row.
+
+        Agent-created listings carry ``owner_user_id = NULL`` — the creating
+        agent is recorded ONLY through the assignment row. Restricting this
+        lookup to literal ownership locked those listings out of the entire
+        verification workflow (the agent could not submit, document or track
+        its own proposal), so the assigned agent holds the same submitter
+        rights here. An agent with no assignment manages nothing.
+        """
         listing = rental_listing(self.session, property_id)
         if listing is None:
             raise NotFoundError("Property not found")
+        if is_admin:
+            return listing
         owner = listing.get("owner_user_id")
-        if not is_admin and (owner is None or str(owner) != str(user_id)):
-            raise ForbiddenError("You can only manage your own property listings.")
-        return listing
+        if owner is not None and str(owner) == str(user_id):
+            return listing
+        if provider_scope.is_agent_role(role):
+            agent_id = provider_scope.agent_id_for_user(user_id)
+            if agent_id is not None:
+                assigned = self.session.execute(
+                    text(
+                        "SELECT 1 FROM public.agent_listing_assignment "
+                        "WHERE listing_id = :lid AND agent_id = :aid"
+                    ),
+                    {"lid": property_id, "aid": agent_id},
+                ).first()
+                if assigned is not None:
+                    return listing
+        raise ForbiddenError("You can only manage your own property listings.")
 
     def status_for_property(
-        self, property_id: int, user_id: uuid.UUID, is_admin: bool = False
+        self,
+        property_id: int,
+        user_id: uuid.UUID,
+        is_admin: bool = False,
+        role: str | None = None,
     ) -> dict[str, Any]:
-        listing = self.get_property_owned(property_id, user_id, is_admin)
+        listing = self.get_property_owned(property_id, user_id, is_admin, role)
         verification = verification_row(self.session, property_id)
         documents = self._document_rows(property_id) if verification else []
         corrections = self._requested_corrections(property_id, verification) if verification else {}
@@ -289,7 +321,11 @@ class PropertyVerificationService:
     # -- mutations ----------------------------------------------------------
 
     def submit(
-        self, property_id: int, submitter_id: uuid.UUID, scope: str = "full"
+        self,
+        property_id: int,
+        submitter_id: uuid.UUID,
+        scope: str = "full",
+        role: str | None = None,
     ) -> dict[str, Any]:
         """Submit (or resubmit) the property for review.
 
@@ -306,12 +342,13 @@ class PropertyVerificationService:
           this path, and publication eligibility stays ``false`` — approving
           the listing later never publishes the property.
 
-        Completeness and server-side address validation apply to BOTH scopes:
-        an incomplete or unconfirmed listing cannot enter the queue either way.
+        Completeness applies to both scopes. Google address validation is
+        no longer a submission prerequisite; administrators review the entered
+        address and available location evidence.
         """
         if scope not in ("full", "listing"):
             raise ConflictError("scope must be 'full' or 'listing'.")
-        listing = self.get_property_owned(property_id, submitter_id)
+        listing = self.get_property_owned(property_id, submitter_id, role=role)
 
         # An incomplete draft can be SAVED but never SUBMITTED: every field
         # the admin review needs must exist before the queue is entered.
@@ -409,8 +446,9 @@ class PropertyVerificationService:
         original_filename: str,
         content_type: str,
         data: bytes,
+        role: str | None = None,
     ) -> VerificationDocument:
-        self.get_property_owned(property_id, uploader_id)
+        self.get_property_owned(property_id, uploader_id, role=role)
         if verification_type not in ("listing", "ownership"):
             raise ConflictError("verification_type must be 'listing' or 'ownership'.")
         if not (document_type or "").strip():
@@ -651,7 +689,8 @@ class AdminPropertyReviewService:
             owner = (
                 self.session.execute(
                     text(
-                        "SELECT u.user_id, u.full_name, u.email FROM users u "
+                        "SELECT u.user_id, u.full_name, u.email "
+                        "FROM public.users u "
                         "WHERE u.user_id = :uid"
                     ),
                     {"uid": owner_id},

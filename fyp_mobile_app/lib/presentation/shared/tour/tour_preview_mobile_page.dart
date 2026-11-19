@@ -2,10 +2,12 @@ import 'package:shared_logic/shared_logic.dart';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
-import 'package:panorama_viewer/panorama_viewer.dart';
+import '../../mobile/widgets/mobile_swipe_panorama.dart';
 
 import '../../../core/theme/sitewise_theme.dart';
 import '../../../core/utils/pano_bytes.dart';
+import '../../../features/capture/presentation/widgets/stitching_results_panel.dart';
+import '../../../features/virtual_tour/presentation/capture_theme.dart';
 import '../viewmodels/tour_preview_viewmodel.dart';
 import '../widgets/sitewise_button.dart';
 import '../widgets/sitewise_confirm_dialog.dart';
@@ -15,8 +17,10 @@ import '../widgets/sitewise_secondary_button.dart';
 import '../../mobile/shell/mobile_app_shell.dart';
 import 'ar_capture_mobile_page.dart';
 
-/// Mobile tour preview: real 360° panorama, 26-frame grid with retake,
-/// regenerate, submit and delete. The capture screen resumes for retakes.
+/// Mobile tour preview: real 360° panorama, per-target frame grid with
+/// retake, regenerate, submit and delete. The capture screen resumes for
+/// retakes. The grid follows the tour's capture engine — 38 directions for
+/// the sphere flow, the legacy 26-point layout for tours captured before it.
 
 class TourPreviewMobilePage extends StatefulWidget {
   final String tourId;
@@ -83,23 +87,10 @@ class _TourPreviewMobilePageState extends State<TourPreviewMobilePage> {
                   children: [
                     _header(vm.tour!),
                     const SizedBox(height: 12),
+                    _completenessCard(),
+                    const SizedBox(height: 12),
                     _panorama(vm.tour!),
                     const SizedBox(height: 12),
-                    Text(
-                      'Frames (${vm.frames.length}/26)',
-                      style: const TextStyle(fontWeight: FontWeight.w700),
-                    ),
-                    const SizedBox(height: 8),
-                    _frameGrid(),
-                    const SizedBox(height: 12),
-                    if (vm.error != null)
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 8),
-                        child: Text(
-                          vm.error!,
-                          style: const TextStyle(color: SitewiseColors.danger),
-                        ),
-                      ),
                     if (vm.generating)
                       Padding(
                         padding: const EdgeInsets.only(bottom: 8),
@@ -115,8 +106,19 @@ class _TourPreviewMobilePageState extends State<TourPreviewMobilePage> {
                           ],
                         ),
                       ),
+                    if (vm.error != null)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: Text(
+                          vm.error!,
+                          style: const TextStyle(color: SitewiseColors.danger),
+                        ),
+                      ),
+                    _uploadCard(),
                     SitewiseSecondaryButton(
-                      label: 'Regenerate panorama',
+                      label: vm.hasPanorama
+                          ? 'Regenerate panorama'
+                          : 'Generate panorama',
                       icon: Icons.auto_awesome,
                       onPressed: vm.generating
                           ? null
@@ -125,7 +127,18 @@ class _TourPreviewMobilePageState extends State<TourPreviewMobilePage> {
                               vm.regenerate();
                             },
                     ),
+                    const SizedBox(height: 12),
+                    if (vm.stitchService != null) ...[
+                      _stitchingSection(),
+                      const SizedBox(height: 12),
+                    ],
+                    Text(
+                      'Photographs (${vm.frames.length}/${vm.specs.length})',
+                      style: const TextStyle(fontWeight: FontWeight.w700),
+                    ),
                     const SizedBox(height: 8),
+                    _frameGrid(),
+                    const SizedBox(height: 12),
                     if (vm.tour!.status == VirtualTourStatus.ready ||
                         vm.tour!.status == VirtualTourStatus.draft)
                       SitewiseButton(
@@ -264,22 +277,17 @@ class _TourPreviewMobilePageState extends State<TourPreviewMobilePage> {
                 ),
               );
             }
-            return PanoramaViewer(child: Image.memory(bytes));
+            return MobileSwipePanorama(bytes: bytes);
           },
         ),
       ),
     );
   }
 
+  /// Every capture direction the station was built from, in shutter order. A
+  /// target without a saved photograph is drawn as its own empty slot, so an
+  /// incomplete sphere is visible rather than merely a shorter list.
   Widget _frameGrid() {
-    if (vm.frames.isEmpty) {
-      return const Card(
-        child: Padding(
-          padding: EdgeInsets.all(16),
-          child: Text('No frames stored yet.'),
-        ),
-      );
-    }
     final status = vm.tour?.status;
     // A tour awaiting review or already approved is not silently editable.
     final canRetake =
@@ -295,54 +303,52 @@ class _TourPreviewMobilePageState extends State<TourPreviewMobilePage> {
         mainAxisSpacing: 8,
         childAspectRatio: 0.8,
       ),
-      itemCount: vm.frames.length,
+      itemCount: vm.specs.length,
       itemBuilder: (c, i) {
-        final f = vm.frames[i];
-        // The grid is ordered by capture sequence, but a missing frame file
-        // drops out of the manifest, so the position in this list is not the
-        // sequence index. Resolve it from the rig definition instead.
-        final sequenceIndex = CaptureTargetDataSource.targets.indexWhere(
-          (t) => t.frameIndex == f.frameIndex,
-        );
+        final spec = vm.specs[i];
+        final frame = vm.frameFor(spec.targetId);
         return Card(
           clipBehavior: Clip.antiAlias,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Expanded(
-                child: FutureBuilder<Uint8List?>(
-                  future: _bytesFor(f.imagePath),
-                  builder: (cc, snap) {
-                    if (snap.connectionState != ConnectionState.done) {
-                      return const Icon(Icons.image_outlined);
-                    }
-                    final bytes = snap.data;
-                    if (bytes == null) {
-                      return const Icon(
-                        Icons.image_not_supported_outlined,
+                child: frame == null
+                    ? const Icon(
+                        Icons.add_a_photo_outlined,
                         color: SitewiseColors.muted,
-                      );
-                    }
-                    return Image.memory(bytes, fit: BoxFit.cover);
-                  },
-                ),
+                      )
+                    : FutureBuilder<Uint8List?>(
+                        future: _bytesFor(frame.imagePath),
+                        builder: (cc, snap) {
+                          if (snap.connectionState != ConnectionState.done) {
+                            return const Icon(Icons.image_outlined);
+                          }
+                          final bytes = snap.data;
+                          if (bytes == null) {
+                            return const Icon(
+                              Icons.image_not_supported_outlined,
+                              color: SitewiseColors.muted,
+                            );
+                          }
+                          return Image.memory(bytes, fit: BoxFit.cover);
+                        },
+                      ),
               ),
               Padding(
-                padding: const EdgeInsets.all(6),
+                padding: const EdgeInsets.symmetric(horizontal: 6),
                 child: Text(
-                  '#${i + 1} ${f.targetName}',
+                  spec.label,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(fontSize: 11),
                 ),
               ),
-              if (canRetake && sequenceIndex >= 0)
+              if (canRetake && frame != null)
                 Padding(
                   padding: const EdgeInsets.only(bottom: 4),
                   child: TextButton.icon(
-                    onPressed: vm.generating
-                        ? null
-                        : () => _retake(sequenceIndex),
+                    onPressed: vm.generating ? null : () => _retake(spec.targetId),
                     icon: const Icon(Icons.replay_rounded, size: 14),
                     label: const Text('Retake', style: TextStyle(fontSize: 11)),
                     style: TextButton.styleFrom(
@@ -352,7 +358,9 @@ class _TourPreviewMobilePageState extends State<TourPreviewMobilePage> {
                       tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                     ),
                   ),
-                ),
+                )
+              else
+                const SizedBox(height: 32),
             ],
           ),
         );
@@ -360,13 +368,15 @@ class _TourPreviewMobilePageState extends State<TourPreviewMobilePage> {
     );
   }
 
-  /// Reopens the live capture session at [sequenceIndex] and hands over to the
-  /// capture screen, which resumes that exact session — the other 25 frames
-  /// are never discarded.
-  Future<void> _retake(int sequenceIndex) async {
+  /// Clears one target's photograph and reopens the live capture session.
+  ///
+  /// Only that record and that JPEG go; the controller rebuilds its target
+  /// list from the records on disk, so it resumes the same station and visits
+  /// the direction that is pending again. Nothing else is recaptured.
+  Future<void> _retake(int targetId) async {
     final tour = vm.tour;
     if (tour == null || vm.generating) return;
-    await vm.retakeFrame(sequenceIndex, tour.propertyId);
+    await vm.retakeTarget(targetId);
     _invalidateImageCaches();
     if (!mounted) return;
     Navigator.of(context).pushNamed(
@@ -374,6 +384,123 @@ class _TourPreviewMobilePageState extends State<TourPreviewMobilePage> {
       arguments: ArCaptureRequest(
         propertyId: tour.propertyId,
         title: tour.title,
+      ),
+    );
+  }
+
+  /// Reopens the session without deleting anything — the panel's way out when
+  /// a pair failed to register and the frame itself is fine.
+  Future<void> _resumeCapture() async {
+    final tour = vm.tour;
+    if (tour == null || vm.generating) return;
+    await Navigator.of(context).pushNamed(
+      '/owner/capture',
+      arguments: ArCaptureRequest(propertyId: tour.propertyId, title: tour.title),
+    );
+  }
+
+  /// Says how much of the sphere exists on this device and which directions
+  /// are missing. The panorama is stitched from exactly these photographs, so
+  /// an incomplete set is stated, not hidden behind a generic error.
+  Widget _completenessCard() {
+    final missing = vm.missingTargetIds;
+    final complete = missing.isEmpty;
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              complete
+                  ? 'All ${vm.specs.length} photographs saved.'
+                  : '${vm.frames.length} of ${vm.specs.length} photographs saved.',
+              style: const TextStyle(fontWeight: FontWeight.w700),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              complete
+                  ? (vm.hasPanorama
+                        ? 'The panorama below is stitched from these saved frames.'
+                        : 'Generate the panorama from these saved frames.')
+                  : 'Missing targets: ${missing.take(10).join(', ')}'
+                        '${missing.length > 10 ? ' (+${missing.length - 10} more)' : ''}. '
+                        'Resume the capture to shoot them — saved frames are kept.',
+              style: TextStyle(
+                color: complete
+                    ? SitewiseColors.muted
+                    : SitewiseColors.warning,
+                fontSize: 12,
+                height: 1.4,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// The Sitewise copy of the panorama. A device-only result is still a real
+  /// panorama, but buyers see nothing until the upload is accepted, so a
+  /// pending upload gets its own action instead of a silent success.
+  Widget _uploadCard() {
+    if (vm.uploadPending) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'This panorama exists only on this device. The frames and the '
+            'stitched file are safe here; uploading changes nothing on disk.',
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+          const SizedBox(height: 8),
+          SitewiseButton(
+            label: 'Upload panorama to Sitewise',
+            icon: Icons.cloud_upload_outlined,
+            onPressed: vm.generating ? null : _upload,
+          ),
+          const SizedBox(height: 8),
+        ],
+      );
+    }
+    if (!vm.panoramaPublished) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Text(
+        'Uploaded to Sitewise for this property.',
+        style: Theme.of(context).textTheme.bodySmall,
+      ),
+    );
+  }
+
+  Future<void> _upload() async {
+    final ok = await vm.pushPanorama();
+    if (mounted && ok) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Panorama uploaded to Sitewise.')),
+      );
+    }
+  }
+
+  /// The per-frame stitching evidence: which neighbour each frame registered
+  /// against, its inlier counts, and which pair failed. This is the capture
+  /// module's own panel, so it keeps the camera theme's dark surface.
+  Widget _stitchingSection() {
+    final service = vm.stitchService;
+    if (service == null) return const SizedBox.shrink();
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(16),
+      child: ColoredBox(
+        color: CaptureColors.sheet,
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: StitchingResultsPanel(
+            service: service,
+            specs: vm.specs,
+            onRetake: _resumeCapture,
+            thumbnailFor: (targetId) => vm.recordFor(targetId)?.imagePath,
+          ),
+        ),
       ),
     );
   }

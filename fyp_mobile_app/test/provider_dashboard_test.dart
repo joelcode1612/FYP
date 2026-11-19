@@ -14,10 +14,12 @@ import 'package:shared_logic/shared_logic.dart';
 /// records. What is pinned here:
 ///
 /// * the Agent layout — greeting with the real profile name, overview metrics
-///   (including the HONEST '—' for viewings / deals SiteWise never records),
-///   the schedule empty state, assigned-property cards and lead rows;
+///   from the authorized listing rows (including the HONEST '—' for viewings
+///   SiteWise never records), and assigned-property cards;
 /// * the Owner layout — portfolio metrics, "Tasks to do" derived from real
-///   drafts and enquiries, Manage buttons;
+///   drafts and rejections, Manage buttons;
+/// * the absence of the removed Enquiries / Schedule surfaces — no lead rows,
+///   no schedule section, no enquiry metric, no Messages action;
 /// * the loading and error surfaces keep their retry affordances.
 ///
 /// No network: [providerDashboardProvider] is overridden with a fixed bundle,
@@ -29,8 +31,8 @@ void main() {
   ProviderDashboardData agentBundle() => ProviderDashboardData(
     isAgent: true,
     firstName: 'Joel',
-    listings: [
-      const ProviderListing(
+    listings: const [
+      ProviderListing(
         id: 1755,
         title: 'Riverside Promenade – Unit 01',
         address: 'Kuala Lumpur, Federal Territory of Kuala Lumpur',
@@ -39,7 +41,7 @@ void main() {
         rent: 12000,
         imageUrl: 'https://example.test/photo.jpg',
       ),
-      const ProviderListing(
+      ProviderListing(
         id: 1760,
         title: 'Maple Court – Unit B2-05',
         address: 'Penang, Pulau Pinang',
@@ -48,24 +50,7 @@ void main() {
         rent: 9800,
       ),
     ],
-    enquiryMetrics: const ProviderEnquiryMetrics(
-      total: 5,
-      byStatus: {'new': 5, 'replied': 2},
-    ),
-    recentEnquiries: [
-      ProviderEnquiry(
-        id: 9,
-        propertyId: 1755,
-        propertyTitle: 'Riverside Promenade – Unit 01',
-        propertyAddress: 'Kuala Lumpur',
-        enquirerName: 'Alicia Tan',
-        enquirerEmail: 'alicia@example.test',
-        message: 'Is this unit still available for viewing next week?',
-        status: ProviderEnquiryStatus.incoming,
-      ),
-    ],
     tasks: const [],
-    performance: null,
   );
 
   ProviderDashboardData ownerBundle() {
@@ -103,24 +88,7 @@ void main() {
       isAgent: false,
       firstName: 'Maria',
       listings: listings,
-      enquiryMetrics: const ProviderEnquiryMetrics(
-        total: 5,
-        byStatus: {'new': 2, 'replied': 3},
-      ),
-      recentEnquiries: const [],
-      tasks: buildOwnerTasks(listings, const [
-        ProviderEnquiry(
-          id: 11,
-          propertyId: 1802,
-          propertyTitle: 'Maple Court – Unit B2-05',
-          propertyAddress: 'Penang',
-          enquirerName: 'Marcus Lee',
-          enquirerEmail: 'marcus@example.test',
-          message: 'What is the minimum lease term?',
-          status: ProviderEnquiryStatus.incoming,
-        ),
-      ]),
-      performance: null,
+      tasks: buildOwnerTasks(listings),
     );
   }
 
@@ -155,55 +123,41 @@ void main() {
     expect(find.text('Welcome back, Joel'), findsOneWidget);
     expect(
       find.text(
-        'Manage your assigned properties, client enquiries, and viewings.',
+        'Manage your assigned properties and their verification statuses.',
       ),
       findsOneWidget,
     );
 
-    // Overview metrics from the bundle. The response rate IS calculable
-    // (2 replied of 5 → 40%); viewings are honestly untracked.
+    // Overview metrics from the authorized listing rows. Viewings are
+    // honestly untracked.
     expect(find.text('Agent overview'), findsOneWidget);
     expect(find.text('Your agency activity at a glance.'), findsOneWidget);
     expect(find.text('2'), findsOneWidget); // assigned properties
-    expect(find.text('5'), findsOneWidget); // new leads
-    expect(find.text('40%'), findsOneWidget);
+    expect(find.text('1'), findsNWidgets(2)); // published + pending
     expect(find.text('—'), findsWidgets); // at least Viewings Today
     expect(find.text('Not tracked'), findsOneWidget);
 
-    // Quick actions.
+    // Quick actions — no Enquiries, no Schedule.
     expect(find.text('Assigned Listings'), findsOneWidget);
-    expect(find.text('Schedule'), findsOneWidget);
+    expect(find.text('Add Property'), findsOneWidget);
+    expect(find.text('Performance'), findsOneWidget);
+    expect(find.text('Enquiries'), findsNothing);
+    expect(find.text('Schedule'), findsNothing);
 
-    // Schedule is an honest empty state: no scheduling backend exists.
-    expect(find.text("Today's schedule"), findsOneWidget);
-    expect(find.text('No schedule yet'), findsOneWidget);
+    // The removed sections never render.
+    expect(find.text("Today's schedule"), findsNothing);
+    expect(find.text('No schedule yet'), findsNothing);
+    expect(find.text('Recent leads'), findsNothing);
+    expect(find.text('New Leads'), findsNothing);
 
     // Assigned property cards with the real record. (Section headers above
     // the scrolled target are not asserted — a ListView builds and lays out
     // lazily, so a header may sit just above the viewport edge while the
     // card it titles is centred.)
     await _scrollUntilVisible(tester, find.text('Riverside Promenade – Unit 01'));
-    // Twice: the property card title AND the lead row's property reference
-    // (the sample enquiry is about that listing).
-    expect(find.text('Riverside Promenade – Unit 01'), findsNWidgets(2));
+    expect(find.text('Riverside Promenade – Unit 01'), findsOneWidget);
     expect(find.text('RM 12000 / month'), findsOneWidget);
     expect(find.text('Open'), findsWidgets);
-
-    // Recent leads come from the enquiries API.
-    await _scrollUntilVisible(tester, find.text('Alicia Tan'));
-    expect(find.text('Alicia Tan'), findsOneWidget);
-    expect(find.text('New'), findsOneWidget);
-
-    // Weekly performance with the honest no-comparison note.
-    await _scrollUntilVisible(tester, find.text('Closed Deals'));
-    expect(find.text('Performance this week'), findsOneWidget);
-    expect(find.text('Compared to last week'), findsOneWidget);
-    expect(find.text('Closed Deals'), findsOneWidget);
-    expect(find.text('Not recorded'), findsWidgets);
-    expect(
-      find.textContaining('SiteWise stores no weekly history'),
-      findsOneWidget,
-    );
   });
 
   testWidgets('the owner dashboard renders portfolio, tasks and properties', (
@@ -215,21 +169,22 @@ void main() {
     expect(find.text('Welcome back, Maria'), findsOneWidget);
     expect(
       find.text(
-        'Manage your F&B properties, listings, and enquiries in one place.',
+        'Manage your F&B properties, listings, and verification in one place.',
       ),
       findsOneWidget,
     );
 
     expect(find.text('Portfolio overview'), findsOneWidget);
-    // 3 total, 1 published, 1 pending, 2 new enquiries.
+    // 3 total, 1 published, 1 pending, 1 draft.
     expect(find.text('3'), findsOneWidget); // total properties
-    expect(find.text('1'), findsNWidgets(2)); // published + pending
-    expect(find.text('2'), findsOneWidget); // new enquiries
+    expect(find.text('1'), findsNWidgets(3)); // published + pending + drafts
 
-    // Quick actions for the owner dock vocabulary.
+    // Quick actions for the owner dock vocabulary — no Messages.
     expect(find.text('Add Property'), findsOneWidget);
     expect(find.text('My Properties'), findsOneWidget);
-    expect(find.text('Messages'), findsOneWidget);
+    expect(find.text('Performance'), findsOneWidget);
+    expect(find.text('Messages'), findsNothing);
+    expect(find.text('New Enquiries'), findsNothing);
 
     // Property cards with Manage (the strip is scrollable; two cards fit the
     // first viewport, the rest build lazily as the list scrolls). "Pending
@@ -241,18 +196,12 @@ void main() {
     expect(find.text('Pending Review'), findsNWidgets(2));
 
     // Tasks derived ONLY from real records: one draft without photos →
-    // upload task; one new enquiry → respond task. The pending listing is
-    // NOT a task (nothing for the owner to do about it).
+    // upload task. The pending listing is NOT a task, and no enquiry-derived
+    // task exists any more.
     await _scrollUntilVisible(tester, find.text('Upload property photos'));
     expect(find.text('Upload property photos'), findsOneWidget);
-    expect(find.text('Respond to new enquiry'), findsOneWidget);
+    expect(find.text('Respond to new enquiry'), findsNothing);
     expect(find.textContaining('Maple Court'), findsWidgets);
-
-    // Weekly performance card closes the owner layout.
-    await _scrollUntilVisible(tester, find.text('Property Views'));
-    expect(find.text('Performance this week'), findsOneWidget);
-    expect(find.text('Property Views'), findsOneWidget);
-    expect(find.text('Not tracked'), findsWidgets);
   });
 
   testWidgets('a failed load renders the retry surface, never fake data', (
@@ -299,6 +248,86 @@ void main() {
     await tester.pump();
 
     expect(find.byType(CircularProgressIndicator), findsOneWidget);
+  });
+
+  testWidgets('the agent home previews the tasks the Tasks tab renders', (
+    tester,
+  ) async {
+    // The same classifier the tab uses, over records an agent was assigned —
+    // Home and Tasks are two views of one list, so a count here is the count
+    // there.
+    final listings = [
+      const ProviderListing(
+        id: 1901,
+        title: 'Annexe Road Shophouse',
+        address: 'Ipoh, Perak',
+        status: 'draft',
+        isPublished: false,
+        taskState: 'draft',
+        missingRequiredFields: ['availability'],
+        backendEditable: true,
+      ),
+      const ProviderListing(
+        id: 1902,
+        title: 'Bukit Bintang Loft',
+        address: 'Kuala Lumpur, Federal Territory',
+        status: 'draft',
+        isPublished: false,
+        taskState: 'draft',
+        backendEditable: true,
+      ),
+      const ProviderListing(
+        id: 1903,
+        title: 'Tanjung Tokong Corner Unit',
+        address: 'Penang, Pulau Pinang',
+        status: 'rejected',
+        isPublished: false,
+        taskState: 'corrections',
+        correctionNote: 'Tenancy period does not match the document.',
+        correctionAction: 'listing_rejected',
+        correctionAt: '2026-10-04T09:12:00+00:00',
+        backendEditable: true,
+      ),
+      const ProviderListing(
+        id: 1904,
+        title: 'Seremban Garden Store',
+        address: 'Nilai, Negeri Sembilan',
+        status: 'approved',
+        isPublished: true,
+        taskState: 'approved',
+      ),
+    ];
+
+    await tester.pumpWidget(
+      host(
+        user: agentUser,
+        data: ProviderDashboardData(
+          isAgent: true,
+          firstName: 'Joel',
+          listings: listings,
+          tasks: const [],
+          agentTasks: buildAgentTasks(listings),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await _scrollUntilVisible(
+      tester,
+      find.text('Tasks requiring attention (3)'),
+    );
+    expect(find.text('Tasks requiring attention (3)'), findsOneWidget);
+    expect(find.text('View all tasks'), findsOneWidget);
+
+    // Three actionable records, and the preview never exceeds three.
+    expect(find.text('Draft property'), findsNWidgets(2));
+    expect(find.text('Corrections requested'), findsOneWidget);
+
+    // An approved property is not work, and no task comes from an enquiry or
+    // an appointment.
+    expect(find.text('Approved property'), findsNothing);
+    expect(find.text('Respond to new enquiry'), findsNothing);
+    expect(find.text('Today\'s schedule'), findsNothing);
   });
 }
 

@@ -205,10 +205,12 @@ class RotationInPlaceMonitor {
     if (previous != null) {
       final deltaYaw = _wrappedDelta(previous.unwrappedYawDeg, yawDeg);
       final elapsed = at.difference(previous.at);
-      final timestampWentBack = timestampNanoseconds != null &&
+      final timestampWentBack =
+          timestampNanoseconds != null &&
           previous.timestampNanoseconds != null &&
           timestampNanoseconds <= previous.timestampNanoseconds!;
-      final timestampGap = timestampNanoseconds != null &&
+      final timestampGap =
+          timestampNanoseconds != null &&
           previous.timestampNanoseconds != null &&
           timestampNanoseconds - previous.timestampNanoseconds! >
               maxSampleGap.inMicroseconds * 1000;
@@ -237,8 +239,7 @@ class RotationInPlaceMonitor {
       unwrappedYawDeg: unwrappedYawDeg,
     );
     _samples.add(sample);
-    while (_samples.length > 1 &&
-        at.difference(_samples.first.at) > window) {
+    while (_samples.length > 1 && at.difference(_samples.first.at) > window) {
       _samples.removeAt(0);
     }
 
@@ -306,8 +307,8 @@ class RotationInPlaceMonitor {
     var signedSweep = 0.0;
     var absoluteSweep = 0.0;
     for (var i = 1; i < _samples.length; i++) {
-      final delta = _samples[i].unwrappedYawDeg -
-          _samples[i - 1].unwrappedYawDeg;
+      final delta =
+          _samples[i].unwrappedYawDeg - _samples[i - 1].unwrappedYawDeg;
       signedSweep += delta;
       absoluteSweep += delta.abs();
     }
@@ -364,7 +365,10 @@ class RotationInPlaceMonitor {
 
     for (final sample in _samples) {
       final radians =
-          (sample.unwrappedYawDeg - first.unwrappedYawDeg) * sign * math.pi / 180;
+          (sample.unwrappedYawDeg - first.unwrappedYawDeg) *
+          sign *
+          math.pi /
+          180;
       final c = math.cos(radians);
       final s = math.sin(radians);
       // [pivotX, pivotZ, offsetX, offsetZ] in the station's horizontal plane.
@@ -388,9 +392,9 @@ class RotationInPlaceMonitor {
       maxFitResidualM: 0,
     );
     for (final sample in _samples) {
-      final residual = (sample.position -
-              candidate.expectedPosition(sample.unwrappedYawDeg))
-          .length;
+      final residual =
+          (sample.position - candidate.expectedPosition(sample.unwrappedYawDeg))
+              .length;
       if (!residual.isFinite) return null;
       maxResidual = math.max(maxResidual, residual);
     }

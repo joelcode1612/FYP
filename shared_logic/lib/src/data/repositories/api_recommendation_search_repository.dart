@@ -50,6 +50,24 @@ class ApiRecommendationSearchRepository implements RecommendationSearchRepositor
       if (c.minSizeSqft != null) query['min_size_sqft'] = '${c.minSizeSqft}';
       if (c.maxSizeSqft != null) query['max_size_sqft'] = '${c.maxSizeSqft}';
       if (c.propertyType != null) query['property_type'] = c.propertyType!;
+      if (c.city != null) query['city'] = c.city!;
+      if (c.floorLevel != null) query['floor_level'] = c.floorLevel!;
+      if (c.transitMaxM != null) query['transit_max_m'] = '${c.transitMaxM}';
+      if (c.nearbyParkingMin != null) {
+        query['nearby_parking_min'] = '${c.nearbyParkingMin}';
+      }
+      if (c.fnbCompetitionMax != null) {
+        query['fnb_competition_max'] = '${c.fnbCompetitionMax}';
+      }
+      if (c.demandGenerator != null) {
+        query['demand_generator'] = c.demandGenerator!;
+      }
+      if (c.populationMin1000m != null) {
+        query['population_min_1000m'] = '${c.populationMin1000m}';
+      }
+      if (c.populationMax1000m != null) {
+        query['population_max_1000m'] = '${c.populationMax1000m}';
+      }
       if (c.query != null) query['query'] = c.query!;
       if (c.managedOnly) query['managed_only'] = 'true';
     }

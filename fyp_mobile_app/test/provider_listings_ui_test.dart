@@ -149,7 +149,6 @@ void main() {
             home: Scaffold(
               body: ProviderListingsMobilePage(
                 loadOverride: (_) async => workspace,
-                enquiriesOverride: () async => {11: 5},
               ),
             ),
           ),
@@ -202,11 +201,11 @@ void main() {
       expect(find.text('Maria Santos'), findsOneWidget);
 
       // Views / Saved are not tracked — unavailable, never a fabricated count.
-      // The second card has no enquiry record either, so its count slot is
-      // also an honest dash: 2 cards × (views + saved) + 1 enquiries.
-      expect(find.text('—'), findsNWidgets(5));
-      // Enquiries: the real count supplied by the enquiries endpoint.
-      expect(find.text('5'), findsOneWidget);
+      // 2 cards × (views + saved): the Enquiries slot was removed with the
+      // Enquiries feature, so the metric row carries no enquiry dash either.
+      expect(find.text('—'), findsNWidgets(4));
+      expect(find.text('Enquiries'), findsNothing);
+      expect(find.text('5'), findsNothing);
     });
 
     testWidgets('the owner Edit button follows the backend editing policy',
@@ -291,7 +290,6 @@ void main() {
               body: ProviderListingsMobilePage(
                 loadOverride: (_) async =>
                     ProviderWorkspace(isAgent: role == AppRole.agent, listings: const []),
-                enquiriesOverride: () async => const <int, int>{},
               ),
             ),
           ),

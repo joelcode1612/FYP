@@ -453,6 +453,27 @@ class EntrepreneurController extends StateController<EntrepreneurState> {
     setState(state.copyWith(selectedRankedId: id));
   }
 
+  /// Reset recommendation results without issuing an unfiltered search.
+  /// Incrementing the sequence prevents in-flight older requests from
+  /// repopulating cards after Clear has been pressed.
+  void clearRecommendationSearch() {
+    ++_recommendationSeq;
+    setState(
+      state.copyWith(
+        ranked: const <RankedProperty>[],
+        recommendationRequest: const RecommendationSearchRequest(),
+        clearRecommendationCursor: true,
+        recommendationHasMore: false,
+        clearRecommendationTotal: true,
+        clearRecommendationModel: true,
+        recommendationLoading: false,
+        recommendationRefreshing: false,
+        clearRecommendationError: true,
+        clearSelectedRankedId: true,
+      ),
+    );
+  }
+
   /// Applies new criteria and re-runs from page 1.
   void applyRecommendationRequest(RecommendationSearchRequest request) {
     searchRecommendations(request: request);

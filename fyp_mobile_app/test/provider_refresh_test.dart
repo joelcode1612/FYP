@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:fyp/presentation/mobile/provider/pages/provider_dashboard_controller.dart';
-import 'package:fyp/presentation/mobile/provider/pages/provider_models.dart';
 import 'package:fyp/presentation/mobile/provider/pages/provider_ui.dart';
 import 'package:fyp/presentation/mobile/provider/shell/provider_tab_host.dart';
 import 'package:shared_logic/shared_logic.dart';
@@ -45,7 +44,7 @@ void main() {
   });
 
   group('Provider shell reload', () {
-    testWidgets('all six tabs build without the setState-Future error', (
+    testWidgets('only the active tab is built on the first frame', (
       tester,
     ) async {
       await tester.pumpWidget(
@@ -70,18 +69,99 @@ void main() {
       // Before the fix this returned the "setState() callback argument
       // returned a Future" assertion that produced the red screen.
       expect(tester.takeException(), isNull);
-      // IndexedStack keeps every tab alive but parks the inactive ones
-      // offstage, so the finder must include them. The sixth is Schedule,
-      // the agent dock's own page.
+      // Profile no longer fires three requests while Home is still loading,
+      // and the Add wizard is not allocated offstage: only Home builds first.
+      expect(find.byType(RefreshIndicator), findsOneWidget);
       expect(
-        find.byType(RefreshIndicator, skipOffstage: false),
-        findsNWidgets(6),
+        find.text('Add commercial property', skipOffstage: false),
+        findsNothing,
       );
-      // No tab keeps a top-right reload button.
       expect(
         find.byIcon(Icons.refresh_rounded, skipOffstage: false),
         findsNothing,
       );
+    });
+
+    testWidgets('a visited tab is kept alive for later switches', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            authNotifierProvider.overrideWith(
+              () => _FixedAuthNotifier(_authenticatedAs(AppRole.owner)),
+            ),
+            providerDashboardProvider.overrideWith((ref) async {
+              return _fixedDashboard(isAgent: false);
+            }),
+          ],
+          child: const MaterialApp(
+            home: ProviderTabHost(initialRoute: '/provider'),
+          ),
+        ),
+      );
+      await tester.pump();
+      expect(find.byType(RefreshIndicator), findsOneWidget);
+
+      await tester.tap(find.text('Profile'));
+      await tester.pump();
+      // Home + Profile now exist; the other tabs are still untouched.
+      expect(
+        find.byType(RefreshIndicator, skipOffstage: false),
+        findsNWidgets(2),
+      );
+
+      await tester.tap(find.text('Home'));
+      await tester.pump();
+      await tester.tap(find.text('Profile'));
+      await tester.pump();
+      // Returning does not rebuild Profile or repeat its requests.
+      expect(
+        find.byType(RefreshIndicator, skipOffstage: false),
+        findsNWidgets(2),
+      );
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('Add Property is one persistent form with a preserved draft', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            authNotifierProvider.overrideWith(
+              () => _FixedAuthNotifier(_authenticatedAs(AppRole.owner)),
+            ),
+            providerDashboardProvider.overrideWith((ref) async {
+              return _fixedDashboard(isAgent: false);
+            }),
+          ],
+          child: const MaterialApp(
+            home: ProviderTabHost(initialRoute: '/provider'),
+          ),
+        ),
+      );
+      await tester.pump();
+
+      // Repeated taps must not stack duplicate form routes.
+      for (var i = 0; i < 3; i++) {
+        await tester.tap(find.text('Add'));
+        await tester.pump();
+      }
+      expect(
+        find.text('Add commercial property', skipOffstage: false),
+        findsOneWidget,
+      );
+
+      await tester.enterText(find.byType(TextField).first, 'Corner unit draft');
+      await tester.tap(find.text('Home'));
+      await tester.pump();
+      await tester.tap(find.text('Add'));
+      await tester.pump();
+
+      // The unfinished form is the same page instance, not a fresh wizard.
+      expect(find.text('Corner unit draft'), findsOneWidget);
+      expect(tester.takeException(), isNull);
     });
 
     testWidgets('Listings keeps swipe-down reload with its filter row', (
@@ -168,10 +248,7 @@ ProviderDashboardData _fixedDashboard({required bool isAgent}) =>
       isAgent: isAgent,
       firstName: 'Test',
       listings: const [],
-      enquiryMetrics: ProviderEnquiryMetrics.empty,
-      recentEnquiries: const [],
       tasks: const [],
-      performance: null,
     );
 
 AuthState _authenticatedAs(AppRole role) => AuthState(

@@ -147,6 +147,9 @@ List<Override> sitewiseOverrides({AuthService? auth}) {
       recommendationSearchRepositoryProvider.overrideWithValue(
         ApiRecommendationSearchRepository(ServiceLocator.apiClient),
       ),
+      propertyCompareRepositoryProvider.overrideWithValue(
+        ServiceLocator.compareRepo,
+      ),
       // [getLocationAnalysisProvider] is deliberately absent here: its single
       // override above already selected the live-backed [analysisRepository].
       // Re-adding it would trip Riverpod's duplicate-override assertion and

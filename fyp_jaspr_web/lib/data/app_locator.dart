@@ -70,6 +70,11 @@ abstract final class AppLocator {
   static final RecommendationSearchRepository recommendationSearchRepo =
       ApiRecommendationSearchRepository(const WebApiClient());
 
+  /// Direct shortlist comparison — one batch request for up to three ids,
+  /// never a second recommendation ranking.
+  static final PropertyCompareRepository compareRepo =
+      ApiPropertyCompareRepository(const WebApiClient());
+
   /// The personalised Layer 2/3 pipeline (`/recommendations/generate`,
   /// `/recommendations/me/generated`, `/recommendations/{id}/explanation`).
   /// Ownership always comes from the authenticated session; no user id is
@@ -314,6 +319,7 @@ abstract final class AppLocator {
     recommendationSearchRepositoryProvider.overrideWithValue(
       recommendationSearchRepo,
     ),
+    propertyCompareRepositoryProvider.overrideWithValue(compareRepo),
     propertyVerificationRepositoryProvider.overrideWithValue(
       propertyVerificationRepo,
     ),

@@ -52,6 +52,7 @@ abstract class ArCoreGateway {
   });
   Future<void> resize({required int width, required int height});
   Future<void> setDisplayRotation(int rotation);
+  Future<void> setPlaneDetection(bool enabled);
   Future<void> setMesh({
     required String id,
     required Float32List positions,
@@ -227,6 +228,12 @@ class ArCoreHost implements ArCoreGateway {
     <String, dynamic>{'rotation': rotation},
   );
 
+  @override
+  Future<void> setPlaneDetection(bool enabled) => _channel.invokeMethod<void>(
+    'setPlaneDetection',
+    <String, dynamic>{'enabled': enabled},
+  );
+
   /// Uploads a mesh parsed from one of the shipped `.glb` files.
   ///
   /// [positions] is xyz per vertex and [colors] rgba per vertex. The native
@@ -276,14 +283,14 @@ class ArCoreHost implements ArCoreGateway {
     // reading it with `invokeListMethod` threw a cast error on every scan and
     // left all 26 targets reported as "no surface". Both shapes are accepted so
     // a host that returns the bare list keeps working.
-    final raw = await _channel.invokeMethod<dynamic>('probeDirections', <
-      String,
-      dynamic
-    >{
-      'origin': <double>[origin.x, origin.y, origin.z],
-      'directions': flat,
-      'maxDistanceM': maxDistanceM,
-    });
+    final raw = await _channel.invokeMethod<dynamic>(
+      'probeDirections',
+      <String, dynamic>{
+        'origin': <double>[origin.x, origin.y, origin.z],
+        'directions': flat,
+        'maxDistanceM': maxDistanceM,
+      },
+    );
     final List<dynamic> results;
     if (raw is Map) {
       results = (raw['results'] as List<dynamic>?) ?? const <dynamic>[];
@@ -727,6 +734,7 @@ class ArCoreAnchor {
 /// A photograph taken through the AR session.
 class ArCoreStill {
   final Uint8List jpeg;
+
   /// Dimensions of the encoded JPEG after image-to-display rotation.
   final int width;
   final int height;

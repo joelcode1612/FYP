@@ -48,7 +48,7 @@ const URL = BASE + '/entrepreneur/property-detail?id=MD-01755';
   await page.locator('#sw-info-tab-score').click();
   await page.waitForTimeout(1200);
   results.fitSection = await page.locator('.sw-fit').count();
-  results.shapSection = await page.locator('.sw-shap').count();
+  results.shapSection = await page.locator('.sw-explain').count();
   results.catFitRemoved = await page.locator('.sw-catfit').count();
 
   results.jsErrors = errors.filter(

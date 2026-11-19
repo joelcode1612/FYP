@@ -3,6 +3,7 @@ import 'package:jaspr/jaspr.dart';
 import 'package:universal_web/web.dart' as web;
 
 import '../ui.dart';
+import '../spherical_panorama_frame.dart';
 
 /// A completed stitched panorama, or the reason there is none.
 ///
@@ -390,34 +391,12 @@ class CombinedMediaGallery extends StatelessComponent {
     }
 
     return Component.fragment([
-      div(
-        classes: 'sw-pano__stage${view.dragging ? ' is-dragging' : ''}',
-        attributes: {
-          'role': 'img',
-          'aria-label': '360 degree photograph of $propertyTitle. '
-              'Drag to look around, or use the zoom controls.',
-          'style': 'background-image:url("${panorama.url}");'
-              'background-size:${(view.zoom * 100).toStringAsFixed(0)}% auto;'
-              'background-position:${view.yaw.toStringAsFixed(2)}% '
-              '${view.pitch.toStringAsFixed(2)}%;',
-        },
-        events: {
-          'pointerdown': (event) {
-            final pointer = event as web.PointerEvent;
-            onDragStart(pointer.clientX.toDouble(), pointer.clientY.toDouble());
-          },
-          'pointermove': (event) {
-            if (!view.dragging) return;
-            final pointer = event as web.PointerEvent;
-            onDragMove(pointer.clientX.toDouble(), pointer.clientY.toDouble());
-          },
-          'pointerup': (_) => onDragEnd(),
-          'pointercancel': (_) => onDragEnd(),
-          'pointerleave': (_) => onDragEnd(),
-        },
-        const [],
-      ),
-      div(classes: 'sw-pano__hint', [Component.text('Drag to look around')]),
+      div(classes: 'sw-pano__stage', [
+        SphericalPanoramaFrame(
+          imageUrl: panorama.url,
+          title: '360 degree panorama of $propertyTitle. Swipe or drag to look around.',
+        ),
+      ]),
       button(
         classes: 'sw-gallery__full',
         attributes: {
@@ -426,36 +405,14 @@ class CombinedMediaGallery extends StatelessComponent {
           'aria-label': view.full ? 'Exit fullscreen' : 'View panorama fullscreen',
         },
         events: events(onClick: onToggleFull),
-        [
-          Icon(view.full ? 'close' : 'open_in_full', size: 'sm'),
-        ],
+        [Icon(view.full ? 'close' : 'open_in_full', size: 'sm')],
       ),
     ]);
   }
 
   Component _panoramaTools() => div(classes: 'sw-pano__tools', [
-        button(
-          classes: 'sw-pano__tool',
-          attributes: {'type': 'button', 'aria-label': 'Zoom in'},
-          events: events(onClick: () => onZoom(view.zoom + 0.25)),
-          // Supported Material Symbols instead of typed +/- glyphs: the
-          // minus sign in particular rendered as a box on some font stacks.
-          [Icon('add', size: 'sm')],
-        ),
-        button(
-          classes: 'sw-pano__tool',
-          attributes: {'type': 'button', 'aria-label': 'Zoom out'},
-          events: events(onClick: () => onZoom(view.zoom - 0.25)),
-          [Icon('remove', size: 'sm')],
-        ),
-        button(
-          classes: 'sw-pano__tool sw-pano__tool--wide',
-          attributes: {'type': 'button'},
-          events: events(onClick: onResetView),
-          [Component.text('Reset view')],
-        ),
         span(classes: 'sw-pano__zoom', [
-          Component.text('${(view.zoom * 100).round()}%'),
+          Component.text('Swipe or drag to rotate · pinch, scroll or use + / − to zoom'),
         ]),
       ]);
 

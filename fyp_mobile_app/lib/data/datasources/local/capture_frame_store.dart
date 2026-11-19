@@ -121,4 +121,92 @@ class CaptureFrameStore {
     }
     return missing;
   }
+
+  /// The tour's panorama-upload state, or `null` when nothing was ever
+  /// attempted. Absence is reported as absence: no upload is implied.
+  Future<PanoramaUploadRecord?> loadPanoramaUpload(String tourId) async {
+    try {
+      final file = File('${await tourRoot(tourId)}/panorama_upload.json');
+      if (!await file.exists()) return null;
+      return PanoramaUploadRecord.fromJson(
+        jsonDecode(await file.readAsString()) as Map<String, dynamic>,
+      );
+    } catch (_) {
+      // A corrupt record reads as "never attempted", which re-offers the
+      // upload instead of claiming a panorama Sitewise never received.
+      return null;
+    }
+  }
+
+  Future<void> savePanoramaUpload(PanoramaUploadRecord record) async {
+    try {
+      final root = await tourRoot(record.tourId);
+      await Directory(root).create(recursive: true);
+      await File('$root/panorama_upload.json').writeAsString(
+        jsonEncode(record.toJson()),
+        flush: true,
+      );
+    } catch (_) {
+      // The panorama and its frames are on disk already; losing only the
+      // acknowledgement makes the next screen offer the upload again.
+    }
+  }
+}
+
+/// One panorama's upload state, kept in the tour directory.
+///
+/// The device always owns the stitched file; Sitewise only gets a copy. A
+/// record whose [uploadedAt] is null means "sent, not accepted", which is what
+/// lets the review screen finish the job after a failure or a killed app
+/// without touching a single frame. The byte count identifies the panorama, so
+/// re-sending the identical file is recognisable as a duplicate rather than a
+/// second storage object and a second tour update.
+class PanoramaUploadRecord {
+  final String tourId;
+  final String propertyId;
+  final String panoramaPath;
+  final int bytes;
+  final DateTime? uploadedAt;
+
+  const PanoramaUploadRecord({
+    required this.tourId,
+    required this.propertyId,
+    required this.panoramaPath,
+    required this.bytes,
+    this.uploadedAt,
+  });
+
+  /// True when this record describes the panorama currently on disk.
+  bool covers(String path, int size) =>
+      panoramaPath == path && bytes == size;
+
+  bool get accepted => uploadedAt != null;
+
+  PanoramaUploadRecord copyWith({DateTime? uploadedAt}) =>
+      PanoramaUploadRecord(
+        tourId: tourId,
+        propertyId: propertyId,
+        panoramaPath: panoramaPath,
+        bytes: bytes,
+        uploadedAt: uploadedAt ?? this.uploadedAt,
+      );
+
+  Map<String, dynamic> toJson() => {
+    'tourId': tourId,
+    'propertyId': propertyId,
+    'panoramaPath': panoramaPath,
+    'bytes': bytes,
+    'uploadedAt': uploadedAt?.toIso8601String(),
+  };
+
+  factory PanoramaUploadRecord.fromJson(Map<String, dynamic> json) =>
+      PanoramaUploadRecord(
+        tourId: json['tourId'] as String? ?? '',
+        propertyId: json['propertyId'] as String? ?? '',
+        panoramaPath: json['panoramaPath'] as String? ?? '',
+        bytes: (json['bytes'] as num?)?.toInt() ?? 0,
+        uploadedAt: json['uploadedAt'] is String
+            ? DateTime.tryParse(json['uploadedAt'] as String)
+            : null,
+      );
 }

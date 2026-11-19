@@ -76,10 +76,17 @@ dependencies:
 # Native asset build options for dartcv4 (opencv_dart). The stitching
 # module (plus its OpenCV dependencies) is required by the 360° panorama
 # pipeline; without it Stitcher has no native implementation.
+#
+# `include_modules` REPLACES dartcv4's default module set — it does not add to
+# it, so imgproc and imgcodecs must be repeated here even though they are
+# defaults: a list missing them compiles `cv.cvtColor`/`cv.imread` out of the
+# shipped library and the stitcher fails at runtime with an undefined symbol.
 hooks:
   user_defines:
     dartcv4:
       include_modules:
+        - imgproc
+        - imgcodecs
         - stitching
         - features2d
         - flann

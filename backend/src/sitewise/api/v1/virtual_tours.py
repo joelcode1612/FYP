@@ -1,7 +1,8 @@
 import uuid
-from typing import Annotated
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import text
 from sqlmodel import Session, select
 
@@ -16,6 +17,10 @@ from sitewise.services.virtual_tour_service import VirtualTourService
 router = APIRouter()
 
 _MUTABLE_TOUR_FIELDS = frozenset({"url", "status"})
+#: The tour lifecycle vocabulary. Insights and the 360° viewer read these
+#: statuses, so a client cannot invent one (e.g. fabricate ``completed`` with
+#: arbitrary text) outside this set.
+_TOUR_STATUSES = frozenset({"pending", "processing", "ready", "failed"})
 #: Status the capture pipeline stamps on a freshly stitched panorama. It is
 #: one of the completed statuses the insights panorama reader accepts.
 PANORAMA_READY_STATUS = "ready"
@@ -29,10 +34,17 @@ def _require_owned_listing(
     """Require access to the current listing represented by a tour's id.
 
     ``virtual_tour.property_id`` is a legacy, unbound integer after the
-    retirement of ``public.property``. New tour reads must therefore resolve
-    that integer against the canonical operational listing table before a
-    tour is returned. Missing or unlinked legacy rows fail closed instead of
-    becoming readable by any authenticated user.
+    retirement of ``public.property``. Tour reads must therefore resolve that
+    integer against the canonical operational listing table before a tour is
+    returned. Missing or unlinked legacy rows fail closed instead of becoming
+    readable by any authenticated user.
+
+    Access rule — the SAME one the panorama upload applies: the owner of the
+    listing, an administrator, or the agent holding the
+    ``public.agent_listing_assignment`` row for this listing. The upload is
+    part of the shared Add Property flow where an assigned agent maintains the
+    record on the owner's behalf, so the agent can also read and update the
+    tour rows it creates. An agent with no assignment manages nothing.
     """
     row = session.execute(
         text("SELECT owner_user_id FROM fyp.rental_properties WHERE id = :pid"),
@@ -42,8 +54,23 @@ def _require_owned_listing(
         raise HTTPException(status_code=404, detail="Property not found.")
     if rbac.can_administer_users(current.role):
         return
-    if row[0] is None or str(row[0]) != str(current.user_id):
-        raise ForbiddenError("You can only access tours for your own property listings.")
+    if row[0] is not None and str(row[0]) == str(current.user_id):
+        return
+    if rbac.has_role(current.role, (rbac.ROLE_AGENT,)):
+        agent_id = provider_scope.agent_id_for_user(current.user_id)
+        if agent_id is not None:
+            assignment = session.execute(
+                text(
+                    "SELECT 1 FROM public.agent_listing_assignment "
+                    "WHERE listing_id = :lid AND agent_id = :aid"
+                ),
+                {"lid": property_id, "aid": agent_id},
+            ).first()
+            if assignment is not None:
+                return
+    raise ForbiddenError(
+        "You can only manage property listings you own or are assigned to."
+    )
 
 
 def _owned_tour_or_error(
@@ -60,13 +87,27 @@ def _owned_tour_or_error(
     return tour
 
 
+def _validated_url(url: str) -> str:
+    """A tour must point at a real http(s) URL — never arbitrary text."""
+    candidate = (url or "").strip()
+    if not candidate.lower().startswith(("http://", "https://")) or len(
+        candidate
+    ) > 2048:
+        raise HTTPException(
+            status_code=422,
+            detail="url must be an http(s) URL of at most 2048 characters.",
+        )
+    return candidate
+
+
 def _validated_update(data: dict) -> dict:
     """Accept only the two lifecycle fields that can safely change in place.
 
     A virtual tour must never be reassigned to another listing through PATCH:
     that could turn a legitimate owner update into a cross-property record
     move. Keeping this allow-list next to the endpoint also prevents clients
-    from setting primary keys or audit timestamps through the raw dict body.
+    from setting primary keys or audit timestamps through the raw dict body,
+    and the status/url values are validated against the tour lifecycle.
     """
     unknown = set(data) - _MUTABLE_TOUR_FIELDS
     if unknown:
@@ -75,7 +116,40 @@ def _validated_update(data: dict) -> dict:
             status_code=422,
             detail=f"Only url and status may be updated (unexpected: {fields}).",
         )
-    return {key: data[key] for key in _MUTABLE_TOUR_FIELDS if key in data}
+    update: dict = {}
+    if "status" in data:
+        if data["status"] not in _TOUR_STATUSES:
+            statuses = ", ".join(sorted(_TOUR_STATUSES))
+            raise HTTPException(
+                status_code=422,
+                detail=f"status must be one of: {statuses}.",
+            )
+        update["status"] = data["status"]
+    if "url" in data:
+        update["url"] = _validated_url(str(data["url"]))
+    return update
+
+
+class TourCreate(BaseModel):
+    """The ONLY fields a generic tour create accepts.
+
+    The historical endpoint deserialized a raw ``VirtualTour`` model, so a
+    client could set the primary key, audit timestamps and any status string —
+    fabricating tour records the pipeline never produced. Creation now goes
+    through this payload: the server generates the key and timestamps, and the
+    status is constrained to the real lifecycle.
+    """
+
+    property_id: int
+    url: str = Field(min_length=1, max_length=2048)
+    status: Literal["pending", "processing", "ready", "failed"] = "pending"
+
+    @field_validator("url")
+    @classmethod
+    def _http_url(cls, value: str) -> str:
+        if not value.strip().lower().startswith(("http://", "https://")):
+            raise ValueError("url must be an http(s) URL")
+        return value.strip()
 
 
 @router.get("/property/{property_id}")
@@ -100,11 +174,16 @@ def get_tour(
 
 @router.post("/", status_code=201)
 def create_tour(
-    tour: VirtualTour,
+    payload: TourCreate,
     session: DbSession,
     current: OwnerUser,
 ):
-    _require_owned_listing(session, tour.property_id, current)
+    _require_owned_listing(session, payload.property_id, current)
+    tour = VirtualTour(
+        property_id=payload.property_id,
+        url=payload.url,
+        status=payload.status,
+    )
     return VirtualTourService(session).create(tour)
 
 
@@ -125,38 +204,12 @@ def _panorama_upload_authorized(
 ) -> None:
     """Record-level access for the capture upload: owner, admin or assigned agent.
 
-    The read endpoints keep [_require_owned_listing]'s owner-only rule. The
-    upload is part of the shared Add Property flow, where an assigned agent
-    maintains the record on the owner's behalf — so the same
-    ``agent_listing_assignment`` check that authorizes the listing routes
-    authorizes the panorama's tour row too. An agent with no assignment
-    manages nothing.
+    The upload is part of the shared Add Property flow, where an assigned agent
+    maintains the record on the owner's behalf. This is exactly the rule
+    [_require_owned_listing] enforces for every tour read and mutation, so the
+    upload delegates to it — one access rule, enforced everywhere.
     """
-    row = session.execute(
-        text("SELECT owner_user_id FROM fyp.rental_properties WHERE id = :pid"),
-        {"pid": property_id},
-    ).first()
-    if row is None:
-        raise HTTPException(status_code=404, detail="Property not found.")
-    if rbac.can_administer_users(current.role):
-        return
-    if row[0] is not None and str(row[0]) == str(current.user_id):
-        return
-    if rbac.has_role(current.role, (rbac.ROLE_AGENT,)):
-        agent_id = provider_scope.agent_id_for_user(current.user_id)
-        if agent_id is not None:
-            assignment = session.execute(
-                text(
-                    "SELECT 1 FROM agent_listing_assignment "
-                    "WHERE listing_id = :lid AND agent_id = :aid"
-                ),
-                {"lid": property_id, "aid": agent_id},
-            ).first()
-            if assignment is not None:
-                return
-    raise ForbiddenError(
-        "You can only manage property listings you own or are assigned to."
-    )
+    _require_owned_listing(session, property_id, current)
 
 
 @router.post("/property/{property_id}/panorama", status_code=201)

@@ -231,7 +231,10 @@ def _owner_reference(session: Session, property_row: dict | None) -> dict | None
     if not owner_id:
         return None
     row = session.execute(
-        text("SELECT user_id, full_name, email FROM users WHERE user_id = :uid"),
+        text(
+            "SELECT user_id, full_name, email "
+            "FROM public.users WHERE user_id = :uid"
+        ),
         {"uid": str(owner_id)},
     ).mappings().first()
     if row is None:
@@ -630,12 +633,16 @@ def _apply_approved_changes(
             },
         )
     if not fields:
-        # Nothing left to write: either fully applied already or empty.
-        return current
+        # Nothing left to write: either fully applied already or empty. The
+        # caller reports applied_fields from THIS return value, so an empty
+        # write must be reported as an empty set — returning the full row
+        # here made every approval claim every row key as "applied".
+        return {}
     updated = repo.update_owner_listing(listing_id, fields)
     if updated is None:
         raise HTTPException(status_code=404, detail="Operational listing not found.")
-    return updated
+    # Report exactly the fields written, not the whole updated row.
+    return fields
 
 
 @router.post(

@@ -31,8 +31,8 @@ SELECT p.id, p.owner_user_id, p.owner_id, p.listing_id, p.verification_status,
        u.full_name AS owner_name, u.account_status AS owner_status,
        a.agent_id
 FROM fyp.rental_properties p
-LEFT JOIN users u ON u.user_id = p.owner_user_id
-LEFT JOIN agent_listing_assignment a ON a.listing_id = p.id
+LEFT JOIN public.users u ON u.user_id = p.owner_user_id
+LEFT JOIN public.agent_listing_assignment a ON a.listing_id = p.id
 """
 
 
@@ -70,7 +70,8 @@ def agent_directory(
         try:
             rows = session.execute(
                 text(
-                    "SELECT user_id::text AS uid, account_status FROM users "
+                    "SELECT user_id::text AS uid, account_status "
+                    "FROM public.users "
                     "WHERE user_id::text = ANY(:ids)"
                 ),
                 {"ids": sorted(user_ids.values())},

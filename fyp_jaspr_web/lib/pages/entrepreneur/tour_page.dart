@@ -3,6 +3,7 @@ import 'package:jaspr/jaspr.dart';
 import 'package:shared_logic/shared_logic.dart';
 
 import '../../components/ui.dart';
+import '../../components/spherical_panorama_frame.dart';
 import '../../data/app_locator.dart';
 import '../../layouts/app_layout.dart';
 
@@ -62,6 +63,8 @@ class _TourBody extends StatelessComponent {
 
   @override
   Component build(BuildContext context) {
+    // A device-local file path is not an HTTP image the browser can open.
+    final panoramaUrl = browserPanoramaUrl(tour.panoramaPath);
     return FutureBuilder<CommercialProperty?>(
       future: AppLocator.properties.detail(propertyId),
       builder: (c, psnap) {
@@ -70,46 +73,25 @@ class _TourBody extends StatelessComponent {
           // --- Viewer ------------------------------------------------------
           div([
             div(classes: 'tour-stage', [
-              div(
-                classes: 'pano',
-                attributes: const {
-                  'style':
-                      'background-image:linear-gradient(120deg,#dbe3ee,#eef2f7 40%,'
-                      '#dbe3ee 70%,#e8eef6);',
-                },
-                [],
-              ),
-              span(classes: 'tour-hint', [
-                Component.text('Drag to look around'),
-              ]),
-              div(classes: 'tour-controls', [
-                button(
+              if (panoramaUrl != null)
+                SphericalPanoramaFrame(
+                  imageUrl: panoramaUrl,
+                  title: 'Interactive 360 degree tour of ${tour.title}',
+                )
+              else
+                div(
+                  classes: 'pano',
                   attributes: const {
-                    'type': 'button',
-                    'aria-label': 'Zoom out',
+                    'style': 'background:linear-gradient(120deg,#dbe3ee,#eef2f7 40%,#dbe3ee 70%);',
                   },
-                  [Icon('remove', size: 'sm')],
+                  [],
                 ),
-                button(
-                  attributes: const {
-                    'type': 'button',
-                    'aria-label': 'Zoom in',
-                  },
-                  [Icon('add', size: 'sm')],
-                ),
-                button(
-                  attributes: const {'type': 'button'},
-                  [Component.text('Reset')],
-                ),
-              ]),
             ]),
             div(classes: 'notice notice-info', [
-              Component.text(
-                'Static preview — the interactive panorama requires the mobile '
-                'app. Scene 1 of ${tour.sceneCount}, captured '
-                '${tour.capturedAt.day}/${tour.capturedAt.month}/'
-                '${tour.capturedAt.year}.',
-              ),
+              Component.text(panoramaUrl != null
+                  ? 'Interactive 360° view: swipe or drag to look around; pinch or scroll to zoom.'
+                  : 'The tour has no web-accessible stitched panorama yet. A panorama stored '
+                      'only on the mobile device cannot be viewed here until it is published.'),
             ]),
           ]),
 

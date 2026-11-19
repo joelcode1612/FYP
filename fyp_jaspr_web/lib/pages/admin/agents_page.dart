@@ -54,6 +54,17 @@ const _newMode = 'New company';
 
 final _emailPattern = RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$');
 
+/// Presentation-only initials, never used as an account identifier.
+String _agentInitials(String fullName) {
+  final words = fullName.trim().split(RegExp(r'\s+'))
+      .where((word) => word.isNotEmpty).toList(growable: false);
+  if (words.isEmpty) return 'A';
+  final first = words.first.substring(0, 1).toUpperCase();
+  final last = words.length > 1
+      ? words.last.substring(0, 1).toUpperCase() : '';
+  return '$first$last';
+}
+
 /// A single `<option>` value/label pair for [_AdminAgentsPageState._selectField].
 class _Option {
   final String value;
@@ -82,6 +93,9 @@ class _AdminAgentsPageState extends State<AdminAgentsPage> {
   String? _detailsId;
   String? _busyId;
   String? _revokingId;
+  // Identifies the open invitation awaiting an explicit cancellation decision.
+  String? _cancelInvitationId;
+  String? _cancelInvitationError;
   String? _notice;
   bool _noticeError = false;
 
@@ -215,7 +229,7 @@ class _AdminAgentsPageState extends State<AdminAgentsPage> {
     if (_invitations.any(
       (invite) => invite.isOpen && invite.email.toLowerCase() == email,
     )) {
-      return 'An open invitation already exists for this email. Revoke it in '
+      return 'An open invitation already exists for this email. Cancel it in '
           'the invitations table before issuing a new one.';
     }
     return null;
@@ -356,28 +370,64 @@ class _AdminAgentsPageState extends State<AdminAgentsPage> {
     }
   }
 
-  Future<void> _revoke(StaffInvitation invite) async {
-    if (invite.invitationId.isEmpty) {
-      _setNotice(
-        'This invitation row has no id, so it cannot be revoked safely.',
-        error: true,
-      );
+  void _openCancelInvitation(StaffInvitation invite) {
+    if (!invite.isOpen || invite.invitationId.isEmpty || _revokingId != null) {
       return;
     }
-    setState(() => _revokingId = invite.invitationId);
+    setState(() {
+      _cancelInvitationId = invite.invitationId;
+      _cancelInvitationError = null;
+    });
+    _focusOpenDialog();
+  }
+
+  void _closeCancelInvitation() {
+    if (_revokingId != null) return;
+    setState(() {
+      _cancelInvitationId = null;
+      _cancelInvitationError = null;
+    });
+  }
+
+  /// Cancels only an OPEN invitation record. The staff account and any
+  /// previously emailed Supabase setup link are not disabled by this endpoint.
+  Future<void> _revoke(StaffInvitation invite) async {
+    if (!invite.isOpen || invite.invitationId.isEmpty) {
+      setState(() {
+        _cancelInvitationError =
+            'This invitation is no longer available for cancellation. Refresh '
+            'the directory to see its current status.';
+      });
+      return;
+    }
+    if (_revokingId != null) return;
+
+    setState(() {
+      _revokingId = invite.invitationId;
+      _cancelInvitationError = null;
+    });
     try {
-      final result = await AppLocator.adminApi.revokeInvitation(invite.invitationId);
+      // Retain the existing backend route; only the UI wording changes.
+      final result = await AppLocator.adminApi.revokeInvitation(
+        invite.invitationId,
+      );
       await _load(silent: true);
       if (!mounted) return;
+      setState(() {
+        _cancelInvitationId = null;
+        _cancelInvitationError = null;
+      });
       _setNotice(
-        'The invitation for ${invite.email} was revoked server-side. No '
-        'identity was deleted and no email was sent; the address can now be '
-        'invited again.${_auditSuffix(result)}',
+        'Invitation for ${invite.email} cancelled. The invitation record '
+        'is closed, but the agent account has not been suspended or deleted. '
+        'The address can be invited again.${_auditSuffix(result)}',
         error: false,
       );
     } catch (error) {
       if (!mounted) return;
-      _setNotice(AdminApi.message(error), error: true);
+      final message = AdminApi.message(error);
+      setState(() => _cancelInvitationError = message);
+      _setNotice(message, error: true);
     } finally {
       if (mounted) setState(() => _revokingId = null);
     }
@@ -803,7 +853,7 @@ class _AdminAgentsPageState extends State<AdminAgentsPage> {
       title: _loading
           ? 'Agent directory'
           : 'Agent directory · $showing of ${_agents.length} accounts',
-      child: div(classes: 'stack', [
+      child: div(classes: 'stack ag-roster-panel', [
         _filters(),
         if (_notice != null)
           ActionNotice(_notice!, tone: _noticeError ? 'danger' : 'info'),
@@ -836,19 +886,44 @@ class _AdminAgentsPageState extends State<AdminAgentsPage> {
                   'different status to see the full roster.',
       );
     }
-    return DataTable(
+    return div(classes: 'ag-roster-table', [
+      div(classes: 'ag-roster-summary', [
+        span(classes: 'ag-roster-summary__count', [
+          Component.text(
+            '${rows.length} ${rows.length == 1 ? 'agent' : 'agents'} shown',
+          ),
+        ]),
+        span(classes: 'ag-roster-summary__hint', [
+          Component.text('Select View details to manage an account'),
+        ]),
+      ]),
+      DataTable(
       columns: const [
         DataColumn('Agent'),
         DataColumn('Company'),
         DataColumn('Account status'),
-        DataColumn('Invitation'),
-        DataColumn('Added'),
+        DataColumn('Invitation status'),
+        DataColumn('Joined'),
         DataColumn('Actions', actions: true),
       ],
       rows: [
         for (final agent in rows)
           [
-            CellIdentity(title: agent.displayName, caption: agent.email),
+            div(classes: 'ag-agent', [
+              span(
+                classes: 'ag-agent__avatar',
+                attributes: const {'aria-hidden': 'true'},
+                [Component.text(_agentInitials(agent.displayName))],
+              ),
+              div(classes: 'ag-agent__text', [
+                CellIdentity(
+                  title: agent.displayName.isEmpty
+                      ? 'Unnamed agent'
+                      : agent.displayName,
+                  caption: agent.email,
+                ),
+              ]),
+            ]),
             Component.text(
               agent.companyName.isEmpty
                   ? (agent.companyId.isEmpty
@@ -858,17 +933,18 @@ class _AdminAgentsPageState extends State<AdminAgentsPage> {
             ),
             agent.status.isEmpty
                 ? const StatusBadge('Unknown', tone: 'neutral')
-                : StatusBadge(_label(agent.status), tone: _tone(agent.status)),
+                : StatusBadge(_label(agent.status), tone: _tone(agent.status), dot: true),
             agent.invitationStatus.isEmpty
                 ? const StatusBadge('None', tone: 'neutral')
                 : StatusBadge(
                     _label(agent.invitationStatus),
                     tone: _tone(agent.invitationStatus),
+                    dot: true,
                   ),
             Component.text(_shortDate(agent.createdAt)),
             div(classes: 'ag-actions', [
               ActionButton(
-                'Details',
+                'View details',
                 variant: 'ghost',
                 onClick: () => _openDetails(agent.userId),
               ),
@@ -876,7 +952,8 @@ class _AdminAgentsPageState extends State<AdminAgentsPage> {
             ]),
           ],
       ],
-    );
+      ),
+    ]);
   }
 
   Component _statusAction(StaffAgent agent) {
@@ -992,16 +1069,23 @@ class _AdminAgentsPageState extends State<AdminAgentsPage> {
                     div(classes: 'ag-actions', [
                       if (invite.isOpen && invite.invitationId.isNotEmpty)
                         ActionButton(
-                          _revokingId == invite.invitationId
-                              ? 'Revoking…'
-                              : 'Revoke',
+                          'Cancel invitation',
                           variant: 'danger-outline',
                           onClick: _revokingId == null
-                              ? () => _revoke(invite)
+                              ? () => _openCancelInvitation(invite)
                               : null,
                         )
                       else
-                        span(classes: 'ag-muted', [Component.text('Closed')]),
+                        span(classes: 'ag-muted', [
+                          Component.text(
+                            switch (invite.status.toLowerCase()) {
+                              'accepted' => 'Completed',
+                              'revoked' => 'Cancelled',
+                              'expired' => 'Expired',
+                              _ => '—',
+                            },
+                          ),
+                        ]),
                     ]),
                   ],
               ],
@@ -1533,6 +1617,49 @@ class _AdminAgentsPageState extends State<AdminAgentsPage> {
     );
   }
 
+  Component _cancelInvitationDialog() {
+    final invite = _invitations
+        .where((row) => row.invitationId == _cancelInvitationId)
+        .firstOrNull;
+    if (invite == null) return const span([]);
+    return SitewiseDialog(
+      title: 'Cancel invitation?',
+      ariaLabel: 'Confirm invitation cancellation',
+      onClose: _revokingId == null ? _closeCancelInvitation : _noop,
+      body: div(classes: 'stack', [
+        p(classes: 'body', [
+          Component.text(
+            'Cancel the open invitation for ${invite.email}? This closes '
+            'the invitation record so a new invitation can be issued. It '
+            'does not delete or suspend an agent account, and it does not '
+            'invalidate a setup link that was already emailed.',
+          ),
+        ]),
+        if (_cancelInvitationError != null)
+          div(
+            attributes: const {'role': 'alert'},
+            [ActionNotice(_cancelInvitationError!, tone: 'danger')],
+          ),
+      ]),
+      actions: [
+        ActionButton(
+          'Keep invitation',
+          variant: 'secondary',
+          onClick: _revokingId == null ? _closeCancelInvitation : null,
+        ),
+        ActionButton(
+          _revokingId == invite.invitationId
+              ? 'Cancelling…'
+              : 'Cancel invitation',
+          variant: 'danger-outline',
+          onClick: _revokingId == null && invite.isOpen
+              ? () => _revoke(invite)
+              : null,
+        ),
+      ],
+    );
+  }
+
   Component _confirmDialog() {
     final agent = _agents
         .where((row) => row.userId == _confirmingId)
@@ -1598,8 +1725,10 @@ class _AdminAgentsPageState extends State<AdminAgentsPage> {
         if (_companyDialogOpen) _companyDialog(),
         if (_detailsId != null) _detailsDialog(),
         if (_confirmingId != null) _confirmDialog(),
+        if (_cancelInvitationId != null) _cancelInvitationDialog(),
         if (_mfaId != null) _mfaDialog(),
       ]),
     );
   }
 }
+

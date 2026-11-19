@@ -7,6 +7,7 @@ import 'package:fyp/features/capture/domain/services/station_frame.dart';
 import 'package:fyp/features/capture/domain/services/target_sphere.dart';
 import 'package:fyp/features/virtual_tour/domain/math/quaternions.dart';
 import 'package:fyp/features/virtual_tour/domain/math/vectors.dart';
+import 'package:fyp/features/virtual_tour/platform/ar_target_model.dart';
 import 'package:fyp/features/virtual_tour/platform/arcore_ar.dart';
 import 'package:fyp/features/virtual_tour/platform/ar_types.dart';
 
@@ -161,6 +162,15 @@ class PlaneAnchorService {
   /// the reason the marker filled half the view.
   double markerScale = 1;
 
+  /// The scale actually handed to the renderer.
+  ///
+  /// [kArTargetDisplayScale] is a **display-only** enlargement: it multiplies
+  /// the model before projection, so the plate is easier to find on a busy wall
+  /// while its anchor, its world position and every angular calculation stay
+  /// exactly where they were. Keeping it out of [markerScale] means the
+  /// geometry-facing value still means "the specified 0.22 m plate".
+  double get drawScale => markerScale * kArTargetDisplayScale;
+
   int get placedCount => _placementsById.length;
 
   bool isPlaced(int targetId) => _placementsById.containsKey(targetId);
@@ -219,7 +229,8 @@ class PlaneAnchorService {
         );
       } catch (error) {
         for (final spec in specs) {
-          failures[spec.targetId] = 'Station anchor could not be created: $error';
+          failures[spec.targetId] =
+              'Station anchor could not be created: $error';
         }
         return PlacementOutcome(placed: placed, failures: failures);
       }
@@ -308,7 +319,8 @@ class PlaneAnchorService {
         for (final spec in specs) {
           failures.putIfAbsent(
             spec.targetId,
-            () => 'Station placement was rolled back because the full target set did not succeed.',
+            () =>
+                'Station placement was rolled back because the full target set did not succeed.',
           );
         }
         placed.clear();
@@ -436,7 +448,7 @@ class PlaneAnchorService {
             localRotation: placement.localRotation,
             modelMatrix: modelMatrix,
             useModelTranslation: true,
-            scale: markerScale * 3.5,
+            scale: drawScale * 3.5,
             // No setback: the debug plate must not hide behind the bezel, and
             // its colour must be impossible to mistake for the real marker.
             tint: kDebugMarkerTint,
@@ -456,7 +468,7 @@ class PlaneAnchorService {
           localRotation: placement.localRotation,
           modelMatrix: modelMatrix,
           useModelTranslation: true,
-          scale: markerScale,
+          scale: drawScale,
           offset: Vec3(0, 0, -geometry.bezelSetbackM),
           tint: tint,
           useTint: true,
@@ -474,7 +486,7 @@ class PlaneAnchorService {
           localRotation: placement.localRotation,
           modelMatrix: modelMatrix,
           useModelTranslation: true,
-          scale: markerScale,
+          scale: drawScale,
           tint: markerTint ?? kBezelIdleTint,
           useTint: markerTint != null,
           opacity: targetOpacity,
@@ -503,8 +515,7 @@ class PlaneAnchorService {
   /// `ConcurrentModificationError` whenever teardown ran while a photograph
   /// or a dropped anchor mutated it. Clearing first also means a [release]
   /// racing this can never double-detach — the in-flight set covers the rest.
-  Future<void> releaseAll() =>
-      _serializeAnchorOperation<void>(_releaseAll);
+  Future<void> releaseAll() => _serializeAnchorOperation<void>(_releaseAll);
 
   Future<void> _releaseAll() async {
     final anchor = _stationAnchor;
@@ -528,8 +539,10 @@ class PlaneAnchorService {
     try {
       await _host.detachAnchor(anchorId);
     } catch (error) {
-      debugPrint('ARCORE_ANCHOR: detach of $anchorId failed or the anchor '
-          'was already gone: $error');
+      debugPrint(
+        'ARCORE_ANCHOR: detach of $anchorId failed or the anchor '
+        'was already gone: $error',
+      );
     } finally {
       _detachInFlight.remove(anchorId);
     }

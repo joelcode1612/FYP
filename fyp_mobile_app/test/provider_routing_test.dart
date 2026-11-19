@@ -4,8 +4,10 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:fyp/core/routing/app_routes.dart';
 import 'package:fyp/core/routing/auth_route_guard.dart';
 import 'package:fyp/core/routing/mobile_role.dart';
+import 'package:fyp/presentation/mobile/shell/mobile_navigation.dart';
 import 'package:fyp/presentation/mobile/provider/shell/provider_tab_host.dart';
 import 'package:fyp/presentation/mobile/start/auth_blocking_views.dart';
+import 'package:fyp/presentation/shared/pages/not_found_mobile_page.dart';
 import 'package:shared_logic/shared_logic.dart';
 
 /// Regression guards for the shared Owner / Agent (Provider) workspace.
@@ -42,10 +44,8 @@ void main() {
     for (final path in const [
       '/provider',
       '/provider/listings',
-      '/provider/enquiries',
       '/provider/performance',
       '/provider/profile',
-      '/provider/schedule',
       '/provider/add-property',
       '/provider/property-detail',
       '/provider/verification',
@@ -58,13 +58,57 @@ void main() {
       });
     }
 
-    test('the six stack pages map onto their own index', () {
+    testWidgets('removed Enquiries and Schedule routes cannot render those '
+        'screens', (tester) async {
+      // The screens were removed from the workspace; the routes are
+      // deliberately unregistered so an old deep link falls through to the
+      // catch-all not-found page instead of resurrecting a removed screen.
+      // The route's builder is resolved DIRECTLY so the assertion is about
+      // the route contract itself, independent of MaterialApp's
+      // initial-route plumbing.
+      for (final removed in const [
+        '/provider/enquiries',
+        '/provider/schedule',
+      ]) {
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [
+              authNotifierProvider.overrideWith(
+                () => _FixedAuthNotifier(
+                  _authenticatedAs(AppRole.agent, assurance: 'aal2'),
+                ),
+              ),
+            ],
+            child: MaterialApp(
+              home: Builder(
+                builder: (context) {
+                  final route =
+                      AppRoutes.onGenerateRoute(RouteSettings(name: removed))!
+                          as MaterialPageRoute<dynamic>;
+                  return route.builder(context);
+                },
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(find.byType(NotFoundMobilePage), findsOneWidget);
+        // And never a removed screen's content.
+        expect(find.text('Enquiries'), findsNothing);
+        expect(find.text('Schedule'), findsNothing);
+      }
+    });
+
+    test('the persistent pages map onto their own index', () {
       expect(ProviderTabHost.indexForRoute('/provider'), 0);
       expect(ProviderTabHost.indexForRoute('/provider/listings'), 1);
-      expect(ProviderTabHost.indexForRoute('/provider/enquiries'), 2);
+      // Tasks is the agent's third destination, a page in the same stack.
+      expect(ProviderTabHost.indexForRoute('/provider/tasks'), 2);
       expect(ProviderTabHost.indexForRoute('/provider/performance'), 3);
       expect(ProviderTabHost.indexForRoute('/provider/profile'), 4);
-      expect(ProviderTabHost.indexForRoute('/provider/schedule'), 5);
+      // Add is a persistent page in the SAME IndexedStack, so switching to the
+      // shared form never pushes a second full-screen route.
+      expect(ProviderTabHost.indexForRoute('/provider/add-property'), 5);
       // An unknown provider path lands on the dashboard, not an arbitrary tab.
       expect(ProviderTabHost.indexForRoute('/provider/property-detail'), 0);
     });
@@ -79,71 +123,95 @@ void main() {
       }
     });
 
+    test('dock result commands round-trip to a tab', () {
+      for (final route in ProviderTabHost.tabRoutes) {
+        expect(providerTabFromResult(providerTabResult(route)), route);
+      }
+      expect(providerTabFromResult(addPropertyDoneResult), isNull);
+      expect(providerTabFromResult(null), isNull);
+    });
+
     test('drill-ins highlight the tab they were opened from', () {
       // Add is a real dock destination now, so the form highlights Add.
-      expect(parentShellRoute('/provider/add-property'), '/provider/add-property');
+      expect(
+        parentShellRoute('/provider/add-property'),
+        '/provider/add-property',
+      );
       // A property is opened from My listings.
-      expect(parentShellRoute('/provider/property-detail'), '/provider/listings');
+      expect(
+        parentShellRoute('/provider/property-detail'),
+        '/provider/listings',
+      );
       // Performance is a Dashboard shortcut, not a tab: Home stays selected.
       expect(parentShellRoute('/provider/performance'), '/provider');
-      // Schedule IS a real agent dock tab: it highlights itself.
-      expect(parentShellRoute('/provider/schedule'), '/provider/schedule');
       // Verification and the authenticator step are Profile surfaces.
       expect(parentShellRoute('/provider/verification'), '/provider/profile');
       expect(parentShellRoute('/provider/mfa'), '/provider/profile');
     });
 
     test('the docks are role-scoped', () {
-      // AGENT: Home | Listings | Enquiries | Schedule | Profile.
+      // AGENT: Home | Listings | Tasks | Profile.
       expect(
         ProviderTabHost.destinationsFor(AppRole.agent).map((d) => d.route),
         [
           '/provider',
           '/provider/listings',
-          '/provider/enquiries',
-          '/provider/schedule',
+          '/provider/tasks',
           '/provider/profile',
         ],
       );
       expect(
         ProviderTabHost.destinationsFor(AppRole.agent).map((d) => d.label),
-        ['Home', 'Listings', 'Enquiries', 'Schedule', 'Profile'],
+        ['Home', 'Listings', 'Tasks', 'Profile'],
       );
-      // OWNER: Home | Properties | Add | Messages | Profile. The names differ
-      // but the ROUTES are the same shared pages — one inbox, one listing
-      // store, never per-role duplicate screens.
+      // An agent is assigned properties rather than creating them, so the
+      // create form is no longer an agent destination — while the route itself
+      // stays registered for the flows that still resume a draft.
+      expect(
+        ProviderTabHost.destinationsFor(
+          AppRole.agent,
+        ).any((d) => d.route == '/provider/add-property'),
+        isFalse,
+      );
+      // OWNER: Home | Properties | Add | Profile. The names differ but the
+      // ROUTES are the same shared pages — one listing store, one form, never
+      // per-role duplicate screens.
       expect(
         ProviderTabHost.destinationsFor(AppRole.owner).map((d) => d.route),
         [
           '/provider',
           '/provider/listings',
           '/provider/add-property',
-          '/provider/enquiries',
           '/provider/profile',
         ],
       );
       expect(
         ProviderTabHost.destinationsFor(AppRole.owner).map((d) => d.label),
-        ['Home', 'Properties', 'Add', 'Messages', 'Profile'],
+        ['Home', 'Properties', 'Add', 'Profile'],
       );
       // Performance must NOT be a dock tab for either role; it stays a stack
       // page reached from the Dashboard.
       for (final role in AppRole.values) {
         expect(
+          ProviderTabHost.destinationsFor(
+            role,
+          ).any((d) => d.route == '/provider/performance'),
+          isFalse,
+        );
+        // The removed Enquiries / Schedule slots must not come back.
+        expect(
           ProviderTabHost.destinationsFor(role).any(
-            (d) => d.route == '/provider/performance',
+            (d) =>
+                d.route == '/provider/enquiries' ||
+                d.route == '/provider/schedule',
           ),
           isFalse,
         );
       }
+      // Tasks is its own dock destination, so the stack highlights itself.
+      expect(ProviderTabHost.highlightForStack[2], '/provider/tasks');
       // While the report is open, Home keeps the highlight.
       expect(ProviderTabHost.highlightForStack[3], '/provider');
-      // The Schedule stack page highlights the Schedule dock slot.
-      expect(ProviderTabHost.highlightForStack[5], '/provider/schedule');
-    });
-
-    test('a trailing slash still highlights the right tab', () {
-      expect(parentShellRoute('/provider/enquiries/'), '/provider/enquiries');
     });
   });
 
@@ -152,10 +220,9 @@ void main() {
       for (final path in const [
         '/provider',
         '/provider/listings',
-        '/provider/enquiries',
+        '/provider/tasks',
         '/provider/performance',
         '/provider/profile',
-        '/provider/schedule',
         '/provider/add-property',
         '/provider/verification',
         '/provider/mfa',
@@ -194,8 +261,9 @@ void main() {
       for (final path in const [
         '/provider',
         '/provider/listings',
-        '/provider/enquiries',
-        '/provider/schedule',
+        '/provider/tasks',
+        '/provider/performance',
+        '/provider/add-property',
       ]) {
         expect(canEnterMobileRoute(AppRole.owner, path), isTrue);
         expect(canEnterMobileRoute(AppRole.agent, path), isTrue);
@@ -212,7 +280,11 @@ void main() {
     test('shared capture and tour routes stay role-neutral', () {
       // Both workspaces capture 360° media and preview a tour, so these are
       // deliberately not owned by either shell.
-      for (final path in const ['/owner/capture', '/tour-preview', '/onboarding']) {
+      for (final path in const [
+        '/owner/capture',
+        '/tour-preview',
+        '/onboarding',
+      ]) {
         expect(mobileWorkspaceForRoute(path), isNull);
         expect(canEnterMobileRoute(AppRole.entrepreneur, path), isTrue);
         expect(canEnterMobileRoute(AppRole.owner, path), isTrue);
@@ -276,7 +348,8 @@ void main() {
               builder: (_) => AuthGuard(
                 access: RouteAccess.workspace,
                 routeName: '/entrepreneur/recommendations',
-                builder: (_) => const Scaffold(body: Text('entrepreneur shell')),
+                builder: (_) =>
+                    const Scaffold(body: Text('entrepreneur shell')),
               ),
             ),
             initialRoute: '/entrepreneur/recommendations',
@@ -296,7 +369,11 @@ void main() {
         ProviderScope(
           overrides: [
             authNotifierProvider.overrideWith(
-              () => _FixedAuthNotifier(_authenticatedAs(AppRole.agent)),
+              // An elevated (aal2) session: the guard's mandatory Provider MFA
+              // is satisfied, not bypassed.
+              () => _FixedAuthNotifier(
+                _authenticatedAs(AppRole.agent, assurance: 'aal2'),
+              ),
             ),
           ],
           child: MaterialApp(
@@ -304,11 +381,11 @@ void main() {
               settings: settings,
               builder: (_) => AuthGuard(
                 access: RouteAccess.workspace,
-                routeName: '/provider/enquiries',
+                routeName: '/provider/listings',
                 builder: (_) => const Scaffold(body: Text('provider shell')),
               ),
             ),
-            initialRoute: '/provider/enquiries',
+            initialRoute: '/provider/listings',
           ),
         ),
       );
@@ -320,7 +397,7 @@ void main() {
   });
 }
 
-AuthState _authenticatedAs(AppRole role) => AuthState(
+AuthState _authenticatedAs(AppRole role, {String? assurance}) => AuthState(
   status: AuthStatus.authenticated,
   user: SitewiseUser(
     id: 'user-${role.name}',
@@ -330,6 +407,11 @@ AuthState _authenticatedAs(AppRole role) => AuthState(
     status: 'active',
     location: 'Kuala Lumpur',
     joinedAt: DateTime(2026, 1, 1),
+    // The guard requires a verified `aal2` session before painting ANY
+    // Provider route (both Owner and Agent). Fixtures that enter the
+    // workspace therefore present an elevated session; the guard must never
+    // be bypassed in tests, only satisfied.
+    assuranceLevel: assurance,
   ),
 );
 

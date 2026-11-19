@@ -57,6 +57,7 @@ class _ProviderMfaMobilePageState extends ConsumerState<ProviderMfaMobilePage> {
   String? _error;
   bool _busy = false;
   bool _finished = false;
+  bool _finishing = false;
   bool _manualKeyOpen = false;
 
   @override
@@ -200,19 +201,32 @@ class _ProviderMfaMobilePageState extends ConsumerState<ProviderMfaMobilePage> {
     }
   }
 
-  void _finish() {
-    if (_finished) return;
+  Future<void> _finish() async {
+    if (_finished || _finishing) return;
+    _finishing = true;
+    // Re-read the *signed* Supabase assurance via FastAPI before opening the
+    // shared Provider workspace. Otherwise AuthGuard still sees stale aal1
+    // and immediately redirects the newly verified Owner / Agent back to MFA.
+    final verified = await ref
+        .read(authNotifierProvider.notifier)
+        .refreshVerifiedSessionAfterMfa();
+    if (!mounted) return;
+    if (!verified) {
+      _finishing = false;
+      setState(() {
+        _phase = _Phase.unreachable;
+        _error = 'Your authenticator verification could not be confirmed. '
+            'Check your connection and try again.';
+      });
+      return;
+    }
     _finished = true;
     final entry = widget.entry;
     if (entry != null) {
-      // Sign-in / cold-start MFA: there is no workspace beneath this route to
-      // pop back to. Open the dashboard (or the permitted deep link) and clear
-      // the auth stack so Back cannot return to a stale login or half-finished
-      // enrollment. No local flag grants access — Supabase has just issued the
-      // elevated session and FastAPI re-checks aal2 on every staff call.
       Navigator.of(context).pushNamedAndRemoveUntil(
         entry.destination,
         (_) => false,
+        arguments: entry.destinationArguments,
       );
       return;
     }

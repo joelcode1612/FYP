@@ -947,6 +947,11 @@ class FypPropertyRepository:
             "accessibility_road_km_1km": values.get("accessibility_road_km_1km"),
             "nearest_major_road_m": values.get("nearest_major_road_m"),
             "last_calculated_at": values.get("calculated_at") or datetime.now(timezone.utc),
+            # Provenance of the coordinates these numbers were computed at.
+            # Without it a later refresh cannot tell whether a carried-forward
+            # population value still describes the CURRENT location, which is
+            # how measured-at-elsewhere numbers used to be reported as fresh.
+            "coordinate_hash": values.get("coordinate_hash"),
         }
         updated = self.session.execute(
             text(
@@ -960,7 +965,8 @@ class FypPropertyRepository:
                     demand_generator_count_1km = :demand_generator_count_1km,
                     accessibility_road_km_1km = :accessibility_road_km_1km,
                     nearest_major_road_m = :nearest_major_road_m,
-                    last_calculated_at = :last_calculated_at
+                    last_calculated_at = :last_calculated_at,
+                    coordinate_hash = COALESCE(:coordinate_hash, coordinate_hash)
                 WHERE property_id = :property_id
                 """
             ),
@@ -975,13 +981,13 @@ class FypPropertyRepository:
                         competitor_count_500m, competitor_count_1km,
                         demand_generator_count_500m, demand_generator_count_1km,
                         accessibility_road_km_1km, nearest_major_road_m,
-                        last_calculated_at
+                        last_calculated_at, coordinate_hash
                     ) VALUES (
                         :property_id, :population_500m, :population_1km,
                         :competitor_count_500m, :competitor_count_1km,
                         :demand_generator_count_500m, :demand_generator_count_1km,
                         :accessibility_road_km_1km, :nearest_major_road_m,
-                        :last_calculated_at
+                        :last_calculated_at, :coordinate_hash
                     )
                     """
                 ),

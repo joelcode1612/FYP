@@ -68,7 +68,9 @@ Future<void> persistCaptureCalibrationFiles({
       targets.any((CaptureTarget t) => t.stationId != station.stationId) ||
       targets.map((CaptureTarget t) => t.targetId).toSet().length !=
           station.total) {
-    throw StateError('Calibration must contain the complete unique target set.');
+    throw StateError(
+      'Calibration must contain the complete unique target set.',
+    );
   }
 
   final directory = Directory(stationDirectory);
@@ -85,7 +87,9 @@ Future<void> persistCaptureCalibrationFiles({
     p.join(stationDirectory, '.targets.json.calibration-backup'),
   );
 
-  if (await pending.exists()) await _rollbackPendingCalibration(stationDirectory);
+  if (await pending.exists()) {
+    await _rollbackPendingCalibration(stationDirectory);
+  }
   await _deleteIfExists(stationBackup);
   await _deleteIfExists(targetsBackup);
   await _deleteIfExists(stationTemp);
@@ -118,13 +122,14 @@ Future<void> persistCaptureCalibrationFiles({
     );
     final savedTargets = (jsonDecode(await targetsFile.readAsString()) as List)
         .map(
-          (dynamic row) =>
-              CaptureTarget.fromJson(row as Map<String, dynamic>),
+          (dynamic row) => CaptureTarget.fromJson(row as Map<String, dynamic>),
         )
         .toList(growable: false);
     if (savedStation.stationId != station.stationId ||
         savedTargets.length != station.total ||
-        savedTargets.any((CaptureTarget t) => t.stationId != station.stationId)) {
+        savedTargets.any(
+          (CaptureTarget t) => t.stationId != station.stationId,
+        )) {
       throw StateError('Calibration verification failed after persistence.');
     }
 
@@ -147,7 +152,8 @@ Future<void> persistCaptureCalibrationFiles({
 Future<void> _rollbackPendingCalibration(String stationDirectory) async {
   final pending = File(p.join(stationDirectory, '.calibration.pending'));
   if (!await pending.exists()) return;
-  final metadata = jsonDecode(await pending.readAsString()) as Map<String, dynamic>;
+  final metadata =
+      jsonDecode(await pending.readAsString()) as Map<String, dynamic>;
   final stationFile = File(p.join(stationDirectory, 'station.json'));
   final targetsFile = File(p.join(stationDirectory, 'targets.json'));
   final stationBackup = File(
@@ -315,7 +321,9 @@ class FileCaptureRepository implements CaptureRepository {
     final result = <String>[];
     for (final id in ids) {
       final stationDirectory = _stationDir(id);
-      if (await File(p.join(stationDirectory, '.calibration.pending')).exists()) {
+      if (await File(
+        p.join(stationDirectory, '.calibration.pending'),
+      ).exists()) {
         continue;
       }
       if (await File(p.join(stationDirectory, 'station.json')).exists()) {

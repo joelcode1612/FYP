@@ -69,9 +69,11 @@ class TestAgentManaged:
         )
         assert result["type"] == TYPE_AGENT
         assert result["agent_id"] == 3
-        # Management does not transfer ownership.
+        # Management does not transfer ownership. The derived status is
+        # ``recorded`` — an active account on the row, NOT evidence-backed
+        # verification (which only the verification workflow can claim).
         assert result["owner_user_id"] == "11111111-1111-1111-1111-111111111111"
-        assert result["ownership_status"] == "verified"
+        assert result["ownership_status"] == "recorded"
 
     def test_assignment_to_suspended_agent_is_unresolved_not_a_manager(self):
         result = derive(
@@ -112,7 +114,10 @@ class TestOwnerManaged:
         assert result["type"] == TYPE_OWNER
         assert result["manager_name"] == "Tan Wei Ming"
         assert result["agent_id"] is None
-        assert result["ownership_status"] == "verified"
+        # Derived management state is ``recorded``, never ``verified``:
+        # evidence-backed ownership verification is the verification
+        # workflow's claim, not this module's.
+        assert result["ownership_status"] == "recorded"
 
     def test_active_owner_without_a_name_is_not_given_a_made_up_one(self):
         result = derive(

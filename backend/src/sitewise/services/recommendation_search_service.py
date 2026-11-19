@@ -205,6 +205,12 @@ FILTER_FIELDS: tuple[dict[str, str], ...] = (
         "effect": "Only listings in the selected state remain eligible.",
     },
     {
+        "key": "city",
+        "label": "City / District",
+        "role": "hard_filter",
+        "effect": "Only properties in the selected city or district remain eligible.",
+    },
+    {
         "key": "property_type",
         "label": "Property type",
         "role": "hard_filter",
@@ -259,8 +265,8 @@ FILTER_FIELDS: tuple[dict[str, str], ...] = (
 
 #: The ``FILTER_FIELDS`` keys whose selection narrows the eligible set.
 HARD_FILTER_KEYS = tuple(
-    f["key"] for f in FILTER_FIELDS if f["role"] == "hard_filter"
-) + ("city",)
+    field["key"] for field in FILTER_FIELDS if field["role"] == "hard_filter"
+)
 
 #: Target number of rental/size options. The generated intervals are always
 #: non-overlapping; this only steers how many of them the data is cut into.
@@ -1532,3 +1538,4 @@ def _to_row(row: Any) -> _Row:
         image_url=row["image_url"],
         suitability_score=_as_float(row["suitability_score"]),
     )
+

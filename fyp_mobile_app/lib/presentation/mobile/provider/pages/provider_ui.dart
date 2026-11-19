@@ -445,55 +445,9 @@ class ProviderMfaGate extends StatelessWidget {
   );
 }
 
-/// Status pill for an enquiry. Same shape as [ProviderStatusPill] so the two
-/// states read as one system rather than two.
-class ProviderEnquiryPill extends StatelessWidget {
-  const ProviderEnquiryPill({
-    super.key,
-    required this.label,
-    required this.tone,
-  });
-
-  /// One of: incoming | read | replied | closed. Anything else is neutral —
-  /// an unrecognised state is reported as itself, never colour-coded into a
-  /// state the server did not send.
-  final String label;
-  final String tone;
-
-  @override
-  Widget build(BuildContext context) {
-    final (Color bg, Color fg) = switch (tone) {
-      'action' => (SitewiseM3.quiet, SitewiseColors.action),
-      'warning' => (SitewiseM3.amberWash, SitewiseM3.amber),
-      'success' => (SitewiseM3.greenWash, SitewiseM3.green),
-      _ => (providerSoft, providerMuted),
-    };
-    return Semantics(
-      label: 'Enquiry status: $label',
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-        decoration: BoxDecoration(
-          color: bg,
-          borderRadius: BorderRadius.circular(SitewiseM3.radiusPill),
-          border: Border.all(color: bg),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            fontFamily: kFontFamily,
-            fontSize: 10,
-            fontWeight: FontWeight.w700,
-            color: fg,
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 /// A titled white card — the Provider counterpart of `M3Card`.
 ///
-/// Used by the enquiries, performance and verification screens so they share
+/// Used by the performance and verification screens so they share
 /// one surface, radius, hairline and typography with the dashboard.
 class ProviderCard extends StatelessWidget {
   const ProviderCard({

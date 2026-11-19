@@ -37,6 +37,10 @@ class _EntrepreneurProfileMobilePageState
   /// then torn down in one navigation rather than left underneath the auth
   /// screen.
   Future<void> _logOut(BuildContext context) async {
+    // The comparison shortlist is account-scoped UI state: clear it before
+    // the next identity can reach any protected screen.
+    ref.read(appNotifierProvider.notifier).clearCompared();
+    ref.read(propertyCompareProvider.notifier).reset();
     await ref.read(authNotifierProvider.notifier).signOut();
     if (!context.mounted) return;
     Navigator.of(context).pushNamedAndRemoveUntil('/auth', (_) => false);
@@ -89,7 +93,7 @@ class _EntrepreneurProfileMobilePageState
             children: [
               _Tile(
                 icon: Icons.tune,
-                title: 'Business preferences',
+                title: 'User Preferences',
                 subtitle:
                     '${prefs.businessType} · up to RM${prefs.maxBudgetRm.toStringAsFixed(0)}',
                 onTap: () => Navigator.of(

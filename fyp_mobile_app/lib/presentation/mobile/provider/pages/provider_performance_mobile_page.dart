@@ -13,12 +13,16 @@ import 'provider_workspace_service.dart';
 ///
 /// Two kinds of number appear here and they are never mixed:
 ///
-/// * **Measured** — arithmetic over the listings the signed-in account manages
-///   and the enquiries stored against them. Both come from the same authorized
-///   scope as the dashboard, so no two screens can disagree.
+/// * **Measured** — arithmetic over the listings the signed-in account manages.
+///   They come from the same authorized scope as the dashboard, so no two
+///   screens can disagree.
 /// * **Not tracked** — impressions, views and contact clicks. SiteWise logs no
 ///   event for any of them, so they are listed with the reason. Reporting them
 ///   as `0` would be indistinguishable from "measured, and it was zero".
+///
+/// The Enquiries figures the backend still computes are deliberately not
+/// rendered: the Enquiries feature was removed from the mobile Provider
+/// workspace. The server payload is untouched.
 class ProviderPerformanceMobilePage extends ConsumerStatefulWidget {
   const ProviderPerformanceMobilePage({super.key});
 
@@ -84,8 +88,8 @@ class _ProviderPerformanceMobilePageState
                 eyebrow: 'Portfolio report',
                 title: 'Performance.',
                 lead:
-                    'Measured from the listings and enquiries this account '
-                    'is authorized to manage.',
+                    'Measured from the listings this account is authorized '
+                    'to manage.',
               ),
               if (report.total == 0) ...[
                 const M3SectionRow(title: 'Overview'),
@@ -140,16 +144,14 @@ class _ProviderPerformanceMobilePageState
                 ),
                 M3DataNote(
                   text:
-                      'Figures are computed from stored listing and enquiry '
-                      'records. Metrics SiteWise does not capture are listed '
-                      'as "Not tracked" below, never as zero.',
+                      'Figures are computed from stored listing records. '
+                      'Metrics SiteWise does not capture are listed as '
+                      '"Not tracked" below, never as zero.',
                 ),
                 const M3SectionRow(title: 'Property details'),
                 _ManagedProperties(report: report),
                 const SizedBox(height: 14),
                 _Listings(report: report),
-                const SizedBox(height: 14),
-                _Enquiries(report: report),
                 const SizedBox(height: 14),
                 _Engagement(report: report),
               ],
@@ -253,83 +255,6 @@ class _Listings extends StatelessWidget {
             'Publication is separate from approval: '
             '${report.published} of ${report.total} listings are live on the '
             'public site.',
-            style: const TextStyle(
-              fontFamily: kFontFamily,
-              fontSize: 11,
-              height: 1.5,
-              color: SitewiseM3.muted,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _Enquiries extends StatelessWidget {
-  const _Enquiries({required this.report});
-
-  final ProviderPerformance report;
-
-  @override
-  Widget build(BuildContext context) {
-    final metrics = report.enquiries;
-    final lastReceived = metrics.lastReceivedAt;
-    final footnote = metrics.total == 0
-        ? 'No enquiry has been stored against these listings.'
-        : lastReceived == null
-        ? 'Enquiries exist, but the server reported no arrival time.'
-        : 'Last received $lastReceived.';
-    return ProviderCard(
-      title: 'Enquiries received',
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: ProviderKpi(label: 'Total', value: metrics.total),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: ProviderKpi(
-                  label: 'Awaiting reply',
-                  value: metrics.count(ProviderEnquiryStatus.incoming),
-                  tone: SitewiseColors.action,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 14),
-          for (final status in const [
-            ProviderEnquiryStatus.incoming,
-            ProviderEnquiryStatus.read,
-            ProviderEnquiryStatus.replied,
-            ProviderEnquiryStatus.closed,
-          ])
-            Padding(
-              padding: const EdgeInsets.only(bottom: 9),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      status.label,
-                      style: const TextStyle(
-                        fontFamily: kFontFamily,
-                        fontSize: 12.5,
-                        color: SitewiseM3.ink,
-                      ),
-                    ),
-                  ),
-                  ProviderEnquiryPill(
-                    label: '${metrics.count(status)}',
-                    tone: 'neutral',
-                  ),
-                ],
-              ),
-            ),
-          Text(
-            footnote,
             style: const TextStyle(
               fontFamily: kFontFamily,
               fontSize: 11,

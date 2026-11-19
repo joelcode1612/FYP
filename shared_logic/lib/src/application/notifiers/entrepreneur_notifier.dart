@@ -157,6 +157,9 @@ class EntrepreneurNotifier extends Notifier<EntrepreneurState> {
   void applyRecommendationRequest(RecommendationSearchRequest request) =>
       _controller.applyRecommendationRequest(request);
 
+  /// Removes a previous search and returns Recommendations to the empty state.
+  void clearRecommendationSearch() => _controller.clearRecommendationSearch();
+
   /// Loads listings: a real server search when an ExploreRepository is wired,
   /// otherwise the client-filtered full listing.
   Future<void> loadExplore() => _controller.loadExplore();

@@ -11,6 +11,7 @@ import '../../../../core/theme/sitewise_theme.dart';
 import '../../../../core/utils/capture_log.dart';
 import '../../shell/mobile_app_shell.dart';
 import '../../shell/mobile_navigation.dart';
+import '../../provider/shell/provider_tab_scope.dart';
 import '../../../shared/tour/ar_capture_mobile_page.dart';
 
 /// SiteWise Add Property — the ONE create/edit form for the whole Provider
@@ -57,7 +58,7 @@ class _SitewiseAddPropertyMobilePageState
   static const List<String> _stepNames = <String>[
     'Property details',
     'Location',
-    'AR 360° Capture',
+    '360° Capture',
     'Review',
     'Confirmation',
   ];
@@ -65,10 +66,23 @@ class _SitewiseAddPropertyMobilePageState
   static const List<String> _stepDescriptions = <String>[
     'Enter the basic details of your commercial unit.',
     'Add the address details of your commercial unit.',
-    'Capture a 360° virtual tour of the property with AR guidance.',
+    'Capture a 360° virtual tour of the property.',
     'Review the information before submission.',
     'Save or submit your property.',
   ];
+
+  // Cache the theme. Keyboard opening/closing should not allocate and
+  // propagate an entirely new ThemeData through the input-heavy wizard.
+  late final ThemeData _formTheme = ThemeData(
+    useMaterial3: true,
+    scaffoldBackgroundColor: _background,
+    colorScheme: ColorScheme.fromSeed(
+      seedColor: _brand,
+      primary: _brand,
+      surface: SitewiseM3.surface,
+    ),
+    fontFamily: kFontFamily,
+  );
 
   final TextEditingController _nameController = TextEditingController();
   final TextEditingController _rentController = TextEditingController();
@@ -115,7 +129,9 @@ class _SitewiseAddPropertyMobilePageState
   /// (draft, rejected or corrections-requested). The backend enforces the
   /// same rule; this only disables the UI honestly.
   bool get _editable =>
-      _draftId == null || _serverStatus == 'draft' || _serverStatus == 'rejected';
+      _draftId == null ||
+      _serverStatus == 'draft' ||
+      _serverStatus == 'rejected';
 
   bool get _live => MobileConfig.usesLiveApi;
 
@@ -158,7 +174,10 @@ class _SitewiseAddPropertyMobilePageState
     } on Object catch (error) {
       if (!mounted) return;
       setState(() {
-        _serverError = _readableError(error, fallback: 'Could not load the saved draft.');
+        _serverError = _readableError(
+          error,
+          fallback: 'Could not load the saved draft.',
+        );
       });
     } finally {
       if (mounted) setState(() => _saving = false);
@@ -175,16 +194,24 @@ class _SitewiseAddPropertyMobilePageState
     }
 
     text(_nameController, listing.name);
-    text(_rentController,
-        listing.rentalPrice == null ? '' : listing.rentalPrice!.toStringAsFixed(0));
-    text(_areaController,
-        listing.sizeSqft == null ? '' : listing.sizeSqft!.toStringAsFixed(0));
+    text(
+      _rentController,
+      listing.rentalPrice == null
+          ? ''
+          : listing.rentalPrice!.toStringAsFixed(0),
+    );
+    text(
+      _areaController,
+      listing.sizeSqft == null ? '' : listing.sizeSqft!.toStringAsFixed(0),
+    );
     text(_addressController, listing.address);
     text(_stateController, listing.state);
     text(_districtController, listing.city);
     text(_postcodeController, listing.postcode);
     text(_descriptionController, listing.description);
-    final normalizedType = normalizeCommercialPropertyType(listing.propertyType);
+    final normalizedType = normalizeCommercialPropertyType(
+      listing.propertyType,
+    );
     if (normalizedType != null) _propertyType = normalizedType;
     setState(() {});
   }
@@ -219,15 +246,17 @@ class _SitewiseAddPropertyMobilePageState
     });
   }
 
-  Map<String, dynamic> _draftFields() => OwnerListing(
+  Map<String, dynamic> _draftFields() =>
+      OwnerListing(
         id: _draftId ?? '',
         name: '',
         verificationStatus: _serverStatus,
       ).toDraftJson(
         name: _propertyName.isEmpty ? null : _propertyName,
         propertyType: _propertyType,
-        description:
-            _descriptionController.text.trim().isEmpty ? null : _descriptionController.text.trim(),
+        description: _descriptionController.text.trim().isEmpty
+            ? null
+            : _descriptionController.text.trim(),
         address: _address.isEmpty ? null : _address,
         city: _district.isEmpty ? null : _district,
         state: _stateName.isEmpty ? null : _stateName,
@@ -269,13 +298,17 @@ class _SitewiseAddPropertyMobilePageState
       setState(() {
         _draftId = saved.id;
         _serverStatus = saved.verificationStatus;
-        _serverMessage = 'Draft saved to Sitewise (ID ${saved.id}). '
+        _serverMessage =
+            'Draft saved to Sitewise (ID ${saved.id}). '
             'You can leave this page and resume it later from My listings.';
       });
     } on Object catch (error) {
       if (!mounted) return;
       setState(() {
-        _serverError = _readableError(error, fallback: 'Could not save the draft.');
+        _serverError = _readableError(
+          error,
+          fallback: 'Could not save the draft.',
+        );
       });
     } finally {
       if (mounted) setState(() => _saving = false);
@@ -304,7 +337,9 @@ class _SitewiseAddPropertyMobilePageState
       // The record must exist before evidence can attach to it.
       String id = _draftId ?? '';
       if (id.isEmpty) {
-        final saved = await ServiceLocator.ownerListings.createDraft(_draftFields());
+        final saved = await ServiceLocator.ownerListings.createDraft(
+          _draftFields(),
+        );
         if (!mounted) return;
         id = saved.id;
         _draftId = id;
@@ -312,7 +347,10 @@ class _SitewiseAddPropertyMobilePageState
       } else {
         await ServiceLocator.ownerListings.updateDraft(id, _draftFields());
       }
-      final result = await ServiceLocator.propertyVerification.submit(id);
+      final result = await ServiceLocator.propertyVerification.submit(
+        id,
+        scope: 'listing',
+      );
       if (!mounted) return;
       // The verification status changed on the server. The draft update above
       // already bumped the listings revision, but that happened BEFORE this
@@ -321,9 +359,11 @@ class _SitewiseAddPropertyMobilePageState
       ServiceLocator.listingsRevision.value++;
       setState(() {
         _serverStatus = 'pending';
-        _serverMessage = 'Submitted for verification (ID $id). '
-            'Status: ${result.listingStatus.wire}/${result.ownershipStatus.wire}. '
-            'An administrator will review your listing and ownership evidence.';
+        _serverMessage =
+            'Listing submitted for admin review (ID $id). '
+            'Listing: ${result.listingStatus.wire}. '
+            'Ownership: ${result.ownershipStatus.wire} (separate review). '
+            'Approval does not publish the listing until ownership is verified.';
         _step = 5;
       });
     } on Object catch (error) {
@@ -401,6 +441,7 @@ class _SitewiseAddPropertyMobilePageState
 
   void _goNext() {
     if (_step >= 5) return;
+    FocusManager.instance.primaryFocus?.unfocus();
     setState(() {
       if (_validateCurrentStep()) {
         _step += 1;
@@ -419,6 +460,7 @@ class _SitewiseAddPropertyMobilePageState
 
   void _goBack() {
     if (_step <= 1) return;
+    FocusManager.instance.primaryFocus?.unfocus();
     setState(() {
       _step -= 1;
       _validationMessage = null;
@@ -426,6 +468,7 @@ class _SitewiseAddPropertyMobilePageState
   }
 
   void _editStep(int step) {
+    FocusManager.instance.primaryFocus?.unfocus();
     setState(() {
       _step = step;
       _validationMessage = null;
@@ -436,25 +479,53 @@ class _SitewiseAddPropertyMobilePageState
   }
 
   void _onTextChanged(String _) {
-    setState(() {
-      _validationMessage = null;
-    });
+    // TextField updates itself through its controller. Rebuilding the whole
+    // page on every character causes unnecessary keyboard/input jank.
+    if (_validationMessage == null) return;
+    setState(() => _validationMessage = null);
   }
 
   /// Leave the form for the signed-in role's property listing.
   ///
-  /// The form is normally a drill-in above the shared Provider workspace, so it
-  /// pops back with [addPropertyDoneResult] and `ProviderTabHost` re-selects
-  /// `/provider/listings`. Replacing the route instead would stack a second
-  /// workspace shell over the one that opened this form. A cold deep link has
-  /// no shell underneath it, and only that case rebuilds the stack.
+  /// Inside the Provider shell the listing tab already exists, so the dock
+  /// command simply selects it and the form page is kept alive. A draft resumed
+  /// as a drill-in cannot see that scope; it pops with [addPropertyDoneResult]
+  /// and the shell re-selects `/provider/listings`. A cold deep link has no
+  /// shell underneath it, and only that case rebuilds the stack.
   void _goToListings() {
+    const listings = '/provider/listings';
+    final scope = ProviderTabScope.maybeOf(context);
+    if (scope != null && scope.handlesRoute(listings)) {
+      scope.go(listings);
+      return;
+    }
     final navigator = Navigator.of(context);
     if (navigator.canPop()) {
       navigator.pop(addPropertyDoneResult);
     } else {
-      navigator.pushNamedAndRemoveUntil('/provider/listings', (route) => false);
+      navigator.pushNamedAndRemoveUntil(listings, (route) => false);
     }
+  }
+
+  /// Dock taps while the form is open are tab commands, not new routes.
+  ///
+  /// When the form is the persistent Provider page the scope is present and
+  /// `IndexedStack` switches tabs with no rebuild or second AuthGuard pass. A
+  /// resumed draft has no scope: popping with a tab result returns to the shell
+  /// that opened it, and a cold deep link falls back to the original route
+  /// replacement so the workspace is never stacked twice.
+  void _onDockNavigate(String route) {
+    final scope = ProviderTabScope.maybeOf(context);
+    if (scope != null && scope.handlesRoute(route)) {
+      scope.go(route);
+      return;
+    }
+    final navigator = Navigator.of(context);
+    if (navigator.canPop()) {
+      navigator.pop(providerTabResult(route));
+      return;
+    }
+    navigator.pushReplacementNamed(route);
   }
 
   /// The dock route to highlight while the form is open.
@@ -469,16 +540,7 @@ class _SitewiseAddPropertyMobilePageState
   @override
   Widget build(BuildContext context) {
     return Theme(
-      data: ThemeData(
-        useMaterial3: true,
-        scaffoldBackgroundColor: _background,
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: _brand,
-          primary: _brand,
-          surface: SitewiseM3.surface,
-        ),
-        fontFamily: kFontFamily,
-      ),
+      data: _formTheme,
       child: Consumer(
         builder: (context, ref, _) {
           // ONE form serves the whole Provider workspace: an owner and an agent
@@ -488,57 +550,66 @@ class _SitewiseAddPropertyMobilePageState
           final role = ref.watch(appNotifierProvider.select((s) => s.role));
           final destinations = providerDestinationsFor(role);
           return MobileAppShell(
-        title: 'Add property',
-        currentRoute: _dockRouteFor(destinations),
-        // This form is the Provider dock's Add destination: keep the exact
-        // Material 3 chrome and the role's provider tabs while it is open.
-        m3: true,
-        destinations: destinations,
-        // Entered from the Owner / Agent workspace as a top-level Add
-        // destination, so the header keeps no back arrow — the dock is the
-        // way back to the other tabs.
-        showBack: false,
-        body: SafeArea(
-          child: LayoutBuilder(
-            builder: (context, constraints) {
-              return SingleChildScrollView(
-                padding: const EdgeInsets.fromLTRB(12, 10, 12, 28),
-                child: Center(
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 620),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: <Widget>[
-                        const SizedBox(height: 8),
-                        _buildPageHeading(),
-                        const SizedBox(height: 18),
-                        _buildStepper(),
-                        const SizedBox(height: 18),
-                        _buildMainCard(),
-                        if (_serverMessage != null) ...<Widget>[
-                          const SizedBox(height: 14),
-                          _buildServerBanner(_serverMessage!, success: true),
-                        ],
-                        if (_serverError != null) ...<Widget>[
-                          const SizedBox(height: 14),
-                          _buildServerBanner(_serverError!, success: false),
-                        ],
-                        if (_rejectionReason != null &&
-                            _serverStatus == 'rejected') ...<Widget>[
-                          const SizedBox(height: 14),
-                          _buildServerBanner(
-                            'Administrator requested corrections: $_rejectionReason',
-                            success: false,
-                          ),
-                        ],
-                      ],
+            title: 'Add property',
+            currentRoute: _dockRouteFor(destinations),
+            // This form is the Provider dock's Add destination: keep the exact
+            // Material 3 chrome and the role's provider tabs while it is open.
+            m3: true,
+            destinations: destinations,
+            hideBottomNavOnKeyboard: true,
+            onNavigate: _onDockNavigate,
+            // Entered from the Owner / Agent workspace as a top-level Add
+            // destination, so the header keeps no back arrow — the dock is the
+            // way back to the other tabs.
+            showBack: false,
+            body: SafeArea(
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  return SingleChildScrollView(
+                    // Let the user drag to dismiss the keyboard without forcing
+                    // the entire provider wizard through extra input rebuilds.
+                    keyboardDismissBehavior:
+                        ScrollViewKeyboardDismissBehavior.onDrag,
+                    padding: const EdgeInsets.fromLTRB(12, 10, 12, 28),
+                    child: Center(
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 620),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: <Widget>[
+                            const SizedBox(height: 8),
+                            _buildPageHeading(),
+                            const SizedBox(height: 18),
+                            _buildStepper(),
+                            const SizedBox(height: 18),
+                            _buildMainCard(),
+                            if (_serverMessage != null) ...<Widget>[
+                              const SizedBox(height: 14),
+                              _buildServerBanner(
+                                _serverMessage!,
+                                success: true,
+                              ),
+                            ],
+                            if (_serverError != null) ...<Widget>[
+                              const SizedBox(height: 14),
+                              _buildServerBanner(_serverError!, success: false),
+                            ],
+                            if (_rejectionReason != null &&
+                                _serverStatus == 'rejected') ...<Widget>[
+                              const SizedBox(height: 14),
+                              _buildServerBanner(
+                                'Administrator requested corrections: $_rejectionReason',
+                                success: false,
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
                     ),
-                  ),
-                ),
-              );
-            },
-          ),
-        ),
+                  );
+                },
+              ),
+            ),
           );
         },
       ),
@@ -828,52 +899,59 @@ class _SitewiseAddPropertyMobilePageState
       children: <Widget>[
         _fieldLabel('Commercial property type', requiredField: true),
         const SizedBox(height: 9),
-        GridView.builder(
-          itemCount: choices.length,
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: 2,
-            mainAxisSpacing: 9,
-            crossAxisSpacing: 9,
-            mainAxisExtent: 45,
-          ),
-          itemBuilder: (context, index) {
-            final choice = choices[index];
-            final selected = choice == _propertyType;
-            return OutlinedButton(
-              onPressed: () {
-                setState(() {
-                  _propertyType = choice;
-                  _fieldErrors.remove('type');
-                  _validationMessage = null;
-                });
-              },
-              style: OutlinedButton.styleFrom(
-                backgroundColor: selected
-                    ? const Color(0xFFEEF5FF)
-                    : Colors.white,
-                foregroundColor: selected ? _brandStrong : _muted,
-                side: BorderSide(
-                  color: selected
-                      ? const Color(0xFF81A8FB)
-                      : const Color(0xFFD6DEEA),
-                  width: selected ? 1.5 : 1,
-                ),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                padding: const EdgeInsets.symmetric(horizontal: 8),
-              ),
-              child: Text(
-                choice,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
+        // Avoid a nested shrink-wrapped GridView. Keyboard height changes
+        // re-layout the form; Wrap is lighter for this small, fixed set.
+        LayoutBuilder(
+          builder: (context, constraints) {
+            const gap = 9.0;
+            final tileWidth = (constraints.maxWidth - gap) / 2;
+            return Wrap(
+              spacing: gap,
+              runSpacing: gap,
+              children: <Widget>[
+                for (final choice in choices)
+                  SizedBox(
+                    width: tileWidth,
+                    height: 45,
+                    child: OutlinedButton(
+                      onPressed: () {
+                        FocusManager.instance.primaryFocus?.unfocus();
+                        setState(() {
+                          _propertyType = choice;
+                          _fieldErrors.remove('type');
+                          _validationMessage = null;
+                        });
+                      },
+                      style: OutlinedButton.styleFrom(
+                        backgroundColor: choice == _propertyType
+                            ? const Color(0xFFEEF5FF)
+                            : Colors.white,
+                        foregroundColor: choice == _propertyType
+                            ? _brandStrong
+                            : _muted,
+                        side: BorderSide(
+                          color: choice == _propertyType
+                              ? const Color(0xFF81A8FB)
+                              : const Color(0xFFD6DEEA),
+                          width: choice == _propertyType ? 1.5 : 1,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                      ),
+                      child: Text(
+                        choice,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
             );
           },
         ),
@@ -957,10 +1035,9 @@ class _SitewiseAddPropertyMobilePageState
   }
 
   void _onAddressChanged(String value) {
-    setState(() {
-      _fieldErrors.remove('address');
-      _validationMessage = null;
-    });
+    final removedError = _fieldErrors.remove('address') != null;
+    if (!removedError && _validationMessage == null) return;
+    setState(() => _validationMessage = null);
   }
 
   /// A tappable field that opens a searchable option sheet.
@@ -1071,7 +1148,7 @@ class _SitewiseAddPropertyMobilePageState
     onSelected(picked);
   }
 
-  // ------------------------------------------------------- AR 360 capture
+  // ------------------------------------------------------- 360° capture step
   bool _startingCapture = false;
 
   /// Looks for an interrupted capture belonging to the saved draft.
@@ -1100,6 +1177,7 @@ class _SitewiseAddPropertyMobilePageState
 
   Future<void> _startArCapture() async {
     if (_startingCapture) return;
+    FocusManager.instance.primaryFocus?.unfocus();
     setState(() => _startingCapture = true);
     try {
       await _saveDraft();
@@ -1109,7 +1187,7 @@ class _SitewiseAddPropertyMobilePageState
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text(
-              'The draft could not be saved, so AR capture was not started.',
+              'The draft could not be saved, so 360° capture was not started.',
             ),
           ),
         );
@@ -1174,12 +1252,22 @@ class _SitewiseAddPropertyMobilePageState
             children: [
               Row(
                 children: [
-                  Icon(Icons.view_in_ar_outlined, color: scheme.primary),
+                  Icon(Icons.threesixty, color: scheme.primary),
                   const SizedBox(width: 10),
                   Expanded(
-                    child: Text(
-                      'AR 360° Capture',
-                      style: Theme.of(context).textTheme.titleMedium,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          '360° Property Capture',
+                          style: Theme.of(context).textTheme.titleMedium,
+                        ),
+                        Text(
+                          'Create an interactive 360° tour of your property.',
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(color: scheme.onSurfaceVariant),
+                        ),
+                      ],
                     ),
                   ),
                 ],
@@ -1187,28 +1275,34 @@ class _SitewiseAddPropertyMobilePageState
               const SizedBox(height: 14),
               _arGuidance(
                 Icons.grid_on_outlined,
-                'Follow 26 capture points',
-                'Stand in one spot and turn your body slowly in a full '
-                    'circle. Hold steady at each point; ARCore records the '
-                    'direction when it is aligned and stable.',
+                'Follow 38 capture points',
+                'Capture the room using the guided targets, including the '
+                    'ceiling and floor.',
+              ),
+              _arGuidance(
+                Icons.photo_camera_outlined,
+                'Keep the camera steady',
+                'Rotate your phone slowly around the same camera position. '
+                    'Avoid moving the lens in a wide circle.',
               ),
               _arGuidance(
                 Icons.center_focus_strong_outlined,
-                'AR alignment guidance',
-                'Align the target, hold still, and let the app confirm the '
-                    'position before the frame is taken.',
+                'Align each target',
+                'Move the target into the center guide and hold still until '
+                    'the photograph is captured.',
               ),
               _arGuidance(
                 Icons.panorama_outlined,
-                'Create a virtual tour',
-                'Frames are stitched into a 360° tour for this property.',
+                'Create your 360° tour',
+                'Your photographs will be joined into a panorama that you can '
+                    'review before saving.',
               ),
               const SizedBox(height: 4),
               FilledButton.icon(
                 onPressed: _startingCapture ? null : _startArCapture,
                 icon: const Icon(Icons.play_circle_outline),
                 label: Text(
-                  _startingCapture ? 'Saving draft…' : 'Start AR Capture',
+                  _startingCapture ? 'Saving draft…' : 'Start 360° Capture',
                 ),
               ),
               // Only ever rendered for a real interrupted capture: the lookup
@@ -1335,7 +1429,11 @@ class _SitewiseAddPropertyMobilePageState
           ),
           const SizedBox(height: 17),
           Text(
-            submitted ? 'Submitted for verification' : 'Draft saved',
+            submitted
+                ? 'Submitted for listing review'
+                : _draftId != null
+                ? 'Draft saved'
+                : 'Draft not saved',
             textAlign: TextAlign.center,
             style: const TextStyle(
               color: _ink,
@@ -1425,7 +1523,7 @@ class _SitewiseAddPropertyMobilePageState
                       )
                     : const Icon(Icons.verified_outlined, size: 19),
                 label: Text(
-                  _submitting ? 'Submitting…' : 'Submit for verification',
+                  _submitting ? 'Submitting…' : 'Submit listing for review',
                   style: const TextStyle(fontWeight: FontWeight.w800),
                 ),
                 style: FilledButton.styleFrom(
@@ -1545,6 +1643,8 @@ class _SitewiseAddPropertyMobilePageState
           controller: controller,
           keyboardType: keyboardType,
           maxLines: maxLines,
+          // Keep the active input above the keyboard and the floating dock.
+          scrollPadding: const EdgeInsets.fromLTRB(16, 16, 16, 104),
           enabled: _editable,
           onChanged: onChanged ?? _onTextChanged,
           style: const TextStyle(color: _ink, fontSize: 13),
@@ -1752,39 +1852,95 @@ class _OptionSheetState extends State<_OptionSheet> {
   static const Color _muted = SitewiseM3.muted;
   static const Color _brand = SitewiseColors.action;
 
+  static const int _maxVisibleOptions = 100;
+  static const Duration _searchDebounceDuration = Duration(milliseconds: 120);
+
   final TextEditingController _filter = TextEditingController();
+  Timer? _searchTimer;
+  late final List<String> _lowercaseOptions;
   List<String> _visible = const <String>[];
+  bool _showNarrowHint = false;
+
+  List<String> _initialOptions() {
+    // Preserve the selected entry even when it lies after the first 100.
+    final result = <String>[];
+    if (widget.selected.isNotEmpty &&
+        widget.options.contains(widget.selected)) {
+      result.add(widget.selected);
+    }
+    for (final option in widget.options) {
+      if (option == widget.selected) continue;
+      if (result.length == _maxVisibleOptions) break;
+      result.add(option);
+    }
+    return result;
+  }
 
   @override
   void initState() {
     super.initState();
-    _visible = widget.options;
+    // Lowercasing all locations on every keystroke can freeze low-end devices.
+    // Compute once, and render no more than 100 list tiles per search.
+    _lowercaseOptions = widget.options
+        .map((option) => option.toLowerCase())
+        .toList(growable: false);
+    _visible = _initialOptions();
+    _showNarrowHint = widget.options.length > _maxVisibleOptions;
   }
 
   @override
   void dispose() {
+    _searchTimer?.cancel();
     _filter.dispose();
     super.dispose();
   }
 
   void _applyFilter(String query) {
+    _searchTimer?.cancel();
     final needle = query.trim().toLowerCase();
-    setState(() {
-      _visible = needle.isEmpty
-          ? widget.options
-          : widget.options
-                .where((option) => option.toLowerCase().contains(needle))
-                .toList(growable: false);
+    if (needle.isEmpty) {
+      setState(() {
+        _visible = _initialOptions();
+        _showNarrowHint = widget.options.length > _maxVisibleOptions;
+      });
+      return;
+    }
+
+    _searchTimer = Timer(_searchDebounceDuration, () {
+      if (!mounted) return;
+      final matches = <String>[];
+      var hasMore = false;
+      for (var i = 0; i < _lowercaseOptions.length; i++) {
+        if (!_lowercaseOptions[i].contains(needle)) continue;
+        if (matches.length == _maxVisibleOptions) {
+          hasMore = true;
+          break;
+        }
+        matches.add(widget.options[i]);
+      }
+      if (!mounted) return;
+      setState(() {
+        _visible = matches;
+        _showNarrowHint = hasMore;
+      });
     });
   }
 
   @override
   Widget build(BuildContext context) {
-    final height = MediaQuery.of(context).size.height * 0.68;
+    // Reserve keyboard space *before* determining sheet height. Previously,
+    // a 68%-screen sheet PLUS the keyboard inset caused repeated constraint
+    // and viewport churn (and occasional overflow on smaller devices).
+    final keyboardInset = MediaQuery.viewInsetsOf(context).bottom;
+    final screenHeight = MediaQuery.sizeOf(context).height;
+    final topPadding = MediaQuery.paddingOf(context).top;
+    final availableHeight = (screenHeight - keyboardInset - topPadding).clamp(
+      0.0,
+      screenHeight,
+    );
+    final height = availableHeight * (keyboardInset > 0 ? 0.92 : 0.68);
     return Padding(
-      padding: EdgeInsets.only(
-        bottom: MediaQuery.of(context).viewInsets.bottom,
-      ),
+      padding: EdgeInsets.only(bottom: keyboardInset),
       child: SafeArea(
         top: false,
         child: SizedBox(
@@ -1851,6 +2007,14 @@ class _OptionSheetState extends State<_OptionSheet> {
                   ),
                 ),
               ),
+              if (_showNarrowHint)
+                const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 18, vertical: 4),
+                  child: Text(
+                    'Showing the first 100 options. Type more to narrow your search.',
+                    style: TextStyle(color: _muted, fontSize: 11),
+                  ),
+                ),
               Expanded(
                 child: _visible.isEmpty
                     ? Center(

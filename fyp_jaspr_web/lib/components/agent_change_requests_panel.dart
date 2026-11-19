@@ -103,8 +103,8 @@ class _AgentChangeRequestsPanelState extends State<AgentChangeRequestsPanel> {
 
   @override
   Component build(BuildContext context) {
-    return div(classes: 'stack stack--sections', [
-      div(classes: 'row row--between', [
+    return div(classes: 'al-agent-changes stack stack--sections', [
+      div(classes: 'al-agent-header', [
         div(classes: 'stack', [
           span(classes: 'title', [Component.text('Agent change requests')]),
           p(classes: 'body muted', [
@@ -116,7 +116,7 @@ class _AgentChangeRequestsPanelState extends State<AgentChangeRequestsPanel> {
             ),
           ]),
         ]),
-        div(classes: 'actions-row', [
+        div(classes: 'al-agent-filters actions-row', [
           for (final entry in const [
             ('pending', 'Pending'),
             ('changes_requested', 'Changes requested'),
@@ -162,7 +162,7 @@ class _AgentChangeRequestsPanelState extends State<AgentChangeRequestsPanel> {
     final busy = _busyId == requestId;
     final propertyExists = property['property_exists'] == true;
 
-    return div(classes: 'card card-pad stack', [
+    return div(classes: 'al-agent-card card card-pad stack', [
       div(classes: 'row row--between', [
         div(classes: 'stack', [
           span(classes: 'title', [

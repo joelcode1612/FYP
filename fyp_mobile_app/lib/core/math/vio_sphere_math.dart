@@ -128,11 +128,11 @@ abstract final class VioSphereConstants {
   static const int horizontalCount = 8;
   static const double horizontalAzimuthStepDeg = 45.0;
 
-  /// Upper and lower rings: 8 targets each at ±45°, every 45°.
+  /// Upper and lower rings: 8 targets each at ±40°, every 45°.
   static const int upperCount = 8;
   static const int lowerCount = 8;
-  static const double upperElevationDeg = 45.0;
-  static const double lowerElevationDeg = -45.0;
+  static const double upperElevationDeg = 40.0;
+  static const double lowerElevationDeg = -40.0;
   static const double ringAzimuthStepDeg = 45.0;
 
   /// The two exact poles.

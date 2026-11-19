@@ -1,41 +1,25 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:js_interop';
+import '../../components/admin_ops_kit.dart';
 
 import 'package:jaspr/dom.dart';
 import 'package:jaspr/jaspr.dart';
 import 'package:shared_logic/shared_logic.dart';
 import 'package:universal_web/web.dart' as web;
 
-import '../../components/admin_ops_kit.dart';
 import '../../components/dashboard_kit.dart';
 import '../../components/ui.dart';
 import '../../data/admin_api.dart';
 import '../../data/app_locator.dart';
 import '../../layouts/app_layout.dart';
 
-/// System activity — administrative actions AND security events in one
-/// server-filtered timeline (`/admin/activity`).
+/// Admin System Activity: responsive, read-only security and operations audit.
 ///
-/// ## Data sources (reported honestly, never faked)
-///
-/// * **Administrative** — the existing `GET /api/v1/staff/audit` feed
-///   (`public.role_change_audit`): agent invitations, activations,
-///   suspensions, role changes, administrator MFA factor resets, listing
-///   assignments, company registrations. Every line carries the performing
-///   administrator.
-/// * **Authentication / MFA** — `auth.audit_log_entries`, read only when the
-///   backend can actually reach it. The backend probes that capability and
-///   the source strip below renders the probe's real answer: on deployments
-///   where Supabase does not expose the `auth` schema (the default), the
-///   chips say "Not available" with the reason instead of pretending.
-///   GoTrue also records successes only — failed sign-ins and failed MFA
-///   verifications do not exist in that source, and the page says so.
-///
-/// Every filter (category, search, result, role, date window) and the
-/// pagination are applied SERVER-SIDE via `GET /api/v1/staff/audit/security`,
-/// so a search never downloads the whole audit history. The endpoint is
-/// admin+MFA-gated; the browser never touches Supabase credentials.
+/// All rows, filters, source-availability statements and paging are returned by
+/// GET /api/v1/staff/audit/security (administrator + MFA protected). This page
+/// deliberately does NOT interpret an unavailable source as zero events.
+/// Reuses the existing AdminApi, AppLayout and SitewiseDialog implementation.
 @client
 class AdminActivityPage extends StatefulComponent {
   const AdminActivityPage({super.key});
@@ -51,18 +35,12 @@ class _ActivityState extends State<AdminActivityPage> {
     ('auth', 'Authentication'),
     ('mfa', 'MFA'),
   ];
-
   static const _results = <(String, String)>[
     ('all', 'All results'),
     ('success', 'Successful'),
     ('failed', 'Failed'),
     ('info', 'Informational'),
   ];
-
-  /// The roles the identity backend actually has (`rbac.ALL_ROLES`):
-  /// administrator, property owner, agent, entrepreneur. Owner is its own role,
-  /// not an entrepreneur who happens to hold property — filtering by it is how
-  /// an administrator reviews owner-role changes.
   static const _roles = <(String, String)>[
     ('all', 'All roles'),
     ('admin', 'Administrator'),
@@ -70,49 +48,46 @@ class _ActivityState extends State<AdminActivityPage> {
     ('agent', 'Agent'),
     ('entrepreneur', 'Entrepreneur'),
   ];
-
   static const _periods = <(String, String)>[
     ('all', 'All dates'),
     ('24h', 'Last 24 hours'),
     ('7d', 'Last 7 days'),
     ('30d', 'Last 30 days'),
   ];
-
   static const _pageSize = 25;
   static const _exportCap = 200;
 
   SecurityAuditPage? _data;
   bool _loading = true;
   String? _error;
-
+  int _loadSequence = 0;
   String _category = 'all';
   String _result = 'all';
   String _role = 'all';
   String _period = 'all';
-  String _queryInput = '';
-  String _committedQuery = '';
+  String _search = '';
+  String _committedSearch = '';
+  int _searchEpoch = 0;
   Timer? _debounce;
   int _currentPage = 1;
-
   SecurityAuditEvent? _selected;
   bool _exporting = false;
   String? _exportMessage;
+  bool _exportFailed = false;
 
   @override
   void initState() {
     super.initState();
-    _load();
+    unawaited(_load());
   }
 
   @override
   void dispose() {
+    _loadSequence++;
     _debounce?.cancel();
     super.dispose();
   }
 
-  /// `24h`/`7d`/`30d` → an ISO UTC lower bound the backend applies
-  /// server-side. UTC windows avoid pretending a timezone the browser never
-  /// declared; the table itself formats to the browser's local time.
   String? get _dateFrom {
     final now = DateTime.now().toUtc();
     return switch (_period) {
@@ -123,28 +98,31 @@ class _ActivityState extends State<AdminActivityPage> {
     };
   }
 
+  /// Avoid out-of-order responses when administrators change filters quickly.
+  /// Keep the previous server-confirmed page visible if a refresh fails.
   Future<void> _load() async {
+    final sequence = ++_loadSequence;
     setState(() {
       _loading = true;
       _error = null;
     });
     try {
-      final data = await AppLocator.adminApi.fetchSecurityAudit(
+      final snapshot = await AppLocator.adminApi.fetchSecurityAudit(
         page: _currentPage,
         pageSize: _pageSize,
         category: _category,
-        search: _committedQuery,
+        search: _committedSearch,
         result: _result,
         role: _role,
         dateFrom: _dateFrom,
       );
-      if (!mounted) return;
+      if (!mounted || sequence != _loadSequence) return;
       setState(() {
-        _data = data;
+        _data = snapshot;
         _loading = false;
       });
     } catch (error) {
-      if (!mounted) return;
+      if (!mounted || sequence != _loadSequence) return;
       setState(() {
         _loading = false;
         _error = AdminApi.message(error);
@@ -155,63 +133,81 @@ class _ActivityState extends State<AdminActivityPage> {
   void _restart({int page = 1}) {
     _debounce?.cancel();
     setState(() => _currentPage = page);
-    _load();
+    unawaited(_load());
   }
 
   void _onSearchInput(String value) {
-    _queryInput = value;
+    _search = value;
     _debounce?.cancel();
     _debounce = Timer(const Duration(milliseconds: 350), () {
       if (!mounted) return;
-      setState(() => _committedQuery = _queryInput);
+      setState(() => _committedSearch = _search);
       _restart();
     });
   }
 
-  /// CSV export of AUTHORIZED records only: the backend returns the same
-  /// filtered view with a bounded window (200 rows, the endpoint cap), and
-  /// the page says exactly how many rows were included — never "everything".
+  void _resetFilters() {
+    setState(() {
+      _category = 'all';
+      _result = 'all';
+      _role = 'all';
+      _period = 'all';
+      _search = '';
+      _committedSearch = '';
+      _searchEpoch++;
+    });
+    _restart();
+  }
+
+  bool get _hasFilters =>
+      _category != 'all' ||
+      _result != 'all' ||
+      _role != 'all' ||
+      _period != 'all' ||
+      _committedSearch.isNotEmpty;
+
+  /// Bounded export: uses the same authenticated server filter and includes
+  /// at most 200 rows, never claims to download the complete history.
   Future<void> _exportCsv() async {
+    if (_exporting) return;
     setState(() {
       _exporting = true;
       _exportMessage = null;
+      _exportFailed = false;
     });
     try {
-      final data = await AppLocator.adminApi.fetchSecurityAudit(
+      final snapshot = await AppLocator.adminApi.fetchSecurityAudit(
         page: 1,
         pageSize: _exportCap,
         category: _category,
-        search: _committedQuery,
+        search: _committedSearch,
         result: _result,
         role: _role,
         dateFrom: _dateFrom,
       );
       if (!mounted) return;
-      final csv = AdminApi.securityAuditCsv(data.events);
-      _saveCsv(csv);
+      _saveCsv(AdminApi.securityAuditCsv(snapshot.events));
       setState(() {
         _exporting = false;
         _exportMessage =
-            'Exported ${data.events.length} authorized events matching the '
-            'current filters${data.total > data.events.length
-                ? ' (of ${data.total} total — export is capped at the most '
-                      'recent $_exportCap)'
+            'Downloaded ${snapshot.events.length} matching events'
+            '${snapshot.total > snapshot.events.length
+                ? ' of ${snapshot.total} (export limit: $_exportCap events)'
                 : ''}.';
       });
     } catch (error) {
       if (!mounted) return;
       setState(() {
         _exporting = false;
+        _exportFailed = true;
         _exportMessage = 'Export failed: ${AdminApi.message(error)}';
       });
     }
   }
 
-  /// Client-only download flow, same mechanism as verification documents.
   void _saveCsv(String csv) {
-    final bytes = utf8.encode(csv);
     final blob = web.Blob(
-      [bytes.toJS].toJS,
+      [utf8.encode(csv).toJS].toJS,
       web.BlobPropertyBag(type: 'text/csv;charset=utf-8'),
     );
     final url = web.URL.createObjectURL(blob);
@@ -222,13 +218,9 @@ class _ActivityState extends State<AdminActivityPage> {
     web.URL.revokeObjectURL(url);
   }
 
-  // --- Formatting helpers ---------------------------------------------------
-
-  /// ISO → `15 Nov 2026 · 18:42`. Unparseable stamps pass through verbatim
-  /// rather than masquerading as the epoch.
   String _when(String iso) {
     final parsed = DateTime.tryParse(iso);
-    if (parsed == null) return iso.isEmpty ? 'Time not recorded' : iso;
+    if (parsed == null) return iso.isEmpty ? 'Not recorded' : iso;
     final local = parsed.toLocal();
     const months = [
       'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
@@ -242,218 +234,278 @@ class _ActivityState extends State<AdminActivityPage> {
   String _resultTone(String result) => switch (result) {
     'success' => 'success',
     'failed' => 'danger',
-    'info' => 'neutral',
     _ => 'neutral',
   };
 
-  String _accountLabel(SecurityAuditEvent event) =>
-      event.affectedEmail.isNotEmpty ? event.affectedEmail : event.affectedUserId;
+  String _account(SecurityAuditEvent event) {
+    if (event.affectedEmail.isNotEmpty) return event.affectedEmail;
+    if (event.affectedUserId.isNotEmpty) return event.affectedUserId;
+    return 'Not recorded';
+  }
 
-  // --- Fragments ------------------------------------------------------------
+  String _actor(SecurityAuditEvent event) {
+    if (event.performedByEmail.isNotEmpty) return event.performedByEmail;
+    if (event.source == 'Supabase Auth') return 'Account holder';
+    return 'Not recorded';
+  }
 
-  Component _sourceCard(String name, String icon, AuditSourceStatus status) {
-    return div(classes: 'act-source', [
-      div(classes: 'act-source__main', [
-        span(classes: 'act-source__name', [Component.text(name)]),
-        span(classes: 'act-source__detail', [Component.text(status.detail)]),
-        span(
-          classes:
-              'act-chip ${status.available ? 'act-chip--ok' : 'act-chip--off'}',
-          [Component.text(status.available ? 'Available' : 'Not available')],
-        ),
+  String _eventIcon(SecurityAuditEvent event) => switch (event.category) {
+    'auth' => 'login',
+    'mfa' => 'verified_user',
+    _ => 'admin_panel_settings',
+  };
+
+  Component _coverageCard(
+    String title,
+    String subtitle,
+    String icon,
+    AuditSourceStatus? source,
+  ) {
+    final ready = source?.available == true;
+    final known = source != null;
+    return div(classes: 'sa-coverage-card', [
+      div(classes: 'sa-coverage-top', [
+        span(classes: 'sa-coverage-icon', [Icon(icon)]),
+        span(classes: 'sa-source-status ${!known ? 'sa-source-status--loading' : ready ? 'sa-source-status--ready' : 'sa-source-status--off'}', [
+          Component.text(!known ? 'Checking' : ready ? 'Available' : 'Unavailable'),
+        ]),
       ]),
-      span(classes: 'ops-tile', [Icon(icon)]),
+      strong(classes: 'sa-coverage-title', [Component.text(title)]),
+      p(classes: 'sa-coverage-subtitle', [Component.text(subtitle)]),
+      p(classes: 'sa-coverage-detail', [
+        Component.text(source?.detail.isNotEmpty == true
+            ? source!.detail
+            : known ? 'No additional source details returned.' : 'Checking audit-source access…'),
+      ]),
     ]);
   }
 
-  Component _tableBody() {
-    final data = _data;
-    if (_loading) return const Skeleton(variant: 'row', count: 6);
-    if (_error != null) {
-      return div(classes: 'stack', [
-        Callout(
-          'The audit feed could not be read: $_error',
-          tone: 'danger',
-          icon: 'error',
+  Component _filters() => div(classes: 'sa-filter-area', [
+    div(classes: 'sa-filter-grid', [
+      div(classes: 'sa-search-field', [
+        // Key recreates this uncontrolled input after an explicit Clear.
+        SearchInput(
+          key: ValueKey('sa-search-$_searchEpoch'),
+          label: 'Search events',
+          placeholder: 'Action, email, event ID…',
+          ariaLabel: 'Search the security audit log',
+          onInput: _onSearchInput,
         ),
-        p(classes: 'ops-qrow__meta', [
-          Component.text(
-            'This is usually the identity backend being unreachable from this '
-            'environment — not an empty log. Retrying is safe; a read never '
-            'writes anything.',
-          ),
+      ]),
+      _selectField('Result', _results, _result, (value) {
+        setState(() => _result = value);
+        _restart();
+      }),
+      _selectField('Account role', _roles, _role, (value) {
+        setState(() => _role = value);
+        _restart();
+      }),
+      _selectField('Date range', _periods, _period, (value) {
+        setState(() => _period = value);
+        _restart();
+      }),
+    ]),
+    if (_hasFilters)
+      div(classes: 'sa-filter-bottom', [
+        span(classes: 'sa-filter-active', [
+          const Icon('filter_alt', size: 'sm'),
+          const Component.text('Filters applied'),
         ]),
-        ActionButton('Try again', variant: 'secondary', onClick: _load),
+        ActionButton('Clear filters', variant: 'ghost', onClick: _resetFilters),
+      ]),
+  ]);
+
+  Component _selectField(
+    String labelText,
+    List<(String, String)> values,
+    String current,
+    void Function(String) onChanged,
+  ) => Field(
+    labelText: labelText,
+    child: select(
+      attributes: {'aria-label': labelText},
+      events: events<List<String>>(
+        onInput: (values) {
+          final next = values.firstOrNull;
+          if (next != null && next != current) onChanged(next);
+        },
+      ),
+      [
+        for (final (key, label) in values)
+          option(
+            value: key,
+            attributes: key == current ? const {'selected': ''} : null,
+            [Component.text(label)],
+          ),
+      ],
+    ),
+  );
+
+  Component _categoryTabs() => div(
+    classes: 'sa-tabs',
+    attributes: const {'role': 'group', 'aria-label': 'Audit event category'},
+    [
+      for (final (key, label) in _categories)
+        button(
+          classes: 'sa-tab${_category == key ? ' sa-tab--selected' : ''}',
+          attributes: {
+            'type': 'button',
+            'aria-pressed': (_category == key).toString(),
+          },
+          events: events(onClick: () {
+            if (_category == key) return;
+            setState(() => _category = key);
+            _restart();
+          }),
+          [Component.text(label)],
+        ),
+    ],
+  );
+
+  Component _eventTable() {
+    final data = _data;
+    if (_loading && data == null) {
+      return const Skeleton(variant: 'row', count: 6);
+    }
+    if (_error != null && data == null) {
+      return div(classes: 'sa-state', [
+        Callout('Security events could not be loaded: $_error', tone: 'danger', icon: 'error'),
+        ActionButton('Try again', variant: 'secondary', onClick: () => unawaited(_load())),
       ]);
     }
     if (data == null || data.events.isEmpty) {
-      final filtered = _committedQuery.isNotEmpty ||
-          _category != 'all' ||
-          _result != 'all' ||
-          _role != 'all' ||
-          _period != 'all';
-      return InlineEmpty(
-        filtered
-            ? 'No audit events match these filters. Try a different search or '
-                  'reset the filters.'
-            : 'The audit sources returned no events yet. Nothing is invented '
-                  'here: this deployment simply has no recorded activity.',
-      );
-    }
-    return DataTable(
-      columns: const [
-        DataColumn('Activity'),
-        DataColumn('Account'),
-        DataColumn('Source'),
-        DataColumn('Date & time'),
-        DataColumn('Result'),
-        DataColumn('Details', actions: true),
-      ],
-      rows: [
-        for (final event in data.events)
-          [
-            CellIdentity(
-              title: event.title,
-              caption: '${event.action} · ${event.id}',
-            ),
-            CellIdentity(
-              title: _accountLabel(event),
-              caption: event.role ?? 'Role not recorded',
-            ),
-            Component.text(event.source),
-            Component.text(_when(event.createdAt)),
-            StatusBadge(
-              event.resultLabel,
-              tone: _resultTone(event.result),
-              dot: true,
-            ),
-            ActionButton(
-              'View',
-              variant: 'ghost',
-              onClick: () => _openDetails(event),
-            ),
-          ],
-      ],
-    );
-  }
-
-  Component _paginationFooter() {
-    final data = _data;
-    if (data == null || data.total == 0) return const span([]);
-    final maxPage = (data.total / data.pageSize).ceil();
-    final page = data.page;
-    final first = (page - 1) * data.pageSize + 1;
-    final last = (page * data.pageSize).clamp(0, data.total);
-
-    Component pageBtn(int target, String label, {bool current = false}) {
-      return button(
-        classes: current ? 'act-pagebtn act-pagebtn--on' : 'act-pagebtn',
-        attributes: {
-          'type': 'button',
-          'aria-label': label,
-          if (current) 'aria-current': 'page',
-        },
-        events: current || target < 1 || target > maxPage
-            ? null
-            : events(onClick: () => _restart(page: target)),
-        [Component.text(label)],
-      );
-    }
-
-    // A small sliding window keeps long histories usable: at most seven
-    // numbered buttons, anchored so the current page is always visible.
-    final windowStart = (page - 3).clamp(1, (maxPage - 6).clamp(1, maxPage));
-    final windowEnd = (windowStart + 6).clamp(1, maxPage);
-
-    return div(classes: 'act-footer', [
-      span(classes: 'act-pageinfo', [
-        Component.text(
-          maxPage <= 1
-              ? '${data.total} event${data.total == 1 ? '' : 's'}'
-              : 'Showing $first–$last of ${data.total} events · page $page of $maxPage',
+      return div(classes: 'sa-state', [
+        InlineEmpty(
+          _hasFilters
+              ? 'No recorded events match the selected filters.'
+              : 'The connected sources returned no events. This does not imply that unavailable audit sources contain no events.',
         ),
-      ]),
-      div(classes: 'act-paging', [
-        pageBtn(page - 1, 'Previous page', current: false),
-        for (var n = windowStart; n <= windowEnd; n++)
-          pageBtn(n, 'Page $n', current: n == page),
-        pageBtn(page + 1, 'Next page'),
+        if (_hasFilters)
+          ActionButton('Clear filters', variant: 'secondary', onClick: _resetFilters),
+      ]);
+    }
+    return div(classes: 'sa-table-scroll', [
+      table(classes: 'sa-table', [
+        thead([
+          tr([
+            th([const Component.text('Event')]),
+            th([const Component.text('Affected account')]),
+            th([const Component.text('Performed by')]),
+            th([const Component.text('Date & time')]),
+            th([const Component.text('Result')]),
+            th([const Component.text('')]),
+          ]),
+        ]),
+        tbody([
+          for (final event in data.events)
+            tr([
+              td([
+                div(classes: 'sa-event-cell', [
+                  span(classes: 'sa-event-icon sa-event-icon--${event.category}', [
+                    Icon(_eventIcon(event), size: 'sm'),
+                  ]),
+                  div(classes: 'sa-event-copy', [
+                    strong(classes: 'sa-event-title', [Component.text(event.title)]),
+                    span(classes: 'sa-event-meta', [
+                      Component.text('${event.categoryLabel} · ${event.source}'),
+                    ]),
+                  ]),
+                ]),
+              ]),
+              td([
+                div(classes: 'sa-person-cell', [
+                  span(classes: 'sa-person-primary', [Component.text(_account(event))]),
+                  span(classes: 'sa-person-muted', [
+                    Component.text(event.role ?? 'Role not recorded'),
+                  ]),
+                ]),
+              ]),
+              td([
+                span(classes: 'sa-actor', [Component.text(_actor(event))]),
+              ]),
+              td([
+                span(classes: 'sa-date', [Component.text(_when(event.createdAt))]),
+              ]),
+              td([
+                StatusBadge(event.resultLabel, tone: _resultTone(event.result), dot: true),
+              ]),
+              td(classes: 'sa-table-actions', [
+                ActionButton('View details', variant: 'ghost', onClick: () => _openDetails(event)),
+              ]),
+            ]),
+        ]),
       ]),
     ]);
   }
 
-  /// Opens the details dialog and moves focus into it. The shared
-  /// [SitewiseDialog] handles Escape only for key events that originate
-  /// INSIDE the dialog element, so focus must land there — the same pattern
-  /// the reference HTML's drawer applies to its close button.
+  Component _pager() {
+    final data = _data;
+    if (data == null || data.total == 0) return const span([]);
+    final lastPage = (data.total / data.pageSize).ceil();
+    final current = data.page;
+    final firstRow = (current - 1) * data.pageSize + 1;
+    final lastRow = (current * data.pageSize).clamp(0, data.total);
+
+    return div(classes: 'sa-pager', [
+      span(classes: 'sa-pager-summary', [
+        Component.text('Showing $firstRow–$lastRow of ${data.total} matching events'),
+      ]),
+      div(classes: 'sa-pager-actions', [
+        ActionButton('Previous', variant: 'secondary', onClick: _loading || current <= 1
+            ? null : () => _restart(page: current - 1)),
+        span(classes: 'sa-page-current', [Component.text('$current / $lastPage')]),
+        ActionButton('Next', variant: 'secondary', onClick: _loading || current >= lastPage
+            ? null : () => _restart(page: current + 1)),
+      ]),
+    ]);
+  }
+
   void _openDetails(SecurityAuditEvent event) {
     setState(() => _selected = event);
-    Future.delayed(const Duration(milliseconds: 30), () {
-      final button = web.document.querySelector('[role="dialog"] button');
-      if (button != null) (button as web.HTMLElement).focus();
+    Future<void>.delayed(const Duration(milliseconds: 30), () {
+      if (!mounted) return;
+      final target = web.document.querySelector('[role="dialog"] button');
+      if (target is web.HTMLElement) target.focus();
     });
   }
 
-  Component _detailDialog(SecurityAuditEvent event) {
-    String fieldTitle(String raw) => raw
-        .replaceAll('_', ' ')
-        .replaceAllMapped(RegExp(r'^[a-z]'), (m) => m.group(0)!.toUpperCase());
-    final rows = <InfoRow>[
-      InfoRow(icon: 'tag', label: 'Event ID', value: event.id),
-      InfoRow(icon: 'category', label: 'Category', value: event.categoryLabel),
-      InfoRow(icon: 'bolt', label: 'Action', value: event.action),
-      InfoRow(icon: 'schedule', label: 'Date & time', value: _when(event.createdAt)),
-      InfoRow(
-        icon: 'person',
-        label: 'Affected account',
-        value: _accountLabel(event).isEmpty
-            ? 'Not recorded'
-            : _accountLabel(event),
-      ),
-      InfoRow(icon: 'badge', label: 'Account role', value: event.role ?? 'Not available'),
-      InfoRow(
-        icon: 'admin_panel_settings',
-        label: 'Performed by',
-        value: event.performedByEmail.isNotEmpty
-            ? event.performedByEmail
-            : (event.source == 'Supabase Auth'
-                  ? 'Self-service (the account holder)'
-                  : 'Not recorded'),
-      ),
-      InfoRow(icon: 'check_circle', label: 'Result', value: event.resultLabel),
-      InfoRow(icon: 'database', label: 'Source', value: event.source),
-      for (final entry in event.details.entries)
-        InfoRow(
-          icon: 'description',
-          label: fieldTitle(entry.key),
-          value: entry.value,
-        ),
-    ];
+  Component _detailsDialog(SecurityAuditEvent event) {
+    String readable(String input) => input.replaceAll('_', ' ').replaceFirstMapped(
+      RegExp(r'^[a-z]'), (match) => match.group(0)!.toUpperCase(),
+    );
     return SitewiseDialog(
-      title: 'Audit event details',
-      ariaLabel: 'Audit event details',
+      title: 'Event details',
+      ariaLabel: 'System activity event details',
       wide: true,
       onClose: () => setState(() => _selected = null),
-      body: div(classes: 'stack', [
-        div(classes: 'act-detail-intro', [
-          span(classes: 'act-detail-intro__title', [Component.text(event.title)]),
-          span(classes: 'act-detail-intro__body', [Component.text(event.summary)]),
+      body: div(classes: 'sa-dialog-body', [
+        div(classes: 'sa-dialog-intro', [
+          div(classes: 'sa-dialog-kicker', [
+            Component.text('${event.categoryLabel} · ${event.source}'),
+          ]),
+          strong(classes: 'sa-dialog-title', [Component.text(event.title)]),
+          p(classes: 'sa-dialog-description', [Component.text(event.summary)]),
+          StatusBadge(event.resultLabel, tone: _resultTone(event.result), dot: true),
         ]),
-        div(classes: 'stack', [for (final row in rows) row]),
-        p(classes: 'act-detail-note', [
-          Component.text(
-            'Read-only record. Authentication events are recorded by Supabase '
-            'Auth on success only; no credentials, codes or tokens are ever '
-            'shown or stored here.',
+        div(classes: 'sa-dialog-grid', [
+          InfoRow(icon: 'schedule', label: 'Recorded at', value: _when(event.createdAt)),
+          InfoRow(icon: 'person', label: 'Affected account', value: _account(event)),
+          InfoRow(icon: 'admin_panel_settings', label: 'Performed by', value: _actor(event)),
+          InfoRow(icon: 'badge', label: 'Account role', value: event.role ?? 'Not recorded'),
+          InfoRow(icon: 'bolt', label: 'Action', value: event.action),
+          InfoRow(icon: 'tag', label: 'Event ID', value: event.id),
+          for (final entry in event.details.entries)
+            InfoRow(icon: 'description', label: readable(entry.key), value: entry.value),
+        ]),
+        p(classes: 'sa-dialog-footnote', [
+          const Icon('shield', size: 'sm'),
+          const Component.text(
+            'Read-only audit record. Sensitive credentials and authentication tokens are not displayed.',
           ),
         ]),
       ]),
       actions: [
-        ActionButton(
-          'Close',
-          variant: 'secondary',
-          onClick: () => setState(() => _selected = null),
-        ),
+        ActionButton('Close', variant: 'secondary', onClick: () => setState(() => _selected = null)),
       ],
     );
   }
@@ -461,173 +513,62 @@ class _ActivityState extends State<AdminActivityPage> {
   @override
   Component build(BuildContext context) {
     final data = _data;
-    final notes = data?.notes ?? const <String>[];
     return AppLayout(
       role: AppRole.admin,
       currentRoute: '/admin/activity',
       title: 'System activity',
-      eyebrow: 'Operations',
-      subtitle:
-          'Review administrative actions and security events from one place. '
-          'Every filter and page is resolved by the backend; nothing is '
-          'fabricated when a source is unavailable.',
+      eyebrow: 'Security & operations',
+      subtitle: 'Review account access, administrative actions and authentication activity from available audit sources.',
       actions: [
-        ActionButton(
-          'Refresh',
-          variant: 'secondary',
-          icon: 'refresh',
-          onClick: _load,
-        ),
-        ActionButton(
-          'Export CSV',
-          variant: 'secondary',
-          icon: 'download',
-          onClick: _exporting ? null : () => unawaited(_exportCsv()),
-        ),
+        ActionButton('Refresh', variant: 'secondary', icon: 'refresh', onClick: _loading ? null : () => unawaited(_load())),
+        ActionButton(_exporting ? 'Exporting…' : 'Export CSV', variant: 'secondary', icon: 'download', onClick: _exporting ? null : () => unawaited(_exportCsv())),
       ],
-      child: div(classes: 'stack act-fade', [
-        if (_exportMessage != null)
-          Callout(_exportMessage!, tone: 'info', icon: 'info'),
-        // Source coverage — the backend probe's real answer, not a static label.
-        div(classes: 'act-sources', [
-          _sourceCard(
-            'Administrative actions',
-            'history',
-            data?.administrative ??
-                const AuditSourceStatus(available: true, detail: 'Loading…'),
-          ),
-          _sourceCard(
-            'Sign-in & registration',
-            'group',
-            data?.authentication ??
-                const AuditSourceStatus(available: false, detail: 'Loading…'),
-          ),
-          _sourceCard(
-            'MFA events',
-            'lock',
-            data?.mfa ?? const AuditSourceStatus(available: false, detail: 'Loading…'),
-          ),
-        ]),
-        SectionCard(
-          title: 'Activity timeline',
-          flush: true,
-          action: [
-            span(classes: 'act-count', [
-              Component.text(
-                _loading
-                    ? '…'
-                    : '${data?.total ?? 0} event${(data?.total ?? 0) == 1 ? '' : 's'}',
-              ),
-            ]),
-          ],
-          child: div(classes: 'stack', [
-            div(classes: 'act-tabs', [
-              ChipRow(
-                options: [
-                  for (final (_, label) in _categories) label,
-                ],
-                selected: _categories
-                    .firstWhere((c) => c.$1 == _category)
-                    .$2,
-                ariaLabel: 'Activity category',
-                onSelect: (chosen) {
-                  final next = _categories
-                      .firstWhere(
-                        (c) => c.$2 == chosen,
-                        orElse: () => _categories.first,
-                      )
-                      .$1;
-                  if (next == _category) return;
-                  setState(() {
-                    _category = next;
-                    _queryInput = '';
-                    _committedQuery = '';
-                  });
-                  _restart();
-                },
-              ),
-            ]),
-            div(classes: 'act-filters', [
-              SearchInput(
-                label: 'Search',
-                placeholder: 'Search action, account or event ID',
-                ariaLabel: 'Search audit events',
-                onInput: _onSearchInput,
-              ),
-              _selectField(
-                'Result',
-                _results,
-                _result,
-                (value) {
-                  setState(() => _result = value);
-                  _restart();
-                },
-              ),
-              _selectField(
-                'Account role',
-                _roles,
-                _role,
-                (value) {
-                  setState(() => _role = value);
-                  _restart();
-                },
-              ),
-              _selectField(
-                'Date range',
-                _periods,
-                _period,
-                (value) {
-                  setState(() => _period = value);
-                  _restart();
-                },
-              ),
-            ]),
-            for (final note in notes)
-              p(classes: 'ops-qrow__meta', [Component.text(note)]),
-            _tableBody(),
-            _paginationFooter(),
+      child: div(classes: 'sa-page stack stack--sections', [
+        div(classes: 'sa-section-heading', [
+          div(classes: 'sa-heading-copy', [
+            span(classes: 'sa-eyebrow', [const Component.text('AUDIT COVERAGE')]),
+            h2([const Component.text('Connected security sources')]),
+            p([const Component.text('Source status comes from the backend. An unavailable source does not mean there were no events.')]),
           ]),
-        ),
-        p(classes: 'act-bottom-note', [
-          Icon('shield', size: 'sm'),
-          Component.text(
-            'This page is read-only. Audit data is exposed only through the '
-            'admin + MFA-protected backend; no passwords, tokens or one-time '
-            'codes are ever stored or displayed.',
-          ),
         ]),
-        if (_selected != null) _detailDialog(_selected!),
+        div(classes: 'sa-coverage-grid', [
+          _coverageCard('Administrative actions', 'Staff and management changes', 'manage_accounts', data?.administrative),
+          _coverageCard('Authentication', 'Account sign-in and registration', 'passkey', data?.authentication),
+          _coverageCard('Multi-factor authentication', 'Authenticator and MFA records', 'shield_lock', data?.mfa),
+        ]),
+        if (_exportMessage != null)
+          Callout(_exportMessage!, tone: _exportFailed ? 'danger' : 'success', icon: _exportFailed ? 'error' : 'download_done'),
+        if (_error != null && data != null)
+          Callout('Refresh failed: $_error. Last loaded events remain visible.', tone: 'warning', icon: 'warning'),
+        section(classes: 'sa-panel', [
+          div(classes: 'sa-panel-head', [
+            div(classes: 'sa-heading-copy', [
+              span(classes: 'sa-eyebrow', [const Component.text('EVENT LOG')]),
+              h2([const Component.text('Security & activity history')]),
+              p([const Component.text('Read-only, searchable events from the authorized audit feed')]),
+            ]),
+            span(classes: 'sa-total', [
+              Component.text(_loading && data == null
+                  ? 'Loading events…'
+                  : '${data?.total ?? 0} matching ${data?.total == 1 ? 'event' : 'events'}'),
+            ]),
+          ]),
+          _categoryTabs(),
+          _filters(),
+          if (data?.notes.isNotEmpty == true)
+            div(classes: 'sa-notes', [
+              for (final note in data!.notes)
+                p([const Icon('info', size: 'sm'), Component.text(note)]),
+            ]),
+          _eventTable(),
+          _pager(),
+        ]),
+        p(classes: 'sa-readonly', [
+          const Icon('lock', size: 'sm'),
+          const Component.text('Read-only audit access · Administrator MFA required · Export limited to 200 filtered events'),
+        ]),
+        if (_selected != null) _detailsDialog(_selected!),
       ]),
-    );
-  }
-
-  Component _selectField(
-    String fieldLabel,
-    List<(String, String)> options,
-    String value,
-    void Function(String) onChanged,
-  ) {
-    return Field(
-      labelText: fieldLabel,
-      // Jaspr's typed events deliver List<String> for <select> targets (the
-      // selected options). events<String> here throws a runtime cast error in
-      // the release bundle — a footgun the users page filters also carry.
-      child: select(
-        events: events<List<String>>(
-          onInput: (values) {
-            final next = values.firstOrNull;
-            if (next != null && next != value) onChanged(next);
-          },
-        ),
-        [
-          for (final (optionValue, optionLabel) in options)
-            option(
-              value: optionValue,
-              attributes: {if (optionValue == value) 'selected': ''},
-              [Component.text(optionLabel)],
-            ),
-        ],
-      ),
     );
   }
 }

@@ -653,7 +653,10 @@ class SupabaseAuthRepository implements AuthRepository {
       );
     }
     return switch (name) {
-      'entrepreneur' || 'property_owner' || 'user' => 'entrepreneur',
+      // Preserve current and legacy Owner roles from the trusted backend.
+      // Both enter the existing shared Provider workspace, not Entrepreneur.
+      'owner' || 'property_owner' => 'owner',
+      'entrepreneur' || 'user' => 'entrepreneur',
       'admin' || 'administrator' => 'admin',
       'agent' => 'agent',
       _ => throw const AccountInactiveFailure(

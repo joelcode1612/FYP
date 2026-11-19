@@ -171,21 +171,24 @@ abstract final class AppRoutes {
         RouteAccess.workspace,
         () => const ProviderTabHost(initialRoute: '/provider/profile'),
       ),
-      '/provider/enquiries' => (
-        RouteAccess.workspace,
-        () => const ProviderTabHost(initialRoute: '/provider/enquiries'),
-      ),
       '/provider/performance' => (
         RouteAccess.workspace,
         () => const ProviderTabHost(initialRoute: '/provider/performance'),
       ),
-      // Agent dock's Schedule tab. SiteWise records no viewings or
-      // appointments yet, so the page renders the workspace's honest empty
-      // state rather than an invented calendar.
-      '/provider/schedule' => (
+      // The Agent task queue — the third destination of the agent dock, built
+      // from the assignments and verification records this agent actually
+      // holds. `ProviderTabHost` resolves a non-agent here to the dashboard:
+      // the projection behind it is the agent's assignment view, so there is
+      // nothing honest to show another role.
+      '/provider/tasks' => (
         RouteAccess.workspace,
-        () => const ProviderTabHost(initialRoute: '/provider/schedule'),
+        () => const ProviderTabHost(initialRoute: '/provider/tasks'),
       ),
+      // `/provider/enquiries` and `/provider/schedule` are deliberately NOT
+      // registered: the Enquiries and Schedule screens were removed from the
+      // mobile Provider workspace, and an old deep link falls through to the
+      // catch-all not-found page below instead of resurrecting a removed
+      // screen. The backend enquiry endpoints and records are untouched.
       // Account-level provider verification. Distinct from per-listing
       // verification: this is the provider's own standing with SiteWise, and
       // the screen renders the real server status rather than a placeholder.

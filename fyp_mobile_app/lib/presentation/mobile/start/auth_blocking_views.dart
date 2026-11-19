@@ -77,8 +77,8 @@ class WorkspaceMismatchView extends StatelessWidget {
       body: Text(
         role == AppRole.entrepreneur
             ? 'This account finds and assesses commercial property. Listing '
-                  'management — drafts, photographs, 360° capture, enquiries '
-                  'and performance — belongs to a verified Property Owner or '
+                  'management — drafts, photographs, 360° capture and '
+                  'performance — belongs to a verified Property Owner or '
                   'Agent account.'
             : 'This account manages commercial property. Browsing, comparing '
                   'and assessing the catalogue belongs to an F&B Entrepreneur '

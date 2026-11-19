@@ -5,9 +5,9 @@ import 'auth_service.dart';
 /// Bearer-aware [ApiClient] backed by the platform auth bridge ([WebAuth]).
 ///
 /// The access token is attached by the bridge — the Supabase session in the
-/// browser, the request's `sitewise_token` cookie during SSR — so this adapter
-/// never sees, stores or logs it. Every call is same-origin (`/api/*`), proxied
-/// to FastAPI, which enforces administrator + `aal2`; the client only transports.
+/// browser; the retired SSR implementation used a `sitewise_token` cookie.
+/// This adapter never sees, stores or logs the token. Every call uses
+/// same-origin `/api/*` on unified FastAPI, which enforces staff MFA (`aal2`).
 class WebApiClient implements ApiClient {
   const WebApiClient();
 

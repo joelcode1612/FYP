@@ -1,5 +1,4 @@
-import 'package:fyp/core/math/vio_sphere_math.dart'
-    as vio;
+import 'package:fyp/core/math/vio_sphere_math.dart' as vio;
 import 'package:fyp/features/virtual_tour/domain/math/quaternions.dart';
 import 'package:fyp/features/virtual_tour/domain/math/vectors.dart';
 import 'package:fyp/features/virtual_tour/platform/ar_types.dart';

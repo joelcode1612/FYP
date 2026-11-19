@@ -1353,13 +1353,19 @@ class PropertyInsightsService:
         A row is only reported when its status is a completed one *and* it has
         a URL. A ``pending`` or failed stitching job is reported as processing
         so the gallery can say so instead of showing a broken viewer.
+
+        The query runs through the OPERATIONAL session (``self.session``):
+        ``fyp.property_subject_links`` and ``public.virtual_tour`` are
+        operational tables written by the panorama upload. Reading them through
+        the analytics session pointed the gallery at the wrong database when
+        the two URLs differ, silently reporting every panorama unavailable.
         """
         unavailable = PANORAMA_UNAVAILABLE
-        if self.analytics is None:
+        if self.session is None:
             return unavailable
 
         try:
-            rows = self.analytics.execute(
+            rows = self.session.execute(
                 text(
                     """
                     SELECT vt.url, vt.status

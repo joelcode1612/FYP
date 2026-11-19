@@ -83,6 +83,8 @@ class UserRepository:
         email: str,
         full_name: str | None = None,
         email_verified: bool | None = None,
+        role: str | None = None,
+        account_status: str | None = None,
     ) -> tuple[User, bool]:
         """Return the local application user for a verified Supabase identity,
         creating it on first sight.
@@ -90,6 +92,11 @@ class UserRepository:
         The Supabase user UUID is the primary key, so identity mapping is
         1:1 by construction and duplicate profiles are impossible for the
         same identity. No password, token or refresh material is stored.
+
+        ``role`` and ``account_status`` are supplied explicitly by the
+        authoritative identity sync path. The fallback values exist only for
+        legacy/test callers and must never be used after an authoritative
+        Supabase profile has been read.
         """
         existing = self.get_by_id(user_id)
         if existing:
@@ -98,8 +105,8 @@ class UserRepository:
             user_id=user_id,
             email=email,
             full_name=full_name,
-            role=rbac.ROLE_ENTREPRENEUR,
-            account_status=rbac.STATUS_ACTIVE,
+            role=role or rbac.ROLE_ENTREPRENEUR,
+            account_status=account_status or rbac.STATUS_ACTIVE,
             email_verified=bool(email_verified),
             last_login=datetime.now(timezone.utc),
         )

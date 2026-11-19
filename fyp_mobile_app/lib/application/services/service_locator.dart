@@ -7,6 +7,7 @@ import '../../data/datasources/local/draft_local_data_source.dart';
 import '../../data/datasources/local/onboarding_local_data_source.dart';
 import '../../data/datasources/local/opencv_panorama_stitcher_stub.dart'
     if (dart.library.io) '../../data/datasources/local/opencv_panorama_stitcher.dart';
+import '../../data/repositories/api_virtual_tour_repository.dart';
 import '../../data/repositories/mobile_api_client.dart';
 import '../../data/repositories/onboarding_repository_impl.dart';
 import '../../data/repositories/persistent_tour_repository.dart';
@@ -55,6 +56,10 @@ abstract final class ServiceLocator {
   /// demo build never touches the network through it.
   static final MobileApiClient apiClient = MobileApiClient();
 
+  /// Direct comparison of up to three selected properties (`/api/v1/compare`).
+  static final ApiPropertyCompareRepository compareRepo =
+      ApiPropertyCompareRepository(apiClient);
+
   /// Owner Add-Property lifecycle (PostgreSQL drafts, photos, My Properties).
   /// Non-final so widget tests can substitute an in-memory fake; a demo build
   /// never calls it because the Add Property page gates on the live config.
@@ -83,6 +88,13 @@ abstract final class ServiceLocator {
   /// status) — the SAME subsystem the Admin review queue reads.
   static ApiPropertyVerificationRepository propertyVerification =
       ApiPropertyVerificationRepository(apiClient);
+
+  /// Panorama upload for the AR 360° capture flow. Carries the stitched
+  /// panorama to the backend and upserts the property's `virtual_tour` row,
+  /// which is what the property-detail 360° viewer reads.
+  static final ApiVirtualTourRepository virtualTours = ApiVirtualTourRepository(
+    apiClient,
+  );
 
   /// Mobile first-run onboarding persistence. Non-final so tests can swap in
   /// [InMemoryOnboardingLocalDataSource].

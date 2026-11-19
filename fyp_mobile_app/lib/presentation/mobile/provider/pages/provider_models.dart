@@ -33,6 +33,40 @@ class ProviderListing {
   /// as zero.
   final int? photoCount;
 
+  // ── Agent task facts (assigned listings only) ────────────────────────────
+  //
+  // Every one of these is READ from the authoritative records by
+  // `AgentAssignmentRepository` — the listing's own verification status, the
+  // `property_verification` row, and the newest note-bearing listing-dimension
+  // audit entry. A null here means the database holds no such record, so a
+  // card omits the line rather than inventing a deadline, a note or a date.
+
+  /// Server-derived task state: draft | corrections | awaiting_review |
+  /// approved. Null on payloads from before the projection, and on owner rows.
+  final String? taskState;
+
+  /// Required fields the record still lacks, as the submission gate words them.
+  final List<String> missingRequiredFields;
+
+  /// The administrator's recorded feedback while the listing dimension is
+  /// rejected or awaiting more information.
+  final String? correctionNote;
+
+  /// Which staff action recorded that feedback (`listing_rejected` /
+  /// `listing_information_requested`), i.e. the response actually asked for.
+  final String? correctionAction;
+
+  /// When the feedback was recorded (ISO-8601), when a decision row exists.
+  final String? correctionAt;
+
+  /// When the listing was submitted for review (ISO-8601), from the
+  /// verification row.
+  final String? submittedAt;
+
+  /// The backend's own lock policy for this record (`can_resubmit` over the
+  /// verification dimensions). Null means the payload did not report it.
+  final bool? backendEditable;
+
   const ProviderListing({
     required this.id,
     required this.title,
@@ -45,6 +79,13 @@ class ProviderListing {
     this.imageUrl,
     this.management,
     this.photoCount,
+    this.taskState,
+    this.missingRequiredFields = const [],
+    this.correctionNote,
+    this.correctionAction,
+    this.correctionAt,
+    this.submittedAt,
+    this.backendEditable,
   });
 
   ProviderStage get stage => ProviderStage.fromWire(status);
@@ -57,6 +98,11 @@ class ProviderListing {
   /// mirrors it for honest UI hints only — the backend decides.
   bool get locallyEditable =>
       stage == ProviderStage.draft || stage == ProviderStage.rejected;
+
+  /// Whether an edit action may be offered at all. An assigned row carries the
+  /// server's answer; a row without it (an owner listing, or an older payload)
+  /// falls back to the mirrored stage policy.
+  bool get canEdit => backendEditable ?? locallyEditable;
 
   String get displayTitle => title.trim().isNotEmpty ? title.trim() : 'Listing L-$id';
 
@@ -135,7 +181,29 @@ class ProviderListing {
               raw['management'] as Map<String, dynamic>,
             )
           : null,
+      taskState: raw['task_state']?.toString(),
+      missingRequiredFields: _strings(raw['missing_required_fields']),
+      correctionNote: _text(raw['correction_reason']),
+      correctionAction: _text(raw['correction_action']),
+      correctionAt: _text(raw['correction_at']),
+      submittedAt: _text(raw['verification_submitted_at']),
+      backendEditable: raw['editable'] is bool ? raw['editable'] as bool : null,
     );
+  }
+
+  static String? _text(dynamic value) {
+    final text = value?.toString().trim();
+    return text == null || text.isEmpty ? null : text;
+  }
+
+  static List<String> _strings(dynamic value) {
+    if (value is! List) return const [];
+    final labels = <String>[];
+    for (final item in value) {
+      final label = '${item ?? ''}'.trim();
+      if (label.isNotEmpty) labels.add(label);
+    }
+    return labels;
   }
 }
 
@@ -337,167 +405,6 @@ bool isMfaRequired(Object error) {
 }
 
 // ---------------------------------------------------------------------------
-// Enquiries
-// ---------------------------------------------------------------------------
-
-/// The states an enquiry moves through. [incoming] is the wire value `new`,
-/// renamed because `new` is a Dart keyword.
-enum ProviderEnquiryStatus {
-  incoming,
-  read,
-  replied,
-  closed,
-  unknown;
-
-  static ProviderEnquiryStatus fromWire(String? value) =>
-      switch ((value ?? '').trim().toLowerCase()) {
-        'new' => ProviderEnquiryStatus.incoming,
-        'read' => ProviderEnquiryStatus.read,
-        'replied' => ProviderEnquiryStatus.replied,
-        'closed' => ProviderEnquiryStatus.closed,
-        _ => ProviderEnquiryStatus.unknown,
-      };
-
-  String get label => switch (this) {
-    ProviderEnquiryStatus.incoming => 'New',
-    ProviderEnquiryStatus.read => 'Read',
-    ProviderEnquiryStatus.replied => 'Replied',
-    ProviderEnquiryStatus.closed => 'Closed',
-    ProviderEnquiryStatus.unknown => 'Status unavailable',
-  };
-
-  /// The value sent back to the server when a provider changes the state.
-  String get wire => switch (this) {
-    ProviderEnquiryStatus.incoming => 'new',
-    ProviderEnquiryStatus.read => 'read',
-    ProviderEnquiryStatus.replied => 'replied',
-    ProviderEnquiryStatus.closed => 'closed',
-    ProviderEnquiryStatus.unknown => '',
-  };
-
-  /// `new` is the state a message arrives in, not one a provider can set.
-  bool get isSettable => this != ProviderEnquiryStatus.incoming &&
-      this != ProviderEnquiryStatus.unknown;
-}
-
-/// One real message received about a listing the signed-in account manages.
-class ProviderEnquiry {
-  const ProviderEnquiry({
-    required this.id,
-    required this.propertyId,
-    required this.propertyTitle,
-    required this.propertyAddress,
-    required this.enquirerName,
-    required this.enquirerEmail,
-    required this.message,
-    required this.status,
-    this.providerReply,
-    this.createdAt,
-    this.repliedAt,
-    this.propertyPublished = false,
-  });
-
-  final int id;
-  final int propertyId;
-  final String propertyTitle;
-  final String propertyAddress;
-  final String enquirerName;
-  final String enquirerEmail;
-  final String message;
-  final ProviderEnquiryStatus status;
-  final String? providerReply;
-  final String? createdAt;
-  final String? repliedAt;
-  final bool propertyPublished;
-
-  factory ProviderEnquiry.fromJson(Map<String, dynamic> row) => ProviderEnquiry(
-    id: _int(row['id']),
-    propertyId: _int(row['property_id']),
-    propertyTitle: '${row['property_title'] ?? ''}'.trim(),
-    propertyAddress: '${row['property_address'] ?? ''}'.trim(),
-    enquirerName: '${row['enquirer_name'] ?? ''}'.trim(),
-    enquirerEmail: '${row['enquirer_email'] ?? ''}'.trim(),
-    message: '${row['message'] ?? ''}',
-    status: ProviderEnquiryStatus.fromWire('${row['status'] ?? ''}'),
-    providerReply: row['provider_reply']?.toString(),
-    createdAt: row['created_at']?.toString(),
-    repliedAt: row['replied_at']?.toString(),
-    propertyPublished: row['property_published'] == true,
-  );
-
-  String get senderDisplay =>
-      enquirerName.isEmpty ? enquirerEmail : enquirerName;
-
-  static int _int(Object? value) {
-    if (value is int) return value;
-    if (value is num) return value.toInt();
-    return int.tryParse('$value') ?? 0;
-  }
-
-  /// "12 Nov 2026, 14:05" — rendered from the server's ISO timestamp, or the
-  /// raw value when it cannot be parsed (never a fabricated date).
-  String get receivedDisplay => _formatStamp(createdAt);
-
-  String get repliedDisplay => _formatStamp(repliedAt);
-
-  static String _formatStamp(String? iso) {
-    if (iso == null || iso.isEmpty) return 'Time not reported';
-    final parsed = DateTime.tryParse(iso);
-    if (parsed == null) return iso;
-    final local = parsed.toLocal();
-    const months = [
-      'Jan',
-      'Feb',
-      'Mar',
-      'Apr',
-      'May',
-      'Jun',
-      'Jul',
-      'Aug',
-      'Sep',
-      'Oct',
-      'Nov',
-      'Dec',
-    ];
-    final hh = local.hour.toString().padLeft(2, '0');
-    final mm = local.minute.toString().padLeft(2, '0');
-    return '${local.day} ${months[local.month - 1]} ${local.year}, $hh:$mm';
-  }
-}
-
-/// Counts over the caller's own enquiries. Arithmetic, never an estimate.
-class ProviderEnquiryMetrics {
-  const ProviderEnquiryMetrics({
-    required this.total,
-    required this.byStatus,
-    this.lastReceivedAt,
-  });
-
-  static const ProviderEnquiryMetrics empty = ProviderEnquiryMetrics(
-    total: 0,
-    byStatus: {},
-  );
-
-  final int total;
-  final Map<String, int> byStatus;
-  final String? lastReceivedAt;
-
-  int count(ProviderEnquiryStatus status) => byStatus[status.wire] ?? 0;
-
-  factory ProviderEnquiryMetrics.fromJson(Map<String, dynamic> json) {
-    final raw = json['by_status'];
-    return ProviderEnquiryMetrics(
-      total: ProviderEnquiry._int(json['total']),
-      byStatus: {
-        if (raw is Map)
-          for (final entry in raw.entries) '${entry.key}': ProviderEnquiry._int(entry.value),
-      },
-      lastReceivedAt: json['last_received_at']?.toString(),
-    );
-  }
-}
-
-// ---------------------------------------------------------------------------
 // Performance
 // ---------------------------------------------------------------------------
 
@@ -517,6 +424,10 @@ class ProviderUntrackedMetric {
 }
 
 /// Everything the Performance screen shows, straight from the server.
+///
+/// The enquiry figures the backend still returns are deliberately NOT parsed:
+/// the Enquiries feature is removed from the mobile Provider workspace, so no
+/// screen consumes them. The server payload is untouched.
 class ProviderPerformance {
   const ProviderPerformance({
     required this.isAgent,
@@ -525,7 +436,6 @@ class ProviderPerformance {
     required this.published,
     required this.byState,
     required this.otherState,
-    required this.enquiries,
     required this.engagementTracked,
     required this.engagementReason,
     required this.untrackedMetrics,
@@ -539,7 +449,6 @@ class ProviderPerformance {
   final int published;
   final Map<String, int> byState;
   final int otherState;
-  final ProviderEnquiryMetrics enquiries;
 
   /// Always `false` for this build: the events do not exist.
   final bool engagementTracked;
@@ -566,17 +475,13 @@ class ProviderPerformance {
     final engagement = json['engagement'] as Map? ?? const {};
     return ProviderPerformance(
       isAgent: scope['is_agent'] == true,
-      managedProperties: ProviderEnquiry._int(scope['managed_properties']),
-      total: ProviderEnquiry._int(listings['total']),
-      published: ProviderEnquiry._int(listings['published']),
+      managedProperties: _int(scope['managed_properties']),
+      total: _int(listings['total']),
+      published: _int(listings['published']),
       byState: {
-        for (final entry in byState.entries)
-          '${entry.key}': ProviderEnquiry._int(entry.value),
+        for (final entry in byState.entries) '${entry.key}': _int(entry.value),
       },
-      otherState: ProviderEnquiry._int(listings['other_state']),
-      enquiries: ProviderEnquiryMetrics.fromJson(
-        json['enquiries'] as Map<String, dynamic>? ?? const {},
-      ),
+      otherState: _int(listings['other_state']),
       engagementTracked: engagement['tracked'] == true,
       engagementReason: '${engagement['reason'] ?? ''}',
       untrackedMetrics: [
@@ -587,6 +492,12 @@ class ProviderPerformance {
       medianRent: _double(portfolio['median_rent']),
       averageSizeSqft: _double(portfolio['average_size_sqft']),
     );
+  }
+
+  static int _int(Object? value) {
+    if (value is int) return value;
+    if (value is num) return value.toInt();
+    return int.tryParse('$value') ?? 0;
   }
 
   static double? _double(Object? value) {

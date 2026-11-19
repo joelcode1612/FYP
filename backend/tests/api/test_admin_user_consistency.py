@@ -107,6 +107,10 @@ def test_detail_count_matches_the_owner_aggregate(client, cleanup_users, fake_ad
 
 
 # --------------------------------------------------- 5: cross-database write
+#
+# The two-database write machinery is exercised through ACCOUNT STATUS
+# changes: roles are no longer accepted by this endpoint at all (see
+# ``test_role_changes_are_refused_before_any_write``).
 
 
 def test_identity_rejection_fails_closed_without_local_change(client, cleanup_users, fake_admin):
@@ -118,7 +122,9 @@ def test_identity_rejection_fails_closed_without_local_change(client, cleanup_us
 
     fake_admin.update_identity_profile = _reject
     r = client.patch(
-        f"/api/v1/users/{target}", headers=auth(admin_token), json={"role": "agent"}
+        f"/api/v1/users/{target}",
+        headers=auth(admin_token),
+        json={"account_status": "suspended"},
     )
     assert r.status_code == 502, r.text
     assert "no change was applied" in r.json()["detail"]
@@ -137,7 +143,9 @@ def test_unconfigured_adapter_is_unavailable_not_a_local_only_write(
 
     monkeypatch.setattr(users_module, "get_admin_service", _unavailable)
     r = client.patch(
-        f"/api/v1/users/{target}", headers=auth(admin_token), json={"role": "agent"}
+        f"/api/v1/users/{target}",
+        headers=auth(admin_token),
+        json={"account_status": "suspended"},
     )
     assert r.status_code == 503, r.text
     assert _local_role(target) == "entrepreneur"
@@ -157,7 +165,9 @@ def test_mirror_failure_reports_an_explicit_partial_result(client, cleanup_users
     users_module.UserService = _MirrorFails
     try:
         r = client.patch(
-            f"/api/v1/users/{target}", headers=auth(admin_token), json={"role": "agent"}
+            f"/api/v1/users/{target}",
+            headers=auth(admin_token),
+            json={"account_status": "suspended"},
         )
     finally:
         users_module.UserService = original
@@ -167,16 +177,21 @@ def test_mirror_failure_reports_an_explicit_partial_result(client, cleanup_users
     assert "Partially applied" in detail
     assert "identity record was updated" in detail
     assert "local access-control record was not" in detail
-    assert fake_admin.identity[str(target)]["role"] == "agent"
+    assert fake_admin.identity[str(target)]["account_status"] == "suspended"
     assert _local_role(target) == "entrepreneur"
     assert any(a["details"]["consistency"] == "partial" for a in fake_admin.audit)
 
     # Recovery is retrying the same idempotent change - no repair by overwrite.
     retry = client.patch(
-        f"/api/v1/users/{target}", headers=auth(admin_token), json={"role": "agent"}
+        f"/api/v1/users/{target}",
+        headers=auth(admin_token),
+        json={"account_status": "suspended"},
     )
     assert retry.status_code == 200, retry.text
-    assert _local_role(target) == "agent"
+    with Session(engine) as session:
+        assert (
+            UserRepository(session).get_by_id(target).account_status == "suspended"
+        )
 
 
 def test_audit_failure_is_reported_and_never_claimed(client, cleanup_users, fake_admin):
@@ -188,14 +203,59 @@ def test_audit_failure_is_reported_and_never_claimed(client, cleanup_users, fake
 
     fake_admin.insert_role_audit = _audit_down
     r = client.patch(
-        f"/api/v1/users/{target}", headers=auth(admin_token), json={"role": "agent"}
+        f"/api/v1/users/{target}",
+        headers=auth(admin_token),
+        json={"account_status": "suspended"},
     )
     assert r.status_code == 200, r.text
     body = r.json()
-    assert body["role"] == "agent"
+    assert body["account_status"] == "suspended"
     assert body["identity_synced"] is True
     assert body["audit_recorded"] is False
-    assert _local_role(target) == "agent"
+    with Session(engine) as session:
+        assert (
+            UserRepository(session).get_by_id(target).account_status == "suspended"
+        )
+
+
+# ------------------------------------------------- role changes are refused
+
+
+def test_role_changes_are_refused_before_any_write(client, cleanup_users, fake_admin):
+    """Roles are assigned by registration / invitation / onboarding only.
+
+    The user-management endpoint must refuse a role payload OUTRIGHT - before
+    the identity write, before the local mirror, and without an audit event -
+    so no unrestricted role-change path remains reachable through the API.
+    """
+    _, admin_token = _provision(cleanup_users, role="admin")
+    target, _ = _provision(cleanup_users)
+
+    r = client.patch(
+        f"/api/v1/users/{target}", headers=auth(admin_token), json={"role": "agent"}
+    )
+    assert r.status_code == 422, r.text
+    detail = r.json()["detail"]
+    assert detail["code"] == "role_change_not_supported"
+    assert "registration" in detail["message"] or "invitation" in detail["message"]
+
+    # Fail closed: no identity write, no local write, no audit event.
+    assert fake_admin.identity == {}
+    assert fake_admin.audit == []
+    assert _local_role(target) == "entrepreneur"
+
+    # A mixed payload is refused whole - never partially applied.
+    r_mixed = client.patch(
+        f"/api/v1/users/{target}",
+        headers=auth(admin_token),
+        json={"role": "agent", "account_status": "suspended"},
+    )
+    assert r_mixed.status_code == 422, r_mixed.text
+    assert fake_admin.identity == {}
+    with Session(engine) as session:
+        assert (
+            UserRepository(session).get_by_id(target).account_status == "active"
+        )
 
 
 def test_successful_change_reports_the_recorded_audit_event(client, cleanup_users, fake_admin):
@@ -231,6 +291,8 @@ def test_profile_only_edit_expects_no_audit_event(client, cleanup_users, fake_ad
 
 
 def test_unknown_role_and_status_are_rejected_before_any_write(client, cleanup_users, fake_admin):
+    """A role payload is refused by POLICY; an unknown status by vocabulary.
+    Both are rejected before any identity or local write."""
     _, admin_token = _provision(cleanup_users, role="admin")
     target, _ = _provision(cleanup_users)
     for body in ({"role": "owner"}, {"account_status": "banned"}):

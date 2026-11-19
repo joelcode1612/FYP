@@ -7,16 +7,17 @@ Flow on every protected request:
 2. The verifier validates signature / algorithm / issuer / audience / expiry
    locally against the project JWKS (401 on any failure, 503 when the key
    service is unreachable).
-3. ``get_current_user`` loads - or, on first sign-in, safely provisions - the
-   local application profile keyed by the verified Supabase UUID, and returns
-   an :class:`AuthenticatedUser` bundling the claims and the authoritative
-   local role / account status.
-4. ``get_active_user`` rejects suspended accounts (403).
+3. ``get_current_user`` reads the authoritative Supabase ``public.users``
+   identity row when available and reconciles the local application profile
+   by the verified Supabase UUID. Client metadata may supply a display name
+   only; role and account status come from the authoritative row.
+4. ``get_active_user`` rejects suspended/non-active accounts (403).
 5. ``require_roles(...)`` factories enforce the RBAC matrices from
-   :mod:`sitewise.domain.rbac` (403).
+   :mod:`sitewise.domain.rbac` and the verified ``aal`` claim (403).
 
-The role and account status are ALWAYS read from the local database row -
-never from token metadata, which the client can influence at signup time.
+The local mirror is the request-time enforcement snapshot; it is never
+populated with default privileges after an authoritative profile has been
+read. A missing or invalid authoritative profile fails closed.
 """
 
 from __future__ import annotations
@@ -31,6 +32,7 @@ from sqlmodel import Session
 from sitewise.core.config import settings
 from sitewise.core.exceptions import AuthError, AuthUnavailableError, ForbiddenError
 from sitewise.core.security import SupabaseJWTVerifier, SupabaseUserinfoVerifier, VerifiedToken
+from sitewise.core.supabase_admin import SupabaseAdminError, get_admin_service
 from sitewise.db.models.user import User
 from sitewise.db.session import get_db
 from sitewise.domain import rbac
@@ -130,6 +132,7 @@ class AuthenticatedUser:
 def get_current_user(
     token: Annotated[str, Depends(bearer_token)],
     session: Annotated[Session, Depends(get_db)],
+    admin: Annotated[Any, Depends(get_admin_service)],
 ) -> AuthenticatedUser:
     verifier = get_jwt_verifier()
     verified = verifier.verify(token)
@@ -139,12 +142,25 @@ def get_current_user(
         subject = uuid.UUID(verified.subject)
     except ValueError as exc:
         raise AuthError("The token subject is not a valid identity.") from exc
+
+    identity_profile: dict[str, Any] | None = None
+    read_profile = getattr(admin, "get_identity_profile", None)
+    if callable(read_profile):
+        try:
+            identity_profile = read_profile(subject)
+        except SupabaseAdminError as exc:
+            raise AuthUnavailableError(
+                "The authoritative identity service is unavailable. Please retry."
+            ) from exc
+
     service = UserService(session)
     profile = service.get_or_sync_current(
         user_id=subject,
         email=verified.email,
         full_name=(verified.claims.get("user_metadata") or {}).get("full_name"),
         email_verified=verified.email_verified,
+        identity_profile=identity_profile,
+        identity_required=bool(getattr(admin, "strict_identity", True)),
     )
     return AuthenticatedUser(token=verified, profile=profile)
 

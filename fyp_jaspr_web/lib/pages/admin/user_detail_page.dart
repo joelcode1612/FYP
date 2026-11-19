@@ -7,7 +7,7 @@ import '../../data/app_locator.dart';
 import '../../data/auth_service.dart';
 import '../../layouts/app_layout.dart';
 
-/// Simplified Sitewise Admin user detail.
+/// Simplified Sitewise Admin user detail — READ-ONLY ROLES.
 ///
 /// Four sections only: user summary, user information, role & status, and the
 /// page actions (Back to Users / Save Changes). The record still comes from
@@ -15,12 +15,17 @@ import '../../layouts/app_layout.dart';
 /// constructor and the existing
 /// `AppLayout(role: AppRole.admin, currentRoute: '/admin/users')` chrome.
 ///
-/// Saving uses the existing authorised administrative operation
-/// `PATCH /api/v1/users/{id}` (`backend/src/sitewise/api/v1/users.py`). That
-/// endpoint is guarded by `require_admin_mfa`, validates the role/status
-/// vocabularies, syncs the identity row and writes `role_change_audit`
-/// server-side. [_UserDetailPageState._isAdmin] is only a presentation guard;
-/// FastAPI remains the authority. Nothing here reads or stores credentials.
+/// THE ROLE IS DISPLAY-ONLY: it is assigned by the authorised registration,
+/// invitation and onboarding workflows and cannot be changed here. The role
+/// dropdown was removed, and the backend's
+/// `PATCH /api/v1/users/{id}` (`backend/src/sitewise/api/v1/users.py`)
+/// refuses any role payload outright (`role_change_not_supported`), so no
+/// unrestricted role-change path remains. Saving uses the same authorised
+/// administrative operation for ACCOUNT STATUS only; that endpoint is guarded
+/// by `require_admin_mfa`, validates the status vocabulary, syncs the
+/// identity row and writes the audit event server-side.
+/// [_UserDetailPageState._isAdmin] is only a presentation guard; FastAPI
+/// remains the authority. Nothing here reads or stores credentials.
 @client
 class UserDetailPage extends StatefulComponent {
   final String id;
@@ -32,14 +37,7 @@ class UserDetailPage extends StatefulComponent {
 }
 
 /// Backend values are lowercase; the second element of each pair is the label.
-/// These are exactly `rbac.ALL_ROLES` and `rbac.ACCOUNT_STATUSES`.
-const List<(String, String)> _roles = [
-  ('admin', 'Administrator'),
-  ('owner', 'Property Owner'),
-  ('agent', 'Agent'),
-  ('entrepreneur', 'Entrepreneur'),
-];
-
+/// This is exactly `rbac.ACCOUNT_STATUSES`.
 const List<(String, String)> _statuses = [
   ('pending', 'Pending'),
   ('active', 'Active'),
@@ -49,11 +47,9 @@ const List<(String, String)> _statuses = [
 class _UserDetailPageState extends State<UserDetailPage> {
   late Future<_UserRecord?> _future;
 
-  /// Last server-confirmed values. The selected values are compared against
-  /// these, never against a locally optimistic copy.
-  String _savedRole = 'entrepreneur';
+  /// Last server-confirmed status. The selected value is compared against
+  /// this, never against a locally optimistic copy.
   String _savedStatus = 'pending';
-  String _role = 'entrepreneur';
   String _status = 'pending';
 
   bool _saving = false;
@@ -103,9 +99,7 @@ class _UserDetailPageState extends State<UserDetailPage> {
     // a role or status. `phone_number` / `last_login` are read from this same
     // payload rather than a second request.
     final user = ApiUserRepository.fromJson(row);
-    _savedRole = _roleValue(user.role);
     _savedStatus = _statusValue(user.status);
-    _role = _savedRole;
     _status = _savedStatus;
 
     return _UserRecord(
@@ -119,10 +113,10 @@ class _UserDetailPageState extends State<UserDetailPage> {
 
   Future<void> _save() async {
     if (_saving || !_isAdmin) return;
-    // Only changed fields are sent, so an untouched record never triggers an
-    // update (and never creates an audit event).
+    // Roles are never sent: they are provisioning-only. Only a changed status
+    // is sent, so an untouched record never triggers an update (and never
+    // creates an audit event).
     final body = <String, dynamic>{
-      if (_role != _savedRole) 'role': _role,
       if (_status != _savedStatus) 'account_status': _status,
     };
     if (body.isEmpty) return;
@@ -162,32 +156,29 @@ class _UserDetailPageState extends State<UserDetailPage> {
           _noticeIsError = true;
           _notice = 'The server returned a response this page cannot read, so '
               'nothing was marked as saved. Reload the account to check its '
-              'current role and status.';
+              'current status.';
         });
         return;
       }
 
-      // Success is shown only when the server echoes back the values we asked
+      // Success is shown only when the server echoes back the value we asked
       // for. A partial or unexpected response is treated as unconfirmed.
-      final echoedRole = _canonicalRole(response['role'] as String?);
       final echoedStatus =
           (response['account_status'] as String?)?.toLowerCase().trim();
       final confirmed =
-          (!body.containsKey('role') || echoedRole == _role) &&
-          (!body.containsKey('account_status') || echoedStatus == _status);
+          !body.containsKey('account_status') || echoedStatus == _status;
 
       if (!confirmed) {
         setState(() {
           _saving = false;
           _noticeIsError = true;
-          _notice = 'The server did not confirm these changes. Nothing was '
+          _notice = 'The server did not confirm this change. Nothing was '
               'marked as saved.';
         });
         return;
       }
 
       setState(() {
-        _savedRole = _role;
         _savedStatus = _status;
         _saving = false;
         _noticeIsError = false;
@@ -204,11 +195,6 @@ class _UserDetailPageState extends State<UserDetailPage> {
     }
   }
 
-  void _setRole(String value) => setState(() {
-    _role = value;
-    _notice = null;
-  });
-
   void _setStatus(String value) => setState(() {
     _status = value;
     _notice = null;
@@ -221,7 +207,10 @@ class _UserDetailPageState extends State<UserDetailPage> {
       currentRoute: '/admin/users',
       title: 'User Detail',
       eyebrow: 'Accounts',
-      subtitle: 'View user information and manage role and account status.',
+      subtitle:
+          'View user information and account status. Roles are assigned '
+          'through registration, invitation and onboarding and are shown '
+          'read-only.',
       child: div(classes: 'stack stack--md', [
         // The notice lives outside the FutureBuilder so it stays visible while
         // the record re-renders, and is never shown before server confirmation.
@@ -268,7 +257,7 @@ class _UserDetailPageState extends State<UserDetailPage> {
 
   Component _details(_UserRecord record) {
     final user = record.user;
-    final changed = _role != _savedRole || _status != _savedStatus;
+    final changed = _status != _savedStatus;
     final canSave = _isAdmin && changed && !_saving;
 
     return div(classes: 'stack stack--md', [
@@ -314,7 +303,7 @@ class _UserDetailPageState extends State<UserDetailPage> {
           Pill(_pretty(_savedStatus), tone: _statusTone(_savedStatus)),
         ]),
         div(classes: 'grid-2', [
-          _row('Current role', _pretty(_savedRole)),
+          _row('Current role', _pretty(_roleValue(user.role))),
           _row('Account status', _pretty(_savedStatus)),
           _row('Registration date', _date(user.joinedAt)),
           _row('Last login', _dateTime(record.lastLogin)),
@@ -334,9 +323,20 @@ class _UserDetailPageState extends State<UserDetailPage> {
         ]),
 
         // --- C. Role & status ----------------------------------------------
+        // The role is a read-only badge: provisioning-only, never editable.
         div(classes: 'card stack stack--md', [
           span(classes: 'title', [Component.text('Role & Status')]),
-          _dropdown('Role', _role, _roles, _isAdmin ? _setRole : null),
+          _row(
+            'Role',
+            _pretty(_roleValue(user.role)),
+          ),
+          span(classes: 'small muted', [
+            Component.text(
+              'The role is assigned by the authorised registration, '
+              'invitation and onboarding workflows and cannot be changed '
+              'here.',
+            ),
+          ]),
           _dropdown(
             'Account Status',
             _status,
@@ -346,14 +346,14 @@ class _UserDetailPageState extends State<UserDetailPage> {
           if (!_isAdmin)
             span(classes: 'small muted', [
               Component.text(
-                'Only an authorized administrator can change role or account '
+                'Only an authorized administrator can change the account '
                 'status. The backend independently verifies the session.',
               ),
             ])
           else if (!changed)
             span(classes: 'small muted', [
               Component.text(
-                'Select a different role or status to enable Save Changes.',
+                'Select a different account status to enable Save Changes.',
               ),
             ]),
         ]),
@@ -433,31 +433,27 @@ class _UserRecord {
   });
 }
 
+/// The stored role id, matching `rbac.ALL_ROLES` — display and echo only.
+/// `owner` IS a stored role now, so it maps to itself: a Property Owner must
+/// never be labelled or echoed as an Entrepreneur.
 String _roleValue(AppRole role) => switch (role) {
   AppRole.admin => 'admin',
+  AppRole.owner => 'owner',
   AppRole.agent => 'agent',
-  // `owner` is a legacy capability, not one of the three stored roles.
-  _ => 'entrepreneur',
-};
-
-String _canonicalRole(String? raw) => switch ((raw ?? '').toLowerCase().trim()) {
-  'admin' || 'administrator' => 'admin',
-  'agent' => 'agent',
-  'entrepreneur' || 'property_owner' || 'user' || 'owner' => 'entrepreneur',
-  _ => (raw ?? '').toLowerCase().trim(),
+  AppRole.entrepreneur => 'entrepreneur',
 };
 
 /// The backend's `audit_recorded` is three-valued: true = event written,
-/// false = the change applied but the audit write failed, null = no role or
-/// status change was made, so no event was due.
+/// false = the change applied but the audit write failed, null = no status
+/// change was made, so no event was due.
 String _successMessage(Object? auditRecorded) {
   if (auditRecorded == false) {
     return 'Changes saved and confirmed by the server, but the audit event '
-        'was NOT recorded. The role and account status are in effect; the '
+        'was NOT recorded. The account status is in effect; the '
         'audit trail is incomplete for this change.';
   }
   if (auditRecorded == true) {
-    return 'Changes saved. The server confirmed the new values and recorded '
+    return 'Changes saved. The server confirmed the new value and recorded '
         'the change in its audit trail.';
   }
   return 'Changes saved and confirmed by the server.';
@@ -469,11 +465,16 @@ String _failureMessage(Map<String, dynamic> result) {
     return 'This change needs an administrator session with completed MFA. '
         'Verify your second factor, then try again.';
   }
+  if (result['code'] == 'role_change_not_supported') {
+    return 'Roles cannot be changed through user management. A role is '
+        'assigned by the authorised registration, invitation and onboarding '
+        'workflows only.';
+  }
   if (message != null && message.isNotEmpty) return message;
   return switch (result['status']) {
     403 => 'You are not authorised to change this account.',
     404 => 'This account no longer exists.',
-    422 => 'The selected role or account status was rejected as invalid.',
+    422 => 'The selected account status was rejected as invalid.',
     _ => 'Could not save changes. Nothing was marked as saved.',
   };
 }

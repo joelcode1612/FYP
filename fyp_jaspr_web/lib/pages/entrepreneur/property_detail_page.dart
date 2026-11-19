@@ -7,13 +7,11 @@ import 'package:jaspr_riverpod/jaspr_riverpod.dart';
 import 'package:shared_logic/shared_logic.dart';
 
 import '../../components/property_detail/business_match_panel.dart';
-import '../../components/property_detail/business_type_fit_panel.dart';
-import '../../components/property_detail/category_explanation_panel.dart';
 import '../../components/property_detail/combined_media_gallery.dart';
+import '../../components/property_detail/compact_location_explanation.dart';
 import '../../components/property_detail/district_demographics_panel.dart';
 import '../../components/property_detail/location_fit_score.dart';
-import '../../components/property_detail/location_insights.dart';
-import '../../components/property_detail/shap_contribution_chart.dart';
+import '../../components/property_detail/location_overview_comparison.dart';
 import '../../components/property_leaflet_map.dart';
 import '../../components/ui.dart';
 import '../../data/app_locator.dart';
@@ -23,20 +21,26 @@ import '../../data/location_evidence_api.dart';
 import '../../data/property_insights_api.dart';
 import '../../layouts/app_layout.dart';
 
-/// Entrepreneur property detail — the final "business-first" layout.
+/// Entrepreneur property detail — the visualization-first layout.
 ///
 /// ```text
 /// top        back · title · verification · address
 /// hero       combined Photos / 360° gallery  +  price, facts, facilities, actions
 /// details    collapsible listing facts — collapsed by default, sits directly
-///            above the business match so the primary answer stays first
-/// match      Why this property matches YOUR business — selected business,
-///            saved recommendation match ring and measured quick facts
-/// tabs       1 Your business match   reasons + things to check
-///            2 Why this area score?  Location Fit + SHAP contributions
-///            3 What's nearby         categories, DOSM district ages, map
+///            above the map so the listing itself stays first
+/// map        the interactive surrounding-area map — a full-width section
+///            above the tabs, visible whichever tab is open
+/// tabs       1 Your business match   saved preferences compared row by row
+///            2 Why this area score?  compact four-factor SHAP explanation
+///            3 What's nearby         curated figures and charts
 /// notes      what this page does not claim
 /// ```
+///
+/// All location information lives INSIDE the tabs. There is deliberately no
+/// standalone location-details block, feature-availability strip or
+/// "View all location details" list above them: the page carries one answer
+/// per question, and the raw model-feature coverage stays a backend concern
+/// rather than customer-facing UI.
 ///
 /// Data honesty: every number comes from the catalogue record, the evidence
 /// API or the insights endpoint, which runs the *deployed* PU artifact and its
@@ -121,16 +125,16 @@ class _PropertyDetailPageState extends State<PropertyDetailPage> {
     return null;
   }
 
-  /// The F&B type the business-match hero scores, resolved once per mount:
-  /// the Recommendations URL selection first, then the signed-in account's
-  /// saved preference, then this browser's stored selection. Empty means the
-  /// visitor has no selection anywhere, so the hero asks instead of scoring
-  /// another category.
+  /// The F&B type the insights request records, resolved once per mount: the
+  /// Recommendations URL selection first, then the signed-in account's saved
+  /// preference, then this browser's stored selection. Empty means the visitor
+  /// has no selection anywhere, so the request carries no type and the
+  /// backend explains its own top category instead of a guessed one.
   String _resolvedBusinessType = '';
 
   /// Where [_resolvedBusinessType] came from — 'recommendations', 'account'
-  /// or 'browser' — shown on the hero so the score's provenance is never
-  /// hidden. Empty when no type resolved.
+  /// or 'browser' — so the resolution is auditable against the response it
+  /// produced. Empty when no type resolved.
   String _typeSource = '';
 
   /// The persisted recommendation result, when the card that opened this page
@@ -219,15 +223,15 @@ class _PropertyDetailPageState extends State<PropertyDetailPage> {
     }
   }
 
-  /// Loads the insights payload the hero and the score tab share, after
-  /// resolving which F&B type it must score.
+  /// Loads the insights payload the score tab, the map and the gallery share,
+  /// after resolving which F&B type the request should record.
   ///
   /// Priority: ① the `?businessType=` selection carried from Recommendations;
   /// ② the signed-in account's saved preference (`/preferences/me`); ③ this
   /// browser's stored selection. No `?result=` is required — a valid saved
   /// preference alone produces the score. When nothing resolves, the request
-  /// is sent without `business_type` and the hero shows the ask-to-select
-  /// state rather than scoring the model's own top category. Demo Mode never
+  /// is sent without `business_type` and the backend explains its own top
+  /// category, which the score tab says plainly. Demo Mode never
   /// reads the account preference: it has no authenticated session.
   Future<PropertyInsights> _loadInsights(
     String id, {
@@ -296,8 +300,6 @@ class _PropertyDetailPageState extends State<PropertyDetailPage> {
                   insightsFuture: _insightsFuture,
                   explanationFuture: _explanationFuture,
                   appliedFilters: _appliedFilters,
-                  businessType: _resolvedBusinessType,
-                  typeSource: _typeSource,
                   saved: saved.contains(p.id),
                   compared: compared.contains(p.id),
                   saveMessage: _saveMessage,
@@ -345,14 +347,6 @@ class _Detail extends StatefulComponent {
   /// Applied Recommendations filters carried into this detail view.
   final RecommendationSearchRequest? appliedFilters;
 
-  /// The resolved F&B type the hero scores (see
-  /// [_PropertyDetailPageState._loadInsights]); empty means none resolved and
-  /// the hero asks for a selection.
-  final String businessType;
-
-  /// The resolution source: 'recommendations' | 'account' | 'browser' | ''.
-  final String typeSource;
-
   final bool saved;
   final bool compared;
   final String? saveMessage;
@@ -369,8 +363,6 @@ class _Detail extends StatefulComponent {
     required this.insightsFuture,
     this.explanationFuture,
     this.appliedFilters,
-    this.businessType = '',
-    this.typeSource = '',
     required this.saved,
     required this.compared,
     required this.onToggleSaved,
@@ -394,17 +386,6 @@ class _DetailState extends State<_Detail> {
   double _dragY = 0;
   double _yawStart = 50;
   double _pitchStart = 50;
-
-  /// SHAP disclosure state.
-  bool _shapShowAll = false;
-  bool _shapTechnical = false;
-
-  /// Whether the "View all location details" list in the business-match hero
-  /// is expanded. Same page-owned disclosure pattern as [_shapShowAll].
-  bool _featureDetailsOpen = false;
-
-  /// The category tab the entrepreneur chose; null opens the most influential.
-  String? _categorySelected;
 
   /// Which of the three insight tabs is open: `business`, `score`, `nearby`.
   ///
@@ -599,77 +580,26 @@ class _DetailState extends State<_Detail> {
         ),
         _summaryCard(),
       ]),
-      // Section order: gallery/summary, then the collapsed listing-details
-      // accordion, then "Your business & this property" and the tabs. The
-      // accordion reuses the existing detail rows — nothing is duplicated.
+      // Section order: gallery/summary, the collapsed listing-details
+      // accordion, the surrounding-area map as its own always-visible
+      // section, then "Explore this property". The accordion reuses the
+      // existing detail rows — nothing is duplicated, and no location block
+      // is presented outside the map and the tabs.
       _detailsPanel(),
-      _businessMatchSection(),
+      _mapPanel(),
       _insightTabs(),
       _notShownPanel(),
     ]);
-  }
-
-  // ------------------------------------------------- business match section
-
-  /// "Your business & this property" — the section above the tabs.
-  ///
-  /// The hero's score is the Stage-2 category suitability for the resolved
-  /// business type, read from the SAME insights payload the score tab uses.
-  /// The insights future is awaited here (not via the state mirror) so the
-  /// hero can distinguish loading from a failed request instead of spinning
-  /// forever. The personalised Layer-2 explanation stays in tab 1 only.
-  Component _businessMatchSection() {
-    return FutureBuilder<PropertyEvidence>(
-      future: component.evidenceFuture,
-      builder: (c, evidenceSnap) {
-        final evidence = evidenceSnap.connectionState == ConnectionState.done
-            ? evidenceSnap.data
-            : null;
-        final insightsFuture = component.insightsFuture;
-        if (insightsFuture == null) {
-          return BusinessMatchHero(
-            property: property,
-            evidence: evidence,
-            insightsFailed: true,
-            businessType: component.businessType,
-            typeSource: component.typeSource,
-            detailsOpen: _featureDetailsOpen,
-            onToggleDetails: () =>
-                setState(() => _featureDetailsOpen = !_featureDetailsOpen),
-          );
-        }
-        return FutureBuilder<PropertyInsights>(
-          future: insightsFuture,
-          builder: (c, snap) {
-            final loading = snap.connectionState != ConnectionState.done;
-            return BusinessMatchHero(
-              property: property,
-              // The measured real-area facts come from the evidence future in
-              // BOTH branches. Dropping it when insights are configured made
-              // every quick fact read "Not available" despite a real payload.
-              evidence: evidence,
-              insights: snap.data,
-              insightsFailed: !loading && snap.data == null,
-              businessType: component.businessType,
-              typeSource: component.typeSource,
-              detailsOpen: _featureDetailsOpen,
-              onToggleDetails: () =>
-                  setState(() => _featureDetailsOpen = !_featureDetailsOpen),
-            );
-          },
-        );
-      },
-    );
   }
 
   // -------------------------------------------------------------- info tabs
 
   /// "Explore this property" — the three insight tabs.
   ///
-  /// One panel is rendered at a time. Only the selected panel is mounted, so a
-  /// tab that owns a Leaflet map never initialises it inside a hidden
-  /// container (Leaflet measures its container once, and a `display:none`
-  /// parent would leave it with a 0×0 viewport).
+  /// One panel is rendered at a time. Only the selected panel is mounted, so
+  /// a tab never pays for a panel that is not open. The Leaflet map lives
+  /// above this section, outside the tab flow, so it stays mounted and keeps
+  /// its pan/zoom state whichever tab is open.
   Component _insightTabs() {
     return section(
       classes: 'sw-info',
@@ -714,7 +644,7 @@ class _DetailState extends State<_Detail> {
             _infoTabButton(
               key: 'nearby',
               title: "What's nearby",
-              description: 'People, shops and travel',
+              description: 'Key figures and area charts',
               icon: _tabIcon('nearby'),
             ),
           ],
@@ -804,18 +734,19 @@ class _DetailState extends State<_Detail> {
 
   // ------------------------------------------------------------- tab: score
 
+  /// Tab 2 — why the area scored as it did.
+  ///
+  /// The reading order is fixed: the score with one short explanation, the
+  /// compact four-factor explanation of what moved it, then a single closing
+  /// disclaimer. The full factor list, the "show all" toggle, the technical
+  /// SHAP details and the topic-by-topic breakdown were removed from this tab;
+  /// the underlying insights payload, the SHAP calculation and the
+  /// business-type explanation in tab 1 are untouched.
   Component _scoreTab() {
     final future = component.insightsFuture;
     return _tabPanel('score', [
       div(classes: 'sw-info__intro', [
         h3([Component.text('How suitable is this area for a food business?')]),
-        p([
-          Component.text(
-            'This score compares the surrounding area with places where food '
-            'businesses already operate. It cannot predict how many customers '
-            'you will get or how much you will earn.',
-          ),
-        ]),
       ]),
       if (future == null)
         div(classes: 'sw-info__note', [
@@ -837,22 +768,13 @@ class _DetailState extends State<_Detail> {
                 );
             return div(classes: 'sw-pd__insights', [
               LocationFitScore(insights: insights),
-              // Stage 2 — the entrepreneur's own business type. Separate model,
-              // separate SHAP, separate wording; never merged into the PU score.
-              BusinessTypeFitPanel(insights: insights),
-              ShapContributionChart(
-                insights: insights,
-                showAll: _shapShowAll,
-                showTechnical: _shapTechnical,
-                onToggleAll: () => setState(() => _shapShowAll = !_shapShowAll),
-                onToggleTechnical: () =>
-                    setState(() => _shapTechnical = !_shapTechnical),
-              ),
-              CategoryExplanationPanel(
-                insights: insights,
-                selectedKey: _categorySelected,
-                onSelect: (key) => setState(() => _categorySelected = key),
-              ),
+              CompactLocationExplanation(insights: insights),
+              p(classes: 'sw-pd__footnote', [
+                Component.text(
+                  'This score measures location similarity. It does not '
+                  'predict sales, customer numbers or business success.',
+                ),
+              ]),
             ]);
           },
         ),
@@ -896,16 +818,26 @@ class _DetailState extends State<_Detail> {
 
   // ------------------------------------------------------------ tab: nearby
 
+  /// Tab 3 — the location-intelligence tab: the curated figures and compact
+  /// charts for this location, then the wider district context.
+  ///
+  /// The map is NOT repeated here — it sits above the tabs where it stays
+  /// mounted across tab switches. The panels below deliberately show the
+  /// recorded catchments side by side instead of adding a radius selector
+  /// that could disagree with the map's own radius control.
   Component _nearbyTab() {
-    final score = _insights?.score;
     return _tabPanel('nearby', [
-      LocationInsightsV4(
-        propertyId: property.id,
-        puScore: score?.value,
-        hasPuScore: score != null,
+      FutureBuilder<PropertyEvidence>(
+        future: component.evidenceFuture,
+        builder: (c, snap) => LocationOverviewComparison(
+          evidence: snap.connectionState == ConnectionState.done
+              ? snap.data
+              : null,
+          loading: snap.connectionState != ConnectionState.done,
+          error: snap.error,
+        ),
       ),
       _districtSection(),
-      _mapPanel(),
     ]);
   }
 
@@ -1208,14 +1140,48 @@ class _DetailState extends State<_Detail> {
 
   // --------------------------------------------------------------------- map
 
+  /// The map of the surrounding area — a full page section rendered directly
+  /// above "Explore this property", outside the tab flow, so it stays mounted
+  /// and keeps its pan/zoom state whichever tab is open.
+  ///
+  /// The one existing map implementation is reused — the radius chips
+  /// (500 m / 1 km / Both), the layer toggles, the catchment rings, the
+  /// subject marker and the clustered nearby locations all live inside the
+  /// first-party frame, which draws only the coordinates the backend
+  /// actually returned. The legend below mirrors the frame's own layer list so
+  /// the categories and their recorded totals are readable without the map,
+  /// and repeats no control: the toggles stay on the map alone.
   Component _mapPanel() {
     final layers = _insights?.mapLayers ?? const <MapLayer>[];
     final lat = _insights?.origin?.lat ?? property.latitude;
     final lon = _insights?.origin?.lon ?? property.longitude;
     final directions = googleMapsDirectionsUrl(lat, lon);
+    // The location identifier the listing actually carries. Coordinates only
+    // appear when no postal address was recorded, so the line never reads as
+    // a placeholder.
+    final where = _addressLine.isNotEmpty
+        ? _addressLine
+        : directions == null
+        ? null
+        : 'Mapped at ${lat.toStringAsFixed(5)}, ${lon.toStringAsFixed(5)}';
+
     return section(classes: 'sw-pd__map', [
-      h2(classes: 'sw-pd__h2', [
-        Component.text('Explore the surrounding area'),
+      div(classes: 'sw-pd__map-head', [
+        div([
+          h2(classes: 'sw-pd__h2', [
+            Component.text('Explore the surrounding area'),
+          ]),
+          p(classes: 'sw-pd__map-sub', [
+            Component.text(
+              "See what's around this property within your selected area.",
+            ),
+          ]),
+        ]),
+        if (where != null)
+          span(classes: 'sw-pd__map-where', [
+            const Icon('place', size: 'sm'),
+            Component.text(where),
+          ]),
       ]),
       PropertyLeafletMap(
         property: property,
@@ -1224,13 +1190,17 @@ class _DetailState extends State<_Detail> {
         origin: _insights?.origin,
         nearby: _nearbyPlaces,
       ),
+      ?_mapLegend(layers),
       // The map explains its own layers inside the frame (which categories
       // have markers and which only totals); this line only covers what the
       // map cannot say about itself, so the two do not repeat each other.
       p(classes: 'sw-pd__footnote', [
         Component.text(
-          'The circles show distances of 500 m and 1 km in a straight line, not '
-          'actual walking or driving distances. The location may be approximate.',
+          'The circles show straight-line distances of 500 m and 1 km, not '
+          'actual walking or driving routes. The counts come from recorded '
+          'nearby-location data, and the location itself may be approximate. '
+          'These visuals help you investigate a site — they do not predict '
+          'customers, sales or success.',
         ),
         // Google is a separate, keyless, provider-branded experience: routing
         // happens on Google's page, never inside the Leaflet frame.
@@ -1247,6 +1217,59 @@ class _DetailState extends State<_Detail> {
         ],
       ]),
     ]);
+  }
+
+  /// What each offered category holds, in the frame's own colours.
+  ///
+  /// A category is left out entirely when it has neither recorded counts nor
+  /// mapped locations — an empty chip would read as "nothing here", which is a
+  /// claim the payload never made. Categories the backend marked as counts-only
+  /// say so instead of pretending to have pins.
+  Component? _mapLegend(List<MapLayer> layers) {
+    final rows = [
+      for (final layer in layers)
+        if (layer.mapped ||
+            layer.count500m != null ||
+            layer.count1000m != null)
+          layer,
+    ];
+    if (rows.isEmpty) return null;
+    return div(classes: 'sw-pd__legend', [
+      span(classes: 'sw-pd__legend-title', [
+        Component.text('Layers on this map'),
+      ]),
+      for (final layer in rows)
+        span(classes: 'sw-pd__legend-item', [
+          span(
+            classes: 'sw-pd__legend-dot',
+            attributes: {'style': '--sw-legend-color:${layer.color}'},
+            const [],
+          ),
+          strong([Component.text(layer.label)]),
+          Component.text(_legendCounts(layer)),
+        ]),
+      p(classes: 'sw-pd__legend-note', [
+        Component.text(
+          'Toggle the same categories on the map. A category marked "counts '
+          'only" has a recorded total but no stored locations, so the map draws '
+          'no pins for it.',
+        ),
+      ]),
+    ]);
+  }
+
+  static String _legendCounts(MapLayer layer) {
+    if (!layer.mapped) return ' — counts only, no locations stored';
+    final parts = [
+      if (layer.count500m != null) '${layer.count500m} within 500 m',
+      if (layer.count1000m != null) '${layer.count1000m} within 1 km',
+    ];
+    // The properties layer is counted by the map itself, per the radius the
+    // visitor picks, so the payload legitimately carries no total for it.
+    if (parts.isNotEmpty) return ' — ${parts.join(' · ')}';
+    return layer.note == null || layer.note!.trim().isEmpty
+        ? ' — counted on the map'
+        : ' — ${layer.note!.trim()}';
   }
 
   // ------------------------------------------------------------------- notes

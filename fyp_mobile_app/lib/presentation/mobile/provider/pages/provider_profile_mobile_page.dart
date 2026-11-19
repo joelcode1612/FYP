@@ -6,6 +6,7 @@ import '../../../../application/services/service_locator.dart';
 import '../../../../core/theme/sitewise_m3.dart';
 import '../../../../core/theme/sitewise_theme.dart';
 import '../../widgets/m3_kit.dart';
+import '../shell/provider_tab_scope.dart';
 import 'provider_models.dart';
 import 'provider_profile_edit_sheet.dart';
 import 'provider_ui.dart';
@@ -20,14 +21,14 @@ import 'provider_workspace_service.dart';
 /// * **Property Owner** — identity + account overview, the honest identity
 ///   (e-KYC) state, the administrator-reviewed account verification, the
 ///   listing destinations and account actions.
-/// * **Agent** — professional details (verification, agency, per-listing
-///   authorizations) and account actions.
+/// * **Agent** — the simplified agent details (verification status, agency,
+///   joined date), per-listing authorizations and account actions.
 ///
 /// Every value is read from the authenticated API: `/auth/me` for the
-/// identity, `ProviderListingsService` for the role's authorized listing
-/// counts, `/provider/verification` for the account verification, and
-/// `/staff/me/listings` for the agent's own profile row and assignments.
-/// Where the backend has no field (e-KYC, REN, agency name) the screen says
+/// identity and the account's joined date, `ProviderListingsService` for the
+/// role's authorized listing counts, `/provider/verification` for the account
+/// verification, and `/staff/me/listings` for the agent's own profile row and
+/// assignments. Where the backend has no field (e-KYC, REN) the screen says
 /// so instead of inventing one.
 class ProviderProfileMobilePage extends ConsumerStatefulWidget {
   const ProviderProfileMobilePage({super.key});
@@ -56,9 +57,7 @@ class _ProviderProfileMobilePageState
   Future<void> _load() async {
     final role = ref.read(authNotifierProvider).user?.role;
     final me = ServiceLocator.apiClient.get('/api/v1/auth/me');
-    final workspace = ProviderListingsService.load(
-      role ?? AppRole.owner,
-    );
+    final workspace = ProviderListingsService.load(role ?? AppRole.owner);
     final verification = ProviderWorkspaceService.verification();
     final agent = role == AppRole.agent ? _loadAgentSelf() : null;
     if (!mounted) return;
@@ -79,7 +78,7 @@ class _ProviderProfileMobilePageState
   }
 
   /// The authenticated agent's profile row plus their authorized
-    /// assignments. Any failure (transport, MFA gate) resolves to null and
+  /// assignments. Any failure (transport, MFA gate) resolves to null and
   /// the sections report that they could not be read.
   Future<AgentSelfOverview?> _loadAgentSelf() async {
     try {
@@ -93,16 +92,26 @@ class _ProviderProfileMobilePageState
   }
 
   Future<void> _signOut() async {
-    await ServiceLocator.auth.signOut();
-    if (mounted) {
-      Navigator.of(context).pushNamedAndRemoveUntil('/', (_) => false);
-    }
+    await ref.read(authNotifierProvider.notifier).signOut();
+
+    if (!mounted) return;
+
+    Navigator.of(
+      context,
+      rootNavigator: true,
+    ).pushNamedAndRemoveUntil('/auth', (route) => false);
   }
 
   /// Opens a drill-in and reloads on return: the verification screen can
   /// change the status this page summarises, and the authenticator screen
   /// changes the assurance level.
   Future<void> _open(String route) async {
+    final scope = ProviderTabScope.maybeOf(context);
+    if (scope != null && scope.handlesRoute(route)) {
+      // "My listings" is now a tab command: no second shell, no profile reload.
+      scope.go(route);
+      return;
+    }
     await Navigator.of(context).pushNamed(route);
     if (mounted) _load();
   }
@@ -149,9 +158,7 @@ class _ProviderProfileMobilePageState
       color: SitewiseColors.action,
       onRefresh: _load,
       child: providerContent(
-        children: isAgent
-            ? _agentBody(user)
-            : _ownerBody(user),
+        children: isAgent ? _agentBody(user) : _ownerBody(user),
       ),
     );
   }
@@ -176,34 +183,31 @@ class _ProviderProfileMobilePageState
     ),
     const SizedBox(height: 8),
     _SectionHead(title: 'Account overview', hint: 'Your account'),
-    _SummaryCard(rows: [
-      _SummaryRow(
-        'Account type',
-        user?.role.label ?? 'Property Owner',
-      ),
-      FutureBuilder<Map<String, dynamic>>(
-        future: _me,
-        builder: (context, snapshot) {
-          return _SummaryRow(
-            'Email verification',
-            null,
-            badge: _emailVerifiedBadge(snapshot.data),
-          );
-        },
-      ),
-      FutureBuilder<Map<String, dynamic>>(
-        future: _me,
-        builder: (context, snapshot) {
-          final status = snapshot.data?['account_status']?.toString();
-          return _SummaryRow(
-            'Account status',
-            (status == null || status.isEmpty)
-                ? 'Unavailable'
-                : status,
-          );
-        },
-      ),
-    ]),
+    _SummaryCard(
+      rows: [
+        _SummaryRow('Account type', user?.role.label ?? 'Property Owner'),
+        FutureBuilder<Map<String, dynamic>>(
+          future: _me,
+          builder: (context, snapshot) {
+            return _SummaryRow(
+              'Email verification',
+              null,
+              badge: _emailVerifiedBadge(snapshot.data),
+            );
+          },
+        ),
+        FutureBuilder<Map<String, dynamic>>(
+          future: _me,
+          builder: (context, snapshot) {
+            final status = snapshot.data?['account_status']?.toString();
+            return _SummaryRow(
+              'Account status',
+              (status == null || status.isEmpty) ? 'Unavailable' : status,
+            );
+          },
+        ),
+      ],
+    ),
     const _IdentityVerificationCard(),
     const SizedBox(height: 8),
     FutureBuilder<ProviderVerification>(
@@ -219,44 +223,48 @@ class _ProviderProfileMobilePageState
     ),
     const SizedBox(height: 8),
     _SectionHead(title: 'My properties', hint: 'Listings & approvals'),
-    _ActionList(rows: [
-      _ActionRow(
-        icon: Icons.storefront_outlined,
-        title: 'My listings',
-        subtitle: 'View and manage properties you have added',
-        onTap: () => _open('/provider/listings'),
-      ),
-      _ActionRow(
-        icon: Icons.description_outlined,
-        title: 'Ownership documents',
-        subtitle: 'Proof of ownership, reviewed for each listing',
-        onTap: () => _open('/provider/listings'),
-      ),
-      _ActionRow(
-        icon: Icons.fact_check_outlined,
-        title: 'Review progress',
-        subtitle: 'See which listings need action or approval',
-        onTap: () => _open('/provider/listings'),
-      ),
-    ]),
+    _ActionList(
+      rows: [
+        _ActionRow(
+          icon: Icons.storefront_outlined,
+          title: 'My listings',
+          subtitle: 'View and manage properties you have added',
+          onTap: () => _open('/provider/listings'),
+        ),
+        _ActionRow(
+          icon: Icons.description_outlined,
+          title: 'Ownership documents',
+          subtitle: 'Proof of ownership, reviewed for each listing',
+          onTap: () => _open('/provider/listings'),
+        ),
+        _ActionRow(
+          icon: Icons.fact_check_outlined,
+          title: 'Review progress',
+          subtitle: 'See which listings need action or approval',
+          onTap: () => _open('/provider/listings'),
+        ),
+      ],
+    ),
     const SizedBox(height: 8),
     _SectionHead(title: 'Account & settings', hint: 'Preferences'),
-    _ActionList(rows: [
-      _ActionRow(
-        icon: Icons.lock_outline_rounded,
-        title: 'Security & sign-in',
-        subtitle: 'How you access your account',
-        greyIcon: true,
-        onTap: _openSecuritySheet,
-      ),
-      _ActionRow(
-        icon: Icons.shield_outlined,
-        title: 'Privacy & terms',
-        subtitle: 'Your information and how it is used',
-        greyIcon: true,
-        onTap: () => _soon('Privacy & terms'),
-      ),
-    ]),
+    _ActionList(
+      rows: [
+        _ActionRow(
+          icon: Icons.lock_outline_rounded,
+          title: 'Security & sign-in',
+          subtitle: 'How you access your account',
+          greyIcon: true,
+          onTap: _openSecuritySheet,
+        ),
+        _ActionRow(
+          icon: Icons.shield_outlined,
+          title: 'Privacy & terms',
+          subtitle: 'Your information and how it is used',
+          greyIcon: true,
+          onTap: () => _soon('Privacy & terms'),
+        ),
+      ],
+    ),
     const SizedBox(height: 12),
     const _ProfileNote(
       'Identity, listing and verification statuses come from your SiteWise '
@@ -273,7 +281,7 @@ class _ProviderProfileMobilePageState
     M3ScreenHeading(
       eyebrow: 'Your account',
       title: 'My profile.',
-      lead: 'Manage your details, agency and access.',
+      lead: 'Your details, agency and authorizations.',
     ),
     const SizedBox(height: 18),
     _ProfileHero(
@@ -284,101 +292,57 @@ class _ProviderProfileMobilePageState
       onEdit: () => _editProfileFuture(),
     ),
     const SizedBox(height: 8),
-    _SectionHead(title: 'Professional details', hint: 'Your credentials'),
-    _ActionList(rows: [
-      FutureBuilder<ProviderVerification>(
-        future: _verification,
-        builder: (context, snapshot) {
-          return _ActionRow(
-            icon: Icons.badge_outlined,
-            title: 'Agent verification',
-            subtitle: 'Registration and identity details',
-            trailing: _verificationBadge(snapshot),
-            onTap: () => _open('/provider/verification'),
-          );
-        },
-      ),
-      _ActionRow(
-        icon: Icons.domain_outlined,
-        title: 'Agency details',
-        subtitle: 'Company, registration and contact',
-        onTap: _openAgencySheet,
-      ),
-      FutureBuilder<AgentSelfOverview?>(
-        future: _agent,
-        builder: (context, snapshot) {
-          final overview = snapshot.data;
-          return _ActionRow(
-            icon: Icons.assignment_outlined,
-            title: 'Listing authorizations',
-            subtitle: 'Owner permission for each listing',
-            trailing: overview == null
-                ? null
-                : _StatusBadge(
-                    '${overview.assignments.length} assigned',
-                    tone: StatusTone.neutral,
-                  ),
-            onTap: _openAuthorizationsSheet,
-          );
-        },
-      ),
-    ]),
-    const _ProfileNote(
-      'Verification and authorization details come from your account '
-      'records. Owner authorization is granted per listing, never for the '
-      'account as a whole.',
+    _SectionHead(title: 'Agent details', hint: 'Your credentials'),
+    _AgentDetailsCard(verification: _verification, agent: _agent, me: _me),
+    const SizedBox(height: 8),
+    _SectionHead(title: 'Listing access', hint: 'Assignments'),
+    _ActionList(
+      rows: [
+        FutureBuilder<AgentSelfOverview?>(
+          future: _agent,
+          builder: (context, snapshot) {
+            final overview = snapshot.data;
+            return _ActionRow(
+              icon: Icons.assignment_outlined,
+              title: 'Listing authorizations',
+              subtitle: 'Owner permission for each listing',
+              trailing: overview == null
+                  ? null
+                  : _StatusBadge(
+                      '${overview.assignments.length} assigned',
+                      tone: StatusTone.neutral,
+                    ),
+              onTap: _openAuthorizationsSheet,
+            );
+          },
+        ),
+      ],
     ),
-    // The second-factor step itself, offered only to an agent whose session
-    // is not already elevated: the backend refuses an aal1 session on the
-    // property-management endpoints.
-    FutureBuilder<Map<String, dynamic>>(
-      future: _me,
-      builder: (context, snapshot) {
-        final level = snapshot.data?['assurance_level']?.toString();
-        if (level == null || level == 'aal2') return const SizedBox.shrink();
-        return Padding(
-          padding: const EdgeInsets.only(top: 4),
-          child: FilledButton.icon(
-            onPressed: () => _open('/provider/mfa'),
-            icon: const Icon(Icons.shield_outlined, size: 18),
-            label: const Text('Set up or enter authenticator code'),
-            style: FilledButton.styleFrom(
-              backgroundColor: SitewiseColors.action,
-              foregroundColor: SitewiseM3.surface,
-              minimumSize: const Size.fromHeight(48),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(SitewiseM3.radiusPill),
-              ),
-            ),
-          ),
-        );
-      },
+    const _ProfileNote(
+      'Authorization details come from your account records. Owner '
+      'authorization is granted per listing, never for the account as a '
+      'whole.',
     ),
     const SizedBox(height: 8),
     _SectionHead(title: 'Account & preferences', hint: 'Settings'),
-    _ActionList(rows: [
-      _ActionRow(
-        icon: Icons.notifications_none_rounded,
-        title: 'Notifications',
-        subtitle: 'Review updates and messages',
-        greyIcon: true,
-        onTap: () => _soon('Notification settings'),
-      ),
-      _ActionRow(
-        icon: Icons.lock_outline_rounded,
-        title: 'Security & sign-in',
-        subtitle: 'Manage your account access',
-        greyIcon: true,
-        onTap: _openSecuritySheet,
-      ),
-      _ActionRow(
-        icon: Icons.shield_outlined,
-        title: 'Privacy & terms',
-        subtitle: 'How your account information is used',
-        greyIcon: true,
-        onTap: () => _soon('Privacy & terms'),
-      ),
-    ]),
+    _ActionList(
+      rows: [
+        _ActionRow(
+          icon: Icons.notifications_none_rounded,
+          title: 'Notifications',
+          subtitle: 'Review updates and messages',
+          greyIcon: true,
+          onTap: () => _soon('Notification settings'),
+        ),
+        _ActionRow(
+          icon: Icons.shield_outlined,
+          title: 'Privacy & terms',
+          subtitle: 'How your account information is used',
+          greyIcon: true,
+          onTap: () => _soon('Privacy & terms'),
+        ),
+      ],
+    ),
     const SizedBox(height: 12),
     _SignOutButton(onSignOut: _signOut),
   ];
@@ -421,7 +385,8 @@ class _ProviderProfileMobilePageState
   }
 
   /// The two hero stats for the AGENT layout: the assigned listing count from
-  /// the authorized staff endpoint, and the account verification state.
+  /// the authorized staff endpoint, and the account verification state (the
+  /// SAME verified record and wording the Agent details card shows).
   Widget _agentStats(BuildContext context) {
     return FutureBuilder<ProviderWorkspace>(
       future: _workspace,
@@ -433,12 +398,7 @@ class _ProviderProfileMobilePageState
             final verification = verificationSnapshot.data;
             final verificationLabel = verification == null
                 ? '—'
-                : switch (verification.status) {
-                    'approved' => 'Verified',
-                    'pending' => 'Pending',
-                    'rejected' => 'Rejected',
-                    _ => 'Not submitted',
-                  };
+                : _verificationPresentation(verification.status).$1;
             return Row(
               children: [
                 _Stat(
@@ -448,10 +408,7 @@ class _ProviderProfileMobilePageState
                   label: 'Assigned listings',
                 ),
                 const _StatDivider(),
-                _Stat(
-                  value: verificationLabel,
-                  label: 'Account verification',
-                ),
+                _Stat(value: verificationLabel, label: 'Account verification'),
               ],
             );
           },
@@ -472,22 +429,14 @@ class _ProviderProfileMobilePageState
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
-      builder: (_) => _SecuritySheet(me: _me, isAgent: ref.read(authNotifierProvider).user?.role == AppRole.agent, onOpenMfa: () {
-        Navigator.of(context).pop();
-        _open('/provider/mfa');
-      }),
-    );
-  }
-
-  void _openAgencySheet() {
-    showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: SitewiseM3.surface,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      builder: (_) => _SecuritySheet(
+        me: _me,
+        isAgent: ref.read(authNotifierProvider).user?.role == AppRole.agent,
+        onOpenMfa: () {
+          Navigator.of(context).pop();
+          _open('/provider/mfa');
+        },
       ),
-      builder: (_) => _AgencySheet(agent: _agent, me: _me),
     );
   }
 
@@ -499,10 +448,13 @@ class _ProviderProfileMobilePageState
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
-      builder: (_) => _AuthorizationsSheet(agent: _agent, onOpenListings: () {
-        Navigator.of(context).pop();
-        _open('/provider/listings');
-      }),
+      builder: (_) => _AuthorizationsSheet(
+        agent: _agent,
+        onOpenListings: () {
+          Navigator.of(context).pop();
+          _open('/provider/listings');
+        },
+      ),
     );
   }
 
@@ -518,25 +470,6 @@ class _ProviderProfileMobilePageState
     return verified == true
         ? const _StatusBadge('Verified', tone: StatusTone.green)
         : const _StatusBadge('Not verified', tone: StatusTone.amber);
-  }
-
-  Widget? _verificationBadge(AsyncSnapshot<ProviderVerification> snapshot) {
-    if (snapshot.connectionState == ConnectionState.waiting) {
-      return const _StatusBadge('Loading', tone: StatusTone.grey);
-    }
-    final verification = snapshot.data;
-    if (verification == null) {
-      return const _StatusBadge('Unavailable', tone: StatusTone.grey);
-    }
-    return _StatusBadge(
-      verification.statusLabel,
-      tone: switch (verification.status) {
-        'approved' => StatusTone.green,
-        'pending' => StatusTone.amber,
-        'rejected' => StatusTone.red,
-        _ => StatusTone.neutral,
-      },
-    );
   }
 }
 
@@ -566,8 +499,9 @@ class AgentSelfOverview {
     return AgentSelfOverview(
       profile: _map(json['agent']),
       assignments: [
-        for (final row in (json['listings'] as List? ?? const [])
-            .whereType<Map<String, dynamic>>())
+        for (final row
+            in (json['listings'] as List? ?? const [])
+                .whereType<Map<String, dynamic>>())
           row,
       ],
     );
@@ -583,6 +517,130 @@ class AgentSelfOverview {
     // is only present when the server includes it. No client-side guess.
     final name = '${profile?['company_name'] ?? ''}'.trim();
     return name.isEmpty ? null : name;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Agent details (simplified read-only professional summary)
+// ---------------------------------------------------------------------------
+
+/// The verification wording shared by the Agent details card and the hero's
+/// account-verification stat, so the two can never disagree.
+(String, StatusTone) _verificationPresentation(String? status) =>
+    switch (status) {
+      'approved' => ('Verified', StatusTone.green),
+      'pending' => ('Pending review', StatusTone.amber),
+      'rejected' => ('Rejected', StatusTone.red),
+      'unsubmitted' => ('Not submitted', StatusTone.neutral),
+      _ => ('Status unavailable', StatusTone.grey),
+    };
+
+/// ISO timestamp -> `DD MMM YYYY` (e.g. `15 Nov 2026`); null when absent or
+/// unparseable — never a fabricated date.
+String? _formatJoinedDate(String? iso) {
+  final trimmed = (iso ?? '').trim();
+  if (trimmed.isEmpty) return null;
+  final parsed = DateTime.tryParse(trimmed);
+  if (parsed == null) return null;
+  const months = [
+    'Jan',
+    'Feb',
+    'Mar',
+    'Apr',
+    'May',
+    'Jun',
+    'Jul',
+    'Aug',
+    'Sep',
+    'Oct',
+    'Nov',
+    'Dec',
+  ];
+  return '${parsed.day.toString().padLeft(2, '0')} '
+      '${months[parsed.month - 1]} ${parsed.year}';
+}
+
+/// The read-only "Agent details" card: verification status, company/agency
+/// and joined date, one row per verified record. Verification comes from the
+/// account verification service, the agency from the authorized staff row and
+/// the joined date from `/auth/me`'s account `created_at`. A value the
+/// backend does not have renders "Not provided", never placeholder data —
+/// and email verification is deliberately NOT echoed here: it is a separate,
+/// unrelated signal shown once in the profile card.
+class _AgentDetailsCard extends StatelessWidget {
+  const _AgentDetailsCard({this.verification, this.agent, this.me});
+
+  final Future<ProviderVerification>? verification;
+  final Future<AgentSelfOverview?>? agent;
+  final Future<Map<String, dynamic>>? me;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+      decoration: BoxDecoration(
+        color: SitewiseM3.surface,
+        borderRadius: BorderRadius.circular(19),
+        border: Border.all(color: SitewiseM3.line),
+      ),
+      child: Column(
+        children: [
+          FutureBuilder<ProviderVerification>(
+            future: verification,
+            builder: (context, snapshot) {
+              final (
+                String label,
+                StatusTone tone,
+              ) = snapshot.connectionState == ConnectionState.waiting
+                  ? ('Loading', StatusTone.grey)
+                  : switch (snapshot.data) {
+                      null => (
+                        isMfaRequired(snapshot.error ?? '')
+                            ? 'Second factor required'
+                            : 'Could not be read',
+                        StatusTone.grey,
+                      ),
+                      final record => _verificationPresentation(record.status),
+                    };
+              return _SummaryRow(
+                'Verification status',
+                null,
+                badge: _StatusBadge(label, tone: tone),
+              );
+            },
+          ),
+          const Divider(height: 1, color: Color(0xFFEDF1F6)),
+          FutureBuilder<AgentSelfOverview?>(
+            future: agent,
+            builder: (context, snapshot) {
+              final waiting =
+                  snapshot.connectionState == ConnectionState.waiting;
+              final company = snapshot.data?.companyName;
+              final shown = company == null || company.isEmpty
+                  ? 'Not provided'
+                  : company;
+              return _SummaryRow('Company / Agency', waiting ? '—' : shown);
+            },
+          ),
+          const Divider(height: 1, color: Color(0xFFEDF1F6)),
+          FutureBuilder<Map<String, dynamic>>(
+            future: me,
+            builder: (context, snapshot) {
+              final waiting =
+                  snapshot.connectionState == ConnectionState.waiting;
+              final joined = _formatJoinedDate(
+                snapshot.data?['created_at']?.toString(),
+              );
+              return _SummaryRow(
+                'Joined date',
+                waiting ? '—' : (joined ?? 'Not provided'),
+              );
+            },
+          ),
+        ],
+      ),
+    );
   }
 }
 
@@ -648,10 +706,10 @@ class _ProfileHero extends StatelessWidget {
               FutureBuilder<Map<String, dynamic>>(
                 future: me,
                 builder: (context, snapshot) {
-                  final url =
-                      '${snapshot.data?['profile_picture_url'] ?? ''}'.trim();
-                  final serverName =
-                      '${snapshot.data?['full_name'] ?? ''}'.trim();
+                  final url = '${snapshot.data?['profile_picture_url'] ?? ''}'
+                      .trim();
+                  final serverName = '${snapshot.data?['full_name'] ?? ''}'
+                      .trim();
                   final displayName = serverName.isNotEmpty
                       ? serverName
                       : (user?.name ?? '');
@@ -666,10 +724,10 @@ class _ProfileHero extends StatelessWidget {
                 child: FutureBuilder<Map<String, dynamic>>(
                   future: me,
                   builder: (context, snapshot) {
-                    final serverName =
-                        '${snapshot.data?['full_name'] ?? ''}'.trim();
-                    final serverEmail =
-                        '${snapshot.data?['email'] ?? ''}'.trim();
+                    final serverName = '${snapshot.data?['full_name'] ?? ''}'
+                        .trim();
+                    final serverEmail = '${snapshot.data?['email'] ?? ''}'
+                        .trim();
                     final displayName = serverName.isNotEmpty
                         ? serverName
                         : (user?.name ?? 'Not available');
@@ -837,16 +895,8 @@ class _EmailChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final (Color bg, Color fg, String label) = switch (me?['email_verified']) {
-      true => (
-        SitewiseM3.greenWash,
-        SitewiseM3.green,
-        'Email verified',
-      ),
-      false => (
-        SitewiseM3.amberWash,
-        SitewiseM3.amber,
-        'Email not verified',
-      ),
+      true => (SitewiseM3.greenWash, SitewiseM3.green, 'Email verified'),
+      false => (SitewiseM3.amberWash, SitewiseM3.amber, 'Email not verified'),
       _ => (
         const Color(0xFFF0F3F7),
         const Color(0xFF52617B),
@@ -1094,12 +1144,14 @@ class _ActionList extends StatelessWidget {
       borderRadius: BorderRadius.circular(19),
       side: const BorderSide(color: SitewiseM3.line),
     ),
-    child: Column(children: [
-      for (var i = 0; i < rows.length; i++) ...[
-        if (i > 0) const Divider(height: 1, color: Color(0xFFEDF1F6)),
-        rows[i],
+    child: Column(
+      children: [
+        for (var i = 0; i < rows.length; i++) ...[
+          if (i > 0) const Divider(height: 1, color: Color(0xFFEDF1F6)),
+          rows[i],
+        ],
       ],
-    ]),
+    ),
   );
 }
 
@@ -1141,9 +1193,7 @@ class _ActionRow extends StatelessWidget {
             child: Icon(
               icon,
               size: 20,
-              color: greyIcon
-                  ? const Color(0xFF45617D)
-                  : SitewiseColors.action,
+              color: greyIcon ? const Color(0xFF45617D) : SitewiseColors.action,
             ),
           ),
           const SizedBox(width: 12),
@@ -1174,10 +1224,7 @@ class _ActionRow extends StatelessWidget {
               ],
             ),
           ),
-          if (trailing != null) ...[
-            const SizedBox(width: 8),
-            trailing!,
-          ],
+          if (trailing != null) ...[const SizedBox(width: 8), trailing!],
           const SizedBox(width: 6),
           const Icon(
             Icons.chevron_right_rounded,
@@ -1226,9 +1273,7 @@ class _SignOutButton extends StatelessWidget {
         foregroundColor: SitewiseColors.danger,
         minimumSize: const Size.fromHeight(50),
         side: const BorderSide(color: Color(0xFFF0D7DE)),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(15),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
         textStyle: const TextStyle(
           fontFamily: kFontFamily,
           fontWeight: FontWeight.w800,
@@ -1251,8 +1296,7 @@ class _IdentityVerificationCard extends StatefulWidget {
       _IdentityVerificationCardState();
 }
 
-class _IdentityVerificationCardState
-    extends State<_IdentityVerificationCard> {
+class _IdentityVerificationCardState extends State<_IdentityVerificationCard> {
   bool _expanded = false;
 
   @override
@@ -1374,9 +1418,7 @@ class _IdentityVerificationCardState
                 width: double.infinity,
                 padding: const EdgeInsets.only(top: 12),
                 decoration: const BoxDecoration(
-                  border: Border(
-                    top: BorderSide(color: Color(0xFFEAEFF7)),
-                  ),
+                  border: Border(top: BorderSide(color: Color(0xFFEAEFF7))),
                 ),
                 child: const Text(
                   'SiteWise does not verify identity documents (e-KYC) yet, '
@@ -1422,18 +1464,18 @@ class _AccountVerificationCard extends StatelessWidget {
     final (String status, StatusTone tone) = loading
         ? ('Loading', StatusTone.grey)
         : verification == null
-            ? (
-                isMfaRequired(error ?? '')
-                    ? 'Second factor required'
-                    : 'Could not be read',
-                StatusTone.grey,
-              )
-            : switch (verification!.status) {
-                'approved' => ('Verified', StatusTone.green),
-                'pending' => ('Awaiting review', StatusTone.amber),
-                'rejected' => ('Needs correction', StatusTone.red),
-                _ => ('Not submitted', StatusTone.neutral),
-              };
+        ? (
+            isMfaRequired(error ?? '')
+                ? 'Second factor required'
+                : 'Could not be read',
+            StatusTone.grey,
+          )
+        : switch (verification!.status) {
+            'approved' => ('Verified', StatusTone.green),
+            'pending' => ('Awaiting review', StatusTone.amber),
+            'rejected' => ('Needs correction', StatusTone.red),
+            _ => ('Not submitted', StatusTone.neutral),
+          };
     final verification_ = verification;
     return Container(
       width: double.infinity,
@@ -1481,8 +1523,8 @@ class _AccountVerificationCard extends StatelessWidget {
                       verification_ == null
                           ? 'Your provider account with SiteWise'
                           : verification_.businessName.isEmpty
-                              ? 'Your provider account with SiteWise'
-                              : verification_.businessName,
+                          ? 'Your provider account with SiteWise'
+                          : verification_.businessName,
                       style: const TextStyle(
                         fontFamily: kFontFamily,
                         fontSize: 11,
@@ -1701,13 +1743,13 @@ class _SecuritySheet extends StatelessWidget {
           final (String assurance, String mfa) = level == null
               ? ('Unavailable', 'Unavailable')
               : elevated
-                  ? ('aal2 · second factor verified', 'Satisfied for this session')
-                  : isAgent
-                      ? (
-                          '$level · second factor outstanding',
-                          'Required before property management',
-                        )
-                      : ('$level · password only', 'Not required for your account');
+              ? ('aal2 · second factor verified', 'Satisfied for this session')
+              : isAgent
+              ? (
+                  '$level · second factor outstanding',
+                  'Required before property management',
+                )
+              : ('$level · password only', 'Not required for your account');
           return Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -1744,7 +1786,9 @@ class _SecuritySheet extends StatelessWidget {
                     foregroundColor: SitewiseM3.surface,
                     minimumSize: const Size.fromHeight(48),
                     shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(SitewiseM3.radiusPill),
+                      borderRadius: BorderRadius.circular(
+                        SitewiseM3.radiusPill,
+                      ),
                     ),
                   ),
                 ),
@@ -1759,116 +1803,11 @@ class _SecuritySheet extends StatelessWidget {
 
 /// The agent's agency details from the authorized staff record. Fields the
 /// server does not expose (agency name, REN) are reported as unavailable.
-class _AgencySheet extends StatelessWidget {
-  const _AgencySheet({required this.agent, required this.me});
-
-  final Future<AgentSelfOverview?>? agent;
-  final Future<Map<String, dynamic>>? me;
-
-  @override
-  Widget build(BuildContext context) {
-    return _SheetScaffold(
-      title: 'Agency details',
-      subtitle:
-          'From your agent record and authenticated profile. SiteWise does '
-          'not expose agency registration or REN details to the mobile app '
-          'yet.',
-      child: FutureBuilder<AgentSelfOverview?>(
-        future: agent,
-        builder: (context, agentSnapshot) {
-          return FutureBuilder<Map<String, dynamic>>(
-            future: me,
-            builder: (context, meSnapshot) {
-              final profile = agentSnapshot.data?.profile;
-              final overview = agentSnapshot.data;
-              final phone =
-                  '${meSnapshot.data?['phone_number'] ?? ''}'.trim();
-              if (agentSnapshot.connectionState == ConnectionState.waiting) {
-                return const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 22),
-                  child: Center(
-                    child: CircularProgressIndicator(
-                      color: SitewiseColors.action,
-                    ),
-                  ),
-                );
-              }
-              if (overview == null || profile == null) {
-                return Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(15),
-                  decoration: BoxDecoration(
-                    color: SitewiseM3.surface,
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: SitewiseM3.line),
-                  ),
-                  child: const Text(
-                    'Your agency record could not be read. Agency details '
-                    'are readable only with a completed second factor — '
-                    'they are never inferred from the signup selection.',
-                    style: TextStyle(
-                      fontFamily: kFontFamily,
-                      fontSize: 12,
-                      height: 1.5,
-                      color: SitewiseM3.muted,
-                    ),
-                  ),
-                );
-              }
-              final agentId = '${profile['agent_id'] ?? ''}'.trim();
-              final companyName = overview.companyName;
-              final companyId = '${profile['company_id'] ?? ''}'.trim();
-              return Container(
-                width: double.infinity,
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 15,
-                  vertical: 5,
-                ),
-                decoration: BoxDecoration(
-                  color: SitewiseM3.surface,
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: SitewiseM3.line),
-                ),
-                child: Column(
-                  children: [
-                    _SheetRow(
-                      'Agent name',
-                      value: overview.agentName ?? 'Not provided',
-                    ),
-                    _SheetRow(
-                      'Agent ID',
-                      value: agentId.isEmpty ? 'Not provided' : agentId,
-                    ),
-                    _SheetRow(
-                      'Agency',
-                      value: companyName ?? 'Not provided by the server',
-                    ),
-                    if (companyId.isNotEmpty && companyName == null)
-                      _SheetRow('Agency ID', value: companyId),
-                    _SheetRow(
-                      'Contact number',
-                      value: phone.isEmpty ? 'Not provided' : phone,
-                    ),
-                    _SheetRow(
-                      'REN / registration',
-                      value: 'Not exposed by SiteWise yet',
-                    ),
-                  ],
-                ),
-              );
-            },
-          );
-        },
-      ),
-    );
-  }
-}
-
-/// Per-listing authorizations. Each row is the server-derived management
-/// state for ONE listing — there is deliberately no universal "authorized"
-/// status for the account.
 class _AuthorizationsSheet extends StatelessWidget {
-  const _AuthorizationsSheet({required this.agent, required this.onOpenListings});
+  const _AuthorizationsSheet({
+    required this.agent,
+    required this.onOpenListings,
+  });
 
   final Future<AgentSelfOverview?>? agent;
   final VoidCallback onOpenListings;
@@ -2001,8 +1940,9 @@ class _AuthorizationTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final management = row['management'];
-    final managementMap =
-        management is Map<String, dynamic> ? management : null;
+    final managementMap = management is Map<String, dynamic>
+        ? management
+        : null;
     final providerManagement = managementMap == null
         ? null
         : ProviderManagement.fromJson(managementMap);

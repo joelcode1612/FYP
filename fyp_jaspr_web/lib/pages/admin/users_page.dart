@@ -16,11 +16,13 @@ import '../../layouts/app_layout.dart';
 ///
 /// Records are live: the user repository reads the authenticated FastAPI
 /// `/users` API (administrator + aal2 enforced server-side), not demo data.
-/// The screen is deliberately read-only status visibility — role and status
-/// are changed on the User Detail page, so no change is ever simulated here.
-/// A failed load surfaces an error state rather than an empty directory. The
-/// Listings column is the backend's per-owner count of operational listings;
-/// Joined is the user's `joinedAt`.
+/// The screen is deliberately read-only: roles are assigned by the
+/// authorised registration / invitation / onboarding workflows and are shown
+/// for information only — never editable from user management. Account
+/// status is managed on the User Detail page, so no change is ever
+/// simulated here. A failed load surfaces an error state rather than an
+/// empty directory. The Listings column is the backend's per-owner count of
+/// operational listings; Joined is the user's `joinedAt`.
 @client
 class UsersPage extends StatefulComponent {
   const UsersPage({super.key});
@@ -182,14 +184,25 @@ class _DirectoryState extends State<_Directory> {
     required void Function(String) onChanged,
   }) => Field(
     labelText: labelText,
-    child: select(events: events<String>(onInput: (raw) => onChanged(raw)), [
-      for (final opt in options)
-        option(
-          value: opt.$2,
-          attributes: {if (opt.$2 == value) 'selected': ''},
-          [Component.text(opt.$1)],
-        ),
-    ]),
+    // A select's onInput delivers the selected values as a LIST (the same
+    // shape the User Detail page's status dropdown consumes). The earlier
+    // `events<String>` signature never matched that delivery, so the Status
+    // and Role filters silently never fired.
+    child: select(
+      events: events<List<String>>(
+        onInput: (selected) {
+          if (selected.isNotEmpty) onChanged(selected.first);
+        },
+      ),
+      [
+        for (final opt in options)
+          option(
+            value: opt.$2,
+            attributes: {if (opt.$2 == value) 'selected': ''},
+            [Component.text(opt.$1)],
+          ),
+      ],
+    ),
   );
 
   @override
@@ -235,58 +248,81 @@ class _DirectoryState extends State<_Directory> {
               '${users.length == 1 ? 'account' : 'accounts'}',
           flush: true,
           child: div(classes: 'table-scroll', [
-            table(classes: 'audit-table', [
+            table(classes: 'audit-table auu-table', [
               thead([
                 tr([
-                  th([Component.text('Account')]),
+                  th([Component.text('User')]),
                   th([Component.text('Role')]),
-                  th([Component.text('Status')]),
+                  th([Component.text('Account status')]),
                   th([Component.text('Listings')]),
                   th([Component.text('Joined')]),
-                  th([Component.text('')]),
+                  th([Component.text('Action')]),
                 ]),
               ]),
               tbody([
                 for (final user in users)
                   tr([
                     td([
-                      // The account itself links into the detail route so
-                      // the directory row is the entry point to account
-                      // management — not a dead end.
-                      AppLink(
-                        to:
-                            '/admin/user-detail?id=${Uri.encodeComponent(user.id)}',
-                        classes: 'who text-action',
-                        children: [Component.text(user.name)],
-                      ),
-                      span(classes: 'sub', [Component.text(user.email)]),
+                      div(classes: 'auu-person', [
+                        span(
+                          classes: 'auu-avatar',
+                          attributes: const {'aria-hidden': 'true'},
+                          [
+                            Component.text(
+                              user.name.trim().isEmpty
+                                  ? 'U'
+                                  : user.name.trim().substring(0, 1).toUpperCase(),
+                            ),
+                          ],
+                        ),
+                        div(classes: 'auu-person__info', [
+                          AppLink(
+                            to: '/admin/user-detail?id=${Uri.encodeComponent(user.id)}',
+                            classes: 'auu-person__name',
+                            children: [
+                              Component.text(
+                                user.name.trim().isEmpty ? 'Unnamed account' : user.name,
+                              ),
+                            ],
+                          ),
+                          span(classes: 'auu-person__email', [
+                            Component.text(user.email),
+                          ]),
+                        ]),
+                      ]),
                     ]),
                     td([
-                      span(
-                        classes: user.role == AppRole.admin
-                            ? 'badge badge-info'
-                            : 'badge badge-muted',
-                        [Component.text(_roleLabel(user.role))],
-                      ),
+                      span(classes: 'auu-role auu-role--${user.role.name}', [
+                        Component.text(_roleLabel(user.role)),
+                      ]),
                     ]),
-                    td([StatusBadge.forText(user.status)]),
                     td([
-                      Component.text(
-                        user.listingCount == null ? '—' : '${user.listingCount}',
-                      ),
+                      StatusBadge.forText(user.status),
                     ]),
-                    td([Component.text(_joined(user))]),
                     td([
-                      div(classes: 'stack stack--xs', [
+                      span(classes: 'auu-count', [
+                        Component.text(
+                          user.listingCount == null ? '—' : '${user.listingCount}',
+                        ),
+                      ]),
+                    ]),
+                    td([
+                      span(classes: 'auu-date', [Component.text(_joined(user))]),
+                    ]),
+                    td([
+                      div(classes: 'auu-actions', [
                         AppLink(
-                          to:
-                              '/admin/user-detail?id=${Uri.encodeComponent(user.id)}',
-                          classes: 'text-action',
-                          children: [Component.text('Manage')],
+                          to: '/admin/user-detail?id=${Uri.encodeComponent(user.id)}',
+                          classes: 'auu-manage',
+                          children: [
+                            Component.text('Manage'),
+                            Icon('arrow_forward', size: 'sm'),
+                          ],
                         ),
                         if (user.role == AppRole.admin)
-                          span(classes: 'stat-note', [
-                            Component.text('Protected account'),
+                          span(classes: 'auu-protected', [
+                            Icon('lock', size: 'sm'),
+                            Component.text('Protected'),
                           ]),
                       ]),
                     ]),
@@ -307,10 +343,13 @@ class _DirectoryState extends State<_Directory> {
 }
 
 /// The stored role id, matching `rbac.ALL_ROLES` and the filter option values.
+/// `owner` IS a stored role now, so it maps to itself: filtering by
+/// "Property Owner" must match Property Owner rows, never Entrepreneurs.
 String _roleValue(AppRole role) => switch (role) {
   AppRole.admin => 'admin',
+  AppRole.owner => 'owner',
   AppRole.agent => 'agent',
-  _ => 'entrepreneur',
+  AppRole.entrepreneur => 'entrepreneur',
 };
 
 String _roleLabel(AppRole role) => switch (role) {

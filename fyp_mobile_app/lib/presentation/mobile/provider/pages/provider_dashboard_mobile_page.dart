@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../application/services/service_locator.dart';
 import '../../../../core/theme/sitewise_m3.dart';
 import '../../../../core/theme/sitewise_theme.dart';
 import '../../widgets/m3_kit.dart';
 import '../../widgets/sitewise_network_image.dart';
+import '../shell/provider_tab_scope.dart';
 import 'provider_dashboard_controller.dart';
 import 'provider_models.dart';
 import 'provider_ui.dart';
@@ -13,19 +15,22 @@ import 'provider_ui.dart';
 /// layouts.
 ///
 /// Every figure on this screen is real: listings come from the role's
-/// authorized endpoint, enquiry counts from the provider inbox, the weekly
-/// report from `/api/v1/provider/performance`. Metrics SiteWise does not
-/// record (viewings, closed deals, property views, saves, week-over-week
-/// deltas) render as an explicit "—" with a not-tracked caption — never a
-/// fabricated zero or percentage.
+/// authorized endpoint (`GET /api/v1/properties/listings/mine` for an owner,
+/// `GET /api/v1/staff/me/listings` for an agent), and the status counts are
+/// arithmetic over those server rows. Metrics SiteWise does not record
+/// (viewings, closed deals) render as an explicit "—" with a not-tracked
+/// caption — never a fabricated zero or percentage.
+///
+/// The dashboard no longer depends on the Enquiries or Schedule features:
+/// those screens are removed from the mobile Provider workspace, and their
+/// fetch used to fail the WHOLE bundle. An empty portfolio renders the honest
+/// empty state, and a backend failure renders the Retry card.
 ///
 /// Structure per role (top to bottom):
-/// * **Agent** — greeting → Agent overview → quick actions → Today's
-///   schedule (honest empty state: no scheduling backend exists) → Assigned
-///   properties → Recent leads → Performance this week.
+/// * **Agent** — greeting → Agent overview → quick actions → Assigned
+///   properties.
 /// * **Owner** — greeting → Portfolio overview → quick actions → Your
-///   properties → Tasks to do (derived from real drafts / rejections /
-///   new enquiries) → Performance this week.
+///   properties → Tasks to do (derived from real drafts / rejections).
 class ProviderDashboardMobilePage extends ConsumerStatefulWidget {
   const ProviderDashboardMobilePage({super.key});
 
@@ -36,12 +41,33 @@ class ProviderDashboardMobilePage extends ConsumerStatefulWidget {
 
 class _ProviderDashboardMobilePageState
     extends ConsumerState<ProviderDashboardMobilePage> {
+  @override
+  void initState() {
+    super.initState();
+    // The Add Property form and detail pages mutate listings through the
+    // shared repository. Refresh only when that revision actually changes;
+    // simply switching back to Home must not refetch the dashboard.
+    ServiceLocator.listingsRevision.addListener(_reload);
+  }
+
+  @override
+  void dispose() {
+    ServiceLocator.listingsRevision.removeListener(_reload);
+    super.dispose();
+  }
+
   void _reload() => ref.invalidate(providerDashboardProvider);
 
   void _open(String route, {Object? arguments}) {
-    Navigator.of(context).pushNamed(route, arguments: arguments).then((_) {
-      if (mounted) _reload();
-    });
+    final scope = ProviderTabScope.maybeOf(context);
+    if (scope != null && scope.handlesRoute(route)) {
+      scope.go(route, arguments: arguments);
+      return;
+    }
+    // A drill-in does not refetch on return by default. Mutations bump
+    // `listingsRevision`, which is the only signal that can change these
+    // figures; a plain view-and-back therefore stays instant.
+    Navigator.of(context).pushNamed(route, arguments: arguments);
   }
 
   @override
@@ -78,20 +104,6 @@ class _ProviderDashboardMobilePageState
             _OverviewCard(data: data),
             const SizedBox(height: 16),
             _QuickActionRow(data: data, onOpen: _open),
-            if (data.isAgent) ...[
-              M3SectionRow(
-                title: "Today's schedule",
-                actionLabel: 'View all',
-                onAction: () => _open('/provider/schedule'),
-              ),
-              const ProviderMessage(
-                icon: Icons.event_note_outlined,
-                title: 'No schedule yet',
-                body: 'SiteWise does not record viewings or follow-up calls '
-                    'yet, so nothing is scheduled today. Upcoming viewings '
-                    'will appear here once scheduling arrives.',
-              ),
-            ],
             M3SectionRow(
               title: data.isAgent ? 'Assigned properties' : 'Your properties',
               actionLabel: 'View all',
@@ -124,38 +136,16 @@ class _ProviderDashboardMobilePageState
                     ),
                   ),
                 ),
-            if (data.isAgent) ...[
-              M3SectionRow(
-                title: 'Recent leads',
-                actionLabel: 'View all',
-                onAction: () => _open('/provider/enquiries'),
-              ),
-              if (data.recentEnquiries.isEmpty)
-                const ProviderMessage(
-                  icon: Icons.mail_outline_rounded,
-                  title: 'No leads yet',
-                  body: 'No enquiry has arrived for the assigned listings '
-                      'yet. New enquiries appear here the moment a tenant '
-                      'asks about a property.',
-                )
-              else
-                for (final enquiry in data.recentEnquiries)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 8),
-                    child: _LeadRow(
-                      enquiry: enquiry,
-                      onOpen: () => _open('/provider/enquiries'),
-                    ),
-                  ),
-            ] else ...[
+            if (!data.isAgent) ...[
               const M3SectionRow(title: 'Tasks to do'),
               if (data.tasks.isEmpty)
                 const ProviderMessage(
                   icon: Icons.task_alt_outlined,
                   title: 'Nothing to do',
-                  body: 'No draft is waiting to be finished, no submission '
-                      'was rejected, and no enquiry is unanswered. New tasks '
-                      'appear here as your portfolio changes.',
+                  body:
+                      'No draft is waiting to be finished and no submission '
+                      'was rejected. New tasks appear here as your portfolio '
+                      'changes.',
                 )
               else
                 for (final task in data.tasks)
@@ -164,7 +154,30 @@ class _ProviderDashboardMobilePageState
                     child: _TaskRow(task: task, onOpen: _open),
                   ),
             ],
-            _PerformanceCard(data: data),
+            if (data.isAgent) ...[
+              // The same classified records the Tasks tab renders — one
+              // classifier, one payload, so Home and Tasks cannot disagree. The
+              // count is the real outstanding count, the preview is at most
+              // three actionable properties, and nothing here comes from
+              // enquiries or appointments.
+              M3SectionRow(
+                title: 'Tasks requiring attention (${data.needsAttentionCount})',
+                actionLabel: 'View all tasks',
+                onAction: () => _open('/provider/tasks'),
+              ),
+              if (data.attentionPreview.isEmpty)
+                const ProviderMessage(
+                  icon: Icons.task_alt_outlined,
+                  title: "You're all caught up",
+                  body: 'No assigned properties need action right now.',
+                )
+              else
+                for (final task in data.attentionPreview)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: _TaskRow(task: task.asDashboardTask, onOpen: _open),
+                  ),
+            ],
             M3Banner(
               text:
                   'Viewed as ${data.isAgent ? 'Agent' : 'Property Owner'}. '
@@ -201,10 +214,10 @@ class _Greeting extends StatelessWidget {
         const SizedBox(height: 8),
         Text(
           data.isAgent
-              ? 'Manage your assigned properties, client enquiries, and '
-                    'viewings.'
-              : 'Manage your F&B properties, listings, and enquiries in one '
-                    'place.',
+              ? 'Manage your assigned properties and their verification '
+                    'statuses.'
+              : 'Manage your F&B properties, listings, and verification in '
+                    'one place.',
           style: SitewiseM3Type.lead,
         ),
       ],
@@ -236,7 +249,6 @@ class _OverviewCard extends StatelessWidget {
   final ProviderDashboardData data;
 
   List<_Metric> get _metrics {
-    final responseRate = data.responseRatePercent;
     if (data.isAgent) {
       return [
         _Metric(
@@ -244,10 +256,11 @@ class _OverviewCard extends StatelessWidget {
           '${data.listingCount}',
           'Assigned Properties',
         ),
+        _Metric(Icons.layers_outlined, '${data.publishedCount}', 'Published'),
         _Metric(
-          Icons.person_outline_rounded,
-          '${data.newEnquiryCount}',
-          'New Leads',
+          Icons.schedule_outlined,
+          '${data.pendingCount}',
+          'Pending Review',
         ),
         // SiteWise emits no viewing events; the report states this too.
         const _Metric(
@@ -255,12 +268,6 @@ class _OverviewCard extends StatelessWidget {
           '—',
           'Viewings Today',
           'Not tracked',
-        ),
-        _Metric(
-          Icons.bolt_outlined,
-          responseRate == null ? '—' : '$responseRate%',
-          'Response Rate',
-          responseRate == null ? 'No enquiries yet' : null,
         ),
       ];
     }
@@ -280,11 +287,7 @@ class _OverviewCard extends StatelessWidget {
         '${data.pendingCount}',
         'Pending Review',
       ),
-      _Metric(
-        Icons.mail_outline_rounded,
-        '${data.newEnquiryCount}',
-        'New Enquiries',
-      ),
+      _Metric(Icons.edit_note_outlined, '${data.draftCount}', 'Drafts'),
     ];
   }
 
@@ -324,51 +327,47 @@ class _OverviewCard extends StatelessWidget {
               ),
             ),
           ),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(18, 18, 18, 16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                data.isAgent ? 'Agent overview' : 'Portfolio overview',
-                style: const TextStyle(
-                  fontFamily: kFontFamily,
-                  fontSize: 17,
-                  fontWeight: FontWeight.w800,
-                  color: SitewiseM3.ink,
+          Padding(
+            padding: const EdgeInsets.fromLTRB(18, 18, 18, 16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  data.isAgent ? 'Agent overview' : 'Portfolio overview',
+                  style: const TextStyle(
+                    fontFamily: kFontFamily,
+                    fontSize: 17,
+                    fontWeight: FontWeight.w800,
+                    color: SitewiseM3.ink,
+                  ),
                 ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                data.isAgent
-                    ? 'Your agency activity at a glance.'
-                    : 'Your property portfolio at a glance.',
-                style: const TextStyle(
-                  fontFamily: kFontFamily,
-                  fontSize: 12,
-                  color: SitewiseM3.muted,
+                const SizedBox(height: 4),
+                Text(
+                  data.isAgent
+                      ? 'Your agency activity at a glance.'
+                      : 'Your property portfolio at a glance.',
+                  style: const TextStyle(
+                    fontFamily: kFontFamily,
+                    fontSize: 12,
+                    color: SitewiseM3.muted,
+                  ),
                 ),
-              ),
-              const SizedBox(height: 14),
-              Row(
-                children: [
-                  for (var i = 0; i < metrics.length; i++) ...[
-                    if (i > 0) ...[
-                      const SizedBox(width: 6),
-                      Container(
-                        width: 1,
-                        height: 42,
-                        color: SitewiseM3.line,
-                      ),
-                      const SizedBox(width: 6),
+                const SizedBox(height: 14),
+                Row(
+                  children: [
+                    for (var i = 0; i < metrics.length; i++) ...[
+                      if (i > 0) ...[
+                        const SizedBox(width: 6),
+                        Container(width: 1, height: 42, color: SitewiseM3.line),
+                        const SizedBox(width: 6),
+                      ],
+                      Expanded(child: _MetricSlot(metric: metrics[i])),
                     ],
-                    Expanded(child: _MetricSlot(metric: metrics[i])),
                   ],
-                ],
-              ),
-            ],
+                ),
+              ],
+            ),
           ),
-        ),
         ],
       ),
     );
@@ -396,11 +395,7 @@ class _MetricSlot extends StatelessWidget {
                 color: providerWash,
                 borderRadius: BorderRadius.circular(9),
               ),
-              child: Icon(
-                metric.icon,
-                size: 16,
-                color: SitewiseColors.action,
-              ),
+              child: Icon(metric.icon, size: 16, color: SitewiseColors.action),
             ),
             const SizedBox(width: 6),
             Flexible(
@@ -413,9 +408,7 @@ class _MetricSlot extends StatelessWidget {
                   fontSize: 16,
                   fontWeight: FontWeight.w800,
                   letterSpacing: -0.5,
-                  color: metric.unavailable
-                      ? SitewiseM3.muted
-                      : SitewiseM3.ink,
+                  color: metric.unavailable ? SitewiseM3.muted : SitewiseM3.ink,
                 ),
               ),
             ),
@@ -476,14 +469,9 @@ class _QuickActionRow extends StatelessWidget {
             '/provider/listings',
           ),
           const _QuickAction(
-            Icons.mail_outline_rounded,
-            'Enquiries',
-            '/provider/enquiries',
-          ),
-          const _QuickAction(
-            Icons.calendar_today_outlined,
-            'Schedule',
-            '/provider/schedule',
+            Icons.add_circle_outline,
+            'Add Property',
+            '/provider/add-property',
           ),
           const _QuickAction(
             Icons.bar_chart_rounded,
@@ -501,11 +489,6 @@ class _QuickActionRow extends StatelessWidget {
             Icons.apartment_outlined,
             'My Properties',
             '/provider/listings',
-          ),
-          const _QuickAction(
-            Icons.chat_bubble_outline_rounded,
-            'Messages',
-            '/provider/enquiries',
           ),
           const _QuickAction(
             Icons.bar_chart_rounded,
@@ -708,7 +691,9 @@ class _PropertyCard extends StatelessWidget {
                     foregroundColor: SitewiseColors.action,
                     side: const BorderSide(color: SitewiseColors.action),
                     shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(SitewiseM3.radiusPill),
+                      borderRadius: BorderRadius.circular(
+                        SitewiseM3.radiusPill,
+                      ),
                     ),
                     minimumSize: const Size(64, 34),
                     padding: const EdgeInsets.symmetric(horizontal: 14),
@@ -716,94 +701,6 @@ class _PropertyCard extends StatelessWidget {
                   child: Text(manageLabel),
                 ),
               ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// ── Lead row (agent) ─────────────────────────────────────────────────────────
-
-class _LeadRow extends StatelessWidget {
-  const _LeadRow({required this.enquiry, required this.onOpen});
-
-  final ProviderEnquiry enquiry;
-  final VoidCallback onOpen;
-
-  String get _tone => switch (enquiry.status) {
-    ProviderEnquiryStatus.incoming => 'action',
-    ProviderEnquiryStatus.replied => 'success',
-    _ => 'neutral',
-  };
-
-  @override
-  Widget build(BuildContext context) {
-    return Semantics(
-      button: true,
-      label: 'Open enquiry from ${enquiry.senderDisplay}',
-      child: M3Card(
-        onTap: onOpen,
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-        child: Row(
-          children: [
-            Container(
-              width: 40,
-              height: 40,
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                color: providerWash,
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(
-                Icons.person_outline_rounded,
-                size: 22,
-                color: SitewiseColors.action,
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    enquiry.senderDisplay,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontFamily: kFontFamily,
-                      fontSize: 13,
-                      fontWeight: FontWeight.w800,
-                      color: SitewiseM3.ink,
-                    ),
-                  ),
-                  const SizedBox(height: 3),
-                  Text(
-                    enquiry.propertyTitle.isEmpty
-                        ? 'Listing L-${enquiry.propertyId}'
-                        : enquiry.propertyTitle,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontFamily: kFontFamily,
-                      fontSize: 11,
-                      color: SitewiseM3.muted,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(width: 8),
-            ProviderEnquiryPill(
-              label: enquiry.status.label,
-              tone: _tone,
-            ),
-            const SizedBox(width: 4),
-            const Icon(
-              Icons.arrow_forward_ios_rounded,
-              size: 14,
-              color: Color(0xFF4E6E9E),
             ),
           ],
         ),
@@ -878,204 +775,6 @@ class _TaskRow extends StatelessWidget {
             ),
           ],
         ),
-      ),
-    );
-  }
-}
-
-// ── Performance this week ────────────────────────────────────────────────────
-
-class _PerformanceCard extends StatelessWidget {
-  const _PerformanceCard({required this.data});
-
-  final ProviderDashboardData data;
-
-  /// Three columns: the real enquiry count plus the metrics SiteWise does
-  /// not record, shown as '—' with their honest captions.
-  List<_Metric> get _metrics {
-    if (data.isAgent) {
-      return [
-        _Metric(
-          Icons.mail_outline_rounded,
-          '${data.enquiryMetrics.total}',
-          'Enquiries',
-        ),
-        const _Metric(
-          Icons.calendar_today_outlined,
-          '—',
-          'Viewings',
-          'Not recorded',
-        ),
-        const _Metric(
-          Icons.handshake_outlined,
-          '—',
-          'Closed Deals',
-          'Not recorded',
-        ),
-      ];
-    }
-    return [
-      const _Metric(
-        Icons.visibility_outlined,
-        '—',
-        'Property Views',
-        'Not tracked',
-      ),
-      const _Metric(
-        Icons.bookmark_border_outlined,
-        '—',
-        'Saves',
-        'Not tracked',
-      ),
-      _Metric(
-        Icons.mail_outline_rounded,
-        '${data.enquiryMetrics.total}',
-        'Enquiries',
-      ),
-    ];
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final performance = data.performance;
-    final reason = performance?.engagementReason ?? '';
-    return Container(
-      margin: const EdgeInsets.only(top: 22),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: SitewiseM3.surface,
-        borderRadius: BorderRadius.circular(SitewiseM3.radiusCard),
-        border: Border.all(color: SitewiseM3.line),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x0C276097),
-            blurRadius: 20,
-            offset: Offset(0, 5),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Performance this week',
-            style: const TextStyle(
-              fontFamily: kFontFamily,
-              fontSize: 15,
-              fontWeight: FontWeight.w800,
-              color: SitewiseM3.ink,
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            'Compared to last week',
-            style: const TextStyle(
-              fontFamily: kFontFamily,
-              fontSize: 11,
-              color: SitewiseM3.muted,
-            ),
-          ),
-          const SizedBox(height: 16),
-          Row(
-            children: [
-              for (var i = 0; i < _metrics.length; i++) ...[
-                if (i > 0) ...[
-                  const SizedBox(width: 10),
-                  Container(
-                    width: 1,
-                    height: 44,
-                    color: SitewiseM3.line,
-                  ),
-                  const SizedBox(width: 10),
-                ],
-                Expanded(
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Container(
-                        width: 34,
-                        height: 34,
-                        alignment: Alignment.center,
-                        decoration: BoxDecoration(
-                          color: providerWash,
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Icon(
-                          _metrics[i].icon,
-                          size: 20,
-                          color: SitewiseColors.action,
-                        ),
-                      ),
-                      const SizedBox(width: 9),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              _metrics[i].value,
-                              style: TextStyle(
-                                fontFamily: kFontFamily,
-                                fontSize: 18,
-                                fontWeight: FontWeight.w800,
-                                letterSpacing: -0.7,
-                                color: _metrics[i].unavailable
-                                    ? SitewiseM3.muted
-                                    : SitewiseM3.ink,
-                              ),
-                            ),
-                            const SizedBox(height: 2),
-                            Text(
-                              _metrics[i].caption ?? _metrics[i].label,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                fontFamily: kFontFamily,
-                                fontSize: 10.5,
-                                color: SitewiseM3.muted,
-                              ),
-                            ),
-                            // The caption slot shows the metric NAME for a
-                            // tracked value; an untracked value shows the
-                            // name too — the 'Not recorded' hint moves into
-                            // the value's semantics below.
-                            if (_metrics[i].caption != null) ...[
-                              const SizedBox(height: 1),
-                              Text(
-                                _metrics[i].label,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(
-                                  fontFamily: kFontFamily,
-                                  fontSize: 9.5,
-                                  color: Color(0xFF8B98AB),
-                                ),
-                              ),
-                            ],
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ],
-          ),
-          const SizedBox(height: 12),
-          Text(
-            performance == null
-                ? 'The weekly report could not be loaded. SiteWise stores no '
-                      'weekly history, so no week-over-week comparison is '
-                      'shown.'
-                : 'No week-over-week comparison is shown: SiteWise stores no '
-                    'weekly history. ${reason.isEmpty ? '' : reason}',
-            style: const TextStyle(
-              fontFamily: kFontFamily,
-              fontSize: 10.5,
-              height: 1.45,
-              color: SitewiseM3.muted,
-            ),
-          ),
-        ],
       ),
     );
   }

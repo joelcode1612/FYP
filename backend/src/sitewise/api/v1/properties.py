@@ -137,12 +137,28 @@ def _run_enrichment(repo: FypPropertyRepository, property_row: dict) -> dict:
     can display and retry. The property row is committed BEFORE this call, so
     a failure here never invalidates the saved listing; no external data
     download is triggered (local PostGIS only).
-    """
-    from sitewise.services.feature_refresh_service import FeatureRefreshService
 
+    Population is resolved through the REAL provider chain (pre-computed row,
+    WorldPop 2025 PostGIS raster, LandScan, configured GeoTIFF) instead of
+    being carried forward from an earlier row: the category lifecycle records
+    what actually happened, and the response reports it. ``status`` is ``ok``
+    only when every attempted category settled honestly (measured or explicitly
+    unavailable); any ``failed`` category yields ``partial`` with the reasons.
+    """
+    from sitewise.ingestion.state import RefreshState
+    from sitewise.services.feature_refresh_service import FeatureRefreshService
+    from sitewise.services.property_enrichment_service import (
+        CATEGORIES,
+        CALCULATION_VERSION,
+        CATEGORY_PHASE,
+        PHASE_POSTGIS,
+        PropertyEnrichmentService,
+    )
+
+    property_id = int(property_row["id"])
     try:
         result = FeatureRefreshService(repo.session).recalculate_new_property(
-            int(property_row["id"])
+            property_id
         )
         if result["successful_computations"] != 1:
             return {
@@ -156,23 +172,59 @@ def _run_enrichment(repo: FypPropertyRepository, property_row: dict) -> dict:
         # admin review panel from reporting "not started" for a listing whose
         # features were in fact calculated. Same source tables and predicates,
         # so the numbers agree; a failure here must not fail the creation.
+        enrichment = PropertyEnrichmentService(repo.session)
+        attempted = [
+            c for c in CATEGORIES if CATEGORY_PHASE[c] == PHASE_POSTGIS
+        ] + ["population"]
         try:
-            PropertyEnrichmentService(repo.session).run(
-                int(property_row["id"]), phase="postgis"
-            )
+            enrichment.run(property_id, phase="postgis")
+            # Population is measured, never borrowed: the provider chain
+            # either produces a real measurement for these coordinates or
+            # settles the category as explicitly unavailable.
+            enrichment.run(property_id, categories=["population"])
         except Exception as exc:  # noqa: BLE001 - additive bookkeeping only
             logger.warning(
                 "enrichment.category_state_failed property=%s error=%s",
                 property_row.get("id"), exc,
             )
-        return {
-            "status": "ok",
+        # Honest freshness: when the population chain measured a real value
+        # for these coordinates the whole set is current; otherwise the
+        # category row (and the summary the UI polls) carries the truth.
+        try:
+            population_state = enrichment.summary(property_id)["categories"][
+                "population"
+            ]["status"]
+            if population_state == "current":
+                RefreshState(repo.session).set_freshness(
+                    property_id,
+                    status="current",
+                    version=CALCULATION_VERSION,
+                    success=True,
+                )
+        except Exception:  # noqa: BLE001 - never fail creation on bookkeeping
+            population_state = "unknown"
+        states = enrichment.states(property_id)
+        failed = [
+            (name, states[name].get("last_error"))
+            for name in attempted
+            if states[name]["status"] == "failed"
+        ]
+        freshness = RefreshState(repo.session).freshness_payload(property_id)
+        payload: dict = {
+            "status": "partial" if failed else "ok",
             # Preserve the original response contract: the stored feature row
             # (competitor/demand/accessibility counts) is returned exactly as
             # before, with the freshness state added alongside it.
-            "features": repo.get_geo_features(int(property_row["id"])) or {},
-            "freshness": "current",
+            "features": repo.get_geo_features(property_id) or {},
+            "freshness": freshness.get("status", "unknown"),
+            "population_status": population_state,
+            "categories": {name: states[name]["status"] for name in attempted},
         }
+        if failed:
+            payload["detail"] = "; ".join(
+                f"{name}: {str(error)[:120]}" for name, error in failed
+            )[:300]
+        return payload
     except Exception as exc:  # noqa: BLE001 - reported, never swallowed silently
         return {"status": "failed", "reason": type(exc).__name__, "detail": str(exc)[:300]}
 
@@ -320,7 +372,7 @@ def _agent_manages_listing(
         return False
     row = session.execute(
         text(
-            "SELECT 1 FROM agent_listing_assignment "
+            "SELECT 1 FROM public.agent_listing_assignment "
             "WHERE listing_id = :lid AND agent_id = :aid"
         ),
         {"lid": property_id, "aid": agent_id},

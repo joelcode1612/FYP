@@ -1,238 +1,420 @@
+import 'dart:async';
+
 import 'package:jaspr/dom.dart';
 import 'package:jaspr/jaspr.dart';
 import 'package:jaspr_riverpod/jaspr_riverpod.dart';
 import 'package:shared_logic/shared_logic.dart';
 
 import '../../components/ui.dart';
-import '../../data/app_locator.dart';
 import '../../layouts/app_layout.dart';
 
-/// Web compare, laid out as the source's `compare.html`.
+/// Compare shortlisted properties by observable differences only.
 ///
-/// ```text
-/// .page-head   "Compare" · "Compare N properties" · explanation
-/// .notice      "add another" / "some records dropped" warnings
-/// .panel       .compare-table  (field rows × property columns)
-/// disclaimer
-/// ```
-///
-/// The source table puts the property in the column header and the field names
-/// down the left, with each cell labelled by state ("Not provided", "Data
-/// unavailable"). The previous version used a generic `.table` with the property
-/// city as the header and a flat "—" for every absent value, collapsing three
-/// distinct states into one.
+/// This page NEVER calls the recommendation search, never computes an overall
+/// score and never names a winner. It renders the batch result from
+/// `POST /api/v1/compare`, which derives every sentence from verified
+/// measurements of the selected properties themselves.
 @client
-class ComparePage extends StatelessComponent {
+class ComparePage extends StatefulComponent {
   const ComparePage({super.key});
 
   @override
+  State<ComparePage> createState() => _ComparePageState();
+}
+
+class _ComparePageState extends State<ComparePage> {
+  /// The selection we last sent, so a rebuild cannot queue duplicate reads.
+  String _requestedIds = '';
+
+  @override
   Component build(BuildContext context) {
-    // The selection lives in the root provider scope (seeded from the cookie),
-    // so the page needs no constructor argument and stays a plain encodable
-    // client target.
     final compared = context.watch(
       appNotifierProvider.select((app) => app.compared),
     );
+    final comparison = context.watch(propertyCompareProvider);
+    final ids = compared.toList();
+    final signature = ids.join('|');
+
+    if (signature != _requestedIds) {
+      _requestedIds = signature;
+      Future.microtask(() {
+        context.read(propertyCompareProvider.notifier).load(ids);
+      });
+    }
+
     return AppLayout(
       role: AppRole.entrepreneur,
       currentRoute: '/entrepreneur/compare',
-      title: compared.isEmpty
-          ? 'Compare properties'
-          : 'Compare ${compared.length} '
-                '${compared.length == 1 ? 'property' : 'properties'}',
+      title: 'Compare your shortlisted properties',
       eyebrow: 'Compare',
       subtitle:
-          'Identical fields side by side. "Not provided" and "Data '
-          'unavailable" are labelled — a blank is never a better or worse '
-          'result.',
-      child: compared.isEmpty
-          ? const _EmptyCompare()
-          : FutureBuilder<List<CommercialProperty>>(
-              future: AppLocator.properties.listings(),
-              builder: (c, snap) {
-                if (!snap.hasData) return const _Loading();
-                final all = snap.data!;
-                final items = all
-                    .where((property) => compared.contains(property.id))
-                    .toList();
-                return _CompareBody(
-                  items: items,
-                  missing: compared.length - items.length,
-                );
-              },
+          'Objective differences between up to three properties you selected. '
+          'No overall score, no winner — the decision stays with you.',
+      child: div(classes: 'cmp', [
+        _topBar(ids.length),
+        if (ids.isEmpty)
+          EmptyState(
+            title: 'Nothing to compare yet',
+            body: 'Add two or three properties from Recommendations, then '
+                'return here to see their measured differences.',
+            action: const ActionLink(
+              'Back to Recommendations',
+              href: '/entrepreneur/recommendations',
+              variant: 'primary',
             ),
+          )
+        else if (ids.length < 2)
+          div(classes: 'notice notice-warn', [
+            Component.text(
+              'One property selected. Add another from Recommendations for a '
+              'side-by-side comparison.',
+            ),
+          ]),
+        if (comparison.error != null)
+          div(classes: 'notice notice-warn', [
+            Component.text(comparison.error!),
+            ActionButton(
+              'Retry',
+              variant: 'secondary',
+              onClick: () => context
+                  .read(propertyCompareProvider.notifier)
+                  .load(ids, refresh: true),
+            ),
+          ]),
+        if (comparison.loading && comparison.data == null)
+          div(classes: 'loading', [
+            span(classes: 'spinner', []),
+            Component.text('Loading the selected properties…'),
+          ]),
+        if (comparison.data case final result?)
+          _body(context, result, ids.length),
+      ]),
     );
   }
-}
 
-class _Loading extends StatelessComponent {
-  const _Loading();
-
-  @override
-  Component build(BuildContext context) => div(classes: 'loading', [
-    span(classes: 'spinner', []),
-    Component.text('Loading listings…'),
-  ]);
-}
-
-class _EmptyCompare extends StatelessComponent {
-  const _EmptyCompare();
-
-  @override
-  Component build(BuildContext context) => EmptyState(
-    title: 'Nothing to compare yet',
-    body:
-        'Add at least two properties from Explore, your favourites or a '
-        'recommendation run. Fields are shown side by side once two or more are '
-        'selected.',
-    action: const ActionLink(
-      'Browse properties',
-      href: '/entrepreneur/explore',
-      variant: 'primary',
+  Component _topBar(int count) => div(classes: 'cmp__top', [
+    div(classes: 'cmp__count', [
+      Component.text('$count of 3 selected'),
+    ]),
+    const ActionLink(
+      'Back to Recommendations',
+      href: '/entrepreneur/recommendations',
+      variant: 'secondary',
     ),
-  );
-}
+  ]);
 
-class _CompareBody extends StatelessComponent {
-  final List<CommercialProperty> items;
+  Component _body(
+    BuildContext context,
+    PropertyCompareResult result,
+    int selectedCount,
+  ) {
+    final properties = result.properties;
+    if (properties.isEmpty) return Component.fragment([]);
 
-  /// Compared ids that are no longer in the listing set.
-  final int missing;
-
-  const _CompareBody({required this.items, this.missing = 0});
-
-  static String _toneFor(VerificationStatus status) => switch (status) {
-    VerificationStatus.verified => 'success',
-    VerificationStatus.pending => 'warning',
-    VerificationStatus.rejected => 'danger',
-    VerificationStatus.draft => 'neutral',
-  };
-
-  @override
-  Component build(BuildContext context) {
-    return div(classes: 'stack stack--md', [
-      if (items.length < 2)
+    return div(classes: 'cmp__stack', [
+      if (result.unresolvedIds.isNotEmpty)
         div(classes: 'notice notice-warn', [
           Component.text(
-            'Add at least one more property for a useful comparison.',
+            '${result.unresolvedIds.length} selected '
+            '${result.unresolvedIds.length == 1 ? 'property was' : 'properties were'} '
+            'not found in the property catalogue and were left out.',
           ),
         ]),
-      if (missing > 0)
+      if (selectedCount > result.resolvedCount)
         div(classes: 'notice notice-warn', [
+          Component.text('Add at least two available properties to compare.'),
+        ]),
+      _overview(context, properties),
+      _keyDifferences(result),
+      _category(
+        'Cost & space',
+        properties,
+        const [
+          'monthly_rent_rm',
+          'size_sqft',
+          'rent_per_sqft',
+          'floor_level_text',
+          'has_parking',
+        ],
+        result,
+      ),
+      _category(
+        'Location & accessibility',
+        properties,
+        const [
+          'population_500m',
+          'population_1000m',
+          'nearest_transit_walk_m',
+          'bus_stops_500m_walk',
+          'walk_isochrone_area_10min_km2',
+          'parking_facilities_500m',
+          'office_pois_500m',
+          'universities_count_500m',
+          'malls_count_500m',
+        ],
+        result,
+      ),
+      _category(
+        'Nearby F&B competition',
+        properties,
+        const [
+          'fnb_competitors_500m',
+          'fnb_competitors_1000m',
+          'cafe_count_500m',
+          'restaurant_count_500m',
+          'nearest_competitor_distance_m',
+        ],
+        result,
+      ),
+      _tradeoffs(result),
+      _detailTable(properties, result),
+      div(classes: 'cmp__notes', [
+        for (final note in result.notes)
+          p([Component.text(note)]),
+        p(classes: 'cmp__context', [
           Component.text(
-            '$missing saved ${missing == 1 ? 'property is' : 'properties are'} '
-            'no longer published and ${missing == 1 ? 'was' : 'were'} left out.',
+            'Research association index is supporting context only: an '
+            'uncalibrated 0–100 research measure, not a success probability '
+            'and not used to order this comparison.',
           ),
         ]),
-      div(classes: 'panel', [
-        div(classes: 'table-scroll', [
-          table(classes: 'compare-table', [
-            thead([
-              tr([
-                th([Component.text('Field')]),
-                for (final prop in items)
-                  th([
-                    Component.text(prop.title),
-                    div(classes: 'small', [Component.text(prop.city)]),
-                    div(classes: 'compare-remove', [
-                      ActionButton(
-                        'Remove',
-                        variant: 'ghost',
-                        onClick: () => context
-                            .read(appNotifierProvider.notifier)
-                            .toggleCompared(prop.id),
-                      ),
-                    ]),
-                  ]),
-              ]),
-            ]),
-            tbody([
-              _row('Monthly rent', [
-                for (final prop in items) prop.rentalDisplay,
-              ]),
-              _row('Floor area', [
-                for (final prop in items)
-                  '${prop.sizeSqft.toStringAsFixed(0)} sq ft',
-              ]),
-              _row('Property type', [
-                for (final prop in items) prop.propertyType,
-              ]),
-              _row('Rental efficiency', [
-                for (final prop in items)
-                  'RM${prop.rentalPerSqft.toStringAsFixed(2)} / sq ft',
-              ]),
-              _nodeRow('Availability', [
-                for (final prop in items)
-                  StatusBadge(
-                    prop.verification == VerificationStatus.verified
-                        ? 'available'
-                        : 'pending',
-                    tone: prop.verification == VerificationStatus.verified
-                        ? 'action'
-                        : 'warning',
-                  ),
-              ]),
-              _nodeRow('Verification', [
-                for (final prop in items)
-                  StatusBadge(
-                    prop.verification.label,
-                    tone: _toneFor(prop.verification),
-                  ),
-              ]),
-              _row('Suitability score', [
-                for (final prop in items)
-                  '${prop.suitabilityScore.toStringAsFixed(0)}/100',
-              ], emphasise: true),
-              _row('360° tour', [
-                for (final prop in items)
-                  prop.hasTour ? 'Published' : 'Not available',
-              ]),
-              _nodeRow('Details', [
-                for (final prop in items)
-                  ActionLink(
-                    'Open',
-                    href: '/entrepreneur/property-detail?id=${prop.id}',
-                    variant: 'secondary',
-                  ),
-              ]),
-            ]),
-          ]),
-        ]),
       ]),
-      p(classes: 'disclaimer', [
-        Component.text(
-          'A suitability score is a relative decision-support indicator. It is '
-          'not a probability of business success, a revenue or customer-volume '
-          'forecast, regulatory approval, or a guarantee of any kind.',
-        ),
-      ]),
-      div(classes: 'actions-row', [
+      div(classes: 'cmp__actions', [
         ActionButton(
           'Clear comparison',
           variant: 'secondary',
-          onClick: () =>
-              context.read(appNotifierProvider.notifier).clearCompared(),
+          onClick: () {
+            context.read(appNotifierProvider.notifier).clearCompared();
+            context.read(propertyCompareProvider.notifier).reset();
+          },
         ),
         const ActionLink(
-          'Back to results',
-          href: '/entrepreneur/explore',
+          'Back to Recommendations',
+          href: '/entrepreneur/recommendations',
           variant: 'secondary',
         ),
       ]),
     ]);
   }
 
-  Component _row(String label, List<String> values, {bool emphasise = false}) =>
-      tr([
-        th(attributes: const {'scope': 'row'}, [Component.text(label)]),
-        for (final v in values)
-          td([
-            if (emphasise) strong([Component.text(v)]) else Component.text(v),
-          ]),
+  /// Section A — property cards in one horizontal row.
+  Component _overview(BuildContext context, List<CompareProperty> properties) =>
+      div(classes: 'cmp__section', [
+        h2([Component.text('Property overview')]),
+        div(classes: 'cmp__cards', [
+          for (final property in properties)
+            div(classes: 'cmp__card', [
+              if (property.imageUrl != null && property.imageUrl!.isNotEmpty)
+                img(
+                  src: property.imageUrl!,
+                  attributes: {
+                    'alt': property.title,
+                    'loading': 'lazy',
+                  },
+                  classes: 'cmp__card-img',
+                )
+              else
+                div(classes: 'cmp__card-noimg', [
+                  Component.text('No property photo'),
+                ]),
+              div(classes: 'cmp__card-body', [
+                h3([Component.text(property.title)]),
+                p([Component.text(property.location)]),
+                div(classes: 'cmp__card-facts', [
+                  span([Component.text(property.propertyType)]),
+                  span([
+                    Component.text(
+                      property.metric('monthly_rent_rm').display,
+                    ),
+                  ]),
+                  span([Component.text(property.metric('size_sqft').display)]),
+                ]),
+                if (property.availabilityConfirmed)
+                  span(classes: 'cmp__tag cmp__tag--ok', [
+                    Component.text('Availability confirmed'),
+                  ])
+                else
+                  span(classes: 'cmp__tag', [
+                    Component.text('Availability not confirmed'),
+                  ]),
+                if (property.panoramaAvailable)
+                  span(classes: 'cmp__tag', [Component.text('360° tour ready')]),
+                div(classes: 'cmp__card-actions', [
+                  ActionLink(
+                    'View details',
+                    href: '/entrepreneur/property-detail?id=${Uri.encodeComponent(property.id)}',
+                    variant: 'secondary',
+                  ),
+                  ActionButton(
+                    'Remove',
+                    variant: 'ghost',
+                    onClick: () => context
+                        .read(appNotifierProvider.notifier)
+                        .toggleCompared(property.id),
+                  ),
+                ]),
+              ]),
+            ]),
+        ]),
       ]);
 
-  Component _nodeRow(String label, List<Component> values) => tr([
-    th(attributes: const {'scope': 'row'}, [Component.text(label)]),
-    for (final v in values) td([v]),
-  ]);
+  /// Section E — factual labels only, followed by measured trade-offs.
+  Component _keyDifferences(PropertyCompareResult result) =>
+      div(classes: 'cmp__section', [
+        h2([Component.text('Key differences')]),
+        if (result.insights.isEmpty)
+          p([Component.text('Not enough comparable evidence for a summary.')])
+        else
+          div(classes: 'cmp__insights', [
+            for (final insight in result.insights)
+              div(classes: 'cmp__insight', [
+                h3([Component.text(insight.title)]),
+                ul([
+                  for (final point in insight.points)
+                    li([Component.text(point)]),
+                ]),
+              ]),
+          ]),
+        div(classes: 'cmp__diffs', [
+          for (final difference in result.differences)
+            p([Component.text(difference.sentence)]),
+        ]),
+      ]);
+
+  Component _category(
+    String title,
+    List<CompareProperty> properties,
+    List<String> keys,
+    PropertyCompareResult result,
+  ) {
+    final rows = <Component>[];
+    for (final key in keys) {
+      final metric = properties.first.metric(key);
+      final values = [
+        for (final property in properties) property.metric(key),
+      ];
+      final available = values.where((item) => item.available).toList();
+      final max = available.isEmpty
+          ? null
+          : available
+              .map((item) => item.value?.toDouble() ?? 0)
+              .reduce((low, high) => low > high ? low : high);
+      rows.add(div(classes: 'cmp__row', [
+        div(classes: 'cmp__row-label', [
+          Component.text(metric.caption),
+          if (metric.unit.isNotEmpty)
+            span(classes: 'cmp__unit', [Component.text(metric.unit)]),
+        ]),
+        for (final value in values)
+          div(classes: 'cmp__row-cell', [
+            span([Component.text(value.display)]),
+            if (value.available &&
+                max != null &&
+                max > 0 &&
+                value.value != null &&
+                metric.unit.isNotEmpty)
+              div(classes: 'cmp__bar-track', [
+                div(
+                  classes: 'cmp__bar',
+                  attributes: {
+                    'style': 'width: ${((value.value!.toDouble() / max) * 100).round()}%',
+                  },
+                  [],
+                ),
+              ]),
+          ]),
+      ]));
+    }
+    return div(classes: 'cmp__section', [
+      h2([Component.text(title)]),
+      div(classes: 'cmp__grid', [
+        div(classes: 'cmp__row cmp__row--head', [
+          div(classes: 'cmp__row-label', [Component.text('Measurement')]),
+          for (final property in properties)
+            div(classes: 'cmp__row-cell', [Component.text(property.title)]),
+        ]),
+        ...rows,
+      ]),
+      if (title == 'Nearby F&B competition')
+        p(classes: 'cmp__hint', [
+          Component.text(
+            'Counts use the same source and radius for every property. Fewer '
+            'recorded competitors does not mean better demand — it can also '
+            'mean a less established area.',
+          ),
+        ]),
+    ]);
+  }
+
+  Component _tradeoffs(PropertyCompareResult result) =>
+      div(classes: 'cmp__section', [
+        h2([Component.text('Key trade-offs')]),
+        for (final tradeoff in result.tradeoffs)
+          div(classes: 'cmp__tradeoff', [Component.text(tradeoff.text)]),
+      ]);
+
+  Component _detailTable(
+    List<CompareProperty> properties,
+    PropertyCompareResult result,
+  ) {
+    const keys = [
+      'monthly_rent_rm',
+      'size_sqft',
+      'rent_per_sqft',
+      'floor_level_text',
+      'has_parking',
+      'population_500m',
+      'population_1000m',
+      'nearest_transit_walk_m',
+      'bus_stops_500m_walk',
+      'walk_isochrone_area_10min_km2',
+      'parking_facilities_500m',
+      'office_pois_500m',
+      'universities_count_500m',
+      'malls_count_500m',
+      'fnb_competitors_500m',
+      'fnb_competitors_1000m',
+      'cafe_count_500m',
+      'restaurant_count_500m',
+      'fast_food_count_500m',
+      'nearest_competitor_distance_m',
+    ];
+    return div(classes: 'cmp__section', [
+      h2([Component.text('Detailed comparison')]),
+      div(classes: 'table-scroll', [
+        table(classes: 'compare-table', [
+          thead([
+            tr([
+              th([Component.text('Measurement')]),
+              for (final property in properties)
+                th([Component.text(property.title)]),
+            ]),
+          ]),
+          tbody([
+            for (final key in keys)
+              tr([
+                th(attributes: const {'scope': 'row'}, [
+                  Component.text(properties.first.metric(key).caption),
+                ]),
+                for (final property in properties)
+                  td([Component.text(property.metric(key).display)]),
+              ]),
+            tr([
+              th(attributes: const {'scope': 'row'}, [
+                Component.text('PU research index (context only)'),
+              ]),
+              for (final property in properties)
+                td([
+                  Component.text(
+                    property.researchIndexAvailable
+                        ? '${property.researchIndex?.toStringAsFixed(0)} / 100'
+                        : 'Data not available',
+                  ),
+                ]),
+            ]),
+          ]),
+        ]),
+      ]),
+    ]);
+  }
 }

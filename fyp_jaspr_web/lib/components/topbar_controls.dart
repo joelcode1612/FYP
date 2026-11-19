@@ -1,5 +1,6 @@
 import 'package:jaspr/dom.dart';
 import 'package:jaspr/jaspr.dart';
+import 'package:jaspr_riverpod/jaspr_riverpod.dart';
 import 'package:shared_logic/shared_logic.dart';
 
 import '../data/agent_records.dart';
@@ -482,6 +483,11 @@ class AvatarMenuState extends State<AvatarMenu> {
                   classes: 'menu__item',
                   events: events(
                     onClick: () async {
+                      // A comparison shortlist belongs to the signed-in
+                      // account; never leave it for the next identity.
+                      context
+                          .read(appNotifierProvider.notifier)
+                          .clearCompared();
                       await WebAuth.signout();
                     },
                   ),

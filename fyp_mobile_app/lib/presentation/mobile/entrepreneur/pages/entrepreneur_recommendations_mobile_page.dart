@@ -37,7 +37,13 @@ class EntrepreneurRecommendationsMobilePage extends ConsumerStatefulWidget {
 class _EntrepreneurRecommendationsMobilePageState
     extends ConsumerState<EntrepreneurRecommendationsMobilePage> {
   final ScrollController _scroll = ScrollController();
+  final TextEditingController _search = TextEditingController();
   bool _seeded = false;
+
+  /// Uncommitted draft selections survive closing the sheet by swipe/back.
+  /// Applying via Show properties or Clear all clears it because the applied
+  /// request becomes the new source of truth.
+  RecommendationSearchRequest? _filterDraft;
 
   @override
   void initState() {
@@ -49,9 +55,11 @@ class _EntrepreneurRecommendationsMobilePageState
       if (!mounted || _seeded) return;
       _seeded = true;
       final prefs = ref.read(businessPreferencesProvider);
+      final initial = _initialRequest(prefs);
+      _search.text = initial.query ?? '';
       ref
           .read(entrepreneurNotifierProvider.notifier)
-          .searchRecommendations(request: _initialRequest(prefs));
+          .searchRecommendations(request: initial);
     });
   }
 
@@ -59,6 +67,7 @@ class _EntrepreneurRecommendationsMobilePageState
   void dispose() {
     _scroll.removeListener(_onScroll);
     _scroll.dispose();
+    _search.dispose();
     super.dispose();
   }
 
@@ -67,7 +76,8 @@ class _EntrepreneurRecommendationsMobilePageState
   /// works, and the notifier deduplicates concurrent requests.
   void _onScroll() {
     if (!_scroll.hasClients) return;
-    final remaining = _scroll.position.maxScrollExtent - _scroll.position.pixels;
+    final remaining =
+        _scroll.position.maxScrollExtent - _scroll.position.pixels;
     if (remaining > 480) return;
     final notifier = ref.read(entrepreneurNotifierProvider.notifier);
     if (!notifier.recommendationHasMore || notifier.recommendationRefreshing) {
@@ -81,7 +91,6 @@ class _EntrepreneurRecommendationsMobilePageState
   /// the user had asked for it. Unconfigured accounts get a plain browse.
   RecommendationSearchRequest _initialRequest(BusinessPreferences prefs) {
     final configured =
-        prefs.businessType.trim().isNotEmpty ||
         prefs.preferredLocation.trim().isNotEmpty ||
         prefs.preferredAreas.isNotEmpty;
     return configured
@@ -108,6 +117,9 @@ class _EntrepreneurRecommendationsMobilePageState
       next,
     ) {
       if (previous == null) return;
+      // A saved-preference edit replaces the applied criteria; an old
+      // uncommitted sheet draft must not silently override it.
+      _filterDraft = null;
       notifier.searchRecommendations(request: _initialRequest(next));
     });
 
@@ -135,8 +147,7 @@ class _EntrepreneurRecommendationsMobilePageState
                 isSelected: item.id == state.selectedRankedId,
                 onOpen: () => _openInsight(item),
                 onSave: () => _toggleSaved(item.id),
-                onCompare: () =>
-                    ref.read(appNotifierProvider.notifier).toggleCompared(item.id),
+                onCompare: () => _toggleCompared(item.id),
               );
             }
             return _footer(state, notifier);
@@ -149,194 +160,261 @@ class _EntrepreneurRecommendationsMobilePageState
   // -- header ---------------------------------------------------------------
 
   Widget _header(EntrepreneurState state, EntrepreneurNotifier notifier) {
-    final prefs = state.preferences;
     final total = state.recommendationTotal;
-    final model = state.recommendationModel;
+    final request = state.recommendationRequest;
+    final facets = state.recommendationFacets;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const M3ScreenHeading(
           eyebrow: 'Find a space that fits your vision',
           title: 'Recommendations',
-          lead: 'Ranked commercial properties for your business.',
-        ),
-        const SizedBox(height: 12),
-        Container(
-          padding: const EdgeInsets.all(13),
-          decoration: BoxDecoration(
-            color: SitewiseColors.surface,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: SitewiseColors.border),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  const Expanded(
-                    child: Text(
-                      'Your requirements',
-                      style: TextStyle(
-                        fontSize: 12.5,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: .3,
-                        color: SitewiseColors.muted,
-                      ),
-                    ),
-                  ),
-                  TextButton.icon(
-                    onPressed: () => Navigator.of(context).pushNamed(
-                      '/entrepreneur/ai-recommendations',
-                    ),
-                    icon: const Icon(Icons.auto_awesome_rounded, size: 15),
-                    label: const Text('AI matches'),
-                    style: TextButton.styleFrom(
-                      foregroundColor: SitewiseColors.action,
-                      visualDensity: VisualDensity.compact,
-                      textStyle: const TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                  ),
-                  TextButton.icon(
-                    onPressed: () => _openFilters(state),
-                    icon: const Icon(Icons.tune_rounded, size: 16),
-                    label: const Text('Edit'),
-                    style: TextButton.styleFrom(
-                      foregroundColor: SitewiseColors.action,
-                      visualDensity: VisualDensity.compact,
-                      textStyle: const TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 6),
-              _requirementsGrid(prefs),
-              if (prefs.businessType.trim().isEmpty &&
-                  prefs.preferredLocation.trim().isEmpty &&
-                  prefs.maxBudgetRm <= 0 &&
-                  prefs.minSizeSqft <= 0) ...[
-                const SizedBox(height: 8),
-                const Text(
-                  'No requirements set yet — every eligible listing is '
-                  'shown. Tap Edit to set your business, location, budget '
-                  'and space.',
-                  style: TextStyle(
-                    fontSize: 14,
-                    height: 1.4,
-                    color: SitewiseColors.text,
-                  ),
-                ),
-              ],
-            ],
-          ),
+          lead:
+              'Commercial properties ranked by the general SiteWise PU model.',
         ),
         const SizedBox(height: 12),
         Row(
           children: [
             Expanded(
-              child: Text(
-                total == null
-                    ? 'Ranked properties'
-                    : '$total ${total == 1 ? 'property' : 'properties'}',
-                style: const TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w800,
-                  color: SitewiseColors.ink,
+              child: TextField(
+                controller: _search,
+                textInputAction: TextInputAction.search,
+                decoration: const InputDecoration(
+                  hintText: 'Search area, title or property ID',
+                  prefixIcon: Icon(Icons.search_rounded),
+                  isDense: true,
+                  border: OutlineInputBorder(),
+                ),
+                onSubmitted: (value) {
+                  final text = value.trim();
+                  notifier.applyRecommendationRequest(
+                    text.isEmpty
+                        ? request.copyWith(clearQuery: true)
+                        : request.copyWith(query: text),
+                  );
+                  FocusScope.of(context).unfocus();
+                },
+              ),
+            ),
+            const SizedBox(width: 8),
+            SizedBox(
+              height: 48,
+              child: OutlinedButton.icon(
+                onPressed: () => _openFilters(state),
+                icon: const Icon(Icons.tune_rounded, size: 18),
+                label: const Text('Filters'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: SitewiseColors.action,
+                  side: const BorderSide(color: SitewiseColors.action),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
                 ),
               ),
             ),
-            if (state.recommendationRefreshing)
-              const SizedBox(
-                width: 14,
-                height: 14,
-                child: CircularProgressIndicator(strokeWidth: 2),
-              ),
           ],
         ),
-        if (model != null) ...[
-          const SizedBox(height: 4),
-          // Entrepreneur-facing wording only. The internal model identifier
-          // and version stay in `state.recommendationModel` for diagnostics
-          // and are deliberately never rendered here.
-          Text(
-            model.available
-                ? 'Ranked by how well each property fits your requirements.'
-                : 'Ordered by requirement fit — the research score is '
-                      'unavailable for this browse.',
-            style: const TextStyle(
-              fontSize: 14,
-              height: 1.35,
-              color: SitewiseColors.muted,
+        const SizedBox(height: 10),
+        Row(
+          children: [
+            Expanded(
+              child: DropdownButtonFormField<String>(
+                initialValue: request.sort ?? 'best_match',
+                isDense: true,
+                decoration: const InputDecoration(
+                  labelText: 'Sort by',
+                  border: OutlineInputBorder(),
+                  isDense: true,
+                ),
+                items: [
+                  for (final entry
+                      in (facets?.sortOptions.isNotEmpty ?? false)
+                          ? facets!.sortOptions.entries
+                          : _sortFallback.entries)
+                    DropdownMenuItem(
+                      value: entry.key,
+                      child: Text(entry.value),
+                    ),
+                ],
+                onChanged: (value) {
+                  if (value == null) return;
+                  notifier.applyRecommendationRequest(
+                    request.copyWith(sort: value),
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 10),
+        Text(
+          total == null
+              ? 'Finding matching properties…'
+              : '$total ${total == 1 ? 'property matches' : 'properties match'}',
+          style: const TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w800,
+            color: SitewiseColors.ink,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Builder(
+          builder: (context) {
+            final compareCount = ref.read(appNotifierProvider).compared.length;
+            return Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    '$compareCount of 3 in comparison',
+                    style: const TextStyle(
+                      fontSize: 12.5,
+                      color: SitewiseColors.muted,
+                    ),
+                  ),
+                ),
+                TextButton(
+                  onPressed: compareCount >= 2
+                      ? () => Navigator.of(
+                          context,
+                        ).pushNamed('/entrepreneur/compare')
+                      : null,
+                  child: const Text(
+                    'View comparison',
+                    style: TextStyle(
+                      color: SitewiseColors.action,
+                      fontWeight: FontWeight.w800,
+                      fontSize: 12.5,
+                    ),
+                  ),
+                ),
+              ],
+            );
+          },
+        ),
+        const SizedBox(height: 8),
+        if (_filterChips(request).isNotEmpty)
+          SizedBox(
+            height: 34,
+            child: ListView(
+              scrollDirection: Axis.horizontal,
+              children: [
+                for (final chip in _filterChips(request))
+                  Padding(
+                    padding: const EdgeInsets.only(right: 6),
+                    child: ActionChip(
+                      label: Text(
+                        chip.label,
+                        style: const TextStyle(fontSize: 12),
+                      ),
+                      onPressed: () =>
+                          notifier.applyRecommendationRequest(chip.next),
+                    ),
+                  ),
+              ],
             ),
           ),
-        ],
-        const SizedBox(height: 12),
+        const SizedBox(height: 10),
       ],
     );
   }
 
-  /// The four requirements, each as a labelled value. Values stay readable
-  /// even when nothing is configured ("Any location" is a statement, not an
-  /// empty gap).
-  Widget _requirementsGrid(BusinessPreferences prefs) {
-    Widget field(String label, String value) => _RequirementField(
-      label: label,
-      value: value,
-    );
-    return Column(
-      children: [
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(
-              child: field(
-                'Business',
-                prefs.businessType.trim().isEmpty
-                    ? 'Any F&B business'
-                    : prefs.businessType.trim(),
-              ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: field(
-                'Location',
-                prefs.preferredLocation.trim().isEmpty
-                    ? 'Anywhere'
-                    : prefs.preferredLocation.trim(),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 8),
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(
-              child: field(
-                'Budget',
-                prefs.maxBudgetRm > 0
-                    ? 'Up to ${_ringgitPerMonth(prefs.maxBudgetRm)}'
-                    : 'Any budget',
-              ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: field(
-                'Minimum space',
-                prefs.minSizeSqft > 0
-                    ? 'From ${_squareFeet(prefs.minSizeSqft)}'
-                    : 'Any size',
-              ),
-            ),
-          ],
-        ),
-      ],
-    );
+  /// Applied filters as individually removable chips, built from the SAME
+  /// request the server ranked. Business type is deliberately absent.
+  List<({String label, RecommendationSearchRequest next})> _filterChips(
+    RecommendationSearchRequest request,
+  ) => [
+    if (request.preferredState != null)
+      (
+        label: request.preferredState!,
+        next: request.copyWith(clearState: true),
+      ),
+    if (request.city != null)
+      (label: request.city!, next: request.copyWith(clearCity: true)),
+    if (request.propertyType != null)
+      (
+        label: request.propertyType!,
+        next: request.copyWith(clearPropertyType: true),
+      ),
+    if (request.minRentalRm != null || request.maxRentalRm != null)
+      (
+        label: _rentLabel(request.minRentalRm, request.maxRentalRm),
+        next: request.copyWith(clearRentRange: true),
+      ),
+    if (request.minSizeSqft != null || request.maxSizeSqft != null)
+      (
+        label: _sizeLabel(request.minSizeSqft, request.maxSizeSqft),
+        next: request.copyWith(clearSizeRange: true),
+      ),
+    if (request.layoutPreferences.isNotEmpty)
+      (
+        label: request.layoutPreferences.join(', '),
+        next: request.copyWith(layoutPreferences: const []),
+      ),
+    if (request.floorLevel != null)
+      (
+        label: 'Floor: ${request.floorLevel}',
+        next: request.copyWith(clearFloorLevel: true),
+      ),
+    if (request.transitMaxM != null)
+      (
+        label: 'Transit ≤ ${request.transitMaxM!.round()} m',
+        next: request.copyWith(clearTransit: true),
+      ),
+    if (request.nearbyParkingMin != null)
+      (
+        label: 'Parking ≥ ${request.nearbyParkingMin!.round()}',
+        next: request.copyWith(clearParking: true),
+      ),
+    if (request.fnbCompetitionMax != null)
+      (
+        label: 'F&B ≤ ${request.fnbCompetitionMax!.round()}',
+        next: request.copyWith(clearCompetition: true),
+      ),
+    if (request.demandGenerator != null)
+      (
+        label: 'Near ${_demandLabel(request.demandGenerator!)}',
+        next: request.copyWith(clearDemand: true),
+      ),
+    if (request.populationMin1000m != null ||
+        request.populationMax1000m != null)
+      (
+        label: 'Population ${request.populationMin1000m?.round() ?? 0}+',
+        next: request.copyWith(clearPopulation: true),
+      ),
+    if (request.query != null)
+      (label: '“${request.query}”', next: request.copyWith(clearQuery: true)),
+  ];
+
+  static const _sortFallback = <String, String>{
+    'best_match': 'Best requirement match',
+    'rent_asc': 'Lowest monthly rent',
+    'rent_desc': 'Highest monthly rent',
+    'size_desc': 'Largest floor area',
+    'size_asc': 'Smallest floor area',
+    'pu_desc': 'Highest PU research index',
+  };
+
+  static String _demandLabel(String key) => switch (key) {
+    'malls_1000m' => 'malls',
+    'offices_500m' => 'offices',
+    'universities_500m' => 'universities',
+    _ => key,
+  };
+
+  static String _rentLabel(double? min, double? max) {
+    if (min != null && max != null) {
+      return '${_ringgitPerMonth(min)} – ${_ringgitPerMonth(max)}';
+    }
+    if (min != null) return 'From ${_ringgitPerMonth(min)}';
+    return 'Up to ${_ringgitPerMonth(max!)}';
+  }
+
+  static String _sizeLabel(double? min, double? max) {
+    if (min != null && max != null) {
+      return '${min.round()}–${max.round()} sq ft';
+    }
+    if (min != null) return 'From ${min.round()} sq ft';
+    return 'Up to ${max!.round()} sq ft';
   }
 
   // -- footer states --------------------------------------------------------
@@ -414,6 +492,31 @@ class _EntrepreneurRecommendationsMobilePageState
 
   // -- actions --------------------------------------------------------------
 
+  /// Compare is capped at three; a fourth tap is explained instead of being
+  /// silently ignored, and Favourites remain a separate store.
+  void _toggleCompared(String id) {
+    final notifier = ref.read(appNotifierProvider.notifier);
+    final already = ref.read(appNotifierProvider).compared.contains(id);
+    final bool accepted;
+    if (already) {
+      notifier.toggleCompared(id);
+      accepted = true;
+    } else {
+      accepted = notifier.addCompared(id);
+    }
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          accepted
+              ? (already ? 'Removed from comparison.' : 'Added to comparison.')
+              : 'You can compare up to three properties. Remove one first.',
+        ),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
   Future<void> _toggleSaved(String id) async {
     final messenger = ScaffoldMessenger.of(context);
     final wantSaved = !ref.read(appNotifierProvider).saved.contains(id);
@@ -427,9 +530,7 @@ class _EntrepreneurRecommendationsMobilePageState
       SnackBar(
         content: Text(
           failure ??
-              (wantSaved
-                  ? 'Added to favourites.'
-                  : 'Removed from favourites.'),
+              (wantSaved ? 'Added to favourites.' : 'Removed from favourites.'),
         ),
         behavior: SnackBarBehavior.floating,
       ),
@@ -453,56 +554,78 @@ class _EntrepreneurRecommendationsMobilePageState
     final request = await showModalBottomSheet<RecommendationSearchRequest>(
       context: context,
       isScrollControlled: true,
+      useSafeArea: true,
       backgroundColor: SitewiseColors.surface,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
       ),
       builder: (_) => _FilterSheet(
-        initial: state.recommendationRequest,
-        facets: state.recommendationFacets,
+        initial: _filterDraft ?? state.recommendationRequest,
+        onDraftChanged: (draft) => _filterDraft = draft,
       ),
     );
-    if (request == null || !mounted) return;
+    if (!mounted) return;
+    if (request == null) return;
+    _filterDraft = null;
     ref
         .read(entrepreneurNotifierProvider.notifier)
         .applyRecommendationRequest(request);
   }
 }
 
-/// One labelled requirement cell inside the header card.
-class _RequirementField extends StatelessWidget {
-  final String label;
-  final String value;
+/// Server failure with a real retry action, never an empty success state.
+class _ErrorBlock extends StatelessWidget {
+  final String message;
+  final VoidCallback onRetry;
 
-  const _RequirementField({required this.label, required this.value});
+  const _ErrorBlock({required this.message, required this.onRetry});
 
   @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.only(top: 28),
+    child: Column(
       children: [
-        Text(
-          label,
-          style: const TextStyle(
-            fontSize: 12,
-            fontWeight: FontWeight.w600,
-            color: SitewiseColors.muted,
-            height: 1.25,
+        Icon(Icons.cloud_off_rounded, size: 30, color: SitewiseColors.muted),
+        const SizedBox(height: 8),
+        const Text(
+          'Could not load recommendations',
+          style: TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w800,
+            color: SitewiseColors.ink,
           ),
         ),
-        const SizedBox(height: 2),
+        const SizedBox(height: 4),
         Text(
-          value,
+          message,
+          textAlign: TextAlign.center,
           style: const TextStyle(
-            fontSize: 14,
-            fontWeight: FontWeight.w700,
-            color: SitewiseColors.ink,
-            height: 1.3,
+            fontSize: 11.5,
+            height: 1.45,
+            color: SitewiseColors.muted,
+          ),
+        ),
+        const SizedBox(height: 10),
+        OutlinedButton.icon(
+          onPressed: onRetry,
+          icon: const Icon(Icons.refresh_rounded, size: 17),
+          label: const Text('Retry'),
+          style: OutlinedButton.styleFrom(
+            minimumSize: const Size(140, 44),
+            foregroundColor: SitewiseColors.action,
+            side: const BorderSide(color: SitewiseColors.borderStrong),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+            textStyle: const TextStyle(
+              fontSize: 12.5,
+              fontWeight: FontWeight.w800,
+            ),
           ),
         ),
       ],
-    );
-  }
+    ),
+  );
 }
 
 /// One ranked result: full-width 16:9 media (swipeable photo gallery with
@@ -571,9 +694,7 @@ class RecommendationCard extends StatelessWidget {
                   bookmarkButton: _IconToggle(
                     icon: isSaved ? Icons.bookmark : Icons.bookmark_border,
                     active: isSaved,
-                    label: isSaved
-                        ? 'Remove from favourites'
-                        : 'Save property',
+                    label: isSaved ? 'Remove from favourites' : 'Save property',
                     onTap: onSave,
                   ),
                   // Only a backend-verified ready panorama earns this action.
@@ -761,7 +882,7 @@ class _RequirementVerdict extends StatelessWidget {
     return Semantics(
       label: verifiable
           ? 'Meets ${match.matchedCount} of ${match.verifiableCount} '
-              'of your requirements'
+                'of your requirements'
           : 'Requirement fit is not available yet',
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -782,9 +903,7 @@ class _RequirementVerdict extends StatelessWidget {
                 fontSize: 14,
                 height: 1.35,
                 fontWeight: verifiable ? FontWeight.w700 : FontWeight.w500,
-                color: verifiable
-                    ? SitewiseColors.ink
-                    : SitewiseColors.text,
+                color: verifiable ? SitewiseColors.ink : SitewiseColors.text,
               ),
             ),
           ),
@@ -820,11 +939,7 @@ class _PanoramaAction extends StatelessWidget {
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(
-                    Icons.threesixty_rounded,
-                    size: 19,
-                    color: Colors.white,
-                  ),
+                  Icon(Icons.threesixty_rounded, size: 19, color: Colors.white),
                   SizedBox(width: 6),
                   Text(
                     '360° View',
@@ -867,8 +982,9 @@ class _CardActionButton extends StatelessWidget {
       height: 46,
       child: FilledButton.icon(
         style: FilledButton.styleFrom(
-          backgroundColor:
-              primary ? SitewiseColors.action : SitewiseColors.surface,
+          backgroundColor: primary
+              ? SitewiseColors.action
+              : SitewiseColors.surface,
           foregroundColor: color,
           side: primary
               ? null
@@ -971,9 +1087,11 @@ class _InsightSheet extends StatelessWidget {
           ),
           const SizedBox(height: 4),
           Text(
-            [prop.address, prop.city, prop.state]
-                .where((v) => v.isNotEmpty)
-                .join(', '),
+            [
+              prop.address,
+              prop.city,
+              prop.state,
+            ].where((v) => v.isNotEmpty).join(', '),
             style: const TextStyle(
               fontSize: 12,
               height: 1.45,
@@ -1073,20 +1191,18 @@ class _InsightSheet extends StatelessWidget {
             label: 'View property',
             onTap: () {
               Navigator.of(context).pop();
-              Navigator.of(context).pushNamed(
-                '/entrepreneur/property-detail',
-                arguments: prop.id,
-              );
+              Navigator.of(
+                context,
+              ).pushNamed('/entrepreneur/property-detail', arguments: prop.id);
             },
           ),
           const SizedBox(height: 8),
           OutlinedButton.icon(
             onPressed: () {
               Navigator.of(context).pop();
-              Navigator.of(context).pushNamed(
-                '/entrepreneur/assessment-setup',
-                arguments: prop.id,
-              );
+              Navigator.of(
+                context,
+              ).pushNamed('/entrepreneur/assessment-setup', arguments: prop.id);
             },
             icon: const Icon(Icons.assignment_outlined, size: 18),
             label: const Text('Assess this property'),
@@ -1110,64 +1226,534 @@ class _InsightSheet extends StatelessWidget {
 }
 
 /// Requirement search form. Returns the request to run, or null on dismiss.
-class _FilterSheet extends StatefulWidget {
+class _FilterSheet extends ConsumerStatefulWidget {
   final RecommendationSearchRequest initial;
-  final RecommendationFacets? facets;
 
-  const _FilterSheet({required this.initial, this.facets});
+  /// Lets the page keep an uncommitted draft if the sheet is dismissed. It is
+  /// a callback rather than a controller, so the sheet remains state-owned.
+  final ValueChanged<RecommendationSearchRequest>? onDraftChanged;
+
+  const _FilterSheet({required this.initial, this.onDraftChanged});
 
   @override
-  State<_FilterSheet> createState() => _FilterSheetState();
+  ConsumerState<_FilterSheet> createState() => _FilterSheetState();
 }
 
-class _FilterSheetState extends State<_FilterSheet> {
-  late final TextEditingController _budget = TextEditingController(
-    text: widget.initial.maxRentalRm?.toStringAsFixed(0) ?? '',
-  );
-  late final TextEditingController _minSize = TextEditingController(
-    text: widget.initial.minSizeSqft?.toStringAsFixed(0) ?? '',
-  );
-  late final TextEditingController _query = TextEditingController(
-    text: widget.initial.query ?? '',
-  );
-  late String _state = widget.initial.preferredState ?? '';
-  late String _type = widget.initial.propertyType ?? '';
+class _FilterSheetState extends ConsumerState<_FilterSheet> {
+  late RecommendationSearchRequest _draft = widget.initial;
+  RecommendationFacets? _facets;
+  bool _loading = false;
+  String? _facetError;
+  bool _more = false;
+  int _seq = 0;
+
+  /// The same vocabulary the web Recommendations form exposes. It is a UI
+  /// vocabulary, not a substitute for backend options; the backend may add
+  /// more advanced filters and those still render from `facets.advanced`.
+  static const _targetMarketOptions = <String>[
+    'Students',
+    'Office Workers',
+    'Residents',
+    'General Public',
+  ];
 
   @override
-  void dispose() {
-    _budget.dispose();
-    _minSize.dispose();
-    _query.dispose();
-    super.dispose();
+  void initState() {
+    super.initState();
+    _refresh();
   }
 
-  void _apply() {
-    Navigator.of(context).pop(
-      RecommendationSearchRequest(
-        preferredState: _state.isEmpty ? null : _state,
-        propertyType: _type.isEmpty ? null : _type,
-        maxRentalRm: double.tryParse(_budget.text.trim()),
-        minSizeSqft: double.tryParse(_minSize.text.trim()),
-        query: _query.text.trim().isEmpty ? null : _query.text.trim(),
-        pageSize: 20,
+  /// Dependent options are read from the SAME contextual facet endpoint used
+  /// by web (`GET /api/v1/recommendations/facets`). A stale response can never
+  /// overwrite a newer choice, and a failure is stated instead of silently
+  /// keeping an unrelated option list.
+  Future<void> _refresh() async {
+    final seq = ++_seq;
+    setState(() {
+      _loading = true;
+      _facetError = null;
+    });
+    try {
+      final facets = await ref
+          .read(entrepreneurNotifierProvider.notifier)
+          .fetchRecommendationFacets(_draft);
+      if (!mounted || seq != _seq) return;
+      setState(() => _facets = facets);
+    } on Object {
+      if (!mounted || seq != _seq) return;
+      setState(() {
+        _facetError = 'Filter choices could not be updated.';
+      });
+    } finally {
+      if (mounted && seq == _seq) setState(() => _loading = false);
+    }
+  }
+
+  void _update(RecommendationSearchRequest next) {
+    widget.onDraftChanged?.call(next);
+    setState(() => _draft = next);
+    _refresh();
+  }
+
+  static String _key(double? min, double? max) =>
+      (min == null && max == null) ? '' : '${min ?? ''}|${max ?? ''}';
+
+  static ({double? min, double? max}) _normalisedRange(
+    double? min,
+    double? max,
+  ) {
+    if (min != null && max != null && min > max) {
+      return (min: max, max: min);
+    }
+    return (min: min, max: max);
+  }
+
+  static String _money(double value) {
+    final digits = value.toStringAsFixed(0);
+    final grouped = StringBuffer();
+    for (var i = 0; i < digits.length; i++) {
+      if (i > 0 && (digits.length - i) % 3 == 0) grouped.write(',');
+      grouped.write(digits[i]);
+    }
+    return 'RM $grouped';
+  }
+
+  /// Fallback only when the backend has not supplied a label (for example a
+  /// saved custom interval). Generated options always use the backend label,
+  /// so mobile and web cannot drift.
+  static String _rangeLabel(double? min, double? max, {required bool money}) {
+    final bounds = _normalisedRange(min, max);
+    min = bounds.min;
+    max = bounds.max;
+    if (min != null && max != null && min == max) {
+      return money ? _money(min) : '${max.round()} sq ft';
+    }
+    if (money) {
+      if (min != null && max != null) {
+        return '${_money(min)} – ${_money(max)}';
+      }
+      if (min != null) return 'From ${_money(min)}';
+      if (max != null) return 'Up to ${_money(max)}';
+      return 'Any monthly rental';
+    }
+    if (min != null && max != null) {
+      return '${min.round()} – ${max.round()} sq ft';
+    }
+    if (min != null) return 'From ${min.round()} sq ft';
+    if (max != null) return 'Up to ${max.round()} sq ft';
+    return 'Any size';
+  }
+
+  /// Dropdown labels are names or ranges only. Counts remain in the contextual
+  /// facet summary and `Show properties`, matching the web Recommendations UI.
+  List<DropdownMenuItem<String>> _items(
+    String value,
+    List<(String, String)> options,
+    String emptyLabel, {
+    String? selectedLabel,
+  }) => [
+    DropdownMenuItem(
+      value: '',
+      child: Text(emptyLabel, maxLines: 1, overflow: TextOverflow.ellipsis),
+    ),
+    if (value.isNotEmpty && !options.any((pair) => pair.$1 == value))
+      DropdownMenuItem(
+        value: value,
+        child: Text(
+          selectedLabel ?? value,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
+      ),
+    for (final pair in options)
+      DropdownMenuItem(
+        value: pair.$1,
+        child: Text(pair.$2, maxLines: 1, overflow: TextOverflow.ellipsis),
+      ),
+  ];
+
+  List<(String, String)> _values(List<FacetOption> options) => [
+    for (final option in options)
+      (option.value, option.label.isEmpty ? option.value : option.label),
+  ];
+
+  List<(String, String)> _ranges(List<FacetRangeOption> options) => [
+    for (final option in options) (option.key, option.label),
+  ];
+
+  Widget _field(
+    String label,
+    String value,
+    List<(String, String)> options,
+    void Function(String) changed, {
+    String emptyLabel = 'Any',
+    String? selectedLabel,
+  }) => Padding(
+    padding: const EdgeInsets.only(bottom: 10),
+    child: DropdownButtonFormField<String>(
+      initialValue: value,
+      isDense: true,
+      isExpanded: true,
+      menuMaxHeight: 320,
+      borderRadius: const BorderRadius.vertical(top: Radius.circular(14)),
+      decoration: InputDecoration(
+        labelText: label,
+        border: const OutlineInputBorder(),
+      ),
+      items: _items(value, options, emptyLabel, selectedLabel: selectedLabel),
+      onChanged: (next) => changed(next ?? ''),
+    ),
+  );
+
+  /// Rental and size use the same `"min|max"` key as web, but the displayed
+  /// text is the backend label. A saved interval that the current draft no
+  /// longer generates stays selected; the note explains that instead of
+  /// silently dropping or replacing the choice.
+  Widget _rangeField({
+    required String label,
+    required double? min,
+    required double? max,
+    required List<FacetRangeOption> options,
+    required FacetRangeOption? selected,
+    required bool money,
+    required String emptyLabel,
+    required void Function(String) onChanged,
+  }) {
+    final bounds = _normalisedRange(min, max);
+    final value = _key(bounds.min, bounds.max);
+    final hasSelection = value.isNotEmpty;
+    final generated =
+        selected?.generated ?? options.any((option) => option.key == value);
+    final isCustom = _facets != null && hasSelection && !generated;
+    final selectedLabel =
+        selected?.label ?? _rangeLabel(bounds.min, bounds.max, money: money);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _field(
+          label,
+          value,
+          _ranges(options),
+          onChanged,
+          emptyLabel: emptyLabel,
+          selectedLabel: isCustom ? selectedLabel : null,
+        ),
+        if (isCustom)
+          _rangeNote(
+            unavailable: _facets != null && _facets!.matchingTotal == 0,
+            text: _facets != null && _facets!.matchingTotal == 0
+                ? 'This selected range currently matches no eligible '
+                      'properties. It stays applied until changed.'
+                : 'This saved range is not one of the current intervals. It '
+                      'stays applied until changed.',
+            onClear: () => onChanged(''),
+          ),
+      ],
+    );
+  }
+
+  Widget _rangeNote({
+    required bool unavailable,
+    required String text,
+    required VoidCallback onClear,
+  }) => Padding(
+    padding: const EdgeInsets.only(bottom: 10),
+    child: Container(
+      padding: const EdgeInsets.fromLTRB(10, 7, 4, 7),
+      decoration: BoxDecoration(
+        color: unavailable ? SitewiseColors.warningWash : null,
+        border: Border.all(color: SitewiseColors.border),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Expanded(
+            child: Text(
+              text,
+              style: const TextStyle(fontSize: 11.5, height: 1.3),
+            ),
+          ),
+          TextButton(
+            onPressed: onClear,
+            child: const Text(
+              'Clear range',
+              style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w800),
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
+
+  Widget _advancedField(String key) {
+    final facet = _facets?.advanced[key];
+    if (facet == null) return const SizedBox.shrink();
+    final request = _draft;
+    final value = switch (key) {
+      'floor_level' => request.floorLevel ?? '',
+      'transit_walk_m' => _key(request.transitMaxM, null),
+      'nearby_parking_500m' => _key(request.nearbyParkingMin, null),
+      'fnb_competition_500m' => _key(request.fnbCompetitionMax, null),
+      'demand_generator' => request.demandGenerator ?? '',
+      'surrounding_population_1000m' => _key(
+        request.populationMin1000m,
+        request.populationMax1000m,
+      ),
+      _ => '',
+    };
+    final options = facet.isRange
+        ? _ranges(facet.rangeOptions)
+        : _values(facet.valueOptions);
+    return _field(facet.label, value, options, (next) {
+      final bounds = FacetRangeOption.boundsFromKey(next);
+      _update(switch (key) {
+        'floor_level' => request.copyWith(
+          floorLevel: next.isEmpty ? null : next,
+        ),
+        'transit_walk_m' => request.copyWith(transitMaxM: bounds.min),
+        'nearby_parking_500m' => request.copyWith(nearbyParkingMin: bounds.min),
+        'fnb_competition_500m' => request.copyWith(
+          fnbCompetitionMax: bounds.max,
+        ),
+        'demand_generator' => request.copyWith(
+          demandGenerator: next.isEmpty ? null : next,
+        ),
+        'surrounding_population_1000m' => request.copyWith(
+          populationMin1000m: bounds.min,
+          populationMax1000m: bounds.max,
+        ),
+        _ => request,
+      });
+    });
+  }
+
+  /// Target market permits several preferences in the shared data model, so
+  /// the field shows the complete selection as compact chips. The helper text
+  /// is the compact summary; the chips themselves remain tappable.
+  Widget _targetMarketField(RecommendationSearchRequest request) {
+    final selected = request.layoutPreferences;
+    final ordered = [
+      for (final value in _targetMarketOptions)
+        if (selected.contains(value)) value,
+      for (final value in selected)
+        if (!_targetMarketOptions.contains(value)) value,
+    ];
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: InputDecorator(
+        decoration: InputDecoration(
+          labelText: 'Target market',
+          border: const OutlineInputBorder(),
+          helperText: selected.length > 1
+              ? '${selected.length} target markets selected'
+              : null,
+          helperStyle: const TextStyle(
+            fontSize: 11,
+            color: SitewiseColors.muted,
+          ),
+          contentPadding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+        ),
+        child: LayoutBuilder(
+          builder: (context, constraints) => Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: [
+              for (final value in ordered)
+                FilterChip(
+                  selected: true,
+                  onSelected: (_) => _removeTargetMarket(value),
+                  label: ConstrainedBox(
+                    constraints: BoxConstraints(maxWidth: constraints.maxWidth),
+                    child: Text(
+                      value,
+                      maxLines: 2,
+                      softWrap: true,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ),
+              for (final value in _targetMarketOptions)
+                if (!selected.contains(value))
+                  FilterChip(
+                    selected: false,
+                    onSelected: (_) => _addTargetMarket(value),
+                    label: Text(value),
+                  ),
+            ],
+          ),
+        ),
       ),
     );
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final facets = widget.facets;
-    return Padding(
-      padding: EdgeInsets.only(
-        left: 18,
-        right: 18,
-        top: 14,
-        bottom: MediaQuery.of(context).viewInsets.bottom + 22,
+  void _addTargetMarket(String value) {
+    if (_draft.layoutPreferences.contains(value)) return;
+    _update(
+      _draft.copyWith(layoutPreferences: [..._draft.layoutPreferences, value]),
+    );
+  }
+
+  void _removeTargetMarket(String value) {
+    if (!_draft.layoutPreferences.contains(value)) return;
+    _update(
+      _draft.copyWith(
+        layoutPreferences: _draft.layoutPreferences
+            .where((item) => item != value)
+            .toList(),
       ),
-      child: SingleChildScrollView(
+    );
+  }
+
+  /// Maps a backend relaxation key to the same clear action web uses. Only
+  /// real hard filters appear in `relaxations`; ranking-only inputs never do.
+  RecommendationSearchRequest _clearFacetField(
+    RecommendationSearchRequest request,
+    String field,
+  ) => switch (field) {
+    'preferred_state' => request.copyWith(clearState: true),
+    'city' => request.copyWith(clearCity: true),
+    'floor_level' => request.copyWith(clearFloorLevel: true),
+    'transit_walk_m' => request.copyWith(clearTransit: true),
+    'nearby_parking_500m' => request.copyWith(clearParking: true),
+    'fnb_competition_500m' => request.copyWith(clearCompetition: true),
+    'demand_generator' => request.copyWith(clearDemand: true),
+    'surrounding_population_1000m' => request.copyWith(clearPopulation: true),
+    'property_type' => request.copyWith(clearPropertyType: true),
+    'rental_budget' => request.copyWith(clearRentRange: true),
+    'property_size' => request.copyWith(clearSizeRange: true),
+    'preferred_area' => request.copyWith(clearArea: true),
+    'query' => request.copyWith(clearQuery: true),
+    _ => request,
+  };
+
+  Widget _facetStatus(RecommendationFacets? facets) {
+    if (_facetError != null) {
+      return _statusCard(
+        error: true,
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Expanded(
+              child: Text(
+                '$_facetError Previous choices are still shown.',
+                style: const TextStyle(fontSize: 11.5, height: 1.3),
+              ),
+            ),
+            TextButton(
+              onPressed: _refresh,
+              child: const Text(
+                'Retry',
+                style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w800),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+    if (_loading) {
+      return _statusPlaceholder('Updating filter choices…');
+    }
+    if (facets == null) return const SizedBox.shrink();
+
+    final total = facets.matchingTotal;
+    if (total == 0) {
+      return _statusCard(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text(
+              'No properties match all your current filters.',
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w800,
+                height: 1.3,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Wrap(
+              spacing: 4,
+              runSpacing: 0,
+              children: [
+                for (final relaxation in facets.relaxations.take(3))
+                  TextButton(
+                    style: TextButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 6),
+                      minimumSize: const Size(0, 34),
+                    ),
+                    onPressed: () =>
+                        _update(_clearFacetField(_draft, relaxation.field)),
+                    child: Text(
+                      'Remove ${relaxation.label}',
+                      style: const TextStyle(
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
+                TextButton(
+                  style: TextButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 6),
+                    minimumSize: const Size(0, 34),
+                  ),
+                  onPressed: () => _update(const RecommendationSearchRequest()),
+                  child: const Text(
+                    'Clear all filters',
+                    style: TextStyle(
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      );
+    }
+    return _statusPlaceholder(
+      '$total ${total == 1 ? 'property matches' : 'properties match'} '
+      'all your current filters.',
+    );
+  }
+
+  Widget _statusCard({bool error = false, required Widget child}) => Padding(
+    padding: const EdgeInsets.only(bottom: 10),
+    child: Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: error ? SitewiseColors.warningWash : null,
+        border: Border.all(color: SitewiseColors.border),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: child,
+    ),
+  );
+
+  Widget _statusPlaceholder(String text) => Padding(
+    padding: const EdgeInsets.only(bottom: 10),
+    child: Text(
+      text,
+      style: const TextStyle(fontSize: 12, color: SitewiseColors.muted),
+    ),
+  );
+
+  @override
+  Widget build(BuildContext context) {
+    final facets = _facets;
+    final request = _draft;
+    final count = facets?.matchingTotal;
+    final bottomInset = MediaQuery.viewInsetsOf(context).bottom;
+    return Padding(
+      padding: EdgeInsets.fromLTRB(18, 14, 18, bottomInset + 20),
+      child: DraggableScrollableSheet(
+        expand: false,
+        initialChildSize: .88,
+        maxChildSize: .95,
+        minChildSize: .55,
+        builder: (context, controller) => Column(
           children: [
             Center(
               child: Container(
@@ -1179,97 +1765,151 @@ class _FilterSheetState extends State<_FilterSheet> {
                 ),
               ),
             ),
-            const SizedBox(height: 14),
-            const Text(
-              'Your requirements',
-              style: TextStyle(
-                fontSize: 17,
-                fontWeight: FontWeight.w800,
-                color: SitewiseColors.ink,
-              ),
-            ),
-            const SizedBox(height: 4),
-            const Text(
-              'These are sent to the server, which filters and ranks. Nothing '
-              'is sorted on this device.',
-              style: TextStyle(
-                fontSize: 11.5,
-                height: 1.45,
-                color: SitewiseColors.muted,
-              ),
-            ),
-            const SizedBox(height: 16),
-            if (facets != null && facets.states.isNotEmpty) ...[
-              const _SectionLabel('Preferred state'),
-              Wrap(
-                spacing: 6,
-                runSpacing: 6,
-                children: [
-                  for (final option in [
-                    const FacetOption(value: ''),
-                    ...facets.states,
-                  ])
-                    _ChoiceChip(
-                      label: option.value.isEmpty ? 'Any' : option.value,
-                      selected: option.value == _state,
-                      onTap: () => setState(() => _state = option.value),
-                    ),
-                ],
-              ),
-              const SizedBox(height: 14),
-            ],
-            if (facets != null && facets.propertyTypes.isNotEmpty) ...[
-              const _SectionLabel('Property type'),
-              Wrap(
-                spacing: 6,
-                runSpacing: 6,
-                children: [
-                  for (final option in [
-                    const FacetOption(value: ''),
-                    ...facets.propertyTypes,
-                  ])
-                    _ChoiceChip(
-                      label: option.value.isEmpty ? 'Any' : option.value,
-                      selected: option.value == _type,
-                      onTap: () => setState(() => _type = option.value),
-                    ),
-                ],
-              ),
-              const SizedBox(height: 14),
-            ],
-            _SheetField(
-              label: 'Monthly budget (RM)',
-              controller: _budget,
-              hint: 'e.g. 8000',
-              keyboardType: TextInputType.number,
-            ),
             const SizedBox(height: 12),
-            _SheetField(
-              label: 'Minimum floor area (sq ft)',
-              controller: _minSize,
-              hint: 'e.g. 1200',
-              keyboardType: TextInputType.number,
-            ),
-            const SizedBox(height: 12),
-            _SheetField(
-              label: 'Search',
-              controller: _query,
-              hint: 'Area, title or property id',
-            ),
-            const SizedBox(height: 18),
-            M3PrimaryButton(label: 'Find properties', onTap: _apply),
-            const SizedBox(height: 6),
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(
-                const RecommendationSearchRequest(),
-              ),
-              child: const Text(
-                'Clear all requirements',
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
-                  color: SitewiseColors.muted,
+            Row(
+              children: [
+                const Expanded(
+                  child: Text(
+                    'Filters',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w800,
+                      color: SitewiseColors.ink,
+                    ),
+                  ),
                 ),
+                if (_loading)
+                  const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Expanded(
+              child: ListView(
+                controller: controller,
+                keyboardDismissBehavior:
+                    ScrollViewKeyboardDismissBehavior.onDrag,
+                children: [
+                  const _SectionLabel('Location & property'),
+                  _field(
+                    'State',
+                    request.preferredState ?? '',
+                    _values(facets?.states ?? const []),
+                    (v) => _update(
+                      request.copyWith(preferredState: v.isEmpty ? null : v),
+                    ),
+                    emptyLabel: 'Any state',
+                  ),
+                  _field(
+                    'City / District',
+                    request.city ?? '',
+                    _values(facets?.cities ?? const []),
+                    (v) =>
+                        _update(request.copyWith(city: v.isEmpty ? null : v)),
+                    emptyLabel: 'Any city / district',
+                  ),
+                  _field(
+                    'Property type',
+                    request.propertyType ?? '',
+                    _values(facets?.propertyTypes ?? const []),
+                    (v) => _update(
+                      request.copyWith(propertyType: v.isEmpty ? null : v),
+                    ),
+                    emptyLabel: 'Any property type',
+                  ),
+                  const _SectionLabel('Budget & size'),
+                  _rangeField(
+                    label: 'Monthly rental (RM)',
+                    min: request.minRentalRm,
+                    max: request.maxRentalRm,
+                    options: facets?.rentalRanges ?? const [],
+                    selected: facets?.selectedRental,
+                    money: true,
+                    emptyLabel: 'Any monthly rental',
+                    onChanged: (v) {
+                      final bounds = FacetRangeOption.boundsFromKey(v);
+                      _update(
+                        request.copyWith(
+                          minRentalRm: bounds.min,
+                          maxRentalRm: bounds.max,
+                        ),
+                      );
+                    },
+                  ),
+                  _rangeField(
+                    label: 'Property size (sq ft)',
+                    min: request.minSizeSqft,
+                    max: request.maxSizeSqft,
+                    options: facets?.sizeRanges ?? const [],
+                    selected: facets?.selectedSize,
+                    money: false,
+                    emptyLabel: 'Any size',
+                    onChanged: (v) {
+                      final bounds = FacetRangeOption.boundsFromKey(v);
+                      _update(
+                        request.copyWith(
+                          minSizeSqft: bounds.min,
+                          maxSizeSqft: bounds.max,
+                        ),
+                      );
+                    },
+                  ),
+                  const _SectionLabel('Business preferences'),
+                  _targetMarketField(request),
+                  const SizedBox(height: 4),
+                  OutlinedButton.icon(
+                    onPressed: () => setState(() => _more = !_more),
+                    icon: Icon(_more ? Icons.expand_less : Icons.expand_more),
+                    label: const Text('More filters'),
+                  ),
+                  if (_more) ...[
+                    const SizedBox(height: 10),
+                    const _SectionLabel('Property characteristics'),
+                    _advancedField('floor_level'),
+                    const _SectionLabel('Geospatial characteristics'),
+                    for (final key in const [
+                      'transit_walk_m',
+                      'nearby_parking_500m',
+                      'fnb_competition_500m',
+                      'demand_generator',
+                      'surrounding_population_1000m',
+                    ])
+                      _advancedField(key),
+                  ],
+                  _facetStatus(facets),
+                ],
+              ),
+            ),
+            const SizedBox(height: 8),
+            SafeArea(
+              top: false,
+              child: Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () => Navigator.of(
+                        context,
+                      ).pop(const RecommendationSearchRequest()),
+                      child: const Text('Clear all'),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: FilledButton(
+                      onPressed: () => Navigator.of(context).pop(_draft),
+                      child: Text(
+                        count == null
+                            ? 'Show properties'
+                            : 'Show properties ($count)',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
           ],
@@ -1278,8 +1918,6 @@ class _FilterSheetState extends State<_FilterSheet> {
     );
   }
 }
-
-// -- small building blocks ---------------------------------------------------
 
 class _SectionLabel extends StatelessWidget {
   final String text;
@@ -1344,7 +1982,11 @@ class _ReasonChip extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(met ? Icons.check_rounded : Icons.close_rounded, size: 12, color: color),
+          Icon(
+            met ? Icons.check_rounded : Icons.close_rounded,
+            size: 12,
+            color: color,
+          ),
           const SizedBox(width: 3),
           ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 190),
@@ -1487,154 +2129,6 @@ class _SheetRow extends StatelessWidget {
             fontSize: 11.5,
             fontWeight: FontWeight.w800,
             color: SitewiseColors.ink,
-          ),
-        ),
-      ],
-    ),
-  );
-}
-
-class _ChoiceChip extends StatelessWidget {
-  final String label;
-  final bool selected;
-  final VoidCallback onTap;
-
-  const _ChoiceChip({
-    required this.label,
-    required this.selected,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) => InkWell(
-    onTap: onTap,
-    borderRadius: BorderRadius.circular(999),
-    child: Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-      decoration: BoxDecoration(
-        color: selected ? SitewiseColors.action : SitewiseColors.surface,
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(
-          color: selected ? SitewiseColors.action : SitewiseColors.borderStrong,
-        ),
-      ),
-      child: Text(
-        label,
-        style: TextStyle(
-          fontSize: 11.5,
-          fontWeight: FontWeight.w700,
-          color: selected ? Colors.white : SitewiseColors.ink,
-        ),
-      ),
-    ),
-  );
-}
-
-class _SheetField extends StatelessWidget {
-  final String label;
-  final TextEditingController controller;
-  final String hint;
-  final TextInputType? keyboardType;
-
-  const _SheetField({
-    required this.label,
-    required this.controller,
-    required this.hint,
-    this.keyboardType,
-  });
-
-  @override
-  Widget build(BuildContext context) => Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      Text(
-        label,
-        style: const TextStyle(
-          fontSize: 11,
-          fontWeight: FontWeight.w800,
-          letterSpacing: .3,
-          color: SitewiseColors.muted,
-        ),
-      ),
-      const SizedBox(height: 5),
-      TextField(
-        controller: controller,
-        keyboardType: keyboardType,
-        style: const TextStyle(fontSize: 13, color: SitewiseColors.ink),
-        decoration: InputDecoration(
-          hintText: hint,
-          isDense: true,
-          filled: true,
-          fillColor: SitewiseColors.surface,
-          contentPadding: const EdgeInsets.symmetric(
-            horizontal: 12,
-            vertical: 13,
-          ),
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: const BorderSide(color: SitewiseColors.border),
-          ),
-          enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: const BorderSide(color: SitewiseColors.border),
-          ),
-          focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: const BorderSide(color: SitewiseColors.action, width: 1.6),
-          ),
-        ),
-      ),
-    ],
-  );
-}
-
-class _ErrorBlock extends StatelessWidget {
-  final String message;
-  final VoidCallback onRetry;
-
-  const _ErrorBlock({required this.message, required this.onRetry});
-
-  @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.only(top: 28),
-    child: Column(
-      children: [
-        Icon(Icons.cloud_off_rounded, size: 30, color: SitewiseColors.muted),
-        const SizedBox(height: 8),
-        const Text(
-          'Could not load recommendations',
-          style: TextStyle(
-            fontSize: 13,
-            fontWeight: FontWeight.w800,
-            color: SitewiseColors.ink,
-          ),
-        ),
-        const SizedBox(height: 4),
-        Text(
-          message,
-          textAlign: TextAlign.center,
-          style: const TextStyle(
-            fontSize: 11.5,
-            height: 1.45,
-            color: SitewiseColors.muted,
-          ),
-        ),
-        const SizedBox(height: 10),
-        OutlinedButton.icon(
-          onPressed: onRetry,
-          icon: const Icon(Icons.refresh_rounded, size: 17),
-          label: const Text('Retry'),
-          style: OutlinedButton.styleFrom(
-            minimumSize: const Size(140, 44),
-            foregroundColor: SitewiseColors.action,
-            side: const BorderSide(color: SitewiseColors.borderStrong),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
-            textStyle: const TextStyle(
-              fontSize: 12.5,
-              fontWeight: FontWeight.w800,
-            ),
           ),
         ),
       ],

@@ -127,20 +127,78 @@ class FeatureRefreshService:
                     float(row["latitude"]), float(row["longitude"]))
                 if snapshot.get("competitor_status") != "ok":
                     raise RuntimeError("competitor computation reported unavailable")
+                # Population is NOT recomputed by the postgis snapshot. A
+                # previous value may only be carried forward when it provably
+                # describes the CURRENT coordinates: the stored hash of the
+                # last computation must match the hash of the present location.
+                # Carrying a value measured at other coordinates while reporting
+                # success is exactly the defect this gate removes.
+                from sitewise.services.property_enrichment_service import (
+                    coordinate_hash,
+                )
+
+                current_hash = coordinate_hash(
+                    float(row["latitude"]), float(row["longitude"]))
                 previous = self.session.execute(text("""
-                    SELECT population_500m,population_1km
+                    SELECT population_500m, population_1km, coordinate_hash
                     FROM fyp.property_geospatial_features
                     WHERE property_id=:pid ORDER BY id DESC LIMIT 1
-                """), {"pid": property_id}).first()
+                """), {"pid": property_id}).mappings().first()
                 if previous is not None:
-                    for ix, field in enumerate(("population_500m", "population_1km")):
-                        if snapshot.get(field) is None and previous[ix] is not None:
-                            snapshot[field] = previous[ix]
+                    stored_hash = previous["coordinate_hash"]
+                    for field in ("population_500m", "population_1km"):
+                        if snapshot.get(field) is not None:
+                            continue
+                        value = previous[field]
+                        if value is None:
+                            continue
+                        if stored_hash == current_hash:
+                            snapshot[field] = value
                             snapshot["population_status"] = "preserved"
+                        elif stored_hash is None:
+                            # Legacy row predates coordinate provenance. The
+                            # value is kept for display (the import measured it
+                            # for these coordinates) but is explicitly NOT
+                            # claimed as freshly verified for this location.
+                            snapshot[field] = value
+                            snapshot["population_status"] = "preserved_unverified"
+                        else:
+                            # Provable coordinate change: the old number
+                            # describes a different location. It is never
+                            # carried; the gap is explicit.
+                            snapshot["population_status"] = (
+                                "unavailable_coordinates_changed"
+                            )
+                            break
+                snapshot["coordinate_hash"] = current_hash
                 self.repo.upsert_geospatial_features(property_id, snapshot)
-                self.state.set_freshness(property_id, status="current",
-                    version=self.config.calculation_version,
-                    source_release=source_release, success=True)
+                # Freshness honesty: ``current`` claims the feature set is
+                # valid for the present coordinates. Population carried
+                # forward is only claimed current when the stored hash
+                # PROVES it was computed at the same coordinates and both
+                # radii survived; every other case settles as ``stale``
+                # (values may be present, recalculation pending) with the
+                # reason recorded. The ON CONFLICT clause preserves prior
+                # timestamps on success=False, so no history is lost.
+                both_radii = (
+                    snapshot.get("population_500m") is not None
+                    and snapshot.get("population_1km") is not None
+                )
+                population_state = snapshot.get("population_status") or "unavailable"
+                population_proven_current = (
+                    population_state == "preserved" and both_radii
+                )
+                if population_proven_current:
+                    self.state.set_freshness(property_id, status="current",
+                        version=self.config.calculation_version,
+                        source_release=source_release, success=True)
+                else:
+                    self.state.set_freshness(property_id, status="stale",
+                        version=self.config.calculation_version,
+                        source_release=source_release,
+                        error=f"population_not_recomputed ({population_state}); "
+                              "competitor/demand/accessibility were measured")
+                result["population_status"] = population_state
                 result["properties_recalculated"] += 1
                 result["successful_computations"] += 1
             except Exception as exc:

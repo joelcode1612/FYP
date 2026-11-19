@@ -6,6 +6,11 @@
     <!-- Guided 360° capture only. Not required, so the app still installs on
          devices without a camera; the capture screen reports the absence. -->
     <uses-permission android:name="android.permission.CAMERA"/>
+    <!-- 38-target flow's Gallery save on Android 9 and below (MediaStore is
+         permission-free on 10+). Scoped to the retired pre-Q path. -->
+    <uses-permission
+        android:name="android.permission.WRITE_EXTERNAL_STORAGE"
+        android:maxSdkVersion="28"/>
     <uses-feature android:name="android.hardware.camera" android:required="false"/>
     <uses-feature android:name="android.hardware.sensor.accelerometer" android:required="false"/>
     <uses-feature android:name="android.hardware.sensor.compass" android:required="false"/>

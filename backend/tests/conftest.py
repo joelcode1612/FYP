@@ -24,6 +24,7 @@ from fastapi.testclient import TestClient
 from sitewise.core.security import JWKSClient
 from sitewise.main import app
 
+
 TEST_KID = "test-es256-key"
 TEST_ISSUER = "https://lzdpjwmcjbhtkzkqudyt.supabase.co/auth/v1"
 TEST_AUDIENCE = "authenticated"
@@ -57,6 +58,28 @@ def fake_jwks(monkeypatch):
 
     monkeypatch.setattr(deps, "_verifier", None)
     yield
+
+
+@pytest.fixture(autouse=True)
+def fake_supabase_admin_identity():
+    """Keep request-time identity reconciliation hermetic.
+
+    Production uses the real Supabase service and treats the ``public.users``
+    row as authoritative. Tests use an in-memory fake; ``strict_identity`` is
+    false so token-only fixtures can still provision local profiles exactly
+    as before. Individual tests may override this dependency.
+    """
+    from sitewise.core.supabase_admin import get_admin_service
+    from tests.fakes import FakeSupabaseAdmin
+
+    fake = FakeSupabaseAdmin()
+    previous = app.dependency_overrides.get(get_admin_service)
+    app.dependency_overrides[get_admin_service] = lambda: fake
+    yield fake
+    if previous is None:
+        app.dependency_overrides.pop(get_admin_service, None)
+    else:
+        app.dependency_overrides[get_admin_service] = previous
 
 
 @pytest.fixture(scope="session", autouse=True)

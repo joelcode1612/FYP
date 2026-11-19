@@ -1,5 +1,6 @@
+import logging
 import uuid
-from typing import Optional
+from typing import Any, Optional
 
 from sqlmodel import Session
 
@@ -7,6 +8,9 @@ from sitewise.core.exceptions import ConflictError, ForbiddenActionError
 from sitewise.db.models.user import User
 from sitewise.domain import rbac
 from sitewise.repositories.user_repository import UserRepository
+
+
+logger = logging.getLogger(__name__)
 
 
 class UserService:
@@ -48,17 +52,62 @@ class UserService:
         email: str,
         full_name: str | None = None,
         email_verified: bool | None = None,
+        identity_profile: dict[str, Any] | None = None,
+        identity_required: bool = False,
     ) -> User:
-        """Load the local profile for a verified Supabase identity, creating
-        it on first sign-in and syncing the verification flag.
+        """Load the local mirror for a verified Supabase identity.
 
-        The authoritative role/status always come from this local row - never
-        from token metadata, which the client could influence at signup.
+        When an authoritative Supabase ``public.users`` row is supplied, its
+        UUID, email, role and account status are the only accepted source for
+        those fields. The local mirror is reconciled to that row; token
+        metadata may supply a display name only. When no authoritative row is
+        available the legacy token-claim path is retained for development and
+        tests only, and ``identity_required=True`` fails closed instead of
+        minting a default-privilege profile.
         """
-        # The Supabase UUID is the identity key. An email collision with a
-        # different local UUID must be reconciled by a trusted administrator,
-        # not silently re-keyed or promoted on sign-in.
-        collision = self.repo.get_by_email(email)
+        authoritative = identity_profile or {}
+        profile_email = str(authoritative.get("email") or email).strip().lower()
+        raw_role = authoritative.get("role")
+        raw_status = authoritative.get("account_status")
+
+        if identity_required and not authoritative:
+            raise ConflictError(
+                "The authoritative identity profile is unavailable. Sign in "
+                "again or ask an administrator to reconcile this account."
+            )
+
+        if authoritative:
+            try:
+                role = rbac.canonical_role(str(raw_role))
+                status = str(raw_status)
+                if role is None or not rbac.is_valid_role(role):
+                    raise ValueError("invalid authoritative role")
+            except Exception as exc:  # defensive: bad authoritative row
+                raise ConflictError(
+                    "The authoritative identity profile is invalid. Contact an "
+                    "administrator for verified reconciliation."
+                ) from exc
+            if not rbac.is_valid_status(status):
+                raise ConflictError(
+                    "The authoritative account status is invalid. Contact an "
+                    "administrator for verified reconciliation."
+                )
+            claimed_uid = str(authoritative.get("user_id") or user_id)
+            if claimed_uid != str(user_id):
+                raise ConflictError(
+                    "The authenticated identity and profile UUID differ. "
+                    "Contact an administrator for verified reconciliation."
+                )
+        else:
+            # Compatibility path: no authoritative row was read (local tests,
+            # or a deployment that has not provisioned Supabase profiles).
+            role = rbac.ROLE_ENTREPRENEUR
+            status = rbac.STATUS_ACTIVE
+
+        # The UUID is the identity key. An email collision with a different
+        # local UUID must be reconciled by a trusted administrator, not
+        # silently re-keyed or promoted on sign-in.
+        collision = self.repo.get_by_email(profile_email)
         if collision is not None and collision.user_id != user_id:
             raise ConflictError(
                 "This identity conflicts with an existing profile. "
@@ -66,15 +115,46 @@ class UserService:
             )
         user, created = self.repo.get_or_create_from_supabase(
             user_id=user_id,
-            email=email,
+            email=profile_email,
             full_name=full_name,
             email_verified=email_verified,
+            role=role,
+            account_status=status,
         )
-        if not created and email_verified is not None and user.email_verified != email_verified:
-            # Verification status is owned by Supabase; mirror it, never the
-            # other way around.
-            user.email_verified = email_verified
-            self.repo.update(user.user_id, {"email_verified": email_verified})
+        changes: dict[str, Any] = {}
+        if user.email.lower() != profile_email:
+            changes["email"] = profile_email
+        if authoritative:
+            if user.role != role:
+                logger.warning(
+                    "Reconciled stale local role for authenticated identity %s",
+                    user_id,
+                )
+                changes["role"] = role
+            if user.account_status != status:
+                logger.warning(
+                    "Reconciled stale local account status for authenticated identity %s",
+                    user_id,
+                )
+                changes["account_status"] = status
+            profile_name = authoritative.get("full_name")
+            if profile_name is not None and user.full_name != profile_name:
+                changes["full_name"] = profile_name
+            profile_phone = authoritative.get("phone_number")
+            if profile_phone is not None and user.phone_number != profile_phone:
+                changes["phone_number"] = profile_phone
+            authoritative_verified = authoritative.get("email_verified")
+            if authoritative_verified is not None:
+                verified = bool(authoritative_verified)
+            else:
+                verified = email_verified
+            if verified is not None and user.email_verified != verified:
+                changes["email_verified"] = verified
+        elif email_verified is not None and user.email_verified != email_verified:
+            changes["email_verified"] = email_verified
+        if changes:
+            self.repo.update(user.user_id, changes)
+            user = self.repo.get_by_id(user_id) or user
         return user
 
     def update_own_profile(self, user_id: uuid.UUID, data: dict) -> Optional[User]:

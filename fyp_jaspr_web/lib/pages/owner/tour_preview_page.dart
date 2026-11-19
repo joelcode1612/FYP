@@ -3,6 +3,7 @@ import 'package:jaspr/jaspr.dart';
 import 'package:shared_logic/shared_logic.dart';
 
 import '../../components/ui.dart';
+import '../../components/spherical_panorama_frame.dart';
 import '../../data/app_locator.dart';
 import '../../layouts/app_layout.dart';
 
@@ -212,10 +213,8 @@ class _PreviewBody extends StatelessComponent {
   }
 }
 
-/// Panorama viewport — the Flutter version loads the stitched bytes and hands
-/// them to the `Panorama` widget (plugin-bound, no web build). Both branches
-/// of the Flutter `_panorama` (no file yet / file present) render as labelled
-/// static placeholders.
+/// Owner preview shows a spherical panorama when a browser-accessible
+/// stitched image is available; device-local file paths cannot be opened here.
 class _Panorama extends StatelessComponent {
   final String? panoramaPath;
 
@@ -223,20 +222,25 @@ class _Panorama extends StatelessComponent {
 
   @override
   Component build(BuildContext context) {
-    if (panoramaPath == null) {
-      return div(classes: 'card', [
-        p(classes: 'body', [
-          Component.text('Generate the panorama to preview it here.'),
+    final url = browserPanoramaUrl(panoramaPath);
+    if (url == null) {
+      return div(classes: 'card stack', [
+        span(classes: 'overline', [Component.text('360° panorama')]),
+        p(classes: 'body muted', [
+          Component.text(panoramaPath == null
+              ? 'Generate the panorama to preview it here.'
+              : 'This panorama is stored on the capture device. A public or '
+                  'authenticated browser-accessible image URL is required '
+                  'before the web preview can display it.'),
         ]),
       ]);
     }
     return div(classes: 'card stack', [
       span(classes: 'overline', [Component.text('360° panorama')]),
-      p(classes: 'body muted', [
-        Component.text(
-          '360° viewer — interactive panorama requires the mobile app.',
-        ),
-      ]),
+      div(
+        attributes: const {'style': 'height:360px;overflow:hidden;border-radius:14px;background:#0b0f19;'},
+        [SphericalPanoramaFrame(imageUrl: url, title: 'Interactive owner tour panorama')],
+      ),
     ]);
   }
 }
