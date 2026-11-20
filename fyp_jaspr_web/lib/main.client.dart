@@ -13,9 +13,9 @@ import 'dart:async';
 
 import 'package:jaspr/client.dart';
 
-import 'app.dart';
-import 'data/app_locator.dart';
-import 'data/auth_service.dart';
+import 'package:sitewise_jaspr_web/app.dart';
+import 'package:sitewise_jaspr_web/core/di/app_locator.dart';
+import 'package:sitewise_jaspr_web/features/authentication/data/auth_service.dart';
 
 Future<void> main() async {
   Jaspr.initializeApp();

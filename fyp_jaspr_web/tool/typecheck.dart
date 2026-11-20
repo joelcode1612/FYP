@@ -23,10 +23,10 @@
 
 import 'package:jaspr/jaspr.dart';
 import 'package:sitewise_jaspr_web/app.dart';
-import 'package:sitewise_jaspr_web/components/ui.dart';
-import 'package:sitewise_jaspr_web/layouts/marketing_layout.dart';
-import 'package:sitewise_jaspr_web/pages/landing_page.dart';
-import 'package:sitewise_jaspr_web/pages/login_page.dart';
+import 'package:sitewise_jaspr_web/shared/presentation/components/ui.dart';
+import 'package:sitewise_jaspr_web/shared/presentation/layouts/marketing_layout.dart';
+import 'package:sitewise_jaspr_web/shared/presentation/pages/landing_page.dart';
+import 'package:sitewise_jaspr_web/features/authentication/presentation/pages/login_page.dart';
 
 void main() {
   // Touching each type forces instantiation of its generic/return types, so

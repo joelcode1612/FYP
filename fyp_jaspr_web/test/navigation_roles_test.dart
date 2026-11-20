@@ -1,7 +1,7 @@
 import 'package:jaspr_test/jaspr_test.dart';
 import 'package:shared_logic/shared_logic.dart';
-import 'package:sitewise_jaspr_web/data/navigation.dart';
-import 'package:sitewise_jaspr_web/pages/owner_retired_page.dart';
+import 'package:sitewise_jaspr_web/core/routing/navigation.dart';
+import 'package:sitewise_jaspr_web/features/property_management/presentation/pages/owner_retired_page.dart';
 
 /// The web role surfaces after the Provider migration.
 ///

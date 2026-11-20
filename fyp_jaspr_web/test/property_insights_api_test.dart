@@ -3,9 +3,9 @@ import 'dart:io';
 
 import 'package:jaspr/dom.dart';
 import 'package:jaspr_test/jaspr_test.dart';
-import 'package:sitewise_jaspr_web/components/property_detail/compact_location_explanation.dart';
-import 'package:sitewise_jaspr_web/components/property_detail/location_fit_score.dart';
-import 'package:sitewise_jaspr_web/data/property_insights_api.dart';
+import 'package:sitewise_jaspr_web/features/listing/presentation/components/property_detail/compact_location_explanation.dart';
+import 'package:sitewise_jaspr_web/features/listing/presentation/components/property_detail/location_fit_score.dart';
+import 'package:sitewise_jaspr_web/features/listing/data/property_insights_api.dart';
 
 void main() {
   test('keeps a valid PU score when SHAP is unavailable and preserves provenance', () {

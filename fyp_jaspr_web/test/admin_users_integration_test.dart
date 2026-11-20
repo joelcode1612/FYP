@@ -1,6 +1,6 @@
 import 'package:jaspr_test/jaspr_test.dart';
 import 'package:shared_logic/shared_logic.dart';
-import 'package:sitewise_jaspr_web/data/navigation.dart';
+import 'package:sitewise_jaspr_web/core/routing/navigation.dart';
 
 /// Admin navigation + user-directory mapping (spec 3 + 6).
 void main() {

@@ -4,7 +4,7 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:jaspr_test/jaspr_test.dart';
 import 'package:shelf/shelf.dart' as shelf;
-import 'package:sitewise_jaspr_web/data/staff_guard.dart';
+import 'package:sitewise_jaspr_web/features/authentication/data/staff_guard.dart';
 
 /// F4 regression: the SSR staff guard must authorize /admin and /agent from the
 /// backend-verified bearer token (active + staff role + aal2), never from the

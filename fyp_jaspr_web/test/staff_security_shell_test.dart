@@ -1,6 +1,6 @@
 import 'package:jaspr/jaspr.dart';
 import 'package:jaspr_test/jaspr_test.dart';
-import 'package:sitewise_jaspr_web/components/staff_security_shell.dart';
+import 'package:sitewise_jaspr_web/features/authentication/presentation/components/staff_security_shell.dart';
 
 /// Task-1/F3 regression: the staff MFA shell renders its own branded header —
 /// never the public auth navbar. Sign in / Sign up chrome must not reappear.

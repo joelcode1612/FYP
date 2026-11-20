@@ -1,5 +1,5 @@
 import 'package:jaspr_test/jaspr_test.dart';
-import 'package:sitewise_jaspr_web/data/metric_format.dart';
+import 'package:sitewise_jaspr_web/core/utils/metric_format.dart';
 
 void main() {
   group('metricGrouped', () {
