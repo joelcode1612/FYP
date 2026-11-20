@@ -6,7 +6,8 @@ library;
 
 import 'dart:convert';
 
-import 'package:shared_logic/shared_logic.dart' show BusinessPreferences;
+import 'package:shared_logic/shared_logic.dart'
+show AppState, BusinessPreferences;
 
 const String kUiCookie = 'sitewise_ui';
 const String kPrefsCookie = 'sitewise_prefs';
@@ -19,9 +20,15 @@ typedef UiState = ({
   Set<String> saved,
   Set<String> compared,
   Set<String> roles,
+  String account,
 });
 
-const UiState emptyUiState = (saved: {}, compared: {}, roles: {});
+const UiState emptyUiState = (
+  saved: {},
+  compared: {},
+  roles: {},
+  account: '',
+);
 
 typedef PrefState = ({
   String businessType,
@@ -46,8 +53,9 @@ abstract final class UiStore {
       };
       return (
         saved: ids(value['s'], kMaxSaved),
-        compared: ids(value['c'], 3),
+        compared: ids(value['c'], AppState.maxCompare),
         roles: <String>{}, // Never restore client-written role grants
+        account: value['u'] is String ? value['u'] as String : '',
       );
     } on Object {
       return emptyUiState;

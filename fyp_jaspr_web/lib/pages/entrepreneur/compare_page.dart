@@ -94,7 +94,7 @@ class _ComparePageState extends State<ComparePage> {
 
   Component _topBar(int count) => div(classes: 'cmp__top', [
     div(classes: 'cmp__count', [
-      Component.text('$count of 3 selected'),
+      Component.text('$count of ${AppState.maxCompare} selected'),
     ]),
     const ActionLink(
       'Back to Recommendations',
@@ -109,16 +109,21 @@ class _ComparePageState extends State<ComparePage> {
     int selectedCount,
   ) {
     final properties = result.properties;
-    if (properties.isEmpty) return Component.fragment([]);
+    // Every selected id failed: the backend's per-id reason IS the content of
+    // this state. Rendering nothing here made a delisted or unapproved
+    // selection look like a blank page with no way out.
+    if (properties.isEmpty) return _nothingResolved(context, result);
 
     return div(classes: 'cmp__stack', [
       if (result.unresolvedIds.isNotEmpty)
         div(classes: 'notice notice-warn', [
-          Component.text(
-            '${result.unresolvedIds.length} selected '
-            '${result.unresolvedIds.length == 1 ? 'property was' : 'properties were'} '
-            'not found in the property catalogue and were left out.',
-          ),
+          for (final id in result.unresolvedIds)
+            p([
+              Component.text(
+                '$id: ${result.reasonFor(id) ?? 'This selected property could '
+                    'not be resolved and was left out.'}',
+              ),
+            ]),
         ]),
       if (selectedCount > result.resolvedCount)
         div(classes: 'notice notice-warn', [
@@ -126,6 +131,7 @@ class _ComparePageState extends State<ComparePage> {
         ]),
       _overview(context, properties),
       _keyDifferences(result),
+      _fitSection(result),
       _category(
         'Cost & space',
         properties,
@@ -196,6 +202,51 @@ class _ComparePageState extends State<ComparePage> {
       ]),
     ]);
   }
+
+  /// The all-unresolved state: one line per selected id carrying the reason the
+  /// backend reported, plus the ways out (retry, clear, leave).
+  Component _nothingResolved(
+    BuildContext context,
+    PropertyCompareResult result,
+  ) => div(classes: 'cmp__stack', [
+    div(classes: 'notice notice-warn', [
+      p([Component.text('None of your selected properties could be loaded.')]),
+      ul([
+        for (final id in result.unresolvedIds)
+          li([
+            Component.text(
+              '$id — '
+              '${result.reasonFor(id) ?? 'This selected property could not be resolved.'}',
+            ),
+          ]),
+      ]),
+    ]),
+    div(classes: 'cmp__actions', [
+      ActionButton(
+        'Try again',
+        variant: 'secondary',
+        onClick: () => context
+            .read(propertyCompareProvider.notifier)
+            .load(
+              context.read(appNotifierProvider).compared.toList(),
+              refresh: true,
+            ),
+      ),
+      ActionButton(
+        'Clear comparison',
+        variant: 'secondary',
+        onClick: () {
+          context.read(appNotifierProvider.notifier).clearCompared();
+          context.read(propertyCompareProvider.notifier).reset();
+        },
+      ),
+      const ActionLink(
+        'Back to Recommendations',
+        href: '/entrepreneur/recommendations',
+        variant: 'secondary',
+      ),
+    ]),
+  ]);
 
   /// Section A — property cards in one horizontal row.
   Component _overview(BuildContext context, List<CompareProperty> properties) =>
@@ -280,6 +331,54 @@ class _ComparePageState extends State<ComparePage> {
             p([Component.text(difference.sentence)]),
         ]),
       ]);
+
+  /// Section — fit against the requirements THIS account saved.
+  ///
+  /// Each row states one recorded property value against one requirement the
+  /// entrepreneur wrote down, and names the missing side when the check cannot
+  /// be made. These are facts, not scores: the research index stays separately
+  /// labelled at the bottom of the page and never orders this one.
+  Component _fitSection(PropertyCompareResult result) {
+    final basis = result.fitBasis;
+    return div(classes: 'cmp__section', [
+      h2([Component.text('Fit against your saved requirements')]),
+      p([Component.text(basis.statement)]),
+      if (basis.saved)
+        div(classes: 'cmp__cards', [
+          for (final property in result.properties)
+            div(classes: 'cmp__card', [
+              div(classes: 'cmp__card-body', [
+                h3([Component.text(property.title)]),
+                if (property.preferenceFit.isEmpty)
+                  p([
+                    Component.text(
+                      'No requirement you saved can be checked against this '
+                      'property.',
+                    ),
+                  ])
+                else
+                  for (final row in property.preferenceFit)
+                    div(classes: 'cmp__fit', [
+                      span(
+                        classes:
+                            'cmp__fit-status cmp__fit-status--${_fitTone(row)}',
+                        [Component.text(row.statusLabel)],
+                      ),
+                      p([Component.text('${row.label}: ${row.detail}')]),
+                    ]),
+              ]),
+            ]),
+        ]),
+      for (final gap in basis.notCompared)
+        p(classes: 'cmp__hint', [Component.text(gap)]),
+    ]);
+  }
+
+  static String _fitTone(CompareFitRow row) => switch (row.status) {
+    'meets' => 'ok',
+    'outside' || 'differs' => 'off',
+    _ => 'none',
+  };
 
   Component _category(
     String title,

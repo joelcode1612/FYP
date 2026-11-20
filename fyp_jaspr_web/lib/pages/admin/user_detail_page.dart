@@ -5,6 +5,7 @@ import 'package:shared_logic/shared_logic.dart';
 import '../../components/ui.dart';
 import '../../data/app_locator.dart';
 import '../../data/auth_service.dart';
+import '../../data/user_detail_api.dart';
 import '../../layouts/app_layout.dart';
 
 /// Simplified Sitewise Admin user detail — READ-ONLY ROLES.
@@ -81,9 +82,7 @@ class _UserDetailPageState extends State<UserDetailPage> {
     // One authoritative read of `/users/{id}`. The detailed variant keeps the
     // status code, so "not found", "not authorised" and "service unavailable"
     // are reported as what they are instead of all reading as a missing record.
-    final result = await WebAuth.requestDetailed(
-      '/api/v1/users/${Uri.encodeComponent(id)}',
-    );
+    final result = await UserDetailApi.read(id);
     if (result['ok'] != true) {
       if (result['status'] == 404) return null;
       throw StateError(_failureMessage(result));
@@ -113,13 +112,11 @@ class _UserDetailPageState extends State<UserDetailPage> {
 
   Future<void> _save() async {
     if (_saving || !_isAdmin) return;
-    // Roles are never sent: they are provisioning-only. Only a changed status
-    // is sent, so an untouched record never triggers an update (and never
-    // creates an audit event).
-    final body = <String, dynamic>{
-      if (_status != _savedStatus) 'account_status': _status,
-    };
-    if (body.isEmpty) return;
+    // Roles are never sent: they are provisioning-only, and `UserDetailApi`
+    // exposes no signature for them. Only a changed status is written, so an
+    // untouched record never triggers an update (and never creates an audit
+    // event).
+    if (_status == _savedStatus) return;
 
     setState(() {
       _saving = true;
@@ -129,11 +126,7 @@ class _UserDetailPageState extends State<UserDetailPage> {
     });
 
     try {
-      final result = await WebAuth.requestDetailed(
-        '/api/v1/users/${Uri.encodeComponent(component.id.trim())}',
-        method: 'PATCH',
-        body: body,
-      );
+      final result = await UserDetailApi.updateStatus(component.id, _status);
       if (!mounted) return;
 
       if (result['ok'] != true) {
@@ -165,8 +158,7 @@ class _UserDetailPageState extends State<UserDetailPage> {
       // for. A partial or unexpected response is treated as unconfirmed.
       final echoedStatus =
           (response['account_status'] as String?)?.toLowerCase().trim();
-      final confirmed =
-          !body.containsKey('account_status') || echoedStatus == _status;
+      final confirmed = echoedStatus == _status;
 
       if (!confirmed) {
         setState(() {

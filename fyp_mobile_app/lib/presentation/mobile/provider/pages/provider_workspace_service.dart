@@ -4,17 +4,27 @@ import '../../../../application/services/service_locator.dart';
 import 'provider_models.dart';
 
 /// Transport for the shared Provider workspace surfaces that are NOT listing
-/// reads: the performance report and account verification.
+/// reads: the account identity, the performance report and account
+/// verification.
 ///
-/// Both answer the SAME question on the server — "which properties may this
-/// account manage" — resolved from ownership or assignment, so nothing here
-/// filters by role or agent id on the client. An owner and an agent call
-/// identical endpoints; the server decides what comes back.
+/// The report and the verification status both answer the SAME question on the
+/// server — "which properties may this account manage" — resolved from
+/// ownership or assignment, so nothing here filters by role or agent id on the
+/// client. An owner and an agent call identical endpoints; the server decides
+/// what comes back.
 ///
 /// The Enquiries transport was removed with the feature: the mobile Provider
 /// workspace no longer reads or displays an enquiry inbox. The backend
 /// endpoints and stored records are untouched.
 abstract final class ProviderWorkspaceService {
+  /// The signed-in account's own identity payload (`GET /api/v1/auth/me`).
+  ///
+  /// Returned as the server sent it: the profile page reads fields directly
+  /// and reports the missing ones as unavailable. A failed read throws through
+  /// the client so the page keeps showing its own error state.
+  static Future<Map<String, dynamic>> profile() =>
+      ServiceLocator.apiClient.get('/api/v1/auth/me');
+
   /// Listing figures over the managed properties.
   static Future<ProviderPerformance> performance() async {
     final response = await ServiceLocator.apiClient.get(

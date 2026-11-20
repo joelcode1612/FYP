@@ -901,12 +901,17 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
             ]),
           ActionButton('Clear all', variant: 'secondary', onClick: _reset),
           span(classes: 'rec2__compare-bar', [
-            Component.text('$compareCount of 3 in comparison'),
-            const ActionLink(
-              'View comparison',
-              href: '/entrepreneur/compare',
-              variant: 'secondary',
+            Component.text(
+              compareCount >= AppState.maxCompare
+                  ? '$compareCount of ${AppState.maxCompare} in comparison — remove one to add another'
+                  : '$compareCount of ${AppState.maxCompare} in comparison',
             ),
+            if (compareCount >= 2)
+              const ActionLink(
+                'View comparison',
+                href: '/entrepreneur/compare',
+                variant: 'secondary',
+              ),
           ]),
         ]),
       ],
@@ -1435,17 +1440,24 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
           ),
           ActionButton(
             isCompared
-                ? 'In compare'
+                ? 'In compare ✓'
                 : (compared.length >= AppState.maxCompare
                     ? 'Compare full'
                     : 'Compare'),
             variant: 'secondary',
             icon: 'compare_arrows',
-            onClick: isCompared || compared.length < AppState.maxCompare
+            // Selected → tap removes THIS property only (the compare bar's
+            // 'View comparison' link opens Compare). Full and not selected →
+            // disabled; the compare bar explains the limit.
+            onClick: isCompared
                 ? () => context
                     .read(appNotifierProvider.notifier)
-                    .addCompared(prop.id)
-                : null,
+                    .toggleCompared(prop.id)
+                : (compared.length < AppState.maxCompare
+                    ? () => context
+                        .read(appNotifierProvider.notifier)
+                        .addCompared(prop.id)
+                    : null),
           ),
         ]),
       ]),
@@ -1617,18 +1629,21 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
         ),
         ActionButton(
           compared.contains(prop.id)
-              ? 'In compare'
+              ? 'In compare ✓'
               : (compared.length >= AppState.maxCompare
                   ? 'Compare full'
                   : 'Compare'),
           variant: 'secondary',
           icon: 'compare_arrows',
-          onClick: compared.contains(prop.id) ||
-                  compared.length < AppState.maxCompare
+          onClick: compared.contains(prop.id)
               ? () => context
                   .read(appNotifierProvider.notifier)
-                  .addCompared(prop.id)
-              : null,
+                  .toggleCompared(prop.id)
+              : (compared.length < AppState.maxCompare
+                  ? () => context
+                      .read(appNotifierProvider.notifier)
+                      .addCompared(prop.id)
+                  : null),
         ),
       ]),
     ]);

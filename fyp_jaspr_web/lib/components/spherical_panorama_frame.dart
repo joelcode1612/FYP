@@ -1,4 +1,3 @@
-import 'package:jaspr/dom.dart';
 import 'package:jaspr/jaspr.dart';
 
 /// Only a browser-accessible URL can be passed to the Three.js panorama frame.

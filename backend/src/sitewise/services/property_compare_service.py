@@ -13,12 +13,18 @@ All measurements are read in targeted/batched queries:
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from sqlmodel import Session
 
+from sitewise.domain.recommendation_scoring import (
+    PreferenceProfile,
+    preference_profile_from,
+)
 from sitewise.repositories.catalog_repository import CatalogRepository
 from sitewise.repositories.recommendation_candidate_repository import (
+    _EXPLICITLY_UNAVAILABLE,
     RecommendationCandidateRepository,
 )
 from sitewise.services.catalog_listing_details_service import CatalogListingDetailsService
@@ -185,6 +191,32 @@ _COMPARABLE = (
 )
 
 
+#: SiteWise property id conventions. Catalogue ids carry an EP-/MD- prefix;
+#: operational commercial listings are plain integers (fyp.rental_properties).
+_CATALOGUE_ID = re.compile(r"^(EP|MD)-\S+$", re.IGNORECASE)
+_NUMERIC_ID = re.compile(r"^\d+$")
+
+
+#: Why a selected id could not be resolved — shown verbatim by both clients.
+_UNRESOLVED_REASONS = {
+    "catalogue": "No research-catalogue property exists with this id.",
+    "operational": (
+        "No published, administrator-approved commercial listing exists with "
+        "this id."
+    ),
+    "invalid": "This is not a recognised SiteWise property id.",
+}
+
+
+def _classify(property_id: str) -> str:
+    """``catalogue`` | ``operational`` | ``invalid`` — never a guess."""
+    if _CATALOGUE_ID.match(property_id):
+        return "catalogue"
+    if _NUMERIC_ID.match(property_id):
+        return "operational"
+    return "invalid"
+
+
 def _num(value: Any) -> float | None:
     if value is None or isinstance(value, bool):
         return None
@@ -205,6 +237,35 @@ def _fmt(value: float, unit: str) -> str:
     decimals = 2 if unit in {"RM / sq ft", "km²"} else 0
     number = f"{value:,.{decimals}f}"
     return f"{number} {unit}".strip()
+
+
+def _rm(value: float) -> str:
+    return f"RM {value:,.0f}"
+
+
+def _area(value: float) -> str:
+    return f"{value:,.0f} sq ft"
+
+
+def _joined(values: list[str | None]) -> str:
+    """Readably join the parts that exist, so an unset bound never prints."""
+    parts = [text for value in values if (text := _text(value))]
+    if not parts:
+        return ""
+    if len(parts) == 1:
+        return parts[0]
+    return f"{', '.join(parts[:-1])} and {parts[-1]}"
+
+
+#: Status vocabulary for the preference-fit rows. No row carries a number that
+#: could be read as a score: each states one recorded measurement against one
+#: requirement the caller saved, and names the missing side when it cannot.
+_FIT_MEETS = "meets"
+_FIT_OUTSIDE = "outside"
+_FIT_DIFFERS = "differs"
+_FIT_NOT_STATED = "not_stated"
+_FIT_NOT_RECORDED = "not_recorded"
+_FIT_NOT_CAPTURABLE = "not_capturable"
 
 
 def _sentence(
@@ -287,34 +348,119 @@ class PropertyCompareService:
         self.analytics = analytics_session
         self.operational = operational_session
 
-    def compare(self, property_ids: list[str]) -> dict[str, Any]:
+    def _resolve(
+        self, ids: list[str]
+    ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+        """Resolve catalogue and operational ids from their own sources.
+
+        Catalogue ids are resolved WITHOUT the search eligibility pre-filters:
+        a shortlisted property whose recorded status later became RENTED is
+        reported with that status (the UI shows it), never silently dropped —
+        while Recommendations keeps its eligibility untouched. Operational ids
+        resolve approved+published rows only; anything else stays unresolved
+        with the access reason.
+        """
+        catalogue_ids = [pid for pid in ids if _classify(pid) == "catalogue"]
+        operational_ids = [pid for pid in ids if _classify(pid) == "operational"]
+        repo = RecommendationCandidateRepository(self.analytics)
+        candidates = (
+            repo.list_candidates(
+                property_ids=catalogue_ids, skip_eligibility=True
+            )
+            if catalogue_ids
+            else []
+        )
+        operational = (
+            repo.list_operational_candidates(
+                operational_ids, operational_session=self.operational
+            )
+            if operational_ids
+            else []
+        )
+        return candidates, operational
+
+    @staticmethod
+    def _operational_details(candidate: dict[str, Any]) -> dict[str, Any]:
+        """Listing-fact details for an operational property.
+
+        These are the ROW's own recorded attributes (approved + published by
+        an administrator), not research annotations. Availability confirmation
+        follows the same rule as catalogue listings: a verified listing whose
+        recorded availability says available.
+        """
+        availability = (candidate.get("availability_status") or "").upper()
+        return {
+            "floor_level": candidate.get("floor_level_text"),
+            "has_parking": candidate.get("recorded_has_parking"),
+            "availability": availability,
+            "verified_listing": True,
+            "provenance": "operational_verified_listing",
+            "data_notice": None,
+        }
+
+    def compare(
+        self,
+        property_ids: list[str],
+        *,
+        preferences: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Compare the selected properties against each other and the caller.
+
+        ``preferences`` is the requester's OWN stored business-requirements
+        payload (decoded, not validated). It is used only to state whether a
+        recorded measurement sits inside a requirement they wrote down — never
+        to weight, rank or score anything, so the recommendation methodology
+        stays untouched here.
+        """
         ids = list(dict.fromkeys(_text(value) for value in property_ids if _text(value)))
         if not MIN_PROPERTIES <= len(ids) <= MAX_PROPERTIES:
             raise ValueError(
                 "Select between two and three properties to compare."
             )
 
-        candidates = RecommendationCandidateRepository(self.analytics).list_candidates(
-            property_ids=ids
-        )
-        by_id = {item["property_id"]: item for item in candidates}
+        candidates, operational_candidates = self._resolve(ids)
+        by_id: dict[str, dict[str, Any]] = {}
+        for item in (*candidates, *operational_candidates):
+            by_id[item["property_id"]] = item
         # Preserve the entrepreneur's selection order, but never invent a row
         # for an id the authoritative query did not resolve.
         resolved = [by_id[pid] for pid in ids if pid in by_id]
-        missing_ids = [pid for pid in ids if pid not in by_id]
+
+        unresolved_ids: list[str] = []
+        unresolved_details: list[dict[str, str]] = []
+        for pid in ids:
+            if pid in by_id:
+                continue
+            unresolved_ids.append(pid)
+            unresolved_details.append({"id": pid, "reason": _UNRESOLVED_REASONS[_classify(pid)]})
 
         catalog = CatalogRepository(self.analytics)
         details_service = CatalogListingDetailsService(
             self.analytics, self.operational
         )
-        panoramas = panoramas_by_catalogue_ids(self.operational, ids)
+        # Panorama lookups are keyed by CATALOGUE id; operational listings use
+        # their verified catalogue reference so both universes share one chain.
+        catalogue_refs = [
+            item["property_id"] if not item.get("operational_listing")
+            else item.get("operational_catalogue_ref")
+            for item in resolved
+        ]
+        panoramas = panoramas_by_catalogue_ids(
+            self.operational, [ref for ref in catalogue_refs if ref]
+        )
 
         properties: list[dict[str, Any]] = []
         for candidate in resolved:
             pid = candidate["property_id"]
-            row = catalog.get_property(pid) or {}
-            details = details_service.get_details(pid)
-            panorama = panoramas.get(pid) or dict(PANORAMA_UNAVAILABLE)
+            if candidate.get("operational_listing"):
+                row: dict[str, Any] = {}
+                details = self._operational_details(candidate)
+                panorama_ref = candidate.get("operational_catalogue_ref") or ""
+            else:
+                row = catalog.get_property(pid) or {}
+                details = details_service.get_details(pid)
+                panorama_ref = pid
+            panorama = panoramas.get(panorama_ref) or dict(PANORAMA_UNAVAILABLE)
             properties.append(
                 self._property(candidate, row, details, panorama)
             )
@@ -322,10 +468,16 @@ class PropertyCompareService:
         differences = self._differences(properties)
         insights = _superlatives(properties)
         tradeoffs = self._tradeoffs(properties, differences)
+        profile = preference_profile_from(preferences)
+        saved = bool(preferences)
+        if saved:
+            for prop in properties:
+                prop["preference_fit"] = self._preference_fit(prop, profile)
         return {
             "selected_count": len(ids),
             "resolved_count": len(properties),
-            "unresolved_ids": missing_ids,
+            "unresolved_ids": unresolved_ids,
+            "unresolved_details": unresolved_details,
             "properties": properties,
             "differences": differences,
             "insights": [
@@ -338,15 +490,47 @@ class PropertyCompareService:
                 if insights.get(item["title"])
             ],
             "tradeoffs": tradeoffs,
+            "preference_fit_basis": {
+                "saved": saved,
+                "statement": (
+                    "Each fit row states one recorded property fact against a "
+                    "requirement you saved. These are not scores, they carry no "
+                    "weighting, and they are separate from the research index."
+                    if saved
+                    else "No saved business requirements were found for this "
+                    "account, so fit against your requirements is not "
+                    "available. Save them under Preferences to compare the "
+                    "properties against your own budget, floor area, property "
+                    "type and parking requirement."
+                ),
+                "not_compared": [
+                    (
+                        "Saved location preferences are not re-applied here; "
+                        "this page shows the recorded address and the measured "
+                        "surroundings instead."
+                    ),
+                    (
+                        "Accessibility features are not recorded in either the "
+                        "research catalogue or the verified listing data, so a "
+                        "saved accessibility requirement cannot be checked here."
+                    ),
+                ],
+            },
             "notes": [
-                "Fewer recorded competitors may reflect a quieter area or an "
-                "established commercial district. No claim about demand, "
-                "profit or success is implied.",
-                "A missing measurement is shown as unavailable. It is never "
-                "treated as zero and never penalises a property.",
-                "Population figures are counts within the stated radius, not "
-                "population density. Nearby public parking is not parking "
-                "provided by the property.",
+                (
+                    "Fewer recorded competitors may reflect a quieter area or an "
+                    "established commercial district. No claim about demand, "
+                    "profit or success is implied."
+                ),
+                (
+                    "A missing measurement is shown as unavailable. It is never "
+                    "treated as zero and never penalises a property."
+                ),
+                (
+                    "Population figures are counts within the stated radius, not "
+                    "population density. Nearby public parking is not parking "
+                    "provided by the property."
+                ),
             ],
         }
 
@@ -396,24 +580,52 @@ class PropertyCompareService:
         }
         metrics: dict[str, dict[str, Any]] = {}
         gaps: list[dict[str, str]] = []
+        # Radius provenance: these two demand metrics may have been recorded
+        # at 1 km when no 500 m key exists. The displayed radius must match
+        # the measurement, never assume the field name.
+        radius_provenance = {
+            "universities_count_500m": candidate.get("universities_count_500m_radius_m"),
+            "malls_count_500m": candidate.get("malls_count_500m_radius_m"),
+        }
         for key, (label, unit, radius, group, source) in _METRICS.items():
             value = raw_metrics.get(key)
             available = value is not None and not (
                 isinstance(value, str) and not value
             )
+            proven_radius = radius_provenance.get(key)
+            # `value` is the NUMERIC measurement channel (the Dart entity
+            # casts it to num?). Booleans and text facts ride `display`
+            # instead — a recorded parking flag or floor level must never
+            # crash the client parse.
+            numeric_value = (
+                value
+                if available and isinstance(value, (int, float))
+                and not isinstance(value, bool)
+                else None
+            )
+            # The display channel is chosen by the RECORDED TYPE, in this order:
+            # a boolean fact is a Yes/No ("has_parking"), never "1" — `bool` is a
+            # subclass of `int`, so it must be tested first; a number is
+            # unit-formatted; text is shown as recorded.
+            if not available:
+                display = "Data not available"
+            elif isinstance(value, bool):
+                display = "Yes" if value else "No"
+            elif isinstance(value, (int, float)):
+                display = _fmt(value, unit)
+            elif isinstance(value, str):
+                display = value
+            else:
+                display = "Data not available"
             metrics[key] = {
-                "value": value if available else None,
+                "value": numeric_value,
                 "available": available,
                 "label": label,
                 "unit": unit,
-                "radius_m": radius,
+                "radius_m": int(proven_radius) if available and proven_radius else radius,
                 "group": group,
                 "source": source,
-                "display": _fmt(value, unit) if available and isinstance(value, (int, float)) else (
-                    ("Yes" if value else "No") if key == "has_parking" and available else (
-                        value if available and isinstance(value, str) else "Data not available"
-                    )
-                ),
+                "display": display,
             }
             if not available:
                 gaps.append(
@@ -435,6 +647,13 @@ class PropertyCompareService:
         }
         research_status = _text(candidate.get("availability_status"))
         pu_raw = _num(candidate.get("pu_association_score"))
+        if research_status.upper() in _EXPLICITLY_UNAVAILABLE:
+            unavailable_notice = (
+                f"Recorded research status: {research_status.upper()} — this "
+                "property is no longer available for rental."
+            )
+        else:
+            unavailable_notice = None
         return {
             "property_id": pid,
             "title": _text(candidate.get("title")) or _text(row.get("title")),
@@ -456,7 +675,7 @@ class PropertyCompareService:
                 "confirmed": confirmed,
                 "status": availability_text if confirmed else "Not confirmed",
                 "research_status": research_status or "UNKNOWN_NOT_VERIFIED",
-                "notice": details.get("data_notice"),
+                "notice": unavailable_notice or details.get("data_notice"),
             },
             "verification": {
                 "verified_listing": verified,
@@ -472,7 +691,141 @@ class PropertyCompareService:
             },
             "metrics": metrics,
             "data_gaps": gaps,
+            # Stable key: compare() fills it in only when the caller has saved
+            # requirements, and the clients render "not available" otherwise.
+            "preference_fit": [],
         }
+
+    @staticmethod
+    def _preference_fit(
+        prop: dict[str, Any], profile: PreferenceProfile
+    ) -> list[dict[str, str]]:
+        """How ONE property sits against the bounds the caller saved.
+
+        Deliberately not the recommendation scorer: no weights, tolerances or
+        partial-credit type matching are used here. Property type is reported
+        as recorded-text equality and nothing more, and a requirement this
+        project has no measurement for is stated as unchecked rather than
+        silently passed.
+        """
+        metrics = prop["metrics"]
+        rows: list[dict[str, str]] = []
+
+        def add(key: str, label: str, status: str, detail: str) -> None:
+            rows.append(
+                {"key": key, "label": label, "status": status, "detail": detail}
+            )
+
+        rent = _num(metrics["monthly_rent_rm"]["value"])
+        size = _num(metrics["size_sqft"]["value"])
+
+        # --- monthly rent against the saved budget ---
+        budget = _joined(
+            [
+                f"{_rm(profile.max_rent_myr)} maximum"
+                if profile.max_rent_myr is not None
+                else None,
+                f"{_rm(profile.min_rent_myr)} minimum"
+                if profile.min_rent_myr is not None
+                else None,
+            ]
+        )
+        if not budget:
+            add("budget", "Monthly rent", _FIT_NOT_STATED,
+                "Your saved requirements do not state a monthly budget.")
+        elif rent is None:
+            add("budget", "Monthly rent", _FIT_NOT_RECORDED,
+                f"No monthly rent is recorded for this property, so your saved "
+                f"budget of {budget} is shown as not verifiable here.")
+        elif profile.max_rent_myr is not None and rent > profile.max_rent_myr:
+            add("budget", "Monthly rent", _FIT_OUTSIDE,
+                f"{_rm(rent)} per month is {_rm(rent - profile.max_rent_myr)} "
+                f"above the {_rm(profile.max_rent_myr)} maximum you saved.")
+        elif profile.min_rent_myr is not None and rent < profile.min_rent_myr:
+            add("budget", "Monthly rent", _FIT_OUTSIDE,
+                f"{_rm(rent)} per month is below the "
+                f"{_rm(profile.min_rent_myr)} minimum you saved.")
+        else:
+            add("budget", "Monthly rent", _FIT_MEETS,
+                f"{_rm(rent)} per month is within your saved budget of {budget}.")
+
+        # --- floor area against the saved range ---
+        area = _joined(
+            [
+                f"{_area(profile.min_floor_area_sqft)} minimum"
+                if profile.min_floor_area_sqft is not None
+                else None,
+                f"{_area(profile.max_floor_area_sqft)} maximum"
+                if profile.max_floor_area_sqft is not None
+                else None,
+            ]
+        )
+        if not area:
+            add("floor_area", "Floor area", _FIT_NOT_STATED,
+                "Your saved requirements do not state a floor area.")
+        elif size is None:
+            add("floor_area", "Floor area", _FIT_NOT_RECORDED,
+                f"No floor area is recorded for this property, so your saved "
+                f"range of {area} is shown as not verifiable here.")
+        elif profile.min_floor_area_sqft is not None and size < profile.min_floor_area_sqft:
+            add("floor_area", "Floor area", _FIT_OUTSIDE,
+                f"{_area(size)} is below the "
+                f"{_area(profile.min_floor_area_sqft)} minimum you saved.")
+        elif profile.max_floor_area_sqft is not None and size > profile.max_floor_area_sqft:
+            add("floor_area", "Floor area", _FIT_OUTSIDE,
+                f"{_area(size)} exceeds the "
+                f"{_area(profile.max_floor_area_sqft)} maximum you saved.")
+        else:
+            add("floor_area", "Floor area", _FIT_MEETS,
+                f"{_area(size)} is within your saved range of {area}.")
+
+        # --- recorded type text against the saved type list ---
+        wanted = [t for t in profile.preferred_property_types if t]
+        actual = _text(prop["property_type"])
+        if not wanted:
+            add("property_type", "Property type", _FIT_NOT_STATED,
+                "Your saved requirements do not state a property type.")
+        elif not actual:
+            add("property_type", "Property type", _FIT_NOT_RECORDED,
+                "No property type is recorded for this property.")
+        elif any(actual.lower() == wanted_type.lower() for wanted_type in wanted):
+            add("property_type", "Property type", _FIT_MEETS,
+                f"The recorded type \u2018{actual}\u2019 is one of the types you saved.")
+        else:
+            add("property_type", "Property type", _FIT_DIFFERS,
+                f"The recorded type \u2018{actual}\u2019 is not one of the types you "
+                f"saved ({_joined(wanted)}). The recorded text is compared "
+                "exactly; similar types are not treated as matches.")
+
+        # --- saved parking requirement against the verified listing flag ---
+        parking = [t for t in profile.parking_requirements if t]
+        parking_metric = metrics["has_parking"]
+        if not parking:
+            add("parking", "Parking", _FIT_NOT_STATED,
+                "Your saved requirements do not mention parking.")
+        elif not parking_metric["available"]:
+            add("parking", "Parking", _FIT_NOT_RECORDED,
+                f"Your requirements mention {_joined(parking)}. No on-site "
+                "parking value is recorded for this property, so it reads as "
+                "unavailable rather than as no parking.")
+        elif parking_metric["display"] == "Yes":
+            add("parking", "Parking", _FIT_MEETS,
+                f"Your requirements mention {_joined(parking)} and the verified "
+                "listing records on-site parking.")
+        else:
+            add("parking", "Parking", _FIT_DIFFERS,
+                f"Your requirements mention {_joined(parking)}; the verified "
+                "listing records no on-site parking. Public parking nearby is "
+                "a separate measurement, not parking provided by the property.")
+
+        # --- requirements no source can answer ---
+        accessibility = [t for t in profile.accessibility_requirements if t]
+        if accessibility:
+            add("accessibility", "Accessibility", _FIT_NOT_CAPTURABLE,
+                f"Your requirements mention {_joined(accessibility)}. No "
+                "accessibility attribute is recorded for any property in "
+                "either source, so this cannot be checked here.")
+        return rows
 
     @staticmethod
     def _differences(properties: list[dict[str, Any]]) -> list[dict[str, Any]]:

@@ -18315,6 +18315,24 @@ input[type="range"] {
 .cmp__insight li { font-size: 12.5px; color: var(--ink); line-height: 1.5; }
 .cmp__diffs { margin-top: 12px; border-top: 1px solid var(--border); padding-top: 6px; }
 
+/* Fit against saved requirements: one recorded value vs one stated need. */
+.cmp__fit { border-top: 1px solid var(--border); padding-top: 8px; }
+.cmp__fit:first-of-type { border-top: 0; padding-top: 0; }
+.cmp__fit p { margin: 5px 0 0; color: var(--ink); font-size: 12.5px; }
+.cmp__fit-status {
+  display: inline-block; padding: 2px 8px; border-radius: 999px;
+  border: 1px solid var(--border); color: var(--muted);
+  font-size: 11px; font-weight: 700;
+}
+.cmp__fit-status--ok {
+  color: var(--success-text, var(--success));
+  border-color: var(--success); background: var(--success-wash);
+}
+.cmp__fit-status--off {
+  color: var(--warning); border-color: var(--warning);
+  background: var(--warning-wash);
+}
+
 .cmp__grid { display: grid; gap: 0; }
 .cmp__row {
   display: grid; grid-template-columns: minmax(140px, 1.1fr) repeat(auto-fit, minmax(130px, 1fr));

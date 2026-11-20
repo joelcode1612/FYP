@@ -96,6 +96,9 @@ class PropertyDetailPage extends StatefulComponent {
 class _PropertyDetailPageState extends State<PropertyDetailPage> {
   String? _saveMessage;
   bool _compareLinkShown = false;
+
+  /// Set when the shortlist is full — shown verbatim next to the actions.
+  String? _compareNotice;
   Future<PropertyDetailLoad?>? _detailFuture;
   Future<PropertyEvidence>? _evidenceFuture;
   Future<PropertyInsights>? _insightsFuture;
@@ -304,16 +307,26 @@ class _PropertyDetailPageState extends State<PropertyDetailPage> {
                   compared: compared.contains(p.id),
                   saveMessage: _saveMessage,
                   compareLinkShown: _compareLinkShown,
+                  compareMessage: _compareNotice,
                   onToggleSaved: () => _toggleSaved(p.id),
-                  onToggleCompared: () {
-                    context
-                        .read(appNotifierProvider.notifier)
-                        .toggleCompared(p.id);
-                    final nowCompared = context
-                        .read(appNotifierProvider)
-                        .compared
-                        .contains(p.id);
-                    setState(() => _compareLinkShown = nowCompared);
+                  onCompareTapped: () {
+                    final notifier = context
+                        .read(appNotifierProvider.notifier);
+                    // Already selected: the button itself opens Compare (see
+                    // _Detail), so this tap can never remove the property.
+                    if (notifier.compared.contains(p.id)) return;
+                    if (!notifier.addCompared(p.id)) {
+                      setState(() {
+                        _compareNotice =
+                            'You can compare up to three properties. Remove '
+                            'one from the comparison first.';
+                      });
+                      return;
+                    }
+                    setState(() {
+                      _compareNotice = null;
+                      _compareLinkShown = true;
+                    });
                   },
                 );
               },
@@ -349,10 +362,13 @@ class _Detail extends StatefulComponent {
 
   final bool saved;
   final bool compared;
+
+  /// Why the last compare tap did nothing (shortlist full), verbatim.
+  final String? compareMessage;
   final String? saveMessage;
   final bool compareLinkShown;
   final void Function() onToggleSaved;
-  final void Function() onToggleCompared;
+  final void Function() onCompareTapped;
 
   const _Detail({
     super.key,
@@ -365,8 +381,9 @@ class _Detail extends StatefulComponent {
     this.appliedFilters,
     required this.saved,
     required this.compared,
+    this.compareMessage,
     required this.onToggleSaved,
-    required this.onToggleCompared,
+    required this.onCompareTapped,
     this.saveMessage,
     this.compareLinkShown = false,
   });
@@ -433,10 +450,12 @@ class _DetailState extends State<_Detail> {
   List<String> get imageUrls => component.imageUrls;
   bool get saved => component.saved;
   bool get compared => component.compared;
+
+  String? get compareMessage => component.compareMessage;
   String? get saveMessage => component.saveMessage;
   bool get compareLinkShown => component.compareLinkShown;
   void Function() get onToggleSaved => component.onToggleSaved;
-  void Function() get onToggleCompared => component.onToggleCompared;
+  void Function() get onCompareTapped => component.onCompareTapped;
 
   // -- gallery handlers ----------------------------------------------------
 
@@ -998,12 +1017,22 @@ class _DetailState extends State<_Detail> {
             icon: saved ? 'bookmark' : 'bookmark_border',
             onClick: onToggleSaved,
           ),
-          ActionButton(
-            compared ? 'In compare' : 'Add to compare',
-            variant: 'secondary',
-            icon: 'compare_arrows',
-            onClick: onToggleCompared,
-          ),
+          // Selected: an explicit OPEN action — tapping can never remove
+          // the property. Not selected: adds to the shortlist.
+          if (compared)
+            ActionLink(
+              'Open compare ✓',
+              href: '/entrepreneur/compare',
+              variant: 'secondary',
+              icon: 'compare_arrows',
+            )
+          else
+            ActionButton(
+              'Add to compare',
+              variant: 'secondary',
+              icon: 'compare_arrows',
+              onClick: onCompareTapped,
+            ),
           ActionButton(
             'Copy summary',
             variant: 'ghost',
@@ -1016,7 +1045,9 @@ class _DetailState extends State<_Detail> {
         span(classes: 'small text-success', [Component.text(saveMessage!)]),
       if (_copyMessage != null)
         span(classes: 'small', [Component.text(_copyMessage!)]),
-      if (compareLinkShown && compared)
+      if (compareMessage != null)
+        span(classes: 'small text-danger', [Component.text(compareMessage!)])
+      else if (compareLinkShown && compared)
         ActionLink(
           'Open compare',
           href: '/entrepreneur/compare',

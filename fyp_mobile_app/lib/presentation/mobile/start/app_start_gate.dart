@@ -145,6 +145,17 @@ class _AppStartGateState extends ConsumerState<AppStartGate> {
     }
 
     final state = ref.watch(authNotifierProvider);
+    // Compare selections belong to ONE identity. When the signed-in account
+    // changes (sign-out, account switch, expiry), the in-memory shortlist is
+    // dropped so the next account never inherits the previous one's compare
+    // set — mirroring the cookie scoping the web app applies at boot.
+    ref.listen<AuthState>(authNotifierProvider, (previous, next) {
+      final previousKey = previous?.user?.id;
+      final nextKey = next.user?.id;
+      if (previous == null || previousKey == nextKey) return;
+      ref.read(appNotifierProvider.notifier).clearCompared();
+      ref.read(propertyCompareProvider.notifier).reset();
+    });
     _scopeDrafts(state);
     switch (state.status) {
       case AuthStatus.authenticated:

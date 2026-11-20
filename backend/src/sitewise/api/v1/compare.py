@@ -9,6 +9,7 @@ from sqlmodel import Session
 from sitewise.db.analytics_session import get_analytics_db
 from sitewise.db.session import get_db
 from sitewise.dependencies import CurrentUser
+from sitewise.services.preferences_service import PreferencesService
 from sitewise.services.property_compare_service import PropertyCompareService
 
 router = APIRouter()
@@ -34,7 +35,7 @@ class PropertyCompareRequest(BaseModel):
 @router.post("")
 def compare_properties(
     body: PropertyCompareRequest,
-    _user: CurrentUser,
+    user: CurrentUser,
     analytics: AnalyticsSession,
     operational: OperationalSession,
 ) -> dict:
@@ -43,10 +44,16 @@ def compare_properties(
     Targeted queries only: the three selected rows, their existing geospatial
     measurements, verified listing attributes and panorama status. Missing
     measurements are reported explicitly and never become zeros.
+
+    The requester's own stored requirements ride along so each property can
+    state a plain fit fact (within/above/not stated). They are read from the
+    authenticated identity, never from the request body, and they only label
+    recorded measurements: the ranking methodology is not consulted.
     """
+    saved = PreferencesService(operational).payload(user.user_id)["preferences"]
     try:
         result = PropertyCompareService(analytics, operational).compare(
-            body.property_ids
+            body.property_ids, preferences=saved
         )
     except ValueError as exc:
         raise HTTPException(

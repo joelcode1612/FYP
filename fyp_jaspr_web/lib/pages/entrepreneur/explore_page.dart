@@ -6,6 +6,7 @@ import 'package:jaspr/jaspr.dart';
 import 'package:jaspr_riverpod/jaspr_riverpod.dart';
 import 'package:shared_logic/shared_logic.dart';
 
+import '../../components/compare_shortlist.dart';
 import '../../components/combined_explore_dom.dart';
 import '../../components/filter_panel.dart';
 import '../../components/map_dom.dart';
@@ -769,6 +770,7 @@ class _ExplorePageState extends State<ExplorePage> {
         ])
       else
         div(classes: 'swcx-list-scroll', [
+          if (compareShortlistStatus(compared) case final status?) status,
           div(classes: 'pgrid swcx-property-grid', [
             for (final p in results.take(visibleLimit))
               PropertyCard(

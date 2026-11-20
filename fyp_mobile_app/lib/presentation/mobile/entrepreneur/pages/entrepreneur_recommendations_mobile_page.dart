@@ -265,7 +265,7 @@ class _EntrepreneurRecommendationsMobilePageState
               children: [
                 Expanded(
                   child: Text(
-                    '$compareCount of 3 in comparison',
+                    '$compareCount of ${AppState.maxCompare} in comparison',
                     style: const TextStyle(
                       fontSize: 12.5,
                       color: SitewiseColors.muted,

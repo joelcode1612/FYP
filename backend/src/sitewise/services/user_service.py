@@ -2,20 +2,25 @@ import logging
 import uuid
 from typing import Any, Optional
 
-from sqlmodel import Session
-
 from sitewise.core.exceptions import ConflictError, ForbiddenActionError
 from sitewise.db.models.user import User
 from sitewise.domain import rbac
-from sitewise.repositories.user_repository import UserRepository
+from sitewise.services.ports.user_repository_port import UserRepositoryPort
 
 
 logger = logging.getLogger(__name__)
 
 
 class UserService:
-    def __init__(self, session: Session):
-        self.repo = UserRepository(session)
+    """Identity/profile use-cases over a persistence port.
+
+    The repository is injected rather than constructed here so the rules that
+    decide role and account-status reconciliation are exercisable without a
+    database (see ``tests/test_architecture.py``).
+    """
+
+    def __init__(self, repo: UserRepositoryPort):
+        self.repo = repo
 
     def create_user(self, user: User) -> User:
         return self.repo.create(user)

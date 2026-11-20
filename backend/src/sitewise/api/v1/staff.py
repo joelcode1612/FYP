@@ -35,6 +35,7 @@ from sitewise.dependencies import (
     AgentMfaUser,
     CurrentUser,
     _staff_mfa_required,
+    get_user_service,
 )
 from sitewise.domain import rbac
 from sitewise.services.provider_verification_service import (
@@ -197,7 +198,7 @@ def _company_index(
 
 
 def _agent_records(
-    session: Session,
+    user_service: UserService,
     service: SupabaseAdminService,
     *,
     agent_profiles: list[dict] | None = None,
@@ -219,7 +220,7 @@ def _agent_records(
     companies = _company_index(service, company_rows)
     invitations = _latest_invitations(service, invitation_rows)
     records: list[dict] = []
-    for profile in UserService(session).list_users(limit=500):
+    for profile in user_service.list_users(limit=500):
         if not rbac.has_role(profile.role, (rbac.ROLE_AGENT,)):
             continue
         uid = str(profile.user_id)
@@ -281,7 +282,7 @@ def _resolve_assignment(
 def create_agent(
     payload: CreateAgentRequest,
     admin: AdminMfaUser,
-    session: Session = Depends(get_db),
+    user_service: UserService = Depends(get_user_service),
 ) -> dict:
     """Provision an agent account.
 
@@ -299,7 +300,7 @@ def create_agent(
     # Detect local UUID collisions BEFORE creating/inviting the Supabase user
     # or changing the authoritative Supabase role. No automatic email-based
     # identity merge or primary-key reassignment is permitted.
-    local_profile = UserService(session).get_user_by_email(email)
+    local_profile = user_service.get_user_by_email(email)
     if local_profile is not None and (
         existing is None or str(local_profile.user_id) != str(existing["id"])
     ):
@@ -366,7 +367,7 @@ def create_agent(
     )
 
     # Enforcement mirror in the application database.
-    mirror = UserService(session).ensure_staff_profile(
+    mirror = user_service.ensure_staff_profile(
         user_id=uuid.UUID(auth_user_id),
         email=email,
         full_name=payload.full_name,
@@ -428,10 +429,10 @@ def create_agent(
 @router.get("/agents")
 def list_agents(
     admin: AdminMfaUser,
-    session: Session = Depends(get_db),
+    user_service: UserService = Depends(get_user_service),
 ) -> list[dict]:
     """Agent accounts joined to their company and latest invitation state."""
-    return _agent_records(session, _admin_service())
+    return _agent_records(user_service, _admin_service())
 
 
 # ---------------------------------------------------------------------------
@@ -502,6 +503,7 @@ def invitation_accepted_for(service: SupabaseAdminService, email: str) -> bool:
 def complete_onboarding(
     user: CurrentUser,
     session: Session = Depends(get_db),
+    user_service: UserService = Depends(get_user_service),
 ) -> dict:
     """Trusted completion of the agent invitation lifecycle.
 
@@ -527,7 +529,6 @@ def complete_onboarding(
         raise _staff_mfa_required()
 
     service = _admin_service()
-    user_service = UserService(session)
     email = str(user.email or "").lower()
 
     # 1. Supabase-verified acceptance evidence: the authoritative proof that
@@ -709,7 +710,7 @@ def create_company(
 @router.get("/summary")
 def staff_summary(
     admin: AdminMfaUser,
-    session: Session = Depends(get_db),
+    user_service: UserService = Depends(get_user_service),
 ) -> dict:
     """Backend-driven KPI values for the agent management page.
 
@@ -717,7 +718,7 @@ def staff_summary(
     company list and invitations table — no client-side sample numbers.
     """
     service = _admin_service()
-    agents = _agent_records(session, service)
+    agents = _agent_records(user_service, service)
     invitations = service.list_invitations()
     return {
         "total_agents": len(agents),
@@ -741,7 +742,7 @@ def staff_summary(
 @router.get("/overview")
 def staff_overview(
     admin: AdminMfaUser,
-    session: Session = Depends(get_db),
+    user_service: UserService = Depends(get_user_service),
 ) -> dict:
     """Agent management snapshot: read each Supabase table only once.
 
@@ -753,7 +754,7 @@ def staff_overview(
     company_rows = service.list_companies()
     invitation_rows = service.list_invitations()
     agents = _agent_records(
-        session, service,
+        user_service, service,
         agent_profiles=agent_profiles,
         company_rows=company_rows,
         invitation_rows=invitation_rows,
@@ -802,7 +803,7 @@ def update_agent_status(
     user_id: uuid.UUID,
     payload: UpdateAgentStatusRequest,
     admin: AdminMfaUser,
-    session: Session = Depends(get_db),
+    user_service: UserService = Depends(get_user_service),
 ) -> dict:
     new_status = payload.validated()
     if new_status not in (rbac.STATUS_ACTIVE, rbac.STATUS_SUSPENDED):
@@ -811,7 +812,6 @@ def update_agent_status(
             detail="Staff account status may only be set to active or suspended.",
         )
     service = _admin_service()
-    user_service = UserService(session)
     target = user_service.get_user(user_id)
     if target is None:
         raise HTTPException(status_code=404, detail="User not found.")

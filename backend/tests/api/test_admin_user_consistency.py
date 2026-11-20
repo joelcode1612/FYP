@@ -17,6 +17,8 @@ import sitewise.api.v1.users as users_module
 from sitewise.core.exceptions import AuthUnavailableError
 from sitewise.core.supabase_admin import SupabaseAdminError
 from sitewise.db.session import engine
+from sitewise.dependencies import get_user_service
+from sitewise.main import app
 from sitewise.repositories.user_repository import UserRepository
 from sitewise.services.user_service import UserService
 from tests.conftest import TEST_EMAIL_DOMAIN, make_token, register_user_id
@@ -161,8 +163,11 @@ def test_mirror_failure_reports_an_explicit_partial_result(client, cleanup_users
         def update_user(self, user_id, data):
             raise RuntimeError("local mirror write rejected")
 
-    original = users_module.UserService
-    users_module.UserService = _MirrorFails
+    def _failing_service():
+        with Session(engine) as session:
+            yield _MirrorFails(UserRepository(session))
+
+    app.dependency_overrides[get_user_service] = _failing_service
     try:
         r = client.patch(
             f"/api/v1/users/{target}",
@@ -170,7 +175,7 @@ def test_mirror_failure_reports_an_explicit_partial_result(client, cleanup_users
             json={"account_status": "suspended"},
         )
     finally:
-        users_module.UserService = original
+        app.dependency_overrides.pop(get_user_service, None)
 
     assert r.status_code == 502, r.text
     detail = r.json()["detail"]

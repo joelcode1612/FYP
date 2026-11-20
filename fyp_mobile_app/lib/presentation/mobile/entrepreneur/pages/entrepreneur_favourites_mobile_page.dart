@@ -8,6 +8,7 @@ import '../../../shared/widgets/sitewise_inline_notice.dart';
 import '../../shell/entrepreneur_tab_scope.dart';
 import '../../shell/mobile_app_shell.dart';
 import '../../widgets/async_section.dart';
+import '../../widgets/compare_shortlist.dart';
 import '../../widgets/m3_kit.dart';
 import '../../widgets/mobile_property_card.dart';
 import '../../widgets/mobile_skeleton.dart';
@@ -180,9 +181,8 @@ class _EntrepreneurFavouritesMobilePageState
                           saved: true,
                           onToggleSaved: () => _unsave(p.id),
                           compared: appState.compared.contains(p.id),
-                          onToggleCompare: () => ref
-                              .read(appNotifierProvider.notifier)
-                              .toggleCompared(p.id),
+                          onToggleCompare: () =>
+                              toggleComparedWithFeedback(ref, context, p.id),
                           onViewDetails: () => _openDetails(p.id),
                           onTap: () => _openDetails(p.id),
                         ),

@@ -35,6 +35,10 @@ Future<void> main() async {
     // submits, and protected workspaces redirect to /login (fail closed).
   }
 
+  // The cookie's compare shortlist is scoped to the account that wrote it:
+  // a session that does not match must not inherit someone else's selection.
+  AppLocator.applyAccountScope();
+
   // A signed-in account's saved shortlist comes from the server, not the
   // cookie — merged before mount so the first frame already shows it.
   await AppLocator.mergeAccountSaved();

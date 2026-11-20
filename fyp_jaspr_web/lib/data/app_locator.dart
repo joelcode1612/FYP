@@ -38,7 +38,10 @@ abstract final class AppLocator {
       DatasetRecommendationRepository(propertyRepo);
   static final VerificationRepositoryImpl verificationRepo =
       VerificationRepositoryImpl(propertyRepo);
-  static final UserRepository userRepo = ApiUserRepository(
+  /// Typed as the concrete adapter because the self-profile save
+  /// ([ApiUserRepository.updateOwnProfile]) is a live-backend operation the
+  /// demo [UserRepository] cannot serve; reads keep using the interface.
+  static final ApiUserRepository userRepo = ApiUserRepository(
     const WebApiClient(),
   );
   static final TourRepositoryImpl tourRepo = TourRepositoryImpl();
@@ -170,6 +173,9 @@ abstract final class AppLocator {
   /// plants it in the container when the scope mounts.
   static AppState uiSeed = const AppState();
 
+  /// The account tag the boot cookie was written under ('' = anonymous).
+  static String _storedAccount = '';
+
   /// Seeds the saved/compare sets and recommendation preferences.
   ///
   /// The [cookies] argument is the request's cookie map on the server; the
@@ -178,6 +184,7 @@ abstract final class AppLocator {
   /// up by the next `ProviderScope` mount.
   static void installUiState([Map<String, String> cookies = const {}]) {
     final stored = UiStore.read(cookies);
+    _storedAccount = stored.account;
     uiSeed = AppState(saved: stored.saved, compared: stored.compared);
     // Recommendation preferences survive reloads through their own cookie, so
     // the criteria the user saved are what the ranking actually uses — not a
@@ -220,6 +227,7 @@ abstract final class AppLocator {
       saved: isSignedIn ? const {} : state.saved,
       compared: state.compared,
       roles: Workspaces.granted,
+      account: _currentAccountTag,
     ));
   }
 
@@ -258,6 +266,33 @@ abstract final class AppLocator {
         message: 'The data service could not complete this request.',
       );
     }
+  }
+
+  /// Drops the boot compare shortlist when it belongs to a different account.
+  ///
+  /// The cookie's compare set carries the profile id it was written under:
+  ///   * matching tag, or no tag at all (written while anonymous — the same
+  ///     person, just not signed in yet) → the selection stands;
+  ///   * a tag naming ANOTHER account (expired session, account switch) → the
+  ///     seed is cleared so account B never inherits account A's shortlist.
+  /// The saved shortlist is untouched: it is server-owned and merged per
+  /// account.
+  static void applyAccountScope() {
+    if (!isSignedIn) return;
+    final profileId = _currentAccountTag;
+    if (profileId.isEmpty) return;
+    if (_storedAccount.isEmpty || _storedAccount == profileId) return;
+    uiSeed = uiSeed.copyWith(compared: const <String>{});
+  }
+
+  /// The account tag [persistUiState] should stamp: the signed-in profile's
+  /// server-verified id (`GET /api/v1/auth/me` returns `user_id`), or '' for
+  /// visitors and development Demo Mode.
+  static String get _currentAccountTag {
+    if (!isSignedIn) return '';
+    final profile = WebAuth.profile;
+    if (profile == null) return '';
+    return '${(profile['user_id'] ?? profile['id'] ?? profile['sub'] ?? '')}';
   }
 
   /// Unions the signed-in account's saved properties into [uiSeed], so the

@@ -3,6 +3,7 @@ import 'package:jaspr/jaspr.dart';
 import 'package:shared_logic/shared_logic.dart';
 
 import '../../components/ui.dart';
+import '../../data/app_locator.dart';
 import '../../data/auth_service.dart';
 import '../../layouts/app_layout.dart';
 
@@ -68,16 +69,15 @@ class _ProfilePageState extends State<ProfilePage> {
     });
     try {
       // PATCH /api/v1/users/me persists the verified profile fields.
-      final response = await WebAuth.request(
-        '/api/v1/users/me',
-        method: 'PATCH',
-        body: {'full_name': _concept.trim(), 'phone_number': _phone.trim()},
+      final saved = await AppLocator.userRepo.updateOwnProfile(
+        fullName: _concept.trim(),
+        phoneNumber: _phone.trim(),
       );
       if (!mounted) return;
       setState(() {
         _saving = false;
-        _savedConcept = (response['full_name'] as String?) ?? _concept.trim();
-        _savedPhone = (response['phone_number'] as String?) ?? _phone.trim();
+        _savedConcept = saved.fullName;
+        _savedPhone = saved.phoneNumber ?? _phone.trim();
         _concept = _savedConcept;
         _phone = _savedPhone;
         _savedMessage =

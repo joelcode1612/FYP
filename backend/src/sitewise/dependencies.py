@@ -36,6 +36,13 @@ from sitewise.core.supabase_admin import SupabaseAdminError, get_admin_service
 from sitewise.db.models.user import User
 from sitewise.db.session import get_db
 from sitewise.domain import rbac
+from sitewise.ingestion.state import RefreshState
+from sitewise.repositories.fyp_property_repository import FypPropertyRepository
+from sitewise.repositories.geospatial_repository import GeospatialRepository
+from sitewise.repositories.user_repository import UserRepository
+from sitewise.services.explore_service import ExploreService
+from sitewise.services.geospatial_service import GeospatialService
+from sitewise.services.property_management_service import resolve_management
 from sitewise.services.user_service import UserService
 
 
@@ -129,9 +136,43 @@ class AuthenticatedUser:
         return value if isinstance(value, list) else []
 
 
+def get_user_service(session: Annotated[Session, Depends(get_db)]) -> UserService:
+    """Composition root binding the identity use-cases to the SQL adapter.
+
+    This is the only place that pairs ``UserService`` with ``UserRepository``:
+    the service itself is written against
+    :class:`~sitewise.services.ports.user_repository_port.UserRepositoryPort`,
+    so no use-case layer constructs a repository or touches a session.
+    """
+    return UserService(UserRepository(session))
+
+
+def get_geospatial_service(
+    session: Annotated[Session, Depends(get_db)],
+) -> GeospatialService:
+    """Bind the geospatial read model to its row and ingestion-state adapters."""
+    return GeospatialService(GeospatialRepository(session), RefreshState(session))
+
+
+def get_explore_service(
+    session: Annotated[Session, Depends(get_db)],
+) -> ExploreService:
+    """Bind the Explore read model, including its management-resolver seam.
+
+    ``resolve_management`` is its own application function over the same
+    request session, so it is passed as a callable rather than as a second
+    repository: the Explore service never sees a session object.
+    """
+    return ExploreService(
+        FypPropertyRepository(session),
+        RefreshState(session),
+        lambda listing_id: resolve_management(session, listing_id=listing_id),
+    )
+
+
 def get_current_user(
     token: Annotated[str, Depends(bearer_token)],
-    session: Annotated[Session, Depends(get_db)],
+    service: Annotated[UserService, Depends(get_user_service)],
     admin: Annotated[Any, Depends(get_admin_service)],
 ) -> AuthenticatedUser:
     verifier = get_jwt_verifier()
@@ -153,7 +194,6 @@ def get_current_user(
                 "The authoritative identity service is unavailable. Please retry."
             ) from exc
 
-    service = UserService(session)
     profile = service.get_or_sync_current(
         user_id=subject,
         email=verified.email,
@@ -315,3 +355,5 @@ ActiveUser = Annotated[AuthenticatedUser, Depends(get_active_user)]
 StaffUser = Annotated[AuthenticatedUser, Depends(get_staff_user)]
 AgentMfaUser = Annotated[AuthenticatedUser, Depends(require_agent_mfa)]
 AdminMfaUser = Annotated[AuthenticatedUser, Depends(require_admin_mfa)]
+GeospatialServiceImpl = Annotated[GeospatialService, Depends(get_geospatial_service)]
+ExploreServiceImpl = Annotated[ExploreService, Depends(get_explore_service)]

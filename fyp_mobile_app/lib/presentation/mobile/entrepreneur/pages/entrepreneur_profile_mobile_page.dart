@@ -114,7 +114,8 @@ class _EntrepreneurProfileMobilePageState
               _Tile(
                 icon: Icons.compare_arrows,
                 title: 'Comparison shortlist',
-                subtitle: '${appState.compared.length} of 3 selected',
+                subtitle:
+                    '${appState.compared.length} of ${AppState.maxCompare} selected',
                 onTap: () =>
                     Navigator.of(context).pushNamed('/entrepreneur/compare'),
               ),

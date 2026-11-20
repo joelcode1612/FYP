@@ -3,6 +3,7 @@ import 'package:jaspr/jaspr.dart';
 import 'package:shared_logic/shared_logic.dart';
 
 import '../../components/ui.dart';
+import '../../data/app_locator.dart';
 import '../../data/auth_service.dart';
 import '../../layouts/app_layout.dart';
 
@@ -92,18 +93,18 @@ class _ProfilePageState extends State<ProfilePage> {
     });
     try {
       // Only the two self-editable fields are sent. Email, role and account
-      // status are omitted deliberately: including them is a 403.
-      final response = await WebAuth.request(
-        '/api/v1/users/me',
-        method: 'PATCH',
-        body: {'full_name': _name.trim(), 'phone_number': _phone.trim()},
+      // status are omitted deliberately: including them is a 403. The
+      // repository owns that contract so no page repeats the request shape.
+      final saved = await AppLocator.userRepo.updateOwnProfile(
+        fullName: _name.trim(),
+        phoneNumber: _phone.trim(),
       );
       if (!mounted) return;
       setState(() {
         _saving = false;
         // Re-baseline from what the server stored, not from what was typed.
-        _savedName = (response['full_name'] as String?) ?? _name.trim();
-        _savedPhone = (response['phone_number'] as String?) ?? _phone.trim();
+        _savedName = saved.fullName;
+        _savedPhone = saved.phoneNumber ?? _phone.trim();
         _name = _savedName;
         _phone = _savedPhone;
         _savedMessage =

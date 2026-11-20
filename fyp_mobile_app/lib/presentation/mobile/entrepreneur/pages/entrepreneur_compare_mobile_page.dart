@@ -25,13 +25,17 @@ class EntrepreneurCompareMobilePage extends ConsumerStatefulWidget {
 
 class _EntrepreneurCompareMobilePageState
     extends ConsumerState<EntrepreneurCompareMobilePage> {
+  /// Signature of the selection we last sent, so an ordinary rebuild never
+  /// queues a duplicate request.
   String _requestedIds = '';
 
   List<String> _ids() =>
       ref.read(appNotifierProvider).compared.toList();
 
-  void _sync() {
-    final ids = _ids();
+  /// Loads the comparison for [ids] unless that exact selection was already
+  /// sent. The provider's own sequence guard drops stale responses, so a slow
+  /// reply for an older selection can never overwrite a newer one.
+  void _requestLoad(List<String> ids) {
     final signature = ids.join('|');
     if (signature == _requestedIds) return;
     _requestedIds = signature;
@@ -41,8 +45,10 @@ class _EntrepreneurCompareMobilePageState
   @override
   void initState() {
     super.initState();
+    // Initial load AFTER the first frame: a provider mutation inside build
+    // (or initState, during widget mounting) throws "modified while building".
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) _sync();
+      if (mounted) _requestLoad(_ids());
     });
   }
 
@@ -52,9 +58,14 @@ class _EntrepreneurCompareMobilePageState
       appNotifierProvider.select((app) => app.compared),
     );
     final result = ref.watch(propertyCompareProvider);
-    // Re-entry with a changed selection is a real reload; an ordinary rebuild
-    // does not re-request anything.
-    _sync();
+    // Selection changes are observed, not polled in build: ref.listen fires
+    // AFTER the current build completes, so mutating propertyCompareProvider
+    // here can never re-enter the build phase. The signature check keeps the
+    // request at most one per distinct selection.
+    ref.listen(
+      appNotifierProvider.select((app) => app.compared),
+      (_, Set<String> next) => _requestLoad(next.toList()),
+    );
 
     return MobileAppShell(
       title: 'Compare',
@@ -76,7 +87,7 @@ class _EntrepreneurCompareMobilePageState
             ),
             const SizedBox(height: 8),
             Text(
-              '${compared.length} of 3 selected',
+              '${compared.length} of ${AppState.maxCompare} selected',
               style: const TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.w700,
@@ -119,21 +130,39 @@ class _EntrepreneurCompareMobilePageState
   Widget _body(BuildContext context, PropertyCompareResult data) {
     final properties = data.properties;
     if (properties.isEmpty) {
-      return const _Notice(text: 'No selected property could be resolved.');
+      // A selection that resolves to nothing is a state with the backend's
+      // reasons and a way out — never a blank screen.
+      return _Notice(
+        text: [
+          'None of your selected properties could be loaded.',
+          for (final id in data.unresolvedIds)
+            data.reasonFor(id) ?? '$id could not be resolved.',
+        ].join(' '),
+        retry: () => ref
+            .read(propertyCompareProvider.notifier)
+            .load(
+              ref.read(appNotifierProvider).compared.toList(),
+              refresh: true,
+            ),
+      );
     }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         if (data.unresolvedIds.isNotEmpty)
           _Notice(
-            text: '${data.unresolvedIds.length} selected '
-                '${data.unresolvedIds.length == 1 ? 'property was' : 'properties were'} '
-                'not found and were left out.',
+            text: [
+              for (final id in data.unresolvedIds)
+                data.reasonFor(id) ??
+                    'One selected property could not be resolved and was left out.',
+            ].join(' '),
           ),
         const SizedBox(height: 14),
         _selector(context, properties),
         const SizedBox(height: 18),
         _KeyDifferences(data: data),
+        const SizedBox(height: 18),
+        _PreferenceFit(data: data),
         const SizedBox(height: 18),
         _Category(
           title: 'Cost & space',
@@ -335,6 +364,137 @@ class _Notice extends StatelessWidget {
       ],
     ),
   );
+}
+
+/// Fit between each property's recorded values and the requirements this
+/// entrepreneur saved. Every row is one statement about two recorded values:
+/// no score, no weighting, and kept visibly separate from the research index.
+class _PreferenceFit extends StatelessWidget {
+  final PropertyCompareResult data;
+
+  const _PreferenceFit({required this.data});
+
+  static IconData _icon(CompareFitRow row) => switch (row.status) {
+    'meets' => Icons.check_circle_outline_rounded,
+    'outside' || 'differs' => Icons.warning_amber_rounded,
+    _ => Icons.help_outline_rounded,
+  };
+
+  static Color _color(CompareFitRow row) => switch (row.status) {
+    'meets' => SitewiseColors.success,
+    'outside' || 'differs' => SitewiseColors.warning,
+    _ => SitewiseColors.muted,
+  };
+
+  @override
+  Widget build(BuildContext context) {
+    final basis = data.fitBasis;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const MobileSectionHeader(
+          title: 'Fit against your saved requirements',
+        ),
+        Text(
+          basis.statement,
+          style: const TextStyle(
+            fontSize: 12,
+            height: 1.45,
+            color: SitewiseColors.muted,
+          ),
+        ),
+        if (basis.saved)
+          for (final property in data.properties)
+            Container(
+              width: double.infinity,
+              margin: const EdgeInsets.only(top: 8),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: SitewiseColors.surface,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: SitewiseColors.border),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    property.title,
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w800,
+                      color: SitewiseColors.ink,
+                    ),
+                  ),
+                  if (property.preferenceFit.isEmpty)
+                    const Padding(
+                      padding: EdgeInsets.only(top: 4),
+                      child: Text(
+                        'No requirement you saved can be checked against this '
+                        'property.',
+                        style: TextStyle(
+                          fontSize: 12.5,
+                          height: 1.4,
+                          color: SitewiseColors.muted,
+                        ),
+                      ),
+                    )
+                  else
+                    for (final row in property.preferenceFit)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 6),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Icon(
+                              _icon(row),
+                              size: 15,
+                              color: _color(row),
+                            ),
+                            const SizedBox(width: 6),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    row.label,
+                                    style: const TextStyle(
+                                      fontSize: 12.5,
+                                      fontWeight: FontWeight.w800,
+                                      color: SitewiseColors.ink,
+                                    ),
+                                  ),
+                                  Text(
+                                    '${row.statusLabel}. ${row.detail}',
+                                    style: const TextStyle(
+                                      fontSize: 12.5,
+                                      height: 1.4,
+                                      color: SitewiseColors.text,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                ],
+              ),
+            ),
+        for (final gap in basis.notCompared)
+          Padding(
+            padding: const EdgeInsets.only(top: 6),
+            child: Text(
+              gap,
+              style: const TextStyle(
+                fontSize: 12,
+                height: 1.45,
+                color: SitewiseColors.muted,
+              ),
+            ),
+          ),
+      ],
+    );
+  }
 }
 
 class _KeyDifferences extends StatelessWidget {

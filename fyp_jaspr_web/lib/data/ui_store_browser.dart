@@ -4,7 +4,8 @@ library;
 import 'dart:convert';
 import 'dart:js_interop';
 
-import 'package:shared_logic/shared_logic.dart' show BusinessPreferences;
+import 'package:shared_logic/shared_logic.dart'
+show AppState, BusinessPreferences;
 
 @JS('document')
 external _Document get _document;
@@ -23,9 +24,20 @@ typedef UiState = ({
   Set<String> saved,
   Set<String> compared,
   Set<String> roles,
+
+  /// Account tag stored with the cookie payload: the profile id the selection
+  /// was written under, or the empty string for an anonymous visitor. Read
+  /// consumers compare it against the live session so one browser's accounts
+  /// never inherit each other's compare shortlist.
+  String account,
 });
 
-const UiState emptyUiState = (saved: {}, compared: {}, roles: {});
+const UiState emptyUiState = (
+  saved: {},
+  compared: {},
+  roles: {},
+  account: '',
+);
 
 typedef PrefState = ({
   String businessType,
@@ -60,8 +72,9 @@ abstract final class UiStore {
       };
       return (
         saved: ids(value['s'], kMaxSaved),
-        compared: ids(value['c'], 3),
+        compared: ids(value['c'], AppState.maxCompare),
         roles: <String>{}, // Never restore client-written role grants
+        account: value['u'] is String ? value['u'] as String : '',
       );
     } on Object {
       return emptyUiState;
@@ -71,7 +84,10 @@ abstract final class UiStore {
   static void write(UiState state) {
     final value = jsonEncode({
       's': state.saved.take(kMaxSaved).toList(),
-      'c': state.compared.take(3).toList(),
+      'c': state.compared.take(AppState.maxCompare).toList(),
+      // The compare shortlist is scoped to whoever was signed in when it was
+      // written; boot drops it when the live session does not match.
+      'u': state.account,
     });
     final secure = _document.baseURI.toDart.startsWith('https:') ? '; Secure' : '';
     _document.cookie =

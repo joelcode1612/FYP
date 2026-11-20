@@ -27,7 +27,10 @@ class CompareMetric {
   });
 
   factory CompareMetric.fromJson(Map<String, dynamic> json) => CompareMetric(
-    value: json['value'] as num?,
+    // `value` is the numeric measurement channel. A non-numeric entry (an
+    // older backend putting a bool/string here) degrades to null — the metric
+    // then shows its `display` text instead of crashing the whole parse.
+    value: json['value'] is num ? json['value'] as num : null,
     available: json['available'] == true,
     label: '${json['label'] ?? ''}',
     unit: '${json['unit'] ?? ''}',
@@ -59,6 +62,86 @@ class CompareDataGap {
   );
 }
 
+/// Why one selected id could not be resolved, in the backend's own words.
+class CompareUnresolved {
+  final String id;
+  final String reason;
+
+  const CompareUnresolved({required this.id, required this.reason});
+
+  factory CompareUnresolved.fromJson(Map<String, dynamic> json) =>
+      CompareUnresolved(
+        id: '${json['id'] ?? ''}',
+        reason: '${json['reason'] ?? 'This property could not be resolved.'}',
+      );
+}
+
+/// One recorded fact about how a property sits against a requirement the
+/// signed-in entrepreneur saved. It carries no number on purpose: a fit row is
+/// a statement about two recorded values, never a score, weight or probability,
+/// and it is kept apart from the research index in every layout.
+class CompareFitRow {
+  final String key;
+  final String label;
+  final String status;
+  final String detail;
+
+  const CompareFitRow({
+    required this.key,
+    required this.label,
+    required this.status,
+    required this.detail,
+  });
+
+  /// Whether the backend could actually compare two recorded values. The other
+  /// statuses say a side of the comparison is missing, which the UI must show
+  /// as plainly as a mismatch.
+  bool get checked => status == 'meets' || status == 'outside' || status == 'differs';
+  bool get satisfied => status == 'meets';
+
+  String get statusLabel => switch (status) {
+    'meets' => 'Within your requirement',
+    'outside' => 'Outside your requirement',
+    'differs' => 'Differs from your requirement',
+    'not_stated' => 'Not in your requirements',
+    'not_recorded' => 'Not recorded for this property',
+    'not_capturable' => 'Cannot be checked',
+    _ => 'Not available',
+  };
+
+  factory CompareFitRow.fromJson(Map<String, dynamic> json) => CompareFitRow(
+    key: '${json['key'] ?? ''}',
+    label: '${json['label'] ?? ''}',
+    status: '${json['status'] ?? ''}',
+    detail: '${json['detail'] ?? 'Not available'}',
+  );
+}
+
+/// What the fit rows are measured against, and what they deliberately skip.
+class CompareFitBasis {
+  final bool saved;
+  final String statement;
+  final List<String> notCompared;
+
+  const CompareFitBasis({
+    this.saved = false,
+    this.statement =
+        'No saved business requirements were found for this account, so fit '
+        'against your requirements is not available.',
+    this.notCompared = const [],
+  });
+
+  factory CompareFitBasis.fromJson(Map<String, dynamic> json) =>
+      CompareFitBasis(
+        saved: json['saved'] == true,
+        statement: '${json['statement'] ?? ''}',
+        notCompared: [
+          for (final value in (json['not_compared'] as List? ?? const []))
+            '$value',
+        ],
+      );
+}
+
 /// One shortlisted property with all comparison measurements.
 class CompareProperty {
   final String id;
@@ -83,6 +166,7 @@ class CompareProperty {
   final String researchIndexMeaning;
   final Map<String, CompareMetric> metrics;
   final List<CompareDataGap> dataGaps;
+  final List<CompareFitRow> preferenceFit;
 
   const CompareProperty({
     required this.id,
@@ -107,6 +191,7 @@ class CompareProperty {
     this.researchIndexMeaning = '',
     this.metrics = const {},
     this.dataGaps = const [],
+    this.preferenceFit = const [],
   });
 
   CompareMetric metric(String key) => metrics[key] ?? const CompareMetric();
@@ -160,6 +245,10 @@ class CompareProperty {
       dataGaps: [
         for (final row in (json['data_gaps'] as List? ?? const []))
           if (row is Map<String, dynamic>) CompareDataGap.fromJson(row),
+      ],
+      preferenceFit: [
+        for (final row in (json['preference_fit'] as List? ?? const []))
+          if (row is Map<String, dynamic>) CompareFitRow.fromJson(row),
       ],
     );
   }
@@ -242,21 +331,31 @@ class PropertyCompareResult {
   final int selectedCount;
   final int resolvedCount;
   final List<String> unresolvedIds;
+
+  /// Per-id reason for every unresolved id (empty on older backend responses
+  /// that only reported [unresolvedIds]).
+  final List<CompareUnresolved> unresolvedDetails;
   final List<CompareProperty> properties;
   final List<CompareDifference> differences;
   final List<CompareInsight> insights;
   final List<CompareTradeoff> tradeoffs;
   final List<String> notes;
 
+  /// What each property's fit rows were measured against, and the requirements
+  /// Compare deliberately leaves to Recommendations.
+  final CompareFitBasis fitBasis;
+
   const PropertyCompareResult({
     required this.selectedCount,
     required this.resolvedCount,
     this.unresolvedIds = const [],
+    this.unresolvedDetails = const [],
     this.properties = const [],
     this.differences = const [],
     this.insights = const [],
     this.tradeoffs = const [],
     this.notes = const [],
+    this.fitBasis = const CompareFitBasis(),
   });
 
   factory PropertyCompareResult.fromJson(Map<String, dynamic> json) =>
@@ -266,6 +365,10 @@ class PropertyCompareResult {
         unresolvedIds: [
           for (final value in (json['unresolved_ids'] as List? ?? const []))
             '$value',
+        ],
+        unresolvedDetails: [
+          for (final row in (json['unresolved_details'] as List? ?? const []))
+            if (row is Map<String, dynamic>) CompareUnresolved.fromJson(row),
         ],
         properties: [
           for (final row in (json['properties'] as List? ?? const []))
@@ -284,9 +387,23 @@ class PropertyCompareResult {
             if (row is Map<String, dynamic>) CompareTradeoff.fromJson(row),
         ],
         notes: [for (final value in (json['notes'] as List? ?? const [])) '$value'],
+        fitBasis: json['preference_fit_basis'] is Map
+            ? CompareFitBasis.fromJson(
+                Map<String, dynamic>.from(json['preference_fit_basis'] as Map),
+              )
+            : const CompareFitBasis(),
       );
 
   /// Differences that concern one metric, for grouped comparison rows.
   List<CompareDifference> differencesFor(String metric) =>
       differences.where((item) => item.metric == metric).toList();
+
+  /// The backend's reason a selected id could not be resolved, or null when
+  /// the response did not carry per-id details.
+  String? reasonFor(String id) {
+    for (final row in unresolvedDetails) {
+      if (row.id == id) return row.reason;
+    }
+    return null;
+  }
 }

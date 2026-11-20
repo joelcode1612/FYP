@@ -1,4 +1,4 @@
-import 'package:flutter_test/flutter_test.dart';
+import 'package:test/test.dart';
 import 'package:shared_logic/src/domain/entities/recommendation_search.dart';
 
 /// The search payload batch-enriches every card with `photos` (URL list from

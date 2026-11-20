@@ -56,7 +56,7 @@ class _ProviderProfileMobilePageState
 
   Future<void> _load() async {
     final role = ref.read(authNotifierProvider).user?.role;
-    final me = ServiceLocator.apiClient.get('/api/v1/auth/me');
+    final me = ProviderWorkspaceService.profile();
     final workspace = ProviderListingsService.load(role ?? AppRole.owner);
     final verification = ProviderWorkspaceService.verification();
     final agent = role == AppRole.agent ? _loadAgentSelf() : null;
@@ -82,10 +82,8 @@ class _ProviderProfileMobilePageState
   /// the sections report that they could not be read.
   Future<AgentSelfOverview?> _loadAgentSelf() async {
     try {
-      final response = await ServiceLocator.apiClient.get(
-        '/api/v1/staff/me/listings',
-      );
-      return AgentSelfOverview.fromJson(response);
+      final self = await ServiceLocator.agentListings.selfOverview();
+      return AgentSelfOverview(profile: self.agent, assignments: self.listings);
     } catch (_) {
       return null;
     }
@@ -474,12 +472,13 @@ class _ProviderProfileMobilePageState
 }
 
 // ---------------------------------------------------------------------------
-// Agent self overview (wire shape of GET /api/v1/staff/me/listings)
+// Agent self overview (read model of GET /api/v1/staff/me/listings)
 // ---------------------------------------------------------------------------
 
 /// The authenticated agent's own profile row plus the listings the backend
-/// authorizes them to manage. Both come from the one authorized call; nothing
-/// here is inferred from the signup selection.
+/// authorizes them to manage. Both come from the one authorized call, mapped
+/// by `ApiAgentListingRepository.selfOverview()`; nothing here is inferred from
+/// the signup selection.
 class AgentSelfOverview {
   const AgentSelfOverview({required this.profile, required this.assignments});
 
@@ -491,21 +490,6 @@ class AgentSelfOverview {
   /// One row per assigned listing, already joined with the server-derived
   /// `management` block (who is authorized to manage it and why).
   final List<Map<String, dynamic>> assignments;
-
-  static Map<String, dynamic>? _map(Object? value) =>
-      value is Map<String, dynamic> ? value : null;
-
-  factory AgentSelfOverview.fromJson(Map<String, dynamic> json) {
-    return AgentSelfOverview(
-      profile: _map(json['agent']),
-      assignments: [
-        for (final row
-            in (json['listings'] as List? ?? const [])
-                .whereType<Map<String, dynamic>>())
-          row,
-      ],
-    );
-  }
 
   String? get agentName {
     final name = '${profile?['agent_name'] ?? ''}'.trim();

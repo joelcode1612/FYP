@@ -628,6 +628,10 @@ class FypPropertyRepository:
         ).first()
         return (float(row[0]), float(row[1])) if row else None
 
+    def property_coords(self, property_id: int) -> tuple[float, float] | None:
+        """Public coordinate lookup for callers outside this repository."""
+        return self._coords(property_id)
+
     @staticmethod
     def _validate_radius(radius_m: int) -> None:
         if radius_m not in _ALLOWED_RADII_M:

@@ -73,6 +73,13 @@ abstract final class ServiceLocator {
   /// shows the new record instead of the list captured on first build.
   static final ValueNotifier<int> listingsRevision = ValueNotifier<int>(0);
 
+  /// The signed-in account's own profile record (`PATCH /api/v1/users/me`).
+  ///
+  /// The provider profile sheet's only write goes through here so the field
+  /// list stays in one place: the backend answers 403 for a payload that
+  /// touches email, role or status, and this repository cannot express them.
+  static final ApiUserRepository userRepo = ApiUserRepository(apiClient);
+
   /// Owner / Agent listing management over the existing staff endpoints
   /// (`GET /api/v1/staff/me/listings`, proposals, change requests, photos).
   ///

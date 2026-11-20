@@ -68,6 +68,7 @@ export 'src/domain/repositories/recommendation_repository.dart';
 export 'src/domain/repositories/recommendation_search_repository.dart';
 export 'src/domain/repositories/saved_properties_repository.dart';
 export 'src/domain/repositories/staff_mfa_repository.dart';
+export 'src/domain/services/location_analysis_rules.dart';
 export 'src/domain/services/panorama_stitcher.dart';
 
 // --- Domain: use cases ------------------------------------------------------

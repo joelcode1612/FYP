@@ -4,9 +4,15 @@ import 'package:sitewise_jaspr_web/data/navigation.dart';
 
 /// Admin navigation + user-directory mapping (spec 3 + 6).
 void main() {
-  test('admin sidebar has exactly the four approved destinations', () {
+  test('admin sidebar has exactly the five approved destinations', () {
     final routes = webDestinationsFor(AppRole.admin).map((d) => d.route).toList();
-    expect(routes, ['/admin', '/admin/users', '/admin/agents', '/admin/listings']);
+    expect(routes, [
+      '/admin',
+      '/admin/users',
+      '/admin/agents',
+      '/admin/listings',
+      '/admin/activity',
+    ]);
   });
 
   group('user directory mapping', () {

@@ -11,16 +11,14 @@ import logging
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlmodel import Session
-
 from sitewise.api.v1.staff import _record_audit
 from sitewise.core.exceptions import ForbiddenActionError
 from sitewise.core.supabase_admin import SupabaseAdminError, get_admin_service
-from sitewise.db.session import get_db
 from sitewise.dependencies import (
     ActiveUser,
     AuthenticatedUser,
     CurrentUser,
+    get_user_service,
     require_admin_mfa,
 )
 from sitewise.domain import rbac
@@ -77,7 +75,7 @@ def get_own_status(user: ActiveUser) -> dict:
 def update_own_profile(
     data: dict,
     user: CurrentUser,
-    session: Session = Depends(get_db),
+    service: UserService = Depends(get_user_service),
 ) -> dict:
     """Update permitted personal fields.
 
@@ -86,7 +84,7 @@ def update_own_profile(
     rather than being silently ignored.
     """
     try:
-        updated = UserService(session).update_own_profile(user.user_id, data)
+        updated = service.update_own_profile(user.user_id, data)
     except ForbiddenActionError as exc:
         raise HTTPException(status_code=403, detail=str(exc)) from exc
     if updated is None:
@@ -103,10 +101,9 @@ def update_own_profile(
 def list_users(
     offset: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=200),
-    session: Session = Depends(get_db),
+    service: UserService = Depends(get_user_service),
     _: AuthenticatedUser = Depends(require_admin_mfa),
 ) -> list[dict]:
-    service = UserService(session)
     # One grouped query for the whole page, never one query per account.
     counts = service.listing_counts_by_owner()
     return [
@@ -118,10 +115,9 @@ def list_users(
 @router.get("/{user_id}")
 def get_user(
     user_id: uuid.UUID,
-    session: Session = Depends(get_db),
+    service: UserService = Depends(get_user_service),
     current: AuthenticatedUser = Depends(require_admin_mfa),
 ) -> dict:
-    service = UserService(session)
     target = service.get_user(user_id)
     if not target:
         raise HTTPException(status_code=404, detail="User not found")
@@ -132,7 +128,7 @@ def get_user(
 def admin_update_user(
     user_id: uuid.UUID,
     data: dict,
-    session: Session = Depends(get_db),
+    service: UserService = Depends(get_user_service),
     current: AuthenticatedUser = Depends(require_admin_mfa),
 ) -> dict:
     """Administrative update (account status / profile fields only).
@@ -197,7 +193,6 @@ def admin_update_user(
         )
     data = {key: value for key, value in data.items() if key in allowed_fields}
 
-    service = UserService(session)
     target = service.get_user(user_id)
     if not target:
         raise HTTPException(status_code=404, detail="User not found")
@@ -285,7 +280,7 @@ def admin_update_user(
 @router.delete("/{user_id}", status_code=204, response_model=None)
 def delete_user(
     user_id: uuid.UUID,
-    session: Session = Depends(get_db),
+    service: UserService = Depends(get_user_service),
     current: AuthenticatedUser = Depends(require_admin_mfa),
 ) -> None:
     if user_id == current.user_id:
@@ -294,7 +289,6 @@ def delete_user(
     # the Supabase identity alive, so the "deleted" user re-provisioned a
     # fresh profile on their very next request — an admin action that silently
     # did nothing. An upstream failure fails closed with the mirror untouched.
-    service = UserService(session)
     mirror_exists = service.get_user(user_id) is not None
     admin = get_admin_service()
     try:

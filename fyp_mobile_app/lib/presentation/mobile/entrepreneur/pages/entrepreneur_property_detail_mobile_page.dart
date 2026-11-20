@@ -696,10 +696,35 @@ class _EntrepreneurPropertyDetailMobilePageState
     );
   }
 
+  /// Compare entry point from Property Details.
+  ///
+  /// * already selected → Compare opens and the property stays selected;
+  /// * not selected with room → it is added first, then Compare opens;
+  /// * shortlist full → an understandable message, nothing changes.
+  void _compareAction(String id) {
+    final app = ref.read(appNotifierProvider.notifier);
+    if (app.compared.contains(id)) {
+      _open('/entrepreneur/compare');
+      return;
+    }
+    if (!app.addCompared(id)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'You can compare up to three properties. Remove one from the '
+            'comparison first.',
+          ),
+        ),
+      );
+      return;
+    }
+    _open('/entrepreneur/compare');
+  }
+
   Widget _actions(CommercialProperty p, bool saved) {
+    // Watched (not read once): adding/removing here repaints this button too.
     final compared = ref
-        .read(appNotifierProvider)
-        .compared
+        .watch(appNotifierProvider.select((app) => app.compared))
         .contains(p.id);
     return Column(
       children: [
@@ -709,13 +734,13 @@ class _EntrepreneurPropertyDetailMobilePageState
           onPressed: () => _toggleSaved(p.id, !saved),
         ),
         const SizedBox(height: 8),
+        // Opening Compare NEVER removes the selection. Already selected →
+        // open directly; not selected → add then open; a full shortlist is
+        // explained instead of silently doing nothing.
         SitewiseSecondaryButton(
-          label: compared ? 'In comparison ✓' : 'Add to compare',
+          label: compared ? 'Open comparison ✓' : 'Add to compare',
           icon: Icons.compare_arrows,
-          onPressed: () {
-            ref.read(appNotifierProvider.notifier).toggleCompared(p.id);
-            _open('/entrepreneur/compare');
-          },
+          onPressed: () => _compareAction(p.id),
         ),
         const SizedBox(height: 8),
         SitewiseSecondaryButton(

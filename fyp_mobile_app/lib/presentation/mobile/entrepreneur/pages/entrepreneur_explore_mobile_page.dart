@@ -15,6 +15,7 @@ import '../../../shared/widgets/sitewise_empty_state.dart';
 import '../../../shared/widgets/sitewise_error_state.dart';
 import '../../../shared/widgets/sitewise_map_panel.dart';
 import '../../shell/mobile_app_shell.dart';
+import '../../widgets/compare_shortlist.dart';
 import '../../widgets/m3_kit.dart';
 import '../../widgets/mobile_filter_sheet.dart';
 import '../../widgets/mobile_filter_tile.dart';
@@ -610,7 +611,7 @@ class _EntrepreneurExploreMobilePageState
               onToggleSaved: () => _toggleSaved(p.id),
               compared: appState.compared.contains(p.id),
               onToggleCompare: () =>
-                  ref.read(appNotifierProvider.notifier).toggleCompared(p.id),
+                  toggleComparedWithFeedback(ref, context, p.id),
               onTap: () => _openDetail(p.id),
             );
           },

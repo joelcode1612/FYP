@@ -1,20 +1,20 @@
 {
-  "generated_at": "2026-11-16T11:49:20.731405+00:00",
+  "generated_at": "2026-11-20T00:59:36.623622+00:00",
   "decision": "refuse_to_train",
   "inventory": {
-    "users_total": 180,
-    "preference_snapshots": 6,
-    "saved_properties": 4,
-    "exposed_impressions": 21,
+    "users_total": 19,
+    "preference_snapshots": 1,
+    "saved_properties": 3,
+    "exposed_impressions": 20,
     "paired_positives": 0,
-    "paired_negatives": 21,
+    "paired_negatives": 20,
     "users_with_positives": 0,
     "missing": []
   },
   "blockers": [
     "Only 0 users have exposure-paired positive feedback; 5 required.",
     "Only 0 exposure-paired positives; 25 required.",
-    "Only 21 exposure-paired negatives; 25 required. Negatives come from persisted recommendation_result impressions that were never saved."
+    "Only 20 exposure-paired negatives; 25 required. Negatives come from persisted recommendation_result impressions that were never saved."
   ],
   "policy": "A trained recommender.joblib is only ever written from real, exposure-paired, temporally split feedback with held-out metrics that beat the rule-based baseline. Anything less keeps the transparent rule-based engine."
 }

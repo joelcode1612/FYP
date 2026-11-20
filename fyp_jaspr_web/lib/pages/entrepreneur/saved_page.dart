@@ -3,6 +3,7 @@ import 'package:jaspr/jaspr.dart';
 import 'package:jaspr_riverpod/jaspr_riverpod.dart';
 import 'package:shared_logic/shared_logic.dart';
 
+import '../../components/compare_shortlist.dart';
 import '../../components/property_card.dart';
 import '../../components/ui.dart';
 import '../../data/app_locator.dart';
@@ -98,6 +99,7 @@ class SavedPage extends StatelessComponent {
                     'session.',
                   ),
                 ]),
+                if (compareShortlistStatus(compared) case final status?) status,
                 if (gone.isNotEmpty)
                   div(classes: 'notice notice-warn', [
                     Component.text(

@@ -88,10 +88,10 @@ class _ProviderProfileEditSheetState extends State<ProviderProfileEditSheet> {
       _error = null;
     });
     try {
-      await ServiceLocator.apiClient.patch('/api/v1/users/me', {
-        'full_name': _name.text.trim(),
-        'phone_number': _phone.text.trim(),
-      });
+      await ServiceLocator.userRepo.updateOwnProfile(
+        fullName: _name.text.trim(),
+        phoneNumber: _phone.text.trim(),
+      );
       if (!mounted) return;
       Navigator.of(context).pop(true);
     } catch (error) {
