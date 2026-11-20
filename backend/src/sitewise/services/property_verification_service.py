@@ -270,16 +270,10 @@ class PropertyVerificationService:
             return listing
         if provider_scope.is_agent_role(role):
             agent_id = provider_scope.agent_id_for_user(user_id)
-            if agent_id is not None:
-                assigned = self.session.execute(
-                    text(
-                        "SELECT 1 FROM public.agent_listing_assignment "
-                        "WHERE listing_id = :lid AND agent_id = :aid"
-                    ),
-                    {"lid": property_id, "aid": agent_id},
-                ).first()
-                if assigned is not None:
-                    return listing
+            if agent_id is not None and provider_scope.agent_is_assigned(
+                self.session, listing_id=property_id, agent_id=agent_id
+            ):
+                return listing
         raise ForbiddenError("You can only manage your own property listings.")
 
     def status_for_property(

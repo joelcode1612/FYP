@@ -37,12 +37,15 @@ from sitewise.db.models.user import User
 from sitewise.db.session import get_db
 from sitewise.domain import rbac
 from sitewise.ingestion.state import RefreshState
+from sitewise.repositories.catalog_repository import CatalogRepository
+from sitewise.repositories.favourite_repository import FavouriteRepository
 from sitewise.repositories.fyp_property_repository import FypPropertyRepository
 from sitewise.repositories.geospatial_repository import GeospatialRepository
 from sitewise.repositories.user_repository import UserRepository
 from sitewise.services.explore_service import ExploreService
 from sitewise.services.geospatial_service import GeospatialService
 from sitewise.services.property_management_service import resolve_management
+from sitewise.services.saved_property_service import SavedPropertyService
 from sitewise.services.user_service import UserService
 
 
@@ -167,6 +170,21 @@ def get_explore_service(
         FypPropertyRepository(session),
         RefreshState(session),
         lambda listing_id: resolve_management(session, listing_id=listing_id),
+    )
+
+
+def get_saved_property_service(
+    session: Annotated[Session, Depends(get_db)],
+) -> SavedPropertyService:
+    """Bind the saved-property commands to the favourites and catalogue adapters.
+
+    The catalogue check is passed as a callable, the way Explore's management
+    resolver is, so the service holds no second repository and never a session.
+    """
+    return SavedPropertyService(
+        FavouriteRepository(session),
+        lambda property_ref: CatalogRepository(session).get_property(property_ref)
+        is not None,
     )
 
 
@@ -357,3 +375,6 @@ AgentMfaUser = Annotated[AuthenticatedUser, Depends(require_agent_mfa)]
 AdminMfaUser = Annotated[AuthenticatedUser, Depends(require_admin_mfa)]
 GeospatialServiceImpl = Annotated[GeospatialService, Depends(get_geospatial_service)]
 ExploreServiceImpl = Annotated[ExploreService, Depends(get_explore_service)]
+SavedPropertyServiceImpl = Annotated[
+    SavedPropertyService, Depends(get_saved_property_service)
+]

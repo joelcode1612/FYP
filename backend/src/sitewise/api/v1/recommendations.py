@@ -3,17 +3,17 @@ from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field, model_validator
-from sqlmodel import Session, select
+from sqlmodel import Session
 
 from sitewise.db.analytics_session import get_analytics_db
 from sitewise.db.models.recommendation_result import RecommendationResult
 from sitewise.db.session import get_db
 from sitewise.dependencies import AuthenticatedUser, CurrentUser, get_active_user, require_admin_mfa
 from sitewise.domain import rbac
-from sitewise.repositories.fyp_property_repository import FypPropertyRepository
 from sitewise.services.property_insights_service import (
     PANORAMA_UNAVAILABLE,
     panoramas_by_catalogue_ids,
+    photo_urls_by_catalogue_ids,
 )
 from sitewise.services.recommendation_search_service import (
     SORT_BEST_MATCH,
@@ -167,9 +167,7 @@ def search_recommendations(
         except ManagementLookupError:
             managers = {pid: unavailable_management() for pid in ids}
         try:
-            photo_urls = FypPropertyRepository(
-                operational_db
-            ).get_catalogue_photo_urls_batch(ids)
+            photo_urls = photo_urls_by_catalogue_ids(operational_db, ids)
         except Exception:  # noqa: BLE001 - media must never fail the search
             photo_urls = {}
         panoramas = panoramas_by_catalogue_ids(operational_db, ids)
@@ -346,11 +344,7 @@ def delete_recommendation(
     session: Session = Depends(get_db),
     current: AuthenticatedUser = Depends(get_active_user),
 ):
-    existing = session.exec(
-        select(RecommendationResult).where(
-            RecommendationResult.result_id == result_id
-        )
-    ).first()
+    existing = RecommendationService(session).get_result(result_id)
     if existing is None:
         raise HTTPException(status_code=404, detail="Recommendation not found")
     if existing.user_id != current.user_id and not rbac.can_read_any_user_data(current.role):

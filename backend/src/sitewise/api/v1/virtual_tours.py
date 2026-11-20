@@ -3,14 +3,12 @@ from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from pydantic import BaseModel, Field, field_validator
-from sqlalchemy import text
 from sqlmodel import Session, select
 
 from sitewise.core.exceptions import ForbiddenError
 from sitewise.db.models.virtual_tour import VirtualTour
 from sitewise.db.session import get_db
 from sitewise.dependencies import AuthenticatedUser, require_property_owner
-from sitewise.domain import rbac
 from sitewise.services import provider_scope
 from sitewise.services.virtual_tour_service import VirtualTourService
 
@@ -46,28 +44,13 @@ def _require_owned_listing(
     record on the owner's behalf, so the agent can also read and update the
     tour rows it creates. An agent with no assignment manages nothing.
     """
-    row = session.execute(
-        text("SELECT owner_user_id FROM fyp.rental_properties WHERE id = :pid"),
-        {"pid": property_id},
-    ).first()
-    if row is None:
+    found, allowed = provider_scope.can_manage_listing(
+        session, listing_id=property_id, user_id=current.user_id, role=current.role
+    )
+    if not found:
         raise HTTPException(status_code=404, detail="Property not found.")
-    if rbac.can_administer_users(current.role):
+    if allowed:
         return
-    if row[0] is not None and str(row[0]) == str(current.user_id):
-        return
-    if rbac.has_role(current.role, (rbac.ROLE_AGENT,)):
-        agent_id = provider_scope.agent_id_for_user(current.user_id)
-        if agent_id is not None:
-            assignment = session.execute(
-                text(
-                    "SELECT 1 FROM public.agent_listing_assignment "
-                    "WHERE listing_id = :lid AND agent_id = :aid"
-                ),
-                {"lid": property_id, "aid": agent_id},
-            ).first()
-            if assignment is not None:
-                return
     raise ForbiddenError(
         "You can only manage property listings you own or are assigned to."
     )

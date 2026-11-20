@@ -63,6 +63,7 @@ from sitewise.ml.property_features import FeatureResolutionError, PropertyFeatur
 from sitewise.ml.pu_learning import PULearning
 from sitewise.ml.pu_variant import LEGACY_MODEL_NAME, resolve_variant
 from sitewise.ml.shap_explainer import ShapExplainer
+from sitewise.repositories.fyp_property_repository import FypPropertyRepository
 from sitewise.services import explanation_cache
 from sitewise.services.explanation_cache import ExplanationIdentity, ExplanationJob
 from sitewise.services.explanation_worker import get_explanation_worker
@@ -408,6 +409,19 @@ def panoramas_by_catalogue_ids(
                 ),
             }
     return result
+
+def photo_urls_by_catalogue_ids(
+    session: Any, catalogue_ids: list[str]
+) -> dict[str, list[str]]:
+    """Batched display-photo URLs for search pages.
+
+    The companion of :func:`panoramas_by_catalogue_ids`: ONE query resolves
+    many catalogue ids through the same verified subject-link chain, and an id
+    with no photo is simply absent from the mapping. No error handling here —
+    unlike panoramas, the caller decides whether a media failure may fail the
+    request, and today every search route swallows it.
+    """
+    return FypPropertyRepository(session).get_catalogue_photo_urls_batch(catalogue_ids)
 
 #: Score bands. Wording is deliberately hedged: the index ranks locations
 #: against each other, it does not predict commercial success.

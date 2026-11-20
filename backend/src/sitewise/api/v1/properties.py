@@ -370,14 +370,9 @@ def _agent_manages_listing(
     agent_id = _agent_id_for(session, current.user_id)
     if agent_id is None:
         return False
-    row = session.execute(
-        text(
-            "SELECT 1 FROM public.agent_listing_assignment "
-            "WHERE listing_id = :lid AND agent_id = :aid"
-        ),
-        {"lid": property_id, "aid": agent_id},
-    ).first()
-    return row is not None
+    return provider_scope.agent_is_assigned(
+        session, listing_id=property_id, agent_id=agent_id
+    )
 
 
 def _provider_agent_id(session: Session, current: AuthenticatedUser) -> int | None:

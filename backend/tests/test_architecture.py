@@ -161,13 +161,10 @@ _DATA_ACCESS_RE = re.compile(
 
 LEGACY_ROUTER_DATA_ACCESS = frozenset(
     {
-        "assessments.py",
         "catalog.py",
         "project1_cp07.py",
         "properties.py",
         "property_verification.py",
-        "recommendations.py",
-        "saved_properties.py",
         "staff.py",
         "staff_listings.py",
         "virtual_tours.py",
@@ -220,11 +217,25 @@ def test_service_ports_stay_free_of_adapters_and_frameworks():
         )
 
 
-def test_user_service_is_written_against_its_port():
-    source = _source_of("services", "user_service.py")
-    assert "UserRepositoryPort" in source
-    assert not imports_module(source, "sitewise.repositories")
-    assert not imports_module(source, "sqlmodel")
+#: Use-case services written against a ``services/ports`` contract. Each one
+#: must stay free of the adapter and the ORM session, which leaves exactly one
+#: place allowed to do the wiring: the composition root.
+PORT_BOUND_SERVICES = {
+    "user_service.py": "UserRepositoryPort",
+    "saved_property_service.py": "FavouriteRepositoryPort",
+}
+
+
+def test_port_bound_services_stay_written_against_their_ports():
+    for service_file, port in sorted(PORT_BOUND_SERVICES.items()):
+        source = _source_of("services", service_file)
+        assert port in source, f"services/{service_file} no longer names its {port}"
+        assert not imports_module(source, "sitewise.repositories"), (
+            f"services/{service_file} imports the adapter it abstracts"
+        )
+        assert not imports_module(source, "sqlmodel"), (
+            f"services/{service_file} reaches for the ORM session"
+        )
 
 
 def test_only_the_composition_root_binds_the_user_adapter():
@@ -235,6 +246,22 @@ def test_only_the_composition_root_binds_the_user_adapter():
         assert "UserService(session)" not in source, f"{name} constructs UserService from a session"
         if name in ("users.py", "staff.py"):
             assert "Depends(get_user_service)" in source, f"{name} lost its injected user service"
+
+
+def test_saved_property_router_goes_through_its_service():
+    """The favourites router may only speak to ``SavedPropertyService``.
+
+    Checked as a substitution for the row-level assertions the router used to
+    carry: the status codes and the ``unresolved`` rule are pinned by
+    ``tests/api/test_saved_properties_api.py``, this pins who answers them.
+    """
+    dependencies = _source_of("dependencies.py")
+    assert "SavedPropertyService(" in dependencies
+    assert "FavouriteRepository(session)" in dependencies
+    source = _source_of("api", "v1", "saved_properties.py")
+    assert "SavedPropertyServiceImpl" in source
+    for forbidden in ("FavouriteRepository(", "CatalogRepository(", "select("):
+        assert forbidden not in source, f"saved_properties.py still does {forbidden} inline"
 
 
 def test_staff_role_checks_still_demand_a_verified_mfa_session():

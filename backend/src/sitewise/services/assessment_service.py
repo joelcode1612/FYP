@@ -584,6 +584,15 @@ class AssessmentService:
     def find_by_property(self, user_id: uuid.UUID, property_id: str) -> Assessment | None:
         return self.repo.get_by_user_and_property(user_id, property_id)
 
+    def evidence_for(self, property_id: str) -> dict:
+        """The analysed location evidence backing one catalogue property.
+
+        The report route needs it alongside the assessment; the ``available``
+        contract (an unmeasured property says so, rather than returning zeros)
+        belongs to the catalogue read model and is passed through untouched.
+        """
+        return self.catalog.get_evidence(property_id)
+
     def create_or_resume(self, user_id: uuid.UUID, property_id: str) -> tuple[Assessment, bool]:
         prop = self.catalog.get_property(property_id)
         if prop is None:
