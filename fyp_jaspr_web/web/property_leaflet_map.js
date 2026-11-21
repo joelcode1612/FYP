@@ -11,12 +11,23 @@
  * catchments, and no walking time is ever derived from them.
  *
  * Five layers are offered: Properties, Food Businesses, Nearby Places,
- * Transport, Parking. The page passes their data as a compact JSON array in
- * the ?layers parameter. Each entry carries `m` — whether the layer has stored
- * coordinates. Only a mapped layer can be drawn as pins: the other four exist
- * in this deployment as counts-within-a-radius on the property's feature
- * vector, so they are reported as numbers with an explicit "counts only" tag
- * rather than positioned markers the data cannot justify.
+ * Transport, Parking. The page passes their recorded counts as a compact JSON
+ * array in the ?layers parameter. Each entry carries `m` — whether the layer
+ * is served from a coordinate-carrying source table (all five are; every
+ * marker comes from the nearby-places payload). Recorded research counts and
+ * mapped locations stay separate registers, and the chips show both.
+ *
+ * Individual verified locations arrive separately: the page fetches
+ * /api/v1/catalog/properties/{id}/nearby-places through the authenticated API
+ * and pushes the payload in with `postMessage` (a string-prefixed JSON body,
+ * same-origin only). Each place carries its own category, subtype, operating
+ * status where the source records one, and straight-line distance from the
+ * property's scored coordinate. Recorded totals and mapped locations are kept
+ * apart on purpose: they can legitimately differ (closed or unverified
+ * outlets, deduplication, coordinate gates), and the chips show both numbers
+ * instead of forcing one onto the other. When no message arrives (another
+ * host page, a failed fetch), the map settles back to its recorded-counts
+ * state after a short grace period and never invents pins from absence.
  */
 (() => {
   'use strict';
@@ -62,10 +73,10 @@
   // when the page has no insights payload (for example, an unscored listing).
   const DEFAULT_LAYERS = [
     { k: 'properties', l: 'Properties', c: '#1d4ed8', m: true },
-    { k: 'competitors', l: 'Food Businesses', c: '#d97706', m: false },
-    { k: 'demand_generators', l: 'Nearby Places', c: '#0f9d86', m: false },
-    { k: 'accessibility', l: 'Transport', c: '#7c3aed', m: false },
-    { k: 'parking', l: 'Parking', c: '#475569', m: false }
+    { k: 'competitors', l: 'Food Businesses', c: '#d97706', m: true },
+    { k: 'demand_generators', l: 'Nearby Places', c: '#0f9d86', m: true },
+    { k: 'accessibility', l: 'Transport', c: '#7c3aed', m: true },
+    { k: 'parking', l: 'Parking', c: '#475569', m: true }
   ];
   let layers = DEFAULT_LAYERS;
   try {
@@ -87,6 +98,82 @@
     layers = DEFAULT_LAYERS;
   }
   const active = new Set(layers.map(x => x.k));
+  const layerColor = key => (layers.find(x => x.k === key) || {}).c || '#1d4ed8';
+
+  // -- individual nearby locations (postMessage) ----------------------------
+  // Colours follow the design brief: food orange, education blue, transport
+  // purple, retail teal, office indigo, healthcare red, parking slate. A
+  // possibly-closed food outlet is grey — the distinction the source data
+  // actually supports, not an invented certainty.
+  const SUBTYPE_STYLES = {
+    competitors: { c: '#d97706', g: 'F', l: 'Food business' },
+    SCHOOL: { c: '#2563eb', g: 'E', l: 'School' },
+    UNIVERSITY_COLLEGE: { c: '#2563eb', g: 'E', l: 'University / college' },
+    MALL: { c: '#0f9d86', g: 'R', l: 'Mall' },
+    SUPERMARKET: { c: '#0f9d86', g: 'R', l: 'Supermarket' },
+    RETAIL: { c: '#0f9d86', g: 'R', l: 'Retail shop' },
+    OFFICE: { c: '#4f46e5', g: 'O', l: 'Office' },
+    OFFICE_BUILDING: { c: '#4f46e5', g: 'O', l: 'Office building' },
+    HOSPITAL: { c: '#dc2626', g: 'H', l: 'Hospital / clinic' },
+    BUS: { c: '#7c3aed', g: 'T', l: 'Bus stop' },
+    KTM: { c: '#7c3aed', g: 'T', l: 'KTM rail stop' },
+    LRT: { c: '#7c3aed', g: 'T', l: 'LRT station' },
+    MRT: { c: '#7c3aed', g: 'T', l: 'MRT station' },
+    MONORAIL: { c: '#7c3aed', g: 'T', l: 'Monorail station' },
+    parking: { c: '#475569', g: 'P', l: 'Parking' }
+  };
+  const CLOSED_STYLE = { c: '#94a3b8', g: 'F', l: 'Food business (possibly closed)' };
+  const humanize = value => String(value || '')
+    .replace(/[_/]+/g, ' ').trim().replace(/\b\w/g, ch => ch.toUpperCase());
+
+  let placesPayload = null;
+  let placesSettled = false;
+
+  const styleFor = place => {
+    if (place.category === 'competitors' && place.operating_status === 'possibly_closed') {
+      return CLOSED_STYLE;
+    }
+    return SUBTYPE_STYLES[place.subtype] || SUBTYPE_STYLES[place.category] ||
+      { c: layerColor(place.category), g: '•', l: humanize(place.subtype) || layerLabel(place.category) };
+  };
+  const layerLabel = key => (layers.find(x => x.k === key) || {}).l || key;
+
+  const applyPlaces = payload => {
+    const list = Array.isArray(payload && payload.places) ? payload.places : null;
+    if (!list) return;
+    const kept = [];
+    for (const p of list) {
+      if (!p || typeof p.lat !== 'number' || typeof p.lng !== 'number' ||
+          !Number.isFinite(p.lat) || !Number.isFinite(p.lng) ||
+          typeof p.distance_m !== 'number' ||
+          (p.lat === 0 && p.lng === 0)) continue;
+      kept.push(p);
+    }
+    placesPayload = {
+      places: kept,
+      categories: (payload.categories && typeof payload.categories === 'object')
+        ? payload.categories : {},
+      fetchedRadius: typeof payload.radius_m === 'number' ? payload.radius_m : null
+    };
+    for (const layer of layers) {
+      if (layer.k !== 'properties') placeGroups[layer.k] = groupFor(layer.k);
+    }
+    placesSettled = true;
+    buildChips();
+    render();
+  };
+
+  window.addEventListener('message', e => {
+    // Same-origin only: the payload comes from our own page, never a third party.
+    if (e.origin !== window.location.origin) return;
+    const raw = e.data;
+    if (typeof raw !== 'string' || !raw.startsWith('sitewiseNearbyPlaces:')) return;
+    try {
+      applyPlaces(JSON.parse(raw.slice('sitewiseNearbyPlaces:'.length)));
+    } catch (err) {
+      // A malformed push is ignored; the recorded-counts state stays honest.
+    }
+  });
 
   // -- radius mode ----------------------------------------------------------
   const singleRadii = ['500', '1000', '2000', '3000'];
@@ -137,6 +224,13 @@
     : L.layerGroup();
   markers.addTo(map);
 
+  // One cluster group per nearby-location category, so toggling a layer
+  // removes exactly its own markers and the others keep their clusters.
+  const placeGroups = {};
+  const groupFor = key => placeGroups[key] ?? ((typeof L.markerClusterGroup === 'function')
+    ? L.markerClusterGroup({ chunkedLoading: true, maxClusterRadius: 50, disableClusteringAtZoom: 17 })
+    : L.layerGroup());
+
   let nearby = [];
   const meters = (a, b) => {
     const toR = Math.PI / 180;
@@ -161,6 +255,77 @@
     content.append(name, title, distance);
     marker.bindPopup(content);
     markers.addLayer(marker);
+  };
+
+  const STATUS_TEXT = {
+    likely_open: 'Operating status: likely open',
+    possibly_closed: 'Operating status: possibly closed',
+    unknown: 'Operating status unverified'
+  };
+  const SOURCE_TEXT = {
+    osm: 'OpenStreetMap-derived, deduplicated for this analysis',
+    gtfs: 'official GTFS transit feed'
+  };
+
+  const placePopup = (place, style) => {
+    const content = document.createElement('div');
+    const name = document.createElement('strong');
+    name.textContent = place.name || 'Unnamed place';
+    const kind = document.createElement('div');
+    const kindText = style.l + (place.detail && place.detail !== place.subtype
+      ? ` · ${humanize(place.detail)}` : '');
+    kind.textContent = kindText;
+    const distance = document.createElement('div');
+    distance.textContent = `~${place.distance_m} m straight line`;
+    content.append(name, kind, distance);
+    if (place.operating_status && STATUS_TEXT[place.operating_status]) {
+      const status = document.createElement('div');
+      status.textContent = STATUS_TEXT[place.operating_status];
+      if (place.operating_status === 'possibly_closed') status.className = 'sw-pop__closed';
+      content.append(status);
+      if (place.status_evidence) {
+        const evidence = document.createElement('div');
+        evidence.className = 'sw-pop__muted';
+        evidence.textContent = String(place.status_evidence).slice(0, 140);
+        content.append(evidence);
+      }
+    }
+    if (place.coords_verified === false) {
+      const approximate = document.createElement('div');
+      approximate.className = 'sw-pop__muted';
+      approximate.textContent = 'Location approximate — awaiting coordinate verification';
+      content.append(approximate);
+    }
+    const sourceBits = [];
+    if (place.source) {
+      sourceBits.push(SOURCE_TEXT[place.source] || humanize(place.source));
+    }
+    if (place.observed_at) sourceBits.push(`observed ${String(place.observed_at).slice(0, 10)}`);
+    if (sourceBits.length) {
+      const source = document.createElement('div');
+      source.className = 'sw-pop__muted';
+      source.textContent = `Source: ${sourceBits.join(' · ')}`;
+      content.append(source);
+    }
+    return content;
+  };
+
+  const addPlaceMarker = (place, group) => {
+    const style = styleFor(place);
+    const closed = place.category === 'competitors' &&
+      place.operating_status === 'possibly_closed';
+    const marker = L.marker([place.lat, place.lng], {
+      icon: L.divIcon({
+        className: 'sw-place-icon',
+        html: `<span${closed ? ' class="is-closed"' : ''} style="background:${style.c}">${style.g}</span>`,
+        iconSize: [18, 18],
+        iconAnchor: [9, 9],
+        popupAnchor: [0, -9]
+      }),
+      title: `${style.l} — ${place.name || 'Unnamed place'}`
+    });
+    marker.bindPopup(placePopup(place, style));
+    group.addLayer(marker);
   };
 
   // A permanent label on the ring itself, so the circle is readable without a
@@ -189,6 +354,65 @@
   };
 
   const radiusMeters = () => (single ? Number(radius) : radius === '500' ? 500 : 1000);
+
+  // -- §6/§7 honesty helpers ------------------------------------------------
+  // Recorded counts (insights features) and mapped locations (nearby-places
+  // payload) are deliberately separate numbers. Recorded exists only for the
+  // measured 500 m / 1 km radii; mapped exists wherever verified coordinates
+  // were returned for the current radius.
+  const mappedFor = layer => {
+    if (!placesPayload || layer.k === 'properties') return 0;
+    const limit = radiusMeters();
+    return placesPayload.places.reduce(
+      (n, p) => (p.category === layer.k && p.distance_m <= limit ? n + 1 : n), 0);
+  };
+  const recordedFor = layer => {
+    if (layer.k === 'properties') return null;
+    if (single) {
+      if (radius === '500') return layer.a;
+      if (radius === '1000') return layer.b;
+      return null; // 2 km / 3 km were never measured as recorded counts
+    }
+    if (radius === '500') return layer.a;
+    if (radius === '1000') return layer.b;
+    return layer.a; // "Both" keeps the closer ring's recorded count on the chip
+  };
+  const radiusPhrase = () => {
+    if (single || radius !== 'both') return labelFor[radius];
+    return '500 m and 1 km';
+  };
+  const listNames = items => {
+    const names = items.map(x => x.l);
+    return names.length === 1
+      ? names[0]
+      : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
+  };
+  // User-facing names for notices: full words, correct F&B capitalisation,
+  // no internal category or source vocabulary.
+  const PLAIN_NAMES = {
+    competitors: 'food and beverage businesses',
+    demand_generators: 'nearby places',
+    accessibility: 'public transport stops',
+    parking: 'parking facilities',
+  };
+  const plainNames = items => {
+    const words = items.map(x => PLAIN_NAMES[x.k] || x.l.toLowerCase());
+    return words.length === 1
+      ? words[0]
+      : `${words.slice(0, -1).join(', ')} and ${words[words.length - 1]}`;
+  };
+  const presentStyles = layer => {
+    if (!placesPayload || !active.has(layer.k)) return [];
+    const limit = radiusMeters();
+    const seen = new Map();
+    for (const p of placesPayload.places) {
+      if (p.category !== layer.k || p.distance_m > limit) continue;
+      const s = styleFor(p);
+      const id = `${s.c}|${s.l}`;
+      if (!seen.has(id)) seen.set(id, s);
+    }
+    return [...seen.values()].slice(0, 5);
+  };
 
   const renderRings = () => {
     rings.clearLayers();
@@ -223,10 +447,18 @@
     }
     for (const layer of layers) {
       if (layer.k === 'properties' || !active.has(layer.k)) continue;
-      const text = layer.m
-        ? layer.l
-        : `${layer.l} (${countText(layer)})`;
-      key(layer.c, text);
+      const mapped = mappedFor(layer);
+      if (mapped > 0) {
+        // The subtypes actually inside the current radius get their own keys,
+        // so e.g. a school and a hospital are never one anonymous teal dot.
+        const styles = presentStyles(layer);
+        for (const s of styles) key(s.c, s.l);
+      } else {
+        const text = layer.m
+          ? layer.l
+          : `${layer.l} (${countText(layer)})`;
+        key(layer.c, text);
+      }
     }
   };
 
@@ -237,21 +469,82 @@
     return parts.length ? parts.join(' · ') : 'No information available';
   };
 
+  const categoryState = layer => {
+    if (!placesPayload || !placesPayload.categories) return null;
+    const meta = placesPayload.categories[layer.k];
+    return meta && typeof meta.state === 'string' ? meta.state : null;
+  };
+
   const renderNotice = () => {
     // Tile failures have their own slot; this line is only about layers.
-    const unmapped = layers.filter(x => active.has(x.k) && !x.m);
-    if (!unmapped.length) {
-      notices.layers = '';
-      return paintNotice();
+    const parts = [];
+    if (placesPayload) {
+      const truncated = Object.values(placesPayload.categories)
+        .some(c => c && c.truncated);
+      if (truncated) {
+        parts.push('Large catchment: only the nearest locations per layer are drawn.');
+      }
     }
-    const names = unmapped.map(x => x.l);
-    const listed = names.length === 1
-      ? names[0]
-      : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
-    notices.layers =
-      `For ${listed}, we have nearby totals but not exact map locations. ` +
-      'See the numbers in the map key below.';
+    // A failing source is never converted into an empty map: the layer keeps
+    // its chip, says it could not be read, and the other layers are unaffected.
+    const unavailable = layers.filter(x =>
+      active.has(x.k) && x.k !== 'properties' && categoryState(x) === 'source_unavailable');
+    if (unavailable.length) {
+      parts.push(
+        `We could not load nearby ${listNames(unavailable)} just now. ` +
+        'Other map layers are unaffected.');
+    }
+    const stale = layers.filter(x =>
+      active.has(x.k) && categoryState(x) === 'data_stale');
+    if (stale.length) {
+      parts.push(`${listNames(stale)} timetable data may be out of date.`);
+    }
+    const totalsOnly = layers.filter(x =>
+      active.has(x.k) && x.k !== 'properties' &&
+      categoryState(x) !== 'source_unavailable' &&
+      mappedFor(x) === 0 && (recordedFor(x) ?? 0) > 0);
+    if (totalsOnly.length) {
+      parts.push(
+        `${plainNames(totalsOnly)} ${totalsOnly.length === 1 ? 'has' : 'have'} ` +
+        `been counted nearby, but ${totalsOnly.length === 1 ? 'its' : 'their'} ` +
+        `exact locations are not available on the map within ${radiusPhrase()}.`);
+    }
+    // §7: the recorded research count and the mapped locations are separate
+    // registers (recorded = the analysis feature vector's curated register;
+    // mapped = every verified coordinate returned for this radius), so they
+    // can differ in either direction — say so instead of hiding either number.
+    const mismatched = layers.filter(x =>
+      active.has(x.k) && x.k !== 'properties' &&
+      mappedFor(x) > 0 && (recordedFor(x) ?? 0) > 0 &&
+      mappedFor(x) !== recordedFor(x));
+    if (mismatched.length) {
+      parts.push(
+        `${plainNames(mismatched)}: the counted total and the number of ` +
+        'locations shown on the map come from different sources, so the two ' +
+        'numbers may differ. The map chips show both.');
+    }
+    notices.layers = parts.join(' ');
     paintNotice();
+  };
+
+  const drawPlaces = () => {
+    const limit = radiusMeters();
+    for (const layer of layers) {
+      if (layer.k === 'properties') continue;
+      const group = placeGroups[layer.k];
+      if (!group) continue;
+      group.clearLayers();
+      let count = 0;
+      if (placesPayload && active.has(layer.k)) {
+        for (const p of placesPayload.places) {
+          if (p.category !== layer.k || p.distance_m > limit) continue;
+          addPlaceMarker(p, group);
+          count++;
+        }
+      }
+      if (count > 0 && !map.hasLayer(group)) group.addTo(map);
+      else if (count === 0 && map.hasLayer(group)) map.removeLayer(group);
+    }
   };
 
   const render = () => {
@@ -262,6 +555,7 @@
     if (active.has('properties')) {
       for (const entry of visible) addReferenceMarker(entry);
     }
+    drawPlaces();
     renderLegend();
     renderNotice();
 
@@ -294,7 +588,7 @@
       b.type = 'button';
       b.className = 'chip';
       b.dataset.layer = layer.k;
-      b.dataset.mapped = String(layer.m);
+      b.dataset.mapped = String(layer.m || mappedFor(layer) > 0);
       b.setAttribute('aria-pressed', String(active.has(layer.k)));
 
       const dot = document.createElement('span');
@@ -310,19 +604,50 @@
         count.dataset.count = 'properties';
         b.append(count);
       } else {
-        // The chip badge follows the selected radius; the legend always shows
-        // both totals.
-        const c = radius === '1000' ? layer.b : layer.a;
-        if (typeof c === 'number') {
-          const count = document.createElement('span');
-          count.className = 'chip__count';
-          count.textContent = String(c);
-          b.append(count);
+        // Recorded R (insights features) and mapped M (nearby-places) are
+        // shown together when both exist and differ: "8/11" reads as 8
+        // locations mapped of 11 recorded, and the full sentence lives in
+        // the notice bar. Before the places push settles, the chip shows
+        // only the recorded count — never a premature "totals only".
+        const m = mappedFor(layer);
+        const r = recordedFor(layer);
+        const count = document.createElement('span');
+        count.className = 'chip__count';
+        if (m > 0 && typeof r === 'number' && r > 0 && r !== m) {
+          count.textContent = `${m}/${r}`;
+          b.title = `${m} locations shown on the map of ${r} counted within ${radiusPhrase()}`;
+        } else if (m > 0) {
+          count.textContent = String(m);
+          b.title = typeof r === 'number' && r > 0
+            ? `${m} locations shown on the map within ${radiusPhrase()}; ${r} counted`
+            : `${m} locations shown on the map within ${radiusPhrase()}; no total is available`;
+        } else if (typeof r === 'number') {
+          count.textContent = String(r);
+          if (r > 0) b.title = `${r} counted within ${radiusPhrase()}`;
         }
-        if (!layer.m) {
+        if (m > 0 || typeof r === 'number') b.append(count);
+        if (m > 0) {
+          const tag = document.createElement('span');
+          tag.className = 'chip__tag';
+          tag.textContent = categoryState(layer) === 'data_stale'
+            ? 'may be out of date'
+            : 'mapped';
+          b.append(tag);
+        } else if (placesSettled && categoryState(layer) === 'source_unavailable') {
+          const tag = document.createElement('span');
+          tag.className = 'chip__tag';
+          tag.textContent = 'source unavailable';
+          b.append(tag);
+        } else if (placesSettled && typeof r === 'number' && r > 0) {
           const tag = document.createElement('span');
           tag.className = 'chip__tag';
           tag.textContent = 'totals only';
+          b.append(tag);
+        } else if (placesSettled && typeof r === 'number' && r === 0) {
+          // A measured zero is a real result, not missing information.
+          const tag = document.createElement('span');
+          tag.className = 'chip__tag';
+          tag.textContent = 'none found';
           b.append(tag);
         }
       }
@@ -387,6 +712,16 @@
       render();
     })
     .catch(() => { nearbyLabel.textContent = 'Nearby property locations could not be loaded'; });
+  // If no places push arrives (another host page, a failed fetch), settle the
+  // chips into their recorded-counts state so "totals only" is never a lie of
+  // impatience — and never silently wrong either.
+  setTimeout(() => {
+    if (!placesSettled) {
+      placesSettled = true;
+      buildChips();
+      renderNotice();
+    }
+  }, 4000);
   // Straight-line buffers only, not verified storefront position or travel time.
   setTimeout(() => map.invalidateSize(), 0);
 })();

@@ -202,6 +202,28 @@ def test_role_only_staff_helpers_removed():
     for safe in ("require_admin_mfa", "require_agent_mfa", "get_staff_user"):
         assert hasattr(deps, safe), safe
 
+@pytest.mark.parametrize("owner_role", ["owner", "property_owner"])
+@pytest.mark.parametrize("aal", [None, "aal1"])
+def test_owner_password_only_must_complete_mfa_before_provider(
+    client, cleanup_users, owner_role, aal
+):
+    _, token = _mirror(cleanup_users, role=owner_role, aal=aal)
+    me = client.get("/api/v1/auth/me", headers=auth(token))
+    assert me.status_code == 200, me.text  # MFA screen may read own profile
+    assert me.json()["role"] == "owner"
+    response = client.get("/api/v1/provider/enquiries", headers=auth(token))
+    assert response.status_code == 403, response.text
+    assert response.json()["detail"]["code"] == "staff_mfa_required"
+
+
+def test_owner_with_verified_mfa_can_read_own_provider_inbox(
+    client, cleanup_users
+):
+    _, token = _mirror(cleanup_users, role="owner", aal="aal2")
+    response = client.get("/api/v1/provider/enquiries", headers=auth(token))
+    assert response.status_code == 200, response.text
+
+
 def test_password_only_admin_cannot_use_property_owner_admin_exception(
     client, cleanup_users
 ):

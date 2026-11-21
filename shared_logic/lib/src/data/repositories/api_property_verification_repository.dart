@@ -1,6 +1,7 @@
 import '../../core/network/api_client.dart';
 import '../../domain/entities/property_verification.dart';
 import '../../domain/repositories/property_verification_repository.dart';
+import '../mappers/property_verification_mapper.dart';
 
 /// Live [PropertyVerificationRepository] over the authenticated FastAPI
 /// endpoints (`backend/src/sitewise/api/v1/property_verification.py`):
@@ -17,22 +18,14 @@ class ApiPropertyVerificationRepository
   ApiPropertyVerificationRepository(this._client);
 
   VerificationDocument _document(Map<String, dynamic> payload) =>
-      VerificationDocument.fromJson(
-        payload['data'] is Map<String, dynamic>
-            ? payload['data'] as Map<String, dynamic>
-            : payload,
-      );
+      PropertyVerificationMapper.document(payload);
 
   PropertyVerification _verification(Map<String, dynamic> payload) =>
-      PropertyVerification.fromJson(
-        payload['data'] is Map<String, dynamic>
-            ? payload['data'] as Map<String, dynamic>
-            : payload,
-      );
+      PropertyVerificationMapper.verification(payload);
 
   @override
   Future<VerificationStatusView> statusForProperty(String propertyId) async =>
-      VerificationStatusView.fromJson(
+      PropertyVerificationMapper.statusView(
         await _client.get(
           '/api/v1/properties/$propertyId/verification',
         ),
@@ -88,16 +81,12 @@ class ApiPropertyVerificationRepository
       '/api/v1/staff/properties/',
       query: filters.toQuery(),
     );
-    return VerificationQueuePage.fromJson(
-      response['data'] is Map<String, dynamic>
-          ? response['data'] as Map<String, dynamic>
-          : response,
-    );
+    return PropertyVerificationMapper.queuePage(response);
   }
 
   @override
   Future<VerificationDetail> adminDetail(String propertyId) async =>
-      VerificationDetail.fromJson(
+      PropertyVerificationMapper.detail(
         await _client.get('/api/v1/staff/properties/$propertyId'),
       );
 

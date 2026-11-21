@@ -3,13 +3,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_logic/shared_logic.dart';
 
-import 'application/providers.dart';
-import 'core/bootstrap/app_bootstrap.dart';
-import 'core/bootstrap/startup_trace.dart';
-import 'core/config/mobile_config.dart';
-import 'core/config/mobile_runtime_config.dart';
-import 'core/routing/app_routes.dart';
-import 'core/theme/sitewise_theme.dart';
+import 'package:fyp/core/di/app_providers.dart';
+import 'package:fyp/core/di/app_bootstrap.dart';
+import 'package:fyp/core/utils/startup_trace.dart';
+import 'package:fyp/core/config/mobile_config.dart';
+import 'package:fyp/core/config/mobile_runtime_config.dart';
+import 'package:fyp/core/routing/app_routes.dart';
+import 'package:fyp/core/theme/sitewise_theme.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();

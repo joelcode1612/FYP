@@ -7,16 +7,17 @@ Flow on every protected request:
 2. The verifier validates signature / algorithm / issuer / audience / expiry
    locally against the project JWKS (401 on any failure, 503 when the key
    service is unreachable).
-3. ``get_current_user`` loads - or, on first sign-in, safely provisions - the
-   local application profile keyed by the verified Supabase UUID, and returns
-   an :class:`AuthenticatedUser` bundling the claims and the authoritative
-   local role / account status.
-4. ``get_active_user`` rejects suspended accounts (403).
+3. ``get_current_user`` reads the authoritative Supabase ``public.users``
+   identity row when available and reconciles the local application profile
+   by the verified Supabase UUID. Client metadata may supply a display name
+   only; role and account status come from the authoritative row.
+4. ``get_active_user`` rejects suspended/non-active accounts (403).
 5. ``require_roles(...)`` factories enforce the RBAC matrices from
-   :mod:`sitewise.domain.rbac` (403).
+   :mod:`sitewise.domain.rbac` and the verified ``aal`` claim (403).
 
-The role and account status are ALWAYS read from the local database row -
-never from token metadata, which the client can influence at signup time.
+The local mirror is the request-time enforcement snapshot; it is never
+populated with default privileges after an authoritative profile has been
+read. A missing or invalid authoritative profile fails closed.
 """
 
 from __future__ import annotations
@@ -31,9 +32,20 @@ from sqlmodel import Session
 from sitewise.core.config import settings
 from sitewise.core.exceptions import AuthError, AuthUnavailableError, ForbiddenError
 from sitewise.core.security import SupabaseJWTVerifier, SupabaseUserinfoVerifier, VerifiedToken
+from sitewise.core.supabase_admin import SupabaseAdminError, get_admin_service
 from sitewise.db.models.user import User
 from sitewise.db.session import get_db
 from sitewise.domain import rbac
+from sitewise.ingestion.state import RefreshState
+from sitewise.repositories.catalog_repository import CatalogRepository
+from sitewise.repositories.favourite_repository import FavouriteRepository
+from sitewise.repositories.fyp_property_repository import FypPropertyRepository
+from sitewise.repositories.geospatial_repository import GeospatialRepository
+from sitewise.repositories.user_repository import UserRepository
+from sitewise.services.explore_service import ExploreService
+from sitewise.services.geospatial_service import GeospatialService
+from sitewise.services.property_management_service import resolve_management
+from sitewise.services.saved_property_service import SavedPropertyService
 from sitewise.services.user_service import UserService
 
 
@@ -127,9 +139,59 @@ class AuthenticatedUser:
         return value if isinstance(value, list) else []
 
 
+def get_user_service(session: Annotated[Session, Depends(get_db)]) -> UserService:
+    """Composition root binding the identity use-cases to the SQL adapter.
+
+    This is the only place that pairs ``UserService`` with ``UserRepository``:
+    the service itself is written against
+    :class:`~sitewise.services.ports.user_repository_port.UserRepositoryPort`,
+    so no use-case layer constructs a repository or touches a session.
+    """
+    return UserService(UserRepository(session))
+
+
+def get_geospatial_service(
+    session: Annotated[Session, Depends(get_db)],
+) -> GeospatialService:
+    """Bind the geospatial read model to its row and ingestion-state adapters."""
+    return GeospatialService(GeospatialRepository(session), RefreshState(session))
+
+
+def get_explore_service(
+    session: Annotated[Session, Depends(get_db)],
+) -> ExploreService:
+    """Bind the Explore read model, including its management-resolver seam.
+
+    ``resolve_management`` is its own application function over the same
+    request session, so it is passed as a callable rather than as a second
+    repository: the Explore service never sees a session object.
+    """
+    return ExploreService(
+        FypPropertyRepository(session),
+        RefreshState(session),
+        lambda listing_id: resolve_management(session, listing_id=listing_id),
+    )
+
+
+def get_saved_property_service(
+    session: Annotated[Session, Depends(get_db)],
+) -> SavedPropertyService:
+    """Bind the saved-property commands to the favourites and catalogue adapters.
+
+    The catalogue check is passed as a callable, the way Explore's management
+    resolver is, so the service holds no second repository and never a session.
+    """
+    return SavedPropertyService(
+        FavouriteRepository(session),
+        lambda property_ref: CatalogRepository(session).get_property(property_ref)
+        is not None,
+    )
+
+
 def get_current_user(
     token: Annotated[str, Depends(bearer_token)],
-    session: Annotated[Session, Depends(get_db)],
+    service: Annotated[UserService, Depends(get_user_service)],
+    admin: Annotated[Any, Depends(get_admin_service)],
 ) -> AuthenticatedUser:
     verifier = get_jwt_verifier()
     verified = verifier.verify(token)
@@ -139,12 +201,24 @@ def get_current_user(
         subject = uuid.UUID(verified.subject)
     except ValueError as exc:
         raise AuthError("The token subject is not a valid identity.") from exc
-    service = UserService(session)
+
+    identity_profile: dict[str, Any] | None = None
+    read_profile = getattr(admin, "get_identity_profile", None)
+    if callable(read_profile):
+        try:
+            identity_profile = read_profile(subject)
+        except SupabaseAdminError as exc:
+            raise AuthUnavailableError(
+                "The authoritative identity service is unavailable. Please retry."
+            ) from exc
+
     profile = service.get_or_sync_current(
         user_id=subject,
         email=verified.email,
         full_name=(verified.claims.get("user_metadata") or {}).get("full_name"),
         email_verified=verified.email_verified,
+        identity_profile=identity_profile,
+        identity_required=bool(getattr(admin, "strict_identity", True)),
     )
     return AuthenticatedUser(token=verified, profile=profile)
 
@@ -181,9 +255,10 @@ def require_roles(*allowed):
     ) -> AuthenticatedUser:
         if not rbac.has_role(user.role, tuple(flat)):
             raise ForbiddenError("You do not have permission to perform this action.")
-        # An administrator acting through a broadly scoped dependency still
-        # requires the same signed AAL2 assurance as an admin-only endpoint.
-        if (rbac.canonical_role(user.role) == rbac.ROLE_ADMIN
+        # A verified password session is insufficient for Owner, Agent or
+        # Admin operations even when an endpoint uses a broad role dependency.
+        if ((rbac.canonical_role(user.role) == rbac.ROLE_OWNER
+             or rbac.is_staff(user.role))
                 and user.assurance_level != rbac.REQUIRED_STAFF_AAL):
             raise _staff_mfa_required()
         return user
@@ -198,9 +273,9 @@ def _staff_mfa_required() -> HTTPException:
         detail={
             "code": "staff_mfa_required",
             "message": (
-                "Staff access requires completed multi-factor authentication "
-                "(aal2). Sign in again and complete the TOTP challenge or "
-                "enrollment."
+                "This account must complete multi-factor authentication "
+                "before accessing property-management or staff features. "
+                "Complete the authenticator challenge or enrollment."
             ),
         },
     )
@@ -264,18 +339,16 @@ def require_property_owner(
     ``owner_user_id`` equality, an agent assignment, or an explicit grant — is
     what authorises a specific property.
 
-    Agents reach the SAME surface as the agent side of the Owner / Agent
-    workspace, and an agent account carries mandatory TOTP MFA. The AAL2 check
-    therefore applies to every staff role here, exactly as it does to an
-    administrator: without it the mobile MFA step would be a screen the client
-    chose to show rather than a condition the server enforces. A property
-    owner (``entrepreneur``) is not staff and is not asked for a second factor.
+    Property Owners and Agents share the Provider workspace. Both roles,
+    along with Administrators, require verified TOTP (`aal2`) on property
+    management operations. Entrepreneurs remain exempt from mandatory MFA.
     """
     if not rbac.can_manage_properties(user.role):
         raise ForbiddenError(
             "This action requires a property owner, entrepreneur or agent account."
         )
-    if (rbac.is_staff(user.role)
+    if ((rbac.canonical_role(user.role) == rbac.ROLE_OWNER
+         or rbac.is_staff(user.role))
             and user.assurance_level != rbac.REQUIRED_STAFF_AAL):
         raise _staff_mfa_required()
     return user
@@ -429,3 +502,8 @@ ActiveUser = Annotated[AuthenticatedUser, Depends(get_active_user)]
 StaffUser = Annotated[AuthenticatedUser, Depends(get_staff_user)]
 AgentMfaUser = Annotated[AuthenticatedUser, Depends(require_agent_mfa)]
 AdminMfaUser = Annotated[AuthenticatedUser, Depends(require_admin_mfa)]
+GeospatialServiceImpl = Annotated[GeospatialService, Depends(get_geospatial_service)]
+ExploreServiceImpl = Annotated[ExploreService, Depends(get_explore_service)]
+SavedPropertyServiceImpl = Annotated[
+    SavedPropertyService, Depends(get_saved_property_service)
+]

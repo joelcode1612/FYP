@@ -24,8 +24,30 @@ from typing import Any
 from sqlalchemy import text
 from sqlmodel import Session
 
+from sitewise.db.models.property_verification import can_resubmit
+from sitewise.services.property_verification_service import listing_completeness_errors
+
+#: The verification dimension states that still carry an unanswered staff
+#: request, mirroring
+#: ``PropertyVerificationService._requested_corrections``.
+_NOTE_BEARING = ("rejected", "information_requested")
+#: States where a submitted listing is held for, or has passed, review.
+_AWAITING_REVIEW = ("pending", "under_review")
+
 #: Columns exposed for the assigned-listings screen. Kept aligned with
 #: ``AgentAssignment.fromJson`` (shared_logic) and the admin queue.
+#: ``image_url`` is the listing's primary photograph: the workspace thumbnails
+#: every assigned row, and without it a card cannot show the property it names.
+#: The lateral join is additive display data — a listing with no usable photo
+#: simply reports ``None``.
+#:
+#: The verification joins are the authoritative record behind the Agent task
+#: screen: the listing's own ``verification_status`` says how far the property
+#: got, ``property_verification`` says what each review dimension currently is
+#: (and when it was submitted), and the newest note-bearing listing-dimension
+#: audit row is the administrator's actual feedback. Every one of these is a
+#: READ of an existing record - no task is stored a second time here, so a
+#: decision made by an administrator is reflected the moment this query runs.
 _LIST_SELECT = """
 SELECT
     a.listing_id,
@@ -37,32 +59,117 @@ SELECT
     p.address,
     p.city,
     p.state,
+    p.postcode,
     p.property_type,
     p.rental_price,
     p.size_sqft,
+    p.latitude,
+    p.longitude,
     p.floor_level,
     p.availability,
     p.is_published,
     p.verification_status,
+    p.rejection_reason,
     p.owner_user_id,
+    photo.url AS image_url,
+    pv.listing_status AS verification_listing_status,
+    pv.ownership_status AS verification_ownership_status,
+    pv.latest_note AS verification_latest_note,
+    pv.created_at AS verification_submitted_at,
+    correction.action AS correction_action,
+    correction.reason AS correction_reason,
+    correction.created_at AS correction_at,
     (p.id IS NOT NULL) AS property_exists
-FROM agent_listing_assignment a
+FROM public.agent_listing_assignment a
 LEFT JOIN fyp.rental_properties p ON p.id = a.listing_id
+LEFT JOIN LATERAL (
+    SELECT url FROM fyp.property_photos ph
+    WHERE ph.property_id = p.id
+      AND ph.url IS NOT NULL AND btrim(ph.url) <> ''
+    ORDER BY ph.is_primary DESC NULLS LAST, ph.id ASC
+    LIMIT 1
+) photo ON TRUE
+LEFT JOIN public.property_verification pv ON pv.property_id = p.id
+LEFT JOIN LATERAL (
+    SELECT va.action, va.reason, va.created_at
+    FROM public.verification_audit va
+    WHERE va.property_id = p.id
+      AND va.action IN ('listing_rejected', 'listing_information_requested')
+      AND btrim(coalesce(va.reason, '')) <> ''
+    ORDER BY va.created_at DESC
+    LIMIT 1
+) correction ON TRUE
 """
+
+
+def _task_projection(data: dict[str, Any]) -> dict[str, Any]:
+    """Derive the task state from the records this row actually joins.
+
+    Nothing is invented: an absent verification row or audit row is read as
+    "not reported", which the Agent UI renders as no date and no feedback text
+    rather than a placeholder. ``editable`` is the backend's own lock policy
+    (``can_resubmit`` for the verification dimensions, plus the listing's
+    operational status), so a screen never offers an edit the API would refuse
+    with 409.
+    """
+    stage = (data.get("verification_status") or "").strip()
+    listing_status = data.get("verification_listing_status")
+    ownership_status = data.get("verification_ownership_status")
+
+    data["missing_required_fields"] = (
+        listing_completeness_errors(data) if data.get("property_exists") else []
+    )
+    note_bearing = listing_status in _NOTE_BEARING
+    # Administrator feedback travels with the state that asked for it: the
+    # audit reason when the listing dimension is still rejected or awaiting
+    # information, then the verification row's note, then the operational
+    # column a decision was written to. Surfacing any of them once the
+    # dimension has moved on would nag about a request already answered.
+    feedback = (
+        data.get("correction_reason") if note_bearing else None
+    ) or (data.get("verification_latest_note") if note_bearing else None) or (
+        data.get("rejection_reason") if stage == "rejected" else None
+    )
+    data["correction_reason"] = feedback or None
+    if not note_bearing:
+        # The joined audit row belongs to an earlier, already-resolved pass.
+        data["correction_action"] = None
+        data["correction_at"] = None
+
+    if not data["property_exists"]:
+        data["task_state"] = None
+        data["editable"] = False
+        return data
+
+    if note_bearing or stage == "rejected":
+        state = "corrections"
+    elif stage == "pending" or listing_status in _AWAITING_REVIEW:
+        state = "awaiting_review"
+    elif stage == "approved" or listing_status == "verified":
+        state = "approved"
+    else:
+        state = "draft"
+    data["task_state"] = state
+    data["editable"] = state in ("draft", "corrections") and (
+        listing_status is None
+        or ownership_status is None
+        or can_resubmit(listing_status, ownership_status)
+    )
+    return data
 
 
 def _as_dict(row: Any) -> dict[str, Any]:
     data = dict(row)
-    for key in ("created_at", "updated_at"):
+    for key in ("created_at", "updated_at", "correction_at", "verification_submitted_at"):
         value = data.get(key)
         if value is not None and hasattr(value, "isoformat"):
             data[key] = value.isoformat()
-    for key in ("rental_price", "size_sqft"):
+    for key in ("rental_price", "size_sqft", "latitude", "longitude"):
         value = data.get(key)
         if value is not None:
             data[key] = float(value)
     data["property_exists"] = bool(data.get("property_exists"))
-    return data
+    return _task_projection(data)
 
 
 class AgentAssignmentRepository:
@@ -114,7 +221,7 @@ class AgentAssignmentRepository:
         self.session.execute(
             text(
                 """
-                INSERT INTO agent_listing_assignment
+                INSERT INTO public.agent_listing_assignment
                     (listing_id, agent_id, assigned_by_user_id, created_at, updated_at)
                 VALUES (:lid, :aid, :by, :now, :now)
                 ON CONFLICT (listing_id) DO UPDATE
@@ -137,7 +244,7 @@ class AgentAssignmentRepository:
 
     def unassign(self, listing_id: int) -> bool:
         result = self.session.execute(
-            text("DELETE FROM agent_listing_assignment WHERE listing_id = :lid"),
+            text("DELETE FROM public.agent_listing_assignment WHERE listing_id = :lid"),
             {"lid": int(listing_id)},
         )
         self.session.commit()
@@ -146,7 +253,7 @@ class AgentAssignmentRepository:
     def agent_id_for(self, listing_id: int) -> int | None:
         value = self.session.execute(
             text(
-                "SELECT agent_id FROM agent_listing_assignment "
+                "SELECT agent_id FROM public.agent_listing_assignment "
                 "WHERE listing_id = :lid"
             ),
             {"lid": int(listing_id)},

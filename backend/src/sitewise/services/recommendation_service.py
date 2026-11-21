@@ -18,6 +18,10 @@ class RecommendationService:
     def get_by_user(self, user_id: uuid.UUID) -> list[RecommendationResult]:
         return self.repo.get_by_user_id(user_id)
 
+    def get_result(self, result_id: uuid.UUID) -> RecommendationResult | None:
+        """One stored result by id, so the caller can check ownership first."""
+        return self.repo.get_by_id(result_id)
+
     def list_results(self, offset: int = 0, limit: int = 100) -> list[RecommendationResult]:
         return self.repo.get_all(offset, limit)
 

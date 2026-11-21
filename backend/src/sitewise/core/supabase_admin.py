@@ -275,6 +275,20 @@ class SupabaseAdminService:
         """
         self._gotrue_admin_json("DELETE", f"admin/users/{auth_user_id}/factors/{factor_id}")
 
+    def delete_auth_user(self, auth_user_id: str) -> None:
+        """Delete the Supabase Auth user — the authoritative identity.
+
+        ``public.users`` and every local mirror are downstream of this record:
+        deleting a mirror row while the identity survived let "deleted" users
+        silently re-provision on their next authenticated request. Deletion is
+        idempotent upstream (a missing identity is already gone) and every
+        failure raises :class:`SupabaseAdminError` so the caller can refuse to
+        destroy the local record while the authoritative one lives on.
+        """
+        self._gotrue_admin_json(
+            "DELETE", f"admin/users/{auth_user_id}", not_found_ok=True
+        )
+
     def _gotrue_admin_json(
         self,
         method: str,
@@ -354,7 +368,33 @@ class SupabaseAdminService:
             raise SupabaseAdminError(f"Identity profile write failed: {exc}") from exc
         return (result.data or [{}])[0]
 
-    def update_identity_profile(self, user_id: uuid.UUID | str, data: dict[str, Any]) -> None:
+    def get_identity_profile(self, user_id: uuid.UUID | str) -> dict[str, Any] | None:
+        """Read the authoritative Supabase ``public.users`` identity row.
+
+        Role, account status and email in this row are provisioning facts owned
+        by Supabase. Request-time local mirrors must be reconciled FROM this
+        row, never from client-writable JWT metadata or repository defaults.
+        Returns ``None`` when the authoritative identity row is absent so the
+        caller can fail closed instead of minting a default-privilege profile.
+        """
+        try:
+            result = (
+                self.client.table("users")
+                .select(
+                    "user_id,email,full_name,phone_number,role,account_status,email_verified"
+                )
+                .eq("user_id", str(user_id))
+                .limit(1)
+                .execute()
+            )
+        except Exception as exc:
+            raise SupabaseAdminError(f"Identity profile read failed: {exc}") from exc
+        rows = list(result.data or [])
+        return rows[0] if rows else None
+
+    def update_identity_profile(
+        self, user_id: uuid.UUID | str, data: dict[str, Any]
+    ) -> None:
         """Partial update of the authoritative identity row (role/status)."""
         try:
             (
@@ -733,44 +773,32 @@ class SupabaseAdminService:
         return list(result.data or [])
 
     def list_assigned_listings(self, agent_id: int) -> list[dict[str, Any]]:
-        try:
-            result = (
-                self.client.table("listing")
-                .select("*")
-                .eq("agent_id", agent_id)
-                .order("listing_id")
-                .execute()
-            )
-        except Exception as exc:
-            raise SupabaseAdminError(f"Listing query failed: {exc}") from exc
-        return list(result.data or [])
+        """Retired legacy Supabase ``public.listing`` reader.
+
+        Operational assignments live in local ``public.agent_listing_assignment``
+        and are served by ``AgentAssignmentRepository``. This method remains as
+        an explicit guard so a restored backup cannot silently revive a second
+        operational property source.
+        """
+        raise NotImplementedError(
+            "Legacy Supabase public.listing assignment source is retired; "
+            "use AgentAssignmentRepository and fyp.rental_properties."
+        )
 
     def get_listing(self, listing_id: int) -> dict[str, Any] | None:
-        try:
-            result = (
-                self.client.table("listing")
-                .select("*")
-                .eq("listing_id", listing_id)
-                .limit(1)
-                .execute()
-            )
-        except Exception as exc:
-            raise SupabaseAdminError(f"Listing lookup failed: {exc}") from exc
-        return (result.data or [None])[0]
+        """Retired legacy Supabase ``public.listing`` reader. See above."""
+        raise NotImplementedError(
+            "Legacy Supabase public.listing lookup is retired; use "
+            "fyp.rental_properties through FypPropertyRepository."
+        )
 
     def assign_listing(self, listing_id: int, agent_id: int) -> dict[str, Any]:
-        try:
-            result = (
-                self.client.table("listing")
-                .update({"agent_id": agent_id})
-                .eq("listing_id", listing_id)
-                .execute()
-            )
-        except Exception as exc:
-            raise SupabaseAdminError(f"Listing assignment failed: {exc}") from exc
-        if not result.data:
-            raise NotFoundError("Listing not found.")
-        return result.data[0]
+        """Retired legacy Supabase ``public.listing`` writer. See above."""
+        raise NotImplementedError(
+            "Legacy Supabase public.listing assignment writes are retired; "
+            "use AgentAssignmentRepository with an administrator-controlled "
+            "assignment workflow."
+        )
 
     def insert_listing_verification(
         self,

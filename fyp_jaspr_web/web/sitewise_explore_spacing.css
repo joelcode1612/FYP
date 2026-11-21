@@ -1,0 +1,77 @@
+﻿/* SiteWise Explore — Improved Layout */
+
+.swcx-page {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  min-width: 0;
+}
+
+.swcx-filters {
+  padding: 24px;
+  border-radius: 16px;
+}
+
+.swcx-filters .filters {
+  padding-top: 20px;
+}
+
+.swcx-toolbar {
+  padding: 20px 24px;
+  gap: 20px;
+  border-radius: 14px;
+}
+
+.swcx-toolbar-copy {
+  gap: 8px;
+}
+
+.swcx-tools {
+  gap: 12px;
+}
+
+.swcx-layout {
+  gap: 24px;
+}
+
+.swcx-panel-head {
+  padding: 20px 24px;
+  gap: 16px;
+}
+
+.swcx-list-scroll {
+  padding: 20px;
+}
+
+.swcx-property-grid.pgrid {
+  gap: 20px;
+}
+
+.swcx-insights-layout {
+  padding: 24px;
+  gap: 24px;
+}
+
+@media (max-width: 768px) {
+  .swcx-page {
+    gap: 18px;
+  }
+
+  .swcx-filters,
+  .swcx-toolbar {
+    padding: 16px;
+  }
+
+  .swcx-layout {
+    grid-template-columns: 1fr;
+    gap: 18px;
+  }
+
+  .swcx-map-column {
+    position: static;
+  }
+
+  .swcx-list-scroll {
+    padding: 12px;
+  }
+}

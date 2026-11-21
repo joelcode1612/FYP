@@ -1,6 +1,8 @@
 import '../../core/network/api_client.dart';
 import '../../domain/entities/owner_listing.dart';
 import '../../domain/entities/property_enrichment.dart';
+import '../../domain/repositories/owner_listing_repository.dart';
+import '../mappers/owner_listing_mapper.dart';
 
 /// Live owner-listing lifecycle over the authenticated FastAPI endpoints
 /// (`backend/src/sitewise/api/v1/properties.py`):
@@ -15,7 +17,7 @@ import '../../domain/entities/property_enrichment.dart';
 /// draft → pending → approved/rejected lifecycle is enforced by the backend.
 /// Submitting for verification and reading the verification state live in
 /// [property_verification_repository.dart] (same backend subsystem).
-class ApiOwnerListingRepository {
+class ApiOwnerListingRepository implements OwnerListingRepository {
   final ApiClient _client;
 
   /// Called after a write the server confirmed (draft saved, photo uploaded,
@@ -40,11 +42,8 @@ class ApiOwnerListingRepository {
     }
   }
 
-  OwnerListing _listing(Map<String, dynamic> payload) => OwnerListing.fromJson(
-        payload['data'] is Map<String, dynamic>
-            ? payload['data'] as Map<String, dynamic>
-            : payload,
-      );
+  OwnerListing _listing(Map<String, dynamic> payload) =>
+      OwnerListingMapper.listing(payload);
 
   /// Creates a NEW server-persisted draft. [fields] uses
   /// [OwnerListing.toDraftJson]; only `name` is required.
@@ -74,11 +73,7 @@ class ApiOwnerListingRepository {
   /// Every listing the signed-in owner has saved, drafts included.
   Future<List<OwnerListing>> myListings() async {
     final response = await _client.get('/api/v1/properties/listings/mine');
-    final rows = (response['data'] as List? ?? const [])
-        .whereType<Map<String, dynamic>>()
-        .map(OwnerListing.fromJson)
-        .toList();
-    return List.unmodifiable(rows);
+    return OwnerListingMapper.list(response);
   }
 
   /// Uploads one property photo (JPG/PNG/WebP, <= 8 MB server-side).
@@ -101,11 +96,7 @@ class ApiOwnerListingRepository {
       bytes: bytes,
       contentType: contentType,
     );
-    final photo = OwnerListingPhoto.fromJson(
-      payload['data'] is Map<String, dynamic>
-          ? payload['data'] as Map<String, dynamic>
-          : payload,
-    );
+    final photo = OwnerListingMapper.photo(payload);
     _mutated();
     return photo;
   }
@@ -113,11 +104,7 @@ class ApiOwnerListingRepository {
   Future<List<OwnerListingPhoto>> photos(String listingId) async {
     final response =
         await _client.get('/api/v1/properties/listings/$listingId/photos');
-    return List.unmodifiable(
-      (response['data'] as List? ?? const [])
-          .whereType<Map<String, dynamic>>()
-          .map(OwnerListingPhoto.fromJson),
-    );
+    return OwnerListingMapper.photos(response);
   }
 
   Future<void> deletePhoto(String listingId, int photoId) async {

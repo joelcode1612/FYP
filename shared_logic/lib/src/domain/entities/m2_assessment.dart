@@ -1,8 +1,8 @@
 /// M2 entrepreneur questionnaire — shared domain model.
 ///
 /// Framework-free (pure Dart) so the Flutter app and the Jaspr web app can both
-/// consume it. The ViewModel lives in `application/notifiers/`, the fixtures in
-/// `data/datasources/local/`.
+/// consume it. The ViewModel lives in `application/notifiers/`, the static
+/// item definitions in `domain/data/m2_prototype_data.dart`.
 ///
 /// **Provenance.** Ported from the Jaspr prototype's `lib/prototype/
 /// prototype_data.dart` (version `PROTO-V4-2026-10-28`). That source states

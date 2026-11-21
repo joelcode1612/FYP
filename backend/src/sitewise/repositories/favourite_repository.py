@@ -43,7 +43,7 @@ class FavouriteRepository:
         self.session.commit()
         return True
 
-    def delete_by_user_and_property(self, user_id: uuid.UUID, property_id: int) -> bool:
+    def delete_by_user_and_property(self, user_id: uuid.UUID, property_id: str) -> bool:
         statement = select(FavouriteProperty).where(
             FavouriteProperty.user_id == user_id,
             FavouriteProperty.property_id == property_id,

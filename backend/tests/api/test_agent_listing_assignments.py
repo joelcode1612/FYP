@@ -29,6 +29,7 @@ from sqlmodel import Session
 from sitewise.db.session import engine
 from sitewise.repositories.agent_assignment_repository import (
     AgentAssignmentRepository,
+    _task_projection,
 )
 
 from ..conftest import TEST_EMAIL_DOMAIN, make_token, register_user_id
@@ -532,3 +533,178 @@ def test_proposer_cannot_decide_own_request(
     )
     assert refused.status_code == 403, refused.text
     assert "cannot approve or reject" in refused.json()["detail"].lower()
+
+
+# ---------------------------------------------------------------------------
+# Agent task projection (the mobile Tasks queue reads these fields)
+# ---------------------------------------------------------------------------
+
+
+def _projection_row(**overrides: object) -> dict:
+    """A complete listing row, so a projection test states only what varies."""
+    data = {
+        "property_exists": True,
+        "name": "Projection Test Unit",
+        "address": "1 Test Road",
+        "city": "Kuala Lumpur",
+        "state": "Federal Territory",
+        "postcode": "50000",
+        "property_type": "shop_lot",
+        "rental_price": 8000.0,
+        "size_sqft": 1200.0,
+        "availability": "available",
+        "latitude": 3.14,
+        "longitude": 101.69,
+        "verification_status": "draft",
+        "rejection_reason": None,
+        "verification_listing_status": None,
+        "verification_ownership_status": None,
+        "verification_latest_note": None,
+        "correction_action": None,
+        "correction_reason": None,
+        "correction_at": None,
+    }
+    data.update(overrides)
+    return _task_projection(data)
+
+
+def test_projection_maps_each_record_to_one_task_state():
+    # §3: the four states come from the record, never from an assumption.
+    assert _projection_row(verification_status="draft")["task_state"] == "draft"
+    assert (
+        _projection_row(verification_status="rejected")["task_state"]
+        == "corrections"
+    )
+    assert (
+        _projection_row(
+            verification_status="draft",
+            verification_listing_status="under_review",
+            verification_ownership_status="verified",
+        )["task_state"]
+        == "awaiting_review"
+    )
+    assert (
+        _projection_row(verification_status="approved")["task_state"]
+        == "approved"
+    )
+
+
+def test_projection_locks_editing_exactly_where_the_api_would_refuse_it():
+    """``editable`` mirrors the update endpoint's own policy, so a screen can
+    never offer a PATCH that answers 409."""
+    assert _projection_row(verification_status="draft")["editable"] is True
+    assert (
+        _projection_row(
+            verification_status="rejected",
+            verification_listing_status="rejected",
+            verification_ownership_status="verified",
+        )["editable"]
+        is True
+    )
+    awaiting = _projection_row(
+        verification_status="pending",
+        verification_listing_status="pending",
+        verification_ownership_status="pending",
+    )
+    assert awaiting["task_state"] == "awaiting_review"
+    assert awaiting["editable"] is False
+    # An approved listing is a completed record, not work in progress.
+    assert _projection_row(verification_status="approved")["editable"] is False
+    # A row whose property is gone is never presented as editable.
+    orphan = _projection_row(property_exists=False, verification_status=None)
+    assert orphan["task_state"] is None
+    assert orphan["editable"] is False
+    assert orphan["missing_required_fields"] == []
+
+
+def test_projection_quotes_only_the_feedback_the_administrator_recorded():
+    # While the listing dimension still asks for changes, the audit reason is
+    # the actionable note and it carries its date.
+    rejected = _projection_row(
+        verification_status="rejected",
+        verification_listing_status="rejected",
+        verification_ownership_status="verified",
+        verification_latest_note="Older note.",
+        correction_action="listing_rejected",
+        correction_reason="Floor area does not match the tenancy agreement.",
+        correction_at="2026-10-04T09:12:00+00:00",
+    )
+    assert rejected["correction_reason"] == (
+        "Floor area does not match the tenancy agreement."
+    )
+    assert rejected["correction_action"] == "listing_rejected"
+    assert rejected["correction_at"] == "2026-10-04T09:12:00+00:00"
+
+    # Once the dimension has moved on, nothing is re-surfaced as an open task.
+    resolved = _projection_row(
+        verification_status="pending",
+        verification_listing_status="pending",
+        verification_ownership_status="verified",
+        correction_action="listing_rejected",
+        correction_reason="Floor area does not match the tenancy agreement.",
+        correction_at="2026-10-04T09:12:00+00:00",
+    )
+    assert resolved["correction_reason"] is None
+    assert resolved["correction_action"] is None
+    assert resolved["correction_at"] is None
+
+    # With no verification row at all, the operational column is the record.
+    operational = _projection_row(
+        verification_status="rejected",
+        rejection_reason="Business licence is unreadable.",
+    )
+    assert operational["correction_reason"] == "Business licence is unreadable."
+
+
+def test_projection_lists_the_fields_submission_actually_misses():
+    incomplete = _projection_row(availability=None, rental_price=None)
+    assert incomplete["missing_required_fields"] == ["rental price", "availability"]
+    assert _projection_row()["missing_required_fields"] == []
+    # A present-but-invalid price is reported, not silently passed.
+    assert "a rental price greater than zero" in _projection_row(
+        rental_price=0.0
+    )["missing_required_fields"]
+
+
+def test_me_listings_exposes_the_projection(client, agents, listing_id):
+    _assign(listing_id, AGENT_A_ID)
+    with Session(engine) as session:
+        existing = session.execute(
+            text(
+                "SELECT listing_status, ownership_status FROM property_verification "
+                "WHERE property_id = :lid"
+            ),
+            {"lid": listing_id},
+        ).mappings().first()
+        stage = session.execute(
+            text("SELECT verification_status FROM fyp.rental_properties WHERE id = :lid"),
+            {"lid": listing_id},
+        ).scalar()
+    if existing is not None:
+        # A live verification record: only the invariants are safe to assert.
+        pytest.skip("listing already carries a verification record")
+
+    response = client.get(
+        "/api/v1/staff/me/listings", headers=auth(agents["a"]["token"])
+    )
+    assert response.status_code == 200, response.text
+    row = next(r for r in response.json()["listings"] if r["listing_id"] == listing_id)
+    for key in (
+        "task_state",
+        "editable",
+        "missing_required_fields",
+        "correction_reason",
+        "correction_at",
+        "verification_submitted_at",
+    ):
+        assert key in row, key
+    expected = {
+        "draft": "draft",
+        "pending": "awaiting_review",
+        "approved": "approved",
+        "rejected": "corrections",
+    }.get(stage or "")
+    assert row["task_state"] == expected
+    assert row["editable"] is (expected in ("draft", "corrections"))
+    assert row["verification_submitted_at"] is None
+    assert all(isinstance(f, str) for f in row["missing_required_fields"])

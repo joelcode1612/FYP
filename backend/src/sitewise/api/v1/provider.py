@@ -34,6 +34,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlmodel import Session
 
+from sitewise.api.v1.staff import _admin_service, invitation_accepted_for
 from sitewise.db.session import get_db
 from sitewise.dependencies import (
     AuthenticatedUser,
@@ -50,6 +51,7 @@ from sitewise.services.provider_scope import (
 from sitewise.services.provider_verification_service import (
     REQUIREMENTS,
     ProviderVerificationService,
+    provider_role_for,
 )
 
 logger = logging.getLogger("sitewise.provider_api")
@@ -162,11 +164,36 @@ def provider_performance(session: DbSession, current: ProviderUser) -> dict:
 def provider_verification_status(
     session: DbSession, current: ProviderUser
 ) -> dict:
-    """The caller's own account verification. Never a fabricated decision."""
+    """The caller's own account verification. Never a fabricated decision.
+
+    An agent whose official invitation was accepted and whose account is
+    active is verified from that evidence — this reconciles agents who
+    completed onboarding before verification was synchronised with the
+    invitation lifecycle. Everyone else sees exactly what the records say,
+    and the reconciliation can only ever approve the caller's own row.
+    """
     service = ProviderVerificationService(session)
+    status = service.status_for(user_id=current.user_id, role=current.role)
+    if (
+        status["status"] in ("unsubmitted", "pending")
+        and provider_role_for(current.role) == "agent"
+    ):
+        try:
+            if invitation_accepted_for(_admin_service(), current.email):
+                status = service.verify_from_invitation(
+                    user_id=current.user_id,
+                    role=current.role,
+                    full_name=current.profile.full_name or "",
+                    contact_phone=current.profile.phone_number or "",
+                )
+        except Exception:  # noqa: BLE001 - reconciliation must never void the read
+            logger.exception(
+                "invitation verification reconciliation failed user=%s",
+                current.user_id,
+            )
     return {
         "data": {
-            **service.status_for(user_id=current.user_id, role=current.role),
+            **status,
             "requirements": [dict(item) for item in REQUIREMENTS],
         }
     }

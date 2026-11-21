@@ -109,4 +109,27 @@ class ApiUserRepository implements UserRepository {
       return null;
     }
   }
+
+  /// Save the signed-in account's own profile (`PATCH /api/v1/users/me`).
+  ///
+  /// Only the two self-editable fields are ever sent: the backend answers 403
+  /// for a payload that touches email, role, account status or verification, so
+  /// this signature cannot express them. On success it returns what the server
+  /// stored — callers re-baseline from that instead of from what was typed,
+  /// which is why the response fields are read here rather than passed back.
+  /// A rejected or failed save throws through [ApiClient], as before.
+  Future<({String fullName, String? phoneNumber})> updateOwnProfile({
+    required String fullName,
+    String? phoneNumber,
+  }) async {
+    final response = await _client.patch('/api/v1/users/me', {
+      'full_name': fullName,
+      // Omitted, not nulled: an absent field leaves the stored number alone.
+      if (phoneNumber != null) 'phone_number': phoneNumber,
+    });
+    return (
+      fullName: response['full_name'] as String? ?? fullName,
+      phoneNumber: response['phone_number'] as String? ?? phoneNumber,
+    );
+  }
 }

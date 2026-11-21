@@ -699,6 +699,22 @@ class RecommendationGenerationService:
             "fnb_concept": profile.fnb_concept,
             "service_model": profile.service_model,
             "preferences_version": profile.preferences_version,
+            # The entrepreneur's own saved inputs, from the SAME profile the
+            # ranking scored — a read-only echo for the property-detail
+            # comparison rows, so no client re-derives or re-reads preferences.
+            "saved_inputs": {
+                "max_rent_myr": profile.max_rent_myr,
+                "min_rent_myr": profile.min_rent_myr,
+                "min_floor_area_sqft": profile.min_floor_area_sqft,
+                "max_floor_area_sqft": profile.max_floor_area_sqft,
+                "preferred_property_types": list(profile.preferred_property_types),
+                "target_customers": list(profile.target_customers),
+                "customer_access_mode": profile.customer_access_mode,
+                "preferred_states": list(profile.preferred_states),
+                "preferred_districts": list(profile.preferred_districts),
+                "parking_requirements": list(profile.parking_requirements),
+                "competition_tolerance": profile.competition_tolerance,
+            },
             # Present tense matters: this is the CURRENTLY saved preference.
             "note": (
                 None

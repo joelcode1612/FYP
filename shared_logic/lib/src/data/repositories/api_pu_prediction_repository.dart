@@ -3,6 +3,7 @@ import '../../domain/entities/full_analysis.dart';
 import '../../domain/entities/pu_feature_coverage.dart';
 import '../../domain/entities/pu_prediction.dart';
 import '../../domain/repositories/pu_prediction_repository.dart';
+import '../mappers/full_analysis_mapper.dart';
 
 /// Live [PuPredictionRepository] over the authenticated read-only research
 /// endpoints (`backend/src/sitewise/api/v1/ml_predictions.py`).
@@ -18,7 +19,9 @@ class ApiPuPredictionRepository implements PuPredictionRepository {
 
   @override
   Future<ResearchModelMetadata> modelMetadata() async =>
-      ResearchModelMetadata.fromJson(await _client.get('/api/v1/ml/model'));
+      FullAnalysisMapper.modelMetadata(
+        await _client.get('/api/v1/ml/model'),
+      );
 
   @override
   Future<PuPrediction> getPropertyPrediction(String propertyId) async =>

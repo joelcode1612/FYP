@@ -15,6 +15,17 @@
 ///   never a success probability.
 /// * `shap` is present only when the verified 47-feature vector resolved;
 ///   `shapStatus.reason` explains every absence.
+
+// ## Wire-decoding compatibility boundary
+//
+// The `fromJson` factories in this library are retained for public API
+// compatibility: `fyp_mobile_app` and `fyp_jaspr_web` call some of them
+// directly, and removing them would require coordinated edits in both apps
+// (outside this package's scope). New transport code must decode through
+// the data-layer mappers (`src/data/mappers/`), which are the authoritative
+// entry points for backend payloads. These factories contain no business
+// rules — they only decode the wire shape, with field names preserved.
+
 library;
 
 /// One ranked result from a generated batch.
@@ -202,6 +213,13 @@ class PersonalisedExplanation {
   /// The finer concept line under [selectedBusinessCategory], when saved.
   final String? selectedFnbConcept;
 
+  /// The entrepreneur's saved preference inputs, echoed by the explanation
+  /// endpoint from the SAME stored profile the ranking scored. Empty when the
+  /// account has no saved preferences or an older backend did not echo them —
+  /// every consumer must treat a missing value as "not stated", never as a
+  /// default.
+  final SavedPreferenceInputs selectedPreferences;
+
   /// Plain-English names for the SHAP features, keyed by the exact technical
   /// feature name. Supplied by the backend so no client keeps its own copy of
   /// the 47-feature label map (and none can drift from the deployed model).
@@ -223,6 +241,7 @@ class PersonalisedExplanation {
     this.featureLabels = const {},
     this.selectedBusinessCategory,
     this.selectedFnbConcept,
+    this.selectedPreferences = const SavedPreferenceInputs(),
   });
 
   /// The friendly label for [feature], falling back to a de-underscored form
@@ -276,8 +295,63 @@ class PersonalisedExplanation {
           (selectedBusiness['fnb_concept'] as String?)?.trim().isNotEmpty == true
               ? selectedBusiness['fnb_concept'] as String
               : null,
+      selectedPreferences: SavedPreferenceInputs.fromJson(
+        (selectedBusiness['saved_inputs'] as Map<String, dynamic>?) ?? const {},
+      ),
     );
   }
+}
+
+/// The entrepreneur's saved preference inputs, echoed by the explanation
+/// endpoint (`selected_business.saved_inputs`) from the profile the ranking
+/// scored. Null means "not stated" — never a default and never a zero.
+class SavedPreferenceInputs {
+  final double? maxRentMyr;
+  final double? minRentMyr;
+  final double? minFloorAreaSqft;
+  final double? maxFloorAreaSqft;
+  final List<String> preferredPropertyTypes;
+  final List<String> targetCustomers;
+  final String? customerAccessMode;
+  final List<String> preferredStates;
+  final List<String> preferredDistricts;
+  final List<String> parkingRequirements;
+  final String? competitionTolerance;
+
+  const SavedPreferenceInputs({
+    this.maxRentMyr,
+    this.minRentMyr,
+    this.minFloorAreaSqft,
+    this.maxFloorAreaSqft,
+    this.preferredPropertyTypes = const [],
+    this.targetCustomers = const [],
+    this.customerAccessMode,
+    this.preferredStates = const [],
+    this.preferredDistricts = const [],
+    this.parkingRequirements = const [],
+    this.competitionTolerance,
+  });
+
+  factory SavedPreferenceInputs.fromJson(Map<String, dynamic> json) =>
+      SavedPreferenceInputs(
+        maxRentMyr: _toDouble(json['max_rent_myr']),
+        minRentMyr: _toDouble(json['min_rent_myr']),
+        minFloorAreaSqft: _toDouble(json['min_floor_area_sqft']),
+        maxFloorAreaSqft: _toDouble(json['max_floor_area_sqft']),
+        preferredPropertyTypes: _toStringList(json['preferred_property_types']),
+        targetCustomers: _toStringList(json['target_customers']),
+        customerAccessMode:
+            (json['customer_access_mode'] as String?)?.trim().isNotEmpty == true
+                ? json['customer_access_mode'] as String
+                : null,
+        preferredStates: _toStringList(json['preferred_states']),
+        preferredDistricts: _toStringList(json['preferred_districts']),
+        parkingRequirements: _toStringList(json['parking_requirements']),
+        competitionTolerance:
+            (json['competition_tolerance'] as String?)?.trim().isNotEmpty == true
+                ? json['competition_tolerance'] as String
+                : null,
+      );
 }
 
 /// One rule-engine component: value (null = unknown, never zero), a plain

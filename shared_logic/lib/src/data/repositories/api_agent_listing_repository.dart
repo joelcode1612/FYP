@@ -43,6 +43,23 @@ class ApiAgentListingRepository implements AgentListingRepository {
         raw: row,
       );
 
+  /// The agent's own profile row next to the raw assignment rows.
+  ///
+  /// `assignedListings()` maps only the listings; the provider profile also
+  /// shows fields of the `agent` row itself (name, company, joined date), so
+  /// the same authorized response is returned unparsed. A column the server
+  /// omits stays absent here — the screen reports it as unavailable instead of
+  /// substituting a value.
+  Future<({Map<String, dynamic>? agent, List<Map<String, dynamic>> listings})>
+  selfOverview() async {
+    final response = await _client.get('/api/v1/staff/me/listings');
+    final agent = response['agent'];
+    return (
+      agent: agent is Map<String, dynamic> ? agent : null,
+      listings: _rows(response, 'listings'),
+    );
+  }
+
   @override
   Future<List<AgentAssignment>> assignedListings() async {
     final response = await _client.get('/api/v1/staff/me/listings');

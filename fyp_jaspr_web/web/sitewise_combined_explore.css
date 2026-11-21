@@ -46,19 +46,26 @@
 .swcx-dot--selected { background:#0f315e; }
 .swcx-dot--near { background:#0d9488; }
 .swcx-dot--other { background:#94a3b8; }
-.swcx-dot--transport { background:#b45309; }
-.swcx-transport-block { padding:15px 18px 16px; border-top:1px solid #e2e8f0; }
-.swcx-transport-heading { display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; }
-.swcx-transport-heading h3 { margin:0; font-size:14px; font-weight:750; color:#0f172a; }
-.swcx-transport-heading span { color:#64748b; font-size:11px; }
-.swcx-transport-status { font-size:12px; color:#475569; margin:9px 0 2px; line-height:1.5; }
-.swcx-transport-results { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; margin-top:8px; }
-.swcx-transport-item { display:flex; justify-content:space-between; gap:7px; padding:9px 10px;
-  background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; min-width:0; }
-.swcx-transport-item span { display:grid; gap:2px; min-width:0; }
-.swcx-transport-item strong { font-size:11px; font-weight:750; color:#0f172a; overflow-wrap:anywhere; }
-.swcx-transport-item small { font-size:10px; color:#64748b; }
-.swcx-transport-item b { font-size:11px; color:#0f766e; white-space:nowrap; }
+/* Surrounding-area layer chips: owned by the map script, floating over the
+   basemap inside the mount the framework never re-renders. Same SiteWise
+   blue family as the toolbar tools. */
+.swcx-layers { position:absolute; top:10px; right:10px; z-index:800; display:grid; gap:6px; justify-items:end; max-width:220px; }
+.swcx-layers__label { font:800 10px/1 Archivo,Arial,sans-serif; letter-spacing:.11em; text-transform:uppercase;
+  color:#1d4ed8; background:rgba(255,255,255,.92); border:1px solid #dce5ef; border-radius:9px; padding:6px 9px; }
+.swcx-layer-chip { display:inline-flex; align-items:center; gap:6px; border:1px solid #cbd5e1;
+  border-radius:9px; min-height:32px; padding:5px 9px; background:rgba(255,255,255,.94); color:#334155;
+  font:700 11px/1.2 Archivo,Arial,sans-serif; cursor:pointer; box-shadow:0 1px 5px rgba(12,32,57,.12); }
+.swcx-layer-chip:focus-visible { outline:3px solid #93c5fd; outline-offset:2px; }
+.swcx-layer-chip:hover { border-color:#1d4ed8; }
+.swcx-layer-chip[aria-pressed="false"] { opacity:.55; }
+.swcx-layer-chip__dot { flex:none; width:10px; height:10px; border-radius:50%; }
+.swcx-layer-chip__count { font-weight:800; color:#0f172a; min-width:14px; text-align:right; }
+.swcx-layer-chip__tag { font:650 9px/1 Archivo,Arial,sans-serif; letter-spacing:.04em; color:#475569;
+  background:#eef2f7; border-radius:6px; padding:3px 5px; white-space:nowrap; }
+.swcx-cat-icon { background:transparent; border:0; }
+.swcx-cat-icon span { display:block; width:18px; height:18px; border-radius:50%; color:#fff;
+  border:2px solid #fff; box-shadow:0 1px 6px rgba(12,32,57,.3); font:800 10px/14px Archivo,Arial,sans-serif;
+  text-align:center; box-sizing:content-box; }
 .swcx-list-panel { min-height:470px; }
 .swcx-list-sort { display:flex; justify-content:space-between; align-items:center; padding:11px 18px;
   border-bottom:1px solid #e2e8f0; gap:10px; }
@@ -109,7 +116,7 @@
   .swcx-tools { width:100%; }
   .swcx-tool { flex:1; padding:8px 9px; }
   .swcx-map-canvas { height:370px; }
-  .swcx-property-grid.pgrid, .swcx-insights-layout, .swcx-transport-results { grid-template-columns:1fr; }
+  .swcx-property-grid.pgrid, .swcx-insights-layout { grid-template-columns:1fr; }
   .swcx-panel-head { padding:14px; }
   .swcx-list-scroll { padding:10px; }
 }

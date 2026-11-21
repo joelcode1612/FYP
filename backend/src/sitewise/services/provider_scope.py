@@ -56,6 +56,69 @@ def is_agent_role(role: str) -> bool:
     return rbac.has_role(role, (rbac.ROLE_AGENT,))
 
 
+def listing_owner(session: Session, listing_id: int) -> tuple[bool, Any]:
+    """``(found, owner_user_id)`` for one operational listing.
+
+    Absence is reported separately from a null owner on purpose: an
+    agent-created listing legitimately has ``owner_user_id IS NULL``, and the
+    caller has to tell "no such listing" (404) apart from "not yours" (403).
+    """
+    row = session.execute(
+        text("SELECT owner_user_id FROM fyp.rental_properties WHERE id = :pid"),
+        {"pid": listing_id},
+    ).first()
+    if row is None:
+        return False, None
+    return True, row[0]
+
+
+def agent_is_assigned(session: Session, *, listing_id: int, agent_id: int) -> bool:
+    """True only when an assignment row links this listing to this agent.
+
+    An agent's authority over an existing listing is the assignment, never the
+    account role: one agent can never reach another agent's listings.
+    """
+    row = session.execute(
+        text(
+            "SELECT 1 FROM public.agent_listing_assignment "
+            "WHERE listing_id = :lid AND agent_id = :aid"
+        ),
+        {"lid": listing_id, "aid": agent_id},
+    ).first()
+    return row is not None
+
+
+def can_manage_listing(
+    session: Session,
+    *,
+    listing_id: int,
+    user_id: Any,
+    role: str,
+) -> tuple[bool, bool]:
+    """``(found, allowed)`` — the owner / assigned-agent / admin rule, once.
+
+    Tour reads, panorama uploads and verification submissions all ask the same
+    question of the same two tables, so the predicate lives here rather than in
+    each caller. Ownership is the verified identity, administration is explicit,
+    and an agent is in only through its assignment row: an agent with no
+    assignment manages nothing, and a null owner never matches a caller.
+    """
+    found, owner = listing_owner(session, listing_id)
+    if not found:
+        return False, False
+    if rbac.can_administer_users(role):
+        return True, True
+    if owner is not None and str(owner) == str(user_id):
+        return True, True
+    if is_agent_role(role):
+        agent_id = agent_id_for_user(user_id)
+        if agent_id is not None and agent_is_assigned(
+            session, listing_id=listing_id, agent_id=agent_id
+        ):
+            return True, True
+    return True, False
+
+
 def managed_property_ids(
     session: Session, *, user_id: Any, role: str
 ) -> list[int] | None:
@@ -81,7 +144,7 @@ def managed_property_ids(
         if agent_id is not None:
             assigned = session.execute(
                 text(
-                    "SELECT listing_id FROM agent_listing_assignment "
+                    "SELECT listing_id FROM public.agent_listing_assignment "
                     "WHERE agent_id = :aid"
                 ),
                 {"aid": agent_id},

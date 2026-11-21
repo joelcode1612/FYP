@@ -11,16 +11,14 @@ import logging
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlmodel import Session
-
 from sitewise.api.v1.staff import _record_audit
 from sitewise.core.exceptions import ForbiddenActionError
 from sitewise.core.supabase_admin import SupabaseAdminError, get_admin_service
-from sitewise.db.session import get_db
 from sitewise.dependencies import (
     ActiveUser,
     AuthenticatedUser,
     CurrentUser,
+    get_user_service,
     require_admin_mfa,
 )
 from sitewise.domain import rbac
@@ -77,7 +75,7 @@ def get_own_status(user: ActiveUser) -> dict:
 def update_own_profile(
     data: dict,
     user: CurrentUser,
-    session: Session = Depends(get_db),
+    service: UserService = Depends(get_user_service),
 ) -> dict:
     """Update permitted personal fields.
 
@@ -86,7 +84,7 @@ def update_own_profile(
     rather than being silently ignored.
     """
     try:
-        updated = UserService(session).update_own_profile(user.user_id, data)
+        updated = service.update_own_profile(user.user_id, data)
     except ForbiddenActionError as exc:
         raise HTTPException(status_code=403, detail=str(exc)) from exc
     if updated is None:
@@ -103,10 +101,9 @@ def update_own_profile(
 def list_users(
     offset: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=200),
-    session: Session = Depends(get_db),
+    service: UserService = Depends(get_user_service),
     _: AuthenticatedUser = Depends(require_admin_mfa),
 ) -> list[dict]:
-    service = UserService(session)
     # One grouped query for the whole page, never one query per account.
     counts = service.listing_counts_by_owner()
     return [
@@ -118,10 +115,9 @@ def list_users(
 @router.get("/{user_id}")
 def get_user(
     user_id: uuid.UUID,
-    session: Session = Depends(get_db),
+    service: UserService = Depends(get_user_service),
     current: AuthenticatedUser = Depends(require_admin_mfa),
 ) -> dict:
-    service = UserService(session)
     target = service.get_user(user_id)
     if not target:
         raise HTTPException(status_code=404, detail="User not found")
@@ -132,51 +128,80 @@ def get_user(
 def admin_update_user(
     user_id: uuid.UUID,
     data: dict,
-    session: Session = Depends(get_db),
+    service: UserService = Depends(get_user_service),
     current: AuthenticatedUser = Depends(require_admin_mfa),
 ) -> dict:
-    """Administrative update (role / account status management).
+    """Administrative update (account status / profile fields only).
+
+    ROLES ARE NOT EDITABLE THROUGH THIS ENDPOINT. A role is established by the
+    authorised provisioning workflows (registration, invitation and onboarding)
+    and written through those paths only, so the user-management API refuses
+    any role payload outright — before any identity or local write, with no
+    audit event. The structured ``role_change_not_supported`` detail lets the
+    Admin UI state the policy instead of a generic validation failure.
 
     Administrator-submitted changes skip the self-service field filter but
-    are still validated against the domain role/status vocabularies.
+    are still validated against the domain status vocabulary.
 
     The authoritative Supabase ``public.users`` row and the local enforcement
     mirror live in two databases, so the write cannot be atomic. The order is
     therefore fixed and the failure modes are explicit:
 
     1. Authoritative row first. If it fails, nothing local is touched and the
-       request fails closed - a role change that only half-exists would let an
-       account keep privileges the administrator just removed.
+       request fails closed - a status change that only half-exists would let
+       an account keep a state the administrator just removed.
     2. Local mirror second. If this fails after step 1 succeeded, the response
        is an explicit partial result naming both states. Recovery is to retry
        the same change: the write is idempotent, so retrying converges without
        overwriting or deleting anybody's record.
     3. Audit last. A failed audit write never masks the applied change, and is
        reported as ``audit_recorded: false`` rather than silently claimed.
-       ``null`` means no role/status change happened, so no event was due.
+       ``null`` means no status change happened, so no event was due.
     """
-    if "role" in data and not rbac.is_valid_role(data["role"]):
-        raise HTTPException(status_code=422, detail="Unknown role value.")
+    if "role" in data:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "code": "role_change_not_supported",
+                "message": (
+                    "Roles cannot be changed through user management. A role "
+                    "is assigned by the authorised registration, invitation "
+                    "and onboarding workflows only."
+                ),
+            },
+        )
     if "account_status" in data and not rbac.is_valid_status(data["account_status"]):
         raise HTTPException(status_code=422, detail="Unknown account status value.")
 
-    service = UserService(session)
+    # Defense in depth: even an administrator cannot push arbitrary column
+    # names into the local mirror. Protected identity/role fields are rejected
+    # before either database is touched.
+    allowed_fields = {
+        "account_status",
+        "full_name",
+        "phone_number",
+        "profile_picture_url",
+    }
+    unsupported = sorted(set(data) - allowed_fields)
+    if unsupported:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "code": "unsupported_profile_fields",
+                "message": "These fields cannot be changed: " + ", ".join(unsupported),
+            },
+        )
+    data = {key: value for key, value in data.items() if key in allowed_fields}
+
     target = service.get_user(user_id)
     if not target:
         raise HTTPException(status_code=404, detail="User not found")
-    previous_role = rbac.canonical_role(target.role)
     previous_status = target.account_status
     email = target.email
 
-    # Canonicalise any legacy role value before writing (new rows never use
-    # legacy values).
-    write_data = dict(data)
-    if "role" in write_data:
-        write_data["role"] = rbac.canonical_role(write_data["role"])
-
     admin = get_admin_service()  # AuthUnavailableError -> 503, nothing applied.
     try:
-        admin.update_identity_profile(user_id, write_data)
+        admin.update_identity_profile(user_id, data)
     except SupabaseAdminError as exc:
         raise HTTPException(
             status_code=502,
@@ -187,7 +212,7 @@ def admin_update_user(
         ) from exc
 
     try:
-        updated = service.update_user(user_id, write_data)
+        updated = service.update_user(user_id, data)
     except Exception as exc:
         logger.exception("local mirror update failed after identity sync for %s", user_id)
         updated = None
@@ -198,18 +223,17 @@ def admin_update_user(
     if updated is None:
         # The authoritative row already carries the new values. Say so, and
         # record the partial application instead of pretending it did not happen.
-        partial_role = write_data.get("role", previous_role)
-        partial_status = write_data.get("account_status", previous_status)
-        if partial_role != previous_role or partial_status != previous_status:
+        partial_status = data.get("account_status", previous_status)
+        if partial_status != previous_status:
             _record_audit(
                 admin,
                 affected_user_id=user_id,
                 affected_email=email,
                 performed_by_user_id=current.user_id,
                 performed_by_email=current.email,
-                action="role.changed" if partial_role != previous_role else "status.changed",
-                previous_role=previous_role,
-                new_role=partial_role,
+                action="status.changed",
+                previous_role=rbac.canonical_role(target.role),
+                new_role=rbac.canonical_role(target.role),
                 previous_status=previous_status,
                 new_status=partial_status,
                 details={
@@ -224,24 +248,23 @@ def admin_update_user(
                 "Partially applied: the authoritative identity record was "
                 "updated, but the local access-control record was not "
                 f"({mirror_error}). The account may still be enforced under its "
-                "previous role or status. Submit the same change again to "
+                "previous status. Submit the same change again to "
                 "finish it - no data was deleted or overwritten."
             ),
         )
 
-    new_role = rbac.canonical_role(updated.role)
     new_status = updated.account_status
     audit_recorded: bool | None = None
-    if new_role != previous_role or new_status != previous_status:
+    if new_status != previous_status:
         audit_recorded = _record_audit(
             admin,
             affected_user_id=user_id,
             affected_email=updated.email,
             performed_by_user_id=current.user_id,
             performed_by_email=current.email,
-            action="role.changed" if new_role != previous_role else "status.changed",
-            previous_role=previous_role,
-            new_role=new_role,
+            action="status.changed",
+            previous_role=rbac.canonical_role(updated.role),
+            new_role=rbac.canonical_role(updated.role),
             previous_status=previous_status,
             new_status=new_status,
             details={"identity_synced": True, "local_mirror_updated": True},
@@ -257,13 +280,49 @@ def admin_update_user(
 @router.delete("/{user_id}", status_code=204, response_model=None)
 def delete_user(
     user_id: uuid.UUID,
-    session: Session = Depends(get_db),
+    service: UserService = Depends(get_user_service),
     current: AuthenticatedUser = Depends(require_admin_mfa),
 ) -> None:
     if user_id == current.user_id:
         raise HTTPException(status_code=422, detail="Administrators cannot delete themselves.")
-    if not UserService(session).delete_user(user_id):
+    # Deletion is AUTHORITATIVE-FIRST. Removing only the local mirror row left
+    # the Supabase identity alive, so the "deleted" user re-provisioned a
+    # fresh profile on their very next request — an admin action that silently
+    # did nothing. An upstream failure fails closed with the mirror untouched.
+    mirror_exists = service.get_user(user_id) is not None
+    admin = get_admin_service()
+    try:
+        identity = admin.get_auth_user(str(user_id))
+    except SupabaseAdminError as exc:
+        logger.warning("supabase_lookup_failed user=%s error=%s", user_id, exc)
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "The authoritative identity service could not be reached. "
+                "Nothing was deleted, so the account remains consistent. "
+                "Retry once the identity service is available."
+            ),
+        ) from exc
+    if identity is None and not mirror_exists:
         raise HTTPException(status_code=404, detail="User not found")
+    if identity is not None:
+        try:
+            admin.delete_auth_user(str(user_id))
+        except SupabaseAdminError as exc:
+            logger.warning("supabase_delete_failed user=%s error=%s", user_id, exc)
+            raise HTTPException(
+                status_code=503,
+                detail=(
+                    "The authoritative identity service rejected or could not "
+                    "process the deletion. Nothing was deleted locally, so the "
+                    "account remains consistent. Retry once the identity "
+                    "service is available."
+                ),
+            ) from exc
+    if not service.delete_user(user_id):
+        # Upstream identity confirmed gone; a missing mirror row is the
+        # normal end state, not an error.
+        logger.info("user %s had no local mirror row to delete", user_id)
     return None
 
 

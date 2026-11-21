@@ -30,9 +30,11 @@ from sqlmodel import Session
 from sitewise.db.analytics_session import get_analytics_db
 from sitewise.db.session import get_db
 from sitewise.dependencies import CurrentUser
+from sitewise.ingestion.sources.gtfs_importer import is_transit_stale
 from sitewise.repositories.catalog_repository import PROPERTY_COLUMNS, CatalogRepository
 from sitewise.repositories.fyp_property_repository import FypPropertyRepository
 from sitewise.services.catalog_listing_details_service import CatalogListingDetailsService
+from sitewise.services.nearby_places_service import NearbyPlacesService
 from sitewise.services.property_insights_service import PropertyInsightsService
 from sitewise.services.property_management_service import resolve_management
 
@@ -132,6 +134,68 @@ def get_catalog_property(
     }
 
 
+@router.get("/properties/{property_id}/nearby-places")
+def get_catalog_nearby_places(
+    property_id: str,
+    session: AnalyticsSession,
+    _user: CurrentUser,
+    radius_m: int = Query(default=1000, ge=100, le=3000),
+) -> dict:
+    """Individual verified locations around one listing, for the map's markers.
+
+    The insights endpoint reports how many competitors, nearby places, transit
+    stops and parking facilities fall inside each radius; this endpoint
+    returns the locations those totals describe, each with a stable id, its
+    category and subtype, its coordinate, its source, its operating status
+    where the source records one, the straight-line distance from the
+    catalogue's own coordinate and the date the record was observed. Five
+    categories are served from their real tables: the research catalogue's
+    other properties, F&B outlets, demand-generating POIs, GTFS stops (with
+    each stop's distinct routes and its published scheduled departures —
+    never live arrivals) and parking facilities. A missing listing is 404; a
+    listing without usable coordinates is 200 with honest zero counts, never
+    fabricated places.
+
+    Every category carries an explicit ``state`` — ``mapped``,
+    ``measured_zero``, ``source_unavailable`` or ``data_stale`` (accessibility
+    only, when every official GTFS feed on this host is past the freshness
+    SLA; markers still come back) — so a failed source is never converted
+    into a zero, and one source failing never removes the others.
+    The response's ``distance_method`` names the straight-line spherical
+    computation shared with the score.
+
+    The radius-based aggregate statistics stay owned by the insights payload —
+    nothing here changes them. Recorded totals and mapped locations can
+    legitimately differ (deduplication, operating-status gates, coordinate
+    validation), and the map shows both rather than forcing one onto the other.
+    Large catchments are capped per category at the nearest 800 locations and
+    say so via ``truncated``.
+    """
+    row = CatalogRepository(session).get_property(property_id)
+    if row is None:
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "code": "property_not_found",
+                "message": f"No property with id '{property_id}' exists in the catalogue.",
+            },
+        )
+    # The same coordinate the insights score describes: markers and score must
+    # never disagree about where the property is.
+    lat, lon = row.get("latitude"), row.get("longitude")
+    origin = {"lat": float(lat), "lon": float(lon)} if lat is not None and lon is not None else None
+    # Feed freshness is decided by the importer's status file (missing or
+    # unreadable -> False/unknown), so a corrupt status never fakes staleness.
+    result = NearbyPlacesService(session).nearby(
+        origin["lat"] if origin else None,
+        origin["lon"] if origin else None,
+        radius_m,
+        exclude_property_id=property_id,
+        transit_stale=is_transit_stale(),
+    )
+    return {"property_id": property_id, "origin": origin, **result}
+
+
 @router.get("/properties/{property_id}/evidence")
 def get_catalog_evidence(
     property_id: str,
@@ -166,9 +230,10 @@ def get_catalog_insights(
         default=None,
         max_length=120,
         description=(
-            "The entrepreneur's selected F&B business type. It selects which "
-            "category output the Stage-2 SHAP explanation describes; it never "
-            "changes the general PU association score."
+            "The entrepreneur's stated F&B business type, kept for "
+            "backward compatibility. It is recorded with the response and "
+            "never changes the general PU association score or its SHAP "
+            "explanation."
         ),
     ),
 ) -> dict:
@@ -190,15 +255,13 @@ def get_catalog_insights(
       an explanation;
     * ``explanation.factors`` always carries plain-English labels; the raw
       feature key is present only as ``technical`` for audit;
-    * ``category_model`` is the independent Stage-2 block: its own 54-feature
-      model, its own validation and its own SHAP. When ``business_type`` is
-      supplied, that category is scored and explained even if the model's own
-      top category differs;
+    * ``business_type`` is recorded as the entrepreneur's stated selection; it
+      selects no model output;
     * the score is a research association index, never a success probability.
 
     Computation is expensive (permutation SHAP over 47 or 64 features), so the
     service caches per ``(model version, artifact checksum, resolved feature
-    vector, selected business type)`` and the first request for a property pays
+    vector, stated business type)`` and the first request for a property pays
     the cost.
     """
     row = CatalogRepository(session).get_property(property_id)

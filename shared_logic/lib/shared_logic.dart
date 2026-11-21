@@ -23,6 +23,7 @@ library;
 // --- Domain: entities -------------------------------------------------------
 export 'src/domain/data/add_property_rules.dart';
 export 'src/domain/data/malaysia_locations.dart';
+export 'src/domain/data/m2_prototype_data.dart';
 export 'src/domain/entities/app_role.dart';
 export 'src/domain/entities/agent_listing.dart';
 export 'src/domain/entities/capture_config.dart';
@@ -46,6 +47,7 @@ export 'src/domain/entities/property_verification.dart'
 export 'src/domain/entities/pu_feature_coverage.dart';
 export 'src/domain/entities/pu_prediction.dart';
 export 'src/domain/entities/recommendation.dart';
+export 'src/domain/entities/property_compare.dart';
 export 'src/domain/entities/recommendation_search.dart';
 // The research-question candidate contract (parsing + review rules) is shared
 // so the Jaspr and Flutter review screens cannot disagree about which actions a
@@ -62,14 +64,19 @@ export 'src/domain/repositories/agent_listing_repository.dart';
 export 'src/domain/repositories/auth_repository.dart';
 export 'src/domain/repositories/explore_repository.dart';
 export 'src/domain/repositories/intelligence_repositories.dart';
+export 'src/domain/repositories/m2_questionnaire_repository.dart';
 export 'src/domain/repositories/onboarding_repository.dart';
+export 'src/domain/repositories/owner_listing_repository.dart';
+export 'src/domain/repositories/personalised_recommendation_repository.dart';
 export 'src/domain/repositories/property_repository.dart';
+export 'src/domain/repositories/property_compare_repository.dart';
 export 'src/domain/repositories/property_verification_repository.dart';
 export 'src/domain/repositories/pu_prediction_repository.dart';
 export 'src/domain/repositories/recommendation_repository.dart';
 export 'src/domain/repositories/recommendation_search_repository.dart';
 export 'src/domain/repositories/saved_properties_repository.dart';
 export 'src/domain/repositories/staff_mfa_repository.dart';
+export 'src/domain/services/location_analysis_rules.dart';
 export 'src/domain/services/panorama_stitcher.dart';
 
 // --- Domain: use cases ------------------------------------------------------
@@ -85,7 +92,11 @@ export 'src/data/datasources/local/demo_data.dart';
 export 'src/data/dtos/property_dto.dart';
 export 'src/data/mappers/catalog_property_mapper.dart';
 export 'src/data/mappers/explore_property_mapper.dart';
+export 'src/data/mappers/full_analysis_mapper.dart';
+export 'src/data/mappers/owner_listing_mapper.dart';
+export 'src/data/mappers/personalised_recommendation_mapper.dart';
 export 'src/data/mappers/property_mapper.dart';
+export 'src/data/mappers/property_verification_mapper.dart';
 export 'src/data/models/commercial_property_model.dart';
 export 'src/data/models/location_intelligence_model.dart';
 export 'src/data/models/property_insights_model.dart';
@@ -100,10 +111,12 @@ export 'src/data/repositories/api_owner_property_repository.dart';
 export 'src/data/repositories/api_property_verification_repository.dart';
 export 'src/data/repositories/api_property_repository.dart';
 export 'src/data/repositories/api_pu_prediction_repository.dart';
+export 'src/data/repositories/api_property_compare_repository.dart';
 export 'src/data/repositories/api_recommendation_search_repository.dart';
 export 'src/data/repositories/api_personalised_recommendation_repository.dart';
 export 'src/data/repositories/api_saved_properties_repository.dart';
 export 'src/data/repositories/api_user_repository.dart';
+export 'src/data/repositories/property_insights_repository.dart';
 export 'src/data/repositories/intelligence_repositories_impl.dart';
 export 'src/data/repositories/property_repository_impl.dart';
 export 'src/data/repositories/recommendation_repository_impl.dart';
@@ -134,6 +147,7 @@ export 'src/core/network/api_client.dart';
 //   AdminNotifier        <- AdminViewModel
 export 'src/application/notifiers/app_notifier.dart';
 export 'src/application/notifiers/auth_notifier.dart';
+export 'src/application/notifiers/property_compare_notifier.dart';
 export 'src/application/notifiers/entrepreneur_notifier.dart';
 export 'src/application/notifiers/owner_notifier.dart';
 export 'src/application/notifiers/admin_notifier.dart';
@@ -179,18 +193,19 @@ export 'src/application/services/verification_service.dart';
 export 'src/domain/entities/project1_readiness.dart';
 export 'src/data/repositories/api_project1_read_repository.dart';
 
-// --- M2 assessment: domain, fixtures and ViewModel -------------------------
+// --- M2 assessment: domain item definitions and ViewModel ------------------
 //
 // New feature work uses Riverpod + MVVM: an immutable state object, a
 // `Notifier` ViewModel, and platform bindings supplied by each app
 // (`flutter_riverpod` on mobile, `jaspr_riverpod` on web). This coexists with
 // the Cubits above; those are not migrated yet.
 //
-// The fixtures are PROTOTYPE data (`PROTO-V4-2026-10-28`) — illustrative, not a
-// scientific instrument, not fielded research, not approved benchmarks, and
-// using prototype-local item ids rather than frozen B03 register ids.
+// The item definitions are PROTOTYPE content (`PROTO-V4-2026-10-28`) —
+// illustrative, not a scientific instrument, not fielded research, not
+// approved benchmarks, and using prototype-local item ids rather than frozen
+// B03 register ids. The ViewModel imports them from the domain layer, never
+// from a data adapter.
 export 'src/domain/entities/m2_assessment.dart';
-export 'src/data/datasources/local/m2_prototype_data.dart';
 export 'src/application/notifiers/m2_assessment_notifier.dart';
 export 'src/domain/entities/confirmed_business_review.dart';
 export 'src/data/repositories/api_confirmed_review_repository.dart';

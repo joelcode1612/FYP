@@ -21,14 +21,14 @@ import 'package:jaspr/dom.dart';
 // ambiguous).
 import 'package:jaspr/server.dart';
 
-import 'app.dart';
-import 'data/api_config.dart';
-import 'data/api_proxy.dart';
-import 'data/app_locator.dart';
-import 'data/auth_service.dart';
-import 'data/dev_auth_bypass.dart';
-import 'data/ssr_service.dart';
-import 'data/staff_guard.dart';
+import 'package:sitewise_jaspr_web/app.dart';
+import 'package:sitewise_jaspr_web/core/config/api_config.dart';
+import 'package:sitewise_jaspr_web/core/routing/api_proxy.dart';
+import 'package:sitewise_jaspr_web/core/di/app_locator.dart';
+import 'package:sitewise_jaspr_web/features/authentication/data/auth_service.dart';
+import 'package:sitewise_jaspr_web/features/authentication/data/dev_auth_bypass.dart';
+import 'package:sitewise_jaspr_web/core/routing/ssr_service.dart';
+import 'package:sitewise_jaspr_web/features/authentication/data/staff_guard.dart';
 
 // This file is generated automatically by Jaspr, do not remove or edit.
 import 'main.server.options.dart';

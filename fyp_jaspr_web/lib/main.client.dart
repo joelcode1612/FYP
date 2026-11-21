@@ -13,9 +13,9 @@ import 'dart:async';
 
 import 'package:jaspr/client.dart';
 
-import 'app.dart';
-import 'data/app_locator.dart';
-import 'data/auth_service.dart';
+import 'package:sitewise_jaspr_web/app.dart';
+import 'package:sitewise_jaspr_web/core/di/app_locator.dart';
+import 'package:sitewise_jaspr_web/features/authentication/data/auth_service.dart';
 
 Future<void> main() async {
   Jaspr.initializeApp();
@@ -34,6 +34,10 @@ Future<void> main() async {
     // Anonymous boot: sign-in surfaces report their own errors when the user
     // submits, and protected workspaces redirect to /login (fail closed).
   }
+
+  // The cookie's compare shortlist is scoped to the account that wrote it:
+  // a session that does not match must not inherit someone else's selection.
+  AppLocator.applyAccountScope();
 
   // A signed-in account's saved shortlist comes from the server, not the
   // cookie — merged before mount so the first frame already shows it.

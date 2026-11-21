@@ -6,7 +6,7 @@
 // It prints the grapheme split for short text, long text, punctuation,
 // diacritics, CJK, emoji with modifiers, and ZWJ/flag sequences so the
 // behaviour can be inspected without a browser.
-import 'package:sitewise_jaspr_web/components/letter_reveal.dart';
+import 'package:sitewise_jaspr_web/shared/presentation/components/letter_reveal.dart';
 
 void check(String label, String input, int expected) {
   final parts = splitGraphemes(input);

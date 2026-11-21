@@ -36,10 +36,23 @@ class AppController extends StateController<AppState> {
     setState(state.copyWith(saved: next));
   }
 
+  /// Adds a property to the comparison set.
+  ///
+  /// Returns false when the three-property cap was reached and the set was
+  /// left untouched, so a screen can explain the limit instead of silently
+  /// ignoring the tap. Removing an already selected property always succeeds.
+  bool addCompared(String id) {
+    final next = {...state.compared};
+    if (!next.add(id)) return true;
+    if (next.length > AppState.maxCompare) return false;
+    setState(state.copyWith(compared: next));
+    return true;
+  }
+
   /// Adds or removes a property from the compare set.
   ///
-  /// Preserves the original rule: adding a fourth entry is a no-op rather than
-  /// an error, and removing is always allowed.
+  /// The three-entry cap is enforced by the controller: adding a fourth entry
+  /// is a no-op rather than an error, and removing is always allowed.
   void toggleCompared(String id) {
     final next = {...state.compared};
     if (!next.remove(id)) {

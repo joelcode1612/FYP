@@ -27,7 +27,7 @@ from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy import text
 from sqlmodel import Session
 
-from sitewise.core.supabase_admin import SupabaseAdminService
+from sitewise.core.supabase_admin import SupabaseAdminError, SupabaseAdminService
 from sitewise.db.models.user import User
 from sitewise.db.session import get_db
 from sitewise.dependencies import (
@@ -35,8 +35,12 @@ from sitewise.dependencies import (
     AgentMfaUser,
     CurrentUser,
     _staff_mfa_required,
+    get_user_service,
 )
 from sitewise.domain import rbac
+from sitewise.services.provider_verification_service import (
+    ProviderVerificationService,
+)
 from sitewise.services.user_service import UserService
 from sitewise.repositories.agent_assignment_repository import (
     AgentAssignmentRepository,
@@ -194,7 +198,7 @@ def _company_index(
 
 
 def _agent_records(
-    session: Session,
+    user_service: UserService,
     service: SupabaseAdminService,
     *,
     agent_profiles: list[dict] | None = None,
@@ -216,7 +220,7 @@ def _agent_records(
     companies = _company_index(service, company_rows)
     invitations = _latest_invitations(service, invitation_rows)
     records: list[dict] = []
-    for profile in UserService(session).list_users(limit=500):
+    for profile in user_service.list_users(limit=500):
         if not rbac.has_role(profile.role, (rbac.ROLE_AGENT,)):
             continue
         uid = str(profile.user_id)
@@ -278,7 +282,7 @@ def _resolve_assignment(
 def create_agent(
     payload: CreateAgentRequest,
     admin: AdminMfaUser,
-    session: Session = Depends(get_db),
+    user_service: UserService = Depends(get_user_service),
 ) -> dict:
     """Provision an agent account.
 
@@ -296,7 +300,7 @@ def create_agent(
     # Detect local UUID collisions BEFORE creating/inviting the Supabase user
     # or changing the authoritative Supabase role. No automatic email-based
     # identity merge or primary-key reassignment is permitted.
-    local_profile = UserService(session).get_user_by_email(email)
+    local_profile = user_service.get_user_by_email(email)
     if local_profile is not None and (
         existing is None or str(local_profile.user_id) != str(existing["id"])
     ):
@@ -363,7 +367,7 @@ def create_agent(
     )
 
     # Enforcement mirror in the application database.
-    mirror = UserService(session).ensure_staff_profile(
+    mirror = user_service.ensure_staff_profile(
         user_id=uuid.UUID(auth_user_id),
         email=email,
         full_name=payload.full_name,
@@ -425,10 +429,10 @@ def create_agent(
 @router.get("/agents")
 def list_agents(
     admin: AdminMfaUser,
-    session: Session = Depends(get_db),
+    user_service: UserService = Depends(get_user_service),
 ) -> list[dict]:
     """Agent accounts joined to their company and latest invitation state."""
-    return _agent_records(session, _admin_service())
+    return _agent_records(user_service, _admin_service())
 
 
 # ---------------------------------------------------------------------------
@@ -480,10 +484,26 @@ def _has_verified_totp_factor(service: SupabaseAdminService, auth_user_id: str) 
     )
 
 
+def invitation_accepted_for(service: SupabaseAdminService, email: str) -> bool:
+    """True when the address's newest invitation row is ``accepted``.
+
+    The evidence gate for account verification: only a completed invitation
+    lifecycle counts. An open, expired, revoked or missing invitation is
+    never evidence — agents provisioned without an invite (allow_existing)
+    stay on the submission-review workflow, and merely selecting the agent
+    role verifies nobody.
+    """
+    invitation = _newest_invitation(service, email)
+    if invitation is None:
+        return False
+    return _invitation_state(invitation) == "accepted"
+
+
 @router.post("/onboarding/complete")
 def complete_onboarding(
     user: CurrentUser,
     session: Session = Depends(get_db),
+    user_service: UserService = Depends(get_user_service),
 ) -> dict:
     """Trusted completion of the agent invitation lifecycle.
 
@@ -509,7 +529,6 @@ def complete_onboarding(
         raise _staff_mfa_required()
 
     service = _admin_service()
-    user_service = UserService(session)
     email = str(user.email or "").lower()
 
     # 1. Supabase-verified acceptance evidence: the authoritative proof that
@@ -626,6 +645,21 @@ def complete_onboarding(
         )
         state = "accepted"
 
+    # 6. Account verification: an agent whose official invitation was
+    # accepted and whose activation has completed is verified without a
+    # separate submission. Idempotent; an administrator's rejection is never
+    # overwritten. An agent provisioned without an invitation row
+    # (allow_existing) is not auto-verified and keeps the review workflow.
+    verification_status = ""
+    if invitation is not None and state == "accepted":
+        verification = ProviderVerificationService(session).verify_from_invitation(
+            user_id=user.user_id,
+            role=user.role,
+            full_name=user.profile.full_name or "",
+            contact_phone=user.profile.phone_number or "",
+        )
+        verification_status = verification["status"]
+
     return {
         "account_status": rbac.STATUS_ACTIVE,
         "role": user.role,
@@ -634,6 +668,7 @@ def complete_onboarding(
         "email_confirmed_at": str(accepted_at),
         "activated": activated,
         "audit_recorded": audit_recorded,
+        "account_verification_status": verification_status or None,
     }
 
 
@@ -675,7 +710,7 @@ def create_company(
 @router.get("/summary")
 def staff_summary(
     admin: AdminMfaUser,
-    session: Session = Depends(get_db),
+    user_service: UserService = Depends(get_user_service),
 ) -> dict:
     """Backend-driven KPI values for the agent management page.
 
@@ -683,7 +718,7 @@ def staff_summary(
     company list and invitations table — no client-side sample numbers.
     """
     service = _admin_service()
-    agents = _agent_records(session, service)
+    agents = _agent_records(user_service, service)
     invitations = service.list_invitations()
     return {
         "total_agents": len(agents),
@@ -707,7 +742,7 @@ def staff_summary(
 @router.get("/overview")
 def staff_overview(
     admin: AdminMfaUser,
-    session: Session = Depends(get_db),
+    user_service: UserService = Depends(get_user_service),
 ) -> dict:
     """Agent management snapshot: read each Supabase table only once.
 
@@ -719,7 +754,7 @@ def staff_overview(
     company_rows = service.list_companies()
     invitation_rows = service.list_invitations()
     agents = _agent_records(
-        session, service,
+        user_service, service,
         agent_profiles=agent_profiles,
         company_rows=company_rows,
         invitation_rows=invitation_rows,
@@ -768,7 +803,7 @@ def update_agent_status(
     user_id: uuid.UUID,
     payload: UpdateAgentStatusRequest,
     admin: AdminMfaUser,
-    session: Session = Depends(get_db),
+    user_service: UserService = Depends(get_user_service),
 ) -> dict:
     new_status = payload.validated()
     if new_status not in (rbac.STATUS_ACTIVE, rbac.STATUS_SUSPENDED):
@@ -777,7 +812,6 @@ def update_agent_status(
             detail="Staff account status may only be set to active or suspended.",
         )
     service = _admin_service()
-    user_service = UserService(session)
     target = user_service.get_user(user_id)
     if target is None:
         raise HTTPException(status_code=404, detail="User not found.")
@@ -854,7 +888,7 @@ def list_invitations(admin: AdminMfaUser) -> list[dict]:
 
 @router.post("/invitations/{invitation_id}/revoke")
 def revoke_invitation(
-    invitation_id: uuid.UUID,
+    invitation_id: str,
     admin: AdminMfaUser,
 ) -> dict:
     """Close an open invitation so the address can be invited again.
@@ -863,8 +897,24 @@ def revoke_invitation(
     unique index over ``pending`` / ``sent`` invitations is simply released.
     A closed or unknown invitation is refused rather than silently rewritten.
     """
+    # The live Supabase table uses BIGINT keys, while older migrations used UUID.
+    # Accept both formats without changing the stored ID or relaxing admin/MFA.
+    if invitation_id.isascii() and invitation_id.isdigit():
+        if (len(invitation_id) > 19 or int(invitation_id) < 1
+                or int(invitation_id) > 9223372036854775807):
+            raise HTTPException(status_code=422, detail="Invalid invitation ID.")
+        invite_key = str(int(invitation_id))
+    else:
+        try:
+            invite_key = str(uuid.UUID(invitation_id))
+        except ValueError:
+            raise HTTPException(
+                status_code=422,
+                detail="Invitation ID must be a positive integer or a UUID.",
+            ) from None
+
     service = _admin_service()
-    invitation = service.get_invitation(str(invitation_id))
+    invitation = service.get_invitation(invite_key)
     if invitation is None:
         raise HTTPException(status_code=404, detail="Invitation not found.")
     state = _invitation_state(invitation)
@@ -873,7 +923,7 @@ def revoke_invitation(
             status_code=409,
             detail=f"Only open invitations can be revoked (current state: {state or 'unknown'}).",
         )
-    service.update_invitation(str(invitation_id), {"invitation_status": "revoked"})
+    service.update_invitation(invite_key, {"invitation_status": "revoked"})
     audit_recorded = _record_audit(
         service,
         # The audit table's user_id_affected has an FK to public.users; an
@@ -885,7 +935,7 @@ def revoke_invitation(
         performed_by_email=admin.email,
         action="staff.invitation_revoked",
         details={
-            "invitation_id": str(invitation_id),
+            "invitation_id": invite_key,
             "previous_status": state,
             "invited_user_id": invitation.get("invited_user_id"),
         },
@@ -944,7 +994,29 @@ def list_security_audit(
 
 
 def _agent_profile_or_empty(service: SupabaseAdminService, user_id: uuid.UUID) -> dict | None:
-    return service.get_agent_profile(user_id)
+    """The signed-in agent's Supabase profile, or ``None`` when it has none.
+
+    A profile-service OUTAGE is not "no profile": swallowing it here would
+    turn an authorization-infrastructure failure into a valid-looking empty
+    listing set (the exact silent-empty antipattern). It fails closed with a
+    structured 503 the client renders as a clear error with Retry, while a
+    genuine "this account has no agent profile" still answers 200 with an
+    empty, honest workspace.
+    """
+    try:
+        return service.get_agent_profile(user_id)
+    except SupabaseAdminError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "code": "agent_profile_service_unavailable",
+                "message": (
+                    "The agent profile service is temporarily unavailable, so "
+                    "assigned listings cannot be resolved. Try again shortly."
+                ),
+                "cause": str(exc),
+            },
+        ) from exc
 
 
 @router.get("/me/listings")
@@ -952,21 +1024,45 @@ def my_assigned_listings(
     agent: AgentMfaUser, session: Session = Depends(get_db)
 ) -> dict:
     """Listings assigned to the authenticated agent (valid empty state when
-    there is no agent profile or no assignment - never unrelated listings).
+    there is no agent profile, no agent id, or no assignment - never unrelated
+    listings).
 
     The assignment rows live in ``agent_listing_assignment`` with a REAL
     foreign key to ``fyp.rental_properties(id)``; the Supabase agent profile
     only supplies the ``agent_id`` scope. A row whose operational property
     disappeared is reported with ``property_exists: false`` rather than being
     rendered as a property.
+
+    The raw ``agent`` row carries only ``company_id``, so the associated
+    ``public.company`` name is joined here for display (the profile screens
+    show the real agency name, never the bare id). The join is additive
+    display data: a failed lookup leaves ``company_name`` absent rather than
+    failing the authorized listing read.
     """
     service = _admin_service()
     profile = _agent_profile_or_empty(service, agent.user_id)
     if profile is None:
         return {"agent": None, "listings": []}
-    listings = AgentAssignmentRepository(session).list_for_agent(
-        int(profile["agent_id"])
-    )
+    try:
+        raw_company_id = profile.get("company_id")
+        company = (
+            service.get_company(int(raw_company_id))
+            if raw_company_id is not None
+            else None
+        )
+        if company and company.get("company_name"):
+            profile["company_name"] = company["company_name"]
+    except Exception:  # noqa: BLE001 - display join must never void the listings
+        pass
+    raw_agent_id = profile.get("agent_id")
+    if raw_agent_id is None:
+        # A profile row that resolves to no agent id manages nothing, which is
+        # the same honest empty workspace as having no assignments. It must not
+        # become a 500 here: every other agent-identity reader treats a missing
+        # id as "no scope", and a failure on this read blanked the whole Agent
+        # workspace rather than reporting an empty one.
+        return {"agent": profile, "listings": []}
+    listings = AgentAssignmentRepository(session).list_for_agent(int(raw_agent_id))
     # The derived management state travels with each row so the workspace never
     # has to assume "I am the manager" — a row reassigned elsewhere, or an
     # assignment whose agent account was suspended, is reported truthfully.

@@ -12,17 +12,10 @@ abstract class RecommendationSearchRepository {
   /// instead of silently returning the wrong slice.
   Future<RecommendationSearchPage> search(RecommendationSearchRequest request);
 
-  /// Filter vocabulary and intervals, counted over the listings [request]
-  /// still leaves eligible.
-  ///
-  /// Each field is priced with all the OTHER hard filters applied and only its
-  /// own constraint released, over the same PU-gated population [search]
-  /// ranks — so an option can never match zero listings, and a dropdown's
-  /// counts move when another input changes. Passing the DRAFT selections
-  /// rather than the applied request is what lets the choices update before a
-  /// search runs.
-  ///
-  /// Omitting the request counts over the whole eligible population, which is
-  /// the view a first paint can show before the contextual numbers arrive.
-  Future<RecommendationFacets> facets([RecommendationSearchRequest? request]);
+  /// Filter vocabulary (states, property types, contextual rental/size
+  /// intervals, counts and relaxations) read from the same eligible catalogue
+  /// the search ranks. With [criteria], the backend applies every other hard
+  /// filter and releases each facet's own constraint (leave-one-out); with no
+  /// criteria it describes the full eligible population.
+  Future<RecommendationFacets> facets({RecommendationSearchRequest? criteria});
 }

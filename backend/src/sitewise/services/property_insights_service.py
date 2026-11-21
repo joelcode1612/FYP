@@ -53,14 +53,6 @@ from sqlmodel import Session
 from sitewise.core.exceptions import ModelUnavailableError
 from sitewise.ml import shap_explainer as _shap_module
 from sitewise.ml.feature_bridge import merge_bridge_features
-from sitewise.ml.fnb_category import (
-    CATEGORY_MODEL_NAME,
-    COMPETITOR_CONTEXT_FEATURES,
-    category_explanation,
-    competition_context,
-    match_business_type,
-    predict_categories,
-)
 from sitewise.ml.pu_expanded import (
     EXPANDED_MODEL_NAME,
     expanded_policy_split,
@@ -71,6 +63,7 @@ from sitewise.ml.property_features import FeatureResolutionError, PropertyFeatur
 from sitewise.ml.pu_learning import PULearning
 from sitewise.ml.pu_variant import LEGACY_MODEL_NAME, resolve_variant
 from sitewise.ml.shap_explainer import ShapExplainer
+from sitewise.repositories.fyp_property_repository import FypPropertyRepository
 from sitewise.services import explanation_cache
 from sitewise.services.explanation_cache import ExplanationIdentity, ExplanationJob
 from sitewise.services.explanation_worker import get_explanation_worker
@@ -250,12 +243,13 @@ CATEGORY_SPECS: tuple[dict[str, str], ...] = (
 
 _CATEGORY_BY_KEY = {spec["key"]: spec for spec in CATEGORY_SPECS}
 
-#: The five map layers the page offers, in display order. Only ``properties``
-#: has stored coordinates in this deployment; the other four are recorded on
-#: the property's feature vector as *counts within a radius*, with no
-#: individual outlet positions. They are therefore reported with their true
-#: totals and an explicit ``mapped: false`` flag rather than invented markers —
-#: the map draws no pin it cannot place.
+#: The five map layers the page offers, in display order. Every layer draws
+#: from a real coordinate-carrying source table (catalogue properties,
+#: fnb_outlet, pois_master, gtfs_stops, psense_parking), so all five are
+#: ``mapped`` — the nearby-places endpoint returns the individual locations
+#: and the frame draws exactly what it receives, never an invented pin.
+#: The feature-vector counts below still power the research panels: markers
+#: and research counts answer different questions and stay separate.
 MAP_LAYER_SPECS: tuple[dict[str, Any], ...] = (
     {
         "key": "properties",
@@ -269,28 +263,28 @@ MAP_LAYER_SPECS: tuple[dict[str, Any], ...] = (
         "label": "Food Businesses",
         "color": "#d97706",
         "description": "Other food and beverage outlets already trading nearby.",
-        "mapped": False,
+        "mapped": True,
     },
     {
         "key": "demand_generators",
         "label": "Nearby Places",
         "color": "#0f9d86",
         "description": "Shops, malls, offices, schools and clinics that bring people in.",
-        "mapped": False,
+        "mapped": True,
     },
     {
         "key": "accessibility",
         "label": "Transport",
         "color": "#7c3aed",
         "description": "Public transport stops and routes within walking distance.",
-        "mapped": False,
+        "mapped": True,
     },
     {
         "key": "parking",
         "label": "Parking",
         "color": "#475569",
         "description": "Parking facilities recorded around the property.",
-        "mapped": False,
+        "mapped": True,
     },
 )
 
@@ -339,6 +333,96 @@ _LAYER_FEATURES: dict[str, dict[str, Any]] = {
 #: (``pending``, ``processing``, ``failed``) must not be presented as a tour.
 PANORAMA_COMPLETE_STATUSES = frozenset({"complete", "completed", "ready", "succeeded"})
 
+PANORAMA_UNAVAILABLE_REASON = (
+    "No completed 360° panorama is linked to this property."
+)
+PANORAMA_UNAVAILABLE: dict[str, Any] = {
+    "available": False,
+    "status": "unavailable",
+    "url": None,
+    "reason": PANORAMA_UNAVAILABLE_REASON,
+}
+
+
+def panoramas_by_catalogue_ids(
+    session: Any, catalogue_ids: list[str]
+) -> dict[str, dict[str, Any]]:
+    """Batched :meth:`PropertyInsightsService._panorama` for search pages.
+
+    ONE query resolves many catalogue ids. The authority chain is identical:
+    ``fyp.property_subject_links`` with ``match_verified IS TRUE`` joined to
+    ``public.virtual_tour`` on the *numeric* property id — the catalogue text
+    id and the legacy integer key are never compared directly — and the most
+    recently updated tour row per property wins (``updated_at DESC NULLS
+    LAST``). The per-id payload has exactly the same shape and honesty rules
+    as the insights endpoint: only a completed status *with* a URL is
+    ``ready``; a linked-but-unfinished job is ``processing``. Ids with no
+    linked tour row are absent from the mapping (callers use
+    ``PANORAMA_UNAVAILABLE``). A missing tour table must never fail the
+    search request, so any query error degrades to an empty mapping.
+    """
+    ids = [cid for cid in dict.fromkeys(catalogue_ids) if cid]
+    if not ids or session is None:
+        return {}
+    try:
+        rows = session.execute(
+            text(
+                """
+                WITH requested (cid) AS (
+                    SELECT unnest(CAST(:pids AS text[]))
+                ), ranked AS (
+                    SELECT r.cid, vt.url, vt.status,
+                           ROW_NUMBER() OVER (
+                               PARTITION BY r.cid
+                               ORDER BY vt.updated_at DESC NULLS LAST
+                           ) AS rn
+                    FROM requested r
+                    JOIN fyp.property_subject_links AS l
+                      ON l.sitewise_property_id = r.cid
+                     AND l.match_verified IS TRUE
+                    JOIN public.virtual_tour AS vt
+                      ON vt.property_id = l.property_id
+                )
+                SELECT cid, url, status FROM ranked WHERE rn = 1
+                """
+            ),
+            {"pids": ids},
+        ).fetchall()
+    except Exception:  # noqa: BLE001 - a missing tour table must not fail search
+        return {}
+
+    result: dict[str, dict[str, Any]] = {}
+    for row in rows:
+        cid = str(row[0])
+        url, status = row[1], (row[2] or "").strip().lower()
+        if url and status in PANORAMA_COMPLETE_STATUSES:
+            result[cid] = {"available": True, "status": "ready",
+                           "url": url, "reason": None}
+        else:
+            result[cid] = {
+                "available": False,
+                "status": "processing",
+                "url": None,
+                "reason": (
+                    "A 360° panorama for this property is still being "
+                    "processed, so it is not shown yet."
+                ),
+            }
+    return result
+
+def photo_urls_by_catalogue_ids(
+    session: Any, catalogue_ids: list[str]
+) -> dict[str, list[str]]:
+    """Batched display-photo URLs for search pages.
+
+    The companion of :func:`panoramas_by_catalogue_ids`: ONE query resolves
+    many catalogue ids through the same verified subject-link chain, and an id
+    with no photo is simply absent from the mapping. No error handling here —
+    unlike panoramas, the caller decides whether a media failure may fail the
+    request, and today every search route swallows it.
+    """
+    return FypPropertyRepository(session).get_catalogue_photo_urls_batch(catalogue_ids)
+
 #: Score bands. Wording is deliberately hedged: the index ranks locations
 #: against each other, it does not predict commercial success.
 _SCORE_BANDS: tuple[tuple[int, str], ...] = (
@@ -379,21 +463,12 @@ def _background_path(variant_key: str | None) -> Path:
 _EXPLANATION_CACHE: dict[tuple[str, str], dict[str, Any]] = {}
 _EXPLANATION_CACHE_LOCK = threading.Lock()
 
-#: Cache of the Stage-2 category block, keyed by (category model version,
-#: property_id). Separate from the PU explanation cache because the two models
-#: are replaced independently.
-_CATEGORY_CACHE: dict[tuple[str, str], dict[str, Any]] = {}
-_CATEGORY_CACHE_LOCK = threading.Lock()
-
 
 def clear_insights_cache() -> int:
     """Test/admin hook: drop cached explanations. Returns the number dropped."""
     with _EXPLANATION_CACHE_LOCK:
         count = len(_EXPLANATION_CACHE)
         _EXPLANATION_CACHE.clear()
-    with _CATEGORY_CACHE_LOCK:
-        count += len(_CATEGORY_CACHE)
-        _CATEGORY_CACHE.clear()
     return count
 
 
@@ -677,8 +752,9 @@ def _layer_payloads(values: dict[str, float | None], measured: bool = True) -> l
             layer["note"] = "No counts were recorded for this property."
         else:
             layer["note"] = (
-                "Recorded as counts within each radius. Individual locations are "
-                "not stored, so no pins are drawn for this layer."
+                "Recorded as counts within each radius. This payload carries no "
+                "coordinates; the map draws individual locations from the "
+                "nearby-places endpoint when verified ones exist."
             )
         layers.append(layer)
 
@@ -752,9 +828,10 @@ class PropertyInsightsService:
           or live PU score. The catalogue ranking's legacy score remains
           authoritative when the active variant is ``legacy``; any available
           live inference is compared with it rather than silently substituted.
-        *         ``business_type`` is the entrepreneur's own selection. It selects
-        which of the four category outputs the Stage-2 explanation describes
-        — never the model's top category, unless no selection is known.
+        *         ``business_type`` is the entrepreneur's own stated selection.
+          It is recorded in the response so callers can see what was asked;
+          it does not select any model output and does not change the score
+          or its explanation.
         * With the persistent cache enabled, a validated stored explanation is
           served immediately; on a miss the request either computes
           synchronously (only when this process has completed its one-off SHAP
@@ -765,7 +842,6 @@ class PropertyInsightsService:
         """
         if cache_session is _UNSET:
             cache_session = self.cache_session
-        selected_category = match_business_type(business_type)
         variant = self._variant()
         base: dict[str, Any] = {
             "property_id": property_id,
@@ -775,11 +851,7 @@ class PropertyInsightsService:
             "panorama": self._panorama(property_id),
             "score": {"available": False, "label": "Location Fit", "meaning": SCORE_MEANING},
             "explanation": {"available": False},
-            "business_type": {
-                "requested": business_type,
-                "matched_category": selected_category,
-                "matched": selected_category is not None,
-            },
+            "business_type": {"requested": business_type},
             "categories": [
                 {
                     **{k: spec[k] for k in ("key", "label", "question", "why")},
@@ -807,11 +879,6 @@ class PropertyInsightsService:
             }
             return base, None, None
 
-        # Stage 2 is independent of the PU variant: the category model has its
-        # own 54-feature contract, its own validation and its own wording. A
-        # PU failure must never hide it, and vice versa.
-        base["category_model"] = self._category_payload(property_id, selected_category)
-
         try:
             loaded = ModelLoader().load_cached(variant["layer1_model"])
         except ModelUnavailableError as exc:
@@ -826,8 +893,7 @@ class PropertyInsightsService:
         artifact_digest = self._artifact_sha256(loaded.meta.get("artifact_filename")) or "unhashed"
         cache_version = (
             f"{variant.get('layer1_model') or variant['name']}:{variant.get('version') or 'unknown'}:"
-            f"{artifact_digest}:{stored['score'] if stored is not None else 'no-stored-score'}:"
-            f"cat:{self._artifact_sha256(CATEGORY_MODEL_NAME + '.joblib') or 'unhashed'}"
+            f"{artifact_digest}:{stored['score'] if stored is not None else 'no-stored-score'}"
         )
 
         repo = PropertyFeatureRepository(self.analytics)
@@ -871,7 +937,7 @@ class PropertyInsightsService:
         if coverage is not None:
             cache_key = (
                 f"{cache_version}:feat:{_feature_digest(values)}:"
-                f"bt:{selected_category or 'top'}",
+                f"bt:{business_type or 'none'}",
                 property_id,
             )
             with _EXPLANATION_CACHE_LOCK:
@@ -1233,173 +1299,6 @@ class PropertyInsightsService:
                 pass
         return {**base, **payload}, payload, persistent_key
 
-    # -- Stage 2: business-category resemblance -----------------------------
-
-    def _category_payload(
-        self, property_id: str, business_type: str | None = None
-    ) -> dict[str, Any]:
-        """The F&B category block for the entrepreneur's SELECTED category.
-
-        Uses the category model's OWN 54-feature contract (leakage-reduced:
-        the ten competitor-count columns are excluded) and its own SHAP
-        background. A category score is never explained with the PU
-        explanation, and vice versa. When ``business_type`` is known the block
-        reports and explains THAT class; the model's own top class is reported
-        separately and never substituted for the entrepreneur's choice.
-        Weak validation is reported with every result so the UI can keep the
-        exploratory wording.
-        """
-        try:
-            from sitewise.ml import category_aware
-
-            bundle = category_aware.load_bundle()
-        except Exception as exc:  # noqa: BLE001 - evidence is additive only
-            return {
-                "available": False,
-                "reason": {"code": "category_model_unavailable", "message": str(exc)},
-            }
-
-        # The Stage-2 explanation is also a permutation-SHAP computation. On a
-        # cold process (one-off SHAP compilation still running off-path) it
-        # must not block the request either: report truthfully and let the
-        # next refresh pick the warmed result up.
-        if self.cache_session is not None and not _shap_module.process_warm():
-            return {
-                "available": False,
-                "model_version": bundle.version,
-                "status": "pending",
-                "reason": {
-                    "code": "category_model_pending",
-                    "message": (
-                        "The category explanation engine is still warming up "
-                        "in this freshly started backend process; please "
-                        "refresh in a few seconds."
-                    ),
-                },
-            }
-
-        version = bundle.version
-        names = list(bundle.category_features)
-        context_names = [n for n in COMPETITOR_CONTEXT_FEATURES if n not in names]
-        required = [*names, *context_names]
-        try:
-            feature_bundle = PropertyFeatureRepository(self.analytics).get(
-                property_id, required, source="catalog"
-            )
-            coverage = merge_bridge_features(feature_bundle, expected_features=required)
-            coverage = merge_expanded_bridge_features(
-                coverage, expected_features=required
-            )
-        except FeatureResolutionError as exc:
-            return {
-                "available": False,
-                "model_version": version,
-                "reason": {"code": "features_unresolved", "message": str(exc)},
-            }
-        except Exception as exc:  # noqa: BLE001 - fail closed, never fabricate
-            return {
-                "available": False,
-                "model_version": version,
-                "reason": {
-                    "code": "features_unresolved",
-                    "message": f"{type(exc).__name__}: {exc}",
-                },
-            }
-
-        values = dict(coverage.values)
-        cache_key = (
-            f"{version}:{bundle.sha256[:16]}:feat:{_feature_digest(values)}:"
-            f"bt:{business_type or 'top'}",
-            property_id,
-        )
-        with _CATEGORY_CACHE_LOCK:
-            cached = _CATEGORY_CACHE.get(cache_key)
-        if cached is not None:
-            return cached
-
-        try:
-            result = predict_categories(values, business_type=business_type)
-        except ModelUnavailableError as exc:
-            return {
-                "available": False,
-                "model_version": version,
-                "reason": {
-                    "code": "category_inference_unavailable",
-                    "message": str(exc),
-                    "missing_features": [n for n in names if values.get(n) is None],
-                },
-            }
-
-        result["property_id"] = property_id
-        result["competition_context_NOT_used_by_model"] = competition_context(values)
-        result["feature_coverage"] = {
-            "available_features": sum(1 for n in names if values.get(n) is not None),
-            "feature_count": len(names),
-            "missing_features": [n for n in names if values.get(n) is None],
-            "flags": list(coverage.flags),
-        }
-        result["business_type"] = {
-            "requested": business_type,
-            "matched_category": business_type,
-            "matched": business_type is not None,
-        }
-        if any(values.get(n) is None for n in names):
-            result["explanation"] = {
-                "available": False,
-                "state": "withheld_imputed_features",
-                "reason": {
-                    "code": "category_shap_imputed",
-                    "message": (
-                        "The displayed category scores use the artifact's median "
-                        "imputation for missing residential measurements, so no "
-                        "SHAP explanation is shown."
-                    ),
-                },
-            }
-        else:
-            try:
-                explained = category_explanation(values, business_type)
-                factors = [
-                    _factor(
-                        item["technical"],
-                        item["contribution"],
-                        values.get(item["technical"]),
-                    )
-                    for item in explained["contributions"]
-                ]
-                result["explanation"] = {
-                    "available": True,
-                    "state": "ready",
-                    "explainer": explained["explainer"],
-                    "model": explained["model"],
-                    "model_version": explained["model_version"],
-                    "artifact_sha256": explained["artifact_sha256"],
-                    "explained_output": explained["explained_output"],
-                    "base_value": explained["base_value"],
-                    "reconstructed": explained["reconstructed"],
-                    "reconstruction_error": explained["reconstruction_error"],
-                    "additivity_tolerance": explained["additivity_tolerance"],
-                    "background_size": explained["background_size"],
-                    "research_only": True,
-                    "score_meaning": explained["score_meaning"],
-                    "factors": factors,
-                    "strongest_supporting": [
-                        f for f in factors if f["contribution"] > 0
-                    ][:4],
-                    "strongest_lowering": [
-                        f for f in factors if f["contribution"] < 0
-                    ][:4],
-                }
-            except ModelUnavailableError as exc:
-                result["explanation"] = {
-                    "available": False,
-                    "state": "unavailable",
-                    "reason": {"code": "category_shap_unavailable", "message": str(exc)},
-                }
-        with _CATEGORY_CACHE_LOCK:
-            _CATEGORY_CACHE[cache_key] = result
-        return result
-
     def _stored_legacy_score(self, property_id: str) -> dict[str, Any] | None:
         """Read a validated original ranking score; never use it for experimental47."""
         if self.analytics is None:
@@ -1468,18 +1367,19 @@ class PropertyInsightsService:
         A row is only reported when its status is a completed one *and* it has
         a URL. A ``pending`` or failed stitching job is reported as processing
         so the gallery can say so instead of showing a broken viewer.
+
+        The query runs through the OPERATIONAL session (``self.session``):
+        ``fyp.property_subject_links`` and ``public.virtual_tour`` are
+        operational tables written by the panorama upload. Reading them through
+        the analytics session pointed the gallery at the wrong database when
+        the two URLs differ, silently reporting every panorama unavailable.
         """
-        unavailable = {
-            "available": False,
-            "status": "unavailable",
-            "url": None,
-            "reason": "No completed 360° panorama is linked to this property.",
-        }
-        if self.analytics is None:
+        unavailable = PANORAMA_UNAVAILABLE
+        if self.session is None:
             return unavailable
 
         try:
-            rows = self.analytics.execute(
+            rows = self.session.execute(
                 text(
                     """
                     SELECT vt.url, vt.status

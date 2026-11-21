@@ -1,0 +1,459 @@
+/* SiteWise Admin Listings v2 | directory-first, scoped to admin listings. */
+.app-shell.app-shell--admin .admin-listings-v2 {
+  --al2-bg: #101522;
+  --al2-surface: #191f2e;
+  --al2-raised: #212a3b;
+  --al2-line: rgba(167, 185, 218, .16);
+  --al2-muted: #9daac1;
+  --al2-text: #eaf0fb;
+  --al2-blue: #72b8ff;
+  --al2-bright: #4da3ff;
+  --al2-soft-blue: rgba(77, 163, 255, .12);
+  width: 100%;
+  min-width: 0;
+  gap: 0;
+}
+
+/* Slim navigation instead of the previous oversized workflow cards. */
+.app-shell.app-shell--admin .al2-navigation {
+  display: flex;
+  align-items: stretch;
+  gap: 26px;
+  border-bottom: 1px solid var(--al2-line);
+  margin: 0 0 26px;
+  padding: 0 4px;
+}
+.app-shell.app-shell--admin .al2-nav {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  position: relative;
+  padding: 0 4px 17px;
+  border: 0;
+  background: transparent;
+  color: #99a8bf;
+  font-size: 14px;
+  font-weight: 750;
+  line-height: 1.2;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: color .15s ease;
+}
+.app-shell.app-shell--admin .al2-nav:hover { color: #eaf0fb; }
+.app-shell.app-shell--admin .al2-nav.is-active { color: #f7faff; }
+.app-shell.app-shell--admin .al2-nav.is-active::after {
+  content: '';
+  position: absolute;
+  bottom: -1px;
+  left: 0;
+  right: 0;
+  height: 3px;
+  border-radius: 3px 3px 0 0;
+  background: var(--al2-bright);
+}
+.app-shell.app-shell--admin .al2-nav.is-active .ms { color: var(--al2-bright); }
+
+/* Light-touch heading; metrics are a single coherent ruled strip. */
+.app-shell.app-shell--admin .al2-review { display: grid; gap: 24px; min-width: 0; }
+.app-shell.app-shell--admin .al2-summary {
+  display: grid;
+  grid-template-columns: minmax(240px, .82fr) minmax(0, 1.9fr);
+  gap: clamp(24px, 4vw, 56px);
+  align-items: end;
+}
+.app-shell.app-shell--admin .al2-overline {
+  display: block;
+  color: var(--al2-blue);
+  font-size: 10px;
+  font-weight: 900;
+  line-height: 1.4;
+  letter-spacing: .14em;
+}
+.app-shell.app-shell--admin .al2-summary__intro h2 {
+  margin: 6px 0 7px;
+  color: #f7faff;
+  font-size: clamp(21px, 2vw, 27px);
+  font-weight: 850;
+  line-height: 1.15;
+  letter-spacing: -.035em;
+}
+.app-shell.app-shell--admin .al2-muted {
+  color: var(--al2-muted);
+  font-size: 12.5px;
+  line-height: 1.6;
+  margin: 0;
+}
+.app-shell.app-shell--admin .al2-stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  align-items: stretch;
+  border: 1px solid var(--al2-line);
+  border-radius: 14px;
+  background: linear-gradient(150deg, rgba(33,42,59,.76), rgba(24,30,44,.7));
+  overflow: hidden;
+}
+.app-shell.app-shell--admin .al2-stat {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 13px;
+  padding: 18px 18px 15px;
+  min-width: 0;
+}
+.app-shell.app-shell--admin .al2-stat + .al2-stat { border-left: 1px solid var(--al2-line); }
+.app-shell.app-shell--admin .al2-stat__top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #a7b5cc;
+  font-size: 11px;
+  font-weight: 650;
+  line-height: 1.45;
+}
+.app-shell.app-shell--admin .al2-stat__top .ms { color: #75b8fc; font-size: 17px; }
+.app-shell.app-shell--admin .al2-stat__value {
+  display: block;
+  color: #f7faff;
+  font-size: clamp(22px, 2.3vw, 30px);
+  font-weight: 850;
+  line-height: 1;
+  letter-spacing: -.035em;
+  font-variant-numeric: tabular-nums;
+}
+
+/* One surface contains controls and rows, reducing visual clutter. */
+.app-shell.app-shell--admin .al2-workspace {
+  border: 1px solid var(--al2-line);
+  border-radius: 17px;
+  background: var(--al2-surface);
+  box-shadow: 0 16px 48px rgba(0, 0, 0, .13);
+  overflow: hidden;
+  min-width: 0;
+}
+.app-shell.app-shell--admin .al2-toolbar {
+  display: grid;
+  grid-template-columns: minmax(220px, 1.3fr) minmax(255px, 1fr) auto;
+  gap: 18px;
+  align-items: end;
+  padding: 22px 24px 19px;
+}
+.app-shell.app-shell--admin .al2-field-label {
+  display: block;
+  margin: 0 0 9px;
+  color: #c5cfe1;
+  font-size: 11.5px;
+  font-weight: 800;
+}
+.app-shell.app-shell--admin .al2-search-control,
+.app-shell.app-shell--admin .al2-sort-control {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.app-shell.app-shell--admin .al2-search-control {
+  height: 44px;
+  gap: 0;
+  padding-left: 12px;
+  border: 1px solid #3f4b63;
+  border-radius: 10px;
+  background: #121827;
+  color: #a4b3cd;
+}
+.app-shell.app-shell--admin .al2-search-control .ms { flex: none; }
+.app-shell.app-shell--admin .al2-search-control input {
+  border: 0 !important;
+  outline: 0;
+  min-height: 0;
+  height: 42px;
+  min-width: 0;
+  flex: 1;
+  padding: 0 10px;
+  background: transparent;
+  box-shadow: none;
+  font-size: 12.5px;
+  color: #eef4ff;
+}
+.app-shell.app-shell--admin .al2-search-control input::placeholder { color: #788ba8; }
+.app-shell.app-shell--admin .al2-search-control:focus-within {
+  border-color: var(--al2-bright);
+  box-shadow: 0 0 0 3px rgba(77,163,255,.14);
+}
+.app-shell.app-shell--admin .al2-search-control .btn {
+  height: 36px;
+  margin-right: 4px;
+  padding: 0 17px;
+  border-radius: 7px;
+  font-size: 12px;
+}
+.app-shell.app-shell--admin .al2-sort-control select {
+  flex: 1;
+  min-width: 0;
+  height: 44px;
+  padding: 0 10px;
+  border: 1px solid #3f4b63;
+  border-radius: 10px;
+  background: #121827;
+  color: #e6edfc;
+  font-size: 12px;
+}
+.app-shell.app-shell--admin .al2-sort-control .btn {
+  height: 44px;
+  white-space: nowrap;
+  font-size: 11.5px;
+}
+.app-shell.app-shell--admin .al2-clear { align-self: end; padding-bottom: 5px; }
+.app-shell.app-shell--admin .al2-clear .btn { font-size: 12px; white-space: nowrap; }
+
+/* Verification type is visibly separate from its status facet. */
+.app-shell.app-shell--admin .al2-filter-shell {
+  display: grid;
+  gap: 16px;
+  padding: 18px 24px 21px;
+  background: #1c2332;
+  border-top: 1px solid var(--al2-line);
+  border-bottom: 1px solid var(--al2-line);
+}
+.app-shell.app-shell--admin .al2-filter-line {
+  display: grid;
+  grid-template-columns: 120px minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+}
+.app-shell.app-shell--admin .al2-filter-name {
+  color: #9eacc2;
+  font-size: 11px;
+  font-weight: 800;
+}
+.app-shell.app-shell--admin .al2-segments,
+.app-shell.app-shell--admin .al2-statuses {
+  display: flex;
+  gap: 7px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.app-shell.app-shell--admin .al2-segment {
+  padding: 8px 14px;
+  border-radius: 8px;
+  border: 1px solid #414c60;
+  background: transparent;
+  color: #b9c5d8;
+  font-size: 11.5px;
+  font-weight: 750;
+  cursor: pointer;
+}
+.app-shell.app-shell--admin .al2-segment:hover { color: white; border-color: #6786aa; }
+.app-shell.app-shell--admin .al2-segment.is-active {
+  color: #e9f3ff;
+  background: #2a3a53;
+  border-color: #4b83bd;
+}
+.app-shell.app-shell--admin .al2-status {
+  display: inline-flex;
+  gap: 7px;
+  align-items: center;
+  justify-content: center;
+  padding: 7px 10px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: #9eacc2;
+  font-size: 11.5px;
+  font-weight: 750;
+  cursor: pointer;
+}
+.app-shell.app-shell--admin .al2-status:hover { color: #eff6ff; background: #2a3244; }
+.app-shell.app-shell--admin .al2-status.is-active {
+  color: #e5f2ff;
+  background: rgba(77,163,255,.14);
+  border-color: #4375a8;
+}
+.app-shell.app-shell--admin .al2-status__count {
+  min-width: 19px;
+  padding: 2px 5px;
+  border-radius: 5px;
+  color: #c8d5e7;
+  background: #323c50;
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+.app-shell.app-shell--admin .al2-status.is-active .al2-status__count {
+  background: rgba(77,163,255,.28);
+  color: #e3f1ff;
+}
+
+/* Real data table: controlled column widths, strong first column and softer meta. */
+.app-shell.app-shell--admin .al2-directory { min-width: 0; }
+.app-shell.app-shell--admin .al2-directory-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: center;
+  padding: 25px 24px 19px;
+}
+.app-shell.app-shell--admin .al2-directory-header h2 {
+  margin: 5px 0 3px;
+  color: #f2f6ff;
+  font-size: 18px;
+  font-weight: 820;
+  letter-spacing: -.022em;
+}
+.app-shell.app-shell--admin .al2-directory-header .btn { font-size: 12px; }
+.app-shell.app-shell--admin .al2-table-scroll {
+  width: 100%;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+}
+.app-shell.app-shell--admin .al2-table {
+  width: 100%;
+  min-width: 995px;
+  border-collapse: separate;
+  border-spacing: 0;
+  text-align: left;
+}
+.app-shell.app-shell--admin .al2-table thead th {
+  padding: 13px 15px;
+  border-top: 1px solid var(--al2-line);
+  border-bottom: 1px solid var(--al2-line);
+  background: #222b3c;
+  color: #a4b6ce;
+  font-size: 10px;
+  font-weight: 820;
+  text-transform: uppercase;
+  letter-spacing: .075em;
+  white-space: nowrap;
+}
+.app-shell.app-shell--admin .al2-table th:first-child,
+.app-shell.app-shell--admin .al2-table td:first-child { padding-left: 24px; width: 29%; }
+.app-shell.app-shell--admin .al2-table th:last-child,
+.app-shell.app-shell--admin .al2-table td:last-child { padding-right: 24px; text-align: right; }
+.app-shell.app-shell--admin .al2-table tbody tr { transition: background .13s ease; }
+.app-shell.app-shell--admin .al2-table tbody tr:hover { background: rgba(77,163,255,.055); }
+.app-shell.app-shell--admin .al2-table tbody tr + tr td { border-top: 1px solid var(--al2-line); }
+.app-shell.app-shell--admin .al2-table tbody td {
+  padding: 17px 15px;
+  vertical-align: middle;
+  color: #d2dbe9;
+  font-size: 12px;
+}
+.app-shell.app-shell--admin .al2-property { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.app-shell.app-shell--admin .al2-property__icon {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 39px;
+  height: 39px;
+  border: 1px solid rgba(94,157,230,.19);
+  border-radius: 10px;
+  background: rgba(77,163,255,.10);
+  color: #89c4ff;
+}
+.app-shell.app-shell--admin .al2-property__copy { display: grid; gap: 5px; min-width: 0; }
+.app-shell.app-shell--admin a.al2-property__name {
+  display: block;
+  color: #f3f6fe;
+  text-decoration: none;
+  font-weight: 800;
+  font-size: 12.4px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+.app-shell.app-shell--admin a.al2-property__name:hover { color: var(--al2-blue); text-decoration: underline; }
+.app-shell.app-shell--admin .al2-property__id,
+.app-shell.app-shell--admin .al2-cell-sub {
+  display: block;
+  color: #889bb7;
+  font-size: 10.8px;
+  line-height: 1.5;
+}
+.app-shell.app-shell--admin .al2-property__id { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.app-shell.app-shell--admin .al2-live {
+  color: #87c3ff;
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: .025em;
+}
+.app-shell.app-shell--admin .al2-live::before { content:'●'; margin-right: 4px; font-size: 8px; }
+.app-shell.app-shell--admin .al2-cell-main { display: block; color: #cbd7e8; font-weight: 650; }
+.app-shell.app-shell--admin .al2-rent { color: #f3f7ff; font-weight: 850; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.app-shell.app-shell--admin .al2-table .pill {
+  display: inline-flex;
+  align-items: center;
+  max-width: 160px;
+  font-size: 10.3px;
+  line-height: 1.3;
+  font-weight: 800;
+  text-align: center;
+  white-space: normal;
+  padding: 5px 8px;
+  border-radius: 7px;
+}
+.app-shell.app-shell--admin .al2-table td:last-child .btn {
+  min-height: 32px;
+  padding: 6px 12px;
+  border-radius: 8px;
+  color: #b7dfff;
+  border-color: #41648c;
+  background: #26374f;
+  font-size: 11px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+.app-shell.app-shell--admin .al2-table td:last-child .btn:hover {
+  background: #304b6e;
+  color: white;
+}
+.app-shell.app-shell--admin .al2-pager {
+  min-height: 66px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 24px;
+  border-top: 1px solid var(--al2-line);
+}
+.app-shell.app-shell--admin .al2-pager__caption { color: #a0aec5; font-size: 12px; }
+.app-shell.app-shell--admin .al2-pager__actions { display: flex; gap: 9px; }
+.app-shell.app-shell--admin .al2-pager .btn { min-height: 34px; font-size: 11.5px; }
+
+/* Separate agent-change workflow uses the same restrained hierarchy. */
+.app-shell.app-shell--admin .al2-agent-workspace { max-width: 1250px; }
+.app-shell.app-shell--admin .al2-agent-workspace > .stack > .row {
+  padding-bottom: 17px;
+  border-bottom: 1px solid var(--al2-line);
+  align-items: flex-end;
+  gap: 20px;
+}
+.app-shell.app-shell--admin .al2-agent-workspace .card {
+  background: #1c2433;
+  border: 1px solid var(--al2-line);
+  border-radius: 13px;
+  box-shadow: none;
+}
+.app-shell.app-shell--admin .al2-agent-workspace .card > .row { gap: 16px; }
+.app-shell.app-shell--admin .al2-agent-workspace .actions-row { flex-wrap: wrap; gap: 8px; }
+
+@media (max-width: 1240px) {
+  .app-shell.app-shell--admin .al2-summary { grid-template-columns: 1fr; gap: 17px; }
+  .app-shell.app-shell--admin .al2-toolbar { grid-template-columns: minmax(0,1.25fr) minmax(0,1fr); }
+  .app-shell.app-shell--admin .al2-clear { grid-column: 1 / -1; }
+}
+@media (max-width: 760px) {
+  .app-shell.app-shell--admin .al2-navigation { gap: 18px; margin-bottom: 20px; }
+  .app-shell.app-shell--admin .al2-nav { font-size: 12px; padding-bottom: 14px; }
+  .app-shell.app-shell--admin .al2-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .app-shell.app-shell--admin .al2-stat:nth-child(3) { border-left: 0; border-top: 1px solid var(--al2-line); }
+  .app-shell.app-shell--admin .al2-stat:nth-child(4) { border-top: 1px solid var(--al2-line); }
+  .app-shell.app-shell--admin .al2-toolbar { grid-template-columns: 1fr; gap: 15px; padding: 18px; }
+  .app-shell.app-shell--admin .al2-clear { grid-column: auto; }
+  .app-shell.app-shell--admin .al2-filter-shell { padding: 17px 18px; }
+  .app-shell.app-shell--admin .al2-filter-line { grid-template-columns: 1fr; gap: 8px; }
+  .app-shell.app-shell--admin .al2-directory-header { padding: 20px 18px; }
+  .app-shell.app-shell--admin .al2-pager { padding: 13px 18px; flex-wrap: wrap; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .app-shell.app-shell--admin .admin-listings-v2 *,
+  .app-shell.app-shell--admin .admin-listings-v2 *::before,
+  .app-shell.app-shell--admin .admin-listings-v2 *::after { transition: none !important; }
+}

@@ -1,9 +1,12 @@
 import 'package:riverpod/riverpod.dart';
 
+import '../../domain/data/m2_prototype_data.dart';
 import '../../domain/entities/app_role.dart';
 import '../../domain/entities/recommendation.dart';
 import '../../domain/repositories/admin_repositories.dart';
 import '../../domain/repositories/explore_repository.dart';
+import '../../domain/repositories/m2_questionnaire_repository.dart';
+import '../../domain/repositories/property_compare_repository.dart';
 import '../../domain/repositories/property_verification_repository.dart';
 import '../../domain/repositories/recommendation_search_repository.dart';
 import '../../domain/repositories/saved_properties_repository.dart';
@@ -87,6 +90,11 @@ final savedPropertiesRepositoryProvider = Provider<SavedPropertiesRepository?>(
 final recommendationSearchRepositoryProvider =
     Provider<RecommendationSearchRepository?>((ref) => null);
 
+/// Optional direct-comparison backend (`POST /api/v1/compare`).
+/// Null means the platform has no live comparison service.
+final propertyCompareRepositoryProvider =
+    Provider<PropertyCompareRepository?>((ref) => null);
+
 /// Write-back hook fired when the entrepreneur updates their preferences.
 /// The composition root decides where preferences persist (local file on
 /// mobile, nothing on web).
@@ -137,6 +145,15 @@ final userRepositoryProvider = Provider<UserRepository>(
   (ref) => throw UnimplementedError(
     'userRepositoryProvider must be overridden at the composition root.',
   ),
+);
+
+/// Questionnaire definition used by the M2 assessment ViewModel.
+///
+/// Defaults to the illustrative prototype content. Either app can override
+/// this at its composition root with another [M2QuestionnaireRepository];
+/// the ViewModel only ever sees the domain contract.
+final m2QuestionnaireProvider = Provider<M2QuestionnaireRepository>(
+  (ref) => const PrototypeM2Questionnaire(),
 );
 
 /// Role an authenticated session starts in before the user picks one.

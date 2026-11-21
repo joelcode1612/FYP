@@ -1,5 +1,3 @@
-import '../errors/app_failure.dart';
-
 /// Bearer-aware transport port for the authenticated REST layer.
 ///
 /// The contract carries no credentials: the platform implementation attaches
@@ -34,9 +32,4 @@ abstract class ApiClient {
   /// Authenticated binary GET (used by the verification-document download
   /// endpoint); a non-2xx response throws with the backend's message.
   Future<List<int>> downloadBinary(String path);
-}
-
-/// Thrown when code calls the network while [AppConfig.usesDemoData].
-class DemoModeFailure extends AppFailure {
-  const DemoModeFailure() : super('Network is disabled in demo-data mode.');
 }

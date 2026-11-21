@@ -64,6 +64,19 @@ class AssessmentRepository:
             ).one()
         )
 
+    def count_reports_by_user(self, user_id: uuid.UUID) -> int:
+        """Count all completed reports, not only the current history page."""
+        from sqlalchemy import func
+
+        return int(
+            self.session.exec(
+                select(func.count()).select_from(Assessment).where(
+                    Assessment.user_id == user_id,
+                    Assessment.report_generated_at.is_not(None),
+                )
+            ).one()
+        )
+
     def most_recent(self, user_id: uuid.UUID) -> Optional[Assessment]:
         return self.session.exec(
             select(Assessment)

@@ -306,7 +306,7 @@ def assessment_report(
         # than failing the whole request.
         property_report = None
 
-    evidence = CatalogRepository(analytics).get_evidence(assessment.property_id)
+    evidence = service.evidence_for(assessment.property_id)
     explanation = ExplanationService(
         session, analytics
     ).latest_for_assessment(assessment)

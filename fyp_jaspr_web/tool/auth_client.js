@@ -1,13 +1,10 @@
 import { createClient } from '@supabase/supabase-js';
 
 // --- Centralized API configuration -----------------------------------------
-// The Jaspr SSR server proxies /api/* to the intended FastAPI backend, so
-// browser requests are same-origin by default. NO host or port is baked into
-// this bundle: the only override is the `sitewise-api` meta tag emitted by
-// lib/main.server.dart before this (deferred) script runs. An empty/absent
-// content means "same-origin proxy". Deployments that deliberately host the
-// API elsewhere set SITEWISE_PUBLIC_API_BASE on the Jaspr process instead of
-// editing generated assets.
+// Unified FastAPI serves the compiled Jaspr client and /api/v1/* on the same
+// origin (normally :8090). No Jaspr SSR server or separate :8000 API is used.
+// The optional `sitewise-api` meta tag may override the origin in a deliberate
+// split-host deployment; the normal empty value means same-origin requests.
 const apiMeta = document.querySelector('meta[name="sitewise-api"]');
 const api = apiMeta ? apiMeta.content.trim().replace(/\/+$/, '') : '';
 // Same-origin public configuration generated from the intended backend's
@@ -47,9 +44,26 @@ const STAFF_ROLES = ['agent', 'admin', 'administrator'];
 // Legacy aliases are normalised on read; any OTHER value is unsupported and
 // must fail closed instead of silently falling back to a least-privileged
 // portal (the "admin lands on /entrepreneur" class of bug).
-const CANONICAL_ROLES = ['entrepreneur', 'agent', 'admin'];
-const ROLE_ALIASES = { administrator: 'admin', property_owner: 'entrepreneur', user: 'entrepreneur' };
-const ROLE_HOME = { entrepreneur: '/entrepreneur', agent: '/agent', admin: '/admin' };
+
+const CANONICAL_ROLES = [
+  'entrepreneur',
+  'owner',
+  'agent',
+  'admin'
+];
+const ROLE_ALIASES = {
+  administrator: 'admin',
+  property_owner: 'owner',
+  propertyowner: 'owner',
+  landlord: 'owner',
+  user: 'entrepreneur'
+};
+const ROLE_HOME = {
+  entrepreneur: '/entrepreneur',
+  owner: '/owner',
+  agent: '/agent',
+  admin: '/admin'
+};
 
 function canonicalRole(role) {
   const name = String(role || '').trim().toLowerCase();
@@ -414,6 +428,7 @@ function assertPortalRole(expectedPortal) {
   if (!role) {
     state.profile = null;
     clearSessionCookies();
+    return;
     throw new Error('The server returned an unsupported account role. Please contact a Sitewise administrator.');
   }
   if (expectedPortal === 'staff' && role === 'entrepreneur') {
@@ -576,8 +591,8 @@ function friendlyFetchError(err, fallback) {
   return (typeof err?.message === 'string' && err.message) ? err.message : fallback;
 }
 
-// Load the public Supabase configuration. It is served by the Jaspr server
-// itself, so it is available even when the FastAPI backend is still starting.
+// Load the public Supabase configuration, served by unified FastAPI as a
+// compiled static asset alongside its /api/v1 endpoints.
 // The old code probed `api + '/health'` here and then ignored the result;
 // readiness is now reported separately by probeBackend() below.
 async function loadConfig() {
@@ -610,7 +625,11 @@ async function probeBackend() {
       cache: 'no-store',
       signal: AbortSignal.timeout(3000),
     });
-    state.backendAvailable = response.ok;
+    const contentType = response.headers.get('content-type') || '';
+    const jsonType = contentType.toLowerCase().includes('application/json');
+    const health = response.ok && jsonType
+      ? await response.json().catch(() => null) : null;
+    state.backendAvailable = response.ok && jsonType && health?.status === 'ok';
   } catch (_) {
     state.backendAvailable = false;
   }
@@ -814,7 +833,7 @@ const ready = (async () => {
       await initialize();
       clearInterval(poll);
     } catch (_) {
-      state.error = 'The Sitewise API is unavailable. Start FYP/backend (uvicorn on port 8000); sign-in will enable automatically once it is up.';
+      state.error = 'SiteWise API unavailable on this origin. Start the unified FastAPI server on port 8090 using run-sitewise.cmd; no separate Jaspr server is needed.';
     } finally {
       polling = false;
     }

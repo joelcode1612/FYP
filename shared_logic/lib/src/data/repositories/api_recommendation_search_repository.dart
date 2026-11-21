@@ -29,12 +29,51 @@ class ApiRecommendationSearchRepository implements RecommendationSearchRepositor
   }
 
   @override
-  Future<RecommendationFacets> facets([
-    RecommendationSearchRequest? request,
-  ]) async {
+  Future<RecommendationFacets> facets({
+    RecommendationSearchRequest? criteria,
+  }) async {
+    // The facets endpoint takes the same hard-filter vocabulary as search.
+    // Business type and target-market preferences are deliberately NOT hard
+    // eligibility filters on the backend, so sending them may change nothing;
+    // layout preferences are omitted because the GET transport cannot carry
+    // repeated keys and the backend does not count them anyway.
+    final query = <String, String>{};
+    final c = criteria;
+    if (c != null) {
+      if (c.businessType != null) query['business_type'] = c.businessType!;
+      if (c.preferredState != null) {
+        query['preferred_state'] = c.preferredState!;
+      }
+      if (c.preferredArea != null) query['preferred_area'] = c.preferredArea!;
+      if (c.minRentalRm != null) query['min_rental_rm'] = '${c.minRentalRm}';
+      if (c.maxRentalRm != null) query['max_rental_rm'] = '${c.maxRentalRm}';
+      if (c.minSizeSqft != null) query['min_size_sqft'] = '${c.minSizeSqft}';
+      if (c.maxSizeSqft != null) query['max_size_sqft'] = '${c.maxSizeSqft}';
+      if (c.propertyType != null) query['property_type'] = c.propertyType!;
+      if (c.city != null) query['city'] = c.city!;
+      if (c.floorLevel != null) query['floor_level'] = c.floorLevel!;
+      if (c.transitMaxM != null) query['transit_max_m'] = '${c.transitMaxM}';
+      if (c.nearbyParkingMin != null) {
+        query['nearby_parking_min'] = '${c.nearbyParkingMin}';
+      }
+      if (c.fnbCompetitionMax != null) {
+        query['fnb_competition_max'] = '${c.fnbCompetitionMax}';
+      }
+      if (c.demandGenerator != null) {
+        query['demand_generator'] = c.demandGenerator!;
+      }
+      if (c.populationMin1000m != null) {
+        query['population_min_1000m'] = '${c.populationMin1000m}';
+      }
+      if (c.populationMax1000m != null) {
+        query['population_max_1000m'] = '${c.populationMax1000m}';
+      }
+      if (c.query != null) query['query'] = c.query!;
+      if (c.managedOnly) query['managed_only'] = 'true';
+    }
     final response = await _client.get(
       '/api/v1/recommendations/facets',
-      query: (request ?? const RecommendationSearchRequest()).facetsQuery,
+      query: query,
     );
     final data = response['data'];
     return RecommendationFacets.fromJson(

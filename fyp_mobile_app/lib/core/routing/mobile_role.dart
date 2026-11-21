@@ -63,28 +63,18 @@ List<AppRole> get mobileSupportedRoles =>
       growable: false,
     );
 
-/// Whether this verified session still owes a second factor before its
-/// workspace can be opened.
-///
-/// Only an **agent** is staff on mobile: the backend's
-/// `require_property_owner` / `get_staff_user` demand `aal2` for staff roles,
-/// while a Property Owner is an `entrepreneur` and needs no second factor.
-/// Administrators have no mobile route at all, so their existing web MFA flow
-/// is untouched.
-///
-/// The decision comes from the server-verified `aal` claim echoed by
-/// `GET /api/v1/auth/me` — never from a local boolean. An unknown level is
-/// treated as NOT satisfied (fail closed): the MFA screen then asks Supabase
-/// directly and finishes immediately when the session is in fact elevated.
+/// Whether the verified Owner / Agent session still needs authenticator MFA.
+/// Both roles must have a server-verified `aal2` session before using the
+/// Provider workspace. Entrepreneur is not required to use MFA, and Admin
+/// remains web-only. Unknown assurance is never treated as verified.
 bool requiresStaffMfa(SitewiseUser user) =>
-    user.role == AppRole.agent && !user.hasStaffAssurance;
+    (user.role == AppRole.owner || user.role == AppRole.agent) &&
+    !user.hasStaffAssurance;
 
-/// The FIRST route to open after a trusted authentication succeeds.
-///
-/// Entrepreneur -> dashboard. Agent with `aal1` -> the existing authenticator
-/// screen, which hands off to the dashboard once Supabase has issued an
-/// elevated session. Agent with `aal2` -> dashboard with no repeated MFA
-/// prompt. Returns null for a role with no mobile workspace (Administrator).
+/// The FIRST route to open after trusted authentication.
+/// Owner / Agent with `aal1` (or unknown assurance) -> authenticator MFA;
+/// Owner / Agent with `aal2` -> shared Provider workspace;
+/// Entrepreneur -> its own workspace; Admin -> web portal only.
 String? authLandingRouteFor(SitewiseUser user) {
   final home = mobileHomeRouteFor(user.role);
   if (home == null) return null;

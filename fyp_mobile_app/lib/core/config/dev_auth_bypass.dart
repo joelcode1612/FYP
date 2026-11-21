@@ -1,6 +1,6 @@
 
 import 'package:flutter/foundation.dart';
-import 'mobile_runtime_config.dart';
+import 'package:fyp/core/config/mobile_runtime_config.dart';
 
 bool get devAuthBypassEnabled =>
     kDebugMode &&

@@ -36,6 +36,14 @@
     .leaflet-popup-content{max-width:260px;overflow-wrap:anywhere;font-size:12px;line-height:1.5}.leaflet-container{font-family:inherit}
     /* Ring labels sit on the circle edge, so the radius is readable in place. */
     .sw-ring-label span{position:absolute;left:0;top:0;transform:translate(-50%,-50%);display:inline-block;padding:1px 5px;border-radius:4px;font-size:9.5px;font-weight:800;color:#fff;white-space:nowrap;box-shadow:0 1px 2px rgba(15,23,42,.25)}
+    /* Nearby-location markers: a small coloured disc with a single letter
+       (F food, E education, R retail, O office, H healthcare, T transport,
+       P parking). The white halo keeps any colour readable over the tiles. */
+    .sw-place-icon{background:none;border:none}
+    .sw-place-icon span{display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:50%;color:#fff;font-size:10px;font-weight:800;line-height:1;box-shadow:0 0 0 2px #fff,0 1px 3px rgba(15,23,42,.35)}
+    .sw-place-icon span.is-closed{opacity:.72;box-shadow:0 0 0 2px #fff,0 1px 2px rgba(15,23,42,.2);filter:grayscale(.2)}
+    .sw-pop__closed{color:#b45309;font-weight:700}
+    .sw-pop__muted{color:#64748b;font-size:11px}
     /* The selected property reads as the subject, not as one more data point. */
     .sw-selected-pin{filter:drop-shadow(0 0 0 #fff)}
     @media (max-width:460px){

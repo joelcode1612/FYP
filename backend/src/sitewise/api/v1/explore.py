@@ -4,6 +4,12 @@ Auth: every route requires a verified Supabase bearer (``CurrentUser``) —
 the same dependency the catalogue uses. Authorization stays server-side; no
 route trusts a client-supplied user id.
 
+Transport only: each handler maps query parameters onto an
+:class:`~sitewise.services.explore_service.ExploreService` call and turns the
+service's own signals into status codes (``None`` → 404, ``ValueError`` → 422).
+The row access, the payload shapes and the read-only guarantees live in that
+service.
+
 Gating: reads expose ONLY ``verification_status='approved' AND
 is_published`` rows. Pending research imports (955 live) are never visible
 here, and nothing in this module writes to the database.
@@ -13,34 +19,27 @@ the precomputed ``property_geospatial_features`` columns; the live
 competitor/demand-generator lookups use the indexed PostGIS geometries.
 """
 
-from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlmodel import Session
+from fastapi import APIRouter, HTTPException, Query
 
-from sitewise.db.session import get_db
-from sitewise.dependencies import CurrentUser
-from sitewise.ingestion.state import RefreshState
-from sitewise.repositories.fyp_property_repository import FypPropertyRepository
-from sitewise.services.property_management_service import resolve_management
+from sitewise.dependencies import CurrentUser, ExploreServiceImpl
 
 router = APIRouter()
 
-DbSession = Depends(get_db)
-
 
 @router.get("/options")
-def explore_options(_user: CurrentUser, session=DbSession) -> dict:
+def explore_options(_user: CurrentUser, service: ExploreServiceImpl) -> dict:
     """Filter facets (states / cities / types / availability) + totals.
 
     Sourced from the database so a filter option can never silently match
     zero rows.
     """
-    return {"data": FypPropertyRepository(session).filter_options()}
+    return service.options()
 
 
 @router.get("/properties")
 def explore_properties(
     _user: CurrentUser,
-    session=DbSession,
+    service: ExploreServiceImpl,
     q: str | None = Query(default=None, max_length=120),
     state: str | None = Query(default=None, max_length=255),
     city: str | None = Query(default=None, max_length=120),
@@ -101,7 +100,7 @@ def explore_properties(
         "nearby_radius_m": nearby_radius_m,
     }
     try:
-        return FypPropertyRepository(session).list_published(params)
+        return service.list_published(params)
     except ValueError as exc:
         # Radius whitelist violations surface as 422, matching the
         # competitor/demand-generator endpoints.
@@ -110,7 +109,7 @@ def explore_properties(
 
 @router.get("/properties/{property_id}")
 def explore_property_detail(
-    property_id: int, _user: CurrentUser, session=DbSession
+    property_id: int, _user: CurrentUser, service: ExploreServiceImpl
 ) -> dict:
     """Detail payload: listing + photos + amenities + research linkage.
 
@@ -118,9 +117,8 @@ def explore_property_detail(
     approved/published" — pending research rows are indistinguishable from
     absent ones to entrepreneurs, by design.
     """
-    repo = FypPropertyRepository(session)
-    prop = repo.get_published(property_id)
-    if prop is None:
+    detail = service.detail(property_id)
+    if detail is None:
         raise HTTPException(
             status_code=404,
             detail={
@@ -128,22 +126,14 @@ def explore_property_detail(
                 "message": "No published property with this id.",
             },
         )
-    return {
-        "data": {
-            **prop,
-            "photos": repo.get_photos(property_id),
-            "amenities": repo.get_amenities(property_id),
-            "listing_sources": repo.get_listing_sources(property_id),
-            "management": resolve_management(session, listing_id=property_id),
-        }
-    }
+    return detail
 
 
 @router.get("/properties/{property_id}/competitors")
 def explore_competitors(
     property_id: int,
     _user: CurrentUser,
-    session=DbSession,
+    service: ExploreServiceImpl,
     radius_m: int = Query(default=500),
     limit: int = Query(default=50, ge=1, le=100),
     source: str = Query(
@@ -159,66 +149,57 @@ def explore_competitors(
     never listed twice. ``meta.counts`` reports the raw per-provider numbers
     next to the deduplicated merged count.
     """
-    repo = FypPropertyRepository(session)
     try:
-        result = repo.list_competitors(
+        return service.competitors(
             property_id, radius_m=radius_m, limit=limit, source=source
         )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
-    coords = repo._coords(property_id)
-    if coords is not None:
-        result["meta"]["counts"] = repo.competitor_counts_by_source(
-            coords[0], coords[1], radius_m=radius_m
-        )
-    return result
 
 
 @router.get("/properties/{property_id}/demand-generators")
 def explore_demand_generators(
     property_id: int,
     _user: CurrentUser,
-    session=DbSession,
+    service: ExploreServiceImpl,
     radius_m: int = Query(default=1000),
     limit: int = Query(default=50, ge=1, le=100),
 ) -> dict:
     """Demand generators (malls, transit, offices…) within radius."""
     try:
-        return FypPropertyRepository(session).list_demand_generators(
-            property_id, radius_m=radius_m, limit=limit
-        )
+        return service.demand_generators(property_id, radius_m=radius_m, limit=limit)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 @router.get("/properties/{property_id}/population")
-def explore_population(property_id: int, _user: CurrentUser, session=DbSession) -> dict:
+def explore_population(
+    property_id: int, _user: CurrentUser, service: ExploreServiceImpl
+) -> dict:
     """Population intelligence through the verified research linkage.
 
     ``available: false`` when the property has no verified subject link —
     the population table is keyed to research subjects, not properties.
     """
-    data = FypPropertyRepository(session).get_population(property_id)
-    return {"data": data, "meta": {"available": data is not None}}
+    return service.population(property_id)
 
 
 @router.get("/properties/{property_id}/research-evidence")
 def explore_research_evidence(
-    property_id: int, _user: CurrentUser, session=DbSession
+    property_id: int, _user: CurrentUser, service: ExploreServiceImpl
 ) -> dict:
     """Verified research linkage + PU feature record for one property.
 
     Feature/status fields only — the research dataset contains no verified
     success-probability score, and none is synthesised here.
     """
-    data = FypPropertyRepository(session).get_research_evidence(property_id)
-    return {"data": data, "meta": {"available": data is not None}}
+    return service.research_evidence(property_id)
 
 
 @router.get("/analysis")
 def explore_analysis(
     _user: CurrentUser,
-    session=DbSession,
+    service: ExploreServiceImpl,
     ref: str = Query(max_length=120),
 ) -> dict:
     """Cross-universe location analysis for one property reference.
@@ -229,9 +210,8 @@ def explore_analysis(
     500 m / 1 km are computed live from the indexed research geometry.
     Scores are labelled research indexes — never verified probabilities.
     """
-    repo = FypPropertyRepository(session)
-    resolved = repo.resolve_reference(ref)
-    if resolved is None:
+    result = service.analysis(ref)
+    if result is None:
         raise HTTPException(
             status_code=404,
             detail={
@@ -239,60 +219,4 @@ def explore_analysis(
                 "message": f"No property matches reference '{ref}'.",
             },
         )
-    geo = None
-    research = None
-    population = None
-    fyp_id: int | None = None
-    if resolved["source_schema"] == "fyp":
-        fyp_id = int(resolved["property_id"])
-        geo = repo.get_geo_features(fyp_id)
-        research = repo.get_research_evidence(fyp_id)
-        population = repo.get_population(fyp_id)
-
-    counts: dict = {}
-    lat = resolved.get("latitude")
-    lon = resolved.get("longitude")
-    if lat is not None and lon is not None and not (
-        geo and geo.get("competitor_count_500m") is not None
-    ):
-        counts = repo.competitor_counts(float(lat), float(lon))
-
-    return {
-        "data": {
-            "property_ref": ref,
-            "source_schema": resolved["source_schema"],
-            "name": resolved.get("name"),
-            "property_type": resolved.get("property_type"),
-            "address": resolved.get("address"),
-            "city": resolved.get("city"),
-            "state": resolved.get("state"),
-            "latitude": lat,
-            "longitude": lon,
-            "rental_price": (
-                float(resolved["rental_price"])
-                if resolved.get("rental_price") is not None
-                else None
-            ),
-            "size_sqft": (
-                float(resolved["size_sqft"])
-                if resolved.get("size_sqft") is not None
-                else None
-            ),
-            # Workbook/catalogue suitability index (research ranking input —
-            # NOT a verified success probability).
-            "catalog_suitability_score": resolved.get("suitability_score"),
-            "geospatial_features": geo,
-            "competitor_counts": counts,
-            "research_link": research,
-            "population": population,
-            # Additive freshness/provenance block. Read-only; an unknown
-            # state is explicit ("unavailable"), never a zero.
-            "freshness": RefreshState(session).freshness_payload(fyp_id),
-            "provenance": RefreshState(session).provenance_summary(),
-        },
-        "meta": {
-            "available": bool(
-                geo or counts or research or resolved.get("suitability_score")
-            ),
-        },
-    }
+    return result

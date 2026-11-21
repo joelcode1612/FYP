@@ -278,7 +278,7 @@ def expanded_prediction(analytics_session: Session, property_id: str) -> dict[st
     failures are explicit (``available: false`` names the exact missing
     features) and successful results are cached per (model version, property).
     """
-    loaded = ModelLoader().load(EXPANDED_MODEL_NAME)
+    loaded = ModelLoader().load_cached(EXPANDED_MODEL_NAME)
     model_version = str(loaded.meta.get("model_variant") or "unknown")
     cache_key = (model_version, str(property_id))
     with _SCORE_CACHE_LOCK:
@@ -403,10 +403,12 @@ def expanded_scores_many(
     """
     if not property_ids:
         return {}
-    loaded = ModelLoader().load(EXPANDED_MODEL_NAME)
+    loaded = ModelLoader().load_cached(EXPANDED_MODEL_NAME)
     expected = loaded.feature_names
 
-    # --- batched resolution (mirrors PropertyFeatureRepository._resolve/get) ---
+    # Reuse previously resolved predictions AND feature vectors; the
+    # category model must receive the same features as the PU model.
+    # If a vector is missing, fall back to the original batch query.
     ids = [str(p) for p in property_ids]
     rows = _verified_catalogue_subject_rows(analytics_session, ids)
     subject_of: dict[str, str] = {}

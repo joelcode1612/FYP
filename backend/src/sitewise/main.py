@@ -32,9 +32,9 @@ def _warm_explainers() -> None:
     explainer evaluation compiles its numba kernels (measured 13-35 s). Paying
     that inside a user request would miss the 3-second explanation target by
     an order of magnitude, so it is done once per worker in a daemon thread:
-    first the category model's kernels, then the PU explainer path with the
-    ACTIVE variant's own artifact and verified background (the kernels are
-    dtype-keyed, so this readies every later explanation). A failure is logged
+    the PU explainer path with the ACTIVE variant's own artifact and verified
+    background (the kernels are dtype-keyed, so this readies every later
+    explanation). A failure is logged
     and ignored: explanations then degrade to their documented "pending"/
     "unavailable" states instead of preventing startup. On completion the
     process is marked warm, which re-enables synchronous explanation
@@ -43,13 +43,6 @@ def _warm_explainers() -> None:
     import threading
 
     def run() -> None:
-        try:
-            from sitewise.ml.category_aware import warm_up
-
-            result = warm_up()
-            logger.info("SHAP warm-up finished: %s", result)
-        except Exception:  # noqa: BLE001 - warm-up must never break the app
-            logger.warning("SHAP warm-up failed; explanations stay lazy", exc_info=True)
         try:
             from sitewise.ml import shap_explainer
 
@@ -87,6 +80,16 @@ async def lifespan(app: FastAPI):
         logger.info("Explanation worker: %s", worker_status)
     except Exception:  # noqa: BLE001 - the API must start even if the worker cannot
         logger.exception("Explanation worker could not start; explanations degrade to pending")
+    # Durable panorama stitching worker: claims fyp.panorama_jobs rows with
+    # FOR UPDATE SKIP LOCKED; a job stalled by a crash or restart is
+    # reclaimed after its claim goes stale, so no stitch is ever stranded.
+    try:
+        from sitewise.services import panorama_worker
+
+        stitcher_status = panorama_worker.startup()
+        logger.info("Panorama worker: %s", stitcher_status)
+    except Exception:  # noqa: BLE001 - the API must start even if the worker cannot
+        logger.exception("Panorama worker could not start; queued jobs wait for the next start")
     yield
 
 

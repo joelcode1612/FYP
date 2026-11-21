@@ -310,8 +310,11 @@ def test_audit_and_invitations_listing(client, cleanup_users, fake_admin):
     assert len(r2.json()) == 1
 
 
-def test_role_change_via_users_endpoint_is_audited(client, cleanup_users, fake_admin, monkeypatch):
-    """PATCH /users/{id} role changes record audit and sync the identity row."""
+def test_role_change_via_users_endpoint_is_refused(client, cleanup_users, fake_admin, monkeypatch):
+    """Roles are provisioning-only: PATCH /users/{id} must refuse a role
+    payload outright — no identity sync, no local write, no audit event — so
+    no unrestricted role-change path remains reachable from Admin User
+    Management."""
     import sitewise.api.v1.users as users_module
 
     monkeypatch.setattr(users_module, "get_admin_service", lambda: fake_admin)
@@ -330,18 +333,25 @@ def test_role_change_via_users_endpoint_is_audited(client, cleanup_users, fake_a
 
     r = client.patch(f"/api/v1/users/{sub}", headers=auth(admin_token),
                      json={"role": "agent"})
-    assert r.status_code == 200, r.text
-    assert r.json()["role"] == "agent"
-    # Identity row synced to the canonical agent role.
-    assert fake_admin.identity[str(sub)]["role"] == "agent"
-    assert any(a["action"] == "role.changed" and a["new_role"] == "agent"
-               and a["previous_role"] == "entrepreneur" for a in fake_admin.audit)
-
-    # Legacy alias 'administrator' is canonicalised on write.
+    assert r.status_code == 422, r.text
+    assert r.json()["detail"]["code"] == "role_change_not_supported"
+    # Legacy alias is refused by the same policy.
     r2 = client.patch(f"/api/v1/users/{sub}", headers=auth(admin_token),
                       json={"role": "administrator"})
-    assert r2.status_code == 200
-    assert r2.json()["role"] == "admin"
+    assert r2.status_code == 422
+
+    # Fail closed: nothing written anywhere.
+    assert fake_admin.identity == {}
+    assert fake_admin.audit == []
+    with Session(engine) as session:
+        assert UserRepository(session).get_by_id(sub).role == "entrepreneur"
+
+    # Status management on the same endpoint still works and is audited.
+    r_status = client.patch(f"/api/v1/users/{sub}", headers=auth(admin_token),
+                            json={"account_status": "suspended"})
+    assert r_status.status_code == 200, r_status.text
+    assert r_status.json()["account_status"] == "suspended"
+    assert any(a["action"] == "status.changed" for a in fake_admin.audit)
 
 
 # ---------------------------------------------------------------------------

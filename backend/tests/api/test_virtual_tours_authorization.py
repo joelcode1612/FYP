@@ -203,7 +203,7 @@ def test_owner_can_create_and_update_own_tour(client, owner_listing):
         json={
             "property_id": owner_listing["property_id"],
             "url": "https://example.test/tours/created-by-owner",
-            "status": "draft",
+            "status": "pending",
         },
     )
     assert created.status_code == 201, created.text
@@ -218,6 +218,45 @@ def test_owner_can_create_and_update_own_tour(client, owner_listing):
     assert updated.json()["status"] == "ready"
 
 
+def test_tour_create_accepts_only_the_lifecycle_payload(client, owner_listing):
+    """The generic create must not fabricate records: a client-supplied
+    primary key or audit timestamp is rejected, and an unknown lifecycle
+    status cannot enter the pipeline the insights reader trusts."""
+    fabricated = client.post(
+        "/api/v1/virtual-tours/",
+        headers=auth(owner_listing["token"]),
+        json={
+            "tour_id": str(uuid.uuid4()),
+            "property_id": owner_listing["property_id"],
+            "url": "https://example.test/tours/fabricated",
+            "status": "ready",
+            "created_at": "1999-01-01T00:00:00Z",
+        },
+    )
+    assert fabricated.status_code == 422
+
+    unknown_status = client.post(
+        "/api/v1/virtual-tours/",
+        headers=auth(owner_listing["token"]),
+        json={
+            "property_id": owner_listing["property_id"],
+            "url": "https://example.test/tours/unknown-status",
+            "status": "totally-custom",
+        },
+    )
+    assert unknown_status.status_code == 422
+
+    not_a_url = client.post(
+        "/api/v1/virtual-tours/",
+        headers=auth(owner_listing["token"]),
+        json={
+            "property_id": owner_listing["property_id"],
+            "url": "not-a-url",
+        },
+    )
+    assert not_a_url.status_code == 422
+
+
 def test_virtual_tour_writes_are_owner_scoped_and_cannot_reassign(
     client, cleanup_users, owner_listing, tour
 ):
@@ -229,7 +268,7 @@ def test_virtual_tour_writes_are_owner_scoped_and_cannot_reassign(
         json={
             "property_id": owner_listing["property_id"],
             "url": "https://example.test/tours/foreign-write",
-            "status": "draft",
+            "status": "pending",
         },
     )
     assert create.status_code == 403
