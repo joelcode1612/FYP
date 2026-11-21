@@ -1,4 +1,5 @@
-import '../../../shared_logic.dart';
+import '../entities/location_intelligence.dart';
+import '../entities/sitewise_records.dart';
 
 /// The derivation rules behind one location reading: which band a figure falls
 /// into, what the factor is called, and what evidence sentence explains it.

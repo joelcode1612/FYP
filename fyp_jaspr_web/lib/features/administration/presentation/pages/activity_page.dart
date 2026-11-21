@@ -465,7 +465,9 @@ class _ActivityState extends State<AdminActivityPage> {
     Future<void>.delayed(const Duration(milliseconds: 30), () {
       if (!mounted) return;
       final target = web.document.querySelector('[role="dialog"] button');
-      if (target is web.HTMLElement) target.focus();
+      if (target != null && target.isA<web.HTMLElement>()) {
+        (target as web.HTMLElement).focus();
+      }
     });
   }
 

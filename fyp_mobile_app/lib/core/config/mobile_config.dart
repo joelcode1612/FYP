@@ -1,7 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:shared_logic/shared_logic.dart';
 
-import 'mobile_endpoints.dart';
+import 'package:fyp/core/config/mobile_endpoints.dart';
 
 /// A read-only, key-free view of this build's authentication configuration.
 ///

@@ -15,6 +15,17 @@
 ///   never a success probability.
 /// * `shap` is present only when the verified 47-feature vector resolved;
 ///   `shapStatus.reason` explains every absence.
+
+// ## Wire-decoding compatibility boundary
+//
+// The `fromJson` factories in this library are retained for public API
+// compatibility: `fyp_mobile_app` and `fyp_jaspr_web` call some of them
+// directly, and removing them would require coordinated edits in both apps
+// (outside this package's scope). New transport code must decode through
+// the data-layer mappers (`src/data/mappers/`), which are the authoritative
+// entry points for backend payloads. These factories contain no business
+// rules — they only decode the wire shape, with field names preserved.
+
 library;
 
 /// One ranked result from a generated batch.

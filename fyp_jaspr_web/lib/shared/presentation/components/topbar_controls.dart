@@ -75,6 +75,23 @@ class SearchControlState extends State<SearchControl> {
   bool _open = false;
   String _query = '';
 
+  // SiteWise navbar search: stable future, timeout, error handling, retry.
+  // Keep one request while the user types. The auth bridge itself has a
+  // 15-second network timeout; this also bounds higher-level delays.
+  Future<List<CommercialProperty>>? _listingsFuture;
+
+  Future<List<CommercialProperty>> _loadListings() =>
+      AppLocator.properties.listings().timeout(const Duration(seconds: 22));
+
+  void _openSearch() => setState(() {
+    _listingsFuture ??= _loadListings();
+    _open = true;
+  });
+
+  void _retrySearch() => setState(() {
+    _listingsFuture = _loadListings();
+  });
+
   @override
   Component build(BuildContext context) {
     return div([
@@ -86,7 +103,7 @@ class SearchControlState extends State<SearchControl> {
           // W-01: tell assistive tech this opens a dialog, and whether it is open.
           'aria-haspopup': 'dialog',
         },
-        events: events(onClick: () => setState(() => _open = true)),
+        events: events(onClick: _openSearch),
         [Icon('search')],
       ),
       if (_open)
@@ -138,7 +155,12 @@ class SearchControlState extends State<SearchControl> {
                     [Icon('close', size: 'sm')],
                   ),
                 ]),
-                _SearchResults(query: _query, role: component.role),
+                _SearchResults(
+                  query: _query,
+                  role: component.role,
+                  future: _listingsFuture!,
+                  onRetry: _retrySearch,
+                ),
               ],
             ),
           ],
@@ -150,19 +172,44 @@ class SearchControlState extends State<SearchControl> {
 class _SearchResults extends StatelessComponent {
   final String query;
   final AppRole role;
-  const _SearchResults({required this.query, required this.role});
+  final Future<List<CommercialProperty>> future;
+  final void Function() onRetry;
+  const _SearchResults({
+    required this.query,
+    required this.role,
+    required this.future,
+    required this.onRetry,
+  });
 
   @override
   Component build(BuildContext context) {
     return FutureBuilder<List<CommercialProperty>>(
-      future: AppLocator.properties.listings(),
+      future: future,
       builder: (context, snapshot) {
+        // A failed Future never has data: without this branch the modal
+        // incorrectly shows 'Loading listings…' forever.
+        if (snapshot.hasError) {
+          return div(classes: 'dialog__empty', attributes: const {
+            'role': 'alert',
+          }, [
+            p([Component.text('Unable to load listings.')]),
+            p(classes: 'small muted', [
+              Component.text('${snapshot.error}'),
+            ]),
+            button(
+              classes: 'btn btn--secondary',
+              attributes: const {'type': 'button'},
+              events: events(onClick: onRetry),
+              [Component.text('Retry search')],
+            ),
+          ]);
+        }
         if (!snapshot.hasData) {
           return div(classes: 'dialog__loading', [
             Component.text('Loading listings…'),
           ]);
         }
-        final q = query.toLowerCase();
+        final q = query.trim().toLowerCase();
         final items = snapshot.data!
             .where(
               (property) =>
@@ -171,6 +218,8 @@ class _SearchResults extends StatelessComponent {
                       .toLowerCase()
                       .contains(q),
             )
+            // Do not mount hundreds of DOM nodes in a small modal.
+            .take(20)
             .toList();
         if (items.isEmpty) {
           return div(classes: 'dialog__empty', [Component.text('No matches.')]);

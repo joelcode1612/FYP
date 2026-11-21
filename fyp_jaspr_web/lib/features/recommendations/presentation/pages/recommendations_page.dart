@@ -567,9 +567,8 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
   /// would be a false statement about the data.
   String _orderingSummary(EntrepreneurState state) {
     final sort = state.recommendationRequest.sort;
-    final model = state.recommendationModel;
     if (sort == null || sort == _sortBestMatch) {
-      return model?.label ?? 'Ranked commercial properties for your business.';
+      return 'Based on the needs you selected';
     }
     return 'Ordered by ${_sortLabel(state, sort).toLowerCase()}';
   }
@@ -590,30 +589,16 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
         : fromServer;
   }
 
+  // SITEWISE_SIMPLE_RECOMMENDATIONS_COPY_V1: explain ordering in plain language.
   String _provenance(EntrepreneurState state) {
-    final model = state.recommendationModel!;
     final sort = state.recommendationRequest.sort;
     if (sort != null && sort != _sortBestMatch) {
-      return 'Ordered by ${_sortLabel(state, sort).toLowerCase()}. This only '
-          're-sequences the same eligible properties — it does not change '
-          'which properties qualify, and it is not a model score.';
+      return 'Showing properties by ${_sortLabel(state, sort).toLowerCase()}. '
+          'Your selected filters decide which properties appear.';
     }
-    if (model.isLivePuAssociation) {
-      // The expanded 64-feature variant: eligibility and tie-breaks come from
-      // LIVE PU inference, not from the stored research index.
-      return '${model.reason} The PU input is a research association index — '
-          'not a probability of business success — and a property whose '
-          'measured features are unavailable is excluded rather than guessed. '
-          'The general PU model ranks the same eligible set for every F&B '
-          'operation; no business-category filter is applied.';
-    }
-    return model.available
-        ? 'Scores come from the experimental preference-matching model '
-              '(${model.version ?? 'unversioned'}). They measure agreement with '
-              'your stated requirements, not the probability of business '
-              'success.'
-        : '${model.reason} Listings are ordered by how many of your requirements '
-              'they meet, then by lower rent. This is not a model score.';
+    return 'Properties are shown using your choices and the available listing '
+        'details. Location scores describe an area, but cannot '
+        'predict sales or business success.';
   }
 
   // -- filters ---------------------------------------------------------------
@@ -766,8 +751,7 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
             ]),
             p(classes: 'rec2__filter-description', [
               Component.text(
-                'Filter by location, budget and size. Open Advanced filters '
-                'for parking, transport, competition and nearby demand.',
+                'Choose a location, budget and size. You can also explore nearby parking, transport and food outlets.',
               ),
             ]),
           ]),
@@ -813,7 +797,7 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
           // Row 2 — budget, size and stated preference.
           _rentalField(facets),
           _dropdownField(
-            caption: 'Property size (sq ft)',
+            caption: 'Floor space (sq ft)',
             fieldId: 'rec2-size',
             value: _sizeKey,
             emptyLabel: 'Any size',
@@ -826,7 +810,7 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
             },
           ),
           _dropdownField(
-            caption: 'Target market (preference)',
+            caption: 'Target customers (optional)',
             fieldId: 'rec2-target-market',
             value: _targetMarket,
             emptyLabel: 'Any target market',
@@ -864,19 +848,19 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
           events: events(onClick: () => setState(() => _moreOpen = !_moreOpen)),
           [
             Icon('tune', size: 'sm'),
-            span([Component.text('Advanced filters')]),
+            span([Component.text('More location options')]),
             Icon(_moreOpen ? 'expand_less' : 'expand_more', size: 'sm'),
           ],
         ),
         if (_moreOpen)
           div(classes: 'rec2__more', [
             _advancedGroup(
-              'Property characteristics',
+              'About the space',
               const ['floor_level'],
               facets,
             ),
             _advancedGroup(
-              'Geospatial characteristics',
+              'Getting around and nearby places',
               const [
                 'transit_walk_m',
                 'nearby_parking_500m',
@@ -1274,24 +1258,6 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
         if (refreshing)
           span(classes: 'rec2__refreshing', [Component.text('Updating…')]),
       ]),
-      // The target is at least three, but the minimum is never manufactured:
-      // when fewer properties qualify, say so and offer the filter editor.
-      if (total != null && total > 0 && total < 3)
-        div(classes: 'rec2__insufficient', [
-          Icon('info_outline', size: 'sm'),
-          span(classes: 'grow', [
-            Component.text(
-              'Only $total ${total == 1 ? 'property matches' : 'properties match'} '
-              'your current criteria and '
-              '${total == 1 ? 'has a PU score' : 'have PU scores'} above 50.',
-            ),
-          ]),
-          AppLink(
-            to: '#rec2-filters',
-            classes: 'rec2__edit-filters',
-            children: [Component.text('Edit filters')],
-          ),
-        ]),
     ]);
   }
 
@@ -1395,10 +1361,10 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
           _fact('Rent', 'RM ${prop.rentalRm.toStringAsFixed(0)}/mo'),
           _fact('Floor area', '${prop.sizeSqft.toStringAsFixed(0)} sq ft'),
           if (item.puAvailable == true && item.puScore != null)
-            _fact('PU score', item.puScore!.toStringAsFixed(0))
+            _fact('Location score', item.puScore!.toStringAsFixed(0))
           else if (item.suitabilityAvailable)
             _fact(
-              'Research index',
+              'Location score',
               item.catalogSuitabilityScore!.toStringAsFixed(0),
             ),
         ]),
@@ -1523,7 +1489,7 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
           _requirementList('Not met', match.unmatched, 'is-unmet'),
         if (match.unverified.isNotEmpty)
           _requirementList(
-            'Cannot be verified from the catalogue',
+            'Not enough information yet',
             match.unverified,
             'is-unverified',
           ),
@@ -1532,8 +1498,7 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
             match.unverified.isEmpty)
           p(classes: 'small', [
             Component.text(
-              'No requirements were applied — this is a plain catalogue '
-              'browse. Set your business requirements to rank by fit.',
+              'Choose a location, budget or floor space above to find properties that suit your needs.',
             ),
           ]),
       ]),
@@ -1568,7 +1533,7 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
             '${(item.characteristics['population_1000m'] as num).round()}',
           ),
         _panelRow(
-          'Research index',
+          'Location score',
           item.suitabilityAvailable
               ? '${item.catalogSuitabilityScore!.toStringAsFixed(1)} / 100'
               : 'Not available',
@@ -1577,28 +1542,20 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
 
       div(classes: 'rec2-panel__block', [
         span(classes: 'rec2-panel__label', [
-          Component.text('PU research association'),
+          Component.text('About the location score'),
         ]),
         p(classes: 'small', [
           Component.text(
             item.puAvailable == true
-                ? 'PU score: ${item.puScore?.toStringAsFixed(1) ?? '—'} / 100 '
-                      '— the research association index (not a success '
-                      'probability). Every listed recommendation exceeds 50.'
-                      '${item.puScoreSource == 'expanded64_live_inference' ? ' '
-                          'This score was computed live by the expanded '
-                          '64-feature research model '
-                          '(${item.puModelVersion ?? 'unversioned'}); the '
-                          'stored research index is a different model and is '
-                          'not shown here.' : ''}'
-                : 'No PU score is stored for this property, so it cannot pass '
-                      'the eligibility threshold and is not recommended. The '
-                      'PU model is a separate research model and is never '
-                      'folded into the match figure.',
+                ? 'This property has a location score of '
+                      '${item.puScore?.toStringAsFixed(1) ?? '—'} out of 100. '
+                      'It describes recorded area characteristics, not the '
+                      'number of customers or sales the business will get.'
+                : 'A location score is not available for this property.',
           ),
         ]),
         ActionLink(
-          'Open explainable analysis',
+          'See how this score was calculated',
           href:
               '/entrepreneur/explanation?property=${Uri.encodeComponent(prop.id)}',
           variant: 'secondary',

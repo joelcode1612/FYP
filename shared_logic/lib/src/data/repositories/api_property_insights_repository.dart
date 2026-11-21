@@ -1,5 +1,6 @@
 import '../../core/network/api_client.dart';
 import '../models/property_insights_model.dart';
+import 'property_insights_repository.dart';
 
 /// Live read of `/api/v1/catalog/properties/{id}/insights`.
 ///
@@ -10,7 +11,7 @@ import '../models/property_insights_model.dart';
 /// Nothing is computed here. The score, the SHAP factors and the category
 /// totals all come from the backend's deployed artifact; this class only
 /// decodes them.
-class ApiPropertyInsightsRepository {
+class ApiPropertyInsightsRepository implements PropertyInsightsRepository {
   final ApiClient _client;
 
   ApiPropertyInsightsRepository(this._client);

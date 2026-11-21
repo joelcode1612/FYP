@@ -1,5 +1,5 @@
 import 'package:shared_logic/shared_logic.dart';
-import 'mobile_runtime_config.dart';
+import 'package:fyp/core/config/mobile_runtime_config.dart';
 
 /// Where this mobile build sends its authenticated requests.
 ///

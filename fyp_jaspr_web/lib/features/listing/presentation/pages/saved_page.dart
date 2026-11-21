@@ -99,7 +99,7 @@ class SavedPage extends StatelessComponent {
                     'session.',
                   ),
                 ]),
-                if (compareShortlistStatus(compared) case final status?) status,
+                ?compareShortlistStatus(compared),
                 if (gone.isNotEmpty)
                   div(classes: 'notice notice-warn', [
                     Component.text(

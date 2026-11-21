@@ -72,6 +72,16 @@ async def lifespan(app: FastAPI):
         logger.info("Explanation worker: %s", worker_status)
     except Exception:  # noqa: BLE001 - the API must start even if the worker cannot
         logger.exception("Explanation worker could not start; explanations degrade to pending")
+    # Durable panorama stitching worker: claims fyp.panorama_jobs rows with
+    # FOR UPDATE SKIP LOCKED; a job stalled by a crash or restart is
+    # reclaimed after its claim goes stale, so no stitch is ever stranded.
+    try:
+        from sitewise.services import panorama_worker
+
+        stitcher_status = panorama_worker.startup()
+        logger.info("Panorama worker: %s", stitcher_status)
+    except Exception:  # noqa: BLE001 - the API must start even if the worker cannot
+        logger.exception("Panorama worker could not start; queued jobs wait for the next start")
     yield
 
 

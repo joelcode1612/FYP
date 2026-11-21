@@ -20,6 +20,16 @@ class NetworkFailure extends AppFailure {
       'Unable to reach Sitewise. Check your connection and try again.';
 }
 
+/// Thrown when a feature is unavailable because the app is running on static
+/// demo data instead of the authenticated backend.
+///
+/// Lives with the other failure types, not with the transport port: an
+/// application controller reports it as state and must not import a network
+/// file only to name the error.
+class DemoModeFailure extends AppFailure {
+  const DemoModeFailure() : super('Network is disabled in demo-data mode.');
+}
+
 /// The request reached the Sitewise service but was refused for lack of a
 /// valid session (HTTP 401/403). Distinct from [NetworkFailure] so the UI
 /// can say "sign in again" instead of "check your connection".

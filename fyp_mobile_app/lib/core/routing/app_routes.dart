@@ -1,39 +1,39 @@
 import 'package:flutter/material.dart';
 
-import 'auth_route_guard.dart';
-import '../../features/assessment/view/home_screen.dart';
-import '../../features/assessment/view/assessment_draft_loader.dart';
-import '../../features/assessment/view/questionnaire_screen.dart';
-import '../../features/assessment/view/review_screen.dart';
-import '../../presentation/mobile/auth/pages/forgot_password_mobile_page.dart';
-import '../../presentation/mobile/auth/pages/mobile_auth_page.dart';
-import '../../presentation/mobile/auth/pages/signup_mobile_page.dart';
-import '../../presentation/mobile/auth/widgets/auth_tabs.dart';
-import '../../presentation/mobile/onboarding/pages/onboarding_flow_page.dart';
-import '../../presentation/mobile/start/app_start_gate.dart';
-import '../../presentation/mobile/shell/entrepreneur_tab_host.dart';
-import '../../presentation/mobile/entrepreneur/pages/entrepreneur_assessment_questions_mobile_page.dart';
-import '../../presentation/mobile/entrepreneur/pages/entrepreneur_assessment_summary_mobile_page.dart';
-import '../../presentation/mobile/entrepreneur/pages/entrepreneur_ai_recommendations_mobile_page.dart';
-import '../../presentation/mobile/entrepreneur/pages/entrepreneur_compare_mobile_page.dart';
-import '../../presentation/mobile/entrepreneur/pages/entrepreneur_evidence_mobile_page.dart';
-import '../../presentation/mobile/landing/pages/landing_mobile_page.dart';
-import '../../presentation/mobile/entrepreneur/pages/entrepreneur_preferences_mobile_page.dart';
-import '../../presentation/mobile/entrepreneur/pages/entrepreneur_property_detail_mobile_page.dart';
-import '../../presentation/mobile/entrepreneur/pages/entrepreneur_explore_mobile_page.dart';
-import '../../presentation/mobile/entrepreneur/pages/entrepreneur_report_mobile_page.dart';
-import '../../presentation/mobile/entrepreneur/pages/entrepreneur_favourites_mobile_page.dart';
-import '../../presentation/mobile/entrepreneur/pages/entrepreneur_tour_mobile_page.dart';
-import '../../presentation/mobile/entrepreneur/pages/property_panorama_mobile_page.dart';
-import '../../presentation/mobile/entrepreneur/pages/sitewise_add_property_mobile_page.dart';
-import '../../presentation/mobile/provider/pages/provider_mfa_mobile_page.dart';
-import '../../presentation/mobile/provider/pages/provider_property_detail_mobile_page.dart';
-import '../../presentation/mobile/provider/pages/provider_verification_mobile_page.dart';
-import '../../presentation/mobile/provider/pages/property_management_moved_page.dart';
-import '../../presentation/mobile/provider/shell/provider_tab_host.dart';
-import '../../presentation/shared/pages/not_found_mobile_page.dart';
-import '../../presentation/shared/tour/ar_capture_mobile_page.dart';
-import '../../presentation/shared/tour/tour_preview_mobile_page.dart';
+import 'package:fyp/core/routing/auth_route_guard.dart';
+import 'package:fyp/features/assessment/presentation/home_screen.dart';
+import 'package:fyp/features/assessment/presentation/assessment_draft_loader.dart';
+import 'package:fyp/features/assessment/presentation/questionnaire_screen.dart';
+import 'package:fyp/features/assessment/presentation/review_screen.dart';
+import 'package:fyp/features/authentication/presentation/pages/forgot_password_mobile_page.dart';
+import 'package:fyp/features/authentication/presentation/pages/mobile_auth_page.dart';
+import 'package:fyp/features/authentication/presentation/pages/signup_mobile_page.dart';
+import 'package:fyp/features/authentication/presentation/widgets/auth_tabs.dart';
+import 'package:fyp/features/onboarding/presentation/pages/onboarding_flow_page.dart';
+import 'package:fyp/core/routing/app_start_gate.dart';
+import 'package:fyp/shared/presentation/layouts/entrepreneur_tab_host.dart';
+import 'package:fyp/features/assessment/presentation/pages/entrepreneur_assessment_questions_mobile_page.dart';
+import 'package:fyp/features/assessment/presentation/pages/entrepreneur_assessment_summary_mobile_page.dart';
+import 'package:fyp/features/recommendations/presentation/pages/entrepreneur_ai_recommendations_mobile_page.dart';
+import 'package:fyp/features/compare/presentation/pages/entrepreneur_compare_mobile_page.dart';
+import 'package:fyp/features/assessment/presentation/pages/entrepreneur_evidence_mobile_page.dart';
+import 'package:fyp/shared/presentation/components/landing_mobile_page.dart';
+import 'package:fyp/features/profile/presentation/pages/entrepreneur_preferences_mobile_page.dart';
+import 'package:fyp/features/listing/presentation/pages/entrepreneur_property_detail_mobile_page.dart';
+import 'package:fyp/features/listing/presentation/pages/entrepreneur_explore_mobile_page.dart';
+import 'package:fyp/features/assessment/presentation/pages/entrepreneur_report_mobile_page.dart';
+import 'package:fyp/features/profile/presentation/pages/entrepreneur_favourites_mobile_page.dart';
+import 'package:fyp/features/panorama_viewer/presentation/pages/entrepreneur_tour_mobile_page.dart';
+import 'package:fyp/features/panorama_viewer/presentation/pages/property_panorama_mobile_page.dart';
+import 'package:fyp/features/property_management/presentation/pages/sitewise_add_property_mobile_page.dart';
+import 'package:fyp/features/authentication/presentation/pages/provider_mfa_mobile_page.dart';
+import 'package:fyp/features/property_management/presentation/pages/provider_property_detail_mobile_page.dart';
+import 'package:fyp/features/property_verification/presentation/pages/provider_verification_mobile_page.dart';
+import 'package:fyp/features/property_management/presentation/pages/property_management_moved_page.dart';
+import 'package:fyp/shared/presentation/layouts/provider_tab_host.dart';
+import 'package:fyp/shared/presentation/components/not_found_mobile_page.dart';
+import 'package:fyp/features/capture_360/presentation/pages/ar_capture_mobile_page.dart';
+import 'package:fyp/features/panorama_viewer/presentation/pages/tour_preview_mobile_page.dart';
 
 /// Centralised route table for the Flutter app (mobile tree only).
 ///
@@ -54,6 +54,7 @@ String parentShellRoute(String route) {
     // Performance is a Dashboard shortcut, not a tab, so Home stays selected.
     '/provider/add-property': '/provider/add-property',
     '/provider/property-detail': '/provider/listings',
+    '/provider/requests': '/provider/requests',
     '/provider/performance': '/provider',
     // Verification is reached from Profile, and MFA is a step of whichever
     // protected staff flow pushed it — both keep Profile selected.
@@ -166,6 +167,10 @@ abstract final class AppRoutes {
       '/provider/listings' => (
         RouteAccess.workspace,
         () => const ProviderTabHost(initialRoute: '/provider/listings'),
+      ),
+      '/provider/requests' => (
+        RouteAccess.workspace,
+        () => const ProviderTabHost(initialRoute: '/provider/requests'),
       ),
       '/provider/profile' => (
         RouteAccess.workspace,

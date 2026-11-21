@@ -6,6 +6,7 @@ import 'package:jaspr_riverpod/jaspr_riverpod.dart';
 import 'package:shared_logic/shared_logic.dart';
 
 import 'package:sitewise_jaspr_web/features/administration/presentation/components/agent_assignment_control.dart';
+import 'package:sitewise_jaspr_web/features/panorama_viewer/presentation/components/canonical_panorama_panel.dart';
 import 'package:sitewise_jaspr_web/shared/presentation/components/ui.dart';
 import 'package:sitewise_jaspr_web/features/property_verification/presentation/components/verification_detail_view.dart';
 import 'package:sitewise_jaspr_web/shared/presentation/layouts/app_layout.dart';
@@ -75,6 +76,7 @@ class _ListingDetailPageState extends State<ListingDetailPage> {
               ),
               const VerificationDetailView(),
               AgentAssignmentControl(propertyId: _loadedId),
+              CanonicalPanoramaPanel(propertyId: _loadedId),
             ])
           : div(classes: 'card stack', [
               if (error != null && !loading) ...[

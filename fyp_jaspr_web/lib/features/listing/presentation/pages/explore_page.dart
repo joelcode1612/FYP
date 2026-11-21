@@ -770,7 +770,7 @@ class _ExplorePageState extends State<ExplorePage> {
         ])
       else
         div(classes: 'swcx-list-scroll', [
-          if (compareShortlistStatus(compared) case final status?) status,
+          ?compareShortlistStatus(compared),
           div(classes: 'pgrid swcx-property-grid', [
             for (final p in results.take(visibleLimit))
               PropertyCard(

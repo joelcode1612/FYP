@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_logic/shared_logic.dart';
-import '../config/dev_auth_bypass.dart';
-import '../../presentation/mobile/start/auth_blocking_views.dart';
-import 'mobile_role.dart';
+import 'package:fyp/core/config/dev_auth_bypass.dart';
+import 'package:fyp/features/authentication/presentation/widgets/auth_blocking_views.dart';
+import 'package:fyp/core/routing/mobile_role.dart';
 
 /// How a route was reached before the user had a session.
 ///
