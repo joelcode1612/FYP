@@ -134,9 +134,12 @@ FastAPI is running properly.
 
 ## Property dataset
 
-The workbook's `Filtered_Data` sheet contains **2,126 accepted records** stored
-in `sitewise_app.properties` in `Final_Location_Analysis`. The intended backend
-serves them read-only at `GET /api/v1/catalog/properties` (bearer token required,
+The workbook's `Filtered_Data sheet` rows now live in `fyp.rental_properties`
+in `Final_Location_Analysis`; the **955-row research catalogue** is served
+through the `fyp.catalogue_properties` view over those rows (owner-submitted
+listings are excluded by the view). The old `sitewise_app` schema has been
+removed. The backend serves the catalogue read-only at
+`GET /api/v1/catalog/properties` (bearer token required,
 `{data, meta:{total,limit,offset}}`), which is what
 `lib/data/api_property_repository.dart` consumes. No analytics/scoring tables
 are modified. A workbook quality PASS is not administrator verification, and the

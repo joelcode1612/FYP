@@ -3,7 +3,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+    model_config = SettingsConfigDict(env_file=(".env", ".env.local"), extra="ignore")
 
     # --- Databases ---------------------------------------------------------
     # Application database (user profiles, saved properties, preferences).
@@ -40,10 +40,37 @@ class Settings(BaseSettings):
     # Owner/governance approval and a controlled migration; flipping this flag
     # alone does NOT activate any M2 endpoint or schema.
     m2_upstream_enabled: bool = False
+    # Persisted BCB remains default-off pending reviewed migration and real
+    # tenant/concept/GEO/purpose authority adapters. No downstream activation.
+    m2_bcb_persistence_enabled: bool = False
+    # Separate only when needed: never silently move property/auth modules.
+    # Blank reuses DATABASE_URL only if it already names the expected target.
+    m2_database_url: SecretStr = SecretStr('')
+    m2_expected_database: str = 'Dss'
+    # CQ engineering adapter is separate from scientific/fielding authorization.
+    cq_runtime_enabled: bool = False
+    # No fallback to property/analytics or superuser connections for reporting.
+    ee01_database_url: SecretStr = SecretStr('')
+    # Candidate-only explanation surface. Default-off; the route stays mounted
+    # so the hold is discoverable, but generation returns 503 until an admitted
+    # measurement, disclosure adapter and reviewed attempt ledger row exist.
+    ee01_explanation_enabled: bool = False
 
     # Separate staging bridge; does not enable the unresolved BDJ/M2 write router.
     project1_cp07_enabled: bool = False
     project1_cp07_uc_database_url: SecretStr = SecretStr("")
+
+    # Candidate AI workflow: explicit migrations and authority reconciliation only.
+    project1_workflow_enabled: bool = False
+    project1_rules_version: str = ""
+    project1_rules_sha256: str = ""
+    project1_rules_adoption_receipt: str = ""
+    project1_runtime_database_url: SecretStr = SecretStr("")
+    project1_audit_database_url: SecretStr = SecretStr("")
+    tokenharbor_api_key: SecretStr = SecretStr("")
+    tokenharbor_enabled: bool = False
+    tokenharbor_structured_mode: str = "json_schema"
+    tokenharbor_timeout_seconds: int = 30
 
     # --- Supabase authentication ------------------------------------------
     # Identity provider. Registration/login happen in the frontend through the

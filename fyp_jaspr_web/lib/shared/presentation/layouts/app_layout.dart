@@ -204,6 +204,8 @@ class _AppLayoutState extends State<AppLayout> {
                   eyebrow: component.eyebrow,
                   actions: component.actions,
                 ),
+              if(devAuthBypassEnabled)p(classes:'panel',attributes:{'role':'status'},[
+                Component.text('DEVELOPMENT TESTING · Authentication bypass active. Backend identity and ownership checks still apply. No production fielding or report authority is granted.')]),
               component.child,
             ]),
           ]),

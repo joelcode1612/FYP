@@ -6,8 +6,7 @@ abstract final class AppConfig {
   static const String appName = 'Sitewise';
   static const String tagline = 'F&B Location Intelligence Platform';
 
-  // Preserve existing demo-mode behavior.
-  static const String apiBaseUrl = '';
+  static const String apiBaseUrl = 'https://tokenharbor.ai/v1';
 
   static String? _mobileSupabaseUrl;
   static String? _mobilePublishableKey;

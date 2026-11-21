@@ -344,3 +344,54 @@ def test_unavailable_uc_role_fails_closed(lab):
             "candidate_version_id":str(lab["version"]),"action":"CONFIRMED","receipt":"test"}).status_code == 503
     finally:
         settings.project1_cp07_uc_database_url = previous
+
+
+def test_confirmed_review_retains_postgres_lock_through_projection_and_releases_on_failure(lab, monkeypatch):
+    """Actual row-lock behavior in the already verified NEW private cluster."""
+    from sqlalchemy.orm import Session
+    from sqlalchemy.exc import OperationalError
+    from sitewise.db.models.m2_schema import clarification_events
+    from sitewise.repositories.m2_repository import SqlModelM2Repository
+    from sitewise.services.m2_service import M2Service
+    from sitewise.services.bdj_service import BDJService
+    from sitewise.services.confirmation_service import ConfirmationService
+    from sitewise.services.confirmed_review_service import ConfirmedReviewService
+    # Required missing stream is provisioned only in this private test cluster.
+    clarification_events.create(lab['db'], checkfirst=True)
+    with Session(lab['db']) as session:
+        repo = SqlModelM2Repository(session)
+        m2 = M2Service(repo)
+        mid = m2.create_assessment(lab['instrument'], lab['actor'])['id']
+        m2.update_answer(mid, lab['actor'], expected_revision=0, item_key='M2-04',
+                         state='ANSWERED', value='Private PostgreSQL review declaration.')
+        BDJService(repo).evaluate(mid, lab['actor'], expected_revision=1)
+        confirmation = ConfirmationService(repo)
+        confirmation.record_review(mid, lab['actor'], 1)
+        cid = confirmation.confirm(mid, lab['actor'], expected_revision=1, acknowledged_issue_ids=[])['id']
+        service = ConfirmedReviewService(repo)
+        read = service.bdj.read_worksheet
+        attempts = []
+        def while_locked(assessment_id, actor_id):
+            with lab['db'].connect() as contender:
+                contender.execute(text("SET LOCAL lock_timeout='150ms'"))
+                with pytest.raises(OperationalError) as blocked:
+                    contender.execute(text('UPDATE m2_assessments SET revision=revision+1 WHERE id=:id'), {'id':mid})
+                assert blocked.value.orig.pgcode == '55P03'
+                contender.rollback()
+                attempts.append('blocked')
+            return read(assessment_id, actor_id)
+        monkeypatch.setattr(service.bdj, 'read_worksheet', while_locked)
+        result = service.read(mid, lab['actor'], confirmation_id=cid, expected_revision=1)
+        assert result.answers[0].value == 'Private PostgreSQL review declaration.'
+        assert len(result.activity) == 4 and attempts == ['blocked']
+        # Successful projection releases its lock. No-op update proves acquisition.
+        with lab['db'].begin() as contender:
+            contender.execute(text("SET LOCAL lock_timeout='150ms'"))
+            contender.execute(text('UPDATE m2_assessments SET revision=revision WHERE id=:id'), {'id':mid})
+        def fail(*args): raise RuntimeError('Synthetic projection failure')
+        monkeypatch.setattr(service.bdj, 'read_worksheet', fail)
+        with pytest.raises(RuntimeError, match='Synthetic projection failure'):
+            service.read(mid, lab['actor'], confirmation_id=cid, expected_revision=1)
+        with lab['db'].begin() as contender:
+            contender.execute(text("SET LOCAL lock_timeout='150ms'"))
+            contender.execute(text('UPDATE m2_assessments SET revision=revision WHERE id=:id'), {'id':mid})

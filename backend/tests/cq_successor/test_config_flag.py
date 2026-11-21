@@ -17,7 +17,8 @@ class TestM2UpstreamFlag(unittest.TestCase):
     def test_missing_env_defaults_false(self):
         original = os.environ.pop("M2_UPSTREAM_ENABLED", None)
         try:
-            self.assertFalse(Settings().m2_upstream_enabled)
+            # Test the code default, independently of a developer's opted-in .env.
+            self.assertFalse(Settings(_env_file=None).m2_upstream_enabled)
         finally:
             if original is not None:
                 os.environ["M2_UPSTREAM_ENABLED"] = original

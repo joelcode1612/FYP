@@ -1,0 +1,3059 @@
+{
+  "classification": "SYNTHETIC_FIXTURE",
+  "source": "attempt09 actual private FastAPI/PG responses; no production authority",
+  "before": {
+    "contract_version": "cq-session/1",
+    "session_id": "a0bf44f6-d2ab-4c4c-94be-924e1f1bee98",
+    "campaign_id": "c6992b73-5ed4-413e-abbf-09b61912d85b",
+    "release_id": "7f94848d-ae12-4875-a3a1-e41493731ee1",
+    "manifest_hash": "b169ec7e8bc5762e3deb0bc4ff5e4e47cdf8a5487535506bc6225af32df5cfe7",
+    "manifest": {
+      "lane": "BASELINE",
+      "mode": "C1",
+      "title": "Isolated questionnaire test",
+      "locales": [
+        "EN",
+        "BM"
+      ],
+      "stimuli": {
+        "menu": {
+          "text": {
+            "BM": "UJIAN menu",
+            "EN": "SYNTHETIC TEST menu"
+          },
+          "version": "SYNTHETIC-menu-1"
+        },
+        "offer": {
+          "text": {
+            "BM": "UJIAN offer",
+            "EN": "SYNTHETIC TEST offer"
+          },
+          "version": "SYNTHETIC-offer-1"
+        },
+        "concept": {
+          "text": {
+            "BM": "UJIAN concept",
+            "EN": "SYNTHETIC TEST concept"
+          },
+          "version": "SYNTHETIC-concept-1"
+        },
+        "features": {
+          "text": {
+            "BM": "UJIAN features",
+            "EN": "SYNTHETIC TEST features"
+          },
+          "version": "SYNTHETIC-features-1"
+        },
+        "occasion": {
+          "text": {
+            "BM": "UJIAN occasion",
+            "EN": "SYNTHETIC TEST occasion"
+          },
+          "version": "SYNTHETIC-occasion-1"
+        }
+      },
+      "version": "SYNTHETIC-e5f28597-ff67-4ce7-9bbf-bd8184a5639e",
+      "questions": [
+        {
+          "id": "Q01",
+          "type": "multi_select_with_exclusive_terminals",
+          "codes": [
+            "LIVE",
+            "WORK",
+            "STUDY",
+            "RUN_BUSINESS",
+            "VISIT_PURPOSE",
+            "PASS_THROUGH",
+            "RARELY",
+            "NEVER",
+            "NOT_SURE"
+          ],
+          "labels": {
+            "BM": {
+              "LIVE": "Saya tinggal di kawasan ini",
+              "WORK": "Saya bekerja di kawasan ini",
+              "NEVER": "Tidak pernah",
+              "STUDY": "Saya belajar di kawasan ini",
+              "RARELY": "Jarang",
+              "NOT_SURE": "Tidak pasti",
+              "PASS_THROUGH": "Saya melalui kawasan ini",
+              "RUN_BUSINESS": "Saya menjalankan perniagaan di kawasan ini",
+              "VISIT_PURPOSE": "Saya datang ke kawasan ini untuk aktiviti atau tujuan lain"
+            },
+            "EN": {
+              "LIVE": "I live in this area",
+              "WORK": "I work in this area",
+              "NEVER": "Never",
+              "STUDY": "I study in this area",
+              "RARELY": "Rarely",
+              "NOT_SURE": "Not sure",
+              "PASS_THROUGH": "I pass through this area",
+              "RUN_BUSINESS": "I operate a business in this area",
+              "VISIT_PURPOSE": "I visit this area for activities or other purposes"
+            }
+          },
+          "version": "SYNTHETIC-LANGUAGE-CANDIDATE-01:Q01",
+          "wording": {
+            "BM": "Antara yang berikut, yang manakah menerangkan hubungan anda dengan [nama kawasan]? Pilih semua yang berkenaan. Jika tiada yang berkenaan, pilih satu daripada pilihan selebihnya.",
+            "EN": "Which of the following describe your connection to [named area]? Select all that apply. If none apply, select one of: Rarely, Never, Not sure."
+          },
+          "validation": {
+            "id": "Q01",
+            "stem": "Which of the following describe your connection to [named area]? Select all that apply. If none apply, select one of: Rarely, Never, Not sure.",
+            "type": "multi_select_with_exclusive_terminals",
+            "class": "ESSENTIAL_SCREEN",
+            "codes": [
+              "LIVE",
+              "WORK",
+              "STUDY",
+              "RUN_BUSINESS",
+              "VISIT_PURPOSE",
+              "PASS_THROUGH",
+              "RARELY",
+              "NEVER",
+              "NOT_SURE"
+            ],
+            "status": "BLOCKED_MEASUREMENT",
+            "construct": "G01_AREA_AFFILIATION",
+            "disposition": "REWRITE_WITH_ROUTE_OUTS_RESTORED",
+            "display_order": [
+              "LIVE",
+              "WORK",
+              "STUDY",
+              "RUN_BUSINESS",
+              "VISIT_PURPOSE",
+              "PASS_THROUGH",
+              "RARELY",
+              "NEVER",
+              "NOT_SURE"
+            ],
+            "max_selections": null,
+            "exclusive_codes": [
+              "RARELY",
+              "NEVER",
+              "NOT_SURE"
+            ],
+            "permitted_claim": "Overlapping affiliation counts and the separate counts of RARELY, NEVER and NOT_SURE screen-outs, with I/Q/S/A/V",
+            "report_sections": [
+              "R02",
+              "R08"
+            ],
+            "source_original": "CS-01",
+            "candidate_remark": {
+              "note": "Candidate draft only. WS2-NEW-16 records that no option display labels exist anywhere in the package; these EN/BM strings are proposed wording, not the validated instrument. BM translation requires independent review (prior A03 recorded the UNSURE/NOT_SURE BM collision hazard).",
+              "locale_bm": {
+                "text": "Pilih semua keterangan yang berkaitan. 'Jarang', 'Tidak pernah' dan 'Tidak pasti' ialah pilihan berasingan — pilih satu daripadanya jika tiada yang lain sesuai. Memilih lebih daripada satu keterangan tidak mengira anda lebih daripada sekali.",
+                "review_status": "PROPOSED_NON_AUTHORITATIVE_BM_TRANSLATION_REVIEW_PENDING"
+              },
+              "locale_en": {
+                "text": "Select all the descriptions that apply. 'Rarely', 'Never' and 'Not sure' are separate choices — pick one of them if none of the others fit. Choosing more than one description does not count you more than once.",
+                "review_status": "PROPOSED_NON_AUTHORITATIVE"
+              },
+              "remark_id": "RM-Q01",
+              "question_id": "Q01",
+              "review_status": "PENDING_SCIENTIFIC_TRANSLATION_ACCESSIBILITY_ETHICS",
+              "remark_version": "candidate_draft_v0_6_1",
+              "question_version": "BLOCKED_MEASUREMENT",
+              "authority_to_activate": "NONE_GRANTED_BY_THIS_DOCUMENT"
+            },
+            "gate_dependencies": [
+              "G01",
+              "G06",
+              "G07",
+              "G08"
+            ],
+            "substantive_codes": [
+              "LIVE",
+              "WORK",
+              "STUDY",
+              "RUN_BUSINESS",
+              "VISIT_PURPOSE",
+              "PASS_THROUGH"
+            ],
+            "eligibility_effect": {
+              "note": "PROPOSED_PENDING_SD_A (Scientific + Owner; NOT adopted): single Q01 disposition rule — see eligibility_effect.disposition_rule (the sole rule source). (1) exclusive terminal co-selected with affiliation: terminal wins (RARELY/NEVER -> AREA_OUTSIDE; NOT_SURE -> AREA_UNKNOWN); (2) sole terminal likewise; (3) any code not in `codes` -> REJECT -> answer_state INVALID, Q01_SCREEN SCREEN_INVALID (unknown_code_policy REJECT is the only unknown-code exit; it is NOT AREA_UNKNOWN); (4) empty -> AREA_UNKNOWN; (5) affiliations only -> ELIGIBLE. 'INVALID at Q01 screen' is the subtracted SCREEN_INVALID partition term of the Q_pre/Q_post formula, not a competing route.",
+              "NEVER": "AREA_OUTSIDE",
+              "RARELY": "AREA_OUTSIDE",
+              "default": "ELIGIBLE",
+              "NOT_SURE": "AREA_UNKNOWN",
+              "disposition_rule": {
+                "note": "v0.6 encoded the same terminal-wins choice using adoption language while still leaving three competing clauses in the bytes; v0.6.1 keeps the choice (required for determinism) but deletes every competing clause and re-marks it as a proposal for SD-A.",
+                "rules": [
+                  {
+                    "n": 1,
+                    "case": "exclusive terminal (RARELY, NEVER, NOT_SURE) co-selected with any affiliation code",
+                    "disposition": "terminal wins: RARELY/NEVER -> AREA_OUTSIDE; NOT_SURE -> AREA_UNKNOWN; never INVALID, never ELIGIBLE"
+                  },
+                  {
+                    "n": 2,
+                    "case": "sole exclusive terminal",
+                    "disposition": "RARELY/NEVER -> AREA_OUTSIDE; NOT_SURE -> AREA_UNKNOWN"
+                  },
+                  {
+                    "n": 3,
+                    "case": "any selected code not in `codes` (unknown code)",
+                    "disposition": "REJECT: item answer_state = INVALID; Q01_SCREEN = SCREEN_INVALID; unit leaves the funnel via the SCREEN_INVALID partition term; never AREA_UNKNOWN, never ELIGIBLE (unknown_code_policy REJECT is the single rule)"
+                  },
+                  {
+                    "n": 4,
+                    "case": "empty answer",
+                    "disposition": "AREA_UNKNOWN (default_when_empty)"
+                  },
+                  {
+                    "n": 5,
+                    "case": "affiliation codes only (any overlap, all in `codes`)",
+                    "disposition": "ELIGIBLE (default)"
+                  }
+                ],
+                "status": "PROPOSED_PENDING_SD_A (Scientific + Owner; NOT adopted)",
+                "totality": "Every possible Q01 answer set maps to exactly one of {AREA_OUTSIDE, AREA_UNKNOWN, SCREEN_INVALID, ELIGIBLE}; every value of routing_model.route_inputs.Q01_SCREEN has exactly one declared exit (routing_model.screen_value_exits).",
+                "single_rule_source": "items[0]/eligibility_effect/disposition_rule is the ONLY source of the Q01 screen disposition. The general exclusive-conflict->INVALID clauses (denominator_invariants, single_select_and_multi_select_guards, E_EXCLUSIVE_CODE_CONFLICT) and the INVALID answer-state trigger list DO NOT apply to Q01. There is no competing disposition anywhere in this contract."
+              },
+              "default_when_empty": "AREA_UNKNOWN",
+              "unknown_code_policy": "REJECT"
+            },
+            "coverage_limitation": "Affiliation categories are proposed; the geographic predicate that turns them into eligibility is not approved (Task B / SD-02 formal).",
+            "forbidden_inference": "Respondent residence; residential totals; demand counts; treating NOT_SURE as eligible or ineligible",
+            "legacy_successor_map": {
+              "rule": "Each code declares whether it is comparable to a legacy CS-01 code. A code with no successor must not be pooled with any other code, and legacy and successor distributions must not be pooled without a declared comparability rule.",
+              "entries": {
+                "LIVE": {
+                  "legacy": "CS-01 LIVE",
+                  "successor": "LIVE",
+                  "comparability": "COMPARABLE"
+                },
+                "WORK": {
+                  "legacy": "CS-01 WORK",
+                  "successor": "WORK",
+                  "comparability": "COMPARABLE"
+                },
+                "NEVER": {
+                  "class": "SCREEN_OUT_TERMINAL",
+                  "legacy": "CS-01 NEVER",
+                  "successor": "NEVER",
+                  "comparability": "COMPARABLE"
+                },
+                "STUDY": {
+                  "legacy": "CS-01 STUDY",
+                  "successor": "STUDY",
+                  "comparability": "COMPARABLE"
+                },
+                "RARELY": {
+                  "class": "SCREEN_OUT_TERMINAL",
+                  "legacy": "CS-01 RARELY",
+                  "successor": "RARELY",
+                  "comparability": "COMPARABLE"
+                },
+                "NOT_SURE": {
+                  "class": "SCREEN_OUT_TERMINAL",
+                  "legacy": "CS-01 NOT_SURE",
+                  "successor": "NOT_SURE",
+                  "comparability": "COMPARABLE"
+                },
+                "PASS_THROUGH": {
+                  "legacy": "CS-01 PASS_THROUGH",
+                  "successor": "PASS_THROUGH",
+                  "comparability": "COMPARABLE"
+                },
+                "RUN_BUSINESS": {
+                  "legacy": "CS-01 RUN_BUSINESS",
+                  "successor": "RUN_BUSINESS",
+                  "comparability": "COMPARABLE"
+                },
+                "VISIT_PURPOSE": {
+                  "note": "No REGULAR_VISIT counterpart exists anywhere in the candidate. This code is retained as a distinct construct and must never be pooled with PASS_THROUGH or with any other code. A successor concept is a scientific decision, not a documentary one, and is NOT made here.",
+                  "action": "RETAIN_AS_DISTINCT",
+                  "legacy": "CS-01 VISIT_PURPOSE",
+                  "successor": null,
+                  "comparability": "NOT_COMPARABLE"
+                }
+              }
+            },
+            "display_order_version": {
+              "note": "Order is pinned for reproducibility only. The pin itself is an instrument decision (SD-N; A10:272 requires order approval for ALL items); 11 of 13 items declare no pinned order. Any reorder must mint a new display_order_version.",
+              "status": "PROPOSED_PENDING_SD_N (Scientific + instrument; approval OPEN)",
+              "display_order_version": "display_order_v1_P3-01C-VNEXT-0.6.1-CUST-REC"
+            },
+            "non_substantive_codes": [
+              "NEVER",
+              "NOT_SURE",
+              "RARELY"
+            ]
+          },
+          "feature_ids": [],
+          "dependencies": [],
+          "required_for_answer": true,
+          "stimulus_dependencies": [],
+          "required_for_presentation": true
+        },
+        {
+          "id": "Q02",
+          "type": "ordinal_single",
+          "codes": [
+            "NONE",
+            "DAYS_1_3",
+            "DAYS_4_10",
+            "DAYS_11_20",
+            "DAYS_GT_20",
+            "PREFER_NOT_TO_ANSWER"
+          ],
+          "labels": {
+            "BM": {
+              "NONE": "0 hari",
+              "DAYS_1_3": "1–3 hari",
+              "DAYS_4_10": "4–10 hari",
+              "DAYS_11_20": "11–20 hari",
+              "DAYS_GT_20": "21–28 hari",
+              "PREFER_NOT_TO_ANSWER": "Memilih untuk tidak menjawab"
+            },
+            "EN": {
+              "NONE": "0 days",
+              "DAYS_1_3": "1–3 days",
+              "DAYS_4_10": "4–10 days",
+              "DAYS_11_20": "11–20 days",
+              "DAYS_GT_20": "21–28 days",
+              "PREFER_NOT_TO_ANSWER": "Prefer not to answer"
+            }
+          },
+          "version": "SYNTHETIC-LANGUAGE-CANDIDATE-01:Q02",
+          "wording": {
+            "BM": "Dalam tempoh empat minggu yang lalu, pada berapa hari yang berbeza anda berada secara fizikal di [nama kawasan]? Kira setiap hari sekali sahaja, walaupun anda datang lebih daripada sekali.",
+            "EN": "In the last four weeks, on how many days were you physically present in [named area]? Please count each day once, even if you were there more than once that day."
+          },
+          "validation": {
+            "id": "Q02",
+            "stem": "In the last four weeks, on how many days were you physically present in [named area]? Please count each day once, even if you were there more than once that day.",
+            "type": "ordinal_single",
+            "class": "ESSENTIAL_SCREEN",
+            "codes": [
+              "NONE",
+              "DAYS_1_3",
+              "DAYS_4_10",
+              "DAYS_11_20",
+              "DAYS_GT_20",
+              "PREFER_NOT_TO_ANSWER"
+            ],
+            "status": "SCIENTIFIC_APPROVAL_PENDING",
+            "construct": "G01_AREA_PRESENCE_FREQUENCY",
+            "disposition": "REWRITE_BLOCKED_SOURCE",
+            "recall_unit": {
+              "unit": "days_present",
+              "disjoint": true,
+              "band_edges": {
+                "NONE": [
+                  0,
+                  0
+                ],
+                "DAYS_1_3": [
+                  1,
+                  3
+                ],
+                "DAYS_4_10": [
+                  4,
+                  10
+                ],
+                "DAYS_11_20": [
+                  11,
+                  20
+                ],
+                "DAYS_GT_20": [
+                  21,
+                  28
+                ]
+              },
+              "exhaustive": true,
+              "counting_rule": "one calendar day counted once regardless of number of separate presences",
+              "reference_period": "last_four_weeks",
+              "reference_period_days": 28,
+              "covers_all_integers_0_to_28": true,
+              "alternative_proposed_NOT_APPLIED": {
+                "unit": "visits_per_four_weeks",
+                "rationale": "Option B of GATE-01. Not applied: it is a different construct and would require a new question version, a comparability note and scientific approval. Recorded so the choice is visible, not implicit.",
+                "authority_required": "WS2 scientific + Owner"
+              }
+            },
+            "refusal_route": {
+              "code": "PREFER_NOT_TO_ANSWER",
+              "note": "Q02 is treated as a pre-screen item under the item_show_gate Q02=ALWAYS staging, which is PROPOSED_PENDING_SD_C_SD_I (Scientific + Owner; NOT adopted); REFUSED is an answer event on the screen but does not affect area eligibility. Single answer state for PREFER_NOT_TO_ANSWER on Q02: REFUSED (via option_to_state_map; see refusal_and_state_semantics.answer_state_precedence_rule). It is NOT an ANSWERED_NON_SUBSTANTIVE event.",
+              "reachable": true,
+              "consequence": "answer_state = REFUSED; counted in A as an answer event; never in V; never converted to SKIPPED; never converted to AREA_OUTSIDE"
+            },
+            "max_selections": 1,
+            "exclusive_codes": [],
+            "permitted_claim": "Four-week days-present band distribution among displayed units, with I/Q/S/A/V, once the band scale is scientifically approved",
+            "report_sections": [
+              "R02",
+              "R08"
+            ],
+            "source_original": "CS-02",
+            "candidate_remark": {
+              "note": "Candidate draft only. WS2-NEW-16 records that no option display labels exist anywhere in the package; these EN/BM strings are proposed wording, not the validated instrument. BM translation requires independent review (prior A03 recorded the UNSURE/NOT_SURE BM collision hazard).",
+              "locale_bm": {
+                "text": "Kira hari kalendar berasingan dalam tempoh empat minggu yang dinyatakan; lebih daripada satu lawatan pada satu hari dikira sebagai satu hari.",
+                "review_status": "PROPOSED_NON_AUTHORITATIVE_BM_TRANSLATION_REVIEW_PENDING"
+              },
+              "locale_en": {
+                "text": "Count separate calendar days in the stated four-week period; more than one visit on a single day counts as one day.",
+                "review_status": "PROPOSED_NON_AUTHORITATIVE"
+              },
+              "remark_id": "RM-Q02",
+              "question_id": "Q02",
+              "review_status": "PENDING_SCIENTIFIC_TRANSLATION_ACCESSIBILITY_ETHICS",
+              "remark_version": "candidate_draft_v0_6",
+              "question_version": "SCIENTIFIC_APPROVAL_PENDING",
+              "authority_to_activate": "NONE_GRANTED_BY_THIS_DOCUMENT"
+            },
+            "gate_dependencies": [
+              "G01",
+              "G07"
+            ],
+            "substantive_codes": [
+              "NONE",
+              "DAYS_1_3",
+              "DAYS_4_10",
+              "DAYS_11_20",
+              "DAYS_GT_20"
+            ],
+            "coverage_limitation": "Bands are source-faithful to the recovered CS-02 item. The recall window is four weeks, NOT a calendar month; the two are not interchangeable and no calendar-month figure may be derived from this item. Recall validity over four weeks is untested. Any eligibility use of this item remains SCIENTIFIC_APPROVAL_PENDING: no geographic threshold is created here.",
+            "forbidden_inference": "Calendar-month visit frequency; visits rather than days; dwell time; café footfall; guaranteed local customers; pedestrian counts; any eligibility threshold derived from these bands",
+            "option_to_state_map": {
+              "NONE": "ANSWERED_SUBSTANTIVE",
+              "DAYS_1_3": "ANSWERED_SUBSTANTIVE",
+              "DAYS_4_10": "ANSWERED_SUBSTANTIVE",
+              "DAYS_11_20": "ANSWERED_SUBSTANTIVE",
+              "DAYS_GT_20": "ANSWERED_SUBSTANTIVE",
+              "PREFER_NOT_TO_ANSWER": "REFUSED"
+            },
+            "non_substantive_codes": [
+              "PREFER_NOT_TO_ANSWER"
+            ]
+          },
+          "feature_ids": [],
+          "dependencies": [
+            "Q01"
+          ],
+          "required_for_answer": false,
+          "stimulus_dependencies": [],
+          "required_for_presentation": true
+        },
+        {
+          "id": "Q03",
+          "type": "nominal_single",
+          "codes": [
+            "HOME",
+            "WORKPLACE",
+            "STUDY_LOCATION",
+            "OTHER_ACTIVITY",
+            "VARIES",
+            "DECLINE",
+            "NOT_SURE"
+          ],
+          "labels": {
+            "BM": {
+              "HOME": "Rumah",
+              "VARIES": "Berubah-ubah",
+              "DECLINE": "Memilih untuk tidak menjawab",
+              "NOT_SURE": "Tidak pasti",
+              "WORKPLACE": "Tempat kerja",
+              "OTHER_ACTIVITY": "Tempat aktiviti lain",
+              "STUDY_LOCATION": "Tempat belajar"
+            },
+            "EN": {
+              "HOME": "Home",
+              "VARIES": "It varies",
+              "DECLINE": "Prefer not to answer",
+              "NOT_SURE": "Not sure",
+              "WORKPLACE": "Workplace",
+              "OTHER_ACTIVITY": "Another activity location",
+              "STUDY_LOCATION": "Place of study"
+            }
+          },
+          "version": "SYNTHETIC-LANGUAGE-CANDIDATE-01:Q03",
+          "wording": {
+            "BM": "Jika anda memutuskan untuk mengunjungi kafe yang diterangkan di atas, dari manakah kemungkinan besar anda akan memulakan perjalanan tersebut?",
+            "EN": "If you decided to visit the café described above, where would you most likely begin that journey?"
+          },
+          "validation": {
+            "id": "Q03",
+            "stem": "If you decided to visit the café described above, where would you most likely begin that journey?",
+            "type": "nominal_single",
+            "class": "ESSENTIAL",
+            "codes": [
+              "HOME",
+              "WORKPLACE",
+              "STUDY_LOCATION",
+              "OTHER_ACTIVITY",
+              "VARIES",
+              "DECLINE",
+              "NOT_SURE"
+            ],
+            "status": "BLOCKED_SOURCE",
+            "construct": "GEO_ORIGIN_TYPE_01",
+            "disposition": "NON_EQUIVALENT_REPLACEMENT_BLOCKED_SOURCE",
+            "refusal_route": "DECLINE_OPTION",
+            "max_selections": 1,
+            "exclusive_codes": [],
+            "permitted_claim": "Counts and shares of stated likely origin TYPE among item-valid units, as a hypothetical self-report",
+            "report_sections": [
+              "R08"
+            ],
+            "source_original": "CS-11",
+            "candidate_remark": {
+              "note": "Candidate draft only. WS2-NEW-16 records that no option display labels exist anywhere in the package; these EN/BM strings are proposed wording, not the validated instrument. BM translation requires independent review (prior A03 recorded the UNSURE/NOT_SURE BM collision hazard).",
+              "locale_bm": {
+                "text": "Ini bertanya tentang jenis tempat anda akan memulakan perjalanan — contohnya rumah, tempat kerja atau belajar. Ia soalan hipotetikal tentang jenis asalan, bukan lokasi rumah atau tempat kerja yang disahkan.",
+                "review_status": "PROPOSED_NON_AUTHORITATIVE_BM_TRANSLATION_REVIEW_PENDING"
+              },
+              "locale_en": {
+                "text": "This asks about the kind of place you would start a journey from — for example home, work or study. It is a hypothetical question about the type of origin, not a verified home or work location.",
+                "review_status": "PROPOSED_NON_AUTHORITATIVE"
+              },
+              "remark_id": "RM-Q03",
+              "question_id": "Q03",
+              "review_status": "PENDING_SCIENTIFIC_TRANSLATION_ACCESSIBILITY_ETHICS",
+              "remark_version": "candidate_draft_v0_5",
+              "question_version": "BLOCKED_SOURCE",
+              "authority_to_activate": "NONE_GRANTED_BY_THIS_DOCUMENT"
+            },
+            "gate_dependencies": [
+              "G01",
+              "G03",
+              "G05"
+            ],
+            "substantive_codes": [
+              "HOME",
+              "WORKPLACE",
+              "STUDY_LOCATION",
+              "OTHER_ACTIVITY",
+              "VARIES"
+            ],
+            "coverage_limitation": "No A10 construct and no research anchor exist for this construct. GEO v0.2 supplies an identifier and a scope, not a validated construct definition.",
+            "forbidden_inference": "Exact home or work location; actual trips; commute length; individual catchment; journey distance; demand",
+            "option_to_state_map": {
+              "HOME": "ANSWERED_SUBSTANTIVE",
+              "rule": "Option values never appear in answer_state. DECLINE is an option whose recorded answer_state is REFUSED; NOT_SURE is an option whose recorded answer_state is ANSWERED_NON_SUBSTANTIVE. This is what makes REFUSED reachable on this item without conflating an option code with a transport/answer state.",
+              "VARIES": "ANSWERED_SUBSTANTIVE",
+              "DECLINE": "REFUSED",
+              "NOT_SURE": "ANSWERED_NON_SUBSTANTIVE",
+              "WORKPLACE": "ANSWERED_SUBSTANTIVE",
+              "OTHER_ACTIVITY": "ANSWERED_SUBSTANTIVE",
+              "STUDY_LOCATION": "ANSWERED_SUBSTANTIVE"
+            },
+            "non_substantive_codes": [
+              "DECLINE",
+              "NOT_SURE"
+            ]
+          },
+          "feature_ids": [],
+          "dependencies": [
+            "Q01"
+          ],
+          "required_for_answer": false,
+          "stimulus_dependencies": [
+            "concept"
+          ],
+          "required_for_presentation": true
+        },
+        {
+          "id": "Q04",
+          "type": "ordinal_single",
+          "codes": [
+            "ZERO",
+            "ONE",
+            "TWO_THREE",
+            "FOUR_SEVEN",
+            "EIGHT_PLUS",
+            "CANNOT_REMEMBER",
+            "PREFER_NOT_TO_ANSWER"
+          ],
+          "labels": {
+            "BM": {
+              "ONE": "1 kali",
+              "ZERO": "0 kali",
+              "TWO_THREE": "2–3 kali",
+              "EIGHT_PLUS": "8 kali atau lebih",
+              "FOUR_SEVEN": "4–7 kali",
+              "CANNOT_REMEMBER": "Tidak ingat",
+              "PREFER_NOT_TO_ANSWER": "Memilih untuk tidak menjawab"
+            },
+            "EN": {
+              "ONE": "1 occasion",
+              "ZERO": "0 occasions",
+              "TWO_THREE": "2–3 occasions",
+              "EIGHT_PLUS": "8 or more occasions",
+              "FOUR_SEVEN": "4–7 occasions",
+              "CANNOT_REMEMBER": "Cannot remember",
+              "PREFER_NOT_TO_ANSWER": "Prefer not to answer"
+            }
+          },
+          "version": "SYNTHETIC-LANGUAGE-CANDIDATE-01:Q04",
+          "wording": {
+            "BM": "Dalam tempoh 30 hari yang lalu, berapa kali anda membeli makanan atau minuman daripada kafe yang sedia ada?",
+            "EN": "In the past 30 days, on how many occasions have you bought food or a drink from an existing café?"
+          },
+          "validation": {
+            "id": "Q04",
+            "stem": "In the past 30 days, on how many occasions have you bought food or a drink from an existing café?",
+            "type": "ordinal_single",
+            "class": "ESSENTIAL",
+            "codes": [
+              "ZERO",
+              "ONE",
+              "TWO_THREE",
+              "FOUR_SEVEN",
+              "EIGHT_PLUS",
+              "CANNOT_REMEMBER",
+              "PREFER_NOT_TO_ANSWER"
+            ],
+            "status": "BLOCKED_MEASUREMENT",
+            "construct": "D04_EXISTING_USE",
+            "disposition": "NON_EQUIVALENT_REWRITE",
+            "refusal_route": {
+              "code": "PREFER_NOT_TO_ANSWER",
+              "reachable": true,
+              "consequence": "answer_state = REFUSED; counted in A as an answer event; never in V; never converted to SKIPPED; never converted to AREA_OUTSIDE",
+              "question_necessity_note": "The route exists on evidence-bearing items only. Q01-Q03 are screening/context and carry NOT_SURE or their own non-substantive terminal instead."
+            },
+            "max_selections": 1,
+            "exclusive_codes": [],
+            "permitted_claim": "30-day recall-band distribution with I/Q/S/A/V; no mean reconstructed from bands",
+            "report_sections": [
+              "R06"
+            ],
+            "source_original": "CS-03",
+            "candidate_remark": {
+              "note": "Candidate draft only. WS2-NEW-16 records that no option display labels exist anywhere in the package; these EN/BM strings are proposed wording, not the validated instrument. BM translation requires independent review (prior A03 recorded the UNSURE/NOT_SURE BM collision hazard).",
+              "locale_bm": {
+                "text": "Fikirkan kafé sedia ada yang anda benar-benar membeli daripadanya dalam 30 hari lepas. Pesanan yang anda ambil sendiri dikira; pesanan dalam talian sahaja tidak dikira.",
+                "review_status": "PROPOSED_NON_AUTHORITATIVE_BM_TRANSLATION_REVIEW_PENDING"
+              },
+              "locale_en": {
+                "text": "Think about existing cafés you actually bought from in the past 30 days. Orders you collected in person count; purely online-only orders do not.",
+                "review_status": "PROPOSED_NON_AUTHORITATIVE"
+              },
+              "remark_id": "RM-Q04",
+              "question_id": "Q04",
+              "review_status": "PENDING_SCIENTIFIC_TRANSLATION_ACCESSIBILITY_ETHICS",
+              "remark_version": "candidate_draft_v0_5",
+              "question_version": "BLOCKED_MEASUREMENT",
+              "authority_to_activate": "NONE_GRANTED_BY_THIS_DOCUMENT"
+            },
+            "gate_dependencies": [
+              "G03",
+              "G04",
+              "G05"
+            ],
+            "substantive_codes": [
+              "ZERO",
+              "ONE",
+              "TWO_THREE",
+              "FOUR_SEVEN",
+              "EIGHT_PLUS"
+            ],
+            "coverage_limitation": "The 30-day window is A10's; the 7-day item was the pre-registered one. Recall validity for 30 days is untested.",
+            "forbidden_inference": "New-café conversion; sales forecast; exact purchase count; pooling with the original 7-day item",
+            "option_to_state_map": {
+              "ONE": "ANSWERED_SUBSTANTIVE",
+              "ZERO": "ANSWERED_SUBSTANTIVE",
+              "TWO_THREE": "ANSWERED_SUBSTANTIVE",
+              "EIGHT_PLUS": "ANSWERED_SUBSTANTIVE",
+              "FOUR_SEVEN": "ANSWERED_SUBSTANTIVE",
+              "CANNOT_REMEMBER": "ANSWERED_NON_SUBSTANTIVE",
+              "PREFER_NOT_TO_ANSWER": "REFUSED"
+            },
+            "non_substantive_codes": [
+              "CANNOT_REMEMBER",
+              "PREFER_NOT_TO_ANSWER"
+            ]
+          },
+          "feature_ids": [],
+          "dependencies": [
+            "Q01"
+          ],
+          "required_for_answer": false,
+          "stimulus_dependencies": [],
+          "required_for_presentation": true
+        },
+        {
+          "id": "Q05",
+          "type": "ordinal_single",
+          "codes": [
+            "DEF_NO",
+            "PROB_NO",
+            "UNSURE",
+            "PROB_YES",
+            "DEF_YES",
+            "CANNOT_JUDGE",
+            "PREFER_NOT_TO_ANSWER"
+          ],
+          "labels": {
+            "BM": {
+              "DEF_NO": "Pasti tidak akan",
+              "UNSURE": "Tidak pasti",
+              "DEF_YES": "Pasti akan",
+              "PROB_NO": "Mungkin tidak akan",
+              "PROB_YES": "Mungkin akan",
+              "CANNOT_JUDGE": "Tidak dapat menilai berdasarkan penerangan",
+              "PREFER_NOT_TO_ANSWER": "Memilih untuk tidak menjawab"
+            },
+            "EN": {
+              "DEF_NO": "Definitely unlikely",
+              "UNSURE": "Unsure",
+              "DEF_YES": "Definitely likely",
+              "PROB_NO": "Probably unlikely",
+              "PROB_YES": "Probably likely",
+              "CANNOT_JUDGE": "Cannot judge from the description",
+              "PREFER_NOT_TO_ANSWER": "Prefer not to answer"
+            }
+          },
+          "version": "SYNTHETIC-LANGUAGE-CANDIDATE-01:Q05",
+          "wording": {
+            "BM": "Jika kafe yang diterangkan di atas dibuka di [nama kawasan], sejauh manakah kemungkinan anda akan mengunjunginya sekurang-kurangnya sekali dalam tempoh tiga bulan pertama selepas pembukaannya?",
+            "EN": "If the café described in [concept_card_version] opened in [named area], how likely would you be to visit it at least once during its first three months?"
+          },
+          "validation": {
+            "id": "Q05",
+            "stem": "If the café described in [concept_card_version] opened in [named area], how likely would you be to visit it at least once during its first three months?",
+            "type": "ordinal_single",
+            "class": "ESSENTIAL",
+            "codes": [
+              "DEF_NO",
+              "PROB_NO",
+              "UNSURE",
+              "PROB_YES",
+              "DEF_YES",
+              "CANNOT_JUDGE",
+              "PREFER_NOT_TO_ANSWER"
+            ],
+            "status": "BLOCKED_MEASUREMENT",
+            "construct": "D01_CONCEPT_INTENT",
+            "disposition": "REWRITE_COMPOUND",
+            "display_order": [
+              "DEF_NO",
+              "PROB_NO",
+              "UNSURE",
+              "PROB_YES",
+              "DEF_YES",
+              "CANNOT_JUDGE",
+              "PREFER_NOT_TO_ANSWER"
+            ],
+            "refusal_route": {
+              "code": "PREFER_NOT_TO_ANSWER",
+              "reachable": true,
+              "consequence": "answer_state = REFUSED; counted in A as an answer event; never in V; never converted to SKIPPED; never converted to AREA_OUTSIDE",
+              "question_necessity_note": "The route exists on evidence-bearing items only. Q01-Q03 are screening/context and carry NOT_SURE or their own non-substantive terminal instead."
+            },
+            "max_selections": 1,
+            "numerator_rule": {
+              "formula": "100 * (x[DEF_YES] + x[PROB_YES]) / V",
+              "authority": "SCIENTIFIC_APPROVAL_PENDING — predeclared by the correction author, awaiting WS2 review of the first-visit horizon and event interpretation",
+              "denominator": "V for this item, version and stimulus",
+              "predeclared": true,
+              "output_label": "stated first-three-month interest",
+              "expressly_not": [
+                "numeric chance of visiting",
+                "predicted visits",
+                "realised visits",
+                "sales",
+                "population-wide probability"
+              ],
+              "applied_only_when": "V > 0",
+              "numerator_categories": [
+                "DEF_YES",
+                "PROB_YES"
+              ],
+              "max_single_category_override": null
+            },
+            "exclusive_codes": [],
+            "ordinal_meaning": {
+              "note": "Display order is presentation. Ordinal meaning is the declared mapping. The two are separate fields so a display-order change cannot silently change the scale.",
+              "DEF_NO": 1,
+              "UNSURE": 3,
+              "DEF_YES": 5,
+              "PROB_NO": 2,
+              "PROB_YES": 4
+            },
+            "permitted_claim": "Five-category ordinal distribution, plus the predeclared DEF_YES + PROB_YES share of the item-specific V, labelled as stated interest only",
+            "report_sections": [
+              "R03"
+            ],
+            "source_original": "CS-06",
+            "candidate_remark": {
+              "note": "Candidate draft only. WS2-NEW-16 records that no option display labels exist anywhere in the package; these EN/BM strings are proposed wording, not the validated instrument. BM translation requires independent review (prior A03 recorded the UNSURE/NOT_SURE BM collision hazard).",
+              "locale_bm": {
+                "text": "'Tiga bulan pertama' bermaksud 90 hari pertama selepas kafé dibuka. Kami bertanya sejauh mana kemungkinan anda melawat sekurang-kurangnya sekali dalam tempoh itu — bukan sama ada anda akan menjadi pelanggan tetap.",
+                "review_status": "PROPOSED_NON_AUTHORITATIVE_BM_TRANSLATION_REVIEW_PENDING"
+              },
+              "locale_en": {
+                "text": "'First three months' means the first 90 days after the café opens. We ask how likely you are to visit at least once in that window — not whether you will become a regular customer.",
+                "review_status": "PROPOSED_NON_AUTHORITATIVE"
+              },
+              "remark_id": "RM-Q05",
+              "question_id": "Q05",
+              "review_status": "PENDING_SCIENTIFIC_TRANSLATION_ACCESSIBILITY_ETHICS",
+              "remark_version": "candidate_draft_v0_5",
+              "question_version": "BLOCKED_MEASUREMENT",
+              "authority_to_activate": "NONE_GRANTED_BY_THIS_DOCUMENT"
+            },
+            "gate_dependencies": [
+              "G03",
+              "G04",
+              "G05",
+              "G06"
+            ],
+            "substantive_codes": [
+              "DEF_NO",
+              "PROB_NO",
+              "UNSURE",
+              "PROB_YES",
+              "DEF_YES"
+            ],
+            "coverage_limitation": "The stem compounds a time horizon with an at-least-once event; which clause drives the answer is untested. UNSURE is substantive per the applicable A10 worked example and is counted in V; CANNOT_JUDGE is not. Horizon and event interpretation are referred to WS2.",
+            "forbidden_inference": "Calibrated probability; predicted visits; customers; revenue; demand score; any conversion to a rate",
+            "option_to_state_map": {
+              "DEF_NO": "ANSWERED_SUBSTANTIVE",
+              "UNSURE": "ANSWERED_SUBSTANTIVE",
+              "DEF_YES": "ANSWERED_SUBSTANTIVE",
+              "PROB_NO": "ANSWERED_SUBSTANTIVE",
+              "PROB_YES": "ANSWERED_SUBSTANTIVE",
+              "CANNOT_JUDGE": "ANSWERED_NON_SUBSTANTIVE",
+              "PREFER_NOT_TO_ANSWER": "REFUSED"
+            },
+            "stimulus_dependency": {
+              "kind": "CONCEPT_CARD_VERSIONED",
+              "stem_cites": "[concept_card_version]",
+              "asymmetry_with": "Q07 declares stimulus_required=true and stimulus_absent_outcome=NOT_SHOWN; Q05/Q10 cite a stimulus but declared nothing before this correction",
+              "route_consequence": "OPEN_ROUTING_03 — recorded as a disclosure, not applied as a show gate",
+              "stimulus_approved": false
+            },
+            "display_order_version": {
+              "note": "Order is pinned for reproducibility only. The pin itself is an instrument decision (SD-N; A10:272 requires order approval for ALL items); 11 of 13 items declare no pinned order. Any reorder must mint a new display_order_version.",
+              "status": "PROPOSED_PENDING_SD_N (Scientific + instrument; approval OPEN)",
+              "display_order_version": "display_order_v1_P3-01C-VNEXT-0.6.1-CUST-REC"
+            },
+            "non_substantive_codes": [
+              "CANNOT_JUDGE",
+              "PREFER_NOT_TO_ANSWER"
+            ],
+            "display_order_decision": "NEGATIVE_FIRST adopted deliberately to reduce acquiescence. A10 lists positive-first; the reversal is a recorded decision, not an oversight.",
+            "ordinal_only_rationale": "Only a Juster-type 0-10 scale carries a validated probability interpretation (Juster 1966; Brennan & Esslemont, Marketing Bulletin 1994/95, on accuracy for fast-moving consumer goods). A five-point labelled intention scale does not, so every figure from Q05 is ordinal and sample-scoped.",
+            "display_order_rationale": "Acquiescence and positivity bias inflate agreement when the positive pole is presented first. The order does not change the ordinal structure or the permitted analysis."
+          },
+          "feature_ids": [],
+          "dependencies": [
+            "Q01"
+          ],
+          "required_for_answer": false,
+          "stimulus_dependencies": [
+            "concept"
+          ],
+          "required_for_presentation": true
+        },
+        {
+          "id": "Q06",
+          "type": "multi_select",
+          "codes": [
+            "COFFEE_ESPRESSO",
+            "NON_COFFEE",
+            "BAKED_PASTRY",
+            "LIGHT_MEALS",
+            "DESSERTS",
+            "RETAIL",
+            "UNLISTED_CATEGORY_REPORTED",
+            "NONE",
+            "NOT_SURE",
+            "PREFER_NOT_TO_ANSWER"
+          ],
+          "labels": {
+            "BM": {
+              "NONE": "Tiada satu pun kategori ini",
+              "RETAIL": "Produk runcit",
+              "DESSERTS": "Pencuci mulut",
+              "NOT_SURE": "Tidak pasti",
+              "NON_COFFEE": "Minuman bukan kopi",
+              "LIGHT_MEALS": "Hidangan ringan",
+              "BAKED_PASTRY": "Produk bakeri dan pastri",
+              "COFFEE_ESPRESSO": "Minuman kopi atau espreso",
+              "PREFER_NOT_TO_ANSWER": "Memilih untuk tidak menjawab",
+              "UNLISTED_CATEGORY_REPORTED": "Kategori lain yang tidak disenaraikan"
+            },
+            "EN": {
+              "NONE": "None of these categories",
+              "RETAIL": "Retail products",
+              "DESSERTS": "Desserts",
+              "NOT_SURE": "Not sure",
+              "NON_COFFEE": "Non-coffee drinks",
+              "LIGHT_MEALS": "Light meals",
+              "BAKED_PASTRY": "Baked goods and pastries",
+              "COFFEE_ESPRESSO": "Coffee or espresso drinks",
+              "PREFER_NOT_TO_ANSWER": "Prefer not to answer",
+              "UNLISTED_CATEGORY_REPORTED": "Another category not listed"
+            }
+          },
+          "version": "SYNTHETIC-LANGUAGE-CANDIDATE-01:Q06",
+          "wording": {
+            "BM": "Antara kategori berikut dalam menu kafe yang dicadangkan, yang manakah menarik minat anda? Pilih sehingga tiga kategori.",
+            "EN": "Which of the following categories from this proposed café menu would you be interested in? Select up to three."
+          },
+          "validation": {
+            "id": "Q06",
+            "stem": "Which of the following categories from this proposed café menu would you be interested in? Select up to three.",
+            "type": "multi_select",
+            "class": "ESSENTIAL",
+            "codes": [
+              "COFFEE_ESPRESSO",
+              "NON_COFFEE",
+              "BAKED_PASTRY",
+              "LIGHT_MEALS",
+              "DESSERTS",
+              "RETAIL",
+              "UNLISTED_CATEGORY_REPORTED",
+              "NONE",
+              "NOT_SURE",
+              "PREFER_NOT_TO_ANSWER"
+            ],
+            "status": "BLOCKED_MEASUREMENT",
+            "construct": "D02_PRODUCT_INTEREST",
+            "disposition": "REWRITE_WITH_RESOLVABLE_OTHER",
+            "cap_semantics": {
+              "cap_set_status": "PROPOSED_PENDING_SD_B (Owner; OD-C-01) — the choice counts_toward_max_selections = substantive set (8 codes incl. UNLISTED_CATEGORY_REPORTED and NONE) is retained from v0.6 for determinism but is NOT adopted; the SD-B alternatives (6-listed-only cap; no cap) remain open in CUST02 §6/§7.",
+              "rule_authority": "AUTHORITY_FREE — forced by already-declared REFUSED semantics and the invariant 'max_selections cap applies to substantive codes only'; no scientific choice made",
+              "residual_for_SD_B": "the respondent remark ('up to three from the list') and REC-A-06 ({3 listed}+UNLISTED -> INVALID) are scientific/Owner questions under SD-B and SD-P; not silently changed here.",
+              "deterministic_rule": "PREFER_NOT_TO_ANSWER is the declared refusal code (answer_state REFUSED via option_to_state_map); a refusal is not a substantive selection, never counts toward max_selections, and is exclusive: combined with any category code the answer is INVALID (E_EXCLUSIVE_CODE_CONFLICT). A sole PNTA answer is a REFUSED event, not a cap violation.",
+              "prefer_not_to_answer_counts_toward_max_selections": false
+            },
+            "refusal_route": {
+              "code": "PREFER_NOT_TO_ANSWER",
+              "reachable": true,
+              "consequence": "answer_state = REFUSED; counted in A as an answer event; never in V; never converted to SKIPPED; never converted to AREA_OUTSIDE",
+              "question_necessity_note": "The route exists on evidence-bearing items only. Q01-Q03 are screening/context and carry NOT_SURE or their own non-substantive terminal instead."
+            },
+            "max_selections": 3,
+            "exclusive_codes": [
+              "NONE",
+              "NOT_SURE",
+              "PREFER_NOT_TO_ANSWER"
+            ],
+            "permitted_claim": "Per-category selection counts over V; option shares may sum above 100%",
+            "report_sections": [
+              "R04"
+            ],
+            "source_original": "CS-09",
+            "candidate_remark": {
+              "note": "Candidate draft only. WS2-NEW-16 records that no option display labels exist anywhere in the package; these EN/BM strings are proposed wording, not the validated instrument. BM translation requires independent review (prior A03 recorded the UNSURE/NOT_SURE BM collision hazard).",
+              "locale_bm": {
+                "text": "Pilih kategori produk yang anda pertimbangkan. Anda boleh memilih sehingga tiga daripada senarai; 'Tiada' ialah pilihan sendiri.",
+                "review_status": "PROPOSED_NON_AUTHORITATIVE_BM_TRANSLATION_REVIEW_PENDING"
+              },
+              "locale_en": {
+                "text": "Choose the product categories you would consider. You may pick up to three from the list; 'None' is its own choice.",
+                "review_status": "PROPOSED_NON_AUTHORITATIVE"
+              },
+              "remark_id": "RM-Q06",
+              "question_id": "Q06",
+              "review_status": "PENDING_SCIENTIFIC_TRANSLATION_ACCESSIBILITY_ETHICS",
+              "remark_version": "candidate_draft_v0_5",
+              "question_version": "BLOCKED_MEASUREMENT",
+              "authority_to_activate": "NONE_GRANTED_BY_THIS_DOCUMENT"
+            },
+            "gate_dependencies": [
+              "G01",
+              "G06"
+            ],
+            "substantive_codes": [
+              "COFFEE_ESPRESSO",
+              "NON_COFFEE",
+              "BAKED_PASTRY",
+              "LIGHT_MEALS",
+              "DESSERTS",
+              "RETAIL",
+              "UNLISTED_CATEGORY_REPORTED",
+              "NONE"
+            ],
+            "coverage_limitation": "M2-06 includes an 'Other' category that cannot be fielded as a closed content code. The content of unlisted interest is not captured; only its presence.",
+            "forbidden_inference": "Sales mix; unit sales; category market share; demand",
+            "option_to_state_map": {
+              "NONE": "ANSWERED_SUBSTANTIVE",
+              "RETAIL": "ANSWERED_SUBSTANTIVE",
+              "DESSERTS": "ANSWERED_SUBSTANTIVE",
+              "NOT_SURE": "ANSWERED_NON_SUBSTANTIVE",
+              "NON_COFFEE": "ANSWERED_SUBSTANTIVE",
+              "LIGHT_MEALS": "ANSWERED_SUBSTANTIVE",
+              "BAKED_PASTRY": "ANSWERED_SUBSTANTIVE",
+              "COFFEE_ESPRESSO": "ANSWERED_SUBSTANTIVE",
+              "PREFER_NOT_TO_ANSWER": "REFUSED",
+              "UNLISTED_CATEGORY_REPORTED": "ANSWERED_SUBSTANTIVE"
+            },
+            "non_substantive_codes": [
+              "NOT_SURE",
+              "PREFER_NOT_TO_ANSWER"
+            ],
+            "other_code_resolution": {
+              "status": "PROPOSED_PENDING_APPROVAL",
+              "problem": "v0.1 offered OTHER_CATEGORY while forbidding free text and defining no coding scheme, so the code could not be resolved at analysis time.",
+              "resolution": "Replaced by UNLISTED_CATEGORY_REPORTED, a boolean presence flag with a defined meaning: the respondent reports at least one wanted category outside the six listed. It measures presence, never content.",
+              "fallback_if_rejected": "Remove the flag entirely and disclose that unlisted categories are unmeasurable in this instrument."
+            },
+            "counts_toward_max_selections": [
+              "COFFEE_ESPRESSO",
+              "NON_COFFEE",
+              "BAKED_PASTRY",
+              "LIGHT_MEALS",
+              "DESSERTS",
+              "RETAIL",
+              "UNLISTED_CATEGORY_REPORTED",
+              "NONE"
+            ]
+          },
+          "feature_ids": [],
+          "dependencies": [
+            "Q01"
+          ],
+          "required_for_answer": false,
+          "stimulus_dependencies": [
+            "concept",
+            "menu"
+          ],
+          "required_for_presentation": true
+        },
+        {
+          "id": "Q07",
+          "type": "ordinal_single",
+          "codes": [
+            "VERY_UNACCEPTABLE",
+            "SOMEWHAT_UNACCEPTABLE",
+            "NEITHER",
+            "SOMEWHAT_ACCEPTABLE",
+            "VERY_ACCEPTABLE",
+            "CANNOT_JUDGE",
+            "PREFER_NOT_TO_ANSWER"
+          ],
+          "labels": {
+            "BM": {
+              "NEITHER": "Berkecuali",
+              "CANNOT_JUDGE": "Tidak dapat menilai",
+              "VERY_ACCEPTABLE": "Sangat boleh diterima",
+              "VERY_UNACCEPTABLE": "Sangat tidak boleh diterima",
+              "SOMEWHAT_ACCEPTABLE": "Agak boleh diterima",
+              "PREFER_NOT_TO_ANSWER": "Memilih untuk tidak menjawab",
+              "SOMEWHAT_UNACCEPTABLE": "Agak tidak boleh diterima"
+            },
+            "EN": {
+              "NEITHER": "Neither acceptable nor unacceptable",
+              "CANNOT_JUDGE": "Cannot judge",
+              "VERY_ACCEPTABLE": "Very acceptable",
+              "VERY_UNACCEPTABLE": "Very unacceptable",
+              "SOMEWHAT_ACCEPTABLE": "Somewhat acceptable",
+              "PREFER_NOT_TO_ANSWER": "Prefer not to answer",
+              "SOMEWHAT_UNACCEPTABLE": "Somewhat unacceptable"
+            }
+          },
+          "version": "SYNTHETIC-LANGUAGE-CANDIDATE-01:Q07",
+          "wording": {
+            "BM": "Sejauh manakah harga [harga tepat dalam RM] boleh anda terima untuk [produk, saiz, kuantiti, kaedah perkhidmatan dan caj yang dinyatakan dengan tepat] di kafe yang dicadangkan?",
+            "EN": "How acceptable would paying [exact_rm_price] for [one_exact_product_size_quantity_fulfilment_and_charges] at the proposed café be to you?"
+          },
+          "validation": {
+            "id": "Q07",
+            "stem": "How acceptable would paying [exact_rm_price] for [one_exact_product_size_quantity_fulfilment_and_charges] at the proposed café be to you?",
+            "type": "ordinal_single",
+            "class": "ESSENTIAL_CONDITIONAL",
+            "codes": [
+              "VERY_UNACCEPTABLE",
+              "SOMEWHAT_UNACCEPTABLE",
+              "NEITHER",
+              "SOMEWHAT_ACCEPTABLE",
+              "VERY_ACCEPTABLE",
+              "CANNOT_JUDGE",
+              "PREFER_NOT_TO_ANSWER"
+            ],
+            "status": "BLOCKED_MEASUREMENT",
+            "construct": "D03A_PRICE_ACCEPT",
+            "show_rule": "NOT_SHOWN unless an approved, versioned exact offer stimulus exists. When the stimulus is absent the item is NOT_SHOWN for every unit and R05 returns UNAVAILABLE_MISSING_APPROVED_STIMULUS.",
+            "disposition": "NON_EQUIVALENT_REPLACEMENT",
+            "refusal_route": {
+              "code": "PREFER_NOT_TO_ANSWER",
+              "reachable": true,
+              "consequence": "answer_state = REFUSED; counted in A as an answer event; never in V; never converted to SKIPPED; never converted to AREA_OUTSIDE",
+              "question_necessity_note": "The route exists on evidence-bearing items only. Q01-Q03 are screening/context and carry NOT_SURE or their own non-substantive terminal instead."
+            },
+            "max_selections": 1,
+            "exclusive_codes": [],
+            "permitted_claim": "Acceptability distribution for one exact offer, if and only if that offer is approved",
+            "report_sections": [
+              "R05"
+            ],
+            "source_original": "CS-07",
+            "candidate_remark": {
+              "note": "Candidate draft only. WS2-NEW-16 records that no option display labels exist anywhere in the package; these EN/BM strings are proposed wording, not the validated instrument. BM translation requires independent review (prior A03 recorded the UNSURE/NOT_SURE BM collision hazard).",
+              "locale_bm": {
+                "text": "Ini memaparkan tawaran kafé sebenar (produk, saiz, harga). Jika tiada tawaran diluluskan dipaparkan, soalan ini tidak muncul dan tiada angka kebolehterimaan harga dihasilkan.",
+                "review_status": "PROPOSED_NON_AUTHORITATIVE_BM_TRANSLATION_REVIEW_PENDING"
+              },
+              "locale_en": {
+                "text": "This shows the exact café offer (product, size, price). If no approved offer is shown, this question does not appear and no price-acceptability figure is produced.",
+                "review_status": "PROPOSED_NON_AUTHORITATIVE"
+              },
+              "remark_id": "RM-Q07",
+              "question_id": "Q07",
+              "review_status": "PENDING_SCIENTIFIC_TRANSLATION_ACCESSIBILITY_ETHICS",
+              "remark_version": "candidate_draft_v0_5",
+              "question_version": "BLOCKED_MEASUREMENT",
+              "authority_to_activate": "NONE_GRANTED_BY_THIS_DOCUMENT"
+            },
+            "gate_dependencies": [
+              "G01",
+              "G06"
+            ],
+            "stimulus_required": true,
+            "substantive_codes": [
+              "VERY_UNACCEPTABLE",
+              "SOMEWHAT_UNACCEPTABLE",
+              "NEITHER",
+              "SOMEWHAT_ACCEPTABLE",
+              "VERY_ACCEPTABLE"
+            ],
+            "coverage_limitation": "No approved M2 offer exists. M2-10 admits 'latte/americano' (two products) while CS-07 fixes 'latte'.",
+            "forbidden_inference": "WTP curve; price optimum; revenue; comparison to an incompatible M2 offer; any acceptability figure while the stimulus is absent",
+            "option_to_state_map": {
+              "NEITHER": "ANSWERED_SUBSTANTIVE",
+              "CANNOT_JUDGE": "ANSWERED_NON_SUBSTANTIVE",
+              "VERY_ACCEPTABLE": "ANSWERED_SUBSTANTIVE",
+              "VERY_UNACCEPTABLE": "ANSWERED_SUBSTANTIVE",
+              "SOMEWHAT_ACCEPTABLE": "ANSWERED_SUBSTANTIVE",
+              "PREFER_NOT_TO_ANSWER": "REFUSED",
+              "SOMEWHAT_UNACCEPTABLE": "ANSWERED_SUBSTANTIVE"
+            },
+            "non_substantive_codes": [
+              "CANNOT_JUDGE",
+              "PREFER_NOT_TO_ANSWER"
+            ],
+            "stimulus_absent_outcome": "NOT_SHOWN",
+            "stimulus_absent_error_code": "E_OFFER_STIMULUS_MISSING",
+            "stimulus_absent_report_state": "UNAVAILABLE_MISSING_APPROVED_STIMULUS"
+          },
+          "feature_ids": [],
+          "dependencies": [
+            "Q01"
+          ],
+          "required_for_answer": false,
+          "stimulus_dependencies": [
+            "offer"
+          ],
+          "required_for_presentation": true
+        },
+        {
+          "id": "Q08",
+          "type": "multi_select",
+          "codes": [
+            "WORK_BREAK",
+            "STUDY",
+            "SOCIAL",
+            "ON_THE_GO",
+            "UNLISTED_OCCASION_REPORTED",
+            "CANNOT_REMEMBER",
+            "PREFER_NOT_TO_ANSWER"
+          ],
+          "labels": {
+            "BM": {
+              "STUDY": "Semasa belajar atau berehat daripada belajar",
+              "SOCIAL": "Untuk berjumpa atau meluangkan masa bersama orang lain",
+              "ON_THE_GO": "Semasa dalam perjalanan atau melalui kawasan tersebut",
+              "WORK_BREAK": "Semasa waktu rehat bekerja",
+              "CANNOT_REMEMBER": "Tidak ingat",
+              "PREFER_NOT_TO_ANSWER": "Memilih untuk tidak menjawab",
+              "UNLISTED_OCCASION_REPORTED": "Situasi lain yang tidak disenaraikan"
+            },
+            "EN": {
+              "STUDY": "While studying or taking a study break",
+              "SOCIAL": "To meet or spend time with others",
+              "ON_THE_GO": "While travelling or passing by",
+              "WORK_BREAK": "During a work break",
+              "CANNOT_REMEMBER": "Cannot remember",
+              "PREFER_NOT_TO_ANSWER": "Prefer not to answer",
+              "UNLISTED_OCCASION_REPORTED": "Another occasion not listed"
+            }
+          },
+          "version": "SYNTHETIC-LANGUAGE-CANDIDATE-01:Q08",
+          "wording": {
+            "BM": "Dengan merujuk hanya kepada kunjungan ke kafe sedia ada yang anda laporkan dalam tempoh 30 hari lalu, dalam situasi manakah anda mengunjungi kafe? Pilih semua yang berkenaan.",
+            "EN": "Thinking only about the existing-café visits you reported in the past 30 days, on which occasions did you visit a café? Select all that apply."
+          },
+          "validation": {
+            "id": "Q08",
+            "stem": "Thinking only about the existing-café visits you reported in the past 30 days, on which occasions did you visit a café? Select all that apply.",
+            "type": "multi_select",
+            "class": "CONDITIONAL_R07",
+            "codes": [
+              "WORK_BREAK",
+              "STUDY",
+              "SOCIAL",
+              "ON_THE_GO",
+              "UNLISTED_OCCASION_REPORTED",
+              "CANNOT_REMEMBER",
+              "PREFER_NOT_TO_ANSWER"
+            ],
+            "status": "BLOCKED_SOURCE",
+            "construct": "D05A_PAST_OCCASION",
+            "show_rule": "Shown only to units whose Q04 answer is a substantive code other than ZERO. Units with Q04 = CANNOT_REMEMBER are NOT_SHOWN and are counted under R07_ROUTED_OUT_UNKNOWN_RECALL, never silently dropped.",
+            "disposition": "NEW_ITEM",
+            "refusal_route": {
+              "code": "PREFER_NOT_TO_ANSWER",
+              "reachable": true,
+              "consequence": "answer_state = REFUSED; counted in A as an answer event; never in V; never converted to SKIPPED; never converted to AREA_OUTSIDE",
+              "question_necessity_note": "The route exists on evidence-bearing items only. Q01-Q03 are screening/context and carry NOT_SURE or their own non-substantive terminal instead."
+            },
+            "max_selections": null,
+            "exclusive_codes": [
+              "CANNOT_REMEMBER"
+            ],
+            "permitted_claim": "Occasion counts among eligible past purchasers, with its own V",
+            "report_sections": [
+              "R07"
+            ],
+            "source_original": null,
+            "candidate_remark": {
+              "note": "Candidate draft only. WS2-NEW-16 records that no option display labels exist anywhere in the package; these EN/BM strings are proposed wording, not the validated instrument. BM translation requires independent review (prior A03 recorded the UNSURE/NOT_SURE BM collision hazard).",
+              "locale_bm": {
+                "text": "Ini tentang kejadian sebenar lepas anda membeli daripada kafé sedia ada. Ia muncul hanya jika anda melaporkan sekurang-kurangnya satu kejadian sedemikian.",
+                "review_status": "PROPOSED_NON_AUTHORITATIVE_BM_TRANSLATION_REVIEW_PENDING"
+              },
+              "locale_en": {
+                "text": "This is about actual past occasions you bought from an existing café. It appears only if you reported at least one such occasion.",
+                "review_status": "PROPOSED_NON_AUTHORITATIVE"
+              },
+              "remark_id": "RM-Q08",
+              "question_id": "Q08",
+              "review_status": "PENDING_SCIENTIFIC_TRANSLATION_ACCESSIBILITY_ETHICS",
+              "remark_version": "candidate_draft_v0_5",
+              "question_version": "BLOCKED_SOURCE",
+              "authority_to_activate": "NONE_GRANTED_BY_THIS_DOCUMENT"
+            },
+            "gate_dependencies": [
+              "G01",
+              "G06"
+            ],
+            "substantive_codes": [
+              "WORK_BREAK",
+              "STUDY",
+              "SOCIAL",
+              "ON_THE_GO",
+              "UNLISTED_OCCASION_REPORTED"
+            ],
+            "coverage_limitation": "The occasion bank is a provisional four-category list with no approved source. Unlisted occasion content is not captured.",
+            "forbidden_inference": "Planned future visits; pooling with Q09; time-of-day demand",
+            "option_to_state_map": {
+              "STUDY": "ANSWERED_SUBSTANTIVE",
+              "SOCIAL": "ANSWERED_SUBSTANTIVE",
+              "ON_THE_GO": "ANSWERED_SUBSTANTIVE",
+              "WORK_BREAK": "ANSWERED_SUBSTANTIVE",
+              "CANNOT_REMEMBER": "ANSWERED_NON_SUBSTANTIVE",
+              "PREFER_NOT_TO_ANSWER": "REFUSED",
+              "UNLISTED_OCCASION_REPORTED": "ANSWERED_SUBSTANTIVE"
+            },
+            "non_substantive_codes": [
+              "CANNOT_REMEMBER",
+              "PREFER_NOT_TO_ANSWER"
+            ]
+          },
+          "feature_ids": [],
+          "dependencies": [
+            "Q01",
+            "Q04"
+          ],
+          "required_for_answer": false,
+          "stimulus_dependencies": [],
+          "required_for_presentation": true
+        },
+        {
+          "id": "Q09",
+          "type": "multi_select",
+          "codes": [
+            "WORK_BREAK",
+            "STUDY",
+            "SOCIAL",
+            "ON_THE_GO",
+            "UNLISTED_OCCASION_REPORTED",
+            "NONE",
+            "CANNOT_JUDGE",
+            "PREFER_NOT_TO_ANSWER"
+          ],
+          "labels": {
+            "BM": {
+              "NONE": "Tiada satu pun situasi ini",
+              "STUDY": "Semasa belajar atau berehat daripada belajar",
+              "SOCIAL": "Untuk berjumpa atau meluangkan masa bersama orang lain",
+              "ON_THE_GO": "Semasa dalam perjalanan atau melalui kawasan tersebut",
+              "WORK_BREAK": "Semasa waktu rehat bekerja",
+              "CANNOT_JUDGE": "Tidak dapat menilai",
+              "PREFER_NOT_TO_ANSWER": "Memilih untuk tidak menjawab",
+              "UNLISTED_OCCASION_REPORTED": "Situasi lain yang tidak disenaraikan"
+            },
+            "EN": {
+              "NONE": "None of these occasions",
+              "STUDY": "While studying or taking a study break",
+              "SOCIAL": "To meet or spend time with others",
+              "ON_THE_GO": "While travelling or passing by",
+              "WORK_BREAK": "During a work break",
+              "CANNOT_JUDGE": "Cannot judge",
+              "PREFER_NOT_TO_ANSWER": "Prefer not to answer",
+              "UNLISTED_OCCASION_REPORTED": "Another occasion not listed"
+            }
+          },
+          "version": "SYNTHETIC-LANGUAGE-CANDIDATE-01:Q09",
+          "wording": {
+            "BM": "Sekiranya anda mengunjungi kafe yang dicadangkan ini, dalam situasi manakah anda mungkin memilih untuk datang? Pilih semua yang berkenaan.",
+            "EN": "If you visited this proposed café, on which occasions might you choose to visit? Select all that apply."
+          },
+          "validation": {
+            "id": "Q09",
+            "stem": "If you visited this proposed café, on which occasions might you choose to visit? Select all that apply.",
+            "type": "multi_select",
+            "class": "CONDITIONAL_R07",
+            "codes": [
+              "WORK_BREAK",
+              "STUDY",
+              "SOCIAL",
+              "ON_THE_GO",
+              "UNLISTED_OCCASION_REPORTED",
+              "NONE",
+              "CANNOT_JUDGE",
+              "PREFER_NOT_TO_ANSWER"
+            ],
+            "status": "BLOCKED_SOURCE",
+            "construct": "D05B_PLANNED_OCCASION",
+            "show_rule": "Shown after the versioned concept card. Independent of Q04.",
+            "disposition": "NEW_ITEM",
+            "refusal_route": {
+              "code": "PREFER_NOT_TO_ANSWER",
+              "reachable": true,
+              "consequence": "answer_state = REFUSED; counted in A as an answer event; never in V; never converted to SKIPPED; never converted to AREA_OUTSIDE",
+              "question_necessity_note": "The route exists on evidence-bearing items only. Q01-Q03 are screening/context and carry NOT_SURE or their own non-substantive terminal instead."
+            },
+            "max_selections": null,
+            "exclusive_codes": [
+              "NONE",
+              "CANNOT_JUDGE"
+            ],
+            "permitted_claim": "Hypothetical stated occasion counts among substantive responses",
+            "report_sections": [
+              "R07"
+            ],
+            "source_original": null,
+            "candidate_remark": {
+              "note": "Candidate draft only. WS2-NEW-16 records that no option display labels exist anywhere in the package; these EN/BM strings are proposed wording, not the validated instrument. BM translation requires independent review (prior A03 recorded the UNSURE/NOT_SURE BM collision hazard).",
+              "locale_bm": {
+                "text": "Ini bertanya tentang kejadian yang anda bayangkan melawat kafé dicadangkan. Ia hipotetikal dan berasingan daripada tingkah laku lepas anda.",
+                "review_status": "PROPOSED_NON_AUTHORITATIVE_BM_TRANSLATION_REVIEW_PENDING"
+              },
+              "locale_en": {
+                "text": "This asks about occasions you imagine visiting the proposed café. It is hypothetical and separate from your past behaviour.",
+                "review_status": "PROPOSED_NON_AUTHORITATIVE"
+              },
+              "remark_id": "RM-Q09",
+              "question_id": "Q09",
+              "review_status": "PENDING_SCIENTIFIC_TRANSLATION_ACCESSIBILITY_ETHICS",
+              "remark_version": "candidate_draft_v0_5",
+              "question_version": "BLOCKED_SOURCE",
+              "authority_to_activate": "NONE_GRANTED_BY_THIS_DOCUMENT"
+            },
+            "gate_dependencies": [
+              "G01",
+              "G06"
+            ],
+            "substantive_codes": [
+              "WORK_BREAK",
+              "STUDY",
+              "SOCIAL",
+              "ON_THE_GO",
+              "UNLISTED_OCCASION_REPORTED",
+              "NONE"
+            ],
+            "show_rule_conflict": {
+              "do_not": [
+                "silently rewrite the prose",
+                "silently keep only the prose",
+                "treat the conflict as resolved because one reading is more convenient"
+              ],
+              "conflict": "The prose is absolute about independence from Q04. The class groups Q09 with Q08, whose show_rule is explicitly Q04-gated. Both cannot govern.",
+              "decision": "OPEN_ROUTING_01 — WS2 scientific + Owner",
+              "declared_class": "CONDITIONAL_R07",
+              "declared_prose": "Shown after the versioned concept card. Independent of Q04.",
+              "preserved_verbatim": true,
+              "governs_until_decided": "the declared class (CONDITIONAL_R07), because a class is the machine-readable field and the prose is a human note"
+            },
+            "coverage_limitation": "Same provisional bank as Q08.",
+            "forbidden_inference": "Actual visit frequency; time-of-day demand; pooling with Q08",
+            "option_to_state_map": {
+              "NONE": "ANSWERED_SUBSTANTIVE",
+              "STUDY": "ANSWERED_SUBSTANTIVE",
+              "SOCIAL": "ANSWERED_SUBSTANTIVE",
+              "ON_THE_GO": "ANSWERED_SUBSTANTIVE",
+              "WORK_BREAK": "ANSWERED_SUBSTANTIVE",
+              "CANNOT_JUDGE": "ANSWERED_NON_SUBSTANTIVE",
+              "PREFER_NOT_TO_ANSWER": "REFUSED",
+              "UNLISTED_OCCASION_REPORTED": "ANSWERED_SUBSTANTIVE"
+            },
+            "non_substantive_codes": [
+              "CANNOT_JUDGE",
+              "PREFER_NOT_TO_ANSWER"
+            ]
+          },
+          "feature_ids": [],
+          "dependencies": [
+            "Q01"
+          ],
+          "required_for_answer": false,
+          "stimulus_dependencies": [
+            "concept",
+            "occasion"
+          ],
+          "required_for_presentation": true
+        },
+        {
+          "id": "Q10",
+          "type": "ordinal_matrix",
+          "codes": [
+            "NOT_AT_ALL_IMPORTANT",
+            "SLIGHTLY_IMPORTANT",
+            "MODERATELY_IMPORTANT",
+            "VERY_IMPORTANT",
+            "EXTREMELY_IMPORTANT",
+            "NOT_APPLICABLE",
+            "CANNOT_JUDGE",
+            "PREFER_NOT_TO_ANSWER"
+          ],
+          "labels": {
+            "BM": {
+              "CANNOT_JUDGE": "Tidak dapat menilai",
+              "NOT_APPLICABLE": "Tidak berkenaan",
+              "VERY_IMPORTANT": "Sangat penting",
+              "SLIGHTLY_IMPORTANT": "Sedikit penting",
+              "EXTREMELY_IMPORTANT": "Amat penting",
+              "MODERATELY_IMPORTANT": "Sederhana penting",
+              "NOT_AT_ALL_IMPORTANT": "Langsung tidak penting",
+              "PREFER_NOT_TO_ANSWER": "Memilih untuk tidak menjawab"
+            },
+            "EN": {
+              "CANNOT_JUDGE": "Cannot judge",
+              "NOT_APPLICABLE": "Not applicable",
+              "VERY_IMPORTANT": "Very important",
+              "SLIGHTLY_IMPORTANT": "Slightly important",
+              "EXTREMELY_IMPORTANT": "Extremely important",
+              "MODERATELY_IMPORTANT": "Moderately important",
+              "NOT_AT_ALL_IMPORTANT": "Not at all important",
+              "PREFER_NOT_TO_ANSWER": "Prefer not to answer"
+            }
+          },
+          "version": "SYNTHETIC-LANGUAGE-CANDIDATE-01:Q10",
+          "wording": {
+            "BM": "Bagi setiap ciri kafe yang diterangkan, sejauh manakah pentingnya ciri tersebut kepada anda sekiranya anda memilih untuk mengunjunginya?",
+            "EN": "For each feature of the described café, how important would that feature be to you if you chose to visit?"
+          },
+          "validation": {
+            "id": "Q10",
+            "stem": "For each feature of the described café, how important would that feature be to you if you chose to visit?",
+            "type": "ordinal_matrix",
+            "class": "CONDITIONAL_R07",
+            "codes": [
+              "NOT_AT_ALL_IMPORTANT",
+              "SLIGHTLY_IMPORTANT",
+              "MODERATELY_IMPORTANT",
+              "VERY_IMPORTANT",
+              "EXTREMELY_IMPORTANT",
+              "NOT_APPLICABLE",
+              "CANNOT_JUDGE",
+              "PREFER_NOT_TO_ANSWER"
+            ],
+            "status": "G06_APPROVAL_PENDING",
+            "ordering": {
+              "rule": "Importance is not rank. A respondent may rate every feature VERY_IMPORTANT. No rank order, no composite score and no weight may be derived from these items.",
+              "ranking": null,
+              "forced_ranking": false
+            },
+            "construct": "D06_EXPERIENCE_PRIORITY",
+            "disposition": "NEW_ITEM",
+            "feature_bank": {
+              "gate": "G06_APPROVAL_PENDING",
+              "approved_bank": null,
+              "author_proposal": {
+                "note": "R1 F-11: A10 v0.3:344 gives an 'Examples:' list of three, which is a drafted example set, not an approved exhaustive bank. F<=6 is a burden cap proposed by the correction author. Neither is a G06 approval.",
+                "F_max": 6,
+                "status": "AUTHOR_PROPOSAL_NOT_G06_APPROVAL"
+              },
+              "feature_count_F": null
+            },
+            "top_two_rule": {
+              "guard": "If the anchor set is relabelled without regenerating this set, the numerator becomes undetectably wrong. The evaluator raises E_TOP_TWO_ANCHOR_MISMATCH.",
+              "formula": "100 * (x[VERY_IMPORTANT] + x[EXTREMELY_IMPORTANT]) / V_feature",
+              "predeclared": true,
+              "top_two_categories": [
+                "VERY_IMPORTANT",
+                "EXTREMELY_IMPORTANT"
+              ],
+              "valid_only_under_anchor_set": [
+                "NOT_AT_ALL_IMPORTANT",
+                "SLIGHTLY_IMPORTANT",
+                "MODERATELY_IMPORTANT",
+                "VERY_IMPORTANT",
+                "EXTREMELY_IMPORTANT"
+              ]
+            },
+            "refusal_route": {
+              "code": "PREFER_NOT_TO_ANSWER",
+              "reachable": true,
+              "consequence": "answer_state = REFUSED; counted in A as an answer event; never in V; never converted to SKIPPED; never converted to AREA_OUTSIDE",
+              "question_necessity_note": "The route exists on evidence-bearing items only. Q01-Q03 are screening/context and carry NOT_SURE or their own non-substantive terminal instead."
+            },
+            "max_selections": 1,
+            "exclusive_codes": [],
+            "permitted_claim": "Per-feature ordered distribution with its own V_feature, plus the predeclared top-two share per feature",
+            "report_sections": [
+              "R07"
+            ],
+            "source_original": null,
+            "candidate_remark": {
+              "note": "Candidate draft only. WS2-NEW-16 records that no option display labels exist anywhere in the package; these EN/BM strings are proposed wording, not the validated instrument. BM translation requires independent review (prior A03 recorded the UNSURE/NOT_SURE BM collision hazard).",
+              "locale_bm": {
+                "text": "Bagi setiap ciri yang dipaparkan, nilaikan betapa pentingnya ia kepada keputusan anda untuk melawat. 'Tidak Berkenaan' bermaksud ciri tidak ditawarkan; ia bukan skor rendah.",
+                "review_status": "PROPOSED_NON_AUTHORITATIVE_BM_TRANSLATION_REVIEW_PENDING"
+              },
+              "locale_en": {
+                "text": "For each feature shown, rate how important it would be to your decision to visit. 'Not applicable' means the feature is not offered; it is not a low score.",
+                "review_status": "PROPOSED_NON_AUTHORITATIVE"
+              },
+              "remark_id": "RM-Q10",
+              "question_id": "Q10",
+              "review_status": "PENDING_SCIENTIFIC_TRANSLATION_ACCESSIBILITY_ETHICS",
+              "remark_version": "candidate_draft_v0_5",
+              "question_version": "G06_APPROVAL_PENDING",
+              "authority_to_activate": "NONE_GRANTED_BY_THIS_DOCUMENT"
+            },
+            "feature_count_max": 6,
+            "gate_dependencies": [
+              "G01",
+              "G06",
+              "G05"
+            ],
+            "substantive_codes": [
+              "NOT_AT_ALL_IMPORTANT",
+              "SLIGHTLY_IMPORTANT",
+              "MODERATELY_IMPORTANT",
+              "VERY_IMPORTANT",
+              "EXTREMELY_IMPORTANT"
+            ],
+            "per_feature_record": {
+              "note": "Each feature carries its own valid denominator. There is no item-level V for Q10 and no pooling of features into one denominator.",
+              "V_field": "V_feature",
+              "record_key": [
+                "feature_id",
+                "feature_version",
+                "answer_event_id"
+              ],
+              "independent_per_feature": true
+            },
+            "coverage_limitation": "Feature bank absent. The A10 v0.3:344 'Examples:' list is a drafted example set, not an approved ceiling; F<=6 is an author burden proposal. M2's product taxonomy is unapproved, so Q06 must not be treated as confirming it. Scale anchors reconciled to A10 v0.3 D06 here; any further relabel voids the predeclared top-two set.",
+            "forbidden_inference": "Composite importance score; preference weights; forced ranking; causal satisfaction; revenue; treating format choice as importance",
+            "option_to_state_map": {
+              "CANNOT_JUDGE": "ANSWERED_NON_SUBSTANTIVE",
+              "NOT_APPLICABLE": "ANSWERED_NON_SUBSTANTIVE",
+              "VERY_IMPORTANT": "ANSWERED_SUBSTANTIVE",
+              "SLIGHTLY_IMPORTANT": "ANSWERED_SUBSTANTIVE",
+              "EXTREMELY_IMPORTANT": "ANSWERED_SUBSTANTIVE",
+              "MODERATELY_IMPORTANT": "ANSWERED_SUBSTANTIVE",
+              "NOT_AT_ALL_IMPORTANT": "ANSWERED_SUBSTANTIVE",
+              "PREFER_NOT_TO_ANSWER": "REFUSED"
+            },
+            "stimulus_dependency": {
+              "kind": "CONCEPT_CARD_VERSIONED",
+              "stem_cites": "the café described above",
+              "asymmetry_with": "Q07 declares stimulus_required=true and stimulus_absent_outcome=NOT_SHOWN; Q05/Q10 cite a stimulus but declared nothing before this correction",
+              "route_consequence": "OPEN_ROUTING_03 — recorded as a disclosure, not applied as a show gate",
+              "stimulus_approved": false
+            },
+            "non_substantive_codes": [
+              "NOT_APPLICABLE",
+              "CANNOT_JUDGE",
+              "PREFER_NOT_TO_ANSWER"
+            ]
+          },
+          "feature_ids": [
+            "SYN-F1",
+            "SYN-F2"
+          ],
+          "dependencies": [
+            "Q01"
+          ],
+          "required_for_answer": false,
+          "stimulus_dependencies": [
+            "concept",
+            "features"
+          ],
+          "required_for_presentation": true
+        },
+        {
+          "id": "Q11",
+          "type": "nominal_single",
+          "codes": [
+            "DINE_IN",
+            "TAKEAWAY",
+            "EITHER_EQUALLY",
+            "CANNOT_JUDGE",
+            "PREFER_NOT_TO_ANSWER"
+          ],
+          "labels": {
+            "BM": {
+              "DINE_IN": "Makan atau minum di premis",
+              "TAKEAWAY": "Bawa pulang",
+              "CANNOT_JUDGE": "Tidak dapat menilai",
+              "EITHER_EQUALLY": "Kedua-duanya sama",
+              "PREFER_NOT_TO_ANSWER": "Memilih untuk tidak menjawab"
+            },
+            "EN": {
+              "DINE_IN": "Dine-in",
+              "TAKEAWAY": "Takeaway",
+              "CANNOT_JUDGE": "Cannot judge",
+              "EITHER_EQUALLY": "Either equally",
+              "PREFER_NOT_TO_ANSWER": "Prefer not to answer"
+            }
+          },
+          "version": "SYNTHETIC-LANGUAGE-CANDIDATE-01:Q11",
+          "wording": {
+            "BM": "Bagi tawaran kafe yang dicadangkan, kaedah perkhidmatan yang manakah akan menjadi pilihan utama anda?",
+            "EN": "For the proposed café offer, which service format would you mainly choose?"
+          },
+          "validation": {
+            "id": "Q11",
+            "stem": "For the proposed café offer, which service format would you mainly choose?",
+            "type": "nominal_single",
+            "class": "OPTIONAL_CONTEXT",
+            "codes": [
+              "DINE_IN",
+              "TAKEAWAY",
+              "EITHER_EQUALLY",
+              "CANNOT_JUDGE",
+              "PREFER_NOT_TO_ANSWER"
+            ],
+            "status": "BLOCKED_OWNER",
+            "construct": "FMT01_FORMAT_CHOICE",
+            "disposition": "RESEARCH_ONLY",
+            "refusal_route": {
+              "code": "PREFER_NOT_TO_ANSWER",
+              "reachable": true,
+              "consequence": "answer_state = REFUSED; counted in A as an answer event; never in V; never converted to SKIPPED; never converted to AREA_OUTSIDE",
+              "question_necessity_note": "The route exists on evidence-bearing items only. Q01-Q03 are screening/context and carry NOT_SURE or their own non-substantive terminal instead."
+            },
+            "max_selections": 1,
+            "exclusive_codes": [],
+            "permitted_claim": "None in a report until the construct is registered and an Owner decision authorises a section",
+            "report_sections": [],
+            "source_original": "CS-08",
+            "candidate_remark": {
+              "note": "Candidate draft only. WS2-NEW-16 records that no option display labels exist anywhere in the package; these EN/BM strings are proposed wording, not the validated instrument. BM translation requires independent review (prior A03 recorded the UNSURE/NOT_SURE BM collision hazard).",
+              "locale_bm": {
+                "text": "Jika format kafé (contohnya dine-in atau bawa pulang) dipaparkan, ini bertanya format mana anda akan gunakan. Ia pilihan.",
+                "review_status": "PROPOSED_NON_AUTHORITATIVE_BM_TRANSLATION_REVIEW_PENDING"
+              },
+              "locale_en": {
+                "text": "If the café format (for example dine-in or takeaway) is shown, this asks which format you would use. It is optional.",
+                "review_status": "PROPOSED_NON_AUTHORITATIVE"
+              },
+              "remark_id": "RM-Q11",
+              "question_id": "Q11",
+              "review_status": "PENDING_SCIENTIFIC_TRANSLATION_ACCESSIBILITY_ETHICS",
+              "remark_version": "candidate_draft_v0_6_1",
+              "question_version": "BLOCKED_OWNER",
+              "authority_to_activate": "NONE_GRANTED_BY_THIS_DOCUMENT",
+              "locale_bm_correction_note": "v0.6 IA-D07 claimed 'Updated BM similarly' but left four enumerated formats against two codes (REC-LNG-01). v0.6.1 removed the two unbacked strings ('makan di tempat duduk', 'Ambil-ambil'); whether either is a legitimate synonym is for the translation authority (SD-P), not for this author. All BM text remains PROPOSED_NON_AUTHORITATIVE_BM_TRANSLATION_REVIEW_PENDING."
+            },
+            "gate_dependencies": [
+              "G01",
+              "G06"
+            ],
+            "substantive_codes": [
+              "DINE_IN",
+              "TAKEAWAY",
+              "EITHER_EQUALLY"
+            ],
+            "report_disposition": "RESEARCH_ONLY_OR_OWNER_DECISION",
+            "coverage_limitation": "No A10 construct. Rendering is suppressed, not annotated.",
+            "forbidden_inference": "Ordered D06 importance; spending; visit frequency",
+            "option_to_state_map": {
+              "DINE_IN": "ANSWERED_SUBSTANTIVE",
+              "TAKEAWAY": "ANSWERED_SUBSTANTIVE",
+              "CANNOT_JUDGE": "ANSWERED_NON_SUBSTANTIVE",
+              "EITHER_EQUALLY": "ANSWERED_SUBSTANTIVE",
+              "PREFER_NOT_TO_ANSWER": "REFUSED"
+            },
+            "non_substantive_codes": [
+              "CANNOT_JUDGE",
+              "PREFER_NOT_TO_ANSWER"
+            ]
+          },
+          "feature_ids": [],
+          "dependencies": [
+            "Q01"
+          ],
+          "required_for_answer": false,
+          "stimulus_dependencies": [],
+          "required_for_presentation": true
+        },
+        {
+          "id": "Q12",
+          "type": "nominal_single",
+          "codes": [
+            "WALK",
+            "MOTORCYCLE",
+            "CAR",
+            "PUBLIC_TRANSPORT",
+            "OTHER",
+            "NOT_SURE",
+            "PREFER_NOT_TO_ANSWER"
+          ],
+          "labels": {
+            "BM": {
+              "CAR": "Kereta",
+              "WALK": "Berjalan kaki",
+              "OTHER": "Lain-lain",
+              "NOT_SURE": "Tidak pasti",
+              "MOTORCYCLE": "Motosikal",
+              "PUBLIC_TRANSPORT": "Pengangkutan awam",
+              "PREFER_NOT_TO_ANSWER": "Memilih untuk tidak menjawab"
+            },
+            "EN": {
+              "CAR": "Car",
+              "WALK": "Walking",
+              "OTHER": "Other",
+              "NOT_SURE": "Not sure",
+              "MOTORCYCLE": "Motorcycle",
+              "PUBLIC_TRANSPORT": "Public transport",
+              "PREFER_NOT_TO_ANSWER": "Prefer not to answer"
+            }
+          },
+          "version": "SYNTHETIC-LANGUAGE-CANDIDATE-01:Q12",
+          "wording": {
+            "BM": "Apakah kaedah pengangkutan yang biasanya anda gunakan untuk pergi ke [nama kawasan]?",
+            "EN": "What is your usual way of travelling to [named area]?"
+          },
+          "validation": {
+            "id": "Q12",
+            "stem": "What is your usual way of travelling to [named area]?",
+            "type": "nominal_single",
+            "class": "OPTIONAL_CONTEXT",
+            "codes": [
+              "WALK",
+              "MOTORCYCLE",
+              "CAR",
+              "PUBLIC_TRANSPORT",
+              "OTHER",
+              "NOT_SURE",
+              "PREFER_NOT_TO_ANSWER"
+            ],
+            "status": "BLOCKED_MEASUREMENT",
+            "construct": "GEO_TRANSPORT_TO_AREA_01",
+            "disposition": "OPTIONAL_CONTEXT",
+            "refusal_route": {
+              "code": "PREFER_NOT_TO_ANSWER",
+              "reachable": true,
+              "consequence": "answer_state = REFUSED; counted in A as an answer event; never in V; never converted to SKIPPED; never converted to AREA_OUTSIDE",
+              "question_necessity_note": "The route exists on evidence-bearing items only. Q01-Q03 are screening/context and carry NOT_SURE or their own non-substantive terminal instead."
+            },
+            "max_selections": 1,
+            "exclusive_codes": [],
+            "permitted_claim": "Descriptive travel-to-area mode distribution with a limited-context qualifier",
+            "report_sections": [
+              "R08"
+            ],
+            "source_original": "CS-12",
+            "candidate_remark": {
+              "note": "Candidate draft only. WS2-NEW-16 records that no option display labels exist anywhere in the package; these EN/BM strings are proposed wording, not the validated instrument. BM translation requires independent review (prior A03 recorded the UNSURE/NOT_SURE BM collision hazard).",
+              "locale_bm": {
+                "text": "Pilih cara anda akan pergi ke kawasan itu. 'Lain-lain' direkodkan tetapi bukan kategori dalam taburan.",
+                "review_status": "PROPOSED_NON_AUTHORITATIVE_BM_TRANSLATION_REVIEW_PENDING"
+              },
+              "locale_en": {
+                "text": "Choose how you would travel to the area. 'Other' is recorded but is not a category in the distribution.",
+                "review_status": "PROPOSED_NON_AUTHORITATIVE"
+              },
+              "remark_id": "RM-Q12",
+              "question_id": "Q12",
+              "review_status": "PENDING_SCIENTIFIC_TRANSLATION_ACCESSIBILITY_ETHICS",
+              "remark_version": "candidate_draft_v0_5",
+              "question_version": "BLOCKED_MEASUREMENT",
+              "authority_to_activate": "NONE_GRANTED_BY_THIS_DOCUMENT"
+            },
+            "gate_dependencies": [
+              "G01",
+              "G07"
+            ],
+            "substantive_codes": [
+              "WALK",
+              "MOTORCYCLE",
+              "CAR",
+              "PUBLIC_TRANSPORT"
+            ],
+            "coverage_limitation": "Transport to the area is not transport to the café. OTHER has no coding scheme and is not treated as a category.",
+            "forbidden_inference": "Travel time; routing; precise origin; café-trip mode; distance",
+            "option_to_state_map": {
+              "CAR": "ANSWERED_SUBSTANTIVE",
+              "WALK": "ANSWERED_SUBSTANTIVE",
+              "OTHER": "ANSWERED_NON_SUBSTANTIVE",
+              "NOT_SURE": "ANSWERED_NON_SUBSTANTIVE",
+              "MOTORCYCLE": "ANSWERED_SUBSTANTIVE",
+              "PUBLIC_TRANSPORT": "ANSWERED_SUBSTANTIVE",
+              "PREFER_NOT_TO_ANSWER": "REFUSED"
+            },
+            "non_substantive_codes": [
+              "NOT_SURE",
+              "PREFER_NOT_TO_ANSWER",
+              "OTHER"
+            ],
+            "report_scope_qualifier": "LIMITED_CONTEXT",
+            "non_substantive_reasons": {
+              "OTHER": "UNCODABLE_OTHER — the respondent gave an answer that falls outside the approved category set; it is a real answer event (counted in A) but it can never enter a category distribution's valid denominator (never in V)."
+            }
+          },
+          "feature_ids": [],
+          "dependencies": [
+            "Q01"
+          ],
+          "required_for_answer": false,
+          "stimulus_dependencies": [],
+          "required_for_presentation": true
+        },
+        {
+          "id": "Q13",
+          "type": "ordinal_single",
+          "codes": [
+            "LT_RM8",
+            "RM8_TO_1199",
+            "RM12_TO_1499",
+            "RM15_TO_1799",
+            "GE_RM18",
+            "NOT_SURE",
+            "PREFER_NOT_TO_ANSWER"
+          ],
+          "labels": {
+            "BM": {
+              "LT_RM8": "Kurang daripada RM8",
+              "GE_RM18": "RM18 atau lebih",
+              "NOT_SURE": "Tidak pasti",
+              "RM8_TO_1199": "RM8 hingga RM11.99",
+              "RM12_TO_1499": "RM12 hingga RM14.99",
+              "RM15_TO_1799": "RM15 hingga RM17.99",
+              "PREFER_NOT_TO_ANSWER": "Memilih untuk tidak menjawab"
+            },
+            "EN": {
+              "LT_RM8": "Below RM8",
+              "GE_RM18": "RM18 or more",
+              "NOT_SURE": "Not sure",
+              "RM8_TO_1199": "RM8–RM11.99",
+              "RM12_TO_1499": "RM12–RM14.99",
+              "RM15_TO_1799": "RM15–RM17.99",
+              "PREFER_NOT_TO_ANSWER": "Prefer not to answer"
+            }
+          },
+          "version": "SYNTHETIC-LANGUAGE-CANDIDATE-01:Q13",
+          "wording": {
+            "BM": "Berapakah harga yang anda jangkakan untuk [latte saiz sederhana yang diminum di premis seperti yang ditakrifkan]?",
+            "EN": "What would you expect to pay for [defined item: medium latte, dine-in]?"
+          },
+          "validation": {
+            "id": "Q13",
+            "stem": "What would you expect to pay for [defined item: medium latte, dine-in]?",
+            "type": "ordinal_single",
+            "class": "OPTIONAL_CONTEXT",
+            "codes": [
+              "LT_RM8",
+              "RM8_TO_1199",
+              "RM12_TO_1499",
+              "RM15_TO_1799",
+              "GE_RM18",
+              "NOT_SURE",
+              "PREFER_NOT_TO_ANSWER"
+            ],
+            "status": "BLOCKED_OWNER",
+            "construct": "EXP01_PRICE_EXPECTATION",
+            "rationale": "P3IR-07. The original CS-07 was the only price measure ever classified DESCRIPTIVE in the research trace. Removing it entirely destroyed that signal; restoring it as a SEPARATE construct preserves the measurement without mislabelling it as R05.",
+            "disposition": "RESTORED_FROM_ORIGINAL_AS_SEPARATE_CONSTRUCT",
+            "refusal_route": {
+              "code": "PREFER_NOT_TO_ANSWER",
+              "reachable": true,
+              "consequence": "answer_state = REFUSED; counted in A as an answer event; never in V; never converted to SKIPPED; never converted to AREA_OUTSIDE",
+              "question_necessity_note": "The route exists on evidence-bearing items only. Q01-Q03 are screening/context and carry NOT_SURE or their own non-substantive terminal instead."
+            },
+            "max_selections": 1,
+            "exclusive_codes": [],
+            "permitted_claim": "Banded price expectation, upper-bound language mandatory, only if an Owner decision authorises a section",
+            "report_sections": [],
+            "source_original": "CS-07",
+            "candidate_remark": {
+              "note": "Candidate draft only. WS2-NEW-16 records that no option display labels exist anywhere in the package; these EN/BM strings are proposed wording, not the validated instrument. BM translation requires independent review (prior A03 recorded the UNSURE/NOT_SURE BM collision hazard).",
+              "locale_bm": {
+                "text": "Ini bertanya harga yang anda jangka bayar untuk item tertentu. Ia penyelidikan sahaja dan bukan soalan kebolehterimaan.",
+                "review_status": "PROPOSED_NON_AUTHORITATIVE_BM_TRANSLATION_REVIEW_PENDING"
+              },
+              "locale_en": {
+                "text": "This asks the price you would expect to pay for a defined item. It is research-only and is not the same as the acceptability question.",
+                "review_status": "PROPOSED_NON_AUTHORITATIVE"
+              },
+              "remark_id": "RM-Q13",
+              "question_id": "Q13",
+              "review_status": "PENDING_SCIENTIFIC_TRANSLATION_ACCESSIBILITY_ETHICS",
+              "remark_version": "candidate_draft_v0_5",
+              "question_version": "BLOCKED_OWNER",
+              "authority_to_activate": "NONE_GRANTED_BY_THIS_DOCUMENT"
+            },
+            "gate_dependencies": [
+              "G01",
+              "G06"
+            ],
+            "substantive_codes": [
+              "LT_RM8",
+              "RM8_TO_1199",
+              "RM12_TO_1499",
+              "RM15_TO_1799",
+              "GE_RM18"
+            ],
+            "report_disposition": "RESEARCH_ONLY_OR_OWNER_DECISION",
+            "coverage_limitation": "Upper-bound language is mandatory. Hypothetical bias is unquantified.",
+            "forbidden_inference": "Any identification with D03A or R05; acceptability; WTP; price optimum",
+            "option_to_state_map": {
+              "LT_RM8": "ANSWERED_SUBSTANTIVE",
+              "GE_RM18": "ANSWERED_SUBSTANTIVE",
+              "NOT_SURE": "ANSWERED_NON_SUBSTANTIVE",
+              "RM8_TO_1199": "ANSWERED_SUBSTANTIVE",
+              "RM12_TO_1499": "ANSWERED_SUBSTANTIVE",
+              "RM15_TO_1799": "ANSWERED_SUBSTANTIVE",
+              "PREFER_NOT_TO_ANSWER": "REFUSED"
+            },
+            "non_substantive_codes": [
+              "NOT_SURE",
+              "PREFER_NOT_TO_ANSWER"
+            ]
+          },
+          "feature_ids": [],
+          "dependencies": [
+            "Q01"
+          ],
+          "required_for_answer": false,
+          "stimulus_dependencies": [],
+          "required_for_presentation": true
+        }
+      ],
+      "q02_policy": "SHOW_ALL",
+      "policy_hash": "a0aad5d7fbf12b39fc2d9cae9a15364d24d76bc5184195d449f2209045de790f",
+      "source_hash": "ec2b5494ecf82447076e0d7a2bfb57599a24f049bbcc925a9ecbea6e833bce59",
+      "bank_version": "SYNTHETIC-BANK-2d062bac-03e4-4d9d-81ee-07b0ca490176",
+      "consent_text": {
+        "BM": "Ujian sintetik sahaja.",
+        "EN": "Synthetic isolated test. No customer fielding."
+      },
+      "policy_version": "CUST03-C0C1-CANDIDATE-20261107.1",
+      "stimulus_order": [
+        "concept",
+        "menu",
+        "offer",
+        "occasion",
+        "features"
+      ],
+      "consent_version": "SYNTHETIC-CONSENT-1",
+      "contract_version": "cq-manifest/1",
+      "optional_context": true,
+      "authorized_question_ids": [
+        "Q01",
+        "Q02",
+        "Q03",
+        "Q04",
+        "Q05",
+        "Q06",
+        "Q07",
+        "Q08",
+        "Q09",
+        "Q10",
+        "Q11",
+        "Q12",
+        "Q13"
+      ]
+    },
+    "execution_scope": "ISOLATED_TEST",
+    "production_fielding_authorized": false,
+    "revision": 2,
+    "status": "ACTIVE",
+    "consented": true,
+    "locale": "EN",
+    "routing": [
+      {
+        "slot_id": "Q01",
+        "question_id": "Q01",
+        "verdict": "SHOWN",
+        "reason": null,
+        "gate": "ALWAYS",
+        "facts": {
+          "Q01_SCREEN": "AREA_UNKNOWN",
+          "Q01_COMPLETED": false,
+          "Q02_VISIBLE": true,
+          "Q04_ANSWER": "NOT_ANSWERED",
+          "CONCEPT_READY": false,
+          "MENU_READY": false,
+          "OCCASION_READY": false,
+          "FEATURE_BANK_READY": false,
+          "APPROVED_EXACT_OFFER_STIMULUS": false,
+          "OPTIONAL_CONTEXT_ENABLED": true
+        },
+        "runtime_version": "cq-runtime/1",
+        "context_digest": "8d34aee797af6b7af8404bbc171c7858a3761c27f88c81a5b0c0e0afab1dd14d",
+        "state": "ANSWERED_SUBSTANTIVE",
+        "event_id": "a5d70070-b5aa-4035-911d-5e5c4db0f66b",
+        "value": [
+          "LIVE"
+        ]
+      },
+      {
+        "slot_id": "Q02",
+        "question_id": "Q02",
+        "verdict": "SHOWN",
+        "reason": null,
+        "gate": "Q02_POLICY",
+        "facts": {
+          "Q01_SCREEN": "ELIGIBLE",
+          "Q01_COMPLETED": true,
+          "Q02_VISIBLE": true,
+          "Q04_ANSWER": "NOT_ANSWERED",
+          "CONCEPT_READY": false,
+          "MENU_READY": false,
+          "OCCASION_READY": false,
+          "FEATURE_BANK_READY": false,
+          "APPROVED_EXACT_OFFER_STIMULUS": false,
+          "OPTIONAL_CONTEXT_ENABLED": true
+        },
+        "runtime_version": "cq-runtime/1",
+        "context_digest": "db91dc8501940fc637abe5c3ea3eef6949f15e31a2022db24cde204f5e87b1a2",
+        "state": "PENDING",
+        "event_id": null,
+        "value": null
+      },
+      {
+        "slot_id": "Q03",
+        "question_id": "Q03",
+        "verdict": "NOT_SHOWN",
+        "reason": "CLAUSE_FAILED:{'op': 'is_true', 'lhs': 'CONCEPT_READY'}",
+        "gate": "CONCEPT",
+        "facts": {
+          "Q01_SCREEN": "ELIGIBLE",
+          "Q01_COMPLETED": true,
+          "Q02_VISIBLE": true,
+          "Q04_ANSWER": "NOT_ANSWERED",
+          "CONCEPT_READY": false,
+          "MENU_READY": false,
+          "OCCASION_READY": false,
+          "FEATURE_BANK_READY": false,
+          "APPROVED_EXACT_OFFER_STIMULUS": false,
+          "OPTIONAL_CONTEXT_ENABLED": true
+        },
+        "runtime_version": "cq-runtime/1",
+        "context_digest": "6720d61416e8ab5c695dc84a8cba7211fd80f315799f2f71845d7ec60aed4034",
+        "state": "NOT_SHOWN",
+        "event_id": null,
+        "value": null
+      },
+      {
+        "slot_id": "Q04",
+        "question_id": "Q04",
+        "verdict": "SHOWN",
+        "reason": null,
+        "gate": "Q01_ELIGIBLE",
+        "facts": {
+          "Q01_SCREEN": "ELIGIBLE",
+          "Q01_COMPLETED": true,
+          "Q02_VISIBLE": true,
+          "Q04_ANSWER": "NOT_ANSWERED",
+          "CONCEPT_READY": false,
+          "MENU_READY": false,
+          "OCCASION_READY": false,
+          "FEATURE_BANK_READY": false,
+          "APPROVED_EXACT_OFFER_STIMULUS": false,
+          "OPTIONAL_CONTEXT_ENABLED": true
+        },
+        "runtime_version": "cq-runtime/1",
+        "context_digest": "db91dc8501940fc637abe5c3ea3eef6949f15e31a2022db24cde204f5e87b1a2",
+        "state": "PENDING",
+        "event_id": null,
+        "value": null
+      },
+      {
+        "slot_id": "Q05",
+        "question_id": "Q05",
+        "verdict": "NOT_SHOWN",
+        "reason": "CLAUSE_FAILED:{'op': 'is_true', 'lhs': 'CONCEPT_READY'}",
+        "gate": "CONCEPT",
+        "facts": {
+          "Q01_SCREEN": "ELIGIBLE",
+          "Q01_COMPLETED": true,
+          "Q02_VISIBLE": true,
+          "Q04_ANSWER": "NOT_ANSWERED",
+          "CONCEPT_READY": false,
+          "MENU_READY": false,
+          "OCCASION_READY": false,
+          "FEATURE_BANK_READY": false,
+          "APPROVED_EXACT_OFFER_STIMULUS": false,
+          "OPTIONAL_CONTEXT_ENABLED": true
+        },
+        "runtime_version": "cq-runtime/1",
+        "context_digest": "6720d61416e8ab5c695dc84a8cba7211fd80f315799f2f71845d7ec60aed4034",
+        "state": "NOT_SHOWN",
+        "event_id": null,
+        "value": null
+      },
+      {
+        "slot_id": "Q06",
+        "question_id": "Q06",
+        "verdict": "NOT_SHOWN",
+        "reason": "CLAUSE_FAILED:{'op': 'is_true', 'lhs': 'CONCEPT_READY'}",
+        "gate": "MENU",
+        "facts": {
+          "Q01_SCREEN": "ELIGIBLE",
+          "Q01_COMPLETED": true,
+          "Q02_VISIBLE": true,
+          "Q04_ANSWER": "NOT_ANSWERED",
+          "CONCEPT_READY": false,
+          "MENU_READY": false,
+          "OCCASION_READY": false,
+          "FEATURE_BANK_READY": false,
+          "APPROVED_EXACT_OFFER_STIMULUS": false,
+          "OPTIONAL_CONTEXT_ENABLED": true
+        },
+        "runtime_version": "cq-runtime/1",
+        "context_digest": "f25a364dcf9cfa8b2bd5269a227006c3fdd2106d8c5029f547eb6d87c0f2c9d1",
+        "state": "NOT_SHOWN",
+        "event_id": null,
+        "value": null
+      },
+      {
+        "slot_id": "Q07",
+        "question_id": "Q07",
+        "verdict": "NOT_SHOWN",
+        "reason": "CLAUSE_FAILED:{'op': 'is_true', 'lhs': 'APPROVED_EXACT_OFFER_STIMULUS'}",
+        "gate": "Q01_ELIGIBLE_AND_APPROVED_EXACT_OFFER_STIMULUS",
+        "facts": {
+          "Q01_SCREEN": "ELIGIBLE",
+          "Q01_COMPLETED": true,
+          "Q02_VISIBLE": true,
+          "Q04_ANSWER": "NOT_ANSWERED",
+          "CONCEPT_READY": false,
+          "MENU_READY": false,
+          "OCCASION_READY": false,
+          "FEATURE_BANK_READY": false,
+          "APPROVED_EXACT_OFFER_STIMULUS": false,
+          "OPTIONAL_CONTEXT_ENABLED": true
+        },
+        "runtime_version": "cq-runtime/1",
+        "context_digest": "2646ac0a39a79e284d29182c9cb6d8e826fbed0ca0952fd38c607cdb481f1575",
+        "state": "NOT_SHOWN",
+        "event_id": null,
+        "value": null
+      },
+      {
+        "slot_id": "Q08",
+        "question_id": "Q08",
+        "verdict": "NOT_SHOWN",
+        "reason": "CLAUSE_FAILED:{'op': 'eq', 'lhs': 'Q04_ANSWER', 'rhs': 'SUBSTANTIVE_NONZERO'}",
+        "gate": "Q01_ELIGIBLE_AND_Q04_SUBSTANTIVE_NONZERO",
+        "facts": {
+          "Q01_SCREEN": "ELIGIBLE",
+          "Q01_COMPLETED": true,
+          "Q02_VISIBLE": true,
+          "Q04_ANSWER": "NOT_ANSWERED",
+          "CONCEPT_READY": false,
+          "MENU_READY": false,
+          "OCCASION_READY": false,
+          "FEATURE_BANK_READY": false,
+          "APPROVED_EXACT_OFFER_STIMULUS": false,
+          "OPTIONAL_CONTEXT_ENABLED": true
+        },
+        "runtime_version": "cq-runtime/1",
+        "context_digest": "764b4b2acfe05bad9b8f8a7153c71d11a32ea3f7db1076eeab3e6ce62a68360f",
+        "state": "NOT_SHOWN",
+        "event_id": null,
+        "value": null
+      },
+      {
+        "slot_id": "Q09",
+        "question_id": "Q09",
+        "verdict": "NOT_SHOWN",
+        "reason": "CLAUSE_FAILED:{'op': 'is_true', 'lhs': 'CONCEPT_READY'}",
+        "gate": "FUTURE_OCCASION",
+        "facts": {
+          "Q01_SCREEN": "ELIGIBLE",
+          "Q01_COMPLETED": true,
+          "Q02_VISIBLE": true,
+          "Q04_ANSWER": "NOT_ANSWERED",
+          "CONCEPT_READY": false,
+          "MENU_READY": false,
+          "OCCASION_READY": false,
+          "FEATURE_BANK_READY": false,
+          "APPROVED_EXACT_OFFER_STIMULUS": false,
+          "OPTIONAL_CONTEXT_ENABLED": true
+        },
+        "runtime_version": "cq-runtime/1",
+        "context_digest": "be352bce89d041f61160ee4533d9c29c6650e4c40c4cb45ff79ef0c465d81108",
+        "state": "NOT_SHOWN",
+        "event_id": null,
+        "value": null
+      },
+      {
+        "slot_id": "Q10:SYN-F1",
+        "question_id": "Q10",
+        "verdict": "NOT_SHOWN",
+        "reason": "CLAUSE_FAILED:{'op': 'is_true', 'lhs': 'CONCEPT_READY'}",
+        "gate": "FEATURES",
+        "facts": {
+          "Q01_SCREEN": "ELIGIBLE",
+          "Q01_COMPLETED": true,
+          "Q02_VISIBLE": true,
+          "Q04_ANSWER": "NOT_ANSWERED",
+          "CONCEPT_READY": false,
+          "MENU_READY": false,
+          "OCCASION_READY": false,
+          "FEATURE_BANK_READY": false,
+          "APPROVED_EXACT_OFFER_STIMULUS": false,
+          "OPTIONAL_CONTEXT_ENABLED": true
+        },
+        "runtime_version": "cq-runtime/1",
+        "context_digest": "a6f0865307adaecb25baf50e27948a43cd48369d34c9b4697cd98313d57453f2",
+        "state": "NOT_SHOWN",
+        "event_id": null,
+        "value": null
+      },
+      {
+        "slot_id": "Q10:SYN-F2",
+        "question_id": "Q10",
+        "verdict": "NOT_SHOWN",
+        "reason": "CLAUSE_FAILED:{'op': 'is_true', 'lhs': 'CONCEPT_READY'}",
+        "gate": "FEATURES",
+        "facts": {
+          "Q01_SCREEN": "ELIGIBLE",
+          "Q01_COMPLETED": true,
+          "Q02_VISIBLE": true,
+          "Q04_ANSWER": "NOT_ANSWERED",
+          "CONCEPT_READY": false,
+          "MENU_READY": false,
+          "OCCASION_READY": false,
+          "FEATURE_BANK_READY": false,
+          "APPROVED_EXACT_OFFER_STIMULUS": false,
+          "OPTIONAL_CONTEXT_ENABLED": true
+        },
+        "runtime_version": "cq-runtime/1",
+        "context_digest": "a6f0865307adaecb25baf50e27948a43cd48369d34c9b4697cd98313d57453f2",
+        "state": "NOT_SHOWN",
+        "event_id": null,
+        "value": null
+      },
+      {
+        "slot_id": "Q11",
+        "question_id": "Q11",
+        "verdict": "SHOWN",
+        "reason": null,
+        "gate": "Q01_ELIGIBLE_AND_OPTIONAL_CONTEXT_ENABLED",
+        "facts": {
+          "Q01_SCREEN": "ELIGIBLE",
+          "Q01_COMPLETED": true,
+          "Q02_VISIBLE": true,
+          "Q04_ANSWER": "NOT_ANSWERED",
+          "CONCEPT_READY": false,
+          "MENU_READY": false,
+          "OCCASION_READY": false,
+          "FEATURE_BANK_READY": false,
+          "APPROVED_EXACT_OFFER_STIMULUS": false,
+          "OPTIONAL_CONTEXT_ENABLED": true
+        },
+        "runtime_version": "cq-runtime/1",
+        "context_digest": "db91dc8501940fc637abe5c3ea3eef6949f15e31a2022db24cde204f5e87b1a2",
+        "state": "PENDING",
+        "event_id": null,
+        "value": null
+      },
+      {
+        "slot_id": "Q12",
+        "question_id": "Q12",
+        "verdict": "SHOWN",
+        "reason": null,
+        "gate": "Q01_ELIGIBLE_AND_OPTIONAL_CONTEXT_ENABLED",
+        "facts": {
+          "Q01_SCREEN": "ELIGIBLE",
+          "Q01_COMPLETED": true,
+          "Q02_VISIBLE": true,
+          "Q04_ANSWER": "NOT_ANSWERED",
+          "CONCEPT_READY": false,
+          "MENU_READY": false,
+          "OCCASION_READY": false,
+          "FEATURE_BANK_READY": false,
+          "APPROVED_EXACT_OFFER_STIMULUS": false,
+          "OPTIONAL_CONTEXT_ENABLED": true
+        },
+        "runtime_version": "cq-runtime/1",
+        "context_digest": "db91dc8501940fc637abe5c3ea3eef6949f15e31a2022db24cde204f5e87b1a2",
+        "state": "PENDING",
+        "event_id": null,
+        "value": null
+      },
+      {
+        "slot_id": "Q13",
+        "question_id": "Q13",
+        "verdict": "SHOWN",
+        "reason": null,
+        "gate": "Q01_ELIGIBLE_AND_OPTIONAL_CONTEXT_ENABLED",
+        "facts": {
+          "Q01_SCREEN": "ELIGIBLE",
+          "Q01_COMPLETED": true,
+          "Q02_VISIBLE": true,
+          "Q04_ANSWER": "NOT_ANSWERED",
+          "CONCEPT_READY": false,
+          "MENU_READY": false,
+          "OCCASION_READY": false,
+          "FEATURE_BANK_READY": false,
+          "APPROVED_EXACT_OFFER_STIMULUS": false,
+          "OPTIONAL_CONTEXT_ENABLED": true
+        },
+        "runtime_version": "cq-runtime/1",
+        "context_digest": "db91dc8501940fc637abe5c3ea3eef6949f15e31a2022db24cde204f5e87b1a2",
+        "state": "PENDING",
+        "event_id": null,
+        "value": null
+      }
+    ],
+    "next_slot_id": null,
+    "next_stimulus_kind": "concept",
+    "can_submit": false,
+    "screen_disposition": "ELIGIBLE",
+    "receipt": null
+  },
+  "afterConcept": {
+    "contract_version": "cq-session/1",
+    "session_id": "a0bf44f6-d2ab-4c4c-94be-924e1f1bee98",
+    "campaign_id": "c6992b73-5ed4-413e-abbf-09b61912d85b",
+    "release_id": "7f94848d-ae12-4875-a3a1-e41493731ee1",
+    "manifest_hash": "b169ec7e8bc5762e3deb0bc4ff5e4e47cdf8a5487535506bc6225af32df5cfe7",
+    "execution_scope": "ISOLATED_TEST",
+    "production_fielding_authorized": false,
+    "revision": 3,
+    "status": "ACTIVE",
+    "consented": true,
+    "locale": "EN",
+    "routing": [
+      {
+        "slot_id": "Q01",
+        "question_id": "Q01",
+        "verdict": "SHOWN",
+        "reason": null,
+        "gate": "ALWAYS",
+        "facts": {
+          "Q01_SCREEN": "AREA_UNKNOWN",
+          "Q01_COMPLETED": false,
+          "Q02_VISIBLE": true,
+          "Q04_ANSWER": "NOT_ANSWERED",
+          "CONCEPT_READY": true,
+          "MENU_READY": false,
+          "OCCASION_READY": false,
+          "FEATURE_BANK_READY": false,
+          "APPROVED_EXACT_OFFER_STIMULUS": false,
+          "OPTIONAL_CONTEXT_ENABLED": true
+        },
+        "runtime_version": "cq-runtime/1",
+        "context_digest": "8d34aee797af6b7af8404bbc171c7858a3761c27f88c81a5b0c0e0afab1dd14d",
+        "state": "ANSWERED_SUBSTANTIVE",
+        "event_id": "a5d70070-b5aa-4035-911d-5e5c4db0f66b",
+        "value": [
+          "LIVE"
+        ]
+      },
+      {
+        "slot_id": "Q02",
+        "question_id": "Q02",
+        "verdict": "SHOWN",
+        "reason": null,
+        "gate": "Q02_POLICY",
+        "facts": {
+          "Q01_SCREEN": "ELIGIBLE",
+          "Q01_COMPLETED": true,
+          "Q02_VISIBLE": true,
+          "Q04_ANSWER": "NOT_ANSWERED",
+          "CONCEPT_READY": true,
+          "MENU_READY": false,
+          "OCCASION_READY": false,
+          "FEATURE_BANK_READY": false,
+          "APPROVED_EXACT_OFFER_STIMULUS": false,
+          "OPTIONAL_CONTEXT_ENABLED": true
+        },
+        "runtime_version": "cq-runtime/1",
+        "context_digest": "db91dc8501940fc637abe5c3ea3eef6949f15e31a2022db24cde204f5e87b1a2",
+        "state": "PENDING",
+        "event_id": null,
+        "value": null
+      },
+      {
+        "slot_id": "Q03",
+        "question_id": "Q03",
+        "verdict": "SHOWN",
+        "reason": null,
+        "gate": "CONCEPT",
+        "facts": {
+          "Q01_SCREEN": "ELIGIBLE",
+          "Q01_COMPLETED": true,
+          "Q02_VISIBLE": true,
+          "Q04_ANSWER": "NOT_ANSWERED",
+          "CONCEPT_READY": true,
+          "MENU_READY": false,
+          "OCCASION_READY": false,
+          "FEATURE_BANK_READY": false,
+          "APPROVED_EXACT_OFFER_STIMULUS": false,
+          "OPTIONAL_CONTEXT_ENABLED": true
+        },
+        "runtime_version": "cq-runtime/1",
+        "context_digest": "b8f7c99ea190d0575842b0c42fbc9284b556a8b341e82b24ec854723b65e9945",
+        "state": "PENDING",
+        "event_id": null,
+        "value": null
+      },
+      {
+        "slot_id": "Q04",
+        "question_id": "Q04",
+        "verdict": "SHOWN",
+        "reason": null,
+        "gate": "Q01_ELIGIBLE",
+        "facts": {
+          "Q01_SCREEN": "ELIGIBLE",
+          "Q01_COMPLETED": true,
+          "Q02_VISIBLE": true,
+          "Q04_ANSWER": "NOT_ANSWERED",
+          "CONCEPT_READY": true,
+          "MENU_READY": false,
+          "OCCASION_READY": false,
+          "FEATURE_BANK_READY": false,
+          "APPROVED_EXACT_OFFER_STIMULUS": false,
+          "OPTIONAL_CONTEXT_ENABLED": true
+        },
+        "runtime_version": "cq-runtime/1",
+        "context_digest": "db91dc8501940fc637abe5c3ea3eef6949f15e31a2022db24cde204f5e87b1a2",
+        "state": "PENDING",
+        "event_id": null,
+        "value": null
+      },
+      {
+        "slot_id": "Q05",
+        "question_id": "Q05",
+        "verdict": "SHOWN",
+        "reason": null,
+        "gate": "CONCEPT",
+        "facts": {
+          "Q01_SCREEN": "ELIGIBLE",
+          "Q01_COMPLETED": true,
+          "Q02_VISIBLE": true,
+          "Q04_ANSWER": "NOT_ANSWERED",
+          "CONCEPT_READY": true,
+          "MENU_READY": false,
+          "OCCASION_READY": false,
+          "FEATURE_BANK_READY": false,
+          "APPROVED_EXACT_OFFER_STIMULUS": false,
+          "OPTIONAL_CONTEXT_ENABLED": true
+        },
+        "runtime_version": "cq-runtime/1",
+        "context_digest": "b8f7c99ea190d0575842b0c42fbc9284b556a8b341e82b24ec854723b65e9945",
+        "state": "PENDING",
+        "event_id": null,
+        "value": null
+      },
+      {
+        "slot_id": "Q06",
+        "question_id": "Q06",
+        "verdict": "NOT_SHOWN",
+        "reason": "CLAUSE_FAILED:{'op': 'is_true', 'lhs': 'MENU_READY'}",
+        "gate": "MENU",
+        "facts": {
+          "Q01_SCREEN": "ELIGIBLE",
+          "Q01_COMPLETED": true,
+          "Q02_VISIBLE": true,
+          "Q04_ANSWER": "NOT_ANSWERED",
+          "CONCEPT_READY": true,
+          "MENU_READY": false,
+          "OCCASION_READY": false,
+          "FEATURE_BANK_READY": false,
+          "APPROVED_EXACT_OFFER_STIMULUS": false,
+          "OPTIONAL_CONTEXT_ENABLED": true
+        },
+        "runtime_version": "cq-runtime/1",
+        "context_digest": "bb3e87c4eaae2e009c625e7b035c8655137f94094a3c18f0c2574e5513ec72b3",
+        "state": "NOT_SHOWN",
+        "event_id": null,
+        "value": null
+      },
+      {
+        "slot_id": "Q07",
+        "question_id": "Q07",
+        "verdict": "NOT_SHOWN",
+        "reason": "CLAUSE_FAILED:{'op': 'is_true', 'lhs': 'APPROVED_EXACT_OFFER_STIMULUS'}",
+        "gate": "Q01_ELIGIBLE_AND_APPROVED_EXACT_OFFER_STIMULUS",
+        "facts": {
+          "Q01_SCREEN": "ELIGIBLE",
+          "Q01_COMPLETED": true,
+          "Q02_VISIBLE": true,
+          "Q04_ANSWER": "NOT_ANSWERED",
+          "CONCEPT_READY": true,
+          "MENU_READY": false,
+          "OCCASION_READY": false,
+          "FEATURE_BANK_READY": false,
+          "APPROVED_EXACT_OFFER_STIMULUS": false,
+          "OPTIONAL_CONTEXT_ENABLED": true
+        },
+        "runtime_version": "cq-runtime/1",
+        "context_digest": "2646ac0a39a79e284d29182c9cb6d8e826fbed0ca0952fd38c607cdb481f1575",
+        "state": "NOT_SHOWN",
+        "event_id": null,
+        "value": null
+      },
+      {
+        "slot_id": "Q08",
+        "question_id": "Q08",
+        "verdict": "NOT_SHOWN",
+        "reason": "CLAUSE_FAILED:{'op': 'eq', 'lhs': 'Q04_ANSWER', 'rhs': 'SUBSTANTIVE_NONZERO'}",
+        "gate": "Q01_ELIGIBLE_AND_Q04_SUBSTANTIVE_NONZERO",
+        "facts": {
+          "Q01_SCREEN": "ELIGIBLE",
+          "Q01_COMPLETED": true,
+          "Q02_VISIBLE": true,
+          "Q04_ANSWER": "NOT_ANSWERED",
+          "CONCEPT_READY": true,
+          "MENU_READY": false,
+          "OCCASION_READY": false,
+          "FEATURE_BANK_READY": false,
+          "APPROVED_EXACT_OFFER_STIMULUS": false,
+          "OPTIONAL_CONTEXT_ENABLED": true
+        },
+        "runtime_version": "cq-runtime/1",
+        "context_digest": "764b4b2acfe05bad9b8f8a7153c71d11a32ea3f7db1076eeab3e6ce62a68360f",
+        "state": "NOT_SHOWN",
+        "event_id": null,
+        "value": null
+      },
+      {
+        "slot_id": "Q09",
+        "question_id": "Q09",
+        "verdict": "NOT_SHOWN",
+        "reason": "CLAUSE_FAILED:{'op': 'is_true', 'lhs': 'OCCASION_READY'}",
+        "gate": "FUTURE_OCCASION",
+        "facts": {
+          "Q01_SCREEN": "ELIGIBLE",
+          "Q01_COMPLETED": true,
+          "Q02_VISIBLE": true,
+          "Q04_ANSWER": "NOT_ANSWERED",
+          "CONCEPT_READY": true,
+          "MENU_READY": false,
+          "OCCASION_READY": false,
+          "FEATURE_BANK_READY": false,
+          "APPROVED_EXACT_OFFER_STIMULUS": false,
+          "OPTIONAL_CONTEXT_ENABLED": true
+        },
+        "runtime_version": "cq-runtime/1",
+        "context_digest": "5c0924045e8d0c811d063e3bedea7841bff8bd6907816254ad4ffd9da03f690b",
+        "state": "NOT_SHOWN",
+        "event_id": null,
+        "value": null
+      },
+      {
+        "slot_id": "Q10:SYN-F1",
+        "question_id": "Q10",
+        "verdict": "NOT_SHOWN",
+        "reason": "CLAUSE_FAILED:{'op': 'is_true', 'lhs': 'FEATURE_BANK_READY'}",
+        "gate": "FEATURES",
+        "facts": {
+          "Q01_SCREEN": "ELIGIBLE",
+          "Q01_COMPLETED": true,
+          "Q02_VISIBLE": true,
+          "Q04_ANSWER": "NOT_ANSWERED",
+          "CONCEPT_READY": true,
+          "MENU_READY": false,
+          "OCCASION_READY": false,
+          "FEATURE_BANK_READY": false,
+          "APPROVED_EXACT_OFFER_STIMULUS": false,
+          "OPTIONAL_CONTEXT_ENABLED": true
+        },
+        "runtime_version": "cq-runtime/1",
+        "context_digest": "2e4816682fd11b9bc9580dbdb6a8d589913f80771cf6f07461861b0d456ce7c0",
+        "state": "NOT_SHOWN",
+        "event_id": null,
+        "value": null
+      },
+      {
+        "slot_id": "Q10:SYN-F2",
+        "question_id": "Q10",
+        "verdict": "NOT_SHOWN",
+        "reason": "CLAUSE_FAILED:{'op': 'is_true', 'lhs': 'FEATURE_BANK_READY'}",
+        "gate": "FEATURES",
+        "facts": {
+          "Q01_SCREEN": "ELIGIBLE",
+          "Q01_COMPLETED": true,
+          "Q02_VISIBLE": true,
+          "Q04_ANSWER": "NOT_ANSWERED",
+          "CONCEPT_READY": true,
+          "MENU_READY": false,
+          "OCCASION_READY": false,
+          "FEATURE_BANK_READY": false,
+          "APPROVED_EXACT_OFFER_STIMULUS": false,
+          "OPTIONAL_CONTEXT_ENABLED": true
+        },
+        "runtime_version": "cq-runtime/1",
+        "context_digest": "2e4816682fd11b9bc9580dbdb6a8d589913f80771cf6f07461861b0d456ce7c0",
+        "state": "NOT_SHOWN",
+        "event_id": null,
+        "value": null
+      },
+      {
+        "slot_id": "Q11",
+        "question_id": "Q11",
+        "verdict": "SHOWN",
+        "reason": null,
+        "gate": "Q01_ELIGIBLE_AND_OPTIONAL_CONTEXT_ENABLED",
+        "facts": {
+          "Q01_SCREEN": "ELIGIBLE",
+          "Q01_COMPLETED": true,
+          "Q02_VISIBLE": true,
+          "Q04_ANSWER": "NOT_ANSWERED",
+          "CONCEPT_READY": true,
+          "MENU_READY": false,
+          "OCCASION_READY": false,
+          "FEATURE_BANK_READY": false,
+          "APPROVED_EXACT_OFFER_STIMULUS": false,
+          "OPTIONAL_CONTEXT_ENABLED": true
+        },
+        "runtime_version": "cq-runtime/1",
+        "context_digest": "db91dc8501940fc637abe5c3ea3eef6949f15e31a2022db24cde204f5e87b1a2",
+        "state": "PENDING",
+        "event_id": null,
+        "value": null
+      },
+      {
+        "slot_id": "Q12",
+        "question_id": "Q12",
+        "verdict": "SHOWN",
+        "reason": null,
+        "gate": "Q01_ELIGIBLE_AND_OPTIONAL_CONTEXT_ENABLED",
+        "facts": {
+          "Q01_SCREEN": "ELIGIBLE",
+          "Q01_COMPLETED": true,
+          "Q02_VISIBLE": true,
+          "Q04_ANSWER": "NOT_ANSWERED",
+          "CONCEPT_READY": true,
+          "MENU_READY": false,
+          "OCCASION_READY": false,
+          "FEATURE_BANK_READY": false,
+          "APPROVED_EXACT_OFFER_STIMULUS": false,
+          "OPTIONAL_CONTEXT_ENABLED": true
+        },
+        "runtime_version": "cq-runtime/1",
+        "context_digest": "db91dc8501940fc637abe5c3ea3eef6949f15e31a2022db24cde204f5e87b1a2",
+        "state": "PENDING",
+        "event_id": null,
+        "value": null
+      },
+      {
+        "slot_id": "Q13",
+        "question_id": "Q13",
+        "verdict": "SHOWN",
+        "reason": null,
+        "gate": "Q01_ELIGIBLE_AND_OPTIONAL_CONTEXT_ENABLED",
+        "facts": {
+          "Q01_SCREEN": "ELIGIBLE",
+          "Q01_COMPLETED": true,
+          "Q02_VISIBLE": true,
+          "Q04_ANSWER": "NOT_ANSWERED",
+          "CONCEPT_READY": true,
+          "MENU_READY": false,
+          "OCCASION_READY": false,
+          "FEATURE_BANK_READY": false,
+          "APPROVED_EXACT_OFFER_STIMULUS": false,
+          "OPTIONAL_CONTEXT_ENABLED": true
+        },
+        "runtime_version": "cq-runtime/1",
+        "context_digest": "db91dc8501940fc637abe5c3ea3eef6949f15e31a2022db24cde204f5e87b1a2",
+        "state": "PENDING",
+        "event_id": null,
+        "value": null
+      }
+    ],
+    "next_slot_id": null,
+    "next_stimulus_kind": "menu",
+    "can_submit": false,
+    "screen_disposition": "ELIGIBLE",
+    "receipt": null,
+    "delivered_stimulus": {
+      "kind": "concept",
+      "text": "SYNTHETIC TEST concept",
+      "version": "SYNTHETIC-concept-1",
+      "hash": "31905bb22e027316f351684b1cad5b32c27f19f75212897d68f313dbb658854a"
+    }
+  },
+  "afterMenu": {
+    "contract_version": "cq-session/1",
+    "session_id": "a0bf44f6-d2ab-4c4c-94be-924e1f1bee98",
+    "campaign_id": "c6992b73-5ed4-413e-abbf-09b61912d85b",
+    "release_id": "7f94848d-ae12-4875-a3a1-e41493731ee1",
+    "manifest_hash": "b169ec7e8bc5762e3deb0bc4ff5e4e47cdf8a5487535506bc6225af32df5cfe7",
+    "execution_scope": "ISOLATED_TEST",
+    "production_fielding_authorized": false,
+    "revision": 4,
+    "status": "ACTIVE",
+    "consented": true,
+    "locale": "EN",
+    "routing": [
+      {
+        "slot_id": "Q01",
+        "question_id": "Q01",
+        "verdict": "SHOWN",
+        "reason": null,
+        "gate": "ALWAYS",
+        "facts": {
+          "Q01_SCREEN": "AREA_UNKNOWN",
+          "Q01_COMPLETED": false,
+          "Q02_VISIBLE": true,
+          "Q04_ANSWER": "NOT_ANSWERED",
+          "CONCEPT_READY": true,
+          "MENU_READY": true,
+          "OCCASION_READY": false,
+          "FEATURE_BANK_READY": false,
+          "APPROVED_EXACT_OFFER_STIMULUS": false,
+          "OPTIONAL_CONTEXT_ENABLED": true
+        },
+        "runtime_version": "cq-runtime/1",
+        "context_digest": "8d34aee797af6b7af8404bbc171c7858a3761c27f88c81a5b0c0e0afab1dd14d",
+        "state": "ANSWERED_SUBSTANTIVE",
+        "event_id": "a5d70070-b5aa-4035-911d-5e5c4db0f66b",
+        "value": [
+          "LIVE"
+        ]
+      },
+      {
+        "slot_id": "Q02",
+        "question_id": "Q02",
+        "verdict": "SHOWN",
+        "reason": null,
+        "gate": "Q02_POLICY",
+        "facts": {
+          "Q01_SCREEN": "ELIGIBLE",
+          "Q01_COMPLETED": true,
+          "Q02_VISIBLE": true,
+          "Q04_ANSWER": "NOT_ANSWERED",
+          "CONCEPT_READY": true,
+          "MENU_READY": true,
+          "OCCASION_READY": false,
+          "FEATURE_BANK_READY": false,
+          "APPROVED_EXACT_OFFER_STIMULUS": false,
+          "OPTIONAL_CONTEXT_ENABLED": true
+        },
+        "runtime_version": "cq-runtime/1",
+        "context_digest": "db91dc8501940fc637abe5c3ea3eef6949f15e31a2022db24cde204f5e87b1a2",
+        "state": "PENDING",
+        "event_id": null,
+        "value": null
+      },
+      {
+        "slot_id": "Q03",
+        "question_id": "Q03",
+        "verdict": "SHOWN",
+        "reason": null,
+        "gate": "CONCEPT",
+        "facts": {
+          "Q01_SCREEN": "ELIGIBLE",
+          "Q01_COMPLETED": true,
+          "Q02_VISIBLE": true,
+          "Q04_ANSWER": "NOT_ANSWERED",
+          "CONCEPT_READY": true,
+          "MENU_READY": true,
+          "OCCASION_READY": false,
+          "FEATURE_BANK_READY": false,
+          "APPROVED_EXACT_OFFER_STIMULUS": false,
+          "OPTIONAL_CONTEXT_ENABLED": true
+        },
+        "runtime_version": "cq-runtime/1",
+        "context_digest": "b8f7c99ea190d0575842b0c42fbc9284b556a8b341e82b24ec854723b65e9945",
+        "state": "PENDING",
+        "event_id": null,
+        "value": null
+      },
+      {
+        "slot_id": "Q04",
+        "question_id": "Q04",
+        "verdict": "SHOWN",
+        "reason": null,
+        "gate": "Q01_ELIGIBLE",
+        "facts": {
+          "Q01_SCREEN": "ELIGIBLE",
+          "Q01_COMPLETED": true,
+          "Q02_VISIBLE": true,
+          "Q04_ANSWER": "NOT_ANSWERED",
+          "CONCEPT_READY": true,
+          "MENU_READY": true,
+          "OCCASION_READY": false,
+          "FEATURE_BANK_READY": false,
+          "APPROVED_EXACT_OFFER_STIMULUS": false,
+          "OPTIONAL_CONTEXT_ENABLED": true
+        },
+        "runtime_version": "cq-runtime/1",
+        "context_digest": "db91dc8501940fc637abe5c3ea3eef6949f15e31a2022db24cde204f5e87b1a2",
+        "state": "PENDING",
+        "event_id": null,
+        "value": null
+      },
+      {
+        "slot_id": "Q05",
+        "question_id": "Q05",
+        "verdict": "SHOWN",
+        "reason": null,
+        "gate": "CONCEPT",
+        "facts": {
+          "Q01_SCREEN": "ELIGIBLE",
+          "Q01_COMPLETED": true,
+          "Q02_VISIBLE": true,
+          "Q04_ANSWER": "NOT_ANSWERED",
+          "CONCEPT_READY": true,
+          "MENU_READY": true,
+          "OCCASION_READY": false,
+          "FEATURE_BANK_READY": false,
+          "APPROVED_EXACT_OFFER_STIMULUS": false,
+          "OPTIONAL_CONTEXT_ENABLED": true
+        },
+        "runtime_version": "cq-runtime/1",
+        "context_digest": "b8f7c99ea190d0575842b0c42fbc9284b556a8b341e82b24ec854723b65e9945",
+        "state": "PENDING",
+        "event_id": null,
+        "value": null
+      },
+      {
+        "slot_id": "Q06",
+        "question_id": "Q06",
+        "verdict": "SHOWN",
+        "reason": null,
+        "gate": "MENU",
+        "facts": {
+          "Q01_SCREEN": "ELIGIBLE",
+          "Q01_COMPLETED": true,
+          "Q02_VISIBLE": true,
+          "Q04_ANSWER": "NOT_ANSWERED",
+          "CONCEPT_READY": true,
+          "MENU_READY": true,
+          "OCCASION_READY": false,
+          "FEATURE_BANK_READY": false,
+          "APPROVED_EXACT_OFFER_STIMULUS": false,
+          "OPTIONAL_CONTEXT_ENABLED": true
+        },
+        "runtime_version": "cq-runtime/1",
+        "context_digest": "db678abb324f5338429b45109eca6761fe21a783b547c4d2f73c2cbdd3d8b532",
+        "state": "PENDING",
+        "event_id": null,
+        "value": null
+      },
+      {
+        "slot_id": "Q07",
+        "question_id": "Q07",
+        "verdict": "NOT_SHOWN",
+        "reason": "CLAUSE_FAILED:{'op': 'is_true', 'lhs': 'APPROVED_EXACT_OFFER_STIMULUS'}",
+        "gate": "Q01_ELIGIBLE_AND_APPROVED_EXACT_OFFER_STIMULUS",
+        "facts": {
+          "Q01_SCREEN": "ELIGIBLE",
+          "Q01_COMPLETED": true,
+          "Q02_VISIBLE": true,
+          "Q04_ANSWER": "NOT_ANSWERED",
+          "CONCEPT_READY": true,
+          "MENU_READY": true,
+          "OCCASION_READY": false,
+          "FEATURE_BANK_READY": false,
+          "APPROVED_EXACT_OFFER_STIMULUS": false,
+          "OPTIONAL_CONTEXT_ENABLED": true
+        },
+        "runtime_version": "cq-runtime/1",
+        "context_digest": "2646ac0a39a79e284d29182c9cb6d8e826fbed0ca0952fd38c607cdb481f1575",
+        "state": "NOT_SHOWN",
+        "event_id": null,
+        "value": null
+      },
+      {
+        "slot_id": "Q08",
+        "question_id": "Q08",
+        "verdict": "NOT_SHOWN",
+        "reason": "CLAUSE_FAILED:{'op': 'eq', 'lhs': 'Q04_ANSWER', 'rhs': 'SUBSTANTIVE_NONZERO'}",
+        "gate": "Q01_ELIGIBLE_AND_Q04_SUBSTANTIVE_NONZERO",
+        "facts": {
+          "Q01_SCREEN": "ELIGIBLE",
+          "Q01_COMPLETED": true,
+          "Q02_VISIBLE": true,
+          "Q04_ANSWER": "NOT_ANSWERED",
+          "CONCEPT_READY": true,
+          "MENU_READY": true,
+          "OCCASION_READY": false,
+          "FEATURE_BANK_READY": false,
+          "APPROVED_EXACT_OFFER_STIMULUS": false,
+          "OPTIONAL_CONTEXT_ENABLED": true
+        },
+        "runtime_version": "cq-runtime/1",
+        "context_digest": "764b4b2acfe05bad9b8f8a7153c71d11a32ea3f7db1076eeab3e6ce62a68360f",
+        "state": "NOT_SHOWN",
+        "event_id": null,
+        "value": null
+      },
+      {
+        "slot_id": "Q09",
+        "question_id": "Q09",
+        "verdict": "NOT_SHOWN",
+        "reason": "CLAUSE_FAILED:{'op': 'is_true', 'lhs': 'OCCASION_READY'}",
+        "gate": "FUTURE_OCCASION",
+        "facts": {
+          "Q01_SCREEN": "ELIGIBLE",
+          "Q01_COMPLETED": true,
+          "Q02_VISIBLE": true,
+          "Q04_ANSWER": "NOT_ANSWERED",
+          "CONCEPT_READY": true,
+          "MENU_READY": true,
+          "OCCASION_READY": false,
+          "FEATURE_BANK_READY": false,
+          "APPROVED_EXACT_OFFER_STIMULUS": false,
+          "OPTIONAL_CONTEXT_ENABLED": true
+        },
+        "runtime_version": "cq-runtime/1",
+        "context_digest": "5c0924045e8d0c811d063e3bedea7841bff8bd6907816254ad4ffd9da03f690b",
+        "state": "NOT_SHOWN",
+        "event_id": null,
+        "value": null
+      },
+      {
+        "slot_id": "Q10:SYN-F1",
+        "question_id": "Q10",
+        "verdict": "NOT_SHOWN",
+        "reason": "CLAUSE_FAILED:{'op': 'is_true', 'lhs': 'FEATURE_BANK_READY'}",
+        "gate": "FEATURES",
+        "facts": {
+          "Q01_SCREEN": "ELIGIBLE",
+          "Q01_COMPLETED": true,
+          "Q02_VISIBLE": true,
+          "Q04_ANSWER": "NOT_ANSWERED",
+          "CONCEPT_READY": true,
+          "MENU_READY": true,
+          "OCCASION_READY": false,
+          "FEATURE_BANK_READY": false,
+          "APPROVED_EXACT_OFFER_STIMULUS": false,
+          "OPTIONAL_CONTEXT_ENABLED": true
+        },
+        "runtime_version": "cq-runtime/1",
+        "context_digest": "2e4816682fd11b9bc9580dbdb6a8d589913f80771cf6f07461861b0d456ce7c0",
+        "state": "NOT_SHOWN",
+        "event_id": null,
+        "value": null
+      },
+      {
+        "slot_id": "Q10:SYN-F2",
+        "question_id": "Q10",
+        "verdict": "NOT_SHOWN",
+        "reason": "CLAUSE_FAILED:{'op': 'is_true', 'lhs': 'FEATURE_BANK_READY'}",
+        "gate": "FEATURES",
+        "facts": {
+          "Q01_SCREEN": "ELIGIBLE",
+          "Q01_COMPLETED": true,
+          "Q02_VISIBLE": true,
+          "Q04_ANSWER": "NOT_ANSWERED",
+          "CONCEPT_READY": true,
+          "MENU_READY": true,
+          "OCCASION_READY": false,
+          "FEATURE_BANK_READY": false,
+          "APPROVED_EXACT_OFFER_STIMULUS": false,
+          "OPTIONAL_CONTEXT_ENABLED": true
+        },
+        "runtime_version": "cq-runtime/1",
+        "context_digest": "2e4816682fd11b9bc9580dbdb6a8d589913f80771cf6f07461861b0d456ce7c0",
+        "state": "NOT_SHOWN",
+        "event_id": null,
+        "value": null
+      },
+      {
+        "slot_id": "Q11",
+        "question_id": "Q11",
+        "verdict": "SHOWN",
+        "reason": null,
+        "gate": "Q01_ELIGIBLE_AND_OPTIONAL_CONTEXT_ENABLED",
+        "facts": {
+          "Q01_SCREEN": "ELIGIBLE",
+          "Q01_COMPLETED": true,
+          "Q02_VISIBLE": true,
+          "Q04_ANSWER": "NOT_ANSWERED",
+          "CONCEPT_READY": true,
+          "MENU_READY": true,
+          "OCCASION_READY": false,
+          "FEATURE_BANK_READY": false,
+          "APPROVED_EXACT_OFFER_STIMULUS": false,
+          "OPTIONAL_CONTEXT_ENABLED": true
+        },
+        "runtime_version": "cq-runtime/1",
+        "context_digest": "db91dc8501940fc637abe5c3ea3eef6949f15e31a2022db24cde204f5e87b1a2",
+        "state": "PENDING",
+        "event_id": null,
+        "value": null
+      },
+      {
+        "slot_id": "Q12",
+        "question_id": "Q12",
+        "verdict": "SHOWN",
+        "reason": null,
+        "gate": "Q01_ELIGIBLE_AND_OPTIONAL_CONTEXT_ENABLED",
+        "facts": {
+          "Q01_SCREEN": "ELIGIBLE",
+          "Q01_COMPLETED": true,
+          "Q02_VISIBLE": true,
+          "Q04_ANSWER": "NOT_ANSWERED",
+          "CONCEPT_READY": true,
+          "MENU_READY": true,
+          "OCCASION_READY": false,
+          "FEATURE_BANK_READY": false,
+          "APPROVED_EXACT_OFFER_STIMULUS": false,
+          "OPTIONAL_CONTEXT_ENABLED": true
+        },
+        "runtime_version": "cq-runtime/1",
+        "context_digest": "db91dc8501940fc637abe5c3ea3eef6949f15e31a2022db24cde204f5e87b1a2",
+        "state": "PENDING",
+        "event_id": null,
+        "value": null
+      },
+      {
+        "slot_id": "Q13",
+        "question_id": "Q13",
+        "verdict": "SHOWN",
+        "reason": null,
+        "gate": "Q01_ELIGIBLE_AND_OPTIONAL_CONTEXT_ENABLED",
+        "facts": {
+          "Q01_SCREEN": "ELIGIBLE",
+          "Q01_COMPLETED": true,
+          "Q02_VISIBLE": true,
+          "Q04_ANSWER": "NOT_ANSWERED",
+          "CONCEPT_READY": true,
+          "MENU_READY": true,
+          "OCCASION_READY": false,
+          "FEATURE_BANK_READY": false,
+          "APPROVED_EXACT_OFFER_STIMULUS": false,
+          "OPTIONAL_CONTEXT_ENABLED": true
+        },
+        "runtime_version": "cq-runtime/1",
+        "context_digest": "db91dc8501940fc637abe5c3ea3eef6949f15e31a2022db24cde204f5e87b1a2",
+        "state": "PENDING",
+        "event_id": null,
+        "value": null
+      }
+    ],
+    "next_slot_id": null,
+    "next_stimulus_kind": "offer",
+    "can_submit": false,
+    "screen_disposition": "ELIGIBLE",
+    "receipt": null,
+    "delivered_stimulus": {
+      "kind": "menu",
+      "text": "SYNTHETIC TEST menu",
+      "version": "SYNTHETIC-menu-1",
+      "hash": "6a7b82568de51f854c0639921df47ac8362c6985ccb95ba5e47ddc609d71241a"
+    }
+  }
+}

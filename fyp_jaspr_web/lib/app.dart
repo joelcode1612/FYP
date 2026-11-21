@@ -616,72 +616,67 @@ class SitewiseApp extends StatelessComponent {
             ),
           ),
           Route(
-            path: '/entrepreneur/report',
+            path: '/entrepreneur/cafe-report/view',
             builder: (context, state) => _page(
-              e_report.ReportPage(id: state.queryParams['id'] ?? ''),
-              title: 'Assessment report — Sitewise',
-            ),
-          ),
-          // Web decision-support workspace. `?id=` is the same catalogue
-          // property id Explore, Property detail and Saved already pass;
-          // `?stage=` optionally opens one of the two in-page stage panels.
-          // The Flutter mobile assessment is a separate data-collection
-          // workflow and never routes here.
-          //
-          // This is the backward-compatible deep link: it still opens the
-          // workspace for one property. `/entrepreneur/assessments` is the
-          // canonical route now (it opens Stage 1 when no property is given),
-          // so this one keeps working for old bookmarks and shared links.
-          Route(
-            path: '/entrepreneur/assessment',
-            builder: (context, state) => _page(
-              e_assessment.AssessmentWorkspacePage(
-                propertyId: state.queryParams['id'] ?? '',
-                stage: state.queryParams['stage'] ?? '',
-                // The selected F&B business type, carried from Recommendations
-                // so the assessment draft opens with the entrepreneur's own
-                // choice instead of an empty field.
-                businessType: state.queryParams['businessType'] ?? '',
+              e_report_activity.CafeReportView(
+                assessmentId: state.queryParams['assessment'] ?? '',
               ),
-              title: 'Location Assessment Workspace — Sitewise',
-              description:
-                  'A five-stage assessment of one commercial property, saved '
-                  'to your account as you go.',
+              title: 'Café demand suitability report — Sitewise',
             ),
           ),
-          // The assessment history lives under the workspace route. It is
-          // registered before the workspace itself so the history path is
-          // always matched by its own route.
+          Route(
+            path: '/entrepreneur/cafe-report',
+            builder: (context, state) => _page(
+              const e_report_selector.AssessmentReportSelectorView(),
+              title: 'Select assessment to view report — Sitewise',
+            ),
+          ),
+          Route(
+            path: '/entrepreneur/activity-history',
+            builder: (context, state) => _page(
+              e_report_activity.ActivityHistoryView(assessmentId: state.queryParams['assessment'] ?? ''),
+              title: 'Activity history — Sitewise',
+            ),
+          ),
           Route(
             path: '/entrepreneur/assessments/history',
             builder: (context, state) => _page(
-              const e_assessment_history.AssessmentHistoryPage(),
+              // The engine activity shell (M2ActivityPanel) is the history
+              // surface now; ActivityHistoryPage is its embedded view and
+              // needs fetched activities, so the route goes through the shell.
+              e_report_activity.ActivityHistoryView(
+                assessmentId: state.queryParams['assessment'] ?? '',
+              ),
               title: 'Assessment history — Sitewise',
               description:
                   'Every location assessment saved to your account, with its '
                   'real progress and report availability.',
             ),
           ),
-          // The main Assessments destination: the five-stage workspace. With
-          // no `?id=` it opens Stage 1 — the saved-property selector — and
-          // never starts an assessment on its own.
+          // The **Assessment** top-bar destination (PROJECT1 v1.5).
+          //
+          // With no `?id=` this is the four-step research flow: the assessment
+          // overview list, or one of its steps via `?step=1..4`, scoped to the
+          // assessment named by `?assessment=`.
+          //
+          // With `?id=` it is still the five-stage property workspace, byte for
+          // byte the same page as before — every saved link, dashboard KPI and
+          // Explore/Saved hand-off keeps working.
           Route(
             path: '/entrepreneur/assessments',
             builder: (context, state) => _page(
-              e_assessment.AssessmentWorkspacePage(
+              e_assessment_workspace.AssessmentWorkspacePage(
                 propertyId: state.queryParams['id'] ?? '',
                 stage: state.queryParams['stage'] ?? '',
-                // The selected F&B business type, carried from Recommendations
-                // so the assessment draft opens with the entrepreneur's own
-                // choice instead of an empty field.
                 businessType: state.queryParams['businessType'] ?? '',
               ),
-              title: 'Location Assessment Workspace — Sitewise',
+              title: 'Assessment workspace — Sitewise',
               description:
-                  'A five-stage assessment of one commercial property, saved '
-                  'to your account as you go.',
+                  'Select a property, record your business preferences, review '
+                  'the location evidence and open the assessment report.',
             ),
           ),
+
           Route(
             path: '/entrepreneur/profile',
             builder: (context, state) => _page(
@@ -712,7 +707,15 @@ class SitewiseApp extends StatelessComponent {
               ),
             ),
 
-          // Unknown browser routes use errorBuilder above.
+          
+        
+          Route(
+            path: '/entrepreneur/report',
+            builder: (context, state) => _page(
+              e_report.ReportPage(id: state.queryParams['id'] ?? ''),
+              title: 'Assessment report — Sitewise',
+            ),
+          ),
         ],
       ),
     );

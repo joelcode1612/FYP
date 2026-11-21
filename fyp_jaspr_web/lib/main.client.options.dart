@@ -10,6 +10,12 @@ import 'package:sitewise_jaspr_web/features/administration/presentation/componen
     deferred as _agent_assignment_control;
 import 'package:sitewise_jaspr_web/features/administration/presentation/components/agent_change_requests_panel.dart'
     deferred as _agent_change_requests_panel;
+import 'package:sitewise_jaspr_web/components/m2_activity_panel.dart'
+    deferred as _m2_activity_panel;
+import 'package:sitewise_jaspr_web/components/project1_read_panel.dart'
+    deferred as _project1_read_panel;
+import 'package:sitewise_jaspr_web/components/verification_detail_view.dart'
+    deferred as _verification_detail_view;
 import 'package:sitewise_jaspr_web/features/administration/presentation/pages/activity_page.dart'
     deferred as _activity_page;
 import 'package:sitewise_jaspr_web/features/administration/presentation/pages/agents_page.dart'
@@ -28,9 +34,12 @@ import 'package:sitewise_jaspr_web/features/administration/presentation/pages/us
     deferred as _user_detail_page;
 import 'package:sitewise_jaspr_web/features/administration/presentation/pages/users_page.dart'
     deferred as _users_page;
-import 'package:sitewise_jaspr_web/features/assessment/presentation/pages/assessment_history_page.dart'
-    deferred as _assessment_history_page;
-import 'package:sitewise_jaspr_web/features/assessment/presentation/pages/assessment_workspace_page.dart'
+
+import 'package:sitewise_jaspr_web/pages/entrepreneur/ai_recommendations_page.dart'
+    deferred as _ai_recommendations_page;
+import 'package:sitewise_jaspr_web/pages/entrepreneur/assessment_report_selector_view.dart'
+    deferred as _assessment_report_selector_view;
+import 'package:sitewise_jaspr_web/pages/entrepreneur/assessment_workspace_page.dart'
     deferred as _assessment_workspace_page;
 import 'package:sitewise_jaspr_web/features/assessment/presentation/pages/report_page.dart'
     deferred as _report_page;
@@ -113,6 +122,31 @@ ClientOptions get defaultClientOptions => ClientOptions(
       (p) => _agent_change_requests_panel.AgentChangeRequestsPanel(),
       loader: _agent_change_requests_panel.loadLibrary,
     ),
+    'm2_activity_panel': ClientLoader(
+      (p) => _m2_activity_panel.M2ActivityPanel(
+        assessmentId: p['assessmentId'] as String,
+      ),
+      loader: _m2_activity_panel.loadLibrary,
+    ),
+    'project1_read_panel': ClientLoader(
+      (p) => _project1_read_panel.Project1ReadPanel(
+        assessmentId: p['assessmentId'] as String,
+        section: p['section'] as String,
+      ),
+      loader: _project1_read_panel.loadLibrary,
+    ),
+    'location_insights': ClientLoader(
+      (p) => _location_insights.LocationInsightsV4(
+        propertyId: p['propertyId'] as String,
+        puScore: p['puScore'] as num?,
+        hasPuScore: p['hasPuScore'] as bool,
+      ),
+      loader: _location_insights.loadLibrary,
+    ),
+    'verification_detail_view': ClientLoader(
+      (p) => _verification_detail_view.VerificationDetailView(),
+      loader: _verification_detail_view.loadLibrary,
+    ),
     'activity_page': ClientLoader(
       (p) => _activity_page.AdminActivityPage(),
       loader: _activity_page.loadLibrary,
@@ -149,9 +183,19 @@ ClientOptions get defaultClientOptions => ClientOptions(
       (p) => _users_page.UsersPage(),
       loader: _users_page.loadLibrary,
     ),
-    'assessment_history_page': ClientLoader(
-      (p) => _assessment_history_page.AssessmentHistoryPage(),
-      loader: _assessment_history_page.loadLibrary,
+    'auth_callback_page': ClientLoader(
+      (p) => _auth_callback_page.AuthCallbackPage(),
+      loader: _auth_callback_page.loadLibrary,
+    ),
+    'ai_recommendations_page': ClientLoader(
+      (p) => _ai_recommendations_page.AiRecommendationsPage(
+        resultId: p['resultId'] as String,
+      ),
+      loader: _ai_recommendations_page.loadLibrary,
+    ),
+    'assessment_report_selector_view': ClientLoader(
+      (p) => _assessment_report_selector_view.AssessmentReportSelectorView(),
+      loader: _assessment_report_selector_view.loadLibrary,
     ),
     'assessment_workspace_page': ClientLoader(
       (p) => _assessment_workspace_page.AssessmentWorkspacePage(

@@ -58,6 +58,8 @@ def main():
             # The recorded M2 dump already includes the existing users table.
             env["DATABASE_URL"] = f"postgresql+psycopg2://postgres:{password}@127.0.0.1:55437/project1_cp07_tests"
             env["ANALYTICS_DATABASE_URL"] = env["DATABASE_URL"]
+            env['M2_DATABASE_URL'] = env['DATABASE_URL']
+            env['M2_EXPECTED_DATABASE'] = 'project1_cp07_tests'
             env["PYTHONPATH"] = str(root / "src")
             env["M2_UPSTREAM_ENABLED"] = "false"
             env["PROJECT1_CP07_ENABLED"] = "true"

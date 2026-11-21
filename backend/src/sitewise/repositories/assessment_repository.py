@@ -24,6 +24,13 @@ class AssessmentRepository:
         self.session.refresh(assessment)
         return assessment
 
+    def delete(self, assessment: Assessment) -> None:
+        """Remove the row permanently. The table has no FK children — stage
+        timestamps and requirements live on the record itself — so a plain
+        delete cannot orphan anything."""
+        self.session.delete(assessment)
+        self.session.commit()
+
     def get_by_id(self, assessment_id: uuid.UUID) -> Optional[Assessment]:
         return self.session.get(Assessment, assessment_id)
 

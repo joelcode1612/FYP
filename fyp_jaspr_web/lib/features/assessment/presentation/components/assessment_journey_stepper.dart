@@ -1,44 +1,45 @@
 import 'package:jaspr/dom.dart';
 import 'package:jaspr/jaspr.dart';
 
-import 'package:sitewise_jaspr_web/features/assessment/data/assessment_api.dart';
+import '../data/assessment_api.dart';
+import 'ui.dart';
 
 /// Five-stage assessment timeline, based on the SiteWise location-assessment
 /// reference image. It does not compute or change assessment progress:
 /// every stage, status and percentage comes from the backend's persisted
 /// [AssessmentRecord].
 ///
-/// For stages 2/3 it requests that the existing workspace expand its
-/// respective panel. Stage 1 links to the property; stages 4/5 link to
-/// the existing explanation/report pages only when their capability is not
-/// unavailable. No shortcut grants completion or bypasses server validation.
+/// Every stage opens its own checkpoint view in the workspace via
+/// [onOpenStage] — the five checkpoints are independent, one visible at a
+/// time. No shortcut grants completion or bypasses server validation.
 class AssessmentJourneyStepper extends StatelessComponent {
   final AssessmentRecord record;
   final bool busy;
+
+  /// The stage whose checkpoint is on screen. Null falls back to the
+  /// record's own current stage.
+  final String? selectedStageKey;
   final void Function(String stageKey) onOpenStage;
 
   const AssessmentJourneyStepper({
     super.key,
     required this.record,
     required this.busy,
+    this.selectedStageKey,
     required this.onOpenStage,
   });
 
   @override
   Component build(BuildContext context) {
-    final progress = record.progressPercent.clamp(0, 100);
-
     return section(
       classes: 'sw-assessment-journey',
       attributes: const {'aria-label': 'Location assessment stages'},
       [
         div(classes: 'sw-assessment-journey__heading', [
           div(classes: 'sw-assessment-journey__heading-text', [
+            Icon('layers', size: 'sm'),
             span(classes: 'sw-assessment-journey__eyebrow', [
-              Component.text('YOUR ASSESSMENT JOURNEY'),
-            ]),
-            h2(classes: 'sw-assessment-journey__title', [
-              Component.text('Five stages to your location decision'),
+              Component.text('Assessment progress'),
             ]),
           ]),
           div(classes: 'sw-assessment-journey__count', [
@@ -51,42 +52,19 @@ class AssessmentJourneyStepper extends StatelessComponent {
             for (final stage in record.stages) _stage(stage),
           ]),
         ]),
-        div(classes: 'sw-assessment-journey__footer', [
-          span(classes: 'sw-assessment-journey__hint', [
-            Component.text('Progress is saved to your account'),
-          ]),
-          strong(classes: 'sw-assessment-journey__percentage', [
-            Component.text('$progress%'),
-          ]),
-        ]),
-        div(
-          classes: 'sw-assessment-journey__progress',
-          attributes: {
-            'role': 'progressbar',
-            'aria-label': 'Assessment completion',
-            'aria-valuenow': '$progress',
-            'aria-valuemin': '0',
-            'aria-valuemax': '100',
-          },
-          [
-            div(
-              classes: 'sw-assessment-journey__progress-fill',
-              styles: Styles(raw: {'width': '$progress%'}),
-              [],
-            ),
-          ],
-        ),
       ],
     );
   }
 
   Component _stage(AssessmentStage stage) {
-    final label = _displayLabel(stage.key, stage.title);
+    final label = displayLabel(stage.key, stage.title);
+    final selectedKey = selectedStageKey ?? record.currentStageKey;
+    final isSelected = stage.key == selectedKey;
     final state = stage.isComplete
         ? 'complete'
         : stage.isUnavailable
             ? 'unavailable'
-            : stage.isCurrent
+            : isSelected
                 ? 'current'
                 : 'upcoming';
     final statusLabel = switch (state) {
@@ -103,47 +81,25 @@ class AssessmentJourneyStepper extends StatelessComponent {
       span(classes: 'sw-assessment-journey__step-title', [
         Component.text(label),
       ]),
-      span(classes: 'sw-assessment-journey__step-status', [
-        Component.text(statusLabel),
-      ]),
     ];
 
     final attrs = <String, String>{
       'aria-label': 'Step ${stage.number}: $label — $statusLabel',
-      if (stage.isCurrent) 'aria-current': 'step',
+      if (isSelected) 'aria-current': 'step',
       if (stage.isUnavailable && stage.unavailableReason != null)
         'title': stage.unavailableReason!,
     };
 
     final classes = 'sw-assessment-journey__control';
+    // Every stage opens its own checkpoint view in the workspace; the
+    // deep-link hand-offs to the property, explanation and report pages live
+    // inside those checkpoints instead of leaving the workspace from here.
     Component control;
-    if (!busy && (stage.key == 'business_requirements' ||
-                    stage.key == 'location_evidence')) {
+    if (!busy && !stage.isUnavailable) {
       control = button(
         classes: classes,
         attributes: {...attrs, 'type': 'button'},
         events: events(onClick: () => onOpenStage(stage.key)),
-        contents,
-      );
-    } else if (!busy && !stage.isUnavailable && stage.key == 'select_property') {
-      control = a(
-        href: '/entrepreneur/property-detail?id=${Uri.encodeQueryComponent(record.propertyId)}',
-        classes: classes,
-        attributes: attrs,
-        contents,
-      );
-    } else if (!busy && !stage.isUnavailable && stage.key == 'ai_explanation') {
-      control = a(
-        href: '/entrepreneur/explanation?property=${Uri.encodeQueryComponent(record.propertyId)}',
-        classes: classes,
-        attributes: attrs,
-        contents,
-      );
-    } else if (!busy && !stage.isUnavailable && stage.key == 'assessment_report') {
-      control = a(
-        href: '/entrepreneur/report?id=${Uri.encodeQueryComponent(record.propertyId)}',
-        classes: classes,
-        attributes: attrs,
         contents,
       );
     } else {
@@ -159,11 +115,14 @@ class AssessmentJourneyStepper extends StatelessComponent {
     ]);
   }
 
-  static String _displayLabel(String key, String serverLabel) => switch (key) {
+  /// Client-side step labels. The backend keys are the contract; the label for
+  /// `ai_explanation` follows the step-4 redesign (research question review),
+  /// so the stepper, the breadcrumb and the step heading agree.
+  static String displayLabel(String key, String serverLabel) => switch (key) {
     'select_property' => 'Select property',
     'business_requirements' => 'Business preferences',
     'location_evidence' => 'Location evidence',
-    'ai_explanation' => 'AI explanation',
+    'ai_explanation' => 'Question review',
     'assessment_report' => 'Assessment report',
     _ => serverLabel,
   };

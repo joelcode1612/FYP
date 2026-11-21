@@ -15053,6 +15053,49 @@ input[type="range"] {
   .rec2__insufficient { flex-wrap: wrap; }
 }
 
+/* ==========================================================================
+   Contextual filter availability (Recommendations)
+   The live count for what is being SELECTED, before any search runs, and —
+   when that count is thin or empty — the single filter whose release restores
+   the most listings. Nothing relaxes itself: the numbers are the data and the
+   button is the entrepreneur's.
+   ========================================================================== */
+
+.rec2__available-wrap { display: grid; gap: 8px; }
+
+.rec2__available {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.rec2__available .grow { flex: 1; min-width: 0; }
+
+.rec2__conflicts {
+  display: grid;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--warning-border, #fde68a);
+  background: var(--warning-wash, #fffbeb);
+  border-radius: 11px;
+}
+
+.rec2__conflicts-head {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text);
+}
+
+.rec2__conflicts-list { display: flex; flex-wrap: wrap; gap: 8px; }
+
+@media (max-width: 620px) {
+  .rec2__conflicts-list { flex-direction: column; align-items: stretch; }
+}
+
 /* --- V4 Location Insights (property detail section) ---------------------- */
 .sw-pd-v4 { display:grid; gap:16px; background:var(--surface); border:1px solid var(--border); border-radius:var(--radius-lg); padding:20px; }
 .sw-pd-v4__head { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; flex-wrap:wrap; }

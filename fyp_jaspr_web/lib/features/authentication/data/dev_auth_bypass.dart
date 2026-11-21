@@ -20,10 +20,23 @@ library;
 /// Server-side code uses this directly because `Uri.base` under the VM is a
 /// file URI, not the request URL. `jaspr serve` is a dev-only tool, so the
 /// extra localhost check there is done against the request host instead.
-const bool devAuthBypassRequested = bool.fromEnvironment(
+const bool _bypassRequested = bool.fromEnvironment(
   'SITEWISE_DEV_AUTH_BYPASS',
-  defaultValue: false,
+  defaultValue: true,
 );
+const bool _developmentBuild =
+    String.fromEnvironment('SITEWISE_BUILD_ENV', defaultValue: 'production') ==
+    'development';
+const bool _productionBuild = bool.fromEnvironment('dart.vm.product');
+const bool devAuthBypassRequested =
+    _bypassRequested && _developmentBuild && !_productionBuild;
+
+bool developmentBypassAllowed({
+  required bool requested,
+  required bool developmentBuild,
+  required bool productionBuild,
+  required String host,
+}) => requested && developmentBuild && !productionBuild && isLocalDevHost(host);
 
 bool isLocalDevHost(String host) {
   final h = host.toLowerCase();

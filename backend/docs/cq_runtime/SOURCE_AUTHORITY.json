@@ -1,0 +1,122 @@
+[
+  {
+    "path": "C:\\Users\\HP\\OneDrive\\Desktop\\sport-marketplace\\FYP\\backend\\src\\sitewise\\customer_contracts\\reference\\CUST_RECOVERY_20261027\\CUST03_CORRECTED_QUESTIONNAIRE_AND_ROUTING_CONTRACT.json",
+    "sha256": "ec2b5494ecf82447076e0d7a2bfb57599a24f049bbcc925a9ecbea6e833bce59",
+    "bytes": 139905,
+    "classification": "CANDIDATE",
+    "version": "P3-01C-VNEXT-0.6.1-CUST-REC",
+    "authority_status": "Sealed identity/codebook reference; not scientific or fielding adoption."
+  },
+  {
+    "path": "C:\\Users\\HP\\OneDrive\\Desktop\\sport-marketplace\\FYP\\backend\\tests\\cq_runtime\\fixtures\\language_candidate.json",
+    "sha256": "fb0c348788ed5ebc11c33afd029b5cb73ad41c86563c4dbf5a7599abe7952655",
+    "bytes": 28337,
+    "classification": "CANDIDATE",
+    "version": "LANGUAGE-CANDIDATE-01",
+    "authority_status": "Owner accepted candidate for formal review only; bilingual signoff/science pending; activation NOT_AUTHORIZED."
+  },
+  {
+    "path": "C:\\Users\\HP\\OneDrive\\Desktop\\sport-marketplace\\FYP\\backend\\src\\sitewise\\customer_contracts\\candidate_c0c1_v1.json",
+    "sha256": "d6ae33a60a2f26b07a482f1d988c5a614321b5e29624d9e8a0b88aa7fb50af8a",
+    "bytes": 19784,
+    "classification": "CANDIDATE",
+    "version": "CUST03-C0C1-CANDIDATE-20261107.1",
+    "authority_status": "Strict Q01, Q02 staging, stimulus/population policies are proposed; synthetic-only existing qualification."
+  },
+  {
+    "path": "C:\\Users\\HP\\OneDrive\\Desktop\\sport-marketplace\\FYP\\backend\\src\\sitewise\\customer_contracts\\reference\\a2_router_lib.py",
+    "sha256": "3470f9609302f855131bbcd2801350d307bb5f0dc6a57f3081c0b562e6948531",
+    "bytes": 14630,
+    "classification": "CANDIDATE",
+    "version": "SHA-PINNED-A2",
+    "authority_status": "Reused gate interpreter; const only supports true; adapter rejects false const."
+  },
+  {
+    "path": "C:\\Users\\HP\\OneDrive\\Desktop\\sport-marketplace\\FYP\\backend\\src\\sitewise\\customer_contracts\\reference\\a2_routing_spec_v1.json",
+    "sha256": "291a622e68859f4191afff36ca04f86c7ef21cd0e5d45f81be38bcc18a8301fc",
+    "bytes": 16886,
+    "classification": "CONFLICTING",
+    "version": "A2-REFERENCE",
+    "authority_status": "Sealed historical predicates have unapproved/open arms; candidate policy is distinct and pinned."
+  },
+  {
+    "path": "C:\\Users\\HP\\OneDrive\\Desktop\\sport-marketplace\\FYP\\backend\\src\\sitewise\\cq_successor\\app.py",
+    "sha256": "57e446ac7332ee9e8a27c5d79c384fc38776d55354b68e9f70a418e98edccc0a",
+    "bytes": 4547,
+    "classification": "CANDIDATE",
+    "version": "STANDALONE-NOT-LIVE",
+    "authority_status": "Path/body assessment mismatch regression preserved; standalone factory remains unregistered."
+  },
+  {
+    "path": "C:\\Users\\HP\\OneDrive\\Desktop\\sport-marketplace\\FYP\\backend\\src\\sitewise\\services\\customer_questionnaire_candidate.py",
+    "sha256": "45669047d04818864551e2a37a001588e93e0c4bb47a318d23ef9f5086ec68ab",
+    "bytes": 23454,
+    "classification": "SYNTHETIC_FIXTURE",
+    "version": "EXISTING-SYNTHETIC-SERVICE",
+    "authority_status": "Private memory-only qualification not weakened; load_sources and domain validation reused."
+  },
+  {
+    "path": "C:\\Users\\HP\\OneDrive\\Desktop\\sport-marketplace\\FYP\\fyp_mobile_app\\lib\\features\\assessment\\model\\service\\demo_questionnaire_routing_service.dart",
+    "sha256": "4ba89e910254f77d01bec026bb592e00be2a37e26b014369835b98abe60ca166",
+    "bytes": 3479,
+    "classification": "SYNTHETIC_FIXTURE",
+    "version": "HISTORICAL-LOCAL-PREVIEW",
+    "authority_status": "Retained for explicit test overrides; no active production composition."
+  },
+  {
+    "path": "C:\\Users\\HP\\OneDrive\\Desktop\\Project1\\New_Goal\\CQ_R2_CORRECTION_20261104\\11_INDEPENDENT_REVIEW_AND_OWNER_DECISIONS.md",
+    "sha256": "e2651b2c6b05496831c090b8795a2920afd5793bcb37bdc7ef7c338623bc3960",
+    "bytes": 4351,
+    "classification": "AUTHORITY_UNVERIFIED",
+    "version": "R2-20261104",
+    "authority_status": "Records 0/13 core approved and no pretest authorization; historical runtime findings superseded only by new engineering evidence."
+  },
+  {
+    "path": "C:\\Users\\HP\\OneDrive\\Desktop\\Project1\\New_Goal\\CQ_R2_CORRECTION_20261104\\03_Q02_OPTION_A_B_SCIENTIFIC_DECISION.md",
+    "sha256": "a0b9e25f01efc4d07b4271a38f9fdd16bbe3a1d3d4ebe01615cc66b9e9b799d7",
+    "bytes": 3098,
+    "classification": "CANDIDATE",
+    "version": "R2-Q02-A-B",
+    "authority_status": "SCIENTIFIC_DECISION_BLOCKED; SHOW_ALL and ELIGIBLE_ONLY both test alternatives."
+  },
+  {
+    "path": "C:\\Users\\HP\\OneDrive\\Desktop\\Project1\\New_Goal\\doc\\PROJECT1_V1_CQ_SCIENCE_ROUTING_EVIDENCE_HANDOFF_20261105\\06_OWNER_DECISIONS\\AUTHORITY_AND_SCOPE_LOCK.md",
+    "sha256": "855f346e2cac1344519e5c0a83f6c2aec9df58abd13f5ab5d4165c340fca5f2c",
+    "bytes": 2188,
+    "classification": "AUTHORITY_UNVERIFIED",
+    "version": "R3-SCOPE-20261105",
+    "authority_status": "Q01/Q02/Q09/Q10 and common fallback decisions remain Owner/science gates."
+  },
+  {
+    "path": "C:\\Users\\HP\\OneDrive\\Desktop\\Project1\\New_Goal\\doc\\PROJECT1_CQ_SCIENTIFIC_ROUTING_R3_20261105\\ROUTING_ACCEPTANCE_CHECKLIST.md",
+    "sha256": "34a72e64386b50e7235210bc184e6609247888defa2d9413c305697affd3a2a4",
+    "bytes": 6497,
+    "classification": "CONFLICTING",
+    "version": "R3-20261105",
+    "authority_status": "NOT READY; source framing and declared precedence disputed. Human/scientific release not implied by AI reviews."
+  },
+  {
+    "path": "C:\\Users\\HP\\OneDrive\\Desktop\\Project1\\New_Goal\\doc\\PROJECT1_CQ_SPECIFICITY_ADAPTIVE_RESEARCH_R1_20261105\\SOURCE_AND_AUTHORITY_REGISTER.md",
+    "sha256": "efbed131e8ccc708726725a00b4eb79389210cfb45b6423bc0d9f9c4032b38c4",
+    "bytes": 1694,
+    "classification": "CONFLICTING",
+    "version": "R1-20261105",
+    "authority_status": "Calls CUST03 canonical instrument while other records explicitly withhold approval; identity authority is not fielding authority."
+  },
+  {
+    "path": "C:\\Users\\HP\\OneDrive\\Desktop\\Project1\\New_Goal\\doc\\PROJECT1_CQ_SPECIFICITY_ADAPTIVE_RESEARCH_R1_20261105\\C0_C1_C2_COMPARABILITY_AND_ROUTING_ASSESSMENT.md",
+    "sha256": "c5ab7ed2cfd9bb148378c451364ff43e93421ec03a1b2d98db5f677ed39805aa",
+    "bytes": 1443,
+    "classification": "CANDIDATE",
+    "version": "R1-20261105",
+    "authority_status": "No measured adaptive benefit; C1 comparability and expansion not adopted."
+  },
+  {
+    "path": "C:\\Users\\HP\\OneDrive\\Desktop\\sport-marketplace\\FYP\\backend\\tests\\cq_runtime\\test_postgres_api.py",
+    "sha256": "0619b7c6fc5d94e1c47e485be2cccbfbbc29e9979db74bf0259d3ff899b041e2",
+    "bytes": 35985,
+    "classification": "SYNTHETIC_FIXTURE",
+    "version": "CQ-ENGINEERING-TEST-1",
+    "authority_status": "Private-cluster-only authority, test M2 ownership, controlled baseline subset and all-13 conditional test release. No scientific acceptance."
+  }
+]

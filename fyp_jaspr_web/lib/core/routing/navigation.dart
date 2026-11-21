@@ -83,19 +83,29 @@ List<WebDestination> webDestinationsFor(AppRole role) => switch (role) {
       icon: 'recommend',
       label: 'Recommendations',
     ),
-    // Saved location assessments. The workspace itself is a drill-in from a
-    // property, so it has no nav entry of its own; this is where the records
-    // are collected and reopened.
+    // The **Assessment** destination. Since PROJECT1 v1.5 this opens the
+    // four-step research flow at `/entrepreneur/assessments`: the assessment
+    // overview list, then Steps 1–4. It no longer points at the read-only
+    // report index (`/entrepreneur/assessment-list`), which remains reachable
+    // by URL but is not a top-bar entry.
     WebDestination(
       route: '/entrepreneur/assessments',
       icon: 'fact_check',
-      label: 'Assessments',
+      label: 'Assessment',
     ),
     WebDestination(
-      route: '/entrepreneur/reports',
-      icon: 'description',
-      label: 'Reports',
+      route: '/entrepreneur/cafe-report',
+      icon: 'summarize',
+      label: 'Report',
     ),
+    // ONE history destination. `/entrepreneur/activity-history` and
+    // `/entrepreneur/assessments/history` both mounted `ActivityHistoryView`
+    // (the same `M2ActivityPanel`), so the sidebar carried two pills that
+    // opened the identical screen. The surviving entry is the one nested under
+    // Assessment, because it carries the real breadcrumb
+    // (`Assessment › Assessment history`) that the orphan route never had.
+    // `/entrepreneur/activity-history` stays registered in `app.dart`, so an
+    // old bookmark still resolves — it simply has no pill of its own.
     WebDestination(
       route: '/entrepreneur/assessments/history',
       icon: 'history',
@@ -144,8 +154,23 @@ String parentShellRoute(String route) {
     '/entrepreneur/property-analysis': '/entrepreneur/recommendations',
     '/entrepreneur/assessment': '/entrepreneur/assessments',
     '/entrepreneur/assessments/history': '/entrepreneur/assessments/history',
+    // The orphan duplicate. `/entrepreneur/activity-history` renders the same
+    // `ActivityHistoryView` as the entry above, so a bookmark to it must light
+    // that surviving pill rather than leave the sidebar with nothing selected.
+    '/entrepreneur/activity-history': '/entrepreneur/assessments/history',
     '/entrepreneur/tour': '/entrepreneur/recommendations',
-    '/entrepreneur/report': '/entrepreneur/reports',
+    // A generated report is read THROUGH the Report destination. It used to
+    // highlight Recommendations, which meant opening a report lit a tab the
+    // reader had not come from — the selector gate existed precisely to stop
+    // that, so every report surface now resolves back to it.
+    '/entrepreneur/report': '/entrepreneur/cafe-report',
+    // The report shell is now reached from the selector gate; both URLs keep
+    // the Report pill lit so the sidebar matches what is on screen.
+    '/entrepreneur/cafe-report/view': '/entrepreneur/cafe-report',
+    // The standalone report directory is not a sidebar entry. Opening a row
+    // from it and pressing Back must not leave the pill pointing at a route
+    // the sidebar cannot select, so it resolves to the gate as well.
+    '/entrepreneur/reports': '/entrepreneur/cafe-report',
     '/entrepreneur/explanation': '/entrepreneur/recommendations',
     // Listing management is retired from this workspace entirely, so the two
     // routes that used to sit under My Properties have no pill to light up.

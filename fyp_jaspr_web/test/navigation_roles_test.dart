@@ -36,7 +36,10 @@ void main() {
         '/entrepreneur',
         '/entrepreneur/recommendations',
         '/entrepreneur/assessments',
-        '/entrepreneur/reports',
+        // The Report pill opens the selector gate, not the flat directory.
+        // `/entrepreneur/reports` still resolves as a route but was never a
+        // sidebar destination — the gate is what the sidebar carries.
+        '/entrepreneur/cafe-report',
         '/entrepreneur/assessments/history',
         '/entrepreneur/compare',
         '/entrepreneur/saved',
@@ -44,6 +47,21 @@ void main() {
       ]) {
         expect(routes, contains(route), reason: '$route must stay reachable');
       }
+    });
+
+    test('offers ONE history destination, not the duplicated pair', () {
+      // `/entrepreneur/activity-history` and `/entrepreneur/assessments/history`
+      // mounted the same ActivityHistoryView. Only the nested one keeps a pill.
+      expect(routes, contains('/entrepreneur/assessments/history'));
+      expect(routes, isNot(contains('/entrepreneur/activity-history')));
+      expect(
+        routes.where((r) => webDestinationsFor(AppRole.entrepreneur)
+                .firstWhere((d) => d.route == r)
+                .label ==
+            'History'),
+        hasLength(1),
+        reason: 'exactly one History pill must exist',
+      );
     });
 
     test('has no property-creation entry point left', () {

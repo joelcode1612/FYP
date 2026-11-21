@@ -67,8 +67,13 @@ class _EntrepreneurTabHostState extends State<EntrepreneurTabHost> {
     // and a ranked search — it never asks the host which one it is.
     '/entrepreneur/recommendations' =>
       const EntrepreneurRecommendationsMobilePage(),
+<<<<<<< HEAD:fyp_mobile_app/lib/shared/presentation/layouts/entrepreneur_tab_host.dart
     '/entrepreneur/assess' => const EntrepreneurAssessMobilePage(),
     '/entrepreneur/favourites' => const EntrepreneurFavouritesMobilePage(),
+=======
+    '/entrepreneur/assess' => const HomeScreen(),
+    '/entrepreneur/spaces' => const EntrepreneurSpacesMobilePage(),
+>>>>>>> merge_main_jed:fyp_mobile_app/lib/presentation/mobile/shell/entrepreneur_tab_host.dart
     '/entrepreneur/profile' => const EntrepreneurProfileMobilePage(),
     _ => const SizedBox.shrink(),
   };

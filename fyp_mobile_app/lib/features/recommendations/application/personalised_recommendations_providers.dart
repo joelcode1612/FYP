@@ -1,3 +1,4 @@
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/legacy.dart'
     show StateNotifier, StateNotifierProvider;
@@ -30,7 +31,8 @@ class PersonalisedBatchState {
     this.error,
   });
 
-  bool get loading => status == PersonalisedBatchStatus.loading;
+  bool get loading =>
+      status == PersonalisedBatchStatus.loading;
 
   PersonalisedBatchState copyWith({
     PersonalisedBatchStatus? status,
@@ -42,7 +44,8 @@ class PersonalisedBatchState {
     return PersonalisedBatchState(
       status: status ?? this.status,
       batch: clearBatch ? null : (batch ?? this.batch),
-      reusedExistingBatch: reusedExistingBatch ?? this.reusedExistingBatch,
+      reusedExistingBatch:
+          reusedExistingBatch ?? this.reusedExistingBatch,
       error: error,
     );
   }

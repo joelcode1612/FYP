@@ -2,7 +2,18 @@
 /// them into error states. No exceptions leak raw SDK errors to UI.
 abstract class AppFailure implements Exception {
   final String message;
-  const AppFailure(this.message);
+  final int? statusCode;
+  final String? backendCode;
+
+  /// A write may have reached the server; callers must reconcile or reuse its
+  /// exact idempotency identity, never silently create another operation.
+  final bool outcomeUnknown;
+  const AppFailure(
+    this.message, {
+    this.statusCode,
+    this.backendCode,
+    this.outcomeUnknown = false,
+  });
 
   /// Short, user-facing text for this failure class. Deliberately generic:
   /// it never includes SDK, HTTP or stack details.
@@ -14,6 +25,8 @@ abstract class AppFailure implements Exception {
 
 class NetworkFailure extends AppFailure {
   const NetworkFailure([super.message = 'Unable to reach the server.']);
+  const NetworkFailure.transport(String message, {bool outcomeUnknown = false})
+    : super(message, outcomeUnknown: outcomeUnknown);
 
   @override
   String get userMessage =>
@@ -35,6 +48,11 @@ class DemoModeFailure extends AppFailure {
 /// can say "sign in again" instead of "check your connection".
 class UnauthorizedFailure extends AppFailure {
   const UnauthorizedFailure([super.message = 'Your session has expired.']);
+  const UnauthorizedFailure.response(
+    String message, {
+    int? statusCode,
+    String? backendCode,
+  }) : super(message, statusCode: statusCode, backendCode: backendCode);
 
   @override
   String get userMessage => 'Your session has expired. Please sign in again.';
@@ -45,6 +63,11 @@ class UnauthorizedFailure extends AppFailure {
 /// an authorization problem.
 class ServiceFailure extends AppFailure {
   const ServiceFailure([super.message = 'The Sitewise service hit a problem.']);
+  const ServiceFailure.response(
+    String message, {
+    int? statusCode,
+    String? backendCode,
+  }) : super(message, statusCode: statusCode, backendCode: backendCode);
 
   @override
   String get userMessage =>
@@ -65,6 +88,11 @@ class ResponseFormatFailure extends AppFailure {
 
 class NotFoundFailure extends AppFailure {
   const NotFoundFailure([super.message = 'The requested item was not found.']);
+  const NotFoundFailure.response(
+    String message, {
+    int? statusCode,
+    String? backendCode,
+  }) : super(message, statusCode: statusCode, backendCode: backendCode);
 
   @override
   String get userMessage => 'We could not find what you were looking for.';
@@ -72,6 +100,11 @@ class NotFoundFailure extends AppFailure {
 
 class ValidationFailure extends AppFailure {
   const ValidationFailure([super.message = 'Some fields need attention.']);
+  const ValidationFailure.response(
+    String message, {
+    int? statusCode,
+    String? backendCode,
+  }) : super(message, statusCode: statusCode, backendCode: backendCode);
 
   @override
   String get userMessage =>
@@ -239,6 +272,61 @@ class AuthTlsFailure extends AuthUnavailableFailure {
 String readableFailure(Object error, {required String fallback}) {
   if (error is AppFailure) return error.userMessage;
   return fallback;
+}
+
+class ConflictFailure extends AppFailure {
+  const ConflictFailure(String message, {String? backendCode})
+    : super(message, statusCode: 409, backendCode: backendCode);
+}
+
+class ThrottledFailure extends AppFailure {
+  const ThrottledFailure(String message, {String? backendCode})
+    : super(message, statusCode: 429, backendCode: backendCode);
+}
+
+/// One safe HTTP classification shared by browser, SSR and mobile transports.
+/// This carries operation metadata; it never changes authentication or authority.
+AppFailure apiOperationFailure({
+  int? status,
+  String? code,
+  String? message,
+  bool mutation = false,
+}) {
+  final safeCode =
+      code != null && RegExp(r'^[A-Za-z0-9_.:-]{1,100}$').hasMatch(code)
+      ? code
+      : null;
+  final text = message != null && message.trim().isNotEmpty
+      ? message
+      : 'The data service could not complete this request.';
+  return switch (status) {
+    null => NetworkFailure.transport(
+      'The service response could not be verified. Reload saved data before starting another operation.',
+      outcomeUnknown: mutation,
+    ),
+    401 || 403 => UnauthorizedFailure.response(
+      text,
+      statusCode: status,
+      backendCode: safeCode,
+    ),
+    404 => NotFoundFailure.response(
+      text,
+      statusCode: status,
+      backendCode: safeCode,
+    ),
+    409 => ConflictFailure(text, backendCode: safeCode),
+    422 => ValidationFailure.response(
+      text,
+      statusCode: status,
+      backendCode: safeCode,
+    ),
+    429 => ThrottledFailure(text, backendCode: safeCode),
+    _ => ServiceFailure.response(
+      text,
+      statusCode: status,
+      backendCode: safeCode,
+    ),
+  };
 }
 
 // ---------------------------------------------------------------------------

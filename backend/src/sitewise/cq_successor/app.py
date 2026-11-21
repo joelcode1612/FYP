@@ -59,8 +59,9 @@ def create_successor_app(
         leaked = forbidden.intersection(body)
         if leaked or any(k.endswith("_approved") or k.endswith("_authorized") for k in body):
             raise HTTPException(status_code=422, detail="AUTHORITY_FIELD_FORBIDDEN")
-        if "assessment_id" not in body:
-            body = {**body, "assessment_id": assessment_id}
+        if "assessment_id" in body and body["assessment_id"] != assessment_id:
+            raise HTTPException(status_code=422, detail="ASSESSMENT_ID_MISMATCH")
+        body = {**body, "assessment_id": assessment_id}
         try:
             request = RoutePreviewRequest.model_validate(body)
         except ValidationError as exc:

@@ -39,6 +39,22 @@ def permissions(result):
 
 
 class SuccessorPolicyTests(unittest.TestCase):
+    def test_assessment_path_body_mismatch_rejected_without_cache_write(self):
+        client = TestClient(allowed_app())
+        path = '/api/v1/customer/questionnaires/SYN-ASSESSMENT/route-preview'
+        mismatch = client.post(path, json=body(assessment_id='OTHER-ASSESSMENT'))
+        self.assertEqual(mismatch.status_code, 422)
+        self.assertEqual(mismatch.json()['detail'], 'ASSESSMENT_ID_MISMATCH')
+        self.assertEqual(client.get(path).status_code, 404)
+        valid = client.post(path, json=body())
+        self.assertEqual(valid.status_code, 200)
+        cached = client.get(path).json()
+        self.assertEqual(client.post(path, json=body(assessment_id='OTHER-ASSESSMENT')).status_code, 422)
+        self.assertEqual(client.get(path).json(), cached)
+        omitted = body()
+        del omitted['assessment_id']
+        self.assertEqual(client.post(path, json=omitted).status_code, 200)
+
     def setUp(self):
         self.client = TestClient(allowed_app())
 

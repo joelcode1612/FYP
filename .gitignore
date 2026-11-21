@@ -74,4 +74,5 @@ htmlcov/
 **/build/
 
 # Local runtime config (never commit generated keys)
+backend/.env.local
 *.carto-prepatch.bak

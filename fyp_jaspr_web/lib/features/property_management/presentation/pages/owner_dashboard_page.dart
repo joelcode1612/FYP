@@ -5,10 +5,18 @@ import 'package:jaspr/jaspr.dart';
 import 'package:jaspr_riverpod/jaspr_riverpod.dart';
 import 'package:shared_logic/shared_logic.dart';
 
+<<<<<<< HEAD:fyp_jaspr_web/lib/features/property_management/presentation/pages/owner_dashboard_page.dart
 import 'package:sitewise_jaspr_web/shared/presentation/components/letter_reveal.dart';
 import 'package:sitewise_jaspr_web/shared/presentation/components/ui.dart';
 import 'package:sitewise_jaspr_web/features/authentication/data/auth_service.dart';
 import 'package:sitewise_jaspr_web/shared/presentation/layouts/app_layout.dart';
+=======
+import '../../components/letter_reveal.dart';
+import '../../components/ui.dart';
+import '../../data/auth_service.dart';
+import '../../data/app_locator.dart';
+import '../../layouts/app_layout.dart';
+>>>>>>> merge_main_jed:fyp_jaspr_web/lib/pages/owner/dashboard_page.dart
 
 /// Owner home, restructured to the bento grid used across the app.
 ///

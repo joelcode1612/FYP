@@ -40,7 +40,7 @@ $webDir = Join-Path $root 'fyp_jaspr_web'
 # Use the real Windows executable. `C:\src\flutter\bin\dart` is a *bash*
 # launcher (and `dart.bat` needs cmd.exe); neither starts reliably from
 # PowerShell. This is the pinned Flutter 3.44.6 / Dart 3.12.2 SDK.
-$sdkDart = 'C:\src\flutter\bin\cache\dart-sdk\bin\dart.exe'
+$sdkDart = Join-Path $root '.fvm\flutter_sdk\bin\cache\dart-sdk\bin\dart.exe'
 
 if (-not (Test-Path -LiteralPath $envFile)) { throw "Missing $envFile" }
 if (-not (Test-Path -LiteralPath $sdkDart)) { throw "Missing pinned SDK: $sdkDart" }
@@ -79,7 +79,11 @@ $env:NO_PROXY = 'localhost,127.0.0.1'
 $env:no_proxy = 'localhost,127.0.0.1'
 
 $buildArgs = @('run', 'jaspr_cli:jaspr', 'build')
-if ($Enable) { $buildArgs += '--dart-define=SITEWISE_DEV_AUTH_BYPASS=true' }
+if ($Enable) {
+    $buildArgs += '--dart-define=SITEWISE_DEV_AUTH_BYPASS=true'
+    $buildArgs += '--dart-define=SITEWISE_BUILD_ENV=development'
+    $buildArgs += '--dart-define=dart.vm.product=false'
+}
 
 Push-Location $webDir
 try {
