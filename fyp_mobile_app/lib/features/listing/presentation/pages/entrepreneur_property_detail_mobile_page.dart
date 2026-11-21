@@ -17,6 +17,7 @@ import 'package:fyp/features/assessment/presentation/widgets/mobile_insights_pan
 import 'package:fyp/shared/presentation/components/mobile_section_header.dart';
 import 'package:fyp/shared/presentation/components/mobile_skeleton.dart';
 import 'package:fyp/shared/presentation/components/mobile_suitability_badge.dart';
+import 'package:fyp/core/routing/app_routes.dart';
 
 /// Mobile property detail — Option A layout over the existing evaluation flow.
 ///
@@ -243,10 +244,9 @@ class _EntrepreneurPropertyDetailMobilePageState
                     const SizedBox(height: 18),
                     M3PrimaryButton(
                       label: 'Assess this property',
-                      onTap: () => _open(
-                        '/entrepreneur/assessment-setup',
-                        arguments: p.id,
-                      ),
+                      // The feature questionnaire owns Start/Resume; a
+                      // property id is not an assessment draft id.
+                      onTap: () => _open(AppRoutes.assessmentHome),
                     ),
                     const SizedBox(height: 8),
                     _actions(p, saved),

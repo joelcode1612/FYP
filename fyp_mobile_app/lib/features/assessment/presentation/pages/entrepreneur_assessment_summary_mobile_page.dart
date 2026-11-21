@@ -3,8 +3,9 @@ import 'package:shared_logic/shared_logic.dart';
 
 import 'package:fyp/features/assessment/application/assessment_session.dart';
 import 'package:fyp/core/di/service_locator.dart';
-import 'package:fyp/core/theme/sitewise_m3.dart';
-import 'package:fyp/core/theme/sitewise_theme.dart';
+import '../../../../core/routing/app_routes.dart';
+import '../../../../core/theme/sitewise_m3.dart';
+import '../../../../core/theme/sitewise_theme.dart';
 import 'package:fyp/shared/presentation/widgets/sitewise_evidence_score.dart';
 import 'package:fyp/shared/presentation/widgets/sitewise_factor_row.dart';
 import 'package:fyp/shared/presentation/widgets/sitewise_secondary_button.dart';
@@ -220,7 +221,7 @@ class EntrepreneurAssessmentSummaryMobilePage extends StatelessWidget {
           label: 'Edit business inputs',
           icon: Icons.edit_outlined,
           onPressed: () => Navigator.of(context).pushNamedAndRemoveUntil(
-            '/entrepreneur/assessment-setup',
+            AppRoutes.assessmentHome,
             (route) => route.isFirst,
           ),
         ),

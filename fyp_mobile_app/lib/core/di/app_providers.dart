@@ -30,10 +30,10 @@ final assessmentRepositoryProvider = Provider<AssessmentRepository>((ref) {
   );
 });
 
+// Historical preview tests may override this provider explicitly. Normal app
+// composition always withholds the local synthetic questionnaire bank.
 final questionnaireRoutingServiceProvider =
-    Provider<QuestionnaireRoutingService>((ref) {
-      return const DemoQuestionnaireRoutingService();
-    });
+    Provider<QuestionnaireRoutingService>((ref) => const HeldQuestionnaireRoutingService());
 
 final assessmentViewModelProvider =
     legacy.ChangeNotifierProvider<AssessmentViewModel>((ref) {
@@ -51,9 +51,10 @@ final assessmentViewModelProvider =
 /// root `ProviderScope`; tests spread it and replace individual entries (the
 /// auth service is the usual one) with fakes.
 ///
-/// Live-mode note: the property/recommendation screens stay on the demo
-/// repositories ([AppConfig.usesDemoData] in `shared_logic` governs that
-/// flag). The Explore/saved-list providers below gain real backend
+/// Live-mode note: the property/recommendation screens follow
+/// [AppConfig.usesDemoData] in `shared_logic`, which is a fixed compile-time
+/// boolean and is independent of this file's assessment hold. The
+/// Explore/saved-list providers below gain real backend
 /// implementations only when [MobileConfig.usesLiveApi] is true (a valid
 /// build-time API base URL + credentials), so flipping to live mode is a
 /// build-define change, not a code change. `usesLiveApi` must NOT depend on

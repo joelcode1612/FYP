@@ -1,0 +1,183 @@
+{
+  "scope": "Existing eleven-step workflow verification/integration only; user scope correction preserved",
+  "changes": [
+    {
+      "change": "Stage 2 M2 entry panel",
+      "requirement": "Part Two section 2 required correction 1-6; section 01; addendum 19.3",
+      "changed_paths": [
+        "fyp_jaspr_web/lib/pages/entrepreneur/assessment_workspace_page.dart",
+        "fyp_jaspr_web/lib/components/m2_entry_panel.dart"
+      ],
+      "existing_sources": [
+        {
+          "path": "C:\\Users\\HP\\OneDrive\\Desktop\\sport-marketplace\\FYP\\backend\\src\\sitewise\\api\\v1\\m2.py",
+          "sha256": "a2f33ff1c63aacb77dfffe3d58dd7407e44ed79616a4180af84de8f2315871f6"
+        },
+        {
+          "path": "C:\\Users\\HP\\OneDrive\\Desktop\\sport-marketplace\\FYP\\backend\\src\\sitewise\\services\\m2_service.py",
+          "sha256": "4cfce04598c8f8de50ac3896ac8f81b8466aae7fdaa7c9d6faa72d212843471b"
+        },
+        {
+          "path": "C:\\Users\\HP\\OneDrive\\Desktop\\sport-marketplace\\FYP\\backend\\src\\sitewise\\domain\\m2_rules.py",
+          "sha256": "b0d373d165c3f469004eed2b80f4eca802d02cda531d188e9b77e75eabda1345"
+        }
+      ],
+      "classification": "VERIFIED_IMPLEMENTATION_GAP",
+      "justification": "Verified wrong call: _questionnairePanel created Project1ReadPanel(section=review), whose availability predicate requires confirmation. Reuse existing draft/read/save/BDJ/review/confirm endpoints; no confirmation on initial entry.",
+      "new_product_requirement": false,
+      "production_authority_granted": false
+    },
+    {
+      "change": "Owned M2 and authorized instrument discovery",
+      "requirement": "Part Two section 2 required correction 1-2; section 01",
+      "changed_paths": [
+        "backend/src/sitewise/api/v1/m2.py",
+        "backend/src/sitewise/services/m2_service.py",
+        "backend/src/sitewise/repositories/m2_repository.py",
+        "backend/src/sitewise/services/ports/m2_repository_port.py"
+      ],
+      "existing_sources": [
+        {
+          "path": "C:\\Users\\HP\\OneDrive\\Desktop\\sport-marketplace\\FYP\\backend\\src\\sitewise\\db\\models\\m2_schema.py",
+          "sha256": "2b76713af5594fc42299a6400b0bf3fb24e7e00596831f8b521598b65d1528fc"
+        },
+        {
+          "path": "C:\\Users\\HP\\OneDrive\\Desktop\\sport-marketplace\\FYP\\backend\\src\\sitewise\\api\\v1\\m2.py",
+          "sha256": "a2f33ff1c63aacb77dfffe3d58dd7407e44ed79616a4180af84de8f2315871f6"
+        }
+      ],
+      "classification": "VERIFIED_IMPLEMENTATION_GAP",
+      "justification": "Implementation gap: existing API accepted an explicit instrument/assessment UUID but supplied no owned catalogue for the requested selection/resume UI. Add bounded owner-scoped GET discovery, reusing existing tables. No workspace/property UUID substitution or new relationship.",
+      "new_product_requirement": false,
+      "production_authority_granted": false
+    },
+    {
+      "change": "Draft source projection adapter",
+      "requirement": "Part Two section 01; existing project1-m2-projection/1-candidate",
+      "changed_paths": [
+        "backend/src/sitewise/api/v1/m2.py"
+      ],
+      "existing_sources": [
+        {
+          "path": "C:\\Users\\HP\\OneDrive\\Desktop\\sport-marketplace\\FYP\\backend\\src\\sitewise\\project1\\projection.py",
+          "sha256": "cc58626f59e5ebedccc0a15c19e295a37ade9faf17761088f8fbca9cd7f4b136"
+        }
+      ],
+      "classification": "VERIFIED_IMPLEMENTATION_GAP",
+      "justification": "Reuse existing M2SourceProjection before confirmation through the M2 target/session. The unrelated project1 workflow endpoint has a separate restricted-principal configuration gate; do not weaken it.",
+      "new_product_requirement": false,
+      "production_authority_granted": false
+    },
+    {
+      "change": "Shared M2 DTO/repository and HTTP PUT",
+      "requirement": "Part Two section 01 API answer save; preserve Dart shared_logic",
+      "changed_paths": [
+        "shared_logic/lib/src/data/repositories/api_m2_repository.dart",
+        "shared_logic/lib/src/core/network/api_client.dart",
+        "fyp_jaspr_web/lib/data/web_api_client.dart",
+        "fyp_jaspr_web/lib/data/auth_stub.dart",
+        "fyp_mobile_app/lib/data/repositories/mobile_api_client.dart"
+      ],
+      "existing_sources": [
+        {
+          "path": "C:\\Users\\HP\\OneDrive\\Desktop\\sport-marketplace\\FYP\\backend\\src\\sitewise\\api\\v1\\m2.py",
+          "sha256": "a2f33ff1c63aacb77dfffe3d58dd7407e44ed79616a4180af84de8f2315871f6"
+        }
+      ],
+      "classification": "VERIFIED_IMPLEMENTATION_GAP",
+      "justification": "Implementation gap: existing M2 answer endpoint uses PUT, while shared ApiClient and web VM transport lacked PUT. Add the existing verb contract, not another answer-save endpoint or state machine.",
+      "new_product_requirement": false,
+      "production_authority_granted": false
+    },
+    {
+      "change": "Owned Activity History browser panel",
+      "requirement": "User browser screenshot/unblock request; Part Two section 11; addendum 19.3",
+      "changed_paths": [
+        "fyp_jaspr_web/lib/components/m2_activity_panel.dart",
+        "fyp_jaspr_web/lib/pages/entrepreneur/report_activity_views.dart",
+        "backend/src/sitewise/api/v1/m2.py",
+        "backend/src/sitewise/services/m2_service.py"
+      ],
+      "existing_sources": [
+        {
+          "path": "C:\\Users\\HP\\OneDrive\\Desktop\\sport-marketplace\\FYP\\backend\\src\\sitewise\\repositories\\m2_repository.py",
+          "sha256": "377e5b9acdbd3f1ee90fc981b3fbae314dac81fbed5332200fb16ae1ddf30a6c"
+        },
+        {
+          "path": "C:\\Users\\HP\\OneDrive\\Desktop\\sport-marketplace\\FYP\\backend\\src\\sitewise\\services\\confirmed_review_service.py",
+          "sha256": "cb0f2921d27fce9e4f36c09c77bc6d897ca1450156a1fead90a444cca48b1d75"
+        }
+      ],
+      "classification": "VERIFIED_IMPLEMENTATION_GAP",
+      "justification": "Implementation gap: route rendered only static availability. Existing read_activity already retrieves M2 audit streams but was exposed only inside post-confirmation review. Expose the existing owner-scoped stream for pre-confirmation history; no new event vocabulary/store, invented counts or customer disclosure.",
+      "new_product_requirement": false,
+      "production_authority_granted": false
+    },
+    {
+      "change": "Explicit development indicators and production bypass exclusion",
+      "requirement": "Addendum 19.2 requirements 1,2,9,10",
+      "changed_paths": [
+        "fyp_jaspr_web/lib/data/dev_auth_bypass.dart",
+        "fyp_jaspr_web/lib/layouts/app_layout.dart",
+        "fyp_mobile_app/lib/core/routing/auth_route_guard.dart",
+        "toggle-dev-auth.ps1"
+      ],
+      "existing_sources": [
+        {
+          "path": "C:\\Users\\HP\\OneDrive\\Desktop\\sport-marketplace\\FYP\\fyp_jaspr_web\\lib\\data\\dev_auth_bypass.dart",
+          "sha256": "b859599745ea9b22519660f91bb88f9c9bd6185b32c3d7e8bb7f7f1e0719cbbf"
+        },
+        {
+          "path": "C:\\Users\\HP\\OneDrive\\Desktop\\sport-marketplace\\FYP\\fyp_mobile_app\\lib\\core\\config\\dev_auth_bypass.dart",
+          "sha256": "d59f66166b299c118b85751eac4758a27ddfec9cb5efbbff35439e3af5474bb7"
+        }
+      ],
+      "classification": "VERIFIED_IMPLEMENTATION_GAP",
+      "justification": "Preserve existing opt-in local bypass. Web additionally excludes product builds and requires explicit development configuration; both show a development indicator. No backend identity override, credential issuer or authentication architecture added.",
+      "new_product_requirement": false,
+      "production_authority_granted": false
+    }
+  ],
+  "gaps": [
+    {
+      "id": "REL-01",
+      "classification": "REQUIREMENTS_GAP",
+      "subject": "Persisted property workspace to M2 assessment relationship",
+      "observed": "Property workspace assessment UUID is a distinct namespace. Existing source explicitly prohibits substitution. No verified adopted persistent binding found in inspected repository contracts.",
+      "action": "Owner selection of an existing M2 record is supported. Do not invent a property-to-M2 mapping table or treat selection alone as adopted persistent ownership/source binding."
+    },
+    {
+      "id": "AUTH-M2",
+      "classification": "AUTHORITY_UNVERIFIED",
+      "subject": "Production M2 instrument/adoption",
+      "observed": "Fresh read-only Dss inspection: 0 instrument rows, 0 items. Prior candidate 23-item review is not adoption.",
+      "action": "Retain unavailable production state. Only explicit private fixtures may register AUTHORIZED test metadata."
+    },
+    {
+      "id": "BANK-AUTH",
+      "classification": "AUTHORITY_UNVERIFIED",
+      "subject": "QJ/QG and approved question-bank release",
+      "observed": "Existing ResearchWorkflow, prompts and validators are candidate implementations; current CUST03/C0C1/language records retain scientific and Owner holds.",
+      "action": "Reconcile exact adopted sources and test existing components; do not promote the synthetic bank or generate a new bank governance system."
+    },
+    {
+      "id": "DELIVERY",
+      "classification": "AUTHORITY_UNVERIFIED",
+      "subject": "Production CQ delivery mechanism and eligibility authority",
+      "observed": "Existing CQ application has campaign/participant/session/invitations APIs and private tests. Production authority adapter refuses. No new invitation, notification or campaign lifecycle is authorized.",
+      "action": "Use only existing APIs/relationships in isolated tests. Missing real authority remains held."
+    },
+    {
+      "id": "AGGREGATE-DISCLOSURE",
+      "classification": "REQUIREMENTS_GAP",
+      "subject": "Entrepreneur aggregate/disclosure API",
+      "observed": "No verified adopted EE-01-to-Jaspr aggregate API/disclosure contract found yet. Property/SHAP reports are a separate system.",
+      "action": "Inspect existing EE-01/Explanation/A10 deliverables and interfaces before any adapter; do not invent thresholds, suppression, metrics or response disclosure."
+    }
+  ],
+  "new_tables": [],
+  "new_delivery_mechanisms": [],
+  "new_authentication_architecture": false,
+  "cross_device_success_claimed": false,
+  "real_supabase_success_claimed": false
+}

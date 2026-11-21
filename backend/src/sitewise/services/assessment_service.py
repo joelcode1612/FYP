@@ -28,10 +28,12 @@ from datetime import UTC, datetime
 from typing import Any
 
 from sqlmodel import Session
+from sqlalchemy import func, select, inspect
 
 from sitewise.core.exceptions import AssessmentError, ModelUnavailableError
 from sitewise.core.logging import logger
 from sitewise.db.models.assessment import Assessment
+from sitewise.db.models import cq_runtime_schema as cq
 from sitewise.ml.model_loader import ModelLoader
 from sitewise.repositories.assessment_repository import AssessmentRepository
 from sitewise.repositories.catalog_repository import CatalogRepository
@@ -584,14 +586,17 @@ class AssessmentService:
     def find_by_property(self, user_id: uuid.UUID, property_id: str) -> Assessment | None:
         return self.repo.get_by_user_and_property(user_id, property_id)
 
-    def evidence_for(self, property_id: str) -> dict:
-        """The analysed location evidence backing one catalogue property.
+    def delete_owned(self, assessment_id: uuid.UUID, user_id: uuid.UUID) -> None:
+        """Permanently delete the caller's own assessment record.
 
-        The report route needs it alongside the assessment; the ``available``
-        contract (an unmeasured property says so, rather than returning zeros)
-        belongs to the catalogue read model and is passed through untouched.
+        Ownership is enforced through [get_owned] (404 unknown, 403 foreign),
+        so another account's record can never be deleted. The record is
+        self-contained — stage timestamps and requirements are columns on the
+        row — so no child rows need clearing. Generated explanations are
+        keyed per property + user, not per assessment, and simply stay cached.
         """
-        return self.catalog.get_evidence(property_id)
+        assessment = self.get_owned(assessment_id, user_id)
+        self.repo.delete(assessment)
 
     def create_or_resume(self, user_id: uuid.UUID, property_id: str) -> tuple[Assessment, bool]:
         prop = self.catalog.get_property(property_id)
@@ -817,6 +822,69 @@ class AssessmentService:
             "reason": None,
         }
 
+    _cq_tables_verified: bool | None = None
+
+    def _cq_runtime_available(self) -> bool:
+        """Whether the CQ runtime tables exist in this database.
+
+        The questionnaire runtime is explicit-migration-only (no startup
+        provisioning), and fielding is under a production hold, so a database
+        without the migration is the NORMAL state, not an error. Counting
+        against missing tables would 500 every history read, so availability
+        is probed once per process and the counts are omitted when absent —
+        the UI renders "—" for absent fields.
+        """
+        if AssessmentService._cq_tables_verified is None:
+            inspector = inspect(self.session.get_bind())
+            AssessmentService._cq_tables_verified = inspector.has_table(
+                cq.campaigns.name
+            )
+        return AssessmentService._cq_tables_verified
+
+    def _participation_counts(self, assessment_ids: list[uuid.UUID]) -> dict[uuid.UUID, dict[str, int]]:
+        """Respondent and submission counts per assessment, from the CQ runtime.
+
+        * respondent_count — distinct registered respondents across the
+          assessment's questionnaire campaigns (``cq_participants``);
+        * response_count — distinct sessions with at least one persisted
+          submission receipt (``cq_submission_receipts``), i.e. actually
+          submitted questionnaires, not merely consented or started sessions.
+
+        One grouped query each, scoped to the page's assessment ids. A missing
+        campaign simply yields no rows, and the row omits the fields entirely
+        rather than asserting zero — the UI renders "—" for absent fields.
+        """
+        if not assessment_ids or not self._cq_runtime_available():
+            return {}
+        counts: dict[uuid.UUID, dict[str, int]] = {}
+        respondents = self.session.execute(
+            select(
+                cq.campaigns.c.assessment_id,
+                func.count(func.distinct(cq.participants.c.respondent_user_id)),
+            )
+            .join(
+                cq.participants,
+                cq.participants.c.campaign_id == cq.campaigns.c.id,
+            )
+            .where(cq.campaigns.c.assessment_id.in_(assessment_ids))
+            .group_by(cq.campaigns.c.assessment_id)
+        ).all()
+        for assessment_id, respondent_count in respondents:
+            counts.setdefault(assessment_id, {})["respondent_count"] = int(respondent_count)
+        responses = self.session.execute(
+            select(
+                cq.campaigns.c.assessment_id,
+                func.count(func.distinct(cq.receipts.c.session_id)),
+            )
+            .join(cq.sessions, cq.sessions.c.campaign_id == cq.campaigns.c.id)
+            .join(cq.receipts, cq.receipts.c.session_id == cq.sessions.c.id)
+            .where(cq.campaigns.c.assessment_id.in_(assessment_ids))
+            .group_by(cq.campaigns.c.assessment_id)
+        ).all()
+        for assessment_id, response_count in responses:
+            counts.setdefault(assessment_id, {})["response_count"] = int(response_count)
+        return counts
+
     def history_payload(self, user_id: uuid.UUID, limit: int = 50, offset: int = 0) -> dict:
         records = self.repo.list_by_user(user_id, limit=limit, offset=offset)
         properties = self.catalog.get_properties([r.property_id for r in records])
@@ -825,15 +893,23 @@ class AssessmentService:
         capabilities = decision_support_capabilities(
             records[0].property_id if records else "", self.session
         )
+        participation = self._participation_counts(
+            [r.assessment_id for r in records]
+        )
+        rows = []
+        for r in records:
+            row = self.payload(
+                r,
+                prop=properties.get(r.property_id),
+                capabilities=capabilities,
+            )
+            # Optional participation counts. Absent when no questionnaire
+            # campaign exists yet — the web UI renders "—" for absent fields,
+            # never a fabricated 0.
+            row.update(participation.get(r.assessment_id, {}))
+            rows.append(row)
         return {
-            "data": [
-                self.payload(
-                    r,
-                    prop=properties.get(r.property_id),
-                    capabilities=capabilities,
-                )
-                for r in records
-            ],
+            "data": rows,
             "meta": {
                 "total": self.repo.count_by_user(user_id),
                 "reports_total": self.repo.count_reports_by_user(user_id),

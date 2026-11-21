@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 
 import 'package:fyp/core/routing/auth_route_guard.dart';
 import 'package:fyp/features/assessment/presentation/home_screen.dart';
-import 'package:fyp/features/assessment/presentation/assessment_draft_loader.dart';
 import 'package:fyp/features/assessment/presentation/questionnaire_screen.dart';
 import 'package:fyp/features/assessment/presentation/review_screen.dart';
 import 'package:fyp/features/authentication/presentation/pages/forgot_password_mobile_page.dart';
@@ -12,7 +11,6 @@ import 'package:fyp/features/authentication/presentation/widgets/auth_tabs.dart'
 import 'package:fyp/features/onboarding/presentation/pages/onboarding_flow_page.dart';
 import 'package:fyp/core/routing/app_start_gate.dart';
 import 'package:fyp/shared/presentation/layouts/entrepreneur_tab_host.dart';
-import 'package:fyp/features/assessment/presentation/pages/entrepreneur_assessment_questions_mobile_page.dart';
 import 'package:fyp/features/assessment/presentation/pages/entrepreneur_assessment_summary_mobile_page.dart';
 import 'package:fyp/features/recommendations/presentation/pages/entrepreneur_ai_recommendations_mobile_page.dart';
 import 'package:fyp/features/compare/presentation/pages/entrepreneur_compare_mobile_page.dart';
@@ -258,15 +256,16 @@ abstract final class AppRoutes {
         () => const PropertyManagementMovedPage(),
       ),
       assessmentHome => (RouteAccess.workspace, () => const HomeScreen()),
-      assessmentQuestionnaire || assessmentReview => (
+      assessmentQuestionnaire => (
         RouteAccess.workspace,
-        () => AssessmentDraftLoader(
-          assessmentId: settings.arguments is String
-              ? settings.arguments as String
-              : '',
-          builder: (id) => settings.name == assessmentReview
-              ? ReviewScreen(assessmentId: id)
-              : QuestionnaireScreen(assessmentId: id),
+        () => QuestionnaireScreen(
+          assessmentId: settings.arguments as String? ?? '',
+        ),
+      ),
+      assessmentReview => (
+        RouteAccess.workspace,
+        () => ReviewScreen(
+          assessmentId: settings.arguments as String? ?? '',
         ),
       ),
       '/entrepreneur/preferences' => (
@@ -342,13 +341,12 @@ abstract final class AppRoutes {
           propertyId: settings.arguments as String? ?? '',
         ),
       ),
-      // Option A assessment flow. The setup step receives the chosen
-      // property id as arguments; the later steps read the session draft.
+      // Legacy deep link kept resolvable. The old Option A setup page is gone;
+      // the feature questionnaire home owns Start/Resume now, so an old link
+      // (or a saved shortcut) lands there instead of on a not-found page.
       '/entrepreneur/assessment-setup' => (
         RouteAccess.workspace,
-        () => EntrepreneurAssessmentQuestionsPage(
-          propertyId: settings.arguments as String? ?? '',
-        ),
+        () => const HomeScreen(),
       ),
       '/entrepreneur/assessment-evidence' => (
         RouteAccess.workspace,

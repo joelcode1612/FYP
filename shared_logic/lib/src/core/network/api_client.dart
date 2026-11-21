@@ -8,6 +8,8 @@
 /// `ApiUserRepository` consumes this port; the demo-data repositories do not.
 /// A non-2xx response throws, so callers surface their normal error state.
 abstract class ApiClient {
+  Future<Map<String,dynamic>> put(String path,Map<String,dynamic> body) =>
+      throw UnsupportedError('This transport does not support PUT.');
   Future<Map<String, dynamic>> get(String path, {Map<String, String>? query});
 
   Future<Map<String, dynamic>> post(String path, Map<String, dynamic> body);

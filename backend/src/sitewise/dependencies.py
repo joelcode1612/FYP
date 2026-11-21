@@ -359,13 +359,59 @@ from sitewise.repositories.m2_repository import (
     SqlModelM2Repository,
 )
 from sitewise.services.m2_service import M2Service
+from sitewise.services.bdj_service import BDJService
+from sitewise.services.confirmation_service import ConfirmationService
+from sitewise.db.analytics_session import get_analytics_db
+from sitewise.services.assessment_service import AssessmentService
+from sitewise.services.project1_read_service import Project1ReadService
+from sitewise.services.confirmed_review_service import ConfirmedReviewService
+from sitewise.db.m2_session import get_m2_db
+
+
+def get_confirmed_review_service(
+    session: Annotated[Session, Depends(get_m2_db)],
+) -> ConfirmedReviewService:
+    return ConfirmedReviewService(SqlModelM2Repository(session))
+
+
+def get_bcb_bindings_resolver_factory():
+    from sitewise.repositories.business_context_repository import UnverifiedContextBindings
+    return UnverifiedContextBindings
+
+
+def get_persisted_business_context_service(
+    resolver_factory=Depends(get_bcb_bindings_resolver_factory),
+):
+    from sitewise.db.m2_session import get_m2_engine
+    from sitewise.repositories.business_context_repository import SqlBusinessContextStore
+    from sitewise.services.persisted_business_context_service import PersistedBusinessContextService
+    return PersistedBusinessContextService(SqlBusinessContextStore(get_m2_engine(), resolver_factory))
 
 
 def get_m2_service(
-    session: Annotated[Session, Depends(get_db)],
+    session: Annotated[Session, Depends(get_m2_db)],
 ) -> M2Service:
     repository = SqlModelM2Repository(session)
     return M2Service(repository=repository)
+
+
+def get_bdj_service(
+    session: Annotated[Session, Depends(get_m2_db)],
+) -> BDJService:
+    return BDJService(repository=SqlModelM2Repository(session))
+
+
+def get_confirmation_service(
+    session: Annotated[Session, Depends(get_m2_db)],
+) -> ConfirmationService:
+    return ConfirmationService(repository=SqlModelM2Repository(session))
+
+
+def get_project1_read_service(
+    session: Annotated[Session, Depends(get_db)],
+    analytics: Annotated[Session, Depends(get_analytics_db)],
+) -> Project1ReadService:
+    return Project1ReadService(AssessmentService(session, analytics))
 
 # Convenience aliases for router signatures.
 CurrentUser = Annotated[AuthenticatedUser, Depends(get_current_user)]

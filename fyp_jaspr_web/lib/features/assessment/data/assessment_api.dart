@@ -26,6 +26,7 @@ library;
 import 'package:shared_logic/shared_logic.dart' hide ApiPropertyRepository;
 
 import 'package:sitewise_jaspr_web/features/listing/data/api_property_repository.dart';
+import 'package:sitewise_jaspr_web/data/assessment_report.dart';
 import 'package:sitewise_jaspr_web/features/authentication/data/auth_service.dart';
 
 /// Why a call failed, reduced to the states the workspace must render.
@@ -227,17 +228,32 @@ final class AssessmentRecord {
   /// True only once `report_generated_at` is set.
   final bool reportAvailable;
 
+  /// Optional participation counts. The history endpoint did not carry these
+  /// for a long time, and a deployed backend may still omit them — every
+  /// parser default is null and the UI renders "—" for null, never 0. A null
+  /// means "this response does not say", which keeps the honest-empty
+  /// contract intact while a backend that does know can surface real figures:
+  ///
+  ///   * `respondent_count` — distinct respondents registered across the
+  ///     assessment's questionnaire campaigns (`cq_participants`);
+  ///   * `response_count` — sessions that actually submitted
+  ///     (`cq_submission_receipts`);
+  ///   * `external_source_count` — external evidence sources attached to the
+  ///     assessment, when the backend can compute them.
+  final int? respondentCount;
+  final int? responseCount;
+  final int? externalSourceCount;
+
   /// The saved business requirements, or null when stage 2 has not been saved.
   final Map<String, dynamic>? requirements;
 
   /// 0 = nothing saved, 1 = legacy criteria form, 2 = eight-question form.
   ///
-  /// The workspace uses this to show a "saved before the questionnaire
-  /// existed" notice instead of reinterpreting old answers.
+  /// The workspace now uses this only to gate Stage 2's "Complete" action:
+  /// the M2 questionnaire is a UI-only preview that persists nothing, so a
+  /// record without a saved V1 requirements payload must not offer an action
+  /// the backend would refuse.
   final int requirementsVersion;
-
-  /// The two numbers a v1 record can honestly answer for the v2 questions.
-  final Map<String, dynamic>? requirementsLegacyView;
 
   final List<AssessmentStage> stages;
   final AssessmentCapabilities capabilities;
@@ -259,9 +275,11 @@ final class AssessmentRecord {
     required this.totalStages,
     required this.progressPercent,
     required this.reportAvailable,
+    this.respondentCount,
+    this.responseCount,
+    this.externalSourceCount,
     required this.requirements,
     required this.requirementsVersion,
-    this.requirementsLegacyView,
     required this.stages,
     required this.capabilities,
     required this.nextAction,
@@ -291,10 +309,11 @@ final class AssessmentRecord {
       totalStages: (json['total_stages'] as num).toInt(),
       progressPercent: (json['progress_percent'] as num).toInt(),
       reportAvailable: json['report_available'] == true,
+      respondentCount: (json['respondent_count'] as num?)?.toInt(),
+      responseCount: (json['response_count'] as num?)?.toInt(),
+      externalSourceCount: (json['external_source_count'] as num?)?.toInt(),
       requirements: (json['requirements'] as Map?)?.cast<String, dynamic>(),
       requirementsVersion: (json['requirements_version'] as num?)?.toInt() ?? 0,
-      requirementsLegacyView:
-          (json['requirements_legacy_view'] as Map?)?.cast<String, dynamic>(),
       stages: [
         for (final stage in (json['stages'] as List? ?? const []))
           AssessmentStage.fromJson((stage as Map).cast<String, dynamic>()),
@@ -657,31 +676,11 @@ final class AssessmentApi {
     parse: AssessmentHistory.fromJson,
   );
 
-  /// Saves the business requirements. The server validates and normalises
-  /// them; a 422 carries every problem in one message.
-  Future<ApiResult<AssessmentRecord>> saveRequirements(
-    String assessmentId,
-    Map<String, dynamic> requirements,
-  ) => _call(
-    '/api/v1/assessments/$assessmentId',
-    method: 'PATCH',
-    body: {'requirements': requirements},
-    parse: AssessmentRecord.fromJson,
-  );
-
-  /// Saves the requirements and records the stage complete in one request.
-  /// The server applies them in that order, so the stage is only completed
-  /// against values it has just validated.
-  Future<ApiResult<AssessmentRecord>> saveRequirementsAndComplete(
-    String assessmentId,
-    Map<String, dynamic> requirements,
-    String stageKey,
-  ) => _call(
-    '/api/v1/assessments/$assessmentId',
-    method: 'PATCH',
-    body: {'requirements': requirements, 'complete_stage': stageKey},
-    parse: AssessmentRecord.fromJson,
-  );
+  // There is deliberately no client-side requirements write anymore. Stage 2
+  // is the M2 questionnaire UI preview, which persists no answers; stage
+  // completion goes through completeStage() below and is decided by the
+  // backend. The server's validate_requirements() vocabulary is still shared
+  // with /api/v1/preferences/me, so it is NOT dead code.
 
   /// Marks a stage complete. The server refuses with 409 when the stage's own
   /// precondition is not met (evidence missing, model artifact absent, a prior
@@ -694,6 +693,13 @@ final class AssessmentApi {
     method: 'PATCH',
     body: {'complete_stage': stageKey},
     parse: AssessmentRecord.fromJson,
+  );
+
+  /// Permanently deletes the caller's own assessment record. Ownership is
+  /// enforced server-side (404 unknown, 403 foreign); a 204 with no body is
+  /// the success answer.
+  Future<ApiResult<void>> deleteAssessment(String assessmentId) => _callVoid(
+    '/api/v1/assessments/$assessmentId',
   );
 
   /// Stage 3's evidence read. `available: false` is a successful call — it
@@ -734,11 +740,24 @@ final class AssessmentApi {
     ),
   );
 
+  /// The whole five-stage report document for an assessment.
+  ///
+  /// The same endpoint [targetMatching] reads, decoded in full instead of one
+  /// section. It assembles from stored data and never advances a stage or runs
+  /// SHAP, so the report step can load it on open. Sections the backend cannot
+  /// back are returned unavailable with a reason — the page shows that reason
+  /// rather than a zero.
+  Future<ApiResult<AssessmentReportPayload>> report(String assessmentId) =>
+      _call(
+        '/api/v1/assessments/$assessmentId/report',
+        parse: AssessmentReportPayload.fromJson,
+      );
+
   /// The catalogue's real `property_type` vocabulary.
   ///
-  /// Stage 2 offers only these values, so the eligibility filter can never be
-  /// set to a type that matches no listing. Read from the data rather than
-  /// hardcoded in the UI.
+  /// The recommendation preferences form offers only these values, so the
+  /// eligibility filter can never be set to a type that matches no listing.
+  /// Read from the data rather than hardcoded in the UI.
   Future<ApiResult<List<String>>> propertyTypes() => _call(
     '/api/v1/catalog/property-types',
     parse: (json) => [

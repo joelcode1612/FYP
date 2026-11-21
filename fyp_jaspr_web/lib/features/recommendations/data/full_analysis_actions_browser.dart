@@ -22,6 +22,26 @@ extension type _Clipboard(JSObject _) implements JSObject {
 /// Opens the browser print dialog for the current document.
 void printPage() => _window.print();
 
+/// Scrolls the element with [id] into view, for in-page section navigation.
+/// A missing element is a no-op: the nav is a convenience, never a route.
+void scrollToId(String id) {
+  final element = _document.getElementById(id.toJS);
+  element?.scrollIntoView(_scrollOptions);
+}
+
+@JS('document')
+external _Document get _document;
+
+extension type _Document(JSObject _) implements JSObject {
+  external _Element? getElementById(JSString id);
+}
+
+extension type _Element(JSObject _) implements JSObject {
+  external void scrollIntoView(JSAny? options);
+}
+
+final _scrollOptions = {'behavior': 'smooth', 'block': 'start'}.jsify();
+
 /// Writes [text] to the clipboard. Returns false when the Clipboard API is
 /// unavailable or the write is refused, so the button can show an honest
 /// "Copy unavailable" state instead of a false success.

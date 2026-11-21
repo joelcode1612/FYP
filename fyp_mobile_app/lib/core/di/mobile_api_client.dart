@@ -20,9 +20,16 @@ import 'package:fyp/core/config/mobile_endpoints.dart';
 /// `application/providers.dart`); demo-data builds never construct it.
 class MobileApiClient implements ApiClient {
   final String? Function()? _tokenOverride;
+  final String? _baseUrlOverride;
+  final Duration requestTimeout;
 
   /// [bearer] exists for tests; production reads the Supabase session.
-  MobileApiClient({String? Function()? bearer}) : _tokenOverride = bearer;
+  MobileApiClient({
+    String? Function()? bearer,
+    String? baseUrl,
+    this.requestTimeout = const Duration(seconds: 15),
+  }) : _tokenOverride = bearer,
+       _baseUrlOverride = baseUrl;
 
   static final HttpClient _http = HttpClient();
 
@@ -37,11 +44,10 @@ class MobileApiClient implements ApiClient {
   }
 
   Uri _uri(String path, [Map<String, String>? query]) {
-    final base = MobileEndpoints.apiBaseUrl;
-    return Uri.parse('$base$path').replace(
-      queryParameters:
-          (query == null || query.isEmpty) ? null : query,
-    );
+    final base = _baseUrlOverride ?? MobileEndpoints.apiBaseUrl;
+    return Uri.parse(
+      '$base$path',
+    ).replace(queryParameters: (query == null || query.isEmpty) ? null : query);
   }
 
   Future<Map<String, dynamic>> _send(
@@ -51,41 +57,57 @@ class MobileApiClient implements ApiClient {
   ]) async {
     final token = _bearer();
     if (token == null) {
-      throw const UnauthorizedFailure(
-        'No authenticated session is available.',
-      );
+      throw const UnauthorizedFailure('No authenticated session is available.');
     }
-    final String text;
-    final int status;
+    late final String text;
+    late final int status;
+    HttpClientRequest? active;
+    bool expired = false;
     try {
-      final request = await _http.openUrl(method, uri)
-        ..headers.contentType = ContentType.json
-        ..headers.set(HttpHeaders.authorizationHeader, 'Bearer $token');
-      if (body != null) {
-        request.write(jsonEncode(body));
-      }
-      final response = await request.close().timeout(
-        const Duration(seconds: 15),
+      await (() async {
+        final request = await _http.openUrl(method, uri);
+        if (expired) {
+          request.abort();
+          throw TimeoutException('Request budget expired.');
+        }
+        active = request;
+        request
+          ..headers.contentType = ContentType.json
+          ..headers.set(HttpHeaders.authorizationHeader, 'Bearer $token');
+        if (body != null) {
+          request.write(jsonEncode(body));
+        }
+        final response = await request.close();
+        status = response.statusCode;
+        text = await response.transform(utf8.decoder).join();
+      })().timeout(
+        requestTimeout,
+        onTimeout: () {
+          expired = true;
+          active?.abort();
+          throw TimeoutException('Request budget expired.');
+        },
       );
-      status = response.statusCode;
-      text = await response.transform(utf8.decoder).join();
     } on SocketException {
       // Host not listening / no route — a "backend unavailable" state, not
       // a server-side error and not a client misconfiguration.
-      throw const NetworkFailure(
+      throw NetworkFailure.transport(
         'Could not connect to the Sitewise service. '
         'Check that the API server is running.',
+        outcomeUnknown: method != 'GET',
       );
     } on HttpException {
       // A pooled keep-alive connection dying mid-request (server restarted
       // between two calls) is the same transport-level state for the user.
-      throw const NetworkFailure(
+      throw NetworkFailure.transport(
         'Could not connect to the Sitewise service. '
         'Check that the API server is running.',
+        outcomeUnknown: method != 'GET',
       );
     } on TimeoutException {
-      throw const NetworkFailure(
+      throw NetworkFailure.transport(
         'The Sitewise service took too long to respond.',
+        outcomeUnknown: method != 'GET',
       );
     }
     if (status < 200 || status >= 300) {
@@ -113,20 +135,20 @@ class MobileApiClient implements ApiClient {
   /// no stack, header or URL detail is ever included.
   AppFailure _failureForStatus(int status, String body) {
     final message = _failureMessage(body);
-    return switch (status) {
-      401 || 403 => UnauthorizedFailure(message),
-      404 => NotFoundFailure(message),
-      422 => ValidationFailure(message),
-      >= 500 => ServiceFailure(message),
-      _ => NetworkFailure(message),
-    };
+    String? code;
+    try {
+      final decoded = jsonDecode(body);
+      final detail = decoded is Map ? decoded['detail'] : null;
+      if (detail is Map && detail['code'] is String) {
+        code = detail['code'] as String;
+      }
+    } catch (_) {}
+    return apiOperationFailure(status: status, code: code, message: message);
   }
 
   @override
-  Future<Map<String, dynamic>> get(
-    String path, {
-    Map<String, String>? query,
-  }) => _send('GET', _uri(path, query));
+  Future<Map<String, dynamic>> get(String path, {Map<String, String>? query}) =>
+      _send('GET', _uri(path, query));
 
   @override
   Future<Map<String, dynamic>> post(String path, Map<String, dynamic> body) =>
@@ -135,6 +157,10 @@ class MobileApiClient implements ApiClient {
   @override
   Future<Map<String, dynamic>> patch(String path, Map<String, dynamic> body) =>
       _send('PATCH', _uri(path), body);
+
+  @override
+  Future<Map<String, dynamic>> put(String path, Map<String, dynamic> body) =>
+      _send('PUT', _uri(path), body);
 
   @override
   Future<Map<String, dynamic>> delete(String path) =>
@@ -153,17 +179,12 @@ class MobileApiClient implements ApiClient {
     if (token == null) {
       throw const NetworkFailure('No authenticated session is available.');
     }
-    final request =
-        http.MultipartRequest('POST', _uri(path))
-          ..fields.addAll(fields)
-          ..files.add(
-            http.MultipartFile.fromBytes(
-              fileField,
-              bytes,
-              filename: filename,
-            ),
-          )
-          ..headers[HttpHeaders.authorizationHeader] = 'Bearer $token';
+    final request = http.MultipartRequest('POST', _uri(path))
+      ..fields.addAll(fields)
+      ..files.add(
+        http.MultipartFile.fromBytes(fileField, bytes, filename: filename),
+      )
+      ..headers[HttpHeaders.authorizationHeader] = 'Bearer $token';
     final streamed = await request.send().timeout(const Duration(seconds: 30));
     final response = await http.Response.fromStream(streamed);
     if (response.statusCode < 200 || response.statusCode >= 300) {

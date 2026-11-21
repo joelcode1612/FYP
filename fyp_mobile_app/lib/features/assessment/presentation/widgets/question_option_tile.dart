@@ -5,11 +5,13 @@ class QuestionOptionTile extends StatelessWidget {
   final String label;
   final bool selected;
   final VoidCallback? onPressed;
+  final bool multiple;
   const QuestionOptionTile({
     super.key,
     required this.label,
     required this.selected,
     this.onPressed,
+    this.multiple = false,
   });
   @override
   Widget build(BuildContext context) => Padding(
@@ -35,9 +37,13 @@ class QuestionOptionTile extends StatelessWidget {
           child: Row(
             children: [
               Icon(
-                selected
-                    ? Icons.radio_button_checked
-                    : Icons.radio_button_unchecked,
+                multiple
+                    ? (selected
+                          ? Icons.check_box
+                          : Icons.check_box_outline_blank)
+                    : (selected
+                          ? Icons.radio_button_checked
+                          : Icons.radio_button_unchecked),
                 color: selected ? SitewiseColors.action : SitewiseColors.muted,
               ),
               const SizedBox(width: 15),

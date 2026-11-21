@@ -1,0 +1,198 @@
+{
+  "report": {
+    "rowNormal": {
+      "background": "rgb(255, 255, 255)",
+      "border": "rgb(226, 232, 240)",
+      "borderWidth": "1px",
+      "radius": "12px",
+      "shadow": "none",
+      "transform": "none",
+      "filter": "none",
+      "transition": "0.12s, 0.12s",
+      "outline": "none",
+      "cursor": "pointer"
+    },
+    "buttonNormal": {
+      "background": "rgb(29, 78, 216)",
+      "border": "rgb(29, 78, 216)",
+      "borderWidth": "1px",
+      "radius": "9px",
+      "shadow": "none",
+      "transform": "none",
+      "filter": "none",
+      "transition": "0s",
+      "outline": "none",
+      "cursor": "pointer"
+    },
+    "rowHover": {
+      "background": "rgb(248, 250, 252)",
+      "border": "rgb(203, 213, 225)",
+      "borderWidth": "1px",
+      "radius": "12px",
+      "shadow": "none",
+      "transform": "none",
+      "filter": "none",
+      "transition": "0.12s, 0.12s",
+      "outline": "none",
+      "cursor": "pointer"
+    },
+    "rowSelected": {
+      "background": "rgb(219, 234, 254)",
+      "border": "rgb(191, 219, 254)",
+      "borderWidth": "1px",
+      "radius": "12px",
+      "shadow": "rgb(29, 78, 216) 4px 0px 0px 0px inset",
+      "transform": "none",
+      "filter": "none",
+      "transition": "0.12s, 0.12s",
+      "outline": "none",
+      "cursor": "pointer"
+    },
+    "buttonHover": {
+      "background": "rgb(29, 78, 216)",
+      "border": "rgb(29, 78, 216)",
+      "borderWidth": "1px",
+      "radius": "9px",
+      "shadow": "none",
+      "transform": "none",
+      "filter": "brightness(1.12)",
+      "transition": "0s",
+      "outline": "none",
+      "cursor": "pointer"
+    },
+    "buttonActive": {
+      "background": "rgb(29, 78, 216)",
+      "border": "rgb(29, 78, 216)",
+      "borderWidth": "1px",
+      "radius": "9px",
+      "shadow": "none",
+      "transform": "none",
+      "filter": "brightness(1.12)",
+      "transition": "0s",
+      "outline": "none",
+      "cursor": "pointer"
+    }
+  },
+  "assessment": {
+    "tableRow": {
+      "background": "rgba(0, 0, 0, 0)",
+      "border": "rgb(11, 15, 25)",
+      "borderWidth": "0px",
+      "radius": "0px",
+      "shadow": "none",
+      "transform": "none",
+      "filter": "none",
+      "transition": "0s",
+      "outline": "none",
+      "cursor": "auto"
+    },
+    "rowButton": {
+      "background": "rgb(255, 255, 255)",
+      "border": "rgb(203, 213, 225)",
+      "borderWidth": "1px",
+      "radius": "9px",
+      "shadow": "none",
+      "transform": "none",
+      "filter": "none",
+      "transition": "0s",
+      "outline": "none",
+      "cursor": "pointer"
+    },
+    "pageButton": {
+      "background": "rgba(255, 255, 255, 0.92)",
+      "border": "rgba(15, 23, 42, 0.12)",
+      "borderWidth": "1px",
+      "radius": "999px",
+      "shadow": "none",
+      "transform": "none",
+      "filter": "none",
+      "transition": "0.2s, 0.2s, 0.2s, 0.2s",
+      "outline": "none",
+      "cursor": "pointer"
+    },
+    "filterTab": {
+      "background": "rgb(255, 255, 255)",
+      "border": "rgb(203, 213, 225)",
+      "borderWidth": "1px",
+      "radius": "999px",
+      "shadow": "none",
+      "transform": "none",
+      "filter": "none",
+      "transition": "0s",
+      "outline": "none",
+      "cursor": "pointer"
+    },
+    "tableRowHover": {
+      "background": "rgba(0, 0, 0, 0)",
+      "border": "rgb(11, 15, 25) rgb(11, 15, 25) rgb(231, 232, 234)",
+      "borderWidth": "0px 0px 1px",
+      "radius": "0px",
+      "shadow": "none",
+      "transform": "none",
+      "filter": "none",
+      "transition": "0s",
+      "outline": "none",
+      "cursor": "auto"
+    },
+    "rowButtonHover": {
+      "background": "rgb(244, 247, 251)",
+      "border": "rgb(29, 78, 216)",
+      "borderWidth": "1px",
+      "radius": "9px",
+      "shadow": "none",
+      "transform": "none",
+      "filter": "none",
+      "transition": "0s",
+      "outline": "none",
+      "cursor": "pointer"
+    },
+    "pageButtonHover": {
+      "background": "rgba(255, 255, 255, 0.92)",
+      "border": "rgb(29, 78, 216)",
+      "borderWidth": "1px",
+      "radius": "999px",
+      "shadow": "rgba(15, 23, 42, 0.1) 0px 10px 24px 0px",
+      "transform": "matrix(1, 0, 0, 1, 0, -2)",
+      "filter": "none",
+      "transition": "0.2s, 0.2s, 0.2s, 0.2s",
+      "outline": "none",
+      "cursor": "pointer"
+    },
+    "pageButtonActive": {
+      "background": "rgba(255, 255, 255, 0.92)",
+      "border": "rgb(29, 78, 216)",
+      "borderWidth": "1px",
+      "radius": "999px",
+      "shadow": "rgba(15, 23, 42, 0.1) 0px 10px 24px 0px",
+      "transform": "matrix(0.970495, 0, 0, 0.970495, 0, -0.0329859)",
+      "filter": "none",
+      "transition": "0.2s, 0.2s, 0.2s, 0.2s",
+      "outline": "none",
+      "cursor": "pointer"
+    },
+    "filterTabSelected": {
+      "background": "rgb(29, 78, 216)",
+      "border": "rgb(29, 78, 216)",
+      "borderWidth": "1px",
+      "radius": "999px",
+      "shadow": "none",
+      "transform": "none",
+      "filter": "none",
+      "transition": "0s",
+      "outline": "none",
+      "cursor": "pointer"
+    },
+    "rowButtonActive": {
+      "background": "rgb(244, 247, 251)",
+      "border": "rgb(29, 78, 216)",
+      "borderWidth": "1px",
+      "radius": "9px",
+      "shadow": "none",
+      "transform": "none",
+      "filter": "none",
+      "transition": "0s",
+      "outline": "none",
+      "cursor": "pointer"
+    }
+  }
+}

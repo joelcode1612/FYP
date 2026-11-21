@@ -1,0 +1,384 @@
+Section A — Proposed Café Characteristics
+
+M2V1-01 — Intended Study Area
+
+Question: Which area are you currently considering for your proposed café?
+
+Type: Required geographic selection.
+
+Code
+
+Answer
+
+JOHOR
+
+Johor
+
+PENANG
+
+Penang
+
+SELANGOR
+
+Selangor
+
+KUALA_LUMPUR
+
+Kuala Lumpur
+
+UNDECIDED
+
+I have not decided on an area
+
+After a jurisdiction is selected, display its available areas from the existing approved GEO catalogue.
+
+Rule: Store the authorized area reference and catalogue version. Do not infer an exact business premises location.
+
+M2V1-02 — Intended Service Format
+
+Question: How do you currently plan to serve customers?
+
+Type: Required, single selection.
+
+Code
+
+Answer
+
+DINE_IN
+
+Primarily dine-in
+
+TAKEAWAY
+
+Primarily takeaway
+
+DELIVERY
+
+Primarily delivery
+
+HYBRID
+
+A combination of service formats
+
+UNDECIDED
+
+Not decided yet
+
+M2V1-03 — Planned Product Categories
+
+Question: Which product categories do you currently intend to offer?
+
+Type: Required, multiple selection.
+
+Code
+
+Answer
+
+COFFEE
+
+Coffee and espresso beverages
+
+NON_COFFEE
+
+Non-coffee beverages
+
+BAKED_GOODS
+
+Pastries and baked goods
+
+LIGHT_MEALS
+
+Light meals
+
+DESSERTS
+
+Desserts
+
+OTHER_UNLISTED
+
+My intended category is not listed
+
+UNDECIDED
+
+I have not decided on the products
+
+Rule: UNDECIDED cannot be combined with other selections.
+
+M2V1-04 — Intended Customer Groups
+
+Question: Which groups of customers do you currently intend to serve?
+
+Type: Required, multiple selection.
+
+Code
+
+Answer
+
+STUDENTS
+
+Students
+
+OFFICE_WORKERS
+
+Office workers
+
+RESIDENTS
+
+Local residents
+
+VISITORS
+
+Shoppers and visitors
+
+REMOTE_WORKERS
+
+Remote workers
+
+OTHER_UNLISTED
+
+My intended customer group is not listed
+
+UNDECIDED
+
+I have not decided on my target customers
+
+Rule: UNDECIDED cannot be combined with other selections.
+
+M2V1-05 — Primary Intended Customer Group
+
+Question: Among the customer groups you selected, which one is your primary intended group?
+
+Type: Conditional, single selection.
+
+Options: Groups selected in M2V1-04, plus UNDECIDED.
+
+Rules:
+
+One defined group: derive it as primary and show the result for review.
+
+Multiple groups: ask the entrepreneur to select one primary group or UNDECIDED.
+
+No defined group: preserve the unresolved primary-group state.
+
+M2V1-06 — Intended Concept Emphasis
+
+Question: Which aspect do you currently plan to emphasize most in your café concept?
+
+Type: Required, single selection.
+
+Code
+
+Answer
+
+AFFORDABILITY
+
+Affordable pricing
+
+QUALITY
+
+Product quality or specialty
+
+CONVENIENCE
+
+Convenience
+
+AMBIENCE
+
+Ambience
+
+DISTINCTIVE_CONCEPT
+
+Distinctive products or theme
+
+OTHER_UNLISTED
+
+Another aspect not listed
+
+UNDECIDED
+
+Not decided yet
+
+M2V1-07 — Intended Customer Occasion
+
+Question: Which customer occasion do you mainly intend your café concept to support?
+
+Type: Optional, single selection.
+
+Code
+
+Answer
+
+QUICK_PURCHASE
+
+Quick purchase
+
+STUDY_WORK
+
+Studying or working
+
+SOCIAL
+
+Social meetings
+
+MEAL_SNACK
+
+A meal or snack break
+
+LEISURE
+
+Relaxation or leisure
+
+OTHER_UNLISTED
+
+Another occasion not listed
+
+UNDECIDED
+
+Not decided yet
+
+Rule: Do not force an in-person visit occasion for a delivery-only concept. Preserve skipped and not-applicable states.
+
+Section B — Existing Customer Information
+
+M2V1-08 — Customer Information Already Available
+
+Question: Which sources of information have you used to form your current expectations about potential customers?
+
+Type: Required, multiple selection.
+
+Code
+
+Answer
+
+NONE
+
+I have no customer information yet
+
+PERSONAL_OBSERVATION
+
+My own observations
+
+INFORMAL_FEEDBACK
+
+Informal opinions from friends or family
+
+CUSTOMER_INTERVIEWS
+
+Previous customer interviews
+
+CUSTOMER_SURVEY
+
+A previous customer survey
+
+PUBLISHED_RESEARCH
+
+Published customer research
+
+UNKNOWN
+
+I am not sure
+
+Rules: NONE and UNKNOWN are exclusive. Reported sources are entrepreneur declarations, not independently verified evidence.
+
+Section C — Customer Research Intentions
+
+M2V1-09 — Customer Research Topics
+
+Question: Which aspects of your proposed café would you like to investigate with potential customers?
+
+Type: Required, multiple selection.
+
+Code
+
+Answer
+
+CONCEPT_INTEREST
+
+Interest in my overall café concept
+
+PRODUCT_PREFERENCE
+
+Preferences between my planned products
+
+PRICE_ACCEPTABILITY
+
+Acceptability of a specific product price
+
+SERVICE_PREFERENCE
+
+Preferences for service formats
+
+EXPERIENCE_PREFERENCE
+
+Preferences for café features or experiences
+
+SEGMENT_INTEREST
+
+Interest among my intended customer group
+
+NONE
+
+I do not want to investigate these topics at present
+
+Rule: NONE cannot be combined with other selections.
+
+M2V1-10 — Primary Research Priority
+
+Question: Which selected topic is most important for you to investigate first?
+
+Type: Conditional, single selection.
+
+Options: Only the substantive topics selected in M2V1-09.
+
+Rules:
+
+One topic selected: derive and show it for review.
+
+Multiple topics selected: ask the entrepreneur to choose one.
+
+NONE selected: not applicable.
+
+M2V1-11 — Current Research Decision Status
+
+Question: Which statement best describes your current position regarding this research topic?
+
+Type: Conditional, single selection.
+
+Code
+
+Answer
+
+UNDECIDED
+
+I have not decided between the available options
+
+VALIDATE_CHOICE
+
+I have a preferred choice but want customer feedback
+
+EXPLORE
+
+I want to understand customer responses before making a decision
+
+UNSURE
+
+I am not sure what I need to establish yet
+
+Rule: Show only when an active research priority exists.
+
+Section D — Existing Review and Confirmation
+
+These are governance actions, not additional questionnaire answers.
+
+M2-20 — Review
+
+Displayed text: I have reviewed my café concept and customer research selections.
+
+Allow the entrepreneur to inspect and correct their recorded answers, including applicable unresolved information.
+
+M2-21 — Confirm
+
+Displayed text: I confirm that these selections represent my current plans and research intentions.
+
+Bind confirmation to the actual instrument version and current assessment revision.
+

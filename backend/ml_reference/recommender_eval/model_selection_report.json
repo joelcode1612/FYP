@@ -14,7 +14,7 @@
   "blockers": [
     "Only 0 users have exposure-paired positive feedback; 5 required.",
     "Only 0 exposure-paired positives; 25 required.",
-    "Only 20 exposure-paired negatives; 25 required. Negatives come from persisted recommendation_result impressions that were never saved."
+    "Only 21 exposure-paired negatives; 25 required. Negatives come from persisted recommendation_result impressions that were never saved."
   ],
   "policy": "A trained recommender.joblib is only ever written from real, exposure-paired, temporally split feedback with held-out metrics that beat the rule-based baseline. Anything less keeps the transparent rule-based engine."
 }

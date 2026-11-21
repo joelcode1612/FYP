@@ -776,6 +776,9 @@ class RecommendationFacets {
 
   /// Hard filters whose removal would recover matches, server-ranked.
   final List<FacetRelaxation> relaxations;
+
+  /// Backend-defined meaning of each recommendation filter.
+  final List<FilterInput> fields;
   final bool contextual;
 
   final double? minRentalRm;
@@ -797,6 +800,7 @@ class RecommendationFacets {
     this.matchingTotal = 0,
     this.universeTotal = 0,
     this.relaxations = const [],
+    this.fields = const [],
     this.contextual = false,
     this.minRentalRm,
     this.maxRentalRm,
@@ -876,6 +880,16 @@ class RecommendationFacets {
       matchingTotal: (json['matching_total'] as num?)?.toInt() ?? 0,
       universeTotal: (json['universe_total'] as num?)?.toInt() ?? 0,
       relaxations: relaxationList,
+      fields: [
+        for (final row in (json['fields'] as List? ?? const []))
+          if (row is Map<String, dynamic>)
+            FilterInput(
+              key: '${row['key']}',
+              label: '${row['label'] ?? row['key']}',
+              role: FilterRole.fromWire(row['role']?.toString()),
+              effect: '${row['effect'] ?? ''}',
+            ),
+      ],
       contextual: json['contextual'] == true,
       minRentalRm: (rangesBlock['min_rental_rm'] as num?)?.toDouble(),
       maxRentalRm: (rangesBlock['max_rental_rm'] as num?)?.toDouble(),
@@ -883,6 +897,30 @@ class RecommendationFacets {
       maxSizeSqft: (rangesBlock['max_size_sqft'] as num?)?.toDouble(),
       total: (rangesBlock['total'] as num?)?.toInt() ?? 0,
     );
+  }
+
+  /// The role a field plays, for the form's own wording. A key the server did
+  /// not describe falls back to [FilterRole.hardFilter], because that is what
+  /// the search applies to everything it currently lists in `FILTER_FIELDS`.
+  FilterRole roleOf(String key) {
+    for (final field in fields) {
+      if (field.key == key) return field.role;
+    }
+    return FilterRole.hardFilter;
+  }
+
+  String labelOf(String key, {required String fallback}) {
+    for (final field in fields) {
+      if (field.key == key) return field.label;
+    }
+    return fallback;
+  }
+
+  String effectOf(String key) {
+    for (final field in fields) {
+      if (field.key == key) return field.effect;
+    }
+    return '';
   }
 }
 
@@ -960,4 +998,96 @@ class FacetOption {
     this.label = '',
     this.total = 0,
   });
+}
+
+/// Whether an input changes WHICH properties qualify, only their order, or
+/// neither (because the catalogue cannot answer it).
+enum FilterRole {
+  /// Applied as a hard constraint on the eligible set.
+  hardFilter,
+
+  /// Re-sequences the eligible set; removes nothing.
+  rankingOnly,
+
+  /// Recorded nowhere in the catalogue; reported per property as a requirement
+  /// that cannot be verified.
+  unverified;
+
+  static FilterRole fromWire(String? value) => switch (value) {
+    'ranking_only' => FilterRole.rankingOnly,
+    'unverified' => FilterRole.unverified,
+    _ => FilterRole.hardFilter,
+  };
+}
+
+/// What one filter input does, in the server's own words.
+class FilterInput {
+  final String key;
+  final String label;
+  final FilterRole role;
+  final String effect;
+
+  const FilterInput({
+    required this.key,
+    required this.label,
+    required this.role,
+    this.effect = '',
+  });
+
+  bool get isHardFilter => role == FilterRole.hardFilter;
+}
+
+/// An active filter that could be released, with the count releasing it would
+/// restore.
+class FilterRelaxation {
+  /// One of the server's `FILTER_FIELDS` keys, e.g. `rental_budget`.
+  final String field;
+  final String label;
+  final int total;
+
+  const FilterRelaxation({
+    required this.field,
+    required this.label,
+    required this.total,
+  });
+}
+
+/// One numeric interval from the catalogue, with the listings inside it.
+///
+/// The bounds are observed listing values, so consecutive intervals neither
+/// overlap nor leave a priced listing outside every option, and the count is
+/// exactly what sending these two bounds to the search returns.
+class FacetRange {
+  /// Inclusive lower bound. Null only for a selected open interval, which a
+  /// saved preference can hold but a generated bucket never is.
+  final double? low;
+  final double? high;
+  final int total;
+  final String label;
+
+  /// False when this is a saved selection the generated buckets do not offer.
+  final bool generated;
+
+  const FacetRange({
+    this.low,
+    this.high,
+    this.total = 0,
+    this.label = '',
+    this.generated = true,
+  });
+
+  factory FacetRange.fromJson(
+    Map<String, dynamic> json, {
+    required String lowKey,
+    required String highKey,
+  }) => FacetRange(
+    low: (json[lowKey] as num?)?.toDouble(),
+    high: (json[highKey] as num?)?.toDouble(),
+    total: (json['total'] as num?)?.toInt() ?? 0,
+    label: '${json['label'] ?? ''}',
+    generated: json['generated'] != false,
+  );
+
+  /// Whether this interval is the one the two request fields carry.
+  bool matches(double? min, double? max) => low == min && high == max;
 }

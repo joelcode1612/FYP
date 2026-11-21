@@ -1,0 +1,69 @@
+/* SITEWISE assessment-list component: scoped names; no app shell / sidebar. */
+/* Existing SITEWISE variables are used when available. */
+.swal-panel {
+  --swal-action: var(--sitewise-action, #2054eb);
+  --swal-ink: var(--sitewise-ink, #142344);
+  --swal-muted: var(--sitewise-muted, #45608d);
+  --swal-border: var(--sitewise-border, #dce5fa);
+  width: 100%;
+  min-width: 0;
+  background: transparent;
+  color: var(--swal-ink);
+  font-family: inherit;
+}
+.swal-header { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 18px; }
+.swal-header h2 { margin: 0; font-size: 22px; font-weight: 750; }
+.swal-filters { display: grid; grid-template-columns: minmax(0, 1fr) 158px 175px; gap: 10px; margin-bottom: 17px; }
+.swal-search, .swal-select { width: 100%; min-width: 0; box-sizing: border-box; border: 1px solid #c5d6fa; border-radius: 12px; padding: 14px; background: #fff; font: inherit; color: var(--swal-ink); }
+.swal-list { display: flex; flex-direction: column; gap: 10px; }
+.swal-row {
+  display: grid; grid-template-columns: minmax(0, 1fr) 70px 118px 105px 12px;
+  align-items: center; gap: 12px; width: 100%; padding: 17px;
+  box-sizing: border-box; border: 1px solid var(--swal-border);
+  border-radius: 14px; background: #fff; color: var(--swal-ink);
+  text-align: left; font: inherit; cursor: pointer;
+}
+.swal-row.selected { background: #e6eeff; border-color: #9dbbff; border-left: 5px solid var(--swal-action); padding-left: 13px; }
+.swal-row:hover { border-color: #94b3ff; }
+.swal-row:focus-visible { outline: 3px solid var(--swal-action); outline-offset: 2px; }
+.swal-title { display: flex; align-items: center; gap: 13px; min-width: 0; }
+.swal-icon { flex: 0 0 48px; height: 48px; display: grid; place-items: center; background: #e6eeff; border-radius: 11px; font-size: 28px; color: var(--swal-action); }
+.swal-identity { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.swal-name { font-size: 15px; font-weight: 750; overflow-wrap: anywhere; }
+.swal-id { color: var(--swal-muted); font-size: 13px; overflow-wrap: anywhere; }
+.swal-report { font-size: 12px; font-weight: 600; overflow-wrap: anywhere; }
+.swal-report.ready { color: #087a38; }
+.swal-report.preview { color: #8a5b00; }
+.swal-report.pending { color: var(--swal-muted); }
+.swal-rental-count { color: var(--swal-action); font-size: 13px; text-align: center; }
+.swal-updated { display: flex; flex-direction: column; gap: 3px; font-size: 12px; color: var(--swal-muted); }
+.swal-status { padding: 8px 12px; border-radius: 999px; text-align: center; font-size: 12px; font-weight: 700; white-space: nowrap; }
+.swal-status.in-progress { background: #fff0c8; color: #8a5b00; }
+.swal-status.completed { background: #dbf7e5; color: #087a38; }
+.swal-status.on-hold { background: #fff0d9; color: #875800; }
+.swal-status.draft { background: #e1eaff; color: var(--swal-action); }
+.swal-chevron { color: var(--swal-action); font-size: 24px; }
+.swal-empty { padding: 30px; text-align: center; color: #65758f; }
+
+/* Clicking a row opens that assessment's report, so the strip that used to sit
+   under the list (with its "View report" link) is gone. */
+.swal-page { max-width: 1180px; }
+.swal-hint { margin: 0; font-size: 13px; color: var(--swal-muted); }
+.swal-row[disabled] { cursor: not-allowed; opacity: 0.72; }
+.swal-row[disabled]:hover { border-color: var(--swal-border); }
+
+@media (max-width: 900px) {
+  .swal-filters { grid-template-columns: 1fr 1fr; }
+  .swal-search { grid-column: 1 / -1; }
+  .swal-row { grid-template-columns: minmax(0, 1fr) auto; gap: 8px; }
+  .swal-title { grid-column: 1; grid-row: 1; }
+  .swal-rental-count { grid-column: 1; text-align: left; padding-left: 62px; }
+  .swal-updated { grid-column: 1; padding-left: 62px; }
+  .swal-status { grid-column: 1; justify-self: start; margin-left: 62px; }
+  .swal-chevron { grid-column: 2; grid-row: 1; }
+}
+@media (max-width: 420px) {
+  .swal-header { flex-direction: column; align-items: stretch; }
+  .swal-filters { grid-template-columns: 1fr; }
+  .swal-search { grid-column: auto; }
+}

@@ -1,16 +1,15 @@
 import 'dart:typed_data';
 
-import 'package:shared_logic/shared_logic.dart';
-
 import 'package:flutter/material.dart';
 import 'package:fyp/features/panorama_viewer/presentation/widgets/mobile_swipe_panorama.dart';
 
 import 'package:fyp/core/theme/sitewise_theme.dart';
 import 'package:fyp/core/utils/pano_bytes.dart';
+import 'package:shared_logic/shared_logic.dart';
 
-/// Mobile 360° viewer: near-full-screen viewport with previous/next controls
-/// and a bottom scene selector. Same tour contract as the web viewer,
-/// touch-first composition.
+/// Mobile tour viewer: displays a generated panoramic file as a static image.
+/// When the image is unavailable, retains the scene navigation controls and
+/// the existing tour contract. There is no interactive 360° panning.
 
 class MobileTourViewer extends StatefulWidget {
   final VirtualTour tour;
@@ -37,15 +36,14 @@ class _MobileTourViewerState extends State<MobileTourViewer> {
   Future<Uint8List?> _panoFutureFor(String path) {
     if (_cachedPanoPath != path) {
       _cachedPanoPath = path;
-      _cachedPanoFuture = readPanoramaBytes(path).timeout(
-        const Duration(seconds: 8),
-        onTimeout: () => null,
-      );
+      _cachedPanoFuture = readPanoramaBytes(
+        path,
+      ).timeout(const Duration(seconds: 8), onTimeout: () => null);
     }
     return _cachedPanoFuture!;
   }
 
-  /// Real equirectangular panorama (when the tour has a generated file).
+  /// Static preview of a generated equirectangular image (if available).
   Widget _panoBox(String path) {
     return Container(
       height: 340,
@@ -121,7 +119,7 @@ class _MobileTourViewerState extends State<MobileTourViewer> {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     const Icon(
-                      Icons.threesixty,
+                      Icons.photo_library_outlined,
                       size: 64,
                       color: Colors.white70,
                     ),

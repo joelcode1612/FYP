@@ -186,6 +186,8 @@ export 'src/application/services/recommendation_service.dart';
 export 'src/application/services/tour_service.dart';
 export 'src/application/services/upload_service.dart';
 export 'src/application/services/verification_service.dart';
+export 'src/domain/entities/project1_readiness.dart';
+export 'src/data/repositories/api_project1_read_repository.dart';
 
 // --- M2 assessment: domain item definitions and ViewModel ------------------
 //
@@ -201,3 +203,8 @@ export 'src/application/services/verification_service.dart';
 // from a data adapter.
 export 'src/domain/entities/m2_assessment.dart';
 export 'src/application/notifiers/m2_assessment_notifier.dart';
+export 'src/domain/entities/confirmed_business_review.dart';
+export 'src/data/repositories/api_confirmed_review_repository.dart';
+export 'src/domain/entities/customer_questionnaire.dart';
+export 'src/data/repositories/api_customer_questionnaire_repository.dart';
+export 'src/data/repositories/api_m2_repository.dart';

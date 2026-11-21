@@ -1,0 +1,153 @@
+{
+  "assessment_id": "A-DEMO-001",
+  "fixture": "SYNTHETIC_ONLY",
+  "report_status": "PREVIEW_NOT_ADMITTED",
+  "production_release_allowed": false,
+  "llm_required": false,
+  "sections": {
+    "R01": {
+      "heading": "Business concept and declared plan",
+      "claims": [
+        {
+          "claim_id": "F-R01",
+          "text": "The entrepreneur plans a fictional hybrid caf\u00e9 offering coffee, pastries and light meals.",
+          "limitation": "Entrepreneur declaration, not verified demand.",
+          "source_id": "M2-04-R1",
+          "source_version": "1",
+          "source_sha256": "65d0026111f0a0e7c34536c9fec082e669a115b50e423c041574c926482b57e0",
+          "support": "SUPPORTED",
+          "admission": "SYNTHETIC_PREVIEW_ONLY",
+          "llm_attempt_id": null
+        }
+      ],
+      "notice": null
+    },
+    "R02": {
+      "heading": "Survey recruitment, eligibility and consent",
+      "claims": [],
+      "notice": "No authorized synthetic fixture supplied."
+    },
+    "R03": {
+      "heading": "Stated interest in visiting",
+      "claims": [
+        {
+          "claim_id": "F-R03",
+          "text": "Among 55 synthetic valid responses, 30 (54.5%) selected an interested response category.",
+          "limitation": "Stated interest is not an actual visit.",
+          "source_id": "CQ-Q05-S1",
+          "source_version": "1",
+          "source_sha256": "104e6f3b1dea6eb1144bf8791af7a885613c19227d37523249f686476861f298",
+          "support": "SUPPORTED",
+          "admission": "SYNTHETIC_PREVIEW_ONLY",
+          "llm_attempt_id": null
+        }
+      ],
+      "notice": null
+    },
+    "R04": {
+      "heading": "Interested product categories",
+      "claims": [],
+      "notice": "No authorized synthetic fixture supplied."
+    },
+    "R05": {
+      "heading": "Price acceptability for an exact offer",
+      "claims": [
+        {
+          "claim_id": "F-R05",
+          "text": "Among 80 synthetic valid responses, 48 (60.0%) selected acceptable for the fictional RM12 offer.",
+          "limitation": "Price acceptability is not actual purchasing.",
+          "source_id": "CQ-Q07-S1",
+          "source_version": "1",
+          "source_sha256": "3cfb4f05b79f0fe30ad0175ff9066890070643a51af13c1bfcf1821962b57bba",
+          "support": "SUPPORTED",
+          "admission": "SYNTHETIC_PREVIEW_ONLY",
+          "llm_attempt_id": null
+        }
+      ],
+      "notice": null
+    },
+    "R06": {
+      "heading": "Existing-caf\u00e9 purchasing behavior",
+      "claims": [],
+      "notice": "No authorized synthetic fixture supplied."
+    },
+    "R07": {
+      "heading": "Occasions and experience priorities",
+      "claims": [],
+      "notice": "No authorized synthetic fixture supplied."
+    },
+    "R08": {
+      "heading": "Study-area affiliation and limited geographic context",
+      "claims": [],
+      "notice": "No authorized synthetic fixture supplied."
+    },
+    "R09": {
+      "heading": "Dated external business and competitor context",
+      "claims": [
+        {
+          "claim_id": "F-R09",
+          "text": "A fictional October 2026 competitor register contains two illustrative caf\u00e9s. It is not a real market survey.",
+          "limitation": "Fictional register; no real competitor claim.",
+          "source_id": "EXT-S1",
+          "source_version": "1",
+          "source_sha256": "8fec5147266f24f860bec72f9f664c3b7ae644c2073f83a2136855a30930431f",
+          "support": "SUPPORTED",
+          "admission": "SYNTHETIC_PREVIEW_ONLY",
+          "llm_attempt_id": null
+        },
+        {
+          "claim_id": "F-RENT-A",
+          "text": "Synthetic Property A quotation: RM4500/month.",
+          "limitation": "Not a recommendation to lease.",
+          "source_id": "RENT-A",
+          "source_version": "1",
+          "source_sha256": "cc4bd7e0c6af9dc990d71f6b254860493bcb27b06a51f12571f9f76d6e718450",
+          "support": "SUPPORTED",
+          "admission": "SYNTHETIC_PREVIEW_ONLY",
+          "llm_attempt_id": null
+        },
+        {
+          "claim_id": "F-RENT-B",
+          "text": "Synthetic Property B quotation: RM5200/month.",
+          "limitation": "Not a recommendation to lease.",
+          "source_id": "RENT-B",
+          "source_version": "1",
+          "source_sha256": "00df29a229e1bf7ad464080837d74ca3cd1b24e3aa2b8e2743e29fbb92860b6b",
+          "support": "SUPPORTED",
+          "admission": "SYNTHETIC_PREVIEW_ONLY",
+          "llm_attempt_id": null
+        }
+      ],
+      "notice": null
+    },
+    "R10": {
+      "heading": "Financial and operational planning assumptions",
+      "claims": [],
+      "notice": "No authorized synthetic fixture supplied."
+    },
+    "R11": {
+      "heading": "Overall suitability conclusion \u2014 availability only",
+      "claims": [],
+      "notice": "No authorized synthetic fixture supplied."
+    },
+    "R12": {
+      "heading": "Methods, source limitations and outstanding evidence",
+      "claims": [
+        {
+          "claim_id": "F-METHOD",
+          "text": "This demonstration uses synthetic inputs only. No real respondent fieldwork or source review occurred.",
+          "limitation": "No scientific or publication authorization.",
+          "source_id": "METHOD-S1",
+          "source_version": "1",
+          "source_sha256": "59073a7c20f9e91c8ba7dfa3d4ee1c8e562bb80c974cd751dfd24045093dcf44",
+          "support": "SUPPORTED",
+          "admission": "SYNTHETIC_PREVIEW_ONLY",
+          "llm_attempt_id": null
+        }
+      ],
+      "notice": null
+    }
+  },
+  "rejections": [],
+  "snapshot_sha256": "894f578ba56e0f84d956a74a27a4275ff1a9548bef5278675f6a825db3149bbc"
+}

@@ -1,0 +1,30 @@
+# CQ engineering implementation and stopping boundary
+
+The authorized phase is versioned Customer Questionnaire → C0/C1 routing → persisted responses → Flutter/FastAPI. Production remains PRODUCTION_FIELDING_HOLD. Test success is engineering evidence only. There is no QG generation, entrepreneur-specific CQ activation, EE-01, Explanation, A10 or reporting implementation in this change.
+
+## Source reuse and responsibilities
+
+`domain/customer_questionnaire.py` remains the existing state/refusal/code validator. `customer_questionnaire_candidate.load_sources()` validates original SHA pins and loads the sealed A2 reference. `domain/cq_runtime.py` is the application adapter around that gate interpreter, deriving facts from persisted source events and stimulus deliveries, binding contexts to upstream event IDs, and withholding unresolved/unauthorized questions. It is not an independent predicate engine. The sealed interpreter's false-const limitation is rejected, not patched in place. Historical frozen/terminal-wins and candidate strict-mutual-exclusion policies are explicitly distinct. Existing candidate/successor factories remain unregistered and synthetic-only.
+
+`services/customer_questionnaire_service.py` orchestrates authenticated ownership/participant checks, version/assignment/global-bank verification, consent, presentation, answer validation/revisions, routing snapshots, canonical pointers, withdrawal and receipt creation. `services/ports/cq_store_port.py` separates persistence and trusted authority. `repositories/cq_repository.py` provides transactional PostgreSQL units. `db/models/cq_runtime_schema.py` has separate metadata; the migration is explicit-only. `api/v1/customer_questionnaire.py` mounts 14 authenticated routes. `cq_runtime_enabled` defaults false. Availability and invitations return honest held states; enabling the flag alone supplies no authority. Withdrawal works without the participation flag or authority grant, but still requires the real respondent identity, pinned version and revision.
+
+The production authority adapter always refuses. Test authority exists only under tests: it verifies the actual private database and data_directory, uses a locked revocation row, and returns ISOLATED_TEST with false fielding authorization. No request can submit its own grant, identity, questionnaire, stimulus or approval. Entrepreneur-specific assignments explicitly fail CQ_ENTREPRENEUR_ASSIGNMENT_AUTHORITY_UNVERIFIED until actual assessment/confirmation/concept/BCB/QJ/measurement/bank/stimulus/population/scientific/Owner pins are independently verified. Existing M2/BCB modules are not altered.
+
+`shared_logic` contains the CQ DTO/repository and canonical Python-compatible SHA256 verification, using the already-resolved pure-Dart crypto package. It rejects test authority by default and pins session/campaign/release/manifest bindings on every response. `CqViewModel` is ChangeNotifier MVVM with Riverpod composition, holding only UI selections and idempotent request retries; it does not calculate routing. The existing Home, Questionnaire and Review route classes delegate to CQ invitations/session components. Existing visual controls and app shell remain. API transport still attaches Supabase bearer tokens; UI authentication bypass supplies no API credential. Normal composition withholds legacy local demo routing in every build mode. Historical SQLite drafts and explicit preview fixtures/tests remain separate and are never uploaded as actual responses.
+
+The Flutter flow supports retrieval/start/resume, pinned EN/BM locale, exact manifest wording/codes, consent, source-stimulus delivery, single/multiple/matrix-cell presentation, skip/refusal codes, server validation/next question, review/edit, submission receipt, withdrawal, retry and honest held/error states. A stimulus delivery event records server delivery, not proof that a human read it. No production stimulus, respondent population, wording replacement or real research response is invented.
+
+## Reproduce safely
+
+Run from the backend folder with its existing virtual environment:
+
+```powershell
+$env:CQ_RUN_FLUTTER='1'
+.\.venv\Scripts\python.exe -B tests/cq_runtime/run_isolated.py --output C:\temp\cq-evidence-new
+```
+
+The runner requires installed PostgreSQL18 tools and a free isolated port 55443. It always creates a new private cluster, restores schema only, tests rejection without a migration receipt, applies the additive migration there, verifies real signed JWTs and active DB profiles over local HTTP, runs the API/SQL suite and actual Flutter controls against that server, exports readbacks, then stops its own cluster. It does not connect to an existing server, start the production lifespan, alter .env, use real user credentials, collect respondents or deploy. Without CQ_RUN_FLUTTER, the real-widget case is skipped and full technical acceptance must not be claimed. Retained test clusters have synthetic data only; deletion is a separate deliberate operation.
+
+The test C0 release deliberately authorizes a fixed baseline subset Q01/Q02/Q04; it does not adopt a production baseline instrument. The C1 test release authorizes all 13 candidate items and explicit synthetic concept/menu/offer/occasion/feature stimuli, two Q10 cells and optional context. These test releases demonstrate controlled execution, not scientific selection of a real C0/C1 instrument. Required-presentation/required-answer semantics in those releases are explicit test decisions because no authoritative production requiredness contract was located. No CF-02 visits expansion, pricing inference, equivalence or population rule is adopted.
+
+Source authority and full per-question exact wording/code/state mappings are in SOURCE_AUTHORITY and QUESTION_CONTRACT_MATRIX JSON/CSV. Physical FK/unique/RLS boundaries and compatibility gaps are in SCHEMA_AND_ERD.md. Runtime API observations, failed attempts, deterministic transition coverage and acceptance records are delivered separately as evidence. Independent SQL readback means a separate database connection, not independent human scientific review.

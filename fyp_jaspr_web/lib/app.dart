@@ -18,38 +18,64 @@ import 'package:sitewise_jaspr_web/features/authentication/presentation/pages/fo
 import 'package:sitewise_jaspr_web/features/authentication/presentation/pages/staff_mfa_page.dart';
 import 'package:sitewise_jaspr_web/features/authentication/presentation/pages/staff_verify_page.dart';
 import 'package:sitewise_jaspr_web/features/authentication/presentation/pages/reset_password_page.dart';
-import 'package:sitewise_jaspr_web/features/assessment/presentation/pages/assessment_history_page.dart'
-    as e_assessment_history;
-import 'package:sitewise_jaspr_web/features/assessment/presentation/pages/assessment_workspace_page.dart' as e_assessment;
+import 'package:sitewise_jaspr_web/features/assessment/presentation/pages/assessment_workspace_page.dart'
+    as e_assessment;
 import 'package:sitewise_jaspr_web/features/compare/presentation/pages/compare_page.dart';
-import 'package:sitewise_jaspr_web/features/dashboard/presentation/pages/entrepreneur_dashboard_page.dart' as e_dashboard;
+import 'package:sitewise_jaspr_web/features/dashboard/presentation/pages/entrepreneur_dashboard_page.dart'
+    as e_dashboard;
 import 'package:sitewise_jaspr_web/features/property_management/presentation/pages/listing_management_denied_page.dart'
     as e_listing_denied;
-import 'package:sitewise_jaspr_web/features/recommendations/presentation/pages/explanation_page.dart' as e_explanation;
-import 'package:sitewise_jaspr_web/features/recommendations/presentation/pages/ai_recommendations_page.dart' as e_ai;
-import 'package:sitewise_jaspr_web/features/listing/presentation/pages/commercial_listing_page.dart' as e_listing;
-import 'package:sitewise_jaspr_web/features/listing/presentation/pages/explore_page.dart' as e_explore;
-import 'package:sitewise_jaspr_web/features/recommendations/presentation/pages/preferences_page.dart' as e_preferences;
-import 'package:sitewise_jaspr_web/features/profile/presentation/pages/entrepreneur_profile_page.dart' as e_profile;
-import 'package:sitewise_jaspr_web/features/listing/presentation/pages/property_detail_page.dart' as e_property_detail;
-import 'package:sitewise_jaspr_web/features/recommendations/presentation/pages/property_analysis_page.dart' as e_property_analysis;
-import 'package:sitewise_jaspr_web/features/recommendations/presentation/pages/recommendations_page.dart' as e_recommendations;
-import 'package:sitewise_jaspr_web/features/assessment/presentation/pages/report_page.dart' as e_report;
-import 'package:sitewise_jaspr_web/features/assessment/presentation/pages/reports_page.dart' as e_reports;
-import 'package:sitewise_jaspr_web/features/listing/presentation/pages/saved_page.dart' as e_saved;
-import 'package:sitewise_jaspr_web/features/panorama_viewer/presentation/pages/tour_page.dart' as e_tour;
+import 'package:sitewise_jaspr_web/features/recommendations/presentation/pages/explanation_page.dart'
+    as e_explanation;
+import 'package:sitewise_jaspr_web/features/recommendations/presentation/pages/ai_recommendations_page.dart'
+    as e_ai;
+import 'package:sitewise_jaspr_web/features/listing/presentation/pages/commercial_listing_page.dart'
+    as e_listing;
+import 'package:sitewise_jaspr_web/features/listing/presentation/pages/explore_page.dart'
+    as e_explore;
+import 'package:sitewise_jaspr_web/features/recommendations/presentation/pages/preferences_page.dart'
+    as e_preferences;
+import 'package:sitewise_jaspr_web/features/profile/presentation/pages/entrepreneur_profile_page.dart'
+    as e_profile;
+import 'package:sitewise_jaspr_web/features/listing/presentation/pages/property_detail_page.dart'
+    as e_property_detail;
+import 'package:sitewise_jaspr_web/features/recommendations/presentation/pages/property_analysis_page.dart'
+    as e_property_analysis;
+import 'package:sitewise_jaspr_web/features/recommendations/presentation/pages/recommendations_page.dart'
+    as e_recommendations;
+import 'package:sitewise_jaspr_web/features/assessment/presentation/pages/report_page.dart'
+    as e_report;
+import 'package:sitewise_jaspr_web/features/assessment/presentation/pages/reports_page.dart'
+    as e_reports;
+import 'package:sitewise_jaspr_web/features/property_management/presentation/pages/assessment_report_selector_view.dart'
+    as e_report_selector;
+import 'package:sitewise_jaspr_web/features/property_management/presentation/pages/report_activity_views.dart'
+    as e_report_activity;
+import 'package:sitewise_jaspr_web/features/listing/presentation/pages/saved_page.dart'
+    as e_saved;
+import 'package:sitewise_jaspr_web/features/panorama_viewer/presentation/pages/tour_page.dart'
+    as e_tour;
 import 'package:sitewise_jaspr_web/features/administration/presentation/pages/agents_page.dart';
 import 'package:sitewise_jaspr_web/features/property_management/presentation/pages/agent_retired_page.dart';
 import 'package:sitewise_jaspr_web/features/property_management/presentation/pages/owner_retired_page.dart';
-import 'package:sitewise_jaspr_web/features/administration/presentation/pages/activity_page.dart' as a_activity;
-import 'package:sitewise_jaspr_web/features/administration/presentation/pages/campaigns_page.dart' as a_campaigns;
-import 'package:sitewise_jaspr_web/features/administration/presentation/pages/dashboard_page.dart' as a_dashboard;
-import 'package:sitewise_jaspr_web/features/administration/presentation/pages/listing_detail_page.dart' as a_listing_detail;
-import 'package:sitewise_jaspr_web/features/administration/presentation/pages/listings_page.dart' as a_listings;
-import 'package:sitewise_jaspr_web/features/profile/presentation/pages/admin_profile_page.dart' as a_profile;
-import 'package:sitewise_jaspr_web/features/administration/presentation/pages/surveys_page.dart' as a_surveys;
-import 'package:sitewise_jaspr_web/features/administration/presentation/pages/user_detail_page.dart' as a_user_detail;
-import 'package:sitewise_jaspr_web/features/administration/presentation/pages/users_page.dart' as a_users;
+import 'package:sitewise_jaspr_web/features/administration/presentation/pages/activity_page.dart'
+    as a_activity;
+import 'package:sitewise_jaspr_web/features/administration/presentation/pages/campaigns_page.dart'
+    as a_campaigns;
+import 'package:sitewise_jaspr_web/features/administration/presentation/pages/dashboard_page.dart'
+    as a_dashboard;
+import 'package:sitewise_jaspr_web/features/administration/presentation/pages/listing_detail_page.dart'
+    as a_listing_detail;
+import 'package:sitewise_jaspr_web/features/administration/presentation/pages/listings_page.dart'
+    as a_listings;
+import 'package:sitewise_jaspr_web/features/profile/presentation/pages/admin_profile_page.dart'
+    as a_profile;
+import 'package:sitewise_jaspr_web/features/administration/presentation/pages/surveys_page.dart'
+    as a_surveys;
+import 'package:sitewise_jaspr_web/features/administration/presentation/pages/user_detail_page.dart'
+    as a_user_detail;
+import 'package:sitewise_jaspr_web/features/administration/presentation/pages/users_page.dart'
+    as a_users;
 
 /// Route table — the Jaspr counterpart to
 /// `lib/core/routing/app_routes.dart` in the Flutter app.
@@ -157,7 +183,9 @@ class SitewiseApp extends StatelessComponent {
           // entrepreneur workspace, and an entrepreneur is no longer admitted
           // to it — the two roles have different property authority and must not
           // share a surface.
-          if (requested == 'owner' && assigned != 'owner' && assigned != 'admin') {
+          if (requested == 'owner' &&
+              assigned != 'owner' &&
+              assigned != 'admin') {
             final home = _roleNamed(assigned);
             return home == null ? '/login' : home.homeRoute;
           }
@@ -616,72 +644,69 @@ class SitewiseApp extends StatelessComponent {
             ),
           ),
           Route(
-            path: '/entrepreneur/report',
+            path: '/entrepreneur/cafe-report/view',
             builder: (context, state) => _page(
-              e_report.ReportPage(id: state.queryParams['id'] ?? ''),
-              title: 'Assessment report — Sitewise',
-            ),
-          ),
-          // Web decision-support workspace. `?id=` is the same catalogue
-          // property id Explore, Property detail and Saved already pass;
-          // `?stage=` optionally opens one of the two in-page stage panels.
-          // The Flutter mobile assessment is a separate data-collection
-          // workflow and never routes here.
-          //
-          // This is the backward-compatible deep link: it still opens the
-          // workspace for one property. `/entrepreneur/assessments` is the
-          // canonical route now (it opens Stage 1 when no property is given),
-          // so this one keeps working for old bookmarks and shared links.
-          Route(
-            path: '/entrepreneur/assessment',
-            builder: (context, state) => _page(
-              e_assessment.AssessmentWorkspacePage(
-                propertyId: state.queryParams['id'] ?? '',
-                stage: state.queryParams['stage'] ?? '',
-                // The selected F&B business type, carried from Recommendations
-                // so the assessment draft opens with the entrepreneur's own
-                // choice instead of an empty field.
-                businessType: state.queryParams['businessType'] ?? '',
+              e_report_activity.CafeReportView(
+                assessmentId: state.queryParams['assessment'] ?? '',
               ),
-              title: 'Location Assessment Workspace — Sitewise',
-              description:
-                  'A five-stage assessment of one commercial property, saved '
-                  'to your account as you go.',
+              title: 'Café demand suitability report — Sitewise',
             ),
           ),
-          // The assessment history lives under the workspace route. It is
-          // registered before the workspace itself so the history path is
-          // always matched by its own route.
+          Route(
+            path: '/entrepreneur/cafe-report',
+            builder: (context, state) => _page(
+              const e_report_selector.AssessmentReportSelectorView(),
+              title: 'Select assessment to view report — Sitewise',
+            ),
+          ),
+          Route(
+            path: '/entrepreneur/activity-history',
+            builder: (context, state) => _page(
+              e_report_activity.ActivityHistoryView(
+                assessmentId: state.queryParams['assessment'] ?? '',
+              ),
+              title: 'Activity history — Sitewise',
+            ),
+          ),
           Route(
             path: '/entrepreneur/assessments/history',
             builder: (context, state) => _page(
-              const e_assessment_history.AssessmentHistoryPage(),
+              // The engine activity shell (M2ActivityPanel) is the history
+              // surface now; ActivityHistoryPage is its embedded view and
+              // needs fetched activities, so the route goes through the shell.
+              e_report_activity.ActivityHistoryView(
+                assessmentId: state.queryParams['assessment'] ?? '',
+              ),
               title: 'Assessment history — Sitewise',
               description:
                   'Every location assessment saved to your account, with its '
                   'real progress and report availability.',
             ),
           ),
-          // The main Assessments destination: the five-stage workspace. With
-          // no `?id=` it opens Stage 1 — the saved-property selector — and
-          // never starts an assessment on its own.
+          // The **Assessment** top-bar destination (PROJECT1 v1.5).
+          //
+          // With no `?id=` this is the four-step research flow: the assessment
+          // overview list, or one of its steps via `?step=1..4`, scoped to the
+          // assessment named by `?assessment=`.
+          //
+          // With `?id=` it is still the five-stage property workspace, byte for
+          // byte the same page as before — every saved link, dashboard KPI and
+          // Explore/Saved hand-off keeps working.
           Route(
             path: '/entrepreneur/assessments',
             builder: (context, state) => _page(
               e_assessment.AssessmentWorkspacePage(
                 propertyId: state.queryParams['id'] ?? '',
                 stage: state.queryParams['stage'] ?? '',
-                // The selected F&B business type, carried from Recommendations
-                // so the assessment draft opens with the entrepreneur's own
-                // choice instead of an empty field.
                 businessType: state.queryParams['businessType'] ?? '',
               ),
-              title: 'Location Assessment Workspace — Sitewise',
+              title: 'Assessment workspace — Sitewise',
               description:
-                  'A five-stage assessment of one commercial property, saved '
-                  'to your account as you go.',
+                  'Select a property, record your business preferences, review '
+                  'the location evidence and open the assessment report.',
             ),
           ),
+
           Route(
             path: '/entrepreneur/profile',
             builder: (context, state) => _page(
@@ -712,7 +737,13 @@ class SitewiseApp extends StatelessComponent {
               ),
             ),
 
-          // Unknown browser routes use errorBuilder above.
+          Route(
+            path: '/entrepreneur/report',
+            builder: (context, state) => _page(
+              e_report.ReportPage(id: state.queryParams['id'] ?? ''),
+              title: 'Assessment report — Sitewise',
+            ),
+          ),
         ],
       ),
     );

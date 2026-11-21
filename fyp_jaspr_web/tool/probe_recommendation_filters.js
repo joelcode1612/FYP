@@ -82,7 +82,7 @@ function pagePayload(body, items) {
       research_only: true,
     },
     meta: {
-      source: 'sitewise_app.properties',
+      source: 'fyp.catalogue_properties',
       property_source: 'catalog',
       criteria: body,
       cached: false,
@@ -90,7 +90,7 @@ function pagePayload(body, items) {
         threshold: 50,
         scale: '0-100',
         comparison: 'strictly_greater_than',
-        column: 'sitewise_app.properties.suitability_score',
+        column: 'fyp.catalogue_properties.suitability_score',
       },
     },
   };

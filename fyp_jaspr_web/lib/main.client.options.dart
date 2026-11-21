@@ -28,8 +28,6 @@ import 'package:sitewise_jaspr_web/features/administration/presentation/pages/us
     deferred as _user_detail_page;
 import 'package:sitewise_jaspr_web/features/administration/presentation/pages/users_page.dart'
     deferred as _users_page;
-import 'package:sitewise_jaspr_web/features/assessment/presentation/pages/assessment_history_page.dart'
-    deferred as _assessment_history_page;
 import 'package:sitewise_jaspr_web/features/assessment/presentation/pages/assessment_workspace_page.dart'
     deferred as _assessment_workspace_page;
 import 'package:sitewise_jaspr_web/features/assessment/presentation/pages/report_page.dart'
@@ -70,6 +68,8 @@ import 'package:sitewise_jaspr_web/features/profile/presentation/pages/admin_pro
     deferred as _admin_profile_page;
 import 'package:sitewise_jaspr_web/features/profile/presentation/pages/entrepreneur_profile_page.dart'
     deferred as _entrepreneur_profile_page;
+import 'package:sitewise_jaspr_web/features/property_management/presentation/pages/assessment_report_selector_view.dart'
+    deferred as _assessment_report_selector_view;
 import 'package:sitewise_jaspr_web/features/property_verification/presentation/components/verification_detail_view.dart'
     deferred as _verification_detail_view;
 import 'package:sitewise_jaspr_web/features/recommendations/presentation/pages/ai_recommendations_page.dart'
@@ -82,6 +82,10 @@ import 'package:sitewise_jaspr_web/features/recommendations/presentation/pages/p
     deferred as _property_analysis_page;
 import 'package:sitewise_jaspr_web/features/recommendations/presentation/pages/recommendations_page.dart'
     deferred as _recommendations_page;
+import 'package:sitewise_jaspr_web/shared/presentation/components/m2_activity_panel.dart'
+    deferred as _m2_activity_panel;
+import 'package:sitewise_jaspr_web/shared/presentation/components/project1_read_panel.dart'
+    deferred as _project1_read_panel;
 import 'package:sitewise_jaspr_web/shared/presentation/pages/landing_page.dart'
     deferred as _landing_page;
 
@@ -148,10 +152,6 @@ ClientOptions get defaultClientOptions => ClientOptions(
     'users_page': ClientLoader(
       (p) => _users_page.UsersPage(),
       loader: _users_page.loadLibrary,
-    ),
-    'assessment_history_page': ClientLoader(
-      (p) => _assessment_history_page.AssessmentHistoryPage(),
-      loader: _assessment_history_page.loadLibrary,
     ),
     'assessment_workspace_page': ClientLoader(
       (p) => _assessment_workspace_page.AssessmentWorkspacePage(
@@ -248,6 +248,10 @@ ClientOptions get defaultClientOptions => ClientOptions(
       (p) => _entrepreneur_profile_page.ProfilePage(),
       loader: _entrepreneur_profile_page.loadLibrary,
     ),
+    'assessment_report_selector_view': ClientLoader(
+      (p) => _assessment_report_selector_view.AssessmentReportSelectorView(),
+      loader: _assessment_report_selector_view.loadLibrary,
+    ),
     'verification_detail_view': ClientLoader(
       (p) => _verification_detail_view.VerificationDetailView(),
       loader: _verification_detail_view.loadLibrary,
@@ -278,6 +282,19 @@ ClientOptions get defaultClientOptions => ClientOptions(
         initialPropertyId: p['initialPropertyId'] as String?,
       ),
       loader: _recommendations_page.loadLibrary,
+    ),
+    'm2_activity_panel': ClientLoader(
+      (p) => _m2_activity_panel.M2ActivityPanel(
+        assessmentId: p['assessmentId'] as String,
+      ),
+      loader: _m2_activity_panel.loadLibrary,
+    ),
+    'project1_read_panel': ClientLoader(
+      (p) => _project1_read_panel.Project1ReadPanel(
+        assessmentId: p['assessmentId'] as String,
+        section: p['section'] as String,
+      ),
+      loader: _project1_read_panel.loadLibrary,
     ),
     'landing_page': ClientLoader(
       (p) => _landing_page.LandingPage(),

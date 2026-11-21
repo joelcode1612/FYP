@@ -49,22 +49,22 @@ function createApp({ query = db.query, verifyUser, env = process.env } = {}) {
   };
   app.get('/api/me', profile);
   app.post('/api/me', profile);
-  const columns = 'id,title,address,city,state,postcode,rental_rm,size_sqft,latitude,longitude,property_type,image_url,source_url,suitability_score,dataset_validation';
+  const columns = 'id,title,address,city,state,postcode,rental_rm::double precision AS rental_rm,size_sqft::double precision AS size_sqft,latitude,longitude,property_type,image_url,source_url,suitability_score,dataset_validation';
   app.get('/api/catalog/properties', async (req, res, next) => {
     try {
       const limit = Math.min(200, Math.max(1, Number(req.query.limit) || 100));
       const offset = Math.max(0, Number(req.query.offset) || 0);
       if (!Number.isInteger(limit) || !Number.isInteger(offset)) return res.status(400).json({ error: { message: 'Pagination must use whole numbers.' } });
       const [rows, count] = await Promise.all([
-        query(`SELECT ${columns} FROM sitewise_app.properties ORDER BY id LIMIT $1 OFFSET $2`, [limit,offset]),
-        query('SELECT count(*)::int AS total FROM sitewise_app.properties'),
+        query(`SELECT ${columns} FROM fyp.catalogue_properties ORDER BY id LIMIT $1 OFFSET $2`, [limit,offset]),
+        query('SELECT count(*)::int AS total FROM fyp.catalogue_properties'),
       ]);
       res.json({ ok: true, data: rows.rows, meta: { total: count.rows[0].total, limit, offset } });
     } catch (error) { next(error); }
   });
   app.get('/api/catalog/properties/:id', async (req, res, next) => {
     try {
-      const result = await query(`SELECT ${columns} FROM sitewise_app.properties WHERE id=$1`, [req.params.id]);
+      const result = await query(`SELECT ${columns} FROM fyp.catalogue_properties WHERE id=$1`, [req.params.id]);
       res.status(result.rows.length ? 200 : 404).json({ ok: Boolean(result.rows.length), data: result.rows[0] || null });
     } catch (error) { next(error); }
   });

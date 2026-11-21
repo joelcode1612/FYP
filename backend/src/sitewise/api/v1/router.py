@@ -12,6 +12,7 @@ from sitewise.api.v1 import (
     personalised_recommendations,
     preferences,
     properties,
+    project1_read,
     property_verification,
     provider,
     recommendations,
@@ -27,6 +28,16 @@ from sitewise.api.v1 import (
 )
 
 router = APIRouter()
+
+# Availability has no activation flag: it only explains the verified holds.
+# This does not mount either standalone CQ factory or the staged write APIs.
+router.include_router(project1_read.router, prefix="/project1-read", tags=["project1_readiness"])
+from sitewise.api.v1 import customer_questionnaire
+router.include_router(customer_questionnaire.router,prefix='/cq',tags=['customer_questionnaire'])
+# Candidate EE-01 explanations: always mounted so the hold is visible; the
+# request-time gate returns 503 until the feature is deliberately activated.
+from sitewise.api.v1 import ee01_explanation
+router.include_router(ee01_explanation.router, prefix='/cq', tags=['ee01_explanation'])
 
 router.include_router(auth.router, prefix="/auth", tags=["auth"])
 # Imported property catalogue (read-only, previously served by FYP/test).
@@ -103,13 +114,20 @@ router.include_router(ml_predictions.router, prefix="/ml", tags=["ml_predictions
 # Requires separately reviewed schema migration and authorized instrument
 # version before it may be enabled in a controlled environment.
 from sitewise.core.config import settings
+if settings.project1_workflow_enabled:
+    from sitewise.api.v1 import project1_workflow
+    router.include_router(project1_workflow.router, prefix="/project1-workflow",
+                          tags=["project1_candidate_review"])
+
 if settings.project1_cp07_enabled:
     from sitewise.api.v1 import project1_cp07
     router.include_router(project1_cp07.router, prefix="/project1", tags=["project1_cp07_stage"])
 
 if settings.m2_upstream_enabled:
     from sitewise.api.v1 import m2
+    from sitewise.api.v1 import m2_business_context
     router.include_router(m2.router, prefix="/m2", tags=["m2_upstream"])
+    router.include_router(m2_business_context.router, prefix="/m2", tags=["m2_business_context"])
 
 # Additive OPTIONAL selected research PU model (Layer-1 alternate). Mounted
 # BESIDE the default /ml routes — nothing existing is replaced. Same
