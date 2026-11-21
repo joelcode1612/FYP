@@ -222,12 +222,17 @@ class AgentAssignmentRepository:
             text(
                 """
                 INSERT INTO public.agent_listing_assignment
-                    (listing_id, agent_id, assigned_by_user_id, created_at, updated_at)
-                VALUES (:lid, :aid, :by, :now, :now)
+                    (listing_id, agent_id, assigned_by_user_id, created_at, updated_at, workflow_status, requested_at)
+                VALUES (:lid, :aid, :by, :now, :now, 'requested', :now)
                 ON CONFLICT (listing_id) DO UPDATE
                     SET agent_id = EXCLUDED.agent_id,
                         assigned_by_user_id = EXCLUDED.assigned_by_user_id,
-                        updated_at = EXCLUDED.updated_at
+                        updated_at = EXCLUDED.updated_at,
+                        workflow_status = 'requested',
+                        requested_at = now(), responded_at = NULL,
+                        inspection_data = '{}'::jsonb, inspection_updated_at = NULL,
+                        panorama_id = NULL, panorama_tour_id = NULL, panorama_uploaded_at = NULL,
+                        submitted_at = NULL, decline_reason = NULL
                 """
             ),
             {

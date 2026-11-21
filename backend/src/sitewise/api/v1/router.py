@@ -2,6 +2,7 @@ from fastapi import APIRouter
 
 from sitewise.api.v1 import (
     assessments,
+    agent_only_flow,
     auth,
     capture_360,
     catalog,
@@ -46,6 +47,7 @@ router.include_router(users.router, prefix="/users", tags=["users"])
 # account verification. One route set serves both provider roles — what differs
 # is the ownership / assignment relationship resolved server-side, not the API.
 router.include_router(provider.router, prefix="/provider", tags=["provider"])
+router.include_router(agent_only_flow.router, prefix="/provider-flow", tags=["agent_only_verification"])
 # Enquiry creation is the ENQUIRER's action, so it rides the listing prefix the
 # rest of the property surface uses.
 router.include_router(

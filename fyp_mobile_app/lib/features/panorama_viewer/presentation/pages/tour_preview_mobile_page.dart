@@ -2,6 +2,7 @@ import 'package:shared_logic/shared_logic.dart';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:http/http.dart' as http;
 import 'package:fyp/features/panorama_viewer/presentation/widgets/mobile_swipe_panorama.dart';
 
@@ -24,15 +25,16 @@ import 'package:fyp/features/capture_360/presentation/pages/ar_capture_mobile_pa
 /// retakes. The grid follows the tour's capture engine — 38 directions for
 /// the sphere flow, the legacy 26-point layout for tours captured before it.
 
-class TourPreviewMobilePage extends StatefulWidget {
+class TourPreviewMobilePage extends ConsumerStatefulWidget {
   final String tourId;
   const TourPreviewMobilePage({super.key, required this.tourId});
 
   @override
-  State<TourPreviewMobilePage> createState() => _TourPreviewMobilePageState();
+  ConsumerState<TourPreviewMobilePage> createState() => _TourPreviewMobilePageState();
 }
 
-class _TourPreviewMobilePageState extends State<TourPreviewMobilePage> {
+class _TourPreviewMobilePageState extends ConsumerState<TourPreviewMobilePage> {
+  bool get _canCapture => ref.read(authNotifierProvider).user?.role == AppRole.agent;
   late final TourPreviewViewModel vm;
 
   /// Cached file reads, one future per path. Without this, every rebuild of
@@ -116,8 +118,8 @@ class _TourPreviewMobilePageState extends State<TourPreviewMobilePage> {
                           style: const TextStyle(color: SitewiseColors.danger),
                         ),
                       ),
-                    _uploadCard(),
-                    SitewiseSecondaryButton(
+                    if (_canCapture) _uploadCard(),
+                    if (_canCapture) SitewiseSecondaryButton(
                       label: vm.hasPanorama
                           ? 'Regenerate panorama'
                           : 'Generate panorama',
@@ -130,7 +132,7 @@ class _TourPreviewMobilePageState extends State<TourPreviewMobilePage> {
                             },
                     ),
                     const SizedBox(height: 12),
-                    if (vm.stitchService != null) ...[
+                    if (_canCapture && vm.stitchService != null) ...[
                       _stitchingSection(),
                       const SizedBox(height: 12),
                     ],
@@ -141,8 +143,8 @@ class _TourPreviewMobilePageState extends State<TourPreviewMobilePage> {
                     const SizedBox(height: 8),
                     _frameGrid(),
                     const SizedBox(height: 12),
-                    if (vm.tour!.status == VirtualTourStatus.ready ||
-                        vm.tour!.status == VirtualTourStatus.draft)
+                    if (_canCapture && (vm.tour!.status == VirtualTourStatus.ready ||
+                        vm.tour!.status == VirtualTourStatus.draft))
                       SitewiseButton(
                         label: 'Submit for verification',
                         icon: Icons.send,
@@ -166,7 +168,7 @@ class _TourPreviewMobilePageState extends State<TourPreviewMobilePage> {
                         ),
                       ),
                     const SizedBox(height: 8),
-                    SitewiseSecondaryButton(
+                    if (_canCapture) SitewiseSecondaryButton(
                       label: 'Delete tour',
                       icon: Icons.delete_outline,
                       onPressed: () async {
@@ -359,7 +361,7 @@ class _TourPreviewMobilePageState extends State<TourPreviewMobilePage> {
                   style: const TextStyle(fontSize: 11),
                 ),
               ),
-              if (canRetake && frame != null)
+              if (_canCapture && canRetake && frame != null)
                 Padding(
                   padding: const EdgeInsets.only(bottom: 4),
                   child: TextButton.icon(
@@ -389,6 +391,7 @@ class _TourPreviewMobilePageState extends State<TourPreviewMobilePage> {
   /// list from the records on disk, so it resumes the same station and visits
   /// the direction that is pending again. Nothing else is recaptured.
   Future<void> _retake(int targetId) async {
+    if (!_canCapture) return;
     final tour = vm.tour;
     if (tour == null || vm.generating) return;
     await vm.retakeTarget(targetId);
@@ -406,6 +409,7 @@ class _TourPreviewMobilePageState extends State<TourPreviewMobilePage> {
   /// Reopens the session without deleting anything — the panel's way out when
   /// a pair failed to register and the frame itself is fine.
   Future<void> _resumeCapture() async {
+    if (!_canCapture) return;
     final tour = vm.tour;
     if (tour == null || vm.generating) return;
     await Navigator.of(context).pushNamed(

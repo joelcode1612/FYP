@@ -247,6 +247,8 @@ def create_owner_listing(
     standalone ``/validate-address`` endpoint remains available for callers
     that want an explicit check.
     """
+    _owner_write_only(current)
+    raise HTTPException(status_code=410, detail="Use /properties/listings/drafts, then request an Agent. Direct publication submission is retired.")
     body = payload.model_dump()
 
     repo = FypPropertyRepository(session)
@@ -320,6 +322,12 @@ def list_own_listings(
 # verification workflow (property_verification.py), which after migration
 # 0004 is bound to this same table.
 # ---------------------------------------------------------------------------
+
+
+def _owner_write_only(current: AuthenticatedUser) -> None:
+    """Only a property owner registers or modifies original listing facts."""
+    if rbac.canonical_role(current.role) != rbac.ROLE_OWNER:
+        raise ForbiddenError("Only a Property Owner may register or edit property details.")
 
 
 class OwnerDraftRequest(BaseModel):
@@ -421,6 +429,7 @@ def create_owner_draft(
     """Persist a NEW draft. The owner identity comes from the verified token;
     the database assigns the persistent id; the draft stays unpublished and
     outside the admin queue."""
+    _owner_write_only(current)
     if not (payload.name or "").strip():
         raise HTTPException(
             status_code=422, detail="A draft property needs at least a name."
@@ -483,8 +492,11 @@ def update_own_listing(
     from sitewise.db.models.property_verification import can_resubmit
     from sitewise.services.property_verification_service import verification_row
 
+    _owner_write_only(current)
     repo = FypPropertyRepository(session)
-    _owned_listing_or_error(repo, property_id, current)
+    listing = _owned_listing_or_error(repo, property_id, current)
+    if listing.get("is_published") or listing.get("verification_status") not in ("draft", "rejected"):
+        raise HTTPException(status_code=409, detail="The property is locked for review or published.")
     verification = verification_row(session, property_id)
     editable = verification is None or can_resubmit(
         verification.listing_status, verification.ownership_status
@@ -500,6 +512,13 @@ def update_own_listing(
         # A null name must not null out the NOT NULL column: keep the
         # existing draft name.
         fields.pop("name", None)
+    if fields:
+        session.execute(text("""
+            UPDATE public.agent_listing_assignment
+               SET inspection_data='{}'::jsonb, inspection_updated_at=NULL,
+                   panorama_tour_id=NULL, panorama_uploaded_at=NULL, updated_at=now()
+             WHERE listing_id=:pid AND workflow_status IN ('accepted','needs_correction')
+        """), {"pid": property_id})
     row = repo.update_owner_listing(property_id, fields)
     if row is None:
         raise HTTPException(status_code=404, detail="Property not found.")
@@ -532,8 +551,11 @@ async def upload_listing_photo(
     )
     from sitewise.services.property_verification_service import verification_row
 
+    _owner_write_only(current)
     repo = FypPropertyRepository(session)
-    _owned_listing_or_error(repo, property_id, current)
+    listing = _owned_listing_or_error(repo, property_id, current)
+    if listing.get("is_published") or listing.get("verification_status") not in ("draft", "rejected"):
+        raise HTTPException(status_code=409, detail="Photos are locked for review or publication.")
     verification = verification_row(session, property_id)
     editable = verification is None or can_resubmit(
         verification.listing_status, verification.ownership_status
@@ -585,6 +607,10 @@ def delete_listing_photo(
 
     repo = FypPropertyRepository(session)
     _owned_listing_or_error(repo, property_id, current)
+    _owner_write_only(current)
+    listing = _owned_listing_or_error(repo, property_id, current)
+    if listing.get("is_published") or listing.get("verification_status") not in ("draft", "rejected"):
+        raise HTTPException(status_code=409, detail="Photos are locked for review or publication.")
     deleted = repo.delete_listing_photo(property_id, photo_id)
     if deleted is None:
         raise HTTPException(status_code=404, detail="Photo not found.")
@@ -601,6 +627,10 @@ def set_primary_listing_photo(
 ):
     repo = FypPropertyRepository(session)
     _owned_listing_or_error(repo, property_id, current)
+    _owner_write_only(current)
+    listing = _owned_listing_or_error(repo, property_id, current)
+    if listing.get("is_published") or listing.get("verification_status") not in ("draft", "rejected"):
+        raise HTTPException(status_code=409, detail="Photos are locked for review or publication.")
     if not repo.set_primary_listing_photo(property_id, photo_id):
         raise HTTPException(status_code=404, detail="Photo not found.")
     return {"data": repo.listing_photos(property_id)}

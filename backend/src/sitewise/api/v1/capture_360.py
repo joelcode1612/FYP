@@ -32,6 +32,7 @@ from sitewise.db.session import get_db
 from sitewise.dependencies import AuthenticatedUser, require_property_owner
 from sitewise.services import capture_session_service as svc
 from sitewise.services import capture_storage
+from sitewise.services.agent_inspection_policy import agent_assignment, require_owner_published_view
 
 router = APIRouter()
 
@@ -192,6 +193,7 @@ def create_session(
     db: DbSession,
     current: ProviderUser,
 ) -> dict[str, Any]:
+    agent_assignment(db, body.property_id, current, writable=True)
     svc.ensure_property_access(
         db,
         property_id=body.property_id,
@@ -230,6 +232,9 @@ def confirm_frame(
     record = svc.require_capture_session(
         db, session_id=session_id, user_id=current.user_id, role=current.role
     )
+    agent_assignment(db, int(record.property_id), current, writable=True)
+    if str(record.owner_id) != str(current.user_id):
+        raise HTTPException(status_code=403, detail="Capture session belongs to a different Agent.")
     path = _validated_frame_path(record, session_id, body.storage_path)
     try:
         uploaded = capture_storage.object_exists(path)
@@ -306,6 +311,9 @@ def issue_upload_urls(
     record = svc.require_capture_session(
         db, session_id=session_id, user_id=current.user_id, role=current.role
     )
+    agent_assignment(db, int(record.property_id), current, writable=True)
+    if str(record.owner_id) != str(current.user_id):
+        raise HTTPException(status_code=403, detail="Capture session belongs to a different Agent.")
     out_of_plan = [t for t in body.targets if t < 1 or t > record.expected_frames]
     if out_of_plan:
         raise ValidationError(
@@ -353,6 +361,7 @@ def view_panorama(
     panorama = svc.get_panorama(db, panorama_id)
     if panorama is None:
         raise NotFoundError("Panorama not found.")
+    require_owner_published_view(db, int(panorama.property_id), current)
     svc.ensure_property_access(
         db,
         property_id=int(panorama.property_id),
@@ -379,6 +388,11 @@ def request_processing(
     svc.require_capture_session(
         db, session_id=session_id, user_id=current.user_id, role=current.role
     )
+    record = svc.get_capture_session(db, session_id)
+    if record is None: raise HTTPException(status_code=404, detail="Capture session not found.")
+    agent_assignment(db, int(record.property_id), current, writable=True)
+    if str(record.owner_id) != str(current.user_id):
+        raise HTTPException(status_code=403, detail="Capture session belongs to a different Agent.")
     job, created = svc.request_processing(db, session_id=session_id)
     return {**_job_json(job), "created": created}
 
@@ -411,6 +425,13 @@ def retry_job(
     current: ProviderUser,
 ) -> dict[str, Any]:
     _job_with_access(db, job_id, current)
+    job = svc.get_job(db, job_id)
+    if job is None: raise HTTPException(status_code=404, detail="Processing job not found.")
+    record = svc.get_capture_session(db, job.session_id)
+    if record is None: raise HTTPException(status_code=404, detail="Capture session not found.")
+    agent_assignment(db, int(record.property_id), current, writable=True)
+    if str(record.owner_id) != str(current.user_id):
+        raise HTTPException(status_code=403, detail="Capture session belongs to a different Agent.")
     return _job_json(svc.retry_job(db, job_id=job_id))
 
 
@@ -426,6 +447,7 @@ def property_panorama(
         user_id=current.user_id,
         role=current.role,
     )
+    require_owner_published_view(db, property_id, current)
     panorama = svc.latest_property_panorama(db, property_id)
     if panorama is None:
         raise NotFoundError("No panorama exists for this property yet.")

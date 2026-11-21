@@ -148,6 +148,9 @@ class _ProviderTabHostState extends ConsumerState<ProviderTabHost> {
     if (index == ProviderTabHost.tasksIndex && role != AppRole.agent) {
       return ProviderTabHost.homeIndex;
     }
+    if (index == ProviderTabHost.addTabIndex && role != AppRole.owner) {
+      return ProviderTabHost.homeIndex;
+    }
     if (index == ProviderTabHost.requestsIndex && role != AppRole.owner) {
       return ProviderTabHost.homeIndex;
     }

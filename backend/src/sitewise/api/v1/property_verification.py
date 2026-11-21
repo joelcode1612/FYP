@@ -28,6 +28,7 @@ from sitewise.dependencies import (
 )
 from sitewise.domain import rbac
 from sitewise.services import verification_storage as storage
+from sitewise.services.agent_inspection_policy import require_ready_for_admin
 from sitewise.services.property_enrichment_service import PropertyEnrichmentService
 from sitewise.services.property_verification_service import (
     AdminPropertyReviewService,
@@ -132,6 +133,11 @@ def submit_for_verification(
       unavailable rather than estimated, so the reviewer needs to know it is
       missing instead of assuming a low number.
     """
+    if rbac.canonical_role(current.role) != rbac.ROLE_AGENT:
+        raise HTTPException(status_code=403, detail="Only the assigned Agent submits for Admin review.")
+    if payload is not None and payload.scope != "full":
+        raise HTTPException(status_code=422, detail="Agent submission must include ownership verification.")
+    require_ready_for_admin(session, property_id, current)
     acknowledgement = bool(
         payload.acknowledge_unavailable_population if payload is not None else False
     )
@@ -216,6 +222,10 @@ async def upload_document(
         raise HTTPException(
             status_code=422, detail="verification_type must be listing or ownership."
         )
+    if verification_type == "ownership" and rbac.canonical_role(current.role) != rbac.ROLE_OWNER:
+        raise HTTPException(status_code=403, detail="Only the Property Owner uploads ownership proof.")
+    if verification_type == "listing" and rbac.canonical_role(current.role) != rbac.ROLE_AGENT:
+        raise HTTPException(status_code=403, detail="Only the Agent uploads inspection evidence.")
     data = await file.read()
     try:
         document = PropertyVerificationService(session).add_document(
@@ -330,6 +340,13 @@ def approve_dimension(
 ) -> dict:
     """Approve ONE dimension. Never touches the other dimension's status;
     publication eligibility is recomputed server-side after the commit."""
+    if payload.dimension == "listing":
+        assignment = session.execute(text("""
+            SELECT workflow_status FROM public.agent_listing_assignment
+            WHERE listing_id=:pid
+        """), {"pid":property_id}).scalar()
+        if assignment != "submitted":
+            raise HTTPException(status_code=409, detail="Agent inspection and panorama are not submitted.")
     return AdminPropertyReviewService(session).approve(
         property_id, payload.dimension, admin.user_id
     )
@@ -342,9 +359,16 @@ def reject_dimension(
     session: DbSession,
     admin: AdminUser,
 ) -> dict:
-    return AdminPropertyReviewService(session).reject(
+    result = AdminPropertyReviewService(session).reject(
         property_id, payload.dimension, admin.user_id, payload.reason
     )
+    if payload.dimension == "listing":
+        session.execute(text("""
+            UPDATE public.agent_listing_assignment SET workflow_status='needs_correction', updated_at=now()
+             WHERE listing_id=:pid AND workflow_status='submitted'
+        """), {"pid":property_id})
+        session.commit()
+    return result
 
 
 @staff_router.post("/{property_id}/verification/request-information")

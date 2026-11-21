@@ -8,11 +8,9 @@ import 'package:fyp/core/di/service_locator.dart';
 import 'package:fyp/core/config/mobile_config.dart';
 import 'package:fyp/core/theme/sitewise_m3.dart';
 import 'package:fyp/core/theme/sitewise_theme.dart';
-import 'package:fyp/core/utils/capture_log.dart';
 import 'package:fyp/shared/presentation/layouts/mobile_app_shell.dart';
 import 'package:fyp/core/routing/mobile_navigation.dart';
 import 'package:fyp/shared/presentation/layouts/provider_tab_scope.dart';
-import 'package:fyp/features/capture_360/presentation/pages/ar_capture_mobile_page.dart';
 
 /// SiteWise Add Property — the ONE create/edit form for the whole Provider
 /// workspace, reused unchanged by Property Owners and Agents.
@@ -58,7 +56,7 @@ class _SitewiseAddPropertyMobilePageState
   static const List<String> _stepNames = <String>[
     'Property details',
     'Location',
-    '360° Capture',
+    'Agent verification',
     'Review',
     'Confirmation',
   ];
@@ -66,7 +64,7 @@ class _SitewiseAddPropertyMobilePageState
   static const List<String> _stepDescriptions = <String>[
     'Enter the basic details of your commercial unit.',
     'Add the address details of your commercial unit.',
-    'Capture a 360° virtual tour of the property.',
+    'An authorized Agent will independently inspect and capture the 360° tour.',
     'Review the information before submission.',
     'Save or submit your property.',
   ];
@@ -109,13 +107,6 @@ class _SitewiseAddPropertyMobilePageState
   bool _submitting = false;
   String? _serverMessage;
   String? _serverError;
-
-  /// The unfinished 360° capture for this property, when one exists.
-  ///
-  /// Only a draft tour that already holds confirmed frames is resumable. A
-  /// draft with zero frames is an empty session, so offering "Resume" for it
-  /// would promise progress that was never made.
-  String? _resumableTourId;
 
   String get _propertyName => _nameController.text.trim();
   String get _monthlyRent => _rentController.text.trim();
@@ -347,10 +338,8 @@ class _SitewiseAddPropertyMobilePageState
       } else {
         await ServiceLocator.ownerListings.updateDraft(id, _draftFields());
       }
-      final result = await ServiceLocator.propertyVerification.submit(
-        id,
-        scope: 'listing',
-      );
+      // Owner saves the property only; an accepted Agent handles
+      // inspection, panorama capture and the Admin submission.
       if (!mounted) return;
       // The verification status changed on the server. The draft update above
       // already bumped the listings revision, but that happened BEFORE this
@@ -358,12 +347,10 @@ class _SitewiseAddPropertyMobilePageState
       // its new "pending review" status instead of the "draft" it just read.
       ServiceLocator.listingsRevision.value++;
       setState(() {
-        _serverStatus = 'pending';
-        _serverMessage =
-            'Listing submitted for admin review (ID $id). '
-            'Listing: ${result.listingStatus.wire}. '
-            'Ownership: ${result.ownershipStatus.wire} (separate review). '
-            'Approval does not publish the listing until ownership is verified.';
+        _serverStatus = 'draft';
+        _serverMessage = 'Property #$id saved. Open Requests to assign an '
+            'authorized Agent. The Agent submits to Admin after inspection '
+            'and uploading the 360° panorama.';
         _step = 5;
       });
     } on Object catch (error) {
@@ -455,7 +442,6 @@ class _SitewiseAddPropertyMobilePageState
     });
     // Entering Step 3 decides whether "Resume Previous Capture" may be shown,
     // so the lookup runs for the footer path as well as the stepper.
-    if (_step == 3) unawaited(_refreshResumable());
   }
 
   void _goBack() {
@@ -475,7 +461,6 @@ class _SitewiseAddPropertyMobilePageState
     });
     // Step 3 is the only step whose actions depend on persisted state: whether
     // an interrupted capture exists decides if "Resume" may be shown at all.
-    if (step == 3) unawaited(_refreshResumable());
   }
 
   void _onTextChanged(String _) {
@@ -836,7 +821,7 @@ class _SitewiseAddPropertyMobilePageState
       case 2:
         return _buildLocation();
       case 3:
-        return _buildArCapture();
+        return _buildAgentHandoff();
       case 4:
         return _buildReview();
       default:
@@ -883,8 +868,8 @@ class _SitewiseAddPropertyMobilePageState
         _buildChoiceGrid(),
         const SizedBox(height: 16),
         _buildInfoNotice(
-          'Saving creates a real draft record in Sitewise. Submitting sends '
-          'it to administrator verification — approval is never automatic.',
+          'Saving creates a real draft record. Only an authorized Agent may '
+          'capture its 360° tour and submit it for Admin verification.',
         ),
       ],
     );
@@ -1148,188 +1133,20 @@ class _SitewiseAddPropertyMobilePageState
     onSelected(picked);
   }
 
-  // ------------------------------------------------------- 360° capture step
-  bool _startingCapture = false;
-
-  /// Looks for an interrupted capture belonging to the saved draft.
-  ///
-  /// The query is the tour service's property-scoped draft lookup, so it can
-  /// only ever answer with a draft/processing tour — never with a finished one.
-  /// The frame count comes from the tour record, which the capture screen keeps
-  /// in step with the JPEGs actually written.
-  Future<void> _refreshResumable() async {
-    final id = _draftId;
-    if (id == null || id.isEmpty) {
-      if (mounted && _resumableTourId != null) {
-        setState(() => _resumableTourId = null);
-      }
-      return;
-    }
-    try {
-      final tour = await ServiceLocator.tourService.tourForPropertyDraft(id);
-      final resumable = tour != null && tour.frameCount > 0 ? tour.id : null;
-      if (!mounted || resumable == _resumableTourId) return;
-      setState(() => _resumableTourId = resumable);
-    } catch (error) {
-      CaptureLog.log('Resumable capture lookup failed: $error');
-    }
-  }
-
-  Future<void> _startArCapture() async {
-    if (_startingCapture) return;
-    FocusManager.instance.primaryFocus?.unfocus();
-    setState(() => _startingCapture = true);
-    try {
-      await _saveDraft();
-      final id = _draftId;
-      if (!mounted) return;
-      if (id == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              'The draft could not be saved, so 360° capture was not started.',
-            ),
-          ),
-        );
-        return;
-      }
-      await Navigator.of(context).pushNamed(
-        '/owner/capture',
-        arguments: ArCaptureRequest(propertyId: id),
-      );
-      if (mounted) {
-        setState(() {});
-        await _refreshResumable();
-      }
-    } finally {
-      if (mounted) setState(() => _startingCapture = false);
-    }
-  }
-
-  Widget _arGuidance(IconData icon, String title, String body) {
-    final scheme = Theme.of(context).colorScheme;
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(icon, size: 20, color: scheme.primary),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(title, style: Theme.of(context).textTheme.titleSmall),
-                const SizedBox(height: 2),
-                Text(
-                  body,
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: scheme.onSurfaceVariant,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildArCapture() {
-    final scheme = Theme.of(context).colorScheme;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: scheme.surface,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: scheme.outlineVariant),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Row(
-                children: [
-                  Icon(Icons.threesixty, color: scheme.primary),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          '360° Property Capture',
-                          style: Theme.of(context).textTheme.titleMedium,
-                        ),
-                        Text(
-                          'Create an interactive 360° tour of your property.',
-                          style: Theme.of(context).textTheme.bodySmall
-                              ?.copyWith(color: scheme.onSurfaceVariant),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 14),
-              _arGuidance(
-                Icons.grid_on_outlined,
-                'Follow 38 capture points',
-                'Capture the room using the guided targets, including the '
-                    'ceiling and floor.',
-              ),
-              _arGuidance(
-                Icons.photo_camera_outlined,
-                'Keep the camera steady',
-                'Rotate your phone slowly around the same camera position. '
-                    'Avoid moving the lens in a wide circle.',
-              ),
-              _arGuidance(
-                Icons.center_focus_strong_outlined,
-                'Align each target',
-                'Move the target into the center guide and hold still until '
-                    'the photograph is captured.',
-              ),
-              _arGuidance(
-                Icons.panorama_outlined,
-                'Create your 360° tour',
-                'Your photographs will be joined into a panorama that you can '
-                    'review before saving.',
-              ),
-              const SizedBox(height: 4),
-              FilledButton.icon(
-                onPressed: _startingCapture ? null : _startArCapture,
-                icon: const Icon(Icons.play_circle_outline),
-                label: Text(
-                  _startingCapture ? 'Saving draft…' : 'Start 360° Capture',
-                ),
-              ),
-              // Only ever rendered for a real interrupted capture: the lookup
-              // returns draft tours that already hold frames, so this cannot
-              // promise progress that was not saved.
-              if (_resumableTourId != null) ...[
-                const SizedBox(height: 8),
-                OutlinedButton.icon(
-                  onPressed: _startingCapture ? null : _startArCapture,
-                  icon: const Icon(Icons.restart_alt),
-                  label: const Text('Resume Previous Capture'),
-                ),
-              ],
-              const SizedBox(height: 8),
-              Text(
-                'The virtual tour will be linked to this property and can be '
-                'reviewed in My listings.',
-                style: Theme.of(
-                  context,
-                ).textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
+  Widget _buildAgentHandoff() => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      const Icon(Icons.verified_user_outlined,
+          color: SitewiseColors.action, size: 36),
+      const SizedBox(height: 12),
+      const Text('Independent Agent inspection',
+          style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+      const SizedBox(height: 8),
+      const Text('Save this property, attach ownership evidence, then open Requests '
+          'to select an authorized Property Agent. Only that Agent can verify '
+          'physical details and capture or upload a 360° panorama.'),
+    ],
+  );
 
   Widget _buildReview() {
     return Column(
@@ -1445,11 +1262,11 @@ class _SitewiseAddPropertyMobilePageState
           const SizedBox(height: 9),
           Text(
             submitted
-                ? 'Your property is now in the administrator review queue. '
+                ? 'Your property has been saved. '
                       'Track its status in My listings.'
                 : 'This property record is persisted in Sitewise. Complete the '
                       'details and attach ownership evidence, then '
-                      'submit it for verification.',
+                      'request an Agent from the Requests tab.',
             textAlign: TextAlign.center,
             style: const TextStyle(color: _muted, fontSize: 12, height: 1.5),
           ),
@@ -1523,7 +1340,7 @@ class _SitewiseAddPropertyMobilePageState
                       )
                     : const Icon(Icons.verified_outlined, size: 19),
                 label: Text(
-                  _submitting ? 'Submitting…' : 'Submit listing for review',
+                  _submitting ? 'Saving…' : 'Save and choose Agent',
                   style: const TextStyle(fontWeight: FontWeight.w800),
                 ),
                 style: FilledButton.styleFrom(

@@ -427,6 +427,17 @@ class PropertyVerificationService:
                 action="submitted" if scope == "full" else "listing_submitted",
             )
         )
+        # Agent assignment state changes in this SAME transaction as
+        # the property verification submission. No partial handoff.
+        if provider_scope.is_agent_role(role):
+            changed = self.session.execute(text("""
+                UPDATE public.agent_listing_assignment
+                   SET workflow_status='submitted', submitted_at=now(), updated_at=now(),
+                       panorama_id=(SELECT p.panorama_id FROM fyp.panoramas p JOIN fyp.capture_sessions c ON c.id=p.session_id JOIN fyp.panorama_jobs j ON j.session_id=c.id WHERE p.property_id=CAST(:pid AS text) AND c.owner_id=:uid AND c.status='completed' AND j.status='done' ORDER BY p.created_at DESC LIMIT 1)
+                 WHERE listing_id=:pid AND workflow_status IN ('accepted','needs_correction')
+            """), {"pid":property_id, "uid":str(submitter_id)})
+            if changed.rowcount != 1:
+                raise ConflictError("Agent assignment changed during submission.")
         self.session.commit()
         self.session.refresh(verification)
         return verification_payload(verification)

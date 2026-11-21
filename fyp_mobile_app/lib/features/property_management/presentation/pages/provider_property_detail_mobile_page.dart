@@ -8,6 +8,7 @@ import 'package:fyp/core/theme/sitewise_theme.dart';
 import 'package:fyp/features/capture_360/presentation/pages/ar_capture_mobile_page.dart';
 import 'package:fyp/shared/presentation/components/m3_kit.dart';
 import 'package:fyp/features/property_management/domain/entities/provider_models.dart';
+import 'package:fyp/features/property_management/presentation/widgets/provider_agent_inspection_panel.dart';
 import 'package:fyp/shared/presentation/components/provider_ui.dart';
 import 'package:fyp/features/property_management/data/provider_workspace_service.dart';
 import 'package:fyp/features/property_management/application/provider_listings_service.dart';
@@ -358,8 +359,8 @@ class _ProviderPropertyDetailMobilePageState
                             'not overwrite the Owner record. Capture the '
                             '360° tour below.'
                       : 'Keep your ownership evidence, property details and '
-                            'photos ready. You can capture a 360° tour yourself. '
-                            'The Administrator makes the publication decision.',
+                            'standard photos ready. Only an assigned Agent may '
+                            'capture the 360° tour. The Administrator approves publication.',
                   style: const TextStyle(
                     fontFamily: kFontFamily,
                     fontSize: 14,
@@ -369,19 +370,11 @@ class _ProviderPropertyDetailMobilePageState
                 ),
               ),
               const SizedBox(height: 18),
-              FilledButton.icon(
-                onPressed: _busy ? null : _capture,
-                icon: const Icon(Icons.threesixty_rounded),
-                label: const Text('Capture 360° panorama'),
-                style: FilledButton.styleFrom(
-                  backgroundColor: SitewiseColors.action,
-                  foregroundColor: SitewiseM3.surface,
-                  minimumSize: const Size.fromHeight(48),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(SitewiseM3.radiusPill),
-                  ),
-                ),
-              ),
+              if (data.agent != null) ...[
+                ProviderAgentInspectionPanel(propertyId: widget.listingId,
+                    onCapture: _capture, onSubmitted: () async { _load(); }),
+                const SizedBox(height: 12),
+              ],
               const SizedBox(height: 10),
               if (data.agent != null)
                 OutlinedButton.icon(
@@ -394,7 +387,7 @@ class _ProviderPropertyDetailMobilePageState
                 )
               else ...[
                 OutlinedButton.icon(
-                  onPressed: _busy
+                  onPressed: _busy || !listing.canEdit || listing.isPublished
                       ? null
                       : () => Navigator.of(context)
                             .pushNamed(
@@ -411,24 +404,11 @@ class _ProviderPropertyDetailMobilePageState
                   ),
                 ),
                 const SizedBox(height: 10),
-                FilledButton.icon(
-                  onPressed: _busy || listing.stage == ProviderStage.pending
-                      ? null
-                      : _submit,
-                  icon: const Icon(Icons.verified_outlined),
-                  label: Text(
-                    listing.stage == ProviderStage.pending
-                        ? 'Awaiting administrator review'
-                        : 'Submit for verification',
-                  ),
-                style: FilledButton.styleFrom(
-                  backgroundColor: SitewiseColors.action,
-                  foregroundColor: SitewiseM3.surface,
-                  minimumSize: const Size.fromHeight(48),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(SitewiseM3.radiusPill),
-                  ),
-                ),
+                const ProviderMessage(
+                  title: 'Agent submits for review',
+                  body: 'Your assigned Agent must complete the on-site inspection '
+                    'and upload the 360° tour before this property can enter Admin review.',
+                  icon: Icons.assignment_turned_in_outlined,
                 ),
               ],
             ],
