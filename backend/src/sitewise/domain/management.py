@@ -40,6 +40,22 @@ Ownership is never conflated with management
 every response. An agent assignment adds management responsibility; it does
 not transfer ownership. A legacy ``owner_id`` integer is historical provenance
 only — it is never promoted to ``owner_user_id`` without a verified identity.
+
+``ownership_status`` vocabulary (derived, NOT evidence)
+------------------------------------------------------
+This module derives management responsibility from live relationships. Its
+``ownership_status`` therefore describes what the RELATIONSHIP shows, never
+what evidence proved:
+
+* ``recorded`` — an active account is recorded as the owner on the listing
+  row. This is a bookkeeping fact, NOT evidence-backed verification: only the
+  verification workflow (``property_verification.ownership_status = verified``
+  with documents on file) can claim that, and admin review reads it from the
+  verification surface, not from here. The previous ``verified`` label made a
+  review queue present derived management state as verified ownership.
+* ``unverified`` — an owner is recorded but its account is not active.
+* ``legacy_unverified`` — only a pre-Supabase integer owner exists.
+* ``unknown`` — no owner relationship is resolvable.
 """
 
 from __future__ import annotations
@@ -184,7 +200,9 @@ def derive(facts: ManagementFacts) -> dict:
     owner_active = (
         facts.owner_user_id is not None and facts.owner_account_status == "active"
     )
-    ownership = "verified" if owner_active else "unknown"
+    # ``recorded``: an active account is recorded as owner — a derived
+    # bookkeeping fact, never a claim of evidence-backed verification.
+    ownership = "recorded" if owner_active else "unknown"
     if facts.owner_user_id is not None and not owner_active:
         ownership = "unverified"
     elif facts.owner_user_id is None and facts.legacy_owner_id is not None:
@@ -228,7 +246,7 @@ def derive(facts: ManagementFacts) -> dict:
                 LABEL_OWNER,
                 facts=facts,
                 manager_name=name,
-                ownership_status="verified",
+                ownership_status="recorded",
             )
         # The owner UUID is authoritative but the display name is not known.
         # Never substitute an email or a guess.
@@ -236,7 +254,7 @@ def derive(facts: ManagementFacts) -> dict:
             TYPE_UNRESOLVED,
             LABEL_UNRESOLVED,
             facts=facts,
-            ownership_status="verified",
+            ownership_status="recorded",
             reason="owner_display_name_unavailable",
         )
 

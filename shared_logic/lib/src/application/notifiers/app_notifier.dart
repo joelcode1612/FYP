@@ -50,6 +50,9 @@ class AppNotifier extends Notifier<AppState> {
   /// Adds or removes a property from the saved set.
   void toggleSaved(String id) => _controller.toggleSaved(id);
 
+  /// Adds to comparison; false means the three-property cap was reached.
+  bool addCompared(String id) => _controller.addCompared(id);
+
   /// Adds or removes a property from the compare set. The three-entry cap is
   /// enforced by the controller.
   void toggleCompared(String id) => _controller.toggleCompared(id);

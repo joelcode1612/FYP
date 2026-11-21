@@ -1,0 +1,262 @@
+/* SiteWise Admin Listings refresh — scoped to this page only.
+   Uses the existing Admin Blue Edition palette from web/styles.css. */
+.app-shell.app-shell--admin .admin-listings {
+  --al-line: #34384b;
+  --al-panel: #1d202e;
+  --al-raised: #272b3b;
+  --al-blue: #4da3ff;
+  --al-subtle: #acb2c3;
+  --al-ink: #f9f9fd;
+  min-width: 0;
+}
+.app-shell.app-shell--admin .admin-listings :is(button, a, input, select):focus-visible {
+  outline: 3px solid var(--al-blue);
+  outline-offset: 3px;
+}
+/* Workflow switcher */
+.app-shell.app-shell--admin .al-workflows {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+.app-shell.app-shell--admin .al-workflow {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  min-width: 0;
+  padding: 17px 19px;
+  border: 1px solid var(--al-line);
+  border-radius: 17px;
+  background: #1b1e2b;
+  color: var(--al-ink);
+  text-align: left;
+  cursor: pointer;
+  transition: background .16s ease, border-color .16s ease, box-shadow .16s ease;
+}
+.app-shell.app-shell--admin .al-workflow:hover { background: #252a3a; border-color: #59617a; }
+.app-shell.app-shell--admin .al-workflow.is-active {
+  background: linear-gradient(110deg, #27374e, #222c42);
+  border-color: var(--al-blue);
+  box-shadow: inset 3px 0 var(--al-blue), 0 10px 24px rgba(0,0,0,.15);
+}
+.app-shell.app-shell--admin .al-workflow__icon {
+  display: grid;
+  place-items: center;
+  flex: 0 0 44px;
+  height: 44px;
+  border-radius: 12px;
+  color: #c8d8ea;
+  background: #30364a;
+}
+.app-shell.app-shell--admin .al-workflow.is-active .al-workflow__icon { background: #4da3ff25; color: var(--al-blue); }
+.app-shell.app-shell--admin .al-workflow__copy { display: grid; gap: 4px; flex: 1; min-width: 0; }
+.app-shell.app-shell--admin .al-workflow__title { font-weight: 800; font-size: 15px; line-height: 1.35; }
+.app-shell.app-shell--admin .al-workflow__description { font-size: 12.5px; color: var(--al-subtle); line-height: 1.45; }
+.app-shell.app-shell--admin .al-workflow__indicator { color: #718095; }
+.app-shell.app-shell--admin .al-workflow.is-active .al-workflow__indicator { color: var(--al-blue); }
+/* Review summary */
+.app-shell.app-shell--admin .al-review { min-width: 0; gap: 18px; }
+.app-shell.app-shell--admin .al-summary {
+  display: grid;
+  grid-template-columns: minmax(240px, 1fr) minmax(0, 1.85fr);
+  gap: 18px;
+  align-items: center;
+  padding: 21px 23px;
+  border: 1px solid var(--al-line);
+  border-radius: 18px;
+  background: radial-gradient(ellipse at 0 0, rgba(77,163,255,.10), transparent 58%), #1b1f2c;
+}
+.app-shell.app-shell--admin .al-eyebrow {
+  display: block;
+  margin-bottom: 7px;
+  color: #7db9ff;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  font-size: 10px;
+  font-weight: 850;
+}
+.app-shell.app-shell--admin .al-summary__intro h2 { margin: 0 0 6px; font-size: clamp(18px,2vw,24px); color: var(--al-ink); letter-spacing: -.03em; }
+.app-shell.app-shell--admin .al-summary__intro p { margin: 0; color: var(--al-subtle); font-size: 12px; line-height: 1.6; }
+.app-shell.app-shell--admin .al-summary__stats { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 9px; }
+.app-shell.app-shell--admin .al-stat {
+  padding: 13px 12px;
+  border: 1px solid #3b4257;
+  border-radius: 12px;
+  background: rgba(39,43,59,.68);
+  min-width: 0;
+}
+.app-shell.app-shell--admin .al-stat__label { display: block; color: #b5bdcd; font-size: 11px; line-height: 1.4; min-height: 31px; }
+.app-shell.app-shell--admin .al-stat__value { display: block; margin: 5px 0 1px; color: var(--al-ink); font-size: clamp(19px,2.2vw,29px); line-height: 1; font-weight: 850; letter-spacing: -.045em; font-variant-numeric: tabular-nums; }
+.app-shell.app-shell--admin .al-stat:nth-child(2) .al-stat__value { color: #ffc47e; }
+.app-shell.app-shell--admin .al-stat:nth-child(3) .al-stat__value { color: #ffc47e; }
+.app-shell.app-shell--admin .al-stat:nth-child(4) .al-stat__value { color: #7db9ff; }
+/* Toolbar: stable search and sort zones rather than a squeezed single row */
+.app-shell.app-shell--admin .al-toolbar {
+  display: flex;
+  gap: 12px;
+  align-items: end;
+  flex-wrap: wrap;
+  padding: 16px 18px;
+  border: 1px solid var(--al-line);
+  border-radius: 15px;
+  background: var(--al-panel);
+}
+.app-shell.app-shell--admin .al-toolbar__search { flex: 1 1 340px; min-width: 220px; }
+.app-shell.app-shell--admin .al-toolbar__sort { flex: 0 1 auto; }
+.app-shell.app-shell--admin .al-toolbar__label { display: block; margin: 0 0 7px; color: #bec6d6; font-size: 11px; font-weight: 750; }
+.app-shell.app-shell--admin .al-toolbar__controls { display: flex; align-items: stretch; gap: 8px; }
+.app-shell.app-shell--admin .al-toolbar__controls input { flex: 1 1 auto; min-width: 0; }
+.app-shell.app-shell--admin .al-toolbar input,
+.app-shell.app-shell--admin .al-toolbar select {
+  height: 41px;
+  border: 1px solid #454a60;
+  border-radius: 10px;
+  background: #131723;
+  padding: 0 13px;
+  color: #f9f9fd;
+  font-size: 13px;
+}
+.app-shell.app-shell--admin .al-toolbar input::placeholder { color: #9098aa; }
+.app-shell.app-shell--admin .al-toolbar .btn { flex-shrink: 0; min-height: 41px; border-radius: 10px; }
+.app-shell.app-shell--admin .al-toolbar__clear { padding-bottom: 1px; }
+/* Split status filters into clear separate control groups. */
+.app-shell.app-shell--admin .al-filters {
+  display: grid;
+  gap: 13px;
+  padding: 15px 18px;
+  border: 1px solid var(--al-line);
+  border-radius: 15px;
+  background: var(--al-panel);
+}
+.app-shell.app-shell--admin .al-filters__group { display: flex; align-items: start; gap: 15px; min-width: 0; }
+.app-shell.app-shell--admin .al-filters__label { flex: 0 0 103px; padding-top: 11px; font-size: 11px; color: #adb7c9; font-weight: 800; }
+.app-shell.app-shell--admin .al-filters__items { display: flex; flex-wrap: wrap; gap: 7px; min-width: 0; }
+.app-shell.app-shell--admin .al-filter {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+  justify-content: center;
+  min-height: 36px;
+  padding: 7px 11px;
+  border: 1px solid #41465b;
+  border-radius: 9px;
+  color: #c1cada;
+  background: #242838;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: border-color .15s, background .15s;
+}
+.app-shell.app-shell--admin .al-filter:hover { background: #2e3447; border-color: #6b7890; }
+.app-shell.app-shell--admin .al-filter.is-active { color: #111521; border-color: var(--al-blue); background: var(--al-blue); }
+.app-shell.app-shell--admin .al-filter__count { display: inline-block; min-width: 21px; padding: 3px 5px; border-radius: 6px; background: rgba(255,255,255,.12); color: inherit; font-size: 11px; font-variant-numeric: tabular-nums; }
+.app-shell.app-shell--admin .al-filter.is-active .al-filter__count { background: rgba(8,35,63,.14); }
+/* Queue + selected listing workspace */
+.app-shell.app-shell--admin .al-split {
+  grid-template-columns: minmax(355px, .82fr) minmax(0, 1.7fr);
+  gap: 17px;
+  align-items: start;
+}
+.app-shell.app-shell--admin .al-queue-panel {
+  padding: 16px;
+  border-radius: 17px;
+  min-width: 0;
+  background: var(--al-panel);
+}
+.app-shell.app-shell--admin .al-queue-panel__head {
+  display: flex;
+  justify-content: space-between;
+  align-items: start;
+  gap: 8px;
+  padding: 2px 3px 14px;
+}
+.app-shell.app-shell--admin .al-queue-panel__head h2 { font-size: 18px; margin: 0 0 5px; letter-spacing: -.025em; color: var(--al-ink); }
+.app-shell.app-shell--admin .al-queue-panel__head p { margin: 0; font-size: 12px; color: var(--al-subtle); line-height: 1.5; }
+.app-shell.app-shell--admin .al-queue-panel__icon { display: grid; place-items: center; flex: 0 0 32px; height: 32px; border-radius: 10px; background: #2d354b; color: #87bfff; }
+.app-shell.app-shell--admin .al-queue-list { gap: 9px; }
+.app-shell.app-shell--admin .al-queue-item.queue-item {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 12px;
+  width: 100%;
+  min-width: 0;
+  padding: 14px;
+  border-radius: 12px;
+  border: 1px solid #3a4155;
+  background: #232736;
+  text-align: left;
+}
+.app-shell.app-shell--admin .al-queue-item.queue-item.is-active {
+  background: #29344a;
+  border-color: var(--al-blue);
+  box-shadow: inset 3px 0 var(--al-blue), 0 6px 18px rgba(0,0,0,.14);
+}
+.app-shell.app-shell--admin .al-queue-item__top { display: flex; align-items: start; gap: 12px; min-width: 0; }
+.app-shell.app-shell--admin .al-queue-item .shot { flex: 0 0 45px; width: 45px; height: 45px; border-radius: 11px; background: #35425a; color: #98c6fb; }
+.app-shell.app-shell--admin .al-queue-item__copy { min-width: 0; flex: 1; }
+.app-shell.app-shell--admin .al-queue-item__id { display: block; margin-bottom: 5px; color: #8e9ab0; font-size: 10px; font-weight: 850; letter-spacing: .06em; }
+.app-shell.app-shell--admin .al-queue-item h4 { font-size: 14px; line-height: 1.4; overflow-wrap: anywhere; color: var(--al-ink); }
+.app-shell.app-shell--admin .al-queue-item p { font-size: 11.5px; line-height: 1.55; overflow-wrap: anywhere; }
+.app-shell.app-shell--admin .al-queue-item__footer { display: flex; align-items: flex-end; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.app-shell.app-shell--admin .al-queue-item__statuses { display: grid; gap: 7px; }
+.app-shell.app-shell--admin .al-queue-item__status { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.app-shell.app-shell--admin .al-queue-item__status-label { width: 65px; font-size: 10.5px; color: #aab5c8; font-weight: 750; }
+.app-shell.app-shell--admin .al-queue-item__extra { display: flex; align-items: center; justify-content: flex-end; gap: 6px; flex-wrap: wrap; }
+.app-shell.app-shell--admin .al-queue-item__arrow { display: grid; place-items: center; color: #9cb8da; }
+.app-shell.app-shell--admin .al-detail-panel { min-width: 0; }
+.app-shell.app-shell--admin .al-detail-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+  padding: 12px 15px;
+  background: #1d202e;
+  border: 1px solid var(--al-line);
+  border-radius: 13px;
+}
+.app-shell.app-shell--admin .al-detail-toolbar__title { display: flex; align-items: center; gap: 8px; color: var(--al-ink); font-size: 13px; font-weight: 750; }
+.app-shell.app-shell--admin .al-detail-toolbar__title .ms { color: #78b8ff; }
+.app-shell.app-shell--admin .al-pager { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; padding-top: 14px; border-top: 1px solid #373c50; }
+.app-shell.app-shell--admin .al-pager__info { font-size: 11px; color: #acb2c3; }
+.app-shell.app-shell--admin .al-pager__actions { display: flex; gap: 8px; }
+/* Agent change cards share the same visual vocabulary; no workflow changes. */
+.app-shell.app-shell--admin .al-agent-changes { min-width: 0; }
+.app-shell.app-shell--admin .al-agent-header { display: flex; justify-content: space-between; align-items: start; gap: 18px; flex-wrap: wrap; padding: 18px 20px; border: 1px solid var(--al-line); border-radius: 15px; background: var(--al-panel); }
+.app-shell.app-shell--admin .al-agent-header .title { font-size: 19px; color: var(--al-ink); }
+.app-shell.app-shell--admin .al-agent-header .body { max-width: 680px; font-size: 12.5px; line-height: 1.65; }
+.app-shell.app-shell--admin .al-agent-filters { gap: 7px; flex-wrap: wrap; }
+.app-shell.app-shell--admin .al-agent-filters .btn { border-radius: 9px; }
+.app-shell.app-shell--admin .al-agent-card { border: 1px solid var(--al-line); border-radius: 15px; background: var(--al-panel); }
+.app-shell.app-shell--admin .al-agent-card .title { font-size: 17px; color: var(--al-ink); }
+.app-shell.app-shell--admin .al-agent-card input { background: #131723; border: 1px solid #454a60; border-radius: 9px; min-height: 41px; padding: 0 12px; color: #fff; }
+/* Prevent a narrow embedded verification detail from becoming three squashed columns. */
+@media (max-width: 1480px) {
+  .app-shell.app-shell--admin .al-summary { grid-template-columns: 1fr; }
+  .app-shell.app-shell--admin .al-split { grid-template-columns: 1fr; }
+  .app-shell.app-shell--admin .al-queue-list { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); }
+}
+@media (max-width: 900px) {
+  .app-shell.app-shell--admin .al-summary__stats { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .app-shell.app-shell--admin .al-workflows { grid-template-columns: 1fr; }
+  .app-shell.app-shell--admin .al-queue-list { grid-template-columns: 1fr; }
+  .app-shell.app-shell--admin .al-filters__group { display: block; }
+  .app-shell.app-shell--admin .al-filters__label { display: block; padding-top: 0; margin-bottom: 9px; }
+}
+@media (max-width: 540px) {
+  .app-shell.app-shell--admin .al-summary { padding: 16px; }
+  .app-shell.app-shell--admin .al-summary__stats { gap: 7px; }
+  .app-shell.app-shell--admin .al-stat { padding: 12px 10px; }
+  .app-shell.app-shell--admin .al-toolbar { padding: 13px; }
+  .app-shell.app-shell--admin .al-toolbar__controls { flex-wrap: wrap; }
+  .app-shell.app-shell--admin .al-toolbar__controls input { flex-basis: 100%; }
+  .app-shell.app-shell--admin .al-queue-panel { padding: 12px; }
+  .app-shell.app-shell--admin .al-queue-item__footer { display: block; }
+  .app-shell.app-shell--admin .al-queue-item__extra { justify-content: start; margin-top: 10px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .app-shell.app-shell--admin .admin-listings * { transition-duration: 0s !important; }
+}

@@ -12,7 +12,10 @@ abstract class RecommendationSearchRepository {
   /// instead of silently returning the wrong slice.
   Future<RecommendationSearchPage> search(RecommendationSearchRequest request);
 
-  /// Filter vocabulary (states, property types, numeric ranges) read from the
-  /// catalogue, so an option can never match zero listings.
-  Future<RecommendationFacets> facets();
+  /// Filter vocabulary (states, property types, contextual rental/size
+  /// intervals, counts and relaxations) read from the same eligible catalogue
+  /// the search ranks. With [criteria], the backend applies every other hard
+  /// filter and releases each facet's own constraint (leave-one-out); with no
+  /// criteria it describes the full eligible population.
+  Future<RecommendationFacets> facets({RecommendationSearchRequest? criteria});
 }

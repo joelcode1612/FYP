@@ -101,7 +101,7 @@ def verification_status(
     """The submitter's own verification state, evidence and requested
     corrections. A property never submitted returns ``verification: null``."""
     return PropertyVerificationService(session).status_for_property(
-        property_id, current.user_id, is_admin=_is_admin(current)
+        property_id, current.user_id, is_admin=_is_admin(current), role=current.role
     )
 
 
@@ -135,11 +135,23 @@ def submit_for_verification(
     acknowledgement = bool(
         payload.acknowledge_unavailable_population if payload is not None else False
     )
+    service = PropertyVerificationService(session)
+    # Ownership FIRST: the enrichment probe must never reveal another
+    # account's enrichment progress (running categories, population gaps).
+    # The record-level check decides access; only a caller entitled to manage
+    # this listing ever reaches the guard below.
+    service.get_property_owned(
+        property_id,
+        current.user_id,
+        is_admin=_is_admin(current),
+        role=current.role,
+    )
     _guard_enrichment_before_submit(session, property_id, acknowledgement)
-    return PropertyVerificationService(session).submit(
+    return service.submit(
         property_id,
         current.user_id,
         scope=payload.scope if payload is not None else "full",
+        role=current.role,
     )
 
 
@@ -214,6 +226,7 @@ async def upload_document(
             file.filename or "",
             file.content_type or "",
             data,
+            role=current.role,
         )
     except DocumentRejected as exc:
         raise HTTPException(status_code=413 if exc.oversized else 422, detail=str(exc))

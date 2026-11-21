@@ -178,6 +178,9 @@ internal class ArCoreSessionController(
     /** `auto` or `fixed`, as granted when the session was configured. */
     private var focusModeName = "fixed"
 
+    /** The plane-finding mode configured for this live AR session. */
+    private var planeDetectionEnabled = true
+
     /** The camera ARCore picked, read once; reported on the first pose event. */
     private var cameraConfigRead = false
     private var cameraConfigReported = false
@@ -251,6 +254,7 @@ internal class ArCoreSessionController(
                 } else {
                     Config.PlaneFindingMode.DISABLED
                 }
+                planeDetectionEnabled = withPlanes
                 // **Autofocus, not the default.** ARCore's default focus mode is
                 // FIXED, which parks the lens near its hyperfocal distance: a
                 // subject at the distance this app captures from — arm's length,
@@ -505,6 +509,31 @@ internal class ArCoreSessionController(
         }
     }
 
+    fun setPlaneDetection(enabled: Boolean, onDone: (ArOutcome) -> Unit) = post {
+        val s = session
+        if (s == null) {
+            onDone(ArOutcome(errorCode = "no_session", errorMessage = "No AR session is running."))
+            return@post
+        }
+        if (planeDetectionEnabled == enabled) {
+            onDone(ArOutcome(value = mapOf("planes" to enabled)))
+            return@post
+        }
+        try {
+            val config = s.config
+            config.planeFindingMode = if (enabled) {
+                Config.PlaneFindingMode.HORIZONTAL_AND_VERTICAL
+            } else {
+                Config.PlaneFindingMode.DISABLED
+            }
+            s.configure(config)
+            planeDetectionEnabled = enabled
+            onDone(ArOutcome(value = mapOf("planes" to enabled)))
+        } catch (e: Exception) {
+            onDone(ArOutcome(errorCode = "configure_failed", errorMessage = "$e"))
+        }
+    }
+
     fun setMesh(id: String, positions: FloatArray, colors: FloatArray) = post {
         renderer.setMesh(id, positions, colors)
     }
@@ -663,6 +692,7 @@ internal class ArCoreSessionController(
             val config = s.config
             config.planeFindingMode = Config.PlaneFindingMode.HORIZONTAL_AND_VERTICAL
             s.configure(config)
+            planeDetectionEnabled = true
             pendingDisplayGeometry = true
             lastRenderFailure = null
             onDone(ArOutcome(value = mapOf("planes" to true)))
@@ -1535,7 +1565,7 @@ internal class ArCoreSessionController(
      */
     private fun capabilitiesMap(): Map<String, Any?> = mapOf(
         "textureId" to textureId,
-        "planes" to true,
+        "planes" to planeDetectionEnabled,
         "anchors" to true,
         "cameraImage" to true,
         // Stated as false rather than omitted: the capture module shows this, and

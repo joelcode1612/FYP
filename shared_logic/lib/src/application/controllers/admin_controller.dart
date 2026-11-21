@@ -4,7 +4,7 @@ import '../../domain/entities/property_verification.dart';
 import '../../domain/entities/user.dart';
 import '../../domain/entities/virtual_tour.dart';
 import '../../domain/repositories/admin_repositories.dart';
-import '../../core/network/api_client.dart';
+import '../../core/errors/app_failure.dart';
 import '../services/property_service.dart';
 import '../services/property_verification_service.dart';
 import '../services/tour_service.dart';

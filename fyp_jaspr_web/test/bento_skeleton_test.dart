@@ -1,5 +1,5 @@
 import 'package:jaspr_test/jaspr_test.dart';
-import 'package:sitewise_jaspr_web/components/ui.dart';
+import 'package:sitewise_jaspr_web/shared/presentation/components/ui.dart';
 
 /// Structure test for [BentoSkeleton]: it must mirror the loaded bento
 /// geometry — head, 4 KPI tiles, hero + wide + 3 cards — so the swap from

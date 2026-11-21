@@ -1,4 +1,6 @@
-import 'package:shared_logic/shared_logic.dart';
+import '../../domain/entities/commercial_property.dart';
+import '../../domain/repositories/admin_repositories.dart';
+import '../../domain/usecases/verification_usecases.dart';
 
 class VerificationService {
   final VerificationRepository repo;

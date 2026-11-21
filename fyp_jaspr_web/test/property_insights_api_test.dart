@@ -3,9 +3,9 @@ import 'dart:io';
 
 import 'package:jaspr/dom.dart';
 import 'package:jaspr_test/jaspr_test.dart';
-import 'package:sitewise_jaspr_web/components/property_detail/location_fit_score.dart';
-import 'package:sitewise_jaspr_web/components/property_detail/shap_contribution_chart.dart';
-import 'package:sitewise_jaspr_web/data/property_insights_api.dart';
+import 'package:sitewise_jaspr_web/features/listing/presentation/components/property_detail/compact_location_explanation.dart';
+import 'package:sitewise_jaspr_web/features/listing/presentation/components/property_detail/location_fit_score.dart';
+import 'package:sitewise_jaspr_web/features/listing/data/property_insights_api.dart';
 
 void main() {
   test('keeps a valid PU score when SHAP is unavailable and preserves provenance', () {
@@ -113,21 +113,15 @@ void main() {
     });
     tester.pumpComponent(div([
       LocationFitScore(insights: insights),
-      ShapContributionChart(
-        insights: insights,
-        showAll: false,
-        showTechnical: false,
-        onToggleAll: () {},
-        onToggleTechnical: () {},
-      ),
+      CompactLocationExplanation(insights: insights),
     ]));
 
     expect(find.text('98'), findsOneComponent);
     // The entrepreneur-facing copy is deliberately plain-language: the model
     // provenance stays in the parsed payload (asserted in the data test above)
     // rather than being printed in the score card. Assert the copy actually
-    // rendered by LocationFitScore + ShapContributionChart.
-    expect(find.text('What affects this location score?'), findsOneComponent);
+    // rendered by LocationFitScore + CompactLocationExplanation.
+    expect(find.text('Why this area received its score'), findsOneComponent);
     expect(find.text('The PU score is available, but SHAP could not be computed.'), findsOneComponent);
   });
 
@@ -160,18 +154,19 @@ void main() {
     tester.pumpComponent(LocationFitScore(insights: insights));
     expect(find.text('98'), findsOneComponent);
     // Provenance (model/version/artifact/SHA) is verified on the parsed payload
-    // above; the public score card now shows only plain-language interpretation
-    // and the research-only caveat.
+    // above; the public score card shows only plain-language interpretation and
+    // a demoted audit line. The backend's band sentence IS the explanation —
+    // the static fallback must not duplicate it next to a non-empty band.
     expect(
       find.text('This location has many characteristics that may suit an F&B business.'),
       findsOneComponent,
     );
     expect(
       find.text(
-        'This score compares the area with places where food businesses operate. '
-        'It does not predict sales or guarantee success.',
+        'This area has several characteristics similar to locations where '
+        'food businesses already operate.',
       ),
-      findsOneComponent,
+      findsNothing,
     );
   });
 

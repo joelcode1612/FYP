@@ -1,38 +1,39 @@
 import 'package:flutter/material.dart';
 
-import 'auth_route_guard.dart';
-import '../../features/assessment/view/home_screen.dart';
-import '../../features/assessment/view/assessment_draft_loader.dart';
-import '../../features/assessment/view/questionnaire_screen.dart';
-import '../../features/assessment/view/review_screen.dart';
-import '../../presentation/mobile/auth/pages/forgot_password_mobile_page.dart';
-import '../../presentation/mobile/auth/pages/mobile_auth_page.dart';
-import '../../presentation/mobile/auth/pages/signup_mobile_page.dart';
-import '../../presentation/mobile/auth/widgets/auth_tabs.dart';
-import '../../presentation/mobile/onboarding/pages/onboarding_flow_page.dart';
-import '../../presentation/mobile/start/app_start_gate.dart';
-import '../../presentation/mobile/shell/entrepreneur_tab_host.dart';
-import '../../presentation/mobile/entrepreneur/pages/entrepreneur_assessment_questions_mobile_page.dart';
-import '../../presentation/mobile/entrepreneur/pages/entrepreneur_assessment_summary_mobile_page.dart';
-import '../../presentation/mobile/entrepreneur/pages/entrepreneur_ai_recommendations_mobile_page.dart';
-import '../../presentation/mobile/entrepreneur/pages/entrepreneur_compare_mobile_page.dart';
-import '../../presentation/mobile/entrepreneur/pages/entrepreneur_evidence_mobile_page.dart';
-import '../../presentation/mobile/landing/pages/landing_mobile_page.dart';
-import '../../presentation/mobile/entrepreneur/pages/entrepreneur_preferences_mobile_page.dart';
-import '../../presentation/mobile/entrepreneur/pages/entrepreneur_property_detail_mobile_page.dart';
-import '../../presentation/mobile/entrepreneur/pages/entrepreneur_explore_mobile_page.dart';
-import '../../presentation/mobile/entrepreneur/pages/entrepreneur_report_mobile_page.dart';
-import '../../presentation/mobile/entrepreneur/pages/entrepreneur_saved_mobile_page.dart';
-import '../../presentation/mobile/entrepreneur/pages/entrepreneur_tour_mobile_page.dart';
-import '../../presentation/mobile/entrepreneur/pages/sitewise_add_property_mobile_page.dart';
-import '../../presentation/mobile/provider/pages/provider_mfa_mobile_page.dart';
-import '../../presentation/mobile/provider/pages/provider_property_detail_mobile_page.dart';
-import '../../presentation/mobile/provider/pages/provider_verification_mobile_page.dart';
-import '../../presentation/mobile/provider/pages/property_management_moved_page.dart';
-import '../../presentation/mobile/provider/shell/provider_tab_host.dart';
-import '../../presentation/shared/pages/not_found_mobile_page.dart';
-import '../../presentation/shared/tour/ar_capture_mobile_page.dart';
-import '../../presentation/shared/tour/tour_preview_mobile_page.dart';
+import 'package:fyp/core/routing/auth_route_guard.dart';
+import 'package:fyp/features/assessment/presentation/home_screen.dart';
+import 'package:fyp/features/assessment/presentation/assessment_draft_loader.dart';
+import 'package:fyp/features/assessment/presentation/questionnaire_screen.dart';
+import 'package:fyp/features/assessment/presentation/review_screen.dart';
+import 'package:fyp/features/authentication/presentation/pages/forgot_password_mobile_page.dart';
+import 'package:fyp/features/authentication/presentation/pages/mobile_auth_page.dart';
+import 'package:fyp/features/authentication/presentation/pages/signup_mobile_page.dart';
+import 'package:fyp/features/authentication/presentation/widgets/auth_tabs.dart';
+import 'package:fyp/features/onboarding/presentation/pages/onboarding_flow_page.dart';
+import 'package:fyp/core/routing/app_start_gate.dart';
+import 'package:fyp/shared/presentation/layouts/entrepreneur_tab_host.dart';
+import 'package:fyp/features/assessment/presentation/pages/entrepreneur_assessment_questions_mobile_page.dart';
+import 'package:fyp/features/assessment/presentation/pages/entrepreneur_assessment_summary_mobile_page.dart';
+import 'package:fyp/features/recommendations/presentation/pages/entrepreneur_ai_recommendations_mobile_page.dart';
+import 'package:fyp/features/compare/presentation/pages/entrepreneur_compare_mobile_page.dart';
+import 'package:fyp/features/assessment/presentation/pages/entrepreneur_evidence_mobile_page.dart';
+import 'package:fyp/shared/presentation/components/landing_mobile_page.dart';
+import 'package:fyp/features/profile/presentation/pages/entrepreneur_preferences_mobile_page.dart';
+import 'package:fyp/features/listing/presentation/pages/entrepreneur_property_detail_mobile_page.dart';
+import 'package:fyp/features/listing/presentation/pages/entrepreneur_explore_mobile_page.dart';
+import 'package:fyp/features/assessment/presentation/pages/entrepreneur_report_mobile_page.dart';
+import 'package:fyp/features/profile/presentation/pages/entrepreneur_favourites_mobile_page.dart';
+import 'package:fyp/features/panorama_viewer/presentation/pages/entrepreneur_tour_mobile_page.dart';
+import 'package:fyp/features/panorama_viewer/presentation/pages/property_panorama_mobile_page.dart';
+import 'package:fyp/features/property_management/presentation/pages/sitewise_add_property_mobile_page.dart';
+import 'package:fyp/features/authentication/presentation/pages/provider_mfa_mobile_page.dart';
+import 'package:fyp/features/property_management/presentation/pages/provider_property_detail_mobile_page.dart';
+import 'package:fyp/features/property_verification/presentation/pages/provider_verification_mobile_page.dart';
+import 'package:fyp/features/property_management/presentation/pages/property_management_moved_page.dart';
+import 'package:fyp/shared/presentation/layouts/provider_tab_host.dart';
+import 'package:fyp/shared/presentation/components/not_found_mobile_page.dart';
+import 'package:fyp/features/capture_360/presentation/pages/ar_capture_mobile_page.dart';
+import 'package:fyp/features/panorama_viewer/presentation/pages/tour_preview_mobile_page.dart';
 
 /// Centralised route table for the Flutter app (mobile tree only).
 ///
@@ -53,17 +54,21 @@ String parentShellRoute(String route) {
     // Performance is a Dashboard shortcut, not a tab, so Home stays selected.
     '/provider/add-property': '/provider/add-property',
     '/provider/property-detail': '/provider/listings',
+    '/provider/requests': '/provider/requests',
     '/provider/performance': '/provider',
     // Verification is reached from Profile, and MFA is a step of whichever
     // protected staff flow pushed it — both keep Profile selected.
     '/provider/verification': '/provider/profile',
     '/provider/mfa': '/provider/profile',
-    // Detail routes highlight their owning tab in the five-tab model.
+    // Detail routes highlight their owning tab in the five-tab model. The
+    // shortlist and the property-record shortcuts all belong to Favourites,
+    // which is what the retired `/entrepreneur/spaces` tab became.
     '/entrepreneur/preferences': '/entrepreneur/profile',
-    '/entrepreneur/saved': '/entrepreneur/spaces',
-    '/entrepreneur/add-property': '/entrepreneur/spaces',
-    '/owner/capture': '/entrepreneur/spaces',
-    '/entrepreneur/compare': '/entrepreneur/spaces',
+    '/entrepreneur/saved': '/entrepreneur/favourites',
+    '/entrepreneur/spaces': '/entrepreneur/favourites',
+    '/entrepreneur/add-property': '/entrepreneur/favourites',
+    '/owner/capture': '/entrepreneur/favourites',
+    '/entrepreneur/compare': '/entrepreneur/favourites',
     // Discovery is the Recommendations tab. Every retired discovery route
     // (Explore, property detail, tour) highlights it, and the legacy
     // `/entrepreneur/explore` path maps onto it so an old link never lands on
@@ -71,6 +76,7 @@ String parentShellRoute(String route) {
     '/entrepreneur/explore': '/entrepreneur/recommendations',
     '/entrepreneur/property-detail': '/entrepreneur/recommendations',
     '/entrepreneur/tour': '/entrepreneur/recommendations',
+    '/entrepreneur/panorama': '/entrepreneur/recommendations',
     '/entrepreneur/report': '/entrepreneur/assess',
     // The Option A assessment flow keeps the Assess tab highlighted.
     '/entrepreneur/assessment-setup': '/entrepreneur/assess',
@@ -162,25 +168,32 @@ abstract final class AppRoutes {
         RouteAccess.workspace,
         () => const ProviderTabHost(initialRoute: '/provider/listings'),
       ),
+      '/provider/requests' => (
+        RouteAccess.workspace,
+        () => const ProviderTabHost(initialRoute: '/provider/requests'),
+      ),
       '/provider/profile' => (
         RouteAccess.workspace,
         () => const ProviderTabHost(initialRoute: '/provider/profile'),
-      ),
-      '/provider/enquiries' => (
-        RouteAccess.workspace,
-        () => const ProviderTabHost(initialRoute: '/provider/enquiries'),
       ),
       '/provider/performance' => (
         RouteAccess.workspace,
         () => const ProviderTabHost(initialRoute: '/provider/performance'),
       ),
-      // Agent dock's Schedule tab. SiteWise records no viewings or
-      // appointments yet, so the page renders the workspace's honest empty
-      // state rather than an invented calendar.
-      '/provider/schedule' => (
+      // The Agent task queue — the third destination of the agent dock, built
+      // from the assignments and verification records this agent actually
+      // holds. `ProviderTabHost` resolves a non-agent here to the dashboard:
+      // the projection behind it is the agent's assignment view, so there is
+      // nothing honest to show another role.
+      '/provider/tasks' => (
         RouteAccess.workspace,
-        () => const ProviderTabHost(initialRoute: '/provider/schedule'),
+        () => const ProviderTabHost(initialRoute: '/provider/tasks'),
       ),
+      // `/provider/enquiries` and `/provider/schedule` are deliberately NOT
+      // registered: the Enquiries and Schedule screens were removed from the
+      // mobile Provider workspace, and an old deep link falls through to the
+      // catch-all not-found page below instead of resurrecting a removed
+      // screen. The backend enquiry endpoints and records are untouched.
       // Account-level provider verification. Distinct from per-listing
       // verification: this is the provider's own standing with SiteWise, and
       // the screen renders the real server status rather than a placeholder.
@@ -200,8 +213,11 @@ abstract final class AppRoutes {
               : null,
         ),
       ),
-      // The Add Property flow is shared with the previous owner experience —
-      // same draft, photo, enrichment and submission endpoints.
+      // The single Add Property form for BOTH provider roles — same screen,
+      // fields, validation and endpoints, and the same draft, photo,
+      // enrichment and submission flow the owner experience already used.
+      // Ownership vs. agent assignment is decided by the backend from the
+      // verified token, so no per-role create route exists.
       '/provider/add-property' => (
         RouteAccess.workspace,
         () => SitewiseAddPropertyMobilePage(
@@ -220,14 +236,22 @@ abstract final class AppRoutes {
         RouteAccess.workspace,
         () => const EntrepreneurTabHost(initialRoute: '/entrepreneur'),
       ),
-      // Material 3 five-tab workspace: Assess and Spaces.
+      // Material 3 five-tab workspace: Assess and Favourites.
       '/entrepreneur/assess' => (
         RouteAccess.workspace,
         () => const EntrepreneurTabHost(initialRoute: '/entrepreneur/assess'),
       ),
+      '/entrepreneur/favourites' => (
+        RouteAccess.workspace,
+        () =>
+            const EntrepreneurTabHost(initialRoute: '/entrepreneur/favourites'),
+      ),
+      // Retired tab path: it opens the tab that replaced it, so an old deep
+      // link lands on Favourites instead of the not-found page.
       '/entrepreneur/spaces' => (
         RouteAccess.workspace,
-        () => const EntrepreneurTabHost(initialRoute: '/entrepreneur/spaces'),
+        () =>
+            const EntrepreneurTabHost(initialRoute: '/entrepreneur/favourites'),
       ),
       '/entrepreneur/add-property' => (
         RouteAccess.workspace,
@@ -272,6 +296,22 @@ abstract final class AppRoutes {
           propertyId: settings.arguments as String? ?? '',
         ),
       ),
+      // Immersive 360° viewer for a server-verified catalogue panorama.
+      // arguments: {'url': <ready panorama URL>, 'title': <property title>}.
+      '/entrepreneur/panorama' => (
+        RouteAccess.workspace,
+        () {
+          final args = settings.arguments;
+          final url = args is Map
+              ? '${args['url'] ?? ''}'
+              : '${args ?? ''}';
+          final title = args is Map ? '${args['title'] ?? ''}' : '';
+          return PropertyPanoramaMobilePage(
+            panoramaUrl: url,
+            propertyTitle: title,
+          );
+        },
+      ),
       '/entrepreneur/recommendations' => (
         RouteAccess.workspace,
         () => EntrepreneurTabHost(
@@ -289,9 +329,12 @@ abstract final class AppRoutes {
         RouteAccess.workspace,
         () => const EntrepreneurCompareMobilePage(),
       ),
+      // Old shortlist path. It renders the Favourites tab's own screen rather
+      // than a second list implementation, so there is exactly one saved
+      // property list in the app.
       '/entrepreneur/saved' => (
         RouteAccess.workspace,
-        () => const EntrepreneurSavedMobilePage(),
+        () => const EntrepreneurFavouritesMobilePage(),
       ),
       '/entrepreneur/report' => (
         RouteAccess.workspace,

@@ -1,4 +1,4 @@
-import 'package:flutter_test/flutter_test.dart';
+import 'package:test/test.dart';
 // The barrel hides the staff `LocationAnalysis` (the entrepreneur one is the
 // exported name); the staff report types come in through this direct import.
 import 'package:shared_logic/src/domain/entities/property_verification.dart'

@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_logic/shared_logic.dart';
-import '../config/dev_auth_bypass.dart';
-import '../../presentation/mobile/start/auth_blocking_views.dart';
-import 'mobile_role.dart';
+import 'package:fyp/core/config/dev_auth_bypass.dart';
+import 'package:fyp/features/authentication/presentation/widgets/auth_blocking_views.dart';
+import 'package:fyp/core/routing/mobile_role.dart';
 
 /// How a route was reached before the user had a session.
 ///
@@ -52,10 +52,11 @@ class AuthPendingDestination {
 /// existing in-workspace gate pushes `/provider/mfa` with NO arguments and
 /// keeps the old `pop(true)` + reload behaviour unchanged.
 class MfaEntryRequest {
-  const MfaEntryRequest({required this.destination});
+  const MfaEntryRequest({required this.destination, this.destinationArguments});
 
-  /// Dashboard route to open once Supabase has issued the elevated session.
+  /// Provider route to open once Supabase has issued an `aal2` session.
   final String destination;
+  final Object? destinationArguments;
 }
 
 /// The single post-authentication navigation decision, shared by email/password
@@ -154,6 +155,24 @@ class _AuthGuardState extends ConsumerState<AuthGuard> {
     });
   }
 
+  /// Block a direct Provider deep link until genuine Owner / Agent TOTP
+  /// verification. `/provider/mfa` itself remains accessible at `aal1`.
+  void _redirectToMfa(String destination, Object? arguments) {
+    if (_redirecting) return;
+    _redirecting = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      Navigator.of(context).pushNamedAndRemoveUntil(
+        '/provider/mfa',
+        (_) => false,
+        arguments: MfaEntryRequest(
+          destination: destination,
+          destinationArguments: arguments,
+        ),
+      );
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     // Development Demo Mode (debug builds only, opt-in via
@@ -184,6 +203,21 @@ class _AuthGuardState extends ConsumerState<AuthGuard> {
         if (requestedRoute != null &&
             !canEnterMobileRoute(role, requestedRoute)) {
           return WorkspaceMismatchView(role: role);
+        }
+        // Cold-start restoration is not the only way to enter a Provider
+        // route. Require real MFA on every deep link or manual push as well.
+        // The backend separately verifies `aal2` on privileged API requests.
+        final user = state.user;
+        if (user != null &&
+            requiresStaffMfa(user) &&
+            requestedRoute != null &&
+            requestedRoute != '/provider/mfa' &&
+            mobileWorkspaceForRoute(requestedRoute) == '/provider') {
+          _redirectToMfa(
+            requestedRoute,
+            ModalRoute.of(context)?.settings.arguments,
+          );
+          return const _AuthPendingView();
         }
         return widget.builder(context);
       case AuthStatus.accountInactive:

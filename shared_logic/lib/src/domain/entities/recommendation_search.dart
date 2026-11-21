@@ -1,3 +1,14 @@
+
+// ## Wire-decoding compatibility boundary
+//
+// The `fromJson` factories in this library are retained for public API
+// compatibility: `fyp_mobile_app` and `fyp_jaspr_web` call some of them
+// directly, and removing them would require coordinated edits in both apps
+// (outside this package's scope). New transport code must decode through
+// the data-layer mappers (`src/data/mappers/`), which are the authoritative
+// entry points for backend payloads. These factories contain no business
+// rules — they only decode the wire shape, with field names preserved.
+
 import 'commercial_property.dart';
 import 'recommendation.dart';
 
@@ -175,84 +186,6 @@ class ListingManagement {
 }
 
 /// One ranked listing: the shared property entity plus its verdict.
-/// One category's conditional resemblance score (0–1) from the Stage-2 model.
-class CategoryResemblance {
-  final String businessType;
-  final double score;
-  final int rank;
-
-  const CategoryResemblance({
-    required this.businessType,
-    required this.score,
-    required this.rank,
-  });
-
-  factory CategoryResemblance.fromJson(Map<String, dynamic> json) =>
-      CategoryResemblance(
-        businessType: '${json['business_type'] ?? ''}',
-        score: (json['score'] as num?)?.toDouble() ?? 0,
-        rank: (json['rank'] as num?)?.toInt() ?? 0,
-      );
-}
-
-/// Stage-2 evidence attached to one ranked property.
-///
-/// The score is a conditional resemblance among four observed F&B categories
-/// — never a success probability, and never blended into the PU score or the
-/// preference fit.
-class CategoryEvidence {
-  final bool available;
-  final String? modelVersion;
-  final List<CategoryResemblance> rankings;
-  final String? topCategory;
-  final double? topScore;
-
-  /// The selected business type's own position, when the search carried one.
-  final CategoryResemblance? selectedCategory;
-  final String? reliability;
-  final String? note;
-  final String? reason;
-
-  const CategoryEvidence({
-    required this.available,
-    this.modelVersion,
-    this.rankings = const [],
-    this.topCategory,
-    this.topScore,
-    this.selectedCategory,
-    this.reliability,
-    this.note,
-    this.reason,
-  });
-
-  factory CategoryEvidence.fromJson(Map<String, dynamic> json) {
-    final selected = json['selected_category'];
-    return CategoryEvidence(
-      available: json['available'] == true,
-      modelVersion: json['model_version']?.toString(),
-      rankings: [
-        for (final r in (json['rankings'] as List? ?? const []))
-          if (r is Map<String, dynamic>) CategoryResemblance.fromJson(r),
-      ],
-      topCategory: json['top_category']?.toString(),
-      topScore: (json['top_score'] as num?)?.toDouble(),
-      selectedCategory: selected is Map<String, dynamic>
-          ? CategoryResemblance(
-              businessType: '${selected['business_type'] ?? ''}',
-              score: (selected['score'] as num?)?.toDouble() ?? 0,
-              rank: (selected['rank'] as num?)?.toInt() ?? 0,
-            )
-          : null,
-      reliability: json['reliability']?.toString(),
-      note: json['note']?.toString(),
-      reason: json['reason']?.toString(),
-    );
-  }
-
-  /// True when the backend flags weak discrimination (research-only model).
-  bool get isWeak => (reliability ?? '').contains('weak');
-}
-
 class RankedProperty {
   final CommercialProperty property;
   final String source;
@@ -278,10 +211,17 @@ class RankedProperty {
   /// The model version behind [puScore] when it was computed live.
   final String? puModelVersion;
 
-  /// Stage-2 business-type resemblance, when the two-stage research variant
-  /// produced it. Deliberately separate from [puScore] and from the
-  /// requirement-fit fields: three scores, three meanings.
-  final CategoryEvidence? category;
+  /// Server-verified 360° panorama for this catalogue property. The URL is
+  /// non-null ONLY when the backend resolved a completed stitching job
+  /// through a verified subject link (`status == 'ready'`); `processing` and
+  /// `unavailable` never carry a URL. Ordinary wide photos are never
+  /// promoted to panoramas.
+  final String? panoramaUrl;
+  final String? panoramaStatus;
+
+  /// Verified research characteristics returned for this row. Absent keys
+  /// mean "not measured", never zero; the UI must say unavailable.
+  final Map<String, dynamic> characteristics;
 
   const RankedProperty({
     required this.property,
@@ -294,15 +234,40 @@ class RankedProperty {
     this.puAvailable,
     this.puScoreSource,
     this.puModelVersion,
-    this.category,
+    this.panoramaUrl,
+    this.panoramaStatus,
+    this.characteristics = const {},
   });
 
   String get id => property.id;
+
+  /// City / District: the address prefix, because the catalogue city column
+  /// is empty for every research row.
+  String get district => property.address.split(',').first.trim();
+
+  /// True when an immersive 360° view can actually be opened.
+  bool get hasPanorama => panoramaUrl != null && panoramaUrl!.isNotEmpty;
 
   factory RankedProperty.fromJson(Map<String, dynamic> json) {
     final research = json['research'] as Map<String, dynamic>? ?? const {};
     final suitability = (research['catalog_suitability_score'] as num?)
         ?.toDouble();
+    final rawPhotos = json['photos'];
+    final photoUrls = <String>[
+      if (rawPhotos is List)
+        for (final photo in rawPhotos)
+          if (photo is String && photo.trim().isNotEmpty) photo.trim(),
+    ];
+    final panorama = json['panorama'] is Map<String, dynamic>
+        ? json['panorama'] as Map<String, dynamic>
+        : const <String, dynamic>{};
+    final panoramaStatus = panorama['status']?.toString();
+    final rawPanoUrl = panorama['url']?.toString().trim() ?? '';
+    final panoramaUrl = panorama['available'] == true &&
+            panoramaStatus == 'ready' &&
+            rawPanoUrl.isNotEmpty
+        ? rawPanoUrl
+        : null;
     return RankedProperty(
       management: ListingManagement.fromJson(
         json['management'] is Map<String, dynamic>
@@ -317,17 +282,21 @@ class RankedProperty {
       puAvailable: research['pu_available'] as bool?,
       puScoreSource: research['pu_score_source']?.toString(),
       puModelVersion: research['pu_model_version']?.toString(),
-      category: json['category'] is Map<String, dynamic>
-          ? CategoryEvidence.fromJson(json['category'] as Map<String, dynamic>)
-          : null,
+      panoramaUrl: panoramaUrl,
+      panoramaStatus: panoramaStatus,
+      characteristics: json['characteristics'] is Map<String, dynamic>
+          ? json['characteristics'] as Map<String, dynamic>
+          : const {},
       match: RecommendationMatch.fromJson(
         json['recommendation'] as Map<String, dynamic>? ?? const {},
       ),
-      // The catalogue records no owner, no tour and no owner-verification
-      // state, so those fields are reported empty rather than borrowed from
-      // an unrelated listing. `verification` stays `pending`: a catalogue row
+      // The catalogue records no owner and no owner-verification state, so
+      // those fields are reported empty rather than borrowed from an
+      // unrelated listing. `verification` stays `pending`: a catalogue row
       // has not been verified as an available listing, and the UI must not
-      // imply that it has.
+      // imply that it has. Photos and the panorama ARE reported: the search
+      // response batch-resolves them server-side through the verified
+      // catalogue chain.
       property: CommercialProperty(
         id: json['property_id'] as String? ?? '',
         title: json['title'] as String? ?? '',
@@ -344,8 +313,9 @@ class RankedProperty {
         suitabilityScore: suitability ?? 0,
         hasSuitabilityScore: suitability != null,
         ownerId: '',
-        hasTour: false,
+        hasTour: panoramaUrl != null,
         imageUrl: json['image_url'] as String?,
+        imageUrls: photoUrls,
       ),
     );
   }
@@ -439,6 +409,17 @@ class RecommendationSearchRequest {
   final double? minSizeSqft;
   final double? maxSizeSqft;
   final String? propertyType;
+  final String? city;
+
+  /// Data-supported advanced filters. Every value is a server-verified
+  /// measurement or a documented preference; no client-side guessing.
+  final String? floorLevel;
+  final double? transitMaxM;
+  final double? nearbyParkingMin;
+  final double? fnbCompetitionMax;
+  final String? demandGenerator;
+  final double? populationMin1000m;
+  final double? populationMax1000m;
   final List<String> layoutPreferences;
   final String? query;
   final bool managedOnly;
@@ -461,6 +442,14 @@ class RecommendationSearchRequest {
     this.minSizeSqft,
     this.maxSizeSqft,
     this.propertyType,
+    this.city,
+    this.floorLevel,
+    this.transitMaxM,
+    this.nearbyParkingMin,
+    this.fnbCompetitionMax,
+    this.demandGenerator,
+    this.populationMin1000m,
+    this.populationMax1000m,
     this.layoutPreferences = const [],
     this.query,
     this.managedOnly = false,
@@ -483,9 +472,10 @@ class RecommendationSearchRequest {
     String? cursor,
   }) {
     return RecommendationSearchRequest(
-      businessType: preferences.businessType.isEmpty
-          ? null
-          : preferences.businessType,
+      // Business type is deliberately NOT a recommendation filter: the
+      // general PU model ranks the same eligible set for every F&B operation.
+      // The field exists only for backward-compatible API consumers.
+      businessType: null,
       preferredState: (state ?? preferences.preferredLocation).isEmpty
           ? null
           : (state ?? preferences.preferredLocation),
@@ -512,6 +502,39 @@ class RecommendationSearchRequest {
     );
   }
 
+  /// Reads a request previously serialised by [toJson]. Used when the applied
+  /// search filters travel with a property-detail link, so the comparison on
+  /// that page can show the criteria the entrepreneur actually used — never
+  /// a reconstructed guess from saved preferences.
+  factory RecommendationSearchRequest.fromJson(Map<String, dynamic> json) =>
+      RecommendationSearchRequest(
+        businessType: json['business_type'] as String?,
+        preferredState: json['preferred_state'] as String?,
+        preferredArea: json['preferred_area'] as String?,
+        minRentalRm: (json['min_rental_rm'] as num?)?.toDouble(),
+        maxRentalRm: (json['max_rental_rm'] as num?)?.toDouble(),
+        minSizeSqft: (json['min_size_sqft'] as num?)?.toDouble(),
+        maxSizeSqft: (json['max_size_sqft'] as num?)?.toDouble(),
+        propertyType: json['property_type'] as String?,
+        city: json['city'] as String?,
+        floorLevel: json['floor_level'] as String?,
+        transitMaxM: (json['transit_max_m'] as num?)?.toDouble(),
+        nearbyParkingMin: (json['nearby_parking_min'] as num?)?.toDouble(),
+        fnbCompetitionMax: (json['fnb_competition_max'] as num?)?.toDouble(),
+        demandGenerator: json['demand_generator'] as String?,
+        populationMin1000m: (json['population_min_1000m'] as num?)?.toDouble(),
+        populationMax1000m: (json['population_max_1000m'] as num?)?.toDouble(),
+        layoutPreferences: [
+          for (final value in (json['layout_preferences'] as List? ?? const []))
+            '$value',
+        ],
+        query: json['query'] as String?,
+        managedOnly: json['managed_only'] == true,
+        pageSize: (json['page_size'] as num?)?.toInt() ?? 20,
+        cursor: json['cursor'] as String?,
+        sort: json['sort'] as String?,
+      );
+
   /// True when nothing constrains the search — a plain browse. The UI uses
   /// this to show "browse all properties" instead of an empty-state that
   /// demands preferences the user may not have yet.
@@ -523,6 +546,14 @@ class RecommendationSearchRequest {
       preferredState == null &&
       preferredArea == null &&
       propertyType == null &&
+      city == null &&
+      floorLevel == null &&
+      transitMaxM == null &&
+      nearbyParkingMin == null &&
+      fnbCompetitionMax == null &&
+      demandGenerator == null &&
+      populationMin1000m == null &&
+      populationMax1000m == null &&
       layoutPreferences.isEmpty &&
       !managedOnly &&
       query == null;
@@ -536,6 +567,14 @@ class RecommendationSearchRequest {
     if (minSizeSqft != null) 'min_size_sqft': minSizeSqft,
     if (maxSizeSqft != null) 'max_size_sqft': maxSizeSqft,
     if (propertyType != null) 'property_type': propertyType,
+    if (city != null) 'city': city,
+    if (floorLevel != null) 'floor_level': floorLevel,
+    if (transitMaxM != null) 'transit_max_m': transitMaxM,
+    if (nearbyParkingMin != null) 'nearby_parking_min': nearbyParkingMin,
+    if (fnbCompetitionMax != null) 'fnb_competition_max': fnbCompetitionMax,
+    if (demandGenerator != null) 'demand_generator': demandGenerator,
+    if (populationMin1000m != null) 'population_min_1000m': populationMin1000m,
+    if (populationMax1000m != null) 'population_max_1000m': populationMax1000m,
     if (layoutPreferences.isNotEmpty) 'layout_preferences': layoutPreferences,
     if (query != null) 'query': query,
     'managed_only': managedOnly,
@@ -553,6 +592,14 @@ class RecommendationSearchRequest {
     double? minSizeSqft,
     double? maxSizeSqft,
     String? propertyType,
+    String? city,
+    String? floorLevel,
+    double? transitMaxM,
+    double? nearbyParkingMin,
+    double? fnbCompetitionMax,
+    String? demandGenerator,
+    double? populationMin1000m,
+    double? populationMax1000m,
     List<String>? layoutPreferences,
     String? query,
     int? pageSize,
@@ -563,6 +610,14 @@ class RecommendationSearchRequest {
     bool clearBusinessType = false,
     bool clearState = false,
     bool clearArea = false,
+    bool clearCity = false,
+    bool clearAdvanced = false,
+    bool clearFloorLevel = false,
+    bool clearTransit = false,
+    bool clearParking = false,
+    bool clearCompetition = false,
+    bool clearDemand = false,
+    bool clearPopulation = false,
     bool clearPropertyType = false,
     bool clearQuery = false,
     bool clearRentRange = false,
@@ -580,6 +635,28 @@ class RecommendationSearchRequest {
     propertyType: clearPropertyType
         ? null
         : (propertyType ?? this.propertyType),
+    city: clearCity ? null : (city ?? this.city),
+    floorLevel: clearAdvanced || clearFloorLevel
+        ? null
+        : (floorLevel ?? this.floorLevel),
+    transitMaxM: clearAdvanced || clearTransit
+        ? null
+        : (transitMaxM ?? this.transitMaxM),
+    nearbyParkingMin: clearAdvanced || clearParking
+        ? null
+        : (nearbyParkingMin ?? this.nearbyParkingMin),
+    fnbCompetitionMax: clearAdvanced || clearCompetition
+        ? null
+        : (fnbCompetitionMax ?? this.fnbCompetitionMax),
+    demandGenerator: clearAdvanced || clearDemand
+        ? null
+        : (demandGenerator ?? this.demandGenerator),
+    populationMin1000m: clearAdvanced || clearPopulation
+        ? null
+        : (populationMin1000m ?? this.populationMin1000m),
+    populationMax1000m: clearAdvanced || clearPopulation
+        ? null
+        : (populationMax1000m ?? this.populationMax1000m),
     layoutPreferences: layoutPreferences ?? this.layoutPreferences,
     query: clearQuery ? null : (query ?? this.query),
     pageSize: pageSize ?? this.pageSize,
@@ -590,14 +667,116 @@ class RecommendationSearchRequest {
 }
 
 /// Filter vocabulary and ranges read from the catalogue itself.
+/// One interval generated by the backend from the eligible properties.
+///
+/// Both bounds come from values that actually exist in the scoped catalogue,
+/// so selecting an option sends exactly that minimum and maximum to the
+/// recommendation search. The count is the number of listings inside the
+/// interval, under the other active filters (leave-one-out faceting).
+class FacetRangeOption {
+  final double min;
+  final double max;
+  final String label;
+  final int total;
+
+  /// False for a saved selection whose bounds the backend did not generate.
+  /// It is shown until the entrepreneur changes or clears it — never dropped.
+  final bool generated;
+
+  const FacetRangeOption({
+    required this.min,
+    required this.max,
+    required this.label,
+    this.total = 0,
+    this.generated = true,
+  });
+
+  /// Stable identity for a draft selection, including saved custom ranges.
+  String get key => '$min|$max';
+
+  static FacetRangeOption? fromJson(
+    Object? value, {
+    required String minKey,
+    required String maxKey,
+  }) {
+    if (value is! Map<String, dynamic>) return null;
+    final min = (value[minKey] as num?)?.toDouble();
+    final max = (value[maxKey] as num?)?.toDouble();
+    if (min == null || max == null) return null;
+    return FacetRangeOption(
+      min: min,
+      max: max,
+      label: '${value['label'] ?? ''}',
+      total: (value['total'] as num?)?.toInt() ?? 0,
+      generated: value['generated'] != false,
+    );
+  }
+
+  /// Reads a selection key back into request boundaries. An empty key is
+  /// "Any", so both boundaries are cleared.
+  static ({double? min, double? max}) boundsFromKey(String key) {
+    if (key.isEmpty) return (min: null, max: null);
+    final parts = key.split('|');
+    if (parts.length != 2) return (min: null, max: null);
+    return (min: double.tryParse(parts[0]), max: double.tryParse(parts[1]));
+  }
+}
+
+/// A filter the backend identified as removable to recover matches.
+class FacetRelaxation {
+  final String field;
+  final String label;
+  final int total;
+
+  const FacetRelaxation({
+    required this.field,
+    required this.label,
+    required this.total,
+  });
+
+  static FacetRelaxation? fromJson(Object? value) {
+    if (value is! Map<String, dynamic> || value['field'] == null) return null;
+    return FacetRelaxation(
+      field: '${value['field']}',
+      label: '${value['label'] ?? value['field']}',
+      total: (value['total'] as num?)?.toInt() ?? 0,
+    );
+  }
+}
+
 class RecommendationFacets {
   final List<FacetOption> states;
+  final List<FacetOption> cities;
   final List<FacetOption> propertyTypes;
+
+  /// Data-supported advanced filters keyed by backend field. Only fields
+  /// with verified measurements appear; the UI never invents an option.
+  final Map<String, RecommendationAdvancedFacet> advanced;
 
   /// The orderings the server accepts, `value -> label`, in server order
   /// (first = default). Read from the API so the UI keeps no second copy of
   /// this list; empty when the facets call failed.
   final Map<String, String> sortOptions;
+
+  /// Contextual monthly-rent intervals, generated from the eligible listings
+  /// with the rental filter's own constraint released.
+  final List<FacetRangeOption> rentalRanges;
+  final List<FacetRangeOption> sizeRanges;
+
+  /// The active bounds even when they are not one of [rentalRanges] — a saved
+  /// preference can hold a custom range that must stay visible until changed.
+  final FacetRangeOption? selectedRental;
+  final FacetRangeOption? selectedSize;
+
+  /// Listings under ALL active filters, and under none of them. Both are
+  /// counted before pagination over the same PU-gated population the search
+  /// ranks; neither is read from the 20 cards on screen.
+  final int matchingTotal;
+  final int universeTotal;
+
+  /// Hard filters whose removal would recover matches, server-ranked.
+  final List<FacetRelaxation> relaxations;
+  final bool contextual;
 
   final double? minRentalRm;
   final double? maxRentalRm;
@@ -607,8 +786,18 @@ class RecommendationFacets {
 
   const RecommendationFacets({
     this.states = const [],
+    this.cities = const [],
     this.propertyTypes = const [],
+    this.advanced = const {},
     this.sortOptions = const {},
+    this.rentalRanges = const [],
+    this.sizeRanges = const [],
+    this.selectedRental,
+    this.selectedSize,
+    this.matchingTotal = 0,
+    this.universeTotal = 0,
+    this.relaxations = const [],
+    this.contextual = false,
     this.minRentalRm,
     this.maxRentalRm,
     this.minSizeSqft,
@@ -625,20 +814,137 @@ class RecommendationFacets {
             total: (row['total'] as num?)?.toInt() ?? 0,
           ),
     ];
-    final ranges = json['ranges'] as Map<String, dynamic>? ?? const {};
+    List<FacetRangeOption> ranges(
+      Object? block, {
+      required String min,
+      required String max,
+    }) {
+      final result = <FacetRangeOption>[];
+      if (block is! Map<String, dynamic>) return result;
+      for (final row in (block['options'] as List? ?? const [])) {
+        final option = FacetRangeOption.fromJson(row, minKey: min, maxKey: max);
+        if (option != null) result.add(option);
+      }
+      return result;
+    }
+
+    final rangesBlock = json['ranges'] as Map<String, dynamic>? ?? const {};
+    final rentalBlock = json['rental_ranges'] as Map<String, dynamic>? ?? const {};
+    final sizeBlock = json['size_ranges'] as Map<String, dynamic>? ?? const {};
+    final relaxationList = <FacetRelaxation>[];
+    for (final row in (json['relaxations'] as List? ?? const [])) {
+      final relaxation = FacetRelaxation.fromJson(row);
+      if (relaxation != null) relaxationList.add(relaxation);
+    }
     return RecommendationFacets(
       states: options('states'),
+      cities: options('cities'),
       propertyTypes: options('property_types'),
+      advanced: {
+        for (final entry in (json['advanced'] as Map? ?? const {}).entries)
+          if (entry.value is Map)
+            '${entry.key}': RecommendationAdvancedFacet.fromJson(
+              '${entry.key}',
+              Map<String, dynamic>.from(entry.value as Map),
+            ),
+      },
       sortOptions: {
         for (final row in (json['sort_options'] as List? ?? const []))
           if (row is Map<String, dynamic> && row['value'] != null)
             '${row['value']}': '${row['label'] ?? row['value']}',
       },
-      minRentalRm: (ranges['min_rental_rm'] as num?)?.toDouble(),
-      maxRentalRm: (ranges['max_rental_rm'] as num?)?.toDouble(),
-      minSizeSqft: (ranges['min_size_sqft'] as num?)?.toDouble(),
-      maxSizeSqft: (ranges['max_size_sqft'] as num?)?.toDouble(),
-      total: (ranges['total'] as num?)?.toInt() ?? 0,
+      rentalRanges: ranges(
+        rentalBlock,
+        min: 'min_rental_rm',
+        max: 'max_rental_rm',
+      ),
+      sizeRanges: ranges(
+        sizeBlock,
+        min: 'min_size_sqft',
+        max: 'max_size_sqft',
+      ),
+      selectedRental: FacetRangeOption.fromJson(
+        rentalBlock['selected'],
+        minKey: 'min_rental_rm',
+        maxKey: 'max_rental_rm',
+      ),
+      selectedSize: FacetRangeOption.fromJson(
+        sizeBlock['selected'],
+        minKey: 'min_size_sqft',
+        maxKey: 'max_size_sqft',
+      ),
+      matchingTotal: (json['matching_total'] as num?)?.toInt() ?? 0,
+      universeTotal: (json['universe_total'] as num?)?.toInt() ?? 0,
+      relaxations: relaxationList,
+      contextual: json['contextual'] == true,
+      minRentalRm: (rangesBlock['min_rental_rm'] as num?)?.toDouble(),
+      maxRentalRm: (rangesBlock['max_rental_rm'] as num?)?.toDouble(),
+      minSizeSqft: (rangesBlock['min_size_sqft'] as num?)?.toDouble(),
+      maxSizeSqft: (rangesBlock['max_size_sqft'] as num?)?.toDouble(),
+      total: (rangesBlock['total'] as num?)?.toInt() ?? 0,
+    );
+  }
+}
+
+/// One data-supported advanced filter and the options the backend generated.
+///
+/// ``kind`` is `value`, `choice` or a range kind (`max`/`min`/`range`). A
+/// backend field with no measurements is simply absent from the map — clients
+/// must never render a placeholder control for it.
+class RecommendationAdvancedFacet {
+  final String key;
+  final String label;
+  final String kind;
+  final String group;
+  final String source;
+  final List<FacetOption> valueOptions;
+  final List<FacetRangeOption> rangeOptions;
+
+  const RecommendationAdvancedFacet({
+    required this.key,
+    required this.label,
+    required this.kind,
+    required this.group,
+    required this.source,
+    this.valueOptions = const [],
+    this.rangeOptions = const [],
+  });
+
+  bool get isRange => rangeOptions.isNotEmpty || !kind.contains('value');
+  bool get isChoice => kind == 'choice';
+
+  static RecommendationAdvancedFacet fromJson(
+    String key,
+    Map<String, dynamic> json,
+  ) {
+    final options = json['options'] as List? ?? const [];
+    final isRange = ['max', 'min', 'range'].contains(json['kind']);
+    return RecommendationAdvancedFacet(
+      key: key,
+      label: '${json['label'] ?? key}',
+      kind: '${json['kind'] ?? 'value'}',
+      group: '${json['group'] ?? 'property'}',
+      source: '${json['source'] ?? ''}',
+      valueOptions: isRange
+          ? const []
+          : [
+              for (final row in options)
+                if (row is Map<String, dynamic>)
+                  FacetOption(
+                    value: '${row['value'] ?? ''}',
+                    label: '${row['label'] ?? row['value'] ?? ''}',
+                    total: (row['total'] as num?)?.toInt() ?? 0,
+                  ),
+            ],
+      rangeOptions: [
+        for (final row in options)
+          FacetRangeOption.fromJson(
+                row,
+                minKey: 'min_value',
+                maxKey: 'max_value',
+              )
+              ?? const FacetRangeOption(min: 0, max: 0, label: ''),
+      ]..removeWhere((item) => item.label.isEmpty),
     );
   }
 }
@@ -646,7 +952,12 @@ class RecommendationFacets {
 /// One selectable filter value with the number of listings behind it.
 class FacetOption {
   final String value;
+  final String label;
   final int total;
 
-  const FacetOption({required this.value, this.total = 0});
+  const FacetOption({
+    required this.value,
+    this.label = '',
+    this.total = 0,
+  });
 }

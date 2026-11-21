@@ -180,6 +180,7 @@ class EntrepreneurState {
     int? recommendationTotal,
     bool clearRecommendationTotal = false,
     RecommendationModelStatus? recommendationModel,
+    bool clearRecommendationModel = false,
     RecommendationFacets? recommendationFacets,
     bool? recommendationLoading,
     bool? recommendationRefreshing,
@@ -225,7 +226,9 @@ class EntrepreneurState {
       recommendationTotal: clearRecommendationTotal
           ? null
           : (recommendationTotal ?? this.recommendationTotal),
-      recommendationModel: recommendationModel ?? this.recommendationModel,
+      recommendationModel: clearRecommendationModel
+          ? null
+          : (recommendationModel ?? this.recommendationModel),
       recommendationFacets: recommendationFacets ?? this.recommendationFacets,
       recommendationLoading:
           recommendationLoading ?? this.recommendationLoading,

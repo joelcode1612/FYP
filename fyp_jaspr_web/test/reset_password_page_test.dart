@@ -1,6 +1,6 @@
 import 'package:jaspr_test/jaspr_test.dart';
-import 'package:sitewise_jaspr_web/pages/auth_callback_page.dart';
-import 'package:sitewise_jaspr_web/pages/reset_password_page.dart';
+import 'package:sitewise_jaspr_web/features/authentication/presentation/pages/auth_callback_page.dart';
+import 'package:sitewise_jaspr_web/features/authentication/presentation/pages/reset_password_page.dart';
 
 /// Component tests for the rebuilt "Set a New Password" page and the callback
 /// page's error affordances (invitation acceptance task). Typing simulation is

@@ -26,6 +26,7 @@ from sqlmodel import Session
 from sitewise.core.supabase_admin import SupabaseAdminError, SupabaseAdminService
 from sitewise.db.session import engine
 from sitewise.domain import rbac
+from sitewise.repositories.user_repository import UserRepository
 from sitewise.services.user_service import UserService
 
 TEST_EMAIL = "sitewise-workflow-verification@example.com"
@@ -81,7 +82,7 @@ def main() -> int:
             account_status=rbac.STATUS_PENDING,
         )
         with Session(engine) as session:
-            UserService(session).ensure_staff_profile(
+            UserService(UserRepository(session)).ensure_staff_profile(
                 user_id=uuid.UUID(auth_user_id),
                 email=TEST_EMAIL,
                 full_name=TEST_NAME,
@@ -131,7 +132,7 @@ def main() -> int:
         step("suspend — identity + mirror + audit")
         svc.update_identity_profile(auth_user_id, {"account_status": rbac.STATUS_SUSPENDED})
         with Session(engine) as session:
-            updated = UserService(session).update_user(
+            updated = UserService(UserRepository(session)).update_user(
                 uuid.UUID(auth_user_id), {"account_status": rbac.STATUS_SUSPENDED})
         svc.insert_role_audit(
             affected_user_id=auth_user_id,
@@ -154,7 +155,7 @@ def main() -> int:
         step("reactivate — identity + mirror + audit")
         svc.update_identity_profile(auth_user_id, {"account_status": rbac.STATUS_ACTIVE})
         with Session(engine) as session:
-            restored = UserService(session).update_user(
+            restored = UserService(UserRepository(session)).update_user(
                 uuid.UUID(auth_user_id), {"account_status": rbac.STATUS_ACTIVE})
         svc.insert_role_audit(
             affected_user_id=auth_user_id,
@@ -185,7 +186,7 @@ def main() -> int:
         if created.get("auth_user_id"):
             try:
                 with Session(engine) as session:
-                    UserService(session).delete_user(uuid.UUID(str(created["auth_user_id"])))
+                    UserService(UserRepository(session)).delete_user(uuid.UUID(str(created["auth_user_id"])))
             except Exception as exc:  # mirror row may be absent
                 print(f"  mirror delete skipped: {exc}")
             try:

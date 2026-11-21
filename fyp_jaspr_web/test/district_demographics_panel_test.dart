@@ -1,6 +1,6 @@
 import 'package:jaspr_test/jaspr_test.dart';
-import 'package:sitewise_jaspr_web/components/property_detail/district_demographics_panel.dart';
-import 'package:sitewise_jaspr_web/data/location_evidence_api.dart';
+import 'package:sitewise_jaspr_web/features/listing/presentation/components/property_detail/district_demographics_panel.dart';
+import 'package:sitewise_jaspr_web/features/listing/data/location_evidence_api.dart';
 
 /// The district panel must show DOSM's real district figures, keep each block's
 /// own reference year, and never turn a missing dataset into a number.

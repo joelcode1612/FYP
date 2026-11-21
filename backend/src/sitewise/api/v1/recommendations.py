@@ -3,13 +3,18 @@ from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field, model_validator
-from sqlmodel import Session, select
+from sqlmodel import Session
 
 from sitewise.db.analytics_session import get_analytics_db
 from sitewise.db.models.recommendation_result import RecommendationResult
 from sitewise.db.session import get_db
 from sitewise.dependencies import AuthenticatedUser, CurrentUser, get_active_user, require_admin_mfa
 from sitewise.domain import rbac
+from sitewise.services.property_insights_service import (
+    PANORAMA_UNAVAILABLE,
+    panoramas_by_catalogue_ids,
+    photo_urls_by_catalogue_ids,
+)
 from sitewise.services.recommendation_search_service import (
     SORT_BEST_MATCH,
     RecommendationSearchService,
@@ -51,6 +56,17 @@ class RecommendationSearchRequest(BaseModel):
     min_size_sqft: float | None = Field(default=None, ge=0, le=1_000_000)
     max_size_sqft: float | None = Field(default=None, ge=0, le=1_000_000)
     property_type: str | None = Field(default=None, max_length=120)
+    # City / District is the address prefix; the research catalogue's own
+    # city column is empty. Advanced fields are applied only when a verified
+    # measurement exists — NULL never matches a selection.
+    city: str | None = Field(default=None, max_length=120)
+    floor_level: str | None = Field(default=None, max_length=80)
+    transit_max_m: float | None = Field(default=None, ge=0, le=100_000)
+    nearby_parking_min: float | None = Field(default=None, ge=0, le=10_000)
+    fnb_competition_max: float | None = Field(default=None, ge=0, le=100_000)
+    demand_generator: str | None = Field(default=None, max_length=40)
+    population_min_1000m: float | None = Field(default=None, ge=0, le=10_000_000)
+    population_max_1000m: float | None = Field(default=None, ge=0, le=10_000_000)
     layout_preferences: list[str] = Field(default_factory=list, max_length=12)
     query: str | None = Field(default=None, max_length=120)
     managed_only: bool = False
@@ -78,6 +94,12 @@ class RecommendationSearchRequest(BaseModel):
             and self.min_size_sqft > self.max_size_sqft
         ):
             raise ValueError("Minimum floor area cannot exceed the maximum.")
+        if (
+            self.population_min_1000m is not None
+            and self.population_max_1000m is not None
+            and self.population_min_1000m > self.population_max_1000m
+        ):
+            raise ValueError("Minimum population cannot exceed the maximum.")
         return self
 
 
@@ -97,6 +119,12 @@ def search_recommendations(
     ``model.available`` is ``false`` in this build: the trained artifact is not
     integrated, so ``recommendation.score`` is null and the ordering is the
     documented requirement-fit ordering. No score is fabricated.
+
+    Each page is batch-enriched with display media: ``photos`` (URL list, the
+    verified catalogue-photo chain) and ``panorama`` (the same honest
+    ``ready``/``processing``/``unavailable`` payload as the insights endpoint).
+    Both resolve in ONE query per page — never per card — and media failures
+    degrade to empty media instead of failing the search.
     """
     management = RecommendationManagementService(operational_db)
     try:
@@ -115,6 +143,14 @@ def search_recommendations(
         min_size_sqft=body.min_size_sqft,
         max_size_sqft=body.max_size_sqft,
         property_type=body.property_type,
+        city=body.city,
+        floor_level=body.floor_level,
+        transit_max_m=body.transit_max_m,
+        nearby_parking_min=body.nearby_parking_min,
+        fnb_competition_max=body.fnb_competition_max,
+        demand_generator=body.demand_generator,
+        population_min_1000m=body.population_min_1000m,
+        population_max_1000m=body.population_max_1000m,
         layout_preferences=tuple(body.layout_preferences),
         query=body.query,
         page_size=body.page_size,
@@ -130,10 +166,19 @@ def search_recommendations(
             managers = management.resolve(ids)
         except ManagementLookupError:
             managers = {pid: unavailable_management() for pid in ids}
+        try:
+            photo_urls = photo_urls_by_catalogue_ids(operational_db, ids)
+        except Exception:  # noqa: BLE001 - media must never fail the search
+            photo_urls = {}
+        panoramas = panoramas_by_catalogue_ids(operational_db, ids)
         for row in response['data']:
             row['management'] = managers.get(
                 row['property_id'], unavailable_management()
             )
+            row['photos'] = photo_urls.get(row['property_id'], [])
+            row['panorama'] = panoramas.get(
+                row['property_id']
+            ) or dict(PANORAMA_UNAVAILABLE)
         return response
     except ValueError as exc:
         # Cursor from another search / malformed cursor: the client must
@@ -157,6 +202,14 @@ def recommendation_facets(
     min_size_sqft: float | None = Query(default=None, ge=0, le=1_000_000),
     max_size_sqft: float | None = Query(default=None, ge=0, le=1_000_000),
     property_type: str | None = Query(default=None, max_length=120),
+    city: str | None = Query(default=None, max_length=120),
+    floor_level: str | None = Query(default=None, max_length=80),
+    transit_max_m: float | None = Query(default=None, ge=0, le=100_000),
+    nearby_parking_min: float | None = Query(default=None, ge=0, le=10_000),
+    fnb_competition_max: float | None = Query(default=None, ge=0, le=100_000),
+    demand_generator: str | None = Query(default=None, max_length=40),
+    population_min_1000m: float | None = Query(default=None, ge=0, le=10_000_000),
+    population_max_1000m: float | None = Query(default=None, ge=0, le=10_000_000),
     layout_preferences: list[str] = Query(default=[]),
     query: str | None = Query(default=None, max_length=120),
     managed_only: bool = False,
@@ -196,6 +249,16 @@ def recommendation_facets(
             detail={"code": "invalid_range",
                     "message": "Minimum floor area cannot exceed the maximum."},
         )
+    if (
+        population_min_1000m is not None
+        and population_max_1000m is not None
+        and population_min_1000m > population_max_1000m
+    ):
+        raise HTTPException(
+            status_code=422,
+            detail={"code": "invalid_range",
+                    "message": "Minimum population cannot exceed the maximum."},
+        )
     management = RecommendationManagementService(operational_db)
     try:
         assigned_ids = management.assigned_catalogue_ids() if managed_only else ()
@@ -213,6 +276,14 @@ def recommendation_facets(
         min_size_sqft=min_size_sqft,
         max_size_sqft=max_size_sqft,
         property_type=property_type,
+        city=city,
+        floor_level=floor_level,
+        transit_max_m=transit_max_m,
+        nearby_parking_min=nearby_parking_min,
+        fnb_competition_max=fnb_competition_max,
+        demand_generator=demand_generator,
+        population_min_1000m=population_min_1000m,
+        population_max_1000m=population_max_1000m,
         layout_preferences=tuple(layout_preferences),
         query=query,
         managed_only=managed_only,
@@ -273,11 +344,7 @@ def delete_recommendation(
     session: Session = Depends(get_db),
     current: AuthenticatedUser = Depends(get_active_user),
 ):
-    existing = session.exec(
-        select(RecommendationResult).where(
-            RecommendationResult.result_id == result_id
-        )
-    ).first()
+    existing = RecommendationService(session).get_result(result_id)
     if existing is None:
         raise HTTPException(status_code=404, detail="Recommendation not found")
     if existing.user_id != current.user_id and not rbac.can_read_any_user_data(current.role):

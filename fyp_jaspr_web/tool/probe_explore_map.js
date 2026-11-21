@@ -16,7 +16,10 @@
  *        - the 500 m/1 km radius circle draws,
  *        - a marker click forwards the property id through the selection
  *          bridge into the app layer,
- *        - the transport panel reports an honest idle state when disabled.
+ *        - the four surrounding-area layer chips render, draw category
+ *          markers from the pushed `data-nearby` payload, carry honest
+ *          per-layer states (mapped / no data / source unavailable), toggle
+ *          on click and re-slice when the radius changes.
  *
  * Usage: BASE=http://127.0.0.1:8091 node tool/probe_explore_map.js
  */
@@ -25,6 +28,9 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 const BASE = process.env.BASE || 'http://127.0.0.1:8091';
+// The real app server (unified FastAPI) — the anonymous-guard redirect only
+// exists there; a bare static file server cannot exercise the client router.
+const APP_BASE = process.env.APP_BASE || 'http://127.0.0.1:8090';
 const BASE_DIR = new URL(BASE).pathname; // e.g. /
 const BUILD_DIR = path.join(__dirname, '..', 'build', 'jaspr');
 const FIXTURE_NAME = '_probe_explore_fixture.html';
@@ -54,15 +60,35 @@ function get(path_) {
   });
 }
 
-const STATE = JSON.stringify({
+const STATE_500 = JSON.stringify({
   selectedId: 'EP-01002',
   radiusM: 500,
-  showTransport: false,
   properties: [
     { id: 'EP-01002', title: 'Selected shop', address: 'Jalan Test 1, Kuala Lumpur', lat: 3.139, lon: 101.687, rentRm: 3500, nearby: true },
     { id: 'EP-01003', title: 'Nearby cafe lot', address: 'Jalan Test 2, Kuala Lumpur', lat: 3.1412, lon: 101.6891, rentRm: 2800, nearby: true },
     { id: 'EP-01044', title: 'Far retail unit', address: 'Jalan Far 9, Petaling Jaya', lat: 3.1578, lon: 101.7118, rentRm: 5200, nearby: false },
     { id: 'EP-01077', title: 'No-coordinate record', address: 'Unknown', lat: 0, lon: 0, rentRm: 900, nearby: false },
+  ],
+});
+const STATE_1000 = JSON.stringify({ ...JSON.parse(STATE_500), radiusM: 1000 });
+
+// Same shape the nearby-places endpoint returns; one category per honest
+// state so the chips must show mapped / no data / source unavailable.
+const NEARBY = JSON.stringify({
+  property_id: 'EP-01002',
+  radius_m: 1000,
+  distance_method: 'straight_line_spherical',
+  categories: {
+    competitors: { state: 'mapped', returned: 2, total_in_radius: 2, truncated: false, source: 'fnb_outlet' },
+    demand_generators: { state: 'mapped', returned: 1, total_in_radius: 1, truncated: false, source: 'pois_master' },
+    accessibility: { state: 'source_unavailable', returned: 0, total_in_radius: null, truncated: false, source: 'gtfs_stops', error: 'fixture' },
+    parking: { state: 'mapped', returned: 1, total_in_radius: 1, truncated: false, source: 'psense_parking' },
+  },
+  places: [
+    { id: 'fnb-1', name: 'Fixture kopitiam', category: 'competitors', subtype: 'cafe', detail: null, lat: 3.1396, lng: 101.6876, source: 'osm', distance_m: 90, operating_status: 'likely_open', observed_at: '2026-06-21' },
+    { id: 'fnb-2', name: 'Fixture bakery', category: 'competitors', subtype: 'bakery', detail: null, lat: 3.1365, lng: 101.6855, source: 'osm', distance_m: 330, operating_status: 'unknown', observed_at: '2026-06-21' },
+    { id: 'poi-1', name: 'Fixture mall', category: 'demand_generators', subtype: 'shopping_mall', detail: null, lat: 3.1398, lng: 101.688, source: 'osm', distance_m: 130, operating_status: null, observed_at: null },
+    { id: 'park-1', name: 'Fixture car park', category: 'parking', subtype: 'parking', detail: 'multi-storey', lat: 3.1394, lng: 101.6874, source: 'osm', distance_m: 800, operating_status: null, observed_at: null },
   ],
 });
 
@@ -75,11 +101,10 @@ const FIXTURE_HTML = `<!DOCTYPE html>
 </head><body>
 <div id="swcx-leaflet" class="swcx-map-canvas" role="region"
      aria-label="Interactive commercial property map"
-     data-state='${STATE.replace(/'/g, '&#39;')}'></div>
+     data-state='${STATE_500.replace(/'/g, '&#39;')}'
+     data-nearby='${NEARBY.replace(/'/g, '&#39;')}'></div>
 <button id="swcx-selection-bridge" type="button" tabindex="-1"
         aria-hidden="true" style="display:none"></button>
-<p id="swcx-transport-status" aria-live="polite"></p>
-<div id="swcx-transport-results"></div>
 <script src="/map-config.js"></script>
 <script src="/vendor/leaflet/leaflet.js"></script>
 <script src="/vendor/leaflet/leaflet.markercluster.js"></script>
@@ -94,6 +119,9 @@ const FIXTURE_HTML = `<!DOCTYPE html>
   results.clusterLoaded = typeof window.L !== 'undefined' &&
     typeof window.L.markerClusterGroup === 'function';
   const settle = (ms) => new Promise((r) => setTimeout(r, ms));
+  const chip = (k) => document.querySelector('.swcx-layer-chip[data-layer="' + k + '"]');
+  const catMarkers = () =>
+    document.querySelectorAll('#swcx-leaflet .swcx-cat-icon').length;
   (async () => {
    try {
     await settle(1200); // boot + MutationObserver-driven first render
@@ -114,15 +142,37 @@ const FIXTURE_HTML = `<!DOCTYPE html>
     results.bridgeCalled = bridgeCalls === 1;
     results.choiceId =
       document.getElementById('swcx-leaflet').getAttribute('data-choice');
-    results.transportStatus =
-      document.getElementById('swcx-transport-status').textContent.trim();
     results.mapError = !!document.querySelector('.swcx-map-error');
 
+    // --- surrounding-area layer chips -------------------------------------
+    results.chipsRendered = document.querySelectorAll('.swcx-layer-chip').length;
+    results.catMarkersAt500 = catMarkers();
+    results.competitorCount = chip('competitors')
+      ?.querySelector('.swcx-layer-chip__count')?.textContent;
+    results.accessibilityCount = chip('accessibility')
+      ?.querySelector('.swcx-layer-chip__count')?.textContent;
+    results.accessibilityTag = chip('accessibility')
+      ?.querySelector('.swcx-layer-chip__tag')?.textContent;
+    results.parkingCount = chip('parking')
+      ?.querySelector('.swcx-layer-chip__count')?.textContent;
+    results.parkingTag = chip('parking')
+      ?.querySelector('.swcx-layer-chip__tag')?.textContent;
+    results.competitorTag = chip('competitors')
+      ?.querySelector('.swcx-layer-chip__tag')?.textContent;
+
+    // toggle one layer off and on again
+    chip('competitors').click();
+    await settle(300);
+    results.competitorPressedAfterHide =
+      chip('competitors').getAttribute('aria-pressed');
+    results.catMarkersAfterHide = catMarkers();
+    chip('competitors').click();
+    await settle(300);
+    results.competitorPressedAfterShow =
+      chip('competitors').getAttribute('aria-pressed');
+    results.catMarkersAfterShow = catMarkers();
+
     // --- regression: the framework must not own Leaflet's container --------
-    // Jaspr rewrites the class attribute of every element it renders. If
-    // Leaflet mounts on that element, the rewrite strips leaflet-container
-    // and the app-wide img { max-width: 100% } rule collapses every tile to
-    // 0px, leaving a blank basemap behind live markers.
     const host = document.getElementById('swcx-leaflet');
     const mount = host.querySelector(':scope > .swcx-map-mount');
     results.mountIsChild = !!mount && mount.classList.contains('leaflet-container');
@@ -137,20 +187,6 @@ const FIXTURE_HTML = `<!DOCTYPE html>
     results.tileWidthAfterRewrite = tileWidth();
     results.panesAfterRewrite =
       document.querySelectorAll('#swcx-leaflet .leaflet-pane').length;
-
-    // --- regression: wheel over the map zooms (Google-Maps-like) ----------
-    const zoomSet = () => [...new Set(
-      [...document.querySelectorAll('#swcx-leaflet img.leaflet-tile')]
-        .map((t) => Number((t.src.split('light_all/')[1] || '').split('/')[0]))
-        .filter((n) => Number.isFinite(n) && n > 0),
-    )].sort((a, b) => a - b);
-    results.zoomBeforeWheel = zoomSet();
-    mount.dispatchEvent(new WheelEvent('wheel', {
-      deltaY: -120, deltaMode: 0, bubbles: true, cancelable: true,
-      clientX: 450, clientY: 275,
-    }));
-    await settle(900);
-    results.zoomAfterWheel = zoomSet();
    } catch (e) {
     results.error = String((e && e.stack) || e);
    } finally {
@@ -201,15 +237,26 @@ const FIXTURE_HTML = `<!DOCTYPE html>
   });
 
   // --- 3. route + anonymous guard -------------------------------------------
-  const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
-  await page.goto(BASE + '/entrepreneur/explore', { waitUntil: 'load' });
-  await page.waitForTimeout(1200); // hydration + client router redirect
-  const url = page.url();
-  check(
-    'explore route resolves through the client router (anonymous -> login with next)',
-    url.includes('/login') && url.includes('next='),
-    url,
-  );
+  const appUp = await new Promise((resolve) => {
+    http
+      .get(APP_BASE + '/index.html', (res) => resolve(res.statusCode === 200))
+      .on('error', () => resolve(false));
+  });
+  if (!appUp) {
+    console.log(
+      `  SKIP  anonymous-guard redirect — app server ${APP_BASE} is down; the guard is verified live there, a static server cannot exercise the client router`,
+    );
+  } else {
+    const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+    await page.goto(APP_BASE + '/entrepreneur/explore', { waitUntil: 'load' });
+    await page.waitForTimeout(1200); // hydration + client router redirect
+    const url = page.url();
+    check(
+      'explore route resolves through the client router (anonymous -> login with next)',
+      url.includes('/login') && url.includes('next='),
+      url,
+    );
+  }
 
   // --- 4. map runtime fixture (same-origin page inside build output) ---------
   fs.mkdirSync(BUILD_DIR, { recursive: true });
@@ -235,12 +282,43 @@ const FIXTURE_HTML = `<!DOCTYPE html>
       r.bridgeCalled && r.choiceId === 'EP-01003',
       `choice=${r.choiceId}`,
     );
-    check(
-      'transport panel shows honest idle state when disabled',
-      r.transportStatus.includes('Turn on Transport'),
-      `"${r.transportStatus.slice(0, 60)}"`,
-    );
     check('no map-level error banner', !r.mapError);
+
+    check('four surrounding-layer chips rendered', r.chipsRendered === 4, `got ${r.chipsRendered}`);
+    check(
+      'category markers at 500 m (2 competitors + 1 place; unavailable source and 800 m parking excluded)',
+      r.catMarkersAt500 === 3,
+      `got ${r.catMarkersAt500}`,
+    );
+    check('competitor chip count', r.competitorCount === '2', `got "${r.competitorCount}"`);
+    check(
+      'unavailable source keeps its slot with a dash count',
+      r.accessibilityCount === '0',
+      `got "${r.accessibilityCount}"`,
+    );
+    check(
+      'source_unavailable chip shows the honest tag',
+      r.accessibilityTag === 'source unavailable',
+      `got "${r.accessibilityTag}"`,
+    );
+    check(
+      'parking inside 500 m? no — chip shows no data and zero count',
+      r.parkingCount === '0' && r.parkingTag === 'no data',
+      `got "${r.parkingCount}" / "${r.parkingTag}"`,
+    );
+    check('mapped layer with data carries no warning tag', !r.competitorTag, `got "${r.competitorTag}"`);
+
+    check(
+      'toggling a chip hides its markers',
+      r.competitorPressedAfterHide === 'false' && r.catMarkersAfterHide === 1,
+      `pressed=${r.competitorPressedAfterHide}, markers=${r.catMarkersAfterHide}`,
+    );
+    check(
+      'toggling again restores the markers',
+      r.competitorPressedAfterShow === 'true' && r.catMarkersAfterShow === 3,
+      `pressed=${r.competitorPressedAfterShow}, markers=${r.catMarkersAfterShow}`,
+    );
+
     check(
       'Leaflet mounts on a child element, not the framework canvas',
       r.mountIsChild,
@@ -261,10 +339,52 @@ const FIXTURE_HTML = `<!DOCTYPE html>
       r.panesAfterRewrite > 0,
       `${r.panesAfterRewrite} panes`,
     );
+
+    // --- radius change re-slices the pushed layers --------------------------
+    await fixturePage.evaluate(() => {
+      const host = document.getElementById('swcx-leaflet');
+      const state = JSON.parse(host.getAttribute('data-state'));
+      state.radiusM = 1000;
+      host.setAttribute('data-state', JSON.stringify(state));
+    });
+    await fixturePage.waitForTimeout(600);
+    const r2 = await fixturePage.evaluate(() => ({
+      parkingCount:
+        document.querySelector('.swcx-layer-chip[data-layer="parking"] .swcx-layer-chip__count')
+          ?.textContent ?? null,
+      parkingTag:
+        document.querySelector('.swcx-layer-chip[data-layer="parking"] .swcx-layer-chip__tag')
+          ?.textContent ?? null,
+      catMarkers: document.querySelectorAll('#swcx-leaflet .swcx-cat-icon').length,
+    }));
+    check(
+      '1 km radius draws the 800 m parking record (count grows, tag clears)',
+      r2.parkingCount === '1' && r2.parkingTag === '' && r2.catMarkers === 4,
+      `count="${r2.parkingCount}" tag="${r2.parkingTag}" markers=${r2.catMarkers}`,
+    );
+
+    // --- regression: wheel over the map zooms (Google-Maps-like) ------------
+    const zoom = await fixturePage.evaluate(async () => {
+      const zoomSet = () => [...new Set(
+        [...document.querySelectorAll('#swcx-leaflet img.leaflet-tile')]
+          .map((t) => Number((t.src.split('light_all/')[1] || '').split('/')[0]))
+          .filter((n) => Number.isFinite(n) && n > 0),
+      )].sort((a, b) => a - b);
+      const before = zoomSet();
+      const settle = (ms) => new Promise((r) => setTimeout(r, ms));
+      document
+        .querySelector('#swcx-leaflet .swcx-map-mount')
+        .dispatchEvent(new WheelEvent('wheel', {
+          deltaY: -120, deltaMode: 0, bubbles: true, cancelable: true,
+          clientX: 450, clientY: 275,
+        }));
+      await settle(900);
+      return { before, after: zoomSet() };
+    });
     check(
       'wheel over the map zooms (Google-Maps-like)',
-      (r.zoomAfterWheel || []).some((z) => !(r.zoomBeforeWheel || []).includes(z)),
-      `${JSON.stringify(r.zoomBeforeWheel)} -> ${JSON.stringify(r.zoomAfterWheel)}`,
+      zoom.after.some((z) => !zoom.before.includes(z)),
+      `${JSON.stringify(zoom.before)} -> ${JSON.stringify(zoom.after)}`,
     );
   } finally {
     fs.rmSync(FIXTURE_PATH, { force: true });

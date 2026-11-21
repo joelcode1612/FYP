@@ -320,16 +320,26 @@ class PropertyEnrichmentService:
         phase2 = [c for c in CATEGORIES if CATEGORY_PHASE[c] == PHASE_POPULATION]
         population = states["population"]
 
+        # Coordinates gate the whole pipeline. Categories settled
+        # ``unavailable`` ONLY because the property has no coordinates are
+        # not measurements — reporting them as a complete, submittable
+        # feature set was exactly the dishonesty this block removes.
+        row = self._property_row(property_id)
+        has_coordinates = row is not None and _valid_coordinates(
+            row.get("latitude"), row.get("longitude")
+        )
+        blocked_reason = None if has_coordinates else "property_has_no_coordinates"
+
         def _phase_block(names: Sequence[str]) -> dict[str, Any]:
             settled = [n for n in names if states[n]["status"] in (
-                "current", "unavailable", "failed")]
+                "current", "unavailable")]
             running = [n for n in names if states[n]["status"] == "running"]
             return {
                 "categories": {n: states[n] for n in names},
                 "total": len(names),
                 "settled": len(settled),
                 "running": len(running),
-                "complete": len(settled) == len(names),
+                "complete": len(settled) == len(names) and has_coordinates,
             }
 
         return {
@@ -338,8 +348,11 @@ class PropertyEnrichmentService:
             "phase1": _phase_block(phase1),
             "phase2": _phase_block(phase2),
             "categories": states,
+            "coordinates_present": has_coordinates,
+            "blocked_reason": blocked_reason,
             "population_unavailable": population["status"] == "unavailable",
-            "ready_to_submit": all(
+            "ready_to_submit": has_coordinates
+            and all(
                 states[c]["status"] in ("current", "unavailable") for c in CATEGORIES
             ),
         }

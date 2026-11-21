@@ -160,7 +160,7 @@ def test_password_only_admin_reads_own_status_but_not_staff_data(client, cleanup
     "stored,canonical",
     [
         ("administrator", "admin"),
-        ("property_owner", "entrepreneur"),
+        ("property_owner", "owner"),
         ("user", "entrepreneur"),
         ("agent", "agent"),
         ("admin", "admin"),
@@ -168,8 +168,13 @@ def test_password_only_admin_reads_own_status_but_not_staff_data(client, cleanup
     ],
 )
 def test_auth_me_canonicalizes_role(client, cleanup_users, stored, canonical):
-    """F5: legacy role aliases are normalised to the canonical three-role model
-    on read, so clients never have to special-case deprecated values."""
+    """F5: legacy role aliases are normalised to the canonical four-role model
+    on read, so clients never have to special-case deprecated values.
+
+    ``property_owner`` resolves to ``owner``. It used to resolve to
+    ``entrepreneur``, which was only correct while Property Owner was not a
+    role: ownership was then purely a relationship on the property row.
+    """
     _, token = _mirror(cleanup_users, role=stored, aal="aal2")
     r = client.get("/api/v1/auth/me", headers=auth(token))
     assert r.status_code == 200, r.text
@@ -196,6 +201,28 @@ def test_role_only_staff_helpers_removed():
     assert not hasattr(deps, "require_agent")
     for safe in ("require_admin_mfa", "require_agent_mfa", "get_staff_user"):
         assert hasattr(deps, safe), safe
+
+@pytest.mark.parametrize("owner_role", ["owner", "property_owner"])
+@pytest.mark.parametrize("aal", [None, "aal1"])
+def test_owner_password_only_must_complete_mfa_before_provider(
+    client, cleanup_users, owner_role, aal
+):
+    _, token = _mirror(cleanup_users, role=owner_role, aal=aal)
+    me = client.get("/api/v1/auth/me", headers=auth(token))
+    assert me.status_code == 200, me.text  # MFA screen may read own profile
+    assert me.json()["role"] == "owner"
+    response = client.get("/api/v1/provider/enquiries", headers=auth(token))
+    assert response.status_code == 403, response.text
+    assert response.json()["detail"]["code"] == "staff_mfa_required"
+
+
+def test_owner_with_verified_mfa_can_read_own_provider_inbox(
+    client, cleanup_users
+):
+    _, token = _mirror(cleanup_users, role="owner", aal="aal2")
+    response = client.get("/api/v1/provider/enquiries", headers=auth(token))
+    assert response.status_code == 200, response.text
+
 
 def test_password_only_admin_cannot_use_property_owner_admin_exception(
     client, cleanup_users

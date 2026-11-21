@@ -3,53 +3,53 @@ import 'package:jaspr_router/jaspr_router.dart';
 import 'package:jaspr_riverpod/jaspr_riverpod.dart';
 import 'package:shared_logic/shared_logic.dart';
 
-import 'data/app_locator.dart';
-import 'data/auth_service.dart';
-import 'data/dev_auth_bypass.dart';
-import 'data/ssr_service.dart';
-import 'data/workspaces.dart';
-import 'pages/auth_callback_page.dart';
-import 'components/ui.dart';
-import 'layouts/marketing_layout.dart';
-import 'pages/landing_page.dart';
-import 'pages/login_page.dart';
-import 'pages/signup_page.dart';
-import 'pages/forgot_password_page.dart';
-import 'pages/staff_mfa_page.dart';
-import 'pages/staff_verify_page.dart';
-import 'pages/reset_password_page.dart';
-import 'pages/entrepreneur/assessment_history_page.dart'
+import 'package:sitewise_jaspr_web/core/di/app_locator.dart';
+import 'package:sitewise_jaspr_web/features/authentication/data/auth_service.dart';
+import 'package:sitewise_jaspr_web/features/authentication/data/dev_auth_bypass.dart';
+import 'package:sitewise_jaspr_web/core/routing/ssr_service.dart';
+import 'package:sitewise_jaspr_web/features/authentication/application/workspaces.dart';
+import 'package:sitewise_jaspr_web/features/authentication/presentation/pages/auth_callback_page.dart';
+import 'package:sitewise_jaspr_web/shared/presentation/components/ui.dart';
+import 'package:sitewise_jaspr_web/shared/presentation/layouts/marketing_layout.dart';
+import 'package:sitewise_jaspr_web/shared/presentation/pages/landing_page.dart';
+import 'package:sitewise_jaspr_web/features/authentication/presentation/pages/login_page.dart';
+import 'package:sitewise_jaspr_web/features/authentication/presentation/pages/signup_page.dart';
+import 'package:sitewise_jaspr_web/features/authentication/presentation/pages/forgot_password_page.dart';
+import 'package:sitewise_jaspr_web/features/authentication/presentation/pages/staff_mfa_page.dart';
+import 'package:sitewise_jaspr_web/features/authentication/presentation/pages/staff_verify_page.dart';
+import 'package:sitewise_jaspr_web/features/authentication/presentation/pages/reset_password_page.dart';
+import 'package:sitewise_jaspr_web/features/assessment/presentation/pages/assessment_history_page.dart'
     as e_assessment_history;
-import 'pages/entrepreneur/assessment_workspace_page.dart' as e_assessment;
-import 'pages/entrepreneur/compare_page.dart';
-import 'pages/entrepreneur/dashboard_page.dart' as e_dashboard;
-import 'pages/entrepreneur/listing_management_denied_page.dart'
+import 'package:sitewise_jaspr_web/features/assessment/presentation/pages/assessment_workspace_page.dart' as e_assessment;
+import 'package:sitewise_jaspr_web/features/compare/presentation/pages/compare_page.dart';
+import 'package:sitewise_jaspr_web/features/dashboard/presentation/pages/entrepreneur_dashboard_page.dart' as e_dashboard;
+import 'package:sitewise_jaspr_web/features/property_management/presentation/pages/listing_management_denied_page.dart'
     as e_listing_denied;
-import 'pages/entrepreneur/explanation_page.dart' as e_explanation;
-import 'pages/entrepreneur/ai_recommendations_page.dart' as e_ai;
-import 'pages/entrepreneur/commercial_listing_page.dart' as e_listing;
-import 'pages/entrepreneur/explore_page.dart' as e_explore;
-import 'pages/entrepreneur/preferences_page.dart' as e_preferences;
-import 'pages/entrepreneur/profile_page.dart' as e_profile;
-import 'pages/entrepreneur/property_detail_page.dart' as e_property_detail;
-import 'pages/entrepreneur/property_analysis_page.dart' as e_property_analysis;
-import 'pages/entrepreneur/recommendations_page.dart' as e_recommendations;
-import 'pages/entrepreneur/report_page.dart' as e_report;
-import 'pages/entrepreneur/reports_page.dart' as e_reports;
-import 'pages/entrepreneur/saved_page.dart' as e_saved;
-import 'pages/entrepreneur/tour_page.dart' as e_tour;
-import 'pages/admin/agents_page.dart';
-import 'pages/agent_retired_page.dart';
-import 'pages/owner_retired_page.dart';
-import 'pages/admin/activity_page.dart' as a_activity;
-import 'pages/admin/campaigns_page.dart' as a_campaigns;
-import 'pages/admin/dashboard_page.dart' as a_dashboard;
-import 'pages/admin/listing_detail_page.dart' as a_listing_detail;
-import 'pages/admin/listings_page.dart' as a_listings;
-import 'pages/admin/profile_page.dart' as a_profile;
-import 'pages/admin/surveys_page.dart' as a_surveys;
-import 'pages/admin/user_detail_page.dart' as a_user_detail;
-import 'pages/admin/users_page.dart' as a_users;
+import 'package:sitewise_jaspr_web/features/recommendations/presentation/pages/explanation_page.dart' as e_explanation;
+import 'package:sitewise_jaspr_web/features/recommendations/presentation/pages/ai_recommendations_page.dart' as e_ai;
+import 'package:sitewise_jaspr_web/features/listing/presentation/pages/commercial_listing_page.dart' as e_listing;
+import 'package:sitewise_jaspr_web/features/listing/presentation/pages/explore_page.dart' as e_explore;
+import 'package:sitewise_jaspr_web/features/recommendations/presentation/pages/preferences_page.dart' as e_preferences;
+import 'package:sitewise_jaspr_web/features/profile/presentation/pages/entrepreneur_profile_page.dart' as e_profile;
+import 'package:sitewise_jaspr_web/features/listing/presentation/pages/property_detail_page.dart' as e_property_detail;
+import 'package:sitewise_jaspr_web/features/recommendations/presentation/pages/property_analysis_page.dart' as e_property_analysis;
+import 'package:sitewise_jaspr_web/features/recommendations/presentation/pages/recommendations_page.dart' as e_recommendations;
+import 'package:sitewise_jaspr_web/features/assessment/presentation/pages/report_page.dart' as e_report;
+import 'package:sitewise_jaspr_web/features/assessment/presentation/pages/reports_page.dart' as e_reports;
+import 'package:sitewise_jaspr_web/features/listing/presentation/pages/saved_page.dart' as e_saved;
+import 'package:sitewise_jaspr_web/features/panorama_viewer/presentation/pages/tour_page.dart' as e_tour;
+import 'package:sitewise_jaspr_web/features/administration/presentation/pages/agents_page.dart';
+import 'package:sitewise_jaspr_web/features/property_management/presentation/pages/agent_retired_page.dart';
+import 'package:sitewise_jaspr_web/features/property_management/presentation/pages/owner_retired_page.dart';
+import 'package:sitewise_jaspr_web/features/administration/presentation/pages/activity_page.dart' as a_activity;
+import 'package:sitewise_jaspr_web/features/administration/presentation/pages/campaigns_page.dart' as a_campaigns;
+import 'package:sitewise_jaspr_web/features/administration/presentation/pages/dashboard_page.dart' as a_dashboard;
+import 'package:sitewise_jaspr_web/features/administration/presentation/pages/listing_detail_page.dart' as a_listing_detail;
+import 'package:sitewise_jaspr_web/features/administration/presentation/pages/listings_page.dart' as a_listings;
+import 'package:sitewise_jaspr_web/features/profile/presentation/pages/admin_profile_page.dart' as a_profile;
+import 'package:sitewise_jaspr_web/features/administration/presentation/pages/surveys_page.dart' as a_surveys;
+import 'package:sitewise_jaspr_web/features/administration/presentation/pages/user_detail_page.dart' as a_user_detail;
+import 'package:sitewise_jaspr_web/features/administration/presentation/pages/users_page.dart' as a_users;
 
 /// Route table — the Jaspr counterpart to
 /// `lib/core/routing/app_routes.dart` in the Flutter app.
@@ -151,14 +151,16 @@ class SitewiseApp extends StatelessComponent {
           // Workspace presentation is based on the backend-verified account
           // role. Client-controlled demo grants cannot authorize another role.
           //
-          // `owner` is no longer a workspace. An owner is an entrepreneur who
-          // also holds the verified property capability, and that capability is
-          // exercised in the SiteWise mobile app alongside agents. A legacy
-          // `/owner/*` link therefore falls through to the retired-workspace
-          // page below, which explains where the work moved and renders no
-          // record, draft or identity. It is never re-pointed at another role's
-          // authenticated surface.
-          if (requested == 'owner') return null;
+          // `owner` is a workspace again, in the sense that matters: an owner
+          // account is routed to `/owner`, which explains that the Owner
+          // workspace is the SiteWise mobile app. It is NOT re-pointed at the
+          // entrepreneur workspace, and an entrepreneur is no longer admitted
+          // to it — the two roles have different property authority and must not
+          // share a surface.
+          if (requested == 'owner' && assigned != 'owner' && assigned != 'admin') {
+            final home = _roleNamed(assigned);
+            return home == null ? '/login' : home.homeRoute;
+          }
           if (requested == assigned) return null;
           final role = _roleNamed(requested);
           if (role != null && Workspaces.canOpen(role)) return null;
@@ -514,6 +516,12 @@ class SitewiseApp extends StatelessComponent {
                 // explains why THIS unit matched the entrepreneur's saved
                 // preferences, using the persisted Layer 2 result.
                 resultId: state.queryParams['result'] ?? '',
+                // The applied search filters, carried from Recommendations as
+                // the raw `?filters=` JSON string (client components accept
+                // only primitive parameters; the page parses it itself).
+                // They power an honest "your filters vs this property" table;
+                // a saved ?result= explanation always takes precedence.
+                appliedFiltersJson: state.queryParams['filters'] ?? '',
                 // The selected F&B business type, carried from Recommendations.
                 businessType: state.queryParams['businessType'] ?? '',
               ),
@@ -691,8 +699,6 @@ class SitewiseApp extends StatelessComponent {
             '/agent',
             '/agent/listings',
             '/agent/property-detail',
-            '/agent/enquiries',
-            '/agent/performance',
             '/agent/profile',
           ])
             Route(
@@ -749,10 +755,15 @@ AppRole? _roleNamed(String? name) {
 /// Mirrors the backend's legacy alias normalisation
 /// (`sitewise.domain.rbac.canonical_role`) so a session mirror written before
 /// canonicalisation still routes to the canonical workspace. Anything the
-/// three-role model does not define returns null and fails closed.
+/// four-role model does not define returns null and fails closed.
+///
+/// `property_owner` resolves to `owner`, not `entrepreneur`: the two are
+/// distinct roles now, and routing an owner into the entrepreneur workspace
+/// would hand them a surface with no property authority.
 String? _canonicalRoleName(String? name) => switch (name) {
   'administrator' => 'admin',
-  'property_owner' || 'user' => 'entrepreneur',
-  'entrepreneur' || 'agent' || 'admin' => name,
+  'property_owner' || 'propertyowner' || 'landlord' => 'owner',
+  'user' => 'entrepreneur',
+  'owner' || 'entrepreneur' || 'agent' || 'admin' => name,
   _ => null,
 };

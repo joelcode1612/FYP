@@ -143,6 +143,12 @@ class EntrepreneurNotifier extends Notifier<EntrepreneurState> {
   Future<void> searchRecommendations({RecommendationSearchRequest? request}) =>
       _controller.searchRecommendations(request: request);
 
+  /// Read-only contextual facets for a draft request. Results on screen stay
+  /// untouched; the page decides when to apply the criteria.
+  Future<RecommendationFacets?> fetchRecommendationFacets(
+    RecommendationSearchRequest criteria,
+  ) => _controller.fetchRecommendationFacets(criteria);
+
   Future<void> loadMoreRecommendations() =>
       _controller.loadMoreRecommendations();
 
@@ -150,6 +156,9 @@ class EntrepreneurNotifier extends Notifier<EntrepreneurState> {
 
   void applyRecommendationRequest(RecommendationSearchRequest request) =>
       _controller.applyRecommendationRequest(request);
+
+  /// Removes a previous search and returns Recommendations to the empty state.
+  void clearRecommendationSearch() => _controller.clearRecommendationSearch();
 
   /// Loads listings: a real server search when an ExploreRepository is wired,
   /// otherwise the client-filtered full listing.

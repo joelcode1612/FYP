@@ -1,5 +1,5 @@
 import 'package:jaspr_test/jaspr_test.dart';
-import 'package:sitewise_jaspr_web/data/api_property_repository.dart';
+import 'package:sitewise_jaspr_web/features/listing/data/api_property_repository.dart';
 
 void main() {
   test(

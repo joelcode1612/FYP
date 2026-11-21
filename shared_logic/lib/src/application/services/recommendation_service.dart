@@ -1,4 +1,10 @@
-import 'package:shared_logic/shared_logic.dart';
+import '../../domain/entities/location_intelligence.dart';
+import '../../domain/entities/recommendation.dart';
+import '../../domain/entities/sitewise_records.dart';
+import '../../domain/repositories/intelligence_repositories.dart';
+import '../../domain/repositories/recommendation_repository.dart';
+import '../../domain/usecases/intelligence_usecases.dart';
+import '../../domain/usecases/recommendation_usecases.dart';
 
 class RecommendationService {
   final RecommendationRepository repo;

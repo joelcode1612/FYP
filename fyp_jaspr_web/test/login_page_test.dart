@@ -1,5 +1,5 @@
 import 'package:jaspr_test/jaspr_test.dart';
-import 'package:sitewise_jaspr_web/pages/login_page.dart';
+import 'package:sitewise_jaspr_web/features/authentication/presentation/pages/login_page.dart';
 
 /// Component tests for the redesigned login page (`lib/pages/login_page.dart`):
 /// structure and client-side validation. Typing simulation is not possible in

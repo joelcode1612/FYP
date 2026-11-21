@@ -21,7 +21,6 @@ from sitewise.core.exceptions import AssessmentError
 from sitewise.db.analytics_session import get_analytics_db
 from sitewise.db.session import get_db
 from sitewise.dependencies import AuthenticatedUser, require_entrepreneur
-from sitewise.repositories.catalog_repository import CatalogRepository
 from sitewise.services.assessment_service import AssessmentService
 from sitewise.services.explanation_service import ExplanationService
 from sitewise.services.report_service import ReportService
@@ -227,7 +226,7 @@ def assessment_report(
         # than failing the whole request.
         property_report = None
 
-    evidence = CatalogRepository(analytics).get_evidence(assessment.property_id)
+    evidence = service.evidence_for(assessment.property_id)
     explanation = ExplanationService(
         session, analytics
     ).latest_for_assessment(assessment)

@@ -1,12 +1,18 @@
 import 'package:jaspr_test/jaspr_test.dart';
 import 'package:shared_logic/shared_logic.dart';
-import 'package:sitewise_jaspr_web/data/navigation.dart';
+import 'package:sitewise_jaspr_web/core/routing/navigation.dart';
 
 /// Admin navigation + user-directory mapping (spec 3 + 6).
 void main() {
-  test('admin sidebar has exactly the four approved destinations', () {
+  test('admin sidebar has exactly the five approved destinations', () {
     final routes = webDestinationsFor(AppRole.admin).map((d) => d.route).toList();
-    expect(routes, ['/admin', '/admin/users', '/admin/agents', '/admin/listings']);
+    expect(routes, [
+      '/admin',
+      '/admin/users',
+      '/admin/agents',
+      '/admin/listings',
+      '/admin/activity',
+    ]);
   });
 
   group('user directory mapping', () {
@@ -32,15 +38,18 @@ void main() {
       expect(ApiUserRepository.fromJson(row()).listingCount, isNull);
     });
 
-    test('the three stored roles map to their own workspace role', () {
+    test('the four stored roles map to their own workspace role', () {
       AppRole roleOf(String raw) =>
           ApiUserRepository.fromJson(row()..['role'] = raw).role;
       expect(roleOf('entrepreneur'), AppRole.entrepreneur);
+      expect(roleOf('owner'), AppRole.owner);
       expect(roleOf('agent'), AppRole.agent);
       expect(roleOf('admin'), AppRole.admin);
       // Legacy aliases canonicalise exactly as the backend does.
       expect(roleOf('administrator'), AppRole.admin);
-      expect(roleOf('property_owner'), AppRole.entrepreneur);
+      // `property_owner` used to fold into entrepreneur. It is a distinct role
+      // now, and the fold would mislabel every owner in the admin user list.
+      expect(roleOf('property_owner'), AppRole.owner);
     });
 
     test('every stored account status is representable', () {

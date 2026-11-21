@@ -4,7 +4,7 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:jaspr_test/jaspr_test.dart';
 import 'package:shelf/shelf.dart' as shelf;
-import 'package:sitewise_jaspr_web/data/staff_guard.dart';
+import 'package:sitewise_jaspr_web/features/authentication/data/staff_guard.dart';
 
 /// F4 regression: the SSR staff guard must authorize /admin and /agent from the
 /// backend-verified bearer token (active + staff role + aal2), never from the
@@ -112,11 +112,10 @@ void main() {
         req('/owner', cookie: 'sitewise_token=abc; sitewise_ui=forged'),
         id: identity(role: 'entrepreneur'),
       );
-      expect(r.response.statusCode, 200);
-      expect(r.rendered, isNotNull);
-      expect(r.response.headers['location'], isNull);
-      // The render isolate still receives only the backend-verified profile.
-      expect(decodeSession(r.rendered!.headers['cookie']!)['role'], 'entrepreneur');
+      // The retirement page is owner/admin-gated now: an entrepreneur is
+      // redirected home, never handed an owner surface.
+      expect(r.response.statusCode, 302);
+      expect(r.response.headers['location'], '/entrepreneur');
     });
 
     test('a forged admin cookie cannot turn a retired owner path into staff UI', () async {
@@ -126,13 +125,11 @@ void main() {
         req('/owner/listings', cookie: forged),
         id: identity(role: 'entrepreneur'),
       );
-      expect(r.response.statusCode, 200);
-      expect(r.rendered, isNotNull);
       // Backend truth overrides the attacker-written role on every protected
-      // workspace, including the retired owner paths.
-      final profile = decodeSession(r.rendered!.headers['cookie']!);
-      expect(profile['role'], 'entrepreneur');
-      expect(profile['role'], isNot('admin'));
+      // workspace, including the retired owner paths: the forged admin cookie
+      // earns the same redirect home as any other entrepreneur.
+      expect(r.response.statusCode, 302);
+      expect(r.response.headers['location'], '/entrepreneur');
     });
 
     test('the /staff/verify screen is not guarded (no redirect loop)', () async {

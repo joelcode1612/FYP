@@ -1,5 +1,5 @@
 import 'package:permission_handler/permission_handler.dart';
-import 'package:fyp/core/error/failures.dart';
+import 'package:fyp/core/errors/failures.dart';
 
 /// Camera permission gate with permanently-denied handling.
 class PermissionService {

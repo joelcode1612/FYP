@@ -24,18 +24,27 @@ class ApiUserRepository implements UserRepository {
   /// Same canonicalisation the backend applies on read (`rbac.LEGACY_ROLE_ALIASES`).
   /// `_profile_payload` returns the stored role verbatim, so legacy values can
   /// still arrive here and must be normalised before mapping to [AppRole].
+  ///
+  /// `property_owner` maps to [AppRole.owner], not entrepreneur: Property Owner
+  /// is a stored role now, and folding it into entrepreneur would label every
+  /// owner in the administrator's user list with the wrong role.
   static const Map<String, String> _roleAliases = {
     'administrator': 'admin',
-    'property_owner': 'entrepreneur',
+    'property_owner': 'owner',
+    'propertyowner': 'owner',
+    'landlord': 'owner',
     'user': 'entrepreneur',
   };
 
   static AppRole _role(String? raw) {
-    final canonical = raw == null ? '' : (_roleAliases[raw] ?? raw);
+    final normalised = (raw ?? '').trim().toLowerCase().replaceAll('-', '_');
+    final canonical = normalised.isEmpty
+        ? ''
+        : (_roleAliases[normalised] ?? normalised);
     return switch (canonical) {
       'admin' => AppRole.admin,
-      'agent' => AppRole.agent,
       'owner' => AppRole.owner,
+      'agent' => AppRole.agent,
       _ => AppRole.entrepreneur,
     };
   }
@@ -99,5 +108,28 @@ class ApiUserRepository implements UserRepository {
     } on Object {
       return null;
     }
+  }
+
+  /// Save the signed-in account's own profile (`PATCH /api/v1/users/me`).
+  ///
+  /// Only the two self-editable fields are ever sent: the backend answers 403
+  /// for a payload that touches email, role, account status or verification, so
+  /// this signature cannot express them. On success it returns what the server
+  /// stored — callers re-baseline from that instead of from what was typed,
+  /// which is why the response fields are read here rather than passed back.
+  /// A rejected or failed save throws through [ApiClient], as before.
+  Future<({String fullName, String? phoneNumber})> updateOwnProfile({
+    required String fullName,
+    String? phoneNumber,
+  }) async {
+    final response = await _client.patch('/api/v1/users/me', {
+      'full_name': fullName,
+      // Omitted, not nulled: an absent field leaves the stored number alone.
+      if (phoneNumber != null) 'phone_number': phoneNumber,
+    });
+    return (
+      fullName: response['full_name'] as String? ?? fullName,
+      phoneNumber: response['phone_number'] as String? ?? phoneNumber,
+    );
   }
 }

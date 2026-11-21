@@ -172,23 +172,38 @@ class ArCoreCapturePlugin : FlutterPlugin, ActivityAware, MethodChannel.MethodCa
                     val value = HashMap<String, Any?>(existing.capabilities())
                     value["textureId"] = existing.textureId
                     value["reused"] = true
-                    // A caller that starts while the previous owner has the
-                    // session paused gets a camera, not a frozen texture. The
-                    // world origin is kept either way.
-                    if (existing.isPaused) {
-                        existing.resume { outcome ->
-                            if (outcome.errorCode != null) {
-                                result.error(
-                                    outcome.errorCode,
-                                    outcome.errorMessage,
-                                    null,
-                                )
-                            } else {
-                                result.success(value)
-                            }
+                    // The mode that claims an existing controller must also
+                    // receive its requested plane configuration. In particular,
+                    // opening the markerless 26-target flow after another AR
+                    // workflow must not inherit plane finding from that owner.
+                    value["planes"] = withPlanes
+                    existing.setPlaneDetection(withPlanes) { configured ->
+                        if (configured.errorCode != null) {
+                            result.error(
+                                configured.errorCode,
+                                configured.errorMessage,
+                                null,
+                            )
+                            return@setPlaneDetection
                         }
-                    } else {
-                        result.success(value)
+                        // A caller that starts while the previous owner has the
+                        // session paused gets a camera, not a frozen texture. The
+                        // world origin is kept either way.
+                        if (existing.isPaused) {
+                            existing.resume { outcome ->
+                                if (outcome.errorCode != null) {
+                                    result.error(
+                                        outcome.errorCode,
+                                        outcome.errorMessage,
+                                        null,
+                                    )
+                                } else {
+                                    result.success(value)
+                                }
+                            }
+                        } else {
+                            result.success(value)
+                        }
                     }
                     return
                 }
@@ -258,6 +273,17 @@ class ArCoreCapturePlugin : FlutterPlugin, ActivityAware, MethodChannel.MethodCa
             "setDisplayRotation" -> {
                 controller?.setDisplayRotation(call.argument<Int>("rotation") ?: 0)
                 result.success(null)
+            }
+
+            "setPlaneDetection" -> {
+                val existing = controller
+                if (existing == null) {
+                    result.error("no_session", "No AR session is running.", null)
+                    return
+                }
+                existing.setPlaneDetection(call.argument<Boolean>("enabled") ?: true) { outcome ->
+                    answer(result, outcome)
+                }
             }
 
             "setMesh" -> {

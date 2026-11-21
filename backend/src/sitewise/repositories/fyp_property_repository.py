@@ -22,6 +22,7 @@ the confirmed ``fnb_a.overture_match`` decisions.
 """
 
 import math
+from collections.abc import Sequence
 from datetime import datetime, timezone
 from typing import Any
 
@@ -421,6 +422,64 @@ class FypPropertyRepository:
             photos.append(dict(row) | {"url": url})
         return photos
 
+    def get_catalogue_photo_urls_batch(
+        self, catalogue_ids: list[str]
+    ) -> dict[str, list[str]]:
+        """Display-photo URLs for MANY catalogue ids in ONE query.
+
+        Same resolution chain and tie-breaks as :meth:`get_catalogue_photos`
+        (verified subject link first, then the canonical ownerless
+        ``rental_properties`` row; exactly ONE numeric target per catalogue
+        id; primary photo first, then id ascending; blanks and duplicates
+        dropped). Ids with no resolved photos are simply absent from the
+        mapping. Used by the recommendation search response so a page of
+        cards costs one round-trip instead of twenty.
+        """
+        ids = [cid for cid in dict.fromkeys(catalogue_ids) if cid]
+        if not ids:
+            return {}
+        rows = self.session.execute(
+            text(
+                """
+                WITH requested (cid) AS (
+                    SELECT unnest(CAST(:pids AS text[]))
+                ), candidates AS (
+                    SELECT r.cid, l.property_id, 0 AS priority
+                    FROM fyp.property_subject_links l
+                    JOIN requested r ON r.cid = l.sitewise_property_id
+                    WHERE l.match_verified IS TRUE
+                    UNION ALL
+                    SELECT r.cid, p.id, 1 AS priority
+                    FROM fyp.rental_properties p
+                    JOIN requested r
+                      ON (r.cid = p.listing_id OR r.cid = p.catalogue_id)
+                    WHERE p.owner_id IS NULL
+                ), target AS (
+                    SELECT DISTINCT ON (cid) cid, property_id
+                    FROM candidates
+                    ORDER BY cid, priority, property_id
+                )
+                SELECT t.cid, ph.url
+                FROM target t
+                JOIN fyp.property_photos ph ON ph.property_id = t.property_id
+                WHERE ph.url IS NOT NULL AND btrim(ph.url) <> ''
+                ORDER BY t.cid, ph.is_primary DESC NULLS LAST, ph.id ASC
+                """
+            ),
+            {"pids": ids},
+        ).mappings().all()
+
+        photos: dict[str, list[str]] = {}
+        seen: set[tuple[str, str]] = set()
+        for row in rows:
+            url = str(row["url"]).strip()
+            key = (str(row["cid"]), url)
+            if key in seen:
+                continue
+            seen.add(key)
+            photos.setdefault(str(row["cid"]), []).append(url)
+        return photos
+
     def get_listing_sources(self, property_id: int) -> list[dict]:
         """Where the listing was imported from (platform + observed state)."""
         rows = self.session.execute(
@@ -568,6 +627,10 @@ class FypPropertyRepository:
             {"pid": property_id},
         ).first()
         return (float(row[0]), float(row[1])) if row else None
+
+    def property_coords(self, property_id: int) -> tuple[float, float] | None:
+        """Public coordinate lookup for callers outside this repository."""
+        return self._coords(property_id)
 
     @staticmethod
     def _validate_radius(radius_m: int) -> None:
@@ -888,6 +951,11 @@ class FypPropertyRepository:
             "accessibility_road_km_1km": values.get("accessibility_road_km_1km"),
             "nearest_major_road_m": values.get("nearest_major_road_m"),
             "last_calculated_at": values.get("calculated_at") or datetime.now(timezone.utc),
+            # Provenance of the coordinates these numbers were computed at.
+            # Without it a later refresh cannot tell whether a carried-forward
+            # population value still describes the CURRENT location, which is
+            # how measured-at-elsewhere numbers used to be reported as fresh.
+            "coordinate_hash": values.get("coordinate_hash"),
         }
         updated = self.session.execute(
             text(
@@ -901,7 +969,8 @@ class FypPropertyRepository:
                     demand_generator_count_1km = :demand_generator_count_1km,
                     accessibility_road_km_1km = :accessibility_road_km_1km,
                     nearest_major_road_m = :nearest_major_road_m,
-                    last_calculated_at = :last_calculated_at
+                    last_calculated_at = :last_calculated_at,
+                    coordinate_hash = COALESCE(:coordinate_hash, coordinate_hash)
                 WHERE property_id = :property_id
                 """
             ),
@@ -916,13 +985,13 @@ class FypPropertyRepository:
                         competitor_count_500m, competitor_count_1km,
                         demand_generator_count_500m, demand_generator_count_1km,
                         accessibility_road_km_1km, nearest_major_road_m,
-                        last_calculated_at
+                        last_calculated_at, coordinate_hash
                     ) VALUES (
                         :property_id, :population_500m, :population_1km,
                         :competitor_count_500m, :competitor_count_1km,
                         :demand_generator_count_500m, :demand_generator_count_1km,
                         :accessibility_road_km_1km, :nearest_major_road_m,
-                        :last_calculated_at
+                        :last_calculated_at, :coordinate_hash
                     )
                     """
                 ),
@@ -1287,6 +1356,34 @@ class FypPropertyRepository:
         ).mappings().all()
         return [dict(r) for r in rows]
 
+    def listing_photos_by_ids(
+        self, property_ids: Sequence[int]
+    ) -> dict[int, list[dict]]:
+        """Display photos for many listings in ONE query, primary first.
+
+        The list endpoints omitted photos altogether, so every card fell back to
+        the placeholder image and a draft that already had photographs was still
+        reported as needing them. A listing with no usable photo is simply
+        absent from the mapping. Blank URLs are excluded because the card would
+        reserve an image box for an image that cannot load.
+        """
+        wanted = [int(pid) for pid in property_ids]
+        if not wanted:
+            return {}
+        rows = self.session.execute(
+            text(
+                f"{self._PHOTO_SELECT} WHERE property_id = ANY(:ids) "
+                "AND url IS NOT NULL AND btrim(url) <> '' "
+                "ORDER BY is_primary DESC NULLS LAST, id ASC"
+            ),
+            {"ids": wanted},
+        ).mappings().all()
+        grouped: dict[int, list[dict]] = {}
+        for row in rows:
+            photo = dict(row)
+            grouped.setdefault(int(photo["property_id"]), []).append(photo)
+        return grouped
+
     def add_listing_photo(
         self, property_id: int, url: str, caption: str, is_primary: bool
     ) -> dict:
@@ -1378,6 +1475,116 @@ class FypPropertyRepository:
         )
         self.session.commit()
         return True
+
+    # ------------------------------------------------------------ deletion
+
+    #: Tables whose references to a listing are NO ACTION / RESTRICT: they
+    #: must be empty before the master row may be deleted, otherwise the
+    #: database itself refuses (and the history is meant to be kept).
+    _DELETE_BLOCKERS: tuple[tuple[str, str], ...] = (
+        ("public.property_verification", "property_id"),
+        ("public.verification_audit", "property_id"),
+        ("public.verification_document", "property_id"),
+        ("public.listing_change_audit", "listing_id"),
+        ("public.listing_change_request", "listing_id"),
+    )
+
+    #: Operational related tables the FK graph cascades on master delete.
+    _DELETE_CASCADES: tuple[tuple[str, str], ...] = (
+        ("fyp.property_photos", "property_id"),
+        ("fyp.property_features", "property_id"),
+        ("fyp.property_geospatial_features", "property_id"),
+        ("fyp.property_listing_sources", "property_id"),
+        ("fyp.property_enrichment_category", "property_id"),
+        ("fyp.property_feature_freshness", "property_id"),
+        ("fyp.favourite_properties", "property_id"),
+        ("fyp.recommendation_results", "property_id"),
+        ("fyp.virtual_tours", "property_id"),
+        ("agent_listing_assignment", "listing_id"),
+        ("property_enquiry", "property_id"),
+        ("fnb_a.property_geospatial_feature", "property_key"),
+    )
+
+    def admin_delete_listing(self, property_id: int) -> dict:
+        """The ONE deletion path for ``fyp.rental_properties``.
+
+        Resolves the request through the canonical id, refuses research-linked
+        rows (catalogue import or verified subject link — their history is
+        protected), refuses rows that still carry verification / change-request
+        history, and otherwise deletes the master row in one transaction,
+        letting the foreign-key graph cascade the operational children.
+
+        Returns a structured summary; the API route translates it to HTTP.
+        """
+        row = (
+            self.session.execute(
+                text(
+                    "SELECT id, name, catalogue_id, verification_status, "
+                    "is_published FROM fyp.rental_properties WHERE id = :pid"
+                ),
+                {"pid": property_id},
+            )
+            .mappings()
+            .first()
+        )
+        if row is None:
+            return {"found": False, "deleted": False}
+
+        protected: list[str] = []
+        if row["catalogue_id"] is not None:
+            protected.append("research_catalogue_import")
+        linked = self.session.execute(
+            text(
+                "SELECT count(*) FROM fyp.property_subject_links "
+                "WHERE property_id = :pid"
+            ),
+            {"pid": property_id},
+        ).scalar_one()
+        if linked:
+            protected.append("verified_research_subject_link")
+
+        blocked: dict[str, int] = {}
+        for table, column in self._DELETE_BLOCKERS:
+            count = self.session.execute(
+                text(f"SELECT count(*) FROM {table} WHERE {column} = :pid"),
+                {"pid": property_id},
+            ).scalar_one()
+            if count:
+                blocked[table] = int(count)
+
+        children: dict[str, int] = {}
+        for table, column in self._DELETE_CASCADES:
+            count = self.session.execute(
+                text(f"SELECT count(*) FROM {table} WHERE {column} = :pid"),
+                {"pid": property_id},
+            ).scalar_one()
+            if count:
+                children[table] = int(count)
+
+        if protected or blocked:
+            self.session.rollback()
+            return {
+                "found": True,
+                "deleted": False,
+                "name": row["name"],
+                "protected": protected,
+                "blocked": blocked,
+                "children": children,
+            }
+
+        self.session.execute(
+            text("DELETE FROM fyp.rental_properties WHERE id = :pid"),
+            {"pid": property_id},
+        )
+        self.session.commit()
+        return {
+            "found": True,
+            "deleted": True,
+            "name": row["name"],
+            "protected": [],
+            "blocked": {},
+            "children": children,
+        }
 
     # ------------------------------------------------- catalogue integration
 

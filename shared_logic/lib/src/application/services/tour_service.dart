@@ -1,4 +1,6 @@
-import 'package:shared_logic/shared_logic.dart';
+import '../../domain/entities/captured_frame.dart';
+import '../../domain/entities/virtual_tour.dart';
+import '../../domain/repositories/admin_repositories.dart';
 
 /// Virtual-tour lifecycle: draft → processing → ready → submitted
 /// (pending verification) → approved / rejected, plus deletion with optional

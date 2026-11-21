@@ -3,7 +3,9 @@ from fastapi import APIRouter
 from sitewise.api.v1 import (
     assessments,
     auth,
+    capture_360,
     catalog,
+    compare,
     explore,
     geospatial,
     ml_predictions,
@@ -61,6 +63,8 @@ router.include_router(staff.router, prefix="/staff", tags=["staff"])
 # exactly one authorization definition for staff listing access.
 router.include_router(staff_listings.router, prefix="/staff", tags=["staff_listings"])
 router.include_router(recommendations.router, prefix="/recommendations", tags=["recommendations"])
+# Direct shortlist comparison — separate from ranking, never a second scorer.
+router.include_router(compare.router, prefix="/compare", tags=["compare"])
 # Layer 2/3 personalised pipeline. Separate router so the existing
 # recommendations module (and its in-progress /search, /facets work) is never
 # modified. Registered AFTER it: existing static paths keep priority.
@@ -82,6 +86,10 @@ router.include_router(
 )
 router.include_router(geospatial.router, prefix="/geospatial", tags=["geospatial"])
 router.include_router(virtual_tours.router, prefix="/virtual-tours", tags=["virtual_tours"])
+# Backend-authoritative 360° capture: authorized sessions, frame manifests and
+# panorama processing jobs. The stitching worker claims the jobs these routes
+# enqueue; storage transport is the signed-upload gateway.
+router.include_router(capture_360.router, prefix="/360", tags=["capture_360"])
 router.include_router(reports.router, prefix="/reports", tags=["reports"])
 router.include_router(statistics.router, prefix="/statistics", tags=["statistics"])
 # Entrepreneur Explore: approved+published fyp.rental_properties with

@@ -17,6 +17,9 @@ class FakeSupabaseAdmin:
     """In-memory stand-in for :class:`SupabaseAdminService`."""
 
     def __init__(self):
+        # Test fakes do not model the live authoritative profile by default;
+        # request-time sync must keep the legacy token path for hermetic tests.
+        self.strict_identity = False
         self.auth_users: dict[str, dict] = {}  # email -> {id, email}
         self.identity: dict[str, dict] = {}  # user_id -> public.users row
         self.invitations: list[dict] = []
@@ -37,6 +40,12 @@ class FakeSupabaseAdmin:
         user = self.auth_users.get(email.lower())
         return dict(user) if user else None
 
+    def get_auth_user(self, auth_user_id: str) -> dict | None:
+        for user in self.auth_users.values():
+            if user.get("id") == auth_user_id:
+                return dict(user)
+        return None
+
     def invite_agent(self, *, email: str, full_name: str, phone_number: str | None = None) -> dict:
         uid = str(uuid.uuid4())
         self.auth_users[email.lower()] = {"id": uid, "email": email.lower()}
@@ -52,7 +61,25 @@ class FakeSupabaseAdmin:
             f for f in self.factors.get(auth_user_id, []) if f.get("id") != factor_id
         ]
 
+    def delete_auth_user(self, auth_user_id: str) -> None:
+        """Record the authoritative deletion and drop the fake identity.
+
+        Mirrors the real adapter: idempotent (a missing identity is already
+        gone) and recorded so tests can assert the deletion actually reached
+        the authoritative store before any local mirror was removed.
+        """
+        if not hasattr(self, "deleted_auth_users"):
+            self.deleted_auth_users: list[str] = []
+        self.deleted_auth_users.append(auth_user_id)
+        for email, user in list(self.auth_users.items()):
+            if user.get("id") == auth_user_id:
+                self.auth_users.pop(email, None)
+
     # -- identity rows (public.users) ----------------------------------------
+
+    def get_identity_profile(self, user_id) -> dict | None:
+        row = self.identity.get(str(user_id))
+        return dict(row) if row else None
 
     def upsert_identity_profile(
         self,

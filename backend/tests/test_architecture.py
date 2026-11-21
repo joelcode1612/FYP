@@ -65,8 +65,8 @@ def test_services_are_testable_with_fake_repositories():
         def get_or_create_from_supabase(self, **kwargs):
             return {"user_id": kwargs["user_id"]}, True
 
-    service = UserService.__new__(UserService)  # bypass __init__'s SQLModel session
-    service.repo = FakeRepo()
+    # Injecting the fake is the whole point of the port: no session, no DB.
+    service = UserService(FakeRepo())  # type: ignore[arg-type]
     uid = uuid.uuid4()
 
     # update_own_profile uses rbac filtering + repo.update.
@@ -132,8 +132,7 @@ def test_identity_email_collision_fails_closed_without_rekey():
             return (kwargs, True)
 
     repo = FakeRepo()
-    service = UserService.__new__(UserService)
-    service.repo = repo
+    service = UserService(repo)  # type: ignore[arg-type]
     with pytest.raises(ConflictError):
         service.get_or_sync_current(
             user_id=new_id, email='staff@example.test', email_verified=True
@@ -145,3 +144,132 @@ def test_identity_email_collision_fails_closed_without_rekey():
         )
     assert repo.rekeys == []
     assert repo.creates == []
+
+
+# ---------------------------------------------------------------------------
+# Clean-architecture boundaries (spec 15 + the repository refactor).
+#
+# The router rules are a ratchet, not a claim of compliance: the listed files
+# still read or write rows from inside a handler, and the second assertion
+# forces the debt list to shrink when one of them is migrated.
+# ---------------------------------------------------------------------------
+
+#: Session/SQL primitives that belong to the infrastructure layer only.
+_DATA_ACCESS_RE = re.compile(
+    r"session\.(?:execute|exec|add|commit|delete|refresh|get)\(|\btext\("
+)
+
+LEGACY_ROUTER_DATA_ACCESS = frozenset(
+    {
+        "catalog.py",
+        "project1_cp07.py",
+        "properties.py",
+        "property_verification.py",
+        "staff.py",
+        "staff_listings.py",
+        "virtual_tours.py",
+    }
+)
+
+
+def _router_sources() -> dict[str, str]:
+    return {
+        path.name: path.read_text(encoding="utf-8")
+        for path in (SRC / "api" / "v1").glob("*.py")
+    }
+
+
+def _router_violations(sources: dict[str, str]) -> set[str]:
+    return {
+        name
+        for name, source in sources.items()
+        if imports_module(source, "sitewise.repositories") or _DATA_ACCESS_RE.search(source)
+    }
+
+
+def test_route_modules_do_not_gain_new_data_access():
+    """A handler may reach a use-case, never a row.
+
+    New route modules must delegate; the documented legacy files are tracked in
+    :data:`LEGACY_ROUTER_DATA_ACCESS` and fail this test once they are clean.
+    """
+    sources = _router_sources()
+    offenders = _router_violations(sources)
+    assert offenders <= set(LEGACY_ROUTER_DATA_ACCESS), (
+        "route modules performing data access: " + ", ".join(sorted(offenders))
+    )
+    assert offenders == set(LEGACY_ROUTER_DATA_ACCESS), (
+        "these routers are now clean - remove them from LEGACY_ROUTER_DATA_ACCESS: "
+        + ", ".join(sorted(LEGACY_ROUTER_DATA_ACCESS - offenders))
+    )
+
+
+def test_service_ports_stay_free_of_adapters_and_frameworks():
+    """``services/ports`` declares contracts, so it may not know SQL or HTTP."""
+    for path in (SRC / "services" / "ports").glob("*.py"):
+        source = path.read_text(encoding="utf-8")
+        for forbidden in ("fastapi", "sqlmodel", "sqlalchemy", "pydantic"):
+            assert forbidden not in source, (
+                f"services/ports/{path.name} must stay framework-free"
+            )
+        assert not imports_module(source, "sitewise.repositories"), (
+            f"services/ports/{path.name} must not depend on the adapter it abstracts"
+        )
+
+
+#: Use-case services written against a ``services/ports`` contract. Each one
+#: must stay free of the adapter and the ORM session, which leaves exactly one
+#: place allowed to do the wiring: the composition root.
+PORT_BOUND_SERVICES = {
+    "user_service.py": "UserRepositoryPort",
+    "saved_property_service.py": "FavouriteRepositoryPort",
+}
+
+
+def test_port_bound_services_stay_written_against_their_ports():
+    for service_file, port in sorted(PORT_BOUND_SERVICES.items()):
+        source = _source_of("services", service_file)
+        assert port in source, f"services/{service_file} no longer names its {port}"
+        assert not imports_module(source, "sitewise.repositories"), (
+            f"services/{service_file} imports the adapter it abstracts"
+        )
+        assert not imports_module(source, "sqlmodel"), (
+            f"services/{service_file} reaches for the ORM session"
+        )
+
+
+def test_only_the_composition_root_binds_the_user_adapter():
+    """``UserService`` takes a port, so somebody must do the wiring - exactly once."""
+    dependencies = _source_of("dependencies.py")
+    assert "UserService(UserRepository(session))" in dependencies
+    for name, source in _router_sources().items():
+        assert "UserService(session)" not in source, f"{name} constructs UserService from a session"
+        if name in ("users.py", "staff.py"):
+            assert "Depends(get_user_service)" in source, f"{name} lost its injected user service"
+
+
+def test_saved_property_router_goes_through_its_service():
+    """The favourites router may only speak to ``SavedPropertyService``.
+
+    Checked as a substitution for the row-level assertions the router used to
+    carry: the status codes and the ``unresolved`` rule are pinned by
+    ``tests/api/test_saved_properties_api.py``, this pins who answers them.
+    """
+    dependencies = _source_of("dependencies.py")
+    assert "SavedPropertyService(" in dependencies
+    assert "FavouriteRepository(session)" in dependencies
+    source = _source_of("api", "v1", "saved_properties.py")
+    assert "SavedPropertyServiceImpl" in source
+    for forbidden in ("FavouriteRepository(", "CatalogRepository(", "select("):
+        assert forbidden not in source, f"saved_properties.py still does {forbidden} inline"
+
+
+def test_staff_role_checks_still_demand_a_verified_mfa_session():
+    """The refactor moved construction, not authorization: ``aal2`` stays required.
+
+    Counted rather than eyeballed, because a role gate that silently drops its
+    assurance check still compiles and still returns 200 for a password session.
+    """
+    source = _source_of("dependencies.py")
+    assert source.count("user.assurance_level != rbac.REQUIRED_STAFF_AAL") >= 4
+    assert "def get_active_user" in source

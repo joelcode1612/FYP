@@ -35,7 +35,7 @@ Map<String, dynamic> _summaryPayload({
       'complete': true,
     },
     'phase2': {
-      'total': 1,
+      'total': 2,
       'settled': running ? 0 : 1,
       'running': running ? 1 : 0,
       'complete': !running,
@@ -83,13 +83,17 @@ void main() {
           'roads_transport',
           'parking',
           'population',
+          'age_population',
         ],
       );
     });
 
-    test('phase split is four PostGIS categories and one raster category', () {
+    test('phase split is four PostGIS categories and two raster categories', () {
       expect(EnrichmentCategory.phaseOne, hasLength(4));
-      expect(EnrichmentCategory.phaseTwo, [EnrichmentCategory.population]);
+      expect(EnrichmentCategory.phaseTwo, [
+        EnrichmentCategory.population,
+        EnrichmentCategory.agePopulation,
+      ]);
       for (final category in EnrichmentCategory.phaseOne) {
         expect(category.phase, EnrichmentPhase.postgis);
       }
@@ -136,7 +140,7 @@ void main() {
       expect(summary.calculationVersion, 'property-enrichment-v1');
       expect(summary.phaseOneComplete, isTrue);
       expect(summary.phaseTwoComplete, isTrue);
-      expect(summary.categories, hasLength(5));
+      expect(summary.categories, hasLength(6));
       expect(
         summary.state(EnrichmentCategory.fnbCompetitors).number(
           'competitor_count_500m',
@@ -157,7 +161,7 @@ void main() {
         'categories': const <String, dynamic>{},
       });
 
-      expect(summary.categories, hasLength(5));
+      expect(summary.categories, hasLength(6));
       for (final category in EnrichmentCategory.values) {
         expect(summary.state(category).status, EnrichmentStatus.pending);
       }
@@ -165,13 +169,16 @@ void main() {
     });
 
     test('progress counts settled categories', () {
+      // fnb/demand/roads/parking are current and population unavailable —
+      // five settled of the six categories; age_population is absent from
+      // the payload, which parses as pending (not settled).
       final summary = PropertyEnrichmentSummary.fromJson(_summaryPayload());
-      expect(summary.progress, 1.0);
+      expect(summary.progress, closeTo(5 / 6, 1e-9));
 
       final running = PropertyEnrichmentSummary.fromJson(
         _summaryPayload(running: true),
       );
-      expect(running.progress, closeTo(4 / 5, 1e-9));
+      expect(running.progress, closeTo(4 / 6, 1e-9));
       expect(running.isRunning, isTrue);
     });
 

@@ -1,5 +1,7 @@
 import '../../core/network/api_client.dart';
 import '../../domain/entities/personalised_recommendations.dart';
+import '../../domain/repositories/personalised_recommendation_repository.dart';
+import '../mappers/personalised_recommendation_mapper.dart';
 
 /// Live client for the Layer 2/3 personalised recommendation pipeline.
 ///
@@ -15,7 +17,8 @@ import '../../domain/entities/personalised_recommendations.dart';
 ///
 /// Failures propagate as exceptions for the notifier to map onto its error
 /// state; nothing is substituted or fabricated here.
-class ApiPersonalisedRecommendationRepository {
+class ApiPersonalisedRecommendationRepository
+    implements PersonalisedRecommendationRepository {
   final ApiClient _client;
 
   const ApiPersonalisedRecommendationRepository(this._client);
@@ -35,15 +38,12 @@ class ApiPersonalisedRecommendationRepository {
   /// Returns null when no batch exists for the account yet.
   Future<GeneratedBatch?> latest() async {
     final response = await _client.get('/api/v1/recommendations/me/generated');
-    if (response['available'] != true) return null;
-    final batch = response['batch'];
-    if (batch is! Map<String, dynamic>) return null;
-    return GeneratedBatch.fromJson(batch);
+    return PersonalisedRecommendationMapper.batch(response);
   }
 
   Future<PersonalisedExplanation> explanation(String resultId) async {
     final response =
         await _client.get('/api/v1/recommendations/$resultId/explanation');
-    return PersonalisedExplanation.fromJson(response);
+    return PersonalisedRecommendationMapper.explanation(response);
   }
 }

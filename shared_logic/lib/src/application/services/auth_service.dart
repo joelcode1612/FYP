@@ -1,4 +1,5 @@
-import 'package:shared_logic/shared_logic.dart';
+import '../../domain/entities/user.dart';
+import '../../domain/repositories/auth_repository.dart';
 
 /// Authentication application layer. Widgets (onboarding, auth screen, role
 /// menu) talk to this — never to a backend client directly.
