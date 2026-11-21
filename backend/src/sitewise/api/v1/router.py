@@ -5,6 +5,7 @@ from sitewise.api.v1 import (
     agent_only_flow,
     auth,
     capture_360,
+    public_panorama_publication,
     catalog,
     compare,
     explore,
@@ -92,6 +93,11 @@ router.include_router(virtual_tours.router, prefix="/virtual-tours", tags=["virt
 # panorama processing jobs. The stitching worker claims the jobs these routes
 # enqueue; storage transport is the signed-upload gateway.
 router.include_router(capture_360.router, prefix="/360", tags=["capture_360"])
+# Public-schema AR capture tour publication and shared read endpoint.
+router.include_router(
+    public_panorama_publication.router, prefix="/360/published",
+    tags=["public_panorama_publication"],
+)
 router.include_router(reports.router, prefix="/reports", tags=["reports"])
 router.include_router(statistics.router, prefix="/statistics", tags=["statistics"])
 # Entrepreneur Explore: approved+published fyp.rental_properties with

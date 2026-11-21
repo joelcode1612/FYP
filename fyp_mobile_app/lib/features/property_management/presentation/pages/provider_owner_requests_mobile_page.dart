@@ -64,7 +64,7 @@ class _OwnerRequestsState extends ConsumerState<ProviderOwnerRequestsMobilePage>
           Text(property.displayTitle),
           const SizedBox(height: 12),
           DropdownButtonFormField<String>(
-            value: chosen,
+            initialValue: chosen,
             isExpanded: true,
             decoration: const InputDecoration(labelText: 'Property Agent'),
             items: agents.map((a) => DropdownMenuItem<String>(
@@ -89,9 +89,11 @@ class _OwnerRequestsState extends ConsumerState<ProviderOwnerRequestsMobilePage>
       );
       ref.invalidate(providerDashboardProvider);
       await refresh();
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text('Agent request sent. The Agent must accept it first.'),
-      ));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Agent request sent. The Agent must accept it first.'),
+        ));
+      }
     } catch (e) { if (mounted) setState(() => error = '$e'); }
     finally { if (mounted) setState(() => busy = false); }
   }

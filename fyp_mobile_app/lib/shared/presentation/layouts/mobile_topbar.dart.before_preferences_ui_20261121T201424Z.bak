@@ -1,0 +1,242 @@
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_logic/shared_logic.dart';
+import 'package:flutter/material.dart';
+
+import 'package:fyp/core/theme/sitewise_m3.dart';
+import 'package:fyp/core/theme/sitewise_theme.dart';
+import 'package:fyp/shared/presentation/components/m3_kit.dart';
+import 'package:fyp/shared/presentation/widgets/sitewise_brand.dart';
+import 'package:fyp/shared/presentation/widgets/sitewise_role_menu.dart';
+import 'package:fyp/shared/presentation/layouts/entrepreneur_tab_scope.dart';
+
+/// Compact mobile header.
+///
+/// `m3: true` renders the Material 3 reference `.app-head`: paper background,
+/// the real Sitewise brand lockup, rounded utility buttons and a hairline
+/// bottom border. Back navigation, caller [actions] and the demo role menu are
+/// preserved so detail pages keep every affordance they had.
+///
+/// Admin / owner keep the classic [AppBar] treatment (`m3: false`).
+
+class MobileTopBar extends ConsumerWidget implements PreferredSizeWidget {
+  final String title;
+  final List<Widget>? actions;
+
+  /// Render the Sitewise wordmark instead of the text title (used on Home).
+  final bool brandTitle;
+
+  /// Opt into the Material 3 post-sign-in chrome.
+  final bool m3;
+
+  /// Force the back affordance on or off. When null (default) the back arrow
+  /// follows [Navigator.canPop]. Root workspaces (the persistent tab host)
+  /// pass `false`: a primary tab is a top-level destination and must never
+  /// offer a back arrow that pops the whole workspace away.
+  final bool? showBack;
+
+  /// Role pill rendered next to the brand lockup (`Agent`, `Property Owner`).
+  /// Null keeps the header exactly as it was — the entrepreneur workspace
+  /// passes nothing.
+  final String? roleBadge;
+
+  /// Real unread count for the notification affordance (server-derived, e.g.
+  /// `new` enquiries in the provider inbox). Null = no signal available —
+  /// the badge dot is suppressed rather than guessed; 0 = known none.
+  final int? unreadNotifications;
+
+  /// Where the notification button goes. Defaults to the historic no-op
+  /// snackbar so existing callers are untouched.
+  final VoidCallback? onNotifications;
+
+  const MobileTopBar({
+    super.key,
+    required this.title,
+    required this.actions,
+    this.brandTitle = false,
+    this.m3 = false,
+    this.showBack,
+    this.roleBadge,
+    this.unreadNotifications,
+    this.onNotifications,
+  });
+
+  @override
+  Size get preferredSize => Size.fromHeight(m3 ? 62 : kToolbarHeight);
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final canPop = showBack ?? Navigator.of(context).canPop();
+    if (!m3) return _classic(context, ref, canPop);
+    return _m3(context, canPop);
+  }
+
+  // ── Classic (admin / owner) ────────────────────────────────────────────────
+  Widget _classic(BuildContext context, WidgetRef ref, bool canPop) {
+    final role = ref.watch(appNotifierProvider.select((s) => s.role));
+    return AppBar(
+      backgroundColor: SitewiseColors.surface,
+      foregroundColor: SitewiseColors.ink,
+      surfaceTintColor: SitewiseColors.surface,
+      elevation: 0,
+      scrolledUnderElevation: 0,
+      shape: const Border(bottom: BorderSide(color: SitewiseColors.border)),
+      automaticallyImplyLeading: false,
+      centerTitle: false,
+      titleSpacing: 0,
+      leadingWidth: 48,
+      leading: _leading(context, canPop),
+      title: brandTitle
+          ? const SitewiseBrand(fontSize: 17)
+          : Text(
+              title,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                fontSize: 17,
+                fontWeight: FontWeight.w700,
+                color: SitewiseColors.ink,
+              ),
+            ),
+      actions: [
+        ...?actions,
+        if (role == AppRole.entrepreneur)
+          InkWell(
+            borderRadius: BorderRadius.circular(20),
+            // In-page shortcut to a primary tab: switch the persistent host's
+            // tab in place instead of stacking a second workspace route.
+            onTap: () => EntrepreneurTabScope.open(
+              context,
+              '/entrepreneur/profile',
+            ),
+            child: const Padding(
+              padding: EdgeInsets.all(8),
+              child: CircleAvatar(
+                radius: 16,
+                backgroundColor: SitewiseColors.geoWash,
+                child: Text(
+                  'S',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w700,
+                    color: SitewiseColors.action,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        const SitewiseRoleMenu(),
+        const SizedBox(width: 4),
+      ],
+    );
+  }
+
+  // ── Material 3 (entrepreneur post-sign-in) ────────────────────────────────
+  Widget _m3(BuildContext context, bool canPop) {
+    void notify() => ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('You have no new notifications.'),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+    final unread = unreadNotifications ?? 0;
+    final showUnread = (unreadNotifications != null) && unread > 0;
+
+    return AppBar(
+      automaticallyImplyLeading: false,
+      backgroundColor: SitewiseM3.paper,
+      surfaceTintColor: SitewiseM3.paper,
+      foregroundColor: SitewiseM3.ink,
+      elevation: 0,
+      scrolledUnderElevation: 0,
+      toolbarHeight: 62,
+      titleSpacing: 10,
+      leadingWidth: canPop ? 46 : 16,
+      leading: canPop
+          ? Padding(
+              padding: const EdgeInsets.only(left: 8),
+              child: IconButton(
+                tooltip: 'Back',
+                onPressed: () => Navigator.of(context).maybePop(),
+                icon: const Icon(
+                  Icons.arrow_back_rounded,
+                  size: 22,
+                  color: SitewiseM3.circleBtnIcon,
+                ),
+              ),
+            )
+          : const SizedBox.shrink(),
+      shape: const Border(
+        bottom: BorderSide(color: SitewiseM3.divider, width: 1),
+      ),
+      title: Row(
+        children: [
+          const Flexible(child: M3BrandLockup()),
+          // Role pill (`Agent` / `Property Owner`). Sits beside the lockup and
+          // ellipsises before the lockup does on a narrow screen, so the two
+          // never push the bell off-screen.
+          if (roleBadge != null) ...[
+            const SizedBox(width: 8),
+            Flexible(
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 5,
+                ),
+                decoration: BoxDecoration(
+                  color: SitewiseM3.quiet,
+                  borderRadius: BorderRadius.circular(SitewiseM3.radiusPill),
+                  border: Border.all(color: SitewiseM3.brandBorder),
+                ),
+                child: Text(
+                  roleBadge!,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontFamily: kFontFamily,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w800,
+                    color: SitewiseColors.action,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
+      actions: [
+        ...?actions,
+        // Unread dot only when a REAL server-derived count says so — never a
+        // decorative badge.
+        Badge(
+          isLabelVisible: showUnread,
+          backgroundColor: SitewiseColors.danger,
+          offset: const Offset(3, 3),
+          child: M3CircleButton(
+            icon: Icons.notifications_none_rounded,
+            tooltip: showUnread
+                ? 'Notifications — $unread unread'
+                : 'Notifications',
+            onTap: onNotifications ?? notify,
+          ),
+        ),
+        // Single utility button — Notifications. The profile is reached via
+        // the bottom navigation's Profile tab, so no person button here. The
+        // classic (admin / owner) header below keeps its own account menu.
+        const SizedBox(width: 6),
+      ],
+    );
+  }
+
+  Widget _leading(BuildContext context, bool canPop) {
+    if (canPop) {
+      return IconButton(
+        tooltip: 'Back',
+        icon: const Icon(Icons.arrow_back),
+        onPressed: () => Navigator.of(context).maybePop(),
+      );
+    }
+    return const Padding(
+      padding: EdgeInsets.only(left: 12),
+      child: Icon(Icons.location_on, size: 24, color: SitewiseColors.action),
+    );
+  }
+}

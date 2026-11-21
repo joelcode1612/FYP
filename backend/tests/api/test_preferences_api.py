@@ -143,7 +143,7 @@ def test_saving_preferences_persists_them(client, identity):
     body = saved.json()
     assert body["saved"] is True
     assert body["updated_at"] is not None
-    assert body["preferences"]["business_type"] == "Specialty coffee"
+    assert "business_type" not in body["preferences"]
     assert body["preferences"]["max_budget_rm"] == 9000
 
     # A second request re-reads the database rather than an in-memory copy.
@@ -186,7 +186,7 @@ def test_partial_save_merges_over_what_is_stored(client, identity):
     stored = partial.json()["preferences"]
     assert stored["target_market"] == "Students"
     # Untouched fields keep their stored values instead of being blanked.
-    assert stored["business_type"] == "Specialty coffee"
+    assert "business_type" not in stored
     assert stored["property_type"] == "Shop lot"
     assert stored["max_budget_rm"] == 9000
     assert stored["preferred_areas"] == ["Petaling Jaya"]
@@ -204,7 +204,27 @@ def test_stored_preferences_stay_loadable_by_the_assessment_stage(client, identi
         headers=auth(identity["token"]),
     )
     stored = client.get("/api/v1/preferences/me", headers=auth(identity["token"])).json()
-    assert validate_requirements(stored["preferences"]) == stored["preferences"]
+    # The assessment still requires a category in its own questionnaire,
+    # but the saved shortlist criteria intentionally have no category.
+    assessment_payload = {**stored["preferences"], "business_type": "Cafe"}
+    assert validate_requirements(assessment_payload) == assessment_payload
+
+
+def test_saving_without_business_category_succeeds(client, identity):
+    # The shortlist does not score individual F&B categories. A new account
+    # must be able to save rent/size/type without inventing a business type.
+    criteria = {k: v for k, v in VALID_PREFERENCES.items() if k != "business_type"}
+    saved = client.patch(
+        "/api/v1/preferences/me",
+        json={"preferences": criteria},
+        headers=auth(identity["token"]),
+    )
+    assert saved.status_code == 200, saved.text
+    stored = saved.json()["preferences"]
+    assert "business_type" not in stored
+    assert stored["max_budget_rm"] == 9000
+    assert stored["property_type"] == "Shop lot"
+
 
 
 # -------------------------------------------------------------- validation
@@ -238,7 +258,7 @@ def test_missing_required_fields_are_all_reported_at_once(client, identity):
     )
     assert r.status_code == 422, r.text
     message = r.json()["detail"]["message"]
-    assert "business_type is required" in message
+    assert "business_type is required" not in message
     assert "property_type is required" in message
     assert "max_budget_rm is required" in message
     assert _row_count(identity["user_id"]) == 0

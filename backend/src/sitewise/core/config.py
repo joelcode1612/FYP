@@ -54,6 +54,8 @@ class Settings(BaseSettings):
     # Server-only secret key. NEVER sent to a client, never used to sign JWTs.
     # Optional for this integration (only needed for admin API operations).
     supabase_secret_key: str = ""
+    # Same Supabase Storage bucket as the standalone AR capture backend.
+    sitewise_public_panorama_bucket: str = "property-panoramas"
     # JWKS endpoint of the asymmetric signing keys (ES256 on current projects).
     supabase_jwks_url: str = ""
     # Accepted `aud` claim values (Supabase issues "authenticated" for users).

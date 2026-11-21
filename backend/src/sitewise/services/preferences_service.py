@@ -59,7 +59,16 @@ class PreferencesService:
         is written when it raises.
         """
         record = self.repo.get_by_user(user_id)
-        clean = validate_requirements({**self._decode(record), **changes})
+        merged = {**self._decode(record), **changes}
+        # Business category is no longer a recommendation preference: there
+        # is no separate F&B category suitability score. Drop a historical
+        # value instead of carrying it invisibly into new saves. Assessment
+        # questionnaire validation still requires it when appropriate.
+        merged.pop('business_type', None)
+        clean = validate_requirements(
+            merged, require_business_type=False
+        )
+        clean.pop('business_type', None)
 
         now = _now()
         if record is None:
@@ -81,6 +90,10 @@ class PreferencesService:
         """
         record = self.repo.get_by_user(user_id)
         stored = self._decode(record)
+        # Hide any older category value without migrating or deleting the
+        # user's other saved preferences. The next save removes the old
+        # field from the persisted JSON.
+        stored.pop('business_type', None)
         return {
             "preferences": stored or None,
             "saved": bool(stored),

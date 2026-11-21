@@ -159,105 +159,151 @@ class _EntrepreneurRecommendationsMobilePageState
 
   // -- header ---------------------------------------------------------------
 
+  // SiteWise mobile recommendations UI refinement (2026-11-21).
+  // Search gets its own line; filters and sort share a predictable toolbar.
   Widget _header(EntrepreneurState state, EntrepreneurNotifier notifier) {
     final total = state.recommendationTotal;
     final request = state.recommendationRequest;
     final facets = state.recommendationFacets;
+    final chips = _filterChips(request);
+    final sortOptions = (facets?.sortOptions.isNotEmpty ?? false)
+        ? facets!.sortOptions
+        : _sortFallback;
+    final currentSort = request.sort ?? 'best_match';
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const M3ScreenHeading(
           eyebrow: 'Find a space that fits your vision',
           title: 'Recommendations',
-          lead:
-              'Commercial properties ranked by the general SiteWise PU model.',
+          lead: 'Explore commercial spaces and assess their location fit.',
         ),
-        const SizedBox(height: 12),
-        Row(
-          children: [
-            Expanded(
-              child: TextField(
-                controller: _search,
-                textInputAction: TextInputAction.search,
-                decoration: const InputDecoration(
-                  hintText: 'Search area, title or property ID',
-                  prefixIcon: Icon(Icons.search_rounded),
-                  isDense: true,
-                  border: OutlineInputBorder(),
-                ),
-                onSubmitted: (value) {
-                  final text = value.trim();
-                  notifier.applyRecommendationRequest(
-                    text.isEmpty
-                        ? request.copyWith(clearQuery: true)
-                        : request.copyWith(query: text),
-                  );
-                  FocusScope.of(context).unfocus();
-                },
+        const SizedBox(height: 14),
+        ValueListenableBuilder<TextEditingValue>(
+          valueListenable: _search,
+          builder: (context, value, _) => TextField(
+            controller: _search,
+            textInputAction: TextInputAction.search,
+            decoration: InputDecoration(
+              hintText: 'Search area, title or property ID',
+              hintMaxLines: 1,
+              prefixIcon: const Icon(Icons.search_rounded),
+              suffixIcon: value.text.isEmpty
+                  ? null
+                  : IconButton(
+                      tooltip: 'Clear search',
+                      icon: const Icon(Icons.close_rounded),
+                      onPressed: () {
+                        _search.clear();
+                        notifier.applyRecommendationRequest(
+                          request.copyWith(clearQuery: true),
+                        );
+                      },
+                    ),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(13),
+              ),
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 14,
+                vertical: 15,
               ),
             ),
-            const SizedBox(width: 8),
+            onSubmitted: (value) {
+              final text = value.trim();
+              notifier.applyRecommendationRequest(
+                text.isEmpty
+                    ? request.copyWith(clearQuery: true)
+                    : request.copyWith(query: text),
+              );
+              FocusScope.of(context).unfocus();
+            },
+          ),
+        ),
+        const SizedBox(height: 10),
+        Row(
+          children: [
             SizedBox(
-              height: 48,
+              height: 52,
               child: OutlinedButton.icon(
                 onPressed: () => _openFilters(state),
-                icon: const Icon(Icons.tune_rounded, size: 18),
-                label: const Text('Filters'),
+                icon: const Icon(Icons.tune_rounded, size: 19),
+                label: Text(chips.isEmpty ? 'Filters' : 'Filters (${chips.length})'),
                 style: OutlinedButton.styleFrom(
                   foregroundColor: SitewiseColors.action,
                   side: const BorderSide(color: SitewiseColors.action),
+                  padding: const EdgeInsets.symmetric(horizontal: 13),
+                  minimumSize: const Size(0, 52),
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: BorderRadius.circular(13),
                   ),
                 ),
               ),
             ),
-          ],
-        ),
-        const SizedBox(height: 10),
-        Row(
-          children: [
+            const SizedBox(width: 10),
             Expanded(
-              child: DropdownButtonFormField<String>(
-                initialValue: request.sort ?? 'best_match',
-                isDense: true,
-                decoration: const InputDecoration(
-                  labelText: 'Sort by',
-                  border: OutlineInputBorder(),
-                  isDense: true,
+              child: OutlinedButton(
+                onPressed: () => _openSortOptions(request, sortOptions),
+                style: OutlinedButton.styleFrom(
+                  backgroundColor: SitewiseColors.surface,
+                  foregroundColor: SitewiseColors.ink,
+                  side: const BorderSide(color: SitewiseColors.borderStrong),
+                  minimumSize: const Size.fromHeight(52),
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(13),
+                  ),
                 ),
-                items: [
-                  for (final entry
-                      in (facets?.sortOptions.isNotEmpty ?? false)
-                          ? facets!.sortOptions.entries
-                          : _sortFallback.entries)
-                    DropdownMenuItem(
-                      value: entry.key,
-                      child: Text(entry.value),
+                child: Row(
+                  children: [
+                    const Icon(Icons.sort_rounded, color: SitewiseColors.action, size: 18),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Sort by',
+                            style: TextStyle(fontSize: 11, color: SitewiseColors.muted),
+                          ),
+                          Text(
+                            _compactSortLabel(currentSort, sortOptions),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w700,
+                              color: SitewiseColors.ink,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
-                ],
-                onChanged: (value) {
-                  if (value == null) return;
-                  notifier.applyRecommendationRequest(
-                    request.copyWith(sort: value),
-                  );
-                },
+                    const SizedBox(width: 4),
+                    const Icon(
+                      Icons.keyboard_arrow_down_rounded,
+                      color: SitewiseColors.muted,
+                      size: 19,
+                    ),
+                  ],
+                ),
               ),
             ),
           ],
         ),
-        const SizedBox(height: 10),
+        const SizedBox(height: 15),
         Text(
           total == null
               ? 'Finding matching properties…'
               : '$total ${total == 1 ? 'property matches' : 'properties match'}',
           style: const TextStyle(
-            fontSize: 14,
+            fontSize: 16,
             fontWeight: FontWeight.w800,
             color: SitewiseColors.ink,
           ),
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 4),
         Builder(
           builder: (context) {
             final compareCount = ref.read(appNotifierProvider).compared.length;
@@ -267,23 +313,21 @@ class _EntrepreneurRecommendationsMobilePageState
                   child: Text(
                     '$compareCount of ${AppState.maxCompare} in comparison',
                     style: const TextStyle(
-                      fontSize: 12.5,
+                      fontSize: 13,
                       color: SitewiseColors.muted,
                     ),
                   ),
                 ),
                 TextButton(
                   onPressed: compareCount >= 2
-                      ? () => Navigator.of(
-                          context,
-                        ).pushNamed('/entrepreneur/compare')
+                      ? () => Navigator.of(context)
+                          .pushNamed('/entrepreneur/compare')
                       : null,
                   child: const Text(
                     'View comparison',
                     style: TextStyle(
-                      color: SitewiseColors.action,
-                      fontWeight: FontWeight.w800,
-                      fontSize: 12.5,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 13,
                     ),
                   ),
                 ),
@@ -291,30 +335,180 @@ class _EntrepreneurRecommendationsMobilePageState
             );
           },
         ),
-        const SizedBox(height: 8),
-        if (_filterChips(request).isNotEmpty)
+        if (chips.isNotEmpty) ...[
+          const SizedBox(height: 5),
           SizedBox(
-            height: 34,
+            height: 38,
             child: ListView(
               scrollDirection: Axis.horizontal,
               children: [
-                for (final chip in _filterChips(request))
+                for (final chip in chips)
                   Padding(
-                    padding: const EdgeInsets.only(right: 6),
-                    child: ActionChip(
+                    padding: const EdgeInsets.only(right: 7),
+                    child: InputChip(
                       label: Text(
                         chip.label,
                         style: const TextStyle(fontSize: 12),
                       ),
-                      onPressed: () =>
-                          notifier.applyRecommendationRequest(chip.next),
+                      onDeleted: () => notifier.applyRecommendationRequest(
+                        chip.next,
+                      ),
+                      deleteIcon: const Icon(Icons.close_rounded, size: 16),
+                      deleteButtonTooltipMessage: 'Remove ${chip.label} filter',
                     ),
                   ),
               ],
             ),
           ),
-        const SizedBox(height: 10),
+        ],
+        const SizedBox(height: 14),
       ],
+    );
+  }
+
+  // SiteWise sort picker: compact control + accessible bottom sheet.
+  // Labels shown here are only shortened in the toolbar; backend keys and
+  // server-provided sort options remain unchanged.
+  static String _compactSortLabel(String key, Map<String, String> options) =>
+      switch (key) {
+        'best_match' => 'Best match',
+        'rent_asc' => 'Lowest rent',
+        'rent_desc' => 'Highest rent',
+        'size_desc' => 'Largest area',
+        'size_asc' => 'Smallest area',
+        'pu_desc' => 'Highest PU index',
+        _ => options[key] ?? key,
+      };
+
+  Future<void> _openSortOptions(
+    RecommendationSearchRequest request,
+    Map<String, String> options,
+  ) async {
+    FocusManager.instance.primaryFocus?.unfocus();
+    final selected = request.sort ?? 'best_match';
+    // Do not replace the facet vocabulary: it is supplied by the backend.
+    final available = Map<String, String>.from(options);
+    available.putIfAbsent(
+      selected,
+      () => _sortFallback[selected] ?? selected,
+    );
+
+    final next = await showModalBottomSheet<String>(
+      context: context,
+      useSafeArea: true,
+      isScrollControlled: true,
+      backgroundColor: SitewiseColors.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+      ),
+      builder: (sheetContext) => SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(18, 12, 18, 12),
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              maxHeight: MediaQuery.sizeOf(sheetContext).height * .72,
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Center(
+                  child: Container(
+                    width: 40,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: SitewiseColors.borderStrong,
+                      borderRadius: BorderRadius.circular(50),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 18),
+                const Text(
+                  'Sort properties',
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.w800,
+                    color: SitewiseColors.ink,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                const Text(
+                  'Choose how the matching properties are ordered.',
+                  style: TextStyle(fontSize: 13, color: SitewiseColors.muted),
+                ),
+                const SizedBox(height: 14),
+                Flexible(
+                  child: ListView.separated(
+                    shrinkWrap: true,
+                    itemCount: available.length,
+                    separatorBuilder: (_, _) => const SizedBox(height: 6),
+                    itemBuilder: (context, index) {
+                      final option = available.entries.elementAt(index);
+                      final active = option.key == selected;
+                      return Semantics(
+                        button: true,
+                        selected: active,
+                        child: Material(
+                          color: active
+                              ? SitewiseColors.action.withValues(alpha: .08)
+                              : SitewiseColors.surface,
+                          borderRadius: BorderRadius.circular(12),
+                          child: InkWell(
+                            borderRadius: BorderRadius.circular(12),
+                            onTap: () => Navigator.of(sheetContext).pop(option.key),
+                            child: Container(
+                              constraints: const BoxConstraints(minHeight: 54),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 14,
+                                vertical: 13,
+                              ),
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                  color: active
+                                      ? SitewiseColors.action
+                                      : SitewiseColors.border,
+                                ),
+                              ),
+                              child: Row(
+                                children: [
+                                  Expanded(
+                                    child: Text(
+                                      option.value,
+                                      style: TextStyle(
+                                        fontSize: 15,
+                                        fontWeight: active
+                                            ? FontWeight.w700
+                                            : FontWeight.w500,
+                                        color: SitewiseColors.ink,
+                                      ),
+                                    ),
+                                  ),
+                                  if (active)
+                                    const Icon(
+                                      Icons.check_circle_rounded,
+                                      color: SitewiseColors.action,
+                                      size: 22,
+                                    ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+    if (!mounted || next == null || next == selected) return;
+    ref.read(entrepreneurNotifierProvider.notifier).applyRecommendationRequest(
+      request.copyWith(sort: next),
     );
   }
 
@@ -690,6 +884,7 @@ class RecommendationCard extends StatelessWidget {
                 MobilePropertyGallery(
                   property: prop,
                   urls: prop.imageUrls,
+                  aspectRatio: 2.05, // Compact media; tap to view full image.
                   rankBadge: _RankBadge(rank: match.rank),
                   bookmarkButton: _IconToggle(
                     icon: isSaved ? Icons.bookmark : Icons.bookmark_border,
@@ -707,12 +902,14 @@ class RecommendationCard extends StatelessWidget {
                       : null,
                 ),
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+                  padding: const EdgeInsets.fromLTRB(14, 11, 14, 12),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
                         prop.title,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.w800,
@@ -727,6 +924,8 @@ class RecommendationCard extends StatelessWidget {
                           if (prop.state.isNotEmpty) prop.state,
                           if (prop.propertyType.isNotEmpty) prop.propertyType,
                         ].join(' · '),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
                           fontSize: 14,
                           height: 1.35,
@@ -766,9 +965,9 @@ class RecommendationCard extends StatelessWidget {
                           spacing: 6,
                           runSpacing: 6,
                           children: [
-                            for (final reason in match.matched.take(3))
+                            for (final reason in match.matched.take(2))
                               _ReasonChip(label: reason.label, met: true),
-                            for (final reason in match.unmatched.take(2))
+                            for (final reason in match.unmatched.take(1))
                               _ReasonChip(label: reason.label, met: false),
                           ],
                         ),
@@ -779,7 +978,7 @@ class RecommendationCard extends StatelessWidget {
                           Expanded(
                             flex: 5,
                             child: _CardActionButton(
-                              label: 'View Details',
+                              label: 'Details',
                               icon: Icons.arrow_forward_rounded,
                               primary: true,
                               onTap: () => Navigator.of(context).pushNamed(
@@ -897,8 +1096,7 @@ class _RequirementVerdict extends StatelessWidget {
               verifiable
                   ? 'Meets ${match.matchedCount} of ${match.verifiableCount} '
                         'of your requirements.'
-                  : 'Fit not verified yet — set your business requirements '
-                        'to see how well this listing matches them.',
+                  : 'Fit not verified — set requirements in Filters.',
               style: TextStyle(
                 fontSize: 14,
                 height: 1.35,
@@ -977,9 +1175,10 @@ class _CardActionButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = primary ? SitewiseColors.action : SitewiseColors.ink;
+    // Primary must be WHITE on blue (previously blue on blue).
+    final color = primary ? Colors.white : SitewiseColors.ink;
     return SizedBox(
-      height: 46,
+      height: 48,
       child: FilledButton.icon(
         style: FilledButton.styleFrom(
           backgroundColor: primary
@@ -997,16 +1196,14 @@ class _CardActionButton extends StatelessWidget {
         ),
         onPressed: onTap,
         icon: Icon(icon, size: 17),
-        label: FittedBox(
-          fit: BoxFit.scaleDown,
-          alignment: Alignment.centerLeft,
-          child: Text(
-            label,
-            style: TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w700,
-              color: color,
-            ),
+        label: Text(
+          label,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w700,
+            color: color,
           ),
         ),
       ),
@@ -1399,6 +1596,9 @@ class _FilterSheetState extends ConsumerState<_FilterSheet> {
       decoration: InputDecoration(
         labelText: label,
         border: const OutlineInputBorder(),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 14, vertical: 16,
+        ),
       ),
       items: _items(value, options, emptyLabel, selectedLabel: selectedLabel),
       onChanged: (next) => changed(next ?? ''),
@@ -1747,10 +1947,10 @@ class _FilterSheetState extends ConsumerState<_FilterSheet> {
     final count = facets?.matchingTotal;
     final bottomInset = MediaQuery.viewInsetsOf(context).bottom;
     return Padding(
-      padding: EdgeInsets.fromLTRB(18, 14, 18, bottomInset + 20),
+      padding: EdgeInsets.fromLTRB(18, 12, 18, bottomInset + 12),
       child: DraggableScrollableSheet(
         expand: false,
-        initialChildSize: .88,
+        initialChildSize: .90,
         maxChildSize: .95,
         minChildSize: .55,
         builder: (context, controller) => Column(
@@ -1766,26 +1966,40 @@ class _FilterSheetState extends ConsumerState<_FilterSheet> {
               ),
             ),
             const SizedBox(height: 12),
+            // Filters stay in a scrollable sheet, with a persistent Apply row.
             Row(
               children: [
                 const Expanded(
-                  child: Text(
-                    'Filters',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w800,
-                      color: SitewiseColors.ink,
-                    ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Refine results',
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.w800,
+                          color: SitewiseColors.ink,
+                        ),
+                      ),
+                      SizedBox(height: 3),
+                      Text(
+                        'Choose your location, budget and space needs.',
+                        style: TextStyle(
+                          fontSize: 12.5,
+                          color: SitewiseColors.muted,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-                if (_loading)
-                  const SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  ),
+                TextButton(
+                  onPressed: () => _update(const RecommendationSearchRequest()),
+                  child: const Text('Reset'),
+                ),
               ],
             ),
+            if (_loading)
+              const LinearProgressIndicator(minHeight: 2),
             const SizedBox(height: 10),
             Expanded(
               child: ListView(
@@ -1889,23 +2103,40 @@ class _FilterSheetState extends ConsumerState<_FilterSheet> {
               child: Row(
                 children: [
                   Expanded(
-                    child: OutlinedButton(
-                      onPressed: () => Navigator.of(
-                        context,
-                      ).pop(const RecommendationSearchRequest()),
-                      child: const Text('Clear all'),
+                    flex: 2,
+                    child: SizedBox(
+                      height: 52,
+                      child: OutlinedButton(
+                        onPressed: () =>
+                            _update(const RecommendationSearchRequest()),
+                        child: const Text('Clear all'),
+                      ),
                     ),
                   ),
-                  const SizedBox(width: 8),
+                  const SizedBox(width: 10),
                   Expanded(
-                    child: FilledButton(
-                      onPressed: () => Navigator.of(context).pop(_draft),
-                      child: Text(
-                        count == null
-                            ? 'Show properties'
-                            : 'Show properties ($count)',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
+                    flex: 3,
+                    child: SizedBox(
+                      height: 52,
+                      child: FilledButton(
+                        style: FilledButton.styleFrom(
+                          backgroundColor: SitewiseColors.action,
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(13),
+                          ),
+                        ),
+                        onPressed: count == 0
+                            ? null
+                            : () => Navigator.of(context).pop(_draft),
+                        child: Text(
+                          count == null ? 'Show properties' : 'Show $count results',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
                       ),
                     ),
                   ),

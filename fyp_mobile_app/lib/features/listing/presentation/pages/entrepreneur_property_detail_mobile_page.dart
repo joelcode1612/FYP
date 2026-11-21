@@ -1,22 +1,20 @@
+// SiteWise mobile property-detail focused UI patch (joel branch)
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_logic/shared_logic.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:url_launcher/url_launcher.dart';
+import 'package:fyp/features/recommendations/application/personalised_recommendations_providers.dart';
+import 'package:fyp/core/di/property_evidence_providers.dart';
 
 import 'package:fyp/core/di/service_locator.dart';
 import 'package:fyp/core/theme/sitewise_theme.dart';
-import 'package:fyp/shared/presentation/widgets/sitewise_button.dart';
 import 'package:fyp/shared/presentation/widgets/sitewise_evidence_score.dart';
 import 'package:fyp/shared/presentation/widgets/sitewise_factor_row.dart';
-import 'package:fyp/shared/presentation/widgets/sitewise_map_panel.dart';
 import 'package:fyp/shared/presentation/widgets/sitewise_secondary_button.dart';
-import 'package:fyp/shared/presentation/widgets/sitewise_status_badge.dart';
-import 'package:fyp/shared/presentation/layouts/mobile_app_shell.dart';
-import 'package:fyp/shared/presentation/components/m3_kit.dart';
 import 'package:fyp/shared/presentation/components/mobile_property_gallery.dart';
 import 'package:fyp/features/assessment/presentation/widgets/mobile_insights_panel.dart';
-import 'package:fyp/shared/presentation/components/mobile_section_header.dart';
 import 'package:fyp/shared/presentation/components/mobile_skeleton.dart';
-import 'package:fyp/shared/presentation/components/mobile_suitability_badge.dart';
 
 /// Mobile property detail — Option A layout over the existing evaluation flow.
 ///
@@ -29,9 +27,11 @@ import 'package:fyp/shared/presentation/components/mobile_suitability_badge.dart
 
 class EntrepreneurPropertyDetailMobilePage extends ConsumerStatefulWidget {
   final String propertyId;
+  final String? resultId;
   const EntrepreneurPropertyDetailMobilePage({
     super.key,
     required this.propertyId,
+    this.resultId,
   });
 
   @override
@@ -49,8 +49,15 @@ class _EntrepreneurPropertyDetailMobilePageState
   /// score and its SHAP decomposition. `null` when the backend cannot score the
   /// listing, in which case the older assessment-derived block is shown instead
   /// — the two scoring systems are never merged into one number.
-  late final Future<PropertyInsightsModel?> _insightsFuture =
+  late Future<PropertyInsightsModel?> _insightsFuture = _loadInsights();
+
+  Future<PropertyInsightsModel?> _loadInsights() =>
       ApiPropertyInsightsRepository(ServiceLocator.apiClient).fetch(widget.propertyId);
+
+
+  /// The approved/public-schema tour is independent of the research insights.
+  /// The backend resolves EP-/MD- IDs via verified subject links.
+
 
   @override
   void initState() {
@@ -107,12 +114,11 @@ class _EntrepreneurPropertyDetailMobilePageState
   }
 
   void _reload() {
-    setState(() => _propertyFuture = _loadProperty());
-    // The location insights are a second, independent request — refreshing the
-    // listing alone would leave stale analysis next to fresh facts.
-    ref.read(entrepreneurNotifierProvider.notifier).loadAnalysis(
-      widget.propertyId,
-    );
+    setState(() {
+      _propertyFuture = _loadProperty();
+      _insightsFuture = _loadInsights();
+    });
+    ref.read(entrepreneurNotifierProvider.notifier).loadAnalysis(widget.propertyId);
   }
 
   /// Saves/unsaves against the server first, so the list the Favourites tab
@@ -140,129 +146,969 @@ class _EntrepreneurPropertyDetailMobilePageState
   void _open(String route, {Object? arguments}) =>
       Navigator.of(context).pushNamed(route, arguments: arguments);
 
+  // Tabs follow Jaspr property_detail_page.dart. Only tab content is
+  // switched: the surrounding-area section stays visible across tabs.
+  int _webTab = 0;
+
   @override
   Widget build(BuildContext context) {
-    // Two slices, two rebuilds: the entrepreneur state repaints the location
-    // insights, the app-wide saved/compare sets repaint the toggles. Watching
-    // both here also keeps the page-scoped entrepreneur provider alive for
-    // the route's lifetime.
     final appState = ref.watch(appNotifierProvider);
     final model = ref.watch(entrepreneurNotifierProvider);
-    return MobileAppShell(
-            title: 'Property',
-            currentRoute: '/entrepreneur/recommendations',
-            actions: [
-              IconButton(
-                tooltip: 'Refresh property',
-                icon: const Icon(Icons.refresh_rounded),
-                onPressed: _reload,
-              ),
-            ],
-            body: RefreshIndicator(
-              color: SitewiseColors.action,
-              onRefresh: () async => _reload(),
-              child: FutureBuilder<_PropertyRecord?>(
-              future: _propertyFuture,
-              builder: (c, snap) {
-                if (snap.connectionState != ConnectionState.done) {
-                  return const MobilePropertyListSkeleton(
-                    padding: EdgeInsets.all(16),
-                  );
-                }
-                if (snap.hasError) {
-                  return Center(
-                    child: Padding(
-                      padding: const EdgeInsets.all(32),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            readableFailure(
-                              snap.error!,
-                              fallback:
-                                  'We could not load this property. '
-                                  'Please try again.',
-                            ),
-                            textAlign: TextAlign.center,
-                            style: const TextStyle(
-                              fontSize: 13.5,
-                              color: SitewiseColors.muted,
-                            ),
-                          ),
-                          const SizedBox(height: 14),
-                          SitewiseSecondaryButton(
-                            label: 'Try again',
-                            icon: Icons.refresh_rounded,
-                            onPressed: _reload,
-                          ),
-                        ],
-                      ),
-                    ),
-                  );
-                }
-                final record = snap.data;
-                if (record == null) {
-                  return const Center(
-                    child: Text('This property is no longer available.'),
-                  );
-                }
-                final p = record.property;
-                final saved = appState.saved.contains(p.id);
-                return ListView(
-                  padding: const EdgeInsets.fromLTRB(16, 14, 16, 122),
-                  physics: const AlwaysScrollableScrollPhysics(),
-                  children: [
-                    _heroWithPanorama(p, record.photos, saved),
-                    const SizedBox(height: 16),
-                    _identity(p),
-                    const SizedBox(height: 18),
-                    _keyFacts(p),
-                    const SizedBox(height: 22),
-                    const MobileSectionHeader(
-                      title: 'Location insights',
-                      subtitle: 'What surrounds this property.',
-                    ),
+    return Scaffold(
+      backgroundColor: SitewiseColors.background,
+      appBar: AppBar(
+        backgroundColor: SitewiseColors.surface,
+        foregroundColor: SitewiseColors.ink,
+        surfaceTintColor: SitewiseColors.surface,
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        title: const Text('Property details', style: TextStyle(
+          fontFamily: kFontFamily, fontWeight: FontWeight.w700, fontSize: 18,
+          color: SitewiseColors.ink,
+        )),
+        leading: IconButton(
+          tooltip: 'Back',
+          onPressed: () => Navigator.of(context).maybePop(),
+          icon: const Icon(Icons.arrow_back_rounded),
+        ),
+        actions: [
+          FutureBuilder<_PropertyRecord?>(
+            future: _propertyFuture,
+            builder: (context, snap) {
+              final p = snap.data?.property;
+              if (p == null) return const SizedBox(width: 48);
+              final saved = appState.saved.contains(p.id);
+              return IconButton(
+                tooltip: saved ? 'Remove from favourites' : 'Save property',
+                onPressed: () => _toggleSaved(p.id, !saved),
+                icon: Icon(saved ? Icons.bookmark_rounded : Icons.bookmark_border_rounded,
+                  color: saved ? SitewiseColors.action : SitewiseColors.ink),
+              );
+            },
+          ),
+          const SizedBox(width: 8),
+        ],
+      ),
+      bottomNavigationBar: FutureBuilder<_PropertyRecord?>(
+        future: _propertyFuture,
+        builder: (context, snap) => snap.data == null
+            ? const SizedBox.shrink()
+            : _bottomActions(snap.data!.property),
+      ),
+      body: RefreshIndicator(
+        color: SitewiseColors.action,
+        onRefresh: () async {
+          _reload();
+          await _propertyFuture;
+        },
+        child: FutureBuilder<_PropertyRecord?>(
+          future: _propertyFuture,
+          builder: (context, snap) {
+            if (snap.connectionState != ConnectionState.done) {
+              return const MobilePropertyListSkeleton(padding: EdgeInsets.all(16));
+            }
+            if (snap.hasError) {
+              return ListView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                children: [Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Column(children: [
+                    Text(readableFailure(snap.error!, fallback: 'Could not load this property.'),
+                        textAlign: TextAlign.center),
                     const SizedBox(height: 12),
-                    _insights(p, model),
-                    if (p.hasTour) ...[
-                      const SizedBox(height: 18),
-                      SitewiseSecondaryButton(
-                        label: 'View 360° tour',
-                        icon: Icons.threesixty_rounded,
-                        onPressed: () =>
-                            _open('/entrepreneur/tour', arguments: p.id),
-                      ),
-                    ],
-                    const SizedBox(height: 22),
-                    const M3Banner(
-                      text:
-                          'Evaluate this property for your own business. '
-                          'Survey and location analysis are linked separately '
-                          'when available.',
-                    ),
-                    const SizedBox(height: 18),
-                    M3PrimaryButton(
-                      label: 'Assess this property',
-                      onTap: () => _open(
-                        '/entrepreneur/assessment-setup',
-                        arguments: p.id,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    _actions(p, saved),
-                    const SizedBox(height: 8),
-                    SitewiseSecondaryButton(
-                      label: 'Back to listings',
-                      icon: Icons.arrow_back_rounded,
-                      onPressed: () => Navigator.of(context).pop(),
-                    ),
-                  ],
-                );
-              },
-              ),
-            ),
+                    SitewiseSecondaryButton(label: 'Try again', icon: Icons.refresh,
+                        onPressed: _reload),
+                  ]),
+                )],
+              );
+            }
+            final record = snap.data;
+            if (record == null) {
+              return ListView(children: const [Padding(
+                padding: EdgeInsets.all(24),
+                child: Text('This property is no longer available.'),
+              )]);
+            }
+            final p = record.property;
+            return ListView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: const EdgeInsets.fromLTRB(20, 18, 20, 28),
+              children: [
+                // The web's title, combined gallery, summary and listing facts.
+                _webTitle(p),
+                const SizedBox(height: 16),
+                _heroWithPanorama(p, record.photos),
+                const SizedBox(height: 18),
+                _webPriceAndScore(p),
+                const SizedBox(height: 16),
+                _keyFacts(p),
+                const SizedBox(height: 14),
+                _webManagement(p),
+                const SizedBox(height: 14),
+                _webDetails(p),
+                const SizedBox(height: 24),
+                // Always visible: switching tabs must not reset map context.
+                _webSurroundings(p),
+                const SizedBox(height: 28),
+                const Text('Explore this property', style: TextStyle(
+                  color: SitewiseColors.action, fontWeight: FontWeight.w700,
+                  fontSize: 13,
+                )),
+                const SizedBox(height: 5),
+                const Text('Understand why this property fits your needs',
+                  style: TextStyle(color: SitewiseColors.ink,
+                    fontWeight: FontWeight.w800, fontSize: 21, height: 1.25)),
+                const SizedBox(height: 8),
+                const Text('Review your business match, the area score and nearby services.',
+                  style: TextStyle(color: SitewiseColors.muted, height: 1.45, fontSize: 14)),
+                const SizedBox(height: 14),
+                _webTabs(),
+                const SizedBox(height: 16),
+                if (_webTab == 0) _webBusinessMatch(p),
+                if (_webTab == 1) _webScore(p, model),
+                if (_webTab == 2) _webNearby(p),
+                const SizedBox(height: 24),
+                _webBeforeYouDecide(p),
+                const SizedBox(height: 12),
+              ],
+            );
+          },
+        ),
+      ),
     );
   }
+
+  // Web parity: title and availability before the combined photo gallery.
+  Widget _webTitle(CommercialProperty p) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      const Text('COMMERCIAL PROPERTY', style: TextStyle(
+        color: SitewiseColors.action, fontSize: 12,
+        fontWeight: FontWeight.w700, letterSpacing: 0.7)),
+      const SizedBox(height: 6),
+      Text(p.title, style: const TextStyle(fontFamily: kFontFamily,
+        color: SitewiseColors.ink, fontSize: 22, height: 1.2,
+        fontWeight: FontWeight.w800)),
+      const SizedBox(height: 8),
+      Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        const Icon(Icons.place_outlined, color: SitewiseColors.muted, size: 18),
+        const SizedBox(width: 6),
+        Expanded(child: Text(_displayAddress(p), style: const TextStyle(
+          color: SitewiseColors.muted, fontSize: 14, height: 1.5))),
+      ]),
+    ],
+  );
+
+  // Keep the listing asking rent separate from model-specific suitability.
+  // The live PU score and SHAP appear ONLY in "Why this area score?" below.
+  Widget _webPriceAndScore(CommercialProperty p) => Container(
+    padding: const EdgeInsets.all(16),
+    decoration: BoxDecoration(
+      color: SitewiseColors.surface,
+      border: Border.all(color: SitewiseColors.border),
+      borderRadius: BorderRadius.circular(16),
+    ),
+    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      const Text('MONTHLY RENT', style: TextStyle(fontSize: 12,
+        color: SitewiseColors.muted, fontWeight: FontWeight.w700)),
+      const SizedBox(height: 4),
+      Wrap(crossAxisAlignment: WrapCrossAlignment.center, spacing: 6, children: [
+        Text(p.rentalRm > 0 ? p.rentalDisplay : 'Rent on request',
+          style: const TextStyle(fontSize: 26, fontWeight: FontWeight.w800,
+            color: SitewiseColors.action)),
+        if (p.rentalRm > 0) const Text('/ month', style: TextStyle(
+          fontSize: 14, color: SitewiseColors.muted)),
+      ]),
+    ]),
+  );
+
+  Widget _webManagement(CommercialProperty p) {
+    final management = p.managerName == null || p.managerName!.trim().isEmpty
+        ? p.managementLabel : '${p.managementLabel} — ${p.managerName}';
+    final features = <String>[
+      if (p.hasParking == true) 'Parking',
+      if (p.isFnbSuitable == true) 'Recorded as F&B suitable',
+      if (p.isCornerLot == true) 'Corner lot',
+      if (p.isFreehold == true) 'Freehold',
+      if (p.furnishing?.trim().isNotEmpty == true) p.furnishing!.trim(),
+      if (p.tenure?.trim().isNotEmpty == true) p.tenure!.trim(),
+    ];
+    final desc = p.description?.trim() ?? '';
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(color: SitewiseColors.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: SitewiseColors.border)),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        const Text('Property management', style: TextStyle(
+          color: SitewiseColors.muted, fontSize: 13)),
+        const SizedBox(height: 4),
+        Text(management.trim().isEmpty ? 'Not provided' : management,
+          style: const TextStyle(color: SitewiseColors.ink, fontWeight: FontWeight.w700,
+            fontSize: 15)),
+        if (features.isNotEmpty) ...[
+          const SizedBox(height: 16),
+          const Text('Property features', style: TextStyle(
+            color: SitewiseColors.ink, fontWeight: FontWeight.w700, fontSize: 15)),
+          const SizedBox(height: 8),
+          Wrap(spacing: 8, runSpacing: 8, children: [
+            for (final value in features) Chip(label: Text(value),
+              backgroundColor: SitewiseColors.infoWash,
+              side: const BorderSide(color: SitewiseColors.border)),
+          ]),
+        ],
+        if (desc.isNotEmpty) ...[
+          const Divider(height: 24, color: SitewiseColors.border),
+          Text(desc, style: const TextStyle(
+            color: SitewiseColors.text, fontSize: 14, height: 1.5)),
+        ],
+        const SizedBox(height: 10),
+        TextButton.icon(
+          icon: const Icon(Icons.copy_outlined, size: 18),
+          label: const Text('Copy summary'),
+          onPressed: () async {
+            final text = '${p.title}\n${_displayAddress(p)}\n'
+                '${p.rentalRm > 0 ? p.rentalDisplay : 'Rent on request'} / month';
+            await Clipboard.setData(ClipboardData(text: text));
+            if (!mounted) return;
+            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+              content: Text('Property summary copied.')));
+          },
+        ),
+      ]),
+    );
+  }
+
+  Widget _webDetails(CommercialProperty p) {
+    String? recorded(String? s) => s?.trim().isNotEmpty == true ? s!.trim() : null;
+    String? sqft(double? n) => n == null ? null : '${n.toStringAsFixed(0)} sq ft';
+    String? feet(double? n) => n == null ? null : '${n.toStringAsFixed(0)} ft';
+    final data = <(String, String?)>[
+      if (p.sizeSqft > 0) ('Space size', sqft(p.sizeSqft)),
+      ('Built-up area', sqft(p.builtUpSqft)),
+      ('Land area', sqft(p.landAreaSqft)),
+      ('Frontage', feet(p.frontageFt)),
+      ('Depth', feet(p.depthFt)),
+      ('Floor level', recorded(p.floorLevel)),
+      ('Unit position', recorded(p.unitPosition)),
+      ('Facing direction', recorded(p.facingDirection)),
+      ('Toilets / bathrooms', p.bathrooms?.toString()),
+      ('Furnishing', recorded(p.furnishing)),
+      ('Tenure', recorded(p.tenure)),
+      ('Parking', p.hasParking == null ? null : p.hasParking! ? 'Onsite parking' : 'No onsite parking'),
+      ('Suitable for a food business', p.isFnbSuitable == null ? null : p.isFnbSuitable! ? 'Yes' : 'No'),
+      ('Corner lot', p.isCornerLot == null ? null : p.isCornerLot! ? 'Yes' : 'No'),
+      ('Freehold', p.isFreehold == null ? null : p.isFreehold! ? 'Yes' : 'No'),
+      ('Availability', recorded(p.availability)),
+      ('Availability verified', recorded(p.availabilityVerifiedAt)?.split('T').first),
+    ].where((entry) => entry.$2 != null).toList();
+    return Container(
+      decoration: BoxDecoration(color: SitewiseColors.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: SitewiseColors.border)),
+      child: ExpansionTile(
+        title: const Text('Show listing details', style: TextStyle(
+          fontWeight: FontWeight.w700, fontSize: 16, color: SitewiseColors.ink)),
+        subtitle: Text('${data.length} recorded details', style: const TextStyle(
+          color: SitewiseColors.muted, fontSize: 12)),
+        initiallyExpanded: false,
+        childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+        children: [
+          for (final entry in data) Padding(
+            padding: const EdgeInsets.symmetric(vertical: 7),
+            child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Expanded(child: Text(entry.$1, style: const TextStyle(
+                color: SitewiseColors.muted, fontSize: 13))),
+              const SizedBox(width: 12),
+              Expanded(child: Text(entry.$2!, textAlign: TextAlign.end,
+                style: const TextStyle(color: SitewiseColors.ink,
+                  fontSize: 13, fontWeight: FontWeight.w600))),
+            ]),
+          ),
+          if (p.listingDataNotice?.trim().isNotEmpty == true) ...[
+            const Divider(color: SitewiseColors.border),
+            Text(p.listingDataNotice!, style: const TextStyle(
+              color: SitewiseColors.muted, fontSize: 12, height: 1.4)),
+          ],
+          if (data.isEmpty && p.listingDataNotice?.trim().isNotEmpty != true)
+            const Text('No additional listing facts were recorded.', style: TextStyle(
+              color: SitewiseColors.muted, fontSize: 13)),
+        ],
+      ),
+    );
+  }
+
+  Widget _webSurroundings(CommercialProperty p) {
+    final lat = p.latitude;
+    final lon = p.longitude;
+    final valid = lat >= -90 && lat <= 90 && lon >= -180 && lon <= 180 &&
+        lat.isFinite && lon.isFinite && !(lat == 0 && lon == 0);
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      const Text('Explore the surrounding area', style: TextStyle(
+        color: SitewiseColors.ink, fontWeight: FontWeight.w800, fontSize: 20)),
+      const SizedBox(height: 6),
+      const Text('See what is recorded around this property.', style: TextStyle(
+        color: SitewiseColors.muted, fontSize: 14)),
+      const SizedBox(height: 12),
+      Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(18),
+        decoration: BoxDecoration(color: SitewiseColors.surface,
+          border: Border.all(color: SitewiseColors.border),
+          borderRadius: BorderRadius.circular(16)),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(children: [
+            const Icon(Icons.map_outlined, size: 24, color: SitewiseColors.action),
+            const SizedBox(width: 10),
+            Expanded(child: Text(_displayAddress(p), style: const TextStyle(
+              color: SitewiseColors.ink, fontSize: 14, fontWeight: FontWeight.w600))),
+          ]),
+          const SizedBox(height: 12),
+          Text(valid
+              ? 'Map location: ${lat.toStringAsFixed(5)}, ${lon.toStringAsFixed(5)}'
+              : 'Map coordinates have not been verified.',
+            style: const TextStyle(color: SitewiseColors.muted, fontSize: 12)),
+          const SizedBox(height: 12),
+          SizedBox(width: double.infinity, child: OutlinedButton.icon(
+            icon: const Icon(Icons.open_in_new_rounded),
+            label: const Text('View actual map and directions'),
+            onPressed: !valid ? null : () async {
+              final url = Uri.parse('https://www.google.com/maps/search/?api=1&query=$lat,$lon');
+              final opened = await launchUrl(url, mode: LaunchMode.externalApplication);
+              if (!opened && mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                  content: Text('Could not open the map application.')));
+              }
+            },
+          )),
+          const SizedBox(height: 8),
+          const Text('Open the actual map for nearby streets and route planning. '
+              'Recorded 500 m / 1 km counts are shown below; these are straight-line '
+              'catchments, not travel times.', style: TextStyle(
+                color: SitewiseColors.muted, fontSize: 12, height: 1.5)),
+        ]),
+      ),
+    ]);
+  }
+
+  Widget _webTabs() {
+    const labels = ['Your business match', 'Why this area score?', "What's nearby"];
+    return SingleChildScrollView(scrollDirection: Axis.horizontal,
+      child: Row(children: [
+        for (var i = 0; i < labels.length; i++)
+          Padding(padding: const EdgeInsets.only(right: 10), child: ChoiceChip(
+            label: Text(labels[i], style: TextStyle(
+              fontSize: 13, fontWeight: FontWeight.w600,
+              color: i == _webTab ? SitewiseColors.action : SitewiseColors.muted)),
+            selected: i == _webTab,
+            selectedColor: SitewiseColors.infoWash,
+            backgroundColor: SitewiseColors.surface,
+            side: BorderSide(color: i == _webTab
+              ? SitewiseColors.action : SitewiseColors.border),
+            onSelected: (_) => setState(() => _webTab = i),
+          )),
+      ]),
+    );
+  }
+
+  Widget _webBusinessMatch(CommercialProperty p) {
+    final resultId = widget.resultId;
+    if (resultId == null || resultId.isEmpty) {
+      return _webSection('Your preferences vs this property', [
+        const Text('A personalised match is available when you open a property '
+          'from a generated recommendation. The area suitability score does '
+          'not measure your saved preference match.', style: TextStyle(
+          color: SitewiseColors.muted, height: 1.5, fontSize: 14)),
+        const SizedBox(height: 12),
+        OutlinedButton.icon(onPressed: () => _open('/entrepreneur/recommendations'),
+          icon: const Icon(Icons.tune_rounded),
+          label: const Text('View recommendations')),
+      ]);
+    }
+    final value = ref.watch(explanationProvider(resultId));
+    return value.when(
+      loading: () => const MobileSkeletonBox(height: 110),
+      error: (error, stack) => _webSection('Your preferences vs this property', [
+        const Text('The saved recommendation explanation is unavailable.',
+          style: TextStyle(color: SitewiseColors.muted, fontSize: 14)),
+        TextButton(onPressed: () => ref.invalidate(explanationProvider(resultId)),
+          child: const Text('Try again')),
+      ]),
+      data: (explanation) {
+        if (explanation.propertyId != p.id) {
+          return _webSection('Your preferences vs this property', [
+            const Text('Recommendation context does not match this property.',
+              style: TextStyle(color: SitewiseColors.muted)),
+          ]);
+        }
+        final components = explanation.components.entries.toList();
+        return _webSection('Your preferences vs this property', [
+          if (explanation.selectedBusinessCategory != null)
+            Text('Business: ${explanation.selectedBusinessCategory}', style: const TextStyle(
+              fontSize: 14, color: SitewiseColors.ink, fontWeight: FontWeight.w700)),
+          if (explanation.preferenceMatchScore != null) ...[
+            const SizedBox(height: 6),
+            Text('Preference match: ${(explanation.preferenceMatchScore! * 100).toStringAsFixed(0)}% ',
+              style: const TextStyle(color: SitewiseColors.action,
+                fontSize: 16, fontWeight: FontWeight.w800)),
+          ],
+          const SizedBox(height: 10),
+          if (components.isEmpty) const Text('No saved preferences were scored for this property.',
+            style: TextStyle(color: SitewiseColors.muted)),
+          for (final entry in components) ...[
+            const Divider(height: 24, color: SitewiseColors.border),
+            Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text(entry.key.replaceAll('_', ' '), style: const TextStyle(
+                  color: SitewiseColors.ink, fontWeight: FontWeight.w700, fontSize: 14)),
+                if (entry.value.reason.trim().isNotEmpty) ...[
+                  const SizedBox(height: 5),
+                  Text(entry.value.reason, style: const TextStyle(
+                    color: SitewiseColors.muted, fontSize: 12, height: 1.4)),
+                ],
+              ])),
+              const SizedBox(width: 8),
+              Text(entry.value.status != 'scored' || entry.value.value == null
+                  ? 'Not enough data'
+                  : entry.value.value! >= 0.65 ? 'Matched' : 'Needs review',
+                style: TextStyle(color: entry.value.value != null &&
+                    entry.value.status == 'scored' && entry.value.value! >= 0.65
+                    ? SitewiseColors.success : SitewiseColors.muted,
+                  fontSize: 11, fontWeight: FontWeight.w700)),
+            ]),
+          ],
+          if (explanation.cautions.isNotEmpty) ...[
+            const SizedBox(height: 14),
+            const Text('Points to consider', style: TextStyle(
+              fontSize: 14, fontWeight: FontWeight.w700, color: SitewiseColors.ink)),
+            for (final caution in explanation.cautions.take(4)) Padding(
+              padding: const EdgeInsets.only(top: 6),
+              child: Text('• $caution', style: const TextStyle(
+                fontSize: 13, height: 1.4, color: SitewiseColors.text))),
+          ],
+        ]);
+      },
+    );
+  }
+
+  Widget _webScore(CommercialProperty p, EntrepreneurState model) =>
+    _webSection('How suitable is this area for a food business?', [
+      _insights(p, model),
+      const SizedBox(height: 12),
+      const Text('This research score does not predict sales, customers or '
+        'business success.', style: TextStyle(
+        fontSize: 12, height: 1.4, color: SitewiseColors.muted)),
+    ]);
+
+  // Web-parity presentation for the existing What's nearby tab only.
+  // Data still comes from propertyEvidenceProvider and the already loaded
+  // property; a missing metric is never replaced with an assumed zero.
+  Widget _webNearby(CommercialProperty p) {
+    final evidence = ref.watch(propertyEvidenceProvider(p.id));
+    return evidence.when(
+      loading: () => _webSection("What's nearby", [
+        const MobileSkeletonBox(height: 140),
+      ]),
+      error: (error, stack) => _webSection("What's nearby", [
+        const Text(
+          'Nearby measurements could not be loaded.',
+          style: TextStyle(color: SitewiseColors.muted, fontSize: 14),
+        ),
+        TextButton(
+          onPressed: () => ref.invalidate(propertyEvidenceProvider(p.id)),
+          child: const Text('Try again'),
+        ),
+        _webNearbyFromListing(),
+      ]),
+      data: (data) {
+        String number(num? value) {
+          if (value == null) return 'Not measured';
+          return value.round().toString().replaceAllMapped(
+            RegExp(r'(\d)(?=(\d{3})+(?!\d))'),
+            (match) => '${match[1]},',
+          );
+        }
+
+        String reading(String key, {String? alternate}) {
+          final found = data.metric(key) ??
+              (alternate == null ? null : data.metric(alternate));
+          if (found != null) return found.display;
+          return switch (key) {
+            'pop_500m' => number(p.population500m),
+            'pop_1000m' => number(p.population1km),
+            'competitor_count_500m' => number(p.competitorCount500m),
+            'competitor_count_1000m' => number(p.competitorCount1km),
+            _ => 'Not measured',
+          };
+        }
+
+        final district = data.districtName;
+        return _webSection("What's nearby", [
+          const Text(
+            'Location overview',
+            style: TextStyle(
+              fontSize: 17,
+              fontWeight: FontWeight.w800,
+              color: SitewiseColors.ink,
+            ),
+          ),
+          const SizedBox(height: 5),
+          const Text(
+            'Compare what is around this property at 500 m and 1 km.',
+            style: TextStyle(fontSize: 14, color: SitewiseColors.muted),
+          ),
+          const SizedBox(height: 14),
+          _nearbyRadiusPanel(
+            radius: '500 m',
+            subtitle: 'The immediate area around this property',
+            tiles: [
+              _nearbyTile(
+                Icons.groups_outlined, 'Estimated residents',
+                reading('pop_500m'), 'Residential population estimate',
+              ),
+              _nearbyTile(
+                Icons.storefront_outlined, 'F&B competition',
+                reading('competitor_count_500m',
+                    alternate: 'fnb_competitors_500m'),
+                'Other mapped F&B businesses',
+              ),
+              _nearbyTile(
+                Icons.local_parking_outlined, 'Parking facilities',
+                reading('parking_facilities_500m'),
+                'Mapped facilities, not free spaces',
+              ),
+              _nearbyTile(
+                Icons.shopping_bag_outlined, 'Retail shops',
+                reading('retail_pois_500m'), 'Mapped retail businesses',
+              ),
+            ],
+            footnote: 'Within a 500 m radius, not a 500 m walking route.',
+          ),
+          const SizedBox(height: 12),
+          _nearbyRadiusPanel(
+            radius: '1 km',
+            subtitle: 'The wider surrounding area',
+            tiles: [
+              _nearbyTile(
+                Icons.groups_outlined, 'Estimated residents',
+                reading('pop_1000m'), 'Residential population estimate',
+              ),
+              _nearbyTile(
+                Icons.storefront_outlined, 'F&B competition',
+                reading('competitor_count_1000m',
+                    alternate: 'fnb_competitors_1000m'),
+                'Other mapped F&B businesses',
+              ),
+              _nearbyTile(
+                Icons.local_parking_outlined, 'Parking facilities',
+                reading('parking_facilities_1km',
+                    alternate: 'parking_facilities_1000m'),
+                'Mapped facilities, not free spaces',
+              ),
+              _nearbyTile(
+                Icons.shopping_bag_outlined, 'Retail shops',
+                reading('retail_pois_1000m'), 'Mapped retail businesses',
+              ),
+            ],
+            footnote: 'Offices: ${reading('office_pois_1000m')}. '
+                'Counts use a 1 km radius, not walking distance.',
+          ),
+          const SizedBox(height: 14),
+          _nearbyPanel(
+            title: 'Access & walkability',
+            description: 'Walking distances and reach are separate from '
+                'the circular 500 m and 1 km counts.',
+            children: [
+              _nearbyAccessRow(
+                Icons.directions_bus_outlined,
+                'Nearest public transport',
+                reading('nearest_transit_walk_m'),
+                '${reading('bus_stops_500m_walk')} bus stops within a 500 m walk · '
+                    '${reading('rail_stations_1km_walk')} rail stations '
+                    'within a 1 km walk',
+              ),
+              _nearbyAccessRow(
+                Icons.local_parking_outlined,
+                'Nearest parking facility',
+                reading('nearest_parking_distance_m'),
+                'Distance to the nearest mapped parking location',
+              ),
+              _nearbyAccessRow(
+                Icons.directions_walk_outlined,
+                '10-minute walking reach',
+                reading('walk_isochrone_area_10min_km2'),
+                'Area reachable on foot; not a population estimate',
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          _nearbyPanel(
+            title: 'Who lives in the wider district?',
+            description: 'Official DOSM district statistics, separate '
+                'from the nearby population estimates.',
+            children: [
+              if (data.districtAvailable) ...[
+                if (district != null)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 10),
+                    child: Text(
+                      district,
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                        color: SitewiseColors.ink,
+                      ),
+                    ),
+                  ),
+                _nearbyAccessRow(
+                  Icons.groups_outlined,
+                  'Residents in the whole district',
+                  data.districtPopulation == null
+                      ? 'Not available'
+                      : '${data.districtPopulation}',
+                  'DOSM district population'
+                      '${data.populationAsOf == null ? '' : ' · ${data.populationAsOf}'}',
+                ),
+                _nearbyAccessRow(
+                  Icons.account_balance_wallet_outlined,
+                  'Median monthly household income',
+                  data.householdMedian == null
+                      ? 'Not available'
+                      : 'RM ${data.householdMedian}',
+                  'DOSM district income'
+                      '${data.incomeAsOf == null ? '' : ' · ${data.incomeAsOf}'}',
+                ),
+              ] else
+                Text(
+                  data.districtReason ??
+                      'No verified district statistics available.',
+                  style: const TextStyle(
+                    color: SitewiseColors.muted,
+                    fontSize: 14,
+                  ),
+                ),
+              const SizedBox(height: 10),
+              const Text(
+                'District data describes the whole administrative district, '
+                'not people within 500 m or 1 km of the property.',
+                style: TextStyle(
+                  fontSize: 12,
+                  height: 1.45,
+                  color: SitewiseColors.muted,
+                ),
+              ),
+            ],
+          ),
+          // Keep the existing property-insights fallback when the evidence
+          // endpoint has no individual measurements for this listing.
+          if (data.measurements.isEmpty) ...[
+            const SizedBox(height: 12),
+            _webNearbyFromListing(),
+          ],
+          const SizedBox(height: 12),
+          const Text(
+            'Distances are straight-line radii unless labelled as walking '
+            'distances. Missing measurements are not zeros.',
+            style: TextStyle(
+              fontSize: 12,
+              height: 1.45,
+              color: SitewiseColors.muted,
+            ),
+          ),
+        ]);
+      },
+    );
+  }
+
+  Widget _nearbyRadiusPanel({
+    required String radius,
+    required String subtitle,
+    required List<Widget> tiles,
+    required String footnote,
+  }) => Container(
+    width: double.infinity,
+    padding: const EdgeInsets.all(14),
+    decoration: BoxDecoration(
+      color: SitewiseColors.surface,
+      border: Border.all(color: SitewiseColors.border),
+      borderRadius: BorderRadius.circular(14),
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Within $radius',
+          style: const TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.w800,
+            color: SitewiseColors.ink,
+          ),
+        ),
+        const SizedBox(height: 3),
+        Text(subtitle, style: const TextStyle(
+          color: SitewiseColors.muted, fontSize: 13,
+        )),
+        const SizedBox(height: 12),
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final columns = constraints.maxWidth < 290 ? 1 : 2;
+            final width =
+                (constraints.maxWidth - (columns == 2 ? 10 : 0)) / columns;
+            return Wrap(
+              spacing: 10,
+              runSpacing: 10,
+              children: [
+                for (final tile in tiles)
+                  SizedBox(width: width, child: tile),
+              ],
+            );
+          },
+        ),
+        const SizedBox(height: 10),
+        Text(
+          footnote,
+          style: const TextStyle(
+            fontSize: 12, height: 1.45, color: SitewiseColors.muted,
+          ),
+        ),
+      ],
+    ),
+  );
+
+  Widget _nearbyTile(
+    IconData icon,
+    String label,
+    String value,
+    String note,
+  ) => Container(
+    constraints: const BoxConstraints(minHeight: 126),
+    padding: const EdgeInsets.all(11),
+    decoration: BoxDecoration(
+      color: SitewiseColors.background,
+      border: Border.all(color: SitewiseColors.border),
+      borderRadius: BorderRadius.circular(12),
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(icon, color: SitewiseColors.action, size: 19),
+        const SizedBox(height: 8),
+        Text(label, style: const TextStyle(
+          color: SitewiseColors.muted, fontSize: 12, height: 1.3,
+        )),
+        const SizedBox(height: 5),
+        Text(value, style: const TextStyle(
+          color: SitewiseColors.ink,
+          fontSize: 16,
+          height: 1.25,
+          fontWeight: FontWeight.w800,
+        )),
+        const SizedBox(height: 5),
+        Text(note, style: const TextStyle(
+          color: SitewiseColors.muted,
+          fontSize: 11.5,
+          height: 1.3,
+        )),
+      ],
+    ),
+  );
+
+  Widget _nearbyPanel({
+    required String title,
+    required String description,
+    required List<Widget> children,
+  }) => Container(
+    width: double.infinity,
+    padding: const EdgeInsets.all(14),
+    decoration: BoxDecoration(
+      color: SitewiseColors.surface,
+      border: Border.all(color: SitewiseColors.border),
+      borderRadius: BorderRadius.circular(14),
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(title, style: const TextStyle(
+          color: SitewiseColors.ink,
+          fontSize: 16,
+          fontWeight: FontWeight.w800,
+        )),
+        const SizedBox(height: 5),
+        Text(description, style: const TextStyle(
+          color: SitewiseColors.muted,
+          fontSize: 13,
+          height: 1.4,
+        )),
+        const SizedBox(height: 12),
+        ...children,
+      ],
+    ),
+  );
+
+  Widget _nearbyAccessRow(
+    IconData icon,
+    String title,
+    String value,
+    String explanation,
+  ) => Padding(
+    padding: const EdgeInsets.only(bottom: 12),
+    child: Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(icon, color: SitewiseColors.action, size: 21),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(title, style: const TextStyle(
+                color: SitewiseColors.muted,
+                fontSize: 13,
+                height: 1.3,
+              )),
+              const SizedBox(height: 4),
+              Text(value, style: const TextStyle(
+                color: SitewiseColors.ink,
+                fontWeight: FontWeight.w700,
+                fontSize: 16,
+              )),
+              const SizedBox(height: 4),
+              Text(explanation, style: const TextStyle(
+                color: SitewiseColors.muted,
+                fontSize: 12,
+                height: 1.45,
+              )),
+            ],
+          ),
+        ),
+      ],
+    ),
+  );
+
+  /// Counts-only fallback from the already fetched property insights. The
+  /// source may report more layers than the main location-evidence endpoint.
+  Widget _webNearbyFromListing() => FutureBuilder<PropertyInsightsModel?>(
+    future: _insightsFuture,
+    builder: (context, snap) {
+      if (snap.connectionState != ConnectionState.done || snap.data == null) {
+        return const SizedBox.shrink();
+      }
+      final layers = snap.data!.mapLayers.where((layer) =>
+          layer.count500m != null || layer.count1000m != null).toList();
+      if (layers.isEmpty) return const SizedBox.shrink();
+      return _nearbyPanel(
+        title: 'Other recorded nearby measurements',
+        description: 'Additional location counts available for this listing.',
+        children: [
+          for (final layer in layers)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 6),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Text(layer.label, style: const TextStyle(
+                      color: SitewiseColors.ink,
+                      fontSize: 13,
+                    )),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      '500 m: ${layer.count500m?.toString() ?? 'Not measured'}\n'
+                      '1 km: ${layer.count1000m?.toString() ?? 'Not measured'}',
+                      textAlign: TextAlign.end,
+                      style: const TextStyle(
+                        color: SitewiseColors.text,
+                        fontSize: 12,
+                        height: 1.45,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+        ],
+      );
+    },
+  );
+
+  Widget _webSection(String title, List<Widget> children) => Container(
+    width: double.infinity,
+    padding: const EdgeInsets.all(16),
+    decoration: BoxDecoration(color: SitewiseColors.surface,
+      border: Border.all(color: SitewiseColors.border),
+      borderRadius: BorderRadius.circular(16)),
+    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Text(title, style: const TextStyle(fontSize: 17,
+        color: SitewiseColors.ink, fontWeight: FontWeight.w800)),
+      const SizedBox(height: 12),
+      ...children,
+    ]),
+  );
+
+  Widget _webBeforeYouDecide(CommercialProperty p) =>
+    _webSection('Before you decide', [
+      const Text('Confirm licensing, kitchen ventilation and grease-trap '
+        'requirements with the relevant local authority.', style: TextStyle(
+          color: SitewiseColors.text, fontSize: 13, height: 1.45)),
+      const SizedBox(height: 8),
+      Text(p.verification == VerificationStatus.verified
+        ? 'This listing is verified, but F&B licensing is not confirmed.'
+        : 'This listing is not verified. Confirm rent, floor area and availability.',
+        style: const TextStyle(color: SitewiseColors.text, fontSize: 13, height: 1.45)),
+      const SizedBox(height: 8),
+      const Text('Location scores do not predict revenue, customer numbers or '
+        'commercial success.', style: TextStyle(
+          color: SitewiseColors.muted, fontSize: 12, height: 1.4)),
+    ]);
+
+  Widget _bottomActions(CommercialProperty p) => SafeArea(
+    top: false,
+    child: Container(
+      padding: const EdgeInsets.fromLTRB(20, 12, 20, 12),
+      decoration: const BoxDecoration(
+        color: SitewiseColors.surface,
+        border: Border(top: BorderSide(color: SitewiseColors.border)),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: OutlinedButton.icon(
+              onPressed: () => _compareAction(p.id),
+              icon: const Icon(Icons.compare_arrows_rounded, size: 20),
+              label: const Text('Compare'),
+              style: OutlinedButton.styleFrom(
+                minimumSize: const Size(48, 52),
+                foregroundColor: SitewiseColors.action,
+                side: const BorderSide(color: SitewiseColors.action),
+                textStyle: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            flex: 2,
+            child: ElevatedButton.icon(
+              onPressed: () => _open(
+                '/entrepreneur/assessment-setup',
+                arguments: p.id,
+              ),
+              icon: const Icon(Icons.assessment_outlined, size: 20),
+              label: const Text('Assess property'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: SitewiseColors.action,
+                foregroundColor: Colors.white,
+                minimumSize: const Size(48, 52),
+                textStyle: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+              ),
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
 
   /// Media block over the house gallery: every photograph the record returned,
   /// primary first, with the fullscreen viewer behind the counter and the
@@ -277,234 +1123,112 @@ class _EntrepreneurPropertyDetailMobilePageState
   Widget _hero(
     CommercialProperty p,
     List<String> photos,
-    bool saved,
     String? panoramaUrl,
-  ) =>
-      MobilePropertyGallery(
-        property: p,
-        urls: photos,
-        borderRadius: BorderRadius.circular(18),
-        bookmarkButton: Semantics(
-          button: true,
-          label: saved ? 'Remove from favourites' : 'Save property',
-          child: Material(
-            color: SitewiseColors.surface.withValues(alpha: 0.94),
-            shape: const CircleBorder(),
-            child: InkWell(
-              customBorder: const CircleBorder(),
-              onTap: () => _toggleSaved(p.id, !saved),
-              // 44x44: the accessibility floor for a touch target.
-              child: SizedBox(
-                width: 44,
-                height: 44,
-                child: Icon(
-                  saved
-                      ? Icons.bookmark_rounded
-                      : Icons.bookmark_border_rounded,
-                  size: 20,
-                  color: saved ? SitewiseColors.action : SitewiseColors.ink,
-                ),
-              ),
+  ) => MobilePropertyGallery(
+    property: p,
+    urls: photos,
+    borderRadius: BorderRadius.circular(18),
+    // Save is in the detail header; do not obscure the photo with a second
+    // bookmark button.
+    tourAction: panoramaUrl == null
+        ? null
+        : _PanoramaChip(
+            label: p.title,
+            onTap: () => _open(
+              '/entrepreneur/panorama',
+              arguments: {'url': panoramaUrl, 'title': p.title},
             ),
           ),
-        ),
-        tourAction: panoramaUrl == null
-            ? null
-            : _PanoramaChip(
-                label: p.title,
-                onTap: () => _open(
-                  '/entrepreneur/panorama',
-                  arguments: {'url': panoramaUrl, 'title': p.title},
-                ),
-              ),
-      );
+  );
 
-  /// The hero waits on the insights read for one reason: the 360° chip.
-  ///
-  /// It shares `_insightsFuture` with the location card and the 360° fact cell
-  /// — the future memoizes, so three readers cost one request and the chip and
-  /// the fact cell cannot disagree about whether a panorama exists.
   Widget _heroWithPanorama(
     CommercialProperty p,
     List<String> photos,
-    bool saved,
   ) => FutureBuilder<PropertyInsightsModel?>(
     future: _insightsFuture,
-    builder: (context, snap) =>
-        _hero(p, photos, saved, snap.data?.panorama.readyUrl),
+    builder: (context, snapshot) =>
+        _hero(p, photos, snapshot.data?.panorama.readyUrl),
   );
 
-  Widget _identity(CommercialProperty p) => Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Expanded(
-            child: Text(
-              p.title,
-              style: const TextStyle(
-                fontFamily: kFontFamily,
-                fontSize: 20,
-                fontWeight: FontWeight.w800,
-                color: SitewiseColors.ink,
-                height: 1.2,
-                letterSpacing: -0.4,
-              ),
-            ),
-          ),
-          if (p.verification == VerificationStatus.verified)
-            SitewiseStatusBadge.forVerification(p.verification),
-        ],
-      ),
-      const SizedBox(height: 6),
-      Row(
-        children: [
-          const Icon(
-            Icons.place_outlined,
-            size: 14,
-            color: SitewiseColors.muted,
-          ),
-          const SizedBox(width: 4),
-          Expanded(
-            child: Text(
-              '${p.address}, ${p.postcode} ${p.city}, ${p.state}',
-              style: const TextStyle(
-                fontSize: 12.5,
-                color: SitewiseColors.muted,
-              ),
-            ),
-          ),
-        ],
-      ),
-      const SizedBox(height: 14),
-      Row(
-        crossAxisAlignment: CrossAxisAlignment.end,
-        children: [
-          Flexible(
-            child: Text(
-              // SQL NULL rent arrives as 0; a real listing is never RM 0,
-              // so the zero renders as "not listed" rather than a price.
-              p.rentalRm > 0 ? p.rentalDisplay : 'Rent on request',
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                fontSize: 22,
-                fontWeight: FontWeight.w800,
-                color: SitewiseColors.action,
-                height: 1.1,
-              ),
-            ),
-          ),
-          if (p.rentalRm > 0)
-            const Padding(
-              padding: EdgeInsets.only(bottom: 2),
-              child: Text(
-                '/ month',
-                style: TextStyle(fontSize: 12.5, color: SitewiseColors.muted),
-              ),
-            ),
-        ],
-      ),
-      const SizedBox(height: 14),
-      if (p.hasSuitabilityScore) ...[
-        MobileSuitabilityBadge(score: p.suitabilityScore),
-        const SizedBox(height: 4),
-        const Text(
-          'Location suitability for your business.',
-          style: TextStyle(fontSize: 11, color: SitewiseColors.muted),
-        ),
-      ] else ...[
-        const Text(
-          'Suitability: not scored yet',
-          style: TextStyle(
-            fontSize: 13,
-            fontWeight: FontWeight.w700,
-            color: SitewiseColors.muted,
-          ),
-        ),
-        const SizedBox(height: 4),
-        const Text(
-          'This listing has no research suitability index yet.',
-          style: TextStyle(fontSize: 11, color: SitewiseColors.muted),
-        ),
-      ],
-    ],
-  );
+  String _displayAddress(CommercialProperty p) {
+    var address = p.address.trim().replaceAll(RegExp(r'\s+'), ' ');
+    // Imported research records sometimes prefix the local address with an
+    // administrative area separated by ';'. Avoid repeating city/state.
+    if (address.contains(';')) {
+      final detail = address.split(';').last.trim();
+      if (detail.isNotEmpty) address = detail;
+    }
+    final components = <String>[
+      if (address.isNotEmpty) address,
+      if (p.postcode.trim().isNotEmpty && !address.contains(p.postcode.trim()))
+        p.postcode.trim(),
+      if (p.city.trim().isNotEmpty &&
+          !address.toLowerCase().contains(p.city.trim().toLowerCase()))
+        p.city.trim(),
+      if (p.state.trim().isNotEmpty &&
+          !address.toLowerCase().contains(p.state.trim().toLowerCase()))
+        p.state.trim(),
+    ];
+    return components.join(', ');
+  }
 
   Widget _keyFacts(CommercialProperty p) => Container(
     padding: const EdgeInsets.all(16),
     decoration: BoxDecoration(
       color: SitewiseColors.surface,
-      borderRadius: BorderRadius.circular(16),
       border: Border.all(color: SitewiseColors.border),
+      borderRadius: BorderRadius.circular(16),
     ),
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const Text(
           'Property information',
-          style: TextStyle(
-            fontSize: 13.5,
-            fontWeight: FontWeight.w800,
-            color: SitewiseColors.ink,
-          ),
+          style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: SitewiseColors.ink),
         ),
-        const SizedBox(height: 14),
+        const SizedBox(height: 18),
         Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Expanded(
               child: _Fact(
+                icon: Icons.aspect_ratio_outlined,
                 label: 'Floor area',
                 value: p.sizeSqft > 0
                     ? '${p.sizeSqft.toStringAsFixed(0)} sq ft'
                     : 'Not listed',
               ),
             ),
-            const SizedBox(width: 12),
+            const SizedBox(width: 10),
             Expanded(
-              child: _Fact(label: 'Unit type', value: p.propertyType),
-            ),
-            const SizedBox(width: 12),
-            // The repository carries no F&B licensing data — the Option A
-            // marker stays honestly "Unknown" rather than guessed.
-            const Expanded(
-              child: _Fact(label: 'F&B approval', value: 'Unknown'),
+              child: _Fact(
+                icon: Icons.storefront_outlined,
+                label: 'Unit type',
+                value: p.propertyType.isNotEmpty ? p.propertyType : 'Not listed',
+              ),
             ),
           ],
         ),
-        const SizedBox(height: 14),
+        const SizedBox(height: 19),
+
         Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Expanded(
               child: _Fact(
+                icon: Icons.calculate_outlined,
                 label: 'Rental efficiency',
-                // Dividing a placeholder 0 rent or 0 size would print
-                // "RM 0.00 / sq ft" — the honest marker is "Not computable".
                 value: p.rentalRm > 0 && p.sizeSqft > 0
-                    ? 'RM${p.rentalPerSqft.toStringAsFixed(2)} / sq ft'
+                    ? 'RM ${p.rentalPerSqft.toStringAsFixed(2)} / sq ft'
                     : 'Not computable',
               ),
             ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: _Fact(
-                label: 'Verification',
-                value: p.verification == VerificationStatus.verified
-                    ? 'Verified'
-                    : 'Unverified',
-              ),
-            ),
-            const SizedBox(width: 12),
-            // The same promise as the 360° chip on the media above, so the
-            // same evidence: a stitched research panorama and a
-            // device-captured tour are two sources of one 360° view, and
-            // reading `hasTour` alone printed "Not yet" while the chip
-            // below it opened a working viewer.
+            const SizedBox(width: 10),
             Expanded(
               child: FutureBuilder<PropertyInsightsModel?>(
                 future: _insightsFuture,
                 builder: (context, snap) => _Fact(
+                  icon: Icons.threesixty_rounded,
                   label: '360° view',
                   value: _tourState(p, snap),
                 ),
@@ -512,98 +1236,25 @@ class _EntrepreneurPropertyDetailMobilePageState
             ),
           ],
         ),
-        if (p.requirements.isNotEmpty) ...[
-          const Divider(height: 26),
-          const Text(
-            'Meets your requirements',
-            style: TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.w700,
-              color: SitewiseColors.muted,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Wrap(
-            spacing: 6,
-            runSpacing: 6,
-            children: [for (final r in p.requirements) _Tag(r, positive: true)],
-          ),
-        ],
-        if (p.tags.isNotEmpty) ...[
-          const SizedBox(height: 12),
-          Wrap(
-            spacing: 6,
-            runSpacing: 6,
-            children: [for (final t in p.tags) _Tag(t)],
-          ),
-        ],
-        const SizedBox(height: 12),
-        Text(
-          AppConfig.usesDemoData
-              ? 'Floor area and price are sample data in this build and '
-                    'require verification.'
-              : 'Floor area and price are provided per listing and require '
-                    'verification.',
-          style: const TextStyle(
-            fontFamily: kFontFamily,
-            fontSize: 10.5,
-            height: 1.5,
-            color: SitewiseColors.muted,
-          ),
-        ),
       ],
     ),
   );
 
   Widget _insights(CommercialProperty p, EntrepreneurState model) {
-    // The state owner keeps the last analysis it loaded. If the user opened a
-    // different property, that analysis belongs to the OTHER listing — showing
-    // it here would attribute one unit's research figures to another.
-    final a = model.analysisPropertyId == p.id ? model.analysis : null;
+    // Do not show the previously opened property's analysis while this one
+    // loads. Keep the same existing backend contract and fallback rules.
+    final analysis = model.analysisPropertyId == p.id ? model.analysis : null;
     final error = model.analysisPropertyId == p.id ? model.analysisError : null;
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: SitewiseColors.surface,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: SitewiseColors.border),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SitewiseMapPanel(
-            height: 190,
-            pins: [
-              MapPin(
-                id: p.id,
-                label: p.title,
-                latitude: p.latitude,
-                longitude: p.longitude,
-                highlighted: true,
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          FutureBuilder<PropertyInsightsModel?>(
-            future: _insightsFuture,
-            builder: (context, snapshot) {
-              if (snapshot.connectionState != ConnectionState.done) {
-                return const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 12),
-                  child: MobileSkeletonBox(height: 14, width: 180),
-                );
-              }
-              final insights = snapshot.data;
-              // A scored property always uses the model's own explanation. The
-              // assessment block below is a DIFFERENT scoring system, so it is
-              // only shown when Location Fit itself is unavailable — the two
-              // are never blended into one number.
-              if (insights != null) return MobileInsightsPanel(insights: insights);
-              return _assessmentBlock(p, model, a, error);
-            },
-          ),
-        ],
-      ),
+    return FutureBuilder<PropertyInsightsModel?>(
+      future: _insightsFuture,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState != ConnectionState.done) {
+          return const MobileSkeletonBox(height: 100);
+        }
+        final insights = snapshot.data;
+        if (insights != null) return MobileInsightsPanel(insights: insights);
+        return _assessmentBlock(p, model, analysis, error);
+      },
     );
   }
 
@@ -721,36 +1372,7 @@ class _EntrepreneurPropertyDetailMobilePageState
     _open('/entrepreneur/compare');
   }
 
-  Widget _actions(CommercialProperty p, bool saved) {
-    // Watched (not read once): adding/removing here repaints this button too.
-    final compared = ref
-        .watch(appNotifierProvider.select((app) => app.compared))
-        .contains(p.id);
-    return Column(
-      children: [
-        SitewiseButton(
-          label: saved ? 'Remove from favourites' : 'Save property',
-          icon: saved ? Icons.bookmark_rounded : Icons.bookmark_border_rounded,
-          onPressed: () => _toggleSaved(p.id, !saved),
-        ),
-        const SizedBox(height: 8),
-        // Opening Compare NEVER removes the selection. Already selected →
-        // open directly; not selected → add then open; a full shortlist is
-        // explained instead of silently doing nothing.
-        SitewiseSecondaryButton(
-          label: compared ? 'Open comparison ✓' : 'Add to compare',
-          icon: Icons.compare_arrows,
-          onPressed: () => _compareAction(p.id),
-        ),
-        const SizedBox(height: 8),
-        SitewiseSecondaryButton(
-          label: 'Generate evaluation report',
-          icon: Icons.description_outlined,
-          onPressed: () => _open('/entrepreneur/report', arguments: p.id),
-        ),
-      ],
-    );
-  }
+
 }
 
 /// The 360° overlay on the media block, matching the chip the ranked cards
@@ -824,68 +1446,48 @@ class _PropertyRecord {
 }
 
 class _Fact extends StatelessWidget {
+  final IconData icon;
   final String label;
   final String value;
 
-  const _Fact({required this.label, required this.value});
+  const _Fact({required this.icon, required this.label, required this.value});
 
   @override
-  Widget build(BuildContext context) => Column(
+  Widget build(BuildContext context) => Row(
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
-      Text(
-        label,
-        style: const TextStyle(fontSize: 10.5, color: SitewiseColors.muted),
+      Container(
+        width: 37,
+        height: 37,
+        decoration: BoxDecoration(
+          color: SitewiseColors.infoWash,
+          borderRadius: BorderRadius.circular(11),
+        ),
+        child: Icon(icon, size: 20, color: SitewiseColors.action),
       ),
-      const SizedBox(height: 3),
-      Text(
-        value,
-        maxLines: 2,
-        overflow: TextOverflow.ellipsis,
-        style: const TextStyle(
-          fontSize: 13,
-          fontWeight: FontWeight.w700,
-          color: SitewiseColors.ink,
-          height: 1.25,
+      const SizedBox(width: 8),
+      Expanded(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              label,
+              style: const TextStyle(fontSize: 12, height: 1.35, color: SitewiseColors.muted),
+            ),
+            const SizedBox(height: 3),
+            Text(
+              value,
+              softWrap: true,
+              style: const TextStyle(
+                fontSize: 14,
+                height: 1.3,
+                fontWeight: FontWeight.w700,
+                color: SitewiseColors.ink,
+              ),
+            ),
+          ],
         ),
       ),
     ],
-  );
-}
-
-class _Tag extends StatelessWidget {
-  final String label;
-  final bool positive;
-
-  const _Tag(this.label, {this.positive = false});
-
-  @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
-    decoration: BoxDecoration(
-      color: positive ? const Color(0xFFD3F8DF) : SitewiseColors.geoWash,
-      borderRadius: BorderRadius.circular(999),
-    ),
-    child: Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        if (positive) ...[
-          const Icon(
-            Icons.check_rounded,
-            size: 12,
-            color: SitewiseColors.success,
-          ),
-          const SizedBox(width: 4),
-        ],
-        Text(
-          label,
-          style: TextStyle(
-            fontSize: 11,
-            fontWeight: FontWeight.w600,
-            color: positive ? SitewiseColors.success : SitewiseColors.accent,
-          ),
-        ),
-      ],
-    ),
   );
 }

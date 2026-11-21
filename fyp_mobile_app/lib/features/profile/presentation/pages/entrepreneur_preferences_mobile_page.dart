@@ -20,16 +20,6 @@ class EntrepreneurPreferencesMobilePage extends ConsumerStatefulWidget {
 
 class _EntrepreneurPreferencesMobilePageState
     extends ConsumerState<EntrepreneurPreferencesMobilePage> {
-  static const _categories = <String>[
-    'Cafe / Coffee Shop',
-    'Restaurant',
-    'Bakery / Dessert Shop',
-    'Fast Food / Quick Service',
-    'Beverage Shop / Kiosk',
-    'Other F&B',
-  ];
-
-  /// Constructed by the composition root; the page never builds a repository.
   /// Constructed by the composition root; the page never builds a repository.
   late final _repository = ServiceLocator.userPreferences;
   final _minRent = TextEditingController();
@@ -38,7 +28,6 @@ class _EntrepreneurPreferencesMobilePageState
   final _maxSize = TextEditingController();
   final _targetMarket = TextEditingController();
 
-  String _businessType = '';
   String _propertyType = 'Any';
   List<String>? _catalogueTypes;
   String? _catalogueError;
@@ -109,7 +98,6 @@ class _EntrepreneurPreferencesMobilePageState
   /// Populate the controls from server values (or cached draft defaults).
   void _seed(Map<String, dynamic>? raw) {
     final fallback = ServiceLocator.preferences;
-    _businessType = raw?['business_type'] as String? ?? fallback.businessType;
     final type = raw?['property_type'] as String? ?? fallback.propertyType;
     _propertyType = type.trim().isEmpty ? 'Any' : type;
     _minRent.text = _numberText(
@@ -137,7 +125,6 @@ class _EntrepreneurPreferencesMobilePageState
   }
 
   Map<String, String> _snapshot() => {
-        'business_type': _businessType,
         'property_type': _propertyType,
         'min_budget_rm': _minRent.text,
         'max_budget_rm': _maxRent.text,
@@ -233,15 +220,9 @@ class _EntrepreneurPreferencesMobilePageState
 
   Map<String, dynamic>? _payload() {
     final errors = <String, String>{};
-    final category = _businessType.trim();
     final type = _propertyType.trim();
     final target = _targetMarket.text.trim();
 
-    if (category.isEmpty) {
-      errors['business_type'] = 'Select a business category.';
-    } else if (category.length > 120) {
-      errors['business_type'] = 'Use 120 characters or fewer.';
-    }
     if (type.isEmpty) {
       errors['property_type'] = 'Choose a property type, or Any.';
     } else if (type.length > 60) {
@@ -270,7 +251,6 @@ class _EntrepreneurPreferencesMobilePageState
     }
 
     return {
-      'business_type': category,
       'property_type': type,
       'target_market': target,
       'min_budget_rm': minRent,
@@ -330,7 +310,6 @@ class _EntrepreneurPreferencesMobilePageState
   void _discard() {
     if (_saving || !_dirty) return;
     setState(() {
-      _businessType = _baseline['business_type'] ?? '';
       _propertyType = _baseline['property_type'] ?? 'Any';
       _minRent.text = _baseline['min_budget_rm'] ?? '';
       _maxRent.text = _baseline['max_budget_rm'] ?? '';
@@ -372,33 +351,6 @@ class _EntrepreneurPreferencesMobilePageState
         decoration: _decoration(label,
             error: _errors[key], hint: 'e.g. 2000', helper: helper),
       );
-
-  Widget _categoryInput() {
-    final values = <String>[
-      if (_businessType.isNotEmpty && !_categories.contains(_businessType))
-        _businessType,
-      ..._categories,
-    ];
-    return DropdownButtonFormField<String>(
-      key: ValueKey('category-$_businessType'),
-      initialValue: _businessType.isEmpty ? '' : _businessType,
-      isExpanded: true,
-      decoration: _decoration('Business category',
-          error: _errors['business_type']),
-      items: [
-        const DropdownMenuItem<String>(
-          value: '', child: Text('Select business category'),
-        ),
-        for (final category in values)
-          DropdownMenuItem<String>(value: category, child: Text(category)),
-      ],
-      onChanged: (value) {
-        if (value == null) return;
-        setState(() => _businessType = value);
-        _changed('business_type');
-      },
-    );
-  }
 
   Widget _propertyInput() {
     final types = _catalogueTypes;
@@ -465,7 +417,8 @@ class _EntrepreneurPreferencesMobilePageState
   @override
   Widget build(BuildContext context) {
     return MobileAppShell(
-      title: 'User Preferences',
+      title: 'User preferences',
+      simpleTopBar: true,
       currentRoute: '/entrepreneur/preferences',
       body: _loading
           ? const Center(child: CircularProgressIndicator())
@@ -498,8 +451,8 @@ class _EntrepreneurPreferencesMobilePageState
                               fontWeight: FontWeight.w800,
                               color: SitewiseColors.ink)),
                           const SizedBox(height: 6),
-                          const Text('Set the rental, size, property type and '
-                            'business details used when comparing locations.',
+                          const Text('Set the rental, floor area and property '
+                            'preferences used when comparing locations.',
                             style: TextStyle(fontSize: 13, height: 1.5,
                                 color: SitewiseColors.muted)),
                           const SizedBox(height: 22),
@@ -517,11 +470,10 @@ class _EntrepreneurPreferencesMobilePageState
                             _numberInput('max_size_sqft', 'Max floor area (sq ft)',
                                 _maxSize, helper: 'Required; greater than 0.'),
                           ]),
-                          _inputSection('Your business',
-                            'The commercial unit and your F&B concept are '
-                            'different types of information.', [
+                          _inputSection('Property preferences',
+                            'Choose the property type and target customers '
+                            'that matter to you.', [
                             _propertyInput(),
-                            _categoryInput(),
                             TextField(
                               controller: _targetMarket,
                               onChanged: (_) => _changed('target_market'),

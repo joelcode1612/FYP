@@ -41,15 +41,6 @@ class PreferencesPage extends StatefulComponent {
 class _PreferencesPageState extends State<PreferencesPage> {
   static const _api = AssessmentApi();
 
-  static const _businessCategories = <String>[
-    'Cafe / Coffee Shop',
-    'Restaurant',
-    'Bakery / Dessert Shop',
-    'Fast Food / Quick Service',
-    'Beverage Shop / Kiosk',
-    'Other F&B',
-  ];
-
   bool _loading = true;
   String? _loadError;
   bool _unauthorized = false;
@@ -62,7 +53,6 @@ class _PreferencesPageState extends State<PreferencesPage> {
 
   // Numbers are held as text. Parsing on input and dropping the unparseable is
   // what made an emptied field silently keep its old value.
-  String _businessType = '';
   String _propertyType = 'Any';
   String _minBudget = '0';
   String _maxBudget = '';
@@ -128,7 +118,6 @@ class _PreferencesPageState extends State<PreferencesPage> {
   }
 
   void _seed(BusinessPreferences value, Map<String, dynamic>? stored) {
-    _businessType = value.businessType;
     _propertyType = value.propertyType.isEmpty ? 'Any' : value.propertyType;
     _minBudget = _text(value.minBudgetRm);
     _maxBudget = _text(value.maxBudgetRm);
@@ -141,7 +130,6 @@ class _PreferencesPageState extends State<PreferencesPage> {
   }
 
   Map<String, String> _snapshot() => {
-    'business_type': _businessType,
     'property_type': _propertyType,
     'min_budget_rm': _minBudget,
     'max_budget_rm': _maxBudget,
@@ -218,7 +206,6 @@ class _PreferencesPageState extends State<PreferencesPage> {
   void _discard() {
     if (_saving) return;
     setState(() {
-      _businessType = _baseline['business_type'] ?? '';
       _propertyType = _baseline['property_type'] ?? 'Any';
       _minBudget = _baseline['min_budget_rm'] ?? '0';
       _maxBudget = _baseline['max_budget_rm'] ?? '';
@@ -236,13 +223,6 @@ class _PreferencesPageState extends State<PreferencesPage> {
   /// problems surface before a round trip; the server stays authoritative.
   Map<String, dynamic>? _payload() {
     final errors = <String, String>{};
-
-    final businessType = _businessType.trim();
-    if (businessType.isEmpty) {
-      errors['business_type'] = 'Enter your business category.';
-    } else if (businessType.length > 120) {
-      errors['business_type'] = 'Use 120 characters or fewer.';
-    }
 
     final propertyType = _propertyType.trim();
     if (propertyType.isEmpty) {
@@ -283,7 +263,6 @@ class _PreferencesPageState extends State<PreferencesPage> {
     }
 
     return {
-      'business_type': businessType,
       'property_type': propertyType,
       'target_market': targetMarket,
       'min_budget_rm': minBudget,
@@ -334,9 +313,9 @@ class _PreferencesPageState extends State<PreferencesPage> {
       title: 'Your preferences',
       eyebrow: 'Recommendations',
       subtitle:
-          'These values decide which properties are eligible for your shortlist. '
-          'They are stored on your account and read by every ranking and every '
-          'location assessment you open.',
+          'Choose your preferred rent, floor area and property type. These '
+          'criteria narrow your shortlist; no separate score is generated '
+          'for each F&B business category.',
       child: div(classes: 'stack stack--sections', [
         _explainer(),
         if (_loading)
@@ -347,9 +326,9 @@ class _PreferencesPageState extends State<PreferencesPage> {
           _form(),
         p(classes: 'disclaimer', [
           Component.text(
-            'Preferences are a filter, not a prediction. Changing them changes '
-            'which listings are eligible and how the eligible ones are ordered '
-            '— it does not change the underlying listing data.',
+            'Rent, floor area and property type determine shortlist eligibility. '
+            'Target market is saved as assessment context; it does not '
+            'generate a business-category-specific score.',
           ),
         ]),
       ]),
@@ -365,22 +344,20 @@ class _PreferencesPageState extends State<PreferencesPage> {
     div(classes: 'quick', [
       _step(
         'Step 1',
-        'Business profile',
-        'Your category, budget range and target size define what "suitable" '
-            'means for your concept.',
+        'Set your limits',
+        'Choose a monthly rental range and the floor area you need.',
       ),
       _step(
         'Step 2',
-        'Eligibility thresholds',
-        'Budget, size and type act as hard filters — a property outside them is '
-            'never ranked, however good its location.',
+        'Filter available spaces',
+        'Rent, floor area and property type limit which listings enter '
+            'your shortlist.',
       ),
       _step(
         'Step 3',
-        'Ordering',
-        'Eligible properties are ordered by the imported F&B suitability index '
-            'from the source workbook. That index is not a model trained on '
-            'your preferences, and no score is generated here.',
+        'Review the shortlist',
+        'Eligible properties use the existing overall F&B suitability '
+            'measure, not a separate score for each business category.',
       ),
     ]),
   ]);
@@ -427,14 +404,13 @@ class _PreferencesPageState extends State<PreferencesPage> {
       ),
     ]),
 
-    div(classes: 'frow', [
+    div(classes: 'field-grid', [
       // Property type as checkpills, as in the source. This is the field the
       // eligibility filter reads (`propertyType`) — single-choice radio group.
       div(classes: 'field', [
         span(classes: 'field__label', [Component.text('Property type')]),
         if (_catalogueTypes == null)
-          // Catalogue unavailable: keep the property type editable. This
-          // must not accidentally edit the separate business-category field.
+          // Catalogue unavailable: keep the property type editable.
           input<String>(
             key: const ValueKey('preferences-property-type-fallback'),
             value: _propertyType == 'Any' ? '' : _propertyType,
@@ -479,60 +455,6 @@ class _PreferencesPageState extends State<PreferencesPage> {
         ]),
       ]),
 
-      // Business category describes the entrepreneur's concept; it is stored
-      // separately from the property type instead of overwriting it.
-      div(classes: 'field', [
-        label(
-          classes: 'field__label',
-          attributes: const {'for': 'business-category'},
-          [Component.text('Business category')],
-        ),
-        select(
-          id: 'business-category',
-          key: const ValueKey('preferences-business-category'),
-          attributes: {
-            'name': 'business_type',
-            if (_errors['business_type'] != null) 'aria-invalid': 'true',
-          },
-          // Jaspr select changes deliver a list of selected strings.
-          onChange: (values) => setState(
-            () => _businessType = values.isEmpty ? '' : values.first,
-          ),
-          [
-            option(
-              value: '',
-              selected: _businessType.isEmpty,
-              [Component.text('Select business category')],
-            ),
-            // Existing custom categories must remain visible after a reload.
-            if (_businessType.isNotEmpty &&
-                !_businessCategories.contains(_businessType))
-              option(
-                value: _businessType,
-                selected: true,
-                [Component.text(_businessType)],
-              ),
-            for (final category in _businessCategories)
-              option(
-                value: category,
-                selected: _businessType == category,
-                [Component.text(category)],
-              ),
-          ],
-        ),
-        if (_errors['business_type'] != null)
-          span(classes: 'field__error', [
-            Component.text(_errors['business_type']!),
-          ])
-        else
-          span(classes: 'hint', [
-            Component.text(
-              'Describes your concept. Shown on your recommendations and '
-              'carried into every assessment; it does not filter the ranking.',
-            ),
-          ]),
-      ]),
-
       div(classes: 'field', [
         span(classes: 'field__label', [Component.text('Target market')]),
         input<String>(
@@ -558,20 +480,18 @@ class _PreferencesPageState extends State<PreferencesPage> {
           ]),
       ]),
 
-      div(classes: 'field', [
-        span(classes: 'field__label', [Component.text('\u00a0')]),
-        div(classes: 'actions-row', [
-          ActionButton(
-            _saving ? 'Saving…' : 'Save preferences',
-            onClick: _saving ? null : _save,
-          ),
-          ActionButton(
-            'Discard changes',
-            variant: 'secondary',
-            onClick: (_saving || !_dirty) ? null : _discard,
-          ),
-        ]),
-      ]),
+    ]),
+
+    div(classes: 'actions-row', [
+      ActionButton(
+        _saving ? 'Saving…' : 'Save preferences',
+        onClick: _saving ? null : _save,
+      ),
+      ActionButton(
+        'Discard changes',
+        variant: 'secondary',
+        onClick: (_saving || !_dirty) ? null : _discard,
+      ),
     ]),
 
     if (_errorMessage != null)

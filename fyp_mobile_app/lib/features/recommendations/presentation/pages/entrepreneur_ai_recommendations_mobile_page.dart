@@ -343,7 +343,7 @@ class _AiRecommendationCard extends ConsumerWidget {
                   child: OutlinedButton.icon(
                     onPressed: () => Navigator.of(context).pushNamed(
                       '/entrepreneur/property-detail',
-                      arguments: item.propertyId,
+                      arguments: {'propertyId': item.propertyId, 'resultId': item.resultId},
                     ),
                     icon: const Icon(Icons.place_outlined, size: 16),
                     label: const Text('View property insights'),

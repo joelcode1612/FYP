@@ -265,7 +265,9 @@ def legacy_requirements_view(stored: dict) -> dict:
 
 
 
-def validate_requirements(raw: Any) -> dict:
+def validate_requirements(
+    raw: Any, *, require_business_type: bool = True
+) -> dict:
     """Normalise and validate the business-requirements payload.
 
     Two schemas are accepted so a record saved before the eight-question
@@ -288,10 +290,12 @@ def validate_requirements(raw: Any) -> dict:
         return _validate_v3(raw)
     if any(key in raw for key in V2_ONLY_KEYS):
         return _validate_v2(raw)
-    return _validate_v1(raw)
+    return _validate_v1(raw, require_business_type=require_business_type)
 
 
-def _validate_v1(raw: dict) -> dict:
+def _validate_v1(
+    raw: dict, *, require_business_type: bool = True
+) -> dict:
 
     problems: list[str] = []
     clean: dict[str, Any] = {}
@@ -304,7 +308,11 @@ def _validate_v1(raw: dict) -> dict:
             problems.append(f"{field} must be text.")
             continue
         value = value.strip()
-        if field in _REQUIRED_TEXT and not value:
+        if (
+            field in _REQUIRED_TEXT
+            and not value
+            and (field != 'business_type' or require_business_type)
+        ):
             problems.append(f"{field} is required.")
         if len(value) > limit:
             problems.append(f"{field} must be {limit} characters or fewer.")

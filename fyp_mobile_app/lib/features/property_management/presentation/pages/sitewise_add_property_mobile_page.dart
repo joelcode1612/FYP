@@ -69,6 +69,12 @@ class _SitewiseAddPropertyMobilePageState
     'Save or submit your property.',
   ];
 
+  // The one Agent/Owner Add Property form offers only two property types.
+  static const List<String> _supportedPropertyTypes = <String>[
+    'Shoplot',
+    'Retail Space',
+  ];
+
   // Cache the theme. Keyboard opening/closing should not allocate and
   // propagate an entirely new ThemeData through the input-heavy wizard.
   late final ThemeData _formTheme = ThemeData(
@@ -203,7 +209,12 @@ class _SitewiseAddPropertyMobilePageState
     final normalizedType = normalizeCommercialPropertyType(
       listing.propertyType,
     );
-    if (normalizedType != null) _propertyType = normalizedType;
+    // Existing drafts are not rewritten automatically. If an older
+    // type is no longer offered, require the user to choose one.
+    _propertyType = normalizedType != null &&
+            _supportedPropertyTypes.contains(normalizedType)
+        ? normalizedType
+        : '';
     setState(() {});
   }
 
@@ -403,7 +414,12 @@ class _SitewiseAddPropertyMobilePageState
 
   void _collectDetailsErrors() {
     _putField('title', PropertyFormRules.titleError(_propertyName));
-    _putField('type', PropertyFormRules.propertyTypeError(_propertyType));
+    _putField(
+      'type',
+      _supportedPropertyTypes.contains(_propertyType)
+          ? PropertyFormRules.propertyTypeError(_propertyType)
+          : 'Choose Shoplot or Retail Space.',
+    );
     _putField('rent', PropertyFormRules.rentError(_monthlyRent));
     _putField('area', PropertyFormRules.areaError(_builtUpArea));
   }
@@ -876,7 +892,7 @@ class _SitewiseAddPropertyMobilePageState
   }
 
   Widget _buildChoiceGrid() {
-    final choices = commercialPropertyTypeLabels;
+    final choices = _supportedPropertyTypes;
     final error = _fieldErrors['type'];
 
     return Column(
@@ -897,7 +913,7 @@ class _SitewiseAddPropertyMobilePageState
                 for (final choice in choices)
                   SizedBox(
                     width: tileWidth,
-                    height: 45,
+                    height: 52,
                     child: OutlinedButton(
                       onPressed: () {
                         FocusManager.instance.primaryFocus?.unfocus();

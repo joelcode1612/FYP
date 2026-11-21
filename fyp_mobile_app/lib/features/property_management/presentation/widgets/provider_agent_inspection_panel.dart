@@ -79,9 +79,11 @@ class _InspectionState extends State<ProviderAgentInspectionPanel> {
         'accessibility_notes': accessNotes.text.trim(),
       });
       if (mounted) setState(() => saved = true);
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Inspection saved.')),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Inspection saved.')),
+        );
+      }
     } catch (e) { if (mounted) setState(() => error = '$e'); }
     finally { if (mounted) setState(() => busy = false); }
   }

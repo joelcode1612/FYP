@@ -22,6 +22,9 @@ class MobileAppShell extends ConsumerWidget {
   final List<MobileDestination>? destinations;
   final bool? showBack;
 
+  /// Use a plain title-only header for pushed settings/detail pages.
+  final bool simpleTopBar;
+
   /// Hide bottom navigation while the keyboard is open.
   /// Defaults to false so existing pages are unchanged.
   final bool hideBottomNavOnKeyboard;
@@ -43,6 +46,7 @@ class MobileAppShell extends ConsumerWidget {
     this.m3,
     this.destinations,
     this.showBack,
+    this.simpleTopBar = false,
     this.hideBottomNavOnKeyboard = false,
     this.onNavigate,
   });
@@ -94,6 +98,7 @@ class MobileAppShell extends ConsumerWidget {
               brandTitle: brandTitle,
               m3: useM3,
               showBack: showBack,
+              plainTitle: simpleTopBar,
             )
           : null,
 

@@ -34,6 +34,9 @@ class MobileTopBar extends ConsumerWidget implements PreferredSizeWidget {
   /// offer a back arrow that pops the whole workspace away.
   final bool? showBack;
 
+  /// Display a dedicated screen title and no global utilities.
+  final bool plainTitle;
+
   /// Role pill rendered next to the brand lockup (`Agent`, `Property Owner`).
   /// Null keeps the header exactly as it was — the entrepreneur workspace
   /// passes nothing.
@@ -55,6 +58,7 @@ class MobileTopBar extends ConsumerWidget implements PreferredSizeWidget {
     this.brandTitle = false,
     this.m3 = false,
     this.showBack,
+    this.plainTitle = false,
     this.roleBadge,
     this.unreadNotifications,
     this.onNotifications,
@@ -131,6 +135,48 @@ class MobileTopBar extends ConsumerWidget implements PreferredSizeWidget {
 
   // ── Material 3 (entrepreneur post-sign-in) ────────────────────────────────
   Widget _m3(BuildContext context, bool canPop) {
+    if (plainTitle) {
+      // The Preferences screen is a detail route, not the branded app home.
+      // The global header and notification affordance are intentionally absent.
+      return AppBar(
+        automaticallyImplyLeading: false,
+        backgroundColor: SitewiseM3.paper,
+        foregroundColor: SitewiseM3.ink,
+        surfaceTintColor: SitewiseM3.paper,
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        toolbarHeight: 62,
+        titleSpacing: 0,
+        leadingWidth: 56,
+        leading: IconButton(
+          tooltip: 'Back to profile',
+          icon: const Icon(Icons.arrow_back_rounded, color: SitewiseM3.ink),
+          onPressed: () {
+            final navigator = Navigator.of(context);
+            if (navigator.canPop()) {
+              navigator.pop();
+            } else {
+              navigator.pushReplacementNamed('/entrepreneur/profile');
+            }
+          },
+        ),
+        title: Text(
+          title,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.w700,
+            color: SitewiseM3.ink,
+          ),
+        ),
+        actions: const <Widget>[],
+        shape: const Border(
+          bottom: BorderSide(color: SitewiseM3.divider, width: 1),
+        ),
+      );
+    }
+
     void notify() => ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
         content: Text('You have no new notifications.'),

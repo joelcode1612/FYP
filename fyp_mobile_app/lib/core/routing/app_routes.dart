@@ -287,7 +287,12 @@ abstract final class AppRoutes {
       '/entrepreneur/property-detail' => (
         RouteAccess.workspace,
         () => EntrepreneurPropertyDetailMobilePage(
-          propertyId: settings.arguments as String? ?? '',
+          propertyId: settings.arguments is Map
+              ? '${(settings.arguments as Map)['propertyId'] ?? ''}'
+              : (settings.arguments as String? ?? ''),
+          resultId: settings.arguments is Map
+              ? (settings.arguments as Map)['resultId']?.toString()
+              : null,
         ),
       ),
       '/entrepreneur/tour' => (
