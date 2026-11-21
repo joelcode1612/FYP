@@ -1,0 +1,161 @@
+{
+  "probe": "F01_APPEND_ONLY",
+  "database": "project1_workflow_tests",
+  "ran_at": "2026-11-17T15:31:15.101384+00:00",
+  "triggers": [
+    "m2_bcb_append_only"
+  ],
+  "admin_identity": {
+    "user": "postgres",
+    "superuser": true,
+    "bypassrls": true
+  },
+  "restricted_identity": {
+    "user": "p1_m2_runtime",
+    "superuser": false,
+    "bypassrls": false
+  },
+  "uncertainty_id": "5f5e1442-fa14-483d-9b2c-45b805dac5ee",
+  "checks": [
+    {
+      "check": "restricted principal can see the row (so RLS is not what blocks the next step)",
+      "rows_visible": 1,
+      "pass": true
+    },
+    {
+      "check": "UPDATE exact_text",
+      "principal": "p1_m2_runtime",
+      "sql": "UPDATE public.m2_confirmed_uncertainties SET exact_text = %(v)s WHERE id = %(id)s",
+      "params": [
+        "id",
+        "v"
+      ],
+      "acceptable_sqlstates": [
+        "55000"
+      ],
+      "refused": true,
+      "sqlstate": "55000",
+      "error": "Versioned M2/BCB source records are append-only",
+      "pass": true
+    },
+    {
+      "check": "UPDATE exact_text",
+      "principal": "superuser",
+      "sql": "UPDATE public.m2_confirmed_uncertainties SET exact_text = %(v)s WHERE id = %(id)s",
+      "params": [
+        "id",
+        "v"
+      ],
+      "acceptable_sqlstates": [
+        "55000"
+      ],
+      "refused": true,
+      "sqlstate": "55000",
+      "error": "Versioned M2/BCB source records are append-only",
+      "pass": true
+    },
+    {
+      "check": "UPDATE id",
+      "principal": "p1_m2_runtime",
+      "sql": "UPDATE public.m2_confirmed_uncertainties SET id = %(v)s WHERE id = %(id)s",
+      "params": [
+        "id",
+        "v"
+      ],
+      "acceptable_sqlstates": [
+        "55000"
+      ],
+      "refused": true,
+      "sqlstate": "55000",
+      "error": "Versioned M2/BCB source records are append-only",
+      "pass": true
+    },
+    {
+      "check": "UPDATE id",
+      "principal": "superuser",
+      "sql": "UPDATE public.m2_confirmed_uncertainties SET id = %(v)s WHERE id = %(id)s",
+      "params": [
+        "id",
+        "v"
+      ],
+      "acceptable_sqlstates": [
+        "55000"
+      ],
+      "refused": true,
+      "sqlstate": "55000",
+      "error": "Versioned M2/BCB source records are append-only",
+      "pass": true
+    },
+    {
+      "check": "UPDATE confirmation_id",
+      "principal": "p1_m2_runtime",
+      "sql": "UPDATE public.m2_confirmed_uncertainties SET confirmation_id = %(v)s WHERE id = %(id)s",
+      "params": [
+        "id",
+        "v"
+      ],
+      "acceptable_sqlstates": [
+        "55000"
+      ],
+      "refused": true,
+      "sqlstate": "55000",
+      "error": "Versioned M2/BCB source records are append-only",
+      "pass": true
+    },
+    {
+      "check": "UPDATE confirmation_id",
+      "principal": "superuser",
+      "sql": "UPDATE public.m2_confirmed_uncertainties SET confirmation_id = %(v)s WHERE id = %(id)s",
+      "params": [
+        "id",
+        "v"
+      ],
+      "acceptable_sqlstates": [
+        "55000"
+      ],
+      "refused": true,
+      "sqlstate": "55000",
+      "error": "Versioned M2/BCB source records are append-only",
+      "pass": true
+    },
+    {
+      "check": "DELETE",
+      "principal": "p1_m2_runtime",
+      "sql": "DELETE FROM public.m2_confirmed_uncertainties WHERE id = %(id)s",
+      "params": [
+        "id"
+      ],
+      "acceptable_sqlstates": [
+        "55000",
+        "42501"
+      ],
+      "refused": true,
+      "sqlstate": "42501",
+      "error": "permission denied for table m2_confirmed_uncertainties",
+      "pass": true
+    },
+    {
+      "check": "DELETE",
+      "principal": "superuser",
+      "sql": "DELETE FROM public.m2_confirmed_uncertainties WHERE id = %(id)s",
+      "params": [
+        "id"
+      ],
+      "acceptable_sqlstates": [
+        "55000"
+      ],
+      "refused": true,
+      "sqlstate": "55000",
+      "error": "Versioned M2/BCB source records are append-only",
+      "pass": true
+    },
+    {
+      "check": "row is byte-identical after every attempt",
+      "pass": true,
+      "count_before": 1,
+      "count_after": 1,
+      "text_digest_unchanged": true
+    }
+  ],
+  "all_pass": true
+}

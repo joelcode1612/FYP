@@ -21,6 +21,8 @@ def main():
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--current-dss-schema', action='store_true',
                         help='Export current local Dss read-only; clone schema only, never source records.')
+    parser.add_argument('--with-m2-review', action='store_true',
+                        help='Apply existing M2 review migrations only to the new fixture cluster.')
     parser.add_argument('--postgres-bin',type=Path,default=Path(r'C:\Program Files\PostgreSQL\18\bin'))
     args = parser.parse_args()
     root = Path(__file__).resolve().parents[2]
@@ -52,7 +54,7 @@ def main():
                 '--locale=C','-A','scram-sha-256','--pwfile='+str(pwfile)])
             pwfile.unlink()
             run([str(binaries/'pg_ctl.exe'),'-D',str(lab/'data'),'-l',str(lab/'postgres.log'),
-                '-o','-h 127.0.0.1 -p 55443','-w','start'])
+                '-o','-h 127.0.0.1 -p 55443 -c shared_buffers=16MB -c work_mem=1MB -c maintenance_work_mem=16MB -c max_connections=12 -c max_worker_processes=0 -c autovacuum=off','-w','start'])
             started=True
             run([str(binaries/'psql.exe'),'-v','ON_ERROR_STOP=1','-c','CREATE DATABASE project1_cq_runtime_test'])
             env['PGDATABASE']='project1_cq_runtime_test'
@@ -64,6 +66,16 @@ def main():
                         for role in source_before['policy_roles']:
                             cursor.execute(sql.SQL('CREATE ROLE {} NOLOGIN NOSUPERUSER NOBYPASSRLS').format(sql.Identifier(role)))
             run([str(binaries/'psql.exe'),'-v','ON_ERROR_STOP=1','-f',str(schema)])
+            if args.with_m2_review:
+                if source_before:
+                    raise RuntimeError('M2-review fixture migrations require the frozen synthetic schema.')
+                for name in ('20261113_01_confirmed_context_persistence.sql',
+                             '20261114_02_research_objective_sources.sql'):
+                    run([str(binaries/'psql.exe'),'-v','ON_ERROR_STOP=1','-c',
+                         "SET project1.m2_bcb_migration_target='project1_cq_runtime_test'; "
+                         "SET project1.m2_bcb_migration_receipt='SYNTHETIC-PRIVATE-ONLY';",
+                         '-f',str(root/'migrations/m2'/name)])
+                env['CQ_TEST_M2_REVIEW'] = '1'
             if source_before:
                 from dss_schema_capture import physical_definition,comparable_physical
                 with psycopg2.connect(host='127.0.0.1',port=55443,user='postgres',password=password,dbname='project1_cq_runtime_test') as admin:

@@ -1,0 +1,38 @@
+/* SiteWise Add Property — balanced vertical spacing.
+   Append these rules to:
+   fyp_jaspr_web/web/sitewise_add_property_preview.css
+   They are scoped to the Add Property preview only.
+*/
+.swap .swap-form-grid {
+  row-gap: 14px;
+  column-gap: 18px;
+}
+
+.swap .swap-card-head {
+  padding-top: 22px;
+  padding-bottom: 18px;
+}
+
+.swap .swap-card-body {
+  padding-top: 20px;
+  padding-bottom: 22px;
+}
+
+.swap .swap-divider {
+  margin-top: 16px;
+  margin-bottom: 16px;
+}
+
+.swap .swap-notice {
+  margin-top: 14px;
+}
+
+.swap .swap-review-section + .swap-review-section {
+  margin-top: 16px;
+}
+
+@media (max-width: 600px) {
+  .swap .swap-form-grid {
+    row-gap: 12px;
+  }
+}

@@ -1,0 +1,39 @@
+{
+  "fixture_id": "LLM01-04",
+  "label": "SYNTHETIC - non-human test fixture",
+  "synthetic": true,
+  "contains_personal_data": false,
+  "no_expected_output_recorded": true,
+  "scenario": "Complete declarations plus a separately confirmed customer-research uncertainty about a stated price. Input-level description only; no expected output is recorded.",
+  "business_description": "A dine-in cafe near offices offering coffee and light meals, aimed at office workers, emphasising convenience.",
+  "m2_answers": {
+    "M2V1-01": {"state": "ANSWERED", "value": "UNDECIDED"},
+    "M2V1-02": {"state": "ANSWERED", "value": "DINE_IN"},
+    "M2V1-03": {"state": "ANSWERED", "value": ["COFFEE", "LIGHT_MEALS"]},
+    "M2V1-04": {"state": "ANSWERED", "value": ["OFFICE_WORKERS"]},
+    "M2V1-05": {"state": "ANSWERED", "value": "OFFICE_WORKERS"},
+    "M2V1-06": {"state": "ANSWERED", "value": "CONVENIENCE"},
+    "M2V1-07": {"state": "ANSWERED", "value": "MEAL_SNACK"},
+    "M2V1-08": {"state": "ANSWERED", "value": ["PERSONAL_OBSERVATION", "INFORMAL_FEEDBACK"]},
+    "M2V1-09": {"state": "ANSWERED", "value": ["PRICE_ACCEPTABILITY"]},
+    "M2V1-10": {"state": "ANSWERED", "value": "PRICE_ACCEPTABILITY"},
+    "M2V1-11": {"state": "ANSWERED", "value": "VALIDATE_CHOICE"}
+  },
+  "confirmation": {
+    "record_kind": "SYNTHETIC_SHAPE_ONLY",
+    "authority": "NONE",
+    "persisted": false,
+    "confirmation_id": "SYN-CONF-04",
+    "assessment_revision_source": "answer_count",
+    "actor": "SYNTHETIC_FIXTURE_ACTOR",
+    "status": "SYNTHETIC_CONFIRMED_FOR_TEST",
+    "confirmed_uncertainty": {
+      "id": "SYN-UNC-04",
+      "origin": "ENTREPRENEUR_SYNTHETIC",
+      "evidence_class": "SYNTHETIC_NONHUMAN",
+      "exact_text": "Would office workers pay RM12 for a coffee and a light lunch at this location?",
+      "scientific_approval": false,
+      "fielding_authorized": false
+    }
+  }
+}

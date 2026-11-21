@@ -1,0 +1,119 @@
+{
+  "budget_state": {
+    "attempts": [
+      {
+        "at": "2026-11-17T12:40:48.066727+00:00",
+        "n": 1,
+        "scenario": "consistent:BDJ"
+      },
+      {
+        "at": "2026-11-17T13:21:04.147422+00:00",
+        "n": 2,
+        "scenario": "02_contradictory_service_format:BDJ"
+      }
+    ],
+    "limit": 6,
+    "spent": 2
+  },
+  "call": {
+    "attempt_no": 1,
+    "budget": {
+      "limit": 6,
+      "remaining": 4,
+      "spent_after": 2,
+      "spent_before": 1
+    },
+    "deterministic_note": "Recomputed locally after the call from the same fixture, ruleset and prompt; not read from the lost transport record.",
+    "deterministic_request_context": {
+      "data_class": "SYNTHETIC_NONHUMAN",
+      "instrument_id": "50906385-072b-5cf1-9661-4d001898ffb8",
+      "instrument_schema_digest": "ac389b412aef96d51cb048d0a7592610e73d79678b1e64dd4b78ce90570d6406",
+      "instrument_source_sha256": "d09a7db532cbd2e41458d9776004de2830c67c91cacb0a264dc4cfbe5c432c6b",
+      "instrument_version": "M2V1-20261114-1",
+      "prompt_fingerprint": "3d3ccf6b48c0b52933c09b4269c09bb9f7a7b5eec13b5440a26427757abc5ea9",
+      "prompt_version": "BDJ-SOURCE-3-CAND",
+      "purpose": "SYNTHETIC_BDJ_DIAGNOSTIC",
+      "rule_catalogue": [],
+      "ruleset_sha256": "42f7fef3bf2bb48255ab8eac406dfb8232923b76789dd065d693732e8bf2a061",
+      "ruleset_version": "BDJ-RULESET-0.2-CAND",
+      "source_fingerprint": "5ce30dd048cde3cbb8dbfbeea9d017946a93bb90341b76aa7dc64e9a9cf67a27"
+    },
+    "dispatched": true,
+    "dispatches": 1,
+    "fixture_id": "LLM01-02",
+    "ledger_outcome": "returned",
+    "note": "The provider response was obtained and passed provider validation: the ledger receipt is \"returned\" with a non-null output digest. The capture dict was lost only because instrument_id (a UUID) was not serialisable. No second call was made.",
+    "output_digest": "34768b3de3e8c3c119bb988df9187163fa1510eaebdfeafe74dd276d1d7a6f52",
+    "prompt_hash": "3d3ccf6b48c0b52933c09b4269c09bb9f7a7b5eec13b5440a26427757abc5ea9",
+    "prompt_version": "BDJ-SOURCE-3-CAND",
+    "receipt_at": "2026-11-17T13:21:08.783246+00:00",
+    "request_hash": "288f666020b02e03191d4c417e7aa2c189beb8cdfedfdf3dd36c49f2b455365a",
+    "reserved_at": "2026-11-17T13:21:04.724110+00:00",
+    "scenario": "02_contradictory_service_format",
+    "stage": "BDJ",
+    "unknown_fields": [
+      "raw_response",
+      "http_status",
+      "latency_ms",
+      "content_encoding",
+      "uncompressed",
+      "token_usage",
+      "last_identity",
+      "engine_outcome",
+      "authorized_findings",
+      "candidate_admission",
+      "request"
+    ]
+  },
+  "capture_status": "INCOMPLETE_LOCAL_SERIALISATION_DEFECT",
+  "defect": "TypeError: Object of type UUID is not JSON serializable at capture[\"instrument_id\"]",
+  "defect_stage": "after the single dispatch returned; before r01_capture.json was written",
+  "gate": {
+    "checked_at": "2026-11-17T13:21:02.858125+00:00",
+    "content_encoding": null,
+    "entry": {
+      "blurb": "Free-tier only \u2014 uses your rolling 7-day allowance, then returns a rate-limit error. Never billed. Drop the ':free' suffix to use the paid route.",
+      "context_length": 1048576,
+      "covered_by_plans": [],
+      "created": 1700000000,
+      "function_call": true,
+      "id": "mimo-v2.6-flash:free",
+      "label": "MiMo V2.6 Flash (Free)",
+      "object": "model",
+      "owned_by": "tokenharbor",
+      "pricing": {
+        "cache_read_usd_per_1m": 0,
+        "cache_write_usd_per_1m": 0,
+        "input_usd_per_1m": 0,
+        "output_usd_per_1m": 0
+      },
+      "reasoning": {
+        "can_disable": null,
+        "default_effort": null,
+        "efforts": null
+      },
+      "supports_prompt_cache": true,
+      "tier": "low",
+      "tool_call": true
+    },
+    "http_status": 200,
+    "latency_ms": 1266.2,
+    "model_id": "mimo-v2.6-flash:free",
+    "pricing": {
+      "cache_read_usd_per_1m": 0,
+      "cache_write_usd_per_1m": 0,
+      "input_usd_per_1m": 0,
+      "output_usd_per_1m": 0
+    },
+    "pricing_keys_used": {
+      "input": "input_usd_per_1m",
+      "output": "output_usd_per_1m"
+    },
+    "ratelimit": [],
+    "reason": null,
+    "result": "FREE_TIER_CONFIRMED",
+    "uncompressed": true,
+    "url": "https://tokenharbor.ai/v1/models"
+  },
+  "retried": false
+}

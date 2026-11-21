@@ -9,7 +9,8 @@ import 'components/question_option_tile.dart';
 /// submission, and withdrawal operations; this widget adds no local authority.
 class CqSessionPage extends ConsumerStatefulWidget {
   final String sessionId;
-  const CqSessionPage({super.key, required this.sessionId});
+  final CqViewModel? viewModel;
+  const CqSessionPage({super.key, required this.sessionId, this.viewModel});
 
   @override
   ConsumerState<CqSessionPage> createState() => _CqSessionPageState();
@@ -23,21 +24,34 @@ class _CqSessionPageState extends ConsumerState<CqSessionPage> {
   @override
   void initState() {
     super.initState();
+    widget.viewModel?.addListener(_changed);
     Future.microtask(() {
-      if (mounted) ref.read(cqViewModelProvider(widget.sessionId)).load();
+      if (mounted) {
+        (widget.viewModel ??
+                ref.read<CqViewModel>(cqViewModelProvider(widget.sessionId)))
+            .load();
+      }
     });
+  }
+
+  void _changed() {
+    if (mounted) setState(() {});
   }
 
   @override
   void dispose() {
+    widget.viewModel?.removeListener(_changed);
     _scroll.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final vm = ref.watch(cqViewModelProvider(widget.sessionId));
+    final CqViewModel vm =
+        widget.viewModel ??
+        ref.watch<CqViewModel>(cqViewModelProvider(widget.sessionId));
     final s = vm.session;
+    final syntheticFlow = vm.repository.syntheticRunId != null;
     final error = vm.error;
     final token = '${s?.revision}-${s?.presentation?['display_id']}';
     if (token != _viewToken) {
@@ -56,7 +70,9 @@ class _CqSessionPageState extends ConsumerState<CqSessionPage> {
             ? vm.busy
                   ? 'Loading your saved questionnaire session.'
                   : vm.withdrawn
-                  ? 'Participation withdrawn.'
+                  ? syntheticFlow
+                        ? 'Synthetic session ended.'
+                        : 'Participation withdrawn.'
                   : 'Your saved questionnaire is unavailable.'
             : 'Version ${s.manifest['version']}',
       ),
@@ -92,9 +108,10 @@ class _CqSessionPageState extends ConsumerState<CqSessionPage> {
     }
     if (vm.withdrawn) {
       children.add(
-        const CqNotice(
-          message:
-              'Participation withdrawn. Your earlier audit records are retained.',
+        CqNotice(
+          message: syntheticFlow
+              ? 'SYNTHETIC / NOT REPORTABLE — session WITHDRAWN. Saved test answers and audit history are retained.'
+              : 'Participation withdrawn. Your earlier audit records are retained.',
           tone: CqNoticeTone.info,
         ),
       );
@@ -102,6 +119,19 @@ class _CqSessionPageState extends ConsumerState<CqSessionPage> {
 
     if (s != null) {
       final locale = s.data['locale'] as String;
+      final synthetic = s.data['synthetic_execution'] == true;
+      final terminalSynthetic =
+          synthetic &&
+          ['SCREENED_OUT', 'UNRESOLVED'].contains(s.data['lifecycle_status']);
+      if (synthetic) {
+        children.add(
+          CqNotice(
+            message:
+                'SYNTHETIC / NOT REPORTABLE · ${s.data['synthetic_case']}\nNonhuman test acknowledgement; real collection remains disabled.',
+            tone: CqNoticeTone.warning,
+          ),
+        );
+      }
       if (s.data['execution_scope'] == 'ISOLATED_TEST') {
         children.add(
           const CqNotice(
@@ -111,7 +141,18 @@ class _CqSessionPageState extends ConsumerState<CqSessionPage> {
         );
       }
 
-      if (s.data['status'] == 'SUBMITTED') {
+      if (terminalSynthetic) {
+        children.add(
+          CqPanel(
+            title: s.data['lifecycle_status'] as String,
+            child: Text(
+              s.data['lifecycle_status'] == 'SCREENED_OUT'
+                  ? 'TEST-ONLY hypothetical eligibility fixture. This termination is independent of geography, zero days and preferences. No submission receipt or demand finding is created.'
+                  : 'TEST-ONLY unresolved eligibility. No completion or demand eligibility is inferred.',
+            ),
+          ),
+        );
+      } else if (s.data['status'] == 'SUBMITTED') {
         final receipt = s.data['receipt'] as Map<String, dynamic>;
         children.add(
           CqPanel(
@@ -120,6 +161,11 @@ class _CqSessionPageState extends ConsumerState<CqSessionPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                if (s.data['lifecycle_status'] == 'COMPLETED')
+                  const Text(
+                    'COMPLETED · stored submission status SUBMITTED',
+                    key: Key('cq-completed'),
+                  ),
                 const Text(
                   'Submission received',
                   key: Key('cq-submitted'),
@@ -185,7 +231,9 @@ class _CqSessionPageState extends ConsumerState<CqSessionPage> {
                 ),
                 const SizedBox(height: 24),
                 CqFullWidthAction(
-                  text: 'I agree to participate',
+                  text: synthetic
+                      ? 'Acknowledge nonhuman synthetic test'
+                      : 'I agree to participate',
                   icon: Icons.check_rounded,
                   actionKey: const Key('cq-consent'),
                   onPressed: vm.busy || error != null ? null : vm.consent,
@@ -196,29 +244,45 @@ class _CqSessionPageState extends ConsumerState<CqSessionPage> {
         );
       } else if (s.data['next_stimulus_kind'] != null) {
         final kind = s.data['next_stimulus_kind'] as String;
-        final stimulus = (s.manifest['stimuli'] as Map)[kind] as Map;
+        final kinds = synthetic ? vm.displayedSyntheticStimuli : [kind];
         children.add(
           CqPanel(
-            title: 'Information for this question',
+            title: synthetic
+                ? 'Review the questionnaire information'
+                : 'Information for this question',
             icon: Icons.info_outline,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Text(
-                  (stimulus['text'] as Map)[locale] as String,
-                  style: const TextStyle(
-                    fontSize: 15,
-                    height: 1.55,
-                    color: CqUiColors.ink,
+                for (final displayedKind in kinds) ...[
+                  Text(
+                    ((((s.manifest['stimuli'] as Map)[displayedKind]
+                                as Map)['text']
+                            as Map)[locale])
+                        as String,
+                    style: const TextStyle(
+                      fontSize: 15,
+                      height: 1.55,
+                      color: CqUiColors.ink,
+                    ),
                   ),
-                ),
-                const SizedBox(height: 12),
-                CqMetaText(text: 'Source version: ${stimulus['version']}'),
-                const SizedBox(height: 20),
+                  const SizedBox(height: 12),
+                  CqMetaText(
+                    text:
+                        'Source version: ${((s.manifest['stimuli'] as Map)[displayedKind] as Map)['version']}',
+                  ),
+                  const SizedBox(height: 20),
+                ],
                 CqFullWidthAction(
-                  text: 'Continue with this information',
+                  text: synthetic
+                      ? 'Continue to questions'
+                      : 'Continue with this information',
                   actionKey: const Key('cq-stimulus'),
-                  onPressed: vm.busy || error != null ? null : vm.stimulus,
+                  onPressed: vm.busy || error != null
+                      ? null
+                      : synthetic
+                      ? () => vm.acknowledgeDisplayedStimuli(kinds)
+                      : vm.stimulus,
                 ),
               ],
             ),
@@ -321,8 +385,20 @@ class _CqSessionPageState extends ConsumerState<CqSessionPage> {
                         : () => vm.choose(code),
                   ),
                 const SizedBox(height: 12),
+                if (synthetic)
+                  OutlinedButton.icon(
+                    key: const Key('cq-previous'),
+                    onPressed:
+                        vm.busy ||
+                            error != null ||
+                            vm.previousAnsweredSlot == null
+                        ? null
+                        : vm.previous,
+                    icon: const Icon(Icons.arrow_back),
+                    label: const Text('Previous saved question'),
+                  ),
                 CqFullWidthAction(
-                  text: 'Save answer',
+                  text: synthetic ? 'Save & Next' : 'Save answer',
                   icon: Icons.save_outlined,
                   actionKey: const Key('cq-answer'),
                   onPressed:
@@ -405,6 +481,7 @@ class _CqSessionPageState extends ConsumerState<CqSessionPage> {
       }
 
       if (s.data['lifecycle_version'] == 'cq-lifecycle/1' &&
+          !terminalSynthetic &&
           s.data['status'] == 'ACTIVE' &&
           s.data['consented'] == true) {
         children.add(
@@ -423,9 +500,39 @@ class _CqSessionPageState extends ConsumerState<CqSessionPage> {
           Center(
             child: TextButton.icon(
               key: const Key('cq-withdraw'),
-              onPressed: vm.busy ? null : vm.withdraw,
+              onPressed: vm.busy
+                  ? null
+                  : () async {
+                      if (synthetic) {
+                        final end = await showDialog<bool>(
+                          context: context,
+                          builder: (dialogContext) => AlertDialog(
+                            title: const Text('End this synthetic session?'),
+                            content: const Text(
+                              'This records WITHDRAWN and closes the case. To continue answering, choose Keep answering. Saved audit records are retained.',
+                            ),
+                            actions: [
+                              TextButton(
+                                onPressed: () =>
+                                    Navigator.pop(dialogContext, false),
+                                child: const Text('Keep answering'),
+                              ),
+                              TextButton(
+                                onPressed: () =>
+                                    Navigator.pop(dialogContext, true),
+                                child: const Text('End session'),
+                              ),
+                            ],
+                          ),
+                        );
+                        if (end != true) return;
+                      }
+                      await vm.withdraw();
+                    },
               icon: const Icon(Icons.exit_to_app_outlined),
-              label: const Text('Withdraw participation'),
+              label: Text(
+                synthetic ? 'End synthetic session' : 'Withdraw participation',
+              ),
             ),
           ),
         );

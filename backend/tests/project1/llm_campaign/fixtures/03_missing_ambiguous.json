@@ -1,0 +1,22 @@
+{
+  "fixture_id": "LLM01-03",
+  "label": "SYNTHETIC - non-human test fixture",
+  "synthetic": true,
+  "contains_personal_data": false,
+  "no_expected_output_recorded": true,
+  "scenario": "Several declarations are explicitly not provided, the service format and emphasis are undecided, and the information source is unknown. Input-level description only; no expected output is recorded.",
+  "business_description": "A cafe concept that is still being formed. The product range, target customers and service format have not been settled.",
+  "m2_answers": {
+    "M2V1-01": {"state": "ANSWERED", "value": "UNDECIDED"},
+    "M2V1-02": {"state": "ANSWERED", "value": "UNDECIDED"},
+    "M2V1-03": {"state": "NOT_PROVIDED", "value": null},
+    "M2V1-04": {"state": "NOT_PROVIDED", "value": null},
+    "M2V1-05": {"state": "NOT_APPLICABLE", "value": null},
+    "M2V1-06": {"state": "ANSWERED", "value": "UNDECIDED"},
+    "M2V1-07": {"state": "NOT_PROVIDED", "value": null},
+    "M2V1-08": {"state": "ANSWERED", "value": ["UNKNOWN"]},
+    "M2V1-09": {"state": "ANSWERED", "value": ["NONE"]},
+    "M2V1-10": {"state": "NOT_APPLICABLE", "value": null},
+    "M2V1-11": {"state": "NOT_APPLICABLE", "value": null}
+  }
+}

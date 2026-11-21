@@ -157,8 +157,10 @@ _EVIDENCE_SELECT = ", ".join(f"f.{c}" for c, *_ in _COLUMN_METRICS) + (
     " f.other_features"
 )
 
+# The imported relation supplies the aggregate series only. Sex-specific
+# values are not part of this schema and must not be inferred from the total.
 _POPULATION_SQL = """
-SELECT population_persons, male_persons, female_persons, date
+SELECT population_persons, date
 FROM public.district_population
 WHERE state = :state AND district = :district
 ORDER BY date DESC
@@ -519,12 +521,13 @@ class CatalogRepository:
     ) -> dict:
         """Official DOSM district demographics for the property's district.
 
-        Each block - the population with its sex split, the age bands, the
-        household income - is resolved on its own terms, because the datasets
-        do not cover the same districts or the same years: a district whose
-        income is published while its age bands are not (W.P. Putrajaya)
-        reports the figure DOSM actually holds instead of collapsing the whole
-        section, and every value travels with its own reference year.
+        Aggregate population, age bands, and household income are resolved on
+        their own terms because the datasets do not cover the same districts or
+        years. This schema has no sex-specific population fields, so male/female
+        splits remain unavailable rather than being inferred. A district whose
+        income is published while its age bands are not (W.P. Putrajaya) reports
+        the figure DOSM actually holds instead of collapsing the whole section,
+        and every value travels with its own reference year.
 
         The age distribution is a regrouping of the published five-year bands
         into the six displayed groups - a lossless relabelling of the source
@@ -633,12 +636,11 @@ class CatalogRepository:
             "district_population": _persons(
                 population_row["population_persons"] if population_row else None
             ),
-            "male_population": _persons(
-                population_row["male_persons"] if population_row else None
-            ),
-            "female_population": _persons(
-                population_row["female_persons"] if population_row else None
-            ),
+            # The source relation contains no sex-specific counts. Keep the
+            # response keys for compatibility and report them as unavailable;
+            # never estimate them from the aggregate.
+            "male_population": None,
+            "female_population": None,
             "population_as_of": (
                 _json_safe(population_row["date"]) if population_row else None
             ),

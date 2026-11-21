@@ -1,0 +1,436 @@
+{
+  "source_database": "Dss",
+  "source_version": "16.14",
+  "generated_from": "artifacts/migration_inventory/dss_inventory.json",
+  "tables": [
+    {
+      "schema": "project1_ai",
+      "name": "attempt_receipts"
+    },
+    {
+      "schema": "project1_ai",
+      "name": "attempts"
+    },
+    {
+      "schema": "project1_ai",
+      "name": "bdj_raw_responses"
+    },
+    {
+      "schema": "project1_ai",
+      "name": "bdj_result_findings"
+    },
+    {
+      "schema": "project1_ai",
+      "name": "bdj_result_sources"
+    },
+    {
+      "schema": "project1_ai",
+      "name": "bdj_result_validations"
+    },
+    {
+      "schema": "project1_ai",
+      "name": "bdj_results"
+    },
+    {
+      "schema": "project1_ai",
+      "name": "finding_provenance"
+    },
+    {
+      "schema": "project1_ai",
+      "name": "runs"
+    },
+    {
+      "schema": "project1_ai",
+      "name": "schema_versions"
+    },
+    {
+      "schema": "public",
+      "name": "assessment_workflow_projection"
+    },
+    {
+      "schema": "public",
+      "name": "cq_answer_revisions"
+    },
+    {
+      "schema": "public",
+      "name": "cq_bank_versions"
+    },
+    {
+      "schema": "public",
+      "name": "cq_campaigns"
+    },
+    {
+      "schema": "public",
+      "name": "cq_consent_events"
+    },
+    {
+      "schema": "public",
+      "name": "cq_effective_answers"
+    },
+    {
+      "schema": "public",
+      "name": "cq_lifecycle_events"
+    },
+    {
+      "schema": "public",
+      "name": "cq_manifest_releases"
+    },
+    {
+      "schema": "public",
+      "name": "cq_participants"
+    },
+    {
+      "schema": "public",
+      "name": "cq_presentations"
+    },
+    {
+      "schema": "public",
+      "name": "cq_question_assignments"
+    },
+    {
+      "schema": "public",
+      "name": "cq_rejected_answer_events"
+    },
+    {
+      "schema": "public",
+      "name": "cq_render_events"
+    },
+    {
+      "schema": "public",
+      "name": "cq_routing_decisions"
+    },
+    {
+      "schema": "public",
+      "name": "cq_schema_migrations"
+    },
+    {
+      "schema": "public",
+      "name": "cq_session_controls"
+    },
+    {
+      "schema": "public",
+      "name": "cq_sessions"
+    },
+    {
+      "schema": "public",
+      "name": "cq_stimulus_deliveries"
+    },
+    {
+      "schema": "public",
+      "name": "cq_submission_receipts"
+    },
+    {
+      "schema": "public",
+      "name": "cq_synthetic_cases"
+    },
+    {
+      "schema": "public",
+      "name": "cq_synthetic_execution_events"
+    },
+    {
+      "schema": "public",
+      "name": "cq_synthetic_execution_grants"
+    },
+    {
+      "schema": "public",
+      "name": "cq_synthetic_import_records"
+    },
+    {
+      "schema": "public",
+      "name": "cq_synthetic_import_retirements"
+    },
+    {
+      "schema": "public",
+      "name": "cq_synthetic_import_runs"
+    },
+    {
+      "schema": "public",
+      "name": "cq_synthetic_preview_grants"
+    },
+    {
+      "schema": "public",
+      "name": "ee01_category_cells"
+    },
+    {
+      "schema": "public",
+      "name": "ee01_measurement_snapshots"
+    },
+    {
+      "schema": "public",
+      "name": "ee01_report_readbacks"
+    },
+    {
+      "schema": "public",
+      "name": "ee01_source_units"
+    },
+    {
+      "schema": "public",
+      "name": "m2_answer_revisions"
+    },
+    {
+      "schema": "public",
+      "name": "m2_assessments"
+    },
+    {
+      "schema": "public",
+      "name": "m2_bdj_evaluations"
+    },
+    {
+      "schema": "public",
+      "name": "m2_bdj_findings"
+    },
+    {
+      "schema": "public",
+      "name": "m2_business_context_builds"
+    },
+    {
+      "schema": "public",
+      "name": "m2_business_contexts"
+    },
+    {
+      "schema": "public",
+      "name": "m2_candidate_owner_reviews"
+    },
+    {
+      "schema": "public",
+      "name": "m2_candidate_review_assignments"
+    },
+    {
+      "schema": "public",
+      "name": "m2_clarification_events"
+    },
+    {
+      "schema": "public",
+      "name": "m2_confirmation_snapshots"
+    },
+    {
+      "schema": "public",
+      "name": "m2_confirmed_uncertainties"
+    },
+    {
+      "schema": "public",
+      "name": "m2_desired_options"
+    },
+    {
+      "schema": "public",
+      "name": "m2_instrument_versions"
+    },
+    {
+      "schema": "public",
+      "name": "m2_item_versions"
+    },
+    {
+      "schema": "public",
+      "name": "m2_research_clarifications"
+    },
+    {
+      "schema": "public",
+      "name": "m2_research_objective_sources"
+    },
+    {
+      "schema": "public",
+      "name": "m2_research_revisions"
+    },
+    {
+      "schema": "public",
+      "name": "m2_review_events"
+    },
+    {
+      "schema": "public",
+      "name": "m2_review_question_versions"
+    }
+  ],
+  "views": [
+    {
+      "schema": "public",
+      "name": "m2_workflow_campaigns"
+    },
+    {
+      "schema": "public",
+      "name": "m2_workflow_summary"
+    }
+  ],
+  "functions": [
+    {
+      "schema": "project1_ai",
+      "name": "deny_mutation"
+    },
+    {
+      "schema": "public",
+      "name": "cq_immutable_record"
+    },
+    {
+      "schema": "public",
+      "name": "cq_is_synthetic_campaign"
+    },
+    {
+      "schema": "public",
+      "name": "cq_session_update_guard"
+    },
+    {
+      "schema": "public",
+      "name": "cq_source_bank_immutable_record"
+    },
+    {
+      "schema": "public",
+      "name": "cq_synthetic_can_execute"
+    },
+    {
+      "schema": "public",
+      "name": "cq_synthetic_can_read"
+    },
+    {
+      "schema": "public",
+      "name": "cq_synthetic_profile_guard"
+    },
+    {
+      "schema": "public",
+      "name": "ee01_source_binding_guard"
+    },
+    {
+      "schema": "public",
+      "name": "m2_bcb_freeze_definition"
+    },
+    {
+      "schema": "public",
+      "name": "m2_bcb_initialize_status"
+    },
+    {
+      "schema": "public",
+      "name": "m2_bcb_reject_mutation"
+    },
+    {
+      "schema": "public",
+      "name": "m2_workflow_change"
+    },
+    {
+      "schema": "public",
+      "name": "m2_workflow_cq_change"
+    },
+    {
+      "schema": "public",
+      "name": "refresh_m2_workflow"
+    }
+  ],
+  "excluded_legacy": [
+    {
+      "schema": "public",
+      "name": "address",
+      "reason": "shared_identity_or_reference"
+    },
+    {
+      "schema": "public",
+      "name": "ai_explanation",
+      "reason": "marketplace_listing"
+    },
+    {
+      "schema": "public",
+      "name": "assessment",
+      "reason": "marketplace_listing"
+    },
+    {
+      "schema": "public",
+      "name": "district_demographic",
+      "reason": "shared_identity_or_reference"
+    },
+    {
+      "schema": "public",
+      "name": "entrepreneur_preferences",
+      "reason": "shared_identity_or_reference"
+    },
+    {
+      "schema": "public",
+      "name": "favorite_property",
+      "reason": "marketplace_listing"
+    },
+    {
+      "schema": "public",
+      "name": "nearby_competitor",
+      "reason": "marketplace_listing"
+    },
+    {
+      "schema": "public",
+      "name": "property",
+      "reason": "marketplace_listing"
+    },
+    {
+      "schema": "public",
+      "name": "property_feature",
+      "reason": "marketplace_listing"
+    },
+    {
+      "schema": "public",
+      "name": "property_foot_traffic",
+      "reason": "marketplace_listing"
+    },
+    {
+      "schema": "public",
+      "name": "property_geospatial_feature",
+      "reason": "marketplace_listing"
+    },
+    {
+      "schema": "public",
+      "name": "property_photo",
+      "reason": "marketplace_listing"
+    },
+    {
+      "schema": "public",
+      "name": "property_property_id_seq",
+      "reason": "marketplace_listing"
+    },
+    {
+      "schema": "public",
+      "name": "property_verification",
+      "reason": "marketplace_listing"
+    },
+    {
+      "schema": "public",
+      "name": "recommendation_result",
+      "reason": "marketplace_listing"
+    },
+    {
+      "schema": "public",
+      "name": "user_tokens",
+      "reason": "shared_identity_or_reference"
+    },
+    {
+      "schema": "public",
+      "name": "users",
+      "reason": "shared_identity_or_reference"
+    },
+    {
+      "schema": "public",
+      "name": "verification_audit",
+      "reason": "marketplace_listing"
+    },
+    {
+      "schema": "public",
+      "name": "verification_document",
+      "reason": "marketplace_listing"
+    },
+    {
+      "schema": "public",
+      "name": "virtual_tour",
+      "reason": "marketplace_listing"
+    }
+  ],
+  "counts": {
+    "tables": 59,
+    "views": 2,
+    "functions": 15,
+    "excluded": 20,
+    "public_tables": 49,
+    "project1_ai_tables": 10
+  },
+  "rls": {
+    "tables_with_rls": 57,
+    "force_row_security": 20,
+    "policies": 82
+  },
+  "triggers": 72,
+  "indexes": 157,
+  "constraints": 395,
+  "fk_constraints": 118,
+  "grant_rows": 60,
+  "cross_app_fk_hinge": "public.users (8 PROJECT1 FKs) — excluded from copy, must pre-exist in target"
+}

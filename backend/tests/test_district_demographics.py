@@ -123,26 +123,11 @@ def test_the_age_table_holds_only_the_both_sex_overall_ethnicity_series(session)
     assert "overall" not in {age for age, _count in rows}
 
 
-def test_sex_split_comes_from_the_same_record_as_the_district_population(session):
+def test_sex_split_is_unavailable_instead_of_inferred_from_the_total(session):
     stats = statistics(session, KL_PROPERTY)
-    assert stats["male_population"] == 1_123_500
-    assert stats["female_population"] == 958_800
-    # Two published halves may differ from the published whole only by the
-    # source's own rounding - never by a third, summed, both-sex row.
-    assert (stats["male_population"] + stats["female_population"]) == pytest.approx(
-        stats["district_population"], abs=ROUNDING_TOLERANCE_PEOPLE
-    )
-    row = session.exec(
-        text(
-            "SELECT male_persons, female_persons, date FROM public.district_population "
-            "WHERE district = 'W.P. Kuala Lumpur' ORDER BY date DESC LIMIT 1"
-        )
-    ).first()
-    assert (int(row[0]), int(row[1]), row[2].isoformat()) == (
-        stats["male_population"],
-        stats["female_population"],
-        stats["population_as_of"],
-    )
+    assert stats["district_population"] == pytest.approx(2_082_300, abs=1)
+    assert stats["male_population"] is None
+    assert stats["female_population"] is None
 
 
 def test_income_keeps_its_own_reference_year(session):
@@ -280,9 +265,8 @@ def test_the_evidence_endpoint_carries_the_district_records(client, cleanup_user
     assert stats["district"] == "W.P. Kuala Lumpur"
     assert stats["age_groups"], "the panel needs bars, not an empty list"
     assert stats["district_population"] == 2_082_300
-    assert stats["male_population"] + stats["female_population"] == pytest.approx(
-        stats["district_population"], abs=ROUNDING_TOLERANCE_PEOPLE
-    )
+    assert stats["male_population"] is None
+    assert stats["female_population"] is None
     assert stats["income_median_myr"] is not None
     assert stats["income_as_of"] != stats["population_as_of"]
 

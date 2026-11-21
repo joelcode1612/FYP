@@ -32,7 +32,12 @@ def main():
         # Windows daemon children can inherit PIPE handles and prevent
         # communicate() from finishing even after pg_ctl exits. Use a file.
         with (out/'readback_control.log').open('a',encoding='utf-8') as log:
-            subprocess.run([*control,'-l',str(cluster/'readback.log'),'-o','-h 127.0.0.1 -p 55443','-w','start'],
+            # Read-only replay needs few connections; keep the private instance
+            # small on the owner's resource-constrained Windows machine.
+            subprocess.run([*control,'-l',str(cluster/'readback.log'),'-o',
+                           '-h 127.0.0.1 -p 55443 -c shared_buffers=16MB -c work_mem=1MB '
+                           '-c maintenance_work_mem=16MB -c max_connections=12 '
+                           '-c max_worker_processes=0 -c autovacuum=off','-w','start'],
                            check=True,stdout=log,stderr=subprocess.STDOUT)
     env = {**os.environ,'PGHOST':cfg['host'],'PGPORT':str(cfg['port']),
            'PGDATABASE':cfg['database'],'PGUSER':cfg['role'],'PGPASSWORD':cfg['password']}

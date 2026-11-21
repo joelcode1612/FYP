@@ -1,0 +1,17 @@
+{
+  "budget_after": 4,
+  "budget_before": 4,
+  "budget_file_identical": true,
+  "code": "QJ_DISCLOSURE_UNCERTAINTY_NOT_CONFIRMED",
+  "confirmed_uncertainty": null,
+  "scenario": "confirmed uncertainty absent",
+  "sent": false,
+  "socket_constructed": false,
+  "stage": "QJ",
+  "unknowns": [
+    {
+      "code": "UNCERTAINTY_NOT_CONFIRMED",
+      "reference": "00000000-0000-0000-0000-000000000004"
+    }
+  ]
+}

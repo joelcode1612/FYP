@@ -12,7 +12,11 @@ from sitewise.core.config import Settings
 
 class TestM2UpstreamFlag(unittest.TestCase):
     def test_default_is_disabled(self):
-        self.assertFalse(Settings().m2_upstream_enabled)
+        # The declared default, read from the model itself. Calling Settings() here
+        # would also read the developer's .env, where an explicit opt-in is legal and
+        # would make this assertion measure the environment instead of the code.
+        declared = Settings.model_fields["m2_upstream_enabled"].default
+        self.assertIs(declared, False)
 
     def test_missing_env_defaults_false(self):
         original = os.environ.pop("M2_UPSTREAM_ENABLED", None)

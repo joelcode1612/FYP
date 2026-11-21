@@ -1,0 +1,24 @@
+{
+  "runs": {
+    "r01-live-20261117T132434Z-primary": {
+      "attempts": [
+        {
+          "attempt_no": 1,
+          "prompt_hash": "3d3ccf6b48c0b52933c09b4269c09bb9f7a7b5eec13b5440a26427757abc5ea9",
+          "prompt_version": "BDJ-SOURCE-3-CAND",
+          "request_hash": "b2e5c1fdc61d9ea38be4c524f376f33b899746111b0e2fc04b7f80f3f476ec7f",
+          "reserved_at": "2026-11-17T13:24:36.455337+00:00",
+          "stage": "BDJ"
+        }
+      ],
+      "receipts": [
+        {
+          "at": "2026-11-17T13:24:39.846443+00:00",
+          "attempt_no": 1,
+          "outcome": "returned",
+          "output_digest": "f8bbf6ea5e46c2cdd94c21f163ae96583f6c6e7ea23f098d072641299915f370"
+        }
+      ]
+    }
+  }
+}

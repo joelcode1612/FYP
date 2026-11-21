@@ -25,11 +25,10 @@ class AssessmentRepository:
         return assessment
 
     def delete(self, assessment: Assessment) -> None:
-        """Remove the row permanently. The table has no FK children — stage
-        timestamps and requirements live on the record itself — so a plain
-        delete cannot orphan anything."""
-        self.session.delete(assessment)
-        self.session.commit()
+        """Legacy callers share the same coordinator; no marketplace-only delete."""
+        from sitewise.services.assessment_discard_service import AssessmentDiscardService
+        AssessmentDiscardService(self.session.get_bind()).discard(
+            assessment.assessment_id, assessment.user_id)
 
     def get_by_id(self, assessment_id: uuid.UUID) -> Optional[Assessment]:
         return self.session.get(Assessment, assessment_id)

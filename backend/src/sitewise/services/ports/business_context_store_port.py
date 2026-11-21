@@ -15,6 +15,7 @@ class ContextSelection:
     assessment_id: UUID
     confirmation_id: UUID
     revision: int
+    objective_id: UUID | None = None
 
 
 @dataclass(frozen=True)
@@ -56,6 +57,7 @@ class ContextUnit(Protocol):
 
 
 class ContextStorePort(Protocol):
-    def open(self) -> ContextManager[ContextUnit]:
-        """A dedicated PostgreSQL repeatable-read transaction; rollback on exit."""
+    def open(self, actor_id: UUID) -> ContextManager[ContextUnit]:
+        """A dedicated PostgreSQL repeatable-read transaction, scoped to the
+        restricted principal and the requesting owner; rollback on exit."""
         ...

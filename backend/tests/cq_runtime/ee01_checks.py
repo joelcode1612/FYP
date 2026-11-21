@@ -100,6 +100,37 @@ def test_EE01_persisted_cutoff_reference_security_and_held_report(lab):
         assert current['counts_json']['not_shown'] == 1 and current['counts_json']['excluded'] == 2
         repeated = service.build_diagnostic(lab['owner'], aid, cid, 'Q05', cutoff, 'CUST03_CURRENT_ATTEMPT_DIAGNOSTIC')
         assert repeated == current
+        if os.environ.get('CQ_TEST_M2_REVIEW') == '1':
+            # Real existing M2 review tables in this disposable cluster only.
+            # A prediction is not a presentation, respondent or answer event.
+            confirmation_id, objective_id, candidate_id = uuid4(), uuid4(), uuid4()
+            with lab['db'].begin() as c:
+                before_counts = [c.scalar(text(f'SELECT count(*) FROM {table}')) for table in
+                    ('cq_sessions','cq_presentations','cq_render_events','cq_answer_revisions','cq_effective_answers')]
+                c.execute(text('INSERT INTO m2_confirmation_snapshots '
+                    '(id,assessment_id,assessment_revision,actor_user_id,snapshot_json,snapshot_digest,acknowledged_issue_ids) '
+                    "VALUES (:id,:assessment,0,:owner,'{}',:digest,'[]')"),
+                    {'id':confirmation_id,'assessment':aid,'owner':lab['owner'],'digest':'a'*64})
+                c.execute(text('INSERT INTO m2_confirmed_uncertainties '
+                    "(id,confirmation_id,actor_user_id,exact_text) VALUES (:id,:confirmation,:owner,'Synthetic objective')"),
+                    {'id':objective_id,'confirmation':confirmation_id,'owner':lab['owner']})
+                c.execute(text("INSERT INTO m2_research_objective_sources(objective_id,provenance) VALUES (:id,'{}')"),
+                    {'id':objective_id})
+                c.execute(text('INSERT INTO m2_review_question_versions(id,objective_id,source_receipt,question,options) '
+                    "VALUES (:id,:objective,'{}','Synthetic prediction?',CAST(:options AS jsonb))"),
+                    {'id':candidate_id,'objective':objective_id,'options':json.dumps([{'code':'YES','label':'Yes'}])})
+                c.execute(text("INSERT INTO m2_desired_options(question_version,actor_id,option_code) VALUES (:id,:owner,'YES')"),
+                    {'id':candidate_id,'owner':lab['owner']})
+                after_counts = [c.scalar(text(f'SELECT count(*) FROM {table}')) for table in
+                    ('cq_sessions','cq_presentations','cq_render_events','cq_answer_revisions','cq_effective_answers')]
+                assert after_counts == before_counts
+                assert c.scalar(text('SELECT option_code FROM m2_desired_options WHERE question_version=:id'),
+                                {'id':candidate_id}) == 'YES'
+            after_prediction = service.build_diagnostic(lab['owner'], aid, cid, 'Q05',
+                datetime.now(timezone.utc), 'CUST03_CURRENT_ATTEMPT_DIAGNOSTIC')
+            assert tuple(after_prediction[k] for k in ('q','s','a','v')) == tuple(current[k] for k in ('q','s','a','v'))
+            assert [(x['code'],x['x'],x['v']) for x in after_prediction['cells']] == [
+                (x['code'],x['x'],x['v']) for x in current['cells']]
         assert service.build_diagnostic(lab['owner'], aid, cid, 'Q05', cutoff.astimezone(), 'CUST03_CURRENT_ATTEMPT_DIAGNOSTIC') == current
         with service.connection(lab['owner']) as c:
             # Independent raw-source oracle; no Python aggregation function used.

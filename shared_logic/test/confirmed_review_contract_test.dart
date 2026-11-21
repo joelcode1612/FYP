@@ -77,6 +77,13 @@ class ReviewClient extends ApiClient {
 }
 
 void main() {
+  test('declaration-only confirmation accepts no fabricated BDJ findings', () {
+    final unevaluated = {...reviewFixture(), 'evaluation_state': 'NOT_EVALUATED',
+      'rule_version': 'NOT_EVALUATED', 'findings': <Object>[]};
+    expect(ConfirmedBusinessReview.fromJson(unevaluated).evaluationState, 'NOT_EVALUATED');
+    expect(() => ConfirmedBusinessReview.fromJson({...unevaluated, 'findings': reviewFixture()['findings']}), throwsFormatException);
+    expect(() => ConfirmedBusinessReview.fromJson({...unevaluated, 'rule_version': 'unverified'}), throwsFormatException);
+  });
   test(
     'review pins all three requested references in the shared transport',
     () async {

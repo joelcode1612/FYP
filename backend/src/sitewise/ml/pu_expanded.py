@@ -366,6 +366,22 @@ def expanded_prediction(analytics_session: Session, property_id: str) -> dict[st
     return result
 
 
+def _verified_catalogue_subject_rows(
+    analytics_session: Session, property_ids: list[str]
+) -> list[dict[str, Any]]:
+    """Resolve catalogue IDs through the verified rental-property bridge."""
+    return [dict(row) for row in analytics_session.execute(
+        sql_text("""
+            SELECT l.sitewise_property_id AS catalogue_id, l.subject_id
+            FROM fyp.property_subject_links l
+            JOIN fyp.rental_properties p ON p.id = l.property_id
+            WHERE l.sitewise_property_id = ANY(:ids)
+              AND l.match_verified IS TRUE
+        """),
+        {"ids": property_ids},
+    ).mappings().all()]
+
+
 def expanded_scores_many(
     analytics_session: Session,
     property_ids: list[str],
@@ -392,16 +408,7 @@ def expanded_scores_many(
 
     # --- batched resolution (mirrors PropertyFeatureRepository._resolve/get) ---
     ids = [str(p) for p in property_ids]
-    rows = [dict(r) for r in analytics_session.execute(
-        sql_text("""
-            SELECT p.catalogue_id AS catalogue_id, l.subject_id
-            FROM fyp.rental_properties p
-            LEFT JOIN fyp.property_subject_links l
-              ON l.sitewise_property_id = p.catalogue_id AND l.match_verified IS TRUE
-            WHERE p.catalogue_id = ANY(:ids)
-        """),
-        {"ids": ids},
-    ).mappings().all()]
+    rows = _verified_catalogue_subject_rows(analytics_session, ids)
     subject_of: dict[str, str] = {}
     found: set[str] = set()
     for row in rows:

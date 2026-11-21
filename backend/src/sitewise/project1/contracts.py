@@ -29,7 +29,13 @@ class SourceRef(StrictModel):
     item_key: str = Field(pattern=r'^(?:M2-(?:\d{2}|O-0[12])|M2V1-(?:0[1-9]|1[01]))$')
     answer_revision_id: str = Field(min_length=1, max_length=64)
     item_version_id: str = Field(min_length=1, max_length=64)
-    quote: str = Field(min_length=1, max_length=4000)
+    # BDJ-QUOTE-01: the quote is the evidence span, so it must be copied from the
+    # declaration's `value`, never from the question text and never a question+value
+    # concatenation. validate_candidates() enforces this by substring containment.
+    quote: str = Field(min_length=1, max_length=4000, description=(
+        "An exact substring copied from this declaration's value field. "
+        "For a list value, copy one element verbatim. "
+        "Never quote the question text and never append the value to the question."))
 
 
 class Finding(StrictModel):

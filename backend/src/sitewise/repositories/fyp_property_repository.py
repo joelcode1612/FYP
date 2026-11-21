@@ -366,14 +366,13 @@ class FypPropertyRepository:
         while ``fyp.property_photos`` is keyed by the numeric operational id.
         The verified chain is::
 
-            fyp.rental_properties.catalogue_id
-              -> fyp.property_subject_links.sitewise_property_id
+            fyp.property_subject_links.sitewise_property_id
               -> fyp.property_subject_links.property_id
               -> fyp.property_photos.property_id
 
-        The 955 imported rows also live in ``fyp.rental_properties`` with
-        ``listing_id``/``catalogue_id`` = canonical id; that mapping is used as
-        a fallback when a verified link is absent. Exactly ONE numeric target
+        The imported catalogue rows in ``fyp.rental_properties`` carry their
+        canonical text id in ``listing_id``; that mapping is used as a fallback
+        when a verified link is absent. Exactly ONE numeric target
         is chosen (verified link first, then canonical row, lowest id wins), so
         photos of different properties can never be combined. No publication
         filter is applied: these are catalogue research images, not the
@@ -394,7 +393,7 @@ class FypPropertyRepository:
                     UNION ALL
                     SELECT p.id, 1 AS priority
                     FROM fyp.rental_properties p
-                    WHERE (p.listing_id = :pid OR p.catalogue_id = :pid)
+                    WHERE p.listing_id = :pid
                       AND p.owner_id IS NULL
                 ), target AS (
                     SELECT property_id FROM candidates

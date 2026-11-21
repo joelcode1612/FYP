@@ -8,7 +8,6 @@ import 'package:shared_logic/shared_logic.dart';
 import '../../components/letter_reveal.dart';
 import '../../components/ui.dart';
 import '../../data/auth_service.dart';
-import '../../data/app_locator.dart';
 import '../../layouts/app_layout.dart';
 
 /// Owner home, restructured to the bento grid used across the app.

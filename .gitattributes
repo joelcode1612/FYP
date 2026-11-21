@@ -13,3 +13,6 @@ backend/src/sitewise/customer_contracts/reference/CUST_RECOVERY_20261027/CUST03_
 # Keep their original newline bytes through Windows checkouts.
 backend/tests/cp07/fixtures/stage_m2_schema.sql -text
 backend/tests/cp07/fixtures/stage_uc_schema.sql -text
+# M2V1 instrument source is digest-pinned in definition.json (source_sha256).
+# CRLF conversion on checkout breaks the digest; preserve bytes verbatim.
+backend/src/sitewise/instruments/m2v1_20261114/source.txt -text

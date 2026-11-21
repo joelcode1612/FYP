@@ -5,7 +5,7 @@ from contextlib import contextmanager
 from uuid import UUID
 
 from sitewise.core.exceptions import ConflictError, NotFoundError
-from sitewise.domain.m2_rules import validate_m2_answer, resolve_m2_items, derived_m2_selections
+from sitewise.modules.decision_engine.domain.m2_rules import validate_m2_answer, resolve_m2_items, derived_m2_selections
 from sitewise.domain.m2_provenance import pins_match
 from sitewise.services.ports.m2_repository_port import M2RepositoryPort
 
@@ -27,7 +27,7 @@ class M2Service:
         try:
             a=self.repo.get_assessment_for_update(assessment_id,actor_id)
             if a is None:raise NotFoundError('Assessment not found.')
-            events=self.repo.read_activity(assessment_id,actor_id,a['revision'],limit,include_metadata=True)
+            events=self.repo.read_activity(assessment_id,actor_id,a['revision'],limit)
             extra=self.repo.read_activity_supplement(assessment_id,actor_id,a['revision'],limit)
             events += extra['events']
             modules={'BDJ_EVALUATED':'BDJ','REVIEW_RECORDED':'Business Understanding',
@@ -44,7 +44,7 @@ class M2Service:
             events=sorted(unique.values(),key=lambda e:(e['occurred_at'],e['kind'],str(e['event_id'])),reverse=True)
             return {'contract_version':'m2-activity/1','assessment_id':assessment_id,'assessment_revision':a['revision'],
                 'scope':'PERSISTED_M2_ACTIVITY','events':events[:limit],'truncated':len(events)>limit,
-                'history_extension':'workflow-history-metadata/1',
+                'history_extension':'workflow-history-metadata/2',
                 'bcb_statuses':extra['bcb_statuses'],
                 'bcb_statuses_truncated':extra['bcb_statuses_truncated'],
                 'bcb_history_available':extra['bcb_available'],
@@ -155,13 +155,17 @@ class M2Service:
             self.repo.rollback()
 
     def update_answer(self, assessment_id: UUID, actor_id: UUID, *, expected_revision: int,
-                      item_key: str, state: str, value: object) -> dict:
+                      item_key: str, state: str, value: object,
+                      marketplace_assessment_id: UUID | None = None) -> dict:
         # Owner-scoped row lock prevents an edit racing a confirmation or
         # clarification decision in PostgreSQL. The CAS remains authoritative.
         try:
             assessment = self.repo.get_assessment_for_update(assessment_id, actor_id)
             if assessment is None:
                 raise NotFoundError("Assessment not found.")
+            if marketplace_assessment_id is not None and not self.repo.lock_active_marketplace_binding(
+                    assessment_id, actor_id, marketplace_assessment_id):
+                raise ConflictError('The linked assessment changed; reload before saving.')
             if assessment["revision"] != expected_revision:
                 raise ConflictError("Assessment revision is stale; reload before saving.")
             instrument = self.repo.get_instrument(assessment['instrument_id'])

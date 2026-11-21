@@ -6,12 +6,13 @@ An evaluation receipt proves software execution, not scientific validity.
 from uuid import UUID
 
 from sitewise.core.exceptions import ConflictError, NotFoundError
-from sitewise.domain.m2_rules import missing_required_items, validate_m2_answer, resolve_m2_items
+from sitewise.modules.decision_engine.domain.m2_rules import missing_required_items, validate_m2_answer, resolve_m2_items
 from sitewise.domain.bdj_candidate_rules import (
     RULE_VERSION, RULE_CATALOGUE, evaluate_candidate_issues,
     interpretation_notices,
 )
 from sitewise.services.ports.m2_repository_port import M2RepositoryPort
+from sitewise.core.config import settings
 
 
 class BDJService:
@@ -70,9 +71,14 @@ class BDJService:
         instrument = self.repo.get_instrument(assessment["instrument_id"])
         # A prior ruleset's findings may remain in the same assessment revision.
         # Do not silently mix those findings into the current review/confirmation.
+        # The adopted ruleset may differ from the legacy deterministic constant.
+        # Resolve it once so results produced under BDJ-M2V1-IG-0.1-PROP are
+        # visible here; without this the panel reports NOT_EVALUATED for every
+        # run made with the adopted ruleset.
+        rule_version = settings.project1_rules_version or RULE_VERSION
         active_findings = [f for f in self.repo.get_findings(assessment_id, rev)
-                           if f["rule_version"] == RULE_VERSION]
-        eval_record = self.repo.get_evaluation(assessment_id, rev, RULE_VERSION)
+                           if f["rule_version"] == rule_version]
+        eval_record = self.repo.get_evaluation(assessment_id, rev, rule_version)
         current_decisions = self.repo.latest_clarifications(assessment_id, rev)
         active_ids = {str(f["id"]) for f in active_findings}
         return {
@@ -80,7 +86,7 @@ class BDJService:
             "revision": rev,
             "instrument_id": str(assessment["instrument_id"]),
             "instrument_version": instrument["version_tag"] if instrument else None,
-            "rule_version": RULE_VERSION,
+            "rule_version": rule_version,
             "evaluation_state": "EVALUATED_CANDIDATE" if eval_record else "NOT_EVALUATED",
             "business_description": answers.get("M2-04", {}).get("value_json")
                 if answers.get("M2-04", {}).get("answer_state") == "ANSWERED" else None,

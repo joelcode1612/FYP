@@ -36,6 +36,7 @@ class BuildRequest(BaseModel):
     model_config = ConfigDict(extra='forbid')
     confirmation_id: UUID
     expected_revision: int = Field(ge=0, strict=True)
+    objective_id: UUID | None = None
 
 
 class ContextResponse(BaseModel):
@@ -88,7 +89,7 @@ def actor(user):
 def construct_context(assessment_id: UUID, payload: BuildRequest, user: Owner,
                       service: Service, response: Response):
     result = call(lambda: service.construct_and_save(
-        ContextSelection(assessment_id,payload.confirmation_id,payload.expected_revision),
+        ContextSelection(assessment_id,payload.confirmation_id,payload.expected_revision,payload.objective_id),
         actor(user)))
     response.headers['Cache-Control'] = 'no-store'
     response.status_code = 200 if result['replayed'] else 201

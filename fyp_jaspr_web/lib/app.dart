@@ -10,6 +10,7 @@ import 'data/ssr_service.dart';
 import 'data/workspaces.dart';
 import 'pages/auth_callback_page.dart';
 import 'components/ui.dart';
+import 'components/m2_workflow_panel.dart';
 import 'layouts/marketing_layout.dart';
 import 'pages/landing_page.dart';
 import 'pages/login_page.dart';
@@ -648,6 +649,23 @@ class SitewiseApp extends StatelessComponent {
               description:
                   'Every location assessment saved to your account, with its '
                   'real progress and report availability.',
+            ),
+          ),
+          // M2 research workflow (live API). The workspace above is the
+          // location-assessment state machine; M2 assessments are separate
+          // records in Dss, so they get their own route rather than being
+          // faked inside the five-stage workspace.
+          Route(
+            path: '/entrepreneur/m2-workflow',
+            builder: (context, state) => _page(
+              M2WorkflowPanel(
+                assessmentId: state.queryParams['assessment'] ?? '',
+              ),
+              title: 'M2 research workflow — Sitewise',
+              description:
+                  'Answer the authorized M2 instrument, run the candidate BDJ '
+                  'evaluation, confirm the business understanding and record a '
+                  'research objective against the live service.',
             ),
           ),
           // The **Assessment** top-bar destination (PROJECT1 v1.5).

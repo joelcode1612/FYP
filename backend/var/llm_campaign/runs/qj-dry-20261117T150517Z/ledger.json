@@ -1,0 +1,17 @@
+{
+  "runs": {
+    "qj-dry": {
+      "attempts": [
+        {
+          "attempt_no": 1,
+          "prompt_hash": "dc3b3253533e6dfb1410aa79bb39a401b11a122c3794fa2b90d0c6b9e8ef1af4",
+          "prompt_version": "QJ-MEASURE-2-CAND",
+          "request_hash": "e117bbe53224b8c26f4872d7f7b7e5bb4ecc522e1de244a6895f913a6f5efd36",
+          "reserved_at": "2026-11-17T15:05:17.743114+00:00",
+          "stage": "QJ"
+        }
+      ],
+      "receipts": []
+    }
+  }
+}

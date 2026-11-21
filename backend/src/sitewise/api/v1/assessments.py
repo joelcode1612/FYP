@@ -13,14 +13,16 @@ from __future__ import annotations
 import uuid
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from pydantic import BaseModel, Field
+from sqlalchemy.exc import SQLAlchemyError
 from sqlmodel import Session
 
 from sitewise.core.exceptions import AssessmentError
 from sitewise.db.analytics_session import get_analytics_db
 from sitewise.db.session import get_db
-from sitewise.dependencies import AuthenticatedUser, require_entrepreneur
+from sitewise.dependencies import AuthenticatedUser, require_entrepreneur, get_m2_service
+from sitewise.api.v1.m2 import get_assessment_link_service
 from sitewise.repositories.catalog_repository import CatalogRepository
 from sitewise.services.assessment_service import AssessmentService
 from sitewise.services.explanation_service import ExplanationService
@@ -129,6 +131,68 @@ def get_assessment(
     return {"assessment": service.payload(assessment)}
 
 
+@router.get("/{assessment_id}/workflow-readiness")
+def read_workflow_readiness(
+    assessment_id: uuid.UUID,
+    session: AppSession,
+    analytics: AnalyticsSession,
+    user: EntrepreneurUser,
+    response: Response,
+    link_service: Annotated[object, Depends(get_assessment_link_service)],
+    m2_service: Annotated[object, Depends(get_m2_service)],
+) -> dict:
+    """Evaluate current M2 readiness without changing legacy stage records."""
+    from sitewise.services.assessment_link_service import AssessmentLinkError
+    from sitewise.services.assessment_workflow_readiness import workflow_readiness
+
+    response.headers["Cache-Control"] = "private, no-store"
+    assessment = _service(session, analytics).get_owned(assessment_id, user.user_id)
+    try:
+        return workflow_readiness(assessment, user.user_id, user.email, link_service, m2_service)
+    except AssessmentLinkError as exc:
+        raise HTTPException(status_code=exc.status_code,
+                            detail={"code": exc.code, "message": str(exc)}) from exc
+    except SQLAlchemyError as exc:
+        raise HTTPException(status_code=503, detail={
+            "code": "WORKFLOW_READINESS_UNAVAILABLE",
+            "message": "The assessment's confirmation could not be verified. Try again.",
+        }) from exc
+
+
+@router.get("/{assessment_id}/questionnaire-preview")
+def questionnaire_preview(
+    assessment_id: uuid.UUID,
+    session: AppSession,
+    analytics: AnalyticsSession,
+    user: EntrepreneurUser,
+    response: Response,
+    link_service: Annotated[object, Depends(get_assessment_link_service)],
+    m2_service: Annotated[object, Depends(get_m2_service)],
+) -> dict:
+    """Read-only source status; no campaign, session or sample question is made.
+
+    The existing CQ release and candidate APIs do not yet supply an adopted
+    assessment-bound preview contract. Until they do, expose an explicit hold
+    rather than claiming their contents are available or authorized.
+    """
+    readiness = read_workflow_readiness(assessment_id, session, analytics, user,
+                                        response, link_service, m2_service)
+    stage = readiness['stage_2']
+    return {
+        'contract_version': 'sitewise-questionnaire-preview/1',
+        'marketplace_assessment_id': str(assessment_id),
+        'm2_assessment_id': stage.get('m2_assessment_id'),
+        'confirmation_id': stage.get('confirmation_id'),
+        'assessment_revision': stage.get('assessment_revision'),
+        'status': 'UNAVAILABLE',
+        'reason': ('QUESTIONNAIRE_SOURCE_PROJECTION_UNVERIFIED' if stage['complete']
+                   else stage.get('reason', 'CURRENT_CONFIRMATION_REQUIRED')),
+        'question_items': [],
+        'fielding_authorized': False,
+        'publication_authorized': False,
+    }
+
+
 @router.patch("/{assessment_id}")
 def update_assessment(
     assessment_id: uuid.UUID,
@@ -160,11 +224,10 @@ def delete_assessment(
     analytics: AnalyticsSession,
     user: EntrepreneurUser,
 ) -> None:
-    """Permanently delete the caller's own assessment record.
+    """Owner-scoped CP-12 discard; 204 only after durable completion.
 
-    Ownership comes from the verified token, so a foreign record is 403 and an
-    unknown id is 404. The row is self-contained, so nothing else is removed
-    with it; the empty 204 tells the client the record is gone.
+    Missing provisioning or protected dependencies refuse the operation. Retrying
+    the same owner/assessment resumes the same durable discard operation.
     """
     _service(session, analytics).delete_owned(assessment_id, user.user_id)
 

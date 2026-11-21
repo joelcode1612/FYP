@@ -93,11 +93,12 @@ List<WebDestination> webDestinationsFor(AppRole role) => switch (role) {
       icon: 'fact_check',
       label: 'Assessment',
     ),
-    WebDestination(
-      route: '/entrepreneur/cafe-report',
-      icon: 'summarize',
-      label: 'Report',
-    ),
+    // "M2 research" and "Report" are no longer top-bar destinations (owner
+    // request). Both routes stay registered in `app.dart`, so an existing
+    // bookmark still resolves to the same screen — they simply have no pill of
+    // their own, the same treatment `/entrepreneur/activity-history` and
+    // `/entrepreneur/explore` already get. The report is still reachable from
+    // every assessment: "View report" on a card, and in the details panel.
     // ONE history destination. `/entrepreneur/activity-history` and
     // `/entrepreneur/assessments/history` both mounted `ActivityHistoryView`
     // (the same `M2ActivityPanel`), so the sidebar carried two pills that

@@ -1,5 +1,8 @@
 import 'package:jaspr/dom.dart';
 import 'package:jaspr/jaspr.dart';
+import 'package:shared_logic/shared_logic.dart';
+
+import '../data/app_locator.dart';
 
 /// PROJECT1 research flow UI (four logical steps, not the legacy persisted
 /// property-assessment state machine).
@@ -606,5 +609,680 @@ class _ResearchWorkflowState extends State<ResearchWorkflowPanel> {
         p(classes:'rw-muted',[Component.text('The server must enforce revision locks, authorization and a complete audit receipt. No action here bypasses scientific or fielding gates.')]),
       ]),
     ]);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Live research-question candidate
+// ---------------------------------------------------------------------------
+//
+// Everything below drives the CP-04 routes directly. Parsing, status rules and
+// outcome classification live in `shared_logic` so the Flutter screen shows the
+// same thing; this file only renders and forwards intents.
+//
+// What this panel deliberately does NOT do:
+//  * it never calls the candidate "approved", "validated" or "ready to field";
+//  * it never invents a missing business fact or a question;
+//  * it never decides review authority — the server refuses an unassigned
+//    reviewer and the refusal is shown verbatim;
+//  * it has no QJ step and no shared-bank readiness copy (both are retired or
+//    deferred by contract).
+
+class ResearchCandidatePanel extends StatefulComponent {
+  /// The confirmed research objective the candidate belongs to.
+  final String objectiveId;
+
+  /// The assessment revision the objective is pinned to. The server rejects a
+  /// stale value with 409, which is rendered as a conflict.
+  final int expectedRevision;
+
+  /// The persisted business context id. Without it a candidate cannot be
+  /// prepared, and the action stays disabled with the reason shown.
+  final String? contextId;
+
+  /// The objective wording, for context above the candidate.
+  final String objectiveText;
+
+  const ResearchCandidatePanel({
+    super.key,
+    required this.objectiveId,
+    required this.expectedRevision,
+    this.contextId,
+    this.objectiveText = '',
+  });
+
+  @override
+  State<ResearchCandidatePanel> createState() => _ResearchCandidatePanelState();
+}
+
+class _ResearchCandidatePanelState extends State<ResearchCandidatePanel> {
+  bool _busy = false;
+  String? _error;
+  String? _notice;
+
+  CandidatePrepareOutcome? _outcome;
+  ResearchCandidate? _candidate;
+  ResearchCandidateHistory? _history;
+  bool _historyOpen = false;
+
+  bool _reviewOpen = false;
+  ResearchReviewAction _action = ResearchReviewAction.approveForReview;
+  String _rationale = '';
+
+  bool get _canPrepare => component.contextId != null && !_busy;
+
+  @override
+  void didUpdateComponent(covariant ResearchCandidatePanel previous) {
+    super.didUpdateComponent(previous);
+    if (previous.objectiveId != component.objectiveId ||
+        previous.expectedRevision != component.expectedRevision ||
+        previous.contextId != component.contextId) {
+      _outcome = null;
+      _candidate = null;
+      _history = null;
+      _historyOpen = false;
+      _reviewOpen = false;
+      _rationale = '';
+      _notice = null;
+      _error = null;
+    }
+  }
+
+  // --- actions -------------------------------------------------------------
+
+  Future<void> _prepare() async {
+    final contextId = component.contextId;
+    if (contextId == null || _busy) return;
+    setState(() {
+      _busy = true;
+      _error = null;
+      _notice = null;
+    });
+    try {
+      final outcome = await AppLocator.m2.prepareCandidate(
+        objectiveId: component.objectiveId,
+        expectedRevision: component.expectedRevision,
+        contextId: contextId,
+      );
+      if (!mounted) return;
+      setState(() {
+        _outcome = outcome;
+        _candidate = outcome.candidate;
+        _notice = outcome.hasCandidate
+            ? 'The server stored candidate version ${outcome.candidate!.version}. '
+                  'It is a proposal awaiting your decision.'
+            : null;
+      });
+      if (outcome.hasCandidate) await _loadHistory(silent: true);
+    } on FormatException {
+      if (mounted) {
+        setState(
+          () => _error =
+              'The service answered with a candidate this screen could not '
+              'verify. Nothing is displayed.',
+        );
+      }
+    } on UnauthorizedFailure {
+      if (mounted) {
+        setState(
+          () => _error =
+              'Your session is no longer authorized for this objective. Sign '
+              'in again; nothing was generated.',
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _revise() async {
+    final candidate = _candidate;
+    final contextId = component.contextId;
+    if (candidate == null || contextId == null || _busy) return;
+    setState(() {
+      _busy = true;
+      _error = null;
+      _notice = null;
+    });
+    try {
+      final outcome = await AppLocator.m2.reviseCandidate(
+        version: candidate.version,
+        expectedRevision: component.expectedRevision,
+        contextId: contextId,
+      );
+      if (!mounted) return;
+      setState(() {
+        _outcome = outcome;
+        if (outcome.hasCandidate) _candidate = outcome.candidate;
+        _notice = outcome.hasCandidate
+            ? 'The server stored child version ${outcome.candidate!.version}, '
+                  'which supersedes ${candidate.version}.'
+            : null;
+      });
+      if (outcome.hasCandidate) await _loadHistory(silent: true);
+    } on FormatException {
+      if (mounted) {
+        setState(
+          () => _error =
+              'The revision answered with a version this screen could not '
+              'verify. Nothing is displayed.',
+        );
+      }
+    } on UnauthorizedFailure {
+      if (mounted) {
+        setState(
+          () => _error =
+              'Your session is no longer authorized for this objective. Sign '
+              'in again; no revision was generated.',
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _loadHistory({bool silent = false}) async {
+    if (_busy && !silent) return;
+    try {
+      final history = await AppLocator.m2.candidateHistory(
+        component.objectiveId,
+        component.expectedRevision,
+      );
+      if (!mounted) return;
+      setState(() {
+        _history = history;
+        _historyOpen = true;
+        if (!silent) _notice = 'History reloaded from the server.';
+      });
+    } catch (_) {
+      if (mounted) {
+        setState(
+          () => _error =
+              'The candidate history could not be read. The versions already '
+              'on screen are unchanged.',
+        );
+      }
+    }
+  }
+
+  Future<void> _openVersion(String version) async {
+    if (_busy) return;
+    setState(() {
+      _busy = true;
+      _error = null;
+      _notice = null;
+    });
+    try {
+      final stored = await AppLocator.m2.readCandidate(version);
+      if (!mounted) return;
+      setState(() {
+        _candidate = stored;
+        _outcome = null;
+        _notice = 'Showing stored version $version and its recorded status.';
+      });
+    } on NotFoundFailure {
+      if (mounted) {
+        setState(
+          () => _error = 'That candidate version is not available to you.',
+        );
+      }
+    } on FormatException {
+      if (mounted) {
+        setState(
+          () => _error =
+              'The stored version could not be verified against this objective.',
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _submitReview() async {
+    final candidate = _candidate;
+    if (candidate == null || _busy) return;
+    final rationale = _rationale.trim();
+    if (rationale.isEmpty) {
+      setState(
+        () => _error =
+            'A rationale is required. For a revision it is the reason the next '
+            'question must address.',
+      );
+      return;
+    }
+    setState(() {
+      _busy = true;
+      _error = null;
+      _notice = null;
+    });
+    try {
+      await AppLocator.m2.recordOwnerReview(candidate.version, _action, rationale);
+      // Re-read the version: the status shown must be the server's, not the
+      // one this screen assumed.
+      final refreshed = await AppLocator.m2.readCandidate(candidate.version);
+      if (!mounted) return;
+      setState(() {
+        _candidate = refreshed;
+        _reviewOpen = false;
+        _rationale = '';
+        _notice =
+            'The server recorded "${_action.wireCode}" for version '
+            '${candidate.version}.';
+      });
+      await _loadHistory(silent: true);
+    } on NotFoundFailure {
+      if (mounted) {
+        setState(
+          () => _error =
+              'No current pending review assignment exists for you on this '
+              'version, so nothing was recorded.',
+        );
+      }
+    } on ConflictFailure catch (failure) {
+      if (mounted) {
+        setState(
+          () => _error = candidateConflictExplanation(failure.backendCode),
+        );
+      }
+    } on UnauthorizedFailure {
+      if (mounted) {
+        setState(
+          () => _error =
+              'Your session is no longer authorized to record this decision. '
+              'Nothing was recorded.',
+        );
+      }
+    } on FormatException {
+      if (mounted) {
+        setState(
+          () => _error =
+              'The server answered with a decision this screen could not '
+              'verify. Reload the version before acting again.',
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  // --- rendering -----------------------------------------------------------
+
+  Component _button(
+    String label, {
+    VoidCallback? onClick,
+    bool secondary = false,
+    bool danger = false,
+    String? testId,
+  }) => button(
+    classes:
+        'rw-button ${secondary ? 'rw-button--outline' : ''} '
+        '${danger ? 'rw-button--danger' : ''}',
+    disabled: _busy || onClick == null,
+    onClick: _busy ? null : onClick,
+    attributes: {'type': 'button', 'data-testid': ?testId},
+    [Component.text(label)],
+  );
+
+  Component _pill(String value, {bool? positive}) => span(
+    classes:
+        'rw-pill ${positive == true ? 'rw-pill--good' : positive == false ? 'rw-pill--warn' : ''}',
+    [Component.text(value)],
+  );
+
+  Component _facts(String title, List<String> values, {String empty = 'None supplied'}) =>
+      div(classes: 'rw-subcard', [
+        h4([Component.text(title)]),
+        if (values.isEmpty) p(classes: 'rw-muted', [Component.text(empty)]),
+        for (final value in values) p([Component.text('• $value')]),
+      ]);
+
+  Component _proposalMarker(FieldAuthority authority) => div(classes: 'rw-proposal', [
+    span(classes: 'rw-proposal__badge', [
+      Component.text(
+        authority.isProposal
+            ? 'PROPOSAL — not confirmed'
+            : 'AUTHORITY FLAG PRESENT — review before use',
+      ),
+    ]),
+    p(classes: 'rw-proposal__text', [Component.text(candidateProposalNotice)]),
+    p(classes: 'rw-muted', [
+      Component.text('Server flags: ${authority.flagSummary}'),
+    ]),
+  ]);
+
+  Component _candidateCard(ResearchCandidate candidate) {
+    final actions = reviewActionsFor(candidate.decision);
+    return div(classes: 'rw-card', attributes: {
+      'data-testid': 'rw-candidate-card',
+    }, [
+      div(classes: 'rw-card-head', [
+        h3([Component.text('Question candidate')]),
+        _pill(candidate.decision.label, positive: false),
+      ]),
+      p(classes: 'rw-muted', [
+        Component.text(
+          'Version ${candidate.version}'
+          '${candidate.supersedes == null ? '' : ' · supersedes ${candidate.supersedes}'}'
+          '${candidate.recordedAt == null ? '' : ' · decided ${candidate.recordedAt}'}',
+        ),
+      ]),
+      if (component.objectiveText.isNotEmpty)
+        p(classes: 'rw-muted', [
+          Component.text('Objective: ${component.objectiveText}'),
+        ]),
+      p(classes: 'rw-question', [Component.text(candidate.question)]),
+      if (candidate.options.isEmpty)
+        p(classes: 'rw-muted', [
+          Component.text('The candidate returned no answer options.'),
+        ])
+      else
+        div(classes: 'rw-options', [
+          for (final option in candidate.options)
+            div(classes: 'rw-option', [
+              Component.text('${option.code} — ${option.label}'),
+            ]),
+        ]),
+      _proposalMarker(candidate.fieldAuthority),
+      if (candidate.referencePeriod != null)
+        p([Component.text('Reference period: ${candidate.referencePeriod}')]),
+      if (candidate.measurementDescription != null)
+        p([
+          Component.text(
+            'Measurement: ${candidate.measurementDescription}',
+          ),
+        ]),
+      if (candidate.denominatorSpecification != null)
+        p([
+          Component.text(
+            'Denominator: ${candidate.denominatorSpecification}',
+          ),
+        ]),
+      if (candidate.constructInterpretation != null)
+        p(classes: 'rw-muted', [
+          Component.text(
+            'How the objective was read: ${candidate.constructInterpretation}',
+          ),
+        ]),
+      div(classes: 'rw-cols', [
+        _facts('Limitations', candidate.limitations),
+        _facts('Unresolved assumptions', candidate.unresolvedAssumptions),
+      ]),
+      if (candidate.rationale != null)
+        p(classes: 'rw-muted', [
+          Component.text('Recorded rationale: ${candidate.rationale}'),
+        ]),
+      if (actions.isEmpty)
+        p(classes: 'rw-note', [
+          Component.text(
+            'This version already has a recorded decision. A decision is '
+            'terminal: asking for a revision creates a child version instead of '
+            'reopening this one.',
+          ),
+        ]),
+      div(classes: 'rw-actions', [
+        for (final action in actions)
+          _button(
+            action.label,
+            secondary: action != ResearchReviewAction.approveForReview,
+            danger: action == ResearchReviewAction.reject,
+            testId: 'rw-review-${action.wireCode.toLowerCase()}',
+            onClick: () => setState(() {
+              _action = action;
+              _rationale = '';
+              _reviewOpen = true;
+              _error = null;
+              _notice = null;
+            }),
+          ),
+        if (canGenerateRevision(candidate.decision))
+          _button(
+            'Generate revision',
+            secondary: true,
+            testId: 'rw-generate-revision',
+            onClick: _revise,
+          ),
+      ]),
+      p(classes: 'rw-note', [Component.text(candidateReviewAssignmentNotice)]),
+    ]);
+  }
+
+  Component _abstentionCard(CandidatePrepareOutcome outcome) => div(
+    classes: 'rw-card',
+    attributes: {'data-testid': 'rw-candidate-abstention'},
+    [
+      div(classes: 'rw-card-head', [
+        h3([Component.text('What we still need to know')]),
+        _pill('No question drafted', positive: false),
+      ]),
+      p([
+        Component.text(
+          'The engine could not draft a question from your confirmed facts, so '
+          'it named the facts that are missing. This is a valid answer, not a '
+          'failure.',
+        ),
+      ]),
+      if (outcome.missingBusinessFacts.isEmpty)
+        p(classes: 'rw-muted', [
+          Component.text(
+            'The answer did not name a specific fact. Add the confirmed detail '
+            'the question needs, then prepare again.',
+          ),
+        ])
+      else
+        for (final code in outcome.missingBusinessFacts)
+          div(classes: 'rw-list-item', [
+            strong([Component.text(missingBusinessFactLabel(code))]),
+            p(classes: 'rw-muted', [Component.text('Fact code: $code')]),
+          ]),
+      p(classes: 'rw-note', [
+        Component.text(
+          'No candidate was stored. Add the confirmed fact to your business '
+          'understanding, then prepare the question again.',
+        ),
+      ]),
+    ],
+  );
+
+  Component _refusalCard(CandidatePrepareOutcome outcome) {
+    final copy = candidateRefusalCopy(outcome);
+    return div(classes: 'rw-alert', attributes: {
+      'data-testid': 'rw-candidate-refusal',
+    }, [
+      strong([Component.text(copy.title)]),
+      p([Component.text(copy.body)]),
+      if (outcome.code != null)
+        p(classes: 'rw-muted', [Component.text('Server code: ${outcome.code}')]),
+    ]);
+  }
+
+  Component _historyCard() {
+    final history = _history;
+    return div(classes: 'rw-card', [
+      div(classes: 'rw-card-head', [
+        h3([Component.text('Version history')]),
+        _button(
+          _historyOpen ? 'Refresh history' : 'Show history',
+          secondary: true,
+          testId: 'rw-history-toggle',
+          // Written as a block, not a conditional expression: a `? a() : () {}`
+          // arrow returns the closure instead of calling it.
+          onClick: () {
+            if (_historyOpen) {
+              _loadHistory();
+            } else {
+              setState(() => _historyOpen = true);
+              _loadHistory();
+            }
+          },
+        ),
+      ]),
+      if (!_historyOpen)
+        p(classes: 'rw-muted', [
+          Component.text(
+            'Open the history to see every stored version and its recorded '
+            'decision. Opening it changes nothing.',
+          ),
+        ])
+      else if (history == null)
+        p(classes: 'rw-muted', [Component.text('Loading stored versions…')])
+      else if (history.versions.isEmpty)
+        p(classes: 'rw-muted', [
+          Component.text('No stored version exists for this objective yet.'),
+        ])
+      else ...[
+        p(classes: 'rw-muted', [
+          Component.text(
+            '${history.versions.length} stored '
+            '${history.versions.length == 1 ? 'version' : 'versions'}, oldest '
+            'first. A recorded decision is shown exactly as stored.',
+          ),
+        ]),
+        for (final version in history.versions)
+          div(classes: 'rw-list-item', [
+            div(classes: 'rw-row', [
+              div([
+                strong([Component.text(version.question)]),
+                p(classes: 'rw-muted', [
+                  Component.text(
+                    'Version ${version.version}'
+                    '${version.supersedes == null ? '' : ' · supersedes ${version.supersedes}'}',
+                  ),
+                ]),
+                if (version.rationale != null)
+                  p(classes: 'rw-muted', [
+                    Component.text('Rationale: ${version.rationale}'),
+                  ]),
+              ]),
+              _pill(version.decision.label, positive: false),
+            ]),
+            div(classes: 'rw-actions', [
+              _button(
+                'Open this version',
+                secondary: true,
+                onClick: () => _openVersion(version.version),
+              ),
+            ]),
+          ]),
+      ],
+    ]);
+  }
+
+  Component _reviewDialog() {
+    final candidate = _candidate;
+    if (candidate == null) return Component.fragment(const []);
+    final isRevision = _action == ResearchReviewAction.requestRevision;
+    return div(classes: 'rw-modal-shade', [
+      section(
+        classes: 'rw-modal',
+        attributes: {
+          'role': 'dialog',
+          'aria-modal': 'false',
+          'aria-label': _action.label,
+          'data-testid': 'rw-candidate-decision-dialog',
+        },
+        [
+          div(classes: 'rw-card-head', [
+            h3([Component.text(_action.label)]),
+            _button(
+              'Close',
+              secondary: true,
+              onClick: () => setState(() => _reviewOpen = false),
+            ),
+          ]),
+          p([
+            Component.text(
+              'Version ${candidate.version}. Your decision is recorded against '
+              'this version only; it does not publish the question or authorize '
+              'fielding.',
+            ),
+          ]),
+          label(attributes: {'for': 'rw-candidate-rationale'}, [
+            Component.text(
+              isRevision
+                  ? 'Reason for the revision (required — the next question must '
+                        'address it)'
+                  : 'Rationale (required)',
+            ),
+          ]),
+          textarea(
+            id: 'rw-candidate-rationale',
+            rows: 4,
+            onInput: (value) => setState(() => _rationale = value),
+            attributes: {'maxlength': '1000'},
+            [Component.text(_rationale)],
+          ),
+          if (_error != null) p(classes: 'rw-error', [Component.text(_error!)]),
+          div(classes: 'rw-actions', [
+            _button(
+              'Cancel',
+              secondary: true,
+              onClick: () => setState(() => _reviewOpen = false),
+            ),
+            _button(
+              'Record decision',
+              testId: 'rw-candidate-save-decision',
+              onClick: _submitReview,
+            ),
+          ]),
+        ],
+      ),
+    ]);
+  }
+
+  @override
+  Component build(BuildContext context) {
+    final candidate = _candidate;
+    final outcome = _outcome;
+    final refused = outcome != null &&
+        outcome.kind != CandidateOutcomeKind.validated &&
+        outcome.kind != CandidateOutcomeKind.abstention;
+    return section(
+      classes: 'rw-workspace',
+      attributes: {'data-testid': 'research-candidate-panel'},
+      [
+        div(classes: 'rw-header', [
+          div([
+            h2([Component.text('Research question candidate')]),
+            p(classes: 'rw-muted', [
+              Component.text(
+                'Prepare a candidate from this objective, read it, and record '
+                'your decision. Generated fields are proposals only.',
+              ),
+            ]),
+          ]),
+          _pill('Proposal workflow', positive: false),
+        ]),
+        if (component.contextId == null)
+          div(classes: 'rw-alert', [
+            Component.text(
+              'A persisted business context is required before a candidate can '
+              'be prepared. Read the business-context status for this '
+              'confirmation first; this panel will not invent one.',
+            ),
+          ]),
+        if (_notice != null) p(classes: 'rw-success', [Component.text(_notice!)]),
+        if (_error != null && !_reviewOpen)
+          p(classes: 'rw-error', [Component.text(_error!)]),
+        div(classes: 'rw-actions', [
+          _button(
+            'Prepare question',
+            testId: 'rw-prepare-candidate',
+            onClick: _canPrepare ? _prepare : null,
+          ),
+        ]),
+        if (outcome != null && outcome.isAbstention) _abstentionCard(outcome),
+        if (refused) _refusalCard(outcome),
+        if (candidate != null) _candidateCard(candidate),
+        if (candidate == null && outcome == null && component.contextId != null)
+          p(classes: 'rw-muted', [
+            Component.text(
+              'No candidate has been prepared in this session. Preparing one '
+              'calls the live engine; it does not reuse a previous answer.',
+            ),
+          ]),
+        _historyCard(),
+        if (_reviewOpen) _reviewDialog(),
+      ],
+    );
   }
 }

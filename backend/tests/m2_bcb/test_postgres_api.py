@@ -1,7 +1,8 @@
 """Actual FastAPI + signed JWT verifier + Dss-derived private PostgreSQL.
 
-Instrument, tenant, concept, GEO and purpose grants below are TEST FIXTURES.
-No production authority, endpoint or database is used by this module.
+Instrument, tenant, concept and purpose grants below are TEST FIXTURES. GEO is no
+longer supplied at all: BCB-V1-1.1.0 excludes GEO from V1 scope. No production
+authority, endpoint or database is used by this module.
 """
 from copy import deepcopy
 from datetime import datetime, timezone
@@ -47,7 +48,7 @@ class FixtureBindingResolver:
 @pytest.fixture(scope='module')
 def lab():
     url = make_url(os.environ['DATABASE_URL'])
-    assert (url.host,url.port,url.database) == ('127.0.0.1',55441,'project1_m2_bcb_test')
+    assert (url.host,url.port,url.database) == ('127.0.0.1',int(os.environ.get('M2_BCB_PRIVATE_PORT', '55441')),'project1_m2_bcb_test')
     db = create_engine(url,hide_parameters=True,connect_args={'options':'-c timezone=UTC'})
     with db.connect() as connection:
         assert Path(connection.execute(text('SHOW data_directory')).scalar_one()).resolve() == (
@@ -92,6 +93,9 @@ def lab():
                 option_values=options,allowed_states=states,lifecycle='ACTIVE',sort_order=order))
         connection.execute(text('CREATE TABLE test_bcb_bindings(confirmation_id uuid PRIMARY KEY,owner_id uuid NOT NULL,'
             'request_json jsonb NOT NULL,decision_json jsonb NOT NULL,bindings_json jsonb NOT NULL)'))
+        # TEST-ONLY table read by the fixture resolver on the restricted BCB
+        # session. This grants nothing on any product table.
+        connection.execute(text('GRANT SELECT ON test_bcb_bindings TO p1_m2_runtime'))
     app.dependency_overrides[deps.get_bcb_bindings_resolver_factory] = lambda: FixtureBindingResolver
     bound=socket.socket();bound.bind(('127.0.0.1',0));bound.listen(128)
     port=bound.getsockname()[1]
@@ -177,13 +181,11 @@ def confirmed(lab, description='A fictional cafÃ© serving drinks.', uncertaint
     answer(lab,mid,'M2-04',description,1)
     answer(lab,mid,'M2-05',None if service_unknown else 'TAKEAWAY_FOCUSED',2,
            'NOT_DECIDED' if service_unknown else 'ANSWERED')
-    findings=lab['request']('POST',f'/assessments/{mid}/bdj/evaluate',json={'expected_revision':3}).json()['findings']
-    for finding in findings:
-        lab['request']('POST',f"/assessments/{mid}/findings/{finding['id']}/decisions",json={
-            'expected_revision':3,'request_id':str(uuid4()),'decision':'KEEP_ORIGINAL'})
+    # Current declaration confirmation never runs BDJ or invents finding
+    # acknowledgements. Historical pin validation is verified separately.
     lab['request']('POST',f'/assessments/{mid}/review',json={'expected_revision':3})
     result=lab['request']('POST',f'/assessments/{mid}/confirm',json={
-        'expected_revision':3,'acknowledged_issue_ids':[f['id'] for f in findings]}).json()
+        'expected_revision':3,'acknowledged_issue_ids':[]}).json()
     cid=result['id']
     uid=None
     if uncertainty:
@@ -214,7 +216,9 @@ def bind(lab,mid,cid,uid=None,*,test_concept=None):
             confirmation_id=cid,assessment_revision=revision,status='ENTREPRENEUR_CONFIRMED',confirmed_by=str(lab['actor']),
             confirmation_event_id=cid,content=content,source_hash=source_hash(content),
             m2_snapshot_digest=confirmation['snapshot_digest'],valid_until='2099-01-01T00:00:00+00:00')
-        bindings['geography'].update(tenant_id=tenant,assessment_id=mid,confirmation_id=cid)
+        # BCB-V1-1.1.0 excludes GEO from V1 scope, so the fixture binding source
+        # supplies no GEO catalogue/approval authority at all.
+        bindings['geography']=None
         if uid:
             row=connection.execute(text('SELECT * FROM m2_confirmed_uncertainties WHERE id=:id'),{'id':uid}).mappings().one()
             bindings['uncertainty']={k:str(row[k]) if isinstance(row[k],UUID) else row[k] for k in ('id','confirmation_id','actor_user_id','exact_text')}
@@ -491,12 +495,26 @@ def test_PG12_sql_integrity_append_only_and_default_deny_rls(lab):
         assert connection.execute(text('SELECT count(*) FROM m2_business_contexts')).scalar_one()==0
 
 
-def test_PG13_production_binding_factory_refuses_and_feature_flag_is_off_gate(lab):
+def test_PG13_production_binding_factory_authorizes_owner_and_refuses_others(lab):
+    """The wired factory now resolves from M2; refusal is by authorization, not absence."""
     from sitewise import dependencies as deps
     from sitewise.core.config import settings
     mid,cid,uid=confirmed(lab)
     override=lab['app'].dependency_overrides.pop(deps.get_bcb_bindings_resolver_factory)
-    try: build(lab,mid,cid,503)
+    try:
+        created=build(lab,mid,cid)
+        assert created.status_code==201
+        packet=created.json()['packet']
+        assert packet['identity']['owner_id']==str(lab['actor'])
+        assert packet['confirmation']['id']==cid and packet['geography'] is None
+        payload={'confirmation_id':cid,'expected_revision':3}
+        path=f'/assessments/{mid}/business-context'
+        lab['request']('POST',path,401,uid=None,json=payload)
+        lab['request']('POST',path,403,uid=lab['staff'],json=payload)
+        lab['request']('POST',path,404,uid=lab['other'],json=payload)
+        with lab['db'].connect() as independent:
+            assert independent.execute(text('SELECT count(*) FROM m2_business_contexts '
+                'WHERE confirmation_id=:id'),{'id':cid}).scalar_one()==1
     finally: lab['app'].dependency_overrides[deps.get_bcb_bindings_resolver_factory]=override
     before=settings.m2_bcb_persistence_enabled
     settings.m2_bcb_persistence_enabled=False
@@ -1103,4 +1121,32 @@ from hellop_source_checks import (
     test_HELLOP_source_validation_persistence_and_authority_boundary,
     test_HELLOP_source_conditions_not_silently_claimed_supported,
     test_HELLOP_actual_Jaspr_source_form_revision_and_BDJ_handoff,
+)
+# Phase 4: production M2-backed bindings, same private lab and real HTTP surface.
+from production_binding_checks import (
+    test_PG40_production_confirmed_M2_creates_context_without_fixture_bindings,
+    test_PG41_production_applicable_BDJ_findings_are_bound,
+    test_PG42_production_confirmed_uncertainty_is_bound_from_its_own_record,
+    test_PG43_business_description_template_is_deterministic_and_needs_no_provider,
+    test_PG44_non_geographic_context_succeeds_without_geo_authority,
+    test_PG45_production_authorization_refuses_cross_owner_and_wrong_role,
+    test_PG46_production_stale_revision_is_refused,
+    test_PG47_production_missing_confirmed_description_holds,
+    test_PG48_production_repeated_builds_are_idempotent,
+    test_PG49_restricted_principal_owner_reads_own_rows,
+    test_PG50_restricted_principal_other_owner_sees_zero_rows,
+    test_PG51_role_without_grants_is_refused,
+    test_PG52_privileged_effective_principal_is_refused,
+    test_PG53_absent_validity_basis_fails_closed,
+    test_PG54_freshness_refusals_still_fire,
+    test_PG55_confirmation_not_current_is_still_refused,
+)
+# Connected chain: confirmed M2 -> deterministic BDJ -> BCB -> QJ interface.
+from connected_chain_checks import (
+    test_CC1_confirmed_M2_is_owner_readable_under_restricted_principal,
+    test_CC2_deterministic_BDJ_evaluates_confirmed_data_with_real_ruleset,
+    test_CC3_BCB_builds_contract_1_1_context_without_geo_and_with_findings,
+    test_CC4_qj_checked_context_accepts_real_BCB_context_interface_only,
+    test_CC5_qj_refuses_when_confirmed_uncertainty_is_absent,
+    test_CC6_cross_owner_cannot_reach_assessment_context_or_qj_input,
 )

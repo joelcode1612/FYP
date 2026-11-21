@@ -1,0 +1,67 @@
+{
+  "budget_spent": 5,
+  "confirmation": {
+    "digest": "b0b2c57a212de763303870131d7cee8965eb34d19f99f551ddbc8a49d5cbb484",
+    "id": "20779bda-e5bc-42f3-a8b7-bb10226d0c57",
+    "revision": 8,
+    "status": "CURRENT_CONFIRMED"
+  },
+  "confirmed_uncertainty": {
+    "actor_user_id": "9ee0be16-25ec-46f3-a578-1fa7f4080489",
+    "confirmation_id": "20779bda-e5bc-42f3-a8b7-bb10226d0c57",
+    "exact_text": "How acceptable would potential customers find a hypothetical 12 oz takeaway iced latte priced at RM13?",
+    "id": "ab6227a6-b0ef-4559-b30f-ff4dcfa5dc9d"
+  },
+  "context_version": "BCB-V1-1.1.0",
+  "geography_is_null": true,
+  "packet_hash": "dac24066a1243cb4a683ea2c65d8748a6aafce59fdf7a21b9c4eb639a57dc736",
+  "qj": {
+    "justification": "The confirmed uncertainty (acceptability of a hypothetical RM13 12 oz takeaway iced latte) concerns customer perception, not profit, so it cannot substantiate profitability. Several frozen measurement fields are absent from the supplied sources: no response options, response codes, routing rules, denominator, timeframe, or source refs are defined, and no uncertainty_version identifier is provided for the confirmed uncertainty (only confirmation/assessment IDs). Geography is explicitly out of V1 scope, and location (M2V1-05), price-tolerance (M2V1-07) and (M2V1-10) answers are unknown. With incomplete frozen fields, the candidate cannot be assembled, so the item is held pending completion of the measurement specification.",
+    "measurement": null,
+    "route": "HOLD"
+  },
+  "receipt": {
+    "assessment_id": "b654d7eb-b59e-45f6-9bf6-aedce644ae46",
+    "authority": "NONE",
+    "authorization_id": "TEST-SCOPED-QJ-PRICE-RM13-P3",
+    "builder_version": "BCB-V1-1.1.0",
+    "candidate_only": true,
+    "checks": [
+      "QJ_STAGE_SCOPED",
+      "QJ_SYNTHETIC_NONHUMAN",
+      "QJ_BUILDER_OUTPUT_VERIFIED",
+      "QJ_IMMUTABLE_VERSIONS_MATCH",
+      "QJ_UNCERTAINTY_CONFIRMED",
+      "QJ_PURPOSE_QJ_CONTEXT_CURRENT",
+      "QJ_ENDPOINT_MODEL_MATCH",
+      "QJ_TEST_AUTHORIZATION_CURRENT"
+    ],
+    "confirmation_id": "20779bda-e5bc-42f3-a8b7-bb10226d0c57",
+    "confirmed_revision": 8,
+    "context_hash": "dac24066a1243cb4a683ea2c65d8748a6aafce59fdf7a21b9c4eb639a57dc736",
+    "context_version": "BCB-V1-1.1.0",
+    "fielding_authorized": false,
+    "owner_authorization": false,
+    "publication_authorized": false,
+    "report_release_authorized": false,
+    "scientific_acceptance": false,
+    "tenant_id": "m2-owner:9ee0be16-25ec-46f3-a578-1fa7f4080489"
+  },
+  "run_id": "qj-live-20261117T141049Z",
+  "stage": "QJ",
+  "usage": {
+    "completion_tokens": 351,
+    "prompt_tokens": 6292,
+    "total_tokens": 6643
+  },
+  "validation": {
+    "authority": "CANDIDATE_ONLY",
+    "codes": [],
+    "note": "Structural validation by the repository validator. The adopted measurement policy is not implemented, so this is not a scientific acceptance and not an approved research question.",
+    "scientific_acceptance": false,
+    "uncertainty_version_basis": "packet.confirmed_uncertainty.id — harness convention used by the existing isolated tests; no adopted uncertainty-version policy exists",
+    "uncertainty_version_expected": "ab6227a6-b0ef-4559-b30f-ff4dcfa5dc9d",
+    "valid": true,
+    "validator": "sitewise.project1.research.validate_measurement"
+  }
+}

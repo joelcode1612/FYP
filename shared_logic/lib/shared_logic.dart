@@ -47,6 +47,10 @@ export 'src/domain/entities/pu_feature_coverage.dart';
 export 'src/domain/entities/pu_prediction.dart';
 export 'src/domain/entities/recommendation.dart';
 export 'src/domain/entities/recommendation_search.dart';
+// The research-question candidate contract (parsing + review rules) is shared
+// so the Jaspr and Flutter review screens cannot disagree about which actions a
+// version allows or whether a candidate is still only a proposal.
+export 'src/domain/entities/research_candidate.dart';
 export 'src/domain/entities/personalised_recommendations.dart';
 export 'src/domain/entities/sitewise_records.dart';
 export 'src/domain/entities/user.dart';
@@ -193,3 +197,4 @@ export 'src/data/repositories/api_confirmed_review_repository.dart';
 export 'src/domain/entities/customer_questionnaire.dart';
 export 'src/data/repositories/api_customer_questionnaire_repository.dart';
 export 'src/data/repositories/api_m2_repository.dart';
+export 'src/data/repositories/api_synthetic_inspection_repository.dart';

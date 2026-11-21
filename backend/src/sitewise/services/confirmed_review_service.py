@@ -6,6 +6,7 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field
 
 from sitewise.core.exceptions import ConflictError
+from sitewise.domain.m2_provenance import SNAPSHOT_VERSION
 from sitewise.services.bdj_service import BDJService
 from sitewise.services.m2_service import M2Service
 from sitewise.services.ports.m2_repository_port import M2RepositoryPort
@@ -78,11 +79,17 @@ class ConfirmedReviewService:
                 confirmation_id=confirmation_id, expected_revision=expected_revision) as source:
             worksheet = self.bdj.read_worksheet(assessment_id, actor_id)
             snapshot = source['snapshot']
+            if snapshot.get('snapshot_contract_version') == SNAPSHOT_VERSION:
+                # This reader projects the confirmed declaration, not later
+                # model findings or a fabricated evaluation receipt.
+                worksheet = {**worksheet, 'findings': [],
+                             'evaluation_state':'NOT_EVALUATED', 'rule_version':'NOT_EVALUATED'}
             if (worksheet['assessment_id'] != str(assessment_id) or
                     worksheet['revision'] != expected_revision or
                     (snapshot.get('bdj_rule_version') is not None and
                      worksheet['rule_version'] != snapshot['bdj_rule_version']) or
-                    worksheet['evaluation_state'] != 'EVALUATED_CANDIDATE' or
+                    (snapshot.get('snapshot_contract_version') != SNAPSHOT_VERSION and
+                     worksheet['evaluation_state'] != 'EVALUATED_CANDIDATE') or
                     sorted(str(f['id']) for f in worksheet['findings']) !=
                     snapshot.get('unresolved_candidate_findings')):
                 raise ConflictError('Review source revision or ruleset has changed.')
@@ -111,6 +118,13 @@ class ConfirmedReviewService:
                 at = event['occurred_at']
                 event['occurred_at'] = at.replace(tzinfo=timezone.utc) if at.tzinfo is None else at.astimezone(timezone.utc)
             activity.sort(key=lambda e: (e['occurred_at'], str(e['event_id'])), reverse=True)
+            # `project1-confirmed-review/1` is a frozen worksheet contract and
+            # ReviewActivity forbids extra fields. The reader now also returns
+            # per-kind enrichment (answer_state, item_key, evaluator_version,
+            # snapshot_digest, rule_id) for Activity History; it is projected
+            # away here so this contract's payload does not change.
+            declared = set(ReviewActivity.model_fields)
+            activity = [{k: v for k, v in e.items() if k in declared} for e in activity]
             return ConfirmedReview(
                 assessment_id=assessment_id, confirmation_id=confirmation_id,
                 assessment_revision=expected_revision, snapshot_digest=source['snapshot_digest'],

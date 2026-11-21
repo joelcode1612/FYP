@@ -616,8 +616,59 @@ final class SavedProperties {
 ///
 /// Const and stateless: nothing is cached here, so a refresh always re-reads
 /// the persisted record rather than a stale in-memory copy.
+/// Owner-scoped preview source state. No candidate authority is inferred.
+final class QuestionnairePreviewStatus {
+  final String assessmentId;
+  final String? m2AssessmentId, confirmationId;
+  final int? revision;
+  final String reason;
+  const QuestionnairePreviewStatus(this.assessmentId, this.m2AssessmentId,
+      this.confirmationId, this.revision, this.reason);
+
+  static QuestionnairePreviewStatus parse(Map<String, dynamic> json, String assessmentId) {
+    if (json['contract_version'] != 'sitewise-questionnaire-preview/1' ||
+        json['marketplace_assessment_id'] != assessmentId ||
+        json['status'] != 'UNAVAILABLE' || json['reason'] is! String ||
+        json['question_items'] is! List || (json['question_items'] as List).isNotEmpty ||
+        json['fielding_authorized'] != false || json['publication_authorized'] != false ||
+        (json['m2_assessment_id'] != null && json['m2_assessment_id'] is! String) ||
+        (json['confirmation_id'] != null && json['confirmation_id'] is! String) ||
+        (json['assessment_revision'] != null && json['assessment_revision'] is! int)) {
+      throw const FormatException('Unrecognized questionnaire preview source.');
+    }
+    return QuestionnairePreviewStatus(assessmentId, json['m2_assessment_id'] as String?,
+        json['confirmation_id'] as String?, json['assessment_revision'] as int?, json['reason'] as String);
+  }
+}
+
 final class AssessmentApi {
   const AssessmentApi();
+
+  Future<ApiResult<QuestionnairePreviewStatus>> questionnairePreview(String assessmentId) =>
+      _call('/api/v1/assessments/$assessmentId/questionnaire-preview',
+          parse: (json) => QuestionnairePreviewStatus.parse(json, assessmentId));
+
+  /// A point-in-time, owner-scoped readiness check, independent of legacy
+  /// marketplace timestamps. Errors must not be interpreted as permission.
+  Future<ApiResult<Map<String, dynamic>>> workflowReadiness(String assessmentId) =>
+      _call('/api/v1/assessments/$assessmentId/workflow-readiness',
+          parse: (json) => parseWorkflowReadiness(json, assessmentId));
+
+  static Map<String, dynamic> parseWorkflowReadiness(
+      Map<String, dynamic> json, String assessmentId) {
+    final first = json['stage_1'];
+    final second = json['stage_2'];
+    final third = json['stage_3'];
+    if (json['contract_version'] != 'sitewise-assessment-workflow/2' ||
+        json['assessment_id'] != assessmentId || first is! Map ||
+        second is! Map || third is! Map || first['complete'] is! bool ||
+        second['complete'] is! bool || third['enterable'] is! bool ||
+        (third['enterable'] == true &&
+            (first['complete'] != true || second['complete'] != true))) {
+      throw const FormatException('Unrecognized assessment readiness response.');
+    }
+    return json;
+  }
 
   /// Opens the workspace for [propertyId]. The backend resumes the existing
   /// record when one is present (`created: false`), which is what makes the
@@ -665,11 +716,41 @@ final class AssessmentApi {
     parse: AssessmentHistory.fromJson,
   );
 
-  // There is deliberately no client-side requirements write anymore. Stage 2
-  // is the M2 questionnaire UI preview, which persists no answers; stage
-  // completion goes through completeStage() below and is decided by the
-  // backend. The server's validate_requirements() vocabulary is still shared
-  // with /api/v1/preferences/me, so it is NOT dead code.
+  /// Parses the `{"assessment": {...}}` envelope the write endpoints answer
+  /// with. DEF-01: saveRequirements()/completeStage() previously fed this
+  /// wrapper straight into [AssessmentRecord.fromJson]; every non-nullable
+  /// String cast then read null, the UI reported a false save failure after
+  /// the server had already persisted, and the chained stage completion never
+  /// ran. Kept as one visible helper so the envelope contract is testable.
+  static AssessmentRecord parseAssessmentEnvelope(Map<String, dynamic> json) =>
+      AssessmentRecord.fromJson(
+        (json['assessment'] as Map).cast<String, dynamic>(),
+      );
+
+  /// Persists the Stage-2 business-requirements answers.
+  ///
+  /// `PATCH /api/v1/assessments/{id}` accepts `requirements` (and optionally
+  /// `complete_stage` in the same round trip). The server re-validates the
+  /// payload with `validate_requirements()` and returns 422 listing every
+  /// field problem, so the caller must surface the failure instead of
+  /// treating the answers as saved.
+  ///
+  /// This is required before Stage 2 can complete: the backend refuses
+  /// `complete_stage='business_requirements'` with 409 `requirements_missing`
+  /// when no requirements row has been stored.
+  Future<ApiResult<AssessmentRecord>> saveRequirements(
+    String assessmentId,
+    Map<String, dynamic> requirements,
+  ) => _call(
+    '/api/v1/assessments/$assessmentId',
+    method: 'PATCH',
+    body: {'requirements': requirements},
+    // The PATCH handler wraps the record: {"assessment": {...}} — the same
+    // envelope start()/byProperty() unwrap. Parsing the wrapper directly
+    // fails every non-nullable String cast and falsely reports a save
+    // failure after the server has already persisted the row.
+    parse: AssessmentApi.parseAssessmentEnvelope,
+  );
 
   /// Marks a stage complete. The server refuses with 409 when the stage's own
   /// precondition is not met (evidence missing, model artifact absent, a prior
@@ -681,7 +762,7 @@ final class AssessmentApi {
     '/api/v1/assessments/$assessmentId',
     method: 'PATCH',
     body: {'complete_stage': stageKey},
-    parse: AssessmentRecord.fromJson,
+    parse: AssessmentApi.parseAssessmentEnvelope,
   );
 
   /// Permanently deletes the caller's own assessment record. Ownership is

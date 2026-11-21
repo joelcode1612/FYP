@@ -18531,6 +18531,12 @@ input[type="range"] {
   gap: 20px;
   padding: 4px 0 40px;
 }
+/* A grid item's automatic minimum is its min-content width, so one wide child
+   (the five-stage stepper, a long stage name, a findings row) used to widen the
+   whole page past the viewport and produce a horizontal scrollbar at tablet
+   widths. Clamping the minimum lets each child fit its column and scroll its
+   own overflow instead. */
+.asw-page > * { min-width: 0; }
 .asw-muted { color: var(--muted); }
 .asw-inline { margin: 0; }
 
@@ -19898,3 +19904,119 @@ input[type="range"] {
   }
   .bdj-choice { padding: 13px 11px; }
 }
+
+/* Stage 3 Research Goals visual adaptation. Scoped so the app shell, sidebar,
+   navigation and existing assessment contracts remain unchanged. */
+.asw-stage3 { color: #243857; container-type: inline-size; }
+.asw-stage3 .asw-stagehead { margin-bottom: 24px; }
+.asw-stage3__workspace { gap: 20px; align-items: start; }
+.asw-stage3__workspace > .panel {
+  border: 1px solid #d8e2f1;
+  border-radius: 20px;
+  background: #fff;
+  box-shadow: 0 8px 24px rgba(35, 61, 102, .05);
+}
+.asw-stage3__workspace > .panel .panel__body { padding: 24px 26px 27px; }
+.asw-stage3 .panel__head { border-bottom: 0; padding: 22px 26px 0; }
+.asw-stage3 .panel__title { color: #101b36; font-size: 25px; font-weight: 800; }
+.asw-stage3 .bdj-desc { color: #4c6080; font-size: 15px; line-height: 1.7; }
+.asw-stage3 .asw-findtools { gap: 12px; margin: 20px 0 18px; }
+.asw-stage3 .asw-findtools .tabs { gap: 7px; }
+.asw-stage3 .asw-findtools .tab {
+  min-height: 42px; padding: 8px 14px; border-radius: 9px;
+  border: 1px solid #d8e2f1; background: #fff; color: #31476d;
+  font-weight: 700;
+}
+.asw-stage3 .asw-findtools .tab.is-active { background: #1d4ed8; border-color: #1d4ed8; color: #fff; }
+.asw-stage3 .asw-findsearch { min-width: 190px; }
+.asw-stage3 .bdj-finding-list { gap: 12px; }
+.asw-stage3 .bdj-finding {
+  border-color: #d8e2f1; border-radius: 15px; background: #fff;
+}
+.asw-stage3 .bdj-finding.is-selected { border-color: #b8cfff; background: #fbfdff; }
+.asw-stage3 .bdj-finding__top { padding: 18px 19px; }
+.asw-stage3 .bdj-id {
+  flex: none;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  border-radius: 7px;
+  background: #edf3ff;
+  color: #1542bb;
+  padding: 5px 9px;
+  font-weight: 800;
+}
+.asw-stage3 .bdj-state { flex: none; }
+.asw-stage3 .bdj-finding__title { color: #18294a; font-size: 17px; font-weight: 800; }
+.asw-stage3 .bdj-finding__body > p { color: #425778; line-height: 1.65; }
+.asw-stage3 .bdj-state.selected { color: #1d4ed8; }
+.asw-stage3 .bdj-detail { margin: 0 19px 19px 48px; padding-top: 16px; border-top: 1px solid #e6ecf4; }
+.asw-stage3 .bdj-meta { border-radius: 12px; background: #f2f5fa; }
+.asw-stage3 .bdj-consideration { border-radius: 10px; background: #f7faff; }
+.asw-stage3 .bdj-action.primary { background: #eef4ff; border-color: #abc7ff; color: #1542bb; }
+.asw-stage3 .bdj-objective { border: 1px solid #dee7fa; background: #eff4ff; border-radius: 15px; padding: 15px 18px; }
+.asw-stage3 .bdj-objective-title { color: #1542bb; font-weight: 800; }
+.asw-stage3 .bdj-objective p { background: #fff; border: 1px solid #dce5f2; border-radius: 11px; padding: 15px 17px; color: #172642; line-height: 1.6; }
+.asw-stage3 .bdj-choice { border-radius: 13px; border-color: #d8e2f1; }
+.asw-stage3 .bdj-choice:hover, .asw-stage3 .bdj-choice:has(input:checked) { border-color: #7ca6ff; background: #edf3ff; }
+.asw-stage3 .bdj-decision-foot { border-top-color: #e6ecf4; }
+/* The two-column split depends on how much room the workspace actually has,
+   not on the window width: the sidebar takes ~240px, so a 1000px window leaves
+   ~700px of content and two columns would each be too narrow to read. */
+@container (max-width: 940px) {
+  .asw-stage3__workspace { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 860px) {
+  .asw-stage3 .panel__head { padding: 19px 19px 0; }
+  .asw-stage3__workspace > .panel .panel__body { padding: 20px 19px; }
+  .asw-stage3 .bdj-detail { margin-left: 0; }
+}
+
+/* ==========================================================================
+   M2 instrument questionnaire — same question-card layout as Stage 2
+   --------------------------------------------------------------------------
+   The M2 panel reuses .asw-qlayout / .asw-qnav / .asw-qcard / .asw-answer so a
+   research question looks like a business-preference question. Only the
+   answer-state control is M2-specific: the instrument decides which states are
+   legal, and a conditional item may only be recorded as NOT_APPLICABLE /
+   NOT_PROVIDED.
+   ========================================================================== */
+.m2q .asw-qcard { min-height: 0; }
+.m2q .asw-qcard__answers .m1-textarea { width: 100%; }
+.m2q__states {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 16px;
+}
+.m2q__states-label {
+  font-size: 10px;
+  font-weight: 720;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+  color: #8090a6;
+  margin-right: 2px;
+}
+.m2q__state {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 32px;
+  padding: 5px 11px;
+  border: 1px solid #dfe5ed;
+  border-radius: 999px;
+  background: var(--surface);
+  color: #4a5c78;
+  font-size: 11px;
+  font-weight: 620;
+  letter-spacing: .02em;
+  cursor: pointer;
+}
+.m2q__state:hover { border-color: #b8c9e7; }
+.m2q__state input { width: 13px; height: 13px; accent-color: var(--action); margin: 0; }
+.m2q__state.is-on {
+  background: #f0f4fc;
+  border-color: #9db6e6;
+  color: #1e4aa8;
+}
+.m2q__endpoint { margin: 10px 0 0; }

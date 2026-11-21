@@ -23,6 +23,19 @@ from sitewise.services.explanation_service import ExplanationService
 from ..conftest import TEST_EMAIL_DOMAIN, make_token, register_user_id
 
 
+@pytest.fixture(autouse=True)
+def require_disposable_databases():
+    """Never run these committing/cleanup fixtures on configured real databases."""
+    import os
+    names = (os.environ.get('PROJECT1_TEST_OPERATIONAL_DB'), os.environ.get('PROJECT1_TEST_ANALYTICS_DB'))
+    engines = (engine, analytics_engine)
+    if any(not name or not name.startswith('project1_test_') for name in names):
+        pytest.fail('Set explicit project1_test_ disposable database names before running this suite.')
+    for name, target in zip(names, engines):
+        if target.url.database != name or target.url.host not in ('localhost', '127.0.0.1', '::1'):
+            pytest.fail('Configured database does not match the explicit local disposable test target.')
+
+
 def auth(token):
     return {"Authorization": f"Bearer {token}"}
 
@@ -71,7 +84,7 @@ def other_identity(client, cleanup_users, catalog_ids):
 
 
 @pytest.fixture(autouse=True)
-def cleanup_rows(cleanup_users):
+def cleanup_rows(require_disposable_databases, cleanup_users):
     yield
     if not cleanup_users:
         return

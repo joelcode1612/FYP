@@ -1,9 +1,22 @@
 """Candidate-only EE-01 explanations over the server-held readback context.
 
-V1.0 deliberately does NOT call an LLM. The held context carries zero admitted
-findings, there is no production disclosure adapter, and the project1_ai ledger
-has no run row for an explanation. Prompt spec section 8 is therefore executed
-locally: an insufficient-evidence candidate, no invented claim and no numbers.
+This service does NOT dispatch a prompt. V1.0 has no disclosure adapter for the
+EXPLANATION stage (the only synthetic adapter is BDJ-scoped, and the attempt
+ledger registers BDJ/QJ/QG only), so every candidate is rendered locally by the
+deterministic template:
+
+* an empty authorized-claim set yields the insufficient-evidence candidate
+  (prompt spec section 8);
+* an authorized-claim set yields a template that restates the supplied counts,
+  denominators, percentages, labels and reference periods without computing,
+  rounding or aggregating anything.
+
+``candidate.origin`` records which producer ran, so a consumer that persists only
+the candidate can distinguish template prose from model prose. An optional
+``candidate_source`` callable may supply an already-produced candidate; it is
+validated and used only when it passes every guard, and otherwise the template is
+rendered instead. No composition in this repository supplies one, because doing
+so requires the adopted EXPLANATION disclosure adapter.
 
 This service NEVER writes to a report, admission table or any other durable
 store. It reads the immutable EE-01 snapshot through its restricted principal
@@ -17,11 +30,17 @@ from uuid import UUID
 from sitewise.domain.cq_runtime import CqRefused
 from sitewise.project1.contracts import canonical, no_authority
 from sitewise.project1.explanation_contracts import (
+    MAX_TEMPLATE_FINDINGS,
     SCHEMA_VERSION,
     ExplanationOutput,
+    authorized_finding_output,
     insufficient_evidence_output,
     validate_candidate,
 )
+
+CONTRACT_VERSION = 'ee01-explanation-candidate/2'
+TEMPLATE_PRODUCER = 'EE01-EXPLANATION-TEMPLATE-1'
+EXTERNAL_PRODUCER = 'EXTERNAL_EXPLANATION_CANDIDATE'
 
 
 def _numbers_in(value) -> set[str]:
@@ -30,11 +49,26 @@ def _numbers_in(value) -> set[str]:
     return set(_NUMBER_RE.findall(canonical(value)))
 
 
+def _explanation_authorized(finding) -> bool:
+    """A finding is interpretable only when the server marked it authorized.
+
+    Fail closed: an unmarked or malformed finding is a governance error, never a
+    licence to explain held data.
+    """
+    return (isinstance(finding, dict) and finding.get('authorized') is True
+            and isinstance(finding.get('claim_id'), str) and bool(finding['claim_id']))
+
+
 class Ee01ExplanationService:
     """Reads EE-01 readback; produces a non-authoritative candidate only."""
 
-    def __init__(self, ee01):
+    def __init__(self, ee01, *, candidate_source=None):
         self.ee01 = ee01
+        # Validation-only seam: receives the server-built packet and returns a
+        # candidate mapping. It is never a provider client, and no caller may
+        # wire a disclosure-bound runner here until the EXPLANATION stage has an
+        # adopted disclosure adapter.
+        self.candidate_source = candidate_source
 
     @staticmethod
     def _packet(task_mode: str, context: dict, snapshot: dict, context_hash: str) -> dict:
@@ -96,31 +130,80 @@ class Ee01ExplanationService:
         context = readback['context']
         if isinstance(context, str):
             context = json.loads(context)
-        if context.get('authority') != 'AUTHORITY_UNVERIFIED' or context.get('findings'):
-            # An adopted authority adapter or newly admitted claim changes the
-            # governance position; V1.0 has no disclosure gate for that path.
+        if context.get('authority') != 'AUTHORITY_UNVERIFIED':
+            # An adopted scientific/admission authority changes the governance
+            # position; V1.0 has no disclosure gate for that path. Findings being
+            # present is a different question and no longer refuses here: each
+            # finding must carry the server's own authorization marker.
             raise CqRefused('EXPLANATION_ADAPTER_UNVERIFIED', 503)
+        findings = context.get('findings') or []
+        if not all(_explanation_authorized(f) for f in findings):
+            raise CqRefused('EXPLANATION_FINDING_NOT_AUTHORIZED', 503)
 
         snapshot = self.ee01.read(actor, assessment_id, campaign_id, snapshot_id)
         packet = self._packet(task_mode, context, snapshot, context_hash)
-        permitted = {c['claim_id'] for c in context['findings'] if c.get('claim_id')}
+        permitted = {f['claim_id'] for f in findings}
         if not set(claim_ids) <= permitted:
             raise CqRefused('EXPLANATION_CLAIM_NOT_AUTHORIZED', 409)
 
-        # Section 8: no admitted claim ⇒ no interpretation, produced locally.
-        output: ExplanationOutput = insufficient_evidence_output(
-            context_id=packet['context_id'],
-            snapshot_id=packet['snapshot_id'],
-            task_mode=task_mode,
-            missing=list(packet['report_admission_references']),
-        )
+        selected = []
+        wanted = set(claim_ids)
+        for finding in findings:
+            if not wanted or finding['claim_id'] in wanted:
+                selected.append(finding)
+
+        output, llm_execution, producer = self._render(packet, selected, permitted)
         validate_candidate(output, packet=packet, allowed_claim_ids=permitted,
                            allowed_numbers=_numbers_in(packet))
         return {
-            'contract_version': 'ee01-explanation-candidate/1',
-            'prompt_version': 'EE01-EXPLANATION-1-CAND',
+            'contract_version': CONTRACT_VERSION,
+            # No prompt executed, so no prompt version is attributed. The template
+            # is named instead, and the candidate carries its own origin.
+            'producer': producer,
+            'prompt_version': None,
             'authority': 'CANDIDATE_UNVERIFIED',
-            'llm_execution': 'NOT_ATTEMPTED',
+            'llm_execution': llm_execution,
             'candidate': output.model_dump(),
             **no_authority(),
         }
+
+    def _render(self, packet: dict, selected: list[dict], permitted: set[str]):
+        """Prefer a validated model candidate; otherwise render the template."""
+        if selected and self.candidate_source is not None:
+            try:
+                proposed = ExplanationOutput.model_validate(self.candidate_source(packet))
+                validate_candidate(proposed, packet=packet,
+                                   allowed_claim_ids=permitted,
+                                   allowed_numbers=_numbers_in(packet))
+                if proposed.origin == 'LLM':
+                    return proposed, 'RETURNED', EXTERNAL_PRODUCER
+            except Exception:
+                # Any failure of the optional source (absent, malformed, invented
+                # number, unauthorized claim) falls back to the deterministic
+                # template. It must never raise and never emit partial prose.
+                pass
+            return self._template(packet, selected), 'REJECTED_FELL_BACK', TEMPLATE_PRODUCER
+        return self._template(packet, selected), 'NOT_ATTEMPTED', TEMPLATE_PRODUCER
+
+    @staticmethod
+    def _template(packet: dict, selected: list[dict]) -> ExplanationOutput:
+        missing = list(packet['report_admission_references'])
+        if not selected:
+            # Section 8: no authorized claim ⇒ no interpretation, produced locally.
+            return insufficient_evidence_output(
+                context_id=packet['context_id'],
+                snapshot_id=packet['snapshot_id'],
+                task_mode=packet['task_mode'],
+                missing=missing,
+            )
+        if len(selected) > MAX_TEMPLATE_FINDINGS:
+            # A faithful restatement no longer fits the field limits; refuse
+            # rather than truncate the claim set silently.
+            raise CqRefused('EXPLANATION_TEMPLATE_SCOPE_EXCEEDED', 503)
+        return authorized_finding_output(
+            context_id=packet['context_id'],
+            snapshot_id=packet['snapshot_id'],
+            task_mode=packet['task_mode'],
+            findings=selected,
+            missing=missing,
+        )

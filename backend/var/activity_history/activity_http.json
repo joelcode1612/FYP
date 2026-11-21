@@ -1,0 +1,286 @@
+{
+  "assessment_id": "da90aa4a-f9cf-4145-9acf-7de36c9d6fad",
+  "checks": [
+    {
+      "check": "owner receives 200",
+      "ok": true,
+      "detail": 200
+    },
+    {
+      "check": "contract_version",
+      "ok": true,
+      "detail": "m2-activity/1"
+    },
+    {
+      "check": "history_extension",
+      "ok": true,
+      "detail": "workflow-history-metadata/2"
+    },
+    {
+      "check": "assessment_id matches",
+      "ok": true,
+      "detail": "da90aa4a-f9cf-4145-9acf-7de36c9d6fad"
+    },
+    {
+      "check": "authorization_decisions_included is false",
+      "ok": true,
+      "detail": false
+    },
+    {
+      "check": "events present",
+      "ok": true,
+      "detail": 17
+    },
+    {
+      "check": "kinds present",
+      "ok": true,
+      "detail": [
+        "ANSWER_SAVED",
+        "ASSESSMENT_CREATED",
+        "BDJ_EVALUATED",
+        "CONTEXT_CONFIRMED",
+        "REVIEW_RECORDED",
+        "UNCERTAINTY_CONFIRMED"
+      ]
+    },
+    {
+      "check": "every ANSWER_SAVED carries status + item_key",
+      "ok": true,
+      "detail": "12 answers, 0 bad"
+    },
+    {
+      "check": "BDJ_EVALUATED carries evaluator_version, not reason",
+      "ok": true,
+      "detail": [
+        "BDJ-RULESET-0.2-CAND"
+      ]
+    },
+    {
+      "check": "CONTEXT_CONFIRMED carries a 64-hex digest",
+      "ok": true,
+      "detail": [
+        "8cfc90ddd091b735e47190e808ec5102374daf55c557ae409544c570568eafb9"
+      ]
+    },
+    {
+      "check": "cross-owner read is refused",
+      "ok": true,
+      "detail": 404
+    },
+    {
+      "check": "unauthenticated read is refused",
+      "ok": true,
+      "detail": 401
+    }
+  ],
+  "response": {
+    "contract_version": "m2-activity/1",
+    "assessment_id": "da90aa4a-f9cf-4145-9acf-7de36c9d6fad",
+    "assessment_revision": 12,
+    "scope": "PERSISTED_M2_ACTIVITY",
+    "events": [
+      {
+        "event_id": "5f5e1442-fa14-483d-9b2c-45b805dac5ee",
+        "kind": "UNCERTAINTY_CONFIRMED",
+        "assessment_revision": 12,
+        "occurred_at": "2026-11-16T12:10:37.282630+00:00",
+        "actor_id": "11111111-1111-4111-8111-111111111111",
+        "module": "Business Understanding",
+        "status": null,
+        "reason": "Separate entrepreneur declaration recorded.",
+        "source_id": "698ae3eb-24fe-4c6d-bdd3-69e575cc00e6",
+        "source_is_current": true
+      },
+      {
+        "event_id": "698ae3eb-24fe-4c6d-bdd3-69e575cc00e6",
+        "kind": "CONTEXT_CONFIRMED",
+        "assessment_revision": 12,
+        "occurred_at": "2026-11-16T12:10:36.964274+00:00",
+        "actor_id": "11111111-1111-4111-8111-111111111111",
+        "snapshot_digest": "8cfc90ddd091b735e47190e808ec5102374daf55c557ae409544c570568eafb9",
+        "module": "Business Understanding",
+        "source_is_current": true
+      },
+      {
+        "event_id": "46fb5b05-2442-447d-a3e4-4551bc61b7b2",
+        "kind": "REVIEW_RECORDED",
+        "assessment_revision": 12,
+        "occurred_at": "2026-11-16T12:10:36.681498+00:00",
+        "actor_id": "11111111-1111-4111-8111-111111111111",
+        "module": "Business Understanding",
+        "source_is_current": true
+      },
+      {
+        "event_id": "e19a8e10-7ac5-456c-ac7d-afe59d34b092",
+        "kind": "BDJ_EVALUATED",
+        "assessment_revision": 12,
+        "occurred_at": "2026-11-16T12:10:36.270891+00:00",
+        "actor_id": null,
+        "evaluator_version": "BDJ-RULESET-0.2-CAND",
+        "module": "BDJ",
+        "source_is_current": true
+      },
+      {
+        "event_id": "48294e2c-dc66-48b3-84ef-025491b794b3",
+        "kind": "ANSWER_SAVED",
+        "assessment_revision": 12,
+        "occurred_at": "2026-11-16T12:10:35.931925+00:00",
+        "actor_id": null,
+        "status": "ANSWERED",
+        "item_key": "M2V1-11",
+        "module": "M2",
+        "source_is_current": true
+      },
+      {
+        "event_id": "b1b3fe92-c809-4059-93d0-b5c41df4ef39",
+        "kind": "ANSWER_SAVED",
+        "assessment_revision": 11,
+        "occurred_at": "2026-11-16T12:09:57.795165+00:00",
+        "actor_id": null,
+        "status": "ANSWERED",
+        "item_key": "M2V1-10",
+        "module": "M2",
+        "source_is_current": false
+      },
+      {
+        "event_id": "5588e98d-5a98-4c5b-8ce5-481bb84912e8",
+        "kind": "ANSWER_SAVED",
+        "assessment_revision": 10,
+        "occurred_at": "2026-11-16T12:09:57.481747+00:00",
+        "actor_id": null,
+        "status": "ANSWERED",
+        "item_key": "M2V1-05",
+        "module": "M2",
+        "source_is_current": false
+      },
+      {
+        "event_id": "e633f00c-7b5f-4ddc-b24f-525c7df430e9",
+        "kind": "ANSWER_SAVED",
+        "assessment_revision": 9,
+        "occurred_at": "2026-11-16T12:09:23.187816+00:00",
+        "actor_id": null,
+        "status": "NOT_PROVIDED",
+        "item_key": "M2V1-11",
+        "module": "M2",
+        "source_is_current": false
+      },
+      {
+        "event_id": "b90fcf13-56c6-4384-a8d3-b680cae5ab96",
+        "kind": "ANSWER_SAVED",
+        "assessment_revision": 8,
+        "occurred_at": "2026-11-16T12:09:22.067449+00:00",
+        "actor_id": null,
+        "status": "ANSWERED",
+        "item_key": "M2V1-09",
+        "module": "M2",
+        "source_is_current": false
+      },
+      {
+        "event_id": "93217c1d-2a35-447d-b1eb-b13236071c43",
+        "kind": "ANSWER_SAVED",
+        "assessment_revision": 7,
+        "occurred_at": "2026-11-16T12:09:21.755855+00:00",
+        "actor_id": null,
+        "status": "ANSWERED",
+        "item_key": "M2V1-08",
+        "module": "M2",
+        "source_is_current": false
+      },
+      {
+        "event_id": "06123517-3a23-451a-a582-467c384ac046",
+        "kind": "ANSWER_SAVED",
+        "assessment_revision": 6,
+        "occurred_at": "2026-11-16T12:09:21.333423+00:00",
+        "actor_id": null,
+        "status": "SKIPPED_OPTIONAL",
+        "item_key": "M2V1-07",
+        "module": "M2",
+        "source_is_current": false
+      },
+      {
+        "event_id": "192b5de0-47bb-46fe-b5a9-2a6f45647bbb",
+        "kind": "ANSWER_SAVED",
+        "assessment_revision": 5,
+        "occurred_at": "2026-11-16T12:09:21.018292+00:00",
+        "actor_id": null,
+        "status": "ANSWERED",
+        "item_key": "M2V1-06",
+        "module": "M2",
+        "source_is_current": false
+      },
+      {
+        "event_id": "6d1884c5-a63c-43e1-8299-e3196213aff8",
+        "kind": "ANSWER_SAVED",
+        "assessment_revision": 4,
+        "occurred_at": "2026-11-16T12:09:19.988256+00:00",
+        "actor_id": null,
+        "status": "ANSWERED",
+        "item_key": "M2V1-04",
+        "module": "M2",
+        "source_is_current": false
+      },
+      {
+        "event_id": "92e9f502-56ed-411d-b6ff-393a6ddec558",
+        "kind": "ANSWER_SAVED",
+        "assessment_revision": 3,
+        "occurred_at": "2026-11-16T12:09:19.354431+00:00",
+        "actor_id": null,
+        "status": "ANSWERED",
+        "item_key": "M2V1-03",
+        "module": "M2",
+        "source_is_current": false
+      },
+      {
+        "event_id": "027caed1-e9b9-405b-bcdb-f65107df1d2a",
+        "kind": "ANSWER_SAVED",
+        "assessment_revision": 2,
+        "occurred_at": "2026-11-16T12:09:18.957202+00:00",
+        "actor_id": null,
+        "status": "ANSWERED",
+        "item_key": "M2V1-02",
+        "module": "M2",
+        "source_is_current": false
+      },
+      {
+        "event_id": "495e7081-d3c5-4dc0-8585-cb2c2f89da88",
+        "kind": "ANSWER_SAVED",
+        "assessment_revision": 1,
+        "occurred_at": "2026-11-16T12:09:18.596902+00:00",
+        "actor_id": null,
+        "status": "ANSWERED",
+        "item_key": "M2V1-01",
+        "module": "M2",
+        "source_is_current": false
+      },
+      {
+        "event_id": "da90aa4a-f9cf-4145-9acf-7de36c9d6fad",
+        "kind": "ASSESSMENT_CREATED",
+        "assessment_revision": 0,
+        "occurred_at": "2026-11-16T12:09:18.112628+00:00",
+        "actor_id": null,
+        "module": "M2",
+        "status": null,
+        "reason": "Persisted assessment creation; creating actor not separately recorded.",
+        "source_is_current": false
+      }
+    ],
+    "truncated": false,
+    "history_extension": "workflow-history-metadata/2",
+    "bcb_statuses": [
+      {
+        "confirmation_id": "698ae3eb-24fe-4c6d-bdd3-69e575cc00e6",
+        "assessment_revision": 12,
+        "status": "HELD",
+        "last_code": "BCB_BINDING_AUTHORITY_UNVERIFIED",
+        "context_id": null,
+        "attempt_count": 1,
+        "updated_at": "2026-11-16T20:10:37.828331+08:00",
+        "source_is_current": true
+      }
+    ],
+    "bcb_statuses_truncated": false,
+    "bcb_history_available": true,
+    "authorization_decisions_included": false
+  },
+  "verdict": "PASS"
+}

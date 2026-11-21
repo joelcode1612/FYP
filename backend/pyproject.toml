@@ -15,6 +15,10 @@ dependencies = [
     "psycopg2-binary>=2.9",
     "python-dotenv>=1.0",
     "pyjwt[crypto]>=2.9",
+    # Explicit: bdj_raw_responses decryption depends on it. It currently
+    # arrives transitively via pyjwt[crypto], and a transitive dependency that
+    # disappears on a version bump would break historical rows.
+    "cryptography>=42",
     "supabase>=2.34",
     "httpx>=0.27",
     "numpy>=1.26",
@@ -43,7 +47,12 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8.0", "httpx>=0.27", "ruff>=0.7", "joblib>=1.3"]
+dev = ["pytest>=8.0", "httpx>=0.27", "ruff>=0.7", "joblib>=1.3",
+       # Diagnostic tool only: project1_tokenharbor_sdk_smoke_test.py uses the
+       # OpenAI SDK to check TokenHarbor reachability by hand. The application
+       # no longer imports it -- the runtime adapter is plain httpx with
+       # Accept-Encoding: identity -- so it stays out of the runtime deps.
+       "openai>=1.40"]
 
 [tool.ruff]
 line-length = 100

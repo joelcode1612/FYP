@@ -1276,7 +1276,7 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
           ),
           ActionLink(
             'Assess',
-            href: '/entrepreneur/assessment?id=${Uri.encodeComponent(prop.id)}$_businessTypeQuery',
+            href: '/entrepreneur/assessments?id=${Uri.encodeComponent(prop.id)}$_businessTypeQuery',
             variant: 'secondary',
           ),
           ActionButton(
@@ -1440,7 +1440,7 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
         ),
         ActionLink(
           'Assess this property',
-          href: '/entrepreneur/assessment?id=${Uri.encodeComponent(prop.id)}$_businessTypeQuery',
+          href: '/entrepreneur/assessments?id=${Uri.encodeComponent(prop.id)}$_businessTypeQuery',
           variant: 'secondary',
         ),
         ActionLink(

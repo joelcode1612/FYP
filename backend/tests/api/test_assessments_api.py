@@ -258,6 +258,52 @@ def test_evidence_for_unknown_property_is_404(client, identity):
 # ------------------------------------------------------------- assessments
 
 
+def test_start_requires_callers_saved_property_and_ignores_body_user_id(
+    client, cleanup_users, catalog_ids
+):
+    property_ref = catalog_ids["analysed"]
+    owner_id = uuid.uuid4()
+    other_id = uuid.uuid4()
+    owner_token = make_token(
+        sub=str(owner_id),
+        email=f"save-owner-{owner_id.hex[:8]}@{TEST_EMAIL_DOMAIN}",
+        role_claims={"full_name": "Saved Property Owner"},
+    )
+    other_token = make_token(
+        sub=str(other_id),
+        email=f"unsaved-user-{other_id.hex[:8]}@{TEST_EMAIL_DOMAIN}",
+        role_claims={"full_name": "Unsaved Entrepreneur"},
+    )
+
+    for token, user_id in ((owner_token, owner_id), (other_token, other_id)):
+        authenticated = client.get("/api/v1/auth/me", headers=auth(token))
+        assert authenticated.status_code == 200, authenticated.text
+        register_user_id(cleanup_users, user_id)
+
+    saved = client.post(
+        "/api/v1/saved-properties/",
+        json={"property_ref": property_ref},
+        headers=auth(owner_token),
+    )
+    assert saved.status_code == 201, saved.text
+
+    owner_start = client.post(
+        "/api/v1/assessments/",
+        json={"property_id": property_ref, "user_id": str(other_id)},
+        headers=auth(owner_token),
+    )
+    assert owner_start.status_code == 200, owner_start.text
+    assert owner_start.json()["assessment"]["user_id"] == str(owner_id)
+
+    unsaved_start = client.post(
+        "/api/v1/assessments/",
+        json={"property_id": property_ref},
+        headers=auth(other_token),
+    )
+    assert unsaved_start.status_code == 403, unsaved_start.text
+    assert unsaved_start.json()["detail"]["code"] == "property_not_saved"
+
+
 def test_start_creates_then_resumes_the_same_record(client, identity, catalog_ids):
     pid = catalog_ids["analysed"]
     first = client.post(
@@ -266,6 +312,19 @@ def test_start_creates_then_resumes_the_same_record(client, identity, catalog_id
     assert first.status_code == 200, first.text
     assert first.json()["created"] is True
     assessment_id = first.json()["assessment"]["assessment_id"]
+    assert first.json()["assessment"]["property"]["id"] == pid
+
+    # Assessment serialization reads location evidence after inserting the row.
+    # The aggregate-only district_population schema must not block that response
+    # or lead us to manufacture a male/female split from the total.
+    evidence = client.get(
+        f"/api/v1/catalog/properties/{pid}/evidence",
+        headers=auth(identity["token"]),
+    )
+    assert evidence.status_code == 200, evidence.text
+    statistics = evidence.json()["district_statistics"]
+    assert statistics["male_population"] is None
+    assert statistics["female_population"] is None
 
     second = client.post(
         "/api/v1/assessments/", json={"property_id": pid}, headers=auth(identity["token"])

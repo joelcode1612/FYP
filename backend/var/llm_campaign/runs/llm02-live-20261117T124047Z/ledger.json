@@ -1,0 +1,17 @@
+{
+  "runs": {
+    "llm02-live-20261117T124047Z-c01": {
+      "attempts": [
+        {
+          "attempt_no": 1,
+          "prompt_hash": "3d3ccf6b48c0b52933c09b4269c09bb9f7a7b5eec13b5440a26427757abc5ea9",
+          "prompt_version": "BDJ-SOURCE-3-CAND",
+          "request_hash": "2f70841cc544249d7f8552f244a26c134423f39f94fae51d00227c0d53b27c88",
+          "reserved_at": "2026-11-17T12:40:48.626961+00:00",
+          "stage": "BDJ"
+        }
+      ],
+      "receipts": []
+    }
+  }
+}

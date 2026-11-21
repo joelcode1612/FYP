@@ -6,6 +6,11 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=(".env", ".env.local"), extra="ignore")
 
     # --- Databases ---------------------------------------------------------
+    # Schema creation at startup is an explicit operator decision. With this
+    # off, the application never issues CREATE TABLE / CREATE SCHEMA: a missing
+    # table fails loudly instead of being silently created in whatever database
+    # DATABASE_URL happens to name.
+    db_auto_create: bool = False
     # Application database (user profiles, saved properties, preferences).
     # Startup `create_all` runs through this URL, so it is the only database
     # the ORM ever writes to.
@@ -47,6 +52,15 @@ class Settings(BaseSettings):
     # Blank reuses DATABASE_URL only if it already names the expected target.
     m2_database_url: SecretStr = SecretStr('')
     m2_expected_database: str = 'Dss'
+    # Disabled until a reviewed database identity migration is installed.
+    # Key is a separately provisioned secret, never the database password.
+    m2_protected_identity_enabled: bool = False
+    m2_identity_assertion_key: SecretStr = SecretStr('')
+    # BCB confirmation validity horizon, in days. There is NO default: when
+    # this is absent the resolver fails closed with
+    # VALIDITY_BASIS_UNAUTHORIZED instead of assuming a 90-day window. Any
+    # 90-day value used in tests is a test value, not a product rule.
+    project1_bcb_confirmation_validity_days: int | None = None
     # CQ engineering adapter is separate from scientific/fielding authorization.
     cq_runtime_enabled: bool = False
     # No fallback to property/analytics or superuser connections for reporting.
@@ -55,6 +69,9 @@ class Settings(BaseSettings):
     # so the hold is discoverable, but generation returns 503 until an admitted
     # measurement, disclosure adapter and reviewed attempt ledger row exist.
     ee01_explanation_enabled: bool = False
+    # Separate local operator inspection. Never authorizes participation.
+    cq_synthetic_preview_enabled: bool = False
+    cq_synthetic_interactive_enabled: bool = False
 
     # Separate staging bridge; does not enable the unresolved BDJ/M2 write router.
     project1_cp07_enabled: bool = False
@@ -62,6 +79,12 @@ class Settings(BaseSettings):
 
     # Candidate AI workflow: explicit migrations and authority reconciliation only.
     project1_workflow_enabled: bool = False
+    # Explicit private-lab opt-in. Neither field changes the default Dss target.
+    project1_isolated_database_name: str = ""
+    project1_isolated_database_port: int = 0
+    project1_synthetic_bdj_trial_enabled: bool = False
+    project1_synthetic_bdj_prompt_path: str = ""
+    project1_synthetic_bdj_prompt_sha256: str = ""
     project1_rules_version: str = ""
     project1_rules_sha256: str = ""
     project1_rules_adoption_receipt: str = ""
@@ -71,6 +94,18 @@ class Settings(BaseSettings):
     tokenharbor_enabled: bool = False
     tokenharbor_structured_mode: str = "json_schema"
     tokenharbor_timeout_seconds: int = 30
+    # Development evaluation only: tolerate the provider reporting the model
+    # without its ':free' qualifier, recorded as unverified. Never production.
+    tokenharbor_model_identity_exception: bool = False
+    # Key custody for the encrypted raw-response store. Filesystem directory,
+    # deliberately outside the database and outside the project1_ai schema: a
+    # retention deadline cannot be honoured by deleting an append-only row, so
+    # expiry destroys the per-record key instead. Empty => <backend>/var/
+    # key-custody. Never point this at a web-served or synced folder.
+    project1_key_custody_dir: str = ""
+    # Append-only JSONL receipt ledger for retention destruction. Empty =>
+    # <backend>/var/audit/project1_retention_receipts.jsonl.
+    project1_retention_receipt_path: str = ""
 
     # --- Supabase authentication ------------------------------------------
     # Identity provider. Registration/login happen in the frontend through the

@@ -5,8 +5,15 @@
    workflow coverage, timeline + detail grid, JSON log dialog, footnote.
    Scoped to this route only; the shell (pill nav, breadcrumbs) stays AppLayout's.
    Colors use the shell's semantic tokens with the reference values as fallbacks,
-   so the page follows the theme instead of hardcoding whites. */
-.sr-workspace {
+   so the page follows the theme instead of hardcoding whites.
+
+   The tokens are declared on the JSON dialog's backdrop as well as on the
+   workspace: the dialog is rendered as a sibling of the workspace (so that a
+   fixed overlay is not clipped by the workspace box), and without the tokens it
+   inherited none of them — `background: var(--sr-white)` resolved to nothing and
+   the dialog painted fully transparent over the page. */
+.sr-workspace,
+.sr-json-backdrop {
   --sr-blue: var(--action, #1d4ed8);
   --sr-blue-dark: var(--action, #1d4ed8);
   --sr-accent: var(--accent, #3b82f6);
@@ -21,6 +28,8 @@
   --sr-selected: var(--geo-wash, #eaf1ff);
   --sr-selected-border: var(--geo-border, #bfdbfe);
   --sr-radius: 14px;
+}
+.sr-workspace {
   box-sizing: border-box;
   width: 100%;
   max-width: 1450px;

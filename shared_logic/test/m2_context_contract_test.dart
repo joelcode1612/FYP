@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:test/test.dart';
 import 'package:shared_logic/shared_logic.dart';
+import 'package:crypto/crypto.dart';
 
 class RecordingClient extends ApiClient {
   Map<String, dynamic> response;
@@ -26,6 +27,46 @@ class RecordingClient extends ApiClient {
 }
 
 void main() {
+  test('BCB 1.1 binds the explicitly selected objective', () async {
+    const aid = '00000000-0000-4000-8000-000000000001';
+    const cid = '00000000-0000-4000-8000-000000000002';
+    const objective = '00000000-0000-4000-8000-000000000003';
+    const context = '00000000-0000-4000-8000-000000000004';
+    final packet = <String, dynamic>{
+      'schema_version': 'business-context-package/1.1',
+      'identity': {'assessment_id': aid},
+      'confirmation': {'id': cid, 'revision': 3, 'status': 'CURRENT_CONFIRMED'},
+      'confirmed_uncertainty': {'id': objective},
+      'geography': null,
+      'permissions': {'qj_execution': false, 'qg_execution': false},
+    };
+    packet['packet_hash'] = sha256
+        .convert(utf8.encode(canonicalSourceJson(packet)))
+        .toString();
+    final client = RecordingClient({
+      'contract_version': 'persisted-business-context/1',
+      'assessment_id': aid,
+      'confirmation_id': cid,
+      'assessment_revision': 3,
+      'lifecycle_status': 'PERSISTED',
+      'context_id': context,
+      'replayed': false,
+      'created_at': '2026-01-01T00:00:00Z',
+      'qj_execution_authorized': false,
+      'qg_execution_authorized': false,
+      'packet': packet,
+    });
+    final repository = ApiM2Repository(client);
+    expect(
+      (await repository.buildContext(aid, cid, 3, objectiveId: objective)).id,
+      context,
+    );
+    expect(client.body!['objective_id'], objective);
+    await expectLater(
+      repository.buildContext(aid, cid, 3, objectiveId: aid),
+      throwsFormatException,
+    );
+  });
   test('generic M2 actions cannot override the saved source revision', () {
     const aid = '00000000-0000-4000-8000-000000000001';
     const iid = '00000000-0000-4000-8000-000000000002';

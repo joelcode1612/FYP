@@ -7,6 +7,7 @@ final class ConfirmedBusinessReview {
   final List<ConfirmedReviewFinding> findings;
   final List<ConfirmedReviewEvent> activity;
   final bool activityTruncated;
+  final String evaluationState;
 
   const ConfirmedBusinessReview._(
     this.assessmentId,
@@ -18,13 +19,14 @@ final class ConfirmedBusinessReview {
     this.findings,
     this.activity,
     this.activityTruncated,
+    this.evaluationState,
   );
 
   factory ConfirmedBusinessReview.fromJson(Map<String, dynamic> json) {
     if (json['contract_version'] != 'project1-confirmed-review/1' ||
         json['source_status'] != 'CURRENT_CONFIRMED_SOURCE' ||
         json['trust_class'] != 'T2_AUTHENTICATED_ENTREPRENEUR_DECLARATION' ||
-        json['evaluation_state'] != 'EVALUATED_CANDIDATE' ||
+        !const {'EVALUATED_CANDIDATE', 'NOT_EVALUATED'}.contains(json['evaluation_state']) ||
         json['activity_scope'] != 'M2_RECORDS_THROUGH_CONFIRMED_REVISION' ||
         json['fielding_authorized'] != false ||
         json['qj_handoff_authorized'] != false ||
@@ -50,6 +52,10 @@ final class ConfirmedBusinessReview {
       json,
       'findings',
     ).map(ConfirmedReviewFinding.fromJson).toList();
+    if (json['evaluation_state'] == 'NOT_EVALUATED' &&
+        (findings.isNotEmpty || json['rule_version'] != 'NOT_EVALUATED')) {
+      throw const FormatException('Unevaluated review cannot contain BDJ findings.');
+    }
     if (findings.map((f) => f.id).toSet().length != findings.length ||
         findings.any(
           (f) => f.sourceAnswerIds.any((id) => !refs.contains(id)),
@@ -75,6 +81,7 @@ final class ConfirmedBusinessReview {
       List.unmodifiable(findings),
       List.unmodifiable(activity),
       json['activity_truncated'] as bool,
+      json['evaluation_state'] as String,
     );
   }
 }

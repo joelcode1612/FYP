@@ -1,0 +1,92 @@
+{
+  "generated_at": "2026-11-17T15:31:19.004266+00:00",
+  "database": "project1_workflow_tests",
+  "migration": "C:\\Users\\HP\\OneDrive\\Desktop\\sport-marketplace\\FYP\\backend\\migrations\\m2\\20261118_01_question_bank.sql",
+  "rollback": "C:\\Users\\HP\\OneDrive\\Desktop\\sport-marketplace\\FYP\\backend\\migrations\\m2\\20261118_01_question_bank_rollback.sql",
+  "migration_receipt": "BD01 P2: corrected question-bank schema verified on the disposable clone",
+  "commands": {
+    "apply": "psql -h localhost -U postgres -d project1_workflow_tests -v ON_ERROR_STOP=1 -c \"SET project1.qgb_migration_target='project1_workflow_tests'; SET project1.qgb_migration_receipt='<receipt>';\" -f backend/migrations/m2/20261118_01_question_bank.sql",
+    "rollback": "psql -h localhost -U postgres -d project1_workflow_tests -v ON_ERROR_STOP=1 -c \"SET project1.qgb_migration_target='project1_workflow_tests'; SET project1.qgb_migration_receipt='<receipt>';\" -f backend/migrations/m2/20261118_01_question_bank_rollback.sql",
+    "harness": "backend/.venv/Scripts/python.exe backend/scripts/bd01_qgb_schema_evidence.py"
+  },
+  "structural_assertions": {
+    "question_item_version_lifecycle_columns": 0,
+    "bank_snapshot_state_columns": 0,
+    "expected_zero": true
+  },
+  "checks": [
+    {
+      "check": 1,
+      "name": "current_database() is project1_workflow_tests before DDL",
+      "status": "PASS",
+      "sql": "SELECT current_database();",
+      "observed": "project1_workflow_tests",
+      "note": "Asserted again before every DDL block below."
+    },
+    {
+      "check": 2,
+      "name": "Migration applies cleanly; rollback applies cleanly (twice); re-apply works",
+      "status": "PASS",
+      "sql": "forward migration; rollback; rollback again; forward again; guard probe with project1.qgb_migration_target='Dss'",
+      "observed": "apply=True rollback_removed=True rollback_twice_ok=True reapply=True mismatched_target_refused=True (P0001)",
+      "note": "The guard also hard-refuses Dss / Final_Location_Analysis by name."
+    },
+    {
+      "check": 3,
+      "name": "Lifecycle CANDIDATE -> INDEPENDENTLY_REVIEWED -> APPROVED",
+      "status": "PASS",
+      "sql": "INSERT 3 item_lifecycle_event rows; SELECT ... FROM question_item_version_state",
+      "observed": "states=CANDIDATE/INDEPENDENTLY_REVIEWED/APPROVED, approved_at=2026-11-17 23:31:18.963491+08:00, reviewer=reviewer-1, approver=owner-1",
+      "note": ""
+    },
+    {
+      "check": 4,
+      "name": "Approval requires both roles and two distinct actors",
+      "status": "PASS",
+      "sql": "owner-only events on V2; same-actor review+approval on V3; SELECT state view",
+      "observed": "owner_only=CANDIDATE, self_approval=INDEPENDENTLY_REVIEWED",
+      "note": ""
+    },
+    {
+      "check": 5,
+      "name": "Snapshot can reach ACCEPTED (defect BD01-SQL-01 fixed)",
+      "status": "PASS",
+      "sql": "INSERT bank_snapshot + bank_snapshot_item + DRAFT event + ACCEPTED event; SELECT bank_snapshot_state",
+      "observed": "draft=DRAFT, accepted=ACCEPTED, accepted_at=2026-11-17 23:31:18.979375+08:00, acceptor=owner-1",
+      "note": ""
+    },
+    {
+      "check": 6,
+      "name": "Immutability: UPDATE/DELETE raise QGB01 on version and event rows",
+      "status": "PASS",
+      "sql": "UPDATE / DELETE against question_item_version and item_lifecycle_event",
+      "observed": "sqlstates=['QGB01', 'QGB01', 'QGB01', 'QGB01', 'QGB01'], version_row_survives=True",
+      "note": "[{\"statement\": \"UPDATE question_item_version\", \"sqlstate\": \"QGB01\", \"message\": \"ERROR:  QGB_APPEND_ONLY: UPDATE on question_item_version is not permitted\"}, {\"statement\": \"UPDATE item_lifecycle_event\", \"sqlstate\": \"QGB01\", \"message\": \"ERROR:  QGB_APPEND_ONLY: UPDATE on item_lifecycle_event is not permitted\"}, {\"statement\": \"DELETE question_item_version\", \"sqlstate\": \"QGB01\", \"message\": \"ERROR:  QGB_APPEND_ONLY: DELETE on question_item_version is not permitted\"}, {\"statement\": \"DELETE item_lifecycle_event\", \"sqlstate\": \"QGB01\", \"message\": \"ERROR:  QGB_APPEND_ONLY: DELETE on item_lifecycle_event is not permitted\"}, {\"statement\": \"UPDATE bank_snapshot\", \"sqlstate\": \"QGB01\", \"message\": \"ERROR:  QGB_APPEND_ONLY: UPDATE on bank_snapshot is not permitted\"}]"
+    },
+    {
+      "check": 7,
+      "name": "Retirement without rewriting history",
+      "status": "PASS",
+      "sql": "INSERT RETIRED event; compare the prior APPROVED row before/after",
+      "observed": "state=RETIRED, approved_row_unchanged=True",
+      "note": ""
+    },
+    {
+      "check": 8,
+      "name": "RLS isolates receipts by tenant; role is not superuser and not BYPASSRLS",
+      "status": "PASS",
+      "sql": "SET ROLE p1_qgb_runtime; SET project1.tenant_id='<A>'; SELECT ... FROM comparison_receipt / comparison_review_item",
+      "observed": "role=p1_qgb_runtime super=False bypassrls=False; visible_total=1, tenantB_rows_visible=0, review_visible=1, review_tenantB_visible=0",
+      "note": "executed as p1_qgb_runtime with tenant 11111111-1111-4111-8111-111111111111"
+    },
+    {
+      "check": 9,
+      "name": "Cross-tenant lookup by query alone returns zero rows",
+      "status": "PASS",
+      "sql": "SET ROLE p1_qgb_runtime; SET project1.tenant_id='<A>'; SELECT ... WHERE tenant_id='<B>'; SELECT ... WHERE receipt_id='<B receipt>'",
+      "observed": "rows_by_tenant_B=0, rows_by_receipt_B=0",
+      "note": ""
+    }
+  ],
+  "verdict": "PASS"
+}

@@ -1,0 +1,306 @@
+import '../../../domain/entities/app_role.dart';
+import '../../../domain/entities/commercial_property.dart';
+import '../../../domain/entities/location_intelligence.dart';
+import '../../../domain/entities/recommendation.dart';
+import '../../../domain/entities/user.dart';
+import '../../../domain/entities/virtual_tour.dart';
+
+/// Prototype data provider. Presentation must never hardcode listing arrays —
+/// it consumes these entities via repositories instead. Listings mirror the
+/// §31 sample properties (RM ranges, sq ft, Malaysian postcodes).
+abstract final class DemoData {
+  static const String demoOwnerId = 'owner-1';
+
+  static const List<String> standardRequirements = [
+    'Ground Floor',
+    'F&B Suitable',
+    'Good Accessibility',
+  ];
+
+  static List<CommercialProperty> get properties => [
+    const CommercialProperty(
+      id: 'p-artisan',
+      title: 'Artisan Brew Corner Lot',
+      address: 'No. 22, Jalan SS15/4G',
+      city: 'Subang Jaya',
+      state: 'Selangor',
+      postcode: '47500',
+      rentalRm: 7000,
+      rentalMaxRm: 8000,
+      sizeSqft: 1200,
+      latitude: 3.0738,
+      longitude: 101.587,
+      propertyType: 'Corner shoplot',
+      verification: VerificationStatus.verified,
+      suitabilityScore: 86,
+      ownerId: demoOwnerId,
+      hasTour: true,
+      requirements: standardRequirements,
+      tags: ['High footfall', 'Near LRT'],
+    ),
+    const CommercialProperty(
+      id: 'p-kopi',
+      title: 'Kopi & Co Shoplot',
+      address: 'No. 8, Lebuh Bandar Utama',
+      city: 'Petaling Jaya',
+      state: 'Selangor',
+      postcode: '47800',
+      rentalRm: 9000,
+      rentalMaxRm: 9200,
+      sizeSqft: 1800,
+      latitude: 3.1357,
+      longitude: 101.629,
+      propertyType: 'Shoplot unit',
+      verification: VerificationStatus.verified,
+      suitabilityScore: 84,
+      ownerId: 'owner-3',
+      hasTour: true,
+      requirements: standardRequirements,
+      tags: ['Mall catchment'],
+    ),
+    const CommercialProperty(
+      id: 'p-baker',
+      title: "The Baker's Nook",
+      address: 'No. 41, Jalan SS2/24',
+      city: 'Petaling Jaya',
+      state: 'Selangor',
+      postcode: '47300',
+      rentalRm: 5800,
+      rentalMaxRm: 6000,
+      sizeSqft: 950,
+      latitude: 3.118,
+      longitude: 101.625,
+      propertyType: 'Shoplot unit',
+      verification: VerificationStatus.pending,
+      suitabilityScore: 81,
+      ownerId: demoOwnerId,
+      hasTour: false,
+      requirements: standardRequirements,
+      tags: ['Family catchment'],
+    ),
+    const CommercialProperty(
+      id: 'p-riverside',
+      title: 'Riverside F&B Lot',
+      address: 'No. 3, Jalan Bandar Hilir',
+      city: 'Melaka',
+      state: 'Melaka',
+      postcode: '75200',
+      rentalRm: 4500,
+      rentalMaxRm: 4800,
+      sizeSqft: 1400,
+      latitude: 2.189,
+      longitude: 102.25,
+      propertyType: 'Corner lot',
+      verification: VerificationStatus.verified,
+      suitabilityScore: 78,
+      ownerId: 'owner-2',
+      hasTour: true,
+      requirements: ['Ground Floor', 'F&B Suitable'],
+      tags: ['Tourist footfall'],
+    ),
+    const CommercialProperty(
+      id: 'p-heritage',
+      title: 'George Town Heritage Shoplot',
+      address: 'No. 55, Lebuh Chulia',
+      city: 'George Town',
+      state: 'Penang',
+      postcode: '10200',
+      rentalRm: 7800,
+      rentalMaxRm: 8000,
+      sizeSqft: 1600,
+      latitude: 5.417,
+      longitude: 100.335,
+      propertyType: 'Heritage shoplot',
+      verification: VerificationStatus.verified,
+      suitabilityScore: 83,
+      ownerId: 'owner-2',
+      hasTour: true,
+      requirements: ['F&B Suitable', 'Good Accessibility'],
+      tags: ['Heritage row', 'Evening crowd'],
+    ),
+    const CommercialProperty(
+      id: 'p-puchong',
+      title: 'Puchong Corner Unit',
+      address: 'No. 17, Jalan Puteri 2/3, Bandar Puteri',
+      city: 'Puchong',
+      state: 'Selangor',
+      postcode: '47100',
+      rentalRm: 5200,
+      rentalMaxRm: 5500,
+      sizeSqft: 1100,
+      latitude: 3.025,
+      longitude: 101.617,
+      propertyType: 'Corner shoplot',
+      verification: VerificationStatus.draft,
+      suitabilityScore: 72,
+      ownerId: demoOwnerId,
+      hasTour: false,
+      requirements: ['Ground Floor'],
+      tags: ['Growing township'],
+    ),
+    const CommercialProperty(
+      id: 'p-shahalam',
+      title: 'Shah Alam Community Lot',
+      address: 'No. 26, Jalan Plumbum N7/N, Seksyen 7',
+      city: 'Shah Alam',
+      state: 'Selangor',
+      postcode: '40000',
+      rentalRm: 5000,
+      rentalMaxRm: 5200,
+      sizeSqft: 1050,
+      latitude: 3.07,
+      longitude: 101.518,
+      propertyType: 'Retail unit',
+      verification: VerificationStatus.pending,
+      suitabilityScore: 76,
+      ownerId: 'owner-3',
+      hasTour: false,
+      requirements: ['Ground Floor', 'F&B Suitable'],
+      tags: ['Student catchment'],
+    ),
+  ];
+
+  static List<SitewiseUser> get users => [
+    SitewiseUser(
+      id: 'admin-1',
+      name: 'Aina Razak',
+      email: 'aina@sitewise.my',
+      role: AppRole.admin,
+      status: 'Active',
+      location: 'Kuala Lumpur',
+      joinedAt: DateTime(2024, 3, 2),
+    ),
+    SitewiseUser(
+      id: 'owner-1',
+      name: 'Ahmad Faiz',
+      email: 'ahmad@faizproperties.my',
+      role: AppRole.owner,
+      status: 'Active',
+      location: 'Subang Jaya, Selangor',
+      joinedAt: DateTime(2024, 6, 11),
+    ),
+    SitewiseUser(
+      id: 'owner-2',
+      name: 'Farah Idris',
+      email: 'farah@heritagespaces.my',
+      role: AppRole.owner,
+      status: 'Pending',
+      location: 'George Town, Penang',
+      joinedAt: DateTime(2025, 1, 19),
+    ),
+    SitewiseUser(
+      id: 'owner-3',
+      name: 'Muhammad Danial',
+      email: 'danial@danialretail.my',
+      role: AppRole.owner,
+      status: 'Active',
+      location: 'Johor Bahru, Johor',
+      joinedAt: DateTime(2024, 11, 8),
+    ),
+    SitewiseUser(
+      id: 'ent-1',
+      name: 'Sarah Tan',
+      email: 'sarah@artisanbrew.my',
+      role: AppRole.entrepreneur,
+      status: 'Active',
+      location: 'Petaling Jaya, Selangor',
+      joinedAt: DateTime(2024, 9, 5),
+    ),
+  ];
+
+  static List<VirtualTour> get tours => [
+    VirtualTour(
+      id: 't-1',
+      propertyId: 'p-artisan',
+      title: 'Artisan Brew corner walkthrough',
+      sceneCount: 8,
+      capturedAt: DateTime(2025, 11, 2),
+      published: true,
+      status: VirtualTourStatus.approved,
+    ),
+    VirtualTour(
+      id: 't-2',
+      propertyId: 'p-heritage',
+      title: 'Lebuh Chulia heritage unit',
+      sceneCount: 6,
+      capturedAt: DateTime(2025, 12, 14),
+      published: true,
+      status: VirtualTourStatus.approved,
+    ),
+  ];
+
+  static LocationAnalysis analysisFor(String propertyId) {
+    final property = properties.firstWhere(
+      (p) => p.id == propertyId,
+      orElse: () => properties.first,
+    );
+    return LocationAnalysis(
+      propertyId: property.id,
+      suitabilityScore: property.suitabilityScore,
+      competitorCount: 14,
+      demandSummary:
+          'Strong lunch and dinner demand from nearby offices, colleges and '
+          'residential blocks around ${property.city}.',
+      socioeconomicSummary:
+          'Middle-income family catchment with steady weekend spending '
+          'around ${property.city}.',
+      factors: const [
+        LocationFactor(
+          name: 'Population',
+          score: 88,
+          rating: 'Strong',
+          evidence: 'Dense residential blocks within a 10-minute walk.',
+          impact: 'Positive',
+        ),
+        LocationFactor(
+          name: 'Accessibility',
+          score: 84,
+          rating: 'Good',
+          evidence: 'Corner frontage with public parking nearby.',
+          impact: 'Positive',
+        ),
+        LocationFactor(
+          name: 'Transportation',
+          score: 80,
+          rating: 'Good',
+          evidence: 'Within 400 m of rail and major bus routes.',
+          impact: 'Positive',
+        ),
+        LocationFactor(
+          name: 'Competition',
+          score: 58,
+          rating: 'Moderate',
+          evidence: '14 F&B outlets within 500 m; 3 direct competitors.',
+          impact: 'Neutral',
+        ),
+        LocationFactor(
+          name: 'Demand',
+          score: 86,
+          rating: 'Strong',
+          evidence: 'Offices and colleges drive lunch and dinner peaks.',
+          impact: 'Positive',
+        ),
+        LocationFactor(
+          name: 'Rental Fit',
+          score: 74,
+          rating: 'Good',
+          evidence: 'Asking rent sits near the area median per sq ft.',
+          impact: 'Neutral',
+        ),
+      ],
+    );
+  }
+
+  static const BusinessPreferences defaultPreferences = BusinessPreferences(
+    businessType: 'Specialty Café',
+    preferredLocation: 'Petaling Jaya, Selangor',
+    minBudgetRm: 6000,
+    maxBudgetRm: 10000,
+    propertyType: 'Shoplot / corner unit',
+    minSizeSqft: 900,
+    maxSizeSqft: 1800,
+    requirements: standardRequirements,
+    preferredAreas: ['Subang Jaya', 'Petaling Jaya', 'Shah Alam'],
+    seatingModel: '40–60 seats',
+  );
+}

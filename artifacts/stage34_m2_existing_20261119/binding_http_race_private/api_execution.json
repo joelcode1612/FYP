@@ -1,0 +1,115 @@
+[
+  {
+    "test_id": "test_marketplace_bound_answer_fails_after_link_revocation",
+    "method": "POST",
+    "path": "/api/v1/m2/assessments",
+    "auth": "signed-test-principal:26124b45-b1b6-46ac-9e69-ded0aa222339",
+    "assurance": null,
+    "expected_http": 201,
+    "actual_http": 201,
+    "input": {
+      "json": {
+        "instrument_version_id": "82da6544-f29b-4c3c-84cc-d0770544450e"
+      }
+    },
+    "output": {
+      "id": "ebe1335e-fef1-43da-ba9d-3faecb71d32e",
+      "owner_user_id": "26124b45-b1b6-46ac-9e69-ded0aa222339",
+      "instrument_id": "82da6544-f29b-4c3c-84cc-d0770544450e",
+      "revision": 0,
+      "confirmed_revision": null
+    },
+    "result": "PASS"
+  },
+  {
+    "test_id": "test_marketplace_bound_answer_fails_after_link_revocation",
+    "method": "PUT",
+    "path": "/api/v1/m2/assessments/ebe1335e-fef1-43da-ba9d-3faecb71d32e/answers/M2-01",
+    "auth": "signed-test-principal:26124b45-b1b6-46ac-9e69-ded0aa222339",
+    "assurance": null,
+    "expected_http": 200,
+    "actual_http": 200,
+    "input": {
+      "json": {
+        "expected_revision": 1,
+        "answer_state": "ANSWERED",
+        "value": "SYNTHETIC_B",
+        "marketplace_assessment_id": "b8e43a4d-5753-44c0-b82c-b7687240e3f5"
+      }
+    },
+    "output": {
+      "assessment_revision": 1,
+      "answer": {
+        "id": "8ecf4989-02cf-4ca4-9a5c-7a8e2227b3fd",
+        "assessment_id": "ebe1335e-fef1-43da-ba9d-3faecb71d32e",
+        "item_version_id": "b1cb129c-8548-4d26-8d6a-e52f3a954bb1",
+        "assessment_revision": 1,
+        "answer_state": "ANSWERED",
+        "value_json": "SYNTHETIC_A"
+      },
+      "current_review_required": true,
+      "previous_confirmation_is_historical": false
+    },
+    "result": "PASS"
+  },
+  {
+    "test_id": "test_marketplace_bound_answer_fails_after_link_revocation",
+    "method": "PUT",
+    "path": "/api/v1/m2/assessments/ebe1335e-fef1-43da-ba9d-3faecb71d32e/answers/M2-01",
+    "auth": "signed-test-principal:26124b45-b1b6-46ac-9e69-ded0aa222339",
+    "assurance": null,
+    "expected_http": 409,
+    "actual_http": 409,
+    "input": {
+      "json": {
+        "expected_revision": 1,
+        "answer_state": "ANSWERED",
+        "value": "SYNTHETIC_B",
+        "marketplace_assessment_id": "b8e43a4d-5753-44c0-b82c-b7687240e3f5"
+      }
+    },
+    "output": {
+      "detail": "The linked assessment changed; reload before saving."
+    },
+    "result": "PASS"
+  },
+  {
+    "test_id": "test_marketplace_bound_answer_fails_after_link_revocation",
+    "method": "POST",
+    "path": "/api/v1/m2/assessments/ebe1335e-fef1-43da-ba9d-3faecb71d32e/review",
+    "auth": "signed-test-principal:26124b45-b1b6-46ac-9e69-ded0aa222339",
+    "assurance": null,
+    "expected_http": 409,
+    "actual_http": 409,
+    "input": {
+      "json": {
+        "expected_revision": 1,
+        "marketplace_assessment_id": "b8e43a4d-5753-44c0-b82c-b7687240e3f5"
+      }
+    },
+    "output": {
+      "detail": "The linked assessment changed; reload before reviewing."
+    },
+    "result": "PASS"
+  },
+  {
+    "test_id": "test_marketplace_bound_answer_fails_after_link_revocation",
+    "method": "POST",
+    "path": "/api/v1/m2/assessments/ebe1335e-fef1-43da-ba9d-3faecb71d32e/confirm",
+    "auth": "signed-test-principal:26124b45-b1b6-46ac-9e69-ded0aa222339",
+    "assurance": null,
+    "expected_http": 409,
+    "actual_http": 409,
+    "input": {
+      "json": {
+        "expected_revision": 1,
+        "marketplace_assessment_id": "b8e43a4d-5753-44c0-b82c-b7687240e3f5",
+        "acknowledged_issue_ids": []
+      }
+    },
+    "output": {
+      "detail": "The linked assessment changed; reload before confirming."
+    },
+    "result": "PASS"
+  }
+]

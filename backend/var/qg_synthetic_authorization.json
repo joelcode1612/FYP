@@ -1,0 +1,13 @@
+{
+  "purpose": "SYNTHETIC_QG_RESEARCH_EVALUATION",
+  "source_fingerprint": "2857ede693a94be4c7f1ba17fa9df7540445b8d93b135badbe99427bb842230b",
+  "assessment_id": "da90aa4a-f9cf-4145-9acf-7de36c9d6fad",
+  "actor_id": "11111111-1111-4111-8111-111111111111",
+  "operator_receipt": "CP-08 Owner-authorized synthetic QG research-only evaluation: RM13 / 12 oz iced-latte scenario, one free-model attempt, USD 0.00 cost ceiling, no fielding or scientific approval.",
+  "max_attempts": 1,
+  "evaluation_id": "CP08-EVAL-10",
+  "scenario": "Would eligible customers find RM13 acceptable for a 12 oz takeaway iced latte?",
+  "authorized_by": "PROJECT1 owner directive CP-08",
+  "authorized_at": "2026-11-17T19:56:53.448343+00:00",
+  "cost_ceiling_usd": 0.0
+}

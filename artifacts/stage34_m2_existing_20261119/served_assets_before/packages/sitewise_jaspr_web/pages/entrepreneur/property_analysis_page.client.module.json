@@ -1,0 +1,1 @@
+{"name":"PropertyAnalysisPage","id":["sitewise_jaspr_web","lib/pages/entrepreneur/property_analysis_page.dart"],"import":"package:sitewise_jaspr_web/pages/entrepreneur/property_analysis_page.dart","params":[{"name":"id","isNamed":true,"decoder":"p['id'] as String","encoder":"c.id"}]}

@@ -2,6 +2,7 @@
 from copy import deepcopy
 import hashlib
 import json
+import re
 from types import SimpleNamespace
 from uuid import uuid4
 
@@ -15,6 +16,7 @@ from sitewise.core.exceptions import ConflictError, NotFoundError
 from sitewise.db import bdj_rules
 from sitewise.project1.bdj import BDJEngine, load_rules, validate_candidates
 from sitewise.project1.contracts import BDJOutput, Measurement, WorkflowHeld, digest
+from sitewise.project1.measurement_policy import lab_authority
 from sitewise.project1.projection import M2SourceProjection, verify_projection
 from sitewise.project1.provider import MODEL, ModelRunner, TokenHarbor, strict_json
 from sitewise.project1.prompts import PROMPTS
@@ -110,6 +112,13 @@ def test_changed_source_during_review_suppresses_findings(repo):
     assert result['outcome'] == 'stale' and result['findings'] == []
 
 
+def test_source_conflict_during_recheck_is_stale_not_success(repo):
+    def changed():
+        raise ConflictError('revision changed')
+    result = BDJEngine(bdj_rules).review(project(repo), recheck_current=changed)
+    assert result['outcome'] == 'stale' and result['findings'] == []
+
+
 @pytest.mark.parametrize('mutation', ['unknown_answer','wrong_item','invented_quote','approval','missing_note'])
 def test_model_cannot_invent_refs_or_approval(repo, mutation):
     packet = project(repo)
@@ -141,11 +150,15 @@ def provider_with(body=None, status=200, handler=None):
         assert payload['model'] == MODEL and payload['response_format']['type'] == 'json_schema'
         return httpx.Response(status, json=body)
     return TokenHarbor(SecretStr('synthetic-test-key'), enabled=True,
+                       identity_exception=True,
                        transport=httpx.MockTransport(handler or fake))
 
 
 def envelope(content):
-    return {'model':MODEL, 'choices':[{'finish_reason':'stop','message':{'content':content}}]}
+    # The provider reports its canonical model name without the ':free' tier
+    # marker. These doubles therefore need the explicit test exception; the
+    # identity check itself stays strict (see test_provider_transport_recovery).
+    return {'model':'mimo-v2.6-flash', 'choices':[{'finish_reason':'stop','message':{'content':content}}]}
 
 
 def test_provider_structured_envelope():
@@ -183,28 +196,37 @@ def test_missing_secret_no_dispatch_and_secret_repr():
 
 
 def context_and_measurement():
-    packet = {'confirmation':{'status':'CURRENT_CONFIRMED'},
-        'confirmed_uncertainty':{'id':'SYN-UC-1'}, 'm2_answers':[
+    # F-01: the packet must carry the identity a version label is derived from.
+    # A packet with only `id` cannot prove which confirmation the uncertainty
+    # belongs to, so the resolver refuses it — which is the intended behaviour.
+    packet = {'confirmation':{'status':'CURRENT_CONFIRMED','id':'SYN-CONF-1','revision':1},
+        'confirmed_uncertainty':{'id':'SYN-UC-1','confirmation_id':'SYN-CONF-1',
+            'exact_text':'Would eligible customers find RM13 acceptable for a 12 oz '
+                         'takeaway iced latte?'},
+        'permissions':{'qj_execution':False},
+        'm2_answers':[
             {'answer_revision_id':'SYN-A1','item_key':'M2-04'}], 'supporting_sources':[]}
     packet['packet_hash'] = digest(packet)
-    m = dict(uncertainty_version='SYN-UC-1@1', construct='stated preference',
+    m = dict(uncertainty_version='SYN-UC-1', construct='stated preference',
         population='local adults', timeframe='next month', stimulus='12 oz latte at RM13',
         response_options=['Prefer','Do not prefer','Unsure'], response_codes=['A','B','U'],
-        routing={'A':'END','B':'END','U':'END'}, denominator='all eligible respondents',
+        routing={'A':'END','B':'END','U':'END'},
+        denominator='A and B substantive respondents; U reported separately',
         source_refs=['SYN-A1','SYN-UC-1'], limitations='Stated preference does not establish sales.')
     return packet, m
 
 
 def research(bank_outcome='verified_no_equivalent', route='CUSTOMER_SURVEY_CANDIDATE', mutate=None):
     packet,m = context_and_measurement()
-    class Authority:
-        def admit_qj(self,p): return {'uncertainty_version':'SYN-UC-1@1'}
-        def require_current(self,*a): pass
-        def validate_measurement(self,*a): pass
-        def require_drafting(self,*a): pass
+    # F-02: the real versioned policy, not a no-op double. A double can no longer
+    # reach QG drafting, because `research.py` requires a policy version.
+    authority = lab_authority()
     class Bank:
         def lookup(self,*a):
-            return dict(outcome=bank_outcome, item_version='SYN-Q1@1', approval_receipt='SYN-ONLY')
+            # The real authority requires the no-equivalent receipt to be lab-scoped,
+            # so this double must declare the scope it actually operates in.
+            return dict(outcome=bank_outcome, item_version='SYN-Q1@1',
+                        approval_receipt='SYN-ONLY', scope='SYNTHETIC_PRIVATE_LAB_ONLY')
         def verify_receipt(self,*a):
             if bank_outcome not in {'verified_no_equivalent','verified_equivalent'}:
                 raise WorkflowHeld('BANK_AUTHORITY_UNVERIFIED')
@@ -218,7 +240,7 @@ def research(bank_outcome='verified_no_equivalent', route='CUSTOMER_SURVEY_CANDI
                  measurement=deepcopy(m), justification='Synthetic only')
         if mutate: mutate(raw)
         return raw
-    w = ResearchWorkflow(SimpleNamespace(get_context=lambda _:deepcopy(packet)), Authority(),Bank(),runner)
+    w = ResearchWorkflow(SimpleNamespace(get_context=lambda _:deepcopy(packet)), authority,Bank(),runner)
     return w, calls
 
 
@@ -256,6 +278,31 @@ def test_qg_cannot_change_frozen_measurement(field):
 def test_price_wording_change_rejected_even_if_metadata_unchanged():
     w,_=research(mutate=lambda raw:raw.update(question=raw['question'].replace('RM13','RM9')))
     with pytest.raises(WorkflowHeld): w.execute(None)
+
+
+def test_currency_amount_change_rejected_even_when_stimulus_is_quoted_verbatim():
+    """D-01: the frozen stimulus is echoed, then a second, different price is added.
+
+    A bare number-subset check passes here because "12 oz" already permits the
+    token "12", so this case is what distinguishes a real amount guard from one
+    that only counts digits.
+    """
+    def add_price(text):
+        def change(raw):
+            raw['question'] = raw['question'] + ' ' + text
+        return change
+    # Prove the case really exercises the hole: the old digit-subset rule holds.
+    _, measurement = context_and_measurement()
+    probe = ('For local adults next month: ' + measurement['stimulus'] +
+             ' — which option? Would you pay RM12 instead?')
+    permitted = set(re.findall(r'\d+(?:\.\d+)?', ' '.join(
+        (measurement['stimulus'], measurement['population'], measurement['timeframe']))))
+    assert set(re.findall(r'\d+(?:\.\d+)?', probe)) <= permitted
+    with pytest.raises(WorkflowHeld, match='QG_UNSOURCED_AMOUNT'):
+        research(mutate=add_price('Would you pay RM12 instead?'))[0].execute(None)
+    # Control: restating the frozen price is still allowed.
+    w,_ = research(mutate=add_price('Would you pay RM13 instead?'))
+    assert w.execute(None)['qg']['decision'] == 'DRAFT'
 
 
 def test_model_reservation_before_dispatch_and_unknown_receipt():
@@ -311,7 +358,11 @@ def test_http_active_role_mfa_and_extra_approval_fields(monkeypatch):
 def test_configuration_rejects_analytics_and_superuser(monkeypatch):
     from sitewise.api.v1 import project1_workflow as api
     from fastapi import HTTPException
+    from pydantic import SecretStr
     monkeypatch.setattr(api.settings,'project1_workflow_enabled',True)
+    # This test exercises the main-URL fallback, independently of a developer's
+    # configured dedicated M2 connection.
+    monkeypatch.setattr(api.settings, 'm2_database_url', SecretStr(''))
     for url in ['postgresql://postgres@localhost/Dss','postgresql://service@localhost/Final_Location_Analysis']:
         monkeypatch.setattr(api.settings,'database_url',url)
         with pytest.raises(HTTPException): api.configuration_gate(None)
@@ -348,8 +399,10 @@ def test_unregistered_measurement_source_blocks_drafting():
     from sitewise.project1.research import validate_measurement
     packet,m=context_and_measurement()
     m['source_refs'].append('INVENTED@1')
-    with pytest.raises(WorkflowHeld):
-        validate_measurement(Measurement.model_validate(m),packet,'SYN-UC-1@1')
+    # The version argument must be the resolved one, otherwise the refusal would
+    # come from the version comparison and this test would prove nothing about refs.
+    with pytest.raises(WorkflowHeld, match='MEASUREMENT_SOURCE_MISMATCH'):
+        validate_measurement(Measurement.model_validate(m),packet,'SYN-UC-1')
 
 
 def test_model_cannot_hide_reproducible_conflict(repo):
@@ -439,3 +492,119 @@ def test_source_ref_instrument_namespace(version,key,source_key,valid):
     else:
         with pytest.raises((ValidationError,WorkflowHeld)):
             validate_candidates(raw,packet,{'SYN'})
+
+
+@pytest.mark.parametrize('quote,admitted', [
+    # BDJ-QUOTE-01: only a span copied from the declaration value is evidence.
+    ('STUDENTS', True),
+    ('Which groups of customers do you currently intend to serve?', False),
+    ('Which groups of customers do you currently intend to serve? = STUDENTS', False),
+])
+def test_source_quote_must_come_from_declared_value(quote,admitted):
+    packet={'instrument_version':'M2V1-20261114-1','declarations':[dict(item_key='M2V1-04',
+        answer_state='ANSWERED',value=['STUDENTS','OFFICE_WORKERS'],answer_revision_id='a',
+        item_version_id='v')]}
+    raw=dict(overall_note='Synthetic quote binding only',issues=[dict(rule_id='SYN',kind='INFORMATION_GAP',
+        source_refs=[dict(item_key='M2V1-04',answer_revision_id='a',item_version_id='v',quote=quote)],
+        observed_condition='x',counterargument='x',justification='x',next_action='x')])
+    if admitted:
+        assert validate_candidates(raw,packet,{'SYN'}).issues
+    else:
+        with pytest.raises(WorkflowHeld,match='BDJ_SOURCE_QUOTE_INVALID'):
+            validate_candidates(raw,packet,{'SYN'})
+
+
+# ---------------------------------------------------------------------------
+# F-01 / F-02 at the workflow boundary
+# ---------------------------------------------------------------------------
+def _no_op_authority():
+    """The exact shape every authority in the tree used to have."""
+    class NoOp:
+        def admit_qj(self,p): return {'uncertainty_version':'SYN-UC-1'}
+        def require_current(self,*a): pass
+        def validate_measurement(self,*a): pass
+        def require_drafting(self,*a): pass
+    return NoOp()
+
+
+def test_qj_input_carries_the_resolved_version_verbatim():
+    """F-01: the model must be shown the value it is required to echo."""
+    w,_=research('verified_equivalent')
+    seen={}
+    inner=w.runner
+    def capture(stage,payload,output_type):
+        if stage=='QJ': seen['payload']=payload
+        return inner(stage,payload,output_type)
+    w.runner=capture
+    w.execute(None)
+    assert seen['payload']['admission']['uncertainty_version']=='SYN-UC-1'
+    assert (seen['payload']['admission']['uncertainty_version']
+            == seen['payload']['context']['confirmed_uncertainty']['id'])
+    assert seen['payload']['admission']['uncertainty_version_basis']=='confirmed_uncertainty.id'
+
+
+def test_qj_prompt_names_the_field_and_the_copy_rule():
+    """The root cause of F-01 was an unnamed field, so the prompt is the guard."""
+    prompt=PROMPTS['QJ']
+    assert prompt.version=='QJ-MEASURE-2-CAND'
+    assert 'uncertainty_version' in prompt.instruction
+    assert 'admission.uncertainty_version' in prompt.instruction
+    assert 'character for character' in prompt.instruction
+
+
+def test_no_op_authority_cannot_reach_qg_drafting():
+    """F-02: the no-op that used to authorise a draft is refused at validation.
+
+    The refusal now happens earlier than the QG marker check: a survey candidate
+    cannot be produced at all without a verifiable validation receipt, so QG is
+    never reached and no model call is spent on a candidate that has no policy.
+    """
+    w,calls=research()
+    w.authority=_no_op_authority()
+    with pytest.raises(WorkflowHeld,match='MEASUREMENT_RECEIPT_MISSING'):
+        w.execute(None)
+    assert calls==['QJ']
+
+
+def test_a_no_op_authority_cannot_produce_a_survey_candidate():
+    """There is no such thing as a labelled-but-unvalidated survey candidate.
+
+    An earlier version recorded `NOT_RECORDED_BY_AUTHORITY` and continued. That
+    still admitted an unchecked measurement into the bank comparison, which is the
+    bypass the directive closes: a successful survey candidate must carry a genuine
+    validation result, so the absence of one is a refusal rather than a label.
+    """
+    w,_=research('verified_equivalent')
+    w.authority=_no_op_authority()
+    with pytest.raises(WorkflowHeld,match='MEASUREMENT_RECEIPT_MISSING'):
+        w.execute(None)
+
+
+def test_a_fabricated_authority_cannot_borrow_a_policy_version():
+    """Claiming a registered policy version is not enough: the digest must match."""
+    class Fabricated:
+        measurement_policy_version='QJ-MEASUREMENT-INVARIANTS-0.1'
+        def admit_qj(self,p): return {'uncertainty_version':'SYN-UC-1'}
+        def require_current(self,*a): pass
+        def validate_measurement(self,packet,task,measurement):
+            return {'status':'TEST_SCOPED_VALID',
+                    'policy_version':'QJ-MEASUREMENT-INVARIANTS-0.1',
+                    'policy_digest':'fabricated','measurement_digest':'fabricated',
+                    'bcb_packet_hash':packet['packet_hash'],
+                    'uncertainty_version':'SYN-UC-1','receipt_id':'fabricated',
+                    'scientific_accepted':False,'fielding_authorized':False,
+                    'production_eligible':False}
+        def require_drafting(self,*a): pass
+    w,_=research()
+    w.authority=Fabricated()
+    with pytest.raises(WorkflowHeld,match='MEASUREMENT_RECEIPT_POLICY_DIGEST_MISMATCH'):
+        w.execute(None)
+
+
+def test_real_authority_records_its_receipt_in_the_result():
+    w,_=research('verified_equivalent')
+    result=w.execute(None)
+    assert result['measurement_validation']['status']=='TEST_SCOPED_VALID'
+    assert result['measurement_validation']['policy_version']
+    assert result['measurement_validation']['production_eligible'] is False
+    assert result['admission']['uncertainty_version']=='SYN-UC-1'

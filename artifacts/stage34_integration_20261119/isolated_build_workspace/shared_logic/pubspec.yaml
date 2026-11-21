@@ -1,0 +1,30 @@
+name: shared_logic
+description: >-
+  Framework-free domain and data layers shared by the Sitewise Flutter app and
+  the Jaspr web app. No Flutter, no Jaspr, no third-party dependencies.
+version: 0.1.0
+publish_to: none
+
+environment:
+  sdk: ^3.12.0
+
+# Member of the fyp_workspace pub workspace: dependency resolution and the
+# lockfile are shared with the sibling packages.
+resolution: workspace
+
+# Pure Dart only. A dependency is acceptable here when it is itself pure Dart
+# and therefore usable from both apps: a Flutter-only or Jaspr-only package
+# would break the other platform's build.
+#
+# `riverpod` backs every notifier in
+# `src/application/notifiers/` (M2 assessment included), which replaced the
+# former `bloc` Cubits. `package:bloc` is no longer imported anywhere in the
+# monorepo, so the `bloc` declaration was dropped with it. Pure Dart `crypto`
+# verifies the Python CQ manifest/receipt digest on both mobile and web.
+dependencies:
+  crypto: 3.0.8
+  riverpod: ^3.3.2
+dev_dependencies:
+  # 1.31.1 requires test_api 0.7.12, but flutter_test (SDK 3.44.6) pins 0.7.11.
+  # Bumping this breaks workspace resolution for both apps.
+  test: 1.31.0

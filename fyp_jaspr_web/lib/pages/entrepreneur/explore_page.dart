@@ -801,7 +801,7 @@ class _ExplorePageState extends State<ExplorePage> {
         ]),
         ActionLink(
           'Assess this property',
-          href: '/entrepreneur/assessment?id=${Uri.encodeComponent(center.id)}',
+          href: '/entrepreneur/assessments?id=${Uri.encodeComponent(center.id)}',
         ),
       ]),
       div(classes: 'swcx-insights-layout', [

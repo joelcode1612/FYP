@@ -4,11 +4,16 @@ import 'package:jaspr_riverpod/jaspr_riverpod.dart';
 import 'package:shared_logic/shared_logic.dart';
 
 import '../../components/assessment_journey_stepper.dart';
+import '../../components/customer_questionnaire_step5.dart';
+import '../../components/m2_workflow_panel.dart' show M2WorkflowPanel;
+import '../../components/project1_research_stage_panel.dart'
+    show Project1ResearchStagePanel;
 import '../../components/dashboard_kit.dart' show SitewiseDialog;
 import '../../components/ui.dart';
 import '../../data/app_locator.dart';
 import '../../data/assessment_api.dart';
 import '../../data/assessment_report.dart';
+import '../../data/stage3_access.dart';
 import '../../layouts/app_layout.dart';
 import 'assessment_report_view.dart';
 
@@ -144,8 +149,9 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
 
   /// The property the workspace flow is bound to: the URL's `?id=` when
   /// present, otherwise the in-place selection from the listing.
-  String get _activePropertyId =>
-      component.propertyId.isNotEmpty ? component.propertyId : (_openPropertyId ?? '');
+  String get _activePropertyId => component.propertyId.isNotEmpty
+      ? component.propertyId
+      : (_openPropertyId ?? '');
 
   /// True when the workspace was opened in place from the listing (no `?id=`
   /// in the URL), so a back-to-assessments control is offered.
@@ -160,6 +166,128 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
   /// requirements form can seed itself from what is actually persisted.
   AssessmentRecord? _record;
 
+  String? _readinessAssessmentId;
+  Map<String, dynamic>? _workflowReadiness;
+  String? _readinessError;
+  int _readinessRequest = 0;
+  bool _declarationEditing = false;
+
+  void _invalidateWorkflowReadiness() {
+    _readinessRequest++;
+    _readinessAssessmentId = null;
+    _workflowReadiness = null;
+    _readinessError = null;
+    _previewAssessmentId = null;
+    _previewFuture = null;
+    _declarationEditing = false;
+    _m2LinkRequest++;
+    _m2LinkFor = '';
+    _m2LinkId = '';
+    _m2LinkStatus = 'idle';
+    _m2LinkError = null;
+  }
+
+  Future<void> _refreshWorkflowReadiness(String assessmentId) async {
+    if (!mounted ||
+        _readinessAssessmentId != assessmentId ||
+        _declarationEditing) {
+      return;
+    }
+    final request = ++_readinessRequest;
+    setState(() {
+      _workflowReadiness = null;
+      _readinessError = null;
+    });
+    final result = await _api.workflowReadiness(assessmentId);
+    if (!mounted ||
+        request != _readinessRequest ||
+        _readinessAssessmentId != assessmentId)
+      return;
+    setState(() {
+      _workflowReadiness = result.value;
+      if (!result.ok)
+        _readinessError =
+            result.failure?.message ??
+            'Assessment progress could not be verified.';
+    });
+  }
+
+  Future<void> _continueToBusinessReview(String assessmentId) async {
+    await _refreshWorkflowReadiness(assessmentId);
+    if (!mounted ||
+        _readinessAssessmentId != assessmentId ||
+        _declarationEditing)
+      return;
+    final readinessM2 =
+        (_workflowReadiness?['stage_2'] as Map?)?['m2_assessment_id'];
+    if ((_workflowReadiness?['stage_3'] as Map?)?['enterable'] != true ||
+        readinessM2 is! String ||
+        readinessM2.isEmpty) {
+      setState(
+        () => _readinessError ??=
+            'Confirm the current saved M2 declaration before continuing.',
+      );
+      return;
+    }
+    // Stage 2 may never have been opened in this page instance. Always verify
+    // the active relationship rather than comparing to an empty local cache.
+    final readinessRequest = _readinessRequest;
+    final linkRequest = ++_m2LinkRequest;
+    try {
+      final matches = await verifyStage3M2Link(
+        expectedM2Id: readinessM2,
+        readCurrentLink: () => AppLocator.m2.linkForMarketplace(assessmentId),
+      );
+      if (!mounted ||
+          _readinessAssessmentId != assessmentId ||
+          _declarationEditing ||
+          readinessRequest != _readinessRequest ||
+          linkRequest != _m2LinkRequest) {
+        return;
+      }
+      if (!matches) {
+        setState(() {
+          _m2LinkFor = '';
+          _m2LinkId = '';
+          _workflowReadiness = null;
+          _readinessError =
+              'The M2 link changed. Reload the linked questionnaire before continuing.';
+        });
+        return;
+      }
+      setState(() {
+        _m2LinkFor = assessmentId;
+        _m2LinkId = readinessM2;
+        _m2LinkStatus = 'linked';
+        _m2LinkError = null;
+      });
+      _openCheckpoint('location_evidence');
+    } catch (error) {
+      if (!mounted ||
+          _readinessAssessmentId != assessmentId ||
+          readinessRequest != _readinessRequest ||
+          linkRequest != _m2LinkRequest) {
+        return;
+      }
+      setState(() => _readinessError = _m2FailureText(error));
+    }
+  }
+
+  /// CP-10F: the M2 assessment resolved for the assessment currently open.
+  ///
+  /// `idle` before the first lookup, then `loading`, then `linked` (with
+  /// [_m2LinkId]), `unlinked` (no M2 record exists yet), `initializing`, or
+  /// `error`. The panel is only mounted once an id has actually been resolved,
+  /// so it can never fall back to "the newest M2 assessment".
+  String _m2LinkId = '';
+  String _m2LinkStatus = 'idle';
+  String? _m2LinkError;
+  String _m2LinkFor = '';
+  int _m2LinkRequest = 0;
+
+  /// Whether the collapsed location-scoring inputs are expanded.
+  bool _showScoringForm = false;
+
   /// Stage 2 form values. Numbers stay as text so an emptied field is visibly
   /// empty and invalid — never silently coerced to zero.
   _RequirementsDraft? _draft;
@@ -172,6 +300,8 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
   /// checkpoint is opened, so browsing another stage never calls the report
   /// assembler. The endpoint is read-only: it advances nothing.
   Future<ApiResult<AssessmentReportPayload>>? _reportFuture;
+  Future<ApiResult<QuestionnairePreviewStatus>>? _previewFuture;
+  String? _previewAssessmentId;
 
   // --- Assessments listing (the tab's default view) -------------------------
   //
@@ -224,12 +354,11 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
   /// The catalogue refs the entrepreneur selected in the dialog, in selection
   /// order.
   ///
-  /// Up to three properties may be chosen, but each still gets its OWN
-  /// independent assessment record: the backend's create-or-resume contract is
+  /// The dialog's single choice. The backend's create-or-resume contract is
   /// per property (one `property_id` per assessment row) and there is no
-  /// combined multi-property prediction or report, so this list never becomes
-  /// a single batched record.
-  static const int _maxSelections = 3;
+  /// combined multi-property prediction or report, so a shortlist only ever
+  /// produced several unrelated records from one click — which read as one
+  /// assessment and was not. See [_toggleDialogSelection].
   final List<String> _selectedRefs = <String>[];
 
   /// True while the per-property create requests are in flight.
@@ -254,9 +383,6 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
     super.initState();
     if (_inlineStages.contains(component.stage)) _openStage = component.stage;
     if (_stageKeys.contains(component.stage)) _checkpoint = component.stage;
-    if (_openStage == 'location_evidence' && component.propertyId.isNotEmpty) {
-      _evidenceFuture = _api.evidence(component.propertyId);
-    }
   }
 
   /// Re-runs the load when the route changes the property.
@@ -268,11 +394,19 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
   @override
   void didUpdateComponent(covariant AssessmentWorkspacePage oldComponent) {
     super.didUpdateComponent(oldComponent);
-    if (oldComponent.propertyId == component.propertyId) return;
-    _openStage =
-        _inlineStages.contains(component.stage) ? component.stage : null;
-    _checkpoint =
-        _stageKeys.contains(component.stage) ? component.stage : null;
+    if (oldComponent.propertyId == component.propertyId) {
+      if (oldComponent.stage != component.stage) {
+        _checkpoint = _stageKeys.contains(component.stage)
+            ? component.stage
+            : null;
+      }
+      return;
+    }
+    _invalidateWorkflowReadiness();
+    _openStage = _inlineStages.contains(component.stage)
+        ? component.stage
+        : null;
+    _checkpoint = _stageKeys.contains(component.stage) ? component.stage : null;
     _record = null;
     _draft = null;
     _draftErrors = const {};
@@ -327,6 +461,7 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
   }
 
   void _reload(String propertyId) => setState(() {
+    _invalidateWorkflowReadiness();
     _notice = null;
     _writeError = null;
     _draft = null;
@@ -339,6 +474,7 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
   /// gate→content behaviour and the mockup's showDetail/back pattern).
   /// `?id=` deep links keep working through the normal route flow.
   void _openAssessment(String propertyId, {String? stage}) => setState(() {
+    _invalidateWorkflowReadiness();
     _openPropertyId = propertyId;
     _reportRecord = null;
     _checkpoint = _stageKeys.contains(stage) ? stage : null;
@@ -356,9 +492,6 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
     _notice = null;
     _writeError = null;
     _busy = false;
-    if (_openStage == 'location_evidence') {
-      _evidenceFuture = _api.evidence(propertyId);
-    }
     _future = _open(propertyId);
   });
 
@@ -366,6 +499,7 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
   /// change — the mockup's back-to-list control. The listing is re-read so a
   /// record changed in the workspace shows its new state.
   void _closeAssessment() => setState(() {
+    _invalidateWorkflowReadiness();
     _openPropertyId = null;
     _checkpoint = null;
     _openStage = null;
@@ -557,7 +691,8 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
       _busy = false;
       _record = updated;
       _future = Future.value(_Started(updated));
-      _notice = 'Stage 2 — Business preferences is recorded as complete. '
+      _notice =
+          'Stage 2 — Business preferences is recorded as complete. '
           '${updated.completedStages} of ${updated.totalStages} stages done.';
     });
   }
@@ -580,9 +715,6 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
     _notice = null;
     _writeError = null;
     if (_openStage == 'business_requirements') _seedDraft();
-    if (_openStage == 'location_evidence') {
-      _evidenceFuture ??= _api.evidence(_activePropertyId);
-    }
   });
 
   /// Opens one independent checkpoint view. The journey stepper navigates
@@ -590,14 +722,15 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
   /// time, and an inline stage's panel expands with its checkpoint.
   void _openCheckpoint(String key) => setState(() {
     _checkpoint = key;
+    if (key == 'assessment_report') {
+      _previewAssessmentId = null;
+      _previewFuture = null;
+    }
     _notice = null;
     _writeError = null;
     if (_inlineStages.contains(key)) {
       _openStage = key;
       if (key == 'business_requirements') _seedDraft();
-      if (key == 'location_evidence') {
-        _evidenceFuture ??= _api.evidence(_activePropertyId);
-      }
     } else {
       _openStage = null;
     }
@@ -658,7 +791,8 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
 
   /// The account's assessments, from the authenticated history endpoint. The
   /// same read the report directory and assessment history use.
-  Future<ApiResult<AssessmentHistory>> _loadListing() => _api.history(limit: 50);
+  Future<ApiResult<AssessmentHistory>> _loadListing() =>
+      _api.history(limit: 50);
 
   void _reloadListing() => setState(() {
     _historyFuture = _loadListing();
@@ -685,27 +819,35 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
 
   /// Toggles one saved property in the dialog's shortlist.
   ///
-  /// A property whose details could not be resolved never reaches this
-  /// method (its checkbox is disabled), duplicates are impossible because the
-  /// toggle checks membership first, and a fourth property cannot be added.
+  /// Selects exactly one property.
+  ///
+  /// Choosing a different card REPLACES the current choice rather than adding
+  /// to it, so the dialog can never build a shortlist that turns into several
+  /// independent assessments from a single click. Choosing the selected card
+  /// again clears the selection.
   void _toggleDialogSelection(String propertyRef) => setState(() {
     if (_selectedRefs.contains(propertyRef)) {
       _selectedRefs.remove(propertyRef);
-      _dialogError = null;
-    } else if (_selectedRefs.length < _maxSelections) {
-      _selectedRefs.add(propertyRef);
-      _dialogError = null;
+    } else {
+      _selectedRefs
+        ..clear()
+        ..add(propertyRef);
     }
+    _dialogError = null;
   });
 
-  /// Creates — or resumes — one independent assessment per selected property.
+  /// Creates — or resumes — the assessment for the one selected property, then
+  /// opens it at Step 2.
   ///
-  /// The backend's create-or-resume contract is per property (one
-  /// `property_id` per assessment row), so each selection is one POST and the
-  /// requests run sequentially on purpose: each is an independent server
-  /// transaction that checks the catalogue and the account's saved list, and
-  /// refuses a property the account has not saved. A per-property refusal
-  /// never aborts the other selections.
+  /// Step 1 ("Select property") is satisfied by the dialog itself: the record
+  /// is bound to that `property_id` the moment the POST succeeds, and the
+  /// backend has already created its stage row. Landing the entrepreneur back
+  /// on Step 1 to re-pick the property they just picked would be a step that
+  /// can only be answered one way, so the dialog hands over at
+  /// `business_requirements` instead.
+  ///
+  /// A refusal keeps the dialog open with the reason verbatim; nothing is
+  /// opened on a failed create.
   Future<void> _createSelected() async {
     if (_creating || _selectedRefs.isEmpty) return;
     setState(() {
@@ -713,44 +855,36 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
       _dialogError = null;
     });
 
-    var created = 0;
-    var resumed = 0;
-    final failures = <String>[];
-    for (final ref in _selectedRefs) {
-      final started = await _api.start(ref);
-      if (!mounted) return;
-      if (!started.ok) {
-        failures.add('Property $ref — ${started.failure!.message}');
-        continue;
-      }
-      started.value!.created ? created++ : resumed++;
+    final ref = _selectedRefs.first;
+    final started = await _api.start(ref);
+    if (!mounted) return;
+    if (!started.ok) {
+      setState(() {
+        _creating = false;
+        _dialogError = 'Property $ref — ${started.failure!.message}';
+      });
+      return;
     }
 
-    if (!mounted) return;
-    final ready = created + resumed;
+    final created = started.value!.created;
     setState(() {
       _creating = false;
-      _historyFuture = _loadListing();
-      if (failures.isNotEmpty) {
-        // The dialog stays open so each refusal is visible against the
-        // selection that caused it. Everything that did succeed is already
-        // reflected in the re-read listing.
-        _dialogError = [
-          if (ready > 0)
-            '$ready assessment${ready == 1 ? '' : 's'} started, but:',
-          ...failures,
-        ].join(' ');
-        return;
-      }
       _createOpen = false;
       _selectedRefs.clear();
-      _notice = created == 0
-          ? '$resumed assessment${resumed == 1 ? '' : 's'} reopened — nothing '
-                'was duplicated. Open each property from the list below.'
-          : '$ready assessment${ready == 1 ? '' : 's'} ready: $created new, '
-                '$resumed reopened. Open each property from the list below — '
-                'the assessments are independent.';
+      _historyFuture = _loadListing();
+      // No `_notice` here: the workspace replaces this view immediately, so a
+      // banner about the listing would be a message about a page the
+      // entrepreneur is no longer looking at.
+      _notice = null;
     });
+    _openAssessment(ref, stage: 'business_requirements');
+    if (!created) {
+      setState(() {
+        _notice =
+            'You already had an assessment for this property — it was '
+            'reopened at Step 2. Nothing was duplicated.';
+      });
+    }
   }
 
   // ------------------------------------------------------------ delete dialog
@@ -784,7 +918,7 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
       _deleting = false;
       if (!result.ok) {
         _deleteError =
-            '${result.failure!.message} The assessment was not deleted.';
+            '${result.failure!.message} Reload to check the current state before retrying.';
         return;
       }
       _deleteTarget = null;
@@ -802,8 +936,6 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
           'was deleted.';
     });
   }
-
-
 
   // ------------------------------------------------------------------ render
 
@@ -915,37 +1047,37 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
     /// False only for the inner detail shells rendered under the listing —
     /// the outer combined shell keeps its single breadcrumb and page head.
     bool showHead = true,
-  }) => div(
-    classes: showHead ? 'asw-page' : 'asw-page asw-page--embedded',
-    [
-      if (showHead) ...[
-        _crumbs(leaf: leaf),
-        PageHead(
-          title: title,
-          eyebrow: eyebrow,
-          description: subtitle,
-          actions: actions,
-        ),
-      ],
-      // The dev-bypass banner is not repeated here: [AppLayout] renders it
-      // once for the whole page, and two copies stacked above the same heading
-      // read as a bug.
-      // Embedded detail has no page head, so name the selected record here —
-      // otherwise two assessments' workspace panels look identical. The
-      // actions carry the way back, since there is no page head to hold them.
-      if (!showHead)
-        div(classes: 'asw-inline-detail__head', [
-          div(classes: 'asw-inline-detail__copy', [
-            h2([Component.text(title)]),
-            if (subtitle != null && subtitle.isNotEmpty)
-              p(classes: 'asw-muted', [Component.text(subtitle)]),
-          ]),
-          if (actions.isNotEmpty)
-            div(classes: 'asw-inline-detail__actions', actions),
-        ]),
-      child,
+  }) => div(classes: showHead ? 'asw-page' : 'asw-page asw-page--embedded', [
+    if (showHead) ...[
+      _crumbs(leaf: leaf),
+      PageHead(
+        title: title,
+        // The entry page passes an empty eyebrow: its breadcrumb already
+        // says "Entrepreneur workspace", and the supplied design does not
+        // repeat it as a caption above the title.
+        eyebrow: eyebrow.isEmpty ? null : eyebrow,
+        description: subtitle,
+        actions: actions,
+      ),
     ],
-  );
+    // The dev-bypass banner is not repeated here: [AppLayout] renders it
+    // once for the whole page, and two copies stacked above the same heading
+    // read as a bug.
+    // Embedded detail has no page head, so name the selected record here —
+    // otherwise two assessments' workspace panels look identical. The
+    // actions carry the way back, since there is no page head to hold them.
+    if (!showHead)
+      div(classes: 'asw-inline-detail__head', [
+        div(classes: 'asw-inline-detail__copy', [
+          h2([Component.text(title)]),
+          if (subtitle != null && subtitle.isNotEmpty)
+            p(classes: 'asw-muted', [Component.text(subtitle)]),
+        ]),
+        if (actions.isNotEmpty)
+          div(classes: 'asw-inline-detail__actions', actions),
+      ]),
+    child,
+  ]);
 
   // --------------------------------------------------------------- listing UI
 
@@ -960,15 +1092,14 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
   Component _listing() {
     return _shell(
       title: 'My assessments',
-      eyebrow: 'Entrepreneur workspace',
+      eyebrow: '',
       subtitle:
           'Manage your location assessments and view reports at any stage.',
       actions: [
-        ActionLink(
-          'Assessment History',
-          href: '/entrepreneur/assessments/history',
-          variant: 'secondary',
-        ),
+        // The supplied design carries exactly one action here: create. The
+        // history shortcut that used to sit beside it is dropped because
+        // "History" is its own sidebar destination, so the header no longer
+        // offers two routes to the same place.
         ActionButton(
           _creating ? 'Starting…' : 'Create assessment',
           icon: 'add',
@@ -986,53 +1117,53 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
     return div(classes: 'stack stack--sections', [
       FutureBuilder<ApiResult<AssessmentHistory>>(
         future: history,
-          builder: (context, snapshot) {
-            if (snapshot.connectionState != ConnectionState.done) {
-              return section(classes: 'panel', [
-                div(classes: 'panel__head', [
-                  span(classes: 'panel__title', [
-                    Component.text('My assessments'),
-                  ]),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState != ConnectionState.done) {
+            return section(classes: 'panel', [
+              div(classes: 'panel__head', [
+                span(classes: 'panel__title', [
+                  Component.text('My assessments'),
                 ]),
-                div(classes: 'panel__body', [
-                  const Skeleton(variant: 'row', count: 4),
-                ]),
-              ]);
-            }
-            final result = snapshot.data;
-            if (result == null || !result.ok) {
-              final failure = result?.failure;
-              if (failure?.kind == AssessmentFailureKind.unauthorized) {
-                return const EmptyState(
-                  title: 'You are not signed in to this workspace',
-                  body:
-                      'Assessments belong to your account, so the service '
-                      'will only return them to a signed-in entrepreneur.',
-                  action: ActionLink(
-                    'Go to sign in',
-                    href: '/login',
-                    variant: 'primary',
-                  ),
-                );
-              }
-              return EmptyState(
-                title: 'Your assessments did not load',
+              ]),
+              div(classes: 'panel__body', [
+                const Skeleton(variant: 'row', count: 4),
+              ]),
+            ]);
+          }
+          final result = snapshot.data;
+          if (result == null || !result.ok) {
+            final failure = result?.failure;
+            if (failure?.kind == AssessmentFailureKind.unauthorized) {
+              return const EmptyState(
+                title: 'You are not signed in to this workspace',
                 body:
-                    failure?.message ??
-                    'The listing received no response. Nothing has been '
-                        'changed.',
-                action: ActionButton('Try again', onClick: _reloadListing),
+                    'Assessments belong to your account, so the service '
+                    'will only return them to a signed-in entrepreneur.',
+                action: ActionLink(
+                  'Go to sign in',
+                  href: '/login',
+                  variant: 'primary',
+                ),
               );
             }
-            return _listingPanel(result.value!);
-          },
-        ),
+            return EmptyState(
+              title: 'Your assessments did not load',
+              body:
+                  failure?.message ??
+                  'The listing received no response. Nothing has been '
+                      'changed.',
+              action: ActionButton('Try again', onClick: _reloadListing),
+            );
+          }
+          return _listingPanel(result.value!);
+        },
+      ),
 
-        if (_notice != null) _successNotice(_notice!),
-        if (_writeError != null) _errorNotice(_writeError!),
+      if (_notice != null) _successNotice(_notice!),
+      if (_writeError != null) _errorNotice(_writeError!),
 
-        if (_createOpen) _createDialog(),
-        if (_deleteTarget != null) _deleteDialog(),
+      if (_createOpen) _createDialog(),
+      if (_deleteTarget != null) _deleteDialog(),
     ]);
   }
 
@@ -1196,8 +1327,9 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
         sorted.sort(byUpdated);
       case 'title':
         sorted.sort(
-          (first, second) =>
-              (first.property?.title ?? first.propertyId).toLowerCase().compareTo(
+          (first, second) => (first.property?.title ?? first.propertyId)
+              .toLowerCase()
+              .compareTo(
                 (second.property?.title ?? second.propertyId).toLowerCase(),
               ),
         );
@@ -1229,9 +1361,8 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
         'aria-label': 'Assessment for $title',
       },
       events: events(
-        onClick: () => setState(
-          () => _selectedAssessmentId = record.assessmentId,
-        ),
+        onClick: () =>
+            setState(() => _selectedAssessmentId = record.assessmentId),
       ),
       [
         div(classes: 'asw-ecard__top', [
@@ -1266,10 +1397,7 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
               'aria-label': 'View the report for $title',
             },
             events: events(onClick: () => _openReport(record)),
-            [
-              Icon('visibility', size: 'sm'),
-              Component.text('View report'),
-            ],
+            [Icon('visibility', size: 'sm'), Component.text('View report')],
           ),
         ]),
         div(classes: 'asw-ecard__foot', [
@@ -1284,10 +1412,7 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
               'title': 'Remove this assessment',
             },
             events: events(onClick: () => _openDelete(record)),
-            [
-              Icon('delete', size: 'sm'),
-              Component.text('Remove'),
-            ],
+            [Icon('delete', size: 'sm'), Component.text('Remove')],
           ),
         ]),
       ],
@@ -1305,8 +1430,7 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
         .where((stage) => stage.number == record.currentStage)
         .firstOrNull;
     final title = property?.title ?? 'Property ${record.propertyId}';
-    final businessProfiles =
-        (record.requirements?.isEmpty ?? true) ? '0' : '1';
+    final businessProfiles = (record.requirements?.isEmpty ?? true) ? '0' : '1';
 
     return section(classes: 'panel panel--flush asw-entry__detail', [
       div(classes: 'panel__head', [
@@ -1408,7 +1532,9 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
           ]),
         ]),
         div(classes: 'asw-ecallout', [
-          span(classes: 'asw-ecallout__icon', [Icon('description', size: 'sm')]),
+          span(classes: 'asw-ecallout__icon', [
+            Icon('description', size: 'sm'),
+          ]),
           div(classes: 'asw-ecallout__copy', [
             strong([Component.text('Draft report available to view')]),
             span([
@@ -1464,7 +1590,7 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
             ),
           ]),
           ActionButton(
-            'Remove assessment',
+            'Permanently discard unfinished assessment',
             variant: 'danger-outline',
             icon: 'delete',
             onClick: () => _openDelete(record),
@@ -1475,10 +1601,11 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
   }
 
   /// One cell of the detail panel's four-cell meta grid.
-  Component _metaCell(String label, String value) => div(classes: 'asw-emeta__cell', [
-    span(classes: 'asw-emeta__label', [Component.text(label)]),
-    strong(classes: 'asw-emeta__value', [Component.text(value)]),
-  ]);
+  Component _metaCell(String label, String value) =>
+      div(classes: 'asw-emeta__cell', [
+        span(classes: 'asw-emeta__label', [Component.text(label)]),
+        strong(classes: 'asw-emeta__value', [Component.text(value)]),
+      ]);
 
   /// One "Progress & inputs" tile: icon, figure, label.
   Component _inputKpi(String icon, String value, String label) =>
@@ -1489,8 +1616,18 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
       ]);
 
   static const _monthNames = [
-    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+    'Jan',
+    'Feb',
+    'Mar',
+    'Apr',
+    'May',
+    'Jun',
+    'Jul',
+    'Aug',
+    'Sep',
+    'Oct',
+    'Nov',
+    'Dec',
   ];
 
   /// Day Month Year, or an honest dash when the server sent no timestamp.
@@ -1514,6 +1651,9 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
       title: 'Create a new assessment',
       ariaLabel: 'Create a new assessment',
       wide: true,
+      // A landscape panel: the saved properties lay out in a two-column grid
+      // beside each other instead of stacking into a tall scrolling list.
+      panelClass: 'asw-create-dialog',
       onClose: _closeCreate,
       body: FutureBuilder<AssessmentSelectableProperties>(
         future: selectable,
@@ -1532,8 +1672,9 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
               action: ActionButton(
                 'Try again',
                 onClick: () => setState(
-                  () => _selectableFuture =
-                      AppLocator.assessmentSelectableProperties.call(),
+                  () => _selectableFuture = AppLocator
+                      .assessmentSelectableProperties
+                      .call(),
                 ),
               ),
             );
@@ -1566,28 +1707,19 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
           }
 
           final visible = data.search(_dialogSearch);
-          final atLimit = _selectedRefs.length >= _maxSelections;
           return div(classes: 'stack stack--md', [
             p(classes: 'small asw-muted', [
               Component.text(
-                'Choose the saved property you want to assess. You can '
-                'select up to $_maxSelections.',
+                'Choose the one saved property you want to assess. The '
+                'assessment starts at Step 2, because this dialog is Step 1.',
               ),
             ]),
             SearchInput(
-              label: 'Select saved properties',
+              label: 'Select a saved property',
               placeholder: 'Search by property name or ID',
               ariaLabel: 'Search saved properties',
               onInput: (value) => setState(() => _dialogSearch = value),
             ),
-            if (atLimit)
-              div(classes: 'notice notice-info asw-select-limit', [
-                Component.text(
-                  'You have selected the maximum of $_maxSelections '
-                  'properties. Remove one below to choose a different '
-                  'property.',
-                ),
-              ]),
             if (visible.isEmpty)
               p(classes: 'body', [
                 Component.text(
@@ -1601,19 +1733,11 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
               div(
                 classes: 'asw-select',
                 attributes: {
-                  'role': 'group',
-                  'aria-label':
-                      'Saved properties — choose up to $_maxSelections',
+                  'role': 'radiogroup',
+                  'aria-label': 'Saved properties — choose one',
                 },
-                [for (final item in visible) _dialogChoice(item, atLimit)],
+                [for (final item in visible) _dialogChoice(item)],
               ),
-            p(classes: 'small asw-muted', [
-              Component.text(
-                'Choose at least one property. Each property gets its own '
-                'independent assessment — questionnaire, evidence, prediction '
-                'and report. The assessments are never combined.',
-              ),
-            ]),
             if (_dialogError != null)
               div(classes: 'notice notice-danger', [
                 Component.text(_dialogError!),
@@ -1627,41 +1751,45 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
           attributes: const {'aria-live': 'polite'},
           [
             Component.text(
-              '${_selectedRefs.length} of $_maxSelections selected',
+              _selectedRefs.isEmpty
+                  ? 'No property selected'
+                  : '1 property selected',
             ),
           ],
         ),
         ActionButton('Cancel', variant: 'secondary', onClick: _closeCreate),
         ActionButton(
           _creating ? 'Creating…' : 'Create Assessment',
-          onClick:
-              _selectedRefs.isEmpty || _creating ? null : _createSelected,
+          onClick: _selectedRefs.isEmpty || _creating ? null : _createSelected,
         ),
       ],
     );
   }
 
-  /// One saved property as a selectable dialog row — checkbox, image and lock
-  /// behaviour identical to the workspace's own selector cards.
-  Component _dialogChoice(SelectableProperty item, bool atLimit) {
+  /// One saved property as a selectable dialog card.
+  ///
+  /// A single choice: the control is a radio, so the browser enforces
+  /// one-at-a-time and screen readers announce the group as a radiogroup. A
+  /// property whose listing could not be resolved stays visible but is never
+  /// selectable.
+  Component _dialogChoice(SelectableProperty item) {
     final property = item.property;
     final unavailable = property == null;
     final selected = _selectedRefs.contains(item.propertyRef);
-    final locked = !selected && (atLimit || unavailable);
 
     return label(
       classes: [
         'asw-select-card',
         if (selected) 'is-selected',
-        if (locked) 'asw-select-card--locked',
+        if (unavailable) 'asw-select-card--locked',
       ].join(' '),
       [
         input<bool>(
-          type: InputType.checkbox,
+          type: InputType.radio,
           name: 'create-assessment-property',
           value: item.propertyRef,
           checked: selected,
-          disabled: locked,
+          disabled: unavailable,
           onChange: (_) => _toggleDialogSelection(item.propertyRef),
         ),
         div(classes: 'asw-select-card__body', [
@@ -1723,8 +1851,8 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
     final target = _deleteTarget!;
     final title = target.property?.title ?? 'Property ${target.propertyId}';
     return SitewiseDialog(
-      title: 'Delete this assessment?',
-      ariaLabel: 'Delete this assessment',
+      title: 'Permanently discard unfinished assessment?',
+      ariaLabel: 'Permanently discard unfinished assessment',
       onClose: _closeDelete,
       body: div(classes: 'stack stack--md', [
         p(classes: 'body', [
@@ -1736,20 +1864,18 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
         p(classes: 'small asw-muted', [
           Component.text(
             'The record, its saved requirements and its stage history are '
-            'removed permanently. This cannot be undone — if you want the '
+            'removed permanently only for an eligible unfinished draft. Protected evidence is refused. This cannot be undone — if you want the '
             'property assessed again, starting it later creates a fresh '
             'assessment from stage 1.',
           ),
         ]),
         if (_deleteError != null)
-          div(classes: 'notice notice-danger', [
-            Component.text(_deleteError!),
-          ]),
+          div(classes: 'notice notice-danger', [Component.text(_deleteError!)]),
       ]),
       actions: [
         ActionButton('Cancel', variant: 'secondary', onClick: _closeDelete),
         ActionButton(
-          _deleting ? 'Deleting…' : 'Delete assessment',
+          _deleting ? 'Discarding…' : 'Permanently discard',
           variant: 'danger-outline',
           onClick: _deleting ? null : _deleteConfirmed,
         ),
@@ -1844,9 +1970,7 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
       div(classes: 'asw-guidance', [
         div(classes: 'asw-guidance__icon', [Icon('flag', size: 'sm')]),
         div(classes: 'asw-guidance__copy', [
-          p(classes: 'asw-guidance__kicker', [
-            Component.text('STEP 1 OF 5'),
-          ]),
+          p(classes: 'asw-guidance__kicker', [Component.text('STEP 1 OF 5')]),
           h2(classes: 'asw-guidance__title', [
             Component.text('Select property'),
           ]),
@@ -1857,9 +1981,7 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
             ),
           ]),
         ]),
-        span(classes: 'asw-guidance__state', [
-          Component.text('Not started'),
-        ]),
+        span(classes: 'asw-guidance__state', [Component.text('Not started')]),
       ]),
 
       section(classes: 'panel', [
@@ -1914,15 +2036,31 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
     // Cached for the requirements form's seed. Assigning during build is safe:
     // it is a plain field write and never schedules a rebuild.
     _record = record;
+    if (_readinessAssessmentId != record.assessmentId) {
+      if (_readinessAssessmentId != null) _checkpoint = null;
+      _readinessAssessmentId = record.assessmentId;
+      _workflowReadiness = null;
+      _readinessError = null;
+      _declarationEditing = false;
+      Future.microtask(() => _refreshWorkflowReadiness(record.assessmentId));
+    }
     final property = record.property;
 
     // Exactly ONE checkpoint view is on screen — the mockup's five
     // independent steps, navigated by the journey stepper.
-    final selectedKey = _checkpoint ?? record.currentStageKey;
+    //
+    // A checkpoint the user explicitly asked for may be opened for REVIEW even
+    // when the server has not marked it enterable: each panel renders its own
+    // explicit blocked state, and every write, approval and transition stays
+    // gated by server readiness. Viewing a stage grants nothing.
+    final requestedKey = _checkpoint ?? record.currentStageKey;
+    final selectedKey = _stageKeys.contains(requestedKey)
+        ? requestedKey
+        : (canViewAssessmentStage(requestedKey, _workflowReadiness)
+              ? requestedKey
+              : 'business_requirements');
     final selected =
-        record.stages
-            .where((stage) => stage.key == selectedKey)
-            .firstOrNull ??
+        record.stages.where((stage) => stage.key == selectedKey).firstOrNull ??
         record.stages
             .where((stage) => stage.number == record.currentStage)
             .firstOrNull ??
@@ -1953,13 +2091,31 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
         if (_notice != null) _successNotice(_notice!),
 
         if (_writeError != null) _errorNotice(_writeError!),
+        if (_readinessError != null && selectedKey != 'business_requirements')
+          p(classes: 'notice notice-warn', [Component.text(_readinessError!)]),
+        if (selectedKey != requestedKey)
+          p(classes: 'notice notice-warn', [
+            Component.text(
+              _workflowReadiness == null
+                  ? 'Checking assessment access. The requested stage is not yet verified.'
+                  : 'This stage is unavailable until its current server-side requirements are met.',
+            ),
+          ]),
 
         // Compact five-step tracker — the checkpoint navigator.
         AssessmentJourneyStepper(
           record: record,
           busy: _busy,
+          governedWorkflow: true,
+          workflowReadiness: _workflowReadiness,
           selectedStageKey: selected.key,
-          onOpenStage: _openCheckpoint,
+          onOpenStage: (key) {
+            if (key == 'location_evidence') {
+              _continueToBusinessReview(record.assessmentId);
+            } else {
+              _openCheckpoint(key);
+            }
+          },
         ),
 
         // One independent checkpoint at a time, each in the reference's own
@@ -1970,27 +2126,39 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
         if (selected.key == 'business_requirements')
           ..._preferencesStep(record, property),
         if (selected.key == 'location_evidence')
-          ..._findingsStep(record, selected),
+          Project1ResearchStagePanel(
+            marketplaceAssessmentId: record.assessmentId,
+            propertyId: record.propertyId,
+            stageNumber: 3,
+            onOpenStage: (key) {
+              if (canViewAssessmentStage(key, _workflowReadiness)) {
+                _openCheckpoint(key);
+              }
+            },
+          ),
         if (selected.key == 'ai_explanation')
-          ..._reviewStep(record, selected),
+          Project1ResearchStagePanel(
+            marketplaceAssessmentId: record.assessmentId,
+            propertyId: record.propertyId,
+            stageNumber: 4,
+            onOpenStage: (key) {
+              if (key == 'location_evidence') {
+                _continueToBusinessReview(record.assessmentId);
+              } else if (canViewAssessmentStage(key, _workflowReadiness)) {
+                _openCheckpoint(key);
+              }
+            },
+          ),
         if (selected.key == 'assessment_report')
           ..._reportStep(record, selected),
 
-        // Steps 1 and 2 carry their own forward action (the saved-property
-        // button and the questionnaire footer), step 4 puts the back /
-        // continue pair inside its own main column, and the report document
-        // ends with its own back / mark-complete row — so the shared footer
-        // only appears where the reference shows it: step 3.
-        if (selected.key == 'location_evidence')
-          _stepFooter(record, selected),
-
+        // Stage 3/4 research panels show only server-authorized transitions.
+        // Do not use the legacy stage footer: it bypassed research readiness.
         p(classes: 'disclaimer', [
           Component.text(
-            'A suitability score is a relative decision-support indicator. It '
-            'is not a probability of business success, a revenue or '
-            'customer-volume forecast, regulatory approval, or a guarantee of '
-            'any kind. Licensing, extraction, venting and grease-trap '
-            'requirements still need official confirmation.',
+            'Saved business declarations are planning inputs, not verified '
+            'evidence of demand or business viability. Review generated '
+            'research questions before they are considered for use.',
           ),
         ]),
       ]),
@@ -2006,14 +2174,14 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
       'This assessment is bound to its property. Review it, then move on to '
           'your business preferences.',
     'business_requirements' =>
-      'Answer the preference questions — they shape how the location is '
-          'scored against your concept.',
+      'Record your M2 business declaration and research priorities. '
+          'Your answers are saved to the linked M2 assessment.',
     'location_evidence' =>
-      'Review the measured catchment, accessibility and competitor evidence '
-          'for this property.',
+      'Review your M2 declaration and research goals; catalogue evidence is '
+          'not used as BDJ findings.',
     'ai_explanation' =>
-      'Review the customer-research questions derived from your business '
-          'preferences and decide which ones to include.',
+      'Review source-linked Direct-QG candidates and recorded owner decisions. '
+          'Owner predictions are not measured customer demand.',
     'assessment_report' =>
       'Assemble and review the full suitability report for this assessment.',
     _ => 'Continue this assessment to move closer to your report.',
@@ -2058,8 +2226,9 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
     AssessmentRecord record,
     CommercialProperty? bound,
   ) {
-    final future =
-        _selectableFuture ??= AppLocator.assessmentSelectableProperties.call();
+    final future = _selectableFuture ??= AppLocator
+        .assessmentSelectableProperties
+        .call();
     return [
       FutureBuilder<AssessmentSelectableProperties>(
         future: future,
@@ -2087,9 +2256,7 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
               icon: 'bookmark',
               title: 'Your saved properties',
               trailing: span(classes: 'small asw-muted', [
-                Component.text(
-                  total == 0 ? 'None saved' : '1 of $total bound',
-                ),
+                Component.text(total == 0 ? 'None saved' : '1 of $total bound'),
               ]),
             ),
             div(classes: 'panel__body stack stack--md', [
@@ -2174,8 +2341,7 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
         Component.text('Property ${property.id}'),
       ]),
     ]),
-    if (bound)
-      span(classes: 'asw-proprow__tag', [Component.text('Bound')]),
+    if (bound) span(classes: 'asw-proprow__tag', [Component.text('Bound')]),
   ]);
 
   // ------------------------------------------------------ step 2: preferences
@@ -2193,145 +2359,401 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
         Component.text(property?.title ?? 'Property ${record.propertyId}'),
       ]),
     ]),
-    // A record saved before the questionnaire existed keeps its own legacy
-    // editor; a v2/v3 record gets the five questions (v3 form).
-    record.requirementsVersion == 1
-        ? _legacyRequirementsPanel(record)
-        : _questionnairePanel(record),
+    // CP-10 DEF-03: M2 now owns the Step 2 questionnaire. The five-question
+    // recommender form is retained below because recommendation_scoring.py
+    // reads fnb_concept, recommendation_priority and space_size_preference,
+    // none of which M2V1 collects — deleting it would silently disable
+    // location scoring rather than replace it.
+    _m2QuestionnaireSection(record),
   ];
+
+  /// The five-question recommender, demoted from a second questionnaire to a
+  /// collapsed scoring section.
+  ///
+  /// It cannot simply be deleted: `requirements_saved_at` gates stage 2, and the
+  /// stored payload is what the stage reads back. Presenting it side by side with
+  /// the M2V1 instrument made it look like a second business declaration the
+  /// entrepreneur also had to complete. It is now closed by default, labelled for
+  /// what it is, and opened only on request.
+  Component _locationScoringSection(
+    AssessmentRecord record,
+  ) => section(classes: 'panel asw-inline', [
+    _panelHead(icon: 'tune', title: 'Location-scoring preferences'),
+    div(classes: 'panel__body stack stack--md', [
+      p(classes: 'small asw-muted', [
+        Component.text(
+          record.requirements == null
+              ? 'Not set yet. These answers feed the property recommendation '
+                    'score. They are separate from the business declaration '
+                    'above and are not M2 answers.'
+              : 'Saved. These answers feed the property recommendation score. '
+                    'They are separate from the business declaration above and '
+                    'are not M2 answers.',
+        ),
+      ]),
+      ActionButton(
+        _showScoringForm
+            ? 'Hide location preferences'
+            : 'Edit location preferences',
+        variant: 'secondary',
+        onClick: () => setState(() => _showScoringForm = !_showScoringForm),
+      ),
+      if (_showScoringForm) ...[
+        div(classes: 'asw-stepbar', [
+          h2(classes: 'asw-stepbar__title', [
+            Component.text('Property scoring inputs'),
+          ]),
+        ]),
+        record.requirementsVersion == 1
+            ? _legacyRequirementsPanel(record)
+            : _questionnairePanel(record),
+      ],
+    ]),
+  ]);
+
+  /// CP-10 DEF-03 / DEF-11: the M2V1 research questionnaire (11 items) inside
+  /// Step 2. This is the authoritative business-declaration instrument; every
+  /// value still comes from `/api/v1/m2/...` through [M2WorkflowPanel], so no
+  /// answer storage, BDJ evaluation, confirmation or BCB logic is duplicated
+  /// here.
+  ///
+  /// `requireExplicitId: true` is the DEF-11 correction. The panel is embedded
+  /// in an assessment-specific page, so it must never adopt "the owner's most
+  /// recent M2 assessment" — that would show one assessment's answers under
+  /// another's heading. Until a verified link exists, it renders an unbound
+  /// notice and no editor, which also makes saving impossible.
+  /// CP-10F: Step 2 resolves this assessment's M2 record and mounts the real
+  /// questionnaire against it.
+  ///
+  /// The lookup is started from here because Step 2 is the first place the
+  /// marketplace assessment id and the M2 panel meet. Nothing is guessed: until
+  /// the service returns an id, the panel is not mounted at all.
+  Component _m2QuestionnaireSection(AssessmentRecord record) {
+    if (_m2LinkFor != record.assessmentId) {
+      _m2LinkFor = record.assessmentId;
+      _m2LinkStatus = 'idle';
+      _m2LinkId = '';
+      _m2LinkError = null;
+      Future.microtask(() => _resolveM2Link(record.assessmentId));
+    }
+    return section(classes: 'panel asw-inline', [
+      _panelHead(
+        icon: 'fact_check',
+        title: 'Business declaration (M2 research questionnaire)',
+      ),
+      div(classes: 'panel__body stack stack--md', [
+        _m2LinkBody(record),
+        if (_readinessError != null)
+          p(classes: 'small asw-muted', [Component.text(_readinessError!)]),
+        if ((_workflowReadiness?['stage_3'] as Map?)?['enterable'] == true)
+          ActionButton(
+            'Continue to Stage 3',
+            onClick: () => _continueToBusinessReview(record.assessmentId),
+          ),
+        if (_readinessError != null && !_declarationEditing)
+          ActionButton(
+            'Retry progress check',
+            variant: 'secondary',
+            onClick: () => _refreshWorkflowReadiness(record.assessmentId),
+          ),
+      ]),
+    ]);
+  }
+
+  Component _m2LinkBody(AssessmentRecord record) {
+    switch (_m2LinkStatus) {
+      case 'linked':
+        return M2WorkflowPanel(
+          assessmentId: _m2LinkId,
+          requireExplicitId: true,
+          embedded: true,
+          marketplaceAssessmentId: record.assessmentId,
+          onDeclarationChanged: () {
+            if (_readinessAssessmentId != record.assessmentId) return;
+            _declarationEditing = false;
+            _refreshWorkflowReadiness(record.assessmentId);
+          },
+          onDeclarationEditing: () {
+            if (_readinessAssessmentId != record.assessmentId) return;
+            _readinessRequest++;
+            _declarationEditing = true;
+            setState(() {
+              _workflowReadiness = null;
+              _readinessError =
+                  'Save and review the changed declaration before continuing.';
+            });
+          },
+        );
+      case 'initializing':
+        return _m2Notice(
+          'Preparing the M2 questionnaire…',
+          'Creating this assessment\'s M2 research record. This happens once '
+              'per assessment.',
+          busy: true,
+        );
+      case 'error':
+        return _m2Notice(
+          'The M2 questionnaire could not be resolved',
+          _m2LinkError ?? 'The M2 service did not answer.',
+          action: ('Try again', () => _resolveM2Link(record.assessmentId)),
+        );
+      case 'unlinked':
+        return _m2Notice(
+          'This assessment has no M2 research record yet',
+          'Initialize it to open the 11-question business-declaration '
+              'questionnaire for this assessment. Existing M2 records are not '
+              'reused, and no other assessment\'s answers are shown.',
+          action: (
+            'Initialize M2 questionnaire',
+            () => _initializeM2Link(record.assessmentId),
+          ),
+        );
+      default:
+        return _m2Notice(
+          'Resolving the M2 questionnaire…',
+          'Looking up the M2 research record linked to this assessment.',
+          busy: true,
+        );
+    }
+  }
+
+  Component _m2Notice(
+    String title,
+    String body, {
+    bool busy = false,
+    (String, Future<void> Function())? action,
+  }) => div(classes: 'bdj-empty', [
+    p(classes: 'bdj-empty__title', [Component.text(title)]),
+    p(classes: 'bdj-empty__body', [Component.text(body)]),
+    if (busy) p(classes: 'small asw-muted', [Component.text('Working…')]),
+    if (action != null)
+      ActionButton(action.$1, variant: 'secondary', onClick: () => action.$2()),
+  ]);
+
+  Future<void> _resolveM2Link(String assessmentId) async {
+    if (_m2LinkFor != assessmentId) return;
+    final request = ++_m2LinkRequest;
+    setState(() {
+      _m2LinkStatus = 'loading';
+      _m2LinkError = null;
+    });
+    try {
+      final link = await AppLocator.m2.linkForMarketplace(assessmentId);
+      if (!mounted || _m2LinkFor != assessmentId || request != _m2LinkRequest)
+        return;
+      final id = link?['m2_assessment_id'] as String? ?? '';
+      setState(() {
+        _m2LinkId = id;
+        _m2LinkStatus = id.isEmpty ? 'unlinked' : 'linked';
+      });
+    } catch (error) {
+      if (!mounted || _m2LinkFor != assessmentId || request != _m2LinkRequest)
+        return;
+      setState(() {
+        _m2LinkStatus = 'error';
+        _m2LinkError = _m2FailureText(error);
+      });
+    }
+  }
+
+  Future<void> _initializeM2Link(String assessmentId) async {
+    if (_m2LinkFor != assessmentId) return;
+    final request = ++_m2LinkRequest;
+    setState(() {
+      _m2LinkStatus = 'initializing';
+      _m2LinkError = null;
+    });
+    try {
+      final link = await AppLocator.m2.initializeForMarketplace(assessmentId);
+      if (!mounted || _m2LinkFor != assessmentId || request != _m2LinkRequest)
+        return;
+      final id = link['m2_assessment_id'] as String? ?? '';
+      if (id.isEmpty) {
+        setState(() {
+          _m2LinkStatus = 'error';
+          _m2LinkError = 'The service returned no M2 assessment.';
+        });
+        return;
+      }
+      setState(() {
+        _m2LinkId = id;
+        _m2LinkStatus = 'linked';
+      });
+    } catch (error) {
+      if (!mounted || _m2LinkFor != assessmentId || request != _m2LinkRequest)
+        return;
+      setState(() {
+        _m2LinkStatus = 'error';
+        _m2LinkError = _m2FailureText(error);
+      });
+    }
+  }
+
+  /// A failure the entrepreneur can act on, without leaking transport detail.
+  String _m2FailureText(Object error) {
+    if (error is AppFailure) {
+      return error.backendCode ?? error.userMessage;
+    }
+    return 'The M2 service could not be reached.';
+  }
 
   // --------------------------------------------------- step 3: findings layout
 
+  /// Stage 3 remains in the persisted five-stage contract for compatibility,
+  /// but the legacy property/location-evidence questionnaire is no longer
+  /// rendered here. BDJ findings and research goals have their own governed
+  /// M2/Direct-QG workflow; this screen must not substitute catalogue metrics
+  /// for verified BDJ findings.
   List<Component> _findingsStep(
     AssessmentRecord record,
     AssessmentStage stage,
   ) => [
-    _stepHeading(
-      kicker: 'Step 3 of 5',
-      title: 'Findings & objectives',
-      icon: 'layers',
-      description:
-          'Review the measured findings for this property, mark the ones you '
-          'want to research, and record your objective.',
-    ),
-    div(classes: 'asw-2col', [
-      _evidenceFindingsPanel(record),
-      _stageDecisionPanel(record, stage),
+    div(classes: 'asw-stage3', [
+      _stepHeading(
+        kicker: 'Step 3 of 5',
+        title: 'Business review and research goals',
+        icon: 'fact_check',
+        description:
+            'Use your saved M2 declaration and its governed business review '
+            'to decide what needs customer research.',
+      ),
+      section(classes: 'panel asw-inline', [
+        div(classes: 'panel__body stack stack--md', [
+          p(classes: 'body', [
+            Component.text(
+              'Business findings and research objectives belong to the governed '
+              'M2 workflow. Research-question candidates must be reviewed '
+              'through their authorized process.',
+            ),
+          ]),
+          ActionButton(
+            'Return to M2 questionnaire',
+            variant: 'secondary',
+            onClick: () => _openCheckpoint('business_requirements'),
+          ),
+          ActionButton(
+            'Continue to question review',
+            onClick: () => _openCheckpoint('ai_explanation'),
+          ),
+        ]),
+      ]),
     ]),
   ];
 
-  /// Left panel of step 3 (BDJ findings design): the measured evidence as
-  /// selectable finding cards — a checkbox marks a finding for research, the
-  /// expander reveals its origin and information status. Values are the
-  /// backend's own.
-  Component _evidenceFindingsPanel(AssessmentRecord record) =>
-      FutureBuilder<ApiResult<EvidencePayload>>(
-        future: _evidence(record.propertyId),
-        builder: (context, snapshot) {
-          if (snapshot.connectionState != ConnectionState.done) {
-            return section(classes: 'panel asw-inline', [
-              _panelHead(icon: 'layers', title: 'Location evidence'),
-              div(classes: 'panel__body stack stack--md', [
-                Skeleton(variant: 'row'),
-                Skeleton(variant: 'row', count: 4),
+  /// Left panel of step 3: the measured CATALOGUE evidence for the property.
+  /// UI-05: this is property evidence, NOT an M2 BDJ finding. Real BDJ findings
+  /// live in `m2_bdj_findings` and are rendered by M2WorkflowPanel.
+  /// Each card is a selectable evidence metric — a checkbox marks it for
+  /// research, the expander reveals its origin and information status. Values
+  /// are the backend's own.
+  Component _evidenceFindingsPanel(
+    AssessmentRecord record,
+  ) => FutureBuilder<ApiResult<EvidencePayload>>(
+    future: _evidence(record.propertyId),
+    builder: (context, snapshot) {
+      if (snapshot.connectionState != ConnectionState.done) {
+        return section(classes: 'panel asw-inline', [
+          _panelHead(icon: 'layers', title: 'Business findings'),
+          div(classes: 'panel__body stack stack--md', [
+            Skeleton(variant: 'row'),
+            Skeleton(variant: 'row', count: 4),
+          ]),
+        ]);
+      }
+      final result = snapshot.data;
+      final payload = result?.ok == true ? result!.value : null;
+      if (payload == null || !payload.available) {
+        return section(classes: 'panel asw-inline', [
+          _panelHead(icon: 'layers', title: 'Business findings'),
+          div(classes: 'panel__body', [
+            div(classes: 'bdj-empty', [
+              p(classes: 'bdj-empty__title', [
+                Component.text('Evidence unavailable'),
               ]),
-            ]);
-          }
-          final result = snapshot.data;
-          final payload = result?.ok == true ? result!.value : null;
-          if (payload == null || !payload.available) {
-            return section(classes: 'panel asw-inline', [
-              _panelHead(icon: 'layers', title: 'Location evidence'),
-              div(classes: 'panel__body', [
-                div(classes: 'bdj-empty', [
-                  p(classes: 'bdj-empty__title', [
-                    Component.text('Evidence unavailable'),
-                  ]),
-                  p(classes: 'bdj-empty__body', [
-                    Component.text(
-                      payload?.reason ??
-                          result?.failure?.message ??
-                          'The analysis pipeline has no evidence row for this '
-                              'property yet.',
-                    ),
-                  ]),
-                  ActionButton(
-                    'Try again',
-                    variant: 'secondary',
-                    onClick: () => _retryEvidence(record.propertyId),
-                  ),
-                ]),
-              ]),
-            ]);
-          }
-
-          final metrics = [
-            for (final group in payload.groups)
-              for (final metric in group.metrics) (group: group, metric: metric),
-          ];
-          final selectedCount =
-              metrics.where((m) => _bdjSelected.contains(m.metric.key)).length;
-          final needle = _evidenceSearch.trim().toLowerCase();
-          final visible = metrics.where((entry) {
-            final matchesFilter = switch (_evidenceFilter) {
-              'selected' => _bdjSelected.contains(entry.metric.key),
-              'unselected' => !_bdjSelected.contains(entry.metric.key),
-              _ => true,
-            };
-            if (!matchesFilter) return false;
-            if (needle.isEmpty) return true;
-            return '${entry.metric.label} ${entry.metric.key} '
-                    '${entry.group.label}'
-                .toLowerCase()
-                .contains(needle);
-          }).toList();
-
-          return section(classes: 'panel asw-inline', [
-            _panelHead(
-              icon: 'layers',
-              title: 'Location evidence (${metrics.length})',
-            ),
-            div(classes: 'panel__body stack stack--md', [
-              p(classes: 'bdj-desc', [
+              p(classes: 'bdj-empty__body', [
                 Component.text(
-                  'These findings come from the measured location evidence for '
-                  'this property. Select the ones you want to explore further.',
+                  payload?.reason ??
+                      result?.failure?.message ??
+                      'The analysis pipeline has no evidence row for this '
+                          'property yet.',
                 ),
               ]),
-              div(classes: 'asw-findtools', [
-                div(classes: 'tabs', [
-                  _evidenceFilterTab('All (${metrics.length})', 'all'),
-                  _evidenceFilterTab('Selected ($selectedCount)', 'selected'),
-                  _evidenceFilterTab(
-                    'Not selected (${metrics.length - selectedCount})',
-                    'unselected',
-                  ),
-                ]),
-                div(classes: 'asw-findsearch', [
-                  SearchInput(
-                    label: 'Search findings',
-                    placeholder: 'Search findings…',
-                    ariaLabel: 'Search findings',
-                    onInput: (value) =>
-                        setState(() => _evidenceSearch = value),
-                  ),
-                ]),
-              ]),
-              if (visible.isEmpty)
-                div(classes: 'bdj-empty', [
-                  Component.text(
-                    'No findings match this view. Try another filter or search.',
-                  ),
-                ])
-              else
-                div(classes: 'bdj-finding-list', [
-                  for (final entry in visible)
-                    _bdjFindingCard(entry.group, entry.metric),
-                ]),
+              ActionButton(
+                'Try again',
+                variant: 'secondary',
+                onClick: () => _retryEvidence(record.propertyId),
+              ),
             ]),
-          ]);
-        },
-      );
+          ]),
+        ]);
+      }
+
+      final metrics = [
+        for (final group in payload.groups)
+          for (final metric in group.metrics) (group: group, metric: metric),
+      ];
+      final selectedCount = metrics
+          .where((m) => _bdjSelected.contains(m.metric.key))
+          .length;
+      final needle = _evidenceSearch.trim().toLowerCase();
+      final visible = metrics.where((entry) {
+        final matchesFilter = switch (_evidenceFilter) {
+          'selected' => _bdjSelected.contains(entry.metric.key),
+          'unselected' => !_bdjSelected.contains(entry.metric.key),
+          _ => true,
+        };
+        if (!matchesFilter) return false;
+        if (needle.isEmpty) return true;
+        return '${entry.metric.label} ${entry.metric.key} '
+                '${entry.group.label}'
+            .toLowerCase()
+            .contains(needle);
+      }).toList();
+
+      return section(classes: 'panel asw-inline', [
+        _panelHead(
+          icon: 'layers',
+          title: 'Business findings (${metrics.length})',
+        ),
+        div(classes: 'panel__body stack stack--md', [
+          p(classes: 'bdj-desc', [
+            Component.text(
+              'These are the measured business findings for this property. Select the ones you want to explore further.',
+            ),
+          ]),
+          div(classes: 'asw-findtools', [
+            div(classes: 'tabs', [
+              _evidenceFilterTab('All (${metrics.length})', 'all'),
+              _evidenceFilterTab('Selected ($selectedCount)', 'selected'),
+              _evidenceFilterTab(
+                'Not selected (${metrics.length - selectedCount})',
+                'unselected',
+              ),
+            ]),
+            div(classes: 'asw-findsearch', [
+              SearchInput(
+                label: 'Search findings',
+                placeholder: 'Search findings…',
+                ariaLabel: 'Search findings',
+                onInput: (value) => setState(() => _evidenceSearch = value),
+              ),
+            ]),
+          ]),
+          if (visible.isEmpty)
+            div(classes: 'bdj-empty', [
+              Component.text(
+                'No findings match this view. Try another filter or search.',
+              ),
+            ])
+          else
+            div(classes: 'bdj-finding-list', [
+              for (final entry in visible)
+                _bdjFindingCard(entry.group, entry.metric),
+            ]),
+        ]),
+      ]);
+    },
+  );
 
   /// One BDJ finding card: a checkbox to mark the metric for research, the
   /// metric key as the id chip, and an expander with the metric's origin
@@ -2343,8 +2765,8 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
     final detail = (metric.note != null && metric.note!.isNotEmpty)
         ? metric.note!
         : metric.isAvailable
-            ? 'Measured value: ${_metricValue(metric)}.'
-            : 'No measured value has been recorded for this metric yet.';
+        ? 'Measured value: ${_metricValue(metric)}.'
+        : 'No measured value has been recorded for this metric yet.';
     return div(classes: 'bdj-finding${selected ? ' is-selected' : ''}', [
       div(classes: 'bdj-finding__top', [
         input(
@@ -2365,9 +2787,7 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
         div(classes: 'bdj-finding__body', [
           div(classes: 'bdj-finding__heading', [
             span(classes: 'bdj-id', [Component.text(key)]),
-            p(classes: 'bdj-finding__title', [
-              Component.text(metric.label),
-            ]),
+            p(classes: 'bdj-finding__title', [Component.text(metric.label)]),
             span(classes: 'bdj-state${selected ? ' selected' : ''}', [
               Component.text(
                 selected ? 'Selected for research' : 'Not selected',
@@ -2397,9 +2817,7 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
           div(classes: 'bdj-meta', [
             div(classes: 'bdj-meta-item', [
               div(classes: 'bdj-meta-label', [Component.text('Based on')]),
-              div(classes: 'bdj-meta-value', [
-                Component.text(group.label),
-              ]),
+              div(classes: 'bdj-meta-value', [Component.text(group.label)]),
             ]),
             div(classes: 'bdj-meta-item', [
               div(classes: 'bdj-meta-label', [
@@ -2456,118 +2874,119 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
   /// record. Confirm saves through the existing stage endpoint; refine / add
   /// notes are kept for the session only — the backend has no endpoint for
   /// them, so nothing here claims server persistence.
-  Component _stageDecisionPanel(AssessmentRecord record, AssessmentStage stage) =>
-      FutureBuilder<ApiResult<EvidencePayload>>(
-        future: _evidence(record.propertyId),
-        builder: (context, snapshot) {
-          final result = snapshot.connectionState == ConnectionState.done
-              ? snapshot.data
-              : null;
-          final payload = result?.ok == true ? result!.value : null;
-          final canDecide = !stage.isComplete && !stage.isUnavailable && !_busy;
-          final hasFollowUp = _bdjDecision == 'refine' || _bdjDecision == 'add';
-          final statusText = _bdjStatus ??
-              (stage.isComplete
-                  ? 'Recorded as complete.'
-                  : stage.isUnavailable
-                      ? 'This stage cannot be completed right now.'
-                      : '');
-          return section(classes: 'panel asw-inline', [
-            _panelHead(icon: 'target', title: 'Research objective'),
-            div(classes: 'panel__body stack stack--md', [
-              p(classes: 'bdj-desc', [
+  Component _stageDecisionPanel(
+    AssessmentRecord record,
+    AssessmentStage stage,
+  ) => FutureBuilder<ApiResult<EvidencePayload>>(
+    future: _evidence(record.propertyId),
+    builder: (context, snapshot) {
+      final result = snapshot.connectionState == ConnectionState.done
+          ? snapshot.data
+          : null;
+      final payload = result?.ok == true ? result!.value : null;
+      final canDecide = !stage.isComplete && !stage.isUnavailable && !_busy;
+      final hasFollowUp = _bdjDecision == 'refine' || _bdjDecision == 'add';
+      final statusText =
+          _bdjStatus ??
+          (stage.isComplete
+              ? 'Recorded as complete.'
+              : stage.isUnavailable
+              ? 'This stage cannot be completed right now.'
+              : '');
+      return section(classes: 'panel asw-inline', [
+        _panelHead(icon: 'target', title: 'Research objective'),
+        div(classes: 'panel__body stack stack--md', [
+          p(classes: 'bdj-desc', [
+            Component.text(
+              '${_stageDescription(stage.key)} Check whether the proposed '
+              'research objective matches what you want to find out, then '
+              'record your decision.',
+            ),
+          ]),
+          div(classes: 'bdj-objective', [
+            div(classes: 'bdj-objective-title', [
+              Icon('flag', size: 'sm'),
+              Component.text('Proposed objective'),
+            ]),
+            p([Component.text(_bdjObjectiveText(payload))]),
+          ]),
+          p(classes: 'bdj-decision-title', [
+            Component.text('What would you like to do? '),
+            span(classes: 'bdj-required', [Component.text('*')]),
+          ]),
+          div(classes: 'bdj-choices', [
+            _bdjChoice(
+              record,
+              stage,
+              'confirm',
+              'check',
+              'Yes, this objective works',
+              'Keep this objective and record the stage as complete.',
+            ),
+            _bdjChoice(
+              record,
+              stage,
+              'refine',
+              'search',
+              'Clarify the objective',
+              'Adjust the wording, customer group, or focus.',
+            ),
+            _bdjChoice(
+              record,
+              stage,
+              'add',
+              'add',
+              'Add another concern',
+              'Include something else you would like to research.',
+            ),
+          ]),
+          if (hasFollowUp)
+            div(classes: 'bdj-followup', [
+              label([
                 Component.text(
-                  '${_stageDescription(stage.key)} Check whether the proposed '
-                  'research objective matches what you want to find out, then '
-                  'record your decision.',
+                  _bdjDecision == 'refine'
+                      ? 'How would you change the objective?'
+                      : 'What else would you like to research?',
                 ),
               ]),
-              div(classes: 'bdj-objective', [
-                div(classes: 'bdj-objective-title', [
-                  Icon('flag', size: 'sm'),
-                  Component.text('Proposed objective'),
-                ]),
-                p([Component.text(_bdjObjectiveText(payload))]),
-              ]),
-              p(classes: 'bdj-decision-title', [
-                Component.text('What would you like to do? '),
-                span(classes: 'bdj-required', [Component.text('*')]),
-              ]),
-              div(classes: 'bdj-choices', [
-                _bdjChoice(
-                  record,
-                  stage,
-                  'confirm',
-                  'check',
-                  'Yes, this objective works',
-                  'Keep this objective and record the stage as complete.',
-                ),
-                _bdjChoice(
-                  record,
-                  stage,
-                  'refine',
-                  'search',
-                  'Clarify the objective',
-                  'Adjust the wording, customer group, or focus.',
-                ),
-                _bdjChoice(
-                  record,
-                  stage,
-                  'add',
-                  'add',
-                  'Add another concern',
-                  'Include something else you would like to research.',
-                ),
-              ]),
-              if (hasFollowUp)
-                div(classes: 'bdj-followup', [
-                  label([
-                    Component.text(
-                      _bdjDecision == 'refine'
-                          ? 'How would you change the objective?'
-                          : 'What else would you like to research?',
-                    ),
-                  ]),
-                  textarea(
-                    const [],
-                    rows: 3,
-                    placeholder: _bdjDecision == 'refine'
-                        ? 'Example: Focus on office workers within walking '
-                            'distance of the property…'
-                        : 'Example: Will customers use delivery services in '
-                            'this area?',
-                    attributes: const {
-                      'maxlength': '600',
-                      'aria-label': 'Follow-up details',
-                    },
-                    onInput: (value) => _bdjDetails = value,
-                  ),
-                  small([
-                    Component.text(
-                      'Use simple wording that describes what you want to learn.',
-                    ),
-                  ]),
-                ]),
-              if (stage.isUnavailable && stage.unavailableReason != null)
-                div(classes: 'notice notice-warn', [
-                  Component.text(stage.unavailableReason!),
-                ]),
-              div(classes: 'bdj-decision-foot', [
-                div(classes: 'bdj-save-status${_bdjStatusError ? ' error' : ''}', [
-                  Component.text(statusText),
-                ]),
-                ActionButton(
-                  _busy ? 'Saving…' : 'Save decision',
-                  icon: 'save',
-                  onClick: canDecide
-                      ? () => _saveBdjDecision(record, stage)
-                      : null,
+              textarea(
+                const [],
+                rows: 3,
+                placeholder: _bdjDecision == 'refine'
+                    ? 'Example: Focus on office workers within walking '
+                          'distance of the property…'
+                    : 'Example: Will customers use delivery services in '
+                          'this area?',
+                attributes: const {
+                  'maxlength': '600',
+                  'aria-label': 'Follow-up details',
+                },
+                onInput: (value) => _bdjDetails = value,
+              ),
+              small([
+                Component.text(
+                  'Use simple wording that describes what you want to learn.',
                 ),
               ]),
             ]),
-          ]);
-        },
-      );
+          if (stage.isUnavailable && stage.unavailableReason != null)
+            div(classes: 'notice notice-warn', [
+              Component.text(stage.unavailableReason!),
+            ]),
+          div(classes: 'bdj-decision-foot', [
+            div(classes: 'bdj-save-status${_bdjStatusError ? ' error' : ''}', [
+              Component.text(statusText),
+            ]),
+            ActionButton(
+              _busy ? 'Saving…' : 'Save decision',
+              icon: 'save',
+              onClick: canDecide ? () => _saveBdjDecision(record, stage) : null,
+            ),
+          ]),
+        ]),
+      ]);
+    },
+  );
 
   /// One radio-style decision card. Clicking stores the decision in component
   /// state; nothing is recorded until "Save decision" is pressed.
@@ -2581,35 +3000,32 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
   ) {
     final canDecide = !stage.isComplete && !stage.isUnavailable && !_busy;
     final checked = _bdjDecision == value;
-    return label(
-      classes: 'bdj-choice${canDecide ? '' : ' is-disabled'}',
-      [
-        input(
-          attributes: {
-            'type': 'radio',
-            'name': 'bdj-decision',
-            'value': value,
-            // Jaspr reflects `checked` only from the literal 'true'.
-            if (checked) 'checked': 'true',
-            if (!canDecide) 'disabled': '',
-          },
-          events: events(
-            onClick: canDecide
-                ? () => setState(() {
-                      _bdjDecision = value;
-                      _bdjStatus = null;
-                      _bdjStatusError = false;
-                    })
-                : null,
-          ),
+    return label(classes: 'bdj-choice${canDecide ? '' : ' is-disabled'}', [
+      input(
+        attributes: {
+          'type': 'radio',
+          'name': 'bdj-decision',
+          'value': value,
+          // Jaspr reflects `checked` only from the literal 'true'.
+          if (checked) 'checked': 'true',
+          if (!canDecide) 'disabled': '',
+        },
+        events: events(
+          onClick: canDecide
+              ? () => setState(() {
+                  _bdjDecision = value;
+                  _bdjStatus = null;
+                  _bdjStatusError = false;
+                })
+              : null,
         ),
-        span(classes: 'bdj-choice-icon', [Icon(icon, size: 'sm')]),
-        span(classes: 'bdj-choice-text', [
-          Component.text(title),
-          small([Component.text(detail)]),
-        ]),
-      ],
-    );
+      ),
+      span(classes: 'bdj-choice-icon', [Icon(icon, size: 'sm')]),
+      span(classes: 'bdj-choice-text', [
+        Component.text(title),
+        small([Component.text(detail)]),
+      ]),
+    ]);
   }
 
   /// The proposed objective, composed honestly from the findings the user
@@ -2679,221 +3095,202 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
   /// Step 2 and from the measured evidence of Step 3. The production API has no
   /// question-generator endpoint (the M2/BDJ generator is governance-gated), so
   /// nothing here is presented as a model output and nothing is persisted.
-  List<Component> _reviewStep(AssessmentRecord record, AssessmentStage stage) =>
-      [
-        _stepHeading(
-          kicker: 'Step 4 of 5',
-          title: 'Research question review',
-          icon: 'fact_check',
-          description:
-              'Review the suggested questions, check how well they match your '
-              'research objective, and decide which to include.',
-        ),
-        FutureBuilder<ApiResult<EvidencePayload>>(
-          future: _evidence(record.propertyId),
-          builder: (context, snapshot) {
-            // Relevance is decided by which themes Step 3 measured, so the list
-            // is only rendered once the evidence read has settled — otherwise
-            // every candidate would flash as "low" while it loads.
-            if (snapshot.connectionState != ConnectionState.done) {
-              return section(classes: 'panel asw-inline', [
-                div(classes: 'panel__body stack stack--md', [
-                  Skeleton(variant: 'row', count: 5),
-                ]),
-              ]);
-            }
-            final payload = snapshot.data?.ok == true
-                ? snapshot.data!.value
-                : null;
-            final evidence = payload != null && payload.available
-                ? payload
-                : null;
-            final candidates = _reviewCandidates(record, evidence);
-            final decided = candidates
-                .where((item) => _reviewDecisions.containsKey(item.id))
-                .length;
-            final approved = candidates
-                .where((item) => _reviewDecisions[item.id] == 'approve')
-                .length;
-            final rejected = candidates
-                .where((item) => _reviewDecisions[item.id] == 'reject')
-                .length;
-            final pending = candidates.length - approved - rejected;
-            final visible = _reviewFilter == 'decided'
-                ? candidates
-                      .where((item) => _reviewDecisions.containsKey(item.id))
-                      .toList()
-                : candidates;
+  List<Component> _reviewStep(
+    AssessmentRecord record,
+    AssessmentStage stage,
+  ) => [
+    _stepHeading(
+      kicker: 'Step 4 of 5',
+      title: 'Research question review',
+      icon: 'fact_check',
+      description:
+          'Review the suggested questions, check how well they match your '
+          'research objective, and decide which to include.',
+    ),
+    FutureBuilder<ApiResult<EvidencePayload>>(
+      future: _evidence(record.propertyId),
+      builder: (context, snapshot) {
+        // Relevance is decided by which themes Step 3 measured, so the list
+        // is only rendered once the evidence read has settled — otherwise
+        // every candidate would flash as "low" while it loads.
+        if (snapshot.connectionState != ConnectionState.done) {
+          return section(classes: 'panel asw-inline', [
+            div(classes: 'panel__body stack stack--md', [
+              Skeleton(variant: 'row', count: 5),
+            ]),
+          ]);
+        }
+        final payload = snapshot.data?.ok == true ? snapshot.data!.value : null;
+        final evidence = payload != null && payload.available ? payload : null;
+        final candidates = _reviewCandidates(record, evidence);
+        final decided = candidates
+            .where((item) => _reviewDecisions.containsKey(item.id))
+            .length;
+        final approved = candidates
+            .where((item) => _reviewDecisions[item.id] == 'approve')
+            .length;
+        final rejected = candidates
+            .where((item) => _reviewDecisions[item.id] == 'reject')
+            .length;
+        final pending = candidates.length - approved - rejected;
+        final visible = _reviewFilter == 'decided'
+            ? candidates
+                  .where((item) => _reviewDecisions.containsKey(item.id))
+                  .toList()
+            : candidates;
 
-            return div(classes: 'asw-rqr', [
-              div(classes: 'asw-rqr__main', [
-                div(classes: 'asw-rqr__tabsbar', [
-                  div(classes: 'asw-rqr__tabs', [
-                    _reviewTab('Question candidates', candidates.length, 'all'),
-                    _reviewTab('Decided', decided, 'decided'),
-                  ]),
-                  button(
-                    classes: 'asw-rqr__add',
-                    attributes: {
-                      'type': 'button',
-                      'aria-expanded': _reviewAddOpen ? 'true' : 'false',
-                      'aria-controls': 'asw-rqr-addform',
-                    },
-                    events: events(
-                      onClick: () => setState(() {
-                        _reviewAddOpen = !_reviewAddOpen;
-                        _reviewAddError = null;
-                      }),
-                    ),
-                    [
-                      Icon('add', size: 'sm'),
-                      Component.text('Add a question'),
-                    ],
-                  ),
-                ]),
-                if (_reviewAddOpen) _reviewAddForm(),
-                if (visible.isEmpty)
-                  div(classes: 'asw-rqr__empty', [
-                    Component.text(
-                      _reviewFilter == 'decided'
-                          ? 'No reviewed questions yet. Choose '
-                                '“Question candidates” to make a decision.'
-                          : 'No question candidates yet. Save your business '
-                                'preferences in Step 2 to derive them.',
-                    ),
-                  ])
-                else
-                  div(classes: 'asw-rqr__groups', [
-                    for (final group in const ['high', 'low', 'custom'])
-                      ..._reviewGroup(
-                        group,
-                        visible
-                            .where((item) => item.group == group)
-                            .toList(),
-                      ),
-                  ]),
-                div(classes: 'asw-rqr__actions', [
-                  ActionButton(
-                    'Back to Step 3',
-                    variant: 'secondary',
-                    icon: 'arrow_back',
-                    onClick: () => _openCheckpoint('location_evidence'),
-                  ),
-                  div(classes: 'asw-rqr__actionright', [
-                    if (pending > 0)
-                      span(
-                        classes: 'asw-rqr__status',
-                        attributes: const {'aria-live': 'polite'},
-                        [Component.text('$pending still to decide')],
-                      ),
-                    ActionButton(
-                      'Continue to Step 5',
-                      icon: 'arrow_forward',
-                      onClick: () => _openCheckpoint('assessment_report'),
-                    ),
-                  ]),
-                ]),
-                p(classes: 'asw-rqr__footnote', [
-                  Component.text(
-                    'Questions are derived from the business preferences you '
-                    'saved in Step 2. “Relevance” marks whether Step 3 '
-                    'measured evidence for the same theme — it is a coverage '
-                    'hint, not a model score. Decisions stay in this session '
-                    'and are not written to your assessment.',
-                  ),
-                ]),
+        return div(classes: 'asw-rqr', [
+          div(classes: 'asw-rqr__main', [
+            div(classes: 'asw-rqr__tabsbar', [
+              div(classes: 'asw-rqr__tabs', [
+                _reviewTab('Question candidates', candidates.length, 'all'),
+                _reviewTab('Decided', decided, 'decided'),
               ]),
-              aside(classes: 'asw-rqr__aside', [
-                section(classes: 'asw-rqr__box', [
-                  h3(classes: 'asw-rqr__boxhead', [
-                    Icon('monitoring', size: 'sm'),
-                    Component.text('Review progress'),
-                  ]),
-                  div(classes: 'asw-rqr__kvs', [
-                    _reviewKv('Total candidates', '${candidates.length}'),
-                    _reviewKv(
-                      'Approved',
-                      '$approved',
-                      mark: '✓',
-                      tone: 'ok',
-                    ),
-                    _reviewKv(
-                      'Rejected',
-                      '$rejected',
-                      mark: '×',
-                      tone: 'bad',
-                    ),
-                    _reviewKv(
-                      'Pending decision',
-                      '$pending',
-                      mark: '○',
-                      tone: 'wait',
-                    ),
-                  ]),
+              button(
+                classes: 'asw-rqr__add',
+                attributes: {
+                  'type': 'button',
+                  'aria-expanded': _reviewAddOpen ? 'true' : 'false',
+                  'aria-controls': 'asw-rqr-addform',
+                },
+                events: events(
+                  onClick: () => setState(() {
+                    _reviewAddOpen = !_reviewAddOpen;
+                    _reviewAddError = null;
+                  }),
+                ),
+                [Icon('add', size: 'sm'), Component.text('Add a question')],
+              ),
+            ]),
+            if (_reviewAddOpen) _reviewAddForm(),
+            if (visible.isEmpty)
+              div(classes: 'asw-rqr__empty', [
+                Component.text(
+                  _reviewFilter == 'decided'
+                      ? 'No reviewed questions yet. Choose '
+                            '“Question candidates” to make a decision.'
+                      : 'No question candidates yet. Save your business '
+                            'preferences in Step 2 to derive them.',
+                ),
+              ])
+            else
+              div(classes: 'asw-rqr__groups', [
+                for (final group in const ['high', 'low', 'custom'])
+                  ..._reviewGroup(
+                    group,
+                    visible.where((item) => item.group == group).toList(),
+                  ),
+              ]),
+            div(classes: 'asw-rqr__actions', [
+              ActionButton(
+                'Back to Step 3',
+                variant: 'secondary',
+                icon: 'arrow_back',
+                onClick: () => _openCheckpoint('location_evidence'),
+              ),
+              div(classes: 'asw-rqr__actionright', [
+                if (pending > 0)
+                  span(
+                    classes: 'asw-rqr__status',
+                    attributes: const {'aria-live': 'polite'},
+                    [Component.text('$pending still to decide')],
+                  ),
+                ActionButton(
+                  'Continue to Step 5',
+                  icon: 'arrow_forward',
+                  onClick: () => _openCheckpoint('assessment_report'),
+                ),
+              ]),
+            ]),
+            p(classes: 'asw-rqr__footnote', [
+              Component.text(
+                'Questions are derived from the business preferences you '
+                'saved in Step 2. “Relevance” marks whether Step 3 '
+                'measured evidence for the same theme — it is a coverage '
+                'hint, not a model score. Decisions stay in this session '
+                'and are not written to your assessment.',
+              ),
+            ]),
+          ]),
+          aside(classes: 'asw-rqr__aside', [
+            section(classes: 'asw-rqr__box', [
+              h3(classes: 'asw-rqr__boxhead', [
+                Icon('monitoring', size: 'sm'),
+                Component.text('Review progress'),
+              ]),
+              div(classes: 'asw-rqr__kvs', [
+                _reviewKv('Total candidates', '${candidates.length}'),
+                _reviewKv('Approved', '$approved', mark: '✓', tone: 'ok'),
+                _reviewKv('Rejected', '$rejected', mark: '×', tone: 'bad'),
+                _reviewKv(
+                  'Pending decision',
+                  '$pending',
+                  mark: '○',
+                  tone: 'wait',
+                ),
+              ]),
+              div(
+                classes: 'asw-rqr__track',
+                attributes: {
+                  'role': 'progressbar',
+                  'aria-valuemin': '0',
+                  'aria-valuemax': '100',
+                  'aria-valuenow': candidates.isEmpty
+                      ? '0'
+                      : '${(100 * decided / candidates.length).round()}',
+                  'aria-label': 'Questions reviewed',
+                },
+                [
                   div(
-                    classes: 'asw-rqr__track',
-                    attributes: {
-                      'role': 'progressbar',
-                      'aria-valuemin': '0',
-                      'aria-valuemax': '100',
-                      'aria-valuenow': candidates.isEmpty
-                          ? '0'
-                          : '${(100 * decided / candidates.length).round()}',
-                      'aria-label': 'Questions reviewed',
-                    },
-                    [
-                      div(
-                        classes: 'asw-rqr__fill',
-                        styles: Styles(
-                          width: Unit.percent(
-                            candidates.isEmpty
-                                ? 0
-                                : 100 * decided / candidates.length,
-                          ),
-                        ),
-                        const [],
+                    classes: 'asw-rqr__fill',
+                    styles: Styles(
+                      width: Unit.percent(
+                        candidates.isEmpty
+                            ? 0
+                            : 100 * decided / candidates.length,
                       ),
-                    ],
-                  ),
-                ]),
-                section(classes: 'asw-rqr__box', [
-                  h3(classes: 'asw-rqr__boxhead', [
-                    Icon('target', size: 'sm'),
-                    Component.text('Research objective'),
-                    span(classes: 'asw-rqr__ro', [
-                      Component.text('Read only'),
-                    ]),
-                  ]),
-                  p(classes: 'asw-rqr__objective', [
-                    Component.text(_reviewObjective(record)),
-                  ]),
-                ]),
-                section(classes: 'asw-rqr__box', [
-                  h3(classes: 'asw-rqr__boxhead', [
-                    Icon('description', size: 'sm'),
-                    Component.text('Findings & context'),
-                  ]),
-                  p(classes: 'asw-rqr__aside-label', [
-                    Component.text('From Step 3'),
-                  ]),
-                  ul(classes: 'asw-rqr__context', [
-                    for (final line in _reviewContext(evidence))
-                      li([Component.text(line)]),
-                  ]),
-                  div(classes: 'asw-rqr__boxfoot', [
-                    ActionLink(
-                      'Open the full analysis',
-                      href:
-                          '/entrepreneur/explanation?property=${Uri.encodeComponent(record.propertyId)}',
-                      variant: 'ghost',
                     ),
-                  ]),
-                ]),
+                    const [],
+                  ),
+                ],
+              ),
+            ]),
+            section(classes: 'asw-rqr__box', [
+              h3(classes: 'asw-rqr__boxhead', [
+                Icon('target', size: 'sm'),
+                Component.text('Research objective'),
+                span(classes: 'asw-rqr__ro', [Component.text('Read only')]),
               ]),
-            ]);
-          },
-        ),
-      ];
+              p(classes: 'asw-rqr__objective', [
+                Component.text(_reviewObjective(record)),
+              ]),
+            ]),
+            section(classes: 'asw-rqr__box', [
+              h3(classes: 'asw-rqr__boxhead', [
+                Icon('description', size: 'sm'),
+                Component.text('Findings & context'),
+              ]),
+              p(classes: 'asw-rqr__aside-label', [
+                Component.text('From Step 3'),
+              ]),
+              ul(classes: 'asw-rqr__context', [
+                for (final line in _reviewContext(evidence))
+                  li([Component.text(line)]),
+              ]),
+              div(classes: 'asw-rqr__boxfoot', [
+                ActionLink(
+                  'Open the full analysis',
+                  href:
+                      '/entrepreneur/explanation?property=${Uri.encodeComponent(record.propertyId)}',
+                  variant: 'ghost',
+                ),
+              ]),
+            ]),
+          ]),
+        ]);
+      },
+    ),
+  ];
 
   Component _reviewTab(String label, int count, String value) => button(
     classes: 'asw-rqr__tab${_reviewFilter == value ? ' is-active' : ''}',
@@ -2933,9 +3330,7 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
         div(classes: 'asw-rqr__grouphead', [
           Icon(icon, size: 'sm'),
           strong([Component.text('$title (${items.length})')]),
-          span(classes: 'asw-rqr__groupdesc', [
-            Component.text(description),
-          ]),
+          span(classes: 'asw-rqr__groupdesc', [Component.text(description)]),
         ]),
         for (final item in items) _reviewCandidateRow(item),
       ]),
@@ -2959,13 +3354,9 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
             h4(classes: 'asw-rqr__q', [Component.text(candidate.question)]),
           ]),
           div(classes: 'asw-rqr__meta', [
-            span(
-              classes:
-                  'asw-rqr__rel asw-rqr__rel--${candidate.group}',
-              [
-                Component.text('Relevance: $relevance'),
-              ],
-            ),
+            span(classes: 'asw-rqr__rel asw-rqr__rel--${candidate.group}', [
+              Component.text('Relevance: $relevance'),
+            ]),
             span(classes: 'asw-rqr__metaitem', [
               Component.text('Source: ${candidate.source}'),
             ]),
@@ -3007,14 +3398,11 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
               'aria-expanded': expanded ? 'true' : 'false',
             },
             events: events(
-              onClick: () => setState(
-                () => _reviewExpanded[candidate.id] = !expanded,
-              ),
+              onClick: () =>
+                  setState(() => _reviewExpanded[candidate.id] = !expanded),
             ),
             [
-              Component.text(
-                expanded ? 'Hide reasoning' : 'View reasoning',
-              ),
+              Component.text(expanded ? 'Hide reasoning' : 'View reasoning'),
               Icon(expanded ? 'expand_less' : 'expand_more', size: 'sm'),
             ],
           ),
@@ -3034,9 +3422,8 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
                 classes: 'asw-rqr__undo',
                 attributes: const {'type': 'button'},
                 events: events(
-                  onClick: () => setState(
-                    () => _reviewDecisions.remove(candidate.id),
-                  ),
+                  onClick: () =>
+                      setState(() => _reviewDecisions.remove(candidate.id)),
                 ),
                 [Component.text('Undo decision')],
               ),
@@ -3088,63 +3475,63 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
     classes: 'asw-rqr__addform',
     attributes: const {'id': 'asw-rqr-addform'},
     [
-    h3([Component.text('Add your own question')]),
-    p([
-      Component.text(
-        'Include something you would like to ask potential customers.',
+      h3([Component.text('Add your own question')]),
+      p([
+        Component.text(
+          'Include something you would like to ask potential customers.',
+        ),
+      ]),
+      label([
+        Component.text('Research question '),
+        span(classes: 'asw-rqr__req', [Component.text('*')]),
+      ]),
+      textarea(
+        const [],
+        rows: 3,
+        placeholder:
+            'e.g. How often would you visit a café near this location?',
+        attributes: const {
+          'maxlength': '240',
+          'aria-label': 'Research question',
+        },
+        onInput: (value) => _reviewDraftQuestion = value,
       ),
-    ]),
-    label([
-      Component.text('Research question '),
-      span(classes: 'asw-rqr__req', [Component.text('*')]),
-    ]),
-    textarea(
-      const [],
-      rows: 3,
-      placeholder: 'e.g. How often would you visit a café near this location?',
-      attributes: const {
-        'maxlength': '240',
-        'aria-label': 'Research question',
-      },
-      onInput: (value) => _reviewDraftQuestion = value,
-    ),
-    label([
-      Component.text('Reason for asking '),
-      span(classes: 'asw-rqr__optional', [Component.text('(optional)')]),
-    ]),
-    textarea(
-      const [],
-      rows: 2,
-      placeholder: 'What do you hope to learn from the answers?',
-      attributes: const {
-        'maxlength': '400',
-        'aria-label': 'Reason for asking',
-      },
-      onInput: (value) => _reviewDraftContext = value,
-    ),
-    if (_reviewAddError != null)
-      p(classes: 'asw-rqr__adderror', [Component.text(_reviewAddError!)]),
-    div(classes: 'asw-rqr__addactions', [
-      ActionButton(
-        'Cancel',
-        variant: 'secondary',
-        onClick: () => setState(() {
-          _reviewAddOpen = false;
-          _reviewDraftQuestion = '';
-          _reviewDraftContext = '';
-          _reviewAddError = null;
-        }),
+      label([
+        Component.text('Reason for asking '),
+        span(classes: 'asw-rqr__optional', [Component.text('(optional)')]),
+      ]),
+      textarea(
+        const [],
+        rows: 2,
+        placeholder: 'What do you hope to learn from the answers?',
+        attributes: const {
+          'maxlength': '400',
+          'aria-label': 'Reason for asking',
+        },
+        onInput: (value) => _reviewDraftContext = value,
       ),
-      ActionButton('Add question', onClick: _addReviewQuestion),
-    ]),
-  ]);
+      if (_reviewAddError != null)
+        p(classes: 'asw-rqr__adderror', [Component.text(_reviewAddError!)]),
+      div(classes: 'asw-rqr__addactions', [
+        ActionButton(
+          'Cancel',
+          variant: 'secondary',
+          onClick: () => setState(() {
+            _reviewAddOpen = false;
+            _reviewDraftQuestion = '';
+            _reviewDraftContext = '';
+            _reviewAddError = null;
+          }),
+        ),
+        ActionButton('Add question', onClick: _addReviewQuestion),
+      ]),
+    ],
+  );
 
   void _addReviewQuestion() {
     final question = _reviewDraftQuestion.trim();
     if (question.length < 8) {
-      setState(
-        () => _reviewAddError = 'Please enter a complete question.',
-      );
+      setState(() => _reviewAddError = 'Please enter a complete question.');
       return;
     }
     setState(() {
@@ -3418,8 +3805,16 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
     final text = _optionCaption(question, '$raw');
     return text.isEmpty ? null : text;
   }
+
   String _optionCaption(
-    ({String id, String prompt, String help, String kind, List<(String, String)> options}) q,
+    ({
+      String id,
+      String prompt,
+      String help,
+      String kind,
+      List<(String, String)> options,
+    })
+    q,
     String token,
   ) {
     for (final (value, caption) in q.options) {
@@ -3434,107 +3829,61 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
   /// report applies to "View report" only). It states what the report contains
   /// and what is still missing, then hands over to the assembled report — which
   /// opens in place via [_openReport] and comes back here on Back.
+  /// Step 5 body: the customer questionnaire review.
+  ///
+  /// Replaces the old "report contents" summary that used to sit here. The
+  /// report document itself is untouched — it still opens from "View report"
+  /// on the assessment card and in the details panel, so this checkpoint no
+  /// longer duplicates that table. Stage completion lives inside the
+  /// questionnaire component, beside the design's own preview-only controls.
   List<Component> _reportStep(AssessmentRecord record, AssessmentStage stage) {
-    final reportReady = record.capabilities.report.available;
-    final requirementsReady =
-        record.requirements != null && record.requirements!.isNotEmpty;
-    final rows = <(String, String, bool)>[
-      ('Property summary', 'Bound property record', true),
-      (
-        'Business preferences',
-        requirementsReady ? 'Five answers recorded' : 'Not recorded yet',
-        requirementsReady,
-      ),
-      ('Location evidence', 'Measured evidence for this property', true),
-      (
-        'Model explanation',
-        record.capabilities.explanation.available
-            ? 'Verified SHAP explanation available'
-            : 'Not available',
-        record.capabilities.explanation.available,
-      ),
-      ('Requirement checks', 'Deterministic checks against your preferences', true),
-    ];
+    if (_previewAssessmentId != record.assessmentId) {
+      _previewAssessmentId = record.assessmentId;
+      _previewFuture = _api.questionnairePreview(record.assessmentId);
+    }
     return [
-      _stepHeading(
-        kicker: 'Step 5 of 5',
-        title: 'Assessment report',
-        icon: 'description',
-        description:
-            'The report is assembled from the four stages above. Review what it '
-            'contains, then open it to read or print — nothing is generated '
-            'until you open it.',
-      ),
-      section(classes: 'panel asw-inline', [
-        _panelHead(
-          icon: 'description',
-          title: 'Report contents',
-          trailing: Pill(
-            reportReady ? 'Report available' : 'Not available',
-            tone: reportReady ? 'success' : 'warning',
-          ),
-        ),
-        div(classes: 'panel__body stack stack--md', [
-          div(classes: 'table-scroll', [
-            table(classes: 'audit-table asw-reporttable', [
-              thead([
-                tr([
-                  th([Component.text('Section')]),
-                  th([Component.text('Contents')]),
-                  th([Component.text('Status')]),
-                ]),
-              ]),
-              tbody([
-                for (final (sectionName, contents, ok) in rows)
-                  tr([
-                    td([span(classes: 'who', [Component.text(sectionName)])]),
-                    td([span(classes: 'sub', [Component.text(contents)])]),
-                    td([
-                      StatusBadge(
-                        ok ? 'Included' : 'Pending',
-                        tone: ok ? 'success' : 'warning',
-                      ),
-                    ]),
-                  ]),
-              ]),
-            ]),
-          ]),
-          p(classes: 'small asw-muted', [
-            Component.text(
-              reportReady
-                  ? 'The report is assembled from stored data each time it is '
-                        'opened, so a section can only be marked included when '
-                        'the backend can back it.'
-                  : record.capabilities.report.reason ??
-                        'The report generator is not available right now.',
-            ),
-          ]),
-          div(classes: 'asw-stepactions', [
-            ActionButton(
-              'Back to '
-                  '${AssessmentJourneyStepper.displayLabel('ai_explanation', 'Question review')}',
-              variant: 'secondary',
-              icon: 'arrow_back',
-              onClick: () => _openCheckpoint('ai_explanation'),
-            ),
-            div(classes: 'asw-stepactions__right', [
-              if (!stage.isComplete)
-                ActionButton(
-                  _busy ? 'Saving…' : 'Mark stage complete',
-                  variant: 'secondary',
-                  onClick: _busy || stage.isUnavailable
-                      ? null
-                      : () => _completeStage(record, stage.key),
+      FutureBuilder<ApiResult<QuestionnairePreviewStatus>>(
+        future: _previewFuture,
+        builder: (context, snapshot) {
+          if (snapshot.connectionState != ConnectionState.done) {
+            return p([Component.text('Checking questionnaire sources…')]);
+          }
+          final result = snapshot.data;
+          if (result?.ok != true ||
+              result?.value == null ||
+              result!.value!.assessmentId != record.assessmentId) {
+            return section(classes: 'panel asw-inline', [
+              p([
+                Component.text(
+                  'Questionnaire source could not be verified. No questions are shown.',
                 ),
-              ActionButton(
-                'View report',
-                icon: 'visibility',
-                onClick: () => _openReport(record),
+              ]),
+              button(
+                attributes: const {'type': 'button'},
+                onClick: () => setState(
+                  () => _previewFuture = _api.questionnairePreview(
+                    record.assessmentId,
+                  ),
+                ),
+                [Component.text('Retry questionnaire source')],
               ),
-            ]),
-          ]),
-        ]),
-      ]),
+            ]);
+          }
+          // The preview contract currently reports UNAVAILABLE with an empty
+          // item list, so no rows are invented here. The server's own reason is
+          // passed through verbatim for the blocked state.
+          final preview = result.value!;
+          return CustomerQuestionnaireStep5(
+            assessmentId: record.assessmentId,
+            rows: const [],
+            blockedReason: preview.reason,
+            onBack: () => _openCheckpoint('ai_explanation'),
+            busy: _busy,
+            stageComplete: false,
+            onMarkComplete: null,
+          );
+        },
+      ),
     ];
   }
 
@@ -3595,20 +3944,12 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
           return AssessmentReportView(
             report: payload,
             record: record,
-            register: [
-              for (final candidate in _reviewCandidates(record, null))
-                (
-                  id: candidate.id,
-                  question: candidate.question,
-                  group: candidate.group,
-                ),
-            ],
-            decisions: Map<String, String>.unmodifiable(_reviewDecisions),
+            // Legacy in-memory review candidates have no verified provenance.
+            register: const [],
+            decisions: const {},
             scope: _reportScope(record),
             objective: _reviewObjective(record),
-            extraQuestions: [
-              for (final item in _reviewCustom) item.question,
-            ],
+            extraQuestions: const [],
             backLabel: 'Back to assessment',
             onBack: _closeReport,
           );
@@ -3662,14 +4003,14 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
       if (previous != null)
         ActionButton(
           'Back to '
-              '${AssessmentJourneyStepper.displayLabel(previous.key, previous.title)}',
+          '${AssessmentJourneyStepper.displayLabel(previous.key, previous.title)}',
           variant: 'secondary',
           onClick: () => _openCheckpoint(previous.key),
         ),
       if (next != null)
         ActionButton(
           'Continue to '
-              '${AssessmentJourneyStepper.displayLabel(next.key, next.title)}',
+          '${AssessmentJourneyStepper.displayLabel(next.key, next.title)}',
           icon: 'arrow_forward',
           onClick: () => _openCheckpoint(next.key),
         ),
@@ -3726,10 +4067,11 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
             [Component.text('Assessments')],
           )
         : AppLink(
-            to: '/entrepreneur/assessments',
-            classes: 'crumbs__item crumbs__link',
-            children: [Component.text('Assessments')],
-          ) as Component;
+                to: '/entrepreneur/assessments',
+                classes: 'crumbs__item crumbs__link',
+                children: [Component.text('Assessments')],
+              )
+              as Component;
     return nav(classes: 'crumbs', [
       AppLink(
         to: '/entrepreneur',
@@ -3774,7 +4116,13 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
   /// legacy v2 tokens stay valid server-side for pre-V3 records, which seed
   /// from storage without being re-interpreted.
   static const List<
-    ({String id, String prompt, String help, String kind, List<(String, String)> options})
+    ({
+      String id,
+      String prompt,
+      String help,
+      String kind,
+      List<(String, String)> options,
+    })
   >
   _questions = [
     (
@@ -3885,9 +4233,31 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
     }
   }
 
-  /// Every question answered, then confirm stage 2. The five answers are a
-  /// preview (they seed the requirement display only) — nothing here writes
-  /// them to the assessment; the backend decides whether stage 2 may complete.
+  /// Builds the requirements payload the backend's `validate_requirements()`
+  /// accepts (v3 schema, five questions). Tokens are the option codes already
+  /// rendered above, so nothing is inferred or translated here.
+  Map<String, dynamic> _requirementsPayload() {
+    final payload = <String, dynamic>{};
+    for (final q in _questions) {
+      final value = _answers[q.id];
+      if (value == null) continue;
+      if (q.kind == 'multi') {
+        payload[q.id] = [for (final item in (value as List)) '$item'];
+      } else if (q.kind == 'number') {
+        final parsed = double.tryParse('$value');
+        if (parsed != null) payload[q.id] = parsed;
+      } else {
+        payload[q.id] = '$value';
+      }
+    }
+    return payload;
+  }
+
+  /// Persists the five Stage-2 answers, then asks the backend to confirm the
+  /// stage. Both steps are real API calls: the answers are written by
+  /// `PATCH /api/v1/assessments/{id}` (`requirements`) and stage completion is
+  /// decided server-side. A requirements failure stops the flow — the stage is
+  /// never marked complete on top of unsaved answers.
   Future<void> _saveAnswers(AssessmentRecord record) async {
     if (_busy) return;
     final firstInvalid = _questions.indexWhere(
@@ -3906,6 +4276,23 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
       _writeError = null;
       _notice = null;
     });
+    final saved = await _api.saveRequirements(
+      record.assessmentId,
+      _requirementsPayload(),
+    );
+    if (!mounted) return;
+    if (!saved.ok) {
+      setState(() {
+        _busy = false;
+        _writeError = AssessmentFailure(
+          status: saved.failure?.status,
+          code: saved.failure?.code,
+          message:
+              'Your answers were not saved. ${saved.failure?.message ?? 'The server rejected the requirements.'}',
+        );
+      });
+      return;
+    }
     final result = await _api.completeStage(
       record.assessmentId,
       'business_requirements',
@@ -3923,7 +4310,8 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
       _busy = false;
       _record = updated;
       _future = Future.value(_Started(updated));
-      _notice = 'Stage 2 is recorded as complete. '
+      _notice =
+          'Stage 2 is recorded as complete. '
           '${updated.completedStages} of '
           '${updated.totalStages} stages done.';
     });
@@ -3956,168 +4344,164 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
     // on the page (each with its own border), so the step bar above already
     // names the step — no second panel head repeating "Business preferences".
     return div(classes: 'asw-qlayout', [
-        // Left: question navigator.
-        aside(classes: 'asw-qnav', [
-          div(classes: 'asw-qnav__head', [
-            h3(classes: 'asw-qnav__title', [
-              Component.text('Questions (${_questions.length})'),
-            ]),
-            p(
-              classes: 'small asw-muted',
-              attributes: const {'aria-live': 'polite'},
-              [Component.text('$answered of ${_questions.length} answered')],
-            ),
-            div(
-              classes: 'asw-qnav__rail',
-              attributes: const {'aria-hidden': 'true'},
-              [
-                div(
-                  classes: 'asw-qnav__fill',
-                  styles: Styles(width: Unit.percent(progress.toDouble())),
-                  const [],
-                ),
-              ],
-            ),
+      // Left: question navigator.
+      aside(classes: 'asw-qnav', [
+        div(classes: 'asw-qnav__head', [
+          h3(classes: 'asw-qnav__title', [
+            Component.text('Questions (${_questions.length})'),
           ]),
-          nav(
-            classes: 'asw-qnav__list',
-            attributes: const {'aria-label': 'Choose an assessment question'},
+          p(
+            classes: 'small asw-muted',
+            attributes: const {'aria-live': 'polite'},
+            [Component.text('$answered of ${_questions.length} answered')],
+          ),
+          div(
+            classes: 'asw-qnav__rail',
+            attributes: const {'aria-hidden': 'true'},
             [
-              for (final (i, question) in _questions.indexed)
-                button(
-                  classes:
-                      'asw-qnav__item${i == index ? ' is-current' : ''}',
-                  attributes: {'type': 'button'},
-                  events: events(onClick: () => setState(() {
-                    _answerStep = i;
-                    _answerError = null;
-                  })),
-                  [
-                    span(classes: 'asw-qnav__label', [
-                      Component.text(
-                        _questionNavLabels[question.id] ?? question.id,
-                      ),
-                    ]),
-                    span(classes: 'asw-qnav__state', [
-                      Component.text(
-                        _stepValid(question.kind, _answers[question.id])
-                            ? '✓'
-                            : '',
-                      ),
-                    ]),
-                  ],
-                ),
+              div(
+                classes: 'asw-qnav__fill',
+                styles: Styles(width: Unit.percent(progress.toDouble())),
+                const [],
+              ),
             ],
           ),
-          div(classes: 'asw-qnav__foot', [
-            Component.text(
-              'You can return to any question and change your answer.',
-            ),
-          ]),
         ]),
-
-        // Right: the current question card.
-        div(classes: 'asw-qcard', [
-          div(classes: 'asw-qcard__header', [
-            span(classes: 'asw-qcard__code', [
-              Component.text('V3-Q${index + 1}'),
-            ]),
-            span(classes: 'asw-qcard__position', [
-              Component.text(
-                'Question ${index + 1} of ${_questions.length}',
-              ),
-            ]),
-          ]),
-          h2(classes: 'asw-qcard__prompt', [Component.text(q.prompt)]),
-          p(classes: 'asw-qcard__help', [Component.text(q.help)]),
-          div(classes: 'asw-qcard__meta', [
-            span(classes: 'asw-qcard__required', [
-              Component.text('Required to complete this step'),
-            ]),
-            span(classes: 'small asw-muted', [
-              Component.text(
-                q.kind == 'multi'
-                    ? 'Select every answer that applies'
-                    : 'One answer per question',
-              ),
-            ]),
-          ]),
-          div(classes: 'asw-qcard__answers', [
-            for (final (token, caption) in q.options)
-              label(
-                classes: 'asw-answer${_isPicked(q, token) ? ' is-on' : ''}',
+        nav(
+          classes: 'asw-qnav__list',
+          attributes: const {'aria-label': 'Choose an assessment question'},
+          [
+            for (final (i, question) in _questions.indexed)
+              button(
+                classes: 'asw-qnav__item${i == index ? ' is-current' : ''}',
+                attributes: {'type': 'button'},
+                events: events(
+                  onClick: () => setState(() {
+                    _answerStep = i;
+                    _answerError = null;
+                  }),
+                ),
                 [
-                  input(
-                    type: q.kind == 'multi'
-                        ? InputType.checkbox
-                        : InputType.radio,
-                    name: 'aswQ${q.id}',
-                    checked: _isPicked(q, token),
-                    events: events(
-                      onChange: (_) => setState(() {
-                        _toggleAnswer(q, token);
-                        _answerError = null;
-                      }),
+                  span(classes: 'asw-qnav__label', [
+                    Component.text(
+                      _questionNavLabels[question.id] ?? question.id,
                     ),
-                  ),
-                  span(classes: 'asw-answer__label', [
-                    Component.text(caption),
+                  ]),
+                  span(classes: 'asw-qnav__state', [
+                    Component.text(
+                      _stepValid(question.kind, _answers[question.id])
+                          ? '✓'
+                          : '',
+                    ),
                   ]),
                 ],
               ),
+          ],
+        ),
+        div(classes: 'asw-qnav__foot', [
+          Component.text(
+            'You can return to any question and change your answer.',
+          ),
+        ]),
+      ]),
+
+      // Right: the current question card.
+      div(classes: 'asw-qcard', [
+        div(classes: 'asw-qcard__header', [
+          span(classes: 'asw-qcard__code', [
+            Component.text('V3-Q${index + 1}'),
           ]),
-          if (_answerError != null)
-            div(classes: 'notice notice-warn', [
-              Component.text(_answerError!),
-            ]),
-          // Footer split like the reference: Previous on the left, the forward
-          // action (next question, or save-and-complete on the last one) on
-          // the right.
-          div(classes: 'asw-qcard__footer', [
-            div(classes: 'asw-qcard__group', [
-              ActionButton(
-                'Previous',
-                variant: 'secondary',
-                onClick: index == 0
-                    ? null
-                    : () => setState(() {
-                        _answerStep = index - 1;
-                        _answerError = null;
-                      }),
-              ),
-            ]),
-            div(classes: 'asw-qcard__group', [
-              if (isLast)
-                ActionButton(
-                  _busy ? 'Saving…' : 'Save and complete stage 2',
-                  onClick: _busy ? null : () => _saveAnswers(record),
-                )
-              else
-                ActionButton(
-                  'Next question',
-                  icon: 'arrow_forward',
-                  onClick: () {
-                    if (!_stepValid(q.kind, _answers[q.id])) {
-                      setState(
-                        () => _answerError =
-                            'Answer this question to continue.',
-                      );
-                      return;
-                    }
-                    setState(() {
-                      _answerStep = index + 1;
-                      _answerError = null;
-                    });
-                  },
-                ),
-            ]),
+          span(classes: 'asw-qcard__position', [
+            Component.text('Question ${index + 1} of ${_questions.length}'),
           ]),
         ]),
+        h2(classes: 'asw-qcard__prompt', [Component.text(q.prompt)]),
+        p(classes: 'asw-qcard__help', [Component.text(q.help)]),
+        div(classes: 'asw-qcard__meta', [
+          span(classes: 'asw-qcard__required', [
+            Component.text('Required to complete this step'),
+          ]),
+          span(classes: 'small asw-muted', [
+            Component.text(
+              q.kind == 'multi'
+                  ? 'Select every answer that applies'
+                  : 'One answer per question',
+            ),
+          ]),
+        ]),
+        div(classes: 'asw-qcard__answers', [
+          for (final (token, caption) in q.options)
+            label(classes: 'asw-answer${_isPicked(q, token) ? ' is-on' : ''}', [
+              input(
+                type: q.kind == 'multi' ? InputType.checkbox : InputType.radio,
+                name: 'aswQ${q.id}',
+                checked: _isPicked(q, token),
+                events: events(
+                  onChange: (_) => setState(() {
+                    _toggleAnswer(q, token);
+                    _answerError = null;
+                  }),
+                ),
+              ),
+              span(classes: 'asw-answer__label', [Component.text(caption)]),
+            ]),
+        ]),
+        if (_answerError != null)
+          div(classes: 'notice notice-warn', [Component.text(_answerError!)]),
+        // Footer split like the reference: Previous on the left, the forward
+        // action (next question, or save-and-complete on the last one) on
+        // the right.
+        div(classes: 'asw-qcard__footer', [
+          div(classes: 'asw-qcard__group', [
+            ActionButton(
+              'Previous',
+              variant: 'secondary',
+              onClick: index == 0
+                  ? null
+                  : () => setState(() {
+                      _answerStep = index - 1;
+                      _answerError = null;
+                    }),
+            ),
+          ]),
+          div(classes: 'asw-qcard__group', [
+            if (isLast)
+              ActionButton(
+                _busy ? 'Saving…' : 'Save and complete stage 2',
+                onClick: _busy ? null : () => _saveAnswers(record),
+              )
+            else
+              ActionButton(
+                'Next question',
+                icon: 'arrow_forward',
+                onClick: () {
+                  if (!_stepValid(q.kind, _answers[q.id])) {
+                    setState(
+                      () => _answerError = 'Answer this question to continue.',
+                    );
+                    return;
+                  }
+                  setState(() {
+                    _answerStep = index + 1;
+                    _answerError = null;
+                  });
+                },
+              ),
+          ]),
+        ]),
+      ]),
     ]);
   }
 
   bool _isPicked(
-    ({String id, String prompt, String help, String kind, List<(String, String)> options}) q,
+    ({
+      String id,
+      String prompt,
+      String help,
+      String kind,
+      List<(String, String)> options,
+    })
+    q,
     String token,
   ) {
     final value = _answers[q.id];
@@ -4128,7 +4512,14 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
   }
 
   void _toggleAnswer(
-    ({String id, String prompt, String help, String kind, List<(String, String)> options}) q,
+    ({
+      String id,
+      String prompt,
+      String help,
+      String kind,
+      List<(String, String)> options,
+    })
+    q,
     String token,
   ) {
     if (q.kind == 'multi') {
@@ -4571,7 +4962,7 @@ const Map<String, (String, String)> _stageDescriptions = {
         'ranking engine reads, so saving here also updates your preferences.',
   ),
   'location_evidence': (
-    'Location evidence',
+    'Business review and research goals',
     'Competitor pressure, accessibility, catchment demand and the built '
         'environment, as measured by the geospatial analysis pipeline.',
   ),
@@ -4581,9 +4972,9 @@ const Map<String, (String, String)> _stageDescriptions = {
         'Needs a trained model artifact on the server.',
   ),
   'assessment_report': (
-    'Assessment report',
-    'The consolidated report for this property. Only reachable once the '
-        'assessment data it summarises actually exists.',
+    'Publish questionnaire',
+    'Review the customer questionnaire, then publish it or keep it as a '
+        'draft. The consolidated report stays available from "View report".',
   ),
 };
 
@@ -4670,7 +5061,6 @@ class _SelectedPropertyPanel extends StatelessComponent {
     dd([Component.text(value)]),
   ]);
 }
-
 
 /// One customer-research question candidate in step 4.
 ///

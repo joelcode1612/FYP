@@ -1,0 +1,200 @@
+/// Shared, framework-free logic for the Sitewise FYP.
+///
+/// This package holds the layers that neither Flutter nor Jaspr owns: the
+/// **domain** (entities, repository contracts, use cases) and the **data**
+/// implementations that back them. Both apps depend on it, so a change to a
+/// business rule or a model happens once instead of twice.
+///
+/// It is deliberately dependency-free — no Flutter, no Jaspr, no third-party
+/// packages. Only `dart:core`, `dart:convert` and `dart:typed_data` are used,
+/// which is what makes it consumable from a browser-compiled Jaspr app as well
+/// as a Flutter mobile app.
+///
+/// ## Browser-safety
+///
+/// A handful of data sources are mobile-only because they touch `dart:io` or
+/// Flutter plugins (which do not exist in a browser) — local file persistence
+/// for onboarding and captured frames, the OpenCV panorama stitcher, and the
+/// file-backed auth session store. Those live in the Flutter app's own data
+/// layer (`fyp_mobile_app/lib/data/`), not here, so importing this library can
+/// never drag `dart:io` into a web build.
+library;
+
+// --- Domain: entities -------------------------------------------------------
+export 'src/domain/data/add_property_rules.dart';
+export 'src/domain/data/malaysia_locations.dart';
+export 'src/domain/entities/app_role.dart';
+export 'src/domain/entities/agent_listing.dart';
+export 'src/domain/entities/capture_config.dart';
+export 'src/domain/entities/capture_point.dart';
+export 'src/domain/entities/capture_session_state.dart';
+export 'src/domain/entities/captured_frame.dart';
+export 'src/domain/entities/commercial_property.dart';
+export 'src/domain/entities/explore.dart';
+export 'src/domain/entities/full_analysis.dart';
+export 'src/domain/entities/geo.dart';
+export 'src/domain/entities/location_intelligence.dart';
+export 'src/domain/entities/owner_listing.dart';
+export 'src/domain/entities/property_enrichment.dart';
+// The staff verification detail carries its own `LocationAnalysis` (the
+// server's Part A/B/C report). Hide it from the barrel so the long-standing
+// entrepreneur `LocationAnalysis` from location_intelligence.dart remains the
+// one name exported here. The verification type is still reachable through
+// PropertyVerificationDetail.locationAnalysis and by direct library import.
+export 'src/domain/entities/property_verification.dart'
+    hide LocationAnalysis;
+export 'src/domain/entities/pu_feature_coverage.dart';
+export 'src/domain/entities/pu_prediction.dart';
+export 'src/domain/entities/recommendation.dart';
+export 'src/domain/entities/recommendation_search.dart';
+// The research-question candidate contract (parsing + review rules) is shared
+// so the Jaspr and Flutter review screens cannot disagree about which actions a
+// version allows or whether a candidate is still only a proposal.
+export 'src/domain/entities/research_candidate.dart';
+export 'src/domain/entities/personalised_recommendations.dart';
+export 'src/domain/entities/sitewise_records.dart';
+export 'src/domain/entities/user.dart';
+export 'src/domain/entities/virtual_tour.dart';
+
+// --- Domain: contracts & services -------------------------------------------
+export 'src/domain/repositories/admin_repositories.dart';
+export 'src/domain/repositories/agent_listing_repository.dart';
+export 'src/domain/repositories/auth_repository.dart';
+export 'src/domain/repositories/explore_repository.dart';
+export 'src/domain/repositories/intelligence_repositories.dart';
+export 'src/domain/repositories/onboarding_repository.dart';
+export 'src/domain/repositories/property_repository.dart';
+export 'src/domain/repositories/property_verification_repository.dart';
+export 'src/domain/repositories/pu_prediction_repository.dart';
+export 'src/domain/repositories/recommendation_repository.dart';
+export 'src/domain/repositories/recommendation_search_repository.dart';
+export 'src/domain/repositories/saved_properties_repository.dart';
+export 'src/domain/repositories/staff_mfa_repository.dart';
+export 'src/domain/services/panorama_stitcher.dart';
+
+// --- Domain: use cases ------------------------------------------------------
+export 'src/domain/usecases/assessment_selection_usecases.dart';
+export 'src/domain/usecases/intelligence_usecases.dart';
+export 'src/domain/usecases/property_usecases.dart';
+export 'src/domain/usecases/recommendation_usecases.dart';
+export 'src/domain/usecases/verification_usecases.dart';
+
+// --- Data: browser-safe implementations -------------------------------------
+export 'src/data/datasources/local/capture_target_data_source.dart';
+export 'src/data/datasources/local/demo_data.dart';
+export 'src/data/dtos/property_dto.dart';
+export 'src/data/mappers/catalog_property_mapper.dart';
+export 'src/data/mappers/explore_property_mapper.dart';
+export 'src/data/mappers/property_mapper.dart';
+export 'src/data/models/commercial_property_model.dart';
+export 'src/data/models/location_intelligence_model.dart';
+export 'src/data/models/property_insights_model.dart';
+export 'src/data/models/user_model.dart';
+export 'src/data/repositories/admin_repositories_impl.dart';
+export 'src/data/repositories/api_agent_listing_repository.dart';
+export 'src/data/repositories/api_explore_repository.dart';
+export 'src/data/repositories/api_intelligence_repository.dart';
+export 'src/data/repositories/api_property_insights_repository.dart';
+export 'src/data/repositories/api_owner_listing_repository.dart';
+export 'src/data/repositories/api_owner_property_repository.dart';
+export 'src/data/repositories/api_property_verification_repository.dart';
+export 'src/data/repositories/api_property_repository.dart';
+export 'src/data/repositories/api_pu_prediction_repository.dart';
+export 'src/data/repositories/api_recommendation_search_repository.dart';
+export 'src/data/repositories/api_personalised_recommendation_repository.dart';
+export 'src/data/repositories/api_saved_properties_repository.dart';
+export 'src/data/repositories/api_user_repository.dart';
+export 'src/data/repositories/intelligence_repositories_impl.dart';
+export 'src/data/repositories/property_repository_impl.dart';
+export 'src/data/repositories/recommendation_repository_impl.dart';
+
+// --- Core: the three framework-free helpers the layers above depend on ------
+//
+// Paths mirror the Flutter project's `lib/core/` exactly. That is deliberate:
+// the data layer imports them with relative paths (`../../core/constants/...`),
+// so preserving the folder shape keeps those imports valid without rewriting.
+export 'src/core/config/app_config.dart';
+export 'src/core/constants/app_constants.dart';
+export 'src/core/errors/app_failure.dart';
+export 'src/core/network/api_client.dart';
+
+// --- Application: shared state management -----------------------------------
+//
+// Built on `package:riverpod` (pure Dart). Nothing exported here may import
+// Flutter or Jaspr — that is what lets the Flutter app consume these notifiers
+// through `flutter_riverpod` while the Jaspr app consumes them through
+// `jaspr_riverpod`, on the same Riverpod 3 core.
+//
+// These replace the `package:bloc` Cubit adapters (and before those, the
+// Flutter `ChangeNotifier` classes):   AppNotifier  <- AppState
+//   AuthNotifier        <- auth_state.dart (single owner of sign-in state)
+//   EntrepreneurNotifier <- EntrepreneurViewModel
+//                          (lib/presentation/shared/viewmodels/)
+//   OwnerNotifier        <- OwnerViewModel
+//   AdminNotifier        <- AdminViewModel
+export 'src/application/notifiers/app_notifier.dart';
+export 'src/application/notifiers/auth_notifier.dart';
+export 'src/application/notifiers/entrepreneur_notifier.dart';
+export 'src/application/notifiers/owner_notifier.dart';
+export 'src/application/notifiers/admin_notifier.dart';
+
+// Composition-root providers the notifiers consume. Each app overrides these
+// in its `ProviderScope` with its own service implementations; tests override
+// them with fakes.
+export 'src/application/notifiers/providers.dart';
+
+// --- Application: framework-free state controllers ----------------------------
+//
+// The orchestration half of each notifier: same transitions, same rules, no
+// UI dependency. The notifiers above are thin adapters over these, so a state
+// rule is written once and cannot diverge between platforms.
+export 'src/application/controllers/admin_controller.dart';
+export 'src/application/controllers/app_controller.dart';
+export 'src/application/controllers/entrepreneur_controller.dart';
+export 'src/application/controllers/owner_controller.dart';
+export 'src/application/controllers/state_controller.dart';
+export 'src/application/states/app_state.dart';
+export 'src/application/states/auth_state.dart';
+export 'src/application/states/entrepreneur_state.dart';
+export 'src/application/states/owner_state.dart';
+export 'src/application/states/admin_state.dart';
+export 'src/application/usecases/filter_properties.dart';
+
+// The structured filter model (budget / size / type / location / verification)
+// shared by the Explore and Recommendation screens in both apps.
+export 'src/application/usecases/property_filter.dart';
+
+// --- Application: shared services (framework-free orchestration) ------------
+//
+// Both apps talk to these instead of repositories directly. Moved out of the
+// Flutter app's `lib/application/services/` when the Jaspr web tree began
+// consuming the same orchestration.
+export 'src/application/services/auth_service.dart';
+export 'src/application/services/property_service.dart';
+export 'src/application/services/property_verification_service.dart';
+export 'src/application/services/recommendation_service.dart';
+export 'src/application/services/tour_service.dart';
+export 'src/application/services/upload_service.dart';
+export 'src/application/services/verification_service.dart';
+export 'src/domain/entities/project1_readiness.dart';
+export 'src/data/repositories/api_project1_read_repository.dart';
+
+// --- M2 assessment: domain, fixtures and ViewModel -------------------------
+//
+// New feature work uses Riverpod + MVVM: an immutable state object, a
+// `Notifier` ViewModel, and platform bindings supplied by each app
+// (`flutter_riverpod` on mobile, `jaspr_riverpod` on web). This coexists with
+// the Cubits above; those are not migrated yet.
+//
+// The fixtures are PROTOTYPE data (`PROTO-V4-2026-10-28`) — illustrative, not a
+// scientific instrument, not fielded research, not approved benchmarks, and
+// using prototype-local item ids rather than frozen B03 register ids.
+export 'src/domain/entities/m2_assessment.dart';
+export 'src/data/datasources/local/m2_prototype_data.dart';
+export 'src/application/notifiers/m2_assessment_notifier.dart';
+export 'src/domain/entities/confirmed_business_review.dart';
+export 'src/data/repositories/api_confirmed_review_repository.dart';
+export 'src/domain/entities/customer_questionnaire.dart';
+export 'src/data/repositories/api_customer_questionnaire_repository.dart';
+export 'src/data/repositories/api_m2_repository.dart';
+export 'src/data/repositories/api_synthetic_inspection_repository.dart';

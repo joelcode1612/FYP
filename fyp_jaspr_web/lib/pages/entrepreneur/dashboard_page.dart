@@ -406,7 +406,7 @@ class _DashboardPageState extends State<DashboardPage> {
   Component _featuredCard(AssessmentRecord record) {
     final property = record.property;
     final pct = record.progressPercent.clamp(0, 100);
-    final href = '/entrepreneur/assessment?id=${record.propertyId}';
+    final href = '/entrepreneur/assessments?id=${record.propertyId}';
     return section(classes: 'sw-dash-featured', [
       AppLink(
         to: href,
@@ -496,7 +496,7 @@ class _DashboardPageState extends State<DashboardPage> {
           ].where((part) => part.trim().isNotEmpty).join(', ');
     final pct = record.progressPercent.clamp(0, 100);
     return AppLink(
-      to: '/entrepreneur/assessment?id=${record.propertyId}',
+      to: '/entrepreneur/assessments?id=${record.propertyId}',
       classes: 'sw-dash-rrow',
       children: [
         _thumb(property?.imageUrl, property == null),
@@ -723,7 +723,7 @@ class _CurrentAssessmentState extends State<_CurrentAssessment> {
       ]),
       div(classes: 'sw-dash-ca-actions', [
         AppLink(
-          to: '/entrepreneur/assessment?id=${record.propertyId}',
+          to: '/entrepreneur/assessments?id=${record.propertyId}',
           classes: 'sw-home-primary',
           children: [
             Component.text(

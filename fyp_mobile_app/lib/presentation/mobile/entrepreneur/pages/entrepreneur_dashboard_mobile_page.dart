@@ -183,6 +183,17 @@ class _EntrepreneurDashboardMobilePageState
               subtitle: 'Check progress and insights',
               onTap: () => _open('/entrepreneur/assess'),
             ),
+            // PROJECT1 research-question review. Home has no selected M2
+            // assessment and no confirmed objective, so it cannot supply the
+            // persisted ids a ResearchQuestionTarget requires. Pushing the
+            // route without them produced a screen that could never prepare;
+            // state the reason here instead of offering a dead action.
+            const M3DataNote(
+              text:
+                  'Research questions open from a confirmed objective in your '
+                  'M2 assessment. Home has no assessment selected, so it does '
+                  'not attach an objective to that screen.',
+            ),
             M3QuickActionRow(
               icon: Icons.storefront_outlined,
               title: 'Manage my spaces',

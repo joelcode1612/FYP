@@ -8,17 +8,14 @@ from sqlalchemy.orm import Session
 
 from sitewise.db.models.business_context_schema import builds, contexts
 from sitewise.db.models.m2_schema import assessments
-from sitewise.repositories.m2_repository import SqlModelM2Repository
-from sitewise.services.ports.business_context_store_port import (
-    ContextBindingUnavailable, ContextStoreUnavailable,
+from sitewise.repositories.m2_context_bindings import (
+    M2ContextBindings, bind_restricted_principal,
 )
-
-
-class UnverifiedContextBindings:
-    """Real composition deliberately supplies no guessed tenant/purpose receipts."""
-    def __init__(self, session): pass
-    def resolve(self, selection, actor):
-        raise ContextBindingUnavailable()
+from sitewise.repositories.m2_repository import SqlModelM2Repository
+from sitewise.services.business_context_v1 import ContextRefused
+from sitewise.services.ports.business_context_store_port import (
+    ContextStoreUnavailable,
+)
 
 
 class SqlBusinessContextUnit:
@@ -61,16 +58,28 @@ class SqlBusinessContextUnit:
 
 
 class SqlBusinessContextStore:
-    def __init__(self, engine, resolver_factory=UnverifiedContextBindings):
+    def __init__(self, engine, resolver_factory=M2ContextBindings):
         if engine.dialect.name != 'postgresql':
             raise ContextStoreUnavailable('BCB_POSTGRESQL_REQUIRED')
         self.engine, self.resolver_factory = engine, resolver_factory
     @contextmanager
-    def open(self):
+    def open(self, actor_id):
+        """Open the BCB transaction as the restricted M2 principal.
+
+        The principal and ``project1.actor_id`` are bound before the resolver or
+        any store read executes, so an owner-scoped row is never queried as the
+        ordinary application login. A principal that cannot be established (or
+        that is a superuser / BYPASSRLS role) is refused rather than silently
+        bypassing RLS.
+        """
         try:
             with self.engine.connect().execution_options(isolation_level='REPEATABLE READ') as connection:
                 with Session(connection, autoflush=False) as session:
                     try:
+                        try:
+                            bind_restricted_principal(session, actor_id)
+                        except ContextRefused as exc:
+                            raise ContextStoreUnavailable(exc.code) from exc
                         yield SqlBusinessContextUnit(session, self.resolver_factory(session))
                     finally:
                         session.rollback()

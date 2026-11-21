@@ -1,0 +1,1 @@
+{"name":"Project1ReadPanel","id":["sitewise_jaspr_web","lib/components/project1_read_panel.dart"],"import":"package:sitewise_jaspr_web/components/project1_read_panel.dart","params":[{"name":"assessmentId","isNamed":true,"decoder":"p['assessmentId'] as String","encoder":"c.assessmentId"},{"name":"section","isNamed":true,"decoder":"p['section'] as String","encoder":"c.section"}]}

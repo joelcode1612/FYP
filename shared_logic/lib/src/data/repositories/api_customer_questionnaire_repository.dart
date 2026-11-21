@@ -4,12 +4,22 @@ import '../../domain/entities/customer_questionnaire.dart';
 class ApiCustomerQuestionnaireRepository {
   final ApiClient client;
   final bool allowIsolatedTesting;
+  final String basePath;
+  final String? syntheticRunId;
   const ApiCustomerQuestionnaireRepository(
     this.client, {
     this.allowIsolatedTesting = false,
-  });
+  }) : basePath = '/api/v1/cq',
+       syntheticRunId = null;
+
+  ApiCustomerQuestionnaireRepository.synthetic(
+    this.client, {
+    required String runId,
+  }) : allowIsolatedTesting = true,
+       syntheticRunId = runId,
+       basePath = '/api/v1/cq/developer-imports/${Uri.encodeComponent(runId)}';
   Future<({String state, List<CqInvitation> invitations})> invitations() async {
-    final d = await client.get('/api/v1/cq/invitations');
+    final d = await client.get('$basePath/invitations');
     if (d['contract_version'] != 'cq-invitations/1' ||
         !['ready', 'held', 'empty'].contains(d['state'])) {
       throw const FormatException('Invalid CQ invitation response.');
@@ -29,6 +39,14 @@ class ApiCustomerQuestionnaireRepository {
 
   CqSession _parse(Map<String, dynamic> d, {String? sid, CqSession? previous}) {
     final s = CqSession.fromJson(d, allowIsolatedTesting: allowIsolatedTesting);
+    if (syntheticRunId != null &&
+        (d['synthetic_execution'] != true ||
+            d['synthetic_run_id'] != syntheticRunId ||
+            d['origin'] != 'SYNTHETIC_TEST' ||
+            d['real_reportable'] != false ||
+            d['production_fielding_authorized'] != false)) {
+      throw const FormatException('Synthetic execution boundary mismatch.');
+    }
     if ((sid != null && s.id != sid) ||
         (previous != null &&
             (s.manifestHash != previous.manifestHash ||
@@ -49,7 +67,7 @@ class ApiCustomerQuestionnaireRepository {
       );
     }
     return _parse(
-      await client.get('/api/v1/cq/sessions/$sid'),
+      await client.get('$basePath/sessions/$sid'),
       sid: sid,
       previous: previous,
     );
@@ -57,7 +75,7 @@ class ApiCustomerQuestionnaireRepository {
 
   Future<CqSession> start(CqInvitation invitation, String locale) async {
     final s = _parse(
-      await client.post('/api/v1/cq/sessions', {
+      await client.post('$basePath/sessions', {
         'campaign_id': invitation.campaignId,
         'manifest_hash': invitation.manifestHash,
         'locale': locale,
@@ -92,7 +110,7 @@ class ApiCustomerQuestionnaireRepository {
       );
     }
     return _parse(
-      await client.post('/api/v1/cq/sessions/${s.id}/$action', {
+      await client.post('$basePath/sessions/${s.id}/$action', {
         ...body,
         ...s.version,
       }),
@@ -135,7 +153,7 @@ class ApiCustomerQuestionnaireRepository {
   Future<CqSession> rendered(CqSession s) =>
       mutate(s, 'rendered', {'display_id': s.presentation!['display_id']});
   Future<Map<String, dynamic>> withdraw(CqSession s, String requestId) async {
-    final d = await client.post('/api/v1/cq/sessions/${s.id}/withdraw', {
+    final d = await client.post('$basePath/sessions/${s.id}/withdraw', {
       ...s.version,
       'request_id': requestId,
     });
@@ -148,7 +166,7 @@ class ApiCustomerQuestionnaireRepository {
   }
 
   Future<Map<String, dynamic>> history(String sid) async {
-    final d = await client.get('/api/v1/cq/sessions/$sid/history');
+    final d = await client.get('$basePath/sessions/$sid/history');
     if (d['contract_version'] != 'cq-history/1' || d['session_id'] != sid)
       throw const FormatException('Invalid CQ history.');
     return d;

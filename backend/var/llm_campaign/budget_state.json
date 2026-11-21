@@ -1,0 +1,88 @@
+{
+  "attempts": [
+    {
+      "at": "2026-11-17T12:40:48.066727+00:00",
+      "n": 1,
+      "scenario": "consistent:BDJ"
+    },
+    {
+      "at": "2026-11-17T13:21:04.147422+00:00",
+      "n": 2,
+      "scenario": "02_contradictory_service_format:BDJ"
+    },
+    {
+      "at": "2026-11-17T13:24:36.206821+00:00",
+      "n": 3,
+      "scenario": "02_contradictory_service_format:BDJ:primary"
+    },
+    {
+      "at": "2026-11-17T13:27:44.126073+00:00",
+      "n": 4,
+      "scenario": "qj:single"
+    },
+    {
+      "at": "2026-11-17T14:10:34.463742+00:00",
+      "label_corrected": {
+        "at": "2026-11-17T14:15:00+00:00",
+        "from": "qj:single",
+        "reason": "run_live passed a hard-coded 'qj:single' label to reserve_budget instead of the scenario argument. The dispatch really was scenario qj:price-rm13 (see ledger run qj-live-20261117T141034Z and runs/qj-live-qj-price-rm13-20261117T141034Z/capture.json). The runner is fixed; n, at and spent are unchanged."
+      },
+      "n": 5,
+      "scenario": "qj:price-rm13"
+    },
+    {
+      "at": "2026-11-17T19:37:09.491137+00:00",
+      "n": 6,
+      "scenario": "CP-08 synthetic QG research evaluation"
+    },
+    {
+      "at": "2026-11-17T19:42:00.275854+00:00",
+      "n": 7,
+      "scenario": "CP-08 synthetic QG research evaluation"
+    },
+    {
+      "at": "2026-11-17T19:44:41.232452+00:00",
+      "n": 8,
+      "scenario": "CP-08 synthetic QG research evaluation"
+    },
+    {
+      "at": "2026-11-17T19:45:47.203469+00:00",
+      "n": 9,
+      "scenario": "CP-08 synthetic QG research evaluation"
+    },
+    {
+      "at": "2026-11-17T19:47:06.452920+00:00",
+      "n": 10,
+      "scenario": "CP-08 synthetic QG research evaluation"
+    },
+    {
+      "at": "2026-11-17T19:50:21.400564+00:00",
+      "n": 11,
+      "scenario": "CP-08 synthetic QG research evaluation"
+    },
+    {
+      "at": "2026-11-17T19:52:57.953770+00:00",
+      "n": 12,
+      "scenario": "CP-08 synthetic QG research evaluation"
+    },
+    {
+      "at": "2026-11-17T19:54:33.360651+00:00",
+      "n": 13,
+      "scenario": "CP-08 synthetic QG research evaluation"
+    },
+    {
+      "at": "2026-11-17T19:55:26.384200+00:00",
+      "n": 14,
+      "scenario": "CP-08 synthetic QG research evaluation"
+    },
+    {
+      "at": "2026-11-17T19:56:53.631569+00:00",
+      "n": 15,
+      "scenario": "CP-08 synthetic QG research evaluation"
+    }
+  ],
+  "limit": 50,
+  "limit_raised_at": "2026-11-18T02:15:00+08:00",
+  "limit_raised_by": "PROJECT1-DIRECT-QG-V3.0-CP-03",
+  "spent": 15
+}

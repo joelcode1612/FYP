@@ -28,6 +28,7 @@
     href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,400,0,0&display=block" />
   <link rel="stylesheet" href="/assessment-workflow.css" />
   <link rel="stylesheet" href="/research_workflow_panel.css" />
+  <link rel="stylesheet" href="/project1_research_stages.css" />
   <!-- M2 Stage 2 workspace layout. Kept as its own file so the assessment
        journey stepper, progress panel and AppLayout topbar are untouched. -->
   <link rel="stylesheet" href="/m2_workspace_layout.css" />
@@ -44,6 +45,15 @@
   <!-- "Assessment" nav list. Scoped to .swal-* so it cannot restyle the
        existing .sra-* selector or anything else in the shell. -->
   <link rel="stylesheet" href="/sitewise_assessment_list.css" />
+  <!-- Assessment tab, "My assessments" entry view: the two-column list +
+       details layout. Scoped to .asw-entry / .asw-inline-detail, which only
+       assessment_workspace_page.dart emits. These classes previously had no
+       CSS at all, so the view rendered unstyled. -->
+  <link rel="stylesheet" href="/sitewise_assessment_entry.css" />
+  <!-- Assessment workspace, Step 5: Customer Questionnaire. Port of the
+       supplied design, scoped to .cq5 so it cannot reach the sidebar, the top
+       bar or any other page. -->
+  <link rel="stylesheet" href="/sitewise_cq_step5.css" />
   <!-- PROJECT1 v1.5 four-step research flow. Three scoped sheets:
        .ao-* assessment overview list, .m1-* Step 1 M2 editor, and .af-* the
        flow host + shared four-step stepper. Each is scoped to its own prefix

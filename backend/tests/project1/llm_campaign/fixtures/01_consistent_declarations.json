@@ -1,0 +1,22 @@
+{
+  "fixture_id": "LLM01-01",
+  "label": "SYNTHETIC - non-human test fixture",
+  "synthetic": true,
+  "contains_personal_data": false,
+  "no_expected_output_recorded": true,
+  "scenario": "All declarations agree: a dine-in neighbourhood cafe aimed at office workers.",
+  "business_description": "A small neighbourhood cafe planning to serve dine-in customers, offering coffee and baked goods, aimed mainly at office workers, with product quality as the main emphasis.",
+  "m2_answers": {
+    "M2V1-01": {"state": "ANSWERED", "value": "UNDECIDED"},
+    "M2V1-02": {"state": "ANSWERED", "value": "DINE_IN"},
+    "M2V1-03": {"state": "ANSWERED", "value": ["COFFEE", "BAKED_GOODS"]},
+    "M2V1-04": {"state": "ANSWERED", "value": ["OFFICE_WORKERS", "RESIDENTS"]},
+    "M2V1-05": {"state": "ANSWERED", "value": "OFFICE_WORKERS"},
+    "M2V1-06": {"state": "ANSWERED", "value": "QUALITY"},
+    "M2V1-07": {"state": "ANSWERED", "value": "MEAL_SNACK"},
+    "M2V1-08": {"state": "ANSWERED", "value": ["PERSONAL_OBSERVATION"]},
+    "M2V1-09": {"state": "ANSWERED", "value": ["CONCEPT_INTEREST", "PRICE_ACCEPTABILITY"]},
+    "M2V1-10": {"state": "ANSWERED", "value": "CONCEPT_INTEREST"},
+    "M2V1-11": {"state": "ANSWERED", "value": "EXPLORE"}
+  }
+}

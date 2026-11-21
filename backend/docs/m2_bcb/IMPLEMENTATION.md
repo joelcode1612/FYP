@@ -7,10 +7,15 @@ production instrument/binding. UI and downstream execution are unchanged.
 ## Runtime and authority
 
 The M2 router remains default-off (`M2_UPSTREAM_ENABLED`). The BCB operations also
-require `M2_BCB_PERSISTENCE_ENABLED`, default false. The production binding resolver
-deliberately returns `BCB_BINDING_AUTHORITY_UNVERIFIED`: no authoritative tenant,
-concept-version, GEO, or purpose registry was found in the inspected Dss schema.
-Neither owner UUID nor questionnaire self-reported role is a tenant/access grant.
+require `M2_BCB_PERSISTENCE_ENABLED`, default false. Production bindings are now
+resolved by `M2ContextBindings` from persisted M2 rows only: `owner_user_id` is the
+ownership authority and the owner-scoped tenant label, the confirmed snapshot
+supplies the concept version/digest, findings at the confirmed revision supply rule
+versions, and `m2_confirmed_uncertainties` supplies the confirmed uncertainty.
+`M2OwnershipAuthorization` enforces actor ownership, role and permitted purpose
+before any content is opened. A tenant registry, concept approval receipt, verified
+finding authority, GEO catalogue and external source citation cannot be derived
+from these tables, so those slots stay empty and the frozen builder fails closed.
 The current read-only Dss inspection found no registered M2 instrument or items.
 
 The backend-folder `.env` currently selects `Final_Location_Analysis` for the main
@@ -139,10 +144,17 @@ privacy and deferred-field choices are not silently implemented as adopted rules
 The current Flutter prototype's item meanings also conflict with the documentary
 backend candidate; no UI remapping is attempted in this phase.
 
-Tenant relation, confirmed-concept version/receipt, exact approved GEO binding and
-business-understanding purpose authority remain missing/candidate/conflicting.
-The frozen builder's EXPLANATION/QJ_CONTEXT/EE01_CONTEXT purpose labels do not
-authorize those modules. Production remains held until governing sources, real
-adapters, reviewed migration/permissions and deployment verification are approved.
+Tenant relation, confirmed-concept version/receipt and business-understanding
+purpose authority are now derived from the M2 ownership and confirmation records
+above rather than from a separate registry. GEO is out of V1 scope by Owner
+decision, expressed as the contract version `BCB-V1-1.1.0` /
+`business-context-package/1.1`: core Business Description and `QJ_CONTEXT`
+construction no longer require GEO catalogue authority, the packet carries
+`geography: null`, and no GEO approval record is fabricated. The 1.0 sandbox
+contract remains registered and unchanged, so stored 1.0 packets are still
+validated against the contract they were built with. The frozen builder's
+EXPLANATION/QJ_CONTEXT/EE01_CONTEXT purpose labels do not authorize those modules.
+Production remains held until governing sources, reviewed migration/permissions and
+deployment verification are approved.
 Stop after verified persistence; no QJ, QG, customer fielding, EE-01, Explanation or
 reporting implementation is part of this extension.

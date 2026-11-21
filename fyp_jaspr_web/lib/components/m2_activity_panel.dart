@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:jaspr/dom.dart';
 import 'package:jaspr/jaspr.dart';
 
+import '../data/activity_event_presentation.dart';
 import '../data/app_locator.dart';
 import '../data/full_analysis_actions.dart';
 import '../pages/entrepreneur/activity_history_page.dart';
@@ -151,6 +152,34 @@ class _M2ActivityState extends State<M2ActivityPanel> {
     });
   }
 
+  /// Projects one persisted event onto the read-only page model.
+  ///
+  /// A raw enum code is an identifier, not a title, and a ruleset version is
+  /// not a reason. Both were previously shown in the wrong slot, which hid the
+  /// stored answer outcome behind the sentence "outcome not supplied".
+  AssessmentActivity _toActivity(Map<String, dynamic> e, String assessmentId) {
+    final presented = presentActivityEvent(e);
+    return AssessmentActivity(
+      eventId: '${e['kind']}:${e['event_id']}',
+      occurredAtIso: e['occurred_at'] as String,
+      engine: e['module'] as String? ?? 'M2',
+      activityType: e['kind'] as String,
+      status: e['status'] as String? ?? 'Recorded — outcome not supplied',
+      title: presented.title,
+      summary: presented.summary,
+      actor: e['actor_id'] as String? ?? 'Actor not stored on this record',
+      revision: e['assessment_revision'] as int,
+      version: presented.engineVersion,
+      reason: e['reason'] as String?,
+      sourceIsCurrent: e['source_is_current'] as bool?,
+      inputReferences: [
+        assessmentId,
+        if (e['source_id'] != null) e['source_id'] as String,
+      ],
+      outputReferences: [e['event_id'] as String],
+    );
+  }
+
   @override
   Component build(BuildContext context) => section(classes: 'stack stack--md', [
     if (assessments.length == 50)
@@ -177,7 +206,10 @@ class _M2ActivityState extends State<M2ActivityPanel> {
       sourceCoverage: [
         'M2 / Business Understanding: ${activity == null
             ? 'NOT_VERIFIED — history source unavailable or not selected.'
-            : activity?['history_extension'] == 'workflow-history-metadata/1'
+            : const {
+                'workflow-history-metadata/1',
+                'workflow-history-metadata/2',
+              }.contains(activity?['history_extension'])
             ? 'Persisted records loaded. Creation, answers, candidate-rule evaluation, findings, decisions, review and confirmation only; validation failures and distinct submission attempts are not durably exposed.'
             : 'Legacy M2 receipts loaded. Additional creation, finding, uncertainty and BCB sources are NOT_VERIFIED; the workflow history extension is unavailable.'}',
         'BDJ cloud: NOT_VERIFIED — no owner-scoped durable execution, output-validation or recovery history API. Candidate-rule receipts are not cloud completion.',
@@ -199,27 +231,8 @@ class _M2ActivityState extends State<M2ActivityPanel> {
                 'Select a saved M2 assessment to load its recorded activity.',
       activities: [
         for (final e in activity?['events'] as List? ?? const [])
-          AssessmentActivity(
-            eventId: '${e['kind']}:${e['event_id']}',
-            occurredAtIso: e['occurred_at'] as String,
-            engine: e['module'] as String? ?? 'M2',
-            activityType: e['kind'] as String,
-            status:
-                e['status'] as String? ?? 'Recorded — outcome not supplied',
-            title: e['kind'] as String,
-            summary:
-                'Persisted ${e['module'] ?? 'M2'} metadata at revision ${e['assessment_revision']}.',
-            actor:
-                e['actor_id'] as String? ?? 'Actor not stored on this record',
-            version: '${e['assessment_revision']}',
-            reason: e['reason'] as String?,
-            sourceIsCurrent: e['source_is_current'] as bool?,
-            inputReferences: [
-              activity!['assessment_id'] as String,
-              if (e['source_id'] != null) e['source_id'] as String,
-            ],
-            outputReferences: [e['event_id'] as String],
-          ),
+          if (e is Map<String, dynamic>)
+            _toActivity(e, activity!['assessment_id'] as String),
       ],
     ),
     if (_jsonOpen)

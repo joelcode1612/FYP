@@ -1,0 +1,1 @@
+{"name":"AgentAssignmentControl","id":["sitewise_jaspr_web","lib/components/agent_assignment_control.dart"],"import":"package:sitewise_jaspr_web/components/agent_assignment_control.dart","params":[{"name":"propertyId","isNamed":true,"decoder":"p['propertyId'] as String","encoder":"c.propertyId"}]}

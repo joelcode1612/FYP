@@ -509,11 +509,14 @@ def test_CQ14_Flutter_FastAPI_widget_exchange(lab):
 
 def test_CQ15_registered_routes_and_auth_dependency_execution(lab):
     paths={p:ops for p,ops in lab['app'].openapi()['paths'].items() if p.startswith('/api/v1/cq')}
-    assert sum(len(ops) for ops in paths.values())==19
+    assert sum(len(ops) for ops in paths.values())==35
+    assert sum(len(ops) for p,ops in paths.items() if '/developer-imports' in p)==14
+    assert '/api/v1/cq/explanations/availability' in paths
+    assert '/api/v1/cq/assessments/{assessment_id}/campaigns/{campaign_id}/measurements/{snapshot_id}/explanations' in paths
     for path,ops in paths.items():
         for method in ops:
             concrete=path
-            for param in ('release_id','assessment_id','campaign_id','session_id','snapshot_id'):
+            for param in ('release_id','assessment_id','campaign_id','session_id','snapshot_id','run_id'):
                 concrete=concrete.replace('{'+param+'}',str(uuid4()))
             lab['request'](method.upper(),concrete.removeprefix('/api/v1/cq'),401,uid=None,
                 **({'json':{}} if method=='post' else {}))

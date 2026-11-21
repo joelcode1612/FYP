@@ -295,43 +295,126 @@ from sitewise.services.confirmed_review_service import ConfirmedReviewService
 from sitewise.db.m2_session import get_m2_db
 
 
+def get_m2_scoped_db(
+    user: Annotated[AuthenticatedUser, Depends(get_current_user)],
+):
+    """M2 session bound to the verified caller for RLS owner policies.
+
+    The M2 tables carry owner-scoped RLS keyed on ``project1.actor_id``; the
+    value comes from the authenticated profile, never from the request body.
+    """
+    from sitewise.db.m2_session import m2_session_for
+
+    with m2_session_for(user.user_id) as session:
+        yield session
+
+
+M2Session = Annotated[Session, Depends(get_m2_scoped_db)]
+
+
 def get_confirmed_review_service(
-    session: Annotated[Session, Depends(get_m2_db)],
+    session: M2Session,
 ) -> ConfirmedReviewService:
     return ConfirmedReviewService(SqlModelM2Repository(session))
 
 
 def get_bcb_bindings_resolver_factory():
-    from sitewise.repositories.business_context_repository import UnverifiedContextBindings
-    return UnverifiedContextBindings
+    from datetime import timedelta
+    from functools import partial
+    from sitewise.repositories.m2_context_bindings import M2ContextBindings
+    # No default window: an absent setting leaves validity=None and the
+    # resolver refuses with VALIDITY_BASIS_UNAUTHORIZED.
+    days = settings.project1_bcb_confirmation_validity_days
+    validity = timedelta(days=days) if days is not None else None
+    return partial(M2ContextBindings, validity=validity)
 
 
 def get_persisted_business_context_service(
     resolver_factory=Depends(get_bcb_bindings_resolver_factory),
 ):
-    from sitewise.db.m2_session import get_m2_engine
+    from sitewise.db.m2_session import get_bcb_engine
     from sitewise.repositories.business_context_repository import SqlBusinessContextStore
     from sitewise.services.persisted_business_context_service import PersistedBusinessContextService
-    return PersistedBusinessContextService(SqlBusinessContextStore(get_m2_engine(), resolver_factory))
+    return PersistedBusinessContextService(SqlBusinessContextStore(get_bcb_engine(), resolver_factory))
 
 
 def get_m2_service(
-    session: Annotated[Session, Depends(get_m2_db)],
+    session: M2Session,
 ) -> M2Service:
     repository = SqlModelM2Repository(session)
     return M2Service(repository=repository)
 
 
 def get_bdj_service(
-    session: Annotated[Session, Depends(get_m2_db)],
+    session: M2Session,
 ) -> BDJService:
     return BDJService(repository=SqlModelM2Repository(session))
 
 
 def get_confirmation_service(
-    session: Annotated[Session, Depends(get_m2_db)],
+    session: M2Session,
 ) -> ConfirmationService:
     return ConfirmationService(repository=SqlModelM2Repository(session))
+
+
+def _qg_runtime_engine(secret: str):
+    """One cached runtime engine, shared with the existing model-assisted path."""
+    from functools import lru_cache
+
+    from sqlalchemy import create_engine
+
+    @lru_cache(maxsize=2)
+    def build(value: str):
+        return create_engine(value, hide_parameters=True, pool_pre_ping=True)
+
+    return build(secret)
+
+
+def get_qg_runner():
+    """Server composition of the QG model runner.
+
+    Returns the configured ``QgLiveRunner``, which reuses the existing
+    TokenHarbor adapter, ``project1_ai`` ledger, global budget and disclosure
+    predicate. It is bound at call time to the Owner-authorized synthetic
+    confirmed-facts fingerprint stored in ``var/qg_synthetic_authorization.json``;
+    a packet with any other fingerprint is refused before a run is provisioned or
+    a global slot is consumed. If that artifact, the runtime URL or the provider
+    credential is absent, the returned runner fails closed with a named code —
+    it never falls back to a fabricated authorization, QJ or a paid provider.
+    """
+    from sitewise.project1.qg_live import configured_qg_runner
+
+    secret = settings.project1_runtime_database_url.get_secret_value()
+    if not secret:
+        return configured_qg_runner(None)
+    return configured_qg_runner(_qg_runtime_engine(secret))
+
+
+def get_qg_candidate_service(
+    session: M2Session,
+    contexts=Depends(get_persisted_business_context_service),
+    runner=Depends(get_qg_runner),
+):
+    """BCB context + confirmation + measurement authority + runner, composed once.
+
+    The authority document is the invariant-only policy
+    (``QJ_INVARIANTS_POLICY``), not an authorized measurement policy: no
+    authorized document exists in this tree. It supplies the server-authored
+    uncertainty version and the packet-integrity recheck, and it issues no
+    scientific acceptance, so a generated candidate is review material only.
+    """
+    from sitewise.project1.measurement_policy import (
+        QJ_INVARIANTS_POLICY, MeasurementAuthority,
+    )
+    from sitewise.services.qg_candidate_service import QgCandidateService
+
+    return QgCandidateService(
+        contexts=contexts,
+        confirmation=ConfirmationService(repository=SqlModelM2Repository(session)),
+        authority=MeasurementAuthority(
+            QJ_INVARIANTS_POLICY, lab_scope_record='P1-WORKFLOW-2.0-DIRECT-QG'),
+        runner=runner,
+        enabled=settings.m2_upstream_enabled)
 
 
 def get_project1_read_service(

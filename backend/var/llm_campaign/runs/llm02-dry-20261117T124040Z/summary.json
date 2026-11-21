@@ -1,0 +1,53 @@
+{
+  "budget": 6,
+  "calls": [
+    {
+      "call": 1,
+      "dry_run": true,
+      "file": "C:\\Users\\HP\\OneDrive\\Desktop\\sport-marketplace\\FYP\\backend\\var\\llm_campaign\\runs\\llm02-dry-20261117T124040Z\\01-consistent-BDJ.json",
+      "scenario": "consistent",
+      "stage": "BDJ"
+    },
+    {
+      "call": 2,
+      "dry_run": true,
+      "file": "C:\\Users\\HP\\OneDrive\\Desktop\\sport-marketplace\\FYP\\backend\\var\\llm_campaign\\runs\\llm02-dry-20261117T124040Z\\02-contradictory-BDJ.json",
+      "scenario": "contradictory",
+      "stage": "BDJ"
+    },
+    {
+      "call": 3,
+      "dry_run": true,
+      "file": "C:\\Users\\HP\\OneDrive\\Desktop\\sport-marketplace\\FYP\\backend\\var\\llm_campaign\\runs\\llm02-dry-20261117T124040Z\\03-missing-BDJ.json",
+      "scenario": "missing",
+      "stage": "BDJ"
+    },
+    {
+      "call": 4,
+      "dry_run": true,
+      "file": "C:\\Users\\HP\\OneDrive\\Desktop\\sport-marketplace\\FYP\\backend\\var\\llm_campaign\\runs\\llm02-dry-20261117T124040Z\\04-confirmed_uncertainty-BDJ.json",
+      "scenario": "confirmed_uncertainty",
+      "stage": "BDJ"
+    },
+    {
+      "call": 5,
+      "dry_run": true,
+      "file": "C:\\Users\\HP\\OneDrive\\Desktop\\sport-marketplace\\FYP\\backend\\var\\llm_campaign\\runs\\llm02-dry-20261117T124040Z\\05-requires_clarification-BDJ.json",
+      "scenario": "requires_clarification",
+      "stage": "BDJ"
+    },
+    {
+      "budget_spent": 0,
+      "capture": null,
+      "error": "QJ_DISCLOSURE_NOT_AUTHORIZED",
+      "index": 6,
+      "outcome": "REFUSED_NO_QJ_DISCLOSURE_ADAPTER",
+      "scenario": "requires_clarification",
+      "stage": "QJ"
+    }
+  ],
+  "dry_run": true,
+  "finished_at": "2026-11-17T12:40:41.024956+00:00",
+  "ruleset_version": "BDJ-RULESET-0.2-CAND",
+  "run_id": "llm02-dry-20261117T124040Z"
+}

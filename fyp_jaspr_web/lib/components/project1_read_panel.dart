@@ -90,11 +90,6 @@ class _Project1ReadPanelState extends State<Project1ReadPanel> {
                   'No authorized, routed questionnaire is available for this property assessment.',
                 ),
               ]),
-              p(classes: 'rw-muted', [
-                Component.text(
-                  'Additional question Q14 is held by the assignment constraint (23514).',
-                ),
-              ]),
               button(disabled: true, [Component.text('Publish questionnaire')]),
             ]),
           if (data.assessmentId != null)

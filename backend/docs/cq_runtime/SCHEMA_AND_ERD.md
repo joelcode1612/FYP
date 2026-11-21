@@ -1,5 +1,11 @@
 # Proposed CQ schema compatibility and physical ERD
 
+> Historical proposal/initial test snapshot. The configured local Dss now contains
+> the CQ tables and `m2_assessment_links`; do not interpret the old absence/PG18
+> statements below as current deployment evidence. For the Nov 18 PostgreSQL 16
+> readback, marketplace/M2 boundary, completed synthetic session and remaining gaps,
+> see [current relationships](../../../docs/architecture/assessment_cq/CURRENT_RELATIONSHIPS_20261118.md).
+
 Live Dss was inspected read-only before implementation. Its 28 public tables include nine M2 tables and no CQ tables. No source instrument/items were adopted or seeded. CQ uses the dedicated existing Dss target adapter; the backend-folder default DATABASE_URL names Final_Location_Analysis and is rejected by that adapter. No driver migration, .env change, live migration or record write was performed.
 
 The proposed migration adds 13 tables, two indexes plus constraint indexes, and append-only triggers. It was applied only to new PostgreSQL 18 clusters restored from the read-only PostgreSQL 16.14 Dss schema. Exact physical constraints and private schema dumps are in the evidence. Production-version execution remains a separate gate; PG18 tests do not establish deployment-compatible PG16 acceptance. The migration requires explicit database-target and operator-receipt settings, which are safeguards and do not grant Owner approval.

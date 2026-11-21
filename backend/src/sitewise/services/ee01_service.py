@@ -5,7 +5,7 @@ Both named diagnostic interpretations are supported; official percentages and
 report findings are withheld. A diagnostic job is never run on a mobile tap.
 """
 import json
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 from datetime import datetime, timezone
 from decimal import Decimal
 from uuid import uuid4
@@ -22,13 +22,20 @@ def plain(value):
 class Ee01Service:
     RULES = {'CUST03_CURRENT_ATTEMPT_DIAGNOSTIC', 'ACCEPTED_EFFECTIVE_DIAGNOSTIC'}
 
-    def __init__(self, engine):
+    def __init__(self, engine, synthetic_preview=None, *, transaction=None):
         self.engine = engine
+        self.synthetic_preview = synthetic_preview
+        self.transaction = transaction
+        if transaction is not None and synthetic_preview is None:
+            raise CqRefused('SYNTHETIC_PREVIEW_AUTHORIZATION_REQUIRED',403)
 
     @contextmanager
     def connection(self, actor):
-        with self.engine.begin() as c:
-            c.execute(text('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ'))
+        with (nullcontext(self.transaction) if self.transaction is not None else self.engine.begin()) as c:
+            if self.transaction is None:
+                c.execute(text('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ'))
+            elif c.get_isolation_level()!='REPEATABLE READ':
+                raise CqRefused('EE01_TRANSACTION_ISOLATION_REQUIRED',503)
             role = c.execute(text('SELECT current_user,rolsuper,rolbypassrls FROM pg_roles WHERE rolname=current_user')).one()
             if role != ('p1_ee01_runtime', False, False):
                 raise CqRefused('EE01_RESTRICTED_ROLE_REQUIRED', 503)
@@ -44,6 +51,8 @@ class Ee01Service:
                                  {'cid': campaign_id, 'aid': assessment_id}).mappings().first()
             if not campaign:
                 raise CqRefused('EE01_CAMPAIGN_NOT_FOUND', 404)
+            from sitewise.services.synthetic_preview_boundary import boundary_run
+            synthetic=boundary_run(c,'cq_campaigns',{'id':str(campaign_id)},self.synthetic_preview)
             release = c.execute(text('SELECT * FROM cq_manifest_releases WHERE id=:id'), {'id': campaign['release_id']}).mappings().one()
             m = release['manifest_json']
             if digest(m) != release['manifest_hash'] or digest(release['policy_json']) != release['policy_hash']:
@@ -86,7 +95,7 @@ class Ee01Service:
                 if control and (not source_ok or control['source_json'].get('source_class') != release['source_class']):
                     raise CqRefused('EE01_QUALIFICATION_INTEGRITY_INVALID', 503)
                 qualified = bool(source_ok and control['eligibility'] == 'ELIGIBLE'
-                                 and control['research_mode'] == 'CUSTOMER_DEMAND_SURVEY'
+                                 and control['research_mode'] == ('DEVELOPER_PREVIEW' if synthetic else 'CUSTOMER_DEMAND_SURVEY')
                                  and consent and consent['consented'] and consent['version'] == m['consent_version'])
                 state = 'NOT_SHOWN' if not render else 'SHOWN_NO_ANSWER'
                 selected = accepted
@@ -143,11 +152,15 @@ class Ee01Service:
                         'bank_version': m['bank_version'], 'routing_version': m['policy_version'],
                         'consent_version': m['consent_version'], 'stimulus_hash': digest(expected_stimuli),
                         'qualification_versions': sorted({u['control']['qualification_version'] for u in units if u['control']}),
-                        'research_mode': 'CUSTOMER_DEMAND_SURVEY', 'rule': rule,
+                        'research_mode': 'DEVELOPER_PREVIEW' if synthetic else 'CUSTOMER_DEMAND_SURVEY', 'rule': rule,
                         'authority': 'AUTHORITY_UNVERIFIED', 'privacy_policy': 'WITHHOLD_ALL_FINDINGS',
                         'selection': 'LATEST_ATTEMPT' if rule.startswith('CUST03') else 'LATEST_ACCEPTED',
                         'cutoff_basis': 'COMMITTED_BUILD_SNAPSHOT_WITH_EVENT_TIME_CUTOFF',
                         'scientific_gaps': ['A_DEFINITION_UNRESOLVED', 'REVISION_POLICY_UNVERIFIED', 'MEASUREMENT_CLAIM_UNAUTHORIZED']}
+            if synthetic:
+                metadata.update(origin='SYNTHETIC_TEST',synthetic_run_id=str(synthetic['run_id']),
+                    consent_semantics='SIMULATED_NONHUMAN_NOT_INFORMED_CONSENT',real_reportable=False,
+                    diagnostic_qualification='TEST_ONLY_REPLAY_OF_FROZEN_FIXTURE_PREDICATES')
             rules_hash = digest(metadata)
             scope = 'ISOLATED_TEST' if release['source_class'] == 'SYNTHETIC_FIXTURE' else 'PRODUCTION'
             source_hash = digest(units)
@@ -195,6 +208,8 @@ class Ee01Service:
 
     def read(self, actor, assessment_id, campaign_id, snapshot_id):
         with self.connection(actor) as c:
+            from sitewise.services.synthetic_preview_boundary import boundary_run
+            boundary_run(c,'ee01_measurement_snapshots',{'id':str(snapshot_id)},self.synthetic_preview)
             return self._read(c, snapshot_id, assessment_id, campaign_id)
 
     @staticmethod
@@ -204,6 +219,9 @@ class Ee01Service:
                    'source_hash': row['source_hash'], 'rules_hash': row['rules_hash'],
                    'authority': 'AUTHORITY_UNVERIFIED', 'findings': [],
                    'gates': ['EXPLANATION_TEMPLATE_AUTHORITY_UNVERIFIED', 'A10_ADAPTER_UNVERIFIED', 'REPORT_ADMISSION_REQUIRED']}
+        if row['metadata_json'].get('origin')=='SYNTHETIC_TEST':
+            context.update(origin='SYNTHETIC_TEST',synthetic_run_id=row['metadata_json']['synthetic_run_id'],real_reportable=False)
+            context['gates'].append('SYNTHETIC_DATA_NOT_REPORTABLE')
         ch = digest(context)
         c.execute(text('INSERT INTO ee01_report_readbacks(id,snapshot_id,context_hash,context_json,status) VALUES(:id,:sid,:hash,CAST(:ctx AS jsonb),:status) ON CONFLICT DO NOTHING'),
                   {'id': uuid4(), 'sid': row['id'], 'hash': ch, 'ctx': json.dumps(context),
@@ -211,10 +229,16 @@ class Ee01Service:
 
     def report_readback(self, actor, assessment_id, campaign_id, snapshot_id):
         with self.connection(actor) as c:
+            from sitewise.services.synthetic_preview_boundary import boundary_run
+            boundary_run(c,'ee01_measurement_snapshots',{'id':str(snapshot_id)},self.synthetic_preview)
             self._read(c, snapshot_id, assessment_id, campaign_id)
-            row = c.execute(text('SELECT context_hash,context_json,status FROM ee01_report_readbacks WHERE snapshot_id=:id'),
-                            {'id': snapshot_id}).mappings().one_or_none()
-            if not row or digest(row['context_json']) != row['context_hash']:
-                raise CqRefused('EE01_CONTEXT_UNAVAILABLE', 503)
-            return {'contract_version': 'ee01-report-readback/1', 'status': row['status'],
-                    'context_hash': row['context_hash'], 'context': row['context_json'], 'findings': []}
+            return self._report_context(c,snapshot_id)
+
+    @staticmethod
+    def _report_context(c,snapshot_id):
+        row = c.execute(text('SELECT context_hash,context_json,status FROM ee01_report_readbacks WHERE snapshot_id=:id'),
+                        {'id': snapshot_id}).mappings().one_or_none()
+        if not row or digest(row['context_json']) != row['context_hash']:
+            raise CqRefused('EE01_CONTEXT_UNAVAILABLE', 503)
+        return {'contract_version': 'ee01-report-readback/1', 'status': row['status'],
+                'context_hash': row['context_hash'], 'context': row['context_json'], 'findings': []}

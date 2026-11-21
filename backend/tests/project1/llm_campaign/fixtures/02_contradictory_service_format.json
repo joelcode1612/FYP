@@ -1,0 +1,22 @@
+{
+  "fixture_id": "LLM01-02",
+  "label": "SYNTHETIC - non-human test fixture",
+  "synthetic": true,
+  "contains_personal_data": false,
+  "no_expected_output_recorded": true,
+  "scenario": "A takeaway-only service format is declared alongside a studying-or-working occasion, an occasion that needs seating. The tension is carried by two versioned answers, so it is visible in the projected packet. Input-level description only; no expected output is recorded.",
+  "business_description": "A takeaway-only coffee kiosk. There will be no seating and customers collect their drinks at the counter.",
+  "m2_answers": {
+    "M2V1-01": {"state": "ANSWERED", "value": "UNDECIDED"},
+    "M2V1-02": {"state": "ANSWERED", "value": "TAKEAWAY"},
+    "M2V1-03": {"state": "ANSWERED", "value": ["COFFEE"]},
+    "M2V1-04": {"state": "ANSWERED", "value": ["OFFICE_WORKERS"]},
+    "M2V1-05": {"state": "ANSWERED", "value": "OFFICE_WORKERS"},
+    "M2V1-06": {"state": "ANSWERED", "value": "CONVENIENCE"},
+    "M2V1-07": {"state": "ANSWERED", "value": "STUDY_WORK"},
+    "M2V1-08": {"state": "ANSWERED", "value": ["INFORMAL_FEEDBACK"]},
+    "M2V1-09": {"state": "ANSWERED", "value": ["SERVICE_PREFERENCE"]},
+    "M2V1-10": {"state": "ANSWERED", "value": "SERVICE_PREFERENCE"},
+    "M2V1-11": {"state": "ANSWERED", "value": "VALIDATE_CHOICE"}
+  }
+}

@@ -1,0 +1,1 @@
+{"name":"LoginPage","id":["sitewise_jaspr_web","lib/pages/login_page.dart"],"import":"package:sitewise_jaspr_web/pages/login_page.dart","params":[{"name":"portal","isNamed":true,"decoder":"p['portal'] as String?","encoder":"c.portal"}]}

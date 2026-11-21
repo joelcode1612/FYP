@@ -1,5 +1,5 @@
 """Authenticated candidate review surface. No model or approval HTTP endpoint."""
-from typing import Annotated
+from typing import Annotated, Callable
 from functools import lru_cache
 from uuid import UUID
 
@@ -11,32 +11,29 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlmodel import Session
 
 from sitewise.core.config import settings
-from sitewise.db.session import get_db
+from sitewise.db.m2_session import get_m2_db, m2_session_for
 from sitewise.dependencies import AuthenticatedUser, require_entrepreneur, require_admin_mfa
 from sitewise.project1.bdj import BDJEngine, load_rules
 from sitewise.project1.contracts import WorkflowHeld, no_authority
+from sitewise.project1.model_assisted import run_model_assisted
 from sitewise.project1.projection import M2SourceProjection
+from sitewise.project1.provider import configured_runner
+from sitewise.project1.key_custody import LocalKeyCustody
+from sitewise.project1.result_store import results_for_assessment
 from sitewise.repositories.m2_repository import SqlModelM2Repository
+from sitewise.services.m2_service import M2Service
+from sitewise.core.exceptions import ConflictError
 
 
-def configuration_gate(session: Annotated[Session, Depends(get_db)]):
-    # Before auth opens/syncs a profile. The current Final_Location_Analysis
-    # configuration cannot be repurposed into application authority by a flag.
+def configuration_gate(session: Annotated[Session, Depends(get_m2_db)]):
+    from sitewise.project1.database_identity import verify_workflow_database
+    if not settings.project1_workflow_enabled:
+        raise HTTPException(503, detail={'code': 'WORKFLOW_CONFIGURATION_REQUIRED'})
     try:
-        url = make_url(settings.database_url)
-        valid = (settings.project1_workflow_enabled and url.database == 'Dss' and
-                 url.get_backend_name() == 'postgresql' and url.username != 'postgres')
+        verify_workflow_database(session)
+    except WorkflowHeld:
+        raise
     except (ValueError, SQLAlchemyError):
-        valid = False
-    if not valid:
-        raise HTTPException(503, detail={'code': 'WORKFLOW_CONFIGURATION_REQUIRED',
-            'message': 'Business review is waiting for its required setup.'})
-    try:
-        identity = session.execute(text('SELECT current_database(), rolsuper, rolbypassrls '
-            'FROM pg_roles WHERE rolname=current_user')).one()
-        if identity[0] != 'Dss' or identity[1] or identity[2]:
-            raise HTTPException(503, detail={'code': 'SOURCE_PRINCIPAL_REVIEW_REQUIRED'})
-    except SQLAlchemyError:
         raise HTTPException(503, detail={'code': 'SOURCE_STORAGE_UNAVAILABLE'}) from None
     finally:
         session.rollback()
@@ -45,19 +42,103 @@ def configuration_gate(session: Annotated[Session, Depends(get_db)]):
 router = APIRouter(dependencies=[Depends(configuration_gate)])
 Owner = Annotated[AuthenticatedUser, Depends(require_entrepreneur)]
 Admin = Annotated[AuthenticatedUser, Depends(require_admin_mfa)]
-Database = Annotated[Session, Depends(get_db)]
 
 
-def source(session, user, assessment_id, revision):
+def get_workflow_source_db(user: Owner):
+    # The same owner-bound, transaction-rebinding adapter used by existing M2
+    # services. Projection reads roll back; subsequent revision rechecks must
+    # retain the authenticated actor rather than silently lose RLS visibility.
+    with m2_session_for(user.user_id) as session:
+        yield session
+
+
+Database = Annotated[Session, Depends(get_workflow_source_db)]
+
+
+def model_assisted_gate():
+    """Second gate: the model-assisted path needs its own configuration.
+
+    ``configuration_gate`` already requires the workflow flag and the Dss
+    principal. This one additionally requires an enabled provider and a
+    non-empty adopted rules version/hash/receipt. A partial configuration is a
+    hold, not a reason to dispatch under unknown terms.
+    """
+    if settings.project1_synthetic_bdj_trial_enabled:
+        from sitewise.project1.database_identity import configured_target
+        if (configured_target()[1] is None or not settings.m2_protected_identity_enabled
+                or not settings.tokenharbor_enabled):
+            raise HTTPException(503, detail={'code': 'BDJ_TRIAL_DISABLED'})
+        return
+    if not (settings.tokenharbor_enabled and settings.project1_rules_version
+            and settings.project1_rules_sha256
+            and settings.project1_rules_adoption_receipt):
+        raise HTTPException(503, detail={
+            'code': 'MODEL_ASSISTED_NOT_CONFIGURED',
+            'message': 'Model-assisted review is waiting for its required setup.'})
+
+
+def get_packet_source():
+    """Indirection so a test can supply a synthetic packet without a Dss name."""
+    return source
+
+
+@lru_cache(maxsize=2)
+def runtime_engine(secret):
+    return create_engine(secret, hide_parameters=True, pool_pre_ping=True)
+
+
+def get_runtime_engine():
+    secret = settings.project1_runtime_database_url.get_secret_value()
+    if not secret:
+        raise HTTPException(503, detail={
+            'code': 'MODEL_ASSISTED_NOT_CONFIGURED',
+            'message': 'Model-assisted review is waiting for its required setup.'})
+    return runtime_engine(secret)
+
+
+def get_runner_factory():
+    """Server composition only; a web caller cannot choose a provider or key."""
+    return configured_runner
+
+
+PacketSource = Annotated[Callable, Depends(get_packet_source)]
+RuntimeEngine = Annotated[object, Depends(get_runtime_engine)]
+RunnerFactory = Annotated[Callable, Depends(get_runner_factory)]
+
+
+def source(session, user, assessment_id, revision, *, include_inventory=False):
     try:
-        role = session.execute(text('SELECT current_database(), rolsuper, rolbypassrls '
-            'FROM pg_roles WHERE rolname=current_user')).one()
-        if role[0] != 'Dss' or role[1] or role[2]:
-            raise HTTPException(503, detail={'code': 'SOURCE_PRINCIPAL_REVIEW_REQUIRED',
-                'message': 'Business review is waiting for its required setup.'})
+        from sitewise.project1.database_identity import verify_workflow_database
+        verify_workflow_database(session)
         # Explicit owner SQL checks remain necessary even if existing RLS grants deny.
-        return M2SourceProjection(SqlModelM2Repository(session)).read(
-            assessment_id, user.user_id, revision)
+        repo = SqlModelM2Repository(session)
+        confirmation = repo.latest_confirmation(assessment_id, user.user_id)
+        if confirmation is None:
+            raise ConflictError('Confirm the current M2 declarations before BDJ evaluation.')
+        with M2Service(repo).locked_confirmed_source(assessment_id, user.user_id,
+                confirmation_id=confirmation['id'], expected_revision=revision) as confirmed:
+            receipt = {k: str(confirmed[k]) for k in ('confirmation_id','snapshot_digest')}
+        projected = M2SourceProjection(repo).read(
+            assessment_id, user.user_id, revision, include_inventory=include_inventory)
+        # Keep the original envelope untouched for its fingerprint check.
+        packet = dict(projected['projection']) if include_inventory else projected
+        if not packet['confirmed']:
+            raise ConflictError('The M2 confirmation changed before BDJ evaluation.')
+        packet['confirmation'] = receipt
+        from sitewise.project1.contracts import digest
+        packet['source_fingerprint'] = digest({k:v for k,v in packet.items() if k != 'source_fingerprint'})
+        if include_inventory:
+            # Definitions are server-read, never a client-supplied codebook. The
+            # versioned envelope does not alter the historical fingerprint.
+            from sitewise.project1.projection import bind_bdj_inventory_to_confirmation
+            definitions = repo.list_items(UUID(packet['instrument_id']))
+            envelope = bind_bdj_inventory_to_confirmation(projected, packet, item_definitions=definitions)
+            # Both the inventory and definition read happened after the first
+            # confirmation lock was released. Refuse a concurrent source edit.
+            if source(session, user, assessment_id, revision)['source_fingerprint'] != packet['source_fingerprint']:
+                raise ConflictError('The confirmed M2 source changed while reading the item inventory.')
+            return envelope
+        return packet
     except SQLAlchemyError:
         session.rollback()
         raise HTTPException(503, detail={'code': 'SOURCE_STORAGE_UNAVAILABLE',
@@ -66,9 +147,10 @@ def source(session, user, assessment_id, revision):
 
 @router.get('/assessments/{assessment_id}/source')
 def read_source(assessment_id: UUID, expected_revision: Annotated[int, Query(ge=0)],
-                user: Owner, session: Database, response: Response):
+                user: Owner, session: Database, response: Response,
+                include_inventory: bool = False):
     response.headers['Cache-Control'] = 'no-store'
-    return source(session, user, assessment_id, expected_revision)
+    return source(session, user, assessment_id, expected_revision, include_inventory=include_inventory)
 
 
 class ReviewRequest(BaseModel):
@@ -105,6 +187,71 @@ def business_understanding(assessment_id: UUID, payload: ReviewRequest,
         'stale': 'Your business details changed. Review the latest version first.',
     }[result['outcome']]
     return result
+
+
+@router.post('/assessments/{assessment_id}/business-understanding/model-assisted',
+             dependencies=[Depends(model_assisted_gate)])
+def business_understanding_model_assisted(
+        assessment_id: UUID, payload: ReviewRequest, user: Owner, session: Database,
+        response: Response, packet_source: PacketSource, runtime: RuntimeEngine,
+        runner_factory: RunnerFactory):
+    """A second, explicitly labelled entry point; the deterministic one is untouched.
+
+    Success is a candidate result, never authority: the response always carries
+    ``finding_authority='CANDIDATE_ONLY'``, ``status_contract`` and the all-false
+    ``no_authority()`` spread.
+    """
+    response.headers['Cache-Control'] = 'no-store'
+    return execute_model_assisted_source(session=session, user=user,
+        assessment_id=assessment_id, revision=payload.expected_revision,
+        packet_source=packet_source, runtime=runtime, runner_factory=runner_factory)
+
+
+def execute_model_assisted_source(*, session, user, assessment_id, revision,
+                                  packet_source, runtime, runner_factory):
+    """Shared by both existing BDJ routes; selection is server-only and default-off."""
+    if settings.project1_synthetic_bdj_trial_enabled:
+        from sitewise.services.bdj_synthetic_execution import execute_registered_trial
+        return execute_registered_trial(session=session, user=user,
+            assessment_id=assessment_id, revision=revision, packet_source=packet_source,
+            runtime=runtime, runner_factory=runner_factory)
+    packet = packet_source(session, user, assessment_id, revision)
+    return run_model_assisted(packet=packet, actor_id=user.user_id,
+        runtime_engine=runtime, runner_factory=runner_factory,
+        current_fingerprint=lambda: packet_source(
+            session, user, assessment_id, revision)['source_fingerprint'])
+
+
+@router.get('/assessments/{assessment_id}/results')
+def business_understanding_results(
+        assessment_id: UUID, user: Owner, runtime: RuntimeEngine, response: Response,
+        limit: Annotated[int, Query(ge=1, le=100)] = 50):
+    """Activity History V1.1: the saved model-assisted results for one assessment.
+
+    Additive to the V1 activity feed at ``/m2/assessments/{id}/activity``, which
+    is untouched. This route reads *persisted* rows, so it is the only endpoint
+    that can prove a result survived a restart.
+
+    What it deliberately does not return: ``result_payload`` (an internal
+    column whose quote spans are redacted at write, but which is still not part
+    of the response contract), any ``source_refs``, and any
+    ``bdj_raw_responses`` column. The projection allow-list is enforced in
+    ``results_for_assessment``; the sentinel test is
+    ``test_history_projection_excludes_the_quote_sentinel``.
+
+    Every row carries ``finding_authority='candidate_only'`` and the response
+    spreads ``no_authority()``, so a saved result can never read as approval.
+    """
+    response.headers['Cache-Control'] = 'no-store'
+    rows = results_for_assessment(runtime, user.user_id, assessment_id, limit,
+                                  payload_custody=LocalKeyCustody())
+    return {
+        'assessment_id': str(assessment_id),
+        'result_count': len(rows),
+        'results': [{**row, 'finding_authority': 'CANDIDATE_ONLY'} for row in rows],
+        'status_contract': 'UNRECONCILED_PROPOSAL',
+        **no_authority(),
+    }
 
 
 @router.get('/technical-audit')

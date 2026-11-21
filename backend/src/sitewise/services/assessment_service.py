@@ -581,22 +581,23 @@ class AssessmentService:
                 code="assessment_forbidden",
                 status_code=403,
             )
+        from sitewise.services.assessment_discard_service import AssessmentDiscardService
+        AssessmentDiscardService(self.session.get_bind()).assert_available(assessment_id, user_id)
         return assessment
 
     def find_by_property(self, user_id: uuid.UUID, property_id: str) -> Assessment | None:
-        return self.repo.get_by_user_and_property(user_id, property_id)
+        assessment = self.repo.get_by_user_and_property(user_id, property_id)
+        if assessment is not None:
+            from sitewise.services.assessment_discard_service import AssessmentDiscardService
+            AssessmentDiscardService(self.session.get_bind()).assert_available(assessment.assessment_id, user_id)
+        return assessment
 
     def delete_owned(self, assessment_id: uuid.UUID, user_id: uuid.UUID) -> None:
-        """Permanently delete the caller's own assessment record.
-
-        Ownership is enforced through [get_owned] (404 unknown, 403 foreign),
-        so another account's record can never be deleted. The record is
-        self-contained — stage timestamps and requirements are columns on the
-        row — so no child rows need clearing. Generated explanations are
-        keyed per property + user, not per assessment, and simply stay cached.
-        """
-        assessment = self.get_owned(assessment_id, user_id)
-        self.repo.delete(assessment)
+        """Use the durable CP-12 coordinator; never delete only the FLA row."""
+        from sitewise.services.assessment_discard_service import AssessmentDiscardService
+        # Authenticated owner is passed by the existing route dependency. The
+        # database interface rechecks ownership under the row lock on every retry.
+        AssessmentDiscardService(self.session.get_bind()).discard(assessment_id, user_id)
 
     def create_or_resume(self, user_id: uuid.UUID, property_id: str) -> tuple[Assessment, bool]:
         prop = self.catalog.get_property(property_id)
@@ -611,6 +612,7 @@ class AssessmentService:
             # Resume is always allowed: the entrepreneur may have removed the
             # property from their shortlist after starting, and losing access to
             # in-progress work because of that would destroy data.
+            self.get_owned(existing.assessment_id, user_id)
             return existing, False
 
         # Starting a NEW assessment requires the property to be on the caller's

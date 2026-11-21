@@ -1,0 +1,2545 @@
+{
+  "data": [
+    {
+      "blurb": "Claude Sonnet 4.6.",
+      "context_length": null,
+      "covered_by_plans": [
+        "Office Pass",
+        "Frontier Pass"
+      ],
+      "created": 1700000000,
+      "function_call": true,
+      "id": "claude-sonnet-4.6",
+      "label": "Claude Sonnet 4.6",
+      "object": "model",
+      "owned_by": "tokenharbor",
+      "pricing": {
+        "cache_read_usd_per_1m": 0.3,
+        "cache_write_usd_per_1m": 3.75,
+        "input_usd_per_1m": 3,
+        "output_usd_per_1m": 15
+      },
+      "reasoning": {
+        "can_disable": null,
+        "default_effort": null,
+        "efforts": null
+      },
+      "supports_prompt_cache": true,
+      "tier": "high",
+      "tool_call": true
+    },
+    {
+      "blurb": null,
+      "context_length": 1000000,
+      "covered_by_plans": [
+        "Frontier Pass"
+      ],
+      "created": 1700000000,
+      "function_call": true,
+      "id": "claude-opus-5.5",
+      "label": "Claude Opus 5.5",
+      "object": "model",
+      "owned_by": "tokenharbor",
+      "pricing": {
+        "cache_read_usd_per_1m": 0.2,
+        "cache_write_usd_per_1m": 5,
+        "input_usd_per_1m": 4,
+        "output_usd_per_1m": 20
+      },
+      "reasoning": {
+        "can_disable": false,
+        "default_effort": "medium",
+        "efforts": [
+          "low",
+          "medium",
+          "high",
+          "xhigh"
+        ]
+      },
+      "supports_prompt_cache": true,
+      "tier": "high",
+      "tool_call": true
+    },
+    {
+      "blurb": null,
+      "context_length": 1000000,
+      "covered_by_plans": [
+        "Frontier Pass"
+      ],
+      "created": 1700000000,
+      "function_call": true,
+      "id": "claude-opus-5",
+      "label": "Claude Opus 5",
+      "object": "model",
+      "owned_by": "tokenharbor",
+      "pricing": {
+        "cache_read_usd_per_1m": 0.5,
+        "cache_write_usd_per_1m": 6.25,
+        "input_usd_per_1m": 5,
+        "output_usd_per_1m": 25
+      },
+      "reasoning": {
+        "can_disable": null,
+        "default_effort": null,
+        "efforts": null
+      },
+      "supports_prompt_cache": true,
+      "tier": "high",
+      "tool_call": true
+    },
+    {
+      "blurb": null,
+      "context_length": 1000000,
+      "covered_by_plans": [
+        "Office Pass",
+        "Frontier Pass"
+      ],
+      "created": 1700000000,
+      "function_call": true,
+      "id": "claude-sonnet-5",
+      "label": "Claude Sonnet 5",
+      "object": "model",
+      "owned_by": "tokenharbor",
+      "pricing": {
+        "cache_read_usd_per_1m": 0.2,
+        "cache_write_usd_per_1m": 2.5,
+        "input_usd_per_1m": 2,
+        "output_usd_per_1m": 10
+      },
+      "reasoning": {
+        "can_disable": null,
+        "default_effort": null,
+        "efforts": null
+      },
+      "supports_prompt_cache": true,
+      "tier": "mid",
+      "tool_call": true
+    },
+    {
+      "blurb": null,
+      "context_length": 500000,
+      "covered_by_plans": [
+        "Office Pass",
+        "Frontier Pass"
+      ],
+      "created": 1700000000,
+      "function_call": true,
+      "id": "grok-4.6",
+      "label": "Grok 4.6",
+      "object": "model",
+      "owned_by": "tokenharbor",
+      "pricing": {
+        "cache_read_usd_per_1m": 0.5,
+        "cache_write_usd_per_1m": null,
+        "input_usd_per_1m": 2,
+        "output_usd_per_1m": 6
+      },
+      "reasoning": {
+        "can_disable": null,
+        "default_effort": null,
+        "efforts": null
+      },
+      "supports_prompt_cache": true,
+      "tier": "frontier",
+      "tool_call": true
+    },
+    {
+      "blurb": null,
+      "context_length": 200000,
+      "covered_by_plans": [
+        "Office Pass",
+        "Frontier Pass"
+      ],
+      "created": 1700000000,
+      "function_call": true,
+      "id": "glm-5.3",
+      "label": "GLM-5.3",
+      "object": "model",
+      "owned_by": "tokenharbor",
+      "pricing": {
+        "cache_read_usd_per_1m": 0.283,
+        "cache_write_usd_per_1m": null,
+        "input_usd_per_1m": 1.4,
+        "output_usd_per_1m": 4.4
+      },
+      "reasoning": {
+        "can_disable": null,
+        "default_effort": null,
+        "efforts": null
+      },
+      "supports_prompt_cache": true,
+      "tier": "frontier",
+      "tool_call": true
+    },
+    {
+      "blurb": null,
+      "context_length": 1048576,
+      "covered_by_plans": [
+        "Agent Pass",
+        "Office Pass",
+        "Frontier Pass"
+      ],
+      "created": 1700000000,
+      "function_call": true,
+      "id": "mimo-v2.5",
+      "label": "MiMo V2.5",
+      "object": "model",
+      "owned_by": "tokenharbor",
+      "pricing": {
+        "cache_read_usd_per_1m": 0.0028,
+        "cache_write_usd_per_1m": null,
+        "input_usd_per_1m": 0.14,
+        "output_usd_per_1m": 0.28
+      },
+      "reasoning": {
+        "can_disable": null,
+        "default_effort": null,
+        "efforts": null
+      },
+      "supports_prompt_cache": true,
+      "tier": "mid",
+      "tool_call": true
+    },
+    {
+      "blurb": null,
+      "context_length": 1048576,
+      "covered_by_plans": [
+        "Agent Pass",
+        "Office Pass",
+        "Frontier Pass"
+      ],
+      "created": 1700000000,
+      "function_call": true,
+      "id": "mimo-v2.5-pro",
+      "label": "MiMo V2.5 Pro",
+      "object": "model",
+      "owned_by": "tokenharbor",
+      "pricing": {
+        "cache_read_usd_per_1m": 0.0036,
+        "cache_write_usd_per_1m": null,
+        "input_usd_per_1m": 0.435,
+        "output_usd_per_1m": 0.87
+      },
+      "reasoning": {
+        "can_disable": null,
+        "default_effort": null,
+        "efforts": null
+      },
+      "supports_prompt_cache": true,
+      "tier": "high",
+      "tool_call": true
+    },
+    {
+      "blurb": null,
+      "context_length": 1000000,
+      "covered_by_plans": [
+        "Office Pass",
+        "Frontier Pass"
+      ],
+      "created": 1700000000,
+      "function_call": true,
+      "id": "gemini-3.8-flash",
+      "label": "Gemini 3.8 Flash",
+      "object": "model",
+      "owned_by": "tokenharbor",
+      "pricing": {
+        "cache_read_usd_per_1m": 0.075,
+        "cache_write_usd_per_1m": null,
+        "input_usd_per_1m": 0.75,
+        "output_usd_per_1m": 3.75
+      },
+      "reasoning": {
+        "can_disable": false,
+        "default_effort": null,
+        "efforts": null
+      },
+      "supports_prompt_cache": true,
+      "tier": "mid",
+      "tool_call": true
+    },
+    {
+      "blurb": null,
+      "context_length": 1000000,
+      "covered_by_plans": [
+        "Frontier Pass"
+      ],
+      "created": 1700000000,
+      "function_call": true,
+      "id": "claude-fable-5.1",
+      "label": "Claude Fable 5.1",
+      "object": "model",
+      "owned_by": "tokenharbor",
+      "pricing": {
+        "cache_read_usd_per_1m": 0.25,
+        "cache_write_usd_per_1m": 12.5,
+        "input_usd_per_1m": 10,
+        "output_usd_per_1m": 50
+      },
+      "reasoning": {
+        "can_disable": false,
+        "default_effort": null,
+        "efforts": [
+          "low",
+          "medium",
+          "high",
+          "xhigh"
+        ]
+      },
+      "supports_prompt_cache": true,
+      "tier": "high",
+      "tool_call": true
+    },
+    {
+      "blurb": null,
+      "context_length": null,
+      "covered_by_plans": [
+        "Office Pass",
+        "Frontier Pass"
+      ],
+      "created": 1700000000,
+      "function_call": true,
+      "id": "qwen3.7-max",
+      "label": "Qwen3.7 Max",
+      "object": "model",
+      "owned_by": "tokenharbor",
+      "pricing": {
+        "cache_read_usd_per_1m": 0.5,
+        "cache_write_usd_per_1m": 3.125,
+        "input_usd_per_1m": 2.5,
+        "output_usd_per_1m": 7.5
+      },
+      "reasoning": {
+        "can_disable": null,
+        "default_effort": null,
+        "efforts": null
+      },
+      "supports_prompt_cache": true,
+      "tier": "high",
+      "tool_call": true
+    },
+    {
+      "blurb": "GLM 5.1.",
+      "context_length": null,
+      "covered_by_plans": [
+        "Office Pass",
+        "Frontier Pass"
+      ],
+      "created": 1700000000,
+      "function_call": true,
+      "id": "glm-5.1",
+      "label": "GLM 5.1",
+      "object": "model",
+      "owned_by": "tokenharbor",
+      "pricing": {
+        "cache_read_usd_per_1m": 0.26,
+        "cache_write_usd_per_1m": 0,
+        "input_usd_per_1m": 1.4,
+        "output_usd_per_1m": 4.4
+      },
+      "reasoning": {
+        "can_disable": null,
+        "default_effort": null,
+        "efforts": null
+      },
+      "supports_prompt_cache": true,
+      "tier": "high",
+      "tool_call": true
+    },
+    {
+      "blurb": null,
+      "context_length": null,
+      "covered_by_plans": [
+        "Office Pass",
+        "Frontier Pass"
+      ],
+      "created": 1700000000,
+      "function_call": true,
+      "id": "deepseek-v4-pro",
+      "label": "DeepSeek V4 Pro",
+      "object": "model",
+      "owned_by": "tokenharbor",
+      "pricing": {
+        "cache_read_usd_per_1m": 0.132,
+        "cache_write_usd_per_1m": null,
+        "input_usd_per_1m": 1.32,
+        "off_peak": {
+          "cache_read_usd_per_1m": 0.066,
+          "input_usd_per_1m": 0.66,
+          "output_usd_per_1m": 1.98,
+          "window": "14:00\u201300:00 UTC"
+        },
+        "output_usd_per_1m": 3.96
+      },
+      "reasoning": {
+        "can_disable": null,
+        "default_effort": null,
+        "efforts": null
+      },
+      "supports_prompt_cache": true,
+      "tier": "high",
+      "tool_call": true
+    },
+    {
+      "blurb": null,
+      "context_length": 1000000,
+      "covered_by_plans": [
+        "Frontier Pass"
+      ],
+      "created": 1700000000,
+      "function_call": true,
+      "id": "claude-fable-5",
+      "label": "Claude Fable 5",
+      "object": "model",
+      "owned_by": "tokenharbor",
+      "pricing": {
+        "cache_read_usd_per_1m": 1,
+        "cache_write_usd_per_1m": 12.5,
+        "input_usd_per_1m": 10,
+        "output_usd_per_1m": 50
+      },
+      "reasoning": {
+        "can_disable": null,
+        "default_effort": null,
+        "efforts": null
+      },
+      "supports_prompt_cache": true,
+      "tier": "high",
+      "tool_call": true
+    },
+    {
+      "blurb": "Claude Opus 4.8.",
+      "context_length": null,
+      "covered_by_plans": [
+        "Frontier Pass"
+      ],
+      "created": 1700000000,
+      "function_call": true,
+      "id": "claude-opus-4.8",
+      "label": "Claude Opus 4.8",
+      "object": "model",
+      "owned_by": "tokenharbor",
+      "pricing": {
+        "cache_read_usd_per_1m": 0.5,
+        "cache_write_usd_per_1m": 6.25,
+        "input_usd_per_1m": 5,
+        "output_usd_per_1m": 25
+      },
+      "reasoning": {
+        "can_disable": null,
+        "default_effort": null,
+        "efforts": null
+      },
+      "supports_prompt_cache": true,
+      "tier": "high",
+      "tool_call": true
+    },
+    {
+      "blurb": null,
+      "context_length": 1000000,
+      "covered_by_plans": [
+        "Agent Pass",
+        "Office Pass",
+        "Frontier Pass"
+      ],
+      "created": 1700000000,
+      "function_call": true,
+      "id": "deepseek-v4-flash",
+      "label": "DeepSeek V4 Flash",
+      "object": "model",
+      "owned_by": "tokenharbor",
+      "pricing": {
+        "cache_read_usd_per_1m": 0.044,
+        "cache_write_usd_per_1m": null,
+        "input_usd_per_1m": 0.44,
+        "off_peak": {
+          "cache_read_usd_per_1m": 0.022,
+          "input_usd_per_1m": 0.22,
+          "output_usd_per_1m": 0.66,
+          "window": "14:00\u201300:00 UTC"
+        },
+        "output_usd_per_1m": 1.32
+      },
+      "reasoning": {
+        "can_disable": null,
+        "default_effort": null,
+        "efforts": null
+      },
+      "supports_prompt_cache": true,
+      "tier": "low",
+      "tool_call": true
+    },
+    {
+      "blurb": "Qwen4 Max. Pay-as-you-go balance, Office Pass or Frontier Pass only.",
+      "context_length": 1000000,
+      "covered_by_plans": [
+        "Office Pass",
+        "Frontier Pass"
+      ],
+      "created": 1700000000,
+      "function_call": true,
+      "id": "qwen4-max",
+      "label": "Qwen4 Max",
+      "object": "model",
+      "owned_by": "tokenharbor",
+      "pricing": {
+        "cache_read_usd_per_1m": 0.075,
+        "cache_write_usd_per_1m": 1.875,
+        "input_usd_per_1m": 1.5,
+        "output_usd_per_1m": 4.5
+      },
+      "reasoning": {
+        "can_disable": null,
+        "default_effort": null,
+        "efforts": [
+          "low",
+          "xhigh"
+        ]
+      },
+      "supports_prompt_cache": true,
+      "tier": "high",
+      "tool_call": true
+    },
+    {
+      "blurb": null,
+      "context_length": 1000000,
+      "covered_by_plans": [
+        "Office Pass",
+        "Frontier Pass"
+      ],
+      "created": 1700000000,
+      "function_call": true,
+      "id": "qwen3.8-max",
+      "label": "Qwen3.8 Max",
+      "object": "model",
+      "owned_by": "tokenharbor",
+      "pricing": {
+        "cache_read_usd_per_1m": 0.25,
+        "cache_write_usd_per_1m": 2.5,
+        "input_usd_per_1m": 2,
+        "output_usd_per_1m": 6
+      },
+      "reasoning": {
+        "can_disable": null,
+        "default_effort": null,
+        "efforts": null
+      },
+      "supports_prompt_cache": true,
+      "tier": "high",
+      "tool_call": true
+    },
+    {
+      "blurb": null,
+      "context_length": 1000000,
+      "covered_by_plans": [
+        "Agent Pass",
+        "Office Pass",
+        "Frontier Pass"
+      ],
+      "created": 1700000000,
+      "function_call": true,
+      "id": "glm-5.3-flash",
+      "label": "GLM 5.3 Flash",
+      "object": "model",
+      "owned_by": "tokenharbor",
+      "pricing": {
+        "cache_read_usd_per_1m": 0.03,
+        "cache_write_usd_per_1m": 0,
+        "input_usd_per_1m": 0.15,
+        "output_usd_per_1m": 0.5
+      },
+      "reasoning": {
+        "can_disable": null,
+        "default_effort": null,
+        "efforts": null
+      },
+      "supports_prompt_cache": true,
+      "tier": "low",
+      "tool_call": true
+    },
+    {
+      "blurb": null,
+      "context_length": 1048576,
+      "covered_by_plans": [
+        "Office Pass",
+        "Frontier Pass"
+      ],
+      "created": 1700000000,
+      "function_call": true,
+      "id": "inkling-2-small",
+      "label": "Inkling 2 Small",
+      "object": "model",
+      "owned_by": "tokenharbor",
+      "pricing": {
+        "cache_read_usd_per_1m": 0.03,
+        "cache_write_usd_per_1m": null,
+        "input_usd_per_1m": 0.3,
+        "output_usd_per_1m": 1
+      },
+      "reasoning": {
+        "can_disable": null,
+        "default_effort": null,
+        "efforts": null
+      },
+      "supports_prompt_cache": true,
+      "tier": "mid",
+      "tool_call": true
+    },
+    {
+      "blurb": null,
+      "context_length": 1048576,
+      "covered_by_plans": [
+        "Office Pass",
+        "Frontier Pass"
+      ],
+      "created": 1700000000,
+      "function_call": true,
+      "id": "mimo-v2.6-pro",
+      "label": "MiMo V2.6 Pro",
+      "object": "model",
+      "owned_by": "tokenharbor",
+      "pricing": {
+        "cache_read_usd_per_1m": 0.0036,
+        "cache_write_usd_per_1m": null,
+        "input_usd_per_1m": 0.435,
+        "output_usd_per_1m": 0.87
+      },
+      "reasoning": {
+        "can_disable": null,
+        "default_effort": null,
+        "efforts": null
+      },
+      "supports_prompt_cache": true,
+      "tier": "high",
+      "tool_call": true
+    },
+    {
+      "blurb": null,
+      "context_length": 1000000,
+      "covered_by_plans": [
+        "Office Pass",
+        "Frontier Pass"
+      ],
+      "created": 1700000000,
+      "function_call": true,
+      "id": "claude-sonnet-5.5",
+      "label": "Claude Sonnet 5.5",
+      "object": "model",
+      "owned_by": "tokenharbor",
+      "pricing": {
+        "cache_read_usd_per_1m": 0.1,
+        "cache_write_usd_per_1m": 2.5,
+        "input_usd_per_1m": 2,
+        "output_usd_per_1m": 10
+      },
+      "reasoning": {
+        "can_disable": true,
+        "default_effort": "high",
+        "efforts": [
+          "low",
+          "medium",
+          "high",
+          "xhigh"
+        ]
+      },
+      "supports_prompt_cache": true,
+      "tier": "mid",
+      "tool_call": true
+    },
+    {
+      "blurb": null,
+      "context_length": 1048576,
+      "covered_by_plans": [
+        "Office Pass",
+        "Frontier Pass"
+      ],
+      "created": 1700000000,
+      "function_call": true,
+      "id": "gemini-3.7-flash",
+      "label": "Gemini 3.7 Flash",
+      "object": "model",
+      "owned_by": "tokenharbor",
+      "pricing": {
+        "cache_read_usd_per_1m": 0.075,
+        "cache_write_usd_per_1m": null,
+        "input_usd_per_1m": 0.75,
+        "output_usd_per_1m": 3.75
+      },
+      "reasoning": {
+        "can_disable": false,
+        "default_effort": null,
+        "efforts": null
+      },
+      "supports_prompt_cache": true,
+      "tier": "mid",
+      "tool_call": true
+    },
+    {
+      "blurb": null,
+      "context_length": 524288,
+      "covered_by_plans": [
+        "Office Pass",
+        "Frontier Pass"
+      ],
+      "created": 1700000000,
+      "function_call": true,
+      "id": "mistral-large-2512",
+      "label": "Mistral Large 2512",
+      "object": "model",
+      "owned_by": "tokenharbor",
+      "pricing": {
+        "cache_read_usd_per_1m": null,
+        "cache_write_usd_per_1m": null,
+        "input_usd_per_1m": 0.5,
+        "output_usd_per_1m": 1.5
+      },
+      "reasoning": {
+        "can_disable": null,
+        "default_effort": null,
+        "efforts": null
+      },
+      "supports_prompt_cache": false,
+      "tier": "mid",
+      "tool_call": true
+    },
+    {
+      "blurb": null,
+      "context_length": 1048576,
+      "covered_by_plans": [
+        "Office Pass",
+        "Frontier Pass"
+      ],
+      "created": 1700000000,
+      "function_call": true,
+      "id": "muse-spark-1.2",
+      "label": "Muse Spark 1.2",
+      "object": "model",
+      "owned_by": "tokenharbor",
+      "pricing": {
+        "cache_read_usd_per_1m": 0.15,
+        "cache_write_usd_per_1m": null,
+        "input_usd_per_1m": 1.25,
+        "output_usd_per_1m": 4.25
+      },
+      "reasoning": {
+        "can_disable": null,
+        "default_effort": null,
+        "efforts": null
+      },
+      "supports_prompt_cache": true,
+      "tier": "mid",
+      "tool_call": true
+    },
+    {
+      "blurb": null,
+      "context_length": 1050000,
+      "covered_by_plans": [
+        "Agent Pass",
+        "Office Pass",
+        "Frontier Pass"
+      ],
+      "created": 1700000000,
+      "function_call": true,
+      "id": "gpt-6-luna",
+      "label": "GPT-6 Luna",
+      "object": "model",
+      "owned_by": "tokenharbor",
+      "pricing": {
+        "cache_read_usd_per_1m": 0.01,
+        "cache_write_usd_per_1m": 0.125,
+        "input_usd_per_1m": 0.1,
+        "long_context": {
+          "cache_read_usd_per_1m": 0.02,
+          "cache_write_usd_per_1m": 0.25,
+          "input_usd_per_1m": 0.2,
+          "output_usd_per_1m": 0.75,
+          "over_prompt_tokens": 271999
+        },
+        "output_usd_per_1m": 0.5
+      },
+      "reasoning": {
+        "can_disable": true,
+        "default_effort": null,
+        "efforts": [
+          "low",
+          "medium",
+          "high",
+          "xhigh"
+        ]
+      },
+      "supports_prompt_cache": true,
+      "tier": "high",
+      "tool_call": true
+    },
+    {
+      "blurb": null,
+      "context_length": 1050000,
+      "covered_by_plans": [
+        "Frontier Pass"
+      ],
+      "created": 1700000000,
+      "function_call": true,
+      "id": "gpt-6-astra",
+      "label": "GPT-6 Astra",
+      "object": "model",
+      "owned_by": "tokenharbor",
+      "pricing": {
+        "cache_read_usd_per_1m": 1,
+        "cache_write_usd_per_1m": 12.5,
+        "input_usd_per_1m": 10,
+        "long_context": {
+          "cache_read_usd_per_1m": 2,
+          "cache_write_usd_per_1m": 25,
+          "input_usd_per_1m": 20,
+          "output_usd_per_1m": 75,
+          "over_prompt_tokens": 271999
+        },
+        "output_usd_per_1m": 50
+      },
+      "reasoning": {
+        "can_disable": null,
+        "default_effort": null,
+        "efforts": [
+          "low",
+          "medium",
+          "high",
+          "xhigh"
+        ]
+      },
+      "supports_prompt_cache": true,
+      "tier": "high",
+      "tool_call": true
+    },
+    {
+      "blurb": null,
+      "context_length": 500000,
+      "covered_by_plans": [
+        "Office Pass",
+        "Frontier Pass"
+      ],
+      "created": 1700000000,
+      "function_call": true,
+      "id": "grok-4.5",
+      "label": "Grok 4.5",
+      "object": "model",
+      "owned_by": "tokenharbor",
+      "pricing": {
+        "cache_read_usd_per_1m": 0.3,
+        "cache_write_usd_per_1m": null,
+        "input_usd_per_1m": 2,
+        "output_usd_per_1m": 6
+      },
+      "reasoning": {
+        "can_disable": null,
+        "default_effort": null,
+        "efforts": null
+      },
+      "supports_prompt_cache": true,
+      "tier": "mid",
+      "tool_call": true
+    },
+    {
+      "blurb": null,
+      "context_length": 1048576,
+      "covered_by_plans": [
+        "Office Pass",
+        "Frontier Pass"
+      ],
+      "created": 1700000000,
+      "function_call": true,
+      "id": "muse-spark-1-3",
+      "label": "Muse Spark 1.3",
+      "object": "model",
+      "owned_by": "tokenharbor",
+      "pricing": {
+        "cache_read_usd_per_1m": 0.15,
+        "cache_write_usd_per_1m": null,
+        "input_usd_per_1m": 1.25,
+        "output_usd_per_1m": 4.25
+      },
+      "reasoning": {
+        "can_disable": null,
+        "default_effort": null,
+        "efforts": null
+      },
+      "supports_prompt_cache": true,
+      "tier": "mid",
+      "tool_call": true
+    },
+    {
+      "blurb": "DeepSeek's 4.1 Flash. Native multimodal, 1M context.",
+      "context_length": 1048576,
+      "covered_by_plans": [
+        "Agent Pass",
+        "Office Pass",
+        "Frontier Pass"
+      ],
+      "created": 1700000000,
+      "function_call": true,
+      "id": "deepseek-v4.1-flash",
+      "label": "DeepSeek V4.1 Flash",
+      "object": "model",
+      "owned_by": "tokenharbor",
+      "pricing": {
+        "cache_read_usd_per_1m": 0.0015,
+        "cache_write_usd_per_1m": null,
+        "input_usd_per_1m": 0.3,
+        "off_peak": {
+          "cache_read_usd_per_1m": 0.00075,
+          "input_usd_per_1m": 0.15,
+          "output_usd_per_1m": 0.6,
+          "window": "14:00\u201300:00 UTC"
+        },
+        "output_usd_per_1m": 1.2
+      },
+      "reasoning": {
+        "can_disable": null,
+        "default_effort": null,
+        "efforts": null
+      },
+      "supports_prompt_cache": true,
+      "tier": "low",
+      "tool_call": true
+    },
+    {
+      "blurb": null,
+      "context_length": 1000000,
+      "covered_by_plans": [
+        "Office Pass",
+        "Frontier Pass"
+      ],
+      "created": 1700000000,
+      "function_call": true,
+      "id": "gemini-3.6-flash",
+      "label": "Gemini 3.6 Flash",
+      "object": "model",
+      "owned_by": "tokenharbor",
+      "pricing": {
+        "cache_read_usd_per_1m": 0.075,
+        "cache_write_usd_per_1m": null,
+        "input_usd_per_1m": 0.75,
+        "output_usd_per_1m": 3.75
+      },
+      "reasoning": {
+        "can_disable": null,
+        "default_effort": null,
+        "efforts": null
+      },
+      "supports_prompt_cache": true,
+      "tier": null,
+      "tool_call": true
+    },
+    {
+      "blurb": null,
+      "context_length": 1000000,
+      "covered_by_plans": [
+        "Office Pass",
+        "Frontier Pass"
+      ],
+      "created": 1700000000,
+      "function_call": true,
+      "id": "glm-5.2",
+      "label": "GLM-5.2",
+      "object": "model",
+      "owned_by": "tokenharbor",
+      "pricing": {
+        "cache_read_usd_per_1m": 0.28,
+        "cache_write_usd_per_1m": 0,
+        "input_usd_per_1m": 1.4,
+        "output_usd_per_1m": 4.4
+      },
+      "reasoning": {
+        "can_disable": null,
+        "default_effort": null,
+        "efforts": null
+      },
+      "supports_prompt_cache": true,
+      "tier": null,
+      "tool_call": true
+    },
+    {
+      "blurb": null,
+      "context_length": 1050000,
+      "covered_by_plans": [
+        "Agent Pass",
+        "Office Pass",
+        "Frontier Pass"
+      ],
+      "created": 1700000000,
+      "function_call": true,
+      "id": "gpt-5.6-luna",
+      "label": "GPT-5.6 Luna",
+      "object": "model",
+      "owned_by": "tokenharbor",
+      "pricing": {
+        "cache_read_usd_per_1m": 0.02,
+        "cache_write_usd_per_1m": 0.25,
+        "input_usd_per_1m": 0.2,
+        "output_usd_per_1m": 1.2
+      },
+      "reasoning": {
+        "can_disable": null,
+        "default_effort": null,
+        "efforts": null
+      },
+      "supports_prompt_cache": true,
+      "tier": "high",
+      "tool_call": true
+    },
+    {
+      "blurb": null,
+      "context_length": 1050000,
+      "covered_by_plans": [
+        "Agent Pass",
+        "Office Pass",
+        "Frontier Pass"
+      ],
+      "created": 1700000000,
+      "function_call": true,
+      "id": "gpt-5.6-sol",
+      "label": "GPT-5.6 Sol",
+      "object": "model",
+      "owned_by": "tokenharbor",
+      "pricing": {
+        "cache_read_usd_per_1m": 0.4,
+        "cache_write_usd_per_1m": 5,
+        "input_usd_per_1m": 4,
+        "output_usd_per_1m": 20
+      },
+      "reasoning": {
+        "can_disable": null,
+        "default_effort": null,
+        "efforts": null
+      },
+      "supports_prompt_cache": true,
+      "tier": "high",
+      "tool_call": true
+    },
+    {
+      "blurb": null,
+      "context_length": 1050000,
+      "covered_by_plans": [
+        "Agent Pass",
+        "Office Pass",
+        "Frontier Pass"
+      ],
+      "created": 1700000000,
+      "function_call": true,
+      "id": "gpt-5.6-terra",
+      "label": "GPT-5.6 Terra",
+      "object": "model",
+      "owned_by": "tokenharbor",
+      "pricing": {
+        "cache_read_usd_per_1m": 0.2,
+        "cache_write_usd_per_1m": 2.5,
+        "input_usd_per_1m": 2,
+        "output_usd_per_1m": 12
+      },
+      "reasoning": {
+        "can_disable": null,
+        "default_effort": null,
+        "efforts": null
+      },
+      "supports_prompt_cache": true,
+      "tier": "high",
+      "tool_call": true
+    },
+    {
+      "blurb": null,
+      "context_length": 1048576,
+      "covered_by_plans": [
+        "Office Pass",
+        "Frontier Pass"
+      ],
+      "created": 1700000000,
+      "function_call": true,
+      "id": "muse-spark-1.1",
+      "label": "Muse Spark 1.1",
+      "object": "model",
+      "owned_by": "tokenharbor",
+      "pricing": {
+        "cache_read_usd_per_1m": 0.15,
+        "cache_write_usd_per_1m": null,
+        "input_usd_per_1m": 1.25,
+        "output_usd_per_1m": 4.25
+      },
+      "reasoning": {
+        "can_disable": null,
+        "default_effort": null,
+        "efforts": null
+      },
+      "supports_prompt_cache": true,
+      "tier": "mid",
+      "tool_call": true
+    },
+    {
+      "blurb": null,
+      "context_length": 262000,
+      "covered_by_plans": [
+        "Office Pass",
+        "Frontier Pass"
+      ],
+      "created": 1700000000,
+      "function_call": true,
+      "id": "kimi-k2.6",
+      "label": "Kimi K2.6",
+      "object": "model",
+      "owned_by": "tokenharbor",
+      "pricing": {
+        "cache_read_usd_per_1m": 0.16,
+        "cache_write_usd_per_1m": null,
+        "input_usd_per_1m": 0.95,
+        "output_usd_per_1m": 4
+      },
+      "reasoning": {
+        "can_disable": null,
+        "default_effort": null,
+        "efforts": null
+      },
+      "supports_prompt_cache": true,
+      "tier": "mid",
+      "tool_call": true
+    },
+    {
+      "blurb": null,
+      "context_length": null,
+      "covered_by_plans": [
+        "Office Pass",
+        "Frontier Pass"
+      ],
+      "created": 1700000000,
+      "function_call": true,
+      "id": "qwen3.6-27b",
+      "label": "Qwen3.6 27b",
+      "object": "model",
+      "owned_by": "tokenharbor",
+      "pricing": {
+        "cache_read_usd_per_1m": null,
+        "cache_write_usd_per_1m": null,
+        "input_usd_per_1m": 0.6,
+        "output_usd_per_1m": 3.6
+      },
+      "reasoning": {
+        "can_disable": null,
+        "default_effort": null,
+        "efforts": null
+      },
+      "supports_prompt_cache": true,
+      "tier": "mid",
+      "tool_call": true
+    },
+    {
+      "blurb": null,
+      "context_length": null,
+      "covered_by_plans": [
+        "Agent Pass",
+        "Office Pass",
+        "Frontier Pass"
+      ],
+      "created": 1700000000,
+      "function_call": true,
+      "id": "qwen3.6-flash",
+      "label": "Qwen3.6 Flash",
+      "object": "model",
+      "owned_by": "tokenharbor",
+      "pricing": {
+        "cache_read_usd_per_1m": 0.025,
+        "cache_write_usd_per_1m": 0.3125,
+        "input_usd_per_1m": 0.25,
+        "output_usd_per_1m": 1.5
+      },
+      "reasoning": {
+        "can_disable": null,
+        "default_effort": null,
+        "efforts": null
+      },
+      "supports_prompt_cache": true,
+      "tier": "low",
+      "tool_call": true
+    },
+    {
+      "blurb": null,
+      "context_length": 128000,
+      "covered_by_plans": [
+        "Agent Pass",
+        "Office Pass",
+        "Frontier Pass"
+      ],
+      "created": 1700000000,
+      "function_call": true,
+      "id": "deepseek-v3.2",
+      "label": "DeepSeek V3.2",
+      "object": "model",
+      "owned_by": "tokenharbor",
+      "pricing": {
+        "cache_read_usd_per_1m": 0.028,
+        "cache_write_usd_per_1m": null,
+        "input_usd_per_1m": 0.62,
+        "output_usd_per_1m": 1.85
+      },
+      "reasoning": {
+        "can_disable": null,
+        "default_effort": null,
+        "efforts": null
+      },
+      "supports_prompt_cache": true,
+      "tier": "mid",
+      "tool_call": true
+    },
+    {
+      "blurb": null,
+      "context_length": null,
+      "covered_by_plans": [
+        "Office Pass",
+        "Frontier Pass"
+      ],
+      "created": 1700000000,
+      "function_call": true,
+      "id": "qwen3.5-27b",
+      "label": "Qwen3.5 27b",
+      "object": "model",
+      "owned_by": "tokenharbor",
+      "pricing": {
+        "cache_read_usd_per_1m": null,
+        "cache_write_usd_per_1m": null,
+        "input_usd_per_1m": 0.3,
+        "output_usd_per_1m": 2.4
+      },
+      "reasoning": {
+        "can_disable": null,
+        "default_effort": null,
+        "efforts": null
+      },
+      "supports_prompt_cache": true,
+      "tier": "mid",
+      "tool_call": true
+    },
+    {
+      "blurb": "DeepSeek's R1 reasoning model.",
+      "context_length": 128000,
+      "covered_by_plans": [
+        "Office Pass",
+        "Frontier Pass"
+      ],
+      "created": 1700000000,
+      "function_call": true,
+      "id": "deepseek-r1-0528",
+      "label": "DeepSeek R1",
+      "object": "model",
+      "owned_by": "tokenharbor",
+      "pricing": {
+        "cache_read_usd_per_1m": 0.405,
+        "cache_write_usd_per_1m": null,
+        "input_usd_per_1m": 1.35,
+        "output_usd_per_1m": 5.4
+      },
+      "reasoning": {
+        "can_disable": null,
+        "default_effort": null,
+        "efforts": null
+      },
+      "supports_prompt_cache": true,
+      "tier": "mid",
+      "tool_call": true
+    },
+    {
+      "blurb": null,
+      "context_length": null,
+      "covered_by_plans": [
+        "Agent Pass",
+        "Office Pass",
+        "Frontier Pass"
+      ],
+      "created": 1700000000,
+      "function_call": true,
+      "id": "qwen3.7-flash",
+      "label": "Qwen3.7 Flash",
+      "object": "model",
+      "owned_by": "tokenharbor",
+      "pricing": {
+        "cache_read_usd_per_1m": 0.006,
+        "cache_write_usd_per_1m": 0.0375,
+        "input_usd_per_1m": 0.03,
+        "output_usd_per_1m": 0.13
+      },
+      "reasoning": {
+        "can_disable": null,
+        "default_effort": null,
+        "efforts": null
+      },
+      "supports_prompt_cache": true,
+      "tier": "low",
+      "tool_call": true
+    },
+    {
+      "blurb": null,
+      "context_length": 1000000,
+      "covered_by_plans": [
+        "Office Pass",
+        "Frontier Pass"
+      ],
+      "created": 1700000000,
+      "function_call": true,
+      "id": "qwen3.8-27b",
+      "label": "Qwen3.8 27B",
+      "object": "model",
+      "owned_by": "tokenharbor",
+      "pricing": {
+        "cache_read_usd_per_1m": 0.1,
+        "cache_write_usd_per_1m": null,
+        "input_usd_per_1m": 0.35,
+        "output_usd_per_1m": 2.1
+      },
+      "reasoning": {
+        "can_disable": null,
+        "default_effort": null,
+        "efforts": null
+      },
+      "supports_prompt_cache": true,
+      "tier": "mid",
+      "tool_call": true
+    },
+    {
+      "blurb": null,
+      "context_length": 1000000,
+      "covered_by_plans": [
+        "Agent Pass",
+        "Office Pass",
+        "Frontier Pass"
+      ],
+      "created": 1700000000,
+      "function_call": true,
+      "id": "qwen3.8-flash",
+      "label": "Qwen3.8 Flash",
+      "object": "model",
+      "owned_by": "tokenharbor",
+      "pricing": {
+        "cache_read_usd_per_1m": 0.016,
+        "cache_write_usd_per_1m": 0.2,
+        "input_usd_per_1m": 0.15,
+        "output_usd_per_1m": 0.47
+      },
+      "reasoning": {
+        "can_disable": null,
+        "default_effort": null,
+        "efforts": null
+      },
+      "supports_prompt_cache": true,
+      "tier": "low",
+      "tool_call": true
+    },
+    {
+      "blurb": null,
+      "context_length": 1000000,
+      "covered_by_plans": [
+        "Frontier Pass"
+      ],
+      "created": 1700000000,
+      "function_call": true,
+      "id": "claude-opus-5-fast",
+      "label": "Claude Opus 5 Fast",
+      "object": "model",
+      "owned_by": "tokenharbor",
+      "pricing": {
+        "cache_read_usd_per_1m": 1,
+        "cache_write_usd_per_1m": 12.5,
+        "input_usd_per_1m": 10,
+        "output_usd_per_1m": 50
+      },
+      "reasoning": {
+        "can_disable": null,
+        "default_effort": null,
+        "efforts": null
+      },
+      "supports_prompt_cache": true,
+      "tier": "mid",
+      "tool_call": true
+    },
+    {
+      "blurb": null,
+      "context_length": 1000000,
+      "covered_by_plans": [
+        "Frontier Pass"
+      ],
+      "created": 1700000000,
+      "function_call": true,
+      "id": "kimi-k3",
+      "label": "Kimi K3",
+      "object": "model",
+      "owned_by": "tokenharbor",
+      "pricing": {
+        "cache_read_usd_per_1m": 0.3,
+        "cache_write_usd_per_1m": 3,
+        "input_usd_per_1m": 3,
+        "output_usd_per_1m": 15
+      },
+      "reasoning": {
+        "can_disable": null,
+        "default_effort": null,
+        "efforts": null
+      },
+      "supports_prompt_cache": true,
+      "tier": "mid",
+      "tool_call": true
+    },
+    {
+      "blurb": null,
+      "context_length": 1000000,
+      "covered_by_plans": [
+        "Frontier Pass"
+      ],
+      "created": 1700000000,
+      "function_call": true,
+      "id": "kimi-k3-fast",
+      "label": "Kimi K3 Fast",
+      "object": "model",
+      "owned_by": "tokenharbor",
+      "pricing": {
+        "cache_read_usd_per_1m": 0.6,
+        "cache_write_usd_per_1m": null,
+        "input_usd_per_1m": 6,
+        "output_usd_per_1m": 22.5
+      },
+      "reasoning": {
+        "can_disable": null,
+        "default_effort": null,
+        "efforts": null
+      },
+      "supports_prompt_cache": true,
+      "tier": "mid",
+      "tool_call": true
+    },
+    {
+      "blurb": null,
+      "context_length": 1050000,
+      "covered_by_plans": [
+        "Agent Pass",
+        "Office Pass",
+        "Frontier Pass"
+      ],
+      "created": 1700000000,
+      "function_call": true,
+      "id": "gpt-5.6-luna-fast",
+      "label": "GPT-5.6 Luna Fast",
+      "object": "model",
+      "owned_by": "tokenharbor",
+      "pricing": {
+        "cache_read_usd_per_1m": 0.04,
+        "cache_write_usd_per_1m": 0.5,
+        "input_usd_per_1m": 0.4,
+        "output_usd_per_1m": 2.4
+      },
+      "reasoning": {
+        "can_disable": null,
+        "default_effort": null,
+        "efforts": null
+      },
+      "supports_prompt_cache": true,
+      "tier": "mid",
+      "tool_call": true
+    },
+    {
+      "blurb": null,
+      "context_length": 1050000,
+      "covered_by_plans": [
+        "Frontier Pass"
+      ],
+      "created": 1700000000,
+      "function_call": true,
+      "id": "gpt-5.6-sol-fast",
+      "label": "GPT-5.6 Sol Fast",
+      "object": "model",
+      "owned_by": "tokenharbor",
+      "pricing": {
+        "cache_read_usd_per_1m": 0.8,
+        "cache_write_usd_per_1m": 10,
+        "input_usd_per_1m": 8,
+        "output_usd_per_1m": 40
+      },
+      "reasoning": {
+        "can_disable": null,
+        "default_effort": null,
+        "efforts": null
+      },
+      "supports_prompt_cache": true,
+      "tier": "mid",
+      "tool_call": true
+    },
+    {
+      "blurb": null,
+      "context_length": 1050000,
+      "covered_by_plans": [
+        "Office Pass",
+        "Frontier Pass"
+      ],
+      "created": 1700000000,
+      "function_call": true,
+      "id": "gpt-5.6-terra-fast",
+      "label": "GPT-5.6 Terra Fast",
+      "object": "model",
+      "owned_by": "tokenharbor",
+      "pricing": {
+        "cache_read_usd_per_1m": 0.4,
+        "cache_write_usd_per_1m": 5,
+        "input_usd_per_1m": 4,
+        "output_usd_per_1m": 24
+      },
+      "reasoning": {
+        "can_disable": null,
+        "default_effort": null,
+        "efforts": null
+      },
+      "supports_prompt_cache": true,
+      "tier": "mid",
+      "tool_call": true
+    },
+    {
+      "blurb": null,
+      "context_length": 1050000,
+      "covered_by_plans": [
+        "Frontier Pass"
+      ],
+      "created": 1700000000,
+      "function_call": true,
+      "id": "gpt-6-astra-fast",
+      "label": "GPT-6 Astra Fast",
+      "object": "model",
+      "owned_by": "tokenharbor",
+      "pricing": {
+        "cache_read_usd_per_1m": 2,
+        "cache_write_usd_per_1m": 25,
+        "input_usd_per_1m": 20,
+        "long_context": {
+          "cache_read_usd_per_1m": 4,
+          "cache_write_usd_per_1m": 50,
+          "input_usd_per_1m": 40,
+          "output_usd_per_1m": 150,
+          "over_prompt_tokens": 271999
+        },
+        "output_usd_per_1m": 100
+      },
+      "reasoning": {
+        "can_disable": null,
+        "default_effort": null,
+        "efforts": [
+          "low",
+          "medium",
+          "high",
+          "xhigh"
+        ]
+      },
+      "supports_prompt_cache": true,
+      "tier": "mid",
+      "tool_call": true
+    },
+    {
+      "blurb": null,
+      "context_length": 1048576,
+      "covered_by_plans": [
+        "Office Pass",
+        "Frontier Pass"
+      ],
+      "created": 1700000000,
+      "function_call": true,
+      "id": "glm-5.3-fast",
+      "label": "GLM 5.3 Fast",
+      "object": "model",
+      "owned_by": "tokenharbor",
+      "pricing": {
+        "cache_read_usd_per_1m": 0.21,
+        "cache_write_usd_per_1m": null,
+        "input_usd_per_1m": 2.1,
+        "output_usd_per_1m": 6.6
+      },
+      "reasoning": {
+        "can_disable": null,
+        "default_effort": null,
+        "efforts": null
+      },
+      "supports_prompt_cache": true,
+      "tier": "mid",
+      "tool_call": true
+    },
+    {
+      "blurb": null,
+      "context_length": 1000000,
+      "covered_by_plans": [
+        "Office Pass",
+        "Frontier Pass"
+      ],
+      "created": 1700000000,
+      "function_call": true,
+      "id": "glm-5.3-flashx",
+      "label": "GLM 5.3 FlashX",
+      "object": "model",
+      "owned_by": "tokenharbor",
+      "pricing": {
+        "cache_read_usd_per_1m": 0.075,
+        "cache_write_usd_per_1m": null,
+        "input_usd_per_1m": 0.37,
+        "output_usd_per_1m": 1.25
+      },
+      "reasoning": {
+        "can_disable": null,
+        "default_effort": null,
+        "efforts": null
+      },
+      "supports_prompt_cache": true,
+      "tier": "low",
+      "tool_call": true
+    },
+    {
+      "blurb": null,
+      "context_length": 500000,
+      "covered_by_plans": [
+        "Office Pass",
+        "Frontier Pass"
+      ],
+      "created": 1700000000,
+      "function_call": true,
+      "id": "grok-4.7",
+      "label": "Grok 4.7",
+      "object": "model",
+      "owned_by": "tokenharbor",
+      "pricing": {
+        "cache_read_usd_per_1m": 0.5,
+        "cache_write_usd_per_1m": null,
+        "input_usd_per_1m": 2,
+        "output_usd_per_1m": 6
+      },
+      "reasoning": {
+        "can_disable": false,
+        "default_effort": "high",
+        "efforts": [
+          "low",
+          "high"
+        ]
+      },
+      "supports_prompt_cache": true,
+      "tier": "mid",
+      "tool_call": true
+    },
+    {
+      "blurb": null,
+      "context_length": 1048576,
+      "covered_by_plans": [
+        "Agent Pass",
+        "Office Pass",
+        "Frontier Pass"
+      ],
+      "created": 1700000000,
+      "function_call": true,
+      "id": "mimo-v2.6-flash",
+      "label": "MiMo V2.6 Flash",
+      "object": "model",
+      "owned_by": "tokenharbor",
+      "pricing": {
+        "cache_read_usd_per_1m": 0.0028,
+        "cache_write_usd_per_1m": null,
+        "input_usd_per_1m": 0.14,
+        "output_usd_per_1m": 0.28
+      },
+      "reasoning": {
+        "can_disable": null,
+        "default_effort": null,
+        "efforts": null
+      },
+      "supports_prompt_cache": true,
+      "tier": "low",
+      "tool_call": true
+    },
+    {
+      "blurb": null,
+      "context_length": 1000000,
+      "covered_by_plans": [
+        "Frontier Pass"
+      ],
+      "created": 1700000000,
+      "function_call": true,
+      "id": "claude-opus-5.5-fast",
+      "label": "Claude Opus 5.5 Fast",
+      "object": "model",
+      "owned_by": "tokenharbor",
+      "pricing": {
+        "cache_read_usd_per_1m": 0.4,
+        "cache_write_usd_per_1m": 10,
+        "input_usd_per_1m": 8,
+        "output_usd_per_1m": 40
+      },
+      "reasoning": {
+        "can_disable": null,
+        "default_effort": null,
+        "efforts": null
+      },
+      "supports_prompt_cache": true,
+      "tier": "mid",
+      "tool_call": true
+    },
+    {
+      "blurb": null,
+      "context_length": 1050000,
+      "covered_by_plans": [
+        "Agent Pass",
+        "Office Pass",
+        "Frontier Pass"
+      ],
+      "created": 1700000000,
+      "function_call": true,
+      "id": "gpt-6-luna-fast",
+      "label": "GPT-6 Luna Fast",
+      "object": "model",
+      "owned_by": "tokenharbor",
+      "pricing": {
+        "cache_read_usd_per_1m": 0.02,
+        "cache_write_usd_per_1m": 0.25,
+        "input_usd_per_1m": 0.2,
+        "long_context": {
+          "cache_read_usd_per_1m": 0.04,
+          "cache_write_usd_per_1m": 0.5,
+          "input_usd_per_1m": 0.4,
+          "output_usd_per_1m": 1.5,
+          "over_prompt_tokens": 271999
+        },
+        "output_usd_per_1m": 1
+      },
+      "reasoning": {
+        "can_disable": true,
+        "default_effort": null,
+        "efforts": [
+          "low",
+          "medium",
+          "high",
+          "xhigh"
+        ]
+      },
+      "supports_prompt_cache": true,
+      "tier": "mid",
+      "tool_call": true
+    },
+    {
+      "blurb": null,
+      "context_length": 1050000,
+      "covered_by_plans": [
+        "Frontier Pass"
+      ],
+      "created": 1700000000,
+      "function_call": true,
+      "id": "gpt-6-sol",
+      "label": "GPT-6 Sol",
+      "object": "model",
+      "owned_by": "tokenharbor",
+      "pricing": {
+        "cache_read_usd_per_1m": 0.2,
+        "cache_write_usd_per_1m": 2.5,
+        "input_usd_per_1m": 2,
+        "long_context": {
+          "cache_read_usd_per_1m": 0.4,
+          "cache_write_usd_per_1m": 5,
+          "input_usd_per_1m": 4,
+          "output_usd_per_1m": 15,
+          "over_prompt_tokens": 271999
+        },
+        "output_usd_per_1m": 10
+      },
+      "reasoning": {
+        "can_disable": null,
+        "default_effort": null,
+        "efforts": [
+          "low",
+          "medium",
+          "high",
+          "xhigh"
+        ]
+      },
+      "supports_prompt_cache": true,
+      "tier": "mid",
+      "tool_call": true
+    },
+    {
+      "blurb": null,
+      "context_length": 1050000,
+      "covered_by_plans": [
+        "Frontier Pass"
+      ],
+      "created": 1700000000,
+      "function_call": true,
+      "id": "gpt-6-sol-fast",
+      "label": "GPT-6 Sol Fast",
+      "object": "model",
+      "owned_by": "tokenharbor",
+      "pricing": {
+        "cache_read_usd_per_1m": 0.4,
+        "cache_write_usd_per_1m": 5,
+        "input_usd_per_1m": 4,
+        "long_context": {
+          "cache_read_usd_per_1m": 0.8,
+          "cache_write_usd_per_1m": 10,
+          "input_usd_per_1m": 8,
+          "output_usd_per_1m": 30,
+          "over_prompt_tokens": 271999
+        },
+        "output_usd_per_1m": 20
+      },
+      "reasoning": {
+        "can_disable": null,
+        "default_effort": null,
+        "efforts": [
+          "low",
+          "medium",
+          "high",
+          "xhigh"
+        ]
+      },
+      "supports_prompt_cache": true,
+      "tier": "mid",
+      "tool_call": true
+    },
+    {
+      "blurb": null,
+      "context_length": 262144,
+      "covered_by_plans": [
+        "Office Pass",
+        "Frontier Pass"
+      ],
+      "created": 1700000000,
+      "function_call": true,
+      "id": "ling-3.1-flash",
+      "label": "Ling 3.1 Flash",
+      "object": "model",
+      "owned_by": "tokenharbor",
+      "pricing": {
+        "cache_read_usd_per_1m": 0.06,
+        "cache_write_usd_per_1m": null,
+        "input_usd_per_1m": 0.3,
+        "output_usd_per_1m": 0.9
+      },
+      "reasoning": {
+        "can_disable": null,
+        "default_effort": null,
+        "efforts": null
+      },
+      "supports_prompt_cache": true,
+      "tier": "low",
+      "tool_call": true
+    },
+    {
+      "blurb": null,
+      "context_length": 1050000,
+      "covered_by_plans": [
+        "Frontier Pass"
+      ],
+      "created": 1700000000,
+      "function_call": true,
+      "id": "gpt-6.1-sol",
+      "label": "GPT-6.1 Sol",
+      "object": "model",
+      "owned_by": "tokenharbor",
+      "pricing": {
+        "cache_read_usd_per_1m": 0.1,
+        "cache_write_usd_per_1m": 2.5,
+        "input_usd_per_1m": 2,
+        "long_context": {
+          "cache_read_usd_per_1m": 0.2,
+          "cache_write_usd_per_1m": 5,
+          "input_usd_per_1m": 4,
+          "output_usd_per_1m": 15,
+          "over_prompt_tokens": 271999
+        },
+        "output_usd_per_1m": 10
+      },
+      "reasoning": {
+        "can_disable": null,
+        "default_effort": null,
+        "efforts": [
+          "low",
+          "medium",
+          "high",
+          "xhigh"
+        ]
+      },
+      "supports_prompt_cache": true,
+      "tier": "mid",
+      "tool_call": true
+    },
+    {
+      "blurb": null,
+      "context_length": 1050000,
+      "covered_by_plans": [
+        "Frontier Pass"
+      ],
+      "created": 1700000000,
+      "function_call": true,
+      "id": "gpt-6.1-sol-fast",
+      "label": "GPT-6.1 Sol Fast",
+      "object": "model",
+      "owned_by": "tokenharbor",
+      "pricing": {
+        "cache_read_usd_per_1m": 0.2,
+        "cache_write_usd_per_1m": 5,
+        "input_usd_per_1m": 4,
+        "long_context": {
+          "cache_read_usd_per_1m": 0.4,
+          "cache_write_usd_per_1m": 10,
+          "input_usd_per_1m": 8,
+          "output_usd_per_1m": 30,
+          "over_prompt_tokens": 271999
+        },
+        "output_usd_per_1m": 20
+      },
+      "reasoning": {
+        "can_disable": null,
+        "default_effort": null,
+        "efforts": [
+          "low",
+          "medium",
+          "high",
+          "xhigh"
+        ]
+      },
+      "supports_prompt_cache": true,
+      "tier": "mid",
+      "tool_call": true
+    },
+    {
+      "blurb": null,
+      "context_length": 1048576,
+      "covered_by_plans": [
+        "Office Pass",
+        "Frontier Pass"
+      ],
+      "created": 1700000000,
+      "function_call": true,
+      "id": "mistral-large-4",
+      "label": "Mistral Large 4",
+      "object": "model",
+      "owned_by": "tokenharbor",
+      "pricing": {
+        "cache_read_usd_per_1m": 0.07,
+        "cache_write_usd_per_1m": null,
+        "input_usd_per_1m": 0.7,
+        "output_usd_per_1m": 2.1
+      },
+      "reasoning": {
+        "can_disable": null,
+        "default_effort": null,
+        "efforts": null
+      },
+      "supports_prompt_cache": true,
+      "tier": "mid",
+      "tool_call": true
+    },
+    {
+      "blurb": null,
+      "context_length": 1000000,
+      "covered_by_plans": [
+        "Agent Pass",
+        "Office Pass",
+        "Frontier Pass"
+      ],
+      "created": 1700000000,
+      "function_call": true,
+      "id": "claude-haiku-5.5",
+      "label": "Claude Haiku 5.5",
+      "object": "model",
+      "owned_by": "tokenharbor",
+      "pricing": {
+        "cache_read_usd_per_1m": 0.01,
+        "cache_write_usd_per_1m": 0.125,
+        "input_usd_per_1m": 0.1,
+        "long_context": {
+          "cache_read_usd_per_1m": 0.05,
+          "cache_write_usd_per_1m": 0.625,
+          "input_usd_per_1m": 0.5,
+          "output_usd_per_1m": 2.5,
+          "over_prompt_tokens": 100000
+        },
+        "output_usd_per_1m": 0.5
+      },
+      "reasoning": {
+        "can_disable": true,
+        "default_effort": "medium",
+        "efforts": [
+          "low",
+          "medium",
+          "high",
+          "xhigh"
+        ]
+      },
+      "supports_prompt_cache": true,
+      "tier": "mid",
+      "tool_call": true
+    },
+    {
+      "blurb": null,
+      "context_length": 1048576,
+      "covered_by_plans": [
+        "Frontier Pass"
+      ],
+      "created": 1700000000,
+      "function_call": true,
+      "id": "muse-wonder-1.0",
+      "label": "Muse Wonder 1.0",
+      "object": "model",
+      "owned_by": "tokenharbor",
+      "pricing": {
+        "cache_read_usd_per_1m": 0.2,
+        "cache_write_usd_per_1m": null,
+        "input_usd_per_1m": 4,
+        "output_usd_per_1m": 20
+      },
+      "reasoning": {
+        "can_disable": null,
+        "default_effort": null,
+        "efforts": null
+      },
+      "supports_prompt_cache": true,
+      "tier": "mid",
+      "tool_call": true
+    },
+    {
+      "blurb": null,
+      "context_length": 1000000,
+      "covered_by_plans": [
+        "Frontier Pass"
+      ],
+      "created": 1700000000,
+      "function_call": true,
+      "id": "gemini-4-argon",
+      "label": "Gemini 4 Argon",
+      "object": "model",
+      "owned_by": "tokenharbor",
+      "pricing": {
+        "cache_read_usd_per_1m": 0.1,
+        "cache_write_usd_per_1m": null,
+        "input_usd_per_1m": 2,
+        "output_usd_per_1m": 10
+      },
+      "reasoning": {
+        "can_disable": null,
+        "default_effort": null,
+        "efforts": null
+      },
+      "supports_prompt_cache": true,
+      "tier": "low",
+      "tool_call": true
+    },
+    {
+      "blurb": null,
+      "context_length": 1048576,
+      "covered_by_plans": [
+        "Agent Pass",
+        "Office Pass",
+        "Frontier Pass"
+      ],
+      "created": 1700000000,
+      "function_call": true,
+      "id": "deepseek-v4.1-flash-1017",
+      "label": "DeepSeek V4.1 Flash 1017",
+      "object": "model",
+      "owned_by": "tokenharbor",
+      "pricing": {
+        "cache_read_usd_per_1m": 0.003,
+        "cache_write_usd_per_1m": null,
+        "input_usd_per_1m": 0.15,
+        "off_peak": {
+          "cache_read_usd_per_1m": 0.0015,
+          "input_usd_per_1m": 0.075,
+          "output_usd_per_1m": 0.3,
+          "window": "14:00\u201300:00 UTC"
+        },
+        "output_usd_per_1m": 0.6
+      },
+      "reasoning": {
+        "can_disable": null,
+        "default_effort": null,
+        "efforts": null
+      },
+      "supports_prompt_cache": true,
+      "tier": "low",
+      "tool_call": true
+    },
+    {
+      "blurb": null,
+      "context_length": 1048576,
+      "covered_by_plans": [
+        "Agent Pass",
+        "Office Pass",
+        "Frontier Pass"
+      ],
+      "created": 1700000000,
+      "function_call": true,
+      "id": "deepseek-v4.1-flash-1017-fast",
+      "label": "DeepSeek V4.1 Flash 1017 Fast",
+      "object": "model",
+      "owned_by": "tokenharbor",
+      "pricing": {
+        "cache_read_usd_per_1m": 0.014,
+        "cache_write_usd_per_1m": null,
+        "input_usd_per_1m": 0.6,
+        "output_usd_per_1m": 2.4
+      },
+      "reasoning": {
+        "can_disable": null,
+        "default_effort": null,
+        "efforts": null
+      },
+      "supports_prompt_cache": true,
+      "tier": "low",
+      "tool_call": true
+    },
+    {
+      "blurb": null,
+      "context_length": 1000000,
+      "covered_by_plans": [
+        "Agent Pass",
+        "Office Pass",
+        "Frontier Pass"
+      ],
+      "created": 1700000000,
+      "function_call": true,
+      "id": "minimax-m3.1-flash",
+      "label": "Minimax M3.1 Flash",
+      "object": "model",
+      "owned_by": "tokenharbor",
+      "pricing": {
+        "cache_read_usd_per_1m": 0.015,
+        "cache_write_usd_per_1m": null,
+        "input_usd_per_1m": 0.15,
+        "output_usd_per_1m": 0.6
+      },
+      "reasoning": {
+        "can_disable": null,
+        "default_effort": null,
+        "efforts": null
+      },
+      "supports_prompt_cache": true,
+      "tier": "high",
+      "tool_call": true
+    },
+    {
+      "blurb": null,
+      "context_length": 1000000,
+      "covered_by_plans": [
+        "Frontier Pass"
+      ],
+      "created": 1700000000,
+      "function_call": true,
+      "id": "kimi-k3.1-pro",
+      "label": "Kimi K3.1 Pro",
+      "object": "model",
+      "owned_by": "tokenharbor",
+      "pricing": {
+        "cache_read_usd_per_1m": 0.2,
+        "cache_write_usd_per_1m": 2,
+        "input_usd_per_1m": 2,
+        "output_usd_per_1m": 10
+      },
+      "reasoning": {
+        "can_disable": null,
+        "default_effort": null,
+        "efforts": null
+      },
+      "supports_prompt_cache": true,
+      "tier": "high",
+      "tool_call": true
+    },
+    {
+      "blurb": null,
+      "context_length": 1050000,
+      "covered_by_plans": [
+        "Frontier Pass"
+      ],
+      "created": 1700000000,
+      "function_call": true,
+      "id": "gpt-6.1-terra",
+      "label": "GPT-6.1 Terra",
+      "object": "model",
+      "owned_by": "tokenharbor",
+      "pricing": {
+        "cache_read_usd_per_1m": 0.05,
+        "cache_write_usd_per_1m": 1.25,
+        "input_usd_per_1m": 1,
+        "long_context": {
+          "cache_read_usd_per_1m": 0.1,
+          "cache_write_usd_per_1m": 2.5,
+          "input_usd_per_1m": 2,
+          "output_usd_per_1m": 7.5,
+          "over_prompt_tokens": 271999
+        },
+        "output_usd_per_1m": 5
+      },
+      "reasoning": {
+        "can_disable": true,
+        "default_effort": null,
+        "efforts": [
+          "low",
+          "medium",
+          "high",
+          "xhigh"
+        ]
+      },
+      "supports_prompt_cache": true,
+      "tier": "mid",
+      "tool_call": true
+    },
+    {
+      "blurb": null,
+      "context_length": 1050000,
+      "covered_by_plans": [
+        "Frontier Pass"
+      ],
+      "created": 1700000000,
+      "function_call": true,
+      "id": "gpt-6.1-terra-fast",
+      "label": "GPT-6.1 Terra Fast",
+      "object": "model",
+      "owned_by": "tokenharbor",
+      "pricing": {
+        "cache_read_usd_per_1m": 0.1,
+        "cache_write_usd_per_1m": 2.5,
+        "input_usd_per_1m": 2,
+        "long_context": {
+          "cache_read_usd_per_1m": 0.2,
+          "cache_write_usd_per_1m": 5,
+          "input_usd_per_1m": 4,
+          "output_usd_per_1m": 15,
+          "over_prompt_tokens": 271999
+        },
+        "output_usd_per_1m": 10
+      },
+      "reasoning": {
+        "can_disable": true,
+        "default_effort": null,
+        "efforts": [
+          "low",
+          "medium",
+          "high",
+          "xhigh"
+        ]
+      },
+      "supports_prompt_cache": true,
+      "tier": "mid",
+      "tool_call": true
+    },
+    {
+      "blurb": null,
+      "context_length": 1000000,
+      "covered_by_plans": [
+        "Office Pass",
+        "Frontier Pass"
+      ],
+      "created": 1700000000,
+      "function_call": true,
+      "id": "ling-3.1-flash-1019",
+      "label": "Ling 3.1 Flash 1019",
+      "object": "model",
+      "owned_by": "tokenharbor",
+      "pricing": {
+        "cache_read_usd_per_1m": 0.06,
+        "cache_write_usd_per_1m": null,
+        "input_usd_per_1m": 0.3,
+        "output_usd_per_1m": 0.9
+      },
+      "reasoning": {
+        "can_disable": null,
+        "default_effort": null,
+        "efforts": null
+      },
+      "supports_prompt_cache": true,
+      "tier": "low",
+      "tool_call": true
+    },
+    {
+      "blurb": null,
+      "context_length": 1000000,
+      "covered_by_plans": [
+        "Office Pass",
+        "Frontier Pass"
+      ],
+      "created": 1700000000,
+      "function_call": true,
+      "id": "glm-5.3-flashx-legal",
+      "label": "GLM-5.3 Flashx Legal",
+      "object": "model",
+      "owned_by": "tokenharbor",
+      "pricing": {
+        "cache_read_usd_per_1m": 0.075,
+        "cache_write_usd_per_1m": null,
+        "input_usd_per_1m": 0.37,
+        "output_usd_per_1m": 1.25
+      },
+      "reasoning": {
+        "can_disable": null,
+        "default_effort": null,
+        "efforts": null
+      },
+      "supports_prompt_cache": true,
+      "tier": "low",
+      "tool_call": true
+    },
+    {
+      "blurb": null,
+      "context_length": 1048576,
+      "covered_by_plans": [
+        "Frontier Pass"
+      ],
+      "created": 1700000000,
+      "function_call": true,
+      "id": "deepseek-v4.1-flash-1017-ultrafast",
+      "label": "DeepSeek V4.1 Flash 1017 Ultrafast",
+      "object": "model",
+      "owned_by": "tokenharbor",
+      "pricing": {
+        "cache_read_usd_per_1m": 0.048,
+        "cache_write_usd_per_1m": null,
+        "input_usd_per_1m": 2.4,
+        "output_usd_per_1m": 9.6
+      },
+      "reasoning": {
+        "can_disable": null,
+        "default_effort": null,
+        "efforts": null
+      },
+      "supports_prompt_cache": true,
+      "tier": "low",
+      "tool_call": true
+    },
+    {
+      "blurb": null,
+      "context_length": 1048576,
+      "covered_by_plans": [
+        "Agent Pass",
+        "Office Pass",
+        "Frontier Pass"
+      ],
+      "created": 1700000000,
+      "function_call": true,
+      "id": "muse-ember",
+      "label": "Muse Ember",
+      "object": "model",
+      "owned_by": "tokenharbor",
+      "pricing": {
+        "cache_read_usd_per_1m": 0.004,
+        "cache_write_usd_per_1m": null,
+        "input_usd_per_1m": 0.1,
+        "output_usd_per_1m": 0.5
+      },
+      "reasoning": {
+        "can_disable": null,
+        "default_effort": null,
+        "efforts": null
+      },
+      "supports_prompt_cache": true,
+      "tier": "mid",
+      "tool_call": true
+    },
+    {
+      "blurb": null,
+      "context_length": 1000000,
+      "covered_by_plans": [
+        "Frontier Pass"
+      ],
+      "created": 1700000000,
+      "function_call": true,
+      "id": "claude-fable-5.2",
+      "label": "Claude Fable 5.2",
+      "object": "model",
+      "owned_by": "tokenharbor",
+      "pricing": {
+        "cache_read_usd_per_1m": 0.2,
+        "cache_write_usd_per_1m": 10,
+        "input_usd_per_1m": 8,
+        "output_usd_per_1m": 40
+      },
+      "reasoning": {
+        "can_disable": null,
+        "default_effort": null,
+        "efforts": null
+      },
+      "supports_prompt_cache": true,
+      "tier": "mid",
+      "tool_call": true
+    },
+    {
+      "blurb": null,
+      "context_length": 1000000,
+      "covered_by_plans": [
+        "Frontier Pass"
+      ],
+      "created": 1700000000,
+      "function_call": true,
+      "id": "claude-fable-5.2-fast",
+      "label": "Claude Fable 5.2 Fast",
+      "object": "model",
+      "owned_by": "tokenharbor",
+      "pricing": {
+        "cache_read_usd_per_1m": 0.4,
+        "cache_write_usd_per_1m": 20,
+        "input_usd_per_1m": 16,
+        "output_usd_per_1m": 80
+      },
+      "reasoning": {
+        "can_disable": null,
+        "default_effort": null,
+        "efforts": null
+      },
+      "supports_prompt_cache": true,
+      "tier": "mid",
+      "tool_call": true
+    },
+    {
+      "blurb": null,
+      "context_length": 1000000,
+      "covered_by_plans": [
+        "Frontier Pass"
+      ],
+      "created": 1700000000,
+      "function_call": true,
+      "id": "gemini-4-carbon",
+      "label": "Gemini 4 Carbon",
+      "object": "model",
+      "owned_by": "tokenharbor",
+      "pricing": {
+        "cache_read_usd_per_1m": 0.1,
+        "cache_write_usd_per_1m": null,
+        "input_usd_per_1m": 2,
+        "output_usd_per_1m": 10
+      },
+      "reasoning": {
+        "can_disable": null,
+        "default_effort": null,
+        "efforts": null
+      },
+      "supports_prompt_cache": true,
+      "tier": "low",
+      "tool_call": true
+    },
+    {
+      "blurb": null,
+      "context_length": 1000000,
+      "covered_by_plans": [
+        "Frontier Pass"
+      ],
+      "created": 1700000000,
+      "function_call": true,
+      "id": "gemini-4-hydrogen",
+      "label": "Gemini 4 Hydrogen",
+      "object": "model",
+      "owned_by": "tokenharbor",
+      "pricing": {
+        "cache_read_usd_per_1m": 0.075,
+        "cache_write_usd_per_1m": null,
+        "input_usd_per_1m": 1.5,
+        "output_usd_per_1m": 7.5
+      },
+      "reasoning": {
+        "can_disable": null,
+        "default_effort": null,
+        "efforts": null
+      },
+      "supports_prompt_cache": true,
+      "tier": "low",
+      "tool_call": true
+    },
+    {
+      "blurb": "Free-tier only \u2014 uses your rolling 7-day allowance, then returns a rate-limit error. Never billed. Drop the ':free' suffix to use the paid route.",
+      "context_length": 1048576,
+      "covered_by_plans": [],
+      "created": 1700000000,
+      "function_call": true,
+      "id": "mimo-v2.5:free",
+      "label": "MiMo V2.5 (Free)",
+      "object": "model",
+      "owned_by": "tokenharbor",
+      "pricing": {
+        "cache_read_usd_per_1m": 0,
+        "cache_write_usd_per_1m": 0,
+        "input_usd_per_1m": 0,
+        "output_usd_per_1m": 0
+      },
+      "reasoning": {
+        "can_disable": null,
+        "default_effort": null,
+        "efforts": null
+      },
+      "supports_prompt_cache": true,
+      "tier": "mid",
+      "tool_call": true
+    },
+    {
+      "blurb": "Free-tier only \u2014 uses your rolling 7-day allowance, then returns a rate-limit error. Never billed. Drop the ':free' suffix to use the paid route.",
+      "context_length": 1000000,
+      "covered_by_plans": [],
+      "created": 1700000000,
+      "function_call": true,
+      "id": "deepseek-v4-flash:free",
+      "label": "DeepSeek V4 Flash (Free)",
+      "object": "model",
+      "owned_by": "tokenharbor",
+      "pricing": {
+        "cache_read_usd_per_1m": 0,
+        "cache_write_usd_per_1m": 0,
+        "input_usd_per_1m": 0,
+        "output_usd_per_1m": 0
+      },
+      "reasoning": {
+        "can_disable": null,
+        "default_effort": null,
+        "efforts": null
+      },
+      "supports_prompt_cache": true,
+      "tier": "low",
+      "tool_call": true
+    },
+    {
+      "blurb": "Free-tier only \u2014 uses your rolling 7-day allowance, then returns a rate-limit error. Never billed. Drop the ':free' suffix to use the paid route.",
+      "context_length": 1048576,
+      "covered_by_plans": [],
+      "created": 1700000000,
+      "function_call": true,
+      "id": "deepseek-v4.1-flash:free",
+      "label": "DeepSeek V4.1 Flash (Free)",
+      "object": "model",
+      "owned_by": "tokenharbor",
+      "pricing": {
+        "cache_read_usd_per_1m": 0,
+        "cache_write_usd_per_1m": 0,
+        "input_usd_per_1m": 0,
+        "output_usd_per_1m": 0
+      },
+      "reasoning": {
+        "can_disable": null,
+        "default_effort": null,
+        "efforts": null
+      },
+      "supports_prompt_cache": true,
+      "tier": "low",
+      "tool_call": true
+    },
+    {
+      "blurb": "Free-tier only \u2014 uses your rolling 7-day allowance, then returns a rate-limit error. Never billed. Drop the ':free' suffix to use the paid route.",
+      "context_length": 1048576,
+      "covered_by_plans": [],
+      "created": 1700000000,
+      "function_call": true,
+      "id": "mimo-v2.6-flash:free",
+      "label": "MiMo V2.6 Flash (Free)",
+      "object": "model",
+      "owned_by": "tokenharbor",
+      "pricing": {
+        "cache_read_usd_per_1m": 0,
+        "cache_write_usd_per_1m": 0,
+        "input_usd_per_1m": 0,
+        "output_usd_per_1m": 0
+      },
+      "reasoning": {
+        "can_disable": null,
+        "default_effort": null,
+        "efforts": null
+      },
+      "supports_prompt_cache": true,
+      "tier": "low",
+      "tool_call": true
+    }
+  ],
+  "object": "list"
+}

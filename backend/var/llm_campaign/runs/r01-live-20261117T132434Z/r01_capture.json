@@ -1,0 +1,349 @@
+{
+  "budget_after_primary": 3,
+  "budget_final": 3,
+  "budget_initial": 2,
+  "fallback": {
+    "fired": false,
+    "reason": "PRIMARY_SUCCEEDED"
+  },
+  "fallback_basis": "SUBSCRIPTION_COVERED_OWNER_ASSERTED",
+  "fallback_model": "deepseek-v4.1-flash-1017",
+  "mode": "live",
+  "outcome": "PRIMARY_SUCCEEDED",
+  "primary": {
+    "authorized_finding_count": 0,
+    "authorized_findings": [],
+    "budget": {
+      "limit": 6,
+      "remaining": 3,
+      "spent_after": 3,
+      "spent_before": 2
+    },
+    "candidate_admission": [],
+    "checkpoints": [
+      {
+        "checkpoint": 1,
+        "name": "Source integrity",
+        "outcome": "verified"
+      },
+      {
+        "checkpoint": 2,
+        "name": "Consistency rules",
+        "outcome": "checked",
+        "rule_version": "BDJ-RULESET-0.2-CAND"
+      },
+      {
+        "checkpoint": 3,
+        "name": "Uncertainty interpretation",
+        "outcome": "model_returned"
+      },
+      {
+        "checkpoint": 4,
+        "name": "Candidate validation",
+        "outcome": "checked"
+      },
+      {
+        "checkpoint": 5,
+        "name": "Source-linked explanation",
+        "outcome": "bounded_no_issue"
+      }
+    ],
+    "contains_personal_data": false,
+    "content_encoding": null,
+    "data_class": "SYNTHETIC_NONHUMAN",
+    "disclosure_adapter": "SyntheticBdjDisclosure",
+    "dispatched": true,
+    "dispatches": 1,
+    "elapsed_ms": 3429.0,
+    "engine_outcome": "reviewed",
+    "error": null,
+    "fixture_id": "LLM01-02",
+    "http_status": 200,
+    "identity_exception_enabled": true,
+    "instrument_id": "50906385-072b-5cf1-9661-4d001898ffb8",
+    "instrument_schema_digest": "ac389b412aef96d51cb048d0a7592610e73d79678b1e64dd4b78ce90570d6406",
+    "instrument_source_sha256": "d09a7db532cbd2e41458d9776004de2830c67c91cacb0a264dc4cfbe5c432c6b",
+    "instrument_version": "M2V1-20261114-1",
+    "label": "primary",
+    "last_identity": {
+      "classification": "MODEL_IDENTITY_UNVERIFIED_TEST_EXCEPTION",
+      "identity_verified": false,
+      "requested_model": "mimo-v2.6-flash:free",
+      "returned_model": "mimo-v2.6-flash"
+    },
+    "latency_ms": 3370.3,
+    "ledger": "FileLedger (recording double, reserve->fsync->dispatch->receipt)",
+    "ledger_receipts": [
+      {
+        "at": "2026-11-17T13:24:39.846443+00:00",
+        "attempt_no": 1,
+        "outcome": "returned",
+        "output_digest": "f8bbf6ea5e46c2cdd94c21f163ae96583f6c6e7ea23f098d072641299915f370"
+      }
+    ],
+    "model_requested": "mimo-v2.6-flash:free",
+    "prompt_fingerprint": "3d3ccf6b48c0b52933c09b4269c09bb9f7a7b5eec13b5440a26427757abc5ea9",
+    "prompt_version": "BDJ-SOURCE-3-CAND",
+    "purpose": "SYNTHETIC_BDJ_DIAGNOSTIC",
+    "raw_response": "{\"id\":\"chatcmpl-4017778742ab4ba48d1c94fae2532c9f\",\"object\":\"chat.completion\",\"created\":1794921880,\"model\":\"mimo-v2.6-flash\",\"choices\":[{\"index\":0,\"message\":{\"role\":\"assistant\",\"content\":\"{\\\"issues\\\":[],\\\"overall_note\\\":\\\"No rule identifiers are available because source_data.rule_catalogue is empty, so no finding can carry a catalogue rule_id. No findings are returned.\\\"}\",\"reasoning_content\":\"The rule catalogue is empty, so no rule_id fits. Return no findings.\"},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":3177,\"completion_tokens\":57,\"total_tokens\":3234}}",
+    "request": {
+      "max_tokens": 4000,
+      "message_count": 4,
+      "messages_digest": "e7777f0bd2189c36e077f60d65d8687e580dbf533ee1efe315d6de5a6cde8899",
+      "model": "mimo-v2.6-flash:free",
+      "response_format": {
+        "json_schema": {
+          "name": "BDJOutput",
+          "schema": {
+            "$defs": {
+              "Finding": {
+                "additionalProperties": false,
+                "properties": {
+                  "counterargument": {
+                    "maxLength": 1000,
+                    "minLength": 1,
+                    "title": "Counterargument",
+                    "type": "string"
+                  },
+                  "justification": {
+                    "maxLength": 1000,
+                    "minLength": 1,
+                    "title": "Justification",
+                    "type": "string"
+                  },
+                  "kind": {
+                    "enum": [
+                      "SOURCE_CONFLICT",
+                      "UNSUPPORTED_ASSERTION",
+                      "INFORMATION_GAP"
+                    ],
+                    "title": "Kind",
+                    "type": "string"
+                  },
+                  "next_action": {
+                    "maxLength": 500,
+                    "minLength": 1,
+                    "title": "Next Action",
+                    "type": "string"
+                  },
+                  "observed_condition": {
+                    "maxLength": 1000,
+                    "minLength": 1,
+                    "title": "Observed Condition",
+                    "type": "string"
+                  },
+                  "rule_id": {
+                    "maxLength": 64,
+                    "minLength": 1,
+                    "title": "Rule Id",
+                    "type": "string"
+                  },
+                  "source_refs": {
+                    "items": {
+                      "$ref": "#/$defs/SourceRef"
+                    },
+                    "maxItems": 8,
+                    "minItems": 1,
+                    "title": "Source Refs",
+                    "type": "array"
+                  }
+                },
+                "required": [
+                  "rule_id",
+                  "kind",
+                  "source_refs",
+                  "observed_condition",
+                  "counterargument",
+                  "justification",
+                  "next_action"
+                ],
+                "title": "Finding",
+                "type": "object"
+              },
+              "SourceRef": {
+                "additionalProperties": false,
+                "properties": {
+                  "answer_revision_id": {
+                    "maxLength": 64,
+                    "minLength": 1,
+                    "title": "Answer Revision Id",
+                    "type": "string"
+                  },
+                  "item_key": {
+                    "pattern": "^(?:M2-(?:\\d{2}|O-0[12])|M2V1-(?:0[1-9]|1[01]))$",
+                    "title": "Item Key",
+                    "type": "string"
+                  },
+                  "item_version_id": {
+                    "maxLength": 64,
+                    "minLength": 1,
+                    "title": "Item Version Id",
+                    "type": "string"
+                  },
+                  "quote": {
+                    "description": "An exact substring copied from this declaration's value field. For a list value, copy one element verbatim. Never quote the question text and never append the value to the question.",
+                    "maxLength": 4000,
+                    "minLength": 1,
+                    "title": "Quote",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "item_key",
+                  "answer_revision_id",
+                  "item_version_id",
+                  "quote"
+                ],
+                "title": "SourceRef",
+                "type": "object"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "issues": {
+                "items": {
+                  "$ref": "#/$defs/Finding"
+                },
+                "maxItems": 20,
+                "title": "Issues",
+                "type": "array"
+              },
+              "overall_note": {
+                "maxLength": 1000,
+                "minLength": 1,
+                "title": "Overall Note",
+                "type": "string"
+              }
+            },
+            "required": [
+              "issues",
+              "overall_note"
+            ],
+            "title": "BDJOutput",
+            "type": "object"
+          },
+          "strict": true
+        },
+        "type": "json_schema"
+      },
+      "roles": [
+        "system",
+        "user",
+        "assistant",
+        "user"
+      ],
+      "stream": false,
+      "temperature": 0
+    },
+    "request_headers_sent": {
+      "accept": "*/*",
+      "accept-encoding": "identity",
+      "cache-control": "no-store",
+      "connection": "keep-alive",
+      "content-length": "11391",
+      "content-type": "application/json",
+      "host": "tokenharbor.ai",
+      "user-agent": "python-httpx/0.28.1"
+    },
+    "response_bytes": 566,
+    "response_headers": {
+      "access-control-allow-origin": "*",
+      "access-control-expose-headers": "*",
+      "cache-control": "no-store",
+      "cf-placement": "remote-IAD",
+      "cf-ray": "a5bf0e894ab5ce15-SIN",
+      "connection": "keep-alive",
+      "content-security-policy": "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://www.paypal.com https://*.paypal.com https://challenges.cloudflare.com https://www.googletagmanager.com https://tally.so https://connect.facebook.net https://www.facebook.com https://tagassistant.google.com; worker-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.jsdelivr.net; font-src 'self' https://fonts.gstatic.com https://cdn.jsdelivr.net data:; img-src 'self' data: blob: https://media.tokenharbor.ai https://media.rudder.chat https://auth.tokenharbor.ai https://*.supabase.co https://*.paypal.com https://*.paypalobjects.com https://api.dicebear.com https://icons.duckduckgo.com https://www.googletagmanager.com https://www.google-analytics.com https://*.google-analytics.com https://*.g.doubleclick.net https://www.google.com https://github.com https://connect.facebook.net https://www.facebook.com https://tagassistant.google.com; media-src 'self' https://media.tokenharbor.ai https://media.rudder.chat; connect-src 'self' https://media.tokenharbor.ai https://media.rudder.chat https://auth.tokenharbor.ai wss://auth.tokenharbor.ai https://*.supabase.co https://*.supabase.in wss://*.supabase.co wss://*.supabase.in https://*.vercel.app https://*.paypal.com https://api.sentry.io https://*.sentry.io https://*.ingest.sentry.io https://www.googletagmanager.com https://www.google-analytics.com https://*.google-analytics.com https://*.analytics.google.com https://*.g.doubleclick.net https://www.google.com wss://tokenharbor.ai https://connect.facebook.net https://www.facebook.com https://tagassistant.google.com; frame-src 'self' https://www.paypal.com https://*.paypal.com https://challenges.cloudflare.com https://tally.so https://connect.facebook.net https://www.facebook.com https://tagassistant.google.com; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'self'; upgrade-insecure-requests",
+      "content-type": "application/json; charset=utf-8",
+      "date": "Tue, 17 Nov 2026 13:24:41 GMT",
+      "nel": "{\"report_to\":\"cf-nel\",\"success_fraction\":0.0,\"max_age\":604800}",
+      "permissions-policy": "camera=(), microphone=(self), geolocation=(), interest-cohort=(), payment=(self \"https://www.paypal.com\")",
+      "referrer-policy": "strict-origin-when-cross-origin",
+      "report-to": "{\"group\":\"cf-nel\",\"max_age\":604800,\"endpoints\":[{\"url\":\"https://a.nel.cloudflare.com/report/v4?s=EllNqHIcrI8au1B5KxogvOMjjZQo5VpU5e6l5hADZJA%2B4EdTF0e24Ea8CqzZh4ws8hxBnLtiZgikUDDTTLmuEKBolopJ0%2FcxQyrlRAi%2BsNF8ISpV%2BP7mAFLeuUr1FDUQnvQJUk%2BMja%2F8bYel\"}]}",
+      "server": "cloudflare",
+      "strict-transport-security": "max-age=63072000; includeSubDomains; preload",
+      "vary": "rsc, next-router-state-tree, next-router-prefetch, next-router-segment-prefetch",
+      "x-content-type-options": "nosniff",
+      "x-frame-options": "SAMEORIGIN",
+      "x-th-free-resets": "2026-11-22T09:12:53.446+00:00",
+      "x-th-free-used-pct": "1",
+      "x-th-plan": "agent",
+      "x-th-request-id": "chatcmpl-4017778742ab4ba48d1c94fae2532c9f",
+      "x-th-route-decision": "{\"model\":\"mimo-v2.6-flash\",\"tier\":\"low\",\"cache_hit\":false}",
+      "x-th-steering-applied": "none",
+      "x-th-upstream-model": "mimo-v2.6-flash"
+    },
+    "response_model_reported": "mimo-v2.6-flash",
+    "response_truncated": false,
+    "rule_catalogue": [],
+    "ruleset_sha256": "42f7fef3bf2bb48255ab8eac406dfb8232923b76789dd065d693732e8bf2a061",
+    "ruleset_version": "BDJ-RULESET-0.2-CAND",
+    "run_id": "r01-live-20261117T132434Z-primary",
+    "scenario": "02_contradictory_service_format",
+    "source_fingerprint": "24b3d8cf4a4b3818c50a803f6a9a21d8d270c32445599a9b991b24a197b0314b",
+    "stage": "BDJ",
+    "started_at": "2026-11-17T13:24:36.255363+00:00",
+    "synthetic": true,
+    "token_usage": {
+      "completion_tokens": 57,
+      "prompt_tokens": 3177,
+      "total_tokens": 3234
+    },
+    "uncompressed": true
+  },
+  "primary_availability": {
+    "definitive": false,
+    "reason": "NO_AVAILABILITY_SIGNAL:200"
+  },
+  "primary_gate": {
+    "checked_at": "2026-11-17T13:24:34.757792+00:00",
+    "content_encoding": null,
+    "entry": {
+      "blurb": "Free-tier only \u2014 uses your rolling 7-day allowance, then returns a rate-limit error. Never billed. Drop the ':free' suffix to use the paid route.",
+      "context_length": 1048576,
+      "covered_by_plans": [],
+      "created": 1700000000,
+      "function_call": true,
+      "id": "mimo-v2.6-flash:free",
+      "label": "MiMo V2.6 Flash (Free)",
+      "object": "model",
+      "owned_by": "tokenharbor",
+      "pricing": {
+        "cache_read_usd_per_1m": 0,
+        "cache_write_usd_per_1m": 0,
+        "input_usd_per_1m": 0,
+        "output_usd_per_1m": 0
+      },
+      "reasoning": {
+        "can_disable": null,
+        "default_effort": null,
+        "efforts": null
+      },
+      "supports_prompt_cache": true,
+      "tier": "low",
+      "tool_call": true
+    },
+    "gate": "PRIMARY_FREE_TIER",
+    "http_status": 200,
+    "latency_ms": 1412.9,
+    "model_id": "mimo-v2.6-flash:free",
+    "pricing": {
+      "cache_read_usd_per_1m": 0,
+      "cache_write_usd_per_1m": 0,
+      "input_usd_per_1m": 0,
+      "output_usd_per_1m": 0
+    },
+    "pricing_keys_used": {
+      "input": "input_usd_per_1m",
+      "output": "output_usd_per_1m"
+    },
+    "ratelimit": [],
+    "reason": null,
+    "result": "FREE_TIER_CONFIRMED",
+    "uncompressed": true,
+    "url": "https://tokenharbor.ai/v1/models"
+  },
+  "primary_model": "mimo-v2.6-flash:free",
+  "run_id": "r01-live-20261117T132434Z",
+  "started_at": "2026-11-17T13:24:34.756616+00:00"
+}

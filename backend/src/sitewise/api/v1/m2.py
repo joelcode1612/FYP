@@ -14,7 +14,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from typing import Literal
 
 from sitewise.dependencies import AuthenticatedUser, require_entrepreneur, get_m2_service, get_bdj_service, get_confirmation_service
-from sitewise.domain.m2_rules import M2ValidationError
+from sitewise.modules.decision_engine.domain.m2_rules import M2ValidationError
 from sitewise.services.m2_service import M2Service
 from sitewise.services.bdj_service import BDJService
 from sitewise.services.confirmation_service import ConfirmationService
@@ -49,6 +49,16 @@ def read_confirmed_review(assessment_id: UUID, confirmation_id: UUID, user: Owne
         }) from exc
 
 
+@router.get('/assessments/{assessment_id}/bdj/current')
+def read_current_bdj(assessment_id: UUID, confirmation_id: UUID, user: Owner,
+                     service: M2, response: Response,
+                     expected_revision: Annotated[int, Query(ge=0)]):
+    """Return only a result bound to this owner and current confirmed source."""
+    response.headers['Cache-Control'] = 'private, no-store'
+    from sitewise.services.m2_bdj_execution import read_current_bdj as read
+    return read(service, user, assessment_id, confirmation_id, expected_revision)
+
+
 class NewAssessment(M2Request):
     instrument_version_id: UUID
 
@@ -63,6 +73,66 @@ def instruments(user:Owner,service:M2,response:Response,limit:int=Query(50,ge=1,
 def owned_assessments(user:Owner,service:M2,response:Response,limit:int=Query(50,ge=1,le=100),offset:int=Query(0,ge=0)):
     response.headers['Cache-Control']='no-store'
     return service.list_assessments(user.user_id,limit,offset)
+
+
+# --- assessment -> M2 link (CP-10F) -----------------------------------------
+# The marketplace assessment lives in Final_Location_Analysis; the M2 assessment
+# and its link live in Dss. These routes are the only sanctioned way to cross
+# that boundary, and they never guess a relationship.
+
+def get_assessment_link_service():
+    from sitewise.db.m2_session import get_m2_engine
+    from sitewise.db.session import engine as marketplace_engine
+    from sitewise.services.assessment_link_service import AssessmentLinkService
+    return AssessmentLinkService(marketplace_engine=marketplace_engine,
+                                 m2_engine=get_m2_engine())
+
+
+Link = Annotated[object, Depends(get_assessment_link_service)]
+
+
+def _link_error(exc):
+    from sitewise.services.assessment_link_service import AssessmentLinkError
+    if not isinstance(exc, AssessmentLinkError):
+        raise exc
+    raise HTTPException(status_code=exc.status_code,
+                        detail={'code': exc.code, 'message': str(exc)})
+
+
+@router.get('/assessments/by-marketplace/{assessment_id}')
+def resolve_assessment_link(assessment_id: UUID, user: Owner, response: Response,
+                            service: Link):
+    """Read the active link for a marketplace assessment. Never creates."""
+    from sitewise.services.assessment_link_service import AssessmentLinkError
+    response.headers['Cache-Control'] = 'no-store'
+    try:
+        result = service.resolve(marketplace_assessment_id=assessment_id,
+                                 user_id=user.user_id,
+                                 verified_email=user.email,
+                                 create_if_missing=False)
+    except AssessmentLinkError as exc:
+        _link_error(exc)
+    return result.as_dict()
+
+
+@router.post('/assessments/by-marketplace/{assessment_id}/link')
+def initialize_assessment_link(assessment_id: UUID, user: Owner, response: Response,
+                               service: Link):
+    """Resolve, or create once, the M2 assessment for a marketplace assessment.
+
+    Idempotent: a second call returns the same M2 assessment with created=false.
+    Creates no CQ campaign and no downstream research artefact.
+    """
+    from sitewise.services.assessment_link_service import AssessmentLinkError
+    response.headers['Cache-Control'] = 'no-store'
+    try:
+        result = service.resolve(marketplace_assessment_id=assessment_id,
+                                 user_id=user.user_id,
+                                 verified_email=user.email,
+                                 create_if_missing=True)
+    except AssessmentLinkError as exc:
+        _link_error(exc)
+    return result.as_dict()
 
 
 @router.get('/assessments/{assessment_id}/source-projection')
@@ -83,13 +153,18 @@ class AnswerUpdate(M2Request):
     expected_revision: int = Field(ge=0, strict=True)
     answer_state: str = Field(max_length=32)
     value: str | list[str] | dict[str, str] | None = None
+    marketplace_assessment_id: UUID | None = None
 
 
 class RevisionRequest(M2Request):
     expected_revision: int = Field(ge=0, strict=True)
 
 
-class ConfirmRequest(RevisionRequest):
+class BoundRevisionRequest(RevisionRequest):
+    marketplace_assessment_id: UUID | None = None
+
+
+class ConfirmRequest(BoundRevisionRequest):
     acknowledged_issue_ids: list[str] = Field(default_factory=list)
 
 
@@ -148,14 +223,24 @@ def update_answer(assessment_id: UUID, item_key: str, payload: AnswerUpdate,
     try:
         return service.update_answer(assessment_id, user.user_id,
             expected_revision=payload.expected_revision, item_key=item_key,
-            state=payload.answer_state, value=payload.value)
+            state=payload.answer_state, value=payload.value,
+            marketplace_assessment_id=payload.marketplace_assessment_id)
     except M2ValidationError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 @router.post("/assessments/{assessment_id}/bdj/evaluate")
-def evaluate_bdj(assessment_id: UUID, payload: RevisionRequest, user: Owner, service: BDJ):
-    return service.evaluate(assessment_id, user.user_id, expected_revision=payload.expected_revision)
+def evaluate_bdj(assessment_id: UUID, payload: RevisionRequest, user: Owner, service: M2):
+    """Confirmed declarations are required before the governed BDJ path."""
+    row = service.repo.latest_confirmation(assessment_id, user.user_id)
+    if row is None:
+        raise HTTPException(409, detail={'code':'M2_CONFIRMATION_REQUIRED',
+            'message':'Confirm the current saved M2 declarations before BDJ evaluation.'})
+    with service.locked_confirmed_source(assessment_id, user.user_id,
+            confirmation_id=row['id'], expected_revision=payload.expected_revision):
+        pass
+    from sitewise.services.m2_bdj_execution import execute_confirmed_bdj
+    return execute_confirmed_bdj(service, user, assessment_id, payload.expected_revision)
 
 
 @router.get("/assessments/{assessment_id}/business-understanding")
@@ -164,9 +249,10 @@ def read_business_understanding(assessment_id: UUID, user: Owner, service: BDJ):
 
 
 @router.post("/assessments/{assessment_id}/review")
-def record_review(assessment_id: UUID, payload: RevisionRequest, user: Owner,
+def record_review(assessment_id: UUID, payload: BoundRevisionRequest, user: Owner,
                   service: Confirmation):
-    return service.record_review(assessment_id, user.user_id, payload.expected_revision)
+    return service.record_review(assessment_id, user.user_id, payload.expected_revision,
+                                 marketplace_assessment_id=payload.marketplace_assessment_id)
 
 
 @router.post("/assessments/{assessment_id}/confirm")
@@ -174,7 +260,8 @@ def confirm_context(assessment_id: UUID, payload: ConfirmRequest, user: Owner,
                     service: Confirmation):
     return service.confirm(assessment_id, user.user_id,
         expected_revision=payload.expected_revision,
-        acknowledged_issue_ids=payload.acknowledged_issue_ids)
+        acknowledged_issue_ids=payload.acknowledged_issue_ids,
+        marketplace_assessment_id=payload.marketplace_assessment_id)
 
 
 @router.post("/confirmations/{confirmation_id}/uncertainty", response_model=UncertaintyResponse)
@@ -239,8 +326,11 @@ def choose_desired_option(version: UUID, payload: DesiredOptionRequest, user: Ow
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 class CandidateReviewRequest(M2Request):
-    decision: Literal['APPROVE_FOR_REVIEW', 'REJECT']
-    rationale: str = Field(min_length=1,max_length=1000)
+    # Must agree with m2_candidate_owner_reviews_decision_check
+    # (migrations/m2/20261118_02_candidate_review_v2.sql). A value the database
+    # rejects would turn a 422 into a 500.
+    decision: Literal['APPROVE_FOR_REVIEW', 'REJECT', 'REQUEST_REVISION']
+    rationale: str = Field(default='', max_length=1000)
 
 
 @router.post('/research-questions/{version}/owner-review', status_code=201)
@@ -251,6 +341,15 @@ def owner_candidate_review(version: UUID, payload: CandidateReviewRequest,
         return service.record_owner_review(version, reviewer.user_id, payload.decision, payload.rationale)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except SQLAlchemyError as exc:
+        # The older Dss schema lacks the reviewed context-hash column. Do not
+        # fall back to an unbound review or expose database diagnostics.
+        if getattr(getattr(exc, 'orig', None), 'pgcode', None) == '42703':
+            raise HTTPException(status_code=503, detail={
+                'code': 'CANDIDATE_REVIEW_SCHEMA_UNAVAILABLE',
+                'message': 'Question review is unavailable until its versioned storage schema is provisioned.',
+            }) from exc
+        raise
 
 @router.get('/confirmations/{confirmation_id}/research-workspace')
 def research_workspace(confirmation_id: UUID, user: Owner, service: Confirmation, response: Response,
@@ -296,6 +395,27 @@ class WorkflowOverview(BaseModel):
     projection_data: WorkflowSummary
     created_at: datetime
     is_current: bool
+
+
+@router.get('/assessments/{assessment_id}/confirmation-current')
+def read_current_confirmation(assessment_id: UUID, user: Owner, service: M2,
+                              response: Response):
+    """Read-only current-confirmation lookup.
+
+    CP-10 DEF-06: the M2 panel kept the confirmation only in memory, so any
+    reload left 'Save research objective' permanently dead while the server
+    refuses a duplicate confirm. This read-only endpoint lets the panel
+    restore the persisted confirmation state without weakening any write
+    guard. Returns 404 when no confirmation exists.
+    """
+    response.headers['Cache-Control'] = 'private, no-store'
+    row = service.repo.latest_confirmation(assessment_id, user.user_id)
+    if row is None or not row['is_current']:
+        raise HTTPException(status_code=404, detail='No confirmation recorded for this assessment.')
+    with service.locked_confirmed_source(assessment_id, user.user_id,
+            confirmation_id=row['id'], expected_revision=row['assessment_revision']) as source:
+        return {**dict(row), 'snapshot_contract_version':source['snapshot'].get('snapshot_contract_version'),
+                'snapshot_digest':source['snapshot_digest']}
 
 
 @router.get('/assessments/{assessment_id}/workflow-overview', response_model=WorkflowOverview)

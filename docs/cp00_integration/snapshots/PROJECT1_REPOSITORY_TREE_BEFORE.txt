@@ -1,0 +1,2295 @@
+PROJECT1 REPOSITORY TREE — BEFORE (git HEAD)
+============================================
+
+branch: merge_main_jed
+HEAD: ba30035ecb24b80fa155cc7049cf3cdf94a67844
+HEAD (short): ba30035
+working tree: 171 entries in `git status --porcelain`
+snapshot taken: 2026-11-17 12:11:38 +0800
+generator: backend/scripts/cp03f_structure_snapshot.py
+
+files: 1708
+
+(repository root)/
+    .fvmrc
+    .gitattributes
+    .gitignore
+    README.md
+    Start-SiteWise-All-FVM.ps1
+    Start-SiteWise-All.ps1
+    Start-SiteWise-All.ps1.bak
+    determine_decision.py
+    ee01_registry_results.txt
+    ee01_registry_verification.sql
+    fyp
+    fyp.iml
+    helo.txt
+    index.html
+    pubspec.lock
+    pubspec.yaml
+    rating_collection.pid
+    report_composition_demo.py
+    run-sitewise.cmd
+    run-sitewise.ps1
+    synthetic_report.json
+    synthetic_report.md
+    toggle-dev-auth.ps1
+
+.perch/
+    PERCH.md
+    mcp.json
+
+.sitewise-explore-backup-20261110-144010/fyp_jaspr_web/lib/data/
+    api_property_repository.dart
+
+.sitewise-explore-backup-20261110-144010/fyp_jaspr_web/lib/pages/entrepreneur/
+    explore_page.dart
+
+.sitewise-explore-backup-20261110-144010/fyp_jaspr_web/web/
+    sitewise_combined_explore.js
+
+.workbuddy-ai/
+    AI-DSS_MODULE_GAP_ANALYSIS.md
+    UI_DESIGN_REVIEW.md
+
+.workbuddy-ai/memory/
+    2026-10-03.md
+    2026-10-08.md
+    2026-10-09.md
+    2026-10-10.md
+    2026-10-11.md
+    2026-10-13.md
+    2026-10-14.md
+    2026-10-15.md
+    2026-10-16.md
+    2026-10-17.md
+    2026-10-24.md
+    2026-10-25.md
+    2026-10-26.md
+    2026-11-02.md
+    2026-11-03.md
+    2026-11-04.md
+    2026-11-05.md
+    2026-11-06.md
+    2026-11-07.md
+    2026-11-08.md
+    2026-11-09.md
+    2026-11-10.md
+    2026-11-11.md
+    2026-11-12.md
+    2026-11-13.md
+    2026-11-14.md
+    2026-11-15.md
+    2026-11-16.md
+    MEMORY.md
+
+.workbuddy-ai/tmp/
+    compare_pu_models.py
+    delete_sw_test_agents.py
+    explain_nearby_filter.py
+    failures.txt
+    inspect_add_property_db.py
+    inspect_public_property.py
+    p1.txt
+    probe_pu_addon.py
+    probe_sw_users.py
+    probe_verification_api.py
+    probe_verification_service.py
+    pytest_one.txt
+    pytest_out.txt
+    pytest_run.txt
+    pytest_v.txt
+    t1.txt
+    t2.txt
+    t3.txt
+
+.workbuddy-ai/tmp/design7/Sitewise_Assessment_Redesign/
+    README.md
+    Sitewise_Assessment_Redesigned_Standalone.html
+    app.js
+    index.html
+    style.css
+
+.workbuddy-ai/tmp/design7/Sitewise_Assessment_Redesign/previews/
+    Sitewise_Assessment_Redesign_Desktop.png
+    Sitewise_Assessment_Redesign_Evidence.png
+    Sitewise_Assessment_Redesign_Mobile.png
+    Sitewise_Assessment_Redesign_Questionnaire.png
+
+.workbuddy-ai/tmp/pu_addon/
+    README_INTEGRATE_WITH_FYP.md
+
+.workbuddy-ai/tmp/pu_addon/backend/ml_reference/
+    example_property_47.json
+    shap_background_47.csv
+
+.workbuddy-ai/tmp/pu_addon/backend/src/sitewise/api/v1/
+    selected_pu_routes.py
+
+.workbuddy-ai/tmp/pu_addon/backend/src/sitewise/ml/
+    selected_pu_cli.py
+    selected_pu_integration.py
+    sitewise_selected_pu_model.joblib
+
+backend/
+    .env  [SECRET — contents not read]
+    .env.example  [SECRET — contents not read]
+    .gitignore
+    Dockerfile
+    _facet_smoke.py
+    alembic.ini
+    bye.txt
+    docker-compose.yml
+    project1_tokenharbor_sdk_smoke_test.py
+    pyproject.toml
+    pytest_report.xml
+    pytest_stdout.txt
+    start-api.ps1
+
+backend/alembic/
+    env.py
+    script.py.mako
+
+backend/alembic/versions/
+    20261109_0001_assessment.py
+    20261109_0002_saved_property_refs.py
+    20261109_0003_property_verification.py
+    20261110_0001_owner_listing_verification.py
+    20261110_0002_drop_legacy_property.py
+    20261110_0003_listing_address_fields.py
+    20261111_0001_listing_change_requests.py
+    20261111_0002_recommendation_persistence.py
+    20261111_0003_geo_refresh_state.py
+    20261111_0004_agent_listing_assignments.py
+    20261112_0001_property_enrichment_state.py
+
+backend/backups/
+    20261110_drop_legacy_property_backup.json
+    20261110_owner_listing_verification_backup.json
+
+backend/backups/migration_20261110/
+    sitewise_property_tables_before.dump
+
+backend/candidates/cust03_vnext/
+    001_customer_candidate_REVIEW_ONLY.sql
+    README.md
+    compile_schema.py
+
+backend/docs/
+    01_BACKEND_GAP_ANALYSIS.md
+    02_SUPABASE_AUTH_INTEGRATION.md
+    03_FASTAPI_CLEAN_ARCHITECTURE.md
+    04_USER_PROFILE_RBAC.md
+    05_BACKEND_API_REFERENCE.md
+    06_DATABASE_INTEGRATION.md
+    07_ML_INTEGRATION_REPORT.md
+    08_BACKEND_TEST_RESULTS.md
+    09_BACKEND_FINAL_SUMMARY.md
+    10_THREE_LAYER_RECOMMENDATION_SYSTEM.md
+
+backend/docs/cp07/
+    ACCEPTANCE.md
+    FILE_INVENTORY.json
+    README.md
+    RECONCILIATION.md
+    RESTRICTIONS_AND_RESPONSIBILITIES.md
+    WORKFLOW_INPUTS_AND_EXITS.md
+
+backend/docs/cp08/
+    CHECKPOINT.md
+    FILE_INVENTORY.json
+    README.md
+    RESULTS.md
+
+backend/docs/cq_runtime/
+    IMPLEMENTATION.md
+    QUESTION_CONTRACT_MATRIX.csv
+    QUESTION_CONTRACT_MATRIX.json
+    SCHEMA_AND_ERD.md
+    SOURCE_AUTHORITY.csv
+    SOURCE_AUTHORITY.json
+    SOURCE_BANK_STORAGE.md
+
+backend/docs/m2_bcb/
+    IMPLEMENTATION.md
+
+backend/docs/part_two/
+    REQUIREMENTS_RECONCILIATION.json
+
+backend/docs/project1_integration/
+    README.md
+
+backend/docs/project1_workflow/
+    IMPLEMENTATION.md
+    V12_CHECKPOINT.md
+
+backend/landscan_recovery_20261111/
+    LandScan_Recovery_Audit.json
+    SiteWise_PU_47_Features_LandScan_Updated.csv
+    SiteWise_P_LandScan_1000m_Recovered.csv
+    recover_landscan_1000m.py
+
+backend/local_data/pu_gap_recovery/
+    README.md
+
+backend/local_data/pu_gap_recovery/manifests/
+    download_manifest.csv
+    stac_item.json
+
+backend/migrations/cq/
+    20261113_01_cq_runtime.sql
+    20261114_01_source_bank_only.sql
+    20261115_04_runtime_from_source_bank.sql
+    20261116_01_lifecycle_render_audit.sql
+    20261116_02_ee01_snapshots.sql
+
+backend/migrations/m2/
+    20261113_01_confirmed_context_persistence.sql
+    20261114_02_research_objective_sources.sql
+    20261115_01_candidate_owner_review.sql
+    20261115_02_workflow_projection.sql
+    20261115_03_workflow_cq_bridge.sql
+
+backend/migrations/project1_ai/
+    20261111_01_candidate_ledger.sql
+
+backend/ml_reference/
+    example_property_47.json
+    pu_artifact_verification_2026_11_12.json
+    shap_background_47.csv
+    shap_background_64.csv
+    training_expanded_bridge_1796.csv
+    training_population_bridge_1849.csv
+
+backend/ml_reference/category_aware_retrain_2026_11_15/
+    916_U_Category_Aware_Predictions.csv
+    Example_MD-00510_Explained.json
+    Example_MD-00510_Model_Output.json
+    INTEGRATION.md
+    MODEL_CARD_FYP_REPORT.md
+    Model_Comparison.csv
+    README_INTEGRATION.md
+    SHAP_Background_Category_54.csv
+    SHAP_Background_PU_64.csv
+    Spatial_Fold_Results.csv
+    Training_Results.json
+    recommend_and_explain.py
+    train_recommender.py
+
+backend/ml_reference/expanded_pu_64_2026_11_15/
+    Expanded_Data_QA.json
+    Expanded_Heldout_Predictions.csv
+    Expanded_Model_Comparison.csv
+    Expanded_PU_Training_Results.json
+    Expanded_Spatial_Fold_Results.csv
+    INTEGRATION.md
+    README.md
+    SiteWise_Expanded_PU_Methodology_Report.md
+    SiteWise_PU_1796_Expanded_Observed.csv
+    SiteWise_PU_44_baseline_44_ResearchOnly.joblib
+    SiteWise_PU_52_Logistic_baseline_plus_residential_52_ResearchOnly.joblib
+    SiteWise_PU_64_Logistic_expanded_age_residential_64_ResearchOnly.joblib
+    SiteWise_PU_64_expanded_age_residential_64_ResearchOnly.joblib
+    build_expanded_training_data.py
+    predict_expanded_pu.py
+    refit_logistic_candidates.py
+    train_expanded_pu.py
+
+backend/ml_reference/fnb_category_pu_2026_11_15/
+    Example_MD-00510_Category_SHAP.json
+    Example_MD-00510_Prediction.json
+    INTEGRATION_AND_METHODOLOGY.md
+    MODEL_CARD_AND_FYP_REPORT.md
+    P_LABEL_ELIGIBILITY_2026_11_15.md
+    README.md
+    SHAP_Observed_Category_Background_54.csv
+    SiteWise_916_U_Category_Exploratory_Predictions.csv
+    SiteWise_916_U_Category_Research_Predictions.xlsx
+    SiteWise_Category_Heldout_Predictions.csv
+    SiteWise_Category_Model_Comparison.csv
+    SiteWise_Category_Model_Validation_Folds.csv
+    SiteWise_Category_Training_Audit.json
+    SiteWise_FNB_Category_Conditional_ResearchOnly.joblib
+    SiteWise_PU_1796_Expanded_Observed.csv
+    SiteWise_PU_1796_With_Known_Business_Types.xlsx
+    SiteWise_PU_64_Logistic_expanded_age_residential_64_ResearchOnly.joblib
+    SiteWise_Two_Stage_PU_FNB_Category_ResearchOnly.joblib
+    explain_category_shap.py
+    predict_category_pu.py
+    train_category_pu.py
+
+backend/ml_reference/pu_variant_comparison_2026_11_11/
+    comparison.json
+    scores.csv
+
+backend/ml_reference/recommender_eval/
+    SHAP_PERFORMANCE_REPORT.md
+    model_selection_report.json
+    shap_latency.json
+    shap_performance_after.json
+
+backend/ml_reference/retrained_pu_1796_2026_11_15/
+    MANIFEST.json
+    README.md
+    SiteWise_PU_1796_Complete_Observed_Only.xlsx
+    SiteWise_PU_1796_Observed_47_Features.csv
+    SiteWise_PU_1796_Research_InSample_Scores.csv
+    SiteWise_PU_44_Features_recommended_research_ResearchOnly.joblib
+    SiteWise_PU_47_Features_full47_restricted_ResearchOnly.joblib
+    SiteWise_PU_53_Excluded_Incomplete_Records.csv
+    SiteWise_PU_FYP_Methodology_Report.docx
+    SiteWise_PU_FYP_Methodology_Report.md
+    SiteWise_PU_Model_Comparison.csv
+    SiteWise_PU_Spatial_Validation_Fold_Results.csv
+    SiteWise_PU_Spatial_Validation_Predictions.csv
+    SiteWise_PU_Training_Results.json
+    SiteWise_PostgreSQL_Safe_PU_53_Training_Copy_Delete.sql
+    predict_research_pu.py
+    train_sitewise_pu_1796.py
+    training_log.txt
+
+backend/pytest-mig-tmp/test_admin_queue_filters_sort_0/docs/
+    08e5e0d751dd4c95816dcb7e595c5904.pdf
+    f19102f1698e4b9881e221a904f3aed6.pdf
+
+backend/pytest-mig-tmp/test_artifact_without_feature_0/
+    pu_model.pkl
+
+backend/pytest-mig-tmp/test_concurrent_decisions_seri0/docs/
+    09d105cf85994fb392682a947434ca5e.jpg
+    b20a75d07333476a9e560fa1d920e2c7.pdf
+
+backend/pytest-mig-tmp/test_decisions_are_independent0/docs/
+    c9ba1e09fe964fb8b2ba28f459e7d2f6.pdf
+    e21f590e31f94514bf76515ff0724d0f.jpg
+
+backend/pytest-mig-tmp/test_extra_feature_is_rejected0/
+    pu_model.pkl
+    pu_model_features.json
+    pu_model_meta.json
+
+backend/pytest-mig-tmp/test_invalid_lifecycle_transit0/docs/
+    19d433c676e04d799bc5d2ff503b15cc.pdf
+    90d89674482342f38fff0d3bf92141bb.jpg
+
+backend/pytest-mig-tmp/test_load_and_predict_with_val0/
+    pu_model.pkl
+    pu_model_features.json
+    pu_model_meta.json
+
+backend/pytest-mig-tmp/test_missing_feature_is_report0/
+    pu_model.pkl
+    pu_model_features.json
+    pu_model_meta.json
+
+backend/pytest-mig-tmp/test_owner_cannot_touch_anothe0/docs/
+    3eb73b142edc49c4acbdeec5280a5282.pdf
+
+backend/pytest-mig-tmp/test_owner_sees_own_submission0/docs/
+    65dccd251b1241c9bf96d87b9a426722.pdf
+    7c5bd0fbfe8b4b9f8b7c576712694dd5.jpg
+
+backend/pytest-mig-tmp/test_owner_submits_own_propert0/docs/
+    1a9723752a284e31a45a18004a80a9ea.pdf
+
+backend/pytest-mig-tmp/test_private_document_access_c0/docs/
+    fc5df82aa431493f93861e367c4a2468.pdf
+
+backend/pytest-mig-tmp/test_reject_and_request_inform0/docs/
+    1f415dad09f34d04bbb84bfdd92eee0b.jpg
+    c51ee15f9efd4eb1b849ed9c09a9047c.pdf
+
+backend/pytest-mig-tmp/test_upload_after_full_verific0/docs/
+    0408c673f16d469b868e524469814228.jpg
+    12dda734f36047deb823b430cd846996.pdf
+
+backend/scripts/
+    apply_agent_listing_assignments_migration.py
+    apply_drop_legacy_property.py
+    apply_listing_address_fields_migration.py
+    apply_owner_listing_verification_migration.py
+    apply_recommendation_persistence_migration.py
+    capture_evidence_fixture.py
+    m2_apply_migration.py
+    m2_db_preflight.py
+    m2_seed_synthetic_local.py
+    project1_probe_tokenharbor.py
+    project1_tokenharbor_setup.ps1
+    register_cq_source_bank.py
+    register_m2_v1.py
+    run_data_refresh.py
+    run_project1_offline.py
+    verify_staff_workflow_live.py
+
+backend/scripts/benchmarks/
+    bench_shap_after.py
+    bench_shap_baseline.py
+
+backend/scripts/cp04b/
+    CP04B_REQUIREMENTS.json
+    verify.py
+
+backend/scripts/data/
+    fetch_worldpop_agesex.py
+    import_dosm_district_population_sex.py
+
+backend/scripts/migration/
+    db_ids.txt
+    excel_ids.json
+    replace_property_catalogue.py
+    verify_catalog_api.py
+
+backend/scripts/ml/
+    build_expanded_reference_data.py
+    compare_pu_variants.py
+    precompute_shap_explanations.py
+    retrain_fnb_category.py
+    train_personalised_recommender.py
+    verify_category_aware_integration.py
+    verify_pu_artifacts.py
+
+backend/scripts/provisioning/
+    census.py
+    entrepreneurs.template.csv
+    export_management.py
+    plan_assignments.py
+    provision_entrepreneurs.py
+
+backend/sitewise_duckdb_ext/v2.0.0/windows_amd64/
+    httpfs.duckdb_extension
+    httpfs.duckdb_extension.info
+
+backend/src/sitewise/
+    __init__.py
+    dependencies.py
+    frontend.py
+    main.py
+
+backend/src/sitewise/api/
+    __init__.py
+
+backend/src/sitewise/api/v1/
+    __init__.py
+    assessments.py
+    auth.py
+    catalog.py
+    customer_candidate.py
+    customer_questionnaire.py
+    ee01_explanation.py
+    explore.py
+    geospatial.py
+    m2.py
+    m2_business_context.py
+    m2_route.py
+    ml_predictions.py
+    personalised_recommendations.py
+    preferences.py
+    project1_cp07.py
+    project1_read.py
+    project1_workflow.py
+    properties.py
+    property_verification.py
+    provider.py
+    recommendations.py
+    recommendations.py.pre_management.bak
+    reports.py
+    router.py
+    saved_properties.py
+    selected_pu_routes.py
+    staff.py
+    staff.py.before-staff-fetch-fix.bak
+    staff_listings.py
+    statistics.py
+    suitability.py
+    users.py
+    virtual_tours.py
+
+backend/src/sitewise/core/
+    __init__.py
+    config.py
+    exceptions.py
+    logging.py
+    security.py
+    supabase_admin.py
+
+backend/src/sitewise/cq_successor/
+    __init__.py
+    app.py
+    contracts.py
+    policy.py
+
+backend/src/sitewise/customer_contracts/
+    candidate_c0c1_v1.json
+    source_manifest.json
+
+backend/src/sitewise/customer_contracts/reference/
+    a2_router_lib.py
+    a2_routing_spec_v1.json
+
+backend/src/sitewise/customer_contracts/reference/CUST_RECOVERY_20261027/
+    CUST03_CORRECTED_QUESTIONNAIRE_AND_ROUTING_CONTRACT.json
+
+backend/src/sitewise/db/
+    __init__.py
+    analytics_session.py
+    base.py
+    bdj_rules.py
+    m2_session.py
+    session.py
+
+backend/src/sitewise/db/models/
+    __init__.py
+    address.py
+    ai_explanation.py
+    assessment.py
+    business_context_schema.py
+    cq_runtime_schema.py
+    customer_candidate_schema.py
+    district_demographic.py
+    entrepreneur_preferences.py
+    favourite_property.py
+    fyp_research.py
+    listing_change_request.py
+    m2_schema.py
+    ml_explanation_cache.py
+    nearby_competitor.py
+    property_foot_traffic.py
+    property_verification.py
+    recommendation_result.py
+    user.py
+    user_tokens.py
+    virtual_tour.py
+
+backend/src/sitewise/domain/
+    __init__.py
+    bdj_candidate_rules.py
+    bdj_rules.py
+    cq_runtime.py
+    customer_questionnaire.py
+    entities.py
+    m2_provenance.py
+    m2_rules.py
+    management.py
+    ranking.py
+    rbac.py
+    recommendation_scoring.py
+    suitability_engine.py
+
+backend/src/sitewise/ingestion/
+    __init__.py
+    config.py
+    deduplicator.py
+    normalizer.py
+    overture_sync.py
+    records.py
+    schema.py
+    state.py
+    synchronizer.py
+
+backend/src/sitewise/ingestion/sources/
+    __init__.py
+    osm_collector.py
+    overture_collector.py
+    overture_collector.py.p1.bak
+
+backend/src/sitewise/instruments/m2v1_20261114/
+    definition.json
+    source.txt
+
+backend/src/sitewise/ml/
+    PU_model.joblib
+    __init__.py
+    category_aware.py
+    cli.py
+    feature_bridge.py
+    fnb_category.py
+    model_loader.py
+    property_features.py
+    property_predictor.py
+    pu_expanded.py
+    pu_learning.py
+    pu_model_compat.py
+    pu_variant.py
+    recommender_v3.joblib
+    selected_pu_cli.py
+    selected_pu_integration.py
+    shap_cli.py
+    shap_explainer.py
+    sitewise_fnb_category.joblib
+    sitewise_fnb_category_v2.joblib
+    sitewise_pu_47_experimental.joblib
+    sitewise_pu_47_experimental_features.json
+    sitewise_pu_47_experimental_meta.json
+    sitewise_pu_64_expanded.joblib
+    sitewise_recommender_v3.py
+    sitewise_selected_pu_model.joblib
+
+backend/src/sitewise/project1/
+    __init__.py
+    bdj.py
+    contracts.py
+    explanation_contracts.py
+    ledger.py
+    projection.py
+    prompts.py
+    provider.py
+    research.py
+
+backend/src/sitewise/repositories/
+    __init__.py
+    agent_assignment_repository.py
+    assessment_repository.py
+    business_context_repository.py
+    catalog_repository.py
+    cq_repository.py
+    favourite_repository.py
+    fyp_property_repository.py
+    generated_recommendation_store.py
+    geospatial_repository.py
+    m2_repository.py
+    preferences_repository.py
+    recommendation_candidate_repository.py
+    recommendation_repository.py
+    statistics_repository.py
+    uc_decision_gateway.py
+    uc_history_repository.py
+    user_repository.py
+    virtual_tour_repository.py
+
+backend/src/sitewise/services/
+    __init__.py
+    address_validation_service.py
+    age_band_raster_service.py
+    assessment_service.py
+    bdj_service.py
+    business_context_v1.py
+    catalog_listing_details_service.py
+    confirmation_service.py
+    confirmed_review_service.py
+    customer_questionnaire_candidate.py
+    customer_questionnaire_service.py
+    ee01_explanation_service.py
+    ee01_service.py
+    enquiry_service.py
+    enrichment_schema.py
+    explanation_cache.py
+    explanation_service.py
+    explanation_worker.py
+    feature_refresh_service.py
+    geospatial_service.py
+    location_analysis_service.py
+    m2_service.py
+    persisted_business_context_service.py
+    photo_storage.py
+    preferences_service.py
+    project1_read_service.py
+    property_enrichment_service.py
+    property_insights_service.py
+    property_management_service.py
+    property_verification_service.py
+    provider_performance_service.py
+    provider_scope.py
+    provider_verification_service.py
+    recommendation_generation_service.py
+    recommendation_management_service.py
+    recommendation_search_service.py
+    recommendation_search_service.py.pre_management.bak
+    recommendation_service.py
+    report_service.py
+    security_audit_service.py
+    statistics_service.py
+    suitability_service.py
+    user_service.py
+    verification_storage.py
+    virtual_tour_service.py
+
+backend/src/sitewise/services/ports/
+    business_context_store_port.py
+    business_context_v1_port.py
+    cq_store_port.py
+    m2_repository_port.py
+
+backend/supabase/
+    README.md
+
+backend/supabase/migrations/
+    20261105090000_role_model_staff_mfa.down.sql
+    20261105090000_role_model_staff_mfa.up.sql
+    20261107120000_users_foundation.sql
+    20261107133000_m2_upstream_foundation.sql
+    20261116130000_users_four_role_model.down.sql
+    20261116130000_users_four_role_model.up.sql
+    add_owner_user_id_to_rental_properties.sql
+    fix_sitewise_audit_trigger_metadata_to_details.sql
+    repair_auth_user_provisioning_live.sql
+    rollback_sitewise_audit_user_role_status.sql
+
+backend/tests/
+    __init__.py
+    _debugreport.py
+    conftest.py
+    fakes.py
+    test_address_validation_api.py
+    test_age_band_raster_service.py
+    test_architecture.py
+    test_auth_api.py
+    test_database.py
+    test_district_demographics.py
+    test_explanation_cache.py
+    test_explore_nearby_filter.py
+    test_fnb_category_model.py
+    test_frontend_cache_headers.py
+    test_fyp_geospatial_api.py
+    test_geo_refresh.py
+    test_management_rule.py
+    test_metadata_startup.py
+    test_ml.py
+    test_property_enrichment.py
+    test_property_insights_service.py
+    test_pu_expanded_model.py
+    test_rbac_domain.py
+    test_security.py
+    test_staff_admin_api.py
+    test_staff_authorization.py
+
+backend/tests/api/
+    __init__.py
+    test_admin_user_consistency.py
+    test_agent_listing_assignments.py
+    test_app.py
+    test_assessment_explanation_read.py
+    test_assessments_api.py
+    test_ee01_explanation.py
+    test_enrichment_api.py
+    test_final_auth_flow.py
+    test_layer1_feature_coverage.py
+    test_layer2_reuse_and_gate.py
+    test_legacy_property_retired.py
+    test_location_analysis_api.py
+    test_owner_listing_drafts.py
+    test_personalised_recommendations.py
+    test_preferences_api.py
+    test_property_id_compatibility.py
+    test_property_verification_api.py
+    test_provider_workspace_api.py
+    test_pu47_experimental_and_v3.py
+    test_recommendation_facets.py
+    test_recommendation_persistence.py
+    test_recommendation_search_pu_gate.py
+    test_recommendation_sort.py
+    test_saved_properties_api.py
+    test_selected_pu_model.py
+    test_shap_operations.py
+    test_staff_mfa_rbac.py
+    test_statistics.py
+    test_virtual_tours_authorization.py
+
+backend/tests/candidate/
+    test_customer_candidate.py
+
+backend/tests/cp07/
+    run_isolated.py
+    test_http_postgres.py
+
+backend/tests/cp07/fixtures/
+    README.md
+    stage_m2_schema.sql
+    stage_uc_schema.sql
+
+backend/tests/cp08/
+    qualification.py
+
+backend/tests/cp1/
+    _uc_b4_support.py
+    test_uc_b4_connection_pool.py
+    test_uc_b4_fastapi_auth.py
+    test_uc_b4_real_login.py
+    test_uc_b4_transactions.py
+
+backend/tests/cp1/sql/
+    uc_b4_seed_fixtures.sql
+
+backend/tests/cq_runtime/
+    EE01_VERIFICATION.md
+    VERIFY_CQ_PERSISTENCE.sql
+    VERIFY_CQ_TO_REPORT_LINEAGE.sql
+    VERIFY_EE01_AGGREGATES.sql
+    VERIFY_EE01_FROM_CQ.sql
+    VERIFY_EE01_SCHEMA.sql
+    dss_schema_capture.py
+    ee01_checks.py
+    pause_checks.py
+    persistence_verification_checks.py
+    readback_saved.py
+    run_isolated.py
+    run_source_bank_isolated.py
+    test_postgres_api.py
+
+backend/tests/cq_runtime/fixtures/
+    dss_m2_schema_20261113.sql
+    language_candidate.json
+
+backend/tests/cq_successor/
+    test_config_flag.py
+    test_d27_stale_display.py
+    test_successor.py
+
+backend/tests/domain/
+    test_domain.py
+
+backend/tests/fixtures/geo/
+    osm_idempotency_fixture.json
+    overture_fixture.json
+
+backend/tests/integration/
+    run_cross_app.py
+    test_project1_runtime.py
+
+backend/tests/m2_bcb/
+    hellop_fixture.py
+    hellop_source_checks.py
+    http_exchange_capture.py
+    run_isolated.py
+    test_adopted_m2_v1.py
+    test_postgres_api.py
+    v14_preview_fixture.py
+
+backend/tests/m2_bcb/fixtures/
+    HELLOP_TEST_ONLY.md
+    dss_m2_schema_20261113.sql
+    hellop_TEST_ONLY_NOT_ADOPTED.txt
+    research_objective_sources.sql
+
+backend/tests/project1/
+    run_isolated.py
+    test_postgres.py
+    test_workflow.py
+
+backend/tests/project1/bcb/
+    conftest.py
+    sandbox_support.py
+
+backend/tests/project1/bcb/fixtures/
+    valid_confirmed.json
+
+backend/tests/project1/bcb/tests/
+    test_business_context.py
+
+docs/
+    10_SYSTEM_AUDIT_2026-11-05.md
+    11_ROLE_MODEL_MFA_DELIVERABLES.md
+    12_ARCHITECTURE_REVIEW_AND_STANDARDS.md
+    CLEANUP_20261110.md
+    FYP_IMPLEMENTATION_AUDIT_EXCLUDING_360.md
+    INCOME_MODULE.md
+    SiteWise_ARCore_Handover_2026-11-12.md
+    UI_MAPPING_TABLE.md
+    UI_MIGRATION_AUDIT.md
+    geospatial_refresh.md
+
+docs/screenshots/
+    agent_manage_desktop.png
+    agent_manage_mobile.png
+    agent_manage_review.png
+
+docs/visuals/
+    build_master_architecture.py
+    render_master_architecture.cjs
+    sitewise-current-workflow.png
+    sitewise-master-architecture-notes.md
+    sitewise-master-architecture.html
+    sitewise-master-architecture.png
+    sitewise-master-architecture.svg
+    sitewise-master-detail.png
+    sitewise-master-viewer.png
+    sitewise-master-workflows.json
+    sitewise-role-swimlanes-prompt.txt
+    sitewise-role-swimlanes.png
+    sitewise-workflow-prompt.txt
+
+fyp_jaspr_web/
+    README.md
+    analysis_options.yaml
+    pubspec.yaml
+    serve.cmd
+    serve.impl.ps1
+
+fyp_jaspr_web/.workbuddy-ai/memory/
+    2026-10-30.md
+
+fyp_jaspr_web/_ref/
+    extracted_clean.png
+    left_panel.png
+    mask.png
+    overlay_lower.png
+    panel_grid.png
+    shops.png
+    towers.png
+    zoom_icons.png
+    zoom_pin.png
+
+fyp_jaspr_web/_shots/
+    bottom_1024.png
+    bottom_1440.png
+    bottom_390.png
+    bottom_768.png
+    final_full.png
+    landing_footer.png
+    landing_full.png
+    landing_nav.png
+    landing_recommendations.png
+    lr2_admin_head.png
+    lr2_hero_done.png
+    lr2_hero_mid.png
+    lr2_mobile_hero.png
+    lr2_section_done.png
+    lr2_section_mid.png
+    lr_hero.png
+    lr_section_done.png
+    lr_section_mid.png
+    rec_after.png
+    rec_before.png
+    rec_final.png
+    rec_mobile.png
+    rec_selected3.png
+    rec_tab2.png
+    rec_tab3.png
+    rec_tab4.png
+    reveal_hero.png
+    reveal_hero_mid.png
+    reveal_section_done.png
+    reveal_section_mid.png
+    signup_after_click.png
+    su_1280.png
+    su_desktop.png
+    su_mobile.png
+
+fyp_jaspr_web/docs/
+    UI_MIGRATION_AUDIT.md
+
+fyp_jaspr_web/lib/
+    app.dart
+    main.client.dart
+    main.client.options.dart
+    main.server.dart
+
+fyp_jaspr_web/lib/components/
+    admin_ops_kit.dart
+    admin_review_split.dart
+    agent_assignment_control.dart
+    agent_change_requests_panel.dart
+    app_breadcrumbs.dart
+    assessment_journey_stepper.dart
+    assessment_list_component.dart
+    auth_icons.dart
+    auth_navbar.dart
+    auth_portal_switcher.dart
+    business_understanding_panel.dart
+    combined_explore_dom.dart
+    combined_explore_dom_browser.dart
+    combined_explore_dom_stub.dart
+    dashboard_kit.dart
+    dom_helpers.dart
+    entrepreneur_hero.dart
+    entrepreneur_signin_form.dart
+    filter_panel.dart
+    full_analysis_view.dart
+    letter_reveal.dart
+    location_evidence_panel.dart
+    m2_activity_panel.dart
+    map_dom.dart
+    map_dom_browser.dart
+    map_dom_stub.dart
+    project1_read_panel.dart
+    property_card.dart
+    property_leaflet_map.dart
+    research_workflow_panel.dart
+    saved_assessment_dropdown.dart
+    site_topbar.dart
+    staff_auth_page.dart
+    staff_security_shell.dart
+    topbar_controls.dart
+    ui.dart
+    verification_detail_view.dart
+
+fyp_jaspr_web/lib/components/property_detail/
+    business_match_panel.dart
+    business_type_fit_panel.dart
+    category_explanation_panel.dart
+    combined_media_gallery.dart
+    district_demographics_panel.dart
+    location_fit_score.dart
+    location_insights.dart
+    shap_contribution_chart.dart
+
+fyp_jaspr_web/lib/data/
+    admin_api.dart
+    admin_api.dart.before-staff-fetch-fix.bak
+    agent_records.dart
+    api_config.dart
+    api_property_repository.dart
+    api_property_repository.dart.bak_20261112_012113
+    api_proxy.dart
+    app_locator.dart
+    assessment_api.dart
+    assessment_format.dart
+    assessment_report.dart
+    auth_browser.dart
+    auth_service.dart
+    auth_stub.dart
+    breadcrumb_routes.dart
+    dev_auth_bypass.dart
+    full_analysis_actions.dart
+    full_analysis_actions_browser.dart
+    full_analysis_actions_stub.dart
+    full_analysis_format.dart
+    icon_variants.dart
+    location_evidence_api.dart
+    metric_format.dart
+    navigation.dart
+    preference_labels.dart
+    property_insights_api.dart
+    site_content.dart
+    ssr_browser.dart
+    ssr_service.dart
+    ssr_stub.dart
+    staff_guard.dart
+    ui_store.dart
+    ui_store_browser.dart
+    ui_store_stub.dart
+    web_api_client.dart
+    workspaces.dart
+
+fyp_jaspr_web/lib/layouts/
+    app_layout.dart
+    marketing_layout.dart
+
+fyp_jaspr_web/lib/pages/
+    agent_retired_page.dart
+    auth_callback_page.dart
+    forgot_password_page.dart
+    landing_page.dart
+    login_page.dart
+    owner_retired_page.dart
+    reset_password_page.dart
+    signup_page.dart
+    staff_mfa_page.dart
+    staff_security_flow.dart
+    staff_verify_page.dart
+
+fyp_jaspr_web/lib/pages/admin/
+    activity_page.dart
+    agents_page.dart
+    agents_page.dart.before-staff-fetch-fix.bak
+    campaigns_page.dart
+    dashboard_page.dart
+    listing_detail_page.dart
+    listings_page.dart
+    profile_page.dart
+    surveys_page.dart
+    user_detail_page.dart
+    users_page.dart
+
+fyp_jaspr_web/lib/pages/agent/
+    dashboard_page.dart
+    enquiries_page.dart
+    listings_page.dart
+    performance_page.dart
+    profile_page.dart
+    property_detail_page.dart
+
+fyp_jaspr_web/lib/pages/entrepreneur/
+    activity_history_page.dart
+    add_property_confirmation_step.dart
+    add_property_details_step.dart
+    add_property_draft.dart
+    add_property_fields.dart
+    add_property_location_step.dart
+    add_property_page.dart
+    add_property_photos_step.dart
+    add_property_review_step.dart
+    ai_recommendations_page.dart
+    assessment_report_selector_page.dart
+    assessment_report_selector_view.dart
+    assessment_report_view.dart
+    assessment_workspace_page.dart
+    commercial_listing_page.dart
+    compare_page.dart
+    customer_questionnaire_preview_page.dart
+    dashboard_page.dart
+    explanation_page.dart
+    explore_page.dart
+    listing_management_denied_page.dart
+    m2_step_one_page.dart
+    map_page.dart
+    my_properties_page.dart
+    preferences_page.dart
+    profile_page.dart
+    property_analysis_page.dart
+    property_detail_page.dart
+    recommendations_page.dart
+    report_activity_views.dart
+    report_page.dart
+    report_template_sections.dart
+    reports_page.dart
+    saved_page.dart
+    sitewise_white_workspace_navbar.dart
+    tour_page.dart
+
+fyp_jaspr_web/lib/pages/owner/
+    add_property_page.dart
+    dashboard_page.dart
+    profile_page.dart
+    properties_page.dart
+    property_detail_page.dart
+    tour_preview_page.dart
+    tours_page.dart
+
+fyp_jaspr_web/test/
+    activity_history_availability_test.dart
+    admin_users_integration_test.dart
+    api_property_repository_test.dart
+    app_notifier_test.dart
+    assessment_report_route_test.dart
+    bento_skeleton_test.dart
+    development_bypass_boundary_test.dart
+    district_demographics_panel_test.dart
+    login_page_test.dart
+    metric_format_test.dart
+    navigation_roles_test.dart
+    project1_read_panel_test.dart
+    property_insights_api_test.dart
+    reset_password_page_test.dart
+    staff_guard_test.dart
+    staff_security_shell_test.dart
+
+fyp_jaspr_web/tool/
+    _diag_icon.py
+    _probe_icons.js
+    _step4_block.dart.txt
+    agent_theme_fixture.html
+    audit_classes.py
+    auth_client.js
+    capture_recommendation_fixture.py
+    css_check.py
+    dev_static_server.js
+    diag_bg.py
+    diag_bg2.py
+    diag_bg3.py
+    diag_bg4.py
+    diag_ent_interactive.js
+    diag_ent_submit.js
+    diag_fill.py
+    diag_icons.py
+    diag_landing.js
+    diag_lines.py
+    diag_lines2.py
+    diag_mask.py
+    diag_pre.py
+    diag_ref.py
+    diag_ref2.py
+    diag_ref3.py
+    diag_ref4.py
+    diag_route.js
+    diag_variants.py
+    diag_zoom.py
+    dump.js
+    extract_signup_bg.py
+    gen_auth_config.js
+    gen_catalog_fixture.js
+    gen_landing_css.py
+    gen_map_config.js
+    hellop_source_browser.cjs
+    icon_probe.js
+    lr_grapheme_check.dart
+    make_app_icon.py
+    outline.py
+    package-lock.json
+    package.json
+    part_two_live_http.cjs
+    probe_add_property_white_nav.js
+    probe_admin_activity.js
+    probe_admin_listings_css.js
+    probe_admin_ops_a11y.js
+    probe_admin_verification.js
+    probe_agent_assignment_consistency.js
+    probe_agent_theme.js
+    probe_agent_workflow.js
+    probe_assessment_routes.js
+    probe_assessments_chrome.js
+    probe_assessments_shell.js
+    probe_assessments_stacked.js
+    probe_auth_e2e.js
+    probe_auth_flows.js
+    probe_backend_integration.js
+    probe_click_states.js
+    probe_ent_dashboard.js
+    probe_explore.js
+    probe_explore_map.js
+    probe_invite_dialog.js
+    probe_login.js
+    probe_logo_404.js
+    probe_property_detail_accordion.js
+    probe_property_detail_final.js
+    probe_property_detail_map.js
+    probe_property_detail_metrics.js
+    probe_property_detail_nearby.js
+    probe_property_detail_tabs_features.js
+    probe_recommendation_filters.js
+    probe_recommendations.js
+    probe_reset.js
+    probe_routes.js
+    probe_signup.js
+    probe_social.js
+    probe_social2.js
+    probe_social3.js
+    probe_social4.js
+    probe_social_final.js
+    probe_ssr.js
+    probe_ssr_mpa.js
+    probe_staff.js
+    probe_step3_bdj.js
+    screenshot.js
+    serve_client_preview.py
+    serve_spa.js
+    session_harness.js
+    shot.js
+    shot_admin_ops.js
+    shot_assessment_workspace.js
+    shot_assessments_listing.js
+    shot_bottom.js
+    shot_dashboard_no_button.js
+    shot_dialog.js
+    shot_entry_page.js
+    shot_history_tab.js
+    shot_landing.js
+    shot_reference_steps.js
+    shot_report_selector.js
+    shot_step3_empty.js
+    shot_step4_review.js
+    shot_step5_report.js
+    test_callback_flows.js
+    test_staff_assurance.js
+    typecheck.dart
+    verify_backend_integration.js
+    verify_client_mode.js
+    verify_icon.js
+    verify_pages.js
+
+fyp_jaspr_web/tool/_src/
+    sitewise_icon_source.jpg
+
+fyp_jaspr_web/tool/screenshots/
+    assessments_chrome.png
+    assessments_chrome_report_after_switch.png
+    assessments_create_dialog.png
+    assessments_delete_dialog.png
+    assessments_empty.png
+    assessments_inplace_back_to_list.png
+    assessments_inplace_open.png
+    assessments_inplace_questionnaire.png
+    assessments_listing.png
+    assessments_stacked_back.png
+    assessments_stacked_final.png
+    assessments_stacked_open.png
+    assessments_stacked_view.png
+    assessments_workspace.png
+    click_assessment_hover.png
+    click_assessment_list.png
+    click_report_hover.png
+    click_report_selected.png
+    click_states.json
+    dashboard_no_review_button.png
+    history_tab.png
+    history_tab_capture2.png
+    history_tab_dropdown.png
+    history_tab_dropdown_view.png
+    history_tab_final.png
+    history_tab_fixed.png
+    history_tab_v2_reference.png
+    report_selector_v2.png
+    workspace_checkpoint_ai_explanation.png
+    workspace_checkpoint_assessment_report.png
+    workspace_checkpoint_business_requirements.png
+    workspace_checkpoint_location_evidence.png
+    workspace_checkpoint_select_property.png
+    workspace_current_default.png
+    workspace_current_questionnaire.png
+
+fyp_jaspr_web/tool/screenshots/assessment_checkpoints/
+    entry_page.png
+    entry_page_continue.png
+    entry_page_remove.png
+    entry_page_report.png
+    entry_page_selected.png
+    step4_review.png
+    step4_review_add.png
+    step4_review_decided.png
+    step4_review_tab_decided.png
+    step5_checkpoint.png
+    step5_report.png
+    step5_report_coverage.png
+    step5_report_decisions.png
+    step5_report_decisions_decided.png
+    step5_report_evidence.png
+    step5_report_jump.png
+    step5_report_overview.png
+    step5_report_sources.png
+    step5_view_report.png
+    workspace_checkpoint_ai_explanation.png
+    workspace_checkpoint_assessment_report.png
+    workspace_checkpoint_business_requirements.png
+    workspace_checkpoint_location_evidence.png
+    workspace_checkpoint_question_review.png
+    workspace_checkpoint_select_property.png
+
+fyp_jaspr_web/tool/screenshots/step3_bdj/
+    workspace_checkpoint_ai_explanation.png
+    workspace_checkpoint_assessment_report.png
+    workspace_checkpoint_business_requirements.png
+    workspace_checkpoint_location_evidence.png
+    workspace_checkpoint_select_property.png
+    workspace_step3_evidence_unavailable.png
+
+fyp_jaspr_web/tool/screenshots/step3_redesign/
+    workspace_checkpoint_ai_explanation.png
+    workspace_checkpoint_assessment_report.png
+    workspace_checkpoint_business_requirements.png
+    workspace_checkpoint_location_evidence.png
+    workspace_checkpoint_select_property.png
+    workspace_step3_evidence_unavailable.png
+
+fyp_jaspr_web/tool/tool/_diag/
+    login_1440.png
+    login_390.png
+
+fyp_jaspr_web/web/
+    _landing_port.css
+    assessment-workflow.css
+    auth-config.json
+    auth_bundle.js
+    full_analysis.css
+    index.html
+    m2_step_one_page.css
+    m2_workspace_layout.css
+    map-config.js
+    property_detail_upgrade.css
+    property_leaflet_map.html
+    property_leaflet_map.js
+    property_reference_955.json
+    research_assessment_flow_page.css
+    research_workflow_panel.css
+    reveal.js
+    saved_assessment_dropdown.css
+    sitewise_add_property_preview.css
+    sitewise_assessment_list.css
+    sitewise_assessment_report_selector.css
+    sitewise_combined_explore.css
+    sitewise_combined_explore.js
+    sitewise_report_activity.css
+    sitewise_review_pages.css
+    staff-mfa.css
+    step2_business_preferences_mock.css
+    styles.css
+    three_scene.js
+
+fyp_jaspr_web/web/assets/
+    login-bg.jpg
+    signup-city.jpg
+    sitewise-icon-16.png
+    sitewise-icon-180.png
+    sitewise-icon-192.png
+    sitewise-icon-32.png
+    sitewise-icon-48.png
+    sitewise-icon-512.png
+    sitewise-icon-64.png
+    sitewise-icon.png
+    sitewise-mark-64.png
+
+fyp_jaspr_web/web/fonts/
+    Archivo-Black.ttf
+    Archivo-Bold.ttf
+    Archivo-ExtraBold.ttf
+    Archivo-Medium.ttf
+    Archivo-Regular.ttf
+    Archivo-SemiBold.ttf
+
+fyp_jaspr_web/web/vendor/
+    three.min.js
+
+fyp_jaspr_web/web/vendor/leaflet/
+    MarkerCluster.Default.css
+    MarkerCluster.css
+    leaflet.css
+    leaflet.js
+    leaflet.markercluster.js
+
+fyp_mobile_app/
+    .metadata
+    analysis_options.yaml
+    pubspec.yaml
+
+fyp_mobile_app/android/
+    .gitignore
+    build.gradle.kts
+    fyp_android.iml
+    gradle.properties
+    settings.gradle.kts
+
+fyp_mobile_app/android/app/
+    build.gradle.kts
+
+fyp_mobile_app/android/app/src/debug/
+    AndroidManifest.xml
+
+fyp_mobile_app/android/app/src/main/
+    AndroidManifest.xml
+
+fyp_mobile_app/android/app/src/main/kotlin/com/example/fyp/
+    MainActivity.kt
+
+fyp_mobile_app/android/app/src/main/kotlin/com/example/fyp/ar/
+    ArCoreCapturePlugin.kt
+    ArCoreSessionController.kt
+    ArGlRenderer.kt
+    YuvJpegEncoder.kt
+
+fyp_mobile_app/android/app/src/main/res/drawable/
+    launch_background.xml
+
+fyp_mobile_app/android/app/src/main/res/drawable-v21/
+    launch_background.xml
+
+fyp_mobile_app/android/app/src/main/res/mipmap-hdpi/
+    ic_launcher.png
+
+fyp_mobile_app/android/app/src/main/res/mipmap-mdpi/
+    ic_launcher.png
+
+fyp_mobile_app/android/app/src/main/res/mipmap-xhdpi/
+    ic_launcher.png
+
+fyp_mobile_app/android/app/src/main/res/mipmap-xxhdpi/
+    ic_launcher.png
+
+fyp_mobile_app/android/app/src/main/res/mipmap-xxxhdpi/
+    ic_launcher.png
+
+fyp_mobile_app/android/app/src/main/res/values/
+    styles.xml
+
+fyp_mobile_app/android/app/src/main/res/values-night/
+    styles.xml
+
+fyp_mobile_app/android/app/src/profile/
+    AndroidManifest.xml
+
+fyp_mobile_app/android/gradle/wrapper/
+    gradle-wrapper.properties
+
+fyp_mobile_app/android/libs/
+    sceneform-base-1.17.1-nsfix.aar
+
+fyp_mobile_app/assets/
+    sitewise-mark-64.png
+
+fyp_mobile_app/assets/config/
+    dev.json
+    sitewise_dev.json
+
+fyp_mobile_app/assets/fonts/
+    Archivo-Black.ttf
+    Archivo-Bold.ttf
+    Archivo-ExtraBold.ttf
+    Archivo-Medium.ttf
+    Archivo-Regular.ttf
+    Archivo-SemiBold.ttf
+
+fyp_mobile_app/assets/models/
+    ar_capture_target.glb
+    white_frame_bezel.glb
+
+fyp_mobile_app/config/
+    sitewise_dev.env
+    sitewise_dev.env.example
+
+fyp_mobile_app/integration_test/
+    cq_invitation_delivery_test.dart
+    part_two_customer_test.dart
+
+fyp_mobile_app/ios/
+    .gitignore
+
+fyp_mobile_app/ios/Flutter/
+    AppFrameworkInfo.plist
+    Debug.xcconfig
+    Release.xcconfig
+
+fyp_mobile_app/ios/Runner/
+    AppDelegate.swift
+    Info.plist
+    Runner-Bridging-Header.h
+    SceneDelegate.swift
+
+fyp_mobile_app/ios/Runner.xcodeproj/
+    project.pbxproj
+
+fyp_mobile_app/ios/Runner.xcodeproj/project.xcworkspace/
+    contents.xcworkspacedata
+
+fyp_mobile_app/ios/Runner.xcodeproj/project.xcworkspace/xcshareddata/
+    IDEWorkspaceChecks.plist
+    WorkspaceSettings.xcsettings
+
+fyp_mobile_app/ios/Runner.xcodeproj/xcshareddata/xcschemes/
+    Runner.xcscheme
+
+fyp_mobile_app/ios/Runner.xcworkspace/
+    contents.xcworkspacedata
+
+fyp_mobile_app/ios/Runner.xcworkspace/xcshareddata/
+    IDEWorkspaceChecks.plist
+    WorkspaceSettings.xcsettings
+
+fyp_mobile_app/ios/Runner/Assets.xcassets/AppIcon.appiconset/
+    Contents.json
+    Icon-App-1024x1024@1x.png
+    Icon-App-20x20@1x.png
+    Icon-App-20x20@2x.png
+    Icon-App-20x20@3x.png
+    Icon-App-29x29@1x.png
+    Icon-App-29x29@2x.png
+    Icon-App-29x29@3x.png
+    Icon-App-40x40@1x.png
+    Icon-App-40x40@2x.png
+    Icon-App-40x40@3x.png
+    Icon-App-60x60@2x.png
+    Icon-App-60x60@3x.png
+    Icon-App-76x76@1x.png
+    Icon-App-76x76@2x.png
+    Icon-App-83.5x83.5@2x.png
+
+fyp_mobile_app/ios/Runner/Assets.xcassets/LaunchImage.imageset/
+    Contents.json
+    LaunchImage.png
+    LaunchImage@2x.png
+    LaunchImage@3x.png
+    README.md
+
+fyp_mobile_app/ios/Runner/Base.lproj/
+    LaunchScreen.storyboard
+    Main.storyboard
+
+fyp_mobile_app/ios/RunnerTests/
+    RunnerTests.swift
+
+fyp_mobile_app/lib/
+    main.dart
+    main.dart.backup
+
+fyp_mobile_app/lib/application/
+    personalised_recommendations_providers.dart
+    providers.dart
+
+fyp_mobile_app/lib/application/coordinators/
+    evaluation_flow_coordinator.dart
+
+fyp_mobile_app/lib/application/onboarding/
+    onboarding_controller.dart
+
+fyp_mobile_app/lib/application/services/
+    assessment_session.dart
+    bootstrap_aware_auth_service.dart
+    capture_session_store.dart
+    draft_repository.dart
+    panorama_capture_service.dart
+    panorama_generation_service.dart
+    service_locator.dart
+
+fyp_mobile_app/lib/assets/models/
+    target_reticle.glb
+    target_reticle.gltf
+
+fyp_mobile_app/lib/core/auth/
+    account_purpose.dart
+    signup_password_policy.dart
+
+fyp_mobile_app/lib/core/bootstrap/
+    app_bootstrap.dart
+    startup_trace.dart
+
+fyp_mobile_app/lib/core/config/
+    assessment_build_mode.dart
+    config_loader.dart
+    cq_development_access.dart
+    dev_auth_bypass.dart
+    dev_auth_bypass.dart.backup
+    mobile_config.dart
+    mobile_endpoints.dart
+    mobile_endpoints.dart.backup
+    mobile_runtime_config.dart
+
+fyp_mobile_app/lib/core/error/
+    failures.dart
+
+fyp_mobile_app/lib/core/math/
+    vio_sphere_math.dart
+
+fyp_mobile_app/lib/core/permissions/
+    permission_service.dart
+
+fyp_mobile_app/lib/core/routing/
+    app_routes.dart
+    auth_route_guard.dart
+    mobile_role.dart
+
+fyp_mobile_app/lib/core/theme/
+    sitewise_m3.dart
+    sitewise_theme.dart
+
+fyp_mobile_app/lib/core/utils/
+    capture_log.dart
+    device_pose_math.dart
+    pano_bytes.dart
+    pano_bytes_io.dart
+    pano_bytes_stub.dart
+
+fyp_mobile_app/lib/cq_successor/
+    route_contract.dart
+    route_outcome.dart
+    route_port.dart
+    route_snapshot.dart
+    successor_flags.dart
+    successor_runtime.dart
+
+fyp_mobile_app/lib/data/datasources/local/
+    camera_pose_source.dart
+    capture_frame_store.dart
+    draft_local_data_source.dart
+    onboarding_local_data_source.dart
+    opencv_panorama_stitcher.dart
+    opencv_panorama_stitcher_stub.dart
+    secure_session_local_storage.dart
+
+fyp_mobile_app/lib/data/repositories/
+    mobile_api_client.dart
+    onboarding_repository_impl.dart
+    persistent_tour_repository.dart
+    supabase_auth_repository.dart
+    supabase_auth_repository.dart.backup
+    supabase_staff_mfa_repository.dart
+
+fyp_mobile_app/lib/features/assessment/model/entities/
+    assessment.dart
+    assessment_draft.dart
+    questionnaire_question.dart
+
+fyp_mobile_app/lib/features/assessment/model/repository/
+    assessment_repository.dart
+
+fyp_mobile_app/lib/features/assessment/model/service/
+    assessment_local_service.dart
+    demo_questionnaire_routing_service.dart
+    questionnaire_routing_service.dart
+
+fyp_mobile_app/lib/features/assessment/view/
+    assessment_draft_loader.dart
+    assessment_live_hold.dart
+    cq_invitations_page.dart
+    cq_session_page.dart
+    home_screen.dart
+    questionnaire_screen.dart
+    review_screen.dart
+
+fyp_mobile_app/lib/features/assessment/view/components/
+    assessment_card.dart
+    cq_ui_primitives.dart
+    question_option_tile.dart
+
+fyp_mobile_app/lib/features/assessment/viewmodel/
+    assessment_view_model.dart
+    cq_view_model.dart
+
+fyp_mobile_app/lib/features/capture/application/
+    capture_controller.dart
+    capture_state.dart
+
+fyp_mobile_app/lib/features/capture/data/repositories/
+    capture_repository_impl.dart
+    sitewise_capture_repository.dart
+
+fyp_mobile_app/lib/features/capture/data/services/
+    ar_session_service.dart
+    glb_mesh_source.dart
+    photo_capture_service.dart
+    plane_anchor_service.dart
+
+fyp_mobile_app/lib/features/capture/domain/models/
+    capture_record.dart
+    capture_station.dart
+    capture_target.dart
+
+fyp_mobile_app/lib/features/capture/domain/motion/
+    adaptive_quaternion_smoother.dart
+    motion_diagnostics.dart
+    motion_sample.dart
+    orientation_filter.dart
+    shot_phase.dart
+
+fyp_mobile_app/lib/features/capture/domain/services/
+    alignment_calculator.dart
+    rotation_in_place.dart
+    stability_monitor.dart
+    station_frame.dart
+    target_sphere.dart
+
+fyp_mobile_app/lib/features/capture/presentation/screens/
+    ar_capture_screen.dart
+
+fyp_mobile_app/lib/features/capture/presentation/widgets/
+    bezel_reticle.dart
+    capture_progress_widget.dart
+    spherical_target_map.dart
+    target_alignment_overlay.dart
+    target_verdict.dart
+
+fyp_mobile_app/lib/features/questionnaire/view/
+    project1_app.dart
+
+fyp_mobile_app/lib/features/virtual_tour/domain/guidance/
+    projection.dart
+
+fyp_mobile_app/lib/features/virtual_tour/domain/math/
+    quaternions.dart
+    scalars.dart
+    sphere.dart
+    vectors.dart
+
+fyp_mobile_app/lib/features/virtual_tour/platform/
+    ar_target_model.dart
+    ar_types.dart
+    arcore_ar.dart
+    arcore_payload.dart
+
+fyp_mobile_app/lib/features/virtual_tour/platform/glb/
+    glb_model.dart
+    glb_renderer.dart
+    glb_target_scene.dart
+
+fyp_mobile_app/lib/features/virtual_tour/presentation/
+    capture_theme.dart
+
+fyp_mobile_app/lib/presentation/mobile/auth/pages/
+    forgot_password_mobile_page.dart
+    mobile_auth_page.dart
+    mobile_auth_page.dart.sitewise-retry-backup
+    signup_mobile_page.dart
+
+fyp_mobile_app/lib/presentation/mobile/auth/widgets/
+    auth_field.dart
+    auth_provider_button.dart
+    auth_tabs.dart
+    auth_terms_row.dart
+    signup_decorations.dart
+    signup_password_rules.dart
+    signup_role_card.dart
+    signup_step_indicator.dart
+
+fyp_mobile_app/lib/presentation/mobile/entrepreneur/pages/
+    entrepreneur_ai_recommendations_mobile_page.dart
+    entrepreneur_assessment_setup_mobile_page.dart
+    entrepreneur_assessment_summary_mobile_page.dart
+    entrepreneur_compare_mobile_page.dart
+    entrepreneur_dashboard_mobile_page.dart
+    entrepreneur_evidence_mobile_page.dart
+    entrepreneur_explore_mobile_page.dart
+    entrepreneur_preferences_mobile_page.dart
+    entrepreneur_profile_mobile_page.dart
+    entrepreneur_property_detail_mobile_page.dart
+    entrepreneur_recommendations_mobile_page.dart
+    entrepreneur_report_mobile_page.dart
+    entrepreneur_saved_mobile_page.dart
+    entrepreneur_spaces_mobile_page.dart
+    entrepreneur_tour_mobile_page.dart
+    m2_assessment_mobile_page.dart
+    sitewise_add_property_mobile_page.dart
+
+fyp_mobile_app/lib/presentation/mobile/landing/pages/
+    landing_mobile_page.dart
+
+fyp_mobile_app/lib/presentation/mobile/landing/widgets/
+    landing_mobile_sections.dart
+
+fyp_mobile_app/lib/presentation/mobile/onboarding/pages/
+    onboarding_360_tour_page.dart
+    onboarding_business_preferences_page.dart
+    onboarding_flow_page.dart
+    onboarding_get_started_page.dart
+    onboarding_intro_page.dart
+    onboarding_location_intelligence_page.dart
+
+fyp_mobile_app/lib/presentation/mobile/onboarding/visuals/
+    intro_hero_visual.dart
+    intro_visual.dart
+    location_visual.dart
+    onboarding_painters.dart
+    tour_visual.dart
+
+fyp_mobile_app/lib/presentation/mobile/onboarding/widgets/
+    onboarding_base_layout.dart
+    onboarding_header.dart
+    onboarding_next_button.dart
+    onboarding_page_indicator.dart
+
+fyp_mobile_app/lib/presentation/mobile/provider/pages/
+    property_management_moved_page.dart
+    provider_dashboard_controller.dart
+    provider_dashboard_mobile_page.dart
+    provider_enquiries_mobile_page.dart
+    provider_listings_mobile_page.dart
+    provider_mfa_mobile_page.dart
+    provider_models.dart
+    provider_performance_mobile_page.dart
+    provider_profile_edit_sheet.dart
+    provider_profile_mobile_page.dart
+    provider_property_detail_mobile_page.dart
+    provider_schedule_mobile_page.dart
+    provider_ui.dart
+    provider_verification_mobile_page.dart
+    provider_workspace_service.dart
+
+fyp_mobile_app/lib/presentation/mobile/provider/shell/
+    provider_tab_host.dart
+
+fyp_mobile_app/lib/presentation/mobile/shell/
+    entrepreneur_tab_host.dart
+    entrepreneur_tab_scope.dart
+    mobile_app_shell.dart
+    mobile_bottom_nav.dart
+    mobile_navigation.dart
+    mobile_topbar.dart
+
+fyp_mobile_app/lib/presentation/mobile/start/
+    app_start_gate.dart
+    auth_blocking_views.dart
+
+fyp_mobile_app/lib/presentation/mobile/widgets/
+    assessment_stepper.dart
+    async_section.dart
+    m3_kit.dart
+    mobile_area_card.dart
+    mobile_card_rail.dart
+    mobile_category_tile.dart
+    mobile_featured_banner.dart
+    mobile_filter_sheet.dart
+    mobile_filter_tile.dart
+    mobile_home_header.dart
+    mobile_hotspot_chip.dart
+    mobile_insights_panel.dart
+    mobile_owner_property_card.dart
+    mobile_property_card.dart
+    mobile_property_image.dart
+    mobile_quick_actions.dart
+    mobile_quick_grid.dart
+    mobile_review_row.dart
+    mobile_search_field.dart
+    mobile_section_header.dart
+    mobile_skeleton.dart
+    mobile_status_count_row.dart
+    mobile_suitability_badge.dart
+    mobile_tour_viewer.dart
+    sitewise_file_image.dart
+    sitewise_network_image.dart
+
+fyp_mobile_app/lib/presentation/shared/landing/
+    landing_content.dart
+
+fyp_mobile_app/lib/presentation/shared/pages/
+    not_found_mobile_page.dart
+
+fyp_mobile_app/lib/presentation/shared/tour/
+    ar_capture_mobile_page.dart
+    tour_preview_mobile_page.dart
+
+fyp_mobile_app/lib/presentation/shared/viewmodels/
+    tour_preview_viewmodel.dart
+
+fyp_mobile_app/lib/presentation/shared/widgets/
+    sitewise_bottom_sheet.dart
+    sitewise_brand.dart
+    sitewise_button.dart
+    sitewise_confirm_dialog.dart
+    sitewise_cta_button.dart
+    sitewise_empty_state.dart
+    sitewise_error_state.dart
+    sitewise_evidence_score.dart
+    sitewise_factor_row.dart
+    sitewise_filter_chip.dart
+    sitewise_icon.dart
+    sitewise_icon_tile.dart
+    sitewise_inline_notice.dart
+    sitewise_loading_state.dart
+    sitewise_map_panel.dart
+    sitewise_progress_indicator.dart
+    sitewise_role_menu.dart
+    sitewise_search_bar.dart
+    sitewise_secondary_button.dart
+    sitewise_section_header.dart
+    sitewise_spec_chip.dart
+    sitewise_stat_card.dart
+    sitewise_status_badge.dart
+
+fyp_mobile_app/linux/
+    .gitignore
+    CMakeLists.txt
+
+fyp_mobile_app/linux/flutter/
+    CMakeLists.txt
+    generated_plugin_registrant.cc
+    generated_plugin_registrant.h
+    generated_plugins.cmake
+
+fyp_mobile_app/linux/runner/
+    CMakeLists.txt
+    main.cc
+    my_application.cc
+    my_application.h
+
+fyp_mobile_app/macos/
+    .gitignore
+
+fyp_mobile_app/macos/Flutter/
+    Flutter-Debug.xcconfig
+    Flutter-Release.xcconfig
+    GeneratedPluginRegistrant.swift
+
+fyp_mobile_app/macos/Runner/
+    AppDelegate.swift
+    DebugProfile.entitlements
+    Info.plist
+    MainFlutterWindow.swift
+    Release.entitlements
+
+fyp_mobile_app/macos/Runner.xcodeproj/
+    project.pbxproj
+
+fyp_mobile_app/macos/Runner.xcodeproj/project.xcworkspace/xcshareddata/
+    IDEWorkspaceChecks.plist
+
+fyp_mobile_app/macos/Runner.xcodeproj/xcshareddata/xcschemes/
+    Runner.xcscheme
+
+fyp_mobile_app/macos/Runner.xcworkspace/
+    contents.xcworkspacedata
+
+fyp_mobile_app/macos/Runner.xcworkspace/xcshareddata/
+    IDEWorkspaceChecks.plist
+
+fyp_mobile_app/macos/Runner/Assets.xcassets/AppIcon.appiconset/
+    Contents.json
+    app_icon_1024.png
+    app_icon_128.png
+    app_icon_16.png
+    app_icon_256.png
+    app_icon_32.png
+    app_icon_512.png
+    app_icon_64.png
+
+fyp_mobile_app/macos/Runner/Base.lproj/
+    MainMenu.xib
+
+fyp_mobile_app/macos/Runner/Configs/
+    AppInfo.xcconfig
+    Debug.xcconfig
+    Release.xcconfig
+    Warnings.xcconfig
+
+fyp_mobile_app/macos/RunnerTests/
+    RunnerTests.swift
+
+fyp_mobile_app/models/
+    target_reticle.glb
+
+fyp_mobile_app/test/
+    provider_dashboard_test.dart
+    provider_listings_ui_test.dart
+    provider_refresh_test.dart
+    provider_routing_test.dart
+    signup_registration_test.dart
+
+fyp_mobile_app/test/assessment/
+    build_configuration_verification_test.dart
+    cq_v072_ui_test.dart
+    questionnaire_routing_gate_test.dart
+
+fyp_mobile_app/test/assessment/fixtures/
+    home_screen.dart
+    preview_routes.dart
+    questionnaire_fixtures.dart
+    questionnaire_screen.dart
+    review_screen.dart
+
+fyp_mobile_app/test/auth/
+    development_indicator_test.dart
+    mobile_api_client_test.dart
+    operation_transport_test.dart
+
+fyp_mobile_app/test/cq_runtime/
+    cq_api_widget_test.dart
+    cq_development_access_test.dart
+    cq_english_invitation_test.dart
+    cq_view_model_retry_test.dart
+
+fyp_mobile_app/third_party/dchs_motion_sensors/
+    README.md
+    pubspec.yaml
+
+fyp_mobile_app/third_party/dchs_motion_sensors/lib/
+    dchs_motion_sensors.dart
+
+fyp_mobile_app/windows/
+    .gitignore
+    CMakeLists.txt
+
+fyp_mobile_app/windows/flutter/
+    CMakeLists.txt
+    generated_plugin_registrant.cc
+    generated_plugin_registrant.h
+    generated_plugins.cmake
+
+fyp_mobile_app/windows/runner/
+    CMakeLists.txt
+    Runner.rc
+    flutter_window.cpp
+    flutter_window.h
+    main.cpp
+    resource.h
+    runner.exe.manifest
+    utils.cpp
+    utils.h
+    win32_window.cpp
+    win32_window.h
+
+fyp_mobile_app/windows/runner/resources/
+    app_icon.ico
+
+shared_logic/
+    pubspec.yaml
+
+shared_logic/lib/
+    shared_logic.dart
+
+shared_logic/lib/src/application/controllers/
+    admin_controller.dart
+    app_controller.dart
+    entrepreneur_controller.dart
+    owner_controller.dart
+    state_controller.dart
+
+shared_logic/lib/src/application/notifiers/
+    admin_notifier.dart
+    app_notifier.dart
+    auth_notifier.dart
+    entrepreneur_notifier.dart
+    m2_assessment_notifier.dart
+    owner_notifier.dart
+    providers.dart
+
+shared_logic/lib/src/application/services/
+    auth_service.dart
+    property_service.dart
+    property_verification_service.dart
+    recommendation_service.dart
+    tour_service.dart
+    upload_service.dart
+    verification_service.dart
+
+shared_logic/lib/src/application/states/
+    admin_state.dart
+    app_state.dart
+    auth_state.dart
+    entrepreneur_state.dart
+    owner_state.dart
+
+shared_logic/lib/src/application/usecases/
+    filter_properties.dart
+    property_filter.dart
+
+shared_logic/lib/src/core/config/
+    app_config.dart
+    app_config.dart.backup
+
+shared_logic/lib/src/core/constants/
+    app_constants.dart
+
+shared_logic/lib/src/core/errors/
+    app_failure.dart
+
+shared_logic/lib/src/core/network/
+    api_client.dart
+
+shared_logic/lib/src/data/datasources/local/
+    capture_target_data_source.dart
+    demo_data.dart
+    m2_prototype_data.dart
+
+shared_logic/lib/src/data/dtos/
+    property_dto.dart
+
+shared_logic/lib/src/data/mappers/
+    catalog_property_mapper.dart
+    explore_property_mapper.dart
+    property_mapper.dart
+
+shared_logic/lib/src/data/models/
+    commercial_property_model.dart
+    location_intelligence_model.dart
+    property_insights_model.dart
+    user_model.dart
+
+shared_logic/lib/src/data/repositories/
+    admin_repositories_impl.dart
+    api_agent_listing_repository.dart
+    api_confirmed_review_repository.dart
+    api_customer_questionnaire_repository.dart
+    api_explore_repository.dart
+    api_intelligence_repository.dart
+    api_m2_repository.dart
+    api_owner_listing_repository.dart
+    api_owner_property_repository.dart
+    api_personalised_recommendation_repository.dart
+    api_project1_read_repository.dart
+    api_property_insights_repository.dart
+    api_property_repository.dart
+    api_property_verification_repository.dart
+    api_pu_prediction_repository.dart
+    api_recommendation_search_repository.dart
+    api_saved_properties_repository.dart
+    api_user_repository.dart
+    intelligence_repositories_impl.dart
+    property_repository_impl.dart
+    recommendation_repository_impl.dart
+
+shared_logic/lib/src/domain/data/
+    add_property_rules.dart
+    add_property_rules.dart.bak_20261112_012113
+    malaysia_locations.dart
+
+shared_logic/lib/src/domain/entities/
+    agent_listing.dart
+    app_role.dart
+    capture_config.dart
+    capture_point.dart
+    capture_session_state.dart
+    captured_frame.dart
+    commercial_property.dart
+    confirmed_business_review.dart
+    customer_questionnaire.dart
+    explore.dart
+    full_analysis.dart
+    geo.dart
+    location_intelligence.dart
+    m2_assessment.dart
+    owner_listing.dart
+    personalised_recommendations.dart
+    project1_readiness.dart
+    property_enrichment.dart
+    property_verification.dart
+    pu_feature_coverage.dart
+    pu_prediction.dart
+    recommendation.dart
+    recommendation_search.dart
+    recommendation_search.dart.pre_management.bak
+    sitewise_records.dart
+    user.dart
+    virtual_tour.dart
+
+shared_logic/lib/src/domain/repositories/
+    admin_repositories.dart
+    agent_listing_repository.dart
+    auth_repository.dart
+    explore_repository.dart
+    intelligence_repositories.dart
+    onboarding_repository.dart
+    property_repository.dart
+    property_verification_repository.dart
+    pu_prediction_repository.dart
+    recommendation_repository.dart
+    recommendation_search_repository.dart
+    saved_properties_repository.dart
+    staff_mfa_repository.dart
+
+shared_logic/lib/src/domain/services/
+    panorama_stitcher.dart
+
+shared_logic/lib/src/domain/usecases/
+    assessment_selection_usecases.dart
+    get_pu_prediction.dart
+    intelligence_usecases.dart
+    property_usecases.dart
+    recommendation_usecases.dart
+    verification_usecases.dart
+
+shared_logic/test/
+    confirmed_review_contract_test.dart
+    cq_mutation_contract_test.dart
+    customer_questionnaire_contract_test.dart
+    m2_activity_contract_test.dart
+    m2_context_contract_test.dart
+    operation_failure_test.dart
+    project1_http_contract_test.dart
+    project1_read_contract_test.dart
+
+shared_logic/test/application/
+    admin_verification_summary_test.dart
+    m2_assessment_notifier_test.dart
+
+shared_logic/test/domain/
+    agent_listing_facts_json_test.dart
+    location_analysis_entity_test.dart
+    property_enrichment_test.dart
+    recommendation_facets_test.dart
+
+shared_logic/test/fixtures/
+    cq_delivery_retry.json
+    cq_session_isolated.json
+
+shared_logic/tool/
+    verify_notifiers.dart
+    verify_property_filter.dart
+
+test/
+    .env  [SECRET — contents not read]
+    .env.example  [SECRET — contents not read]
+    app-api.js
+    app-api.test.js
+    app-schema.sql
+    app-server.js
+    db.js
+    package-lock.json
+    package.json
+    properties.js
+    server.js
+    start-api.ps1
+
+test/.data/
+    evidence_captured_fixture.json
+    jaspr_catalog_fixture.json
+    properties.json
+    recommendation_search_fixture.json
+
+test/data/
+    businesses.csv
+
+test/public/
+    app.js
+    index.html
+    style.css
+
+test/scripts/
+    check-db.js
+    import-properties.js
+    prepare-property-workbook.py
+
+tool/
+    malaysia_postcodes_source.json

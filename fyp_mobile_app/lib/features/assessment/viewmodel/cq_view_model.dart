@@ -143,6 +143,61 @@ class CqViewModel extends ChangeNotifier {
     });
   }
 
+  /// Only the separately authorized synthetic page bundles the context display.
+  /// Every required version still uses the existing ordered backend delivery.
+  List<String> get displayedSyntheticStimuli {
+    final s = session;
+    if (s == null || s.data['synthetic_execution'] != true) return const [];
+    final next = s.data['next_stimulus_kind'];
+    if (next == null) return const [];
+    final authorized = (s.manifest['authorized_question_ids'] as List).toSet();
+    final used = <String>{
+      for (final q in s.manifest['questions'] as List)
+        if (authorized.contains(q['id']))
+          ...(q['stimulus_dependencies'] as List).cast<String>(),
+    };
+    final order = (s.manifest['stimulus_order'] as List)
+        .cast<String>()
+        .where(used.contains)
+        .toList(growable: false);
+    final start = order.indexOf(next as String);
+    return start < 0 ? const [] : List<String>.unmodifiable(order.skip(start));
+  }
+
+  Future<void> acknowledgeDisplayedStimuli(List<String> displayed) {
+    final s = session!, reviewed = List<String>.unmodifiable(displayed);
+    return _run(() async {
+      if (s.data['synthetic_execution'] != true ||
+          reviewed.isEmpty ||
+          reviewed.toSet().length != reviewed.length) {
+        throw const FormatException(
+          'A displayed synthetic information packet is required.',
+        );
+      }
+      // Reconcile an uncertain response before retrying: committed deliveries
+      // are retained, and each remaining version is delivered exactly in order.
+      _set(await repository.read(s.id, previous: session));
+      final next = session!.data['next_stimulus_kind'];
+      if (next != null) {
+        final start = reviewed.indexOf(next as String);
+        if (start < 0) {
+          throw const FormatException(
+            'The required information changed. Reload the questionnaire.',
+          );
+        }
+        for (final kind in reviewed.skip(start)) {
+          if (session!.data['next_stimulus_kind'] != kind) {
+            throw const FormatException(
+              'The information order changed. Reload the questionnaire.',
+            );
+          }
+          _set(await repository.deliverStimulus(session!, kind));
+        }
+      }
+      await _presentNext();
+    });
+  }
+
   Map<String, dynamic>? get question {
     final p = session?.presentation;
     return p == null ? null : session!.question(p['slot_id'] as String);
@@ -195,6 +250,24 @@ class CqViewModel extends ChangeNotifier {
   Future<void> edit(String slot) => _run(() async {
     _set(await repository.present(session!, editSlotId: slot));
   });
+  String? get previousAnsweredSlot {
+    final s = session, current = session?.presentation?['slot_id'];
+    if (s == null || current == null) return null;
+    final index = s.routing.indexWhere((r) => r['slot_id'] == current);
+    for (var i = index - 1; i >= 0; i--) {
+      final r = s.routing[i];
+      if (r['verdict'] == 'SHOWN' && r['event_id'] != null) {
+        return r['slot_id'] as String;
+      }
+    }
+    return null;
+  }
+
+  Future<void> previous() async {
+    final slot = previousAnsweredSlot;
+    if (slot != null) await edit(slot);
+  }
+
   Future<void> pause() {
     final s = session!, id = requestId();
     return _run(() async {

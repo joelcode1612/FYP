@@ -1,0 +1,69 @@
+{
+  "runs": {
+    "llm02-dry-20261117T124040Z-c01": {
+      "attempts": [
+        {
+          "attempt_no": 1,
+          "prompt_hash": "3d3ccf6b48c0b52933c09b4269c09bb9f7a7b5eec13b5440a26427757abc5ea9",
+          "prompt_version": "BDJ-SOURCE-3-CAND",
+          "request_hash": "c4bd6952ef53fe0c9318f7c98211d3280f071d3e342fb3a010a69d990b1e8270",
+          "reserved_at": "2026-11-17T12:40:40.721337+00:00",
+          "stage": "BDJ"
+        }
+      ],
+      "receipts": []
+    },
+    "llm02-dry-20261117T124040Z-c02": {
+      "attempts": [
+        {
+          "attempt_no": 1,
+          "prompt_hash": "3d3ccf6b48c0b52933c09b4269c09bb9f7a7b5eec13b5440a26427757abc5ea9",
+          "prompt_version": "BDJ-SOURCE-3-CAND",
+          "request_hash": "4cd7749530172260315f595c9851389e43b3d0c21f1af11a40497f9915b9c49a",
+          "reserved_at": "2026-11-17T12:40:40.786584+00:00",
+          "stage": "BDJ"
+        }
+      ],
+      "receipts": []
+    },
+    "llm02-dry-20261117T124040Z-c03": {
+      "attempts": [
+        {
+          "attempt_no": 1,
+          "prompt_hash": "3d3ccf6b48c0b52933c09b4269c09bb9f7a7b5eec13b5440a26427757abc5ea9",
+          "prompt_version": "BDJ-SOURCE-3-CAND",
+          "request_hash": "cfb1e58fba53e6bd25aef020a547a89d1de55d2b37dafc9a6015763e95b0b1eb",
+          "reserved_at": "2026-11-17T12:40:40.886858+00:00",
+          "stage": "BDJ"
+        }
+      ],
+      "receipts": []
+    },
+    "llm02-dry-20261117T124040Z-c04": {
+      "attempts": [
+        {
+          "attempt_no": 1,
+          "prompt_hash": "3d3ccf6b48c0b52933c09b4269c09bb9f7a7b5eec13b5440a26427757abc5ea9",
+          "prompt_version": "BDJ-SOURCE-3-CAND",
+          "request_hash": "4bb22456e5f3de15ae42b8717783d43eb0393bfdd85c2d82c2f3542b9be27d9f",
+          "reserved_at": "2026-11-17T12:40:40.943220+00:00",
+          "stage": "BDJ"
+        }
+      ],
+      "receipts": []
+    },
+    "llm02-dry-20261117T124040Z-c05": {
+      "attempts": [
+        {
+          "attempt_no": 1,
+          "prompt_hash": "3d3ccf6b48c0b52933c09b4269c09bb9f7a7b5eec13b5440a26427757abc5ea9",
+          "prompt_version": "BDJ-SOURCE-3-CAND",
+          "request_hash": "55462c33092464a45e2b775014d9b930b760050ab2407b58182624bf749d06ad",
+          "reserved_at": "2026-11-17T12:40:40.991947+00:00",
+          "stage": "BDJ"
+        }
+      ],
+      "receipts": []
+    }
+  }
+}

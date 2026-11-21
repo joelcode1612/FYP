@@ -1,0 +1,64 @@
+{
+  "budget_spent": 4,
+  "confirmation": {
+    "digest": "7b30f47d8d7566da3fcb60fd2e897a0d5f1ca3f54e601a9dd297a5f2b13e3d2d",
+    "id": "00000000-0000-0000-0000-000000000004",
+    "revision": 2,
+    "status": "CURRENT_CONFIRMED"
+  },
+  "confirmed_uncertainty": {
+    "actor_user_id": "00000000-0000-0000-0000-000000000001",
+    "confirmation_id": "00000000-0000-0000-0000-000000000004",
+    "exact_text": "Would office workers pay RM12 for a coffee and a light lunch at this location?",
+    "id": "SYN-UNC-QJ-01"
+  },
+  "context_version": "BCB-V1-1.1.0",
+  "geography_is_null": true,
+  "packet_hash": "f8e4086fec9ea4f314eac4bb1d47a13cd5db8c841ac3d11a7b82c0b48c54f323",
+  "qj": {
+    "justification": "The confirmed uncertainty concerns customer willingness-to-pay, which could in principle route to a customer survey, but no frozen measurement fields (construct, population, timeframe, stimulus, response options/codes, routing, denominator, source refs, limitations, uncertainty version) are supplied in the source records. A survey candidate requires all frozen fields; otherwise HOLD. Observed conditions: entrepreneur-declared, unverified facts; an unresolved candidate contradiction; geography out of V1 scope; permissions deny QJ execution. No profit inference is made.",
+    "measurement": null,
+    "route": "HOLD"
+  },
+  "receipt": {
+    "assessment_id": "00000000-0000-0000-0000-000000000002",
+    "authority": "NONE",
+    "authorization_id": "TEST-SCOPED-QJ-SYNTHETIC-DISCLOSURE-LLM01",
+    "builder_version": "BCB-V1-1.1.0",
+    "candidate_only": true,
+    "checks": [
+      "QJ_STAGE_SCOPED",
+      "QJ_SYNTHETIC_NONHUMAN",
+      "QJ_BUILDER_OUTPUT_VERIFIED",
+      "QJ_IMMUTABLE_VERSIONS_MATCH",
+      "QJ_UNCERTAINTY_CONFIRMED",
+      "QJ_PURPOSE_QJ_CONTEXT_CURRENT",
+      "QJ_ENDPOINT_MODEL_MATCH",
+      "QJ_TEST_AUTHORIZATION_CURRENT"
+    ],
+    "confirmation_id": "00000000-0000-0000-0000-000000000004",
+    "confirmed_revision": 2,
+    "context_hash": "f8e4086fec9ea4f314eac4bb1d47a13cd5db8c841ac3d11a7b82c0b48c54f323",
+    "context_version": "BCB-V1-1.1.0",
+    "fielding_authorized": false,
+    "owner_authorization": false,
+    "publication_authorized": false,
+    "report_release_authorized": false,
+    "scientific_acceptance": false,
+    "tenant_id": "SYNTHETIC-TENANT-A"
+  },
+  "run_id": "qj-live-20261117T132754Z",
+  "stage": "QJ",
+  "usage": {
+    "completion_tokens": 242,
+    "prompt_tokens": 4653,
+    "total_tokens": 4895
+  },
+  "validation": {
+    "authority": "CANDIDATE_ONLY",
+    "codes": [],
+    "note": "Structural validation against the packet's own refs. The adopted measurement policy is not invoked, so this is not a scientific acceptance and not an approved research question.",
+    "scientific_acceptance": false,
+    "valid": true
+  }
+}

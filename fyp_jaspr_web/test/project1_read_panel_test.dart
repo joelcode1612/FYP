@@ -35,9 +35,21 @@ void main() {
     tester.pumpComponent(const Project1ReadPanel(assessmentId: '', section: 'review'));
     await tester.pump();
     await tester.pump();
-    expect(find.text('Automated research review held'), findsOneComponent);
+    expect(find.text('Research objectives and question review'), findsOneComponent);
     expect(find.text('Verified server hold for review.'), findsOneComponent);
     expect(client.paths.single, '/api/v1/project1-read/readiness');
+  });
+
+  testComponents('questionnaire hold uses the server reason and cannot publish', (tester) async {
+    tester.pumpComponent(const Project1ReadPanel(assessmentId: '', section: 'questionnaire'));
+    await tester.pump();
+    await tester.pump();
+    expect(find.text('Verified server hold for questionnaire.'), findsOneComponent);
+    expect(find.text('Additional question Q14 is held by the assignment constraint (23514).'), findsNothing);
+    await tester.click(find.ancestor(of: find.text('Publish questionnaire'), matching: find.tag('button')));
+    await tester.pump();
+    // Read-only availability must never dispatch a publication request.
+    expect(client.paths, ['/api/v1/project1-read/readiness']);
   });
   testComponents('report renders server hold without invented snapshot or statistics', (tester) async {
     tester.pumpComponent(const Project1ReadPanel(assessmentId: '', section: 'report'));

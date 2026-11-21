@@ -1,0 +1,36 @@
+{
+  "authorization_id": "TEST-SCOPED-QJ-PRICE-RM13-P3",
+  "scope": "TEST_ONLY",
+  "phase": "P3 price-acceptability synthetic QJ (LAB-PRICE-RM13-0.1)",
+  "created_on": "2026-11-17",
+  "valid_until": "2027-11-17T00:00:00+00:00",
+  "stage": "QJ",
+  "purpose": "QJ_CONTEXT",
+  "tenant_id": "m2-owner:9ee0be16-25ec-46f3-a578-1fa7f4080489",
+  "data_class": "SYNTHETIC_NONHUMAN",
+  "synthetic": true,
+  "human_subjects": false,
+  "authorised_operations": [
+    "QJ_SYNTHETIC_DISPATCH"
+  ],
+  "authorises": [
+    "one disclosure decision for one synthetic, non-human QJ context built by BusinessContextBuilderV1 from the disposable P1 cluster assessment",
+    "at most one provider dispatch for the price-acceptability scenario, within the existing six-call ceiling and the USD 0.00 free-only gate"
+  ],
+  "does_not_authorise": [
+    "production adoption of any kind",
+    "Owner, scientific or GEO approval of any kind",
+    "real entrepreneur or personal data",
+    "customer fielding or survey execution",
+    "admission of a model candidate as an approved research question",
+    "any QG drafting, bank equivalence or question-bank write",
+    "publication, report release or fielding",
+    "a paid model, paid route or fallback model"
+  ],
+  "production_adoption": false,
+  "owner_signature": null,
+  "scientific_approval": null,
+  "geo_authority": null,
+  "written_to_env": false,
+  "written_to_schema_versions": false
+}

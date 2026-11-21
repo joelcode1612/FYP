@@ -1,0 +1,35 @@
+{
+  "authorization_id": "TEST-SCOPED-QJ-SYNTHETIC-DISCLOSURE-LLM01",
+  "scope": "TEST_ONLY",
+  "phase": "QJ synthetic disclosure adapter verification",
+  "created_on": "2026-11-17",
+  "valid_until": "2027-11-17T00:00:00+00:00",
+  "stage": "QJ",
+  "purpose": "QJ_CONTEXT",
+  "tenant_id": "SYNTHETIC-TENANT-A",
+  "data_class": "SYNTHETIC_NONHUMAN",
+  "synthetic": true,
+  "human_subjects": false,
+  "authorised_operations": [
+    "QJ_SYNTHETIC_DISPATCH"
+  ],
+  "authorises": [
+    "one disclosure decision for one synthetic, non-human QJ context built by BusinessContextBuilderV1 inside backend/tests/project1/llm_campaign",
+    "a local fake transport only, so the request body can be inspected without a socket"
+  ],
+  "does_not_authorise": [
+    "production adoption of any kind",
+    "Owner, scientific or GEO approval of any kind",
+    "real entrepreneur or personal data",
+    "customer fielding or survey execution",
+    "any external provider or network dispatch",
+    "admission of a model candidate as an approved research question",
+    "publication, report release or fielding"
+  ],
+  "production_adoption": false,
+  "owner_signature": null,
+  "scientific_approval": null,
+  "geo_authority": null,
+  "written_to_env": false,
+  "written_to_schema_versions": false
+}

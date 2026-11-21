@@ -366,6 +366,13 @@ def test_revision_persistence_submission_review_confirmation(lab):
         'confirmation':confirmed,'current_confirmation_invalid_after_edit':True},indent=2,default=str),encoding='utf-8')
 
 
+def test_p1_price_measurement_packet(lab):
+    """P1: real BCB-V1-1.1.0 packet whose uncertainty is the exact RM13 offer."""
+    from p1_price_measurement_checks import check_price_measurement_packet
+    evidence = check_price_measurement_packet(lab)
+    assert (evidence / 'packet.json').is_file()
+
+
 def test_projection_atomic_rollback_and_concurrent_rebuild(lab):
     from concurrent.futures import ThreadPoolExecutor
 

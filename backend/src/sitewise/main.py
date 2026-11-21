@@ -1,4 +1,5 @@
 from contextlib import asynccontextmanager
+import re
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -19,6 +20,7 @@ from sitewise.core.supabase_admin import SupabaseAdminError
 from sitewise.core.logging import configure_logging, logger
 from sitewise.db.session import create_db_and_tables
 from sitewise.frontend import DEFAULT_DIST_DIR, mount_frontend
+from sitewise.project1.contracts import WorkflowHeld
 
 configure_logging()
 
@@ -61,13 +63,19 @@ def _warm_explainers() -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    try:
-        create_db_and_tables()
-    except Exception:
-        # Fail fast: without the schema every data route would 500 while
-        # /health still answered "ok". The traceback stays server-side.
-        logger.exception("Database startup failed; the API will not start.")
-        raise
+    # Schema creation is OFF by default: the application must not create or
+    # migrate tables on startup. Enable SITEWISE_DB_AUTO_CREATE only for a
+    # disposable local database.
+    if settings.db_auto_create:
+        try:
+            create_db_and_tables()
+        except Exception:
+            # Fail fast: without the schema every data route would 500 while
+            # /health still answered "ok". The traceback stays server-side.
+            logger.exception("Database startup failed; the API will not start.")
+            raise
+    else:
+        logger.info("Startup schema creation disabled (db_auto_create=false).")
     _warm_explainers()
     # Background explanation worker: computes SHAP off the request path and
     # resumes any pending durable jobs left by a previous process. Startup
@@ -126,6 +134,86 @@ async def supabase_admin_error_handler(request: Request, exc: SupabaseAdminError
     """A trusted provider operation failed (GoTrue/PostgREST). 502, no keys."""
     logger.error("Supabase admin operation failed on %s %s", request.method, request.url.path)
     return JSONResponse(status_code=exc.status_code, content={"detail": str(exc)})
+
+
+# WorkflowHeld carries a fixed reason code and nothing else. The message is
+# chosen from this static table; provider text, prompts and answer content are
+# never interpolated. Unknown codes get a generic message plus the code.
+_WORKFLOW_HELD_MESSAGES = {
+    'DISCLOSURE_REAL_DATA_NOT_AUTHORIZED':
+        'Real business data cannot be sent to the review provider until disclosure '
+        'terms are authorized.',
+    'DISCLOSURE_PURPOSE_MISMATCH':
+        'This review purpose is not authorized for the provider.',
+    'DISCLOSURE_SOURCE_MISMATCH':
+        'The business details changed before the review could be sent.',
+    'RESTRICTED_WORKFLOW_PRINCIPAL_REQUIRED':
+        'The review service is waiting for its required database authorization.',
+    'WORKFLOW_RUN_REVISION_MISMATCH':
+        'The saved business details changed. Reload before requesting a review.',
+    'WORKFLOW_RUN_NOT_FOUND':
+        'The review record could not be found. Reload before trying again.',
+    'WORKFLOW_STORAGE_UNAVAILABLE':
+        'The review record could not be stored. Try again later.',
+    'MODEL_STAGE_ALREADY_RESERVED':
+        'A review attempt is already recorded for this version. Reload before trying again.',
+    'MODEL_ATTEMPT_BUDGET_EXHAUSTED':
+        'This review version has used its allowed attempts. Reload before trying again.',
+    'MODEL_RECEIPT_OUTCOME_INVALID':
+        'The review attempt could not be reconciled and was not stored.',
+    'E_PROVIDER_TIMEOUT_OUTCOME_UNKNOWN':
+        'The review provider did not respond in time. The attempt was recorded and '
+        'will not be retried automatically.',
+    'PROVIDER_NOT_CONFIGURED':
+        'Model-assisted review is waiting for its required setup.',
+    'PROVIDER_CREDENTIALS_REJECTED':
+        'The review provider rejected its configured credentials.',
+    'PROVIDER_RATE_LIMITED':
+        'The review provider is busy. Try again later.',
+    'PROVIDER_TEMPORARILY_UNAVAILABLE':
+        'The review provider is temporarily unavailable. Try again later.',
+    'PROVIDER_MODEL_MISMATCH':
+        'The review provider returned a different model than the one authorized.',
+    'BDJ_RULE_ADOPTION_REQUIRED':
+        'Model-assisted review is waiting for its required setup.',
+    'BDJ_RULE_FINGERPRINT_MISMATCH':
+        'The adopted review rules could not be verified.',
+    'RESULT_OUTCOME_UNCLASSIFIED':
+        'The review result could not be classified and was not stored.',
+    'BDJ_RESULT_NOT_FOUND':
+        'The review result was not found.',
+}
+_INFRASTRUCTURE_HELD_CODES = frozenset({
+    'RESTRICTED_WORKFLOW_PRINCIPAL_REQUIRED',
+    'WORKFLOW_STORAGE_UNAVAILABLE',
+    'WORKFLOW_RUN_NOT_FOUND',
+    'MODEL_RECEIPT_OUTCOME_INVALID',
+    'E_PROVIDER_TIMEOUT_OUTCOME_UNKNOWN',
+    'PROVIDER_NOT_CONFIGURED',
+    'PROVIDER_CREDENTIALS_REJECTED',
+    'PROVIDER_RATE_LIMITED',
+    'PROVIDER_TEMPORARILY_UNAVAILABLE',
+    'PROVIDER_HTTP_REJECTED',
+})
+_WORKFLOW_CODE = re.compile(r'[A-Z][A-Z0-9_]{0,63}')
+
+
+@app.exception_handler(WorkflowHeld)
+async def workflow_held_handler(request: Request, exc: WorkflowHeld):
+    """409 for a judged refusal, 503 for an infrastructure-class hold.
+
+    The body is ``{'detail': {'code', 'message'}}`` with a static message. The
+    code is validated against a fixed shape so an arbitrary exception string
+    cannot become client-visible text.
+    """
+    code = str(exc)
+    if not _WORKFLOW_CODE.fullmatch(code):
+        code = 'WORKFLOW_HELD'
+    message = _WORKFLOW_HELD_MESSAGES.get(
+        code, 'The workflow could not complete this request.')
+    status = 503 if code in _INFRASTRUCTURE_HELD_CODES else 409
+    return JSONResponse(status_code=status,
+                        content={'detail': {'code': code, 'message': message}})
 
 
 @app.exception_handler(Exception)

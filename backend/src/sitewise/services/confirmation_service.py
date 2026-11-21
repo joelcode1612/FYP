@@ -9,9 +9,9 @@ import json
 from uuid import UUID
 
 from sitewise.core.exceptions import ConflictError, NotFoundError
-from sitewise.domain.m2_rules import missing_required_items, validate_m2_answer, resolve_m2_items, derived_m2_selections
+from sitewise.modules.decision_engine.domain.m2_rules import missing_required_items, validate_m2_answer, resolve_m2_items, derived_m2_selections
 from sitewise.domain.bdj_candidate_rules import RULE_VERSION
-from sitewise.domain.m2_provenance import confirmation_pins
+from sitewise.domain.m2_provenance import declaration_pins, M2ConfirmationConflict, SNAPSHOT_VERSION
 from sitewise.services.ports.m2_repository_port import M2RepositoryPort
 
 
@@ -22,6 +22,32 @@ CLARIFICATION_ACTIONS = frozenset({"KEEP_ORIGINAL", "REVIEW_LATER"})
 class ConfirmationService:
     def __init__(self, repository: M2RepositoryPort):
         self.repo = repository
+
+    def _declarations(self, assessment):
+        """The same saved, applicable declaration validation for review/confirm."""
+        instrument = self.repo.get_instrument(assessment['instrument_id'])
+        if instrument is None or instrument['approval_state'] != 'AUTHORIZED':
+            raise M2ConfirmationConflict('M2_INSTRUMENT_UNAUTHORIZED',
+                'An authorized instrument version is required before confirmation.')
+        items = self.repo.list_items(assessment['instrument_id'])
+        answers = self.repo.get_latest_answers(assessment['id'], assessment['revision'])
+        item_map = {item['item_key']: item for item in resolve_m2_items(items, answers)}
+        if not items or len(item_map) != len(items):
+            raise M2ConfirmationConflict('M2_ITEM_BINDING_INVALID', 'The questionnaire definitions could not be verified.')
+        for key, answer in answers.items():
+            item = item_map.get(key)
+            if (item is None or answer['item_version_id'] != item['id'] or
+                    answer['assessment_id'] != assessment['id'] or
+                    not 0 < answer['assessment_revision'] <= assessment['revision']):
+                raise M2ConfirmationConflict('M2_ANSWER_BINDING_INVALID', 'A saved answer has an invalid source binding.')
+            # Previously applicable answers remain immutable history; only
+            # active declarations are eligible inputs to this confirmation.
+            if item.get('applicable') is not False:
+                validate_m2_answer(item, answer['answer_state'], answer['value_json'])
+        if missing_required_items(items, answers):
+            raise M2ConfirmationConflict('M2_REQUIRED_DECLARATIONS_MISSING',
+                'Complete and save the required applicable M2 declarations before reviewing or confirming.')
+        return instrument, items, answers
 
     def record_finding_decision(
         self, assessment_id: UUID, actor_id: UUID, *,
@@ -63,15 +89,18 @@ class ConfirmationService:
             self.repo.rollback()
             raise
 
-    def record_review(self, assessment_id: UUID, actor_id: UUID, expected_revision: int) -> dict:
+    def record_review(self, assessment_id: UUID, actor_id: UUID, expected_revision: int,
+                      *, marketplace_assessment_id: UUID | None = None) -> dict:
         try:
             assessment = self.repo.get_assessment_for_update(assessment_id, actor_id)
             if assessment is None:
                 raise NotFoundError("Assessment not found.")
+            if marketplace_assessment_id is not None and not self.repo.lock_active_marketplace_binding(
+                    assessment_id, actor_id, marketplace_assessment_id):
+                raise ConflictError('The linked assessment changed; reload before reviewing.')
             if assessment["revision"] != expected_revision:
-                raise ConflictError("Assessment changed; review the current revision.")
-            if self.repo.get_evaluation(assessment_id, expected_revision, RULE_VERSION) is None:
-                raise ConflictError("The current revision must receive a BDJ evaluation before review.")
+                raise M2ConfirmationConflict('M2_REVISION_STALE', 'Assessment changed; reload the current revision before reviewing.')
+            self._declarations(assessment)
             review = self.repo.get_review(assessment_id, expected_revision)
             if review is None:
                 review = self.repo.add_review(assessment_id, expected_revision, actor_id)
@@ -82,54 +111,31 @@ class ConfirmationService:
             raise
 
     def confirm(self, assessment_id: UUID, actor_id: UUID, *, expected_revision: int,
-                acknowledged_issue_ids: list[str]) -> dict:
+                acknowledged_issue_ids: list[str], marketplace_assessment_id: UUID | None = None) -> dict:
         try:
             assessment = self.repo.get_assessment_for_update(assessment_id, actor_id)
             if assessment is None:
                 raise NotFoundError("Assessment not found.")
-            instrument = self.repo.get_instrument(assessment["instrument_id"])
-            if instrument is None or instrument["approval_state"] != "AUTHORIZED":
-                raise ConflictError("No authorized instrument version may be confirmed.")
+            if marketplace_assessment_id is not None and not self.repo.lock_active_marketplace_binding(
+                    assessment_id, actor_id, marketplace_assessment_id):
+                raise ConflictError('The linked assessment changed; reload before confirming.')
             if assessment["revision"] != expected_revision:
-                raise ConflictError("Assessment changed; reload before confirming.")
-            evaluation = self.repo.get_evaluation(assessment_id, expected_revision, RULE_VERSION)
-            if evaluation is None:
-                raise ConflictError("The current revision has not been evaluated by BDJ.")
+                raise M2ConfirmationConflict('M2_REVISION_STALE', 'Assessment changed; reload before confirming.')
+            instrument, items, answers = self._declarations(assessment)
+            if acknowledged_issue_ids:
+                raise M2ConfirmationConflict('M2_DECLARATION_FINDING_ACK_NOT_ALLOWED',
+                    'Confirm declarations separately from later BDJ finding review. Reload this questionnaire.')
             review = self.repo.get_review(assessment_id, expected_revision)
             if review is None:
-                raise ConflictError("Review the current answer revision (M2-20) first.")
-            items = self.repo.list_items(assessment["instrument_id"])
-            answers = self.repo.get_latest_answers(assessment_id, expected_revision)
-            item_map = {item['item_key']: item for item in resolve_m2_items(items, answers)}
-            for key, answer in answers.items():
-                item = item_map.get(key)
-                if item is None or answer['item_version_id'] != item['id']:
-                    raise ConflictError('An answer has an invalid instrument item binding.')
-                if item.get('applicable') is not False:
-                    validate_m2_answer(item, answer['answer_state'], answer['value_json'])
-            missing = missing_required_items(items, answers)
-            if missing:
-                raise ConflictError("Required answers are missing for this instrument version: " + ", ".join(missing))
-            current_findings = [f for f in self.repo.get_findings(assessment_id, expected_revision)
-                                if f["rule_version"] == RULE_VERSION]
-            current_issues = {str(f["id"]) for f in current_findings}
-            answer_ids = {str(answer['id']) for answer in answers.values()}
-            if any(not finding['source_answer_ids'] or
-                   not set(finding['source_answer_ids']).issubset(answer_ids)
-                   for finding in current_findings):
-                raise ConflictError('A finding has an invalid source answer binding.')
-            if (set(acknowledged_issue_ids) != current_issues or
-                len(acknowledged_issue_ids) != len(current_issues)):
-                raise ConflictError("Acknowledge exactly the current candidate findings.")
-            decisions = self.repo.latest_clarifications(assessment_id, expected_revision)
-            if any(fid not in decisions or decisions[fid]["decision"] != "KEEP_ORIGINAL"
-                   for fid in current_issues):
-                raise ConflictError("Each current finding needs a persisted KEEP_ORIGINAL decision; REVIEW_LATER is not confirmation.")
+                raise M2ConfirmationConflict('M2_DECLARATION_REVIEW_REQUIRED', 'Review the current saved M2 declarations first.')
+            if (review['assessment_id'] != assessment_id or review['assessment_revision'] != expected_revision
+                    or review['actor_user_id'] != actor_id):
+                raise M2ConfirmationConflict('M2_DECLARATION_REVIEW_BINDING_INVALID', 'The declaration review does not match this owner and revision.')
             snapshot = {
                 "derived_selections": derived_m2_selections(items, answers),
                 "inactive_answer_keys": [q['item_key'] for q in resolve_m2_items(items, answers)
                                          if q.get('applicable') is False and q['item_key'] in answers],
-                **confirmation_pins(RULE_VERSION,evaluation,review,current_findings,items),
+                **declaration_pins(review, items),
                 "assessment_id": str(assessment_id),
                 "instrument_id": str(assessment["instrument_id"]),
                 "instrument_version": instrument["version_tag"],
@@ -141,10 +147,8 @@ class ConfirmationService:
                      "answer_state": a["answer_state"], "value": a["value_json"]}
                     for k, a in sorted(answers.items())
                 ],
-                "unresolved_candidate_findings": sorted(current_issues),
-                "finding_decision_event_refs": {
-                    fid: str(decisions[fid]["id"]) for fid in sorted(current_issues)
-                },
+                "unresolved_candidate_findings": [],
+                "finding_decision_event_refs": {},
                 "research_uncertainty_confirmed": False,
                 "qj_handoff_authorized": False,
             }
@@ -152,10 +156,10 @@ class ConfirmationService:
                 snapshot, sort_keys=True, separators=(",", ":"), ensure_ascii=False
             ).encode("utf-8")).hexdigest()
             if not self.repo.mark_confirmed(assessment_id, expected_revision):
-                raise ConflictError("Assessment was edited or already confirmed; reload.")
+                raise M2ConfirmationConflict('M2_ALREADY_CONFIRMED_OR_CHANGED', 'Assessment was edited or already confirmed; reload saved confirmation.')
             result = self.repo.create_confirmation(
                 assessment_id, expected_revision, actor_id, snapshot, digest,
-                sorted(current_issues))
+                [])
             self.repo.commit()
             return result
         except Exception:
@@ -182,18 +186,34 @@ class ConfirmationService:
             raise
 
     def confirm_objective(self, confirmation_id, actor_id, revision, objective, origin, finding_id):
-        objective = objective.strip()
-        if not objective:
+        if not objective.strip():
             raise ValueError("Supply a research objective.")
         try:
             record = self.repo.get_confirmation(confirmation_id, actor_id)
             if record is None:
                 raise NotFoundError("Current confirmation not found.")
+            # Verify the full immutable snapshot, including its digest, answer
+            # versions and review pins. This read releases its lock on exit;
+            # reacquire and compare the same identity below before writing.
+            from sitewise.services.m2_service import M2Service
+            with M2Service(self.repo).locked_confirmed_source(
+                    record['assessment_id'], actor_id,
+                    confirmation_id=confirmation_id, expected_revision=revision) as verified:
+                verified_digest = verified['snapshot_digest']
             assessment = self.repo.get_assessment_for_update(record["assessment_id"], actor_id)
             record = self.repo.get_confirmation(confirmation_id, actor_id)
-            if not assessment or not record or record["assessment_revision"] != revision:
+            if (not assessment or not record or record["assessment_revision"] != revision or
+                    assessment['revision'] != revision or assessment['confirmed_revision'] != revision or
+                    record['snapshot_digest'] != verified_digest):
                 raise ConflictError("Reload the current confirmation.")
             snapshot = record["snapshot_json"]
+            if snapshot.get('snapshot_contract_version') == SNAPSHOT_VERSION and origin == 'BDJ':
+                # Declaration confirmation is not a confirmed BDJ uncertainty.
+                # No post-confirmation finding-authority adapter is adopted yet.
+                raise M2ConfirmationConflict('M2_UNCERTAINTY_LINK_REQUIRED',
+                    'A source-linked BDJ finding review is not available yet. '
+                    'No research objective has been confirmed; review and confirmation '
+                    'must be recorded before proceeding.')
             source = {"origin": origin, "confirmation_id": str(confirmation_id),
                       "assessment_id": str(record["assessment_id"]), "assessment_revision": revision,
                       "snapshot_digest": record["snapshot_digest"]}
@@ -217,6 +237,16 @@ class ConfirmationService:
                     raise ConflictError("Confirm an active research priority and decision status.")
                 source.update(answer_revisions=rows, derived_selections=derived, priority=priority)
             result = self.repo.create_uncertainty(confirmation_id, actor_id, objective)
+            # The ID identifies this immutable objective version. Record the
+            # explicit owner action only for newly confirmed records; never
+            # infer a decision for historical rows.
+            if origin == 'ENTREPRENEUR':
+                from hashlib import sha256
+                source.update(objective_contract='entrepreneur-objective/1',
+                              objective_version=str(result['id']),
+                              owner_user_id=str(actor_id), owner_decision='CONFIRMED',
+                              approval_status='CONFIRMED_BY_OWNER',
+                              objective_text_sha256=sha256(objective.encode('utf-8')).hexdigest())
             self.repo.save_objective_source(result["id"], source)
             self.repo.commit()
             return {**result, "source": source, "qj_execution_authorized": False}
@@ -296,7 +326,7 @@ class ConfirmationService:
             self.repo.rollback()
             raise
 
-    def persist_candidate(self, objective_id, actor_id, revision, context, result, evidence):
+    def persist_candidate(self, objective_id, actor_id, revision, context, result, evidence, supersedes=None):
         from uuid import uuid5, NAMESPACE_URL
         from sitewise.project1.contracts import digest
         try:
@@ -305,7 +335,7 @@ class ConfirmationService:
                 raise ConflictError("Research source changed.")
             receipt = {"context": context, "evaluation": result, "candidate": evidence}
             version = uuid5(NAMESPACE_URL, digest(receipt))
-            self.repo.persist_candidate(version, objective_id, receipt)
+            self.repo.persist_candidate(version, objective_id, receipt, supersedes=supersedes)
             self.repo.commit()
             return str(version)
         except Exception:
@@ -316,7 +346,9 @@ class ConfirmationService:
         try:
             rationale = rationale.strip()
             if not rationale:
-                raise ValueError("Supply a review rationale.")
+                rationale = "No rationale provided by reviewer."
+            if len(rationale) > 1000:
+                raise ValueError("Review rationale must not exceed 1000 characters.")
             row = self.repo.record_owner_review(version, reviewer, decision, rationale)
             if row is None:
                 raise NotFoundError("No current pending review assignment.")

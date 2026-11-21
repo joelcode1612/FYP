@@ -1,5 +1,6 @@
 """Clean Architecture dependency-rule tests (spec 15 - architecture tests)."""
 
+import ast
 import re
 from pathlib import Path
 
@@ -7,6 +8,29 @@ SRC = Path(__file__).resolve().parents[1] / "src" / "sitewise"
 
 FORBIDDEN_IN_DOMAIN = ("fastapi", "supabase", "sqlmodel", "sqlalchemy", "pydantic_settings")
 FORBIDDEN_IN_ML = ("fastapi", "sqlmodel")
+FORBIDDEN_IN_FEATURE_DOMAIN = (
+    "fastapi",
+    "pydantic",
+    "pydantic_settings",
+    "sqlalchemy",
+    "sqlmodel",
+    "supabase",
+    "psycopg",
+    "psycopg2",
+    "asyncpg",
+    "alembic",
+    "sqlite3",
+    "http",
+    "httpx",
+    "requests",
+    "urllib",
+    "starlette",
+    "aiohttp",
+    "sitewise.api",
+    "sitewise.repositories",
+    "sitewise.db",
+    "sitewise.database",
+)
 
 #: `from sitewise.api...` / `import sitewise.api` — an actual dependency. The
 #: rule is about imports, not prose: a docstring that names the module which
@@ -28,6 +52,54 @@ def _source_of(*parts: str) -> str:
     return path.read_text(encoding="utf-8")
 
 
+def _import_names(source: str, package: str) -> set[str]:
+    """Collect module dependencies from static and constant dynamic imports.
+
+    Imported *member* names are not module paths. Only the special case
+    ``from sitewise import api`` (or another outer-layer package) is expanded,
+    because that form really does import a submodule.
+    """
+    names = set()
+    package_parts = package.split(".")
+    outer_packages = {"main", "api", "repositories", "db", "database"}
+
+    def dynamic_name(node: ast.Call) -> str | None:
+        func = node.func
+        if isinstance(func, ast.Name) and func.id in {"__import__", "import_module"}:
+            return func.id
+        if (
+            isinstance(func, ast.Attribute)
+            and func.attr == "import_module"
+            and isinstance(func.value, ast.Name)
+            and func.value.id == "importlib"
+        ):
+            return "importlib.import_module"
+        return None
+
+    for node in ast.walk(ast.parse(source)):
+        if isinstance(node, ast.Import):
+            names.update(alias.name for alias in node.names)
+        elif isinstance(node, ast.ImportFrom):
+            if node.level:
+                prefix = package_parts[: len(package_parts) - node.level + 1]
+                module_parts = node.module.split(".") if node.module else []
+                imported_module = ".".join(prefix + module_parts)
+            else:
+                imported_module = node.module or ""
+            names.add(imported_module)
+            if imported_module == "sitewise":
+                names.update(
+                    f"{imported_module}.{alias.name}"
+                    for alias in node.names
+                    if alias.name in outer_packages
+                )
+        elif isinstance(node, ast.Call) and dynamic_name(node) and node.args:
+            target = node.args[0]
+            if isinstance(target, ast.Constant) and isinstance(target.value, str):
+                names.add(target.value)
+    return names
+
+
 def test_domain_has_no_framework_dependencies():
     for module in ("rbac.py", "suitability_engine.py", "entities.py", "ranking.py"):
         source = _source_of("domain", module)
@@ -35,6 +107,56 @@ def test_domain_has_no_framework_dependencies():
             assert forbidden not in source, (
                 f"domain/{module} must not depend on {forbidden}"
             )
+
+
+def test_feature_domain_has_no_framework_or_outer_layer_dependencies():
+    modules = SRC / "modules"
+    domain_files = [
+        path for path in modules.rglob("*.py") if "domain" in path.relative_to(modules).parts
+    ]
+    assert domain_files
+    internal_forbidden_parts = {"api", "repository", "repositories", "db", "database"}
+    for path in domain_files:
+        relative = path.relative_to(modules)
+        package_parts = ["sitewise", "modules", *relative.parts[:-1]]
+        for imported in _import_names(
+            path.read_text(encoding="utf-8"), ".".join(package_parts)
+        ):
+            forbidden = next(
+                (
+                    dependency
+                    for dependency in FORBIDDEN_IN_FEATURE_DOMAIN
+                    if imported == dependency or imported.startswith(dependency + ".")
+                ),
+                None,
+            )
+            internal_layer = imported.startswith("sitewise.") and bool(
+                internal_forbidden_parts.intersection(imported.split("."))
+            )
+            assert forbidden is None and not internal_layer, (
+                f"{path.relative_to(SRC)} must not depend on {forbidden or imported}"
+            )
+
+
+def test_import_scanner_does_not_treat_member_names_as_modules():
+    source = (
+        "from sitewise.modules.decision_engine.domain import db\n"
+        "from sitewise import api\n"
+    )
+    names = _import_names(source, "sitewise.modules.decision_engine.domain")
+    assert "sitewise.modules.decision_engine.domain.db" not in names
+    assert "sitewise.api" in names
+
+
+def test_import_scanner_detects_constant_dynamic_imports():
+    source = (
+        "import importlib\n"
+        "a = importlib.import_module('fastapi')\n"
+        "b = __import__('sqlalchemy')\n"
+    )
+    names = _import_names(source, "sitewise.modules.decision_engine.domain")
+    assert "fastapi" in names
+    assert "sqlalchemy" in names
 
 
 def test_ml_has_no_framework_dependencies():
@@ -46,6 +168,20 @@ def test_ml_has_no_framework_dependencies():
 
 def test_domain_modules_import_cleanly():
     from sitewise.domain import ranking, rbac, suitability_engine  # noqa: F401
+
+
+def test_legacy_m2_rules_reexport_same_objects():
+    from sitewise.domain import m2_rules as legacy
+    from sitewise.modules.decision_engine.domain import m2_rules as feature
+
+    for name in (
+        "M2ValidationError",
+        "resolve_m2_items",
+        "derived_m2_selections",
+        "validate_m2_answer",
+        "missing_required_items",
+    ):
+        assert getattr(legacy, name) is getattr(feature, name)
 
 
 def test_services_are_testable_with_fake_repositories():

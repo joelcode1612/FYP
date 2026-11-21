@@ -1,0 +1,88 @@
+{
+  "adapter_search": {
+    "src_implementations": 0,
+    "test_doubles": [
+      "tests/project1/test_workflow.py",
+      "tests/m2_bcb/connected_chain_checks.py"
+    ]
+  },
+  "bank_port_methods": [
+    "lookup(measurement, packet)",
+    "verify_receipt(lookup, digest, packet)"
+  ],
+  "budget": {
+    "concurrent_attempt_not_mine": {
+      "at": "2026-11-17T13:27:44.126073+00:00",
+      "measurement": null,
+      "n": 4,
+      "outcome": "returned",
+      "qj_route": "HOLD",
+      "run": "var/llm_campaign/runs/qj-live-20261117T132744Z",
+      "scenario": "qj:single"
+    },
+    "limit": 6,
+    "note": "At the start of this QG preflight the file read spent=3; a concurrent QJ attempt moved it to 4. This preflight reserved nothing and dispatched nothing.",
+    "remaining": 2,
+    "spent_by_this_task": 0,
+    "spent_now": 4
+  },
+  "case_a": {
+    "approved_questions": 0,
+    "provider_calls": 0,
+    "result": "BLOCKED_NO_APPROVED_QUESTIONS",
+    "reusable_approved_questions": 0
+  },
+  "case_b": {
+    "missing": [
+      "NO_CONFIRMED_RESEARCH_MEASUREMENT: latest QJ live run returned route HOLD with measurement null",
+      "NO_VERIFIED_NO_EQUIVALENT: bank empty (0 question versions, 0 owner reviews) and no production adapter"
+    ],
+    "qj_live_evidence": {
+      "measurement": null,
+      "reason_excerpt": "no frozen measurement fields are supplied in the source records",
+      "receipt": "returned",
+      "route": "HOLD",
+      "run": "qj-live-20261117T132744Z"
+    },
+    "requires": [
+      "QJ route CUSTOMER_SURVEY_CANDIDATE",
+      "Measurement passing validate_measurement and authority.validate_measurement",
+      "bank.lookup -> verified_no_equivalent",
+      "bank.verify_receipt passes",
+      "authority.require_drafting passes"
+    ],
+    "result": "BLOCKED"
+  },
+  "checked_at": "2026-11-17T13:29:24.161418+00:00",
+  "database": "project1_workflow_tests",
+  "m2_review_question_versions_columns": [
+    "id",
+    "objective_id",
+    "source_receipt",
+    "question",
+    "options",
+    "supersedes"
+  ],
+  "non_superseded_question_versions": 0,
+  "production_bank_adapter": "NONE_IN_SRC",
+  "qg_not_called": true,
+  "qg_reachable_now": false,
+  "qg_would_send": {
+    "output_contract": "QGOutput{decision DRAFT|ABSTAIN_NEEDS_REVIEW, question<=2000, measurement, justification}",
+    "prompt_version": "QG-FROZEN-1-CAND",
+    "runner": "runner('QG', {'context': packet, 'frozen_measurement': measurement, 'bank_receipt': lookup}, QGOutput)"
+  },
+  "read_only": true,
+  "table_counts": {
+    "cq_bank_versions": 3,
+    "m2_candidate_owner_reviews": 0,
+    "m2_candidate_review_assignments": 0,
+    "m2_confirmation_snapshots": 2,
+    "m2_confirmed_uncertainties": 1,
+    "m2_desired_options": 0,
+    "m2_research_clarifications": 0,
+    "m2_research_objective_sources": 1,
+    "m2_research_revisions": 0,
+    "m2_review_question_versions": 0
+  }
+}

@@ -1,0 +1,47 @@
+{
+  "checked_at": "2026-11-17T13:21:02.858125+00:00",
+  "content_encoding": null,
+  "entry": {
+    "blurb": "Free-tier only \u2014 uses your rolling 7-day allowance, then returns a rate-limit error. Never billed. Drop the ':free' suffix to use the paid route.",
+    "context_length": 1048576,
+    "covered_by_plans": [],
+    "created": 1700000000,
+    "function_call": true,
+    "id": "mimo-v2.6-flash:free",
+    "label": "MiMo V2.6 Flash (Free)",
+    "object": "model",
+    "owned_by": "tokenharbor",
+    "pricing": {
+      "cache_read_usd_per_1m": 0,
+      "cache_write_usd_per_1m": 0,
+      "input_usd_per_1m": 0,
+      "output_usd_per_1m": 0
+    },
+    "reasoning": {
+      "can_disable": null,
+      "default_effort": null,
+      "efforts": null
+    },
+    "supports_prompt_cache": true,
+    "tier": "low",
+    "tool_call": true
+  },
+  "http_status": 200,
+  "latency_ms": 1266.2,
+  "model_id": "mimo-v2.6-flash:free",
+  "pricing": {
+    "cache_read_usd_per_1m": 0,
+    "cache_write_usd_per_1m": 0,
+    "input_usd_per_1m": 0,
+    "output_usd_per_1m": 0
+  },
+  "pricing_keys_used": {
+    "input": "input_usd_per_1m",
+    "output": "output_usd_per_1m"
+  },
+  "ratelimit": [],
+  "reason": null,
+  "result": "FREE_TIER_CONFIRMED",
+  "uncompressed": true,
+  "url": "https://tokenharbor.ai/v1/models"
+}

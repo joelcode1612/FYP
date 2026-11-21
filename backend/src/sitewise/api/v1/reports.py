@@ -10,7 +10,7 @@ router = APIRouter()
 
 
 @router.get("/property/{property_id}")
-def property_report(property_id: int, session: Session = Depends(get_db), current: AuthenticatedUser = Depends(get_active_user)):
+def property_report(property_id: str, session: Session = Depends(get_db), current: AuthenticatedUser = Depends(get_active_user)):
     """Generate a property report for the authenticated caller.
 
     Assembles the property's stored listing data, precomputed geospatial

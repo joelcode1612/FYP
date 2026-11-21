@@ -1,0 +1,50 @@
+{
+  "captured_at": "2026-11-17T13:27:54.413986+00:00",
+  "identity": {
+    "classification": "MODEL_IDENTITY_UNVERIFIED_TEST_EXCEPTION",
+    "identity_verified": false,
+    "requested_model": "mimo-v2.6-flash:free",
+    "returned_model": "mimo-v2.6-flash"
+  },
+  "latency_ms": 9420.3,
+  "method": "POST",
+  "model_requested": "mimo-v2.6-flash:free",
+  "model_returned": "mimo-v2.6-flash",
+  "request_bytes": 13257,
+  "request_headers": {
+    "accept-encoding": "identity",
+    "content-type": "application/json"
+  },
+  "response_bytes": 1613,
+  "response_headers": {
+    "access-control-allow-origin": "*",
+    "access-control-expose-headers": "*",
+    "cache-control": "no-store",
+    "cf-placement": "remote-IAD",
+    "cf-ray": "a5bf1323481bc061-SIN",
+    "connection": "keep-alive",
+    "content-security-policy": "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://www.paypal.com https://*.paypal.com https://challenges.cloudflare.com https://www.googletagmanager.com https://tally.so https://connect.facebook.net https://www.facebook.com https://tagassistant.google.com; worker-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.jsdelivr.net; font-src 'self' https://fonts.gstatic.com https://cdn.jsdelivr.net data:; img-src 'self' data: blob: https://media.tokenharbor.ai https://media.rudder.chat https://auth.tokenharbor.ai https://*.supabase.co https://*.paypal.com https://*.paypalobjects.com https://api.dicebear.com https://icons.duckduckgo.com https://www.googletagmanager.com https://www.google-analytics.com https://*.google-analytics.com https://*.g.doubleclick.net https://www.google.com https://github.com https://connect.facebook.net https://www.facebook.com https://tagassistant.google.com; media-src 'self' https://media.tokenharbor.ai https://media.rudder.chat; connect-src 'self' https://media.tokenharbor.ai https://media.rudder.chat https://auth.tokenharbor.ai wss://auth.tokenharbor.ai https://*.supabase.co https://*.supabase.in wss://*.supabase.co wss://*.supabase.in https://*.vercel.app https://*.paypal.com https://api.sentry.io https://*.sentry.io https://*.ingest.sentry.io https://www.googletagmanager.com https://www.google-analytics.com https://*.google-analytics.com https://*.analytics.google.com https://*.g.doubleclick.net https://www.google.com wss://tokenharbor.ai https://connect.facebook.net https://www.facebook.com https://tagassistant.google.com; frame-src 'self' https://www.paypal.com https://*.paypal.com https://challenges.cloudflare.com https://tally.so https://connect.facebook.net https://www.facebook.com https://tagassistant.google.com; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'self'; upgrade-insecure-requests",
+    "content-type": "application/json; charset=utf-8",
+    "date": "Tue, 17 Nov 2026 13:27:55 GMT",
+    "nel": "{\"report_to\":\"cf-nel\",\"success_fraction\":0.0,\"max_age\":604800}",
+    "permissions-policy": "camera=(), microphone=(self), geolocation=(), interest-cohort=(), payment=(self \"https://www.paypal.com\")",
+    "referrer-policy": "strict-origin-when-cross-origin",
+    "report-to": "{\"group\":\"cf-nel\",\"max_age\":604800,\"endpoints\":[{\"url\":\"https://a.nel.cloudflare.com/report/v4?s=S3CoBmvMbEYVpvzRek5OJ64LZSvw8DOxe1UuXmo1Tfp9AOplSoubPGUFWRIT5qkwWYBEZm2pfoXPUzdip41OhFmilGKPL91SmhoomRnn3jKv%2Bm2vtZrhifqch%2FzNQf7KdnmOl2eoSDHQ%2F1hS\"}]}",
+    "server": "cloudflare",
+    "strict-transport-security": "max-age=63072000; includeSubDomains; preload",
+    "transfer-encoding": "chunked",
+    "vary": "rsc, next-router-state-tree, next-router-prefetch, next-router-segment-prefetch",
+    "x-content-type-options": "nosniff",
+    "x-frame-options": "SAMEORIGIN",
+    "x-th-free-resets": "2026-11-22T09:12:53.446+00:00",
+    "x-th-free-used-pct": "1",
+    "x-th-plan": "agent",
+    "x-th-request-id": "chatcmpl-6d63fcd92d99404a83009bb3715ea797",
+    "x-th-route-decision": "{\"model\":\"mimo-v2.6-flash\",\"tier\":\"low\",\"cache_hit\":false}",
+    "x-th-steering-applied": "none",
+    "x-th-upstream-model": "mimo-v2.6-flash"
+  },
+  "status": 200,
+  "url": "https://tokenharbor.ai/v1/chat/completions",
+  "wall_ms": 9478.6
+}

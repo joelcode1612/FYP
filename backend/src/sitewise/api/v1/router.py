@@ -32,6 +32,10 @@ router = APIRouter()
 router.include_router(project1_read.router, prefix="/project1-read", tags=["project1_readiness"])
 from sitewise.api.v1 import customer_questionnaire
 router.include_router(customer_questionnaire.router,prefix='/cq',tags=['customer_questionnaire'])
+from sitewise.api.v1 import synthetic_inspection
+router.include_router(synthetic_inspection.router,prefix='/cq',tags=['synthetic_developer_inspection'])
+from sitewise.api.v1 import synthetic_execution
+router.include_router(synthetic_execution.router,prefix='/cq',tags=['synthetic_developer_execution'])
 # Candidate EE-01 explanations: always mounted so the hold is visible; the
 # request-time gate returns 503 until the feature is deliberately activated.
 from sitewise.api.v1 import ee01_explanation
@@ -118,8 +122,13 @@ if settings.project1_cp07_enabled:
 if settings.m2_upstream_enabled:
     from sitewise.api.v1 import m2
     from sitewise.api.v1 import m2_business_context
+    # QG candidate generation rides the same opt-in gate: it reads the same M2
+    # records and persists versions into the same review tables, so a separate
+    # flag would only create a state in which half the surface is mounted.
+    from sitewise.api.v1 import qg_candidate
     router.include_router(m2.router, prefix="/m2", tags=["m2_upstream"])
     router.include_router(m2_business_context.router, prefix="/m2", tags=["m2_business_context"])
+    router.include_router(qg_candidate.router, prefix="/m2", tags=["m2_qg_candidate"])
 
 # Additive OPTIONAL selected research PU model (Layer-1 alternate). Mounted
 # BESIDE the default /ml routes — nothing existing is replaced. Same

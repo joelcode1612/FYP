@@ -15,7 +15,7 @@ from sitewise.project1.explanation_contracts import (
     SCHEMA_VERSION, ExplanationOutput, insufficient_evidence_output, validate_candidate,
 )
 from sitewise.project1.prompts import PROMPTS
-from sitewise.services.ee01_explanation_service import Ee01ExplanationService
+from sitewise.services.ee01_explanation_service import Ee01ExplanationService, _numbers_in
 from sitewise.domain.cq_runtime import CqRefused
 from sitewise.api.v1 import ee01_explanation as api
 from sitewise.dependencies import get_current_user
@@ -88,12 +88,20 @@ def test_explanation_prompt_is_versioned_candidate():
 
 
 def test_contract_has_exactly_the_spec_fields():
-    assert len(ExplanationOutput.model_fields) == 13
+    """The spec fields plus the CP-07 provenance discriminator."""
+    assert len(ExplanationOutput.model_fields) == 14
     assert set(ExplanationOutput.model_fields) == {
         'schema_version', 'task_mode', 'context_id', 'snapshot_id', 'used_claim_ids',
         'headline', 'observation_interpretation', 'research_interpretation',
         'planning_implication', 'limitations', 'summary', 'insufficient_evidence',
-        'missing_evidence_references'}
+        'missing_evidence_references', 'origin'}
+
+
+def test_provenance_defaults_to_template_not_llm():
+    assert ExplanationOutput.model_fields['origin'].default == 'DETERMINISTIC_TEMPLATE'
+    output = insufficient_evidence_output(context_id='ctx', snapshot_id='snap',
+        task_mode='CLAIM_EXPLANATION', missing=['GATE_A'])
+    assert output.origin == 'DETERMINISTIC_TEMPLATE'
 
 
 # --- HTTP gates -------------------------------------------------------------
@@ -161,6 +169,140 @@ def test_report_synthesis_also_short_circuits():
     assert resp.json()['candidate']['task_mode'] == 'REPORT_SYNTHESIS'
 
 
+# --- CP-07: authorized findings, deterministic fallback, provenance ---------
+
+AUTHORIZED_FINDING = {
+    'claim_id': 'CLAIM-Q05-TOP2', 'authorized': True, 'status': 'AUTHORIZED',
+    'label': 'Stated interest', 'construct': 'Q05_TOP_TWO_STATED_INTEREST',
+    'reference_period': 'Q05 fielded window',
+    'count': 12, 'denominator': 40, 'percentage': 30.0,
+}
+
+
+def _explain(fake, *, claim_ids=None, candidate_source=None, task_mode='CLAIM_EXPLANATION'):
+    """Call the service directly so an injected candidate source can be exercised."""
+    ids = ['CLAIM-Q05-TOP2'] if claim_ids is None else claim_ids
+    return Ee01ExplanationService(fake, candidate_source=candidate_source).explain(
+        uuid4(), fake.assessment_id, fake.campaign_id, fake.snapshot_id,
+        task_mode=task_mode, claim_ids=ids, context_hash=fake.context_hash)
+
+
+def test_authorized_finding_renders_deterministic_fallback():
+    fake = FakeEe01(findings=[dict(AUTHORIZED_FINDING)])
+    resp = run_explain(fake, claim_ids=['CLAIM-Q05-TOP2'])
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body['llm_execution'] == 'NOT_ATTEMPTED'
+    assert body['authority'] == 'CANDIDATE_UNVERIFIED'
+    assert body['report_release_authorized'] is False
+    candidate = body['candidate']
+    assert candidate['insufficient_evidence'] is False
+    assert candidate['used_claim_ids'] == ['CLAIM-Q05-TOP2']
+    assert candidate['missing_evidence_references'] == fake.context['gates']
+    # Supplied figures are reproduced verbatim, never recomputed.
+    assert '12 of 40 qualifying responses' in candidate['observation_interpretation']
+    assert '30.0%' in candidate['observation_interpretation']
+    assert 'Stated interest' in candidate['headline']
+
+
+def test_authorized_fallback_passes_validate_candidate():
+    fake = FakeEe01(findings=[dict(AUTHORIZED_FINDING)])
+    body = _explain(fake)
+    packet = Ee01ExplanationService._packet(
+        'CLAIM_EXPLANATION', fake.context, fake.read(None, None, None, None),
+        fake.context_hash)
+    validate_candidate(ExplanationOutput(**body['candidate']), packet=packet,
+                       allowed_claim_ids={'CLAIM-Q05-TOP2'},
+                       allowed_numbers=_numbers_in(packet))
+
+
+def test_authorized_candidate_provenance_is_template_not_llm():
+    fake = FakeEe01(findings=[dict(AUTHORIZED_FINDING)])
+    body = _explain(fake)
+    assert body['candidate']['origin'] == 'DETERMINISTIC_TEMPLATE'
+    assert body['producer'] == 'EE01-EXPLANATION-TEMPLATE-1'
+    assert body['llm_execution'] != 'RETURNED'
+
+
+def test_no_result_attributes_output_to_an_unexecuted_prompt():
+    """A template result must never carry the prompt version that did not run."""
+    import json
+    for fake, claim_ids in ((FakeEe01(), []),
+                            (FakeEe01(findings=[dict(AUTHORIZED_FINDING)]),
+                             ['CLAIM-Q05-TOP2'])):
+        body = _explain(fake, claim_ids=claim_ids)
+        assert body['prompt_version'] is None
+        assert 'EE01-EXPLANATION-1-CAND' not in json.dumps(body)
+
+
+def test_absent_llm_explanation_falls_back_to_template():
+    fake = FakeEe01(findings=[dict(AUTHORIZED_FINDING)])
+    body = _explain(fake, candidate_source=lambda packet: None)
+    assert body['llm_execution'] == 'REJECTED_FELL_BACK'
+    assert body['candidate']['origin'] == 'DETERMINISTIC_TEMPLATE'
+    assert body['candidate']['insufficient_evidence'] is False
+
+
+def test_invalid_llm_explanation_falls_back_instead_of_emitting_partial_prose():
+    def invented_number(packet):
+        return {'schema_version': SCHEMA_VERSION, 'task_mode': packet['task_mode'],
+                'context_id': packet['context_id'], 'snapshot_id': packet['snapshot_id'],
+                'used_claim_ids': ['CLAIM-Q05-TOP2'],
+                'headline': 'Interpretation of the authorized finding',
+                'observation_interpretation': 'Demand of 999 respondents was recorded.',
+                'research_interpretation': 'The result is limited to the measured set.',
+                'planning_implication': 'Treat it as a planning input only.',
+                'limitations': 'This is a candidate and is not report-authorised.',
+                'summary': 'The supplied figures support a cautious interpretation.',
+                'insufficient_evidence': False, 'missing_evidence_references': [],
+                'origin': 'LLM'}
+
+    fake = FakeEe01(findings=[dict(AUTHORIZED_FINDING)])
+    body = _explain(fake, candidate_source=invented_number)
+    assert body['llm_execution'] == 'REJECTED_FELL_BACK'
+    assert body['candidate']['origin'] == 'DETERMINISTIC_TEMPLATE'
+    assert '999' not in body['candidate']['observation_interpretation']
+    assert body['candidate']['observation_interpretation'].startswith(
+        'The authorized measurement for CLAIM-Q05-TOP2')
+
+
+def test_valid_llm_candidate_is_kept_and_marked_llm():
+    def model_candidate(packet):
+        return {'schema_version': SCHEMA_VERSION, 'task_mode': packet['task_mode'],
+                'context_id': packet['context_id'], 'snapshot_id': packet['snapshot_id'],
+                'used_claim_ids': ['CLAIM-Q05-TOP2'],
+                'headline': 'Model interpretation of the authorized finding',
+                'observation_interpretation': 'The supplied measurement records the stated response.',
+                'research_interpretation': 'The result is limited to the measured response set.',
+                'planning_implication': 'Treat it as a planning input only.',
+                'limitations': 'This is a candidate and is not report-authorised.',
+                'summary': 'The supplied figures support a cautious interpretation.',
+                'insufficient_evidence': False, 'missing_evidence_references': [],
+                'origin': 'LLM'}
+
+    fake = FakeEe01(findings=[dict(AUTHORIZED_FINDING)])
+    body = _explain(fake, candidate_source=model_candidate)
+    assert body['llm_execution'] == 'RETURNED'
+    assert body['producer'] == 'EXTERNAL_EXPLANATION_CANDIDATE'
+    assert body['candidate']['origin'] == 'LLM'
+    assert body['prompt_version'] is None
+
+
+def test_finding_without_authorization_marker_is_refused():
+    fake = FakeEe01(findings=[{'claim_id': 'CLAIM-Q05-TOP2', 'label': 'Stated interest'}])
+    resp = run_explain(fake, claim_ids=['CLAIM-Q05-TOP2'])
+    assert resp.status_code == 503
+    assert resp.json()['detail']['code'] == 'EXPLANATION_FINDING_NOT_AUTHORIZED'
+
+
+def test_empty_claim_behaviour_is_unchanged():
+    body = _explain(FakeEe01(), claim_ids=[])
+    assert body['llm_execution'] == 'NOT_ATTEMPTED'
+    assert body['candidate']['origin'] == 'DETERMINISTIC_TEMPLATE'
+    assert body['candidate']['insufficient_evidence'] is True
+    assert body['candidate']['used_claim_ids'] == []
+
+
 # --- Output validators ------------------------------------------------------
 
 def _packet(**over):
@@ -214,6 +356,9 @@ def test_no_dispatch_path_to_explanation_prompt():
         assert 'configured_runner' not in source
         assert "PROMPTS['EXPLANATION']" not in source
         assert 'provider.complete' not in source
+    # The optional candidate source is a validation seam: the HTTP surface cannot
+    # inject one, so no caller can smuggle a provider-bound runner in.
+    assert 'candidate_source' not in inspect.getsource(api_module)
 
 
 @pytest.mark.parametrize('phrase', [

@@ -55,6 +55,18 @@ REFERENCE_PROPERTY = "MD-00510"
 _CACHE_TABLE = "ml_explanation_cache"
 
 
+@pytest.fixture(autouse=True)
+def require_disposable_databases():
+    """Cache tests delete rows and must never target normal databases."""
+    import os
+    names = (os.environ.get('PROJECT1_TEST_OPERATIONAL_DB'), os.environ.get('PROJECT1_TEST_ANALYTICS_DB'))
+    if any(not name or not name.startswith('project1_test_') for name in names):
+        pytest.fail('Set explicit project1_test_ disposable database names before running this suite.')
+    for name, target in zip(names, (operational_engine, analytics_engine)):
+        if target.url.database != name or target.url.host not in ('localhost', '127.0.0.1', '::1'):
+            pytest.fail('Configured database does not match the explicit local disposable test target.')
+
+
 def _identity(**overrides) -> ExplanationIdentity:
     base = dict(
         property_id=REFERENCE_PROPERTY,

@@ -1,0 +1,24 @@
+{
+  "runs": {
+    "qj-live-20261117T141034Z": {
+      "attempts": [
+        {
+          "attempt_no": 1,
+          "prompt_hash": "c7565b7ff70ab9acca91f67a5793b043509d879e845d639fd47028d600831b40",
+          "prompt_version": "QJ-MEASURE-1-CAND",
+          "request_hash": "b9bb511f1987c69155a0f322c4eafe726dfdee0d6e643429e909b3d2d5f7219e",
+          "reserved_at": "2026-11-17T14:10:35.103470+00:00",
+          "stage": "QJ"
+        }
+      ],
+      "receipts": [
+        {
+          "at": "2026-11-17T14:10:49.154452+00:00",
+          "attempt_no": 1,
+          "outcome": "returned",
+          "output_digest": "de283f2fd6d3fdd2463f39a1e35e970f6ea33a799c74b07577a1cf54670233c6"
+        }
+      ]
+    }
+  }
+}

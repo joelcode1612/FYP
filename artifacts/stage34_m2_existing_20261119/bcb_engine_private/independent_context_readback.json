@@ -1,0 +1,115 @@
+{
+  "contexts": [
+    {
+      "context_id": "b0c5d55e-b2e1-5445-bcbe-bb378b2a4c7a",
+      "assessment_id": "49ce05c8-61cc-4c5b-b1c2-53df4102c507",
+      "owner_user_id": "c685d352-3034-4d2a-8897-fef3e9259903",
+      "confirmation_id": "c8176f9d-d286-4aac-a999-581e968a0a2e",
+      "assessment_revision": 3,
+      "schema_version": "business-context-package/1.1",
+      "builder_version": "BCB-V1-1.1.0",
+      "packet_hash": "d81f4bfd670a2a1ed074cbbec50bccb498e3763f3c7e5f8f042ca4c486b212b0",
+      "lifecycle_status": "PERSISTED",
+      "created_at": "2026-11-19 11:36:50.226019+00:00"
+    },
+    {
+      "context_id": "e99592c6-5056-5514-b722-f915c651aab4",
+      "assessment_id": "86e757ce-800e-4d5c-a70d-abf473e0d812",
+      "owner_user_id": "c685d352-3034-4d2a-8897-fef3e9259903",
+      "confirmation_id": "3f3cfc0f-3deb-403f-a263-35d5a41b5ee5",
+      "assessment_revision": 3,
+      "schema_version": "business-context-package/1.1",
+      "builder_version": "BCB-V1-1.1.0",
+      "packet_hash": "bdfc4995fe55a0ec3b1c99d941290e5c4eda86445ebfe2b655b6d108d543c8a3",
+      "lifecycle_status": "PERSISTED",
+      "created_at": "2026-11-19 11:36:51.610245+00:00"
+    },
+    {
+      "context_id": "c6059692-deb5-5d7e-868e-6ff1bb0da012",
+      "assessment_id": "ee5fd96c-ee51-4ecc-a8d3-ae89be33bc64",
+      "owner_user_id": "c685d352-3034-4d2a-8897-fef3e9259903",
+      "confirmation_id": "621582e6-3e98-42fa-be14-ca973c2fd0e5",
+      "assessment_revision": 3,
+      "schema_version": "business-context-package/1.1",
+      "builder_version": "BCB-V1-1.1.0",
+      "packet_hash": "8a7aef9f65367a0dd0464352993d637fa9fce1da1ece0cb811135be222d86a6e",
+      "lifecycle_status": "PERSISTED",
+      "created_at": "2026-11-19 11:36:53.982595+00:00"
+    }
+  ],
+  "build_statuses": [
+    {
+      "confirmation_id": "c8176f9d-d286-4aac-a999-581e968a0a2e",
+      "assessment_id": "49ce05c8-61cc-4c5b-b1c2-53df4102c507",
+      "owner_user_id": "c685d352-3034-4d2a-8897-fef3e9259903",
+      "assessment_revision": 3,
+      "status": "PERSISTED",
+      "last_code": null,
+      "context_id": "b0c5d55e-b2e1-5445-bcbe-bb378b2a4c7a",
+      "attempt_count": 2,
+      "created_at": "2026-11-19 11:36:49.949529+00:00",
+      "updated_at": "2026-11-19 11:36:50.398789+00:00"
+    },
+    {
+      "confirmation_id": "3f3cfc0f-3deb-403f-a263-35d5a41b5ee5",
+      "assessment_id": "86e757ce-800e-4d5c-a70d-abf473e0d812",
+      "owner_user_id": "c685d352-3034-4d2a-8897-fef3e9259903",
+      "assessment_revision": 3,
+      "status": "PERSISTED",
+      "last_code": null,
+      "context_id": "e99592c6-5056-5514-b722-f915c651aab4",
+      "attempt_count": 1,
+      "created_at": "2026-11-19 11:36:51.352269+00:00",
+      "updated_at": "2026-11-19 11:36:51.610245+00:00"
+    },
+    {
+      "confirmation_id": "621582e6-3e98-42fa-be14-ca973c2fd0e5",
+      "assessment_id": "ee5fd96c-ee51-4ecc-a8d3-ae89be33bc64",
+      "owner_user_id": "c685d352-3034-4d2a-8897-fef3e9259903",
+      "assessment_revision": 3,
+      "status": "PERSISTED",
+      "last_code": null,
+      "context_id": "c6059692-deb5-5d7e-868e-6ff1bb0da012",
+      "attempt_count": 2,
+      "created_at": "2026-11-19 11:36:53.573060+00:00",
+      "updated_at": "2026-11-19 11:36:54.328705+00:00"
+    },
+    {
+      "confirmation_id": "bccdb945-f68c-4508-9ba8-2eeab13207a7",
+      "assessment_id": "461b61a0-9626-4b00-ad9a-5a4395b4ceea",
+      "owner_user_id": "c685d352-3034-4d2a-8897-fef3e9259903",
+      "assessment_revision": 3,
+      "status": "PENDING",
+      "last_code": null,
+      "context_id": null,
+      "attempt_count": 0,
+      "created_at": "2026-11-19 11:36:55.774628+00:00",
+      "updated_at": "2026-11-19 11:36:55.774628+00:00"
+    },
+    {
+      "confirmation_id": "248da1ef-ad91-4b82-b21c-ceae2c23e91f",
+      "assessment_id": "b19575c5-cf76-43d7-96e6-ae49ba7a4b4f",
+      "owner_user_id": "c685d352-3034-4d2a-8897-fef3e9259903",
+      "assessment_revision": 3,
+      "status": "HELD",
+      "last_code": "VALIDITY_BASIS_UNAUTHORIZED",
+      "context_id": null,
+      "attempt_count": 1,
+      "created_at": "2026-11-19 11:36:56.894377+00:00",
+      "updated_at": "2026-11-19 11:36:57.161138+00:00"
+    },
+    {
+      "confirmation_id": "51cad25f-3621-4eee-9d6d-1e299f58b39f",
+      "assessment_id": "f5338bbc-d207-4148-a963-eb851a3da20f",
+      "owner_user_id": "c685d352-3034-4d2a-8897-fef3e9259903",
+      "assessment_revision": 3,
+      "status": "PENDING",
+      "last_code": null,
+      "context_id": null,
+      "attempt_count": 0,
+      "created_at": "2026-11-19 11:36:58.402801+00:00",
+      "updated_at": "2026-11-19 11:36:58.402801+00:00"
+    }
+  ],
+  "data": "SYNTHETIC PRIVATE CLUSTER ONLY"
+}

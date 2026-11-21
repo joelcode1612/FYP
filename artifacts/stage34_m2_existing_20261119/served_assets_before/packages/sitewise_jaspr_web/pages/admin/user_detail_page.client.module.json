@@ -1,0 +1,1 @@
+{"name":"UserDetailPage","id":["sitewise_jaspr_web","lib/pages/admin/user_detail_page.dart"],"import":"package:sitewise_jaspr_web/pages/admin/user_detail_page.dart","params":[{"name":"id","isNamed":true,"decoder":"p['id'] as String","encoder":"c.id"}]}

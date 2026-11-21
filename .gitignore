@@ -76,3 +76,37 @@ htmlcov/
 # Local runtime config (never commit generated keys)
 backend/.env.local
 *.carto-prepatch.bak
+
+# ---------------------------------------------------------------------------
+# Sensitive local artifacts — MUST NOT be committed.
+#
+# `backend/backups/` is written by scripts/ and holds, among other things:
+#   * raw cloud-model completions (`result.json`, `bdj_output.json`, `probe.json`)
+#   * full logical database dumps (`*.dump`, one `pg_restore` from plaintext)
+#   * a copy of a local `.env` containing live connection strings
+# None of it belongs in version control. Note that three files under this path
+# were committed before this rule existed; ignoring does not untrack them, and
+# removing them from history is a separate, owner-authorised decision.
+# ---------------------------------------------------------------------------
+backend/backups/
+
+# Environment backups anywhere (`.env.local.XXXXXXXX.bak`). Scoped to `.env`
+# so the `.py.bak` / `.dart.bak` source snapshots this project keeps remain
+# trackable.
+.env*.bak
+**/.env*.bak
+
+# CP-04A: the suffix list above was too narrow. `backend/.env.env.bak.execprincipal`
+# was created during CP-04A and matched none of it, so `git add -A` would have
+# staged SECRET_KEY, SUPABASE_SECRET_KEY and four database URLs. Ignore the whole
+# `.env*` family instead of enumerating suffixes, and re-permit only the examples.
+# NOTE: `backend/.env` is already TRACKED. Ignoring it does not untrack it and
+# does not protect its contents; only rotation does.
+**/.env
+**/.env.*
+!**/.env.example
+
+# CP-03F browser/backend journey harness output: contains declared M2 answer
+# text. Untracked and previously unignored, so `git add -A` would have staged it.
+backend/var/cp03f_*/
+

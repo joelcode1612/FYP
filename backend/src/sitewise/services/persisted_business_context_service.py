@@ -9,7 +9,8 @@ from uuid import UUID, NAMESPACE_URL, uuid5
 from sitewise.core.exceptions import ConflictError, NotFoundError
 from sitewise.domain.m2_provenance import pins_match
 from sitewise.services.business_context_v1 import (
-    BusinessContextBuilderV1, ContextRefused, canonical_bytes, json_value, source_hash,
+    CONTRACTS, CURRENT_CONTEXT_VERSION, BusinessContextBuilderV1, ContextRefused,
+    canonical_bytes, json_value, source_hash,
 )
 from sitewise.services.ports.business_context_v1_port import ContextReadView
 from sitewise.services.ports.business_context_store_port import (
@@ -70,7 +71,10 @@ class _Snapshot:
 
 
 class PersistedBusinessContextService:
-    def __init__(self, store: ContextStorePort): self.store = store
+    def __init__(self, store: ContextStorePort, contract: str = CURRENT_CONTEXT_VERSION):
+        if contract not in CONTRACTS:
+            raise ContextOperationHeld('BCB_CONTRACT_VERSION_UNSUPPORTED')
+        self.store, self.contract = store, contract
 
     @staticmethod
     def _select(unit, selection, actor):
@@ -87,7 +91,7 @@ class PersistedBusinessContextService:
             raise ConflictError('Confirmation revision mismatch.')
 
     @staticmethod
-    def _build(unit, selection, actor):
+    def _build(unit, selection, actor, contract):
         inputs = unit.resolve_inputs(selection, actor)
         request = inputs.request
         if (request.viewer_id != actor.user_id or request.role != actor.role or
@@ -96,7 +100,7 @@ class PersistedBusinessContextService:
                 request.confirmed_revision != selection.revision):
             raise ContextBindingUnavailable('BCB_BINDING_SCOPE_INVALID')
         return BusinessContextBuilderV1(_Authorization(inputs.decision),
-            _Snapshot(unit, selection, actor, inputs.bindings)).get_context(request)
+            _Snapshot(unit, selection, actor, inputs.bindings), contract=contract).get_context(request)
 
     @staticmethod
     def _row(packet):
@@ -142,7 +146,7 @@ class PersistedBusinessContextService:
 
     def _record_failure(self, selection, actor):
         try:
-            with self.store.open() as failure:
+            with self.store.open(actor.user_id) as failure:
                 failure.m2.get_assessment_for_update(selection.assessment_id, actor.user_id)
                 failure.record_build(selection.confirmation_id, actor.user_id, 'FAILED', 'BCB_PERSISTENCE_UNAVAILABLE')
                 failure.commit()
@@ -152,11 +156,11 @@ class PersistedBusinessContextService:
     def _construct_once(self, selection: ContextSelection, actor: ContextActor):
         selected = False
         try:
-            with self.store.open() as unit:
+            with self.store.open(actor.user_id) as unit:
                 self._select(unit, selection, actor)
                 selected = True
                 try:
-                    packet = self._build(unit, selection, actor)
+                    packet = self._build(unit, selection, actor, self.contract)
                 except (ContextBindingUnavailable, ContextRefused) as exc:
                     unit.record_build(selection.confirmation_id, actor.user_id, 'HELD', exc.code)
                     unit.commit()
@@ -179,14 +183,30 @@ class PersistedBusinessContextService:
 
     def retrieve(self, assessment_id: UUID, context_id: UUID, actor: ContextActor):
         try:
-            with self.store.open() as unit:
+            with self.store.open(actor.user_id) as unit:
                 row = unit.read_context(context_id, actor.user_id)
                 if row is None or row['assessment_id'] != assessment_id:
                     raise NotFoundError('Business context not found.')
-                selection = ContextSelection(assessment_id, row['confirmation_id'], row['assessment_revision'])
+                # New owner-confirmed objective versions can be reconstructed
+                # from the packet's existing uncertainty ID. Historical rows
+                # retain their earlier first-uncertainty selection semantics.
+                selected_id = None
+                uncertainty = row['packet_json'].get('confirmed_uncertainty')
+                if (isinstance(uncertainty, dict) and uncertainty.get('id')
+                        and hasattr(unit.m2, 'read_current_objective')):
+                    candidate = UUID(uncertainty['id'])
+                    saved = unit.m2.read_current_objective(candidate, actor.user_id, row['assessment_revision'])
+                    if saved and saved['provenance'].get('objective_contract') == 'entrepreneur-objective/1':
+                        selected_id = candidate
+                selection = ContextSelection(assessment_id, row['confirmation_id'], row['assessment_revision'], selected_id)
                 self._select(unit, selection, actor)
+                # Rebuild against the contract the stored packet was created
+                # under, so historical 1.0 snapshots stay readable after the
+                # 1.1 (GEO-excluded) version bump instead of being re-versioned.
+                if row['builder_version'] not in CONTRACTS:
+                    raise ContextOperationHeld('BCB_CONTRACT_VERSION_UNSUPPORTED')
                 try:
-                    packet = self._build(unit, selection, actor)
+                    packet = self._build(unit, selection, actor, row['builder_version'])
                 except (ContextBindingUnavailable, ContextRefused) as exc:
                     raise ContextOperationHeld(exc.code, 503 if isinstance(exc, ContextBindingUnavailable) else 409) from exc
                 if packet['packet_hash'] != row['packet_hash']:
@@ -197,7 +217,7 @@ class PersistedBusinessContextService:
 
     def status(self, assessment_id: UUID, confirmation_id: UUID, actor: ContextActor):
         try:
-            with self.store.open() as unit:
+            with self.store.open(actor.user_id) as unit:
                 assessment = unit.m2.get_assessment(assessment_id, actor.user_id)
                 row = unit.read_build(confirmation_id, actor.user_id)
                 if assessment is None or row is None or row['assessment_id'] != assessment_id:

@@ -915,7 +915,7 @@ class _DetailState extends State<_Detail> {
         div(classes: 'sw-pd__primary-action', [
           ActionLink(
             'Check this property',
-            href: '/entrepreneur/assessment?id=${property.id}',
+            href: '/entrepreneur/assessments?id=${property.id}',
             variant: 'primary',
             icon: 'fact_check',
           ),

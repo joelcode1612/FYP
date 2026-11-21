@@ -22,6 +22,7 @@ import '../../presentation/mobile/entrepreneur/pages/entrepreneur_explore_mobile
 import '../../presentation/mobile/entrepreneur/pages/entrepreneur_report_mobile_page.dart';
 import '../../presentation/mobile/entrepreneur/pages/entrepreneur_saved_mobile_page.dart';
 import '../../presentation/mobile/entrepreneur/pages/entrepreneur_tour_mobile_page.dart';
+import '../../presentation/mobile/entrepreneur/pages/research_question_mobile_page.dart';
 import '../../presentation/mobile/entrepreneur/pages/sitewise_add_property_mobile_page.dart';
 import '../../presentation/mobile/provider/pages/provider_mfa_mobile_page.dart';
 import '../../presentation/mobile/provider/pages/provider_property_detail_mobile_page.dart';
@@ -74,6 +75,7 @@ String parentShellRoute(String route) {
     '/entrepreneur/assessment-setup': '/entrepreneur/assess',
     '/entrepreneur/assessment-evidence': '/entrepreneur/assess',
     '/entrepreneur/assessment-summary': '/entrepreneur/assess',
+    '/entrepreneur/research-questions': '/entrepreneur/assess',
     AppRoutes.assessmentHome: '/entrepreneur/assess',
     AppRoutes.assessmentQuestionnaire: '/entrepreneur/assess',
     AppRoutes.assessmentReview: '/entrepreneur/assess',
@@ -242,6 +244,17 @@ abstract final class AppRoutes {
         RouteAccess.workspace,
         () => ReviewScreen(
           assessmentId: settings.arguments as String? ?? '',
+        ),
+      ),
+      // PROJECT1 research-question review. `arguments` is a
+      // `ResearchQuestionTarget` (or a map with assessment/confirmation/
+      // objective/revision/context, all from persisted M2 state); without one
+      // the screen renders an honest "no objective selected" state instead of
+      // inventing an objective.
+      '/entrepreneur/research-questions' => (
+        RouteAccess.workspace,
+        () => ResearchQuestionMobilePage(
+          target: ResearchQuestionTarget.fromArguments(settings.arguments),
         ),
       ),
       '/entrepreneur/preferences' => (

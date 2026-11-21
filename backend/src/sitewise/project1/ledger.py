@@ -2,9 +2,33 @@
 from uuid import UUID
 
 from sqlalchemy import text
+from sqlalchemy.exc import SQLAlchemyError
 from sqlmodel import Session
 
 from sitewise.project1.contracts import WorkflowHeld
+
+
+_ALLOWED_STAGES = {'BDJ', 'QJ', 'QG'}
+_MAX_ATTEMPT_SLOT = 3
+_MAX_ATTEMPTS_PER_RUN = 6
+
+# One probe per reserve() call. information_schema is readable by the
+# restricted execution role, so this works under SET LOCAL ROLE p1ai_runtime.
+_SCHEMA_SLOT_COLUMN_SQL = (
+    'SELECT EXISTS (SELECT 1 FROM information_schema.columns '
+    "WHERE table_schema='project1_ai' AND table_name='attempts' "
+    "AND column_name='attempt_slot')")
+
+# Slot 1 deliberately keeps the ORIGINAL statement, without attempt_slot, so
+# the ledger still works against a database that has not applied 20261118_03.
+_INSERT_LEGACY = (
+    'INSERT INTO project1_ai.attempts '
+    '(run_id, owner_user_id, attempt_no, stage, prompt_version, prompt_hash, request_hash) '
+    'VALUES (:run,:actor,:n,:stage,:version,:prompt,:request)')
+_INSERT_SLOT = (
+    'INSERT INTO project1_ai.attempts '
+    '(run_id, owner_user_id, attempt_no, stage, attempt_slot, prompt_version, prompt_hash, request_hash) '
+    'VALUES (:run,:actor,:n,:stage,:slot,:version,:prompt,:request)')
 
 
 class PostgresAttemptLedger:
@@ -12,17 +36,46 @@ class PostgresAttemptLedger:
         self.engine, self.actor_id, self.run_id = engine, actor_id, run_id
 
     def _scope(self, session):
-        # This adapter is only constructed by the verified server identity path.
-        identity = session.execute(text('SELECT current_user, rolsuper, rolbypassrls '
-            'FROM pg_roles WHERE rolname=current_user')).one()
-        if identity[0] != 'p1ai_runtime' or identity[1] or identity[2]:
+        # Restricted execution-principal contract (migration 20261117_01).
+        # Statements MUST execute as the NOLOGIN restricted role p1ai_runtime,
+        # and the login principal MUST be a non-superuser, non-BYPASSRLS role.
+        # Two permitted paths reach that state:
+        #   * direct restricted login (used only by disposable test clones), or
+        #   * the dedicated execution principal p1ai_engine (member of
+        #     p1ai_runtime) issuing SET LOCAL ROLE p1ai_runtime.
+        # A superuser, a BYPASSRLS login, or the ordinary app role that never
+        # switches role must fail closed.
+        session_user, current_user, rolsuper, rolbypassrls = session.execute(text(
+            'SELECT session_user, current_user, '
+            '(SELECT rolsuper FROM pg_roles WHERE rolname=session_user), '
+            '(SELECT rolbypassrls FROM pg_roles WHERE rolname=session_user)')).one()
+        if rolsuper or rolbypassrls:
             raise WorkflowHeld('RESTRICTED_WORKFLOW_PRINCIPAL_REQUIRED')
-        session.execute(text("SELECT set_config('project1.actor_id', :actor, true)"),
-                        {'actor': str(self.actor_id)})
+        if current_user != 'p1ai_runtime':
+            try:
+                session.execute(text('SET LOCAL ROLE p1ai_runtime'))
+            except SQLAlchemyError:
+                raise WorkflowHeld('RESTRICTED_WORKFLOW_PRINCIPAL_REQUIRED') from None
+            current_user = session.execute(text('SELECT current_user')).scalar()
+        if current_user != 'p1ai_runtime':
+            raise WorkflowHeld('RESTRICTED_WORKFLOW_PRINCIPAL_REQUIRED')
+        from sitewise.db.m2_session import bind_m2_actor
+        bind_m2_actor(session, self.actor_id)
 
-    def reserve(self, stage, prompt_version, prompt_hash, request_hash):
-        if stage not in {'BDJ', 'QJ', 'QG'}:
+    def reserve(self, stage, prompt_version, prompt_hash, request_hash,
+                *, attempt_slot=1):
+        """Reserve one attempt in ``attempt_slot`` (1..3).
+
+        Slot 1 is the legacy path and works on an un-migrated ledger. A slot
+        above 1 is refused before any INSERT when the ledger schema cannot
+        represent it, so an old database never silently loses a retry.
+        """
+        if stage not in _ALLOWED_STAGES:
             raise WorkflowHeld('MODEL_STAGE_UNREGISTERED')
+        # bool is an int subclass; never read True as slot 1.
+        if (isinstance(attempt_slot, bool) or not isinstance(attempt_slot, int)
+                or not 1 <= attempt_slot <= _MAX_ATTEMPT_SLOT):
+            raise WorkflowHeld('MODEL_STAGE_INVALID_ATTEMPT_SLOT')
         with Session(self.engine) as session:
             self._scope(session)
             row = session.execute(text('SELECT id FROM project1_ai.runs '
@@ -30,20 +83,39 @@ class PostgresAttemptLedger:
                 {'id': self.run_id, 'actor': self.actor_id}).one_or_none()
             if row is None:
                 raise WorkflowHeld('WORKFLOW_RUN_NOT_FOUND')
-            # Conservatively only one dispatch per stage; retries need a new reviewed
-            # reconciler. A reserved row without a receipt is an UNKNOWN outcome.
-            previous = session.execute(text('SELECT stage FROM project1_ai.attempts '
-                'WHERE run_id=:id'), {'id': self.run_id}).scalars().all()
-            if stage in previous:
+            has_slot = bool(session.execute(text(_SCHEMA_SLOT_COLUMN_SQL)).scalar())
+            if attempt_slot > 1 and not has_slot:
+                # Checked before the attempts read and before any INSERT: the
+                # old schema cannot distinguish two attempts at one stage.
+                raise WorkflowHeld('WORKFLOW_LEDGER_VERSION_UNSUPPORTED')
+            if has_slot:
+                attempts = session.execute(text('SELECT attempt_no, stage, attempt_slot '
+                    'FROM project1_ai.attempts WHERE run_id=:id'),
+                    {'id': self.run_id}).all()
+                pairs = [(r[1], r[2]) for r in attempts]
+            else:
+                attempts = session.execute(text('SELECT attempt_no, stage '
+                    'FROM project1_ai.attempts WHERE run_id=:id'),
+                    {'id': self.run_id}).all()
+                pairs = [(r[1], 1) for r in attempts]
+            # A duplicate is now a (stage, slot) pair, not just a stage. A
+            # retry of QG in a new slot is a new, history-preserving attempt.
+            if (stage, attempt_slot) in pairs:
                 raise WorkflowHeld('MODEL_STAGE_ALREADY_RESERVED')
-            if len(previous) >= 6:
+            if len(attempts) >= _MAX_ATTEMPTS_PER_RUN:
                 raise WorkflowHeld('MODEL_ATTEMPT_BUDGET_EXHAUSTED')
-            number = len(previous) + 1
-            session.execute(text('INSERT INTO project1_ai.attempts '
-                '(run_id, owner_user_id, attempt_no, stage, prompt_version, prompt_hash, request_hash) '
-                'VALUES (:run,:actor,:n,:stage,:version,:prompt,:request)'),
-                {'run': self.run_id, 'actor': self.actor_id, 'n': number, 'stage': stage,
-                 'version': prompt_version, 'prompt': prompt_hash, 'request': request_hash})
+            # From the largest existing attempt, not len(previous)+1: two QG
+            # attempts in one run must not reuse an attempt_no.
+            number = max([r[0] for r in attempts], default=0) + 1
+            if number > _MAX_ATTEMPTS_PER_RUN:
+                raise WorkflowHeld('MODEL_ATTEMPT_BUDGET_EXHAUSTED')
+            params = {'run': self.run_id, 'actor': self.actor_id, 'n': number,
+                      'stage': stage, 'version': prompt_version,
+                      'prompt': prompt_hash, 'request': request_hash}
+            if attempt_slot > 1:
+                session.execute(text(_INSERT_SLOT), {**params, 'slot': attempt_slot})
+            else:
+                session.execute(text(_INSERT_LEGACY), params)
             session.commit()  # No provider dispatch before this succeeds.
             return number
 

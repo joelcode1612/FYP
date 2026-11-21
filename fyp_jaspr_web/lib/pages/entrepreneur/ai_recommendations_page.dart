@@ -438,7 +438,7 @@ class _AiRecommendationCard extends StatelessComponent {
           // The workspace reads `?id=`, not `?property=`. The previous query
           // key was silently ignored, so the page opened with no property.
           href:
-              '/entrepreneur/assessment?id=${Uri.encodeQueryComponent(item.propertyId)}',
+              '/entrepreneur/assessments?id=${Uri.encodeQueryComponent(item.propertyId)}',
           variant: 'secondary',
         ),
         if (ref != null && ref.detailAvailable)

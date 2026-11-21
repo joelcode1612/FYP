@@ -1,0 +1,1 @@
+{"name":"M2ActivityPanel","id":["sitewise_jaspr_web","lib/components/m2_activity_panel.dart"],"import":"package:sitewise_jaspr_web/components/m2_activity_panel.dart","params":[{"name":"assessmentId","isNamed":true,"decoder":"p['assessmentId'] as String","encoder":"c.assessmentId"}]}

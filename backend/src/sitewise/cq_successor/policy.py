@@ -108,6 +108,21 @@ def evaluate_route(
 ) -> RoutePreviewResponse:
     auth = authority or SyntheticAuthority()
 
+    # Server-derived resolution set. The client may declare ANSWERS
+    # (contracts.py docstring) but never authority. Resolution is inferred only
+    # from answers already carried in this request and is passed to _build() as
+    # an internal parameter: no request field and no authority boolean is added.
+    resolved_ids = frozenset(
+        qid
+        for qid, answered in (
+            ("Q01", bool(request.q01_codes)),
+            ("Q02", request.q02_code is not None),
+            ("Q04", request.q04_code is not None),
+            ("Q05", request.q05_code is not None),
+        )
+        if answered
+    )
+
     states = {qid: ("BLOCKED", "UNSET") for qid in QUESTION_IDS}
 
     def put(qid: str, state: str, reason: str) -> None:
@@ -164,7 +179,7 @@ def evaluate_route(
     if request.q02_code is None and states["Q02"][0] == "ELIGIBLE_TO_SHOW":
         for qid in QUESTION_IDS[2:]:
             put(qid, "PENDING_DEPENDENCY", "WAIT_FOR_Q02_SCREENING_ANSWER")
-        return _build(request, "IN_PROGRESS", group, states, ())
+        return _build(request, "IN_PROGRESS", group, states, (), resolved_ids)
 
     put("Q04", "ELIGIBLE_TO_SHOW", "ELIGIBLE_FOR_PAST_BEHAVIOR_ITEM")
 
@@ -210,7 +225,7 @@ def evaluate_route(
         for qid in ("Q11", "Q12", "Q13"):
             put(qid, "NOT_SHOWN", "OPTIONAL_CONTEXT_DISABLED")
 
-    return _build(request, "IN_PROGRESS", group, states, ())
+    return _build(request, "IN_PROGRESS", group, states, (), resolved_ids)
 
 
 def _build(
@@ -219,13 +234,20 @@ def _build(
     group: str,
     states: dict[str, tuple[str, str]],
     q10_features: tuple[str, ...],
+    resolved_ids: frozenset[str] = frozenset(),
 ) -> RoutePreviewResponse:
     permissions = [
         PreviewPermission(item_id=qid, state=state, reason=reason)
         for qid, (state, reason) in ((q, states[q]) for q in QUESTION_IDS)
     ]
+    # F-01: the first ELIGIBLE_TO_SHOW item may already have been answered.
+    # Skip server-resolved IDs; never emit a COMPLETED state here (this module
+    # has no submission/receipt concept).
     next_q = next(
-        (q for q in QUESTION_IDS if states[q][0] == "ELIGIBLE_TO_SHOW"),
+        (
+            q for q in QUESTION_IDS
+            if states[q][0] == "ELIGIBLE_TO_SHOW" and q not in resolved_ids
+        ),
         None,
     )
     payload = {

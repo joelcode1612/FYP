@@ -1,0 +1,1059 @@
+{
+  "meta": {
+    "branch": "merge_main_jed",
+    "HEAD": "ba30035ecb24b80fa155cc7049cf3cdf94a67844",
+    "HEAD (short)": "ba30035",
+    "working tree": "171 entries in `git status --porcelain`",
+    "snapshot taken": "2026-11-17 12:11:38 +0800",
+    "generator": "backend/scripts/cp03f_structure_snapshot.py"
+  },
+  "counts": {
+    "before": 1708,
+    "after": 1832,
+    "added": 125,
+    "removed": 1,
+    "modified": 51
+  },
+  "added": [
+    "backend/.env.env.bak.execprincipal",
+    "backend/.env.local",
+    "backend/backups/cp00r_20261116/.env.local.2ec7f332a64d.bak",
+    "backend/backups/cp01_20261116/BACKUP_RECEIPT_20261116.json",
+    "backend/backups/cp01_20261116/CP02_M2_CHAIN_EVIDENCE.json",
+    "backend/backups/cp01_20261116/Dss_20261116.dump",
+    "backend/backups/cp01_20261116/Dss_roles_20261116.sql",
+    "backend/backups/cp01_20261116/Final_Location_Analysis_20261116_pre_rental_assessment.dump",
+    "backend/backups/cp01_20261116/MIGRATION_RECEIPT_20261116_02.json",
+    "backend/backups/cp03d_96cefb30-60b9-4a9c-b028-e87793c2a82a/bdj_output.json",
+    "backend/backups/cp03d_uncertainty_fd0b4380-1c37-4dd4-ae3c-5faf4a138d01/probe.json",
+    "backend/backups/cp03e_79ee04e1-2bc2-4c27-a383-6c7a196db04f/result.json",
+    "backend/backups/cp03e_9aefb13d-68c5-42d5-bf55-07264795139b/result.json",
+    "backend/backups/cp03e_bb54ef7b-b7cf-4861-bb07-2feaf764ce31/result.json",
+    "backend/migrations/cq/20261116_03_synthetic_import_boundary.sql",
+    "backend/migrations/cq/20261116_04_synthetic_interactive.sql",
+    "backend/migrations/m2/20261117_04_workflow_trigger_grant.sql",
+    "backend/migrations/m2/20261117_05_workflow_view_read_scope.sql",
+    "backend/migrations/m2/20261117_06_workflow_cq_read_scope.sql",
+    "backend/migrations/project1_ai/20261116_02_m2_runtime_role.sql",
+    "backend/migrations/project1_ai/20261117_01_execution_principal.sql",
+    "backend/migrations/project1_ai/20261117_02_finding_provenance.sql",
+    "backend/scripts/READ_DB_RESULTS_VERIFIED.ps1",
+    "backend/scripts/build_synthetic_case_diagnostic.py",
+    "backend/scripts/cp03d_bdj_execution.py",
+    "backend/scripts/cp03d_bdj_uncertainty.py",
+    "backend/scripts/cp03e_m2v1_live_admission.py",
+    "backend/scripts/cp03e_quote_contract_verification.py",
+    "backend/scripts/cp03f_capture_explorer.py",
+    "backend/scripts/cp03f_d05_migration_preflight.py",
+    "backend/scripts/cp03f_e2e_browser.py",
+    "backend/scripts/cp03f_history_and_recovery.py",
+    "backend/scripts/cp03f_journey_backend.py",
+    "backend/scripts/cp03f_journey_browser.py",
+    "backend/scripts/cp03f_m2_answer_probe.py",
+    "backend/scripts/cp03f_m2_conditional_matrix.py",
+    "backend/scripts/cp03f_m2_instrument_probe.py",
+    "backend/scripts/cp03f_m2_view_closure_audit.py",
+    "backend/scripts/cp03f_m2_view_privilege_audit.py",
+    "backend/scripts/cp03f_m2_write_trace.py",
+    "backend/scripts/cp03f_structure_report.py",
+    "backend/scripts/cp03f_structure_snapshot.py",
+    "backend/scripts/cp04_bcb_binding_readiness.py",
+    "backend/scripts/diagnose_bdj_packet.py",
+    "backend/scripts/import_mock_to_dss.py",
+    "backend/scripts/inspect_project1_ai_roles.py",
+    "backend/scripts/probe_bdj_packet.py",
+    "backend/scripts/provision_execution_principal.py",
+    "backend/scripts/read_dss_synthetic_results.py",
+    "backend/scripts/tokenharbor_diagnostic.py",
+    "backend/scripts/tokenharbor_probe_model.py",
+    "backend/scripts/verify_actual_synthetic_phone_completion.py",
+    "backend/scripts/verify_ledger_execution_principal.py",
+    "backend/src/sitewise/api/v1/synthetic_execution.py",
+    "backend/src/sitewise/api/v1/synthetic_inspection.py",
+    "backend/src/sitewise/domain/bdj_m2v1_candidate_rules.py",
+    "backend/src/sitewise/modules/__init__.py",
+    "backend/src/sitewise/modules/decision_engine/__init__.py",
+    "backend/src/sitewise/modules/decision_engine/domain/__init__.py",
+    "backend/src/sitewise/modules/decision_engine/domain/m2_rules.py",
+    "backend/src/sitewise/project1/disclosure.py",
+    "backend/src/sitewise/services/synthetic_case_setup.py",
+    "backend/src/sitewise/services/synthetic_dss_import.py",
+    "backend/src/sitewise/services/synthetic_execution_service.py",
+    "backend/src/sitewise/services/synthetic_inspection_service.py",
+    "backend/src/sitewise/services/synthetic_preview_boundary.py",
+    "backend/startup.stderr.log",
+    "backend/startup.stdout.log",
+    "backend/tests/api/test_expanded_property_mapping.py",
+    "backend/tests/cq_runtime/VERIFY_DSS_EE01_AGGREGATES.sql",
+    "backend/tests/cq_runtime/VERIFY_DSS_EE01_RAW_ORACLE.sql",
+    "backend/tests/cq_runtime/VERIFY_DSS_SYNTHETIC_INTERACTIVE.sql",
+    "backend/tests/cq_runtime/VERIFY_DSS_SYNTHETIC_PERSISTENCE.sql",
+    "backend/tests/cq_runtime/verify_dss_synthetic_import.py",
+    "backend/tests/cq_runtime/verify_synthetic_interactive.py",
+    "backend/tests/project1/test_bdj_m2v1_rules.py",
+    "docs/cp00_integration/PROJECT1_CP00R_CP01H_CHECKPOINT_20261116.md",
+    "docs/cp00_integration/PROJECT1_CP01_CP02_EXECUTION_REPORT.md",
+    "docs/cp00_integration/PROJECT1_CP03D_BDJ_EXECUTION_EVIDENCE_20261117.md",
+    "docs/cp00_integration/PROJECT1_CP03E_CONSOLIDATED_VERIFICATION_20261117.md",
+    "docs/cp00_integration/PROJECT1_CP03F_BDJ_UI_AND_HISTORY_VERIFICATION_20261117.md",
+    "docs/cp00_integration/PROJECT1_CP04_BCB_BINDING_READINESS_20261117.md",
+    "docs/cp00_integration/PROJECT1_D02_RULESET_RETIREMENT_DECISION_20261117.md",
+    "docs/cp00_integration/PROJECT1_ENGINE_PUBLICATION_ENDPOINT_INVENTORY_20261117.md",
+    "docs/cp00_integration/PROJECT1_FRONTEND_API_INTEGRATION_CP00.md",
+    "docs/cp00_integration/snapshots/PROJECT1_EXPLORER_BACKEND.png",
+    "docs/cp00_integration/snapshots/PROJECT1_EXPLORER_FRONTEND.png",
+    "docs/cp00_integration/snapshots/PROJECT1_EXPLORER_SHARED_LOGIC.png",
+    "docs/cp00_integration/snapshots/PROJECT1_MODULE_DEPENDENCY_MAP.md",
+    "docs/cp00_integration/snapshots/PROJECT1_REPOSITORY_TREE_AFTER.txt",
+    "docs/cp00_integration/snapshots/PROJECT1_REPOSITORY_TREE_BEFORE.txt",
+    "docs/cp00_integration/snapshots/PROJECT1_STRUCTURE_CHANGE_REGISTER.md",
+    "docs/cp00_integration/snapshots/structure_data.json",
+    "fyp_jaspr_web/lib/components/customer_questionnaire_step5.dart",
+    "fyp_jaspr_web/lib/components/m2_workflow_panel.dart",
+    "fyp_jaspr_web/tool/nav_labels.dart",
+    "fyp_jaspr_web/web/sitewise_assessment_entry.css",
+    "fyp_jaspr_web/web/sitewise_cq_step5.css",
+    "fyp_mobile_app/.flutter-plugins-dependencies",
+    "fyp_mobile_app/android/app/src/main/java/io/flutter/plugins/GeneratedPluginRegistrant.java",
+    "fyp_mobile_app/android/gradle/wrapper/gradle-wrapper.jar",
+    "fyp_mobile_app/android/gradlew",
+    "fyp_mobile_app/android/gradlew.bat",
+    "fyp_mobile_app/android/local.properties",
+    "fyp_mobile_app/flutter_01.log",
+    "fyp_mobile_app/flutter_02.log",
+    "fyp_mobile_app/ios/Flutter/Generated.xcconfig",
+    "fyp_mobile_app/ios/Flutter/flutter_export_environment.sh",
+    "fyp_mobile_app/ios/Runner/GeneratedPluginRegistrant.h",
+    "fyp_mobile_app/ios/Runner/GeneratedPluginRegistrant.m",
+    "fyp_mobile_app/lib/features/assessment/view/synthetic_inspection_page.dart",
+    "fyp_mobile_app/lib/features/assessment/view/synthetic_session_host.dart",
+    "fyp_mobile_app/test/cq_runtime/synthetic_host_scope_test.dart",
+    "fyp_mobile_app/test/cq_runtime/synthetic_information_packet_test.dart",
+    "fyp_mobile_app/test/cq_runtime/synthetic_inspection_test.dart",
+    "fyp_mobile_app/test/cq_runtime/synthetic_lifecycle_ui_test.dart",
+    "fyp_mobile_app/test/cq_runtime/synthetic_previous_test.dart",
+    "shared_logic/lib/src/data/repositories/api_synthetic_inspection_repository.dart",
+    "shared_logic/test/cq_synthetic_transport_test.dart",
+    "shared_logic/test/fixtures/cq_synthetic_completed.json",
+    "shared_logic/test/fixtures/cq_synthetic_information_packet.json",
+    "shared_logic/test/fixtures/cq_synthetic_presented_q02.json",
+    "shared_logic/test/fixtures/cq_synthetic_screened_out.json",
+    "shared_logic/test/fixtures/m2_canonical_equivalence.json",
+    "shared_logic/test/m2_canonical_equivalence_test.dart"
+  ],
+  "removed": [
+    "fyp"
+  ],
+  "modified": [
+    "backend/ml_reference/recommender_eval/model_selection_report.json",
+    "backend/src/sitewise/api/v1/m2.py",
+    "backend/src/sitewise/api/v1/m2_route.py",
+    "backend/src/sitewise/api/v1/router.py",
+    "backend/src/sitewise/core/config.py",
+    "backend/src/sitewise/db/m2_session.py",
+    "backend/src/sitewise/dependencies.py",
+    "backend/src/sitewise/domain/m2_rules.py",
+    "backend/src/sitewise/main.py",
+    "backend/src/sitewise/ml/pu_expanded.py",
+    "backend/src/sitewise/project1/bdj.py",
+    "backend/src/sitewise/project1/contracts.py",
+    "backend/src/sitewise/project1/ledger.py",
+    "backend/src/sitewise/project1/projection.py",
+    "backend/src/sitewise/project1/prompts.py",
+    "backend/src/sitewise/project1/provider.py",
+    "backend/src/sitewise/repositories/catalog_repository.py",
+    "backend/src/sitewise/repositories/fyp_property_repository.py",
+    "backend/src/sitewise/services/bdj_service.py",
+    "backend/src/sitewise/services/business_context_v1.py",
+    "backend/src/sitewise/services/confirmation_service.py",
+    "backend/src/sitewise/services/ee01_service.py",
+    "backend/src/sitewise/services/m2_service.py",
+    "backend/tests/api/test_assessments_api.py",
+    "backend/tests/cq_runtime/fixtures/dss_m2_schema_20261113.sql",
+    "backend/tests/cq_runtime/persistence_verification_checks.py",
+    "backend/tests/cq_runtime/readback_saved.py",
+    "backend/tests/cq_runtime/run_isolated.py",
+    "backend/tests/cq_runtime/test_postgres_api.py",
+    "backend/tests/project1/test_workflow.py",
+    "backend/tests/test_architecture.py",
+    "backend/tests/test_district_demographics.py",
+    "fyp_jaspr_web/lib/app.dart",
+    "fyp_jaspr_web/lib/data/assessment_api.dart",
+    "fyp_jaspr_web/lib/data/navigation.dart",
+    "fyp_jaspr_web/lib/main.client.options.dart",
+    "fyp_jaspr_web/lib/pages/entrepreneur/ai_recommendations_page.dart",
+    "fyp_jaspr_web/lib/pages/entrepreneur/assessment_workspace_page.dart",
+    "fyp_jaspr_web/lib/pages/entrepreneur/dashboard_page.dart",
+    "fyp_jaspr_web/lib/pages/entrepreneur/explore_page.dart",
+    "fyp_jaspr_web/lib/pages/entrepreneur/property_detail_page.dart",
+    "fyp_jaspr_web/lib/pages/entrepreneur/recommendations_page.dart",
+    "fyp_jaspr_web/lib/pages/owner/dashboard_page.dart",
+    "fyp_jaspr_web/web/index.html",
+    "fyp_mobile_app/lib/features/assessment/view/cq_invitations_page.dart",
+    "fyp_mobile_app/lib/features/assessment/view/cq_session_page.dart",
+    "fyp_mobile_app/lib/features/assessment/view/questionnaire_screen.dart",
+    "fyp_mobile_app/lib/features/assessment/viewmodel/cq_view_model.dart",
+    "shared_logic/lib/shared_logic.dart",
+    "shared_logic/lib/src/data/repositories/api_customer_questionnaire_repository.dart",
+    "shared_logic/lib/src/data/repositories/api_m2_repository.dart"
+  ],
+  "added_by_kind": {
+    "DOCUMENTATION": [
+      "docs/cp00_integration/PROJECT1_CP00R_CP01H_CHECKPOINT_20261116.md",
+      "docs/cp00_integration/PROJECT1_CP01_CP02_EXECUTION_REPORT.md",
+      "docs/cp00_integration/PROJECT1_CP03D_BDJ_EXECUTION_EVIDENCE_20261117.md",
+      "docs/cp00_integration/PROJECT1_CP03E_CONSOLIDATED_VERIFICATION_20261117.md",
+      "docs/cp00_integration/PROJECT1_CP03F_BDJ_UI_AND_HISTORY_VERIFICATION_20261117.md",
+      "docs/cp00_integration/PROJECT1_CP04_BCB_BINDING_READINESS_20261117.md",
+      "docs/cp00_integration/PROJECT1_D02_RULESET_RETIREMENT_DECISION_20261117.md",
+      "docs/cp00_integration/PROJECT1_ENGINE_PUBLICATION_ENDPOINT_INVENTORY_20261117.md",
+      "docs/cp00_integration/PROJECT1_FRONTEND_API_INTEGRATION_CP00.md",
+      "docs/cp00_integration/snapshots/PROJECT1_EXPLORER_BACKEND.png",
+      "docs/cp00_integration/snapshots/PROJECT1_EXPLORER_FRONTEND.png",
+      "docs/cp00_integration/snapshots/PROJECT1_EXPLORER_SHARED_LOGIC.png",
+      "docs/cp00_integration/snapshots/PROJECT1_MODULE_DEPENDENCY_MAP.md",
+      "docs/cp00_integration/snapshots/PROJECT1_REPOSITORY_TREE_AFTER.txt",
+      "docs/cp00_integration/snapshots/PROJECT1_REPOSITORY_TREE_BEFORE.txt",
+      "docs/cp00_integration/snapshots/PROJECT1_STRUCTURE_CHANGE_REGISTER.md",
+      "docs/cp00_integration/snapshots/structure_data.json"
+    ],
+    "EVIDENCE_BACKUP": [
+      "backend/backups/cp00r_20261116/.env.local.2ec7f332a64d.bak",
+      "backend/backups/cp01_20261116/BACKUP_RECEIPT_20261116.json",
+      "backend/backups/cp01_20261116/CP02_M2_CHAIN_EVIDENCE.json",
+      "backend/backups/cp01_20261116/Dss_20261116.dump",
+      "backend/backups/cp01_20261116/Dss_roles_20261116.sql",
+      "backend/backups/cp01_20261116/Final_Location_Analysis_20261116_pre_rental_assessment.dump",
+      "backend/backups/cp01_20261116/MIGRATION_RECEIPT_20261116_02.json",
+      "backend/backups/cp03d_96cefb30-60b9-4a9c-b028-e87793c2a82a/bdj_output.json",
+      "backend/backups/cp03d_uncertainty_fd0b4380-1c37-4dd4-ae3c-5faf4a138d01/probe.json",
+      "backend/backups/cp03e_79ee04e1-2bc2-4c27-a383-6c7a196db04f/result.json",
+      "backend/backups/cp03e_9aefb13d-68c5-42d5-bf55-07264795139b/result.json",
+      "backend/backups/cp03e_bb54ef7b-b7cf-4861-bb07-2feaf764ce31/result.json"
+    ],
+    "MIGRATION": [
+      "backend/migrations/cq/20261116_03_synthetic_import_boundary.sql",
+      "backend/migrations/cq/20261116_04_synthetic_interactive.sql",
+      "backend/migrations/m2/20261117_04_workflow_trigger_grant.sql",
+      "backend/migrations/m2/20261117_05_workflow_view_read_scope.sql",
+      "backend/migrations/m2/20261117_06_workflow_cq_read_scope.sql",
+      "backend/migrations/project1_ai/20261116_02_m2_runtime_role.sql",
+      "backend/migrations/project1_ai/20261117_01_execution_principal.sql",
+      "backend/migrations/project1_ai/20261117_02_finding_provenance.sql"
+    ],
+    "SOURCE": [
+      "backend/.env.env.bak.execprincipal",
+      "backend/.env.local",
+      "backend/src/sitewise/api/v1/synthetic_execution.py",
+      "backend/src/sitewise/api/v1/synthetic_inspection.py",
+      "backend/src/sitewise/domain/bdj_m2v1_candidate_rules.py",
+      "backend/src/sitewise/modules/__init__.py",
+      "backend/src/sitewise/modules/decision_engine/__init__.py",
+      "backend/src/sitewise/modules/decision_engine/domain/__init__.py",
+      "backend/src/sitewise/modules/decision_engine/domain/m2_rules.py",
+      "backend/src/sitewise/project1/disclosure.py",
+      "backend/src/sitewise/services/synthetic_case_setup.py",
+      "backend/src/sitewise/services/synthetic_dss_import.py",
+      "backend/src/sitewise/services/synthetic_execution_service.py",
+      "backend/src/sitewise/services/synthetic_inspection_service.py",
+      "backend/src/sitewise/services/synthetic_preview_boundary.py",
+      "backend/startup.stderr.log",
+      "backend/startup.stdout.log",
+      "fyp_jaspr_web/lib/components/customer_questionnaire_step5.dart",
+      "fyp_jaspr_web/lib/components/m2_workflow_panel.dart",
+      "fyp_jaspr_web/tool/nav_labels.dart",
+      "fyp_jaspr_web/web/sitewise_assessment_entry.css",
+      "fyp_jaspr_web/web/sitewise_cq_step5.css",
+      "fyp_mobile_app/.flutter-plugins-dependencies",
+      "fyp_mobile_app/android/app/src/main/java/io/flutter/plugins/GeneratedPluginRegistrant.java",
+      "fyp_mobile_app/android/gradle/wrapper/gradle-wrapper.jar",
+      "fyp_mobile_app/android/gradlew",
+      "fyp_mobile_app/android/gradlew.bat",
+      "fyp_mobile_app/android/local.properties",
+      "fyp_mobile_app/flutter_01.log",
+      "fyp_mobile_app/flutter_02.log",
+      "fyp_mobile_app/ios/Flutter/Generated.xcconfig",
+      "fyp_mobile_app/ios/Flutter/flutter_export_environment.sh",
+      "fyp_mobile_app/ios/Runner/GeneratedPluginRegistrant.h",
+      "fyp_mobile_app/ios/Runner/GeneratedPluginRegistrant.m",
+      "fyp_mobile_app/lib/features/assessment/view/synthetic_inspection_page.dart",
+      "fyp_mobile_app/lib/features/assessment/view/synthetic_session_host.dart",
+      "shared_logic/lib/src/data/repositories/api_synthetic_inspection_repository.dart"
+    ],
+    "TEST": [
+      "backend/tests/api/test_expanded_property_mapping.py",
+      "backend/tests/cq_runtime/VERIFY_DSS_EE01_AGGREGATES.sql",
+      "backend/tests/cq_runtime/VERIFY_DSS_EE01_RAW_ORACLE.sql",
+      "backend/tests/cq_runtime/VERIFY_DSS_SYNTHETIC_INTERACTIVE.sql",
+      "backend/tests/cq_runtime/VERIFY_DSS_SYNTHETIC_PERSISTENCE.sql",
+      "backend/tests/cq_runtime/verify_dss_synthetic_import.py",
+      "backend/tests/cq_runtime/verify_synthetic_interactive.py",
+      "backend/tests/project1/test_bdj_m2v1_rules.py",
+      "fyp_mobile_app/test/cq_runtime/synthetic_host_scope_test.dart",
+      "fyp_mobile_app/test/cq_runtime/synthetic_information_packet_test.dart",
+      "fyp_mobile_app/test/cq_runtime/synthetic_inspection_test.dart",
+      "fyp_mobile_app/test/cq_runtime/synthetic_lifecycle_ui_test.dart",
+      "fyp_mobile_app/test/cq_runtime/synthetic_previous_test.dart",
+      "shared_logic/test/cq_synthetic_transport_test.dart",
+      "shared_logic/test/fixtures/cq_synthetic_completed.json",
+      "shared_logic/test/fixtures/cq_synthetic_information_packet.json",
+      "shared_logic/test/fixtures/cq_synthetic_presented_q02.json",
+      "shared_logic/test/fixtures/cq_synthetic_screened_out.json",
+      "shared_logic/test/fixtures/m2_canonical_equivalence.json",
+      "shared_logic/test/m2_canonical_equivalence_test.dart"
+    ],
+    "TOOLING_SCRIPT": [
+      "backend/scripts/READ_DB_RESULTS_VERIFIED.ps1",
+      "backend/scripts/build_synthetic_case_diagnostic.py",
+      "backend/scripts/cp03d_bdj_execution.py",
+      "backend/scripts/cp03d_bdj_uncertainty.py",
+      "backend/scripts/cp03e_m2v1_live_admission.py",
+      "backend/scripts/cp03e_quote_contract_verification.py",
+      "backend/scripts/cp03f_capture_explorer.py",
+      "backend/scripts/cp03f_d05_migration_preflight.py",
+      "backend/scripts/cp03f_e2e_browser.py",
+      "backend/scripts/cp03f_history_and_recovery.py",
+      "backend/scripts/cp03f_journey_backend.py",
+      "backend/scripts/cp03f_journey_browser.py",
+      "backend/scripts/cp03f_m2_answer_probe.py",
+      "backend/scripts/cp03f_m2_conditional_matrix.py",
+      "backend/scripts/cp03f_m2_instrument_probe.py",
+      "backend/scripts/cp03f_m2_view_closure_audit.py",
+      "backend/scripts/cp03f_m2_view_privilege_audit.py",
+      "backend/scripts/cp03f_m2_write_trace.py",
+      "backend/scripts/cp03f_structure_report.py",
+      "backend/scripts/cp03f_structure_snapshot.py",
+      "backend/scripts/cp04_bcb_binding_readiness.py",
+      "backend/scripts/diagnose_bdj_packet.py",
+      "backend/scripts/import_mock_to_dss.py",
+      "backend/scripts/inspect_project1_ai_roles.py",
+      "backend/scripts/probe_bdj_packet.py",
+      "backend/scripts/provision_execution_principal.py",
+      "backend/scripts/read_dss_synthetic_results.py",
+      "backend/scripts/tokenharbor_diagnostic.py",
+      "backend/scripts/tokenharbor_probe_model.py",
+      "backend/scripts/verify_actual_synthetic_phone_completion.py",
+      "backend/scripts/verify_ledger_execution_principal.py"
+    ]
+  },
+  "modified_by_kind": {
+    "SOURCE": [
+      "backend/ml_reference/recommender_eval/model_selection_report.json",
+      "backend/src/sitewise/api/v1/m2.py",
+      "backend/src/sitewise/api/v1/m2_route.py",
+      "backend/src/sitewise/api/v1/router.py",
+      "backend/src/sitewise/core/config.py",
+      "backend/src/sitewise/db/m2_session.py",
+      "backend/src/sitewise/dependencies.py",
+      "backend/src/sitewise/domain/m2_rules.py",
+      "backend/src/sitewise/main.py",
+      "backend/src/sitewise/ml/pu_expanded.py",
+      "backend/src/sitewise/project1/bdj.py",
+      "backend/src/sitewise/project1/contracts.py",
+      "backend/src/sitewise/project1/ledger.py",
+      "backend/src/sitewise/project1/projection.py",
+      "backend/src/sitewise/project1/prompts.py",
+      "backend/src/sitewise/project1/provider.py",
+      "backend/src/sitewise/repositories/catalog_repository.py",
+      "backend/src/sitewise/repositories/fyp_property_repository.py",
+      "backend/src/sitewise/services/bdj_service.py",
+      "backend/src/sitewise/services/business_context_v1.py",
+      "backend/src/sitewise/services/confirmation_service.py",
+      "backend/src/sitewise/services/ee01_service.py",
+      "backend/src/sitewise/services/m2_service.py",
+      "fyp_jaspr_web/lib/app.dart",
+      "fyp_jaspr_web/lib/data/assessment_api.dart",
+      "fyp_jaspr_web/lib/data/navigation.dart",
+      "fyp_jaspr_web/lib/main.client.options.dart",
+      "fyp_jaspr_web/lib/pages/entrepreneur/ai_recommendations_page.dart",
+      "fyp_jaspr_web/lib/pages/entrepreneur/assessment_workspace_page.dart",
+      "fyp_jaspr_web/lib/pages/entrepreneur/dashboard_page.dart",
+      "fyp_jaspr_web/lib/pages/entrepreneur/explore_page.dart",
+      "fyp_jaspr_web/lib/pages/entrepreneur/property_detail_page.dart",
+      "fyp_jaspr_web/lib/pages/entrepreneur/recommendations_page.dart",
+      "fyp_jaspr_web/lib/pages/owner/dashboard_page.dart",
+      "fyp_jaspr_web/web/index.html",
+      "fyp_mobile_app/lib/features/assessment/view/cq_invitations_page.dart",
+      "fyp_mobile_app/lib/features/assessment/view/cq_session_page.dart",
+      "fyp_mobile_app/lib/features/assessment/view/questionnaire_screen.dart",
+      "fyp_mobile_app/lib/features/assessment/viewmodel/cq_view_model.dart",
+      "shared_logic/lib/shared_logic.dart",
+      "shared_logic/lib/src/data/repositories/api_customer_questionnaire_repository.dart",
+      "shared_logic/lib/src/data/repositories/api_m2_repository.dart"
+    ],
+    "TEST": [
+      "backend/tests/api/test_assessments_api.py",
+      "backend/tests/cq_runtime/fixtures/dss_m2_schema_20261113.sql",
+      "backend/tests/cq_runtime/persistence_verification_checks.py",
+      "backend/tests/cq_runtime/readback_saved.py",
+      "backend/tests/cq_runtime/run_isolated.py",
+      "backend/tests/cq_runtime/test_postgres_api.py",
+      "backend/tests/project1/test_workflow.py",
+      "backend/tests/test_architecture.py",
+      "backend/tests/test_district_demographics.py"
+    ]
+  },
+  "edges": {
+    "api": [
+      "core",
+      "db",
+      "dependencies",
+      "domain",
+      "ingestion",
+      "ml",
+      "modules",
+      "project1",
+      "repositories",
+      "services"
+    ],
+    "db": [
+      "core",
+      "domain"
+    ],
+    "domain": [
+      "modules"
+    ],
+    "ingestion": [
+      "db"
+    ],
+    "ml": [
+      "core",
+      "db",
+      "domain",
+      "services"
+    ],
+    "project1": [
+      "core",
+      "modules"
+    ],
+    "repositories": [
+      "core",
+      "db",
+      "domain",
+      "services"
+    ],
+    "services": [
+      "core",
+      "db",
+      "domain",
+      "ingestion",
+      "ml",
+      "modules",
+      "project1",
+      "repositories"
+    ]
+  },
+  "package_file_counts": {
+    "api": 35,
+    "core": 6,
+    "cq_successor": 4,
+    "customer_contracts": 1,
+    "db": 27,
+    "domain": 14,
+    "ingestion": 12,
+    "ml": 17,
+    "modules": 4,
+    "project1": 10,
+    "repositories": 19,
+    "services": 53
+  },
+  "package_cycles": [
+    [
+      "ml",
+      "repositories",
+      "services"
+    ]
+  ],
+  "file_cycles": [
+    [
+      "sitewise.ml.shap_explainer",
+      "sitewise.services.explanation_service",
+      "sitewise.services.explanation_worker",
+      "sitewise.services.property_insights_service"
+    ],
+    [
+      "sitewise.services.location_analysis_service",
+      "sitewise.services.property_verification_service"
+    ]
+  ],
+  "legacy_pairs": [
+    {
+      "legacy_path": "backend/src/sitewise/domain/bdj_candidate_rules.py",
+      "lines": 185,
+      "migrated_counterpart": null,
+      "compatibility_shim": false
+    },
+    {
+      "legacy_path": "backend/src/sitewise/domain/bdj_m2v1_candidate_rules.py",
+      "lines": 294,
+      "migrated_counterpart": null,
+      "compatibility_shim": false
+    },
+    {
+      "legacy_path": "backend/src/sitewise/domain/bdj_rules.py",
+      "lines": 42,
+      "migrated_counterpart": null,
+      "compatibility_shim": false
+    },
+    {
+      "legacy_path": "backend/src/sitewise/domain/cq_runtime.py",
+      "lines": 111,
+      "migrated_counterpart": null,
+      "compatibility_shim": false
+    },
+    {
+      "legacy_path": "backend/src/sitewise/domain/customer_questionnaire.py",
+      "lines": 65,
+      "migrated_counterpart": null,
+      "compatibility_shim": false
+    },
+    {
+      "legacy_path": "backend/src/sitewise/domain/entities.py",
+      "lines": 2,
+      "migrated_counterpart": null,
+      "compatibility_shim": false
+    },
+    {
+      "legacy_path": "backend/src/sitewise/domain/m2_provenance.py",
+      "lines": 35,
+      "migrated_counterpart": null,
+      "compatibility_shim": false
+    },
+    {
+      "legacy_path": "backend/src/sitewise/domain/m2_rules.py",
+      "lines": 17,
+      "migrated_counterpart": [
+        "backend/src/sitewise/modules/decision_engine/domain/m2_rules.py"
+      ],
+      "compatibility_shim": true
+    },
+    {
+      "legacy_path": "backend/src/sitewise/domain/management.py",
+      "lines": 309,
+      "migrated_counterpart": null,
+      "compatibility_shim": false
+    },
+    {
+      "legacy_path": "backend/src/sitewise/domain/ranking.py",
+      "lines": 2,
+      "migrated_counterpart": null,
+      "compatibility_shim": false
+    },
+    {
+      "legacy_path": "backend/src/sitewise/domain/rbac.py",
+      "lines": 565,
+      "migrated_counterpart": null,
+      "compatibility_shim": false
+    },
+    {
+      "legacy_path": "backend/src/sitewise/domain/recommendation_scoring.py",
+      "lines": 1662,
+      "migrated_counterpart": null,
+      "compatibility_shim": false
+    },
+    {
+      "legacy_path": "backend/src/sitewise/domain/suitability_engine.py",
+      "lines": 79,
+      "migrated_counterpart": null,
+      "compatibility_shim": false
+    },
+    {
+      "legacy_path": "backend/src/sitewise/services/address_validation_service.py",
+      "lines": 169,
+      "migrated_counterpart": null,
+      "compatibility_shim": false
+    },
+    {
+      "legacy_path": "backend/src/sitewise/services/age_band_raster_service.py",
+      "lines": 432,
+      "migrated_counterpart": null,
+      "compatibility_shim": false
+    },
+    {
+      "legacy_path": "backend/src/sitewise/services/assessment_service.py",
+      "lines": 918,
+      "migrated_counterpart": null,
+      "compatibility_shim": false
+    },
+    {
+      "legacy_path": "backend/src/sitewise/services/bdj_service.py",
+      "lines": 110,
+      "migrated_counterpart": null,
+      "compatibility_shim": false
+    },
+    {
+      "legacy_path": "backend/src/sitewise/services/business_context_v1.py",
+      "lines": 355,
+      "migrated_counterpart": null,
+      "compatibility_shim": false
+    },
+    {
+      "legacy_path": "backend/src/sitewise/services/catalog_listing_details_service.py",
+      "lines": 188,
+      "migrated_counterpart": null,
+      "compatibility_shim": false
+    },
+    {
+      "legacy_path": "backend/src/sitewise/services/confirmation_service.py",
+      "lines": 327,
+      "migrated_counterpart": null,
+      "compatibility_shim": false
+    },
+    {
+      "legacy_path": "backend/src/sitewise/services/confirmed_review_service.py",
+      "lines": 121,
+      "migrated_counterpart": null,
+      "compatibility_shim": false
+    },
+    {
+      "legacy_path": "backend/src/sitewise/services/customer_questionnaire_candidate.py",
+      "lines": 382,
+      "migrated_counterpart": null,
+      "compatibility_shim": false
+    },
+    {
+      "legacy_path": "backend/src/sitewise/services/customer_questionnaire_service.py",
+      "lines": 338,
+      "migrated_counterpart": null,
+      "compatibility_shim": false
+    },
+    {
+      "legacy_path": "backend/src/sitewise/services/ee01_explanation_service.py",
+      "lines": 126,
+      "migrated_counterpart": null,
+      "compatibility_shim": false
+    },
+    {
+      "legacy_path": "backend/src/sitewise/services/ee01_service.py",
+      "lines": 244,
+      "migrated_counterpart": null,
+      "compatibility_shim": false
+    },
+    {
+      "legacy_path": "backend/src/sitewise/services/enquiry_service.py",
+      "lines": 400,
+      "migrated_counterpart": null,
+      "compatibility_shim": false
+    },
+    {
+      "legacy_path": "backend/src/sitewise/services/enrichment_schema.py",
+      "lines": 221,
+      "migrated_counterpart": null,
+      "compatibility_shim": false
+    },
+    {
+      "legacy_path": "backend/src/sitewise/services/explanation_cache.py",
+      "lines": 334,
+      "migrated_counterpart": null,
+      "compatibility_shim": false
+    },
+    {
+      "legacy_path": "backend/src/sitewise/services/explanation_service.py",
+      "lines": 382,
+      "migrated_counterpart": null,
+      "compatibility_shim": false
+    },
+    {
+      "legacy_path": "backend/src/sitewise/services/explanation_worker.py",
+      "lines": 161,
+      "migrated_counterpart": null,
+      "compatibility_shim": false
+    },
+    {
+      "legacy_path": "backend/src/sitewise/services/feature_refresh_service.py",
+      "lines": 568,
+      "migrated_counterpart": null,
+      "compatibility_shim": false
+    },
+    {
+      "legacy_path": "backend/src/sitewise/services/geospatial_service.py",
+      "lines": 8,
+      "migrated_counterpart": null,
+      "compatibility_shim": false
+    },
+    {
+      "legacy_path": "backend/src/sitewise/services/location_analysis_service.py",
+      "lines": 794,
+      "migrated_counterpart": null,
+      "compatibility_shim": false
+    },
+    {
+      "legacy_path": "backend/src/sitewise/services/m2_service.py",
+      "lines": 186,
+      "migrated_counterpart": null,
+      "compatibility_shim": false
+    },
+    {
+      "legacy_path": "backend/src/sitewise/services/persisted_business_context_service.py",
+      "lines": 207,
+      "migrated_counterpart": null,
+      "compatibility_shim": false
+    },
+    {
+      "legacy_path": "backend/src/sitewise/services/photo_storage.py",
+      "lines": 146,
+      "migrated_counterpart": null,
+      "compatibility_shim": false
+    },
+    {
+      "legacy_path": "backend/src/sitewise/services/preferences_service.py",
+      "lines": 88,
+      "migrated_counterpart": null,
+      "compatibility_shim": false
+    },
+    {
+      "legacy_path": "backend/src/sitewise/services/project1_read_service.py",
+      "lines": 54,
+      "migrated_counterpart": null,
+      "compatibility_shim": false
+    },
+    {
+      "legacy_path": "backend/src/sitewise/services/property_enrichment_service.py",
+      "lines": 1444,
+      "migrated_counterpart": null,
+      "compatibility_shim": false
+    },
+    {
+      "legacy_path": "backend/src/sitewise/services/property_insights_service.py",
+      "lines": 1538,
+      "migrated_counterpart": null,
+      "compatibility_shim": false
+    },
+    {
+      "legacy_path": "backend/src/sitewise/services/property_management_service.py",
+      "lines": 169,
+      "migrated_counterpart": null,
+      "compatibility_shim": false
+    },
+    {
+      "legacy_path": "backend/src/sitewise/services/property_verification_service.py",
+      "lines": 904,
+      "migrated_counterpart": null,
+      "compatibility_shim": false
+    },
+    {
+      "legacy_path": "backend/src/sitewise/services/provider_performance_service.py",
+      "lines": 149,
+      "migrated_counterpart": null,
+      "compatibility_shim": false
+    },
+    {
+      "legacy_path": "backend/src/sitewise/services/provider_scope.py",
+      "lines": 114,
+      "migrated_counterpart": null,
+      "compatibility_shim": false
+    },
+    {
+      "legacy_path": "backend/src/sitewise/services/provider_verification_service.py",
+      "lines": 378,
+      "migrated_counterpart": null,
+      "compatibility_shim": false
+    },
+    {
+      "legacy_path": "backend/src/sitewise/services/recommendation_generation_service.py",
+      "lines": 1031,
+      "migrated_counterpart": null,
+      "compatibility_shim": false
+    },
+    {
+      "legacy_path": "backend/src/sitewise/services/recommendation_management_service.py",
+      "lines": 202,
+      "migrated_counterpart": null,
+      "compatibility_shim": false
+    },
+    {
+      "legacy_path": "backend/src/sitewise/services/recommendation_search_service.py",
+      "lines": 1484,
+      "migrated_counterpart": null,
+      "compatibility_shim": false
+    },
+    {
+      "legacy_path": "backend/src/sitewise/services/recommendation_service.py",
+      "lines": 25,
+      "migrated_counterpart": null,
+      "compatibility_shim": false
+    },
+    {
+      "legacy_path": "backend/src/sitewise/services/report_service.py",
+      "lines": 402,
+      "migrated_counterpart": null,
+      "compatibility_shim": false
+    },
+    {
+      "legacy_path": "backend/src/sitewise/services/security_audit_service.py",
+      "lines": 703,
+      "migrated_counterpart": null,
+      "compatibility_shim": false
+    },
+    {
+      "legacy_path": "backend/src/sitewise/services/statistics_service.py",
+      "lines": 14,
+      "migrated_counterpart": null,
+      "compatibility_shim": false
+    },
+    {
+      "legacy_path": "backend/src/sitewise/services/suitability_service.py",
+      "lines": 32,
+      "migrated_counterpart": null,
+      "compatibility_shim": false
+    },
+    {
+      "legacy_path": "backend/src/sitewise/services/synthetic_case_setup.py",
+      "lines": 50,
+      "migrated_counterpart": null,
+      "compatibility_shim": false
+    },
+    {
+      "legacy_path": "backend/src/sitewise/services/synthetic_dss_import.py",
+      "lines": 174,
+      "migrated_counterpart": null,
+      "compatibility_shim": false
+    },
+    {
+      "legacy_path": "backend/src/sitewise/services/synthetic_execution_service.py",
+      "lines": 122,
+      "migrated_counterpart": null,
+      "compatibility_shim": false
+    },
+    {
+      "legacy_path": "backend/src/sitewise/services/synthetic_inspection_service.py",
+      "lines": 74,
+      "migrated_counterpart": null,
+      "compatibility_shim": false
+    },
+    {
+      "legacy_path": "backend/src/sitewise/services/synthetic_preview_boundary.py",
+      "lines": 39,
+      "migrated_counterpart": null,
+      "compatibility_shim": false
+    },
+    {
+      "legacy_path": "backend/src/sitewise/services/user_service.py",
+      "lines": 145,
+      "migrated_counterpart": null,
+      "compatibility_shim": false
+    },
+    {
+      "legacy_path": "backend/src/sitewise/services/verification_storage.py",
+      "lines": 105,
+      "migrated_counterpart": null,
+      "compatibility_shim": false
+    },
+    {
+      "legacy_path": "backend/src/sitewise/services/virtual_tour_service.py",
+      "lines": 30,
+      "migrated_counterpart": null,
+      "compatibility_shim": false
+    },
+    {
+      "legacy_path": "backend/src/sitewise/repositories/agent_assignment_repository.py",
+      "lines": 154,
+      "migrated_counterpart": null,
+      "compatibility_shim": false
+    },
+    {
+      "legacy_path": "backend/src/sitewise/repositories/assessment_repository.py",
+      "lines": 74,
+      "migrated_counterpart": null,
+      "compatibility_shim": false
+    },
+    {
+      "legacy_path": "backend/src/sitewise/repositories/business_context_repository.py",
+      "lines": 79,
+      "migrated_counterpart": null,
+      "compatibility_shim": false
+    },
+    {
+      "legacy_path": "backend/src/sitewise/repositories/catalog_repository.py",
+      "lines": 721,
+      "migrated_counterpart": null,
+      "compatibility_shim": false
+    },
+    {
+      "legacy_path": "backend/src/sitewise/repositories/cq_repository.py",
+      "lines": 126,
+      "migrated_counterpart": null,
+      "compatibility_shim": false
+    },
+    {
+      "legacy_path": "backend/src/sitewise/repositories/favourite_repository.py",
+      "lines": 56,
+      "migrated_counterpart": null,
+      "compatibility_shim": false
+    },
+    {
+      "legacy_path": "backend/src/sitewise/repositories/fyp_property_repository.py",
+      "lines": 1493,
+      "migrated_counterpart": null,
+      "compatibility_shim": false
+    },
+    {
+      "legacy_path": "backend/src/sitewise/repositories/generated_recommendation_store.py",
+      "lines": 386,
+      "migrated_counterpart": null,
+      "compatibility_shim": false
+    },
+    {
+      "legacy_path": "backend/src/sitewise/repositories/geospatial_repository.py",
+      "lines": 100,
+      "migrated_counterpart": null,
+      "compatibility_shim": false
+    },
+    {
+      "legacy_path": "backend/src/sitewise/repositories/m2_repository.py",
+      "lines": 514,
+      "migrated_counterpart": null,
+      "compatibility_shim": false
+    },
+    {
+      "legacy_path": "backend/src/sitewise/repositories/preferences_repository.py",
+      "lines": 35,
+      "migrated_counterpart": null,
+      "compatibility_shim": false
+    },
+    {
+      "legacy_path": "backend/src/sitewise/repositories/recommendation_candidate_repository.py",
+      "lines": 356,
+      "migrated_counterpart": null,
+      "compatibility_shim": false
+    },
+    {
+      "legacy_path": "backend/src/sitewise/repositories/recommendation_repository.py",
+      "lines": 47,
+      "migrated_counterpart": null,
+      "compatibility_shim": false
+    },
+    {
+      "legacy_path": "backend/src/sitewise/repositories/statistics_repository.py",
+      "lines": 40,
+      "migrated_counterpart": null,
+      "compatibility_shim": false
+    },
+    {
+      "legacy_path": "backend/src/sitewise/repositories/uc_decision_gateway.py",
+      "lines": 190,
+      "migrated_counterpart": null,
+      "compatibility_shim": false
+    },
+    {
+      "legacy_path": "backend/src/sitewise/repositories/uc_history_repository.py",
+      "lines": 59,
+      "migrated_counterpart": null,
+      "compatibility_shim": false
+    },
+    {
+      "legacy_path": "backend/src/sitewise/repositories/user_repository.py",
+      "lines": 118,
+      "migrated_counterpart": null,
+      "compatibility_shim": false
+    },
+    {
+      "legacy_path": "backend/src/sitewise/repositories/virtual_tour_repository.py",
+      "lines": 51,
+      "migrated_counterpart": null,
+      "compatibility_shim": false
+    }
+  ],
+  "unmounted_python": [
+    {
+      "module": "sitewise.api.v1.customer_candidate",
+      "repo_referenced": true
+    },
+    {
+      "module": "sitewise.cq_successor.app",
+      "repo_referenced": true
+    },
+    {
+      "module": "sitewise.cq_successor.contracts",
+      "repo_referenced": true
+    },
+    {
+      "module": "sitewise.cq_successor.policy",
+      "repo_referenced": true
+    },
+    {
+      "module": "sitewise.customer_contracts.reference.a2_router_lib",
+      "repo_referenced": false
+    },
+    {
+      "module": "sitewise.db.base",
+      "repo_referenced": true
+    },
+    {
+      "module": "sitewise.db.bdj_rules",
+      "repo_referenced": true
+    },
+    {
+      "module": "sitewise.db.models.address",
+      "repo_referenced": false
+    },
+    {
+      "module": "sitewise.db.models.user_tokens",
+      "repo_referenced": false
+    },
+    {
+      "module": "sitewise.domain.bdj_m2v1_candidate_rules",
+      "repo_referenced": true
+    },
+    {
+      "module": "sitewise.domain.entities",
+      "repo_referenced": false
+    },
+    {
+      "module": "sitewise.domain.m2_rules",
+      "repo_referenced": true
+    },
+    {
+      "module": "sitewise.ingestion.schema",
+      "repo_referenced": true
+    },
+    {
+      "module": "sitewise.ingestion.sources.osm_collector",
+      "repo_referenced": false
+    },
+    {
+      "module": "sitewise.ingestion.sources.overture_collector",
+      "repo_referenced": false
+    },
+    {
+      "module": "sitewise.ingestion.synchronizer",
+      "repo_referenced": true
+    },
+    {
+      "module": "sitewise.ml.cli",
+      "repo_referenced": false
+    },
+    {
+      "module": "sitewise.ml.selected_pu_cli",
+      "repo_referenced": false
+    },
+    {
+      "module": "sitewise.ml.shap_cli",
+      "repo_referenced": false
+    },
+    {
+      "module": "sitewise.project1.disclosure",
+      "repo_referenced": true
+    },
+    {
+      "module": "sitewise.project1.ledger",
+      "repo_referenced": true
+    },
+    {
+      "module": "sitewise.project1.prompts",
+      "repo_referenced": true
+    },
+    {
+      "module": "sitewise.project1.research",
+      "repo_referenced": true
+    },
+    {
+      "module": "sitewise.services.geospatial_service",
+      "repo_referenced": false
+    },
+    {
+      "module": "sitewise.services.synthetic_case_setup",
+      "repo_referenced": true
+    }
+  ]
+}

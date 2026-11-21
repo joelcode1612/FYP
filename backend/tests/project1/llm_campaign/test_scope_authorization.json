@@ -1,0 +1,30 @@
+{
+  "authorization_id": "TEST-SCOPED-BDJ-RULESET-AUTHORIZATION-LLM01",
+  "scope": "TEST_ONLY",
+  "phase": "LLM-01 controlled execution preparation",
+  "created_on": "2026-11-17",
+  "ruleset_version": "BDJ-RULESET-0.2-CAND",
+  "ruleset_module": "sitewise.domain.bdj_candidate_rules",
+  "ruleset_sha256": "42f7fef3bf2bb48255ab8eac406dfb8232923b76789dd065d693732e8bf2a061",
+  "retirement_record": "BDJ-RULESET-0.3-M2V1-CAND was authored on 2026-11-17 to re-key this catalogue onto M2V1 item keys and retired the same day, before any provider call, when the Owner re-affirmed D02. It is not registered and not loaded here.",
+  "adoption_receipt": "TEST-SCOPED ONLY - LLM-01 controlled execution preparation, not a production ruleset adoption. This authorises loading BDJ-RULESET-0.2-CAND (sha256 42f7fef3bf2bb48255ab8eac406dfb8232923b76789dd065d693732e8bf2a061) for synthetic-only evaluation inside backend/tests/project1/llm_campaign on 2026-11-17. The M2V1-keyed re-key BDJ-RULESET-0.3-M2V1-CAND was authored and then retired the same day under re-affirmed D02, and is not loaded here. It is NOT a production ruleset adoption, NOT an Owner adoption, NOT a scientific approval and NOT a GEO authority, and must never be treated as any of those. It authorises no real entrepreneur data, no customer fielding, no report admission and no dispatch to any external provider.",
+  "authorises": [
+    "loading the legacy candidate ruleset module in the synthetic test harness",
+    "running the deterministic BDJ engine over synthetic, non-human M2V1 declarations",
+    "one structural validation of the request body a provider adapter would build, using a local fake transport only"
+  ],
+  "does_not_authorise": [
+    "production ruleset adoption",
+    "Owner, scientific or GEO approval of any kind",
+    "real entrepreneur or personal data",
+    "customer fielding or survey execution",
+    "any external provider or network dispatch",
+    "publication, report release or fielding"
+  ],
+  "production_adoption": false,
+  "owner_signature": null,
+  "scientific_approval": null,
+  "geo_authority": null,
+  "written_to_env": false,
+  "written_to_schema_versions": false
+}

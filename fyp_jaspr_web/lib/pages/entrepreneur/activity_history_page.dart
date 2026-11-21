@@ -16,7 +16,16 @@ class AssessmentActivity {
   final String title;
   final String summary;
   final String actor;
-  final String version;
+
+  /// The assessment revision the event was recorded against. Kept separate
+  /// from [version]: a revision is not an engine version, and labelling one
+  /// as the other is how "Version 13" used to appear for a ruleset evaluation.
+  final int revision;
+
+  /// Engine/ruleset/builder version, when the record actually carries one.
+  /// Null means the source does not store a version — never a substituted
+  /// revision number.
+  final String? version;
   final List<String> inputReferences;
   final List<String> outputReferences;
   final String? reason;
@@ -31,7 +40,8 @@ class AssessmentActivity {
     required this.title,
     required this.summary,
     required this.actor,
-    required this.version,
+    required this.revision,
+    this.version,
     this.inputReferences = const [],
     this.outputReferences = const [],
     this.reason,
@@ -364,8 +374,16 @@ class _ActivityHistoryPageState extends State<ActivityHistoryPage> {
               dd([Component.text(item.activityType)]),
             ]),
             div([
-              dt([Component.text('Version')]),
-              dd([Component.text(item.version)]),
+              dt([Component.text('Assessment revision')]),
+              dd([Component.text('${item.revision}')]),
+            ]),
+            div([
+              dt([Component.text('Engine version')]),
+              dd([
+                Component.text(
+                  item.version ?? 'Not recorded on this event',
+                ),
+              ]),
             ]),
             div([
               dt([Component.text('Event ID')]),

@@ -79,7 +79,10 @@ def test_VP01_Q01_Q13_revisions_pause_submit_to_saved_EE_context(lab):
     with fixture_authority(lab,'ELIGIBLE'):
         s=session(lab,'C1')
         post(lab,s,'submit',{'request_id':str(uuid4())},409)
-        s=answer_shown(lab,s,['LIVE']);assert s['next_slot_id']=='Q02'
+        s=answer_shown(lab,s,['LIVE'])
+        assert row(s,'Q01')['state']=='ANSWERED_SUBSTANTIVE'
+        while s['next_stimulus_kind']:s=post(lab,s,'stimuli',{'kind':s['next_stimulus_kind']})
+        assert s['next_slot_id']=='Q02'
         s=finish_applicable(lab,s)
         campaign,effective,history,control=read_rows(lab,s)
         assert len(history)==14 and len(effective)==14
@@ -114,9 +117,28 @@ def test_VP01_Q01_Q13_revisions_pause_submit_to_saved_EE_context(lab):
             assert str(source['answer_id'])==str(next(r['answer_event_id'] for r in effective if r['slot_id']=='Q05'))
             context=service.report_readback(lab['owner'],campaign['assessment_id'],campaign['id'],UUID(measurement['id']))
             assert context['status']=='REPORT_FINDINGS_WITHHELD_NO_AUTHORIZED_SOURCE' and not context['findings']
+            from sitewise.api.v1 import ee01_explanation as explanation_api
+            from sitewise.services.ee01_explanation_service import Ee01ExplanationService
+            prefix=f'/assessments/{campaign["assessment_id"]}/campaigns/{campaign["id"]}/measurements/{measurement["id"]}'
+            explanation_body={'task_mode':'CLAIM_EXPLANATION','claim_ids':[],'context_hash':context['context_hash']}
+            # Verify the existing production-shaped hold before injecting only
+            # the private dependency. Do not enable flags or call any provider.
+            held=lab['request']('POST',prefix+'/explanations',503,uid=lab['owner'],json=explanation_body)
+            assert held['detail']['code']=='EXPLANATION_MODULE_HOLD'
+            lab['app'].dependency_overrides[explanation_api.get_explanation_service]=lambda:Ee01ExplanationService(service)
+            try:
+                candidate=lab['request']('POST',prefix+'/explanations',uid=lab['owner'],json=explanation_body)
+                assert candidate['llm_execution']=='NOT_ATTEMPTED' and candidate['report_release_authorized'] is False
+                assert candidate['candidate']['context_id']==context['context_hash']
+                assert candidate['candidate']['snapshot_id']==measurement['id']
+                lab['request']('POST',prefix+'/explanations',409,uid=lab['owner'],json={**explanation_body,'context_hash':'0'*64})
+                lab['request']('POST',prefix+'/explanations',409,uid=lab['owner'],json={**explanation_body,'claim_ids':['UNAUTHORIZED-TEST-CLAIM']})
+            finally:
+                lab['app'].dependency_overrides.pop(explanation_api.get_explanation_service,None)
             evidence={'campaign':campaign,'session':s,'control':control,'effective':effective,'all_revisions':history,
                       'measurement':measurement,'selected_source':source,'saved_context':context,
-                      'ExplanationContextBuilder':'NOT_VERIFIED; saved withheld context is not a completed explanation',
+                      'explanation_candidate':candidate,
+                      'ExplanationContextBuilder':'Ee01ExplanationService._packet; tested candidate/insufficient-evidence path only',
                       'ReportAdmission':'NOT_IMPLEMENTED_OR_AUTHORITY_UNVERIFIED'}
             (Path(os.environ['CQ_EVIDENCE'])/'connected_persistence_lineage.json').write_text(json.dumps(evidence,indent=2,default=str),encoding='utf-8')
             execute_persistence_sql(lab,s,campaign,'Q01_Q13')

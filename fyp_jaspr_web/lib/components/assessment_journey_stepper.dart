@@ -4,6 +4,15 @@ import 'package:jaspr/jaspr.dart';
 import '../data/assessment_api.dart';
 import 'ui.dart';
 
+/// Navigation only; these capabilities never authorize writes or completion.
+bool canViewAssessmentStage(String key, Map<String, dynamic>? readiness) => switch (key) {
+  'select_property' || 'business_requirements' => true,
+  'location_evidence' => (readiness?['stage_3'] as Map?)?['enterable'] == true,
+  'ai_explanation' => (readiness?['stage_4'] as Map?)?['enterable'] == true,
+  'assessment_report' => (readiness?['stage_5'] as Map?)?['preview_enterable'] == true,
+  _ => false,
+};
+
 /// Five-stage assessment timeline, based on the SiteWise location-assessment
 /// reference image. It does not compute or change assessment progress:
 /// every stage, status and percentage comes from the backend's persisted
@@ -15,6 +24,9 @@ import 'ui.dart';
 class AssessmentJourneyStepper extends StatelessComponent {
   final AssessmentRecord record;
   final bool busy;
+  /// Versioned readiness returned by FastAPI, not legacy timestamps.
+  final Map<String, dynamic>? workflowReadiness;
+  final bool governedWorkflow;
 
   /// The stage whose checkpoint is on screen. Null falls back to the
   /// record's own current stage.
@@ -25,6 +37,8 @@ class AssessmentJourneyStepper extends StatelessComponent {
     super.key,
     required this.record,
     required this.busy,
+    this.workflowReadiness,
+    this.governedWorkflow = false,
     this.selectedStageKey,
     required this.onOpenStage,
   });
@@ -43,7 +57,11 @@ class AssessmentJourneyStepper extends StatelessComponent {
             ]),
           ]),
           div(classes: 'sw-assessment-journey__count', [
-            strong([Component.text('${record.completedStages} / ${record.totalStages}')]),
+            strong([Component.text(governedWorkflow
+                ? workflowReadiness == null
+                    ? 'Checking progress…'
+                    : '${((workflowReadiness!['stage_1'] as Map?)?['complete'] == true ? 1 : 0) + ((workflowReadiness!['stage_2'] as Map?)?['complete'] == true ? 1 : 0)} / ${record.totalStages}'
+                : '${record.completedStages} / ${record.totalStages}')]),
             span([Component.text(' completed')]),
           ]),
         ]),
@@ -60,7 +78,23 @@ class AssessmentJourneyStepper extends StatelessComponent {
     final label = displayLabel(stage.key, stage.title);
     final selectedKey = selectedStageKey ?? record.currentStageKey;
     final isSelected = stage.key == selectedKey;
-    final state = stage.isComplete
+    final stage1Complete = (workflowReadiness?['stage_1'] as Map?)?['complete'] == true;
+    final stage2Complete = (workflowReadiness?['stage_2'] as Map?)?['complete'] == true;
+    final governedComplete = stage.key == 'select_property'
+        ? stage1Complete
+        : stage.key == 'business_requirements' && stage2Complete;
+    final available = !governedWorkflow || canViewAssessmentStage(stage.key, workflowReadiness);
+    final state = governedWorkflow
+        ? governedComplete
+            ? 'complete'
+            // The checkpoint on screen is always the current one, even when the
+            // server has not marked it enterable: its panel states the block.
+            : isSelected
+                ? 'current'
+                : !available
+                    ? 'unavailable'
+                    : 'upcoming'
+        : stage.isComplete
         ? 'complete'
         : stage.isUnavailable
             ? 'unavailable'
@@ -76,7 +110,7 @@ class AssessmentJourneyStepper extends StatelessComponent {
 
     final contents = <Component>[
       span(classes: 'sw-assessment-journey__circle', [
-        Component.text(stage.isComplete ? '✓' : '${stage.number}'),
+        Component.text(state == 'complete' ? '✓' : '${stage.number}'),
       ]),
       span(classes: 'sw-assessment-journey__step-title', [
         Component.text(label),
@@ -95,7 +129,7 @@ class AssessmentJourneyStepper extends StatelessComponent {
     // deep-link hand-offs to the property, explanation and report pages live
     // inside those checkpoints instead of leaving the workspace from here.
     Component control;
-    if (!busy && !stage.isUnavailable) {
+    if (!busy && (governedWorkflow ? available : !stage.isUnavailable)) {
       control = button(
         classes: classes,
         attributes: {...attrs, 'type': 'button'},
@@ -116,14 +150,17 @@ class AssessmentJourneyStepper extends StatelessComponent {
   }
 
   /// Client-side step labels. The backend keys are the contract; the label for
-  /// `ai_explanation` follows the step-4 redesign (research question review),
+  /// `location_evidence` follows the step-3 redesign (business review and
+  /// research goals), the label for `ai_explanation` follows the step-4
+  /// redesign (research question review), and the label for
+  /// `assessment_report` follows the step-5 redesign (publish questionnaire),
   /// so the stepper, the breadcrumb and the step heading agree.
   static String displayLabel(String key, String serverLabel) => switch (key) {
     'select_property' => 'Select property',
     'business_requirements' => 'Business preferences',
-    'location_evidence' => 'Location evidence',
+    'location_evidence' => 'Business review and research goals',
     'ai_explanation' => 'Question review',
-    'assessment_report' => 'Assessment report',
+    'assessment_report' => 'Questionnaire preview',
     _ => serverLabel,
   };
 }

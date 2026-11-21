@@ -55,6 +55,11 @@ abstract final class ServiceLocator {
   /// demo build never touches the network through it.
   static final MobileApiClient apiClient = MobileApiClient();
 
+  /// PROJECT1 M2 research surface (assessment, objective, research-question
+  /// candidate). The SAME `ApiM2Repository` the Jaspr app uses, over the same
+  /// `ApiClient` port, so neither app re-implements the candidate contract.
+  static final ApiM2Repository m2 = ApiM2Repository(apiClient);
+
   /// Owner Add-Property lifecycle (PostgreSQL drafts, photos, My Properties).
   /// Non-final so widget tests can substitute an in-memory fake; a demo build
   /// never calls it because the Add Property page gates on the live config.
