@@ -29,7 +29,11 @@ from sitewise.core.exceptions import (
     ValidationError,
 )
 from sitewise.db.session import get_db
-from sitewise.dependencies import AuthenticatedUser, require_property_owner
+from sitewise.dependencies import (
+    AdminMfaUser,
+    AuthenticatedUser,
+    require_property_owner,
+)
 from sitewise.services import capture_session_service as svc
 from sitewise.services import capture_storage
 from sitewise.services.agent_inspection_policy import agent_assignment, require_owner_published_view
@@ -102,6 +106,11 @@ def _panorama_json(record) -> dict[str, Any]:
         "publishedAt": (
             record.published_at.isoformat() if record.published_at else None
         ),
+        "reviewedBy": str(record.reviewed_by) if record.reviewed_by else None,
+        "reviewedAt": (
+            record.reviewed_at.isoformat() if record.reviewed_at else None
+        ),
+        "reviewReason": record.review_reason,
         "createdAt": record.created_at.isoformat(),
     }
 
@@ -452,3 +461,77 @@ def property_panorama(
     if panorama is None:
         raise NotFoundError("No panorama exists for this property yet.")
     return _panorama_json(panorama)
+
+
+# --------------------------------------------------------------------------
+# Administrative review and publication of the canonical panorama.
+#
+# Stitching "done" is a technical state; only an administrator (with MFA,
+# reusing the existing admin dependency) may approve, reject with a reason,
+# publish, or unpublish. Reviewing never publishes and publishing never
+# approves — the three decisions stay separate so a completed-but-unreviewed
+# stitch can never reach an entrepreneur viewer.
+# --------------------------------------------------------------------------
+
+AdminUser = AdminMfaUser
+
+
+class PanoramaReview(BaseModel):
+    decision: str = Field(pattern="^(approved|rejected)$")
+    reason: str | None = Field(default=None, max_length=2000)
+
+    @field_validator("reason")
+    @classmethod
+    def _reason_required_on_rejection(cls, value, info):
+        if info.data.get("decision") == "rejected" and not (value or "").strip():
+            raise ValueError("A rejection reason is required.")
+        return value
+
+
+@router.get("/admin/panoramas")
+def list_admin_panoramas(
+    db: DbSession,
+    _admin: AdminUser,
+    verification_status: str | None = None,
+) -> dict[str, Any]:
+    """Review queue: every canonical panorama with its review metadata."""
+    panoramas = svc.list_panoramas(db, verification_status=verification_status)
+    return {"panoramas": [_panorama_json(p) for p in panoramas]}
+
+
+@router.post("/admin/panoramas/{panorama_id}/review")
+def review_admin_panorama(
+    panorama_id: uuid.UUID,
+    body: PanoramaReview,
+    db: DbSession,
+    admin: AdminUser,
+) -> dict[str, Any]:
+    record = svc.review_panorama(
+        db,
+        panorama_id=panorama_id,
+        reviewer_id=admin.user_id,
+        decision=body.decision,
+        reason=body.reason,
+    )
+    return _panorama_json(record)
+
+
+@router.post("/admin/panoramas/{panorama_id}/publish")
+def publish_admin_panorama(
+    panorama_id: uuid.UUID,
+    db: DbSession,
+    admin: AdminUser,
+) -> dict[str, Any]:
+    record = svc.publish_panorama(
+        db, panorama_id=panorama_id, publisher_id=admin.user_id
+    )
+    return _panorama_json(record)
+
+
+@router.post("/admin/panoramas/{panorama_id}/unpublish")
+def unpublish_admin_panorama(
+    panorama_id: uuid.UUID,
+    db: DbSession,
+    _admin: AdminUser,
+) -> dict[str, Any]:
+    return _panorama_json(svc.unpublish_panorama(db, panorama_id=panorama_id))

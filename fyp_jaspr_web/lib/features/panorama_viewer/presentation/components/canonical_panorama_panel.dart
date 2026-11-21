@@ -34,6 +34,12 @@ class _CanonicalPanoramaPanelState extends State<CanonicalPanoramaPanel> {
   String? _error;
   Map<String, dynamic>? _panorama;
   String? _viewUrl;
+  // Administrative review state. A rejection collects a reason first; every
+  // action reloads the metadata so the panel always shows the backend's
+  // actual status, never an optimistic guess.
+  bool _busy = false;
+  bool _rejecting = false;
+  String _reason = '';
 
   int? get _listingId => int.tryParse(component.propertyId);
 
@@ -130,6 +136,140 @@ class _CanonicalPanoramaPanelState extends State<CanonicalPanoramaPanel> {
     return message is String && message.isNotEmpty ? message : fallback;
   }
 
+  // ------------------------------------------------------------- admin actions
+
+  Future<void> _act(String action, {Map<String, dynamic>? body}) async {
+    final panoramaId = '${_panorama?['panoramaId'] ?? ''}';
+    if (_busy || panoramaId.isEmpty) return;
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      final result = await WebAuth.requestDetailed(
+        '/api/v1/360/admin/panoramas/$panoramaId/$action',
+        method: 'POST',
+        body: body ?? const <String, dynamic>{},
+      );
+      if (!mounted) return;
+      if (result['ok'] != true) {
+        setState(() {
+          _busy = false;
+          _error = _message(
+            result,
+            'The ${action == 'review' ? 'review decision' : action} could '
+            'not be recorded.',
+          );
+        });
+        return;
+      }
+      setState(() {
+        _busy = false;
+        _rejecting = false;
+        _reason = '';
+      });
+      await _load();
+    } on Object catch (err) {
+      if (!mounted) return;
+      setState(() {
+        _busy = false;
+        _error = 'The action failed: $err';
+      });
+    }
+  }
+
+  Component _reviewActions(Map<String, dynamic> pano) {
+    final status = '${pano['verificationStatus'] ?? ''}';
+    final published = pano['publishedAt'] != null;
+    final children = <Component>[];
+    switch (status) {
+      case 'pending':
+        children.add(
+          ActionButton(
+            'Approve',
+            variant: 'primary',
+            onClick: _busy
+                ? null
+                : () => unawaited(
+                      _act('review', body: const {
+                        'decision': 'approved',
+                      }),
+                    ),
+          ),
+        );
+        if (_rejecting) {
+          children.add(
+            SearchInput(
+              placeholder: 'Rejection reason (required)',
+              ariaLabel: 'Panorama rejection reason',
+              onInput: (value) => _reason = value,
+            ),
+          );
+          children.add(
+            ActionButton(
+              'Confirm rejection',
+              variant: 'danger-outline',
+              onClick: (_busy || _reason.trim().isEmpty)
+                  ? null
+                  : () => unawaited(
+                        _act('review', body: {
+                          'decision': 'rejected',
+                          'reason': _reason.trim(),
+                        }),
+                      ),
+            ),
+          );
+        } else {
+          children.add(
+            ActionButton(
+              'Reject',
+              variant: 'danger-outline',
+              onClick: _busy
+                  ? null
+                  : () => setState(() => _rejecting = true),
+            ),
+          );
+        }
+      case 'approved':
+        children.add(
+          published
+            ? ActionButton(
+                'Unpublish',
+                variant: 'danger-outline',
+                onClick: _busy ? null : () => unawaited(_act('unpublish')),
+              )
+            : ActionButton(
+                'Publish to buyers',
+                variant: 'primary',
+                onClick: _busy ? null : () => unawaited(_act('publish')),
+              ),
+        );
+      case 'rejected':
+        final reason = '${pano['reviewReason'] ?? ''}';
+        if (reason.isNotEmpty) {
+          children.add(
+            p(classes: 'body muted', [
+              Component.text('Rejection reason: $reason'),
+            ]),
+          );
+        }
+        children.add(
+          ActionButton(
+            'Re-review (approve)',
+            variant: 'secondary',
+            onClick: _busy
+                ? null
+                : () => unawaited(
+                      _act('review', body: const {
+                        'decision': 'approved',
+                      }),
+                    ),
+          ),
+        );
+    }
+    return div(classes: 'stack', children);
+  }
+
   @override
   Component build(BuildContext context) {
     final pano = _panorama;
@@ -169,9 +309,11 @@ class _CanonicalPanoramaPanelState extends State<CanonicalPanoramaPanel> {
             p(classes: 'body muted', [
               Component.text(
                 'Verification status: $status · '
-                '${pano['width'] ?? '?'}×${pano['height'] ?? '?'} px',
+                '${pano['width'] ?? '?'}×${pano['height'] ?? '?'} px'
+                '${pano['publishedAt'] != null ? ' · published' : ''}',
               ),
             ]),
+          _reviewActions(pano),
           div(classes: 'sw-pano__stage', [
             SphericalPanoramaFrame(
               imageUrl: _viewUrl!,

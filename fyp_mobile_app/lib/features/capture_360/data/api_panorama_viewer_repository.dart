@@ -50,6 +50,31 @@ class CanonicalPanorama {
       value is String && value.isNotEmpty ? DateTime.tryParse(value) : null;
 }
 
+/// One published panorama exactly what
+/// `GET /api/v1/360/published/properties/{id}` returns: the SAME
+/// authoritative record the Jaspr property-detail viewer reads, resolved
+/// through the canonical `fyp.panoramas` row first and the reviewed legacy
+/// bridge second. Entrepreneur access needs no owner/agent permission.
+class PublishedPanorama {
+  const PublishedPanorama({
+    required this.panoramaId,
+    required this.viewUrl,
+    required this.expiresInSeconds,
+  });
+
+  final String panoramaId;
+  final String viewUrl;
+  final int expiresInSeconds;
+
+  factory PublishedPanorama.fromJson(Map<String, dynamic> json) {
+    return PublishedPanorama(
+      panoramaId: json['panoramaId'] as String? ?? '',
+      viewUrl: json['viewUrl'] as String? ?? '',
+      expiresInSeconds: (json['expiresInSeconds'] as num?)?.toInt() ?? 0,
+    );
+  }
+}
+
 /// Authorized reads of the canonical panorama for the viewers (spec §14).
 ///
 /// The metadata endpoint and the view endpoint are both provider-scoped
@@ -70,6 +95,27 @@ class ApiPanoramaViewerRepository {
         '/api/v1/360/properties/$propertyId/panorama',
       );
       return CanonicalPanorama.fromJson(payload);
+    } on NotFoundFailure {
+      return null;
+    }
+  }
+
+  /// The entrepreneur-facing published tour for [propertyRef], `null` when
+  /// no approved+published panorama exists. [propertyRef] may be the
+  /// operational numeric listing id OR a verified research catalogue ref
+  /// (MD-/EP-) — the backend resolves both through verified links and fails
+  /// closed on ambiguity. Unpublished and rejected panoramas answer 404 here
+  /// by construction — the client cannot leak a private tour by probing.
+  Future<PublishedPanorama?> publishedByProperty(String propertyRef) async {
+    final reference = propertyRef.trim();
+    if (reference.isEmpty || reference.length > 100) return null;
+    try {
+      final payload = await _client.get(
+        '/api/v1/360/published/properties/$reference',
+      );
+      final parsed = PublishedPanorama.fromJson(payload);
+      if (parsed.panoramaId.isEmpty || parsed.viewUrl.isEmpty) return null;
+      return parsed;
     } on NotFoundFailure {
       return null;
     }

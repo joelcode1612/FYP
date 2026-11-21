@@ -16,6 +16,8 @@ from sqlmodel import Session
 
 from sitewise.db.session import get_db
 from sitewise.dependencies import ActiveUser, AdminMfaUser
+from sitewise.services import capture_session_service as svc
+from sitewise.services import capture_storage
 from sitewise.services.public_panorama_bridge import PublicPanoramaBridge, SIGN_TTL
 
 router = APIRouter()
@@ -114,13 +116,38 @@ def unpublish_job(job_id: str, admin: AdminMfaUser):
 @router.get("/properties/{property_ref}")
 def published_property_panorama(property_ref: str, response: Response,
                                 db: Db, _user: ActiveUser):
-    """Same response for Jaspr and Flutter, using their existing sphere views."""
+    """Same response for Jaspr and Flutter, using their existing sphere views.
+
+    Resolution order — one authoritative record per property, never two
+    disagreeing ones:
+
+    1. The CANONICAL ``fyp.panoramas`` row written by the durable backend
+       worker (approved + published). This is the record the capture
+       pipeline itself produces.
+    2. The legacy ``public.pano_jobs`` bridge, for panoramas captured by the
+       pre-port client and linked by an administrator. A legacy record is
+       used only when no canonical panorama is published for the listing.
+    """
     response.headers["Cache-Control"] = "private, no-store"
     if not 1 <= len(property_ref) <= 100:
         raise HTTPException(422, "Invalid property reference.")
     listing_id = _published_listing_id(db, property_ref)
     if listing_id is None:
         raise HTTPException(404, "No available panorama for this property.")
+    canonical = svc.published_property_panorama(db, listing_id)
+    if canonical is not None:
+        url = capture_storage.signed_view_url(canonical.storage_path)
+        return {
+            "propertyId": listing_id,
+            "panoramaId": str(canonical.panorama_id),
+            "jobId": None,
+            "status": "ready", "available": True,
+            "verificationStatus": "approved", "viewUrl": url,
+            "expiresInSeconds": capture_storage.VIEW_URL_TTL_SECONDS,
+            "publishedUrl": (
+                f"/entrepreneur/property-detail?id={listing_id}"
+            ),
+        }
     with PublicPanoramaBridge() as bridge:
         link = bridge.link_by_listing(listing_id)
         if link is None:

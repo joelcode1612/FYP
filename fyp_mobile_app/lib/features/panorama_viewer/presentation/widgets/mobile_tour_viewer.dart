@@ -1,5 +1,6 @@
 import 'dart:typed_data';
 
+import 'package:http/http.dart' as http;
 import 'package:shared_logic/shared_logic.dart';
 
 import 'package:flutter/material.dart';
@@ -34,15 +35,32 @@ class _MobileTourViewerState extends State<MobileTourViewer> {
   String? _cachedPanoPath;
   Future<Uint8List?>? _cachedPanoFuture;
 
+  /// A tour's [VirtualTour.panoramaPath] may be a device file (owner-side
+  /// capture) OR an https signed URL (backend-published tour, expiring). The
+  /// fetch matches the reference it was given.
   Future<Uint8List?> _panoFutureFor(String path) {
     if (_cachedPanoPath != path) {
       _cachedPanoPath = path;
-      _cachedPanoFuture = readPanoramaBytes(path).timeout(
-        const Duration(seconds: 8),
+      _cachedPanoFuture = _loadPano(path).timeout(
+        const Duration(seconds: 12),
         onTimeout: () => null,
       );
     }
     return _cachedPanoFuture!;
+  }
+
+  Future<Uint8List?> _loadPano(String path) async {
+    final uri = Uri.tryParse(path);
+    if (uri != null && (uri.isScheme('http') || uri.isScheme('https'))) {
+      final response = await http.get(uri);
+      if (response.statusCode == 200 && response.bodyBytes.isNotEmpty) {
+        return response.bodyBytes;
+      }
+      // A 400/403 is the honest "signed URL expired" state; the page's
+      // refresh re-requests the published record and mints a fresh link.
+      return null;
+    }
+    return readPanoramaBytes(path);
   }
 
   /// Real equirectangular panorama (when the tour has a generated file).

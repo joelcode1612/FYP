@@ -32,7 +32,12 @@ from typing import Any
 from sqlalchemy import text
 from sqlmodel import Session
 
-from sitewise.core.exceptions import ForbiddenError, NotFoundError, ValidationError
+from sitewise.core.exceptions import (
+    ConflictError,
+    ForbiddenError,
+    NotFoundError,
+    ValidationError,
+)
 from sitewise.db.models.capture_360 import (
     CaptureFrame,
     CaptureSession,
@@ -453,3 +458,180 @@ def create_panorama(
     session.commit()
     session.refresh(record)
     return record
+
+
+# --------------------------------------------------------------------------
+# Administrative review and publication.
+#
+# Stitching completion is a TECHNICAL event; administrative approval is a
+# separate, auditable decision, and publication is a third one. A panorama
+# only becomes entrepreneur-visible through publish_panorama, which requires
+# the approved verification status AND the listing itself to be approved and
+# published — a rejected or merely stitched panorama can never leak into the
+# public viewer.
+# --------------------------------------------------------------------------
+
+_REVIEW_DECISIONS = frozenset({"approved", "rejected"})
+
+
+def list_panoramas(
+    session: Session, *, verification_status: str | None = None
+) -> list[Panorama]:
+    """All canonical panoramas, newest first, optionally filtered by status."""
+    if verification_status is not None and verification_status not in (
+        "pending",
+        "approved",
+        "rejected",
+    ):
+        raise ValidationError(
+            "verification_status must be pending, approved or rejected."
+        )
+    if verification_status is None:
+        rows = session.execute(
+            text(
+                "SELECT * FROM fyp.panoramas ORDER BY created_at DESC LIMIT 200"
+            )
+        ).mappings()
+    else:
+        rows = session.execute(
+            text(
+                "SELECT * FROM fyp.panoramas WHERE verification_status = :status "
+                "ORDER BY created_at DESC LIMIT 200"
+            ),
+            {"status": verification_status},
+        ).mappings()
+    return [Panorama.model_validate(dict(row)) for row in rows]
+
+
+def review_panorama(
+    session: Session,
+    *,
+    panorama_id: uuid.UUID,
+    reviewer_id: uuid.UUID,
+    decision: str,
+    reason: str | None = None,
+) -> Panorama:
+    """Record one administrative review decision on a stitched panorama.
+
+    Only a COMPLETED panorama (one with a storage object the worker actually
+    produced) can be reviewed. Rejection requires a reason. A re-review of an
+    already-decided panorama updates the decision in place with the new
+    reviewer and timestamp — the audit trail keeps exactly the latest
+    decision, and publication is never auto-toggled by a review.
+    """
+    if decision not in _REVIEW_DECISIONS:
+        raise ValidationError("decision must be 'approved' or 'rejected'.")
+    record = get_panorama(session, panorama_id)
+    if record is None:
+        raise NotFoundError("Panorama not found.")
+    if record.storage_path is None or not str(record.storage_path).strip():
+        raise ConflictError("Only a stitched panorama can be reviewed.")
+    cleaned = (reason or "").strip()
+    if decision == "rejected" and not cleaned:
+        raise ValidationError("A rejection reason is required.")
+    record.verification_status = decision
+    record.reviewed_by = reviewer_id
+    record.reviewed_at = _now()
+    record.review_reason = cleaned or None
+    record.updated_at = _now()
+    session.add(record)
+    session.commit()
+    session.refresh(record)
+    return record
+
+
+def publish_panorama(
+    session: Session, *, panorama_id: uuid.UUID, publisher_id: uuid.UUID
+) -> Panorama:
+    """Make an approved panorama entrepreneur-visible for its property.
+
+    Publication requires: verification approved, the panorama's own listing
+    approved AND published, and no other already-published panorama for the
+    same property (one tour per property — publishing a second one would make
+    two viewer records disagree about the property's tour).
+    """
+    record = get_panorama(session, panorama_id)
+    if record is None:
+        raise NotFoundError("Panorama not found.")
+    if record.verification_status != "approved":
+        raise ConflictError(
+            "Only an approved panorama can be published; review it first."
+        )
+    try:
+        property_id = int(record.property_id)
+    except (TypeError, ValueError) as exc:
+        raise ConflictError(
+            "This panorama is not linked to an operational listing."
+        ) from exc
+    published_listing = session.execute(
+        text(
+            "SELECT 1 FROM fyp.rental_properties "
+            "WHERE id = :pid AND is_published IS TRUE "
+            "AND verification_status = 'approved'"
+        ),
+        {"pid": property_id},
+    ).scalar()
+    if published_listing is None:
+        raise ConflictError(
+            "The listing must be approved and published before its 360° "
+            "tour can be published."
+        )
+    other = session.execute(
+        text(
+            "SELECT panorama_id FROM fyp.panoramas "
+            "WHERE property_id = :pid AND published_at IS NOT NULL "
+            "AND panorama_id <> :me"
+        ),
+        {"pid": str(property_id), "me": str(panorama_id)},
+    ).first()
+    if other is not None:
+        raise ConflictError(
+            "Another panorama is already published for this property; "
+            "unpublish it first."
+        )
+    record.published_at = _now()
+    record.updated_at = _now()
+    session.add(record)
+    session.commit()
+    session.refresh(record)
+    return record
+
+
+def unpublish_panorama(
+    session: Session, *, panorama_id: uuid.UUID
+) -> Panorama:
+    record = get_panorama(session, panorama_id)
+    if record is None:
+        raise NotFoundError("Panorama not found.")
+    if record.published_at is None:
+        return record
+    record.published_at = None
+    record.updated_at = _now()
+    session.add(record)
+    session.commit()
+    session.refresh(record)
+    return record
+
+
+def published_property_panorama(
+    session: Session, property_id: int
+) -> Panorama | None:
+    """The entrepreneur-visible panorama for a listing, if any.
+
+    Reads the canonical record ONLY: approved, published, and belonging to
+    the listing. Unpublished, rejected or pending rows are invisible here by
+    construction, not by filtering at the viewer.
+    """
+    rows = session.execute(
+        text(
+            "SELECT * FROM fyp.panoramas "
+            "WHERE property_id = :pid AND verification_status = 'approved' "
+            "AND published_at IS NOT NULL "
+            "ORDER BY published_at DESC LIMIT 1"
+        ),
+        {"pid": str(property_id)},
+    ).mappings()
+    row = rows.first()
+    if row is None:
+        return None
+    return Panorama.model_validate(dict(row))
