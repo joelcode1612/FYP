@@ -2,9 +2,9 @@ import 'package:jaspr/dom.dart';
 import 'package:jaspr/jaspr.dart';
 import 'package:shared_logic/shared_logic.dart';
 
-import '../../layouts/app_layout.dart';
-import '../../components/project1_read_panel.dart';
-import '../../components/m2_activity_panel.dart';
+import 'package:sitewise_jaspr_web/shared/presentation/layouts/app_layout.dart';
+import 'package:sitewise_jaspr_web/shared/presentation/components/project1_read_panel.dart';
+import 'package:sitewise_jaspr_web/shared/presentation/components/m2_activity_panel.dart';
 
 /// Route shell for the R01–R12 café demand report. The page supplies its own
 /// title, breadcrumb and toolbar, so the shell header is suppressed.

@@ -776,6 +776,9 @@ class RecommendationFacets {
 
   /// Hard filters whose removal would recover matches, server-ranked.
   final List<FacetRelaxation> relaxations;
+
+  /// Backend-defined meaning of each recommendation filter.
+  final List<FilterInput> fields;
   final bool contextual;
 
   final double? minRentalRm;
@@ -797,6 +800,7 @@ class RecommendationFacets {
     this.matchingTotal = 0,
     this.universeTotal = 0,
     this.relaxations = const [],
+    this.fields = const [],
     this.contextual = false,
     this.minRentalRm,
     this.maxRentalRm,
@@ -876,6 +880,16 @@ class RecommendationFacets {
       matchingTotal: (json['matching_total'] as num?)?.toInt() ?? 0,
       universeTotal: (json['universe_total'] as num?)?.toInt() ?? 0,
       relaxations: relaxationList,
+      fields: [
+        for (final row in (json['fields'] as List? ?? const []))
+          if (row is Map<String, dynamic>)
+            FilterInput(
+              key: '${row['key']}',
+              label: '${row['label'] ?? row['key']}',
+              role: FilterRole.fromWire(row['role']?.toString()),
+              effect: '${row['effect'] ?? ''}',
+            ),
+      ],
       contextual: json['contextual'] == true,
       minRentalRm: (rangesBlock['min_rental_rm'] as num?)?.toDouble(),
       maxRentalRm: (rangesBlock['max_rental_rm'] as num?)?.toDouble(),
@@ -883,6 +897,30 @@ class RecommendationFacets {
       maxSizeSqft: (rangesBlock['max_size_sqft'] as num?)?.toDouble(),
       total: (rangesBlock['total'] as num?)?.toInt() ?? 0,
     );
+  }
+
+  /// The role a field plays, for the form's own wording. A key the server did
+  /// not describe falls back to [FilterRole.hardFilter], because that is what
+  /// the search applies to everything it currently lists in `FILTER_FIELDS`.
+  FilterRole roleOf(String key) {
+    for (final field in fields) {
+      if (field.key == key) return field.role;
+    }
+    return FilterRole.hardFilter;
+  }
+
+  String labelOf(String key, {required String fallback}) {
+    for (final field in fields) {
+      if (field.key == key) return field.label;
+    }
+    return fallback;
+  }
+
+  String effectOf(String key) {
+    for (final field in fields) {
+      if (field.key == key) return field.effect;
+    }
+    return '';
   }
 }
 
@@ -946,30 +984,6 @@ class RecommendationAdvancedFacet {
               ?? const FacetRangeOption(min: 0, max: 0, label: ''),
       ]..removeWhere((item) => item.label.isEmpty),
     );
-  }
-
-  /// The role a field plays, for the form's own wording. A key the server did
-  /// not describe falls back to [FilterRole.hardFilter], because that is what
-  /// the search applies to everything it currently lists in `FILTER_FIELDS`.
-  FilterRole roleOf(String key) {
-    for (final field in fields) {
-      if (field.key == key) return field.role;
-    }
-    return FilterRole.hardFilter;
-  }
-
-  String labelOf(String key, {required String fallback}) {
-    for (final field in fields) {
-      if (field.key == key) return field.label;
-    }
-    return fallback;
-  }
-
-  String effectOf(String key) {
-    for (final field in fields) {
-      if (field.key == key) return field.effect;
-    }
-    return '';
   }
 }
 

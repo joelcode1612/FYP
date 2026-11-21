@@ -7,6 +7,7 @@ import 'package:sitewise_jaspr_web/shared/presentation/components/ui.dart';
 import 'package:sitewise_jaspr_web/core/routing/breadcrumb_routes.dart';
 import 'package:sitewise_jaspr_web/core/routing/navigation.dart';
 import 'package:sitewise_jaspr_web/core/config/site_content.dart';
+import 'package:sitewise_jaspr_web/features/authentication/data/dev_auth_bypass.dart';
 
 /// Authenticated app chrome.
 ///

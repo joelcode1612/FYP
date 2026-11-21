@@ -3,9 +3,9 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/legacy.dart' as legacy;
 import 'package:shared_logic/shared_logic.dart';
-import '../../../application/services/service_locator.dart';
-import '../../../core/config/cq_development_access.dart';
-import '../../../data/repositories/mobile_api_client.dart';
+import 'package:fyp/core/di/service_locator.dart';
+import 'package:fyp/core/config/cq_development_access.dart';
+import 'package:fyp/core/di/mobile_api_client.dart';
 
 final cqRepositoryProvider = Provider<ApiCustomerQuestionnaireRepository>(
   (ref) => ApiCustomerQuestionnaireRepository(

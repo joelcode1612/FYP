@@ -1,7 +1,7 @@
 import 'package:jaspr/dom.dart';
 import 'package:jaspr/jaspr.dart';
 
-import '../../components/ui.dart' show Icon;
+import 'package:sitewise_jaspr_web/shared/presentation/components/ui.dart' show Icon;
 
 /// UI-facing read model; construct it from your authenticated repository/API.
 /// This page never invents assessment records, rental status or admission.

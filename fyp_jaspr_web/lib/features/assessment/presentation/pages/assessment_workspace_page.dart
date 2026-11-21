@@ -3,14 +3,14 @@ import 'package:jaspr/jaspr.dart';
 import 'package:jaspr_riverpod/jaspr_riverpod.dart';
 import 'package:shared_logic/shared_logic.dart';
 
-import '../../components/assessment_journey_stepper.dart';
-import '../../components/dashboard_kit.dart' show SitewiseDialog;
-import '../../components/ui.dart';
-import '../../data/app_locator.dart';
-import '../../data/assessment_api.dart';
-import '../../data/assessment_report.dart';
-import '../../layouts/app_layout.dart';
-import 'assessment_report_view.dart';
+import 'package:sitewise_jaspr_web/features/assessment/presentation/components/assessment_journey_stepper.dart';
+import 'package:sitewise_jaspr_web/shared/presentation/components/dashboard_kit.dart' show SitewiseDialog;
+import 'package:sitewise_jaspr_web/shared/presentation/components/ui.dart';
+import 'package:sitewise_jaspr_web/core/di/app_locator.dart';
+import 'package:sitewise_jaspr_web/features/assessment/data/assessment_api.dart';
+import 'package:sitewise_jaspr_web/data/assessment_report.dart';
+import 'package:sitewise_jaspr_web/shared/presentation/layouts/app_layout.dart';
+import 'package:sitewise_jaspr_web/features/property_management/presentation/pages/assessment_report_view.dart';
 
 /// The web decision-support workflow, in five persisted stages.
 ///

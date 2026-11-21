@@ -3,9 +3,9 @@ import 'dart:convert';
 import 'package:jaspr/dom.dart';
 import 'package:jaspr/jaspr.dart';
 
-import '../data/app_locator.dart';
-import '../data/full_analysis_actions.dart';
-import '../pages/entrepreneur/activity_history_page.dart';
+import 'package:sitewise_jaspr_web/core/di/app_locator.dart';
+import 'package:sitewise_jaspr_web/features/recommendations/data/full_analysis_actions.dart';
+import 'package:sitewise_jaspr_web/features/property_management/presentation/pages/activity_history_page.dart';
 import 'saved_assessment_dropdown.dart' show SavedAssessmentChoice;
 
 @client

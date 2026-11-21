@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 
 import 'package:fyp/core/routing/auth_route_guard.dart';
 import 'package:fyp/features/assessment/presentation/home_screen.dart';
-import 'package:fyp/features/assessment/presentation/assessment_draft_loader.dart';
 import 'package:fyp/features/assessment/presentation/questionnaire_screen.dart';
 import 'package:fyp/features/assessment/presentation/review_screen.dart';
 import 'package:fyp/features/authentication/presentation/pages/forgot_password_mobile_page.dart';
@@ -12,7 +11,6 @@ import 'package:fyp/features/authentication/presentation/widgets/auth_tabs.dart'
 import 'package:fyp/features/onboarding/presentation/pages/onboarding_flow_page.dart';
 import 'package:fyp/core/routing/app_start_gate.dart';
 import 'package:fyp/shared/presentation/layouts/entrepreneur_tab_host.dart';
-import 'package:fyp/features/assessment/presentation/pages/entrepreneur_assessment_questions_mobile_page.dart';
 import 'package:fyp/features/assessment/presentation/pages/entrepreneur_assessment_summary_mobile_page.dart';
 import 'package:fyp/features/recommendations/presentation/pages/entrepreneur_ai_recommendations_mobile_page.dart';
 import 'package:fyp/features/compare/presentation/pages/entrepreneur_compare_mobile_page.dart';

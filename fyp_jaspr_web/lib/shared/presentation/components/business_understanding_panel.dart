@@ -1,7 +1,7 @@
 import 'package:jaspr/dom.dart';
 import 'package:jaspr/jaspr.dart';
 
-import '../data/auth_service.dart';
+import 'package:sitewise_jaspr_web/features/authentication/data/auth_service.dart';
 import 'ui.dart';
 
 /// Review setup is read from the authenticated server. Preview answers are

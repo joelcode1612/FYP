@@ -4,16 +4,17 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_logic/shared_logic.dart';
-import 'package:fyp/application/providers.dart';
+import 'package:fyp/core/di/app_providers.dart';
 import 'package:fyp/core/config/mobile_config.dart';
 import 'package:fyp/core/config/dev_auth_bypass.dart';
-import 'package:fyp/features/assessment/view/home_screen.dart';
-import 'package:fyp/features/assessment/view/questionnaire_screen.dart';
-import 'package:fyp/features/assessment/view/review_screen.dart';
-import 'package:fyp/features/assessment/viewmodel/cq_view_model.dart';
-import 'package:fyp/features/assessment/model/service/questionnaire_routing_service.dart';
-import 'package:fyp/presentation/mobile/shell/entrepreneur_tab_scope.dart';
-import 'package:fyp/data/repositories/mobile_api_client.dart';
+import 'package:fyp/features/assessment/presentation/home_screen.dart';
+import 'package:fyp/features/assessment/presentation/questionnaire_screen.dart';
+import 'package:fyp/features/assessment/presentation/review_screen.dart';
+import 'package:fyp/features/assessment/presentation/viewmodels/cq_view_model.dart';
+import 'package:fyp/features/assessment/domain/services/questionnaire_routing_service.dart';
+import 'package:fyp/shared/presentation/layouts/entrepreneur_tab_scope.dart';
+import 'package:fyp/core/di/mobile_api_client.dart';
+import 'package:fyp/features/assessment/data/datasources/questionnaire_routing_service.dart';
 
 class HeldApi implements ApiClient {
   int calls = 0;
@@ -23,12 +24,13 @@ class HeldApi implements ApiClient {
     Map<String, String>? query,
   }) async {
     calls++;
-    if (path == '/api/v1/cq/invitations')
+    if (path == '/api/v1/cq/invitations') {
       return {
         'contract_version': 'cq-invitations/1',
         'state': 'held',
         'invitations': [],
       };
+    }
     throw const ServiceFailure('Customer participation is held.');
   }
 

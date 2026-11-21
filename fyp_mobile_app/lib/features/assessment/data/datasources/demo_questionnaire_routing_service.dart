@@ -1,6 +1,7 @@
-import '../entities/assessment_draft.dart';
-import '../entities/questionnaire_question.dart';
+import 'package:fyp/features/assessment/domain/entities/assessment_draft.dart';
+import 'package:fyp/features/assessment/domain/entities/questionnaire_question.dart';
 import 'questionnaire_routing_service.dart';
+import 'package:fyp/features/assessment/domain/services/questionnaire_routing_service.dart';
 
 /// Synthetic UI demonstration question bank for the assessment flow.
 ///

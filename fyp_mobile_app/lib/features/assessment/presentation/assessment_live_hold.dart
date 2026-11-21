@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'components/cq_ui_primitives.dart';
+import 'package:fyp/features/assessment/presentation/widgets/cq_ui_primitives.dart';
 
 export '../../../core/config/assessment_build_mode.dart'
     show assessmentDemoAllowed, assessmentHoldActive;

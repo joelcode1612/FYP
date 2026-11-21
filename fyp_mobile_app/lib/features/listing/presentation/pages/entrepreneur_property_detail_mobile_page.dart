@@ -17,6 +17,7 @@ import 'package:fyp/features/assessment/presentation/widgets/mobile_insights_pan
 import 'package:fyp/shared/presentation/components/mobile_section_header.dart';
 import 'package:fyp/shared/presentation/components/mobile_skeleton.dart';
 import 'package:fyp/shared/presentation/components/mobile_suitability_badge.dart';
+import 'package:fyp/core/routing/app_routes.dart';
 
 /// Mobile property detail — Option A layout over the existing evaluation flow.
 ///

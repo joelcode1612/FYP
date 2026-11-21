@@ -4,8 +4,8 @@ import 'package:shared_logic/shared_logic.dart';
 import '../../../core/routing/app_routes.dart';
 import '../../../core/config/dev_auth_bypass.dart';
 import '../../../core/config/cq_development_access.dart';
-import '../viewmodel/cq_view_model.dart';
-import 'components/cq_ui_primitives.dart';
+import 'package:fyp/features/assessment/presentation/viewmodels/cq_view_model.dart';
+import 'package:fyp/features/assessment/presentation/widgets/cq_ui_primitives.dart';
 
 /// UI-only refresh of the existing authenticated invitation workflow.
 /// Never constructs invitations or authorizes customer fielding on the client.

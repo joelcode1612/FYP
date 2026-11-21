@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../viewmodel/cq_view_model.dart';
-import 'components/cq_ui_primitives.dart';
-import 'components/question_option_tile.dart';
+import 'package:fyp/features/assessment/presentation/viewmodels/cq_view_model.dart';
+import 'package:fyp/features/assessment/presentation/widgets/cq_ui_primitives.dart';
+import 'package:fyp/features/assessment/presentation/widgets/question_option_tile.dart';
 
 /// Redesigned presentation around the existing versioned FastAPI CQ session.
 /// The view model still owns all consent, stimulus, routing, answer, edit,

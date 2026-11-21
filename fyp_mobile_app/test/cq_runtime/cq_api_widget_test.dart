@@ -9,9 +9,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:shared_logic/shared_logic.dart';
-import 'package:fyp/data/repositories/mobile_api_client.dart';
-import 'package:fyp/features/assessment/viewmodel/cq_view_model.dart';
-import 'package:fyp/features/assessment/view/cq_session_page.dart';
+import 'package:fyp/core/di/mobile_api_client.dart';
+import 'package:fyp/features/assessment/presentation/viewmodels/cq_view_model.dart';
+import 'package:fyp/features/assessment/presentation/cq_session_page.dart';
 import 'package:fyp/core/config/mobile_runtime_config.dart';
 import 'package:fyp/core/config/cq_development_access.dart';
 

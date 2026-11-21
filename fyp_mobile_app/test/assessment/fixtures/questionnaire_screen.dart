@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:fyp/application/providers.dart';
+import 'package:fyp/core/di/app_providers.dart';
 import 'package:fyp/core/routing/app_routes.dart';
 import 'package:fyp/core/theme/sitewise_theme.dart';
-import 'package:fyp/features/assessment/model/entities/assessment_draft.dart';
-import 'package:fyp/features/assessment/view/components/question_option_tile.dart';
+import 'package:fyp/features/assessment/domain/entities/assessment_draft.dart';
+import 'package:fyp/features/assessment/presentation/widgets/question_option_tile.dart';
 
 class QuestionnaireScreen extends ConsumerWidget {
   final String assessmentId;

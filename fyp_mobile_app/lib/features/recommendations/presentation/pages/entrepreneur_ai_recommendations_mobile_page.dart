@@ -5,6 +5,7 @@ import 'package:shared_logic/shared_logic.dart' hide RecommendationExplanation;
 import 'package:fyp/features/recommendations/application/personalised_recommendations_providers.dart';
 import 'package:fyp/core/theme/sitewise_theme.dart';
 import 'package:fyp/shared/presentation/components/m3_kit.dart';
+import 'package:fyp/core/routing/app_routes.dart';
 
 /// Entrepreneur **AI recommendations** (personalised Layer 2/3 pipeline).
 ///

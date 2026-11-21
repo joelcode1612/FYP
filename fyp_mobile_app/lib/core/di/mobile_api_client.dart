@@ -139,8 +139,9 @@ class MobileApiClient implements ApiClient {
     try {
       final decoded = jsonDecode(body);
       final detail = decoded is Map ? decoded['detail'] : null;
-      if (detail is Map && detail['code'] is String)
+      if (detail is Map && detail['code'] is String) {
         code = detail['code'] as String;
+      }
     } catch (_) {}
     return apiOperationFailure(status: status, code: code, message: message);
   }

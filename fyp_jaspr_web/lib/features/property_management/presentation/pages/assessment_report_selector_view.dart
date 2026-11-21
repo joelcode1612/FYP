@@ -2,10 +2,10 @@ import 'package:jaspr/jaspr.dart';
 import 'package:jaspr_router/jaspr_router.dart';
 import 'package:shared_logic/shared_logic.dart';
 
-import '../../components/ui.dart';
-import '../../data/assessment_api.dart';
-import '../../data/full_analysis_format.dart';
-import '../../layouts/app_layout.dart';
+import 'package:sitewise_jaspr_web/shared/presentation/components/ui.dart';
+import 'package:sitewise_jaspr_web/features/assessment/data/assessment_api.dart';
+import 'package:sitewise_jaspr_web/features/recommendations/application/full_analysis_format.dart';
+import 'package:sitewise_jaspr_web/shared/presentation/layouts/app_layout.dart';
 import 'assessment_report_selector_page.dart';
 
 /// The gate that now opens at `/entrepreneur/cafe-report`.

@@ -5,6 +5,7 @@ import 'package:fyp/features/panorama_viewer/presentation/widgets/mobile_swipe_p
 
 import 'package:fyp/core/theme/sitewise_theme.dart';
 import 'package:fyp/core/utils/pano_bytes.dart';
+import 'package:shared_logic/shared_logic.dart';
 
 /// Mobile tour viewer: displays a generated panoramic file as a static image.
 /// When the image is unavailable, retains the scene navigation controls and

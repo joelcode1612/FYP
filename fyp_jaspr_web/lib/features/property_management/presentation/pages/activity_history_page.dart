@@ -1,8 +1,8 @@
 import 'package:jaspr/dom.dart';
 import 'package:jaspr/jaspr.dart';
 
-import '../../components/ui.dart' show Icon;
-import '../../components/saved_assessment_dropdown.dart'
+import 'package:sitewise_jaspr_web/shared/presentation/components/ui.dart' show Icon;
+import 'package:sitewise_jaspr_web/shared/presentation/components/saved_assessment_dropdown.dart'
     show SavedAssessmentChoice;
 
 /// Immutable read-only event projection returned by the existing audit API.

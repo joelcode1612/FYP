@@ -4,7 +4,7 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_logic/shared_logic.dart';
 import 'package:fyp/core/config/mobile_endpoints.dart';
-import 'package:fyp/data/repositories/mobile_api_client.dart';
+import 'package:fyp/core/di/mobile_api_client.dart';
 
 void main() {
   group('actual mobile transport to private FastAPI', () {

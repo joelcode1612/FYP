@@ -2,7 +2,7 @@ import 'package:jaspr/dom.dart';
 import 'package:jaspr/jaspr.dart';
 import 'package:shared_logic/shared_logic.dart';
 
-import '../data/app_locator.dart';
+import 'package:sitewise_jaspr_web/core/di/app_locator.dart';
 import 'ui.dart';
 
 /// Server availability only: no sample record, count, report or local approval.

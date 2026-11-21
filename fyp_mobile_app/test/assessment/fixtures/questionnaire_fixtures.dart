@@ -1,8 +1,8 @@
 // Synthetic regression fixtures. Never imported by the application.
-import 'package:fyp/features/assessment/model/entities/assessment.dart';
-import 'package:fyp/features/assessment/model/entities/assessment_draft.dart';
-import 'package:fyp/features/assessment/model/entities/questionnaire_question.dart';
-import 'package:fyp/features/assessment/model/service/questionnaire_routing_service.dart';
+import 'package:fyp/features/assessment/domain/entities/assessment.dart';
+import 'package:fyp/features/assessment/domain/entities/assessment_draft.dart';
+import 'package:fyp/features/assessment/domain/entities/questionnaire_question.dart';
+import 'package:fyp/features/assessment/domain/services/questionnaire_routing_service.dart';
 
 class DemoQuestionnaireRoutingService implements QuestionnaireRoutingService {
   const DemoQuestionnaireRoutingService();

@@ -4,8 +4,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_logic/shared_logic.dart';
 import 'package:fyp/core/config/cq_development_access.dart';
 import 'package:fyp/core/config/dev_auth_bypass.dart';
-import 'package:fyp/features/assessment/view/cq_invitations_page.dart';
-import 'package:fyp/features/assessment/viewmodel/cq_view_model.dart';
+import 'package:fyp/features/assessment/presentation/cq_invitations_page.dart';
+import 'package:fyp/features/assessment/presentation/viewmodels/cq_view_model.dart';
 
 class _NoSession extends ApiClient {
   @override

@@ -9,12 +9,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_logic/shared_logic.dart';
 import 'package:fyp/core/theme/sitewise_theme.dart';
-import 'package:fyp/features/assessment/view/cq_invitations_page.dart';
-import 'package:fyp/features/assessment/view/cq_session_page.dart';
-import 'package:fyp/features/assessment/view/assessment_live_hold.dart';
-import 'package:fyp/features/assessment/view/components/question_option_tile.dart';
-import 'package:fyp/features/assessment/viewmodel/cq_view_model.dart';
-import 'package:fyp/presentation/mobile/shell/mobile_app_shell.dart';
+import 'package:fyp/features/assessment/presentation/cq_invitations_page.dart';
+import 'package:fyp/features/assessment/presentation/cq_session_page.dart';
+import 'package:fyp/features/assessment/presentation/assessment_live_hold.dart';
+import 'package:fyp/features/assessment/presentation/widgets/question_option_tile.dart';
+import 'package:fyp/features/assessment/presentation/viewmodels/cq_view_model.dart';
+import 'package:fyp/shared/presentation/layouts/mobile_app_shell.dart';
 
 Map<String, dynamic> fixture() =>
     jsonDecode(

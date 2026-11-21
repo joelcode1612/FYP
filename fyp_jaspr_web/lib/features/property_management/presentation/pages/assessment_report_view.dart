@@ -2,10 +2,10 @@ import 'package:jaspr/dom.dart';
 import 'package:jaspr/jaspr.dart';
 import 'package:shared_logic/shared_logic.dart';
 
-import '../../components/ui.dart';
-import '../../data/assessment_api.dart';
-import '../../data/assessment_report.dart';
-import '../../data/full_analysis_actions.dart';
+import 'package:sitewise_jaspr_web/shared/presentation/components/ui.dart';
+import 'package:sitewise_jaspr_web/features/assessment/data/assessment_api.dart';
+import 'package:sitewise_jaspr_web/data/assessment_report.dart';
+import 'package:sitewise_jaspr_web/features/recommendations/data/full_analysis_actions.dart';
 
 /// Step 5 — the assembled assessment report, laid out as the supplied
 /// `SiteWise_Final_Report.html` document: a numbered section index, a sticky

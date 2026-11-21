@@ -5,8 +5,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_logic/shared_logic.dart';
 import 'package:fyp/core/routing/app_routes.dart';
-import 'package:fyp/features/assessment/view/cq_invitations_page.dart';
-import 'package:fyp/features/assessment/viewmodel/cq_view_model.dart';
+import 'package:fyp/features/assessment/presentation/cq_invitations_page.dart';
+import 'package:fyp/features/assessment/presentation/viewmodels/cq_view_model.dart';
 
 class _InvitationApi extends ApiClient {
   final Map<String, dynamic> session;

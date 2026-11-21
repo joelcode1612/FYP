@@ -1,8 +1,8 @@
 import 'package:jaspr/dom.dart';
 import 'package:jaspr/jaspr.dart';
 
-import '../data/assessment_api.dart';
-import 'ui.dart';
+import 'package:sitewise_jaspr_web/features/assessment/data/assessment_api.dart';
+import 'package:sitewise_jaspr_web/shared/presentation/components/ui.dart';
 
 /// Five-stage assessment timeline, based on the SiteWise location-assessment
 /// reference image. It does not compute or change assessment progress:

@@ -7,12 +7,13 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:fyp/application/providers.dart';
+import 'package:fyp/core/di/app_providers.dart';
 import 'package:fyp/core/config/mobile_config.dart';
-import 'package:fyp/features/assessment/model/entities/assessment.dart';
-import 'package:fyp/features/assessment/model/entities/assessment_draft.dart';
-import 'package:fyp/features/assessment/model/service/demo_questionnaire_routing_service.dart';
-import 'package:fyp/features/assessment/model/service/questionnaire_routing_service.dart';
+import 'package:fyp/features/assessment/domain/entities/assessment.dart';
+import 'package:fyp/features/assessment/domain/entities/assessment_draft.dart';
+import 'package:fyp/features/assessment/data/datasources/demo_questionnaire_routing_service.dart';
+import 'package:fyp/features/assessment/domain/services/questionnaire_routing_service.dart';
+import 'package:fyp/features/assessment/data/datasources/questionnaire_routing_service.dart';
 
 void main() {
   tearDown(() => MobileConfig.overrideUsesLiveApi = null);

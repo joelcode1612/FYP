@@ -1,17 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:shared_logic/shared_logic.dart';
 
-import '../../../../application/services/assessment_session.dart';
-import '../../../../application/services/service_locator.dart';
+import 'package:fyp/features/assessment/application/assessment_session.dart';
+import 'package:fyp/core/di/service_locator.dart';
 import '../../../../core/routing/app_routes.dart';
 import '../../../../core/theme/sitewise_m3.dart';
 import '../../../../core/theme/sitewise_theme.dart';
-import '../../../shared/widgets/sitewise_evidence_score.dart';
-import '../../../shared/widgets/sitewise_factor_row.dart';
-import '../../../shared/widgets/sitewise_secondary_button.dart';
-import '../../shell/mobile_app_shell.dart';
-import '../../widgets/assessment_stepper.dart';
-import '../../widgets/m3_kit.dart';
+import 'package:fyp/shared/presentation/widgets/sitewise_evidence_score.dart';
+import 'package:fyp/shared/presentation/widgets/sitewise_factor_row.dart';
+import 'package:fyp/shared/presentation/widgets/sitewise_secondary_button.dart';
+import 'package:fyp/shared/presentation/layouts/mobile_app_shell.dart';
+import 'package:fyp/features/assessment/presentation/widgets/assessment_stepper.dart';
+import 'package:fyp/shared/presentation/components/m3_kit.dart';
 
 /// **ASSESSMENT / STEP 3 OF 3** — "Assessment summary".
 ///

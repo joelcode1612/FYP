@@ -25,9 +25,9 @@ library;
 // through the web repository's fromJson forwarder below.
 import 'package:shared_logic/shared_logic.dart' hide ApiPropertyRepository;
 
-import 'api_property_repository.dart';
-import 'assessment_report.dart';
-import 'auth_service.dart';
+import 'package:sitewise_jaspr_web/features/listing/data/api_property_repository.dart';
+import 'package:sitewise_jaspr_web/data/assessment_report.dart';
+import 'package:sitewise_jaspr_web/features/authentication/data/auth_service.dart';
 
 /// Why a call failed, reduced to the states the workspace must render.
 enum AssessmentFailureKind {

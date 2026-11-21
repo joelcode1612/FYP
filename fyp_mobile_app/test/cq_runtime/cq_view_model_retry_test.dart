@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_logic/shared_logic.dart';
-import 'package:fyp/features/assessment/viewmodel/cq_view_model.dart';
+import 'package:fyp/features/assessment/presentation/viewmodels/cq_view_model.dart';
 
 class LostDeliveryApi implements ApiClient {
   final Map<String, dynamic> fixture;
