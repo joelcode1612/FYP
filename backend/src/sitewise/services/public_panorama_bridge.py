@@ -11,8 +11,11 @@ from urllib.parse import quote
 
 import httpx
 from fastapi import HTTPException
+from sqlalchemy import text
+from sqlmodel import Session
 
 from sitewise.core.config import settings
+from sitewise.db.session import engine
 
 BUCKET = settings.sitewise_public_panorama_bucket
 SESSION = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,149}$")
@@ -81,7 +84,22 @@ class PublicPanoramaBridge:
         return rows[0] if rows else None
 
     def public_property_exists(self, property_id: int) -> bool:
-        return self._one("property", params={"select": "property_id", "property_id": f"eq.{property_id}"}) is not None
+        """The capture catalogue IS the canonical operational table.
+
+        The standalone capture backend's ``public.property`` mirror was folded
+        into ``fyp.rental_properties`` by schema migration 03 (verified: 916
+        identical rows on both sides pre-migration; ``pano_jobs.property_id``
+        now carries a FOREIGN KEY to ``fyp.rental_properties(id)``). The
+        ``fyp`` schema is service-role-only and not exposed through PostgREST,
+        so the existence check runs against the SAME canonical table through
+        the application database connection instead of a REST lookup that
+        would target a table that no longer exists.
+        """
+        with Session(engine) as session:
+            return session.execute(
+                text("SELECT 1 FROM fyp.rental_properties WHERE id = :pid"),
+                {"pid": int(property_id)},
+            ).scalar() is not None
 
     def link_by_listing(self, listing_id: int):
         return self._one("pano_listing_links", params={"select": "listing_id,public_property_id", "listing_id": f"eq.{listing_id}"})

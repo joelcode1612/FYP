@@ -29,7 +29,12 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from _supabase_rest import SupabaseRest  # noqa: E402
+from _supabase_rest import (
+    CLASS_OTHER,
+    CLASS_SCHEMA_NOT_EXPOSED,
+    CLASS_TABLE_MISSING,
+    SupabaseRest,  # noqa: E402
+)
 
 CANONICAL_TABLES = [
     # (canonical name, populated check, key column)
@@ -176,7 +181,19 @@ def data_parity(rest_fyp: SupabaseRest | None, rest_legacy: SupabaseRest | None,
                 "is_published": r.get("is_published"),
             }
     except RuntimeError as exc:
-        report["data_parity"] = {"status": "BLOCKED", "reason": str(exc)[:200]}
+        classification = getattr(exc, "classification", CLASS_OTHER)
+        reason = {
+            CLASS_SCHEMA_NOT_EXPOSED: (
+                "fyp schema is not exposed to PostgREST (PGRST106): expose it "
+                "in Supabase API settings to run parity checks"
+            ),
+            CLASS_TABLE_MISSING: (
+                "legacy public.property no longer exists (migration 03 "
+                "applied) and fyp is not REST-exposed; parity needs the fyp "
+                "schema exposed"
+            ),
+        }.get(classification, str(exc)[:200])
+        report["data_parity"] = {"status": "BLOCKED", "reason": reason}
         return
 
     value_mismatches = []
@@ -212,6 +229,7 @@ def main(argv: list[str] | None = None) -> int:
 
     rest_legacy = None
     rest_fyp = None
+    fyp_probe_failure: dict = {}
     try:
         rest_legacy = SupabaseRest(profile="public")
     except RuntimeError:
@@ -221,8 +239,28 @@ def main(argv: list[str] | None = None) -> int:
             probe = SupabaseRest(profile="fyp")
             probe.get("rental_properties", select="", limit=0, count=True)
             rest_fyp = probe
-        except RuntimeError:
-            pass
+        except RuntimeError as exc:
+            fyp_probe_failure = {
+                "classification": getattr(exc, "classification", CLASS_OTHER),
+                "detail": str(exc)[:200],
+            }
+    report["supabase_fyp_probe"] = fyp_probe_failure
+
+    # Structural evidence that migration 03 was APPLIED on Supabase: the
+    # legacy public.property master is gone from the exposed public profile
+    # (PGRST205 table_missing). Migration 03 is transactional, so a committed
+    # rename means fyp.rental_properties exists even while fyp itself is not
+    # REST-exposed (PGRST106).
+    old_property_gone: bool | None = None
+    if rest_legacy is not None:
+        try:
+            rest_legacy.get("property", select="", limit=0, count=True)
+            old_property_gone = False  # legacy master still present
+        except RuntimeError as exc:
+            old_property_gone = (
+                getattr(exc, "classification", CLASS_OTHER) == CLASS_TABLE_MISSING
+            )
+    report["supabase_legacy_property_gone"] = old_property_gone
 
     report["supabase"] = remote_summary(rest_fyp or rest_legacy,
                                         "fyp" if rest_fyp else "public")
@@ -241,18 +279,37 @@ def main(argv: list[str] | None = None) -> int:
         "remote_property_parity": report.get("data_parity", {}).get("status") == "VERIFIED"
         and not report["data_parity"].get("value_mismatch_count")
         and not report["data_parity"].get("missing_on_remote"),
-        "supabase_fyp_schema_migrated": rest_fyp is not None
-        and report["supabase"]["tables"]["rental_properties"]["rows"] is not None,
+        "supabase_fyp_schema_migrated": (
+            rest_fyp is not None
+            and report["supabase"]["tables"]["rental_properties"]["rows"] is not None
+        ) or (
+            old_property_gone is True
+            and fyp_probe_failure.get("classification") == CLASS_SCHEMA_NOT_EXPOSED
+        ),
+        "fyp_schema_rest_exposed": rest_fyp is not None,
     }
     report["checks"] = checks
     if all(checks.values()):
         report["verdict"] = "PASS"
+    elif not checks["fyp_schema_rest_exposed"] and checks["supabase_fyp_schema_migrated"]:
+        report["verdict"] = (
+            "PARTIAL (fyp migrated on Supabase; expose the fyp API schema to "
+            "verify parity)"
+        )
     elif (not checks["supabase_fyp_schema_migrated"]
           or report.get("data_parity", {}).get("status") == "BLOCKED"):
         report["verdict"] = "PARTIAL (Supabase-side steps blocked pending migration 03)"
     else:
         report["verdict"] = "FAIL"
-    if not checks["supabase_fyp_schema_migrated"]:
+    if not checks["fyp_schema_rest_exposed"] and checks["supabase_fyp_schema_migrated"]:
+        report["verdict_note"] = (
+            "Supabase-side migration 03 is APPLIED (legacy public.property is "
+            "gone), but the fyp schema is not exposed to PostgREST (PGRST106). "
+            "Expose it via Supabase Dashboard -> Settings -> API -> Exposed "
+            "schemas (or ALTER DATABASE postgres SET pgrst.db_schemas), then "
+            "re-run this tool for full parity confirmation."
+        )
+    elif not checks["supabase_fyp_schema_migrated"]:
         report["verdict_note"] = (
             "Local canonical migration verified. Supabase-side migration (03) "
             "requires the Supabase SQL editor / a direct DSN — apply it, then "

@@ -8,11 +8,54 @@ explicitly requested.
 
 from __future__ import annotations
 
+import json
 from typing import Any
 
 import httpx
 
 from sitewise.core.config import settings
+
+#: PostgREST failure classifications produced by :func:`_classify_rest_error`.
+CLASS_SCHEMA_NOT_EXPOSED = "schema_not_exposed"
+CLASS_TABLE_MISSING = "table_missing"
+CLASS_OTHER = "other"
+
+
+def _classify_rest_error(body: str) -> str:
+    """Distinguish gateway-level blocking from missing tables.
+
+    * PGRST106 - the target profile is NOT in the API's exposed schemas
+      (Supabase Dashboard -> Settings -> API -> Exposed schemas, or
+      ``ALTER DATABASE postgres SET pgrst.db_schemas``). The tables may exist
+      and the migration may be fully applied; REST simply cannot see them.
+    * PGRST205 - profile exposed but the table is absent from the schema
+      cache (dropped or moved into another schema).
+    """
+    code: str | None = None
+    try:
+        payload = json.loads(body)
+        if isinstance(payload, dict):
+            code = payload.get("code")
+    except ValueError:
+        pass
+    if code == "PGRST106" or "Only the following schemas are exposed" in body:
+        return CLASS_SCHEMA_NOT_EXPOSED
+    if code == "PGRST205" or "in the schema cache" in body:
+        return CLASS_TABLE_MISSING
+    return CLASS_OTHER
+
+
+class SupabaseRestError(RuntimeError):
+    """PostgREST failure carrying its :func:`_classify_rest_error` class.
+
+    Subclasses RuntimeError so existing ``except RuntimeError`` handling in
+    the standardization scripts keeps working unchanged.
+    """
+
+    def __init__(self, message: str, *, status: int, classification: str) -> None:
+        super().__init__(message)
+        self.status = status
+        self.classification = classification
 
 
 class SupabaseRest:
@@ -44,7 +87,11 @@ class SupabaseRest:
         with httpx.Client(timeout=30) as client:
             resp = client.get(f"{self.base}/rest/v1/{table}", headers=headers, params=params)
         if resp.status_code >= 400:
-            raise RuntimeError(f"REST GET {table} -> {resp.status_code}: {resp.text[:200]}")
+            raise SupabaseRestError(
+                f"REST GET {table} -> {resp.status_code}: {resp.text[:200]}",
+                status=resp.status_code,
+                classification=_classify_rest_error(resp.text[:2000]),
+            )
         total = None
         if count:
             cr = resp.headers.get("content-range", "")
@@ -63,7 +110,11 @@ class SupabaseRest:
             resp = client.post(f"{self.base}/rest/v1/{table}", headers=headers,
                                json=rows, params=params)
         if resp.status_code >= 400:
-            raise RuntimeError(f"REST POST {table} -> {resp.status_code}: {resp.text[:200]}")
+            raise SupabaseRestError(
+                f"REST POST {table} -> {resp.status_code}: {resp.text[:200]}",
+                status=resp.status_code,
+                classification=_classify_rest_error(resp.text[:2000]),
+            )
         return resp.json() if resp.text else []
 
 

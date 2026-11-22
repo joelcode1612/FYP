@@ -35,7 +35,13 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from _supabase_rest import PROPERTY_COLUMN_MAP, SupabaseRest  # noqa: E402
+from _supabase_rest import (
+    CLASS_OTHER,
+    CLASS_SCHEMA_NOT_EXPOSED,
+    CLASS_TABLE_MISSING,
+    PROPERTY_COLUMN_MAP,
+    SupabaseRest,  # noqa: E402
+)
 
 DRAFT_IDS = (10120, 9236, 9235, 9234)
 
@@ -294,9 +300,20 @@ def main(argv: list[str] | None = None) -> int:
             rest_fyp = probe
             report["rest_fyp"] = f"reachable, rental_properties={total}"
         except RuntimeError as exc:
+            classification = getattr(exc, "classification", CLASS_OTHER)
+            hint = {
+                CLASS_SCHEMA_NOT_EXPOSED: (
+                    "migration 03 appears applied but the fyp schema is NOT "
+                    "exposed to PostgREST (PGRST106); expose it via Supabase "
+                    "Dashboard -> Settings -> API -> Exposed schemas"
+                ),
+                CLASS_TABLE_MISSING: (
+                    "apply migrations/03_supabase_schema_migration.sql "
+                    "(MIGRATION_INSTRUCTIONS.md)"
+                ),
+            }.get(classification, "apply migration 03 and expose fyp (MIGRATION_INSTRUCTIONS.md)")
             report["rest_fyp"] = (
-                f"unreachable ({exc}); apply migrations/03_supabase_schema_migration.sql "
-                "and expose the fyp schema to PostgREST (MIGRATION_INSTRUCTIONS.md)."
+                f"unreachable [{classification}] ({exc}); {hint}"
             )
 
     reconcile_users(rest, report)

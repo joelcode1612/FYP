@@ -45,6 +45,9 @@ from sitewise.services.user_service import UserService
 from sitewise.repositories.agent_assignment_repository import (
     AgentAssignmentRepository,
 )
+from sitewise.repositories.listing_verification_repository import (
+    ListingVerificationRepository,
+)
 from sitewise.services.property_management_service import resolve_listings
 from sitewise.services import security_audit_service as security_audit
 
@@ -1122,20 +1125,30 @@ def submit_verification(
 ) -> dict:
     """Record a listing-verification finding on an ASSIGNED listing.
 
-    Keeps the existing ``listing_verification`` mechanism (review findings,
+    Keeps the existing listing-verification mechanism (review findings,
     change requests, outcomes); final approval decisions stay with the
     administrator through the listing review workflow.
+
+    Findings persist to the canonical ``fyp.property_listing_verification``
+    table (one state per listing, property FK to ``fyp.rental_properties``).
+    The former Supabase ``public.listing_verification`` destination was never
+    provisioned in the live project; the repository raises ValueError for a
+    non-existent listing, which maps to 404.
     """
     service = _admin_service()
     _require_listing_access(session, service, user, listing_id)
-    record = service.insert_listing_verification(
-        listing_id=listing_id,
-        verified_by_user_id=user.user_id,
-        property_authenticity_status=payload.property_authenticity_status,
-        commercial_classification_status=payload.commercial_classification_status,
-        verification_reason=payload.verification_reason,
-        evidence_url=payload.evidence_url,
-    )
+    repo = ListingVerificationRepository(session)
+    try:
+        record = repo.record_finding(
+            listing_id=listing_id,
+            verified_by_user_id=user.user_id,
+            property_authenticity_status=payload.property_authenticity_status,
+            commercial_classification_status=payload.commercial_classification_status,
+            verification_reason=payload.verification_reason,
+            evidence_url=payload.evidence_url,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
     return record
 
 
@@ -1147,7 +1160,7 @@ def listing_verifications(
 ) -> list[dict]:
     service = _admin_service()
     _require_listing_access(session, service, user, listing_id)
-    return service.list_listing_verifications(listing_id)
+    return ListingVerificationRepository(session).list_for_listing(listing_id)
 
 
 @router.post("/listings/{listing_id}/assign")
