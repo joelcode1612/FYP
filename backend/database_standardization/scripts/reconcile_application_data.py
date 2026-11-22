@@ -30,7 +30,9 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+import uuid as _uuid
 from datetime import datetime, timezone
+from decimal import Decimal
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -42,6 +44,17 @@ from _supabase_rest import (
     PROPERTY_COLUMN_MAP,
     SupabaseRest,  # noqa: E402
 )
+
+
+def _json_safe(value):
+    """PostgreSQL numeric columns arrive as Decimal and UUID columns as
+    uuid.UUID; httpx (allow_nan=False) refuses to serialize either, so
+    coerce to float/str for the REST payload."""
+    if isinstance(value, Decimal):
+        return float(value)
+    if isinstance(value, _uuid.UUID):
+        return str(value)
+    return value
 
 DRAFT_IDS = (10120, 9236, 9235, 9234)
 
@@ -185,30 +198,61 @@ def reconcile_photos(rest: SupabaseRest | None, report: dict) -> None:
     from sqlalchemy import text
 
     with local_engine().connect() as c:
-        local_ids = {r[0] for r in c.execute(text("SELECT id FROM fyp.property_photos"))}
+        local_ids = {int(r[0]) for r in c.execute(text("SELECT id FROM fyp.property_photos"))}
     if rest is None:
         report["photos"] = {"local_count": len(local_ids), "supabase": "unavailable"}
         return
-    table, id_col = "property_photos", "id"
+    # Live Supabase contract (post-migration): fyp.property_photos.id is a
+    # UUID; the join key back to the local numeric fyp.property_photos.id is
+    # local_source_photo_id (provenance written by the original import).
+    table, key_col, cursor_col = "property_photos", "local_source_photo_id", "id"
     try:
-        rows, total = rest.get(table, select=id_col, limit=1000)
+        rows, total = rest.get(table, select=f"id,{key_col}", limit=1000, order=cursor_col)
     except RuntimeError:
-        table, id_col = "property_photo", "photo_id"  # pre-migration legacy
-        rows, total = rest.get(table, select=id_col, limit=1000)
-    supa_ids = {r[id_col] for r in rows}
-    # Cursor pagination (id-keyed) so counts are not capped at one page.
-    while total is None or len(supa_ids) < total:
-        page, _ = rest.get(table, select=id_col, limit=1000,
-                           filters={id_col: f"gt.{max(supa_ids)}",
-                                    "order": id_col})
+        table, key_col, cursor_col = "property_photo", "photo_id", "photo_id"  # legacy
+        rows, total = rest.get(table, select=key_col, limit=1000, order=cursor_col)
+
+    mapped: set[int] = set()
+    unmapped_rows: list[str] = []
+    duplicate_keys: set[int] = set()
+
+    def absorb(page: list[dict]) -> None:
+        for r in page:
+            key = r.get(key_col)
+            if key is None:
+                unmapped_rows.append(str(r.get("id") or r.get(key_col)))
+                continue
+            key = int(key)
+            if key in mapped:
+                duplicate_keys.add(key)
+            mapped.add(key)
+
+    absorb(rows)
+    seen = len(rows)
+    cursor = rows[-1][cursor_col] if rows else None
+    while (total is None or seen < total) and cursor is not None:
+        page, page_total = rest.get(table, select=f"id,{key_col}", limit=1000,
+                                    order=cursor_col,
+                                    filters={cursor_col: f"gt.{cursor}"})
         if not page:
             break
-        supa_ids.update(r[id_col] for r in page)
+        absorb(page)
+        seen += len(page)
+        cursor = page[-1][cursor_col]
+        if page_total is not None:
+            total = page_total
+
+    missing_on_supabase = sorted(local_ids - mapped)[:50]
+    missing_on_local = sorted(mapped - local_ids)[:50]
     report["photos"] = {
         "local_count": len(local_ids),
-        "supabase_count": total or len(supa_ids),
-        "missing_on_supabase": sorted(local_ids - supa_ids)[:50],
-        "missing_on_local": sorted(supa_ids - local_ids)[:50],
+        "supabase_count": total if total is not None else seen,
+        "join_key": key_col,
+        "matched_ids": len(local_ids & mapped),
+        "missing_on_supabase": missing_on_supabase,
+        "missing_on_local": missing_on_local,
+        "unmapped_supabase_rows": len(unmapped_rows),
+        "duplicate_source_keys": sorted(duplicate_keys)[:50],
     }
 
 
@@ -239,18 +283,18 @@ def sync_drafts(rest: SupabaseRest | None, mode: str, report: dict) -> None:
             "address": d["address"],
             "city": d["city"],
             "state": d["state"],
-            "latitude": d["latitude"],
-            "longitude": d["longitude"],
-            "rental_price": d["rental_price"],
-            "built_up_sqft": d["size_sqft"],
-            "bathrooms": d["bathrooms"],
-            "floor_level": d["floor_level"],
+            "latitude": _json_safe(d["latitude"]),
+            "longitude": _json_safe(d["longitude"]),
+            "rental_price": _json_safe(d["rental_price"]),
+            "built_up_sqft": _json_safe(d["size_sqft"]),
+            "bathrooms": _json_safe(d["bathrooms"]),
+            "floor_level": _json_safe(d["floor_level"]),
             "tenure": d["tenure"],
             "furnishing": d["furnishing"],
             "availability": d["availability"],
             "verification_status": "draft",
             "is_published": False,
-            "owner_user_id": d["owner_user_id"],
+            "owner_user_id": _json_safe(d["owner_user_id"]),
             "created_at": d["created_at"].isoformat() if d["created_at"] else None,
             "updated_at": d["updated_at"].isoformat() if d["updated_at"] else None,
         })
@@ -328,7 +372,7 @@ def main(argv: list[str] | None = None) -> int:
     else:
         print(out)
 
-    blocked = "BLOCKED" in json.dumps(report)
+    blocked = "BLOCKED" in out
     print(f"\n{'DONE (with blocked steps)' if blocked else 'DONE'}: mode={args.mode}")
     return 0
 
