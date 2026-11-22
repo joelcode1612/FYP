@@ -15,6 +15,7 @@ from __future__ import annotations
 import math
 import time
 from dataclasses import dataclass, field
+from typing import ClassVar
 
 import cv2
 import numpy as np
@@ -60,7 +61,11 @@ class SphereResidualAffine:
     dv_x: float = 0.0
     dv_y: float = 0.0
 
-    IDENTITY: "SphereResidualAffine" = None  # filled below
+    # A class-level singleton, NOT a dataclass field: this is a frozen/slots
+    # dataclass, so a normal field would add a seventh constructor argument
+    # and every SphereResidualAffine(...) call would try to write a read-only
+    # slot named IDENTITY.
+    IDENTITY: ClassVar["SphereResidualAffine"]
 
     @property
     def is_identity(self) -> bool:

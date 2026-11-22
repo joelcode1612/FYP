@@ -23,6 +23,7 @@ from sitewise.services.recommendation_search_service import (
     SORT_BEST_MATCH,
     RecommendationSearchService,
     SearchCriteria,
+    StaleRankingCursor,
 )
 from sitewise.services.recommendation_service import RecommendationService
 from sitewise.services.recommendation_management_service import (
@@ -145,9 +146,9 @@ def search_recommendations(
     happen server-side over the complete eligible set, so page 2 is always
     consistent with page 1 and neither client ever sorts the catalogue.
 
-    ``model.available`` is ``false`` in this build: the trained artifact is not
-    integrated, so ``recommendation.score`` is null and the ordering is the
-    documented requirement-fit ordering. No score is fabricated.
+    The expanded64 PU research index gates eligibility and breaks ties in the
+    requirement-fit ordering. ``recommendation.score`` remains null because
+    search returns a rank rather than a blended personalised score.
 
     Each page is batch-enriched with display media: ``photos`` (URL list, the
     verified catalogue-photo chain) and ``panorama`` (the same honest
@@ -212,6 +213,8 @@ def search_recommendations(
                 row['property_id']
             ) or dict(PANORAMA_UNAVAILABLE)
         return response
+    except StaleRankingCursor as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     except ValueError as exc:
         # Cursor from another search / malformed cursor: the client must
         # restart from page 1 rather than page through the wrong ranking.

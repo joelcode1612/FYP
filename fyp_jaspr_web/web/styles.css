@@ -18359,7 +18359,10 @@ input[type="range"] {
 .cmp__context { color: var(--muted); }
 .cmp__actions { display: flex; flex-wrap: wrap; gap: 10px; }
 
+.cmp__cell-property { display: none; }
+
 @media (max-width: 700px) {
+  .cmp__cell-property { display: block; font-weight: 600; }
   .cmp__row { grid-template-columns: minmax(0, 1fr); }
   .cmp__row--head { display: none; }
 }

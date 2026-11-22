@@ -27,8 +27,20 @@ class WebApiClient implements ApiClient {
       WebAuth.request(_withQuery(path, query));
 
   @override
-  Future<Map<String, dynamic>> post(String path, Map<String, dynamic> body) =>
-      WebAuth.request(path, method: 'POST', body: body);
+  Future<Map<String, dynamic>> post(String path, Map<String, dynamic> body) async {
+    if (path != '/api/v1/recommendations/search' || body['cursor'] == null) {
+      return WebAuth.request(path, method: 'POST', body: body);
+    }
+    final result = await WebAuth.requestDetailed(path, method: 'POST', body: body);
+    if (result['ok'] == true) return result['body'] as Map<String, dynamic>;
+    if (result['status'] == 409) {
+      throw const ConflictFailure('The ranking changed. Restart the search from the first page.');
+    }
+    if (result['status'] == 401 || result['status'] == 403) {
+      throw const UnauthorizedFailure();
+    }
+    throw const ServiceFailure();
+  }
 
   @override
   Future<Map<String, dynamic>> patch(String path, Map<String, dynamic> body) =>

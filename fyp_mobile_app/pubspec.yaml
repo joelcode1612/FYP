@@ -129,6 +129,7 @@ flutter:
     - assets/sitewise-mark-64.png
     - assets/config/dev.json
     - assets/config/sitewise_dev.json
+    - assets/images/capture_guide/
 
   uses-material-design: true
 

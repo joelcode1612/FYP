@@ -30,6 +30,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy import text
+from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session
 
 from sitewise.core.exceptions import (
@@ -48,12 +49,15 @@ from sitewise.services import provider_scope
 
 logger = logging.getLogger("sitewise.capture_session")
 
-#: The three capture modes that must never be merged. The expected frame
-#: count comes from the mode, not from the client: a client cannot create a
-#: session that expects a different number of photographs than the plan it
-#: claims to follow.
+#: Capture modes that must never be merged. The expected frame count comes
+#: from the mode, not from the client: a client cannot create a session that
+#: expects a different number of photographs than the plan it claims to
+#: follow. ``device_38_panorama`` is the Flutter-stitched workflow: the same
+#: 38-target plan, but the panorama is produced on the device and confirmed
+#: through the panorama endpoints instead of a Python stitching job.
 CAPTURE_MODES: dict[str, int] = {
     "device_38": 38,
+    "device_38_panorama": 38,
     "arcore_26": 26,
     "arcore_tour_30": 30,
 }
@@ -91,6 +95,30 @@ def ensure_property_access(
         )
 
 
+def _idempotent_session_id(key: str) -> uuid.UUID:
+    """Derive a stable row id from the client's capture idempotency key.
+
+    UUIDv5 lives entirely in application code: the canonical schema keeps its
+    existing UUID primary key and needs no extra column or new table.
+    """
+    return uuid.uuid5(uuid.NAMESPACE_URL, f"sitewise.capture.v1/{key}")
+
+
+def _same_capture(
+    record: CaptureSession,
+    *,
+    property_id: int,
+    user_id: uuid.UUID,
+    capture_mode: str,
+) -> bool:
+    return (
+        str(record.property_id) == str(property_id)
+        and str(record.owner_id) == str(user_id)
+        and record.capture_mode == capture_mode
+        and record.expected_frames == CAPTURE_MODES[capture_mode]
+    )
+
+
 def create_capture_session(
     session: Session,
     *,
@@ -98,11 +126,37 @@ def create_capture_session(
     user_id: uuid.UUID,
     capture_mode: str,
     capture_plan_version: str | None,
+    idempotency_key: str | None = None,
 ) -> CaptureSession:
+    """Create a session, or return the one a retried request already created.
+
+    A lost response is the common case on mobile: without this key the same
+    completed capture could create a second session and a second job. The
+    caller's local station id supplies the key; an existing row is returned
+    only when its property, owner and capture plan still agree.
+    """
     if capture_mode not in CAPTURE_MODES:
         modes = ", ".join(sorted(CAPTURE_MODES))
         raise ValidationError(f"capture_mode must be one of: {modes}.")
+    fixed_id = (
+        _idempotent_session_id(idempotency_key) if idempotency_key else None
+    )
+    if fixed_id is not None:
+        existing = session.get(CaptureSession, fixed_id)
+        if existing is not None:
+            if not _same_capture(
+                existing,
+                property_id=property_id,
+                user_id=user_id,
+                capture_mode=capture_mode,
+            ):
+                raise ConflictError(
+                    "The capture idempotency key belongs to a different "
+                    "property, agent or capture plan."
+                )
+            return existing
     record = CaptureSession(
+        id=fixed_id or uuid.uuid4(),
         property_id=str(property_id),
         owner_id=user_id,
         status="capturing",
@@ -111,7 +165,27 @@ def create_capture_session(
         capture_plan_version=(capture_plan_version or "1").strip() or "1",
     )
     session.add(record)
-    session.commit()
+    try:
+        session.commit()
+    except IntegrityError:
+        # Two requests with the same key raced. The loser reads the winner's
+        # row instead of failing the capture; a genuinely different capture
+        # cannot land on this id because the key is derived from its identity.
+        session.rollback()
+        if fixed_id is None:
+            raise
+        existing = session.get(CaptureSession, fixed_id)
+        if existing is None or not _same_capture(
+            existing,
+            property_id=property_id,
+            user_id=user_id,
+            capture_mode=capture_mode,
+        ):
+            raise ConflictError(
+                "The capture idempotency key belongs to a different property, "
+                "agent or capture plan."
+            ) from None
+        return existing
     session.refresh(record)
     return record
 
@@ -202,7 +276,11 @@ def confirm_frame(
     record.uploaded_at = _now()
     session.add(record)
     record_session.updated_at = _now()
-    if confirmed_frame_count(session, session_id) >= record_session.expected_frames:
+    if (
+        record_session.status != "completed"
+        and confirmed_frame_count(session, session_id)
+        >= record_session.expected_frames
+    ):
         record_session.status = "uploaded"
     session.add(record_session)
     session.commit()
@@ -370,6 +448,36 @@ def complete_job(
         record_session.status = "completed"
         record_session.updated_at = _now()
         session.add(record_session)
+        # Reuse the existing assignment record (and its outbox mirror) for the
+        # only cross-database metadata the inspection workflow needs. This is
+        # best-effort bookkeeping AFTER the canonical panorama exists: a mirror
+        # outage never fails a successful stitch, and no second job table or
+        # duplicate panorama copy is introduced.
+        try:
+            property_id = int(record_session.property_id)
+            with session.begin_nested():
+                session.execute(
+                    text(
+                        "UPDATE fyp.agent_listing_assignment "
+                        "SET panorama_id = :pan, panorama_tour_id = :tour, "
+                        "panorama_job_id = :job, panorama_uploaded_at = now(), "
+                        "updated_at = now() "
+                        "WHERE listing_id = :pid "
+                        "AND workflow_status IN ('accepted', 'needs_correction')"
+                    ),
+                    {
+                        "pan": str(panorama_id),
+                        "tour": str(record_session.id),
+                        "job": str(job.id),
+                        "pid": property_id,
+                    },
+                )
+        except Exception:  # noqa: BLE001 - secondary metadata must not block
+            logger.warning(
+                "Could not mirror panorama metadata for session %s",
+                record_session.id,
+                exc_info=True,
+            )
     session.add(job)
     session.commit()
 
@@ -455,6 +563,114 @@ def create_panorama(
         coverage_report=coverage_report,
     )
     session.add(record)
+    session.commit()
+    session.refresh(record)
+    return record
+
+
+def confirm_device_panorama(
+    session: Session,
+    *,
+    session_id: uuid.UUID,
+    storage_path: str,
+    width: int,
+    height: int,
+    coverage_report: dict[str, Any] | None,
+) -> Panorama:
+    """Register the device-generated panorama as the canonical row.
+
+    In the ``device_38_panorama`` workflow Flutter has already stitched the
+    38 originals into one 2:1 equirectangular JPEG; the confirmation endpoint
+    (which verifies the stored object, its checksum, its JPEG structure and
+    the 2:1 geometry BEFORE calling here) is the only writer of
+    ``fyp.panoramas`` for this workflow. The worker's ``create_panorama``
+    path stays untouched for legacy sessions.
+
+    Confirming twice is idempotent: the same verified object (same path and
+    geometry) returns the existing row without touching review state. A
+    genuinely different object for an UNPUBLISHED tour replaces the metadata
+    and resets the review decision; a published tour can never be silently
+    replaced. The session becomes ``completed`` as soon as the canonical
+    panorama exists — the original frames are a backup, not a prerequisite
+    for the deliverable.
+    """
+    record_session = session.get(CaptureSession, session_id)
+    if record_session is None:
+        raise NotFoundError("Capture session not found.")
+    if record_session.status == "cancelled":
+        raise ConflictError("This capture session was cancelled on the server.")
+    existing = session.execute(
+        text("SELECT panorama_id FROM fyp.panoramas WHERE session_id = :sid"),
+        {"sid": str(session_id)},
+    ).first()
+    if existing is not None:
+        record = session.get(Panorama, existing[0])
+        assert record is not None
+        same_object = (
+            record.storage_path == storage_path
+            and int(record.width) == int(width)
+            and int(record.height) == int(height)
+        )
+        if record.published_at is not None and not same_object:
+            raise ConflictError(
+                "This 360° tour is already published; unpublish it before "
+                "replacing the panorama."
+            )
+        if same_object:
+            # The retry flow re-confirms the object it already stored; review
+            # state and timestamps must survive that unchanged.
+            return record
+        record.storage_path = storage_path
+        record.width = width
+        record.height = height
+        record.coverage_report = coverage_report
+        # Replacing the bytes invalidates any earlier review decision.
+        record.verification_status = "pending"
+        record.reviewed_by = None
+        record.reviewed_at = None
+        record.review_reason = None
+        record.updated_at = _now()
+        session.add(record)
+    else:
+        record = Panorama(
+            session_id=session_id,
+            property_id=str(record_session.property_id),
+            storage_path=storage_path,
+            width=width,
+            height=height,
+            coverage_report=coverage_report,
+        )
+        session.add(record)
+    if record_session.status != "completed":
+        record_session.status = "completed"
+        record_session.updated_at = _now()
+        session.add(record_session)
+    # Same best-effort mirror as the worker's completion path: the inspection
+    # workflow reads the assignment's panorama metadata, and a mirror outage
+    # must never fail a verified upload.
+    try:
+        with session.begin_nested():
+            session.execute(
+                text(
+                    "UPDATE fyp.agent_listing_assignment "
+                    "SET panorama_id = :pan, panorama_tour_id = :tour, "
+                    "panorama_job_id = NULL, panorama_uploaded_at = now(), "
+                    "updated_at = now() "
+                    "WHERE listing_id = :pid "
+                    "AND workflow_status IN ('accepted', 'needs_correction')"
+                ),
+                {
+                    "pan": str(record.panorama_id),
+                    "tour": str(record_session.id),
+                    "pid": int(record_session.property_id),
+                },
+            )
+    except Exception:  # noqa: BLE001 - secondary metadata must not block
+        logger.warning(
+            "Could not mirror device-panorama metadata for session %s",
+            record_session.id,
+            exc_info=True,
+        )
     session.commit()
     session.refresh(record)
     return record

@@ -119,6 +119,13 @@ class SessionCreate(BaseModel):
     property_id: int = Field(gt=0)
     capture_mode: str = "device_38"
     capture_plan_version: str | None = None
+    # Optional stable key from the device's local station id. It lets a retry
+    # after a lost create response resolve the SAME session row without
+    # storing another column: the service derives a UUIDv5 from it.
+    idempotency_key: str | None = Field(
+        default=None, min_length=1, max_length=200,
+        pattern=r"^[A-Za-z0-9._:-]+$",
+    )
 
 
 # Pose keys beyond the orientation quaternion that the capture manifest may
@@ -215,8 +222,9 @@ def create_session(
         user_id=current.user_id,
         capture_mode=body.capture_mode,
         capture_plan_version=body.capture_plan_version,
+        idempotency_key=body.idempotency_key,
     )
-    return _session_json(record, 0)
+    return _session_json(record, svc.confirmed_frame_count(db, record.id))
 
 
 @router.get("/sessions/{session_id}")
@@ -255,6 +263,31 @@ def confirm_frame(
         raise ConflictError(
             "The frame object has not reached storage yet; upload it again."
         )
+    # A repaired checksum (the client found a hashing mistake, or a stale
+    # manifest row) may replace metadata ONLY when the stored bytes really
+    # match it. Without this check a retake could silently relabel old bytes.
+    if body.checksum_sha256 is not None:
+        previous = next(
+            (
+                f for f in svc.list_capture_frames(db, session_id)
+                if f.target_index == body.target_index
+            ),
+            None,
+        )
+        if (
+            previous is not None
+            and previous.checksum_sha256
+            and previous.checksum_sha256.lower() != body.checksum_sha256.lower()
+        ):
+            try:
+                stored = capture_storage.download(path)
+            except capture_storage.CaptureStorageUnavailable as exc:
+                raise _storage_unavailable(exc) from exc
+            if not capture_storage.verify_checksum(stored, body.checksum_sha256):
+                raise ConflictError(
+                    "The stored photograph does not match the corrected "
+                    "checksum; upload this frame again."
+                )
     frame, created = svc.confirm_frame(
         db,
         session_id=session_id,
@@ -358,6 +391,179 @@ def issue_upload_urls(
         "expiresInSeconds": capture_storage.UPLOAD_URL_TTL_SECONDS,
         "uploads": urls,
     }
+
+
+# --------------------------------------------------------------------------
+# Device-generated panorama upload (capture_plan_version 2).
+#
+# Flutter stitches the 38 originals into one 2:1 equirectangular JPEG before
+# any byte reaches the cloud, so the backend never enqueues a stitching job
+# for these sessions. The panorama goes up FIRST through the same signed-URL
+# transport as the frames; the confirmation endpoint is the only writer of
+# the canonical ``fyp.panoramas`` row for this workflow, and it verifies the
+# stored object end to end before any row exists.
+# --------------------------------------------------------------------------
+
+
+@router.post("/sessions/{session_id}/panorama/upload-url")
+def issue_panorama_upload_url(
+    session_id: uuid.UUID,
+    db: DbSession,
+    current: ProviderUser,
+) -> dict[str, Any]:
+    """A short-lived signed upload permission for the session's panorama.
+
+    Same authorization and transport as the frame upload URLs, pinned to the
+    session's single deterministic panorama object.
+    """
+    record = svc.require_capture_session(
+        db, session_id=session_id, user_id=current.user_id, role=current.role
+    )
+    agent_assignment(db, int(record.property_id), current, writable=True)
+    if str(record.owner_id) != str(current.user_id):
+        raise HTTPException(
+            status_code=403, detail="Capture session belongs to a different Agent."
+        )
+    path = capture_storage.panorama_object_path(record.property_id, str(session_id))
+    try:
+        signed = capture_storage.signed_upload_url(storage_path=path, target_index=0)
+    except capture_storage.CaptureStorageUnavailable as exc:
+        raise _storage_unavailable(exc) from exc
+    return {
+        "sessionId": str(session_id),
+        "storagePath": signed.storage_path,
+        "uploadUrl": signed.upload_url,
+        "method": "PUT",
+        "headers": {"content-type": "image/jpeg"},
+        # A repeat PUT of the SAME panorama answers 409 Duplicate, which is
+        # the idempotent success the retry flow needs.
+        "duplicateStatusIsSuccess": True,
+        "expiresInSeconds": capture_storage.UPLOAD_URL_TTL_SECONDS,
+        "maxBytes": capture_storage.PANORAMA_MAX_BYTES,
+    }
+
+
+class PanoramaConfirm(BaseModel):
+    storage_path: str = Field(min_length=1, max_length=512)
+    # Required: the device hashed the exact bytes it PUT; confirmation
+    # verifies the stored object against this digest before any row exists.
+    checksum_sha256: str = Field(max_length=64)
+    coverage_report: dict[str, Any] | None = None
+
+    @field_validator("checksum_sha256")
+    @classmethod
+    def _checksum_hex(cls, value: str | None) -> str | None:
+        if value is None:
+            return value
+        cleaned = value.strip().lower()
+        if len(cleaned) != 64 or any(c not in "0123456789abcdef" for c in cleaned):
+            raise ValueError("checksum_sha256 must be a 64-character hex digest.")
+        return cleaned
+
+
+def _validated_panorama_path(
+    record, session_id: uuid.UUID, storage_path: str
+) -> str:
+    """Only the session's own single panorama object may be confirmed."""
+    cleaned = storage_path.strip()
+    expected = (
+        f"properties/{record.property_id}/sessions/{session_id}/panorama.jpg"
+    )
+    if cleaned != expected:
+        raise ValidationError(
+            "storage_path must be this session's panorama object "
+            f"({expected})."
+        )
+    return cleaned
+
+
+def _decode_panorama(data: bytes) -> tuple[int, int]:
+    """Decode the stored bytes as a JPEG and return ``(width, height)``.
+
+    A corrupt, truncated or non-image payload decodes to ``None`` and is
+    rejected before any canonical row can reference it. cv2 is imported
+    lazily: the router is imported at startup and the vision stack must not
+    pay for that.
+    """
+    import cv2
+    import numpy as np
+
+    decoded = cv2.imdecode(np.frombuffer(data, dtype=np.uint8), cv2.IMREAD_COLOR)
+    if decoded is None:
+        raise ValidationError(
+            "The panorama is not a readable JPEG image; upload it again."
+        )
+    height, width = decoded.shape[:2]
+    return int(width), int(height)
+
+
+@router.post("/sessions/{session_id}/panorama")
+def confirm_panorama(
+    session_id: uuid.UUID,
+    body: PanoramaConfirm,
+    db: DbSession,
+    current: ProviderUser,
+) -> dict[str, Any]:
+    """Verify and register the device-generated panorama.
+
+    The full verification chain runs BEFORE any canonical row exists: the
+    caller is the session's owning agent, the path is the session's own
+    panorama object, the object has reached storage, its bytes match the
+    device's SHA-256 digest, the payload decodes as a JPEG within the size
+    and geometry limits (2:1 equirectangular). Only then is
+    ``fyp.panoramas`` written and the session completed.
+    """
+    record = svc.require_capture_session(
+        db, session_id=session_id, user_id=current.user_id, role=current.role
+    )
+    agent_assignment(db, int(record.property_id), current, writable=True)
+    if str(record.owner_id) != str(current.user_id):
+        raise HTTPException(
+            status_code=403, detail="Capture session belongs to a different Agent."
+        )
+    path = _validated_panorama_path(record, session_id, body.storage_path)
+    try:
+        try:
+            if not capture_storage.object_exists(path):
+                raise ConflictError(
+                    "The panorama object has not reached storage yet; "
+                    "upload it again."
+                )
+            data = capture_storage.download(path)
+        except capture_storage.ObjectMissing as exc:
+            raise ConflictError(
+                "The panorama object has not reached storage yet; "
+                "upload it again."
+            ) from exc
+    except capture_storage.CaptureStorageUnavailable as exc:
+        raise _storage_unavailable(exc) from exc
+    if len(data) > capture_storage.PANORAMA_MAX_BYTES:
+        raise ValidationError(
+            "The panorama exceeds the "
+            f"{capture_storage.PANORAMA_MAX_BYTES // (1024 * 1024)} MB limit."
+        )
+    if not capture_storage.verify_checksum(data, body.checksum_sha256):
+        raise ConflictError(
+            "The stored panorama does not match its checksum; upload it again."
+        )
+    width, height = _decode_panorama(data)
+    if height * 2 != width:
+        raise ValidationError(
+            "The panorama must be a 2:1 equirectangular image."
+        )
+    if not 512 <= width <= 8192:
+        raise ValidationError(
+            "The panorama width must be between 512 and 8192 pixels."
+        )
+    panorama = svc.confirm_device_panorama(
+        db,
+        session_id=session_id,
+        storage_path=path,
+        width=width,
+        height=height,
+        coverage_report=body.coverage_report,
+    )
+    return _panorama_json(panorama)
 
 
 @router.get("/panoramas/{panorama_id}/view")

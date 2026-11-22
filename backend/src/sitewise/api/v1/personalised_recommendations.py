@@ -100,6 +100,7 @@ class GenerateRequest(BaseModel):
     authenticated identity is the sole owner of every generated result.
     """
 
+    refresh: bool = False
     limit: int = Field(default=20, ge=1, le=100)
     state: str | None = Field(default=None, max_length=120)
     property_ids: list[str] | None = Field(default=None, max_length=20)
@@ -132,6 +133,7 @@ def generate_recommendations(
                 limit=body.limit,
                 state=body.state,
                 property_ids=body.property_ids,
+                refresh=body.refresh,
             ),
         )
     except Exception as exc:  # database / repository failure, not a bad request

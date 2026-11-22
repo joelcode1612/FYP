@@ -2,6 +2,8 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
+
 import 'package:http/http.dart' as http;
 import 'package:shared_logic/shared_logic.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -89,6 +91,14 @@ class MobileApiClient implements ApiClient {
       );
     }
     if (status < 200 || status >= 300) {
+      // Never print bearer tokens or request bodies. Route and status identify
+      // whether this was an actual connectivity failure or a backend rejection.
+      if (kDebugMode) {
+        debugPrint(
+          'SITEWISE_API_ERROR: $method ${uri.path} -> HTTP $status: '
+          '${_failureMessage(text)}',
+        );
+      }
       throw _failureForStatus(status, text);
     }
     if (text.isEmpty) return const {}; // 204-style empty success
@@ -116,9 +126,11 @@ class MobileApiClient implements ApiClient {
     return switch (status) {
       401 || 403 => UnauthorizedFailure(message),
       404 => NotFoundFailure(message),
-      422 => ValidationFailure(message),
+      400 || 422 => ValidationFailure(message),
+      409 => ConflictFailure(message),
       >= 500 => ServiceFailure(message),
-      _ => NetworkFailure(message),
+      // An HTTP response proves the server was reachable, even when rejected.
+      _ => ServiceFailure(message),
     };
   }
 

@@ -288,7 +288,19 @@ class TourPreviewViewModel extends ChangeNotifier {
     error = null;
     notifyListeners();
     try {
-      if (_sphereEngine) return await _regenerateSphere();
+      if (_sphereEngine) {
+        // The device panorama is canonical for every 38-point tour: stitch
+        // it locally FIRST. A live tour then synchronizes that file —
+        // panorama upload and confirmation, then the original backups —
+        // while a demo tour is already finished at this point. FastAPI is
+        // never asked to stitch.
+        final stitched = await _regenerateSphere();
+        if (!stitched || !liveBackend) return stitched;
+        final sessions = _sphereSessions;
+        if (sessions == null) return stitched;
+        final panorama = await _devicePanoramaPath(sessions);
+        return await _handoff(panorama ?? tour?.panoramaPath);
+      }
       final service = stitchService;
       unawaited(service?.beginFinalPanorama());
       final manifest = await ServiceLocator.frameStore.loadManifest(tourId);
@@ -375,6 +387,8 @@ class TourPreviewViewModel extends ChangeNotifier {
   /// refused rather than written to storage a second time.
   Future<bool> pushPanorama() async {
     if (generating) return false;
+    // Never upload an old device-rendered panorama for a live sphere tour.
+    if (liveBackend) return retryHandoff();
     final path = tour?.panoramaPath;
     final property = tour?.propertyId;
     if (path == null || property == null || property.isEmpty) {
@@ -461,11 +475,62 @@ class TourPreviewViewModel extends ChangeNotifier {
     }
   }
 
-  /// Runs (or re-runs) the backend-authoritative handoff from the preview —
-  /// the same coordinator the capture banner uses, against the same saved
-  /// frames. Nothing on this device is deleted or restitched by it.
+  /// Runs (or re-runs) the device-panorama cloud synchronization from the
+  /// preview — the same coordinator the capture banner uses, against the
+  /// same saved frames. The device panorama is canonical: if it is missing
+  /// on disk it is stitched here first, never worked around, and nothing on
+  /// this device is deleted by the handoff. The backend is never asked to
+  /// stitch and no processing job is created.
   Future<bool> retryHandoff() async {
     if (generating || !liveBackend) return false;
+    final sessions = _sphereSessions;
+    if (sessions == null) return false;
+    generating = true;
+    error = null;
+    notifyListeners();
+    try {
+      var panorama = await _devicePanoramaPath(sessions);
+      if (panorama == null) {
+        // No device panorama yet: generate it on this device before any
+        // cloud step — the upload must carry the Flutter result.
+        final ok = await _regenerateSphere();
+        if (!ok) return false;
+        panorama = await _devicePanoramaPath(sessions);
+        if (panorama == null) {
+          error =
+              'The panorama was stitched, but its file could not be found '
+              'on this device. The photographs are kept.';
+          return false;
+        }
+      }
+      return await _handoff(panorama);
+    } finally {
+      generating = false;
+      stage = null;
+      notifyListeners();
+    }
+  }
+
+  /// The device-stitched panorama for this tour, verified on disk: the tour
+  /// record's path first, then the session store's stitched panorama.
+  Future<String?> _devicePanoramaPath(
+    SitewiseSphereSessionStore sessions,
+  ) async {
+    final candidates = <String?>[
+      tour?.panoramaPath,
+      (await sessions.getSession(tourId))?.localPanoramaPath,
+    ];
+    for (final path in candidates) {
+      if (path == null || path.isEmpty) continue;
+      if (await File(path).exists()) return path;
+    }
+    return null;
+  }
+
+  /// The cloud synchronization itself: create or resume the authorized
+  /// session, upload and confirm the device panorama FIRST, then back the
+  /// originals up through the resumable queue. Never calls a stitching job.
+  Future<bool> _handoff(String? panoramaPath) async {
     final sessions = _sphereSessions;
     if (sessions == null) return false;
     final property = int.tryParse(tour?.propertyId ?? '');
@@ -476,9 +541,7 @@ class TourPreviewViewModel extends ChangeNotifier {
       notifyListeners();
       return false;
     }
-    generating = true;
     stage = 'Preparing the Sitewise handoff…';
-    error = null;
     notifyListeners();
     try {
       final frames = await sessions.loadFrames(tourId);
@@ -490,8 +553,15 @@ class TourPreviewViewModel extends ChangeNotifier {
         propertyId: property,
         frames: frames,
         expectedFrames: kSphereTargetCount,
+        panoramaPath: panoramaPath,
         onStage: (s) {
+          if (_disposed) return;
           stage = s;
+          notifyListeners();
+        },
+        onProgress: (progress) {
+          if (_disposed) return;
+          stage = _handoffStageLabel(progress);
           notifyListeners();
         },
       );
@@ -504,12 +574,23 @@ class TourPreviewViewModel extends ChangeNotifier {
           'The frames and the panorama are kept on this device — you can '
           'retry.';
       return false;
-    } finally {
-      generating = false;
-      stage = null;
-      notifyListeners();
     }
   }
+
+  /// One honest line per synchronization stage for the preview banner.
+  String _handoffStageLabel(BackendHandoffProgress progress) =>
+      switch (progress.stage) {
+        BackendHandoffStage.captured =>
+          '${progress.total} of ${progress.total} photos captured',
+        BackendHandoffStage.processing =>
+          'Creating your 360° panorama on this device',
+        BackendHandoffStage.panoramaUploading =>
+          'Uploading your 360° panorama…',
+        BackendHandoffStage.framesBackingUp =>
+          'Backing up photographs '
+              '(${progress.processed}/${progress.total})',
+        BackendHandoffStage.ready => 'Your 360° panorama is ready',
+      };
 
   Future<bool> submit() async {
     try {

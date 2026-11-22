@@ -9,9 +9,13 @@ import 'package:fyp/core/di/service_locator.dart';
 import 'package:fyp/core/config/mobile_config.dart';
 import 'package:fyp/core/utils/capture_log.dart';
 import 'package:fyp/features/capture_360/application/backend_capture_coordinator.dart';
+import 'package:fyp/features/capture_360/application/capture_panorama_generation_service.dart';
 import 'package:fyp/features/capture_360/data/repositories/sitewise_capture_repository.dart';
+import 'package:fyp/features/capture_360/data/sphere/equirectangular_stitcher.dart';
 import 'package:fyp/features/capture_360/data/sphere/sitewise_sphere_session_store.dart';
+import 'package:fyp/features/capture_360/domain/sphere/sphere_capture_session.dart' hide CapturedFrame;
 import 'package:fyp/features/capture_360/domain/sphere/sphere_target.dart';
+import 'package:fyp/features/capture_360/guide/presentation/screens/capture_guide_screen.dart';
 import 'package:fyp/features/capture_360/presentation/sphere/screens/sphere_capture_screen.dart';
 import 'package:fyp/shared/presentation/widgets/sitewise_button.dart';
 import 'package:fyp/shared/presentation/widgets/sitewise_confirm_dialog.dart';
@@ -34,19 +38,12 @@ class ArCaptureRequest {
 /// world anchor, so walking moves the whole sphere with the phone — only
 /// rotation is tracked.
 ///
-/// This page is only the host: it resolves the tour the frames belong to, gives
-/// the controller a tour-scoped [SiteWiseCaptureRepository] (frames and
-/// records inside `<appDocs>/sitewise/tours/<tourId>/ar_capture/<tourId>/`), a
-/// [SitewiseSphereSessionStore] for the resumable session metadata, and hands
-/// the stitched panorama back to the tour record and the Sitewise upload. The
-/// capture UI itself is [SphereCaptureScreen], the reference implementation's
-/// own screen.
-///
-/// A station captured by the retired 26-point ARCore flow carries records but
-/// no `session.json` marker (the 38-flow writes it before the camera starts).
-/// Such a station is never resumed as a 38-point session: the host offers an
-/// explicit fresh start, which deletes the legacy capture, and otherwise backs
-/// out without touching anything.
+/// Once the 38th original JPEG is saved, this host owns the handoff: the
+/// device stitches the 2:1 equirectangular panorama FIRST — the device
+/// panorama is canonical — and only then talks to FastAPI. The finished
+/// panorama is uploaded and confirmed through the signed panorama endpoints,
+/// and the 38 originals are backed up afterwards through the resumable queue.
+/// The server never re-stitches a device-generated capture.
 class ArCaptureMobilePage extends StatefulWidget {
   const ArCaptureMobilePage({super.key, required this.request});
 
@@ -61,9 +58,24 @@ class _ArCaptureMobilePageState extends State<ArCaptureMobilePage> {
   SitewiseSphereSessionStore? _sessions;
   String? _tourId;
   bool _preparing = true;
-  bool _uploading = false;
-  String? _stage;
+  bool _guideCompleted = false;
+  bool _resumedComplete = false;
+  Future<void>? _handoffFuture;
+
+  BackendHandoffStage? _handoffStage;
+  int _processed = 0;
+  int _total = kSphereTargetCount;
+  int? _processingPercent;
+  BackendHandoffResult? _result;
+  String? _failure;
   String? _setupError;
+
+  /// The device-stitched panorama the handoff uploads. Set by the capture
+  /// screen's `onPanoramaReady` callback or by the resume stitch; the
+  /// canonical tour file is produced on this device, never on the server.
+  String? _panoramaPath;
+
+  bool get _uploading => _handoffFuture != null;
 
   @override
   void initState() {
@@ -136,16 +148,50 @@ class _ArCaptureMobilePageState extends State<ArCaptureMobilePage> {
         frameStore: frameStore,
         onProgress: (count) => _syncFrameCount(tour.id, count),
       );
+      final sessions = SitewiseSphereSessionStore(
+        frameStore: frameStore,
+        tourId: tour.id,
+      );
+
+      // App-closed recovery: if all originals are already on disk, do not open
+      // the camera or re-run the guide. The resume path stitches the device
+      // panorama if the previous launch never got to, then uploads it first
+      // and resumes the original backups.
+      final restoredFrames = isSphereEngine
+          ? await sessions.loadFrames(tour.id)
+          : const <CapturedFrame>[];
+      final restoredSession = isSphereEngine
+          ? await sessions.getSession(tour.id)
+          : null;
+      final shouldResume =
+          MobileConfig.usesLiveApi &&
+          restoredFrames.length >= kSphereTargetCount;
+
       if (!mounted) return;
       setState(() {
         _tourId = tour.id;
         _repository = repository;
-        _sessions = SitewiseSphereSessionStore(
-          frameStore: frameStore,
-          tourId: tour.id,
-        );
+        _sessions = sessions;
+        _guideCompleted = shouldResume;
+        _resumedComplete = shouldResume;
         _preparing = false;
       });
+
+      if (shouldResume) {
+        if (restoredSession?.syncStatus == FrameSyncStatus.ready) {
+          // A previous launch already finished the handoff. Show the ready
+          // state without inventing another session or another job.
+          if (mounted) {
+            setState(() {
+              _handoffStage = BackendHandoffStage.ready;
+              _processed = kSphereTargetCount;
+              _processingPercent = 100;
+            });
+          }
+        } else {
+          unawaited(_resumeHandoff(restoredSession));
+        }
+      }
     } catch (error) {
       if (!mounted) return;
       setState(() {
@@ -199,77 +245,143 @@ class _ArCaptureMobilePageState extends State<ArCaptureMobilePage> {
     }
   }
 
-  /// The sphere flow finished stitching. Attach the panorama to the tour
-  /// record, then hand the capture over to Sitewise and open the preview.
-  /// Stitching itself stays inside the capture screen — the host only ever
-  /// sees the finished file.
+  /// Resumes an interrupted workflow after the app was closed with all 38
+  /// originals on disk.
   ///
-  /// A live build runs the backend-authoritative handoff (the original frames
-  /// are uploaded and the backend stitches the canonical panorama); a demo
-  /// build has no server records at all, so the device panorama previews
-  /// directly. Either way the local frames and the stitched file are never
-  /// reworked by what follows.
-  Future<void> _onPanoramaReady(String panoramaPath) async {
-    final tourId = _tourId;
-    if (tourId == null || _uploading) return;
-    setState(() {
-      _uploading = true;
-      _stage = 'Preparing the Sitewise handoff…';
-    });
-    try {
-      final tour = await ServiceLocator.tourRepo.tourById(tourId);
-      if (tour != null) {
-        await ServiceLocator.tourRepo.updateTour(
-          tour.copyWith(
-            panoramaPath: panoramaPath,
-            status: VirtualTourStatus.ready,
-          ),
-        );
-      }
-    } catch (error) {
-      CaptureLog.log('Panorama could not be recorded on the tour: $error');
-    }
-    if (MobileConfig.usesLiveApi) {
-      await _handOffToBackend();
-      return;
-    }
-    if (!mounted) return;
-    setState(() {
-      _uploading = false;
-      _stage = null;
-    });
-    _openPreview();
-  }
-
-  /// The backend-authoritative handoff (spec §12): upload the original
-  /// frames through signed URLs, request server-side stitching, poll the job
-  /// and open the preview once the canonical panorama exists.
-  ///
-  /// Every failure here is honest and retryable: the frames, the device
-  /// panorama and the tour record stay exactly as they are, and the coordinator
-  /// re-derives its state from the server on the next run. A draft that was
-  /// never saved as a real listing starts no cloud session at all.
-  Future<void> _handOffToBackend() async {
+  /// The device panorama is canonical, so the resume order mirrors the fresh
+  /// capture: if the previous launch already stitched the panorama, that file
+  /// is uploaded first; if it never got to stitch, the same on-device
+  /// pipeline runs here before any cloud step. Nothing is re-captured and
+  /// the server is never asked to stitch.
+  Future<void> _resumeHandoff(CaptureSession? restoredSession) async {
     final tourId = _tourId;
     final sessions = _sessions;
-    if (tourId == null || sessions == null || _uploading) return;
-    final propertyId = int.tryParse(widget.request.propertyId);
-    if (propertyId == null) {
-      setState(() {
-        _uploading = false;
-        _stage =
-            'The property draft must be saved before a Sitewise capture '
-            'session can start. The photographs are kept on this device.';
-      });
+    final repository = _repository;
+    if (tourId == null || sessions == null || repository == null) return;
+    final stitched = restoredSession?.localPanoramaPath;
+    if (stitched != null &&
+        stitched.isNotEmpty &&
+        await File(stitched).exists()) {
+      _panoramaPath = stitched;
+      unawaited(_handOffToBackend());
       return;
     }
-    setState(() {
-      _uploading = true;
-      _stage = 'Preparing the Sitewise handoff…';
-    });
+    if (mounted) {
+      setState(() {
+        _handoffStage = BackendHandoffStage.processing;
+        _processed = kSphereTargetCount;
+        _total = kSphereTargetCount;
+        _processingPercent = null;
+        _failure = null;
+        _result = null;
+      });
+    }
+    try {
+      final records = await repository.loadRecords(tourId);
+      final result = await const PanoramaGenerationService(
+        EquirectangularStitcher(),
+      ).generate(
+        records: records,
+        total: kSphereTargetCount,
+        onStage: (_) {},
+      );
+      if (!result.success || result.panoramaPath == null) {
+        if (mounted) {
+          setState(() {
+            _handoffStage = null;
+            _processingPercent = null;
+            _failure =
+                'The panorama could not be generated on this device. Your '
+                'photographs are kept — retry to stitch again.';
+          });
+        }
+        return;
+      }
+      _panoramaPath = result.panoramaPath;
+      await sessions.savePanorama(
+        sessionId: tourId,
+        localPanoramaPath: result.panoramaPath,
+        status: PanoramaGenerationStatus.ready,
+        error: null,
+      );
+    } on Object catch (error, stack) {
+      CaptureLog.log('Device stitch on resume failed: $error');
+      CaptureLog.log('Device stitch on resume stack: $stack');
+      if (mounted) {
+        setState(() {
+          _handoffStage = null;
+          _processingPercent = null;
+          _failure =
+              'The panorama could not be generated on this device. Your '
+              'photographs are kept — retry to stitch again.';
+        });
+      }
+      return;
+    }
+    unawaited(_handOffToBackend());
+  }
+
+  /// The device panorama exists on disk. This is the handoff trigger: the
+  /// canonical tour file has been produced by Flutter, so the cloud step can
+  /// start immediately — panorama upload and confirmation first, then the
+  /// original backups. A demo build has no backend to receive it, so the
+  /// in-capture completion screen keeps its own view/export flow there.
+  void _onPanoramaReady(String panoramaPath) {
+    _panoramaPath = panoramaPath;
+    if (_handoffFuture != null || !MobileConfig.usesLiveApi) return;
+    unawaited(_handOffToBackend());
+  }
+
+  /// One handoff per capture. Repeated completion callbacks, banner taps and
+  /// Retry presses join the in-flight future instead of starting a second
+  /// upload; each step inside the coordinator is independently idempotent.
+  Future<void> _handOffToBackend() {
+    final running = _handoffFuture;
+    if (running != null) return running;
+    final future = _runHandOff();
+    _handoffFuture = future;
+    unawaited(
+      future.whenComplete(() {
+        if (identical(_handoffFuture, future)) _handoffFuture = null;
+      }),
+    );
+    return future;
+  }
+
+  Future<void> _runHandOff() async {
+    final tourId = _tourId;
+    final sessions = _sessions;
+    if (tourId == null || sessions == null) return;
+    final propertyId = int.tryParse(widget.request.propertyId);
+    if (propertyId == null) {
+      if (mounted) {
+        setState(() {
+          _failure =
+              'The property draft must be saved before a Sitewise capture '
+              'session can start. Your photographs are kept on this device.';
+        });
+      }
+      return;
+    }
+
+    if (mounted) {
+      setState(() {
+        _failure = null;
+        _result = null;
+        _processingPercent = null;
+        _handoffStage = BackendHandoffStage.captured;
+        _processed = kSphereTargetCount;
+        _total = kSphereTargetCount;
+      });
+    }
+    // Let the "38 of 38" confirmation render before the upload state replaces
+    // it. The photographs are already safely written at this point.
+    await Future<void>.delayed(const Duration(milliseconds: 400));
+
     try {
       final frames = await sessions.loadFrames(tourId);
-      await BackendCaptureCoordinator(
+      final panorama = await _resolvePanoramaPath(sessions, tourId);
+      final result = await BackendCaptureCoordinator(
         client: ServiceLocator.apiClient,
         store: sessions,
       ).handOff(
@@ -277,27 +389,59 @@ class _ArCaptureMobilePageState extends State<ArCaptureMobilePage> {
         propertyId: propertyId,
         frames: frames,
         expectedFrames: kSphereTargetCount,
-        onStage: (String stage) {
-          if (mounted) setState(() => _stage = stage);
+        panoramaPath: panorama,
+        onProgress: (BackendHandoffProgress progress) {
+          if (!mounted) return;
+          setState(() {
+            _handoffStage = progress.stage;
+            _processed = progress.processed;
+            _total = progress.total;
+            _processingPercent = progress.percent;
+          });
         },
       );
       if (!mounted) return;
       setState(() {
-        _uploading = false;
-        _stage = null;
+        _result = result;
+        _handoffStage = BackendHandoffStage.ready;
+        _processingPercent = 100;
+        _failure = null;
       });
-      _openPreview();
-    } catch (error) {
+    } on Object catch (error, stack) {
+      CaptureLog.log('Device-panorama handoff failed: $error');
+      CaptureLog.log('Device-panorama handoff stack: $stack');
       if (!mounted) return;
       setState(() {
-        _uploading = false;
-        _stage =
-            'The Sitewise handoff failed: '
-            '${readableFailure(error, fallback: 'handoff error')} '
-            'The frames and the panorama are kept on this device — you can '
-            'retry.';
+        _handoffStage = null;
+        _processingPercent = null;
+        _failure =
+            'Upload could not finish. You can try again without taking '
+            'new photos.';
       });
     }
+  }
+
+  /// The local panorama for the handoff: the file the capture screen (or the
+  /// resume stitch) produced, verified on disk. A missing file does not stop
+  /// the original backup, but the canonical panorama cannot be confirmed
+  /// without it — the device result is the only source.
+  Future<String?> _resolvePanoramaPath(
+    SitewiseSphereSessionStore sessions,
+    String tourId,
+  ) async {
+    final direct = _panoramaPath;
+    if (direct != null && direct.isNotEmpty && await File(direct).exists()) {
+      return direct;
+    }
+    final session = await sessions.getSession(tourId);
+    final stitched = session?.localPanoramaPath;
+    if (stitched != null &&
+        stitched.isNotEmpty &&
+        await File(stitched).exists()) {
+      _panoramaPath = stitched;
+      return stitched;
+    }
+    return null;
   }
 
   void _openPreview() {
@@ -338,83 +482,214 @@ class _ArCaptureMobilePageState extends State<ArCaptureMobilePage> {
         body: Center(child: CircularProgressIndicator()),
       );
     }
-    return Stack(
-      children: [
-        SphereCaptureScreen(
-          sessionId: _tourId,
-          repository: repository,
-          sessions: _sessions,
-          onPanoramaReady: _onPanoramaReady,
-        ),
-        // Upload, processing and failure states, one tappable line at the
-        // bottom edge. Stitching progress lives inside the capture screen's
-        // own completion overlay; by the time this banner shows, the local
-        // panorama already exists and the backend handoff is what runs.
-        if (_uploading || _stage != null)
-          Positioned(
-            left: 16,
-            right: 16,
-            bottom: 24,
-            child: _UploadBanner(
-              stage: _stage ?? 'Working with Sitewise…',
-              running: _uploading,
-              onRetry: _uploading ? null : _handOffToBackend,
-            ),
-          ),
-      ],
+
+    // A completed capture, an active handoff, a finished tour and a retryable
+    // failure all share one honest progress screen. It replaces the camera
+    // once the device panorama is ready for upload; stitching progress
+    // itself is shown by the capture screen's completion overlay.
+    if (_resumedComplete ||
+        _handoffStage != null ||
+        _failure != null ||
+        _result != null) {
+      return _HandoffStatusScreen(
+        stage: _handoffStage,
+        processed: _processed,
+        total: _total,
+        percent: _processingPercent,
+        failure: _failure,
+        onRetry: _uploading || !MobileConfig.usesLiveApi
+            ? null
+            : () => unawaited(
+                _panoramaPath == null
+                    ? _resumeHandoff(null)
+                    : _handOffToBackend(),
+              ),
+        onView: _uploading ? null : _openPreview,
+      );
+    }
+
+    // Pre-capture instruction screen from the existing AR guide. The host
+    // remains mounted so property, tour and frame-session state stay intact.
+    if (!_guideCompleted) {
+      return CaptureGuideScreen(
+        onStartCapture: () {
+          if (!mounted) return;
+          setState(() => _guideCompleted = true);
+        },
+      );
+    }
+    return SphereCaptureScreen(
+      autoStart: true,
+      sessionId: _tourId,
+      repository: repository,
+      sessions: _sessions,
+      // The device stitches the canonical panorama; this host uploads it
+      // through onPanoramaReady and then backs the originals up.
+      backendProcessing: false,
+      onPanoramaReady: _onPanoramaReady,
     );
   }
 }
 
-class _UploadBanner extends StatelessWidget {
-  const _UploadBanner({
+/// The user-facing progression for the backend handoff. Every message is a
+/// complete sentence the app can show without translating a server exception.
+class _HandoffStatusScreen extends StatelessWidget {
+  const _HandoffStatusScreen({
     required this.stage,
-    required this.running,
+    required this.processed,
+    required this.total,
+    this.percent,
+    this.failure,
     this.onRetry,
+    this.onView,
   });
 
-  final String stage;
-  final bool running;
+  final BackendHandoffStage? stage;
+  final int processed;
+  final int total;
+  final int? percent;
+  final String? failure;
   final VoidCallback? onRetry;
+  final VoidCallback? onView;
 
   @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-    decoration: BoxDecoration(
-      color: Colors.black.withValues(alpha: 0.86),
-      borderRadius: BorderRadius.circular(12),
-    ),
-    child: Row(
-      children: [
-        if (running) ...[
-          const SizedBox(
-            width: 16,
-            height: 16,
-            child: CircularProgressIndicator(
-              strokeWidth: 2,
-              valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final ready = stage == BackendHandoffStage.ready;
+    final failed = failure != null;
+    final working = !ready && !failed;
+
+    final String title;
+    final String message;
+    if (ready) {
+      title = 'Your 360° panorama is ready';
+      message =
+          'The panorama created on this device is in Sitewise, and your '
+          'original photographs are backed up.';
+    } else if (failed) {
+      title = 'Your photos are safe';
+      message =
+          'Something could not finish. You can try again without taking '
+          'new photos.';
+    } else if (stage == BackendHandoffStage.processing) {
+      title = 'Creating your 360° panorama';
+      message =
+          'Your $total photographs are being stitched into one panorama '
+          'right here on this device.';
+    } else if (stage == BackendHandoffStage.panoramaUploading) {
+      title = 'Uploading your 360° panorama';
+      message =
+          'The finished panorama is sent to Sitewise first, so the tour is '
+          'ready for review as soon as possible.';
+    } else if (stage == BackendHandoffStage.framesBackingUp) {
+      title = 'Backing up your original photos';
+      message = '$processed of $total photos backed up';
+    } else {
+      title = '$total of $total photos captured';
+      message = 'Your photographs are safely saved on this device.';
+    }
+
+    final double? progressValue;
+    if (ready) {
+      progressValue = 1;
+    } else if (failed ||
+        stage == BackendHandoffStage.processing ||
+        stage == BackendHandoffStage.panoramaUploading) {
+      progressValue = null;
+    } else {
+      progressValue = total == 0 ? 0 : (processed / total).clamp(0.0, 1.0);
+    }
+
+    return Scaffold(
+      appBar: AppBar(title: const Text('360° capture')),
+      body: SafeArea(
+        child: Center(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(28),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 460),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Icon(
+                    failed
+                        ? Icons.cloud_off_outlined
+                        : ready || stage == BackendHandoffStage.processing
+                        ? Icons.threesixty
+                        : Icons.cloud_upload_outlined,
+                    size: 64,
+                    color: failed
+                        ? theme.colorScheme.error
+                        : theme.colorScheme.primary,
+                  ),
+                  const SizedBox(height: 24),
+                  Text(
+                    title,
+                    textAlign: TextAlign.center,
+                    style: theme.textTheme.headlineSmall?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    message,
+                    textAlign: TextAlign.center,
+                    style: theme.textTheme.bodyLarge?.copyWith(
+                      color: theme.colorScheme.onSurface.withValues(alpha: 0.78),
+                    ),
+                  ),
+                  if (working) ...[
+                    const SizedBox(height: 28),
+                    LinearProgressIndicator(
+                      value: progressValue,
+                      minHeight: 8,
+                      backgroundColor:
+                          theme.colorScheme.surfaceContainerHighest,
+                      color: theme.colorScheme.primary,
+                      semanticsLabel: 'Capture progress',
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      stage == BackendHandoffStage.framesBackingUp
+                          ? '$processed of $total photos backed up'
+                          : stage == BackendHandoffStage.processing
+                          ? 'Stitching on this device'
+                          : 'Sending to Sitewise',
+                      textAlign: TextAlign.center,
+                      style: theme.textTheme.bodyMedium,
+                    ),
+                    const SizedBox(height: 20),
+                    const Center(
+                      child: SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      ),
+                    ),
+                  ],
+                  if (ready) ...[
+                    const SizedBox(height: 32),
+                    SitewiseButton(
+                      label: 'View 360° Tour',
+                      icon: Icons.threesixty,
+                      onPressed: onView,
+                    ),
+                  ],
+                  if (failed && onRetry != null) ...[
+                    const SizedBox(height: 32),
+                    SitewiseButton(
+                      label: 'Retry',
+                      icon: Icons.refresh,
+                      onPressed: onRetry,
+                    ),
+                  ],
+                ],
+              ),
             ),
-          ),
-          const SizedBox(width: 12),
-        ] else ...[
-          const Icon(Icons.error_outline, color: Colors.orangeAccent, size: 18),
-          const SizedBox(width: 12),
-        ],
-        Expanded(
-          child: Text(
-            stage,
-            style: const TextStyle(color: Colors.white, fontSize: 13),
           ),
         ),
-        if (!running && onRetry != null)
-          TextButton(
-            onPressed: onRetry,
-            child: const Text(
-              'Retry',
-              style: TextStyle(color: Colors.white),
-            ),
-          ),
-      ],
-    ),
-  );
+      ),
+    );
+  }
 }

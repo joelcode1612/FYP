@@ -114,6 +114,7 @@ class SphereCaptureController extends ChangeNotifier {
     CaptureSessionStore? sessions,
     String? userId,
     int? propertyId,
+    this.backendProcessing = false,
     this.toleranceDeg = kSphereAlignmentToleranceDeg,
     this.exitToleranceDeg = kSphereAlignmentExitDeg,
     this.holdDuration = const Duration(milliseconds: 600),
@@ -139,6 +140,9 @@ class SphereCaptureController extends ChangeNotifier {
   final CaptureRepository _repository;
   final PanoramaStitcher _stitcher;
   final String _stationId;
+
+  /// Live SiteWise capture sends frames to FastAPI rather than stitching here.
+  final bool backendProcessing;
   final Stream<Vec3>? _motionStream;
 
   /// Raw gyroscope, rad/s. Null in tests and on a device without one, in which
@@ -457,6 +461,13 @@ class SphereCaptureController extends ChangeNotifier {
       // The session row exists before the camera does, so a capture that is
       // interrupted on the very first frame still leaves a resumable record.
       await _ensureSession();
+      // A restored 38-frame session should immediately resume its backend
+      // handoff; no camera or local panorama stitch is needed.
+      if (capturedCount >= kSphereTargetCount) {
+        _phase = SphereCapturePhase.complete;
+        _notify();
+        return;
+      }
       await _permissions.ensureCapturePermissions();
       await _camera.open();
       // The preview must be visible before the reference heading is taken.
@@ -759,10 +770,6 @@ class SphereCaptureController extends ChangeNotifier {
         toleranceDeg: toleranceDeg,
       );
       await _repository.saveRecord(record);
-      // Mirrored into the session store after the JPEG and the JSON record exist. A
-      // failure here loses bookkeeping only, never the photograph, so it must
-      // not fail the capture.
-      await _persistFrame(record);
       debugPrint(
         'SPHERE_CAPTURE: target ${target.spec.targetId} saved '
         '${normalized.width}x${normalized.height} '
@@ -778,6 +785,9 @@ class SphereCaptureController extends ChangeNotifier {
       // The stitch path continues from this frame: the next guide target is
       // the adjacent uncaptured direction, so consecutive photographs keep
       // overlapping content for the panorama.
+      // Persist after updating the captured target list: frame 38 can now
+      // mark the session complete instead of leaving it in progress.
+      await _persistFrame(record);
       _lastCapturedDirection = target.spec.direction;
       _recomputeGuide();
       _message = normalized.warning;
@@ -803,7 +813,9 @@ class SphereCaptureController extends ChangeNotifier {
       if (capturedCount >= kSphereTargetCount) {
         _phase = SphereCapturePhase.complete;
         _notify();
-        unawaited(_stitch());
+        if (!backendProcessing) {
+          unawaited(_stitch());
+        }
       } else {
         _phase = SphereCapturePhase.ready;
       }
@@ -855,7 +867,7 @@ class SphereCaptureController extends ChangeNotifier {
 
   /// Re-runs validation and stitching against the records on disk.
   Future<void> retryStitching() async {
-    if (_stitching) return;
+    if (backendProcessing || _stitching) return;
     _stitchError = null;
     await _stitch();
   }
@@ -930,7 +942,7 @@ class SphereCaptureController extends ChangeNotifier {
       // still missing. A second stitch is never started over a first.
       final inFlight = _stitchFuture;
       if (inFlight != null) await inFlight;
-      if (_panoramaPath == null) await _stitch();
+      if (!backendProcessing && _panoramaPath == null) await _stitch();
       // A station stitched before this build may already have a panorama but
       // no Gallery copy; saving here makes Save & Finish consistent.
       if (_galleryPath == null && _panoramaPath != null) {

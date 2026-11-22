@@ -256,9 +256,9 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
     _advancedKeys
       ..clear()
       ..['floor_level'] = request.floorLevel ?? ''
-      ..['transit_walk_m'] = _rangeKey(request.transitMaxM, null)
+      ..['transit_walk_m'] = _rangeKey(null, request.transitMaxM)
       ..['nearby_parking_500m'] = _rangeKey(request.nearbyParkingMin, null)
-      ..['fnb_competition_500m'] = _rangeKey(request.fnbCompetitionMax, null)
+      ..['fnb_competition_500m'] = _rangeKey(null, request.fnbCompetitionMax)
       ..['surrounding_population_1000m'] = _rangeKey(
         request.populationMin1000m,
         request.populationMax1000m,
@@ -325,7 +325,7 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
       minSizeSqft: size.min,
       maxSizeSqft: size.max,
       floorLevel: floor.isEmpty ? null : floor,
-      transitMaxM: transit.min,
+      transitMaxM: transit.max,
       nearbyParkingMin: parking.min,
       fnbCompetitionMax: competition.max,
       demandGenerator: demand.isEmpty ? null : demand,
@@ -515,6 +515,9 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
       subtitle: _hasSearched
           ? _subtitle(state)
           : 'Choose your preferences to find a suitable commercial property.',
+      actions: const [
+        ActionLink('AI recommendations', href: '/entrepreneur/ai-recommendations'),
+      ],
       child: div(classes: _hasSearched ? 'rec2' : 'rec2 rec2--presearch', [
         div(classes: 'rec2__main', [
           _filters(state),
@@ -1183,8 +1186,14 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
 
   Component _advancedControl(String key, RecommendationAdvancedFacet facet) {
     final selected = _advancedKeys[key] ?? '';
+    final upperLimit = key == 'transit_walk_m' || key == 'fnb_competition_500m';
     final options = facet.isRange
-        ? _rangePairs(facet.rangeOptions)
+        ? upperLimit
+            ? [
+                for (final max in facet.rangeOptions.map((range) => range.max).toSet())
+                  (_rangeKey(null, max), 'Up to ${max.round()} ${key == 'transit_walk_m' ? 'm' : 'outlets'}'),
+              ]
+            : _rangePairs(facet.rangeOptions)
         : [
             for (final option in facet.valueOptions)
               (option.value, _facetOptionLabel(option)),

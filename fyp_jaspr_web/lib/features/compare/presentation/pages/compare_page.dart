@@ -34,11 +34,14 @@ class _ComparePageState extends State<ComparePage> {
     final comparison = context.watch(propertyCompareProvider);
     final ids = compared.toList();
     final signature = ids.join('|');
+    final matchesSelection = comparison.ids.join('|') == signature;
 
     if (signature != _requestedIds) {
       _requestedIds = signature;
       Future.microtask(() {
-        context.read(propertyCompareProvider.notifier).load(ids);
+        if (mounted && signature == _requestedIds) {
+          context.read(propertyCompareProvider.notifier).load(ids);
+        }
       });
     }
 
@@ -70,7 +73,7 @@ class _ComparePageState extends State<ComparePage> {
               'side-by-side comparison.',
             ),
           ]),
-        if (comparison.error != null)
+        if (matchesSelection && comparison.error != null)
           div(classes: 'notice notice-warn', [
             Component.text(comparison.error!),
             ActionButton(
@@ -81,12 +84,13 @@ class _ComparePageState extends State<ComparePage> {
                   .load(ids, refresh: true),
             ),
           ]),
-        if (comparison.loading && comparison.data == null)
+        if (ids.length >= 2 && (!matchesSelection || (comparison.loading && comparison.data == null)))
           div(classes: 'loading', [
             span(classes: 'spinner', []),
             Component.text('Loading the selected properties…'),
           ]),
-        if (comparison.data case final result?)
+        if (ids.length >= 2 && matchesSelection)
+          if (comparison.data case final result?)
           _body(context, result, ids.length),
       ]),
     );
@@ -393,20 +397,24 @@ class _ComparePageState extends State<ComparePage> {
         for (final property in properties) property.metric(key),
       ];
       final available = values.where((item) => item.available).toList();
-      final max = available.isEmpty
+      final mixedRadii = available.map((value) => value.radiusM).toSet().length > 1;
+      final max = available.isEmpty || mixedRadii
           ? null
           : available
               .map((item) => item.value?.toDouble() ?? 0)
               .reduce((low, high) => low > high ? low : high);
       rows.add(div(classes: 'cmp__row', [
         div(classes: 'cmp__row-label', [
-          Component.text(metric.caption),
+          Component.text(mixedRadii || available.isEmpty ? metric.label : available.first.caption),
           if (metric.unit.isNotEmpty)
             span(classes: 'cmp__unit', [Component.text(metric.unit)]),
         ]),
-        for (final value in values)
+        for (final (index, value) in values.indexed)
           div(classes: 'cmp__row-cell', [
-            span([Component.text(value.display)]),
+            span(classes: 'cmp__cell-property', [
+              Component.text(properties[index].title),
+            ]),
+            span([Component.text(_metricDisplay(value, showRadius: mixedRadii))]),
             if (value.available &&
                 max != null &&
                 max > 0 &&
@@ -452,6 +460,13 @@ class _ComparePageState extends State<ComparePage> {
           div(classes: 'cmp__tradeoff', [Component.text(tradeoff.text)]),
       ]);
 
+  String _metricDisplay(CompareMetric metric, {required bool showRadius}) {
+    final radius = metric.radiusM;
+    return showRadius && metric.available && radius != null
+        ? '${metric.display} ($radius m)'
+        : metric.display;
+  }
+
   Component _detailTable(
     List<CompareProperty> properties,
     PropertyCompareResult result,
@@ -493,14 +508,14 @@ class _ComparePageState extends State<ComparePage> {
             for (final key in keys)
               tr([
                 th(attributes: const {'scope': 'row'}, [
-                  Component.text(properties.first.metric(key).caption),
+                  Component.text(properties.first.metric(key).label),
                 ]),
                 for (final property in properties)
-                  td([Component.text(property.metric(key).display)]),
+                  td([Component.text(_metricDisplay(property.metric(key), showRadius: true))]),
               ]),
             tr([
               th(attributes: const {'scope': 'row'}, [
-                Component.text('PU research index (context only)'),
+                Component.text('Expanded64 PU research index (context only)'),
               ]),
               for (final property in properties)
                 td([

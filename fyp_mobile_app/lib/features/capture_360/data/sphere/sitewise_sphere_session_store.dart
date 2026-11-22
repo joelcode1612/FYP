@@ -251,6 +251,12 @@ class SitewiseSphereSessionStore implements CaptureSessionStore {
     bool clearBackendJobId = false,
     String? error,
     bool clearLastError = false,
+    FrameSyncStatus? panoramaSyncStatus,
+    FrameSyncStatus? backupSyncStatus,
+    int? backupUploaded,
+    int? backupTotal,
+    String? backendPanoramaId,
+    bool clearBackendPanoramaId = false,
   }) {
     return _enqueue(() async {
       final document = await _read();
@@ -263,6 +269,12 @@ class SitewiseSphereSessionStore implements CaptureSessionStore {
         syncStatus: syncStatus,
         lastError: error,
         clearLastError: clearLastError,
+        panoramaSyncStatus: panoramaSyncStatus,
+        backupSyncStatus: backupSyncStatus,
+        backupUploaded: backupUploaded,
+        backupTotal: backupTotal,
+        backendPanoramaId: backendPanoramaId,
+        clearBackendPanoramaId: clearBackendPanoramaId,
       );
       await _write(document);
     });

@@ -63,6 +63,17 @@ class ResponseFormatFailure extends AppFailure {
       'The server sent a response Sitewise could not read. Please try again.';
 }
 
+/// A business-rule conflict returned by FastAPI (HTTP 409). This is NOT a
+/// network error. FastAPI's `detail` is a deliberately user-facing reason.
+class ConflictFailure extends AppFailure {
+  const ConflictFailure([
+    super.message = 'This action conflicts with the current property state.',
+  ]);
+
+  @override
+  String get userMessage => message;
+}
+
 class NotFoundFailure extends AppFailure {
   const NotFoundFailure([super.message = 'The requested item was not found.']);
 

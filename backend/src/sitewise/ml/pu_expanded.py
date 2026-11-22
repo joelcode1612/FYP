@@ -43,9 +43,11 @@ from pathlib import Path
 from typing import Any
 
 from sqlalchemy import text as sql_text
+from sqlalchemy.exc import SQLAlchemyError
 from sqlmodel import Session
 
 from sitewise.core.exceptions import ModelUnavailableError
+from sitewise.core.logging import logger
 from sitewise.ml.feature_bridge import FeatureCoverage, bridge_row_for, merge_bridge_features
 from sitewise.ml.model_loader import ModelLoader
 from sitewise.ml.property_features import (
@@ -366,11 +368,31 @@ def expanded_prediction(analytics_session: Session, property_id: str) -> dict[st
     return result
 
 
+def expanded_display_scores(
+    analytics_session: Session, property_ids: list[str]
+) -> dict[str, float]:
+    """Return available expanded64 scores on the 0–100 display scale."""
+    if not property_ids:
+        return {}
+    try:
+        with analytics_session.begin_nested():
+            scores = expanded_scores_many(analytics_session, property_ids)
+    except (ModelUnavailableError, SQLAlchemyError):
+        logger.warning("Expanded64 property scores are unavailable", exc_info=True)
+        return {}
+    return {
+        property_id: float(result["score"]) * 100.0
+        for property_id, result in scores.items()
+        if result.get("available")
+    }
+
+
 def expanded_scores_many(
     analytics_session: Session,
     property_ids: list[str],
     *,
     coverage_sink: dict[str, dict[str, Any]] | None = None,
+    refresh: bool = False,
 ) -> dict[str, dict[str, Any]]:
     """Score MANY catalogue properties with the expanded model.
 
@@ -396,7 +418,7 @@ def expanded_scores_many(
     ids = [str(p) for p in property_ids]
     model_version = str(loaded.meta.get("model_variant") or "unknown")
     with _SCORE_CACHE_LOCK:
-        cached_scores = {pid: _SCORE_CACHE.get((model_version, pid)) for pid in ids}
+        cached_scores = {pid: None if refresh else _SCORE_CACHE.get((model_version, pid)) for pid in ids}
     if all(result is not None for result in cached_scores.values()):
         if coverage_sink is None:
             return {pid: cached_scores[pid] for pid in ids}
@@ -551,7 +573,7 @@ def expanded_scores_many(
     for catalogue_id in ids:
         cache_key = (model_version, catalogue_id)
         with _SCORE_CACHE_LOCK:
-            cached = _SCORE_CACHE.get(cache_key)
+            cached = None if refresh else _SCORE_CACHE.get(cache_key)
         if cached is not None:
             results[catalogue_id] = cached
             # Refill the Stage-2 sink from the resolved vector that produced

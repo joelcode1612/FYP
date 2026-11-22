@@ -12,13 +12,12 @@ the test folder at runtime.
 The row set is the 955 U-class commercial properties of
 ``SiteWise_PU_Property_Image_Scores_Merged``. The 894 P-class research rows in
 ``sitewise_analytics.subject_features`` are model input, NOT listings, and are
-deliberately absent here. ``suitability_score`` is that workbook's uncalibrated
-P-vs-U association index rescaled to 0-100 for ranking; ``source_data`` carries
-the raw score plus ``score_type``. Neither is a business-success probability.
+deliberately absent here. ``suitability_score`` is the expanded64 association
+index on a 0-100 scale, or null when inference is unavailable.
 
 It is intentionally read-only and column-allow-listed: nothing here writes to
-or alters the analytics/geospatial tables, and no scoring, recommendation or
-property-analysis logic is duplicated.
+or alters the analytics/geospatial tables. Display scores reuse the same
+expanded inference as Recommendations.
 """
 
 from typing import Annotated
@@ -31,6 +30,7 @@ from sitewise.db.analytics_session import get_analytics_db
 from sitewise.db.session import get_db
 from sitewise.dependencies import CurrentUser
 from sitewise.ingestion.sources.gtfs_importer import is_transit_stale
+from sitewise.ml.pu_expanded import expanded_display_scores
 from sitewise.repositories.catalog_repository import PROPERTY_COLUMNS, CatalogRepository
 from sitewise.repositories.fyp_property_repository import FypPropertyRepository
 from sitewise.services.catalog_listing_details_service import CatalogListingDetailsService
@@ -72,8 +72,9 @@ def list_catalog_properties(
         .mappings()
         .all()
     )
+    scores = expanded_display_scores(session, [str(row["id"]) for row in rows])
     return {
-        "data": [dict(row) for row in rows],
+        "data": [{**row, "suitability_score": scores.get(str(row["id"]))} for row in rows],
         "meta": {"total": total, "limit": limit, "offset": offset},
     }
 
@@ -118,6 +119,7 @@ def get_catalog_property(
         )
     return {
         **prop,
+        "suitability_score": expanded_display_scores(session, [property_id]).get(property_id),
         # Additive commercial-listing details, sourced from the recorded
         # research subject features and — only for a verified, approved AND
         # published match — the operational listing row. Unknown fields stay

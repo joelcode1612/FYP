@@ -125,6 +125,11 @@ class CaptureSession {
     this.backendSessionId,
     this.backendJobId,
     this.syncStatus = FrameSyncStatus.none,
+    this.panoramaSyncStatus = FrameSyncStatus.none,
+    this.backupSyncStatus = FrameSyncStatus.none,
+    this.backupUploaded = 0,
+    this.backupTotal = 0,
+    this.backendPanoramaId,
   });
 
   final String sessionId;
@@ -164,6 +169,24 @@ class CaptureSession {
   /// Where the backend handoff stands. Written by the coordinator only.
   final FrameSyncStatus syncStatus;
 
+  /// The device-generated panorama's cloud state, tracked independently from
+  /// the 38 original photographs' backup queue.
+  final FrameSyncStatus panoramaSyncStatus;
+
+  /// The 38 original photographs' backup state. A completed panorama upload
+  /// and a completed backup are different milestones.
+  final FrameSyncStatus backupSyncStatus;
+
+  /// How many originals the cloud backup has confirmed so far.
+  final int backupUploaded;
+
+  /// Total originals the backup queue expects.
+  final int backupTotal;
+
+  /// The canonical `fyp.panoramas` row id, once the device panorama is
+  /// confirmed by FastAPI.
+  final String? backendPanoramaId;
+
   bool get isComplete => status == CaptureSessionStatus.complete ||
       status == CaptureSessionStatus.panoramaReady;
 
@@ -187,6 +210,12 @@ class CaptureSession {
     String? backendJobId,
     bool clearBackendJobId = false,
     FrameSyncStatus? syncStatus,
+    FrameSyncStatus? panoramaSyncStatus,
+    FrameSyncStatus? backupSyncStatus,
+    int? backupUploaded,
+    int? backupTotal,
+    String? backendPanoramaId,
+    bool clearBackendPanoramaId = false,
   }) => CaptureSession(
     sessionId: sessionId,
     userId: userId ?? this.userId,
@@ -205,6 +234,13 @@ class CaptureSession {
         : (backendSessionId ?? this.backendSessionId),
     backendJobId: clearBackendJobId ? null : (backendJobId ?? this.backendJobId),
     syncStatus: syncStatus ?? this.syncStatus,
+    panoramaSyncStatus: panoramaSyncStatus ?? this.panoramaSyncStatus,
+    backupSyncStatus: backupSyncStatus ?? this.backupSyncStatus,
+    backupUploaded: backupUploaded ?? this.backupUploaded,
+    backupTotal: backupTotal ?? this.backupTotal,
+    backendPanoramaId: clearBackendPanoramaId
+        ? null
+        : (backendPanoramaId ?? this.backendPanoramaId),
   );
 
   Map<String, Object?> toRow() => <String, Object?>{
@@ -221,6 +257,11 @@ class CaptureSession {
     'backend_session_id': backendSessionId,
     'backend_job_id': backendJobId,
     'sync_status': syncStatus.name,
+    'panorama_sync_status': panoramaSyncStatus.name,
+    'backup_sync_status': backupSyncStatus.name,
+    'backup_uploaded': backupUploaded,
+    'backup_total': backupTotal,
+    'backend_panorama_id': backendPanoramaId,
   };
 
   static CaptureSession fromRow(Map<String, Object?> row) => CaptureSession(
@@ -240,6 +281,15 @@ class CaptureSession {
     backendSessionId: row['backend_session_id'] as String?,
     backendJobId: row['backend_job_id'] as String?,
     syncStatus: FrameSyncStatus.fromWire(row['sync_status'] as String?),
+    panoramaSyncStatus: FrameSyncStatus.fromWire(
+      row['panorama_sync_status'] as String?,
+    ),
+    backupSyncStatus: FrameSyncStatus.fromWire(
+      row['backup_sync_status'] as String?,
+    ),
+    backupUploaded: (row['backup_uploaded'] as num?)?.toInt() ?? 0,
+    backupTotal: (row['backup_total'] as num?)?.toInt() ?? 0,
+    backendPanoramaId: row['backend_panorama_id'] as String?,
   );
 }
 
@@ -472,6 +522,12 @@ abstract class CaptureSessionStore {
     bool clearBackendJobId = false,
     String? error,
     bool clearLastError = false,
+    FrameSyncStatus? panoramaSyncStatus,
+    FrameSyncStatus? backupSyncStatus,
+    int? backupUploaded,
+    int? backupTotal,
+    String? backendPanoramaId,
+    bool clearBackendPanoramaId = false,
   });
 
   /// Removes the session and its metadata file. The JPEGs are untouched.

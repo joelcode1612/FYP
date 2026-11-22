@@ -79,9 +79,11 @@ class VariantInfo:
         }
 
 
-def resolve_variant(settings: Settings | None = None) -> VariantInfo:
+def resolve_variant(
+    settings: Settings | None = None, *, variant_key: str | None = None
+) -> VariantInfo:
     """Describe the ACTIVE Layer-1 variant (loads the artifact once)."""
-    variant = (settings or Settings()).pu_model_variant
+    variant = variant_key or (settings or Settings()).pu_model_variant
     if variant == "legacy":
         loaded = ModelLoader().load_cached(LEGACY_MODEL_NAME)
         return VariantInfo(

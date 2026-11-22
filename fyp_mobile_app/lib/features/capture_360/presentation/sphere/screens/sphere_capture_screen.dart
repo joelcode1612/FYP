@@ -30,6 +30,7 @@ import 'package:fyp/features/capture_360/presentation/widgets/capture_theme.dart
 class SphereCaptureScreen extends StatefulWidget {
   const SphereCaptureScreen({
     super.key,
+    this.autoStart = false,
     this.camera,
     this.rotation,
     this.repository,
@@ -40,8 +41,14 @@ class SphereCaptureScreen extends StatefulWidget {
     this.sessionId,
     this.userId,
     this.propertyId,
+    this.backendProcessing = false,
+    this.onCaptureComplete,
     this.onPanoramaReady,
   });
+
+  /// True only when entered after completing the SiteWise guide.
+  /// The camera starts after the first frame, using the same _start() flow.
+  final bool autoStart;
 
   /// Injection points for tests and for callers that already hold a station.
   final SphereCamera? camera;
@@ -69,6 +76,12 @@ class SphereCaptureScreen extends StatefulWidget {
   /// SiteWise host leaves this `null`.
   final int? propertyId;
 
+  /// When true, completion sends saved frames to FastAPI without local stitching.
+  final bool backendProcessing;
+
+  /// Fired once when all 38 original photographs have been saved.
+  final VoidCallback? onCaptureComplete;
+
   /// Fired once when the stitched panorama exists on disk, so the host page
   /// can attach it to the SiteWise tour, upload it through its own API and
   /// open the existing tour preview.
@@ -90,6 +103,11 @@ class _SphereCaptureScreenState extends State<SphereCaptureScreen>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    if (widget.autoStart) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) unawaited(_start());
+      });
+    }
   }
 
   @override
@@ -109,8 +127,18 @@ class _SphereCaptureScreenState extends State<SphereCaptureScreen>
   void _onControllerChanged() {
     if (_panoramaNotified) return;
     final controller = _controller;
-    final path = controller?.panoramaPath;
-    if (controller == null || controller.stitching || path == null) return;
+    if (controller == null) return;
+    if (widget.backendProcessing) {
+      if (controller.phase != SphereCapturePhase.complete ||
+          controller.capturedCount < kSphereTargetCount) {
+        return;
+      }
+      _panoramaNotified = true;
+      widget.onCaptureComplete?.call();
+      return;
+    }
+    final path = controller.panoramaPath;
+    if (controller.stitching || path == null) return;
     _panoramaNotified = true;
     widget.onPanoramaReady?.call(path);
   }
@@ -147,6 +175,7 @@ class _SphereCaptureScreenState extends State<SphereCaptureScreen>
         camera: camera,
         repository: repository,
         stitcher: widget.stitcher ?? defaults.stitcher,
+        backendProcessing: widget.backendProcessing,
         stationId: stationId,
         // The 4:3 normaliser links OpenCV, so it is supplied here rather than
         // defaulted inside the controller: that keeps the controller — and its
@@ -209,7 +238,11 @@ class _SphereCaptureScreenState extends State<SphereCaptureScreen>
         error: _startError,
       );
     }
-    return _LiveCapture(controller: controller, camera: camera);
+    return _LiveCapture(
+      controller: controller,
+      camera: camera,
+      backendProcessing: widget.backendProcessing,
+    );
   }
 }
 
@@ -450,10 +483,15 @@ class _SphereDiagramPainter extends CustomPainter {
 // ── live capture ───────────────────────────────────────────────────────────
 
 class _LiveCapture extends StatelessWidget {
-  const _LiveCapture({required this.controller, required this.camera});
+  const _LiveCapture({
+    required this.controller,
+    required this.camera,
+    required this.backendProcessing,
+  });
 
   final SphereCaptureController controller;
   final SphereCamera camera;
+  final bool backendProcessing;
 
   @override
   Widget build(BuildContext context) => Scaffold(
@@ -508,7 +546,9 @@ class _LiveCapture extends StatelessWidget {
           animation: controller,
           builder: (BuildContext context, Widget? child) {
             if (controller.phase == SphereCapturePhase.complete) {
-              return _CompletionOverlay(controller: controller);
+              return backendProcessing
+                  ? _BackendCompletionOverlay(controller: controller)
+                  : _CompletionOverlay(controller: controller);
             }
             if (controller.phase == SphereCapturePhase.failed) {
               return _FailureOverlay(controller: controller);
@@ -926,6 +966,68 @@ class _MotionChip extends StatelessWidget {
           ),
         ),
       ],
+    ),
+  );
+}
+
+class _BackendCompletionOverlay extends StatelessWidget {
+  const _BackendCompletionOverlay({required this.controller});
+
+  final SphereCaptureController controller;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    color: Colors.black.withValues(alpha: 0.72),
+    child: Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Container(
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            color: CaptureColors.sheet,
+            borderRadius: BorderRadius.circular(22),
+            border: Border.all(color: CaptureColors.hairlineOnDark),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(
+                Icons.cloud_upload_outlined,
+                color: CaptureColors.ok,
+                size: 48,
+              ),
+              const SizedBox(height: 12),
+              const Text(
+                'Capture complete',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 22,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                '${controller.capturedCount} / $kSphereTargetCount photos saved',
+                style: const TextStyle(
+                  color: CaptureColors.mutedOnDark,
+                  fontSize: 14,
+                ),
+              ),
+              const SizedBox(height: 12),
+              const Text(
+                'SiteWise processes the panorama on the server. Your original '
+                'photos stay on this device if an upload needs to be retried.',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: CaptureColors.mutedOnDark,
+                  fontSize: 13,
+                  height: 1.5,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     ),
   );
 }

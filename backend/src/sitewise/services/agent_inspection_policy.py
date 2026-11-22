@@ -50,19 +50,22 @@ def agent_assignment(session: Session, property_id: int, user, *, writable: bool
 def completed_agent_panorama(session: Session, property_id: int, user) -> str | None:
     """Only a genuinely completed pipeline panorama produced by this Agent.
 
-    A client cannot claim its file or flip a 'ready' flag; the backend stitch
-    worker creates fyp.panoramas and marks the associated job 'done'.
+    A client cannot claim its file or flip a 'ready' flag: the canonical
+    fyp.panoramas row is written ONLY by the confirmation endpoint, which
+    verifies the stored object, its checksum, its JPEG structure and the 2:1
+    geometry first. Legacy sessions additionally carry a 'done' panorama job;
+    device-stitched sessions (capture_plan_version 2) have no job row at all,
+    so the job is no longer the proof — the verified canonical row is.
     """
     record = session.execute(text("""
         SELECT p.panorama_id
           FROM fyp.panoramas p
           JOIN fyp.capture_sessions cs ON cs.id = p.session_id
-          JOIN fyp.panorama_jobs j ON j.session_id = cs.id
           JOIN fyp.agent_listing_assignment a ON a.listing_id = :pid
          WHERE p.property_id = CAST(:pid AS text)
            AND cs.property_id = CAST(:pid AS text)
            AND cs.owner_id = :uid
-           AND cs.status = 'completed' AND j.status = 'done'
+           AND cs.status = 'completed'
            AND a.workflow_status IN ('accepted', 'needs_correction')
            AND a.inspection_updated_at IS NOT NULL
            AND p.created_at >= a.inspection_updated_at
@@ -84,17 +87,24 @@ def require_ready_for_admin(session: Session, property_id: int, user) -> dict:
 
 
 def require_owner_published_view(session: Session, property_id: int, user) -> None:
-    """Before publication, only assigned Agent/Admin may review the panorama.
+    """Owners preview their own listing's tour; everyone else keeps the rule.
 
-    The generic property-scope read check must also run at the endpoint; this
-    helper tightens Owner visibility without widening access for any role.
+    The owner of the listing may always view its canonical panorama — before
+    review, before publication — because it is imagery of their own property
+    captured by the agent they assigned. A non-owner keeps the strict rule:
+    the generic property-scope read check must also run at the endpoint; this
+    helper only tightens visibility for owners of OTHER listings. Public
+    visibility for entrepreneurs is unchanged and governed solely by the
+    published/approved state of the canonical row.
     """
     if rbac.canonical_role(user.role) != rbac.ROLE_OWNER:
         return
-    published = session.execute(text("""
+    owned = session.execute(text("""
         SELECT 1 FROM fyp.rental_properties
          WHERE id = :pid AND owner_user_id = :uid
-           AND is_published = TRUE AND verification_status = 'approved'
     """), {"pid": int(property_id), "uid": str(user.user_id)}).scalar()
-    if not published:
-        raise HTTPException(status_code=403, detail="The 360° tour is viewable after Admin approval and publication.")
+    if not owned:
+        raise HTTPException(
+            status_code=403,
+            detail="The 360° tour is viewable after Admin approval and publication.",
+        )

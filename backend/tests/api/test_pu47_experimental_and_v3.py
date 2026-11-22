@@ -145,12 +145,11 @@ def test_experimental_artifact_loads_with_verified_checksum_and_order():
     assert loaded.model.score_meaning
 
 
-def test_production_artifact_unchanged_and_default_variant_is_legacy():
+def test_legacy_artifact_is_unchanged():
     original = ModelLoader().load("pu_model")
     assert original.name == "pu_model"
     assert original.meta["artifact_filename"] == "PU_model.joblib"
     assert original.meta["feature_set"] == "baseline_47"
-    assert Settings().pu_model_variant == "legacy"  # rollback guarantee
 
 
 def test_experimental_prediction_is_real_and_versioned():
@@ -398,7 +397,9 @@ def test_v3_preferences_validated_and_persisted(client, identity):
     assert r.status_code == 422
 
 
-def test_legacy_variant_generation_uses_stored_scores_rollback(client, identity):
+@pytest.mark.parametrize("configured_variant", ["legacy", "experimental47"])
+def test_application_generation_pins_expanded64(client, identity, monkeypatch, configured_variant):
+    monkeypatch.setenv("SITEWISE_PU_MODEL_VARIANT", configured_variant)
     r = client.patch(
         "/api/v1/preferences/me",
         json={"preferences": V3_PREFERENCES},
@@ -412,46 +413,18 @@ def test_legacy_variant_generation_uses_stored_scores_rollback(client, identity)
     )
     assert r.status_code == 200, r.text
     body = r.json()
-    assert body["model"]["layer1_model"] == "pu_model"
-    assert body["model"]["key"] == "legacy"
-    assert body["layer2"]["engine"] == "rule_based_5q_v3"  # v3 preferences -> V3 engine
-    results = body["results"]
-    assert results, "the reference property must be eligible"
-    assert all(res["model"]["name"] == "pu_model" for res in results)
-    first = results[0]
-    expected = 0.7 * first["model"]["association_score"] + 0.3 * first["personalisation"]["preference_match_score"]
-    assert math.isclose(first["final_recommendation"]["score"], expected, abs_tol=1e-6)
-
-
-def test_experimental_variant_end_to_end_never_mixes_models(client, identity, monkeypatch):
-    monkeypatch.setenv("SITEWISE_PU_MODEL_VARIANT", "experimental47")
-    r = client.patch(
-        "/api/v1/preferences/me",
-        json={"preferences": V3_PREFERENCES},
-        headers=auth(identity["token"]),
+    assert body["model"]["key"] == "expanded64"
+    assert body["model"]["feature_count"] == 64
+    assert body["layer2"]["engine"] == "rule_based_5q_v3"
+    [result] = body["results"]
+    assert result["model"]["name"] == body["model"]["name"]
+    assert result["model"]["score_source_mode"] == "live_inference"
+    expected = (
+        0.7 * result["model"]["association_score"]
+        + 0.3 * result["personalisation"]["preference_match_score"]
     )
-    assert r.status_code in (200, 201), r.text
-    r = client.post(
-        "/api/v1/recommendations/generate",
-        json={"limit": 5, "property_ids": [REFERENCE_PROPERTY_ID]},
-        headers=auth(identity["token"]),
-    )
-    assert r.status_code == 200, r.text
-    body = r.json()
-    assert body["model"]["key"] == "experimental47"
-    assert body["model"]["layer1_model"] == EXPERIMENTAL_MODEL_NAME
-    assert body["model"]["production_ready"] is False
-    assert body["model"]["notes"], "gating notes must travel with the response"
-    results = body["results"]
-    assert results, "MD-00510 has a complete verified 47-feature vector"
-    names = {res["model"]["name"] for res in results}
-    assert names == {EXPERIMENTAL_MODEL_NAME}, "one batch, one variant - never mixed"
-    first = results[0]
-    expected = 0.7 * first["model"]["association_score"] + 0.3 * first["personalisation"]["preference_match_score"]
-    assert math.isclose(first["final_recommendation"]["score"], expected, abs_tol=1e-6)
-    summary = body["candidate_summary"]
-    assert summary["experimental_coverage"]["scored_live_inference"] >= 1
-    assert summary["layer1_variant"] == "experimental47"
+    assert math.isclose(result["final_recommendation"]["score"], expected, abs_tol=1e-6)
+    assert body["candidate_summary"]["expanded64_coverage"]["scored_live_inference"] == 1
 
 
 def test_inputs_hash_invalidates_cache_on_preference_and_model_change():
@@ -481,7 +454,7 @@ def test_inputs_hash_invalidates_cache_on_preference_and_model_change():
 
 
 def test_variant_resolver_gating_metadata():
-    legacy = resolve_variant(Settings())
+    legacy = resolve_variant(Settings(sitewise_pu_model_variant="legacy"))
     assert legacy.key == "legacy"
     experimental = resolve_variant(Settings(sitewise_pu_model_variant="experimental47"))
     assert experimental.key == "experimental47"
