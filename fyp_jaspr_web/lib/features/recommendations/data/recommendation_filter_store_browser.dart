@@ -49,6 +49,7 @@ abstract final class RecommendationFilterStore {
       final request = RecommendationSearchRequest.fromJson(json).copyWith(
         clearCursor: true,
         managedOnly: false,
+        clearNearby: true,
       );
       return request.isBrowseOnly ? null : request;
     } on Object {
@@ -67,7 +68,10 @@ abstract final class RecommendationFilterStore {
     try {
       // Never store a pagination cursor or a management scope. After reload
       // the backend must search from page 1 under the current user.
-      final safe = request.copyWith(clearCursor: true, managedOnly: false);
+      final safe = request.copyWith(
+        clearCursor: true, managedOnly: false, clearNearby: true,
+      );
+      if (safe.isBrowseOnly) { clear(); return; }
       final payload = jsonEncode({
         'version': 1,
         'criteria': safe.toJson(),

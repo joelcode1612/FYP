@@ -10,13 +10,16 @@ class Settings(BaseSettings):
     # Startup `create_all` runs through this URL, so it is the only database
     # the ORM ever writes to.
     database_url: str = (
-        "postgresql+psycopg2://postgres:123456@localhost:5432/Dss"
+        "postgresql+psycopg2://postgres:123456@localhost:5432/Final_Location_Analysis"
     )
     # Analytics database (DOSM statistics, geospatial features). Read-only by
     # convention; the ORM never runs create_all or migrations against it.
     analytics_database_url: str = (
         "postgresql+psycopg2://postgres:123456@localhost:5432/Final_Location_Analysis"
     )
+
+    # Agent assignments: local DB is authoritative; remote mirror is opt-in.
+    assignment_sync_enabled: bool = False
 
     # --- Application -------------------------------------------------------
     log_level: str = "INFO"

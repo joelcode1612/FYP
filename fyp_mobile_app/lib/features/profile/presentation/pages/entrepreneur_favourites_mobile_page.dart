@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_logic/shared_logic.dart';
 
 import 'package:fyp/core/di/service_locator.dart';
+import 'package:fyp/features/profile/application/favourite_property_details.dart';
 import 'package:fyp/core/theme/sitewise_theme.dart';
 import 'package:fyp/shared/presentation/widgets/sitewise_inline_notice.dart';
 import 'package:fyp/shared/presentation/layouts/entrepreneur_tab_scope.dart';
@@ -22,8 +23,8 @@ import 'package:fyp/shared/presentation/components/mobile_skeleton.dart';
 /// which is why saving in Recommendations, in Property Details and here always
 /// shows the same answer, and why it survives an app restart.
 ///
-/// Cards resolve against the same property repository the catalogue uses
-/// ([ServiceLocator]'s `properties.listings()`), and the states stay distinct:
+/// Cards resolve each saved catalogue ID through the existing property service.
+/// Loading only the saved IDs keeps unrelated catalogue rows out of this flow.
 /// a failed read reports the failure with a retry, an empty list invites the
 /// user to save something, and refs the server reports as delisted never
 /// render as ghost cards.
@@ -37,8 +38,8 @@ class EntrepreneurFavouritesMobilePage extends ConsumerStatefulWidget {
 
 class _EntrepreneurFavouritesMobilePageState
     extends ConsumerState<EntrepreneurFavouritesMobilePage> {
-  final GlobalKey<AsyncSectionState<List<CommercialProperty>>> _catalogueKey =
-      GlobalKey<AsyncSectionState<List<CommercialProperty>>>();
+  final GlobalKey<AsyncSectionState<FavouritePropertyDetails>> _catalogueKey =
+      GlobalKey<AsyncSectionState<FavouritePropertyDetails>>();
 
   @override
   void initState() {
@@ -54,10 +55,9 @@ class _EntrepreneurFavouritesMobilePageState
   /// Pull-to-refresh re-reads BOTH sources: the favourites (authoritative on
   /// the server) and the catalogue rows they resolve against.
   Future<void> _refresh() async {
-    await Future.wait([
-      ref.read(appNotifierProvider.notifier).loadSaved(),
-      _catalogueKey.currentState?.refresh() ?? Future<void>.value(),
-    ]);
+    await ref.read(appNotifierProvider.notifier).loadSaved();
+    if (!mounted) return;
+    await _catalogueKey.currentState?.refresh();
   }
 
   Future<void> _unsave(String id) async {
@@ -142,39 +142,51 @@ class _EntrepreneurFavouritesMobilePageState
             else
               // A failed refresh keeps the last list on screen with the reason
               // and retry above it, rather than blanking the tab.
-              AsyncSection<List<CommercialProperty>>(
+              AsyncSection<FavouritePropertyDetails>(
                 key: _catalogueKey,
-                load: () => ServiceLocator.properties.listings(),
+                revision: Object.hashAllUnordered(appState.saved),
+                load: () => loadFavouritePropertyDetails(
+                  ServiceLocator.properties,
+                  Set<String>.of(ref.read(appNotifierProvider).saved),
+                ),
                 errorTitle: 'Your favourites could not be loaded',
                 loadingBuilder: (_) => _loading(),
-                builder: (context, catalogue) {
-                  final items = catalogue
+                builder: (context, details) {
+                  final items = details.properties
                       .where((p) => appState.saved.contains(p.id))
                       .toList();
-                  if (items.isEmpty) {
-                    return const M3EmptyState(
-                      icon: Icons.bookmark_border_rounded,
-                      title: 'Records unavailable',
-                      message:
-                          'Your favourites are no longer present in the '
-                          'property catalogue.',
-                    );
-                  }
+                  final missing = details.missing.where(appState.saved.contains);
+                  final failures = details.failures.entries
+                      .where((entry) => appState.saved.contains(entry.key));
                   return Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      if (items.length < total)
+                      for (final entry in failures)
                         Padding(
-                          padding: const EdgeInsets.only(bottom: 10),
-                          child: Text(
-                            '${total - items.length} of your '
-                            '${total == 1 ? 'favourite is' : 'favourites are'} '
-                            'no longer listed in the property catalogue.',
-                            style: const TextStyle(
-                              fontSize: 11.5,
-                              color: SitewiseColors.muted,
-                            ),
+                          padding: const EdgeInsets.only(bottom: 12),
+                          child: SitewiseInlineNotice(
+                            message: 'Favourite ${entry.key} could not be loaded. '
+                                '${readableFailure(entry.value, fallback: 'Please try again.')}',
+                            busy: false,
+                            onRetry: () {
+                              _catalogueKey.currentState?.refresh();
+                            },
                           ),
                         ),
+                      for (final id in missing)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 12),
+                          child: SitewiseInlineNotice(
+                            message: 'Favourite $id is not currently listed. '
+                                'It has not been removed from your saved list.',
+                            busy: false,
+                            onRetry: () {
+                              _catalogueKey.currentState?.refresh();
+                            },
+                          ),
+                        ),
+                      if (items.isEmpty && failures.isEmpty && missing.isEmpty)
+                        _loading(),
                       for (final p in items) ...[
                         MobilePropertyCard(
                           property: p,

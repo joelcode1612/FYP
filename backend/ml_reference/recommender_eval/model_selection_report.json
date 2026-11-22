@@ -1,20 +1,25 @@
 {
-  "generated_at": "2026-11-20T22:48:21.356410+00:00",
+  "generated_at": "2026-11-22T09:08:17.019220+00:00",
   "decision": "refuse_to_train",
   "inventory": {
-    "users_total": 22,
-    "preference_snapshots": 1,
-    "saved_properties": 3,
-    "exposed_impressions": 20,
+    "users_total": 477,
+    "preference_snapshots": 0,
+    "saved_properties": 0,
+    "exposed_impressions": 0,
     "paired_positives": 0,
-    "paired_negatives": 20,
+    "paired_negatives": 0,
     "users_with_positives": 0,
-    "missing": []
+    "missing": [
+      "preference_snapshots: ProgrammingError: (psycopg2.errors.UndefinedTable) relation \"entrepreneur_preferences\" does not exist\nLINE 1: SELECT count(*) FROM entrepreneur_preferences\n                             ^\n\n[SQL: SELECT count(*) FROM entrepreneur_preferences]\n(Background on this error at: https://sqlalche.me/e/21/f405)",
+      "saved_properties: InternalError: (psycopg2.errors.InFailedSqlTransaction) current transaction is aborted, commands ignored until end of transaction block\n\n[SQL: SELECT count(*) FROM favorite_property]\n(Background on this error at: https://sqlalche.me/e/21/2j85)",
+      "exposed_impressions: InternalError: (psycopg2.errors.InFailedSqlTransaction) current transaction is aborted, commands ignored until end of transaction block\n\n[SQL: SELECT count(*) FROM recommendation_result]\n(Background on this error at: https://sqlalche.me/e/21/2j85)"
+    ]
   },
   "blockers": [
     "Only 0 users have exposure-paired positive feedback; 5 required.",
     "Only 0 exposure-paired positives; 25 required.",
-    "Only 20 exposure-paired negatives; 25 required. Negatives come from persisted recommendation_result impressions that were never saved."
+    "Only 0 exposure-paired negatives; 25 required. Negatives come from persisted recommendation_result impressions that were never saved.",
+    "No entrepreneur preference snapshots exist; the feature matrix cannot reproduce what the user saw when the impression happened."
   ],
   "policy": "A trained recommender.joblib is only ever written from real, exposure-paired, temporally split feedback with held-out metrics that beat the rule-based baseline. Anything less keeps the transparent rule-based engine."
 }

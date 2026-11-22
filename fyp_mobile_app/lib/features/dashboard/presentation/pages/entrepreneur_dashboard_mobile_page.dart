@@ -8,29 +8,9 @@ import 'package:fyp/shared/presentation/layouts/mobile_app_shell.dart';
 import 'package:fyp/shared/presentation/widgets/sitewise_inline_notice.dart';
 import 'package:fyp/shared/presentation/components/m3_kit.dart';
 
-/// Mobile entrepreneur Home — the first screen after sign-in.
-///
-/// Follows `Sitewise_Mobile_Material3_Mock_Data.html`'s `home()` layout:
-/// greeting → light-blue discovery feature → "Your overview" metric pair →
-/// data-provenance note → "Quick actions" rows. The five-tab shell, brand
-/// lockup header and pill-indicator bottom bar come from [MobileAppShell].
-///
-/// **No invented records.** Both overview tiles are wired to real state:
-/// `entrepreneurNotifierProvider`'s `recommendations` (ranked from the property
-/// repository) and `appNotifierProvider`'s `saved` (the user's shortlist). Labels say what the data is —
-/// "Recommendations" and "Favourites" — rather than copying the prototype's
-/// "Assessments" / "My properties", which would imply entities this app does
-/// not have.
-///
-/// Loading/refresh: both counts are server-owned, so this screen loads them on
-/// entry and again on pull-to-refresh or the header refresh button. A failed
-/// read renders "—" plus the reason and a retry — never a zero that looks like
-/// "no matches" / "nothing saved".
-///
-/// Everything else reachable from the old Home (saved, compare, preferences,
-/// recommendations, tours) stays reachable from the Profile and
-/// Recommendations tabs, so this is a layout change only, not a loss of routes.
-
+/// Shows the entrepreneur's saved and comparison selections. Home does not
+/// run the legacy demo recommendation use case; the Recommendations tab owns
+/// live recommendation search and its applied filters.
 class EntrepreneurDashboardMobilePage extends ConsumerStatefulWidget {
   const EntrepreneurDashboardMobilePage({super.key});
 
@@ -41,26 +21,21 @@ class EntrepreneurDashboardMobilePage extends ConsumerStatefulWidget {
 
 class _EntrepreneurDashboardMobilePageState
     extends ConsumerState<EntrepreneurDashboardMobilePage> {
+  bool _savedReadStarted = false;
+
   @override
   void initState() {
     super.initState();
-    // The load publishes synchronously; a kick from initState would modify
-    // the provider while the widget tree is building.
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      _load();
+      if (mounted) _load();
     });
   }
 
-  /// Both tiles are server-owned: the ranked matches and the account's saved
-  /// shortlist. They used to be loaded separately — the shortlist not at all
-  /// from this screen — so Home could show "0 saved spaces" for an account with
-  /// a populated shortlist.
   Future<void> _load() async {
-    await Future.wait([
-      ref.read(appNotifierProvider.notifier).loadSaved(),
-      ref.read(entrepreneurNotifierProvider.notifier).loadRecommendations(),
-    ]);
+    if (!_savedReadStarted && mounted) {
+      setState(() => _savedReadStarted = true);
+    }
+    await ref.read(appNotifierProvider.notifier).loadSaved();
   }
 
   void _open(String route, {Object? arguments}) =>
@@ -69,28 +44,11 @@ class _EntrepreneurDashboardMobilePageState
   @override
   Widget build(BuildContext context) {
     final appState = ref.watch(appNotifierProvider);
-    final model = ref.watch(entrepreneurNotifierProvider);
-    final recommendations = model.recommendations.length;
     final saved = appState.saved.length;
     final compared = appState.compared.length;
-
-    // A failed read is not a zero. Each tile falls back to "—" and the reason
-    // is stated above it with a retry.
-    final recommendationsKnown = model.error == null;
-    final savedKnown = appState.savedError == null;
-    final failure = model.error ?? appState.savedError;
-    final busy = model.loading || appState.savedLoading;
-
-    // The tab host keeps Home alive, so editing preferences on Profile never
-    // re-ranked the match count. The provider is invalidated by
-    // `onPreferencesUpdated`, which makes this the re-entry signal.
-    ref.listen<BusinessPreferences>(businessPreferencesProvider, (
-      previous,
-      next,
-    ) {
-      if (previous == null) return;
-      ref.read(entrepreneurNotifierProvider.notifier).loadRecommendations();
-    });
+    final busy = !_savedReadStarted || appState.savedLoading;
+    final failure = appState.savedError;
+    final savedKnown = !busy && failure == null;
 
     return MobileAppShell(
       title: 'Home',
@@ -107,30 +65,23 @@ class _EntrepreneurDashboardMobilePageState
         onRefresh: _load,
         child: M3Content(
           children: [
-            // ── GREETING ────────────────────────────────────────────────
             const M3ScreenHeading(
               eyebrow: 'Your location workspace',
               title: 'Welcome to Sitewise.',
-              lead:
-                  'Find the right location. Make decisions with better '
+              lead: 'Find the right location. Make decisions with better '
                   'evidence.',
             ),
-
-            // ── DISCOVERY FEATURE ──────────────────────────────────────
             M3FeatureCard(
               kicker: 'Business location intelligence',
               title: 'Your next great location starts here.',
-              body:
-                  'Explore F&B spaces and connect each property to a '
+              body: 'Explore F&B spaces and connect each property to a '
                   'demand assessment.',
               ctaLabel: 'Browse recommendations',
               onCta: () => _open('/entrepreneur/recommendations'),
             ),
-
-            // ── OVERVIEW ───────────────────────────────────────────────
             const M3SectionRow(
               title: 'Your overview',
-              overline: 'LIVE WORKSPACE',
+              overline: 'MY WORKSPACE',
             ),
             if (failure != null)
               SitewiseInlineNotice(
@@ -143,40 +94,32 @@ class _EntrepreneurDashboardMobilePageState
               children: [
                 Expanded(
                   child: M3MetricTile(
-                    label: 'Recommendations',
-                    value: recommendationsKnown ? '$recommendations' : '—',
-                    caption: recommendationsKnown
-                        ? 'Matched to your preferences'
-                        : 'Could not be loaded',
-                    icon: Icons.assignment_outlined,
+                    label: 'Favourites',
+                    value: savedKnown ? '$saved' : '—',
+                    caption: busy
+                        ? 'Loading saved properties…'
+                        : savedKnown
+                            ? 'Properties you saved'
+                            : 'Could not be loaded',
+                    icon: Icons.bookmark_border_rounded,
                   ),
                 ),
                 const SizedBox(width: 10),
                 Expanded(
                   child: M3MetricTile(
-                    label: 'Favourites',
-                    value: savedKnown ? '$saved' : '—',
-                    caption: savedKnown
-                        ? 'Properties you saved'
-                        : 'Could not be loaded',
-                    icon: Icons.bookmark_border_rounded,
+                    label: 'Comparison',
+                    value: '$compared/${AppState.maxCompare}',
+                    caption: 'Properties selected',
+                    icon: Icons.compare_arrows_rounded,
                     teal: true,
                   ),
                 ),
               ],
             ),
-            M3DataNote(
-              text: recommendationsKnown && savedKnown
-                  ? 'Live workspace loaded · $recommendations matched '
-                        'recommendations, $saved favourites and $compared '
-                        'properties in comparison. Counts come from the shared '
-                        'property repository and your saved list.'
-                  : 'Some workspace counts could not be loaded. Pull down or '
-                        'tap Retry to read them again — the figures are not '
-                        'shown as zero.',
+            const M3DataNote(
+              text: 'Save properties and compare up to three locations '
+                  'before making your decision.',
             ),
-
-            // ── QUICK ACTIONS ──────────────────────────────────────────
             const M3SectionRow(title: 'Quick actions'),
             M3QuickActionRow(
               icon: Icons.assignment_outlined,
@@ -191,12 +134,6 @@ class _EntrepreneurDashboardMobilePageState
               onTap: () =>
                   EntrepreneurTabScope.open(context, '/entrepreneur/favourites'),
             ),
-
-            // ── SECONDARY LINKS ────────────────────────────────────────
-            // Comparison is not a tab, so it stays one tap away from Home.
-            // The saved list now IS the Favourites tab, so its old shortcut is
-            // gone rather than being a second entry to the same screen.
-            const M3SectionRow(title: 'Comparison'),
             M3QuickActionRow(
               icon: Icons.compare_arrows_rounded,
               title: 'Compare properties',

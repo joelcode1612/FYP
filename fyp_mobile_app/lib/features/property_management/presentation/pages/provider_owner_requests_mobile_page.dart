@@ -18,7 +18,6 @@ class ProviderOwnerRequestsMobilePage extends ConsumerStatefulWidget {
 }
 
 class _OwnerRequestsState extends ConsumerState<ProviderOwnerRequestsMobilePage> {
-  List<Map<String, dynamic>> agents = const [];
   bool busy = false;
   String? error;
   final Map<int, String> statuses = {};
@@ -28,15 +27,8 @@ class _OwnerRequestsState extends ConsumerState<ProviderOwnerRequestsMobilePage>
   void initState() { super.initState(); refresh(); }
 
   Future<void> refresh() async {
+    if (mounted) setState(() => error = null);
     try {
-      final response = await ServiceLocator.apiClient.get('/api/v1/provider-flow/agents');
-      final available = response['data'];
-      if (available is! List) throw StateError('Agent directory is unavailable.');
-      if (!mounted) return;
-      setState(() {
-        agents = available.whereType<Map<String, dynamic>>().toList();
-        error = null;
-      });
       final rows = await ref.read(providerDashboardProvider.future);
       for (final property in rows.listings) {
         final r = await ServiceLocator.apiClient.get(
@@ -54,32 +46,42 @@ class _OwnerRequestsState extends ConsumerState<ProviderOwnerRequestsMobilePage>
     }
   }
 
+  // Load fresh eligibility when the sheet opens; never infer an Agent locally.
+  Future<List<Map<String, dynamic>>> _loadAuthorizedAgents() async {
+    final response = await ServiceLocator.apiClient.get('/api/v1/provider-flow/agents');
+    final available = response['data'];
+    if (available is! List) {
+      throw StateError('Agent directory is unavailable.');
+    }
+    final unique = <String, Map<String, dynamic>>{};
+    for (final row in available) {
+      if (row is! Map) continue;
+      final id = row['user_id']?.toString().trim() ?? '';
+      final name = row['name']?.toString().trim() ?? '';
+      if (id.isEmpty || name.isEmpty) continue;
+      unique[id] = {'user_id': id, 'name': name};
+    }
+    final result = unique.values.toList();
+    result.sort((a, b) => (a['name'] as String).toLowerCase().compareTo((b['name'] as String).toLowerCase()));
+    return result;
+  }
+
   Future<void> requestAgent(ProviderListing property) async {
     if (busy) return;
-    String? chosen;
-    final selected = await showDialog<String>(context: context,
-      builder: (ctx) => StatefulBuilder(builder: (ctx, change) => AlertDialog(
-        title: const Text('Assign authorized Agent'),
-        content: Column(mainAxisSize: MainAxisSize.min, children: [
-          Text(property.displayTitle),
-          const SizedBox(height: 12),
-          DropdownButtonFormField<String>(
-            initialValue: chosen,
-            isExpanded: true,
-            decoration: const InputDecoration(labelText: 'Property Agent'),
-            items: agents.map((a) => DropdownMenuItem<String>(
-              value: '${a['user_id']}',
-              child: Text('${a['name']}', overflow: TextOverflow.ellipsis),
-            )).toList(),
-            onChanged: (v) => change(() => chosen = v),
-          ),
-        ]),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-          FilledButton(onPressed: chosen == null ? null : () => Navigator.pop(ctx, chosen),
-            child: const Text('Send request')),
-        ],
-      )));
+    final selected = await showModalBottomSheet<String>(
+      context: context,
+      useSafeArea: true,
+      isScrollControlled: true,
+      showDragHandle: true,
+      backgroundColor: SitewiseColors.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (_) => _AgentSelectionSheet(
+        property: property,
+        loadAgents: _loadAuthorizedAgents,
+      ),
+    );
     if (selected == null || !mounted) return;
     setState(() { busy = true; error = null; });
     try {
@@ -215,7 +217,7 @@ class _OwnerRequestsState extends ConsumerState<ProviderOwnerRequestsMobilePage>
                     label: const Text('Upload ownership proof')),
                   const SizedBox(height: 8),
                   FilledButton.icon(
-                    onPressed: busy || agents.isEmpty ||
+                    onPressed: busy ||
                         ['requested','accepted','submitted'].contains(statuses[property.id])
                         ? null : () => requestAgent(property),
                     icon: const Icon(Icons.assignment_ind_outlined),
@@ -230,6 +232,225 @@ class _OwnerRequestsState extends ConsumerState<ProviderOwnerRequestsMobilePage>
             const SizedBox(height: 12),
           ],
         ]),
+      ),
+    );
+  }
+}
+
+// SITEWISE_AGENT_SELECTION_SHEET_V1
+class _AgentSelectionSheet extends StatefulWidget {
+  const _AgentSelectionSheet({
+    required this.property,
+    required this.loadAgents,
+  });
+
+  final ProviderListing property;
+  final Future<List<Map<String, dynamic>>> Function() loadAgents;
+
+  @override
+  State<_AgentSelectionSheet> createState() => _AgentSelectionSheetState();
+}
+
+class _AgentSelectionSheetState extends State<_AgentSelectionSheet> {
+  late Future<List<Map<String, dynamic>>> _directory;
+  String? _selected;
+
+  @override
+  void initState() {
+    super.initState();
+    _directory = widget.loadAgents();
+  }
+
+  void _retry() {
+    setState(() {
+      _selected = null;
+      _directory = widget.loadAgents();
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      top: false,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.sizeOf(context).height * .78,
+          ),
+          child: FutureBuilder<List<Map<String, dynamic>>>(
+            future: _directory,
+            builder: (context, snapshot) {
+              final loading = snapshot.connectionState != ConnectionState.done;
+              final directory = snapshot.data ?? const <Map<String, dynamic>>[];
+              final canSend = !loading && !snapshot.hasError &&
+                  _selected != null && directory.any((a) => a['user_id'] == _selected);
+              return Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Flexible(
+                    child: ListView(
+                      shrinkWrap: true,
+                      padding: EdgeInsets.zero,
+                      children: [
+                        Row(
+                          children: [
+                            const Expanded(
+                              child: Text('Select an agent', style: SitewiseM3Type.h1),
+                            ),
+                            IconButton(
+                              tooltip: 'Close agent selection',
+                              onPressed: () => Navigator.of(context).pop(),
+                              icon: const Icon(Icons.close_rounded),
+                            ),
+                          ],
+                        ),
+                        const Text(
+                          'Choose an authorized agent to inspect your property.',
+                          style: TextStyle(fontSize: 16, height: 1.45, color: SitewiseColors.muted),
+                        ),
+                        const SizedBox(height: 18),
+                        Container(
+                          padding: const EdgeInsets.all(14),
+                          decoration: BoxDecoration(
+                            color: SitewiseColors.action.withValues(alpha: .06),
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Icon(Icons.storefront_outlined, color: SitewiseColors.action),
+                              const SizedBox(width: 12),
+                              Expanded(child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(widget.property.displayTitle,
+                                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: SitewiseColors.ink)),
+                                  if (widget.property.address.trim().isNotEmpty) ...[
+                                    const SizedBox(height: 4),
+                                    Text(widget.property.address,
+                                      style: const TextStyle(fontSize: 14, height: 1.4, color: SitewiseColors.muted)),
+                                  ],
+                                ],
+                              )),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 20),
+                        const Text('Available agents', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: SitewiseColors.ink)),
+                        const SizedBox(height: 10),
+                        if (loading)
+                          const Padding(
+                            padding: EdgeInsets.symmetric(vertical: 24),
+                            child: Center(child: CircularProgressIndicator()),
+                          )
+                        else if (snapshot.hasError || directory.isEmpty)
+                          Container(
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              border: Border.all(color: SitewiseColors.border),
+                              borderRadius: BorderRadius.circular(14),
+                            ),
+                            child: Column(children: [
+                              Icon(snapshot.hasError ? Icons.cloud_off_outlined : Icons.person_search_outlined,
+                                size: 32, color: SitewiseColors.muted),
+                              const SizedBox(height: 10),
+                              Text(snapshot.hasError ? 'Unable to load agents' : 'No authorized agents available',
+                                textAlign: TextAlign.center,
+                                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: SitewiseColors.ink)),
+                              const SizedBox(height: 6),
+                              Text(snapshot.hasError ? 'Check your connection and try again.' : 'Try again later or contact the administrator.',
+                                textAlign: TextAlign.center,
+                                style: const TextStyle(fontSize: 14, height: 1.4, color: SitewiseColors.muted)),
+                              const SizedBox(height: 8),
+                              OutlinedButton.icon(
+                                onPressed: _retry,
+                                icon: const Icon(Icons.refresh_rounded),
+                                label: const Text('Retry'),
+                              ),
+                            ]),
+                          )
+                        else
+                          for (final agent in directory) ...[
+                            _agentRow(agent),
+                            const SizedBox(height: 8),
+                          ],
+                        const SizedBox(height: 14),
+                        const Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Icon(Icons.info_outline, size: 19, color: SitewiseColors.muted),
+                            SizedBox(width: 8),
+                            Expanded(child: Text(
+                              'Your selected agent must accept the request before proceeding with the inspection.',
+                              style: TextStyle(fontSize: 14, height: 1.4, color: SitewiseColors.muted),
+                            )),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  FilledButton(
+                    style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(52)),
+                    onPressed: canSend ? () => Navigator.of(context).pop(_selected) : null,
+                    child: const Text('Send request'),
+                  ),
+                  TextButton(
+                    style: TextButton.styleFrom(minimumSize: const Size.fromHeight(48)),
+                    onPressed: () => Navigator.of(context).pop(),
+                    child: const Text('Cancel'),
+                  ),
+                ],
+              );
+            },
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _agentRow(Map<String, dynamic> agent) {
+    final id = agent['user_id'] as String;
+    final name = agent['name'] as String;
+    final active = _selected == id;
+    return Semantics(
+      button: true,
+      selected: active,
+      child: Material(
+        color: active ? SitewiseColors.action.withValues(alpha: .07) : SitewiseColors.surface,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(14),
+          side: BorderSide(color: active ? SitewiseColors.action : SitewiseColors.border),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: () => setState(() => _selected = id),
+          child: Padding(
+            padding: const EdgeInsets.all(14),
+            child: Row(children: [
+              const CircleAvatar(
+                backgroundColor: SitewiseColors.infoWash,
+                foregroundColor: SitewiseColors.action,
+                child: Icon(Icons.person_outline_rounded),
+              ),
+              const SizedBox(width: 12),
+              Expanded(child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(name, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: SitewiseColors.ink)),
+                  const SizedBox(height: 4),
+                  const Text('Authorized property agent', style: TextStyle(fontSize: 14, color: SitewiseColors.muted)),
+                ],
+              )),
+              const SizedBox(width: 10),
+              Icon(active ? Icons.check_circle_rounded : Icons.radio_button_unchecked_rounded,
+                color: active ? SitewiseColors.action : SitewiseColors.muted),
+            ]),
+          ),
+        ),
       ),
     );
   }

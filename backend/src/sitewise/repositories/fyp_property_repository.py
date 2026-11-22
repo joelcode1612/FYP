@@ -1238,6 +1238,10 @@ class FypPropertyRepository:
             if column not in fields:
                 continue
             value = fields[column]
+            # PostgreSQL stores these flags as SMALLINT (0/1), not BOOLEAN.
+            # Match the existing create_owner_draft/create_owner_listing paths.
+            if column in ("has_parking", "is_fnb_suitable") and value is not None:
+                value = int(value)
             params[column] = value
             if column in ("address", "city", "state", "postcode", "availability",
                           "property_type", "description", "name"):

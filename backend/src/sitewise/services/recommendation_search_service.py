@@ -63,6 +63,7 @@ import math
 import threading
 from collections import OrderedDict
 from dataclasses import dataclass, field, replace
+from math import asin, cos, radians, sin, sqrt
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
@@ -331,6 +332,9 @@ class SearchCriteria:
     # column is empty for every row, so the address is the authoritative
     # location source. Missing advanced measurements are never matched.
     city: str | None = None
+    location_latitude: float | None = None
+    location_longitude: float | None = None
+    nearby_radius_km: float | None = None
     floor_level: str | None = None
     transit_max_m: float | None = None
     nearby_parking_min: float | None = None
@@ -354,6 +358,12 @@ class SearchCriteria:
             "state": (self.preferred_state or "").strip(),
             "area": (self.preferred_area or "").strip(),
             "city": (self.city or "").strip(),
+            # Search-local consent data, never persisted in a user profile.
+            "nearby": {
+                "lat": self.location_latitude,
+                "lon": self.location_longitude,
+                "radius_km": self.nearby_radius_km,
+            },
             "advanced": {
                 key: advanced_fields.selected(self, key)
                 for key in advanced_fields.FIELDS
@@ -503,6 +513,29 @@ def _has_selection(criteria: SearchCriteria, key: str) -> bool:
     return value is not None
 
 
+def _haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    """Great-circle distance between two points in km, not travel time."""
+    d_lat = radians(lat2 - lat1)
+    d_lon = radians(lon2 - lon1)
+    a = sin(d_lat / 2) ** 2 + cos(radians(lat1)) * cos(radians(lat2)) * sin(d_lon / 2) ** 2
+    return 6371.0088 * 2 * asin(min(1, sqrt(a)))
+
+
+def _within_nearby(row: _Row, criteria: SearchCriteria) -> bool:
+    """Exclude unmeasured/invalid property coordinates, never treat as zero."""
+    if criteria.location_latitude is None:
+        return True
+    lat, lon = row.latitude, row.longitude
+    if lat is None or lon is None or not (-90 <= lat <= 90 and -180 <= lon <= 180):
+        return False
+    if lat == 0 and lon == 0:
+        return False
+    assert criteria.location_longitude is not None
+    assert criteria.nearby_radius_km is not None
+    return _haversine_km(criteria.location_latitude, criteria.location_longitude,
+                         lat, lon) <= criteria.nearby_radius_km
+
+
 def _satisfies(row: _Row, criteria: SearchCriteria, *, excluding: str | None) -> bool:
     """The Python mirror of the hard filters :meth:`_query` pushes into SQL.
 
@@ -514,6 +547,8 @@ def _satisfies(row: _Row, criteria: SearchCriteria, *, excluding: str | None) ->
     over the live catalogue, so a drift between the two is a failing test, not a
     silently wrong count.
     """
+    if not _within_nearby(row, criteria):
+        return False
     if excluding != "rental_budget":
         if criteria.max_rental_rm is not None and row.rental_rm > criteria.max_rental_rm:
             return False
@@ -1042,7 +1077,11 @@ class RecommendationSearchService:
             sort=DEFAULT_SORT,
             cursor=None,
         )
-        return self._ranked_candidates(browse)
+        rows = self._ranked_candidates(browse)
+        # The facet universe must agree with the nearby results count.
+        if criteria.location_latitude is not None:
+            rows = [row for row in rows if _within_nearby(row, criteria)]
+        return rows
 
     # -- ranking ------------------------------------------------------------
 

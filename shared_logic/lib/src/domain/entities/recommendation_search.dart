@@ -411,6 +411,11 @@ class RecommendationSearchRequest {
   final String? propertyType;
   final String? city;
 
+  /// Optional, foreground-only device position for nearby property discovery.
+  final double? locationLatitude;
+  final double? locationLongitude;
+  final double? nearbyRadiusKm;
+
   /// Data-supported advanced filters. Every value is a server-verified
   /// measurement or a documented preference; no client-side guessing.
   final String? floorLevel;
@@ -443,6 +448,9 @@ class RecommendationSearchRequest {
     this.maxSizeSqft,
     this.propertyType,
     this.city,
+    this.locationLatitude,
+    this.locationLongitude,
+    this.nearbyRadiusKm,
     this.floorLevel,
     this.transitMaxM,
     this.nearbyParkingMin,
@@ -517,6 +525,9 @@ class RecommendationSearchRequest {
         maxSizeSqft: (json['max_size_sqft'] as num?)?.toDouble(),
         propertyType: json['property_type'] as String?,
         city: json['city'] as String?,
+        locationLatitude: (json['location_latitude'] as num?)?.toDouble(),
+        locationLongitude: (json['location_longitude'] as num?)?.toDouble(),
+        nearbyRadiusKm: (json['nearby_radius_km'] as num?)?.toDouble(),
         floorLevel: json['floor_level'] as String?,
         transitMaxM: (json['transit_max_m'] as num?)?.toDouble(),
         nearbyParkingMin: (json['nearby_parking_min'] as num?)?.toDouble(),
@@ -547,6 +558,7 @@ class RecommendationSearchRequest {
       preferredArea == null &&
       propertyType == null &&
       city == null &&
+      locationLatitude == null &&
       floorLevel == null &&
       transitMaxM == null &&
       nearbyParkingMin == null &&
@@ -568,6 +580,9 @@ class RecommendationSearchRequest {
     if (maxSizeSqft != null) 'max_size_sqft': maxSizeSqft,
     if (propertyType != null) 'property_type': propertyType,
     if (city != null) 'city': city,
+    if (locationLatitude != null) 'location_latitude': locationLatitude,
+    if (locationLongitude != null) 'location_longitude': locationLongitude,
+    if (nearbyRadiusKm != null) 'nearby_radius_km': nearbyRadiusKm,
     if (floorLevel != null) 'floor_level': floorLevel,
     if (transitMaxM != null) 'transit_max_m': transitMaxM,
     if (nearbyParkingMin != null) 'nearby_parking_min': nearbyParkingMin,
@@ -593,6 +608,9 @@ class RecommendationSearchRequest {
     double? maxSizeSqft,
     String? propertyType,
     String? city,
+    double? locationLatitude,
+    double? locationLongitude,
+    double? nearbyRadiusKm,
     String? floorLevel,
     double? transitMaxM,
     double? nearbyParkingMin,
@@ -611,6 +629,7 @@ class RecommendationSearchRequest {
     bool clearState = false,
     bool clearArea = false,
     bool clearCity = false,
+    bool clearNearby = false,
     bool clearAdvanced = false,
     bool clearFloorLevel = false,
     bool clearTransit = false,
@@ -636,6 +655,9 @@ class RecommendationSearchRequest {
         ? null
         : (propertyType ?? this.propertyType),
     city: clearCity ? null : (city ?? this.city),
+    locationLatitude: clearNearby ? null : (locationLatitude ?? this.locationLatitude),
+    locationLongitude: clearNearby ? null : (locationLongitude ?? this.locationLongitude),
+    nearbyRadiusKm: clearNearby ? null : (nearbyRadiusKm ?? this.nearbyRadiusKm),
     floorLevel: clearAdvanced || clearFloorLevel
         ? null
         : (floorLevel ?? this.floorLevel),

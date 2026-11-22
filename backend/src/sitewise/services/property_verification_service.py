@@ -251,7 +251,7 @@ class PropertyVerificationService:
     ) -> dict[str, Any]:
         """The submitter's rental listing, access checked against the verified
         Supabase identity (``fyp.rental_properties.owner_user_id``) or the
-        ``public.agent_listing_assignment`` row.
+        ``fyp.agent_listing_assignment`` row.
 
         Agent-created listings carry ``owner_user_id = NULL`` — the creating
         agent is recorded ONLY through the assignment row. Restricting this
@@ -431,7 +431,7 @@ class PropertyVerificationService:
         # the property verification submission. No partial handoff.
         if provider_scope.is_agent_role(role):
             changed = self.session.execute(text("""
-                UPDATE public.agent_listing_assignment
+                UPDATE fyp.agent_listing_assignment
                    SET workflow_status='submitted', submitted_at=now(), updated_at=now(),
                        panorama_id=(SELECT p.panorama_id FROM fyp.panoramas p JOIN fyp.capture_sessions c ON c.id=p.session_id JOIN fyp.panorama_jobs j ON j.session_id=c.id WHERE p.property_id=CAST(:pid AS text) AND c.owner_id=:uid AND c.status='completed' AND j.status='done' ORDER BY p.created_at DESC LIMIT 1)
                  WHERE listing_id=:pid AND workflow_status IN ('accepted','needs_correction')
@@ -609,7 +609,7 @@ class AdminPropertyReviewService:
         # aliases preserve the exact payload contract the Admin web UI and
         # shared_logic entities parse.
         base_from = (
-            f" FROM property_verification pv"
+            f" FROM fyp.property_verification pv"
             f" JOIN {_LISTING_TABLE} p ON p.id = pv.property_id"
         )
 

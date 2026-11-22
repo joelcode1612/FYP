@@ -10,6 +10,10 @@ from sitewise.db.models.recommendation_result import RecommendationResult
 from sitewise.db.session import get_db
 from sitewise.dependencies import AuthenticatedUser, CurrentUser, get_active_user, require_admin_mfa
 from sitewise.domain import rbac
+from sitewise.services.nearby_location_geocoding import (
+    GeocodingUnavailable,
+    lookup_malaysian_address,
+)
 from sitewise.services.property_insights_service import (
     PANORAMA_UNAVAILABLE,
     panoramas_by_catalogue_ids,
@@ -60,6 +64,9 @@ class RecommendationSearchRequest(BaseModel):
     # city column is empty. Advanced fields are applied only when a verified
     # measurement exists — NULL never matches a selection.
     city: str | None = Field(default=None, max_length=120)
+    location_latitude: float | None = Field(default=None, ge=-90, le=90, allow_inf_nan=False)
+    location_longitude: float | None = Field(default=None, ge=-180, le=180, allow_inf_nan=False)
+    nearby_radius_km: float | None = Field(default=None, ge=0.5, le=100, allow_inf_nan=False)
     floor_level: str | None = Field(default=None, max_length=80)
     transit_max_m: float | None = Field(default=None, ge=0, le=100_000)
     nearby_parking_min: float | None = Field(default=None, ge=0, le=10_000)
@@ -82,6 +89,12 @@ class RecommendationSearchRequest(BaseModel):
 
     @model_validator(mode="after")
     def _check_ranges(self) -> "RecommendationSearchRequest":
+        if any(value is not None for value in (
+            self.location_latitude, self.location_longitude, self.nearby_radius_km
+        )) and not all(value is not None for value in (
+            self.location_latitude, self.location_longitude, self.nearby_radius_km
+        )):
+            raise ValueError("Location latitude, longitude, and radius must be provided together.")
         if (
             self.min_rental_rm is not None
             and self.max_rental_rm is not None
@@ -101,6 +114,22 @@ class RecommendationSearchRequest(BaseModel):
         ):
             raise ValueError("Minimum population cannot exceed the maximum.")
         return self
+
+
+class NearbyAddressRequest(BaseModel):
+    address: str = Field(min_length=5, max_length=200)
+
+
+@router.post("/geocode")
+def geocode_nearby_location(body: NearbyAddressRequest, _user: CurrentUser) -> dict:
+    """Resolve one explicit Malaysian address lookup; never autocomplete."""
+    try:
+        result = lookup_malaysian_address(body.address)
+    except (GeocodingUnavailable, ValueError) as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    if result is None:
+        raise HTTPException(status_code=404, detail="No location found for that address in Malaysia.")
+    return result
 
 
 @router.post("/search")
@@ -144,6 +173,9 @@ def search_recommendations(
         max_size_sqft=body.max_size_sqft,
         property_type=body.property_type,
         city=body.city,
+        location_latitude=body.location_latitude,
+        location_longitude=body.location_longitude,
+        nearby_radius_km=body.nearby_radius_km,
         floor_level=body.floor_level,
         transit_max_m=body.transit_max_m,
         nearby_parking_min=body.nearby_parking_min,
@@ -203,6 +235,9 @@ def recommendation_facets(
     max_size_sqft: float | None = Query(default=None, ge=0, le=1_000_000),
     property_type: str | None = Query(default=None, max_length=120),
     city: str | None = Query(default=None, max_length=120),
+    location_latitude: float | None = Query(default=None, ge=-90, le=90, allow_inf_nan=False),
+    location_longitude: float | None = Query(default=None, ge=-180, le=180, allow_inf_nan=False),
+    nearby_radius_km: float | None = Query(default=None, ge=0.5, le=100, allow_inf_nan=False),
     floor_level: str | None = Query(default=None, max_length=80),
     transit_max_m: float | None = Query(default=None, ge=0, le=100_000),
     nearby_parking_min: float | None = Query(default=None, ge=0, le=10_000),
@@ -259,6 +294,12 @@ def recommendation_facets(
             detail={"code": "invalid_range",
                     "message": "Minimum population cannot exceed the maximum."},
         )
+    if any(value is not None for value in (
+        location_latitude, location_longitude, nearby_radius_km
+    )) and not all(value is not None for value in (
+        location_latitude, location_longitude, nearby_radius_km
+    )):
+        raise HTTPException(status_code=422, detail="Location and radius must be provided together.")
     management = RecommendationManagementService(operational_db)
     try:
         assigned_ids = management.assigned_catalogue_ids() if managed_only else ()
@@ -277,6 +318,9 @@ def recommendation_facets(
         max_size_sqft=max_size_sqft,
         property_type=property_type,
         city=city,
+        location_latitude=location_latitude,
+        location_longitude=location_longitude,
+        nearby_radius_km=nearby_radius_km,
         floor_level=floor_level,
         transit_max_m=transit_max_m,
         nearby_parking_min=nearby_parking_min,

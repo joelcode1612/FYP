@@ -23,7 +23,60 @@ from sqlmodel import Session
 from sitewise.core.logging import logger
 from sitewise.db.models.entrepreneur_preferences import EntrepreneurPreferences
 from sitewise.repositories.preferences_repository import PreferencesRepository
-from sitewise.services.assessment_service import validate_requirements
+from sitewise.core.exceptions import AssessmentError
+from sitewise.services.assessment_service import (
+    _validate_v1, requirements_version_of, validate_requirements,
+)
+
+
+# sitewise-expanded-user-preferences-v1
+# Account settings are independent of the v1/v2/v3 assessment vocabulary.
+# The existing account row remains authoritative; no new table is required.
+_SETTINGS_ENUMS = {
+    "search_radius_m": (500, 1000),
+    "default_sort": ("best_match", "rent_asc", "rent_desc", "size_asc", "size_desc", "pu_desc"),
+    "transit_max_m": (None, 500, 1000),
+    "nearby_parking_min": (None, 1, 3, 5),
+    "fnb_competition_max": (None, 5, 10, 20),
+}
+_SETTINGS_TEXT = ("preferred_state", "preferred_city")
+_SETTINGS_BOOL = ("use_current_location", "notification_updates")
+_LEGACY_PROFILE_KEYS = frozenset({
+    "property_type", "target_market", "seating_model", "min_budget_rm",
+    "max_budget_rm", "min_size_sqft", "max_size_sqft", "requirements", "preferred_areas",
+})
+
+
+def _invalid_settings(message: str):
+    raise AssessmentError(message, code="invalid_requirements", status_code=422)
+
+
+def _merge_user_settings(previous: Any, changes: Any) -> dict:
+    if not isinstance(changes, dict):
+        _invalid_settings("User settings must be an object.")
+    # Keep unchanged, recognised settings. Never persist arbitrary keys from
+    # a request, and never use these flags as an OS permission grant.
+    allowed = set(_SETTINGS_ENUMS) | set(_SETTINGS_TEXT) | set(_SETTINGS_BOOL)
+    if set(changes) - allowed:
+        _invalid_settings("Unknown user settings field.")
+    merged = {**(previous if isinstance(previous, dict) else {}), **changes}
+    clean = {}
+    for key, value in merged.items():
+        if key in _SETTINGS_TEXT:
+            if not isinstance(value, str) or len(value.strip()) > 120:
+                _invalid_settings(f"{key} must be text up to 120 characters.")
+            clean[key] = value.strip()
+        elif key in _SETTINGS_BOOL:
+            if type(value) is not bool:
+                _invalid_settings(f"{key} must be true or false.")
+            clean[key] = value
+        elif key in _SETTINGS_ENUMS:
+            if isinstance(value, bool) or value not in _SETTINGS_ENUMS[key]:
+                _invalid_settings(f"Unsupported {key} value.")
+            if key != "default_sort" and value is not None and type(value) is not int:
+                _invalid_settings(f"{key} must be an integer.")
+            clean[key] = value
+    return clean
 
 
 def _now() -> datetime:
@@ -59,7 +112,15 @@ class PreferencesService:
         is written when it raises.
         """
         record = self.repo.get_by_user(user_id)
-        merged = {**self._decode(record), **changes}
+        previous = self._decode(record)
+        merged = {**previous, **changes}
+        # Settings are partial-merged and validated separately so the assessment
+        # schema cannot strip them or mistake them for questionnaire answers.
+        settings_present = "user_settings" in previous or "user_settings" in changes
+        settings = _merge_user_settings(
+            previous.get("user_settings"), changes.get("user_settings", {})
+        )
+        merged.pop("user_settings", None)
         # Business category is no longer a recommendation preference: there
         # is no separate F&B category suitability score. Drop a historical
         # value instead of carrying it invisibly into new saves. Assessment
@@ -69,6 +130,17 @@ class PreferencesService:
             merged, require_business_type=False
         )
         clean.pop('business_type', None)
+        # A v2/v3 questionnaire may coexist with the general property criteria.
+        # Validate the legacy fields independently rather than losing them when
+        # the questionnaire validator returns only its own vocabulary.
+        if requirements_version_of(merged) in (2, 3):
+            legacy = {k: merged[k] for k in _LEGACY_PROFILE_KEYS if k in merged}
+            if {"property_type", "max_budget_rm", "max_size_sqft"} <= legacy.keys():
+                profile = _validate_v1(legacy, require_business_type=False)
+                profile.pop("business_type", None)
+                clean.update(profile)
+        if settings_present:
+            clean["user_settings"] = settings
 
         now = _now()
         if record is None:

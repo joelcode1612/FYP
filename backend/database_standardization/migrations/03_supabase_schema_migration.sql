@@ -144,10 +144,7 @@ BEGIN
     IF to_regclass('public.property') IS NOT NULL
        AND EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'postgis') THEN
         ALTER TABLE public.property ADD COLUMN IF NOT EXISTS geom geometry(Point,4326);
-        ALTER TABLE public.property ALTER COLUMN geom SET DEFAULT
-            CASE WHEN latitude IS NOT NULL AND longitude IS NOT NULL
-                 THEN st_setsrid(st_makepoint(longitude, latitude), 4326)
-                 ELSE NULL END;
+        ALTER TABLE public.property ALTER COLUMN geom DROP DEFAULT;
         UPDATE public.property
            SET geom = CASE WHEN latitude IS NOT NULL AND longitude IS NOT NULL
                            THEN st_setsrid(st_makepoint(longitude, latitude), 4326)

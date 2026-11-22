@@ -72,6 +72,8 @@ dependencies:
   # Camera permission gate for the ARCore capture screen. The AR host owns the
   # camera device; this package is only used to ask for and check the grant.
   permission_handler: ^12.0.3
+  # Foreground-only location fix when the entrepreneur enables nearby recommendations.
+  geolocator: ^14.1.2
   file_selector: ^1.1.0
   # TOTP enrolment QR for the staff authenticator flow. Already resolved in
   # the pub cache; renders from the otpauth:// URI Supabase returns.

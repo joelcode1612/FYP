@@ -166,21 +166,6 @@ class _EntrepreneurSignInState extends State<EntrepreneurSignInForm> {
   // an honest "(not configured)" label so assistive tech announces the real
   // state. Because it has no `data-provider="google"`, the auth bridge never
   // re-enables it.
-  Component _socialApple() {
-    final Map<String, String> attrs = {
-      'role': 'button',
-      'data-provider': 'apple',
-      'aria-label': 'Continue with Apple (not configured)',
-      'aria-disabled': 'true',
-      'tabindex': '-1',
-    };
-    return div(
-      key: const Key('social-apple'),
-      classes: 'lp-social lp-social--apple is-disabled',
-      attributes: attrs,
-      [authSocialApple(), Component.text('Continue with Apple')],
-    );
-  }
 
   @override
   Component build(BuildContext context) {
@@ -205,13 +190,12 @@ class _EntrepreneurSignInState extends State<EntrepreneurSignInForm> {
       // are disabled with an explicit explanation (no fake successful login).
       div(classes: 'lp-social-row', [
         _socialGoogle(),
-        _socialApple(),
       ]),
       p(classes: 'lp-social-note', [
         Component.text(
           WebAuth.configured
-              ? 'Google sign-in is managed by Supabase. Apple sign-in is not configured.'
-              : 'Social sign-in is not configured in this deployment.',
+              ? 'Google sign-in is managed by Supabase.'
+              : 'Google sign-in is not configured.',
         ),
       ]),
 

@@ -1,0 +1,11 @@
+Expected research catalogue: 916
+Local total rows (including additional drafts): 920
+Supabase total rows: 916
+Matched core records: 916/916
+Mismatched core records: 0
+Numeric IDs equal: 916/916
+Outside manifest: 4 (see report; may be legitimate)
+Numeric comparison: rent/size/bathrooms 2 decimals, coordinates 5 decimals; text normalized for case and whitespace.
+Scope: 916 imported properties and listed core fields; not every field, photos, geospatial features, users, or continuous replication.
+Cloud physical data types not inspected; run column_inventory.sql in Supabase or use --cloud-sql.
+READ ONLY — no database writes.
