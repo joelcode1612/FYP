@@ -1,0 +1,2103 @@
+{
+  "target": "supabase_rest",
+  "generated_at": "2026-11-22T07:46:17.345238+00:00",
+  "mode": "rest_openapi",
+  "limitations": "PostgREST exposes only tables in the configured db-schemas with grants for the API roles; constraints, RLS policies, grants, views and non-exposed schemas are not visible via REST.",
+  "tables": [
+    {
+      "table": "addresses",
+      "columns": [
+        {
+          "name": "id",
+          "type": "int64",
+          "description": "Note:\nThis is a Primary Key.<pk/>",
+          "required": true
+        },
+        {
+          "name": "address_uuid",
+          "type": "uuid",
+          "description": null,
+          "required": true
+        },
+        {
+          "name": "source_property_id",
+          "type": "int64",
+          "description": "Note:\nThis is a Foreign Key to `property.property_id`.<fk table='property' column='property_id'/>",
+          "required": false
+        },
+        {
+          "name": "address_line1",
+          "type": "text",
+          "description": null,
+          "required": false
+        },
+        {
+          "name": "address_line2",
+          "type": "text",
+          "description": null,
+          "required": false
+        },
+        {
+          "name": "district",
+          "type": "text",
+          "description": null,
+          "required": false
+        },
+        {
+          "name": "city",
+          "type": "text",
+          "description": null,
+          "required": false
+        },
+        {
+          "name": "state",
+          "type": "text",
+          "description": null,
+          "required": false
+        },
+        {
+          "name": "postcode",
+          "type": "text",
+          "description": null,
+          "required": false
+        },
+        {
+          "name": "country_code",
+          "type": "character",
+          "description": null,
+          "required": true
+        },
+        {
+          "name": "latitude",
+          "type": "double precision",
+          "description": null,
+          "required": false
+        },
+        {
+          "name": "longitude",
+          "type": "double precision",
+          "description": null,
+          "required": false
+        },
+        {
+          "name": "formatted_address",
+          "type": "text",
+          "description": null,
+          "required": false
+        },
+        {
+          "name": "coordinate_status",
+          "type": "text",
+          "description": null,
+          "required": true
+        },
+        {
+          "name": "review_required",
+          "type": "boolean",
+          "description": null,
+          "required": true
+        },
+        {
+          "name": "source_url",
+          "type": "text",
+          "description": null,
+          "required": false
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "description": null,
+          "required": true
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "description": null,
+          "required": true
+        }
+      ],
+      "row_count": 916,
+      "count_error": null,
+      "classification": "unknown_requires_investigation"
+    },
+    {
+      "table": "agent",
+      "columns": [
+        {
+          "name": "agent_id",
+          "type": "int64",
+          "description": "Note:\nThis is a Primary Key.<pk/>",
+          "required": true
+        },
+        {
+          "name": "agent_name",
+          "type": "character varying",
+          "description": null,
+          "required": false
+        },
+        {
+          "name": "company_id",
+          "type": "int64",
+          "description": "Note:\nThis is a Foreign Key to `company.company_id`.<fk table='company' column='company_id'/>",
+          "required": false
+        },
+        {
+          "name": "user_id",
+          "type": "uuid",
+          "description": "Logical reference to Supabase public.users.user_id. When AGENT is stored in a separate sitesense database, validate this UUID in FastAPI; do not create a cross-database FK.\n\nNote:\nThis is a Foreign Key to `users.user_id`.<fk table='users' column='user_id'/>",
+          "required": false
+        },
+        {
+          "name": "created_by_user_id",
+          "type": "uuid",
+          "description": "Note:\nThis is a Foreign Key to `users.user_id`.<fk table='users' column='user_id'/>",
+          "required": false
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "description": null,
+          "required": false
+        }
+      ],
+      "row_count": 2,
+      "count_error": null,
+      "classification": "identity_or_security"
+    },
+    {
+      "table": "agent_listing_assignment",
+      "columns": [
+        {
+          "name": "listing_id",
+          "type": "int64",
+          "description": "Note:\nThis is a Primary Key.<pk/>\nThis is a Foreign Key to `property.property_id`.<fk table='property' column='property_id'/>",
+          "required": true
+        },
+        {
+          "name": "agent_id",
+          "type": "int64",
+          "description": "Note:\nThis is a Foreign Key to `agent.agent_id`.<fk table='agent' column='agent_id'/>",
+          "required": true
+        },
+        {
+          "name": "assigned_by_user_id",
+          "type": "uuid",
+          "description": "Note:\nThis is a Foreign Key to `users.user_id`.<fk table='users' column='user_id'/>",
+          "required": false
+        },
+        {
+          "name": "workflow_status",
+          "type": "text",
+          "description": null,
+          "required": true
+        },
+        {
+          "name": "requested_at",
+          "type": "timestamp with time zone",
+          "description": null,
+          "required": true
+        },
+        {
+          "name": "responded_at",
+          "type": "timestamp with time zone",
+          "description": null,
+          "required": false
+        },
+        {
+          "name": "inspection_data",
+          "type": "jsonb",
+          "description": null,
+          "required": true
+        },
+        {
+          "name": "inspection_updated_at",
+          "type": "timestamp with time zone",
+          "description": null,
+          "required": false
+        },
+        {
+          "name": "panorama_id",
+          "type": "uuid",
+          "description": null,
+          "required": false
+        },
+        {
+          "name": "panorama_tour_id",
+          "type": "uuid",
+          "description": null,
+          "required": false
+        },
+        {
+          "name": "panorama_job_id",
+          "type": "text",
+          "description": "Note:\nThis is a Foreign Key to `pano_jobs.id`.<fk table='pano_jobs' column='id'/>",
+          "required": false
+        },
+        {
+          "name": "panorama_uploaded_at",
+          "type": "timestamp with time zone",
+          "description": null,
+          "required": false
+        },
+        {
+          "name": "submitted_at",
+          "type": "timestamp with time zone",
+          "description": null,
+          "required": false
+        },
+        {
+          "name": "decline_reason",
+          "type": "text",
+          "description": null,
+          "required": false
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "description": null,
+          "required": true
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "description": null,
+          "required": true
+        }
+      ],
+      "row_count": 0,
+      "count_error": null,
+      "classification": "shared_operational_application"
+    },
+    {
+      "table": "company",
+      "columns": [
+        {
+          "name": "company_id",
+          "type": "int64",
+          "description": "Note:\nThis is a Primary Key.<pk/>",
+          "required": true
+        },
+        {
+          "name": "company_name",
+          "type": "text",
+          "description": null,
+          "required": true
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "description": null,
+          "required": true
+        },
+        {
+          "name": "company_type",
+          "type": "text",
+          "description": null,
+          "required": false
+        }
+      ],
+      "row_count": 3,
+      "count_error": null,
+      "classification": "identity_or_security"
+    },
+    {
+      "table": "favorite_property",
+      "columns": [
+        {
+          "name": "favorite_id",
+          "type": "uuid",
+          "description": "Note:\nThis is a Primary Key.<pk/>",
+          "required": true
+        },
+        {
+          "name": "user_id",
+          "type": "uuid",
+          "description": "Note:\nThis is a Foreign Key to `users.user_id`.<fk table='users' column='user_id'/>",
+          "required": true
+        },
+        {
+          "name": "property_id",
+          "type": "int64",
+          "description": "Note:\nThis is a Foreign Key to `property.property_id`.<fk table='property' column='property_id'/>",
+          "required": true
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "description": null,
+          "required": true
+        }
+      ],
+      "row_count": 0,
+      "count_error": null,
+      "classification": "unknown_requires_investigation"
+    },
+    {
+      "table": "listing_change_audit",
+      "columns": [
+        {
+          "name": "audit_id",
+          "type": "uuid",
+          "description": "Note:\nThis is a Primary Key.<pk/>",
+          "required": true
+        },
+        {
+          "name": "change_request_id",
+          "type": "uuid",
+          "description": null,
+          "required": false
+        },
+        {
+          "name": "listing_id",
+          "type": "int64",
+          "description": "Note:\nThis is a Foreign Key to `property.property_id`.<fk table='property' column='property_id'/>",
+          "required": true
+        },
+        {
+          "name": "action",
+          "type": "character varying",
+          "description": null,
+          "required": true
+        },
+        {
+          "name": "actor_user_id",
+          "type": "uuid",
+          "description": "Note:\nThis is a Foreign Key to `users.user_id`.<fk table='users' column='user_id'/>",
+          "required": true
+        },
+        {
+          "name": "note",
+          "type": "character varying",
+          "description": null,
+          "required": false
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "description": null,
+          "required": true
+        }
+      ],
+      "row_count": 0,
+      "count_error": null,
+      "classification": "unknown_requires_investigation"
+    },
+    {
+      "table": "listing_change_request",
+      "columns": [
+        {
+          "name": "change_request_id",
+          "type": "uuid",
+          "description": "Note:\nThis is a Primary Key.<pk/>",
+          "required": true
+        },
+        {
+          "name": "listing_id",
+          "type": "int64",
+          "description": "Note:\nThis is a Foreign Key to `property.property_id`.<fk table='property' column='property_id'/>",
+          "required": true
+        },
+        {
+          "name": "proposed_by",
+          "type": "uuid",
+          "description": "Note:\nThis is a Foreign Key to `users.user_id`.<fk table='users' column='user_id'/>",
+          "required": true
+        },
+        {
+          "name": "changes",
+          "type": "jsonb",
+          "description": null,
+          "required": true
+        },
+        {
+          "name": "status",
+          "type": "character varying",
+          "description": null,
+          "required": true
+        },
+        {
+          "name": "reason",
+          "type": "character varying",
+          "description": null,
+          "required": false
+        },
+        {
+          "name": "reviewed_by",
+          "type": "uuid",
+          "description": "Note:\nThis is a Foreign Key to `users.user_id`.<fk table='users' column='user_id'/>",
+          "required": false
+        },
+        {
+          "name": "review_note",
+          "type": "character varying",
+          "description": null,
+          "required": false
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "description": null,
+          "required": true
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "description": null,
+          "required": true
+        }
+      ],
+      "row_count": 0,
+      "count_error": null,
+      "classification": "unknown_requires_investigation"
+    },
+    {
+      "table": "pano_capture_frames",
+      "columns": [
+        {
+          "name": "session_id",
+          "type": "text",
+          "description": "Note:\nThis is a Primary Key.<pk/>\nThis is a Foreign Key to `pano_capture_sessions.session_id`.<fk table='pano_capture_sessions' column='session_id'/>",
+          "required": true
+        },
+        {
+          "name": "target_id",
+          "type": "int32",
+          "description": "Note:\nThis is a Primary Key.<pk/>",
+          "required": true
+        },
+        {
+          "name": "target_yaw_deg",
+          "type": "double precision",
+          "description": null,
+          "required": true
+        },
+        {
+          "name": "target_pitch_deg",
+          "type": "double precision",
+          "description": null,
+          "required": true
+        },
+        {
+          "name": "upload_status",
+          "type": "text",
+          "description": null,
+          "required": true
+        },
+        {
+          "name": "storage_path",
+          "type": "text",
+          "description": null,
+          "required": false
+        },
+        {
+          "name": "sha256",
+          "type": "text",
+          "description": null,
+          "required": false
+        },
+        {
+          "name": "image_width",
+          "type": "int32",
+          "description": null,
+          "required": false
+        },
+        {
+          "name": "image_height",
+          "type": "int32",
+          "description": null,
+          "required": false
+        },
+        {
+          "name": "byte_count",
+          "type": "int32",
+          "description": null,
+          "required": false
+        },
+        {
+          "name": "capture_pose",
+          "type": "jsonb",
+          "description": null,
+          "required": false
+        },
+        {
+          "name": "captured_at",
+          "type": "timestamp with time zone",
+          "description": null,
+          "required": false
+        },
+        {
+          "name": "uploaded_at",
+          "type": "timestamp with time zone",
+          "description": null,
+          "required": false
+        },
+        {
+          "name": "error",
+          "type": "text",
+          "description": null,
+          "required": false
+        }
+      ],
+      "row_count": 0,
+      "count_error": null,
+      "classification": "legacy_external_capture_bridge"
+    },
+    {
+      "table": "pano_capture_sessions",
+      "columns": [
+        {
+          "name": "session_id",
+          "type": "text",
+          "description": "Note:\nThis is a Primary Key.<pk/>",
+          "required": true
+        },
+        {
+          "name": "property_id",
+          "type": "int64",
+          "description": "Note:\nThis is a Foreign Key to `property.property_id`.<fk table='property' column='property_id'/>",
+          "required": true
+        },
+        {
+          "name": "captured_by",
+          "type": "uuid",
+          "description": "Note:\nThis is a Foreign Key to `users.user_id`.<fk table='users' column='user_id'/>",
+          "required": true
+        },
+        {
+          "name": "expected_frames",
+          "type": "int32",
+          "description": null,
+          "required": true
+        },
+        {
+          "name": "status",
+          "type": "text",
+          "description": null,
+          "required": true
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "description": null,
+          "required": true
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "description": null,
+          "required": true
+        },
+        {
+          "name": "completed_at",
+          "type": "timestamp with time zone",
+          "description": null,
+          "required": false
+        }
+      ],
+      "row_count": 0,
+      "count_error": null,
+      "classification": "legacy_external_capture_bridge"
+    },
+    {
+      "table": "pano_jobs",
+      "columns": [
+        {
+          "name": "id",
+          "type": "text",
+          "description": "Note:\nThis is a Primary Key.<pk/>",
+          "required": true
+        },
+        {
+          "name": "session_id",
+          "type": "text",
+          "description": null,
+          "required": true
+        },
+        {
+          "name": "owner",
+          "type": "uuid",
+          "description": null,
+          "required": false
+        },
+        {
+          "name": "status",
+          "type": "text",
+          "description": null,
+          "required": true
+        },
+        {
+          "name": "frames",
+          "type": "jsonb",
+          "description": null,
+          "required": true
+        },
+        {
+          "name": "panorama_path",
+          "type": "text",
+          "description": null,
+          "required": false
+        },
+        {
+          "name": "error",
+          "type": "text",
+          "description": null,
+          "required": false
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "description": null,
+          "required": false
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "description": null,
+          "required": false
+        },
+        {
+          "name": "property_id",
+          "type": "int64",
+          "description": "Note:\nThis is a Foreign Key to `property.property_id`.<fk table='property' column='property_id'/>",
+          "required": false
+        },
+        {
+          "name": "verification_status",
+          "type": "text",
+          "description": null,
+          "required": true
+        },
+        {
+          "name": "reviewed_by",
+          "type": "uuid",
+          "description": "Note:\nThis is a Foreign Key to `users.user_id`.<fk table='users' column='user_id'/>",
+          "required": false
+        },
+        {
+          "name": "reviewed_at",
+          "type": "timestamp with time zone",
+          "description": null,
+          "required": false
+        },
+        {
+          "name": "review_reason",
+          "type": "text",
+          "description": null,
+          "required": false
+        },
+        {
+          "name": "processing_report",
+          "type": "jsonb",
+          "description": null,
+          "required": false
+        },
+        {
+          "name": "processing_started_at",
+          "type": "timestamp with time zone",
+          "description": null,
+          "required": false
+        },
+        {
+          "name": "completed_at",
+          "type": "timestamp with time zone",
+          "description": null,
+          "required": false
+        },
+        {
+          "name": "published_url",
+          "type": "text",
+          "description": null,
+          "required": false
+        },
+        {
+          "name": "published_tour_id",
+          "type": "uuid",
+          "description": null,
+          "required": false
+        }
+      ],
+      "row_count": 0,
+      "count_error": null,
+      "classification": "legacy_external_capture_bridge"
+    },
+    {
+      "table": "property",
+      "columns": [
+        {
+          "name": "property_id",
+          "type": "int64",
+          "description": "Note:\nThis is a Primary Key.<pk/>",
+          "required": true
+        },
+        {
+          "name": "address_id",
+          "type": "uuid",
+          "description": "Note:\nThis is a Foreign Key to `addresses.address_uuid`.<fk table='addresses' column='address_uuid'/>",
+          "required": false
+        },
+        {
+          "name": "district_id",
+          "type": "character varying",
+          "description": null,
+          "required": false
+        },
+        {
+          "name": "user_id",
+          "type": "uuid",
+          "description": "Note:\nThis is a Foreign Key to `users.user_id`.<fk table='users' column='user_id'/>",
+          "required": false
+        },
+        {
+          "name": "company_name",
+          "type": "character varying",
+          "description": null,
+          "required": false
+        },
+        {
+          "name": "normalized_address",
+          "type": "text",
+          "description": null,
+          "required": false
+        },
+        {
+          "name": "property_type_normalized",
+          "type": "character varying",
+          "description": null,
+          "required": false
+        },
+        {
+          "name": "tenure",
+          "type": "character varying",
+          "description": null,
+          "required": false
+        },
+        {
+          "name": "floor_level",
+          "type": "character varying",
+          "description": null,
+          "required": false
+        },
+        {
+          "name": "unit_position",
+          "type": "character varying",
+          "description": null,
+          "required": false
+        },
+        {
+          "name": "built_up_area_sqft",
+          "type": "numeric",
+          "description": null,
+          "required": false
+        },
+        {
+          "name": "land_area_sqft",
+          "type": "numeric",
+          "description": null,
+          "required": false
+        },
+        {
+          "name": "frontage_ft",
+          "type": "numeric",
+          "description": null,
+          "required": false
+        },
+        {
+          "name": "depth_ft",
+          "type": "numeric",
+          "description": null,
+          "required": false
+        },
+        {
+          "name": "facing_direction",
+          "type": "character varying",
+          "description": null,
+          "required": false
+        },
+        {
+          "name": "bathroom_count",
+          "type": "int32",
+          "description": null,
+          "required": false
+        },
+        {
+          "name": "parking_spaces",
+          "type": "int32",
+          "description": null,
+          "required": false
+        },
+        {
+          "name": "title",
+          "type": "character varying",
+          "description": null,
+          "required": false
+        },
+        {
+          "name": "description",
+          "type": "text",
+          "description": null,
+          "required": false
+        },
+        {
+          "name": "status",
+          "type": "character varying",
+          "description": null,
+          "required": false
+        },
+        {
+          "name": "price",
+          "type": "numeric",
+          "description": null,
+          "required": false
+        },
+        {
+          "name": "bedrooms",
+          "type": "int32",
+          "description": null,
+          "required": false
+        },
+        {
+          "name": "year_built",
+          "type": "int32",
+          "description": null,
+          "required": false
+        },
+        {
+          "name": "local_source_data",
+          "type": "jsonb",
+          "description": null,
+          "required": false
+        },
+        {
+          "name": "latitude",
+          "type": "double precision",
+          "description": null,
+          "required": false
+        },
+        {
+          "name": "longitude",
+          "type": "double precision",
+          "description": null,
+          "required": false
+        },
+        {
+          "name": "verification_status",
+          "type": "text",
+          "description": null,
+          "required": true
+        },
+        {
+          "name": "is_published",
+          "type": "boolean",
+          "description": null,
+          "required": true
+        },
+        {
+          "name": "published_at",
+          "type": "timestamp with time zone",
+          "description": null,
+          "required": false
+        },
+        {
+          "name": "rejection_reason",
+          "type": "text",
+          "description": null,
+          "required": false
+        }
+      ],
+      "row_count": 916,
+      "count_error": null,
+      "classification": "unknown_requires_investigation"
+    },
+    {
+      "table": "property_features",
+      "columns": [
+        {
+          "name": "property_id",
+          "type": "int64",
+          "description": "Note:\nThis is a Primary Key.<pk/>\nThis is a Foreign Key to `property.property_id`.<fk table='property' column='property_id'/>",
+          "required": true
+        },
+        {
+          "name": "suitable_for",
+          "type": "text",
+          "description": null,
+          "required": false
+        },
+        {
+          "name": "nearby_landmarks",
+          "type": "text",
+          "description": null,
+          "required": false
+        },
+        {
+          "name": "amenities",
+          "type": "jsonb",
+          "description": null,
+          "required": false
+        },
+        {
+          "name": "remarks",
+          "type": "text",
+          "description": null,
+          "required": false
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "description": null,
+          "required": true
+        }
+      ],
+      "row_count": 0,
+      "count_error": null,
+      "classification": "unknown_requires_investigation"
+    },
+    {
+      "table": "property_geospatial_features",
+      "columns": [
+        {
+          "name": "property_id",
+          "type": "int64",
+          "description": "Note:\nThis is a Primary Key.<pk/>\nThis is a Foreign Key to `property.property_id`.<fk table='property' column='property_id'/>",
+          "required": true
+        },
+        {
+          "name": "feature_values",
+          "type": "jsonb",
+          "description": null,
+          "required": true
+        },
+        {
+          "name": "feature_schema_version",
+          "type": "text",
+          "description": null,
+          "required": true
+        },
+        {
+          "name": "calculation_status",
+          "type": "text",
+          "description": null,
+          "required": true
+        },
+        {
+          "name": "source_system",
+          "type": "text",
+          "description": null,
+          "required": true
+        },
+        {
+          "name": "source_updated_at",
+          "type": "timestamp with time zone",
+          "description": null,
+          "required": false
+        },
+        {
+          "name": "calculated_at",
+          "type": "timestamp with time zone",
+          "description": null,
+          "required": false
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "description": null,
+          "required": true
+        },
+        {
+          "name": "last_error",
+          "type": "text",
+          "description": null,
+          "required": false
+        },
+        {
+          "name": "population_500m",
+          "type": "double precision",
+          "description": null,
+          "required": false
+        },
+        {
+          "name": "population_1km",
+          "type": "double precision",
+          "description": null,
+          "required": false
+        },
+        {
+          "name": "population_level",
+          "type": "character varying",
+          "description": null,
+          "required": false
+        },
+        {
+          "name": "competitor_count_500m",
+          "type": "int32",
+          "description": null,
+          "required": false
+        },
+        {
+          "name": "competitor_count_1km",
+          "type": "int32",
+          "description": null,
+          "required": false
+        },
+        {
+          "name": "demand_generator_count_500m",
+          "type": "int32",
+          "description": null,
+          "required": false
+        },
+        {
+          "name": "demand_generator_count_1km",
+          "type": "int32",
+          "description": null,
+          "required": false
+        },
+        {
+          "name": "accessibility_road_km_1km",
+          "type": "double precision",
+          "description": null,
+          "required": false
+        },
+        {
+          "name": "accessibility_score",
+          "type": "double precision",
+          "description": null,
+          "required": false
+        },
+        {
+          "name": "nearest_major_road_m",
+          "type": "double precision",
+          "description": null,
+          "required": false
+        },
+        {
+          "name": "district_name",
+          "type": "character varying",
+          "description": null,
+          "required": false
+        },
+        {
+          "name": "state_name",
+          "type": "character varying",
+          "description": null,
+          "required": false
+        },
+        {
+          "name": "income_median",
+          "type": "numeric",
+          "description": null,
+          "required": false
+        },
+        {
+          "name": "income_mean",
+          "type": "numeric",
+          "description": null,
+          "required": false
+        },
+        {
+          "name": "market_segment",
+          "type": "character varying",
+          "description": null,
+          "required": false
+        },
+        {
+          "name": "overall_location_score",
+          "type": "double precision",
+          "description": null,
+          "required": false
+        },
+        {
+          "name": "last_calculated_at",
+          "type": "timestamp with time zone",
+          "description": null,
+          "required": false
+        },
+        {
+          "name": "parking_facilities_500m",
+          "type": "int32",
+          "description": null,
+          "required": false
+        },
+        {
+          "name": "parking_facilities_1km",
+          "type": "int32",
+          "description": null,
+          "required": false
+        },
+        {
+          "name": "nearest_parking_m",
+          "type": "double precision",
+          "description": null,
+          "required": false
+        },
+        {
+          "name": "transit_stops_500m",
+          "type": "int32",
+          "description": null,
+          "required": false
+        },
+        {
+          "name": "transit_stops_1km",
+          "type": "int32",
+          "description": null,
+          "required": false
+        },
+        {
+          "name": "coordinate_hash",
+          "type": "text",
+          "description": null,
+          "required": false
+        },
+        {
+          "name": "enrichment_status",
+          "type": "text",
+          "description": null,
+          "required": false
+        },
+        {
+          "name": "enrichment_provenance",
+          "type": "jsonb",
+          "description": null,
+          "required": false
+        },
+        {
+          "name": "pop_age_0_14_500m",
+          "type": "double precision",
+          "description": null,
+          "required": false
+        },
+        {
+          "name": "pop_age_15_24_500m",
+          "type": "double precision",
+          "description": null,
+          "required": false
+        },
+        {
+          "name": "pop_age_25_34_500m",
+          "type": "double precision",
+          "description": null,
+          "required": false
+        },
+        {
+          "name": "pop_age_35_49_500m",
+          "type": "double precision",
+          "description": null,
+          "required": false
+        },
+        {
+          "name": "pop_age_50_64_500m",
+          "type": "double precision",
+          "description": null,
+          "required": false
+        },
+        {
+          "name": "pop_age_65_plus_500m",
+          "type": "double precision",
+          "description": null,
+          "required": false
+        },
+        {
+          "name": "pop_age_0_14_1km",
+          "type": "double precision",
+          "description": null,
+          "required": false
+        },
+        {
+          "name": "pop_age_15_24_1km",
+          "type": "double precision",
+          "description": null,
+          "required": false
+        },
+        {
+          "name": "pop_age_25_34_1km",
+          "type": "double precision",
+          "description": null,
+          "required": false
+        },
+        {
+          "name": "pop_age_35_49_1km",
+          "type": "double precision",
+          "description": null,
+          "required": false
+        },
+        {
+          "name": "pop_age_50_64_1km",
+          "type": "double precision",
+          "description": null,
+          "required": false
+        },
+        {
+          "name": "pop_age_65_plus_1km",
+          "type": "double precision",
+          "description": null,
+          "required": false
+        },
+        {
+          "name": "share_age_15_34_500m",
+          "type": "double precision",
+          "description": null,
+          "required": false
+        },
+        {
+          "name": "share_age_15_34_1km",
+          "type": "double precision",
+          "description": null,
+          "required": false
+        },
+        {
+          "name": "age_coverage_500m",
+          "type": "double precision",
+          "description": null,
+          "required": false
+        },
+        {
+          "name": "age_coverage_1km",
+          "type": "double precision",
+          "description": null,
+          "required": false
+        },
+        {
+          "name": "age_data_source",
+          "type": "text",
+          "description": null,
+          "required": false
+        },
+        {
+          "name": "age_data_year",
+          "type": "int32",
+          "description": null,
+          "required": false
+        },
+        {
+          "name": "age_data_status",
+          "type": "text",
+          "description": null,
+          "required": false
+        },
+        {
+          "name": "research_snapshot",
+          "type": "jsonb",
+          "description": null,
+          "required": false
+        },
+        {
+          "name": "research_source_subject_id",
+          "type": "text",
+          "description": null,
+          "required": false
+        },
+        {
+          "name": "research_source_imported_at",
+          "type": "timestamp with time zone",
+          "description": null,
+          "required": false
+        },
+        {
+          "name": "research_snapshot_at",
+          "type": "timestamp with time zone",
+          "description": null,
+          "required": false
+        },
+        {
+          "name": "office_pois_500m",
+          "type": "int32",
+          "description": null,
+          "required": false
+        },
+        {
+          "name": "office_pois_1000m",
+          "type": "int32",
+          "description": null,
+          "required": false
+        },
+        {
+          "name": "schools_count_500m",
+          "type": "int32",
+          "description": null,
+          "required": false
+        },
+        {
+          "name": "schools_count_1000m",
+          "type": "int32",
+          "description": null,
+          "required": false
+        },
+        {
+          "name": "universities_colleges_count_500m",
+          "type": "int32",
+          "description": null,
+          "required": false
+        },
+        {
+          "name": "universities_colleges_count_1000m",
+          "type": "int32",
+          "description": null,
+          "required": false
+        },
+        {
+          "name": "retail_pois_500m",
+          "type": "int32",
+          "description": null,
+          "required": false
+        },
+        {
+          "name": "retail_pois_1000m",
+          "type": "int32",
+          "description": null,
+          "required": false
+        },
+        {
+          "name": "malls_count_500m",
+          "type": "int32",
+          "description": null,
+          "required": false
+        },
+        {
+          "name": "malls_count_1000m",
+          "type": "int32",
+          "description": null,
+          "required": false
+        },
+        {
+          "name": "hospitals_count_500m",
+          "type": "int32",
+          "description": null,
+          "required": false
+        },
+        {
+          "name": "hospitals_count_1000m",
+          "type": "int32",
+          "description": null,
+          "required": false
+        },
+        {
+          "name": "supermarkets_count_500m",
+          "type": "int32",
+          "description": null,
+          "required": false
+        },
+        {
+          "name": "supermarkets_count_1000m",
+          "type": "int32",
+          "description": null,
+          "required": false
+        }
+      ],
+      "row_count": 0,
+      "count_error": null,
+      "classification": "unknown_requires_investigation"
+    },
+    {
+      "table": "property_photo",
+      "columns": [
+        {
+          "name": "photo_id",
+          "type": "uuid",
+          "description": "Note:\nThis is a Primary Key.<pk/>",
+          "required": true
+        },
+        {
+          "name": "property_id",
+          "type": "int64",
+          "description": "Note:\nThis is a Foreign Key to `property.property_id`.<fk table='property' column='property_id'/>",
+          "required": true
+        },
+        {
+          "name": "url",
+          "type": "text",
+          "description": null,
+          "required": true
+        },
+        {
+          "name": "caption",
+          "type": "character varying",
+          "description": null,
+          "required": false
+        },
+        {
+          "name": "is_primary",
+          "type": "boolean",
+          "description": null,
+          "required": true
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "description": null,
+          "required": true
+        },
+        {
+          "name": "local_source_photo_id",
+          "type": "int64",
+          "description": null,
+          "required": false
+        }
+      ],
+      "row_count": 5711,
+      "count_error": null,
+      "classification": "unknown_requires_investigation"
+    },
+    {
+      "table": "property_source_mapping",
+      "columns": [
+        {
+          "name": "source_system",
+          "type": "text",
+          "description": "Note:\nThis is a Primary Key.<pk/>",
+          "required": true
+        },
+        {
+          "name": "source_property_id",
+          "type": "text",
+          "description": "Note:\nThis is a Primary Key.<pk/>",
+          "required": true
+        },
+        {
+          "name": "property_id",
+          "type": "int64",
+          "description": "Note:\nThis is a Foreign Key to `property.property_id`.<fk table='property' column='property_id'/>",
+          "required": true
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "description": null,
+          "required": true
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "description": null,
+          "required": true
+        }
+      ],
+      "row_count": 0,
+      "count_error": null,
+      "classification": "unknown_requires_investigation"
+    },
+    {
+      "table": "property_verification",
+      "columns": [
+        {
+          "name": "verification_id",
+          "type": "uuid",
+          "description": "Note:\nThis is a Primary Key.<pk/>",
+          "required": true
+        },
+        {
+          "name": "property_id",
+          "type": "int64",
+          "description": "Note:\nThis is a Foreign Key to `property.property_id`.<fk table='property' column='property_id'/>",
+          "required": true
+        },
+        {
+          "name": "listing_status",
+          "type": "character varying",
+          "description": null,
+          "required": true
+        },
+        {
+          "name": "ownership_status",
+          "type": "character varying",
+          "description": null,
+          "required": true
+        },
+        {
+          "name": "submitted_by",
+          "type": "uuid",
+          "description": "Note:\nThis is a Foreign Key to `users.user_id`.<fk table='users' column='user_id'/>",
+          "required": true
+        },
+        {
+          "name": "reviewed_by",
+          "type": "uuid",
+          "description": "Note:\nThis is a Foreign Key to `users.user_id`.<fk table='users' column='user_id'/>",
+          "required": false
+        },
+        {
+          "name": "publication_eligible",
+          "type": "boolean",
+          "description": null,
+          "required": true
+        },
+        {
+          "name": "latest_note",
+          "type": "character varying",
+          "description": null,
+          "required": false
+        },
+        {
+          "name": "version",
+          "type": "int32",
+          "description": null,
+          "required": true
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "description": null,
+          "required": true
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "description": null,
+          "required": true
+        }
+      ],
+      "row_count": 0,
+      "count_error": null,
+      "classification": "unknown_requires_investigation"
+    },
+    {
+      "table": "role_change_audit",
+      "columns": [
+        {
+          "name": "audit_id",
+          "type": "int64",
+          "description": "Note:\nThis is a Primary Key.<pk/>",
+          "required": true
+        },
+        {
+          "name": "user_id_affected",
+          "type": "uuid",
+          "description": "Note:\nThis is a Foreign Key to `users.user_id`.<fk table='users' column='user_id'/>",
+          "required": false
+        },
+        {
+          "name": "affected_email_snapshot",
+          "type": "character varying",
+          "description": null,
+          "required": false
+        },
+        {
+          "name": "changed_by_user_id",
+          "type": "uuid",
+          "description": "Note:\nThis is a Foreign Key to `users.user_id`.<fk table='users' column='user_id'/>",
+          "required": false
+        },
+        {
+          "name": "entity_type",
+          "type": "character varying",
+          "description": null,
+          "required": true
+        },
+        {
+          "name": "entity_id",
+          "type": "uuid",
+          "description": null,
+          "required": false
+        },
+        {
+          "name": "action",
+          "type": "character varying",
+          "description": null,
+          "required": true
+        },
+        {
+          "name": "action_category",
+          "type": "character varying",
+          "description": null,
+          "required": false
+        },
+        {
+          "name": "action_status",
+          "type": "character varying",
+          "description": null,
+          "required": true
+        },
+        {
+          "name": "old_role",
+          "type": "character varying",
+          "description": null,
+          "required": false
+        },
+        {
+          "name": "new_role",
+          "type": "character varying",
+          "description": null,
+          "required": false
+        },
+        {
+          "name": "old_account_status",
+          "type": "character varying",
+          "description": null,
+          "required": false
+        },
+        {
+          "name": "new_account_status",
+          "type": "character varying",
+          "description": null,
+          "required": false
+        },
+        {
+          "name": "details",
+          "type": "jsonb",
+          "description": null,
+          "required": true
+        },
+        {
+          "name": "before_data",
+          "type": "jsonb",
+          "description": null,
+          "required": false
+        },
+        {
+          "name": "after_data",
+          "type": "jsonb",
+          "description": null,
+          "required": false
+        },
+        {
+          "name": "request_id",
+          "type": "character varying",
+          "description": null,
+          "required": false
+        },
+        {
+          "name": "source_module",
+          "type": "character varying",
+          "description": null,
+          "required": false
+        },
+        {
+          "name": "ip_address",
+          "type": "inet",
+          "description": null,
+          "required": false
+        },
+        {
+          "name": "user_agent",
+          "type": "text",
+          "description": null,
+          "required": false
+        },
+        {
+          "name": "error_message",
+          "type": "text",
+          "description": null,
+          "required": false
+        },
+        {
+          "name": "changed_at",
+          "type": "timestamp with time zone",
+          "description": null,
+          "required": true
+        }
+      ],
+      "row_count": 223,
+      "count_error": null,
+      "classification": "identity_or_security"
+    },
+    {
+      "table": "rpc/is_active_user",
+      "columns": [],
+      "row_count": 1,
+      "count_error": null,
+      "classification": "unknown_requires_investigation"
+    },
+    {
+      "table": "rpc/is_admin",
+      "columns": [],
+      "row_count": 1,
+      "count_error": null,
+      "classification": "unknown_requires_investigation"
+    },
+    {
+      "table": "rpc/sitewise_is_active_admin",
+      "columns": [],
+      "row_count": 1,
+      "count_error": null,
+      "classification": "unknown_requires_investigation"
+    },
+    {
+      "table": "rpc/sitewise_is_active_staff",
+      "columns": [],
+      "row_count": 1,
+      "count_error": null,
+      "classification": "unknown_requires_investigation"
+    },
+    {
+      "table": "staff_invitations",
+      "columns": [
+        {
+          "name": "invitation_id",
+          "type": "int64",
+          "description": "Note:\nThis is a Primary Key.<pk/>",
+          "required": true
+        },
+        {
+          "name": "invited_user_id",
+          "type": "uuid",
+          "description": "Note:\nThis is a Foreign Key to `users.user_id`.<fk table='users' column='user_id'/>",
+          "required": true
+        },
+        {
+          "name": "invited_email",
+          "type": "character varying",
+          "description": null,
+          "required": true
+        },
+        {
+          "name": "invited_by_user_id",
+          "type": "uuid",
+          "description": "Note:\nThis is a Foreign Key to `users.user_id`.<fk table='users' column='user_id'/>",
+          "required": false
+        },
+        {
+          "name": "invitation_status",
+          "type": "character varying",
+          "description": null,
+          "required": true
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "description": null,
+          "required": true
+        },
+        {
+          "name": "sent_at",
+          "type": "timestamp with time zone",
+          "description": null,
+          "required": false
+        },
+        {
+          "name": "accepted_at",
+          "type": "timestamp with time zone",
+          "description": null,
+          "required": false
+        },
+        {
+          "name": "expires_at",
+          "type": "timestamp with time zone",
+          "description": null,
+          "required": false
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "description": null,
+          "required": true
+        },
+        {
+          "name": "company_id",
+          "type": "int64",
+          "description": "Note:\nThis is a Foreign Key to `company.company_id`.<fk table='company' column='company_id'/>",
+          "required": false
+        }
+      ],
+      "row_count": 2,
+      "count_error": null,
+      "classification": "identity_or_security"
+    },
+    {
+      "table": "user_tokens",
+      "columns": [
+        {
+          "name": "token_id",
+          "type": "character varying",
+          "description": "Note:\nThis is a Primary Key.<pk/>",
+          "required": true
+        },
+        {
+          "name": "user_id",
+          "type": "uuid",
+          "description": "Note:\nThis is a Foreign Key to `users.user_id`.<fk table='users' column='user_id'/>",
+          "required": true
+        },
+        {
+          "name": "token_type",
+          "type": "character varying",
+          "description": null,
+          "required": true
+        },
+        {
+          "name": "token_hash",
+          "type": "character varying",
+          "description": null,
+          "required": true
+        },
+        {
+          "name": "expires_at",
+          "type": "timestamp with time zone",
+          "description": null,
+          "required": true
+        },
+        {
+          "name": "used_at",
+          "type": "timestamp with time zone",
+          "description": null,
+          "required": false
+        },
+        {
+          "name": "last_activity",
+          "type": "timestamp with time zone",
+          "description": null,
+          "required": false
+        },
+        {
+          "name": "ip_address",
+          "type": "character varying",
+          "description": null,
+          "required": false
+        },
+        {
+          "name": "user_agent",
+          "type": "text",
+          "description": null,
+          "required": false
+        },
+        {
+          "name": "is_revoked",
+          "type": "boolean",
+          "description": null,
+          "required": true
+        },
+        {
+          "name": "revoked_at",
+          "type": "timestamp with time zone",
+          "description": null,
+          "required": false
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "description": null,
+          "required": true
+        }
+      ],
+      "row_count": 0,
+      "count_error": null,
+      "classification": "unknown_requires_investigation"
+    },
+    {
+      "table": "users",
+      "columns": [
+        {
+          "name": "user_id",
+          "type": "uuid",
+          "description": "Note:\nThis is a Primary Key.<pk/>",
+          "required": true
+        },
+        {
+          "name": "full_name",
+          "type": "text",
+          "description": null,
+          "required": false
+        },
+        {
+          "name": "email",
+          "type": "character varying",
+          "description": null,
+          "required": true
+        },
+        {
+          "name": "phone_number",
+          "type": "character varying",
+          "description": null,
+          "required": false
+        },
+        {
+          "name": "role",
+          "type": "character varying",
+          "description": "Authoritative Sitewise account role. Exactly one value per account: entrepreneur, agent, or admin. Do not accept role from public signup metadata.",
+          "required": true
+        },
+        {
+          "name": "profile_picture_url",
+          "type": "text",
+          "description": null,
+          "required": false
+        },
+        {
+          "name": "account_status",
+          "type": "character varying",
+          "description": null,
+          "required": true
+        },
+        {
+          "name": "email_verified",
+          "type": "boolean",
+          "description": null,
+          "required": true
+        },
+        {
+          "name": "last_login",
+          "type": "timestamp with time zone",
+          "description": null,
+          "required": false
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "description": null,
+          "required": true
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "description": null,
+          "required": true
+        }
+      ],
+      "row_count": 114,
+      "count_error": null,
+      "classification": "identity_or_security"
+    },
+    {
+      "table": "verification_audit",
+      "columns": [
+        {
+          "name": "audit_id",
+          "type": "uuid",
+          "description": "Note:\nThis is a Primary Key.<pk/>",
+          "required": true
+        },
+        {
+          "name": "property_id",
+          "type": "int64",
+          "description": "Note:\nThis is a Foreign Key to `property.property_id`.<fk table='property' column='property_id'/>",
+          "required": true
+        },
+        {
+          "name": "verification_id",
+          "type": "uuid",
+          "description": "Note:\nThis is a Foreign Key to `property_verification.verification_id`.<fk table='property_verification' column='verification_id'/>",
+          "required": false
+        },
+        {
+          "name": "verification_type",
+          "type": "character varying",
+          "description": null,
+          "required": false
+        },
+        {
+          "name": "previous_status",
+          "type": "character varying",
+          "description": null,
+          "required": false
+        },
+        {
+          "name": "new_status",
+          "type": "character varying",
+          "description": null,
+          "required": false
+        },
+        {
+          "name": "action",
+          "type": "character varying",
+          "description": null,
+          "required": true
+        },
+        {
+          "name": "admin_user_id",
+          "type": "uuid",
+          "description": "Note:\nThis is a Foreign Key to `users.user_id`.<fk table='users' column='user_id'/>",
+          "required": false
+        },
+        {
+          "name": "actor_user_id",
+          "type": "uuid",
+          "description": "Note:\nThis is a Foreign Key to `users.user_id`.<fk table='users' column='user_id'/>",
+          "required": false
+        },
+        {
+          "name": "reason",
+          "type": "character varying",
+          "description": null,
+          "required": false
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "description": null,
+          "required": true
+        }
+      ],
+      "row_count": 916,
+      "count_error": null,
+      "classification": "unknown_requires_investigation"
+    },
+    {
+      "table": "verification_document",
+      "columns": [
+        {
+          "name": "document_id",
+          "type": "uuid",
+          "description": "Note:\nThis is a Primary Key.<pk/>",
+          "required": true
+        },
+        {
+          "name": "verification_id",
+          "type": "uuid",
+          "description": null,
+          "required": true
+        },
+        {
+          "name": "property_id",
+          "type": "int64",
+          "description": null,
+          "required": true
+        },
+        {
+          "name": "verification_type",
+          "type": "character varying",
+          "description": null,
+          "required": true
+        },
+        {
+          "name": "document_type",
+          "type": "character varying",
+          "description": null,
+          "required": true
+        },
+        {
+          "name": "original_filename",
+          "type": "character varying",
+          "description": null,
+          "required": true
+        },
+        {
+          "name": "storage_key",
+          "type": "text",
+          "description": null,
+          "required": true
+        },
+        {
+          "name": "mime_type",
+          "type": "character varying",
+          "description": null,
+          "required": true
+        },
+        {
+          "name": "file_size",
+          "type": "int64",
+          "description": null,
+          "required": true
+        },
+        {
+          "name": "uploaded_by",
+          "type": "uuid",
+          "description": "Note:\nThis is a Foreign Key to `users.user_id`.<fk table='users' column='user_id'/>",
+          "required": true
+        },
+        {
+          "name": "uploaded_at",
+          "type": "timestamp with time zone",
+          "description": null,
+          "required": true
+        },
+        {
+          "name": "status",
+          "type": "character varying",
+          "description": null,
+          "required": true
+        }
+      ],
+      "row_count": 0,
+      "count_error": null,
+      "classification": "unknown_requires_investigation"
+    }
+  ],
+  "not_exposed_or_error": []
+}

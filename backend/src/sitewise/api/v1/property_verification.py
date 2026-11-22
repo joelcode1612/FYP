@@ -342,7 +342,7 @@ def approve_dimension(
     publication eligibility is recomputed server-side after the commit."""
     if payload.dimension == "listing":
         assignment = session.execute(text("""
-            SELECT workflow_status FROM public.agent_listing_assignment
+            SELECT workflow_status FROM fyp.agent_listing_assignment
             WHERE listing_id=:pid
         """), {"pid":property_id}).scalar()
         if assignment != "submitted":
@@ -364,7 +364,7 @@ def reject_dimension(
     )
     if payload.dimension == "listing":
         session.execute(text("""
-            UPDATE public.agent_listing_assignment SET workflow_status='needs_correction', updated_at=now()
+            UPDATE fyp.agent_listing_assignment SET workflow_status='needs_correction', updated_at=now()
              WHERE listing_id=:pid AND workflow_status='submitted'
         """), {"pid":property_id})
         session.commit()

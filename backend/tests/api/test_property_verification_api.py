@@ -93,9 +93,9 @@ def cleanup_verifications(cleanup_users):
         return
     with Session(engine) as session:
         for table in (
-            "verification_audit",
-            "verification_document",
-            "property_verification",
+            "fyp.verification_audit",
+            "fyp.verification_document",
+            "fyp.property_verification",
             "fyp.property_geospatial_features",
         ):
             if props:
@@ -560,7 +560,7 @@ def test_concurrent_decisions_serialize_not_overwrite(client, owner, admin):
     blocker_session = Session(engine2)
     blocker_session.execute(
         text(
-            "SELECT verification_id FROM property_verification WHERE property_id = :pid FOR UPDATE"
+            "SELECT verification_id FROM fyp.property_verification WHERE property_id = :pid FOR UPDATE"
         ),
         {"pid": pid},
     ).first()  # holds the row lock
@@ -746,7 +746,7 @@ def test_ownership_approval_still_requires_evidence_after_review_starts(
     with Session(engine) as session:
         session.execute(
             text(
-                "UPDATE verification_document SET status = 'superseded' "
+                "UPDATE fyp.verification_document SET status = 'superseded' "
                 "WHERE property_id = :pid AND verification_type = 'ownership'"
             ),
             {"pid": pid},

@@ -10,7 +10,7 @@ answered from a role name. It is resolved from the database:
   role no longer *means* owner — the two are distinct — but accounts provisioned
   before the role split own properties recorded against their identity, and the
   ownership row is what authorises them, not the role name;
-* an **agent** reaches rows through ``public.agent_listing_assignment`` — a
+* an **agent** reaches rows through ``fyp.agent_listing_assignment`` — a
   real foreign key to ``fyp.rental_properties.id`` — never through a name and
   never through ownership the agent does not hold;
 * an **administrator** is not a provider. It is given the unrestricted scope
@@ -80,7 +80,7 @@ def agent_is_assigned(session: Session, *, listing_id: int, agent_id: int) -> bo
     """
     row = session.execute(
         text(
-            "SELECT 1 FROM public.agent_listing_assignment "
+            "SELECT 1 FROM fyp.agent_listing_assignment "
             "WHERE listing_id = :lid AND agent_id = :aid"
         ),
         {"lid": listing_id, "aid": agent_id},
@@ -144,7 +144,7 @@ def managed_property_ids(
         if agent_id is not None:
             assigned = session.execute(
                 text(
-                    "SELECT listing_id FROM public.agent_listing_assignment "
+                    "SELECT listing_id FROM fyp.agent_listing_assignment "
                     "WHERE agent_id = :aid"
                 ),
                 {"aid": agent_id},

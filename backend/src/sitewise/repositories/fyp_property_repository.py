@@ -1482,8 +1482,8 @@ class FypPropertyRepository:
     #: must be empty before the master row may be deleted, otherwise the
     #: database itself refuses (and the history is meant to be kept).
     _DELETE_BLOCKERS: tuple[tuple[str, str], ...] = (
-        ("public.property_verification", "property_id"),
-        ("public.verification_audit", "property_id"),
+        ("fyp.property_verification", "property_id"),
+        ("fyp.verification_audit", "property_id"),
         ("public.verification_document", "property_id"),
         ("public.listing_change_audit", "listing_id"),
         ("public.listing_change_request", "listing_id"),

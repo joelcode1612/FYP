@@ -8,7 +8,7 @@ idempotency and the status vocabulary live in exactly one place.
 
 Authorization is the SAME property-scoped predicate the rest of the property
 surface uses (``provider_scope.can_manage_listing``): the verified owner of
-the listing, an agent holding the ``public.agent_listing_assignment`` row,
+the listing, an agent holding the ``fyp.agent_listing_assignment`` row,
 or an administrator. A session is reachable only through its property —
 never through ``owner_id`` equality alone, which would keep stale ownership
 alive after a listing is reassigned.

@@ -677,7 +677,7 @@ def test_agent_creation_assigns_the_agent_and_invents_no_owner(
         with Session(engine) as session:
             assigned = session.execute(
                 text(
-                    "SELECT agent_id FROM agent_listing_assignment "
+                    "SELECT agent_id FROM fyp.agent_listing_assignment "
                     "WHERE listing_id = :lid"
                 ),
                 {"lid": listing_id},
@@ -714,7 +714,7 @@ def _delete_listing(listing_id: int) -> None:
     """Remove one draft this test created (cascades to its enquiries)."""
     with Session(engine) as session:
         session.execute(
-            text("DELETE FROM agent_listing_assignment WHERE listing_id = :lid"),
+            text("DELETE FROM fyp.agent_listing_assignment WHERE listing_id = :lid"),
             {"lid": listing_id},
         )
         session.execute(

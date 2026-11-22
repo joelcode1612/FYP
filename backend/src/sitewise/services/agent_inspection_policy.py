@@ -2,10 +2,10 @@
 
 Do not authorize by client-supplied agent ID or property ID alone: the signed
 user is resolved against their active Supabase Agent profile and the existing
-public.agent_listing_assignment row. Owner/admin/entrepreneur writes fail.
+fyp.agent_listing_assignment row. Owner/admin/entrepreneur writes fail.
 
 Panorama evidence is the canonical server-side fyp.panoramas row created by
-its completed capture/processing job. The old public.virtual_tour metadata is
+its completed capture/processing job. The old fyp.virtual_tour metadata is
 not accepted as proof for NEW Admin submissions.
 """
 from __future__ import annotations
@@ -31,7 +31,7 @@ def agent_assignment(session: Session, property_id: int, user, *, writable: bool
         SELECT a.listing_id, a.agent_id, a.workflow_status, a.inspection_data,
                a.inspection_updated_at, a.panorama_id, a.submitted_at,
                p.verification_status, p.is_published
-          FROM public.agent_listing_assignment a
+          FROM fyp.agent_listing_assignment a
           JOIN fyp.rental_properties p ON p.id = a.listing_id
          WHERE a.listing_id = :pid AND a.agent_id = :aid
     """), {"pid": int(property_id), "aid": int(aid)}).mappings().first()
@@ -58,7 +58,7 @@ def completed_agent_panorama(session: Session, property_id: int, user) -> str | 
           FROM fyp.panoramas p
           JOIN fyp.capture_sessions cs ON cs.id = p.session_id
           JOIN fyp.panorama_jobs j ON j.session_id = cs.id
-          JOIN public.agent_listing_assignment a ON a.listing_id = :pid
+          JOIN fyp.agent_listing_assignment a ON a.listing_id = :pid
          WHERE p.property_id = CAST(:pid AS text)
            AND cs.property_id = CAST(:pid AS text)
            AND cs.owner_id = :uid

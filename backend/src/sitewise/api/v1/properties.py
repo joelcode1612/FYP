@@ -514,7 +514,7 @@ def update_own_listing(
         fields.pop("name", None)
     if fields:
         session.execute(text("""
-            UPDATE public.agent_listing_assignment
+            UPDATE fyp.agent_listing_assignment
                SET inspection_data='{}'::jsonb, inspection_updated_at=NULL,
                    panorama_tour_id=NULL, panorama_uploaded_at=NULL, updated_at=now()
              WHERE listing_id=:pid AND workflow_status IN ('accepted','needs_correction')

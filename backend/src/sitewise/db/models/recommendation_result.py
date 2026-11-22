@@ -29,9 +29,10 @@ class RecommendationResult(SQLModel, table=True):
     """
 
     __tablename__ = "recommendation_result"
+    __table_args__ = {"schema": "fyp", "info": {"externally_managed": True}}
 
     result_id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
-    user_id: uuid.UUID = Field(foreign_key="users.user_id")
+    user_id: uuid.UUID = Field(foreign_key="public.users.user_id")
     property_id: str = Field()  # canonical catalogue text id (EP-/MD-)
     score: Decimal = Field(max_digits=8, decimal_places=5)
     ranking: Optional[int] = None

@@ -775,7 +775,7 @@ class SupabaseAdminService:
     def list_assigned_listings(self, agent_id: int) -> list[dict[str, Any]]:
         """Retired legacy Supabase ``public.listing`` reader.
 
-        Operational assignments live in local ``public.agent_listing_assignment``
+        Operational assignments live in local ``fyp.agent_listing_assignment``
         and are served by ``AgentAssignmentRepository``. This method remains as
         an explicit guard so a restored backup cannot silently revive a second
         operational property source.

@@ -80,7 +80,7 @@ SELECT
     correction.reason AS correction_reason,
     correction.created_at AS correction_at,
     (p.id IS NOT NULL) AS property_exists
-FROM public.agent_listing_assignment a
+FROM fyp.agent_listing_assignment a
 LEFT JOIN fyp.rental_properties p ON p.id = a.listing_id
 LEFT JOIN LATERAL (
     SELECT url FROM fyp.property_photos ph
@@ -89,10 +89,10 @@ LEFT JOIN LATERAL (
     ORDER BY ph.is_primary DESC NULLS LAST, ph.id ASC
     LIMIT 1
 ) photo ON TRUE
-LEFT JOIN public.property_verification pv ON pv.property_id = p.id
+LEFT JOIN fyp.property_verification pv ON pv.property_id = p.id
 LEFT JOIN LATERAL (
     SELECT va.action, va.reason, va.created_at
-    FROM public.verification_audit va
+    FROM fyp.verification_audit va
     WHERE va.property_id = p.id
       AND va.action IN ('listing_rejected', 'listing_information_requested')
       AND btrim(coalesce(va.reason, '')) <> ''
@@ -221,7 +221,7 @@ class AgentAssignmentRepository:
         self.session.execute(
             text(
                 """
-                INSERT INTO public.agent_listing_assignment
+                INSERT INTO fyp.agent_listing_assignment
                     (listing_id, agent_id, assigned_by_user_id, created_at, updated_at, workflow_status, requested_at)
                 VALUES (:lid, :aid, :by, :now, :now, 'requested', :now)
                 ON CONFLICT (listing_id) DO UPDATE
@@ -249,7 +249,7 @@ class AgentAssignmentRepository:
 
     def unassign(self, listing_id: int) -> bool:
         result = self.session.execute(
-            text("DELETE FROM public.agent_listing_assignment WHERE listing_id = :lid"),
+            text("DELETE FROM fyp.agent_listing_assignment WHERE listing_id = :lid"),
             {"lid": int(listing_id)},
         )
         self.session.commit()
@@ -258,7 +258,7 @@ class AgentAssignmentRepository:
     def agent_id_for(self, listing_id: int) -> int | None:
         value = self.session.execute(
             text(
-                "SELECT agent_id FROM public.agent_listing_assignment "
+                "SELECT agent_id FROM fyp.agent_listing_assignment "
                 "WHERE listing_id = :lid"
             ),
             {"lid": int(listing_id)},

@@ -176,29 +176,8 @@ class FypPropertyFeature(SQLModel, table=True):
     created_at: Optional[datetime] = None
 
 
-class FypRecommendationResult(SQLModel, table=True):
-    """``fyp.recommendation_results`` — EMPTY live.
-
-    ``user_id`` references ``fyp.users`` (legacy bigserial), NOT the Supabase
-    identity used by the application. Until a mapping exists, personalised
-    reads honestly report "no model results" rather than guessing.
-    """
-
-    __tablename__ = "recommendation_results"
-    __table_args__ = _FYP_SCHEMA
-
-    id: Optional[int] = Field(default=None, primary_key=True)
-    batch_id: Optional[str] = None
-    # Preserve the legacy integer value and its database-enforced FK without
-    # registering another users model or confusing it with users.user_id.
-    user_id: Optional[int] = Field(
-        default=None, sa_column=Column(BigInteger, nullable=False)
-    )
-    property_id: int = Field(foreign_key="fyp.rental_properties.id")
-    suitability_score: Optional[float] = None
-    ranking: Optional[int] = None
-    preference_snapshot: Optional[dict] = Field(
-        default=None, sa_column=Column(JSONB)
-    )
-    feature_snapshot: Optional[dict] = Field(default=None, sa_column=Column(JSONB))
-    created_at: Optional[datetime] = None
+# NOTE: The legacy ``fyp.recommendation_results`` mirror class was retired by
+# database standardization migration 0014 — the entity's canonical table is
+# ``fyp.recommendation_result`` (uuid-keyed, declared in
+# ``db/models/recommendation_result.py``). The legacy bigserial copy and its
+# ``fyp.users`` foreign key no longer exist.

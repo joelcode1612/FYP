@@ -1,0 +1,549 @@
+{
+ "fyp.rental_properties": [
+  "id:bigint(int8) NN",
+  "owner_id:bigint(int8)",
+  "listing_id:character varying(varchar)",
+  "name:character varying(varchar) NN",
+  "property_type:character varying(varchar) NN",
+  "description:text",
+  "address:text",
+  "city:character varying(varchar)",
+  "state:character varying(varchar)",
+  "latitude:double precision(float8)",
+  "longitude:double precision(float8)",
+  "geom:USER-DEFINED(geometry)",
+  "rental_price:numeric",
+  "size_sqft:numeric",
+  "psf:numeric",
+  "bathrooms:numeric",
+  "floor_level:numeric",
+  "frontage_ft:numeric",
+  "depth_ft:numeric",
+  "land_area_sqft:numeric",
+  "built_up_sqft:numeric",
+  "tenure:character varying(varchar)",
+  "furnishing:character varying(varchar)",
+  "availability:character varying(varchar)",
+  "is_corner_lot:smallint(int2) NN",
+  "has_parking:smallint(int2) NN",
+  "is_freehold:smallint(int2) NN",
+  "is_fnb_suitable:smallint(int2) NN",
+  "verification_status:character varying(varchar) NN",
+  "rejection_reason:text",
+  "is_published:boolean(bool) NN",
+  "created_at:timestamp with time zone(timestamptz) NN",
+  "updated_at:timestamp with time zone(timestamptz) NN",
+  "floor_description:text",
+  "unit_position:text",
+  "facing_direction:text",
+  "availability_verified_at:timestamp with time zone(timestamptz)",
+  "published_at:timestamp with time zone(timestamptz)",
+  "owner_user_id:uuid",
+  "postcode:character varying(varchar)",
+  "address_validation_status:character varying(varchar)",
+  "address_formatted:text",
+  "address_validated_at:timestamp with time zone(timestamptz)",
+  "catalogue_id:text",
+  "catalogue_image_url:text",
+  "catalogue_source_url:text",
+  "catalogue_suitability_score:double precision(float8)",
+  "catalogue_dataset_validation:text",
+  "catalogue_source_workbook:text",
+  "catalogue_source_sheet:text",
+  "catalogue_source_row:integer(int4)",
+  "catalogue_source_data:jsonb",
+  "catalogue_imported_at:timestamp with time zone(timestamptz)"
+ ],
+ "fyp.property_photos": [
+  "id:bigint(int8) NN",
+  "property_id:bigint(int8) NN",
+  "url:text NN",
+  "caption:character varying(varchar)",
+  "is_primary:boolean(bool) NN",
+  "created_at:timestamp with time zone(timestamptz) NN"
+ ],
+ "fyp.property_features": [
+  "id:bigint(int8) NN",
+  "property_id:bigint(int8) NN",
+  "suitable_for:text",
+  "nearby_landmarks:text",
+  "amenities:jsonb",
+  "remarks:text",
+  "created_at:timestamp with time zone(timestamptz) NN"
+ ],
+ "fyp.property_enrichment_category": [
+  "property_id:bigint(int8) NN",
+  "category:text NN",
+  "phase:text NN",
+  "status:text NN",
+  "measurement:jsonb",
+  "provenance:jsonb",
+  "coordinate_hash:text",
+  "calculation_version:text",
+  "attempt_count:integer(int4) NN",
+  "started_at:timestamp with time zone(timestamptz)",
+  "completed_at:timestamp with time zone(timestamptz)",
+  "last_error:text",
+  "updated_at:timestamp with time zone(timestamptz) NN"
+ ],
+ "fyp.capture_sessions": [
+  "id:uuid NN",
+  "property_id:text NN",
+  "owner_id:uuid NN",
+  "status:text NN",
+  "expected_frames:integer(int4) NN",
+  "created_at:timestamp with time zone(timestamptz) NN",
+  "updated_at:timestamp with time zone(timestamptz) NN",
+  "capture_mode:text NN",
+  "capture_plan_version:text NN"
+ ],
+ "fyp.capture_frames": [
+  "id:uuid NN",
+  "session_id:uuid NN",
+  "target_index:integer(int4) NN",
+  "storage_path:text NN",
+  "checksum_sha256:text",
+  "uploaded_at:timestamp with time zone(timestamptz) NN",
+  "image_width:integer(int4)",
+  "image_height:integer(int4)",
+  "capture_pose:jsonb",
+  "captured_at:timestamp with time zone(timestamptz)",
+  "upload_status:text NN"
+ ],
+ "fyp.panorama_jobs": [
+  "id:uuid NN",
+  "session_id:uuid NN",
+  "status:text NN",
+  "output_storage_path:text",
+  "error_message:text",
+  "created_at:timestamp with time zone(timestamptz) NN",
+  "updated_at:timestamp with time zone(timestamptz) NN",
+  "progress:smallint(int2) NN",
+  "processing_stage:text",
+  "retry_count:integer(int4) NN",
+  "started_at:timestamp with time zone(timestamptz)",
+  "completed_at:timestamp with time zone(timestamptz)",
+  "claimed_at:timestamp with time zone(timestamptz)",
+  "claimed_by:text"
+ ],
+ "fyp.panoramas": [
+  "panorama_id:uuid NN",
+  "session_id:uuid NN",
+  "property_id:text NN",
+  "storage_path:text NN",
+  "format:text NN",
+  "width:integer(int4) NN",
+  "height:integer(int4) NN",
+  "verification_status:text NN",
+  "published_at:timestamp with time zone(timestamptz)",
+  "coverage_report:jsonb",
+  "created_at:timestamp with time zone(timestamptz) NN",
+  "updated_at:timestamp with time zone(timestamptz) NN",
+  "reviewed_by:uuid",
+  "reviewed_at:timestamp with time zone(timestamptz)",
+  "review_reason:text"
+ ],
+ "fyp.entrepreneur_preferences": [
+  "id:bigint(int8) NN",
+  "user_id:bigint(int8) NN",
+  "budget_min:numeric",
+  "budget_max:numeric",
+  "business_type:character varying(varchar)",
+  "preferred_states:ARRAY(_text)",
+  "min_size_sqft:numeric",
+  "min_score:double precision(float8)",
+  "updated_at:timestamp with time zone(timestamptz) NN",
+  "service_model:text",
+  "target_customers:ARRAY(_text)",
+  "recommendation_priority:text",
+  "target_price_segment:text"
+ ],
+ "public.assessment": [
+  "assessment_id:uuid NN",
+  "user_id:uuid NN",
+  "property_id:character varying(varchar) NN",
+  "status:character varying(varchar) NN",
+  "property_selected_at:timestamp without time zone(timestamp)",
+  "requirements_saved_at:timestamp without time zone(timestamp)",
+  "evidence_reviewed_at:timestamp without time zone(timestamp)",
+  "explanation_reviewed_at:timestamp without time zone(timestamp)",
+  "report_generated_at:timestamp without time zone(timestamp)",
+  "requirements:text",
+  "created_at:timestamp without time zone(timestamp) NN",
+  "updated_at:timestamp without time zone(timestamp) NN"
+ ],
+ "public.favorite_property": [
+  "favorite_id:uuid NN",
+  "user_id:uuid NN",
+  "property_id:text NN",
+  "created_at:timestamp with time zone(timestamptz) NN"
+ ],
+ "public.entrepreneur_preferences": [
+  "preference_id:uuid NN",
+  "user_id:uuid NN",
+  "preferences:character varying(varchar)",
+  "created_at:timestamp with time zone(timestamptz) NN",
+  "updated_at:timestamp with time zone(timestamptz) NN"
+ ],
+ "public.recommendation_result": [
+  "result_id:uuid NN",
+  "user_id:uuid NN",
+  "property_id:text NN",
+  "score:numeric NN",
+  "ranking:integer(int4)",
+  "created_at:timestamp with time zone(timestamptz) NN",
+  "batch_id:uuid",
+  "pu_association_score:numeric",
+  "preference_match_score:numeric",
+  "scoring_version:character varying(varchar)",
+  "model_name:character varying(varchar)",
+  "payload:jsonb",
+  "shap:jsonb"
+ ],
+ "public.ai_explanation": [
+  "explanation_id:uuid NN",
+  "property_id:integer(int4)",
+  "user_id:uuid",
+  "content:character varying(varchar) NN",
+  "created_at:timestamp with time zone(timestamptz) NN"
+ ],
+ "public.virtual_tour": [
+  "tour_id:uuid NN",
+  "property_id:integer(int4) NN",
+  "url:character varying(varchar) NN",
+  "status:character varying(varchar) NN",
+  "created_at:timestamp with time zone(timestamptz) NN",
+  "updated_at:timestamp with time zone(timestamptz) NN"
+ ],
+ "public.property_verification": [
+  "verification_id:uuid NN",
+  "property_id:bigint(int8) NN",
+  "listing_status:character varying(varchar) NN",
+  "ownership_status:character varying(varchar) NN",
+  "submitted_by:uuid NN",
+  "reviewed_by:uuid",
+  "publication_eligible:boolean(bool) NN",
+  "latest_note:character varying(varchar)",
+  "version:integer(int4) NN",
+  "created_at:timestamp without time zone(timestamp) NN",
+  "updated_at:timestamp without time zone(timestamp) NN"
+ ],
+ "public.verification_document": [
+  "document_id:uuid NN",
+  "verification_id:uuid NN",
+  "property_id:bigint(int8) NN",
+  "verification_type:character varying(varchar) NN",
+  "document_type:character varying(varchar) NN",
+  "original_filename:character varying(varchar) NN",
+  "storage_key:character varying(varchar) NN",
+  "mime_type:character varying(varchar) NN",
+  "file_size:integer(int4) NN",
+  "uploaded_by:uuid NN",
+  "uploaded_at:timestamp without time zone(timestamp) NN",
+  "status:character varying(varchar) NN"
+ ],
+ "public.verification_audit": [
+  "audit_id:uuid NN",
+  "property_id:bigint(int8) NN",
+  "verification_id:uuid",
+  "verification_type:character varying(varchar)",
+  "previous_status:character varying(varchar)",
+  "new_status:character varying(varchar)",
+  "action:character varying(varchar) NN",
+  "admin_user_id:uuid",
+  "reason:character varying(varchar)",
+  "created_at:timestamp without time zone(timestamp) NN"
+ ],
+ "public.listing_change_request": [
+  "change_request_id:uuid NN",
+  "listing_id:integer(int4) NN",
+  "proposed_by:uuid NN",
+  "changes:json NN",
+  "status:character varying(varchar) NN",
+  "reason:character varying(varchar)",
+  "reviewed_by:uuid",
+  "review_note:character varying(varchar)",
+  "created_at:timestamp with time zone(timestamptz) NN",
+  "updated_at:timestamp with time zone(timestamptz) NN"
+ ],
+ "public.listing_change_audit": [
+  "audit_id:uuid NN",
+  "change_request_id:uuid",
+  "listing_id:integer(int4) NN",
+  "action:character varying(varchar) NN",
+  "actor_user_id:uuid NN",
+  "note:character varying(varchar)",
+  "created_at:timestamp with time zone(timestamptz) NN"
+ ],
+ "public.address": [
+  "address_id:uuid NN",
+  "street:character varying(varchar)",
+  "city:character varying(varchar)",
+  "state:character varying(varchar)",
+  "zip:character varying(varchar)",
+  "country:character varying(varchar)",
+  "latitude:double precision(float8)",
+  "longitude:double precision(float8)"
+ ],
+ "public.agent_listing_assignment": [
+  "listing_id:bigint(int8) NN",
+  "agent_id:integer(int4) NN",
+  "assigned_by_user_id:uuid",
+  "created_at:timestamp with time zone(timestamptz) NN",
+  "updated_at:timestamp with time zone(timestamptz) NN",
+  "workflow_status:text",
+  "requested_at:timestamp with time zone(timestamptz)",
+  "responded_at:timestamp with time zone(timestamptz)",
+  "inspection_data:jsonb",
+  "inspection_updated_at:timestamp with time zone(timestamptz)",
+  "panorama_id:uuid",
+  "panorama_tour_id:uuid",
+  "panorama_job_id:text",
+  "panorama_uploaded_at:timestamp with time zone(timestamptz)",
+  "submitted_at:timestamp with time zone(timestamptz)",
+  "decline_reason:text"
+ ],
+ "public.provider_verification": [
+  "user_id:uuid NN",
+  "provider_role:text NN",
+  "status:text NN",
+  "business_name:text NN",
+  "contact_phone:text NN",
+  "registration_no:text",
+  "submission_note:text",
+  "decision_note:text",
+  "submitted_at:timestamp with time zone(timestamptz)",
+  "reviewed_at:timestamp with time zone(timestamptz)",
+  "reviewed_by:uuid",
+  "created_at:timestamp with time zone(timestamptz) NN",
+  "updated_at:timestamp with time zone(timestamptz) NN"
+ ],
+ "public.ml_explanation_cache": [
+  "cache_key:character varying(varchar) NN",
+  "property_id:character varying(varchar) NN",
+  "model_name:character varying(varchar) NN",
+  "model_version:character varying(varchar)",
+  "artifact_sha256:character varying(varchar)",
+  "background_sha256:character varying(varchar)",
+  "method:character varying(varchar) NN",
+  "status:character varying(varchar) NN",
+  "payload:character varying(varchar)",
+  "reason:character varying(varchar)",
+  "attempt_count:integer(int4) NN",
+  "claimed_at:timestamp with time zone(timestamptz)",
+  "created_at:timestamp with time zone(timestamptz) NN",
+  "updated_at:timestamp with time zone(timestamptz) NN"
+ ],
+ "public.district_demographic": [
+  "district_id:character varying(varchar) NN",
+  "district_name:character varying(varchar) NN",
+  "population:integer(int4)",
+  "avg_income:double precision(float8)",
+  "created_at:timestamp with time zone(timestamptz) NN",
+  "updated_at:timestamp with time zone(timestamptz) NN"
+ ],
+ "public.nearby_competitor": [
+  "competitor_id:uuid NN",
+  "property_id:integer(int4) NN",
+  "name:character varying(varchar) NN",
+  "address:character varying(varchar)",
+  "distance:numeric",
+  "price_range:character varying(varchar)",
+  "rating:numeric",
+  "created_at:timestamp with time zone(timestamptz) NN"
+ ],
+ "public.property_foot_traffic": [
+  "traffic_id:uuid NN",
+  "property_id:integer(int4) NN",
+  "traffic_level:character varying(varchar)",
+  "estimated_daily_visitors:integer(int4)",
+  "peak_traffic_hours:character varying(varchar)",
+  "weekday_vs_weekend:character varying(varchar)",
+  "last_updated:timestamp with time zone(timestamptz) NN"
+ ],
+ "public.users": [
+  "user_id:uuid NN",
+  "full_name:character varying(varchar)",
+  "email:character varying(varchar) NN",
+  "phone_number:character varying(varchar)",
+  "role:character varying(varchar) NN",
+  "profile_picture_url:character varying(varchar)",
+  "account_status:character varying(varchar) NN",
+  "email_verified:boolean(bool) NN",
+  "last_login:timestamp with time zone(timestamptz)",
+  "created_at:timestamp with time zone(timestamptz) NN",
+  "updated_at:timestamp with time zone(timestamptz) NN"
+ ],
+ "public.user_tokens": [
+  "token_id:character varying(varchar) NN",
+  "user_id:uuid NN",
+  "token_type:character varying(varchar) NN",
+  "token_hash:character varying(varchar) NN",
+  "expires_at:timestamp with time zone(timestamptz) NN",
+  "used_at:timestamp with time zone(timestamptz)",
+  "last_activity:timestamp with time zone(timestamptz)",
+  "ip_address:character varying(varchar)",
+  "user_agent:character varying(varchar)",
+  "is_revoked:boolean(bool) NN",
+  "revoked_at:timestamp with time zone(timestamptz)",
+  "created_at:timestamp with time zone(timestamptz) NN"
+ ],
+ "_fks": [
+  [
+   "fyp.rental_properties",
+   "users",
+   "rental_properties_owner_user_id_fkey",
+   "FOREIGN KEY (owner_user_id) REFERENCES users(user_id) ON DELETE SET NULL"
+  ],
+  [
+   "fyp.rental_properties",
+   "fyp.users",
+   "rental_properties_owner_id_fkey",
+   "FOREIGN KEY (owner_id) REFERENCES fyp.users(id) ON DELETE SET NULL"
+  ],
+  [
+   "fyp.property_photos",
+   "fyp.rental_properties",
+   "property_photos_property_id_fkey",
+   "FOREIGN KEY (property_id) REFERENCES fyp.rental_properties(id) ON DELETE CASCADE"
+  ],
+  [
+   "fyp.property_features",
+   "fyp.rental_properties",
+   "property_features_property_id_fkey",
+   "FOREIGN KEY (property_id) REFERENCES fyp.rental_properties(id) ON DELETE CASCADE"
+  ],
+  [
+   "fyp.property_geospatial_features",
+   "fyp.rental_properties",
+   "property_geospatial_features_property_id_fkey",
+   "FOREIGN KEY (property_id) REFERENCES fyp.rental_properties(id) ON DELETE CASCADE"
+  ],
+  [
+   "fyp.entrepreneur_preferences",
+   "fyp.users",
+   "entrepreneur_preferences_user_id_fkey",
+   "FOREIGN KEY (user_id) REFERENCES fyp.users(id) ON DELETE CASCADE"
+  ],
+  [
+   "fyp.recommendation_results",
+   "fyp.rental_properties",
+   "recommendation_results_property_id_fkey",
+   "FOREIGN KEY (property_id) REFERENCES fyp.rental_properties(id) ON DELETE CASCADE"
+  ],
+  [
+   "fyp.recommendation_results",
+   "fyp.users",
+   "recommendation_results_user_id_fkey",
+   "FOREIGN KEY (user_id) REFERENCES fyp.users(id) ON DELETE CASCADE"
+  ],
+  [
+   "fyp.ai_explanations",
+   "fyp.recommendation_results",
+   "ai_explanations_recommendation_id_fkey",
+   "FOREIGN KEY (recommendation_id) REFERENCES fyp.recommendation_results(id) ON DELETE CASCADE"
+  ],
+  [
+   "fyp.virtual_tours",
+   "fyp.users",
+   "virtual_tours_created_by_fkey",
+   "FOREIGN KEY (created_by) REFERENCES fyp.users(id) ON DELETE SET NULL"
+  ],
+  [
+   "fyp.virtual_tours",
+   "fyp.rental_properties",
+   "virtual_tours_property_id_fkey",
+   "FOREIGN KEY (property_id) REFERENCES fyp.rental_properties(id) ON DELETE CASCADE"
+  ],
+  [
+   "fyp.virtual_tours",
+   "fyp.users",
+   "virtual_tours_verified_by_fkey",
+   "FOREIGN KEY (verified_by) REFERENCES fyp.users(id) ON DELETE SET NULL"
+  ],
+  [
+   "fyp.favourite_properties",
+   "fyp.users",
+   "favourite_properties_user_id_fkey",
+   "FOREIGN KEY (user_id) REFERENCES fyp.users(id) ON DELETE CASCADE"
+  ],
+  [
+   "fyp.favourite_properties",
+   "fyp.rental_properties",
+   "favourite_properties_property_id_fkey",
+   "FOREIGN KEY (property_id) REFERENCES fyp.rental_properties(id) ON DELETE CASCADE"
+  ],
+  [
+   "fyp.activity_log",
+   "fyp.users",
+   "activity_log_user_id_fkey",
+   "FOREIGN KEY (user_id) REFERENCES fyp.users(id) ON DELETE SET NULL"
+  ],
+  [
+   "fyp.property_subject_links",
+   "demand_gen.subjects",
+   "property_subject_links_subject_id_fkey",
+   "FOREIGN KEY (subject_id) REFERENCES demand_gen.subjects(subject_id) ON DELETE SET NULL"
+  ],
+  [
+   "fyp.property_subject_links",
+   "fyp.rental_properties",
+   "fyp_psl_catalogue_id_fk",
+   "FOREIGN KEY (sitewise_property_id) REFERENCES fyp.rental_properties(catalogue_id) ON UPDATE RESTRICT ON DELETE RESTRICT"
+  ],
+  [
+   "fyp.property_subject_links",
+   "fyp.rental_properties",
+   "property_subject_links_property_id_fkey",
+   "FOREIGN KEY (property_id) REFERENCES fyp.rental_properties(id) ON DELETE CASCADE"
+  ],
+  [
+   "fyp.property_listing_sources",
+   "fyp.rental_properties",
+   "property_listing_sources_property_id_fkey",
+   "FOREIGN KEY (property_id) REFERENCES fyp.rental_properties(id) ON DELETE CASCADE"
+  ],
+  [
+   "fyp.property_listing_verification",
+   "fyp.users",
+   "property_listing_verification_reviewer_user_id_fkey",
+   "FOREIGN KEY (reviewer_user_id) REFERENCES fyp.users(id) ON DELETE SET NULL"
+  ],
+  [
+   "fyp.property_listing_verification",
+   "fyp.rental_properties",
+   "property_listing_verification_property_id_fkey",
+   "FOREIGN KEY (property_id) REFERENCES fyp.rental_properties(id) ON DELETE CASCADE"
+  ],
+  [
+   "fyp.property_feature_freshness",
+   "fyp.rental_properties",
+   "property_feature_freshness_property_fk",
+   "FOREIGN KEY (property_id) REFERENCES fyp.rental_properties(id) ON DELETE CASCADE"
+  ],
+  [
+   "fyp.property_enrichment_category",
+   "fyp.rental_properties",
+   "property_enrichment_category_property_fk",
+   "FOREIGN KEY (property_id) REFERENCES fyp.rental_properties(id) ON DELETE CASCADE"
+  ],
+  [
+   "fyp.capture_frames",
+   "fyp.capture_sessions",
+   "capture_frames_session_id_fkey",
+   "FOREIGN KEY (session_id) REFERENCES fyp.capture_sessions(id) ON DELETE CASCADE"
+  ],
+  [
+   "fyp.panorama_jobs",
+   "fyp.capture_sessions",
+   "panorama_jobs_session_id_fkey",
+   "FOREIGN KEY (session_id) REFERENCES fyp.capture_sessions(id) ON DELETE CASCADE"
+  ],
+  [
+   "fyp.panoramas",
+   "fyp.capture_sessions",
+   "panoramas_session_id_fkey",
+   "FOREIGN KEY (session_id) REFERENCES fyp.capture_sessions(id) ON DELETE CASCADE"
+  ]
+ ]
+}

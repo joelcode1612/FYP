@@ -1,6 +1,6 @@
 """Owner requests -> Agent accepts -> site inspection -> Agent submits for Admin.
 
-Built on existing fyp.rental_properties + public.agent_listing_assignment.
+Built on existing fyp.rental_properties + fyp.agent_listing_assignment.
 Never trusts client-supplied account roles, owner ids or inspection status.
 The DB migration in sql/01_agent_only_360_workflow.sql is required.
 """
@@ -109,7 +109,7 @@ def owner_assignment(property_id: int, session: Db, user: Provider) -> dict:
     row = session.execute(text("""
         SELECT agent_id, workflow_status, requested_at, responded_at, submitted_at,
                panorama_uploaded_at, inspection_updated_at, decline_reason
-          FROM public.agent_listing_assignment WHERE listing_id=:pid
+          FROM fyp.agent_listing_assignment WHERE listing_id=:pid
     """), {'pid': property_id}).mappings().first()
     if row is None:
         return {'data': None}
@@ -133,14 +133,14 @@ def request_agent(property_id: int, payload: AgentRequest, session: Db, user: Pr
         raise HTTPException(status_code=409, detail="This property cannot be reassigned while in review or published.")
     agent = _agent_profile(session, payload.agent_user_id)
     current = session.execute(text("""
-        SELECT workflow_status FROM public.agent_listing_assignment
+        SELECT workflow_status FROM fyp.agent_listing_assignment
          WHERE listing_id=:pid FOR UPDATE
     """), {'pid': property_id}).scalar()
     if current in ('requested','accepted','submitted'):
         raise HTTPException(status_code=409, detail="A live Agent request already exists for this property.")
     # Existing assignment row is updated in place; never invent another listing.
     session.execute(text("""
-        INSERT INTO public.agent_listing_assignment
+        INSERT INTO fyp.agent_listing_assignment
           (listing_id,agent_id,assigned_by_user_id,created_at,updated_at,
            workflow_status,requested_at,responded_at,inspection_data,
            inspection_updated_at,panorama_tour_id,panorama_uploaded_at,
@@ -166,7 +166,7 @@ def _respond(property_id: int, session: Session, user: AuthenticatedUser,
         raise HTTPException(status_code=409, detail="Only new or legacy Agent requests can be answered.")
     status = 'accepted' if accept else 'declined'
     session.execute(text("""
-        UPDATE public.agent_listing_assignment
+        UPDATE fyp.agent_listing_assignment
            SET workflow_status=:status, responded_at=now(), updated_at=now(),
                decline_reason=:reason
          WHERE listing_id=:pid AND agent_id=:aid
@@ -203,7 +203,7 @@ def save_inspection(property_id: int, payload: InspectionInput, session: Db, age
     row = agent_assignment(session, property_id, agent, writable=True)
     evidence = payload.model_dump()
     result = session.execute(text("""
-        UPDATE public.agent_listing_assignment
+        UPDATE fyp.agent_listing_assignment
            SET inspection_data=CAST(:data AS jsonb),inspection_updated_at=now(),updated_at=now()
          WHERE listing_id=:pid AND agent_id=:aid
     """), {'pid':property_id,'aid':row['agent_id'],'data':json.dumps(evidence)})

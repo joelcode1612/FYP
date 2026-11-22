@@ -43,9 +43,9 @@ def cleanup_verifications(cleanup_users):
         return
     with Session(engine) as session:
         for table in (
-            "verification_audit",
-            "verification_document",
-            "property_verification",
+            "fyp.verification_audit",
+            "fyp.verification_document",
+            "fyp.property_verification",
             "fyp.property_geospatial_features",
         ):
             if props:

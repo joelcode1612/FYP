@@ -351,7 +351,7 @@ def panoramas_by_catalogue_ids(
 
     ONE query resolves many catalogue ids. The authority chain is identical:
     ``fyp.property_subject_links`` with ``match_verified IS TRUE`` joined to
-    ``public.virtual_tour`` on the *numeric* property id — the catalogue text
+    ``fyp.virtual_tour`` on the *numeric* property id — the catalogue text
     id and the legacy integer key are never compared directly — and the most
     recently updated tour row per property wins (``updated_at DESC NULLS
     LAST``). The per-id payload has exactly the same shape and honesty rules
@@ -380,7 +380,7 @@ def panoramas_by_catalogue_ids(
                     JOIN fyp.property_subject_links AS l
                       ON l.sitewise_property_id = r.cid
                      AND l.match_verified IS TRUE
-                    JOIN public.virtual_tour AS vt
+                    JOIN fyp.virtual_tour AS vt
                       ON vt.property_id = l.property_id
                 )
                 SELECT cid, url, status FROM ranked WHERE rn = 1
@@ -1369,7 +1369,7 @@ class PropertyInsightsService:
         so the gallery can say so instead of showing a broken viewer.
 
         The query runs through the OPERATIONAL session (``self.session``):
-        ``fyp.property_subject_links`` and ``public.virtual_tour`` are
+        ``fyp.property_subject_links`` and ``fyp.virtual_tour`` are
         operational tables written by the panorama upload. Reading them through
         the analytics session pointed the gallery at the wrong database when
         the two URLs differ, silently reporting every panorama unavailable.
@@ -1384,7 +1384,7 @@ class PropertyInsightsService:
                     """
                     SELECT vt.url, vt.status
                     FROM fyp.property_subject_links AS l
-                    JOIN public.virtual_tour AS vt ON vt.property_id = l.property_id
+                    JOIN fyp.virtual_tour AS vt ON vt.property_id = l.property_id
                     WHERE l.sitewise_property_id = :pid
                       AND l.match_verified IS TRUE
                     ORDER BY vt.updated_at DESC NULLS LAST

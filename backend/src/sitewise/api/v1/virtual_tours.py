@@ -40,7 +40,7 @@ def _require_owned_listing(
 
     Access rule — the SAME one the panorama upload applies: the owner of the
     listing, an administrator, or the agent holding the
-    ``public.agent_listing_assignment`` row for this listing. The upload is
+    ``fyp.agent_listing_assignment`` row for this listing. The upload is
     part of the shared Add Property flow where an assigned agent maintains the
     record on the owner's behalf, so the agent can also read and update the
     tour rows it creates. An agent with no assignment manages nothing.
@@ -259,7 +259,7 @@ async def upload_property_panorama(
     # Agent upload has produced a ready tour. Client JSON cannot forge it.
     from sqlalchemy import text
     changed = session.execute(text("""
-        UPDATE public.agent_listing_assignment
+        UPDATE fyp.agent_listing_assignment
            SET panorama_tour_id=:tid, panorama_uploaded_at=now(), updated_at=now()
          WHERE listing_id=:pid AND workflow_status IN ('accepted','needs_correction')
     """), {"tid": tour.tour_id, "pid": property_id})

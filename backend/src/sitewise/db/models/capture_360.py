@@ -22,7 +22,7 @@ from typing import Any
 
 from sqlmodel import JSON, Column, Field, SQLModel
 
-_FYP_SCHEMA = {"schema": "fyp"}
+_FYP_SCHEMA = {"schema": "fyp", "info": {"externally_managed": True}}
 
 
 def _utcnow() -> datetime:

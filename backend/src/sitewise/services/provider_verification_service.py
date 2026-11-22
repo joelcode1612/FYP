@@ -71,7 +71,7 @@ _PHONE_RE = re.compile(r"^[0-9+\-\s()]{7,20}$")
 
 _DDL_STATEMENTS: tuple[str, ...] = (
     """
-    CREATE TABLE IF NOT EXISTS public.provider_verification (
+    CREATE TABLE IF NOT EXISTS fyp.provider_verification (
         user_id UUID PRIMARY KEY
             REFERENCES public.users(user_id) ON DELETE CASCADE,
         provider_role TEXT NOT NULL,
@@ -94,7 +94,7 @@ _DDL_STATEMENTS: tuple[str, ...] = (
     """,
     """
     CREATE INDEX IF NOT EXISTS idx_provider_verification_status
-        ON public.provider_verification (status)
+        ON fyp.provider_verification (status)
     """,
 )
 
@@ -103,7 +103,7 @@ SELECT v.user_id, v.provider_role, v.status, v.business_name, v.contact_phone,
        v.registration_no, v.submission_note, v.decision_note,
        v.submitted_at, v.reviewed_at, v.updated_at,
        u.full_name, u.email, u.role, u.account_status
-FROM public.provider_verification v
+FROM fyp.provider_verification v
 LEFT JOIN public.users u ON u.user_id = v.user_id
 """
 
@@ -234,7 +234,7 @@ class ProviderVerificationService:
         self.session.execute(
             text(
                 """
-                INSERT INTO public.provider_verification (
+                INSERT INTO fyp.provider_verification (
                     user_id, provider_role, status, business_name,
                     contact_phone, registration_no, submission_note,
                     submitted_at, updated_at
@@ -295,7 +295,7 @@ class ProviderVerificationService:
         self.session.execute(
             text(
                 """
-                INSERT INTO public.provider_verification (
+                INSERT INTO fyp.provider_verification (
                     user_id, provider_role, status, business_name,
                     contact_phone, updated_at
                 ) VALUES (
@@ -304,7 +304,7 @@ class ProviderVerificationService:
                 ON CONFLICT (user_id) DO UPDATE SET
                     status = 'approved',
                     updated_at = now()
-                WHERE public.provider_verification.status IN ('pending', 'approved')
+                WHERE fyp.provider_verification.status IN ('pending', 'approved')
                 """
             ),
             {
@@ -399,7 +399,7 @@ class ProviderVerificationService:
         self.session.execute(
             text(
                 """
-                UPDATE public.provider_verification
+                UPDATE fyp.provider_verification
                    SET status = :status,
                        decision_note = NULLIF(:note, ''),
                        reviewed_at = now(),

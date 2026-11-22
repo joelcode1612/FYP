@@ -66,7 +66,7 @@ def cleanup_favourites(cleanup_users):
         return
     with Session(engine) as session:
         session.execute(
-            text("DELETE FROM favorite_property WHERE user_id = ANY(:ids)"),
+            text("DELETE FROM fyp.favorite_property WHERE user_id = ANY(:ids)"),
             {"ids": list(cleanup_users)},
         )
         session.commit()
@@ -162,7 +162,7 @@ def test_delisted_refs_are_reported_as_unresolved(client, identity, cleanup_favo
     with Session(engine) as session:
         session.execute(
             text(
-                "INSERT INTO favorite_property (favorite_id, user_id, property_id, created_at)"
+                "INSERT INTO fyp.favorite_property (favorite_id, user_id, property_id, created_at)"
                 " VALUES (:fid, :uid, 'GONE-DELISTED-1', now())"
             ),
             {"fid": uuid.uuid4(), "uid": identity["user_id"]},

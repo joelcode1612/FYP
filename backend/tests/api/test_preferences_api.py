@@ -70,7 +70,7 @@ def cleanup_preferences(cleanup_users):
         return
     with Session(engine) as session:
         session.execute(
-            text("DELETE FROM entrepreneur_preferences WHERE user_id = ANY(:ids)"),
+            text("DELETE FROM fyp.entrepreneur_preferences WHERE user_id = ANY(:ids)"),
             {"ids": list(cleanup_users)},
         )
         session.commit()
@@ -94,7 +94,7 @@ def _row_count(user_id):
     with Session(engine) as session:
         return int(
             session.execute(
-                text("SELECT count(*) FROM entrepreneur_preferences WHERE user_id = :uid"),
+                text("SELECT count(*) FROM fyp.entrepreneur_preferences WHERE user_id = :uid"),
                 {"uid": user_id},
             ).scalar_one()
         )
