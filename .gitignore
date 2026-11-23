@@ -124,3 +124,9 @@ backend/var/verification-documents/
 backend/var/evidence/
 backend/var/test-auth/
 
+# Owner decision 2026-11-23: hand-off docs, evidence bundles and test modules
+# in these folders stay local. Files already tracked remain tracked.
+deliverables/
+artifacts/
+backend/tests/
+
