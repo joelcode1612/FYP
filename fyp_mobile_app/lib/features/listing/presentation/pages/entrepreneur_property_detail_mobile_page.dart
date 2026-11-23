@@ -30,9 +30,11 @@ import 'package:fyp/core/routing/app_routes.dart';
 
 class EntrepreneurPropertyDetailMobilePage extends ConsumerStatefulWidget {
   final String propertyId;
+  final String? resultId;
   const EntrepreneurPropertyDetailMobilePage({
     super.key,
     required this.propertyId,
+    this.resultId,
   });
 
   @override

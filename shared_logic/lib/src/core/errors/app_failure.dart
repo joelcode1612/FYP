@@ -89,9 +89,10 @@ class ResponseFormatFailure extends AppFailure {
 /// A business-rule conflict returned by FastAPI (HTTP 409). This is NOT a
 /// network error. FastAPI's `detail` is a deliberately user-facing reason.
 class ConflictFailure extends AppFailure {
-  const ConflictFailure([
-    super.message = 'This action conflicts with the current property state.',
-  ]);
+  const ConflictFailure(
+    String message, {
+    String? backendCode,
+  }) : super(message, statusCode: 409, backendCode: backendCode);
 
   @override
   String get userMessage => message;
@@ -285,10 +286,7 @@ String readableFailure(Object error, {required String fallback}) {
   return fallback;
 }
 
-class ConflictFailure extends AppFailure {
-  const ConflictFailure(String message, {String? backendCode})
-    : super(message, statusCode: 409, backendCode: backendCode);
-}
+
 
 class ThrottledFailure extends AppFailure {
   const ThrottledFailure(String message, {String? backendCode})
