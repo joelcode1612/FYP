@@ -7,6 +7,7 @@ from uuid import UUID,uuid4
 
 from sitewise.domain.cq_runtime import CqRefused,route,verify_release
 from sitewise.domain.customer_questionnaire import classify_answer,digest
+from sitewise.project1 import consent_notice
 from sitewise.services.customer_questionnaire_candidate import load_sources,SOURCE_SHA
 
 
@@ -39,6 +40,11 @@ class CustomerQuestionnaireService:
             raise CqRefused('PRODUCTION_FIELDING_HOLD',503)
         if grant.scope=='PRODUCTION' and (release['source_class']!='ADOPTED' or not grant.production_fielding_authorized):
             raise CqRefused('PRODUCTION_FIELDING_HOLD',503)
+        # Defence in depth, not a replacement for the two locks above. A human-facing
+        # scope may not proceed on a notice whose disclosures are still unapproved
+        # (OD-08). This is refused at the single release choke point so no caller --
+        # manifest, invitations, start, consent -- can route around it.
+        consent_notice.require_approved(consent_notice.build_notice(self.contract,scope=grant.scope))
         return release,manifest,policy,grant
 
     def manifest(self,rid,actor):
@@ -77,7 +83,12 @@ class CustomerQuestionnaireService:
                     'session_id':row['session_id'],'execution_scope':grant.scope,
                     'production_fielding_authorized':grant.production_fielding_authorized})
             return {'contract_version':'cq-invitations/1','state':'ready' if result else 'held' if held else 'empty',
-                'code':'PRODUCTION_FIELDING_HOLD' if held and not result else None,'invitations':result}
+                'code':'PRODUCTION_FIELDING_HOLD' if held and not result else None,
+                # Additive: says the runtime IS enabled but the authority refused
+                # this respondent, which is the opposite cause from the
+                # route-level CQ_RUNTIME_DISABLED.
+                'reason':'AUTHORIZATION_DENIED' if held and not result else None,
+                'invitations':result}
 
     def start(self,cid,manifest_hash,locale,actor):
         with self.store.open() as unit:
@@ -157,7 +168,11 @@ class CustomerQuestionnaireService:
             'lifecycle_version':'cq-lifecycle/1','render_ack_version':'cq-render/1',
             'locale':s['locale'],'routing':rows,'next_slot_id':next_slot if stimulus is None else None,
             'next_stimulus_kind':stimulus,'can_submit':can_act and next_slot is None and stimulus is None,
-            'screen_disposition':disposition,'receipt':receipt['payload_json'] if receipt else None}
+            'screen_disposition':disposition,'receipt':receipt['payload_json'] if receipt else None,
+            # Additive sibling of the manifest, never part of it: inserting a key into
+            # `m` would break digest(manifest)==release['manifest_hash'].
+            'consent_notice':(consent_notice.synthetic_notice(m,locale=s['locale']) if g.scope=='ISOLATED_TEST'
+                else consent_notice.build_notice(self.contract,scope=g.scope))}
 
     def read(self,sid,actor):
         with self.store.open() as unit:

@@ -122,23 +122,23 @@
       },
       {
         "source_code": "DAYS_1_3",
-        "draft_en_label": "1â€“3 days",
-        "draft_bm_label": "1â€“3 hari"
+        "draft_en_label": "1–3 days",
+        "draft_bm_label": "1–3 hari"
       },
       {
         "source_code": "DAYS_4_10",
-        "draft_en_label": "4â€“10 days",
-        "draft_bm_label": "4â€“10 hari"
+        "draft_en_label": "4–10 days",
+        "draft_bm_label": "4–10 hari"
       },
       {
         "source_code": "DAYS_11_20",
-        "draft_en_label": "11â€“20 days",
-        "draft_bm_label": "11â€“20 hari"
+        "draft_en_label": "11–20 days",
+        "draft_bm_label": "11–20 hari"
       },
       {
         "source_code": "DAYS_GT_20",
-        "draft_en_label": "21â€“28 days",
-        "draft_bm_label": "21â€“28 hari"
+        "draft_en_label": "21–28 days",
+        "draft_bm_label": "21–28 hari"
       },
       {
         "source_code": "PREFER_NOT_TO_ANSWER",
@@ -190,8 +190,8 @@
     "question_id": "Q03",
     "frozen_version": "P3-01C-VNEXT-0.6.1-CUST-REC",
     "frozen_source_sha256": "ec2b5494ecf82447076e0d7a2bfb57599a24f049bbcc925a9ecbea6e833bce59",
-    "wording_source": "If you decided to visit the cafÃ© described above, where would you most likely begin that journey?",
-    "wording_test_EN": "If you decided to visit the cafÃ© described above, where would you most likely begin that journey?",
+    "wording_source": "If you decided to visit the café described above, where would you most likely begin that journey?",
+    "wording_test_EN": "If you decided to visit the café described above, where would you most likely begin that journey?",
     "wording_candidate_BM": "Jika anda memutuskan untuk mengunjungi kafe yang diterangkan di atas, dari manakah kemungkinan besar anda akan memulakan perjalanan tersebut?",
     "language_version": "LANGUAGE-CANDIDATE-01",
     "language_sha256": "fb0c348788ed5ebc11c33afd029b5cb73ad41c86563c4dbf5a7599abe7952655",
@@ -280,8 +280,8 @@
     "question_id": "Q04",
     "frozen_version": "P3-01C-VNEXT-0.6.1-CUST-REC",
     "frozen_source_sha256": "ec2b5494ecf82447076e0d7a2bfb57599a24f049bbcc925a9ecbea6e833bce59",
-    "wording_source": "In the past 30 days, on how many occasions have you bought food or a drink from an existing cafÃ©?",
-    "wording_test_EN": "In the past 30 days, on how many occasions have you bought food or a drink from an existing cafÃ©?",
+    "wording_source": "In the past 30 days, on how many occasions have you bought food or a drink from an existing café?",
+    "wording_test_EN": "In the past 30 days, on how many occasions have you bought food or a drink from an existing café?",
     "wording_candidate_BM": "Dalam tempoh 30 hari yang lalu, berapa kali anda membeli makanan atau minuman daripada kafe yang sedia ada?",
     "language_version": "LANGUAGE-CANDIDATE-01",
     "language_sha256": "fb0c348788ed5ebc11c33afd029b5cb73ad41c86563c4dbf5a7599abe7952655",
@@ -298,13 +298,13 @@
       },
       {
         "source_code": "TWO_THREE",
-        "draft_en_label": "2â€“3 occasions",
-        "draft_bm_label": "2â€“3 kali"
+        "draft_en_label": "2–3 occasions",
+        "draft_bm_label": "2–3 kali"
       },
       {
         "source_code": "FOUR_SEVEN",
-        "draft_en_label": "4â€“7 occasions",
-        "draft_bm_label": "4â€“7 kali"
+        "draft_en_label": "4–7 occasions",
+        "draft_bm_label": "4–7 kali"
       },
       {
         "source_code": "EIGHT_PLUS",
@@ -369,8 +369,8 @@
     "question_id": "Q05",
     "frozen_version": "P3-01C-VNEXT-0.6.1-CUST-REC",
     "frozen_source_sha256": "ec2b5494ecf82447076e0d7a2bfb57599a24f049bbcc925a9ecbea6e833bce59",
-    "wording_source": "If the cafÃ© described in [concept_card_version] opened in [named area], how likely would you be to visit it at least once during its first three months?",
-    "wording_test_EN": "If the cafÃ© described in [concept_card_version] opened in [named area], how likely would you be to visit it at least once during its first three months?",
+    "wording_source": "If the café described in [concept_card_version] opened in [named area], how likely would you be to visit it at least once during its first three months?",
+    "wording_test_EN": "If the café described in [concept_card_version] opened in [named area], how likely would you be to visit it at least once during its first three months?",
     "wording_candidate_BM": "Jika kafe yang diterangkan di atas dibuka di [nama kawasan], sejauh manakah kemungkinan anda akan mengunjunginya sekurang-kurangnya sekali dalam tempoh tiga bulan pertama selepas pembukaannya?",
     "language_version": "LANGUAGE-CANDIDATE-01",
     "language_sha256": "fb0c348788ed5ebc11c33afd029b5cb73ad41c86563c4dbf5a7599abe7952655",
@@ -459,8 +459,8 @@
     "question_id": "Q06",
     "frozen_version": "P3-01C-VNEXT-0.6.1-CUST-REC",
     "frozen_source_sha256": "ec2b5494ecf82447076e0d7a2bfb57599a24f049bbcc925a9ecbea6e833bce59",
-    "wording_source": "Which of the following categories from this proposed cafÃ© menu would you be interested in? Select up to three.",
-    "wording_test_EN": "Which of the following categories from this proposed cafÃ© menu would you be interested in? Select up to three.",
+    "wording_source": "Which of the following categories from this proposed café menu would you be interested in? Select up to three.",
+    "wording_test_EN": "Which of the following categories from this proposed café menu would you be interested in? Select up to three.",
     "wording_candidate_BM": "Antara kategori berikut dalam menu kafe yang dicadangkan, yang manakah menarik minat anda? Pilih sehingga tiga kategori.",
     "language_version": "LANGUAGE-CANDIDATE-01",
     "language_sha256": "fb0c348788ed5ebc11c33afd029b5cb73ad41c86563c4dbf5a7599abe7952655",
@@ -572,8 +572,8 @@
     "question_id": "Q07",
     "frozen_version": "P3-01C-VNEXT-0.6.1-CUST-REC",
     "frozen_source_sha256": "ec2b5494ecf82447076e0d7a2bfb57599a24f049bbcc925a9ecbea6e833bce59",
-    "wording_source": "How acceptable would paying [exact_rm_price] for [one_exact_product_size_quantity_fulfilment_and_charges] at the proposed cafÃ© be to you?",
-    "wording_test_EN": "How acceptable would paying [exact_rm_price] for [one_exact_product_size_quantity_fulfilment_and_charges] at the proposed cafÃ© be to you?",
+    "wording_source": "How acceptable would paying [exact_rm_price] for [one_exact_product_size_quantity_fulfilment_and_charges] at the proposed café be to you?",
+    "wording_test_EN": "How acceptable would paying [exact_rm_price] for [one_exact_product_size_quantity_fulfilment_and_charges] at the proposed café be to you?",
     "wording_candidate_BM": "Sejauh manakah harga [harga tepat dalam RM] boleh anda terima untuk [produk, saiz, kuantiti, kaedah perkhidmatan dan caj yang dinyatakan dengan tepat] di kafe yang dicadangkan?",
     "language_version": "LANGUAGE-CANDIDATE-01",
     "language_sha256": "fb0c348788ed5ebc11c33afd029b5cb73ad41c86563c4dbf5a7599abe7952655",
@@ -660,8 +660,8 @@
     "question_id": "Q08",
     "frozen_version": "P3-01C-VNEXT-0.6.1-CUST-REC",
     "frozen_source_sha256": "ec2b5494ecf82447076e0d7a2bfb57599a24f049bbcc925a9ecbea6e833bce59",
-    "wording_source": "Thinking only about the existing-cafÃ© visits you reported in the past 30 days, on which occasions did you visit a cafÃ©? Select all that apply.",
-    "wording_test_EN": "Thinking only about the existing-cafÃ© visits you reported in the past 30 days, on which occasions did you visit a cafÃ©? Select all that apply.",
+    "wording_source": "Thinking only about the existing-café visits you reported in the past 30 days, on which occasions did you visit a café? Select all that apply.",
+    "wording_test_EN": "Thinking only about the existing-café visits you reported in the past 30 days, on which occasions did you visit a café? Select all that apply.",
     "wording_candidate_BM": "Dengan merujuk hanya kepada kunjungan ke kafe sedia ada yang anda laporkan dalam tempoh 30 hari lalu, dalam situasi manakah anda mengunjungi kafe? Pilih semua yang berkenaan.",
     "language_version": "LANGUAGE-CANDIDATE-01",
     "language_sha256": "fb0c348788ed5ebc11c33afd029b5cb73ad41c86563c4dbf5a7599abe7952655",
@@ -751,8 +751,8 @@
     "question_id": "Q09",
     "frozen_version": "P3-01C-VNEXT-0.6.1-CUST-REC",
     "frozen_source_sha256": "ec2b5494ecf82447076e0d7a2bfb57599a24f049bbcc925a9ecbea6e833bce59",
-    "wording_source": "If you visited this proposed cafÃ©, on which occasions might you choose to visit? Select all that apply.",
-    "wording_test_EN": "If you visited this proposed cafÃ©, on which occasions might you choose to visit? Select all that apply.",
+    "wording_source": "If you visited this proposed café, on which occasions might you choose to visit? Select all that apply.",
+    "wording_test_EN": "If you visited this proposed café, on which occasions might you choose to visit? Select all that apply.",
     "wording_candidate_BM": "Sekiranya anda mengunjungi kafe yang dicadangkan ini, dalam situasi manakah anda mungkin memilih untuk datang? Pilih semua yang berkenaan.",
     "language_version": "LANGUAGE-CANDIDATE-01",
     "language_sha256": "fb0c348788ed5ebc11c33afd029b5cb73ad41c86563c4dbf5a7599abe7952655",
@@ -849,8 +849,8 @@
     "question_id": "Q10",
     "frozen_version": "P3-01C-VNEXT-0.6.1-CUST-REC",
     "frozen_source_sha256": "ec2b5494ecf82447076e0d7a2bfb57599a24f049bbcc925a9ecbea6e833bce59",
-    "wording_source": "For each feature of the described cafÃ©, how important would that feature be to you if you chose to visit?",
-    "wording_test_EN": "For each feature of the described cafÃ©, how important would that feature be to you if you chose to visit?",
+    "wording_source": "For each feature of the described café, how important would that feature be to you if you chose to visit?",
+    "wording_test_EN": "For each feature of the described café, how important would that feature be to you if you chose to visit?",
     "wording_candidate_BM": "Bagi setiap ciri kafe yang diterangkan, sejauh manakah pentingnya ciri tersebut kepada anda sekiranya anda memilih untuk mengunjunginya?",
     "language_version": "LANGUAGE-CANDIDATE-01",
     "language_sha256": "fb0c348788ed5ebc11c33afd029b5cb73ad41c86563c4dbf5a7599abe7952655",
@@ -945,8 +945,8 @@
     "question_id": "Q11",
     "frozen_version": "P3-01C-VNEXT-0.6.1-CUST-REC",
     "frozen_source_sha256": "ec2b5494ecf82447076e0d7a2bfb57599a24f049bbcc925a9ecbea6e833bce59",
-    "wording_source": "For the proposed cafÃ© offer, which service format would you mainly choose?",
-    "wording_test_EN": "For the proposed cafÃ© offer, which service format would you mainly choose?",
+    "wording_source": "For the proposed café offer, which service format would you mainly choose?",
+    "wording_test_EN": "For the proposed café offer, which service format would you mainly choose?",
     "wording_candidate_BM": "Bagi tawaran kafe yang dicadangkan, kaedah perkhidmatan yang manakah akan menjadi pilihan utama anda?",
     "language_version": "LANGUAGE-CANDIDATE-01",
     "language_sha256": "fb0c348788ed5ebc11c33afd029b5cb73ad41c86563c4dbf5a7599abe7952655",
@@ -1120,17 +1120,17 @@
       },
       {
         "source_code": "RM8_TO_1199",
-        "draft_en_label": "RM8â€“RM11.99",
+        "draft_en_label": "RM8–RM11.99",
         "draft_bm_label": "RM8 hingga RM11.99"
       },
       {
         "source_code": "RM12_TO_1499",
-        "draft_en_label": "RM12â€“RM14.99",
+        "draft_en_label": "RM12–RM14.99",
         "draft_bm_label": "RM12 hingga RM14.99"
       },
       {
         "source_code": "RM15_TO_1799",
-        "draft_en_label": "RM15â€“RM17.99",
+        "draft_en_label": "RM15–RM17.99",
         "draft_bm_label": "RM15 hingga RM17.99"
       },
       {

@@ -1,0 +1,53 @@
+{
+  "contract_version": "n01-np06/1",
+  "generated_at": "2026-11-22T16:51:09.900472+00:00",
+  "purpose": "Prove the QG authorization guard refuses when reached.",
+  "before": {
+    "m2_confirmed_uncertainties": 2,
+    "m2_qg_authorizations": 36,
+    "m2_qg_candidates": 1,
+    "m2_research_objective_sources": 1,
+    "project1_ai.runs": 9,
+    "project1_ai.attempts": 7
+  },
+  "steps": [
+    {
+      "step": "prerequisite_present",
+      "objective_id": "ec997665-771c-4f10-b77f-ab0145ae565b"
+    },
+    {
+      "step": "check_authorizations",
+      "objective_id": "ec997665-771c-4f10-b77f-ab0145ae565b",
+      "count": 0
+    },
+    {
+      "step": "invoke_qg_candidate",
+      "method": "POST /m2/research-objectives/{objective_id}/qg-candidate",
+      "http_status": 503,
+      "decision_code": "QG_FIXED_OPTION_ADMISSION_UNAVAILABLE",
+      "response": "{\"detail\": {\"code\": \"QG_FIXED_OPTION_ADMISSION_UNAVAILABLE\", \"message\": \"Question generation is waiting for its required setup.\"}}"
+    }
+  ],
+  "prerequisite": {
+    "assessment_id": "032d3dde-547f-49a6-9e0f-58fbc5f1a48f",
+    "instrument": "M2V1-20261114-1",
+    "objective_id": "ec997665-771c-4f10-b77f-ab0145ae565b",
+    "context_id": "50e1761a-ee14-5bc7-9d34-10e176e5ecaf",
+    "assessment_revision": 17,
+    "created_by": "POST /m2/confirmations/{id}/research-objectives (origin=ENTREPRENEUR) - not by direct insert",
+    "note": "A confirmed uncertainty alone is insufficient: read_current_objective() also requires the m2_research_objective_sources provenance row. confirm_uncertainty() does not write it; confirm_objective() does."
+  },
+  "existing_qg_authorizations": 0,
+  "after": {
+    "m2_confirmed_uncertainties": 2,
+    "m2_qg_authorizations": 36,
+    "m2_qg_candidates": 1,
+    "m2_research_objective_sources": 1,
+    "project1_ai.runs": 9,
+    "project1_ai.attempts": 7
+  },
+  "ledger_delta": {},
+  "guard_reached": true,
+  "no_provider_dispatch": true,
+  "verdict": "PASS"
+}

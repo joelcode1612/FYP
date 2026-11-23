@@ -6,6 +6,7 @@ import 'package:shared_logic/shared_logic.dart';
 import 'package:fyp/core/di/service_locator.dart';
 import 'package:fyp/core/config/cq_development_access.dart';
 import 'package:fyp/core/di/mobile_api_client.dart';
+import 'package:fyp/features/assessment/presentation/cq_error_message.dart';
 
 final cqRepositoryProvider = Provider<ApiCustomerQuestionnaireRepository>(
   (ref) => ApiCustomerQuestionnaireRepository(
@@ -61,7 +62,15 @@ class CqViewModel extends ChangeNotifier {
     }
   }
 
-  Future<void> _run(Future<void> Function() operation) async {
+  /// Neutral wording for anything we cannot classify. Never derived from the
+  /// server or the decoder.
+  static const _genericError =
+      'Something went wrong. Reload the saved session to continue.';
+
+  Future<void> _run(
+    Future<void> Function() operation, {
+    String? answerSlotId,
+  }) async {
     if (busy || _disposed) return;
     busy = true;
     error = null;
@@ -71,19 +80,27 @@ class CqViewModel extends ChangeNotifier {
       await operation();
       _retry = null;
     } on ConflictFailure catch (e) {
-      error = e.message;
+      logCqFailure('session operation', e);
+      error = cqErrorMessage(e, fallback: _genericError);
       _mustReload = true;
       _retry = null;
-    } on ThrottledFailure {
-      error =
-          'The service is busy. Try again later; no automatic retry was made.';
     } on AppFailure catch (e) {
-      error = e.message;
+      // Includes ThrottledFailure; the mapper owns that wording. A refused
+      // answer is the one case where the message can name the question: the
+      // 422 body carries a rejection code but no slot, and the caller knows
+      // which slot it submitted.
+      logCqFailure('session operation', e);
+      error = answerSlotId != null && cqIsAnswerRejection(e)
+          ? cqAnswerRejectionMessage(answerSlotId, fallback: _genericError)
+          : cqErrorMessage(e, fallback: _genericError);
     } on FormatException catch (e) {
-      error = e.message;
-    } catch (_) {
-      error =
-          'The questionnaire could not be loaded. Reload the saved session to continue.';
+      // Decoder text such as "Unexpected character at offset 812" is never
+      // shown; it goes to the debug log only.
+      logCqFailure('session response parse', e);
+      error = cqParseErrorMessage(fallback: _genericError);
+    } catch (e) {
+      logCqFailure('session operation', e);
+      error = _genericError;
     } finally {
       busy = false;
       _notify();
@@ -244,7 +261,7 @@ class CqViewModel extends ChangeNotifier {
         ),
       );
       await _presentNext();
-    });
+    }, answerSlotId: body['slot_id'] as String);
   }
 
   Future<void> edit(String slot) => _run(() async {

@@ -1,4 +1,4 @@
-import 'package:sitewise_jaspr_web/data/activity_event_presentation.dart';
+import 'package:sitewise_jaspr_web/features/assessment/data/activity_event_presentation.dart';
 // `jaspr_test` re-exports the `test` API and is already a declared dev
 // dependency of this package, so the test does not add an undeclared one.
 import 'package:jaspr_test/jaspr_test.dart';

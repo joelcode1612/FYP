@@ -57,11 +57,11 @@ class AssessmentJourneyStepper extends StatelessComponent {
             ]),
           ]),
           div(classes: 'sw-assessment-journey__count', [
-            strong([Component.text(governedWorkflow
-                ? workflowReadiness == null
-                    ? 'Checking progress…'
-                    : '${((workflowReadiness!['stage_1'] as Map?)?['complete'] == true ? 1 : 0) + ((workflowReadiness!['stage_2'] as Map?)?['complete'] == true ? 1 : 0)} / ${record.totalStages}'
-                : '${record.completedStages} / ${record.totalStages}')]),
+            // One number, from one place: the persisted record. This used to
+            // sum stage_1 and stage_2 out of workflowReadiness for governed
+            // workflows, which capped the count at 2 for every assessment and
+            // disagreed with the dashboard the moment stage 2 completed.
+            strong([Component.text('${record.completedStages} / ${record.totalStages}')]),
             span([Component.text(' completed')]),
           ]),
         ]),
@@ -78,11 +78,12 @@ class AssessmentJourneyStepper extends StatelessComponent {
     final label = displayLabel(stage.key, stage.title);
     final selectedKey = selectedStageKey ?? record.currentStageKey;
     final isSelected = stage.key == selectedKey;
-    final stage1Complete = (workflowReadiness?['stage_1'] as Map?)?['complete'] == true;
-    final stage2Complete = (workflowReadiness?['stage_2'] as Map?)?['complete'] == true;
-    final governedComplete = stage.key == 'select_property'
-        ? stage1Complete
-        : stage.key == 'business_requirements' && stage2Complete;
+    // Completeness comes from the persisted record -- the same value the count
+    // above, the dashboard and the report read. workflowReadiness decides
+    // *enterability* only (see canViewAssessmentStage). Deriving the ticks from
+    // readiness was what pinned stages 3, 4 and 5 to "not complete" forever:
+    // only stage_1 and stage_2 were ever consulted.
+    final governedComplete = stage.isComplete;
     final available = !governedWorkflow || canViewAssessmentStage(stage.key, workflowReadiness);
     final state = governedWorkflow
         ? governedComplete

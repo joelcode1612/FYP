@@ -59,6 +59,11 @@ abstract final class ServiceLocator {
   /// demo build never touches the network through it.
   static final MobileApiClient apiClient = MobileApiClient();
 
+  /// M2 assessment/research workspace transport. The research-question page
+  /// resolves this through the locator; the repository itself is shared with
+  /// the web app and carries no page state.
+  static final ApiM2Repository m2 = ApiM2Repository(apiClient);
+
   /// Direct comparison of up to three selected properties (`/api/v1/compare`).
   static final ApiPropertyCompareRepository compareRepo =
       ApiPropertyCompareRepository(apiClient);

@@ -33,6 +33,7 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from sitewise.db.models.m2_schema import uncertainties
 from sitewise.repositories.m2_repository import SqlModelM2Repository
+from sitewise.services.instrument_authorization import instrument_is_usable
 from sitewise.services.business_context_v1 import (
     PURPOSES, UTCClock, ContextRefused, current_business_description, json_value, require,
     source_hash,
@@ -113,6 +114,14 @@ def confirmed_description(instrument: dict, items: list[dict], answers: dict,
     """The entrepreneur's own confirmed description. Never inferred, never modelled."""
     if instrument["version_tag"] == M2V1_INSTRUMENT_VERSION:
         text = current_business_description(items, answers)["text"]
+    elif instrument["version_tag"].startswith("M2V2-"):
+        # M2V2 has no single free-text description item; the authoritative
+        # description is the deterministic restatement of the confirmed
+        # characteristics, built from the same snapshot the packet uses.
+        from sitewise.services.bcb_sections import render_description_text
+        item_map = {i["item_key"]: i for i in items}
+        text = render_description_text(list(snapshot.get("answer_revisions", ())),
+                                       item_map)
     else:
         text = next((row["value"] for row in snapshot.get("answer_revisions", ())
                      if row.get("item_key") == DECLARED_DESCRIPTION_ITEM
@@ -194,7 +203,7 @@ class M2ContextBindings:
                 or confirmation["assessment_revision"] != selection.revision):
             raise ContextRefused("M2_CONFIRMATION_STALE")
         instrument = repo.get_instrument(assessment["instrument_id"])
-        if instrument is None or instrument["approval_state"] != "AUTHORIZED":
+        if not instrument_is_usable(instrument):
             raise ContextRefused("INSTRUMENT_UNAUTHORIZED")
         items = repo.list_items(assessment["instrument_id"])
         answers = repo.get_latest_answers(selection.assessment_id, selection.revision)

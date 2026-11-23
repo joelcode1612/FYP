@@ -1,0 +1,121 @@
+{
+  "contract_version": "n01-negative-paths/1",
+  "generated_at": "2026-11-22T16:12:59.289459+00:00",
+  "api": "http://127.0.0.1:8092/api/v1",
+  "assessment_id": "053b3768-145b-4d4a-a880-e98174adcd94",
+  "owner_user_id": "b9e62014-b7bc-426e-a950-a95b25965639",
+  "intruder_user_id": "c70a999a-50c6-4a31-8f7a-b914d0a5c641",
+  "summary": {
+    "total": 10,
+    "pass": 7,
+    "fail": 0,
+    "not_run": 3
+  },
+  "results": [
+    {
+      "id": "NP-01",
+      "name": "Unauthenticated read of objective proposals",
+      "expected": "401/403 refusal",
+      "http_status": 401,
+      "decision_code": "Sign in to continue.",
+      "body_excerpt": "{\"detail\": \"Sign in to continue.\"}",
+      "verdict": "PASS"
+    },
+    {
+      "id": "NP-02",
+      "name": "Cross-owner read of another owner's proposals",
+      "expected": "non-oracle refusal: 403/404/409, no rows, indistinguishable from the stale-revision refusal",
+      "http_status": 409,
+      "decision_code": "BDJ_OBJECTIVE_SOURCE_NOT_CURRENT",
+      "body_excerpt": "{\"detail\": {\"code\": \"BDJ_OBJECTIVE_SOURCE_NOT_CURRENT\", \"message\": \"The objective proposal could not be verified.\"}}",
+      "verdict": "PASS",
+      "intruder_id": "c70a999a-50c6-4a31-8f7a-b914d0a5c641",
+      "rows_leaked": false,
+      "indistinguishable_from_owner_refusal": true,
+      "design_reference": "src/sitewise/api/v1/project1_objective_proposals.py:207-211"
+    },
+    {
+      "id": "NP-03",
+      "name": "Stale M2 revision on evaluate",
+      "expected": "409 source-not-current",
+      "http_status": 409,
+      "decision_code": "BDJ_OBJECTIVE_SOURCE_NOT_CURRENT",
+      "body_excerpt": "{\"detail\": {\"code\": \"BDJ_OBJECTIVE_SOURCE_NOT_CURRENT\", \"message\": \"The objective proposal could not be verified.\"}}",
+      "verdict": "PASS"
+    },
+    {
+      "id": "NP-04",
+      "name": "Stale or mismatched BCB context",
+      "expected": "409/404 context refusal",
+      "http_status": 404,
+      "decision_code": "BDJ_OBJECTIVE_CONTEXT_NOT_FOUND",
+      "body_excerpt": "{\"detail\": {\"code\": \"BDJ_OBJECTIVE_CONTEXT_NOT_FOUND\", \"message\": \"The objective proposal could not be verified.\"}}",
+      "verdict": "PASS"
+    },
+    {
+      "id": "NP-05",
+      "name": "Admission attempted with an invalid proposal reference",
+      "expected": "404/409 refusal from the handler (not a 422 schema rejection)",
+      "http_status": 404,
+      "decision_code": "BDJ_OBJECTIVE_PROPOSAL_NOT_FOUND",
+      "body_excerpt": "{\"detail\": {\"code\": \"BDJ_OBJECTIVE_PROPOSAL_NOT_FOUND\", \"message\": \"The objective proposal could not be verified.\"}}",
+      "verdict": "PASS",
+      "schema_valid_body": true
+    },
+    {
+      "id": "NP-06",
+      "name": "Direct-QG dispatch for an objective with no authorization",
+      "expected": "refusal with a QG_* code",
+      "http_status": 422,
+      "decision_code": null,
+      "body_excerpt": "{\"detail\": [{\"type\": \"uuid_parsing\", \"loc\": [\"path\", \"objective_id\"], \"msg\": \"Input should be a valid UUID, invalid character: found `O` at 0\", \"input\": \"O2\", \"ctx\": {\"error\": \"invalid character: found `O` at 0\"}}]}",
+      "verdict": "NOT_RUN",
+      "note": "Unreachable on this cluster: the route resolves objective_id as a confirmed-uncertainty UUID and m2_confirmed_uncertainties has 0 rows, so no request can reach the authorization check. The observed 422 is a path-parameter schema rejection (uuid_parsing on \"O2\"), not an authorization refusal. QG refusal itself is evidenced separately in the A6 track.",
+      "blocking_condition": "m2_confirmed_uncertainties row_count = 0"
+    },
+    {
+      "id": "NP-07",
+      "name": "Owner readback (control \u2014 must succeed)",
+      "expected": "200 with persisted proposals",
+      "http_status": 200,
+      "decision_code": null,
+      "body_excerpt": "{\"assessment_id\": \"053b3768-145b-4d4a-a880-e98174adcd94\", \"context_id\": \"fa3cb714-5145-57e9-97cd-0af92da80f46\", \"proposal_count\": 3, \"proposals\": [{\"proposal_id\": \"662b8518-89a2-56a5-940f-5d44adcc86d4\", \"recommendation_status\": \"SUGGESTED\", \"problem_type\": \"EXPLORATORY_RESEARCH_NEED\", \"problem\": nul",
+      "verdict": "PASS",
+      "proposal_count": 3
+    },
+    {
+      "id": "NP-08",
+      "name": "Duplicate evaluate replay is not re-dispatched",
+      "expected": "second call reports reused=true and the persisted count is unchanged",
+      "http_status": 200,
+      "decision_code": null,
+      "body_excerpt": "{\"contract_version\": \"bdj-objective-proposal/1\", \"assessment_id\": \"053b3768-145b-4d4a-a880-e98174adcd94\", \"confirmation_id\": \"d2453af1-70e8-4be6-9fbe-20fe5e41b357\", \"confirmation_revision\": 20, \"context_id\": \"fa3cb714-5145-57e9-97cd-0af92da80f46\", \"context_packet_hash\": \"26f243be294d27ab5b37fe4ba910",
+      "verdict": "PASS",
+      "first_status": 200,
+      "reused_flag_observed": true,
+      "proposal_count_before": 3,
+      "proposal_count_after": 3,
+      "persisted_count_unchanged": true,
+      "note": null
+    },
+    {
+      "id": "NP-09",
+      "name": "Accidental access to the protected 5432 cluster",
+      "expected": "never contacted",
+      "http_status": null,
+      "decision_code": null,
+      "verdict": "NOT_RUN",
+      "note": "Deliberately not attempted: connecting to 5432 is itself the prohibited action. Exclusion is evidenced instead by the preflight netstat snapshot and the pinned 5433 URLs.",
+      "artifact": "N01_EVIDENCE/environment_manifest.json#protected_exclusion"
+    },
+    {
+      "id": "NP-10",
+      "name": "Prompt-injection text in M2 free text",
+      "expected": "stored verbatim, no policy effect",
+      "http_status": null,
+      "decision_code": null,
+      "verdict": "NOT_RUN",
+      "note": "Injection string is written into M2V2-19 by the browser journey; verification requires the answered assessment, so this is checked separately once A1 completes."
+    }
+  ]
+}

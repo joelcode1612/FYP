@@ -1,5 +1,5 @@
 import 'package:jaspr_test/jaspr_test.dart';
-import 'package:sitewise_jaspr_web/data/ai_execution_status.dart';
+import 'package:sitewise_jaspr_web/features/assessment/data/ai_execution_status.dart';
 
 void main() {
   test('an unevaluated worksheet does not become a zero-findings result', () {

@@ -4,13 +4,22 @@ import 'package:jaspr_riverpod/jaspr_riverpod.dart';
 import 'package:shared_logic/shared_logic.dart';
 
 import 'package:sitewise_jaspr_web/features/assessment/presentation/components/assessment_journey_stepper.dart';
+import 'package:sitewise_jaspr_web/features/assessment/presentation/components/customer_questionnaire_step5.dart';
+import 'package:sitewise_jaspr_web/features/assessment/presentation/components/m2_workflow_panel.dart';
+import 'package:sitewise_jaspr_web/features/assessment/presentation/components/bdj_objective_proposal_panel.dart';
+import 'package:sitewise_jaspr_web/features/assessment/presentation/components/project1_research_stage_panel.dart';
 import 'package:sitewise_jaspr_web/shared/presentation/components/dashboard_kit.dart' show SitewiseDialog;
 import 'package:sitewise_jaspr_web/shared/presentation/components/ui.dart';
 import 'package:sitewise_jaspr_web/core/di/app_locator.dart';
 import 'package:sitewise_jaspr_web/features/assessment/data/assessment_api.dart';
-import 'package:sitewise_jaspr_web/data/assessment_report.dart';
+import 'package:sitewise_jaspr_web/features/assessment/data/assessment_report.dart';
+import 'package:sitewise_jaspr_web/features/assessment/data/business_description.dart';
+import 'package:sitewise_jaspr_web/features/assessment/data/measurement_chart_preview.dart';
+import 'package:sitewise_jaspr_web/features/assessment/data/q01_synthetic_preview.dart';
+import 'package:sitewise_jaspr_web/features/assessment/data/synthetic_preview_gate.dart';
+import 'package:sitewise_jaspr_web/features/assessment/application/stage3_access.dart';
 import 'package:sitewise_jaspr_web/shared/presentation/layouts/app_layout.dart';
-import 'package:sitewise_jaspr_web/features/property_management/presentation/pages/assessment_report_view.dart';
+import 'package:sitewise_jaspr_web/features/assessment/presentation/pages/assessment_report_view.dart';
 
 /// The web decision-support workflow, in five persisted stages.
 ///
@@ -291,10 +300,14 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
   Future<List<String>>? _typesFuture;
   Future<ApiResult<EvidencePayload>>? _evidenceFuture;
 
-  /// Step 5's assembled report read. Loaded the first time the report
+  /// Step 5's assembled report read, loaded the first time the report
   /// checkpoint is opened, so browsing another stage never calls the report
   /// assembler. The endpoint is read-only: it advances nothing.
-  Future<ApiResult<AssessmentReportPayload>>? _reportFuture;
+  ///
+  /// The bundle carries the RP-13 business description read with it: the report
+  /// document cannot be assembled without section 02, and two independent
+  /// futures would let the document render once without it and again with it.
+  Future<_ReportBundle>? _reportFuture;
   Future<ApiResult<QuestionnairePreviewStatus>>? _previewFuture;
   String? _previewAssessmentId;
 
@@ -568,8 +581,22 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
 
   /// Step 5's report read, memoised per assessment so switching checkpoints
   /// back and forth does not re-assemble the document on every tap.
-  Future<ApiResult<AssessmentReportPayload>> _report(AssessmentRecord record) =>
-      _reportFuture ??= _api.report(record.assessmentId);
+  ///
+  /// The business description is read after the report, not in parallel: when
+  /// the report itself fails the description is not fetched at all, so a failed
+  /// page never issues a second request whose result it cannot use.
+  Future<_ReportBundle> _report(AssessmentRecord record) =>
+      _reportFuture ??= _loadReport(record);
+
+  Future<_ReportBundle> _loadReport(AssessmentRecord record) async {
+    final report = await _api.report(record.assessmentId);
+    if (!report.ok) return _ReportBundle(report, null);
+    final business = await _api.businessDescription(record.assessmentId);
+    // A failed description read leaves the section in its held state rather
+    // than failing the whole report; the failure is not silent, because the
+    // section then says no confirmed description could be read.
+    return _ReportBundle(report, business.ok ? business.value : null);
+  }
 
   // ------------------------------------------------------------------ writes
 
@@ -2120,7 +2147,7 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
           ..._savedPropertiesStep(record, property),
         if (selected.key == 'business_requirements')
           ..._preferencesStep(record, property),
-        if (selected.key == 'location_evidence')
+        if (selected.key == 'location_evidence') ...[
           Project1ResearchStagePanel(
             marketplaceAssessmentId: record.assessmentId,
             propertyId: record.propertyId,
@@ -2131,6 +2158,13 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
               }
             },
           ),
+          // Governed BDJ research-objective proposals for the current
+          // confirmation. Additive: the legacy stage panel above is unchanged,
+          // and this panel reads only the objective-proposal endpoints.
+          BdjObjectiveProposalPanel(
+            marketplaceAssessmentId: record.assessmentId,
+          ),
+        ],
         if (selected.key == 'ai_explanation')
           Project1ResearchStagePanel(
             marketplaceAssessmentId: record.assessmentId,
@@ -3908,7 +3942,7 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
           variant: 'secondary',
         ),
       ],
-      child: FutureBuilder<ApiResult<AssessmentReportPayload>>(
+      child: FutureBuilder<_ReportBundle>(
         future: _report(record),
         builder: (context, snapshot) {
           if (snapshot.connectionState != ConnectionState.done) {
@@ -3917,7 +3951,8 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
               Skeleton(variant: 'block', count: 3),
             ]);
           }
-          final result = snapshot.data;
+          final bundle = snapshot.data;
+          final result = bundle?.report;
           final payload = result?.ok == true ? result!.value : null;
           if (payload == null) {
             return section(classes: 'panel asw-inline', [
@@ -3945,6 +3980,31 @@ class _AssessmentWorkspaceState extends State<AssessmentWorkspacePage> {
             scope: _reportScope(record),
             objective: _reviewObjective(record),
             extraQuestions: const [],
+            // Development-only: the synthetic Q01 demonstration appears in this
+            // same report, in the questionnaire section beside R03. `null` in
+            // every production build, because the gate is a compile-time
+            // constant that defaults to false. It grants no admission — the
+            // section it renders stays HELD and non-reportable.
+            q01Preview: syntheticPreviewEnabled
+                ? Q01SyntheticPreview.tryFromFixture()
+                : null,
+            // Development-only: the real EE-01 measurement readback for R03.
+            // Same compile-time gate as the Q01 preview, and independently
+            // `null` when the fixture is not a held, non-disclosing payload.
+            //
+            // Passing it does not draw it. The report binds a readback to the
+            // assessment named in its provenance, and this fixture belongs to
+            // the FC4-D synthetic assessment — so on a workspace assessment it
+            // is dropped and R03 keeps its held state. There is no live
+            // campaign→assessment binding to read here yet; see
+            // RT_E2E_01_SOURCE_TRACEABILITY.md.
+            measurementChart: syntheticPreviewEnabled
+                ? MeasurementChartPreview.tryFromFixture()
+                : null,
+            // RP-13: the confirmed business description this assessment is
+            // bound to. `null` when the read failed, which leaves section 02 in
+            // its declared/held state rather than inventing a description.
+            businessDescription: bundle?.business,
             backLabel: 'Back to assessment',
             onBack: _closeReport,
           );
@@ -5080,4 +5140,18 @@ final class _ReviewCandidate {
     required this.strengths,
     required this.evidence,
   });
+}
+
+/// The report document and the RP-13 business description read together.
+///
+/// They are one future because they are one document: section 02 is part of the
+/// report, so a page that rendered the report without it and then again with it
+/// would flicker between two different documents. [business] is null when the
+/// description read failed — the section then renders its held state, and the
+/// failure never masks a report that did assemble.
+final class _ReportBundle {
+  final ApiResult<AssessmentReportPayload> report;
+  final BusinessDescription? business;
+
+  const _ReportBundle(this.report, this.business);
 }

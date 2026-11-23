@@ -2,8 +2,8 @@
 // them. Used to verify a navigation edit without a signed-in browser session.
 //
 //   dart run tool/nav_labels.dart
-import 'package:sitewise_jaspr_web/data/navigation.dart';
-import 'package:sitewise_jaspr_web/data/site_content.dart';
+import 'package:sitewise_jaspr_web/core/routing/navigation.dart';
+import 'package:sitewise_jaspr_web/core/config/site_content.dart';
 
 void main() {
   for (final role in [AppRole.entrepreneur, AppRole.admin]) {

@@ -1,0 +1,52 @@
+{
+  "task_id": "PROJECT1-BDJ-LIVE-UI-INTEGRATION-V1.4",
+  "generated_at": "2026-11-23T09:52:00+08:00",
+  "verdict": "BLOCKED",
+  "first_failing_checkpoint": "BDJ-P01",
+  "provider": {
+    "adapter": "tokenharbor",
+    "adapter_location": "backend/src/sitewise/project1/provider.py",
+    "route_composition": "backend/src/sitewise/api/v1/project1_objective_proposals.py:570",
+    "endpoint": "https://tokenharbor.ai/v1/chat/completions",
+    "model": "deepseek-v4.1-flash-1017",
+    "tokenharbor_enabled": false,
+    "api_key_present": true,
+    "api_key_length": 73,
+    "api_key_printed": false,
+    "api_key_committed": false
+  },
+  "dispatch": {
+    "attempted": false,
+    "confirmed": false,
+    "http_requests_made": 0,
+    "reason": "The assessment-bound cloud-disclosure authorization required by BDJ-P01 is not composed on the objective-proposal route, so no dispatch was attempted. Enabling TOKENHARBOR_ENABLED without that authorization would have bypassed a governance control."
+  },
+  "authorization": {
+    "mechanism_exists": true,
+    "mechanism_files": [
+      "backend/src/sitewise/project1/disclosure.py",
+      "backend/src/sitewise/project1/synthetic_trial_registry.py",
+      "backend/src/sitewise/services/bdj_synthetic_execution.py"
+    ],
+    "registered_disclosure_class": "RegisteredSyntheticBdjDisclosure",
+    "registry_class": "PrivateSyntheticTrialRegistry",
+    "wired_into_objective_route": false,
+    "objective_route_uses": "ObjectiveSimulationDisclosure.for_tokenharbour",
+    "consequence": "RegisteredSyntheticBdjDisclosure requires a server-side registry record for the exact run_id carrying owner_id, assessment_id, revision, confirmation_id, source_fingerprint, endpoint, model, rules_sha256, prompt_fingerprint, request_sha256, decision=APPROVED and max_attempts=1. The objective-proposal route performs none of those checks, so a live dispatch from it would disclose entrepreneur source to a cloud model on a source-binding check alone — which the directive forbids."
+  },
+  "historical_records": {
+    "touched": false,
+    "note": "No SIMULATED proposal, attempt, receipt or provenance row was modified. The three historical proposals on 053b3768 remain SIMULATED / APPROVED with their original source refs."
+  },
+  "regression": {
+    "tests_project1": {
+      "tests": 1526,
+      "failures": 25,
+      "errors": 0,
+      "skipped": 3,
+      "baseline_match": true,
+      "note": "25 failures are the documented pre-existing set; unchanged by this work."
+    },
+    "objective_route_tests": {"tests": 25, "failures": 0}
+  }
+}

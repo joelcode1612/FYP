@@ -8,7 +8,12 @@ from sqlmodel import Session
 from sitewise.project1.contracts import WorkflowHeld
 
 
-_ALLOWED_STAGES = {'BDJ', 'QJ', 'QG'}
+#: Stages that may reserve a new attempt. ``QJ`` is retained because historical
+#: rows carry it and the constraint still admits it, but it is not part of the
+#: active workflow and no new QJ attempt is expected. ``EXPLANATION`` was added
+#: with migration ``20261122_01``; reserving it still requires its own disclosure
+#: authorization — a registered stage is not permission to call a provider.
+_ALLOWED_STAGES = {'BDJ', 'QJ', 'QG', 'EXPLANATION'}
 _MAX_ATTEMPT_SLOT = 3
 _MAX_ATTEMPTS_PER_RUN = 6
 

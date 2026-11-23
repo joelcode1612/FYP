@@ -47,7 +47,11 @@
 
 /* Clicking a row opens that assessment's report, so the strip that used to sit
    under the list (with its "View report" link) is gone. */
-.swal-page { max-width: 1180px; }
+/* Matches the workspace measure (`--content-max`, 1360px) instead of a
+   hardcoded 1180px, so the assessment list lines up with Compare and the nav
+   pill rather than sitting 180px narrower. The fallback keeps this stylesheet
+   correct if it is ever loaded without the main token sheet. */
+.swal-page { max-width: var(--content-max, 1360px); }
 .swal-hint { margin: 0; font-size: 13px; color: var(--swal-muted); }
 .swal-row[disabled] { cursor: not-allowed; opacity: 0.72; }
 .swal-row[disabled]:hover { border-color: var(--swal-border); }

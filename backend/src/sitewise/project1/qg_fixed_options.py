@@ -64,11 +64,20 @@ def require_verified_respondent_path() -> None:
 
 
 def validate_fixed_measurement(raw: dict, *, supported_formats: frozenset[str],
-                               period_required: bool) -> FixedOptionMeasurement:
+                               period_required: bool,
+                               require_contiguous: bool = False,
+                               require_label_boundaries: bool = False
+                               ) -> FixedOptionMeasurement:
     """Validate structure using caller-supplied, server-authoritative policy.
 
     Source and semantic review remain separate gates; neither the capability set
     nor the need for a reference period may come from model output.
+
+    ``require_contiguous`` and ``require_label_boundaries`` default to ``False``
+    so historical callers keep their exact behaviour. The versioned adapter turns
+    both on, because a band set that silently leaves a gap — or a label that
+    names an amount the boundary does not — is a measurement the respondent
+    cannot answer as written.
     """
     if not isinstance(raw, dict):
         raise WorkflowHeld('QG_FIXED_OPTION_SCHEMA_INVALID')
@@ -114,10 +123,62 @@ def validate_fixed_measurement(raw: dict, *, supported_formats: frozenset[str],
                 old_hi, old_inclusive = previous
                 if lo < old_hi or (lo == old_hi and old_inclusive and option.lower_inclusive):
                     raise WorkflowHeld('QG_RANGE_OVERLAP')
+                if require_contiguous:
+                    # An exhaustive band set must cover the interval without a
+                    # hole and without a double-covered boundary: the shared
+                    # edge must be inclusive on exactly one side.
+                    if lo != old_hi or old_inclusive == option.lower_inclusive:
+                        raise WorkflowHeld('QG_RANGE_GAP_OR_DOUBLE_COVERED_BOUNDARY')
             previous = (hi, option.upper_inclusive)
+        if require_label_boundaries:
+            for option in spec.options:
+                amounts = {Decimal(m.group(1))
+                           for m in re.finditer(r'RM\s?(\d+(?:\.\d+)?)',
+                                                option.label, re.I)}
+                if not amounts:
+                    # A worded label ("less than RM10" is still caught above;
+                    # "low" is not an amount) is not a boundary claim.
+                    continue
+                allowed = {value for value in (option.lower, option.upper)
+                           if value is not None}
+                if not amounts <= allowed:
+                    raise WorkflowHeld('QG_RANGE_LABEL_BOUNDARY_MISMATCH')
     elif any(o.lower is not None or o.upper is not None for o in spec.options):
         raise WorkflowHeld('QG_RANGE_METADATA_UNEXPECTED')
     return spec
+
+
+def validate_response(spec: FixedOptionMeasurement, selected) -> list[str]:
+    """Validate one respondent selection against an admitted specification.
+
+    Specification validation cannot decide this: "NONE alongside another option"
+    is a property of a *selection*, not of the option set, and rejecting every
+    multi-select specification that carries an exclusive code would also reject
+    the legitimate "select up to three features, or None" shape. So the
+    exclusivity rule lives here, where a selection actually exists.
+
+    Returns the selection as a list on success. Raises on any violation; the
+    caller must not persist an answer that fails here.
+    """
+    codes = [o.code for o in spec.options]
+    if not isinstance(selected, (list, tuple)) or not selected:
+        raise WorkflowHeld('QG_RESPONSE_EMPTY')
+    chosen = list(selected)
+    if any(not isinstance(code, str) for code in chosen):
+        raise WorkflowHeld('QG_RESPONSE_CODE_UNKNOWN')
+    unknown = [code for code in chosen if code not in codes]
+    if unknown:
+        raise WorkflowHeld('QG_RESPONSE_CODE_UNKNOWN')
+    if len(set(chosen)) != len(chosen):
+        raise WorkflowHeld('QG_RESPONSE_DUPLICATE_CODE')
+    if not (spec.min_selections <= len(chosen) <= spec.max_selections):
+        raise WorkflowHeld('QG_RESPONSE_CARDINALITY')
+    exclusive = set(chosen) & set(spec.exclusive_codes)
+    if exclusive and len(chosen) > 1:
+        # "None of these" plus another option is a contradiction, not a
+        # preference, so it is refused rather than stored and interpreted later.
+        raise WorkflowHeld('QG_RESPONSE_EXCLUSIVE_VIOLATED')
+    return chosen
 
 
 def validate_fixed_candidate(raw: dict, facts: ConfirmedFacts, *,

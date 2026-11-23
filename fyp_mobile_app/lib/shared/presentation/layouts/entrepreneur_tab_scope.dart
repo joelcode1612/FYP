@@ -14,7 +14,10 @@ class EntrepreneurTabScope extends InheritedWidget {
   static const Set<String> tabRoutes = <String>{
     '/entrepreneur',
     '/entrepreneur/recommendations',
-    '/entrepreneur/assess',
+    // Third tab. The local assessment-draft hub (`/entrepreneur/assess`) is a
+    // drill-in route now, so it is deliberately absent: a tab route that no
+    // destination carries would make `onTabSelected` a silent no-op.
+    '/entrepreneur/customer-assessments',
     '/entrepreneur/favourites',
     '/entrepreneur/profile',
   };

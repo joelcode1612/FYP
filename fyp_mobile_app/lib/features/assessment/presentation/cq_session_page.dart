@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_logic/shared_logic.dart';
+import 'package:fyp/core/config/cq_development_access.dart';
 import 'package:fyp/features/assessment/presentation/viewmodels/cq_view_model.dart';
 import 'package:fyp/features/assessment/presentation/widgets/cq_ui_primitives.dart';
 import 'package:fyp/features/assessment/presentation/widgets/question_option_tile.dart';
@@ -163,7 +165,7 @@ class _CqSessionPageState extends ConsumerState<CqSessionPage> {
               children: [
                 if (s.data['lifecycle_status'] == 'COMPLETED')
                   const Text(
-                    'COMPLETED · stored submission status SUBMITTED',
+                    'You have completed this questionnaire.',
                     key: Key('cq-completed'),
                   ),
                 const Text(
@@ -175,12 +177,19 @@ class _CqSessionPageState extends ConsumerState<CqSessionPage> {
                     fontWeight: FontWeight.w800,
                   ),
                 ),
+                const SizedBox(height: 6),
+                const Text('Your answers have been submitted.'),
                 const SizedBox(height: 14),
-                const CqMetaText(text: 'Receipt identifier'),
+                const CqMetaText(text: 'Reference'),
                 SelectableText('${receipt['receipt_id']}'),
-                const SizedBox(height: 12),
-                const CqMetaText(text: 'Verification hash'),
-                SelectableText('${receipt['receipt_hash']}'),
+                // The verification hash is an integrity value for staff and
+                // diagnostics, not something a respondent can use. It stays in
+                // the payload and is only shown when development access is on.
+                if (CqDevelopmentAccess.enabled) ...[
+                  const SizedBox(height: 12),
+                  const CqMetaText(text: 'Verification hash (development)'),
+                  SelectableText('${receipt['receipt_hash']}'),
+                ],
               ],
             ),
           ),
@@ -221,13 +230,11 @@ class _CqSessionPageState extends ConsumerState<CqSessionPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Text(
-                  (s.manifest['consent_text'] as Map)[locale] as String,
-                  style: const TextStyle(
-                    color: CqUiColors.ink,
-                    fontSize: 15,
-                    height: 1.55,
-                  ),
+                _CqConsentDisclosure(
+                  session: s,
+                  locale: locale,
+                  fallbackText: (s.manifest['consent_text'] as Map)[locale]
+                      as String,
                 ),
                 const SizedBox(height: 24),
                 CqFullWidthAction(
@@ -559,5 +566,97 @@ class _CqSessionPageState extends ConsumerState<CqSessionPage> {
         ? []
         : [value];
     return '${row['state']}: ${codes.map((c) => labels[c] ?? c).join(', ')}';
+  }
+}
+
+/// Renders the consent disclosure carried by the session's `consent_notice`.
+///
+/// The backend derives that notice from the hash-pinned CUST03 contract, so this
+/// widget adds no wording of its own: it prints the disclosure statements the
+/// contract entails and marks any disclosure still awaiting an Owner decision.
+/// A synthetic run carries no human disclosures, so it falls back to the
+/// manifest's own consent text, which is the accurate statement for that scope.
+class _CqConsentDisclosure extends StatelessWidget {
+  const _CqConsentDisclosure({
+    required this.session,
+    required this.locale,
+    required this.fallbackText,
+  });
+
+  final CqSession session;
+  final String locale;
+  final String fallbackText;
+
+  static const _headings = <String, String>{
+    'purpose': 'Why this research is being done',
+    'voluntariness': 'Taking part is voluntary',
+    'what_is_collected': 'What is recorded',
+    'report_use': 'How responses are used in reports',
+    'confidentiality': 'How confidentiality is protected',
+    'withdrawal_and_retention': 'Withdrawal and data handling',
+  };
+
+  @override
+  Widget build(BuildContext context) {
+    final notice = session.data['consent_notice'];
+    final disclosures = notice is Map ? notice['disclosures'] : null;
+    final approved = notice is Map && notice['approved_for_scope'] == true;
+
+    if (disclosures is! List || disclosures.isEmpty) {
+      // No human disclosures apply (synthetic scope) or the backend is older than
+      // this build. Either way the manifest text is the honest thing to show.
+      return Text(
+        fallbackText,
+        style: const TextStyle(
+          color: CqUiColors.ink,
+          fontSize: 15,
+          height: 1.55,
+        ),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (!approved)
+          const Padding(
+            padding: EdgeInsets.only(bottom: 16),
+            child: CqNotice(
+              message:
+                  'This notice is pending privacy approval and is shown for review only.',
+              tone: CqNoticeTone.warning,
+              messageKey: Key('cq-consent-not-approved'),
+            ),
+          ),
+        for (final entry in disclosures)
+          if (entry is Map && (entry['statement'] as String?) != null)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    _headings[entry['id']] ?? '${entry['id']}',
+                    style: const TextStyle(
+                      color: CqUiColors.navy,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                      height: 1.4,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    entry['statement'] as String,
+                    style: const TextStyle(
+                      color: CqUiColors.ink,
+                      fontSize: 15,
+                      height: 1.55,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+      ],
+    );
   }
 }

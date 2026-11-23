@@ -19,16 +19,26 @@ abstract final class CqUiColors {
 }
 
 class CqPageFrame extends StatelessWidget {
-  const CqPageFrame({super.key, required this.children, this.controller});
+  const CqPageFrame({
+    super.key,
+    required this.children,
+    this.controller,
+    this.onRefresh,
+  });
 
   final List<Widget> children;
   final ScrollController? controller;
 
+  /// When supplied, the page gains pull-to-refresh instead of a Refresh button.
+  /// The list is forced scrollable so a short page (a single notice, or the
+  /// empty state) can still be pulled — otherwise the gesture is unreachable.
+  final Future<void> Function()? onRefresh;
+
   @override
-  Widget build(BuildContext context) => ColoredBox(
-    color: CqUiColors.page,
-    child: ListView(
+  Widget build(BuildContext context) {
+    final list = ListView(
       controller: controller,
+      physics: onRefresh == null ? null : const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
       children: [
         Center(
@@ -47,8 +57,20 @@ class CqPageFrame extends StatelessWidget {
           ),
         ),
       ],
-    ),
-  );
+    );
+    final refresh = onRefresh;
+    return ColoredBox(
+      color: CqUiColors.page,
+      child: refresh == null
+          ? list
+          : RefreshIndicator(
+              color: CqUiColors.blue,
+              backgroundColor: Colors.white,
+              onRefresh: refresh,
+              child: list,
+            ),
+    );
+  }
 }
 
 class CqHero extends StatelessWidget {

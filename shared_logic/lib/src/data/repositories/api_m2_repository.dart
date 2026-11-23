@@ -388,6 +388,31 @@ final class ApiM2Repository {
     );
   }
 
+  /// Deterministic draft concept preview for the current saved revision.
+  ///
+  /// Read-only by contract. The response must identify itself as a draft and
+  /// must deny both side effects; a server that reported otherwise would be
+  /// contradicting the endpoint's purpose, so the client refuses it rather than
+  /// rendering a preview that might have written a confirmation.
+  Future<Map<String, dynamic>> conceptPreview(String id, int revision) async {
+    _id(id);
+    final body = await client.get(
+      '/api/v1/m2/assessments/$id/concept-preview?expected_revision=$revision',
+    );
+    if (body['status'] != 'DRAFT_PREVIEW') {
+      throw const FormatException(
+        'The concept preview was not identified as a draft preview.',
+      );
+    }
+    if (body['creates_confirmation'] != false ||
+        body['creates_business_context'] != false) {
+      throw const FormatException(
+        'The concept preview reported a side effect it must never have.',
+      );
+    }
+    return body;
+  }
+
   Future<M2Draft> create(String instrumentId) async {
     _id(instrumentId);
     final a = await client.post('/api/v1/m2/assessments', {

@@ -1,6 +1,6 @@
 import 'package:jaspr/dom.dart';
 import 'package:jaspr_test/jaspr_test.dart';
-import 'package:sitewise_jaspr_web/pages/entrepreneur/activity_history_page.dart';
+import 'package:sitewise_jaspr_web/features/assessment/presentation/pages/activity_history_page.dart';
 
 /// These tests cover the read-only projection surface only: chronology,
 /// de-duplication, failed-outcome retention, pagination and the difference

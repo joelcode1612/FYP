@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:shared_logic/shared_logic.dart';
-import '../../../application/services/service_locator.dart';
-import '../viewmodel/cq_view_model.dart';
+import '../../../../core/di/service_locator.dart';
+import 'viewmodels/cq_view_model.dart';
 import 'questionnaire_screen.dart';
 
 /// Uses the existing questionnaire and VM with an explicit authorized binding.

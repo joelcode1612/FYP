@@ -1,5 +1,5 @@
 import 'package:jaspr_test/jaspr_test.dart';
-import 'package:sitewise_jaspr_web/components/customer_questionnaire_step5.dart';
+import 'package:sitewise_jaspr_web/features/assessment/presentation/components/customer_questionnaire_step5.dart';
 
 void main() {
   testComponents('missing assessment data never loads sample or publish controls', (tester) async {

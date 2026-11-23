@@ -1,0 +1,41 @@
+{
+  "contract_version": "n01-ui-reachability/1",
+  "generated_at": "2026-11-23T00:42:00Z",
+  "question": "Where are the 'two most suggested and one suggested' proposals and the Approve/Reject buttons?",
+  "answer": {
+    "widget": "BdjObjectiveProposalPanel",
+    "mounted_at": "fyp_jaspr_web/lib/features/assessment/presentation/pages/assessment_workspace_page.dart:2144",
+    "mounted_under_step": "location_evidence (displayed as 'Business review and research goals')",
+    "renders_below": "Project1ResearchStagePanel(stageNumber: 3), so it sits below the stage panel and is out of frame in a 1100px-high viewport",
+    "badges": {
+      "MOST_SUGGESTED": "bdj_objective_proposal_panel.dart:442-443 -> 'Most suggested'",
+      "SUGGESTED": "bdj_objective_proposal_panel.dart:444 -> 'Suggested'"
+    },
+    "buttons": {
+      "Approve": "bdj_objective_proposal_panel.dart:540",
+      "Reject": "bdj_objective_proposal_panel.dart:549"
+    }
+  },
+  "observed_proposals": {
+    "source": "m2_bdj_objective_proposals, actor GUC set to the owner (RLS otherwise returns 0 rows)",
+    "rows": [
+      {"proposal_id": "377ec98c", "assessment_id": "053b3768-145b-4d4a-a880-e98174adcd94", "recommendation_status": "MOST_SUGGESTED", "validation_status": "VALID", "review_state": "APPROVED", "basis": "M2V2-11"},
+      {"proposal_id": "d20808b4", "assessment_id": "053b3768-145b-4d4a-a880-e98174adcd94", "recommendation_status": "MOST_SUGGESTED", "validation_status": "VALID", "review_state": "APPROVED", "basis": "M2V2-01"},
+      {"proposal_id": "662b8518", "assessment_id": "053b3768-145b-4d4a-a880-e98174adcd94", "recommendation_status": "SUGGESTED", "validation_status": "VALID", "review_state": "APPROVED", "basis": "concept interest"}
+    ],
+    "conclusion": "2 MOST_SUGGESTED + 1 SUGGESTED on assessment 053b3768, all already APPROVED. A separate V1 assessment (e0124bfd) contains a REJECTED proposal, so both buttons have been exercised."
+  },
+  "why_not_visible_now": [
+    "The reachable assessment in the UI is marketplace assessment 37bf879a, which maps via m2_assessment_links to M2 assessment 032d3dde-547f-49a6-9e0f-58fbc5f1a48f.",
+    "032d3dde is a V1 assessment (the page renders M2V1-09/10/11 chips) and has ZERO objective proposals, so the panel correctly renders its empty state: 'No objective proposals are persisted for this confirmation.'",
+    "Zero proposals means no badges and no Approve/Reject buttons - there is nothing to decide."
+  ],
+  "integration_gap": {
+    "id": "N01-GAP-01",
+    "severity": "HIGH",
+    "statement": "The assessment that produced the governed BDJ proposals (053b3768, M2V2) has no row in m2_assessment_links, so it is unreachable through normal navigation. The only linked assessment (37bf879a -> 032d3dde) is a V1 assessment with no proposals.",
+    "evidence": "m2_assessment_links contains exactly 1 row: marketplace 37bf879a -> m2 032d3dde. No link references 053b3768.",
+    "consequence": "Browser-driven verification of the proposal panel with populated proposals (and of Approve/Reject on live data) is BLOCKED. Backend verification through the authenticated API route remains available and is reported separately as BACKEND_INTEGRATION_VERIFIED.",
+    "not_a_defect_in": "The panel widget itself - it renders correctly for both the populated and empty cases; the defect is the missing link row."
+  }
+}

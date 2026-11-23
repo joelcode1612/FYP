@@ -116,10 +116,30 @@ def test_changed_inputs_regenerate(client, cleanup_users):
     assert third.json()["reused_existing_batch"] is False
 
 
-def test_training_gate_refuses_and_writes_no_artifact():
-    """The label inventory on this deployment cannot support training."""
+def test_training_gate_refuses_and_writes_no_artifact(tmp_path):
+    """The label inventory on this deployment cannot support training.
+
+    The trainer is a subprocess, so its output directory is redirected with
+    ``SITEWISE_ML_EVAL_DIR``. The tracked historical artifact under
+    ``ml_reference/recommender_eval/`` must come out byte-identical: a test run
+    against disposable data must never rewrite reference numbers.
+    """
+    import hashlib
+    import json
+    import os
     import subprocess
     import sys
+
+    tracked_report = EVAL_DIR / "model_selection_report.json"
+    before = (
+        hashlib.sha256(tracked_report.read_bytes()).hexdigest()
+        if tracked_report.is_file()
+        else None
+    )
+
+    eval_dir = tmp_path / "recommender_eval"
+    env = dict(os.environ)
+    env["SITEWISE_ML_EVAL_DIR"] = str(eval_dir)
 
     result = subprocess.run(
         [
@@ -130,21 +150,49 @@ def test_training_gate_refuses_and_writes_no_artifact():
         text=True,
         timeout=300,
         cwd=str(BACKEND_DIR),
+        env=env,
     )
     assert result.returncode == 2, result.stdout + result.stderr
     assert "REFUSING to train" in result.stderr
 
-    report_path = EVAL_DIR / "model_selection_report.json"
-    assert report_path.is_file()
-    import json
-
+    report_path = eval_dir / "model_selection_report.json"
+    assert report_path.is_file(), "the run must write its report to the redirected directory"
     report = json.loads(report_path.read_text(encoding="utf-8"))
     assert report["decision"] == "refuse_to_train"
     assert report["blockers"], "the report must name the exact missing data"
     assert any("positives" in b for b in report["blockers"])
 
-    # No trained artifact may exist anywhere in the ml package.
-    artifacts = [
-        p for p in (BACKEND_DIR / "src" / "sitewise" / "ml").glob("recommender*.joblib")
-    ]
-    assert artifacts == [], "no trained recommender may be fabricated"
+    after = (
+        hashlib.sha256(tracked_report.read_bytes()).hexdigest()
+        if tracked_report.is_file()
+        else None
+    )
+    assert after == before, (
+        "the tracked reference artifact was rewritten by a disposable test run: "
+        f"{tracked_report}"
+    )
+
+    # No NEW trained artifact may be fabricated. ``recommender_v3.joblib`` is a
+    # legitimate committed artifact (7a5c07b, 47-feature PU / Recommender V3),
+    # so the check is "on-disk set == git-tracked set", not "no joblib exists".
+    # The old blanket glob started failing ~18h after it was written, when that
+    # artifact was committed, and would have tempted someone to delete a real
+    # model to get green.
+    ml_dir = BACKEND_DIR / "src" / "sitewise" / "ml"
+    on_disk = sorted(p.name for p in ml_dir.glob("recommender*.joblib"))
+    tracked = sorted(
+        name
+        for name in subprocess.run(
+            ["git", "ls-files", "--", str(ml_dir.relative_to(BACKEND_DIR))],
+            cwd=str(BACKEND_DIR),
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout.splitlines()
+        if name.rsplit("/", 1)[-1].startswith("recommender") and name.endswith(".joblib")
+    )
+    tracked = sorted(path.rsplit("/", 1)[-1] for path in tracked)
+    assert on_disk == tracked, (
+        "the trainer fabricated an artifact that git does not track: "
+        f"on_disk={on_disk} tracked={tracked}"
+    )

@@ -25,6 +25,21 @@ class SqlBusinessContextUnit:
     def resolve_inputs(self, selection, actor): return self.resolver.resolve(selection, actor)
     def commit(self): self.session.commit()
     def rollback(self): self.session.rollback()
+    def ensure_build(self, confirmation_id, owner_id, assessment_id, revision):
+        """Create the build row for a confirmation, idempotently.
+
+        Nothing else in the codebase inserts into this table: `read_build`
+        selects it and `record_build` only updates it, so first construction
+        failed for every environment. The insert carries only the identities the
+        caller has already authorised (assessment ownership + revision checks in
+        `_select`); it never fabricates confirmation evidence.
+        """
+        self.session.execute(insert(builds).values(
+            confirmation_id=confirmation_id, assessment_id=assessment_id,
+            owner_user_id=owner_id, assessment_revision=revision,
+            status='PENDING', attempt_count=0).on_conflict_do_nothing(
+            index_elements=[builds.c.confirmation_id]))
+
     def read_build(self, confirmation_id, owner_id):
         row = self.session.execute(select(builds).join(assessments,
             builds.c.assessment_id == assessments.c.id).where(and_(
@@ -39,6 +54,27 @@ class SqlBusinessContextUnit:
                 contexts.c.owner_user_id == owner_id,
                 assessments.c.owner_user_id == owner_id))).mappings().first()
         return dict(row) if row else None
+    def latest_context_id(self, assessment_id, owner_id):
+        """Newest persisted context for one owner-scoped M2 assessment.
+
+        Read-only projection used by the report, which must show the *current*
+        confirmed description rather than a caller-supplied id it could be
+        tricked into naming. Ordering is by the assessment revision the packet
+        was built against, then by creation time, so a rebuild of the same
+        revision does not outrank a later confirmed revision. ``created_at`` is
+        nullable on historical rows, hence ``nullslast``: an undated row must
+        never displace a dated one of the same revision.
+        """
+        return self.session.execute(select(contexts.c.context_id).join(assessments,
+            contexts.c.assessment_id == assessments.c.id).where(and_(
+                contexts.c.assessment_id == assessment_id,
+                contexts.c.owner_user_id == owner_id,
+                assessments.c.owner_user_id == owner_id,
+                contexts.c.lifecycle_status == 'PERSISTED',
+            )).order_by(
+                contexts.c.assessment_revision.desc(),
+                contexts.c.created_at.desc().nullslast(),
+            ).limit(1)).scalar_one_or_none()
     def put_context(self, row):
         saved = self.session.execute(insert(contexts).values(**row)
             .on_conflict_do_nothing(index_elements=[contexts.c.context_id])

@@ -129,7 +129,17 @@ String? providerTabFromResult(Object? result) =>
 /// Bottom-navigation destinations per role.
 ///
 /// The entrepreneur workspace follows the consolidated five-tab model:
-/// **Home / Recommendations / Assess / Favourites / Profile**.
+/// **Home / Recommendations / Surveys / Favourites / Profile**.
+///
+/// The third tab is the **questionnaire invitations** list
+/// (`/entrepreneur/customer-assessments`), labelled "Surveys" so it fits the
+/// dock without ellipsising. It is not the local assessment-draft hub.
+/// A published customer questionnaire is the thing an entrepreneur is asked to
+/// answer, so it earns the top-level slot; the Option A draft hub
+/// (`/entrepreneur/assess`) stays a registered drill-in route reached from the
+/// Home quick actions and the dashboard's assessment card. Both routes are
+/// kept, but only the invitation list is a destination — one tab cannot open
+/// two screens.
 ///
 /// The second tab used to be "Listing" (the Explore browser). Discovery is now
 /// one destination — Recommendations — because the recommendation search
@@ -167,9 +177,12 @@ List<MobileDestination> mobileDestinationsFor(AppRole role) {
           label: 'Recommendations',
         ),
         MobileDestination(
-          route: '/entrepreneur/assess',
+          route: '/entrepreneur/customer-assessments',
           icon: Icons.assignment_outlined,
-          label: 'Assess',
+          // Short on purpose: the 5-slot dock ellipsises past ~9 characters on
+          // a 411dp screen, and "Questionnaire" rendered as "Questionna…".
+          // The page heading still says "Questionnaire invitations".
+          label: 'Surveys',
         ),
         MobileDestination(
           route: '/entrepreneur/favourites',

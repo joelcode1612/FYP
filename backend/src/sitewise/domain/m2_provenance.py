@@ -5,7 +5,16 @@ from uuid import UUID
 from sitewise.core.exceptions import ConflictError
 
 LEGACY_SNAPSHOT_VERSION = 'm2-confirmation/2'
-SNAPSHOT_VERSION = 'm2-confirmation/3'
+#: Declaration-only confirmation without an external AI-processing decision.
+DECLARATION_SNAPSHOT_V3 = 'm2-confirmation/3'
+#: Adds the ``ai_processing`` block: an explicit, versioned owner decision about
+#: sending these declarations to a cloud model. It grants nothing else, and a
+#: v3 snapshot is never read as though it contained that decision.
+SNAPSHOT_VERSION = 'm2-confirmation/4'
+#: Every version that is a declaration-only confirmation. Historical rows keep
+#: their own label, so each one is pinned against the contract it was written
+#: under rather than being re-versioned.
+DECLARATION_SNAPSHOT_VERSIONS = (DECLARATION_SNAPSHOT_V3, SNAPSHOT_VERSION)
 
 
 class M2ConfirmationConflict(ConflictError):
@@ -37,11 +46,16 @@ def confirmation_pins(rule_version, evaluation, review, findings, items):
         'item_definition_hashes':{str(i['id']):_digest({k:i[k] for k in item_keys}) for i in items}}
 
 
-def declaration_pins(review, items):
-    """A saved declaration review, without claiming any BDJ execution."""
+def declaration_pins(review, items, contract=SNAPSHOT_VERSION):
+    """A saved declaration review, without claiming any BDJ execution.
+
+    ``contract`` is the version the snapshot itself carries. Pinning a
+    historical v3 row against v4 would report every existing confirmation as
+    unpinned, so the caller passes the snapshot's own label.
+    """
     keys=('id','instrument_id','item_key','question_text','requiredness','answer_kind',
           'option_values','allowed_states','lifecycle','sort_order')
-    return {'snapshot_contract_version':SNAPSHOT_VERSION,
+    return {'snapshot_contract_version':contract,
             'confirmation_scope':'M2_DECLARATIONS_ONLY',
             'review_event_id':str(review['id']),
             'review_event_hash':_digest({k:review[k] for k in (
@@ -51,12 +65,12 @@ def declaration_pins(review, items):
 
 def pins_match(snapshot, evaluation, review, findings, items):
     version = snapshot.get('snapshot_contract_version')
-    if version == SNAPSHOT_VERSION:
+    if version in DECLARATION_SNAPSHOT_VERSIONS:
         if (review is None or snapshot.get('unresolved_candidate_findings') != [] or
                 snapshot.get('finding_decision_event_refs') != {} or
                 any(k in snapshot for k in ('bdj_evaluation_id','bdj_rule_version','finding_hashes'))):
             return False
-        expected = declaration_pins(review, items)
+        expected = declaration_pins(review, items, version)
         return all(snapshot.get(key) == value for key,value in expected.items())
     if evaluation is None or review is None or version != LEGACY_SNAPSHOT_VERSION:
         return False

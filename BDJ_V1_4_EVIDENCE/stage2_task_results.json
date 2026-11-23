@@ -1,0 +1,149 @@
+{
+  "contract_version": "stage2-tasks-evidence/1",
+  "head": "33f20050c8d06282561c3d755d4b616574a88d79",
+  "task1_version_aware_invalidation": {
+    "verdict": "PARTIAL",
+    "unit_tests": "tests/m2_bcb/test_uncertainty_version_invalidation.py (17 passed)",
+    "live": {
+      "positive_path_live": true,
+      "m2v2_unbound_never_invalidated": true,
+      "m2v2_bound_still_current": true,
+      "supersession_live_exercisable": false,
+      "supersession_blocker": "no runtime role holds INSERT on m2_research_revisions; only postgres and pg_write_all_data do, and neither is an application login. revise_objective() therefore cannot create a successor version in this cluster.",
+      "supersession_covered_by": "tests/m2_bcb/test_uncertainty_version_invalidation.py"
+    },
+    "live_contexts": {
+      "fa3cb714": {
+        "classifier": "UNBOUND",
+        "compatible": true,
+        "current": true
+      },
+      "50e1761a": {
+        "classifier": "CURRENT",
+        "compatible": true,
+        "current": true
+      },
+      "80dbc244": {
+        "classifier": "CURRENT",
+        "compatible": true,
+        "current": true
+      }
+    },
+    "no_write_verified": true
+  },
+  "task2_reproduction_diagnostics": {
+    "verdict": "PASS",
+    "tests": "tests/m2_bcb/test_reproduction_diagnostics.py (7 passed)",
+    "codes": [
+      "CONTEXT_ROW_MISSING",
+      "CONTRACT_UNREGISTERED",
+      "PACKET_HASH_MISMATCH",
+      "CONFIRMED_UNCERTAINTY_SUPERSEDED",
+      "CONFIRMED_UNCERTAINTY_ABSENT",
+      "<ExceptionClass>[:<stable code>]"
+    ],
+    "leaks_source_data": false
+  },
+  "task3_new_synthetic_m2v2": {
+    "verdict": "PASS",
+    "assessment_id": "4fc0abc2-ba52-4e41-aaa3-cf14fc822b37",
+    "answers": 19,
+    "revision": 19,
+    "confirmation_id": "337bf19e-326f-4643-9c06-d28b7a4cc1fe",
+    "snapshot_digest": "e3453ad57a568af217b3d4e163cbbe5c90dbdbe92106e90510ab9dc030caf5c6",
+    "context_id": "6c719944-1b7b-59ea-be32-275a0f66c937",
+    "packet_hash": "858c40d9ad07bec5bf2172f6682169cb798a5ab38fc2061b84c8f65f9609a2ba",
+    "reproducibility": {
+      "step": "reproducibility",
+      "rebuilt_hashes": [
+        "858c40d9ad07bec5bf2172f6682169cb798a5ab38fc2061b84c8f65f9609a2ba",
+        "858c40d9ad07bec5bf2172f6682169cb798a5ab38fc2061b84c8f65f9609a2ba"
+      ],
+      "stored_hash": "858c40d9ad07bec5bf2172f6682169cb798a5ab38fc2061b84c8f65f9609a2ba",
+      "byte_identical": true,
+      "readback_hash_matches": true,
+      "context_compatible": true,
+      "context_incompatible_reason": null,
+      "source_is_current": true,
+      "uncertainty_version_status": "UNBOUND"
+    },
+    "governance": {
+      "step": "governance_unchanged",
+      "pre_existing_contexts_preserved": true,
+      "contexts_added": 1,
+      "proposals_before": 7,
+      "proposals_after": 7,
+      "new_assessment_proposals": 0,
+      "instrument_state_before": "PROPOSED_NOT_AUTHORIZED",
+      "instrument_state_after": "PROPOSED_NOT_AUTHORIZED"
+    }
+  },
+  "task4_authorisation_request": {
+    "record_emitted": true,
+    "written_to_database": false,
+    "authorization_record": {
+      "stage": "BDJ_OBJECTIVE",
+      "data_class": "SYNTHETIC_NONHUMAN",
+      "decision": "APPROVED",
+      "max_attempts": 1,
+      "owner_id": "b9e62014-b7bc-426e-a950-a95b25965639",
+      "assessment_id": "4fc0abc2-ba52-4e41-aaa3-cf14fc822b37",
+      "revision": 19,
+      "confirmation_id": "337bf19e-326f-4643-9c06-d28b7a4cc1fe",
+      "source_fingerprint": "608b10b33c84377ca416bbf7f81d9a139d948922e95351c8ba4d16019b962dd2",
+      "context_packet_hash": "858c40d9ad07bec5bf2172f6682169cb798a5ab38fc2061b84c8f65f9609a2ba",
+      "prompt_version": "BDJ-OBJECTIVE-3-CAND",
+      "prompt_fingerprint": "76027bfffbce17711fe2c9190bc610eb8e8bfaf8a57cf4a16913b87cddd7b8ab",
+      "endpoint": "https://tokenharbor.ai/v1/chat/completions",
+      "model": "deepseek-v4.1-flash-1017",
+      "operator_receipt": "<OWNER TO SUPPLY: unique reference, at least 8 characters>"
+    },
+    "subject": {
+      "assessment_id": "4fc0abc2-ba52-4e41-aaa3-cf14fc822b37",
+      "instrument_version": "M2V2-20261122-1",
+      "instrument_approval_state": "PROPOSED_NOT_AUTHORIZED",
+      "assessment_revision": 19,
+      "confirmed_revision": 19,
+      "confirmation_id": "337bf19e-326f-4643-9c06-d28b7a4cc1fe",
+      "confirmation_revision": 19,
+      "snapshot_digest": "e3453ad57a568af217b3d4e163cbbe5c90dbdbe92106e90510ab9dc030caf5c6",
+      "context_id": "6c719944-1b7b-59ea-be32-275a0f66c937",
+      "context_builder_version": "BCB-V1-1.2.1",
+      "context_packet_hash": "858c40d9ad07bec5bf2172f6682169cb798a5ab38fc2061b84c8f65f9609a2ba",
+      "source_fingerprint": "608b10b33c84377ca416bbf7f81d9a139d948922e95351c8ba4d16019b962dd2",
+      "proposals_on_this_assessment": 0
+    },
+    "dispatch": {
+      "provider": "tokenharbor",
+      "endpoint": "https://tokenharbor.ai/v1/chat/completions",
+      "model": "deepseek-v4.1-flash-1017",
+      "prompt_key": "BDJ_OBJECTIVE",
+      "prompt_version": "BDJ-OBJECTIVE-3-CAND",
+      "prompt_fingerprint": "76027bfffbce17711fe2c9190bc610eb8e8bfaf8a57cf4a16913b87cddd7b8ab",
+      "tokenharbor_enabled_setting": false,
+      "api_key_present": true,
+      "structured_mode": "json_schema",
+      "timeout_seconds": 30
+    }
+  },
+  "task5_live_dispatch": {
+    "executed": false,
+    "blocked_by": [
+      "owner approval of the Task 4 record not yet given",
+      "TOKENHARBOR_ENABLED is false",
+      "no operator-provisioned synthetic trial authority row"
+    ]
+  },
+  "regression": {
+    "failed": 25,
+    "passed": 1512,
+    "skipped": 3
+  },
+  "governance_invariants": {
+    "policy_adopted": false,
+    "approved_measurements": "0/6",
+    "m2v2_instrument_state": "PROPOSED_NOT_AUTHORIZED",
+    "historical_simulated_proposals_unchanged": true,
+    "pre_existing_contexts_preserved": true
+  }
+}

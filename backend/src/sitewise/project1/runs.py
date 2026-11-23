@@ -218,6 +218,128 @@ def ensure_qg_run(engine, actor_id: UUID, assessment_id,
         raise WorkflowHeld('WORKFLOW_STORAGE_UNAVAILABLE') from None
 
 
+# -- BDJ objective work identity --------------------------------------------
+# The findings run (``ensure_run``) fingerprints PROMPTS['BDJ'] and carries no
+# context hash. Objective proposals are a different contract, a different
+# prompt and are bound to a persisted BCB packet, so they need their own work
+# identity; otherwise the two would share a run and the ledger's
+# UNIQUE(run_id, stage) would make the second execution impossible.
+
+#: Version tag for the TokenHarbour-era objective policy identity. The legacy
+#: payload carries no version key at all, so its hash is untouched.
+OBJECTIVE_POLICY_VERSION = 'objective-policy/2'
+
+
+def objective_policy_fingerprint(prompt_key: str = 'BDJ_OBJECTIVE',
+                                 *, provider: str | None = None) -> str:
+    """Hash the effective objective policy (contract, prompt, model, rules).
+
+    Two identities live here, and the distinction is load-bearing:
+
+    ``provider is None`` — the **historical** identity.
+        Byte-identical to the calculation that produced every pre-existing
+        ``project1_ai.runs`` row: the ``model`` term is ``SIMULATOR_MODEL`` and
+        no version key is added. Historical run identities therefore remain
+        reproducible, so an existing run is still *found* rather than
+        duplicated. Never change this payload.
+
+    ``provider='tokenharbor'`` — the **versioned** identity for a real cloud
+        execution. It adds ``policy_version``, ``model_provider`` and pins the
+        adapter's actual model. A different producer is a different policy, so
+        it cannot collide with a historical simulated run (requirement: no
+        reuse or redispatch across a model-policy change), while prompt
+        version, prompt fingerprint, contract version and rules version stay
+        bound exactly as before.
+
+    ``prompt_key`` still separates the M2 V2 family from the M2 V1 family via a
+    different prompt version *and* a different ``stage`` label.
+    """
+    from sitewise.project1.objective_proposal import CONTRACT_VERSION
+    from sitewise.project1.objective_simulation import SIMULATOR_MODEL
+    prompt = PROMPTS[prompt_key]
+    terms = {
+        'stage': prompt_key,
+        'contract_version': CONTRACT_VERSION,
+        'prompt_version': prompt.version,
+        'prompt_fingerprint': prompt.fingerprint,
+        'model': SIMULATOR_MODEL,
+        'rules_version': settings.project1_rules_version,
+    }
+    if provider is not None:
+        from sitewise.project1.provider import MODEL
+        terms['policy_version'] = OBJECTIVE_POLICY_VERSION
+        terms['model_provider'] = provider
+        terms['model'] = MODEL
+    return hashlib.sha256(canonical(terms).encode('utf-8')).hexdigest()
+
+
+def objective_work_identity(assessment_id, revision: int, source_fingerprint: str,
+                            context_packet_hash: str,
+                            policy_fingerprint: str) -> str:
+    """Deterministic identity: source revision + context packet + policy terms."""
+    return hashlib.sha256(canonical({
+        'stage': 'BDJ_OBJECTIVE',
+        'assessment_id': str(assessment_id),
+        'revision': revision,
+        'source_fingerprint': source_fingerprint,
+        'context_packet_hash': context_packet_hash,
+        'policy_fingerprint': policy_fingerprint,
+    }).encode('utf-8')).hexdigest()
+
+
+def ensure_objective_run(engine, actor_id: UUID, assessment_id,
+                         revision: int, source_fingerprint: str,
+                         context_packet_hash: str,
+                         prompt_key: str = 'BDJ_OBJECTIVE',
+                         provider: str | None = None) -> UUID:
+    """Provision or reuse the objective run for this source + context + policy.
+
+    ``assessment_revision`` records the real M2 revision (unlike the QG run,
+    which is revision-free), because the proposal table is revision-bound and
+    ``objective_adapter`` filters readback on it.
+    """
+    if isinstance(revision, bool) or not isinstance(revision, int) or revision < 0:
+        raise WorkflowHeld('WORKFLOW_RUN_REVISION_INVALID')
+    for value in (source_fingerprint, context_packet_hash):
+        if not isinstance(value, str) or not re.fullmatch(r'[a-f0-9]{64}', value):
+            raise WorkflowHeld('WORKFLOW_RUN_FINGERPRINT_INVALID')
+
+    policy = objective_policy_fingerprint(prompt_key, provider=provider)
+    work_identity = objective_work_identity(
+        assessment_id, revision, source_fingerprint, context_packet_hash, policy)
+    run_id = uuid4()
+    try:
+        with Session(engine) as session:
+            restricted_scope(session, actor_id)
+            session.execute(text(
+                'INSERT INTO project1_ai.runs (id, owner_user_id, assessment_id,'
+                ' assessment_revision, source_fingerprint, policy_fingerprint,'
+                ' work_identity) VALUES (:id, :actor, :assessment, :revision,'
+                ' :source, :policy, :work)'
+                ' ON CONFLICT (owner_user_id, work_identity) DO NOTHING'), {
+                    'id': run_id, 'actor': actor_id, 'assessment': assessment_id,
+                    'revision': revision, 'source': source_fingerprint,
+                    'policy': policy, 'work': work_identity})
+            row = session.execute(text(
+                'SELECT id, assessment_revision, source_fingerprint, policy_fingerprint'
+                ' FROM project1_ai.runs'
+                ' WHERE owner_user_id=:actor AND work_identity=:work'), {
+                    'actor': actor_id, 'work': work_identity}).one_or_none()
+            if row is None:
+                raise WorkflowHeld('WORKFLOW_RUN_NOT_FOUND')
+            if row.assessment_revision != revision:
+                raise WorkflowHeld('WORKFLOW_RUN_REVISION_MISMATCH')
+            if (row.source_fingerprint != source_fingerprint
+                    or row.policy_fingerprint != policy):
+                raise WorkflowHeld('WORKFLOW_RUN_BINDING_MISMATCH')
+            session.commit()
+            return row.id
+    except WorkflowHeld:
+        raise
+    except SQLAlchemyError:
+        raise WorkflowHeld('WORKFLOW_STORAGE_UNAVAILABLE') from None
+
+
 def attempt_count(engine, actor_id: UUID, run_id: UUID) -> int:
     """How many attempts this run has, read under the restricted principal."""
     try:

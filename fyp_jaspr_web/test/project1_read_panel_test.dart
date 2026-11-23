@@ -1,7 +1,7 @@
 import 'package:jaspr_test/jaspr_test.dart';
 import 'package:shared_logic/shared_logic.dart';
-import 'package:sitewise_jaspr_web/components/project1_read_panel.dart';
-import 'package:sitewise_jaspr_web/data/app_locator.dart';
+import 'package:sitewise_jaspr_web/features/assessment/presentation/components/project1_read_panel.dart';
+import 'package:sitewise_jaspr_web/core/di/app_locator.dart';
 
 class ReadClient extends ApiClient {
   Object? failure;

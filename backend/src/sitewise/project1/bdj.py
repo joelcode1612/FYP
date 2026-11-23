@@ -9,15 +9,38 @@ from sitewise.project1.contracts import BDJOutput, WorkflowHeld, digest, no_auth
 from sitewise.project1.projection import verify_projection
 from sitewise.core.exceptions import ConflictError, NotFoundError
 
+
+def verify_source(packet: dict):
+    """Verify a projection under its own contract and return that contract.
+
+    The two M2 source families have different membership rules — eleven M2 V1
+    items with four exclusions versus nineteen M2 V2 items with none — so a
+    single verifier would either reject a valid V2 packet or accept a V2 packet
+    that is missing items. The schema string is the discriminator, and an
+    unknown one is refused rather than guessed.
+    """
+    from sitewise.project1.m2v2_projection import (
+        M2V2_CONTRACT, resolve_source_contract, verify_m2v2_projection)
+
+    contract = resolve_source_contract(packet.get('schema_version'))
+    if contract == M2V2_CONTRACT:
+        verify_m2v2_projection(packet)
+    else:
+        verify_projection(packet)
+    return contract
+
 RULE_MODULES = {
     'BDJ-EXPLICIT-FORMAT-0.1-CANDIDATE': 'sitewise.domain.bdj_rules',
     'BDJ-RULESET-0.2-CAND': 'sitewise.domain.bdj_candidate_rules',
     # ADOPTED 2026-11-21 on explicit owner direction ("update step 4 to my code
-    # and verify"). Byte-identical copy of
-    # tools/cp13_verification/v2/bdj_m2v1_information_gap_proposal.py; the pinned
-    # SHA-256 is the identity of the adopted artifact. This entry is what
-    # load_rules() treats as adoption — removing it reverts immediately.
-    # NOTE: supersedes the S1/A1/P1 "synthetic trial only" scoping.
+    # and verify"). NOT byte-identical to the CP13 proposal artefact: this module
+    # is that artefact plus a declared SUPPORTED_INSTRUMENT_VERSIONS tuple, so
+    # the two carry different SHA-256 values by design and are pinned separately
+    # (.env PROJECT1_RULES_SHA256 here; SYNTHETIC_M2V1_RULESET_SHA256 below for
+    # the trial gate). Verified 2026-11-21: with CRLF normalised the only
+    # difference is those six appended lines. Do not "fix" one hash to the other.
+    # This entry is what load_rules() treats as adoption — removing it reverts
+    # immediately. NOTE: supersedes the S1/A1/P1 "synthetic trial only" scoping.
     'BDJ-M2V1-IG-0.1-PROP': 'sitewise.project1.rules.bdj_m2v1_ig_proposal',
     # 'BDJ-RULESET-0.3-M2V1-CAND' was authored and RETIRED on 2026-11-17. It
     # re-keyed the 0.2 catalogue onto M2V1 item keys, but its one executable
@@ -172,9 +195,98 @@ class BDJEngine:
                             'name': 'Candidate validation', 'outcome': 'checked'}],
                             [issue.model_dump() for issue in verified.issues], 'reviewed')
 
+    def propose_objectives(self, packet: dict, *, recheck_current, context_packet: dict,
+                           context_id: str, model_runner=None) -> dict:
+        """Objective-proposal path: model-authored, candidate-only, no findings.
+
+        The deterministic detector does not invent proposals. It supplies the
+        allowed rule vocabulary so the model cannot fabricate an identifier, and
+        it stays the authority on which answers carry an uncertainty literal.
+
+        Every proposal is bound to the business context before it can leave this
+        method, so a caller cannot persist an unbound one.
+        """
+        from sitewise.project1.objective_proposal import (
+            ObjectiveProposal, bind_to_business_context, validate_objective_proposal)
+
+        events = []
+        contract = verify_source(packet)
+        events.append({'checkpoint': 1, 'name': 'Source integrity', 'outcome': 'verified'})
+        runner = model_runner if model_runner is not None else self.model_runner
+        if runner is None:
+            return self._objective_result(packet, events + [
+                {'checkpoint': i, 'outcome': 'held',
+                 'reason': 'BDJ_OBJECTIVE_MODEL_REQUIRED'} for i in range(2, 6)], [], 'held')
+
+        answers = {d['item_key']: {'id': d['answer_revision_id'],
+                                   'answer_state': d['answer_state'], 'value_json': d['value']}
+                   for d in packet['declarations']}
+        allowed = sorted({p['rule_id'] for p in self.rules.evaluate_candidate_issues(answers)}) \
+            if self.rules is not None else []
+        events.append({'checkpoint': 2, 'name': 'Uncertainty candidates',
+                       'outcome': 'checked', 'rule_catalogue': allowed})
+
+        model_packet = {**packet, 'rule_catalogue': allowed}
+        # The persisted attempt ledger registers governed *stages* (BDJ/QJ/QG),
+        # not prompt names. A governed runner therefore keeps the BDJ stage and
+        # selects the objective prompt through `prompt_key` — the same mechanism
+        # already used for QG_PROPOSE. Simple test runners that only accept the
+        # original three-argument call keep working unchanged.
+        if getattr(runner, 'supports_prompt_key', False):
+            raw = runner('BDJ', model_packet, ObjectiveProposal,
+                         prompt_key=contract.objective_prompt_key)
+        else:
+            raw = runner('BDJ_OBJECTIVE', model_packet, ObjectiveProposal)
+        events.append({'checkpoint': 3, 'name': 'Uncertainty interpretation',
+                       'outcome': 'model_returned'})
+        try:
+            proposal = validate_objective_proposal(raw, packet)
+            bound = bind_to_business_context(proposal, context_packet=context_packet,
+                                             context_id=context_id)
+        except ValidationError:
+            return self._objective_result(packet, events + [
+                {'checkpoint': 4, 'outcome': 'rejected',
+                 'reason': 'CANDIDATE_VALIDATION_FAILED'},
+                {'checkpoint': 5, 'outcome': 'held'}], [], 'rejected')
+        except WorkflowHeld as exc:
+            # Record the actual hold code on the internal checkpoint. Codes are
+            # safe identifiers; the external API keeps its sanitised message, so
+            # no source content leaks to an unauthorised caller.
+            return self._objective_result(packet, events + [
+                {'checkpoint': 4, 'outcome': 'rejected', 'reason': str(exc)},
+                {'checkpoint': 5, 'outcome': 'held'}], [], 'rejected')
+        events.append({'checkpoint': 4, 'name': 'Candidate validation', 'outcome': 'checked'})
+
+        try:
+            current = recheck_current()
+        except (ConflictError, NotFoundError):
+            current = None
+        if current != packet['source_fingerprint']:
+            return self._objective_result(packet, events + [
+                {'checkpoint': 5, 'outcome': 'stale'}], [], 'stale')
+        events.append({'checkpoint': 5, 'name': 'Source-linked explanation',
+                       'outcome': 'review_required' if bound.proposals
+                                  else 'bounded_no_recommendation'})
+        return self._objective_result(
+            packet, events, [r.model_dump() for r in bound.proposals], 'reviewed',
+            context_packet_hash=bound.context_packet_hash, context_id=bound.context_id)
+
+    @staticmethod
+    def _objective_result(packet, events, proposals, outcome, *,
+                          context_packet_hash=None, context_id=None):
+        return {'contract_version': 'bdj-objective-proposal/1',
+                'assessment_id': packet['assessment_id'],
+                'assessment_revision': packet['assessment_revision'],
+                'source_fingerprint': packet['source_fingerprint'],
+                'context_id': context_id, 'context_packet_hash': context_packet_hash,
+                'outcome': outcome, 'checkpoints': events,
+                'proposals': proposals, 'findings': [],
+                'finding_authority': 'CANDIDATE_ONLY',
+                'status_contract': 'UNRECONCILED_PROPOSAL', **no_authority()}
+
     def review(self, packet: dict, *, recheck_current) -> dict:
         events = []
-        verify_projection(packet)
+        contract = verify_source(packet)
         events.append({'checkpoint': 1, 'name': 'Source integrity', 'outcome': 'verified'})
         if self.rules is None:
             return self._result(packet, events + [
@@ -228,7 +340,13 @@ class BDJEngine:
             # candidate dies on BDJ_RULE_NOT_REGISTERED. The catalogue is policy,
             # not source data, and does not change the source fingerprint.
             model_packet = {**packet, 'rule_catalogue': sorted(allowed)}
-            raw = self.model_runner('BDJ', model_packet, BDJOutput)
+            if getattr(self.model_runner, 'supports_prompt_key', False):
+                # Same governed ledger stage, different registered prompt. For
+                # M2 V1 the key is still 'BDJ', so that path is unchanged.
+                raw = self.model_runner('BDJ', model_packet, BDJOutput,
+                                        prompt_key=contract.findings_prompt_key)
+            else:
+                raw = self.model_runner('BDJ', model_packet, BDJOutput)
         events.append({'checkpoint': 3, 'name': 'Uncertainty interpretation',
                        'outcome': 'model_returned' if self.model_runner else 'not_called'})
         try:

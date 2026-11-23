@@ -118,6 +118,9 @@ def source(session, user, assessment_id, revision, *, include_inventory=False):
         with M2Service(repo).locked_confirmed_source(assessment_id, user.user_id,
                 confirmation_id=confirmation['id'], expected_revision=revision) as confirmed:
             receipt = {k: str(confirmed[k]) for k in ('confirmation_id','snapshot_digest')}
+        # The projector dispatches internally on the instrument version, so one
+        # entry point serves both M2 source families without adding repository
+        # calls here (and without changing this function's existing contract).
         projected = M2SourceProjection(repo).read(
             assessment_id, user.user_id, revision, include_inventory=include_inventory)
         # Keep the original envelope untouched for its fingerprint check.
@@ -298,3 +301,9 @@ def audit_run(run_id: UUID, user: Admin, response: Response):
                     'missing_receipt_means':'unknown_outcome_do_not_redispatch', **no_authority()}
     except (ValueError, SQLAlchemyError):
         raise HTTPException(503,detail={'code':'AUDIT_STORAGE_UNAVAILABLE'}) from None
+
+
+# BDJ objective proposals are additive and remain fail-closed until their
+# objective-specific disclosure and attempt-ledger composition is approved.
+from sitewise.api.v1.project1_objective_proposals import router as objective_proposals_router
+router.include_router(objective_proposals_router)

@@ -4,8 +4,8 @@ import 'package:jaspr/dom.dart';
 import 'package:jaspr/jaspr.dart';
 import 'package:jaspr_test/jaspr_test.dart';
 import 'package:shared_logic/shared_logic.dart';
-import 'package:sitewise_jaspr_web/components/m2_workflow_panel.dart';
-import 'package:sitewise_jaspr_web/data/app_locator.dart';
+import 'package:sitewise_jaspr_web/features/assessment/presentation/components/m2_workflow_panel.dart';
+import 'package:sitewise_jaspr_web/core/di/app_locator.dart';
 
 const mid = '00000000-0000-4000-8000-000000000001';
 const iid = '00000000-0000-4000-8000-000000000002';

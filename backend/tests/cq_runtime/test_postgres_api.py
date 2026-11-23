@@ -107,14 +107,67 @@ def lab():
     from sitewise.api.v1 import customer_questionnaire as api
     from sitewise.db.models.user import User
     from sitewise.db.models.m2_schema import instruments
-    owner,respondent,other,suspended=[uuid4() for _ in range(4)];iid=uuid4()
+    owner,respondent,other,suspended,outsider=[uuid4() for _ in range(5)];iid=uuid4()
     with db.begin() as c:
-        for uid,role,status in [(owner,'entrepreneur','active'),(respondent,'customer','active'),
-                (other,'entrepreneur','active'),(suspended,'customer','suspended')]:
+        # Canonical RBAC roles only: the four-role model is
+        # admin/owner/agent/entrepreneur. These used to be seeded as 'customer',
+        # which no role validator accepts, so once the identity provider started
+        # returning the row authoritatively the profile was rejected as invalid.
+        #
+        # `outsider` exists to express "authenticated but not an entrepreneur":
+        # require_entrepreneur admits entrepreneur and admin only, so an `owner`
+        # is refused with 403 at the role gate. Before, the respondent carried
+        # the invalid 'customer' role and got that 403 by accident.
+        for uid,role,status in [(owner,'entrepreneur','active'),(respondent,'entrepreneur','active'),
+                (other,'entrepreneur','active'),(suspended,'entrepreneur','suspended'),
+                (outsider,'owner','active')]:
             c.execute(User.__table__.insert().values(user_id=uid,email=f'{uid}@test.invalid',role=role,account_status=status,email_verified=True))
         c.execute(instruments.insert().values(id=iid,code='SYNTHETIC-CQ',version_tag='TEST-ONLY',approval_state='DRAFT',schema_digest='0'*64))
         c.execute(text('CREATE TABLE test_cq_authority(release_id uuid PRIMARY KEY,enabled boolean NOT NULL)'))
     app.dependency_overrides[api.get_cq_authority]=lambda:TestOnlyAuthority()
+
+    # P0 identity blocker. `dependencies.get_current_user` calls the hosted
+    # Supabase admin API for an authoritative profile. This private cluster has
+    # no such service, so every authenticated request returned 503 before
+    # reaching a route body (46 of 47 failures in the previous run).
+    #
+    # `get_admin_service` exists as a seam precisely so tests can substitute a
+    # fake without network access (see its docstring). This provider answers
+    # from the synthetic public.users rows the harness already seeds, so role
+    # and account status are still enforced rather than bypassed: a suspended
+    # account is refused by get_active_user, and an unknown subject yields no
+    # profile at all, which fails closed under identity_required.
+    from sitewise.core.supabase_admin import get_admin_service
+
+    class TestOnlyIdentityProvider:
+        """Deterministic synthetic identity. Private cluster only, never production."""
+
+        __test__ = False
+        # Keep the production fail-closed contract: no authoritative row means
+        # no access, never a default-privilege profile.
+        strict_identity = True
+
+        def _assert_private_cluster(self):
+            with db.connect() as c:
+                actual = Path(c.execute(text('SHOW data_directory')).scalar_one()).resolve()
+            expected = (Path(os.environ['CQ_PRIVATE_CLUSTER']) / 'data').resolve()
+            if actual != expected:
+                raise RuntimeError('Synthetic identity provider used outside the private test cluster.')
+
+        def get_identity_profile(self, subject):
+            self._assert_private_cluster()
+            with db.connect() as c:
+                row = c.execute(text(
+                    'SELECT user_id,email,role,account_status FROM public.users WHERE user_id=:u'),
+                    {'u': subject}).mappings().first()
+            if row is None:
+                return None
+            return {'id': str(row['user_id']), 'email': row['email'],
+                    'role': row['role'], 'account_status': row['account_status'],
+                    'email_confirmed_at': 'SYNTHETIC-PRIVATE-CLUSTER'}
+
+    app.dependency_overrides[get_admin_service]=lambda:TestOnlyIdentityProvider()
+
     bound=socket.socket();bound.bind(('127.0.0.1',0));bound.listen(128)
     base=f'http://127.0.0.1:{bound.getsockname()[1]}'
     server=uvicorn.Server(uvicorn.Config(app,lifespan='off',log_level='error',access_log=False))
@@ -124,7 +177,7 @@ def lab():
     assert server.started
     client=httpx.Client(base_url=base+'/api/v1/cq',timeout=20)
     state={'db':db,'app':app,'owner':owner,'respondent':respondent,'other':other,'suspended':suspended,
-        'iid':iid,'case':'setup','traces':[],'base':base,'readbacks':[],
+        'outsider':outsider,'iid':iid,'case':'setup','traces':[],'base':base,'readbacks':[],
         'capture_base':f'http://127.0.0.1:{keys.server_port}'}
     def token(uid):
         now=int(time.time())
@@ -340,7 +393,7 @@ def test_CQ07_campaign_session_uniqueness_and_scope(lab):
     rid,_=release(lab)
     lab['request']('POST',path,409,uid=lab['owner'],json={'release_id':rid})
     lab['request']('POST',path,404,uid=lab['other'],json={'release_id':rid})
-    lab['request']('POST',path,403,json={'release_id':rid})
+    lab['request']('POST',path,403,uid=lab['outsider'],json={'release_id':rid})
     assert lab['request']('POST','/sessions',json={'campaign_id':s['campaign_id'],'manifest_hash':s['manifest_hash'],'locale':'EN'})['session_id']==s['session_id']
     lab['request']('POST','/sessions',404,uid=lab['other'],json={'campaign_id':s['campaign_id'],'manifest_hash':s['manifest_hash'],'locale':'EN'})
     lab['request']('POST','/sessions',409,json={'campaign_id':s['campaign_id'],'manifest_hash':s['manifest_hash'],'locale':'BM'})

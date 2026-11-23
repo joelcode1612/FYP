@@ -1,12 +1,12 @@
 """Pinned M2 review projection; no evaluation, decisions or downstream authority."""
 from datetime import datetime, timezone
-from typing import Literal
+from typing import Any, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from sitewise.core.exceptions import ConflictError
-from sitewise.domain.m2_provenance import SNAPSHOT_VERSION
+from sitewise.domain.m2_provenance import DECLARATION_SNAPSHOT_VERSIONS
 from sitewise.services.bdj_service import BDJService
 from sitewise.services.m2_service import M2Service
 from sitewise.services.ports.m2_repository_port import M2RepositoryPort
@@ -16,11 +16,47 @@ class ReadModel(BaseModel):
     model_config = ConfigDict(extra='forbid', frozen=True)
 
 
+#: The stored answer value for every M2 V2 answer kind:
+#:
+#: * ``GEO`` / ``SINGLE``  -> ``str``
+#: * ``MULTI``             -> ``list[str]``
+#: * ``COMPOSITE``         -> ``dict[str, Any]`` (nested lists/objects allowed)
+#:
+#: ``COMPOSITE`` is a first-class instrument answer kind, not corrupt data: the
+#: M2 V2 instrument declares items such as M2V2-12/13/14/16/17/18/19 as
+#: ``answer_kind = COMPOSITE`` and stores a structured object per answer. The
+#: original contract only admitted ``str | list[str]``, so any confirmation that
+#: pinned a composite answer raised a pydantic ``ValidationError`` and the whole
+#: read surfaced as HTTP 500 (DEF-02).
+AnswerValue = str | list[str] | dict[str, Any] | None
+
+
+def is_structured_value(value: object) -> bool:
+    """True when a pinned answer value is a ``COMPOSITE`` structured object."""
+    return isinstance(value, dict)
+
+
+#: Frozen original contract. Emitted whenever no composite answer is pinned.
+CONTRACT_V1 = 'project1-confirmed-review/1'
+#: Identical to V1 except that ``answers[].value`` may also be a JSON object.
+CONTRACT_V2 = 'project1-confirmed-review/2'
+
+
+def review_contract_version(values) -> str:
+    """Pick the contract version for a set of pinned answer values.
+
+    Data-driven and never caller-selectable. ``/1`` is emitted unless a
+    ``COMPOSITE`` object is actually present, so a reader that only understands
+    the original shape can never receive a value it cannot parse.
+    """
+    return CONTRACT_V2 if any(is_structured_value(v) for v in values) else CONTRACT_V1
+
+
 class ReviewAnswer(ReadModel):
     item_key: str
     question: str
     answer_state: str
-    value: str | list[str] | None
+    value: AnswerValue
     source_answer_revision_id: UUID
     source_item_version_id: UUID
 
@@ -46,7 +82,18 @@ class ReviewActivity(ReadModel):
 
 
 class ConfirmedReview(ReadModel):
-    contract_version: Literal['project1-confirmed-review/1'] = 'project1-confirmed-review/1'
+    #: ``/1`` is the frozen original contract: every answer value is ``str``,
+    #: ``list[str]`` or ``null``. It is still emitted, byte for byte, whenever the
+    #: confirmation pins no structured answer, so existing M2 V1 readers are
+    #: unaffected.
+    #:
+    #: ``/2`` is emitted only when at least one pinned answer is a ``COMPOSITE``
+    #: object. The only change is that ``answers[].value`` may then be a JSON
+    #: object; every other field, name and guarantee is identical, and the
+    #: object is passed through whole rather than flattened or dropped.
+    contract_version: Literal[
+        'project1-confirmed-review/1', 'project1-confirmed-review/2'
+    ] = 'project1-confirmed-review/1'
     assessment_id: UUID
     confirmation_id: UUID
     assessment_revision: int = Field(ge=0)
@@ -79,7 +126,7 @@ class ConfirmedReviewService:
                 confirmation_id=confirmation_id, expected_revision=expected_revision) as source:
             worksheet = self.bdj.read_worksheet(assessment_id, actor_id)
             snapshot = source['snapshot']
-            if snapshot.get('snapshot_contract_version') == SNAPSHOT_VERSION:
+            if snapshot.get('snapshot_contract_version') in DECLARATION_SNAPSHOT_VERSIONS:
                 # This reader projects the confirmed declaration, not later
                 # model findings or a fabricated evaluation receipt.
                 worksheet = {**worksheet, 'findings': [],
@@ -88,7 +135,7 @@ class ConfirmedReviewService:
                     worksheet['revision'] != expected_revision or
                     (snapshot.get('bdj_rule_version') is not None and
                      worksheet['rule_version'] != snapshot['bdj_rule_version']) or
-                    (snapshot.get('snapshot_contract_version') != SNAPSHOT_VERSION and
+                    (snapshot.get('snapshot_contract_version') not in DECLARATION_SNAPSHOT_VERSIONS and
                      worksheet['evaluation_state'] != 'EVALUATED_CANDIDATE') or
                     sorted(str(f['id']) for f in worksheet['findings']) !=
                     snapshot.get('unresolved_candidate_findings')):
@@ -125,7 +172,14 @@ class ConfirmedReviewService:
             # away here so this contract's payload does not change.
             declared = set(ReviewActivity.model_fields)
             activity = [{k: v for k, v in e.items() if k in declared} for e in activity]
+            # Version selection is data-driven, never caller-selectable: the
+            # frozen `/1` payload is emitted unless a composite value is actually
+            # present. A reader that only understands `/1` therefore never
+            # receives a shape it cannot parse, and a reader that understands
+            # `/2` branches on a field it can see.
             return ConfirmedReview(
+                contract_version=review_contract_version(
+                    a.value for a in answers_out),
                 assessment_id=assessment_id, confirmation_id=confirmation_id,
                 assessment_revision=expected_revision, snapshot_digest=source['snapshot_digest'],
                 rule_version=worksheet['rule_version'], evaluation_state=worksheet['evaluation_state'],

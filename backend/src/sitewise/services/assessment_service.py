@@ -28,7 +28,8 @@ from datetime import UTC, datetime
 from typing import Any
 
 from sqlmodel import Session
-from sqlalchemy import func, select, inspect
+from sqlalchemy import func, select, inspect, text
+from sqlalchemy.exc import SQLAlchemyError
 
 from sitewise.core.exceptions import AssessmentError, ModelUnavailableError
 from sitewise.core.logging import logger
@@ -562,6 +563,10 @@ class AssessmentService:
         self.session = session
         self.repo = AssessmentRepository(session)
         self.catalog = CatalogRepository(analytics_session)
+        # Per-request cache of current M2 confirmations, keyed by marketplace
+        # assessment id. Filled by _load_m2_confirmations, which the history
+        # endpoint calls once for the whole page.
+        self._m2_confirmations: dict[str, dict] = {}
 
     # -- reads --------------------------------------------------------------
 
@@ -713,6 +718,75 @@ class AssessmentService:
 
         setattr(assessment, STAGES[index][2], _now())
 
+    # -- stage 2 is owned by the M2 declaration ----------------------------
+    #
+    # ``requirements_saved_at`` is the legacy proof for stage 2, written by the
+    # v1 requirements form. The web workspace no longer collects requirements:
+    # stage 2 is the M2 business declaration, and confirming it never wrote that
+    # timestamp. The record therefore stayed at 1/5 while workflow-readiness
+    # (which is M2-derived) already reported stage 2 complete, and the two
+    # surfaces disagreed.
+    #
+    # Rather than copy confirmation state into the legacy column -- which would
+    # need its own invalidation write on every answer revision, and which cannot
+    # be atomic with the M2 transaction when the two live in different databases
+    # -- stage 2 completeness is *derived* at read time. There is nothing to
+    # synchronise, so there is nothing to drift: a later answer revision makes
+    # the confirmation non-current and stage 2 reverts in the same read.
+    def _load_m2_confirmations(self, actor_id, assessment_ids) -> None:
+        """Fill the per-request cache of current M2 confirmations.
+
+        The M2 tables are RLS-scoped to ``project1.actor_id`` and the assessment
+        session has no SELECT on ``m2_assessment_links`` at all, so this read
+        goes through the owner-scoped M2 session -- the same one the M2 routes
+        use. Called once per page so the history endpoint does not open a
+        connection per row, mirroring how ``capabilities`` and ``participation``
+        are probed once for the page.
+
+        Every failure mode degrades to "no confirmation", which leaves stage 2
+        on its persisted timestamp: an unreadable M2 store must not invent
+        progress, and must not break the assessment list either.
+        """
+        ids = [str(i) for i in assessment_ids if i is not None]
+        if not ids:
+            return
+        try:
+            from sitewise.db.m2_session import m2_session_for
+
+            with m2_session_for(actor_id) as session:
+                rows = session.execute(text("""
+                    SELECT l.marketplace_assessment_id AS mid,
+                           c.id, c.assessment_revision, c.created_at,
+                           a.id AS m2_id
+                    FROM public.m2_assessment_links l
+                    JOIN public.m2_assessments a ON a.id = l.m2_assessment_id
+                    JOIN public.m2_confirmation_snapshots c ON c.assessment_id = a.id
+                    WHERE l.marketplace_assessment_id = ANY(CAST(:ids AS uuid[]))
+                      AND l.revoked_at IS NULL
+                      AND a.owner_user_id = l.user_id
+                      AND a.confirmed_revision = a.revision
+                      AND c.assessment_revision = a.revision
+                      AND c.actor_user_id = l.user_id
+                """), {'ids': ids}).mappings().all()
+        except Exception as exc:  # noqa: BLE001 - M2 storage is optional for this read
+            logger.warning(
+                'M2 confirmation state is not readable from the assessment '
+                'service (%s); stage 2 falls back to its persisted timestamp.',
+                type(exc).__name__,
+            )
+            return
+        logger.info('M2 confirmations loaded for %d of %d assessment(s).',
+                    len(rows), len(ids))
+        for row in rows:
+            self._m2_confirmations[str(row['mid'])] = dict(row)
+
+    def _m2_confirmation(self, assessment) -> dict | None:
+        """The current, bound M2 confirmation for one assessment, if any."""
+        key = str(assessment.assessment_id)
+        if key not in self._m2_confirmations:
+            self._load_m2_confirmations(assessment.user_id, [assessment.assessment_id])
+        return self._m2_confirmations.get(key)
+
     # -- serialization ------------------------------------------------------
 
     def payload(
@@ -737,15 +811,26 @@ class AssessmentService:
                     assessment.assessment_id,
                 )
 
-        completed = sum(1 for _, _, column in STAGES if getattr(assessment, column) is not None)
+        # Stage 2 is complete when either the legacy requirements were saved or
+        # a current, owner-bound M2 confirmation exists. Derived per read, so an
+        # invalidated confirmation reverts the stage with no synchronisation
+        # step and no chance of a stale copy surviving in the record.
+        confirmation = self._m2_confirmation(assessment)
+        done = {column: getattr(assessment, column) for _, _, column in STAGES}
+        stage_2_basis = 'REQUIREMENTS' if done['requirements_saved_at'] else None
+        if done['requirements_saved_at'] is None and confirmation is not None:
+            done['requirements_saved_at'] = confirmation['created_at']
+            stage_2_basis = 'M2_CONFIRMATION'
+
+        completed = sum(1 for column in done.values() if column is not None)
         current_index = next(
-            (i for i, (_, _, column) in enumerate(STAGES) if getattr(assessment, column) is None),
+            (i for i, (_, _, column) in enumerate(STAGES) if done[column] is None),
             TOTAL_STAGES - 1,
         )
 
         stages = []
         for i, (key, title, column) in enumerate(STAGES):
-            done_at = getattr(assessment, column)
+            done_at = done[column]
             reason = None
             if done_at is not None:
                 status = "complete"
@@ -782,6 +867,19 @@ class AssessmentService:
             "completed_stages": completed,
             "total_stages": TOTAL_STAGES,
             "progress_percent": round(completed / TOTAL_STAGES * 100),
+            # Which record made stage 2 complete. Named so a reader never has to
+            # guess whether the timestamp was written by the legacy form or
+            # derived from the M2 declaration.
+            "stage_2_basis": stage_2_basis,
+            "m2_confirmation": (
+                {
+                    "confirmation_id": str(confirmation['id']),
+                    "m2_assessment_id": str(confirmation['m2_id']),
+                    "assessment_revision": confirmation['assessment_revision'],
+                }
+                if confirmation is not None and stage_2_basis == 'M2_CONFIRMATION'
+                else None
+            ),
             "report_available": assessment.report_generated_at is not None,
             "requirements": requirements,
             "requirements_version": requirements_version_of(requirements),
@@ -898,6 +996,9 @@ class AssessmentService:
         participation = self._participation_counts(
             [r.assessment_id for r in records]
         )
+        # Same idea for the M2 confirmations that decide stage 2: one read for
+        # the page, not one per row.
+        self._load_m2_confirmations(user_id, [r.assessment_id for r in records])
         rows = []
         for r in records:
             row = self.payload(

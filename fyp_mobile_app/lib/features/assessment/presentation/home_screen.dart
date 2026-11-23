@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:fyp/core/routing/app_routes.dart';
 import 'package:fyp/shared/presentation/layouts/mobile_app_shell.dart';
 import 'package:fyp/features/assessment/presentation/cq_invitations_page.dart';
 
@@ -8,8 +9,10 @@ class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
   @override
   Widget build(BuildContext context) => MobileAppShell(
-    title: 'Home',
-    currentRoute: '/entrepreneur/assess',
+    title: 'Questionnaire invitations',
+    // Third tab. Inside `EntrepreneurTabHost` the shell returns the body only;
+    // pushed as a standalone route it highlights that same tab.
+    currentRoute: AppRoutes.assessmentHome,
     body: const CqInvitationsPage(),
   );
 }

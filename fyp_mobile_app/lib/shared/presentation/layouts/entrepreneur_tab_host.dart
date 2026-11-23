@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_logic/shared_logic.dart';
 
 import 'package:fyp/core/theme/sitewise_m3.dart';
-import 'package:fyp/features/assessment/presentation/pages/entrepreneur_assess_mobile_page.dart';
+import 'package:fyp/features/assessment/presentation/home_screen.dart';
 import 'package:fyp/features/dashboard/presentation/pages/entrepreneur_dashboard_mobile_page.dart';
 import 'package:fyp/features/recommendations/presentation/pages/entrepreneur_recommendations_mobile_page.dart';
 import 'package:fyp/features/profile/presentation/pages/entrepreneur_profile_mobile_page.dart';
@@ -67,7 +67,11 @@ class _EntrepreneurTabHostState extends State<EntrepreneurTabHost> {
     // and a ranked search — it never asks the host which one it is.
     '/entrepreneur/recommendations' =>
       const EntrepreneurRecommendationsMobilePage(),
-    '/entrepreneur/assess' => const EntrepreneurAssessMobilePage(),
+    // Third tab: the published customer-questionnaire invitations. The page
+    // keeps its own `MobileAppShell` wrapper so it still renders correctly when
+    // it is pushed as a standalone route; inside the host the shell detects
+    // [EntrepreneurTabScope] and returns the body only.
+    '/entrepreneur/customer-assessments' => const HomeScreen(),
     '/entrepreneur/favourites' => const EntrepreneurFavouritesMobilePage(),
     '/entrepreneur/profile' => const EntrepreneurProfileMobilePage(),
     _ => const SizedBox.shrink(),

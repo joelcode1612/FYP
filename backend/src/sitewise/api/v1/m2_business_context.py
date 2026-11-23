@@ -37,6 +37,10 @@ class BuildRequest(BaseModel):
     confirmation_id: UUID
     expected_revision: int = Field(ge=0, strict=True)
     objective_id: UUID | None = None
+    #: Opt-in packet contract. Omitted keeps the current default (1.1) so every
+    #: existing packet rebuilds unchanged. 'BCB-V1-1.2.0' adds the three
+    #: separable M2 V2 outputs and is only valid for an M2V2 instrument.
+    context_version: str | None = None
 
 
 class ContextResponse(BaseModel):
@@ -48,7 +52,16 @@ class ContextResponse(BaseModel):
     confirmation_id: UUID
     assessment_revision: int = Field(ge=0)
     lifecycle_status: Literal['PERSISTED']
-    created_at: datetime
+    # Nullable on purpose. The adopted DDL declares ``NOT NULL DEFAULT now()``,
+    # but rows persisted before that default was in force (or on a cluster whose
+    # column drifted) carry no recorded creation time. Inventing one would
+    # fabricate provenance, so the absence is represented explicitly instead of
+    # failing the whole response: a missing timestamp must never make an
+    # otherwise valid, integrity-checked context unreadable.
+    created_at: datetime | None = Field(
+        default=None,
+        description='Persist timestamp when recorded. Null means no authoritative '
+                    'creation time was captured; it is never back-filled by guesswork.')
     replayed: bool
     packet: dict
     qj_execution_authorized: Literal[False]
@@ -66,9 +79,36 @@ class ContextStatusResponse(BaseModel):
     last_code: str | None
     context_id: UUID | None
     attempt_count: int = Field(ge=0)
-    created_at: datetime
+    # See ContextResponse.created_at: absence of a recorded timestamp is
+    # represented as null rather than rejecting the status read.
+    created_at: datetime | None = Field(
+        default=None,
+        description='Build-row creation time when recorded; null when no '
+                    'authoritative creation time was captured.')
     updated_at: datetime
     source_is_current: bool
+    #: Contract recorded on the persisted context, when one exists.
+    builder_version: str | None = None
+    #: False when the packet was recorded under a builder contract this release
+    #: cannot reproduce. Such a packet stays persisted and auditable, but it is
+    #: never reported as a usable current context.
+    context_compatible: bool = True
+    #: Why the packet no longer reproduces, as a stable code (never a message
+    #: and never a source value). Null when it reproduces.
+    context_incompatible_reason: str | None = None
+    #: Contract that supersedes the recorded one, when the packet is historical.
+    superseded_by: str | None = None
+    #: Version state of the objective the packet is bound to:
+    #: CURRENT / SUPERSEDED / ABSENT / UNBOUND / UNREADABLE. UNBOUND is normal
+    #: for M2 V2 packets, which carry no confirmed uncertainty by contract.
+    uncertainty_version_status: Literal[
+        'CURRENT', 'SUPERSEDED', 'ABSENT', 'UNBOUND', 'UNREADABLE'] = 'UNBOUND'
+    #: The objective version that replaced this one, when SUPERSEDED. Naming it
+    #: is what makes the invalidation actionable: the owner builds a new context
+    #: against this version without repeating the M2 confirmation.
+    superseded_by_objective_id: UUID | None = None
+    #: Owner action that produced the successor (EXPLORE / CLARIFY), when known.
+    uncertainty_supersession_action: str | None = None
 
 
 def call(operation):
@@ -90,7 +130,7 @@ def construct_context(assessment_id: UUID, payload: BuildRequest, user: Owner,
                       service: Service, response: Response):
     result = call(lambda: service.construct_and_save(
         ContextSelection(assessment_id,payload.confirmation_id,payload.expected_revision,payload.objective_id),
-        actor(user)))
+        actor(user), payload.context_version))
     response.headers['Cache-Control'] = 'no-store'
     response.status_code = 200 if result['replayed'] else 201
     return result

@@ -742,12 +742,6 @@ class _EntrepreneurPropertyDetailMobilePageState
           icon: Icons.compare_arrows,
           onPressed: () => _compareAction(p.id),
         ),
-        const SizedBox(height: 8),
-        SitewiseSecondaryButton(
-          label: 'Generate evaluation report',
-          icon: Icons.description_outlined,
-          onPressed: () => _open('/entrepreneur/report', arguments: p.id),
-        ),
       ],
     );
   }

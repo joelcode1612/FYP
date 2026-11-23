@@ -50,6 +50,7 @@ from __future__ import annotations
 
 import json
 import math
+import os
 import sys
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -58,6 +59,18 @@ from typing import Any
 
 ARTIFACTS_DIR = Path(__file__).resolve().parents[2] / "src" / "sitewise" / "ml"
 METRICS_DIR = Path(__file__).resolve().parents[2] / "ml_reference" / "recommender_eval"
+
+#: Overrides where the report is written. Tests MUST set this to a temporary
+#: directory: ``ml_reference/recommender_eval/model_selection_report.json`` is a
+#: tracked historical artifact, and a test run against a disposable database
+#: must never overwrite it with disposable numbers.
+EVAL_DIR_ENV = "SITEWISE_ML_EVAL_DIR"
+
+
+def metrics_dir() -> Path:
+    """Directory that receives ``model_selection_report.json``."""
+    override = os.environ.get(EVAL_DIR_ENV, "").strip()
+    return Path(override) if override else METRICS_DIR
 
 MIN_USERS_WITH_POSITIVES = 5
 MIN_TOTAL_POSITIVES = 25
@@ -257,8 +270,9 @@ def main() -> int:
         ),
     }
 
-    METRICS_DIR.mkdir(parents=True, exist_ok=True)
-    out = METRICS_DIR / "model_selection_report.json"
+    out_dir = metrics_dir()
+    out_dir.mkdir(parents=True, exist_ok=True)
+    out = out_dir / "model_selection_report.json"
     out.write_text(json.dumps(report, indent=2), encoding="utf-8")
 
     print(json.dumps(report, indent=2))

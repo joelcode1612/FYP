@@ -5,7 +5,7 @@ The database schema and authorized questionnaire records still require
 separate Owner/governance approval and a controlled migration.
 """
 from datetime import datetime
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
@@ -152,7 +152,10 @@ def activity(assessment_id:UUID,user:Owner,service:M2,response:Response,limit:in
 class AnswerUpdate(M2Request):
     expected_revision: int = Field(ge=0, strict=True)
     answer_state: str = Field(max_length=32)
-    value: str | list[str] | dict[str, str] | None = None
+    # Structured (COMPOSITE) answers carry nested objects and lists, so the
+    # value cannot be narrowed to ``dict[str, str]``. Shape is enforced by
+    # validate_m2_answer against the item's declared value_schema, not here.
+    value: Any = None
     marketplace_assessment_id: UUID | None = None
 
 
@@ -164,8 +167,26 @@ class BoundRevisionRequest(RevisionRequest):
     marketplace_assessment_id: UUID | None = None
 
 
+class AiProcessingConsentRequest(M2Request):
+    """The owner's decision about sending declarations to a cloud model.
+
+    Every field here is an *echo* of what the interface showed. The server
+    re-derives each term from canonical constants, so this model cannot widen
+    the disclosure — it can only agree with it or be refused.
+    """
+    granted: bool
+    disclosure_version: str = Field(min_length=1, max_length=64)
+    provider: str = Field(min_length=1, max_length=64)
+    purpose: str = Field(min_length=1, max_length=500)
+    endpoint: str = Field(min_length=1, max_length=300)
+    model: str = Field(min_length=1, max_length=200)
+
+
 class ConfirmRequest(BoundRevisionRequest):
     acknowledged_issue_ids: list[str] = Field(default_factory=list)
+    #: Omitted means "no permission granted". It is never inferred from the act
+    #: of confirming declarations.
+    ai_processing: AiProcessingConsentRequest | None = None
 
 
 class UncertaintyRequest(M2Request):
@@ -258,10 +279,28 @@ def record_review(assessment_id: UUID, payload: BoundRevisionRequest, user: Owne
 @router.post("/assessments/{assessment_id}/confirm")
 def confirm_context(assessment_id: UUID, payload: ConfirmRequest, user: Owner,
                     service: Confirmation):
+    from sitewise.project1.ai_processing_consent import build_consent
+    from sitewise.project1.provider import ENDPOINT, MODEL
+    try:
+        consent = build_consent(request=payload.ai_processing, endpoint=ENDPOINT,
+                                model=MODEL, owner_id=user.user_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail={
+            'code': getattr(exc, 'args', ['AI_PROCESSING_DISCLOSURE_MISMATCH'])[0],
+            'message': 'The AI-processing permission did not match the terms disclosed '
+                       'by this release. Reload the disclosure and decide again.'}) from exc
     return service.confirm(assessment_id, user.user_id,
         expected_revision=payload.expected_revision,
         acknowledged_issue_ids=payload.acknowledged_issue_ids,
-        marketplace_assessment_id=payload.marketplace_assessment_id)
+        marketplace_assessment_id=payload.marketplace_assessment_id,
+        ai_processing=consent)
+
+
+@router.get("/ai-processing-disclosure")
+def read_ai_processing_disclosure():
+    """The exact terms the interface must display before asking for consent."""
+    from sitewise.project1.ai_processing_consent import disclosure
+    return disclosure({})
 
 
 @router.post("/confirmations/{confirmation_id}/uncertainty", response_model=UncertaintyResponse)
@@ -416,6 +455,119 @@ def read_current_confirmation(assessment_id: UUID, user: Owner, service: M2,
             confirmation_id=row['id'], expected_revision=row['assessment_revision']) as source:
         return {**dict(row), 'snapshot_contract_version':source['snapshot'].get('snapshot_contract_version'),
                 'snapshot_digest':source['snapshot_digest']}
+
+
+@router.get('/assessments/{assessment_id}/concept-preview')
+def read_concept_preview(assessment_id: UUID, user: Owner, service: M2,
+                         response: Response,
+                         expected_revision: int | None = Query(None, ge=0)):
+    """Read-only draft concept preview for M2 V2, before M2-21 confirmation.
+
+    The projection is the same one the confirmed Business Context Builder uses,
+    so the entrepreneur reviews the real concept rather than a second rendering
+    of it. Nothing is written: no confirmation snapshot, no BCB, no answer
+    revision. ``confirmation_id`` is null on every reference precisely because
+    no confirmation exists yet.
+    """
+    response.headers['Cache-Control'] = 'private, no-store'
+    assessment = service.repo.get_assessment(assessment_id, user.user_id)
+    if assessment is None:
+        # Owner-scoped: another owner's assessment is indistinguishable from a
+        # missing one, so nothing about its existence leaks.
+        raise HTTPException(status_code=404, detail='Assessment not found.')
+    if expected_revision is not None and expected_revision != assessment['revision']:
+        raise HTTPException(status_code=409, detail={
+            'code': 'M2_PREVIEW_STALE_REVISION',
+            'message': 'The assessment changed after the preview was requested. Reload and try again.'})
+    instrument = service.repo.get_instrument(assessment['instrument_id'])
+    if instrument is None:
+        raise HTTPException(status_code=503, detail={
+            'code': 'M2_INSTRUMENT_UNAVAILABLE',
+            'message': 'The assessment instrument could not be read.'})
+    from sitewise.services.instrument_authorization import (
+        authorization_reason, instrument_is_usable)
+    if not instrument_is_usable(instrument):
+        raise HTTPException(status_code=503, detail={
+            'code': 'INSTRUMENT_UNAUTHORIZED', 'message': authorization_reason(instrument)})
+    if not instrument['version_tag'].startswith('M2V2-'):
+        raise HTTPException(status_code=409, detail={
+            'code': 'CONCEPT_PREVIEW_UNSUPPORTED_INSTRUMENT',
+            'message': 'The deterministic concept preview is defined for the M2 V2 instrument only.'})
+    items = service.repo.list_items(assessment['instrument_id'])
+    answers = service.repo.get_latest_answers(assessment_id, assessment['revision'])
+    from sitewise.services.m2_concept_preview import build_concept_preview
+    return build_concept_preview(assessment, instrument, items, answers)
+
+
+@router.get('/assessments/{assessment_id}/questionnaire-preview')
+def read_questionnaire_preview(assessment_id: UUID, user: Owner, service: M2,
+                               response: Response):
+    """Read-only draft preview of the assessment-bound research questionnaire.
+
+    Stage 5. It reuses the persisted objective and question rows that already
+    exist — it does not assemble a new questionnaire, adopt a policy or authorise
+    fielding. Every item is labelled ``accepted: False`` because no adopted
+    preview contract exists yet, and the envelope always reports
+    ``fielding_authorized`` and ``publication_authorized`` as false.
+
+    When there is nothing to preview it returns the specific blocker rather than
+    an empty list that would read as "no questions needed".
+    """
+    response.headers['Cache-Control'] = 'private, no-store'
+    assessment = service.repo.get_assessment(assessment_id, user.user_id)
+    if assessment is None:
+        raise HTTPException(status_code=404, detail='Assessment not found.')
+
+    def envelope(status, reason, confirmation=None, items=None):
+        return {
+            'contract_version': 'sitewise-questionnaire-preview/1',
+            'm2_assessment_id': str(assessment_id),
+            'assessment_revision': assessment['revision'],
+            'confirmation_id': str(confirmation['id']) if confirmation else None,
+            'status': status,
+            'reason': reason,
+            'question_items': items or [],
+            'draft_only': True,
+            'fielding_authorized': False,
+            'publication_authorized': False,
+        }
+
+    row = service.repo.latest_confirmation(assessment_id, user.user_id)
+    if row is None:
+        return envelope('UNAVAILABLE', 'CURRENT_CONFIRMATION_REQUIRED')
+    if not row['is_current']:
+        return envelope('UNAVAILABLE', 'CONFIRMATION_STALE', row)
+
+    rows = service.repo.research_workspace(
+        row['id'], user.user_id, row['assessment_revision'])
+    if not rows:
+        return envelope('UNAVAILABLE', 'NO_ADMITTED_OBJECTIVE', row)
+
+    items = []
+    for entry in rows:
+        if not entry.get('version') or not entry.get('question'):
+            continue
+        options = entry.get('options') or []
+        if isinstance(options, dict):
+            options = options.get('options') or []
+        items.append({
+            'objective_id': str(entry['id']),
+            'objective_text': entry['exact_text'],
+            'objective_authority': entry.get('approval_status'),
+            'question_version': str(entry['version']),
+            'question': entry['question'],
+            'options': options,
+            'accepted': False,
+            'source': 'm2_review_question_versions',
+        })
+    if not items:
+        return envelope('UNAVAILABLE', 'NO_VALIDATED_QUESTION', row)
+
+    # A question exists, but the adopted preview contract still does not, so the
+    # status stays a draft. Claiming READY here would be the fabrication this
+    # endpoint exists to prevent.
+    return envelope('DRAFT_AVAILABLE', 'QUESTIONNAIRE_SOURCE_PROJECTION_UNVERIFIED',
+                    row, items)
 
 
 @router.get('/assessments/{assessment_id}/workflow-overview', response_model=WorkflowOverview)

@@ -23,7 +23,16 @@ final class ConfirmedBusinessReview {
   );
 
   factory ConfirmedBusinessReview.fromJson(Map<String, dynamic> json) {
-    if (json['contract_version'] != 'project1-confirmed-review/1' ||
+    // `/1` is the frozen original: every answer value is a String, a List of
+    // Strings, or null. `/2` differs in exactly one respect — an answer whose
+    // instrument kind is COMPOSITE carries a JSON object. Every other field,
+    // name and guarantee below is identical and still enforced, so accepting
+    // `/2` here widens only what a declaration value may be, not what the
+    // contract promises.
+    if (!const {
+          'project1-confirmed-review/1',
+          'project1-confirmed-review/2',
+        }.contains(json['contract_version']) ||
         json['source_status'] != 'CURRENT_CONFIRMED_SOURCE' ||
         json['trust_class'] != 'T2_AUTHENTICATED_ENTREPRENEUR_DECLARATION' ||
         !const {'EVALUATED_CANDIDATE', 'NOT_EVALUATED'}.contains(json['evaluation_state']) ||
@@ -88,6 +97,14 @@ final class ConfirmedBusinessReview {
 
 final class ConfirmedReviewAnswer {
   final String itemKey, question, state, answerId, itemVersionId;
+
+  /// The pinned declaration value.
+  ///
+  /// Shape follows the instrument's `answer_kind`:
+  /// `String` (GEO / SINGLE), `List<String>` (MULTI) or
+  /// `Map<String, dynamic>` (COMPOSITE). Composite objects are kept whole —
+  /// no key is flattened away or discarded — because the confirmation digest
+  /// pins exactly this JSON.
   final Object? value;
   const ConfirmedReviewAnswer._(
     this.itemKey,
@@ -101,7 +118,8 @@ final class ConfirmedReviewAnswer {
     final value = json['value'];
     if (value != null &&
         value is! String &&
-        !(value is List && value.every((v) => v is String))) {
+        !(value is List && value.every((v) => v is String)) &&
+        value is! Map) {
       throw const FormatException('Invalid declaration value.');
     }
     return ConfirmedReviewAnswer._(
@@ -113,8 +131,38 @@ final class ConfirmedReviewAnswer {
       value is List ? List<String>.unmodifiable(value.cast<String>()) : value,
     );
   }
-  String get displayValue =>
-      value is List ? (value as List).join(', ') : value?.toString() ?? state;
+
+  /// True when this answer is a COMPOSITE structured object.
+  bool get isStructured => value is Map;
+
+  String get displayValue {
+    final v = value;
+    if (v == null) return state;
+    if (v is List) return v.join(', ');
+    if (v is Map) return _renderComposite(v);
+    return v.toString();
+  }
+
+  /// Renders a composite answer as `key: value` pairs, preserving every key and
+  /// descending one level into nested lists/objects so nothing is hidden behind
+  /// Dart's `Map.toString()`.
+  static String _renderComposite(Map<Object?, Object?> map) {
+    final parts = <String>[];
+    map.forEach((key, entry) {
+      parts.add('$key: ${_renderCompositeEntry(entry)}');
+    });
+    return parts.join(' · ');
+  }
+
+  static String _renderCompositeEntry(Object? entry) {
+    if (entry is List) {
+      return entry.map(_renderCompositeEntry).join(', ');
+    }
+    if (entry is Map) {
+      return '(${_renderComposite(entry)})';
+    }
+    return entry?.toString() ?? '—';
+  }
 }
 
 final class ConfirmedReviewFinding {

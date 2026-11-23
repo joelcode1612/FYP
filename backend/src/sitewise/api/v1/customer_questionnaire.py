@@ -120,7 +120,13 @@ def availability(user:Actor,response:Response):
 def invitations(user:Actor,response:Response,authority=Depends(get_cq_authority)):
     if not settings.cq_runtime_enabled:
         response.headers['Cache-Control']='no-store'
-        return {'contract_version':'cq-invitations/1','state':'held','code':'PRODUCTION_FIELDING_HOLD','invitations':[]}
+        # `state` and `code` are unchanged so existing consumers keep working.
+        # `reason` is the additive field that separates "the feature is switched
+        # off" from "this respondent is not authorized": both used to report
+        # PRODUCTION_FIELDING_HOLD, which made them indistinguishable.
+        return {'contract_version':'cq-invitations/1','state':'held',
+            'code':'PRODUCTION_FIELDING_HOLD','reason':'CQ_RUNTIME_DISABLED',
+            'invitations':[]}
     return call(response,lambda:get_cq_service(authority).invitations(user.user_id))
 
 

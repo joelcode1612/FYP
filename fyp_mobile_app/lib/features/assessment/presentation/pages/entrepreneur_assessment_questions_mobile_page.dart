@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:fyp/core/di/service_locator.dart';
+import 'package:fyp/core/routing/app_routes.dart';
 import 'package:fyp/core/theme/sitewise_m3.dart';
 import 'package:fyp/core/theme/sitewise_theme.dart';
 import 'package:fyp/shared/presentation/layouts/mobile_app_shell.dart';
@@ -241,10 +242,10 @@ class _EntrepreneurAssessmentQuestionsPageState
       if (!mounted) return;
       setState(() => _busy = false);
       if (complete) {
-        Navigator.of(context).pushNamed(
-          '/entrepreneur/assessment-evidence',
-          arguments: widget.propertyId,
-        );
+        // The Evidence step that used to sit between the questionnaire and the
+        // summary has been removed, so completing the questions now goes
+        // straight to the summary.
+        Navigator.of(context).pushNamed('/entrepreneur/assessment-summary');
       }
     } on Object catch (error) {
       if (!mounted) return;
@@ -260,7 +261,7 @@ class _EntrepreneurAssessmentQuestionsPageState
     if (_fatal != null) {
       return MobileAppShell(
         title: 'Assessment',
-        currentRoute: '/entrepreneur/assess',
+        currentRoute: AppRoutes.assessmentHome,
         body: Padding(
           padding: const EdgeInsets.all(SitewiseM3.gutter),
           child: Column(
@@ -270,7 +271,7 @@ class _EntrepreneurAssessmentQuestionsPageState
                 icon: Icons.lock_outline_rounded,
                 title: 'Assessment unavailable',
                 message: _fatal!,
-                actionLabel: 'Back to Assess',
+                actionLabel: 'Back to assessments',
                 onAction: () => Navigator.of(context).maybePop(),
               ),
               if (_fatalRetryable) ...[
@@ -301,7 +302,7 @@ class _EntrepreneurAssessmentQuestionsPageState
 
     return MobileAppShell(
       title: 'Business details',
-      currentRoute: '/entrepreneur/assess',
+      currentRoute: AppRoutes.assessmentHome,
       body: ListView(
         padding: const EdgeInsets.fromLTRB(
           SitewiseM3.gutter,

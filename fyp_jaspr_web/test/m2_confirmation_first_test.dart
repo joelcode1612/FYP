@@ -4,8 +4,8 @@ import 'package:crypto/crypto.dart';
 import 'package:jaspr_test/jaspr_test.dart';
 import 'package:jaspr/jaspr.dart' show ValueKey;
 import 'package:shared_logic/shared_logic.dart';
-import 'package:sitewise_jaspr_web/components/m2_workflow_panel.dart';
-import 'package:sitewise_jaspr_web/data/app_locator.dart';
+import 'package:sitewise_jaspr_web/features/assessment/presentation/components/m2_workflow_panel.dart';
+import 'package:sitewise_jaspr_web/core/di/app_locator.dart';
 
 import 'm2_autosave_verification_test.dart' as fixture;
 

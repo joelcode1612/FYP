@@ -1,0 +1,3042 @@
+{
+  "registry_version": "q01-q13-explanation/1",
+  "instrument_version": "P3-01C-VNEXT-0.6.1-CUST-REC",
+  "instrument_sha256": "ec2b5494ecf82447076e0d7a2bfb57599a24f049bbcc925a9ecbea6e833bce59",
+  "approval": "NOT_AUTHORIZED_FOR_FIELDING_OR_REPORT_PUBLICATION",
+  "authority_granted_by_this_registry": "NONE",
+  "instrument_gates": [
+    "NOT_AUTHORIZED",
+    "BLOCKED_SOURCE",
+    "MISSING_APPROVED_STIMULUS",
+    "MISSING_APPROVED_BANK"
+  ],
+  "evidence_states": [
+    "WITHDRAWN_OR_NO_CONSENT",
+    "NO_ADMISSIBLE_RESPONSES",
+    "NOT_SHOWN_APPROVED_ROUTE",
+    "UNKNOWN_ROUTE",
+    "NON_SUBSTANTIVE_ONLY",
+    "REFUSED_OR_CANNOT_JUDGE",
+    "LOW_VALID_BASE",
+    "VALID_APPROVED"
+  ],
+  "state_templates": {
+    "NOT_AUTHORIZED": "Findings for {question_id} are withheld because the instrument, source or required stimulus has not been approved. No quantitative conclusion is issued.",
+    "BLOCKED_SOURCE": "Findings for {question_id} are withheld because the instrument, source or required stimulus has not been approved. No quantitative conclusion is issued.",
+    "MISSING_APPROVED_STIMULUS": "Findings for {question_id} are withheld because the instrument, source or required stimulus has not been approved. No quantitative conclusion is issued.",
+    "MISSING_APPROVED_BANK": "Findings for {question_id} are withheld because the instrument, source or required stimulus has not been approved. No quantitative conclusion is issued.",
+    "NO_ADMISSIBLE_RESPONSES": "No admissible respondent answers were available for {question_id}; the result is not estimable, not zero.",
+    "NOT_SHOWN_APPROVED_ROUTE": "{question_id} was not presented to these respondents under the recorded routing rule; absence of an answer is not a negative response.",
+    "UNKNOWN_ROUTE": "The question's applicability could not be established from approved routing evidence. Findings remain withheld pending verification.",
+    "REFUSED_OR_CANNOT_JUDGE": "{count} of {shown} shown respondents declined or could not judge; these answers were not treated as substantive choices.",
+    "NON_SUBSTANTIVE_ONLY": "{count} of {shown} shown respondents declined or could not judge; these answers were not treated as substantive choices.",
+    "LOW_VALID_BASE": "Only {V} valid responses were available. Percentages, if displayed, describe this small group and should not be generalized.",
+    "WITHDRAWN_OR_NO_CONSENT": "Responses excluded from analysis because valid consent or retention authority was not established.",
+    "VALID_APPROVED": null
+  },
+  "state_template_source": "QUESTION_OBJECTIVES_AND_FALLBACKS.md, \"Report fallback decision rules\" table — quoted verbatim; placeholders {question_id}, {count}, {shown}, {V} are filled only from server-held EE-01 values",
+  "state_template_note": "NOT_AUTHORIZED, BLOCKED_SOURCE, MISSING_APPROVED_STIMULUS and MISSING_APPROVED_BANK share one owner sentence because the handoff groups them into a single row; they remain distinct state codes so the reason is recorded even when the prose is identical.",
+  "framing": {
+    "headline": "{question_id} — {state_label}",
+    "state_labels": {
+      "NOT_AUTHORIZED": "withheld, instrument not authorised",
+      "BLOCKED_SOURCE": "withheld, source unresolved",
+      "MISSING_APPROVED_STIMULUS": "withheld, approved stimulus absent",
+      "MISSING_APPROVED_BANK": "withheld, approved bank absent",
+      "WITHDRAWN_OR_NO_CONSENT": "withheld, consent or retention not established",
+      "NO_ADMISSIBLE_RESPONSES": "not estimable, no admissible responses",
+      "NOT_SHOWN_APPROVED_ROUTE": "not shown under the recorded routing rule",
+      "UNKNOWN_ROUTE": "withheld, applicability unverified",
+      "NON_SUBSTANTIVE_ONLY": "not estimable, no substantive answer",
+      "REFUSED_OR_CANNOT_JUDGE": "not estimable, refused or could not judge",
+      "LOW_VALID_BASE": "estimated on a small valid base",
+      "VALID_APPROVED": "substantive result"
+    },
+    "research_permitted_prefix": "Permitted claim for {question_id}: ",
+    "research_no_claim": "No claim from {question_id} can be made in this state, so no research conclusion is offered.",
+    "planning_withheld": "No planning implication follows from a measurement that is not available.",
+    "planning_valid": "Stated responses are a planning input only; they are not a forecast, price recommendation or viability assessment.",
+    "limitation_prefix": "Item limitation: ",
+    "limitation_coverage_prefix": "Coverage limitation: ",
+    "summary_withheld": "The measurement for {question_id} is not reportable in this state, so no interpretation is offered.",
+    "summary_valid": "This explanation restates supplied figures for {question_id} without recalculation, aggregation or rounding.",
+    "note": "Structural scaffolding only. Contains no claim, figure, finding or measurement; every substantive sentence comes from the item templates or the owner-prepared state sentences."
+  },
+  "source_artifacts": {
+    "CUST03_CORRECTED_QUESTIONNAIRE_AND_ROUTING_CONTRACT.json": "ec2b5494ecf82447076e0d7a2bfb57599a24f049bbcc925a9ecbea6e833bce59",
+    "QUESTION_CONTRACT_MATRIX.json": "8feee558d7acc03b0b1b6473ae8a3369ece7b8a23d5fa23a5a3b2fa48a6bfd63",
+    "QUESTION_OBJECTIVES_AND_FALLBACKS.json": "2ab2626df39b11415d167efca84986aff71d693c2e912408144dfc1f3983ef1b"
+  },
+  "handoff_package_sha256": "4069be6be3e5fabd3aeb70e92395b95c9425cd734f05cd326034e5215a404991",
+  "handoff_package_sha256_basis": "SHA-256 of the extracted SHA256SUMS.txt manifest",
+  "handoff_zip_sha256": "fcc1cf0c1a1c35da1fdcfe61242b6d4abd5228dcd3c3687f381356b9c6f21478",
+  "handoff_zip_sha256_basis": "SHA-256 of PROJECT1_CQ13_RESEARCH_AND_QUERY_HANDOFF_20261122.zip (37,735 bytes, 11 files; all 10 manifest hashes verified OK)",
+  "objectives": [
+    {
+      "objective_id": "O1",
+      "name": "Concept Interest",
+      "closest_question": "Q05",
+      "adequacy": "Stated likelihood, not observed demand; source BLOCKED_MEASUREMENT",
+      "covered_by_an_approved_measure": false
+    },
+    {
+      "objective_id": "O2",
+      "name": "Product Preference",
+      "closest_question": "Q06",
+      "adequacy": "Category interest, not pairwise preference; source BLOCKED_MEASUREMENT",
+      "covered_by_an_approved_measure": false
+    },
+    {
+      "objective_id": "O3",
+      "name": "Price Acceptability",
+      "closest_question": "Q07",
+      "adequacy": "Exact approved offer absent; source BLOCKED_MEASUREMENT",
+      "covered_by_an_approved_measure": false
+    },
+    {
+      "objective_id": "O4",
+      "name": "Service Preference",
+      "closest_question": "Q11",
+      "adequacy": "Optional context and owner-blocked; not yet mandatory O4 evidence",
+      "covered_by_an_approved_measure": false
+    },
+    {
+      "objective_id": "O5",
+      "name": "Experience Preference",
+      "closest_question": "Q10",
+      "adequacy": "Feature bank pending; cannot derive valid feature scores",
+      "covered_by_an_approved_measure": false
+    },
+    {
+      "objective_id": "O6",
+      "name": "Segment Interest",
+      "closest_question": null,
+      "adequacy": "No dedicated approved measure; Q01 area affiliation is not a customer-segment classifier",
+      "covered_by_an_approved_measure": false
+    }
+  ],
+  "conflicts": [
+    {
+      "conflict_id": "CX-01",
+      "question_id": "Q01",
+      "field": "eligibility_effect",
+      "source_a": {
+        "artifact": "CUST03 items[Q01].eligibility_effect",
+        "value": "RARELY/NEVER -> AREA_OUTSIDE, NOT_SURE -> AREA_UNKNOWN, default ELIGIBLE (a respondent-level screen-out)"
+      },
+      "source_b": {
+        "artifact": "QUESTION_OBJECTIVES_AND_FALLBACKS.md (Q01)",
+        "value": "No respondent is declared ineligible solely from Q01"
+      },
+      "later_authority": {
+        "artifact": "CUST03 screening_architecture_decision + authority_directions.SD-09",
+        "status": "OWNER_DIRECTION_FOUND_FORMAL_APPROVAL_PENDING / OPEN_SD09",
+        "value": "candidate A direction recorded in chat 2026-10-27; not a formal controlled spine amendment"
+      },
+      "resolution": "UNRESOLVED_SCREEN_OUT_NOT_ADOPTED",
+      "blocking_decision": "SD-09 formal adoption of the screening architecture",
+      "consequence": "Q01 eligibility is not computed, so any gate of the form Q01_ELIGIBLE is itself unresolved. No respondent is screened out.",
+      "decision_owner": "OWNER"
+    },
+    {
+      "conflict_id": "CX-02",
+      "question_id": "Q02",
+      "field": "item_show_gate",
+      "source_a": {
+        "artifact": "CUST03 routing_model.item_show_gate_decisions.Q02",
+        "value": "ALWAYS (second pre-screen item)"
+      },
+      "source_b": {
+        "artifact": "CUST03 routing_model.item_show_gate_decisions.Q02.why",
+        "value": "flips S_pre/Q_pre semantics; SD-C/SD-I territory; WS2-NEW-15 requires a dated scope act and remains REMAINS_OPEN"
+      },
+      "later_authority": {
+        "artifact": "CUST03 (same field)",
+        "status": "PROPOSED_PENDING_SD_C_SD_I (Scientific + Owner; NOT adopted)",
+        "value": "gate value kept as a proposal only"
+      },
+      "resolution": "UNRESOLVED_GATE_NOT_ADOPTED",
+      "blocking_decision": "SD-C / SD-I dated scope act",
+      "consequence": "Q02 show gate is recorded, never applied.",
+      "decision_owner": "SCIENTIFIC_AND_OWNER"
+    },
+    {
+      "conflict_id": "CX-03",
+      "question_id": "Q04",
+      "field": "recall_period",
+      "source_a": {
+        "artifact": "CUST03 items[Q04] stem",
+        "value": "In the past 30 days, on how many occasions…"
+      },
+      "source_b": {
+        "artifact": "CUST03 items[Q04].coverage_limitation",
+        "value": "The 30-day window is A10's; the 7-day item was the pre-registered one. Recall validity for 30 days is untested."
+      },
+      "later_authority": {
+        "artifact": "CUST03 items[Q04].disposition",
+        "status": "NON_EQUIVALENT_REWRITE",
+        "value": "recorded as a non-equivalent rewrite, not a silent edit"
+      },
+      "resolution": "RECORDED_NOT_INTERCHANGEABLE",
+      "blocking_decision": "none for presentation; measurement approval outstanding",
+      "consequence": "The 30-day band is the only item that exists. A 7-day figure may never be derived from it, and the two may never be pooled.",
+      "decision_owner": "NONE_FOR_PRESENTATION"
+    },
+    {
+      "conflict_id": "CX-04",
+      "question_id": "Q05",
+      "field": "stimulus",
+      "source_a": {
+        "artifact": "CUST03 items[Q05] stem",
+        "value": "the café described in [concept_card_version]"
+      },
+      "source_b": {
+        "artifact": "CUST03 items[Q05].gate_dependencies",
+        "value": "G03, G04, G05, G06"
+      },
+      "later_authority": {
+        "artifact": "CUST03 items[Q05].status",
+        "status": "BLOCKED_MEASUREMENT",
+        "value": "no approved concept stimulus exists"
+      },
+      "resolution": "UNRESOLVED_STIMULUS_ABSENT",
+      "blocking_decision": "concept-card approval (G03–G06)",
+      "consequence": "A Q05 measurement cannot be admitted without an approved stimulus.",
+      "decision_owner": "SCIENTIFIC"
+    },
+    {
+      "conflict_id": "CX-05",
+      "question_id": "Q06",
+      "field": "codebook",
+      "source_a": {
+        "artifact": "CUST03 items[Q06].codes",
+        "value": "six substantive categories + UNLISTED_CATEGORY_REPORTED"
+      },
+      "source_b": {
+        "artifact": "CUST03 items[Q06].coverage_limitation",
+        "value": "M2-06 includes an 'Other' category that cannot be fielded as a closed content code; only its presence is captured"
+      },
+      "later_authority": {
+        "artifact": "CUST03 items[Q06].status",
+        "status": "BLOCKED_MEASUREMENT",
+        "value": "menu codebook not approved"
+      },
+      "resolution": "UNRESOLVED_CODEBOOK_NOT_APPROVED",
+      "blocking_decision": "menu codebook approval",
+      "consequence": "UNLISTED_CATEGORY_REPORTED is a presence flag, not a category. It must never be presented as an interest category.",
+      "decision_owner": "SCIENTIFIC"
+    },
+    {
+      "conflict_id": "CX-06",
+      "question_id": "Q07",
+      "field": "exact_offer_stimulus",
+      "source_a": {
+        "artifact": "CUST03 items[Q07].stem",
+        "value": "[exact_rm_price] for [one_exact_product_size_quantity_fulfilment_and_charges]"
+      },
+      "source_b": {
+        "artifact": "CUST03 items[Q07].coverage_limitation",
+        "value": "No approved M2 offer exists. M2-10 admits 'latte/americano' (two products) while CS-07 fixes 'latte'."
+      },
+      "later_authority": {
+        "artifact": "CUST03 items[Q07].status",
+        "status": "BLOCKED_MEASUREMENT",
+        "value": "stimulus_required=true, stimulus_absent_outcome=NOT_SHOWN"
+      },
+      "resolution": "UNRESOLVED_STIMULUS_ABSENT",
+      "blocking_decision": "one exact approved offer and price",
+      "consequence": "Q07 stays WITHHELD. It is not chartable, not estimable and not substitutable by Q13.",
+      "decision_owner": "SCIENTIFIC_AND_OWNER"
+    },
+    {
+      "conflict_id": "CX-07",
+      "question_id": "Q08",
+      "field": "show_gate_dependency",
+      "source_a": {
+        "artifact": "QUESTION_CONTRACT_MATRIX.json Q08.candidate_gate",
+        "value": "Q01_ELIGIBLE_AND_Q04_SUBSTANTIVE_NONZERO"
+      },
+      "source_b": {
+        "artifact": "CX-01 (Q01 eligibility is not adopted)",
+        "value": "the Q01_ELIGIBLE half of this gate has no adopted definition"
+      },
+      "later_authority": {
+        "artifact": "CUST03 authority_directions.SD-09",
+        "status": "OWNER_SELECTION_REQUIRED",
+        "value": "screening architecture not formally adopted"
+      },
+      "resolution": "UNRESOLVED_DEPENDENCY_UNRESOLVED",
+      "blocking_decision": "SD-09",
+      "consequence": "The Q04 half is well defined (substantive non-zero). The Q01 half is not, so Q08 applicability is only partly determined.",
+      "decision_owner": "OWNER"
+    },
+    {
+      "conflict_id": "CX-08",
+      "question_id": "Q09",
+      "field": "show_gate",
+      "source_a": {
+        "artifact": "CUST03 routing_model.open_decisions.ROUTING-01",
+        "value": "class CONDITIONAL_R07 (grouped with Q08)"
+      },
+      "source_b": {
+        "artifact": "CUST03 inherited show_rule prose",
+        "value": "Shown after the versioned concept card. Independent of Q04."
+      },
+      "later_authority": {
+        "artifact": "CUST03 routing_model.open_decisions.ROUTING-01",
+        "status": "NOT_SETTLED_BY_THIS_CORRECTION (WS2 scientific + Owner)",
+        "value": "author_default Q01_ELIGIBLE_AND_Q04_SUBSTANTIVE_NONZERO, recorded as a default only"
+      },
+      "resolution": "UNRESOLVED_ROUTING_CONFLICT",
+      "blocking_decision": "WS2 scientific + Owner ruling on ROUTING-01",
+      "consequence": "R07's D05B denominator changes by the Q04=ZERO group depending on the ruling.",
+      "decision_owner": "SCIENTIFIC_AND_OWNER"
+    },
+    {
+      "conflict_id": "CX-09",
+      "question_id": "Q10",
+      "field": "show_gate",
+      "source_a": {
+        "artifact": "CUST03 routing_model.open_decisions.ROUTING-02",
+        "value": "class CONDITIONAL_R07 with no gate of any kind"
+      },
+      "source_b": {
+        "artifact": "CUST03 routing_model.items_with_open_show_gate",
+        "value": "Q09 and Q10 listed as having an open show gate"
+      },
+      "later_authority": {
+        "artifact": "CUST03 routing_model.open_decisions.ROUTING-02",
+        "status": "NOT_SETTLED_BY_THIS_CORRECTION (WS2 scientific + Owner)",
+        "value": "author_default recorded, not adopted"
+      },
+      "resolution": "UNRESOLVED_ROUTING_CONFLICT",
+      "blocking_decision": "WS2 scientific + Owner ruling on ROUTING-02",
+      "consequence": "Q10 applicability is undetermined.",
+      "decision_owner": "SCIENTIFIC_AND_OWNER"
+    },
+    {
+      "conflict_id": "CX-10",
+      "question_id": "Q10",
+      "field": "feature_bank",
+      "source_a": {
+        "artifact": "CUST03 items[Q10].feature_bank.approved_bank",
+        "value": "null"
+      },
+      "source_b": {
+        "artifact": "CUST03 items[Q10].feature_bank.author_proposal",
+        "value": "A10 v0.3:344 'Examples:' is a drafted example set, not an approved exhaustive bank; F<=6 is an author burden cap"
+      },
+      "later_authority": {
+        "artifact": "CUST03 items[Q10].feature_bank.gate",
+        "status": "G06_APPROVAL_PENDING",
+        "value": "no approved bank"
+      },
+      "resolution": "UNRESOLVED_BANK_ABSENT",
+      "blocking_decision": "G06 feature-bank approval",
+      "consequence": "There is no item-level V for Q10 and no pooling of features. No Q10 chart, composite score or weight may be produced.",
+      "decision_owner": "SCIENTIFIC"
+    },
+    {
+      "conflict_id": "CX-11",
+      "question_id": "Q10",
+      "field": "denominator",
+      "source_a": {
+        "artifact": "CUST03 items[Q10].per_feature_record",
+        "value": "V_feature per feature; independent_per_feature=true; no pooling"
+      },
+      "source_b": {
+        "artifact": "EE-01 category cells",
+        "value": "one V per snapshot, not per feature"
+      },
+      "later_authority": {
+        "artifact": "CUST03 items[Q10].per_feature_record.note",
+        "status": "RECORDED",
+        "value": "There is no item-level V for Q10"
+      },
+      "resolution": "UNSUPPORTED_BY_CURRENT_ENGINE",
+      "blocking_decision": "a per-feature EE-01 measurement rule",
+      "consequence": "EE-01 cannot express V_feature, so Q10 is not chartable even if a bank were approved. Recorded rather than approximated.",
+      "decision_owner": "ENGINEERING"
+    },
+    {
+      "conflict_id": "CX-12",
+      "question_id": "Q11",
+      "field": "report_authorization",
+      "source_a": {
+        "artifact": "CUST03 items[Q11].status",
+        "value": "BLOCKED_OWNER"
+      },
+      "source_b": {
+        "artifact": "CUST03 items[Q11].report_sections",
+        "value": "[] (empty)"
+      },
+      "later_authority": {
+        "artifact": "CUST03 items[Q11].permitted_claim",
+        "status": "NONE_UNTIL_REGISTERED_AND_OWNER_DECIDES",
+        "value": "None in a report until the construct is registered and an Owner decision authorises a section"
+      },
+      "resolution": "BLOCKED_OWNER",
+      "blocking_decision": "Owner registration and section authorization",
+      "consequence": "Q11 has no report section and cannot be charted or explained as a finding.",
+      "decision_owner": "OWNER"
+    },
+    {
+      "conflict_id": "CX-13",
+      "question_id": "Q12",
+      "field": "no_usual_trip",
+      "source_a": {
+        "artifact": "CUST03 items[Q12].codes",
+        "value": "WALK, MOTORCYCLE, CAR, PUBLIC_TRANSPORT, OTHER, NOT_SURE, PREFER_NOT_TO_ANSWER — there is no \"no usual trip\" code"
+      },
+      "source_b": {
+        "artifact": "CUST03 items[Q12].option_to_state_map",
+        "value": "OTHER -> ANSWERED_NON_SUBSTANTIVE, NOT_SURE -> ANSWERED_NON_SUBSTANTIVE, PREFER_NOT_TO_ANSWER -> REFUSED"
+      },
+      "later_authority": {
+        "artifact": "CUST03 items[Q12].coverage_limitation",
+        "status": "RECORDED",
+        "value": "OTHER has no coding scheme and is not treated as a category"
+      },
+      "resolution": "RECORDED_NO_DEDICATED_CODE",
+      "blocking_decision": "none for presentation",
+      "consequence": "A respondent with no usual trip has no dedicated code and is recorded as OTHER or NOT_SURE. Neither may be reported as a travel mode.",
+      "decision_owner": "NONE_FOR_PRESENTATION"
+    },
+    {
+      "conflict_id": "CX-14",
+      "question_id": "Q13",
+      "field": "report_authorization",
+      "source_a": {
+        "artifact": "CUST03 items[Q13].status",
+        "value": "BLOCKED_OWNER"
+      },
+      "source_b": {
+        "artifact": "CUST03 items[Q13].report_sections",
+        "value": "[] (empty)"
+      },
+      "later_authority": {
+        "artifact": "CUST03 items[Q13].disposition",
+        "status": "BLOCKED_OWNER",
+        "value": "RESTORED_FROM_ORIGINAL_AS_SEPARATE_CONSTRUCT"
+      },
+      "resolution": "BLOCKED_OWNER",
+      "blocking_decision": "Owner decision and a final exact item definition",
+      "consequence": "Q13 is not a Q07 substitute and has no report section.",
+      "decision_owner": "OWNER"
+    },
+    {
+      "conflict_id": "CX-15",
+      "question_id": "*",
+      "field": "A_definition",
+      "source_a": {
+        "artifact": "CUST03 funnel_rules.a_definition_authority",
+        "value": "operative P3-01C-VNEXT-0.6.1-CUST-REC; A = answer events (ANSWERED_SUBSTANTIVE, ANSWERED_NON_SUBSTANTIVE, INVALID, REFUSED); V = ANSWERED_SUBSTANTIVE"
+      },
+      "source_b": {
+        "artifact": "backend/src/sitewise/services/ee01_service.py",
+        "value": "A = sum over ('ANSWERED_SUBSTANTIVE','ANSWERED_NON_SUBSTANTIVE','REFUSED','INVALID'); V = ANSWERED_SUBSTANTIVE"
+      },
+      "later_authority": {
+        "artifact": "CUST03 funnel_rules.a_definition_authority.rule",
+        "status": "RESOLVED_IN_IMPLEMENTATION",
+        "value": "exactly one A-definition is operative"
+      },
+      "resolution": "RESOLVED_ENGINE_MATCHES_CONTRACT",
+      "blocking_decision": "none",
+      "consequence": "EE-01 already implements the operative A and V definitions. No change needed.",
+      "decision_owner": "NONE"
+    },
+    {
+      "conflict_id": "CX-16",
+      "question_id": "*",
+      "field": "option_code_bank",
+      "source_a": {
+        "artifact": "CUST03 items[*].codes"
+      },
+      "source_b": {
+        "artifact": "QUESTION_CONTRACT_MATRIX.json codes_and_candidate_labels + handoff answer_codes"
+      },
+      "later_authority": {
+        "artifact": "this build (see reconciliation report §2)",
+        "status": "VERIFIED_IDENTICAL",
+        "value": "all 13 code banks and all 13 response types are identical across the three sources"
+      },
+      "resolution": "RESOLVED_NO_CONFLICT",
+      "blocking_decision": "none",
+      "consequence": "The \"old Q01 codes\" warning in the handoff refers to a pre-recovery bank that is not present in this workspace; it does not describe a conflict between the three sources used here.",
+      "decision_owner": "NONE"
+    },
+    {
+      "conflict_id": "CX-17",
+      "question_id": "*",
+      "field": "label_bank_encoding",
+      "source_a": {
+        "artifact": "QUESTION_CONTRACT_MATRIX.json codes_and_candidate_labels[]",
+        "value": "no draft label carries the cp1252 mis-decode; every label is stored as U+2013 where a range separator is intended"
+      },
+      "source_b": {
+        "artifact": "the same file read as UTF-8",
+        "value": "the bytes decode as U+2013 directly; no transcoding is applied on read"
+      },
+      "later_authority": {
+        "artifact": "PROJECT1_CX17_LABEL_ENCODING_PROVENANCE.json",
+        "status": "REPAIRED_AT_SOURCE",
+        "value": "fifteen labels in Q02, Q04 and Q13 were repaired by a byte substitution of the corrupted sequence with U+2013; the original file and both hashes are preserved in the provenance artifact"
+      },
+      "resolution": "RESOLVED_SOURCE_ENCODING_REPAIRED",
+      "blocking_decision": "none",
+      "consequence": "The character-level defect is closed: the source now stores U+2013 and no transcoding happens on read. This does NOT approve the wording — every repaired label is still draft option text and is presented as a draft, never as approved wording. Approval of the option bank remains an open gate (MISSING_APPROVED_BANK) and is not settled by this conflict.",
+      "decision_owner": "OWNER"
+    },
+    {
+      "conflict_id": "CX-18",
+      "question_id": "*",
+      "field": "ordinal_scale",
+      "source_a": {
+        "artifact": "CUST03 items[Q02, Q04, Q07, Q13].type",
+        "value": "all four are declared ordinal_single"
+      },
+      "source_b": {
+        "artifact": "CUST03 items[Q02, Q04, Q07, Q13].ordinal_meaning",
+        "value": "null for all four; only Q05 declares a scale (DEF_NO=1 .. DEF_YES=5)"
+      },
+      "later_authority": {
+        "artifact": "CUST03 items[Q05].ordinal_meaning.note",
+        "status": "RECORDED",
+        "value": "\"Display order is presentation. Ordinal meaning is the declared mapping.\""
+      },
+      "resolution": "UNRESOLVED_SCALE_UNDECLARED",
+      "blocking_decision": "declaration of the ordinal scale for Q02, Q04, Q07, Q13",
+      "consequence": "These items are typed ordinal but carry no scale mapping, so a chart presents ordered categories with no ordinal value and no interval claim. Display order is never read as a scale.",
+      "decision_owner": "SCIENTIFIC_AND_OWNER"
+    },
+    {
+      "conflict_id": "CX-19",
+      "question_id": "*",
+      "field": "wording_encoding",
+      "source_a": {
+        "artifact": "QUESTION_CONTRACT_MATRIX.json wording_source",
+        "value": "13 wording fields encode U+00E9 directly and match the frozen stem byte for byte"
+      },
+      "source_b": {
+        "artifact": "CUST03_CORRECTED_QUESTIONNAIRE_AND_ROUTING_CONTRACT.json items[*].stem",
+        "value": "the frozen instrument encodes the same stems the same way"
+      },
+      "later_authority": {
+        "artifact": "PROJECT1_CX17_LABEL_ENCODING_PROVENANCE.json",
+        "status": "REPAIRED_AT_SOURCE",
+        "value": "twenty occurrences across eighteen wording fields were repaired by a byte substitution; every stem is now byte-identical to the frozen instrument"
+      },
+      "resolution": "RESOLVED_SOURCE_ENCODING_REPAIRED",
+      "blocking_decision": "none",
+      "consequence": "The wording now matches the frozen instrument exactly. This is a restoration, not a wording change: the stem text, its language version and its candidate status are untouched.",
+      "decision_owner": "OWNER"
+    }
+  ],
+  "questions": [
+    {
+      "question_id": "Q01",
+      "group": "A",
+      "instrument_version": "P3-01C-VNEXT-0.6.1-CUST-REC",
+      "instrument_sha256": "ec2b5494ecf82447076e0d7a2bfb57599a24f049bbcc925a9ecbea6e833bce59",
+      "instrument_status": "BLOCKED_MEASUREMENT",
+      "source_fingerprint": "6a830f94ee474064ad5fb1bdabca107ddf24aae604cc507a43174060f09c0747",
+      "construct_id": "G01_AREA_AFFILIATION",
+      "construct_id_handoff": "G01_AREA_AFFILIATION",
+      "response_kind": "MULTI_SELECT",
+      "instrument_type": "multi_select_with_exclusive_terminals",
+      "max_selections": null,
+      "exclusive_codes": [
+        "RARELY",
+        "NEVER",
+        "NOT_SURE"
+      ],
+      "codes": [
+        {
+          "code": "LIVE",
+          "label_en": "I live in this area",
+          "label_raw": null,
+          "label_repair": null,
+          "label_source": "CONTRACT_OPTION_BANK_DRAFT"
+        },
+        {
+          "code": "WORK",
+          "label_en": "I work in this area",
+          "label_raw": null,
+          "label_repair": null,
+          "label_source": "CONTRACT_OPTION_BANK_DRAFT"
+        },
+        {
+          "code": "STUDY",
+          "label_en": "I study in this area",
+          "label_raw": null,
+          "label_repair": null,
+          "label_source": "CONTRACT_OPTION_BANK_DRAFT"
+        },
+        {
+          "code": "RUN_BUSINESS",
+          "label_en": "I operate a business in this area",
+          "label_raw": null,
+          "label_repair": null,
+          "label_source": "CONTRACT_OPTION_BANK_DRAFT"
+        },
+        {
+          "code": "VISIT_PURPOSE",
+          "label_en": "I visit this area for activities or other purposes",
+          "label_raw": null,
+          "label_repair": null,
+          "label_source": "CONTRACT_OPTION_BANK_DRAFT"
+        },
+        {
+          "code": "PASS_THROUGH",
+          "label_en": "I pass through this area",
+          "label_raw": null,
+          "label_repair": null,
+          "label_source": "CONTRACT_OPTION_BANK_DRAFT"
+        },
+        {
+          "code": "RARELY",
+          "label_en": "Rarely",
+          "label_raw": null,
+          "label_repair": null,
+          "label_source": "CONTRACT_OPTION_BANK_DRAFT"
+        },
+        {
+          "code": "NEVER",
+          "label_en": "Never",
+          "label_raw": null,
+          "label_repair": null,
+          "label_source": "CONTRACT_OPTION_BANK_DRAFT"
+        },
+        {
+          "code": "NOT_SURE",
+          "label_en": "Not sure",
+          "label_raw": null,
+          "label_repair": null,
+          "label_source": "CONTRACT_OPTION_BANK_DRAFT"
+        }
+      ],
+      "substantive_codes": [
+        "LIVE",
+        "WORK",
+        "STUDY",
+        "RUN_BUSINESS",
+        "VISIT_PURPOSE",
+        "PASS_THROUGH"
+      ],
+      "non_substantive_codes": [
+        "NEVER",
+        "NOT_SURE",
+        "RARELY"
+      ],
+      "display_order": [
+        "LIVE",
+        "WORK",
+        "STUDY",
+        "RUN_BUSINESS",
+        "VISIT_PURPOSE",
+        "PASS_THROUGH",
+        "RARELY",
+        "NEVER",
+        "NOT_SURE"
+      ],
+      "display_order_source": "DECLARED_IN_CONTRACT",
+      "ordinal_meaning": null,
+      "ordinal_meaning_source": "UNDECLARED",
+      "ordinal_only_rationale": null,
+      "research_objective": "Describe respondents’ self-reported connections to the named study area.",
+      "required_measurement": "Multiple-response area-affiliation categories; exclusive rare/never/unsure choices.",
+      "analysis_plan": "Count respondents selecting each category; explicitly allow overlapping category selections. Count exclusive alternatives separately.",
+      "ee01_measurement_rule": {
+        "rule_id": "Q01-NR-DEFAULT",
+        "basis": "STRUCTURAL_DEFAULT_NO_DECLARED_NUMERATOR",
+        "numerator": [
+          "each substantive code independently"
+        ],
+        "denominator": "V for this item, version and stimulus",
+        "formula": "100 * x[code] / V",
+        "applied_only_when": "V > 0",
+        "output_label": "count and share per response code",
+        "expressly_not": [
+          "any aggregate score",
+          "any ranking across items",
+          "any conversion to demand, revenue or visits"
+        ],
+        "authority": "NO_DECLARED_NUMERATOR — only per-code counts are permitted"
+      },
+      "permitted_claim": "Overlapping affiliation counts and the separate counts of RARELY, NEVER and NOT_SURE screen-outs, with I/Q/S/A/V",
+      "prohibited_inference": "Respondent residence; residential totals; demand counts; treating NOT_SURE as eligible or ineligible",
+      "coverage_limitation": "Affiliation categories are proposed; the geographic predicate that turns them into eligibility is not approved (Task B / SD-02 formal).",
+      "limitation": "Not a census of residents, precise origin or demand; old Q01 codes conflict with newer candidate bank.",
+      "templates": {
+        "withheld": {
+          "template_id": "FB-Q01-WITHHELD",
+          "text": "Area-connection results are withheld because the approved item interpretation and/or valid-response evidence is not available. No respondent is declared ineligible solely from Q01.",
+          "placeholders": []
+        },
+        "valid": {
+          "template_id": "VD-Q01-APPROVED",
+          "text": "Among {V} valid Q01 respondents, {count} selected {category}. Categories may overlap; this is a self-reported affiliation distribution only.",
+          "placeholders": [
+            "V",
+            "category",
+            "count"
+          ]
+        },
+        "limitation": {
+          "template_id": "LM-Q01-LIMIT",
+          "text": "Not a census of residents, precise origin or demand; old Q01 codes conflict with newer candidate bank.",
+          "placeholders": []
+        }
+      },
+      "report_sections": [
+        "R02",
+        "R08"
+      ],
+      "report_admission": {
+        "sections": {
+          "R02": {
+            "state": "RENDERABLE_ADMINISTRATIVE",
+            "blocking_gates": [],
+            "reason": null,
+            "scope_qualifier": null,
+            "may_render_measurement": false,
+            "administrative_only": true
+          },
+          "R08": {
+            "state": "SPECIFICATION_ONLY",
+            "blocking_gates": [
+              "G01",
+              "G07",
+              "G08"
+            ],
+            "reason": null,
+            "scope_qualifier": "LIMITED_CONTEXT",
+            "may_render_measurement": false,
+            "administrative_only": false
+          }
+        },
+        "any_section_may_render_measurement": false,
+        "requirement": "Every assigned section is held: none may render a measurement until its blocking gates are closed and an adopted ReportAdmission contract issues ADMITTED.",
+        "suppression_controls": [
+          "COMPLEMENTARY_SUPPRESSION",
+          "CROSS_VIEW_DIFFERENCING_CHECK",
+          "RESIDUAL_BUCKET_REQUIRED"
+        ],
+        "suppression_floor": "NOT_APPROVED — SD-11 Owner decision outstanding"
+      },
+      "instrument_gate": "NOT_AUTHORIZED",
+      "routing_resolved": true,
+      "authorization": {
+        "instrument_status": "BLOCKED_MEASUREMENT",
+        "report_authorized": false,
+        "basis": "report_authorized requires an AUTHORIZED/APPROVED instrument and at least one section that may render a measurement; neither holds",
+        "scientific_approval": "UNVERIFIED / unresolved named decisions; no adoption inferred",
+        "owner_authorization": "LANGUAGE candidate formal review only; production not authorized",
+        "fielding": "PRODUCTION_FIELDING_HOLD",
+        "candidate_gate": "ALWAYS",
+        "authority_granted_by_this_registry": "NONE"
+      },
+      "template_usable_for_substantive_report": false,
+      "objective_proximity": [],
+      "covers_objective": false,
+      "conflict_ids": [
+        "CX-01",
+        "CX-15",
+        "CX-16",
+        "CX-17",
+        "CX-18",
+        "CX-19"
+      ],
+      "open_decisions": [
+        "SD-09 formal adoption of the screening architecture",
+        "declaration of the ordinal scale for Q02, Q04, Q07, Q13"
+      ]
+    },
+    {
+      "question_id": "Q02",
+      "group": "A",
+      "instrument_version": "P3-01C-VNEXT-0.6.1-CUST-REC",
+      "instrument_sha256": "ec2b5494ecf82447076e0d7a2bfb57599a24f049bbcc925a9ecbea6e833bce59",
+      "instrument_status": "SCIENTIFIC_APPROVAL_PENDING",
+      "source_fingerprint": "1e48c59a09a19c21c63af11e1ca15ae312a1d0e4d2abdfa86234aa0f8586a38b",
+      "construct_id": "G01_AREA_PRESENCE_FREQUENCY",
+      "construct_id_handoff": "G01_AREA_PRESENCE_FREQUENCY",
+      "response_kind": "ORDINAL",
+      "instrument_type": "ordinal_single",
+      "max_selections": 1,
+      "exclusive_codes": [],
+      "codes": [
+        {
+          "code": "NONE",
+          "label_en": "0 days",
+          "label_raw": null,
+          "label_repair": null,
+          "label_source": "CONTRACT_OPTION_BANK_DRAFT"
+        },
+        {
+          "code": "DAYS_1_3",
+          "label_en": "1–3 days",
+          "label_raw": null,
+          "label_repair": null,
+          "label_source": "CONTRACT_OPTION_BANK_DRAFT"
+        },
+        {
+          "code": "DAYS_4_10",
+          "label_en": "4–10 days",
+          "label_raw": null,
+          "label_repair": null,
+          "label_source": "CONTRACT_OPTION_BANK_DRAFT"
+        },
+        {
+          "code": "DAYS_11_20",
+          "label_en": "11–20 days",
+          "label_raw": null,
+          "label_repair": null,
+          "label_source": "CONTRACT_OPTION_BANK_DRAFT"
+        },
+        {
+          "code": "DAYS_GT_20",
+          "label_en": "21–28 days",
+          "label_raw": null,
+          "label_repair": null,
+          "label_source": "CONTRACT_OPTION_BANK_DRAFT"
+        },
+        {
+          "code": "PREFER_NOT_TO_ANSWER",
+          "label_en": "Prefer not to answer",
+          "label_raw": null,
+          "label_repair": null,
+          "label_source": "CONTRACT_OPTION_BANK_DRAFT"
+        }
+      ],
+      "substantive_codes": [
+        "NONE",
+        "DAYS_1_3",
+        "DAYS_4_10",
+        "DAYS_11_20",
+        "DAYS_GT_20"
+      ],
+      "non_substantive_codes": [
+        "PREFER_NOT_TO_ANSWER"
+      ],
+      "display_order": [
+        "NONE",
+        "DAYS_1_3",
+        "DAYS_4_10",
+        "DAYS_11_20",
+        "DAYS_GT_20",
+        "PREFER_NOT_TO_ANSWER"
+      ],
+      "display_order_source": "CODE_ARRAY_FALLBACK_UNDECLARED",
+      "ordinal_meaning": null,
+      "ordinal_meaning_source": "UNDECLARED",
+      "ordinal_only_rationale": null,
+      "research_objective": "Describe how frequently respondents report being physically present in the named study area during the preceding four weeks.",
+      "required_measurement": "Categorical number-of-days-present bands (not number of visits).",
+      "analysis_plan": "Report the distribution by 4-week days-present band among item-valid responses; no derived footfall.",
+      "ee01_measurement_rule": {
+        "rule_id": "Q02-NR-DEFAULT",
+        "basis": "STRUCTURAL_DEFAULT_NO_DECLARED_NUMERATOR",
+        "numerator": [
+          "each substantive code independently"
+        ],
+        "denominator": "V for this item, version and stimulus",
+        "formula": "100 * x[code] / V",
+        "applied_only_when": "V > 0",
+        "output_label": "count and share per response code",
+        "expressly_not": [
+          "any aggregate score",
+          "any ranking across items",
+          "any conversion to demand, revenue or visits"
+        ],
+        "authority": "NO_DECLARED_NUMERATOR — only per-code counts are permitted"
+      },
+      "permitted_claim": "Four-week days-present band distribution among displayed units, with I/Q/S/A/V, once the band scale is scientifically approved",
+      "prohibited_inference": "Calendar-month visit frequency; visits rather than days; dwell time; café footfall; guaranteed local customers; pedestrian counts; any eligibility threshold derived from these bands",
+      "coverage_limitation": "Bands are source-faithful to the recovered CS-02 item. The recall window is four weeks, NOT a calendar month; the two are not interchangeable and no calendar-month figure may be derived from this item. Recall validity over four weeks is untested. Any eligibility use of this item remains SCIENTIFIC_APPROVAL_PENDING: no geographic threshold is created here.",
+      "limitation": "Days present ≠ visits, unique visitors, or pedestrian footfall; no eligibility threshold.",
+      "templates": {
+        "withheld": {
+          "template_id": "FB-Q02-WITHHELD",
+          "text": "Four-week area-presence patterns are not estimated because the item’s measurement approval or valid response evidence is outstanding.",
+          "placeholders": []
+        },
+        "valid": {
+          "template_id": "VD-Q02-APPROVED",
+          "text": "Of {V} valid Q02 respondents, {count} selected {category} for days physically present during the preceding four weeks.",
+          "placeholders": [
+            "V",
+            "category",
+            "count"
+          ]
+        },
+        "limitation": {
+          "template_id": "LM-Q02-LIMIT",
+          "text": "Days present ≠ visits, unique visitors, or pedestrian footfall; no eligibility threshold.",
+          "placeholders": []
+        }
+      },
+      "report_sections": [
+        "R02",
+        "R08"
+      ],
+      "report_admission": {
+        "sections": {
+          "R02": {
+            "state": "RENDERABLE_ADMINISTRATIVE",
+            "blocking_gates": [],
+            "reason": null,
+            "scope_qualifier": null,
+            "may_render_measurement": false,
+            "administrative_only": true
+          },
+          "R08": {
+            "state": "SPECIFICATION_ONLY",
+            "blocking_gates": [
+              "G01",
+              "G07",
+              "G08"
+            ],
+            "reason": null,
+            "scope_qualifier": "LIMITED_CONTEXT",
+            "may_render_measurement": false,
+            "administrative_only": false
+          }
+        },
+        "any_section_may_render_measurement": false,
+        "requirement": "Every assigned section is held: none may render a measurement until its blocking gates are closed and an adopted ReportAdmission contract issues ADMITTED.",
+        "suppression_controls": [
+          "COMPLEMENTARY_SUPPRESSION",
+          "CROSS_VIEW_DIFFERENCING_CHECK",
+          "RESIDUAL_BUCKET_REQUIRED"
+        ],
+        "suppression_floor": "NOT_APPROVED — SD-11 Owner decision outstanding"
+      },
+      "instrument_gate": "NOT_AUTHORIZED",
+      "routing_resolved": false,
+      "authorization": {
+        "instrument_status": "SCIENTIFIC_APPROVAL_PENDING",
+        "report_authorized": false,
+        "basis": "report_authorized requires an AUTHORIZED/APPROVED instrument and at least one section that may render a measurement; neither holds",
+        "scientific_approval": "UNVERIFIED / unresolved named decisions; no adoption inferred",
+        "owner_authorization": "LANGUAGE candidate formal review only; production not authorized",
+        "fielding": "PRODUCTION_FIELDING_HOLD",
+        "candidate_gate": "Q02_POLICY",
+        "authority_granted_by_this_registry": "NONE"
+      },
+      "template_usable_for_substantive_report": false,
+      "objective_proximity": [],
+      "covers_objective": false,
+      "conflict_ids": [
+        "CX-02",
+        "CX-15",
+        "CX-16",
+        "CX-17",
+        "CX-18",
+        "CX-19"
+      ],
+      "open_decisions": [
+        "SD-C / SD-I dated scope act",
+        "declaration of the ordinal scale for Q02, Q04, Q07, Q13"
+      ]
+    },
+    {
+      "question_id": "Q03",
+      "group": "A",
+      "instrument_version": "P3-01C-VNEXT-0.6.1-CUST-REC",
+      "instrument_sha256": "ec2b5494ecf82447076e0d7a2bfb57599a24f049bbcc925a9ecbea6e833bce59",
+      "instrument_status": "BLOCKED_SOURCE",
+      "source_fingerprint": "1704110bf1a8058100275925d04e407acdf48c1366f5358ad9fff2d628acbcdf",
+      "construct_id": "GEO_ORIGIN_TYPE_01",
+      "construct_id_handoff": "GEO_ORIGIN_TYPE_01",
+      "response_kind": "SINGLE_SELECT",
+      "instrument_type": "nominal_single",
+      "max_selections": 1,
+      "exclusive_codes": [],
+      "codes": [
+        {
+          "code": "HOME",
+          "label_en": "Home",
+          "label_raw": null,
+          "label_repair": null,
+          "label_source": "CONTRACT_OPTION_BANK_DRAFT"
+        },
+        {
+          "code": "WORKPLACE",
+          "label_en": "Workplace",
+          "label_raw": null,
+          "label_repair": null,
+          "label_source": "CONTRACT_OPTION_BANK_DRAFT"
+        },
+        {
+          "code": "STUDY_LOCATION",
+          "label_en": "Place of study",
+          "label_raw": null,
+          "label_repair": null,
+          "label_source": "CONTRACT_OPTION_BANK_DRAFT"
+        },
+        {
+          "code": "OTHER_ACTIVITY",
+          "label_en": "Another activity location",
+          "label_raw": null,
+          "label_repair": null,
+          "label_source": "CONTRACT_OPTION_BANK_DRAFT"
+        },
+        {
+          "code": "VARIES",
+          "label_en": "It varies",
+          "label_raw": null,
+          "label_repair": null,
+          "label_source": "CONTRACT_OPTION_BANK_DRAFT"
+        },
+        {
+          "code": "DECLINE",
+          "label_en": "Prefer not to answer",
+          "label_raw": null,
+          "label_repair": null,
+          "label_source": "CONTRACT_OPTION_BANK_DRAFT"
+        },
+        {
+          "code": "NOT_SURE",
+          "label_en": "Not sure",
+          "label_raw": null,
+          "label_repair": null,
+          "label_source": "CONTRACT_OPTION_BANK_DRAFT"
+        }
+      ],
+      "substantive_codes": [
+        "HOME",
+        "WORKPLACE",
+        "STUDY_LOCATION",
+        "OTHER_ACTIVITY",
+        "VARIES"
+      ],
+      "non_substantive_codes": [
+        "DECLINE",
+        "NOT_SURE"
+      ],
+      "display_order": [
+        "HOME",
+        "WORKPLACE",
+        "STUDY_LOCATION",
+        "OTHER_ACTIVITY",
+        "VARIES",
+        "DECLINE",
+        "NOT_SURE"
+      ],
+      "display_order_source": "CODE_ARRAY_FALLBACK_UNDECLARED",
+      "ordinal_meaning": null,
+      "ordinal_meaning_source": "UNDECLARED",
+      "ordinal_only_rationale": null,
+      "research_objective": "Identify the self-reported type of place from which a potential visit to the proposed café would begin.",
+      "required_measurement": "Hypothetical journey-origin type (home, workplace, study location, etc.).",
+      "analysis_plan": "If authorized, report categorical likely-origin types without precise locations or distances.",
+      "ee01_measurement_rule": {
+        "rule_id": "Q03-NR-DEFAULT",
+        "basis": "STRUCTURAL_DEFAULT_NO_DECLARED_NUMERATOR",
+        "numerator": [
+          "each substantive code independently"
+        ],
+        "denominator": "V for this item, version and stimulus",
+        "formula": "100 * x[code] / V",
+        "applied_only_when": "V > 0",
+        "output_label": "count and share per response code",
+        "expressly_not": [
+          "any aggregate score",
+          "any ranking across items",
+          "any conversion to demand, revenue or visits"
+        ],
+        "authority": "NO_DECLARED_NUMERATOR — only per-code counts are permitted"
+      },
+      "permitted_claim": "Counts and shares of stated likely origin TYPE among item-valid units, as a hypothetical self-report",
+      "prohibited_inference": "Exact home or work location; actual trips; commute length; individual catchment; journey distance; demand",
+      "coverage_limitation": "No A10 construct and no research anchor exist for this construct. GEO v0.2 supplies an identifier and a scope, not a validated construct definition.",
+      "limitation": "Not actual trips, catchment distances or a validated demand estimate.",
+      "templates": {
+        "withheld": {
+          "template_id": "FB-Q03-WITHHELD",
+          "text": "Likely journey-origin types are withheld because the construct/source has not been approved for report use.",
+          "placeholders": []
+        },
+        "valid": {
+          "template_id": "VD-Q03-APPROVED",
+          "text": "Among {V} valid Q03 respondents, {count} indicated {category} as their likely starting-place type for a hypothetical café visit.",
+          "placeholders": [
+            "V",
+            "category",
+            "count"
+          ]
+        },
+        "limitation": {
+          "template_id": "LM-Q03-LIMIT",
+          "text": "Not actual trips, catchment distances or a validated demand estimate.",
+          "placeholders": []
+        }
+      },
+      "report_sections": [
+        "R08"
+      ],
+      "report_admission": {
+        "sections": {
+          "R08": {
+            "state": "SPECIFICATION_ONLY",
+            "blocking_gates": [
+              "G01",
+              "G07",
+              "G08"
+            ],
+            "reason": null,
+            "scope_qualifier": "LIMITED_CONTEXT",
+            "may_render_measurement": false,
+            "administrative_only": false
+          }
+        },
+        "any_section_may_render_measurement": false,
+        "requirement": "Every assigned section is held: none may render a measurement until its blocking gates are closed and an adopted ReportAdmission contract issues ADMITTED.",
+        "suppression_controls": [
+          "COMPLEMENTARY_SUPPRESSION",
+          "CROSS_VIEW_DIFFERENCING_CHECK",
+          "RESIDUAL_BUCKET_REQUIRED"
+        ],
+        "suppression_floor": "NOT_APPROVED — SD-11 Owner decision outstanding"
+      },
+      "instrument_gate": "BLOCKED_SOURCE",
+      "routing_resolved": true,
+      "authorization": {
+        "instrument_status": "BLOCKED_SOURCE",
+        "report_authorized": false,
+        "basis": "report_authorized requires an AUTHORIZED/APPROVED instrument and at least one section that may render a measurement; neither holds",
+        "scientific_approval": "UNVERIFIED / unresolved named decisions; no adoption inferred",
+        "owner_authorization": "LANGUAGE candidate formal review only; production not authorized",
+        "fielding": "PRODUCTION_FIELDING_HOLD",
+        "candidate_gate": "CONCEPT",
+        "authority_granted_by_this_registry": "NONE"
+      },
+      "template_usable_for_substantive_report": false,
+      "objective_proximity": [],
+      "covers_objective": false,
+      "conflict_ids": [
+        "CX-15",
+        "CX-16",
+        "CX-17",
+        "CX-18",
+        "CX-19"
+      ],
+      "open_decisions": [
+        "declaration of the ordinal scale for Q02, Q04, Q07, Q13"
+      ]
+    },
+    {
+      "question_id": "Q04",
+      "group": "B",
+      "instrument_version": "P3-01C-VNEXT-0.6.1-CUST-REC",
+      "instrument_sha256": "ec2b5494ecf82447076e0d7a2bfb57599a24f049bbcc925a9ecbea6e833bce59",
+      "instrument_status": "BLOCKED_MEASUREMENT",
+      "source_fingerprint": "c145c4ff69e0abd07099716233d640efb18e0cadd524213570bf0d24967bb7c8",
+      "construct_id": "D04_EXISTING_USE",
+      "construct_id_handoff": "D04_EXISTING_USE",
+      "response_kind": "ORDINAL",
+      "instrument_type": "ordinal_single",
+      "max_selections": 1,
+      "exclusive_codes": [],
+      "codes": [
+        {
+          "code": "ZERO",
+          "label_en": "0 occasions",
+          "label_raw": null,
+          "label_repair": null,
+          "label_source": "CONTRACT_OPTION_BANK_DRAFT"
+        },
+        {
+          "code": "ONE",
+          "label_en": "1 occasion",
+          "label_raw": null,
+          "label_repair": null,
+          "label_source": "CONTRACT_OPTION_BANK_DRAFT"
+        },
+        {
+          "code": "TWO_THREE",
+          "label_en": "2–3 occasions",
+          "label_raw": null,
+          "label_repair": null,
+          "label_source": "CONTRACT_OPTION_BANK_DRAFT"
+        },
+        {
+          "code": "FOUR_SEVEN",
+          "label_en": "4–7 occasions",
+          "label_raw": null,
+          "label_repair": null,
+          "label_source": "CONTRACT_OPTION_BANK_DRAFT"
+        },
+        {
+          "code": "EIGHT_PLUS",
+          "label_en": "8 or more occasions",
+          "label_raw": null,
+          "label_repair": null,
+          "label_source": "CONTRACT_OPTION_BANK_DRAFT"
+        },
+        {
+          "code": "CANNOT_REMEMBER",
+          "label_en": "Cannot remember",
+          "label_raw": null,
+          "label_repair": null,
+          "label_source": "CONTRACT_OPTION_BANK_DRAFT"
+        },
+        {
+          "code": "PREFER_NOT_TO_ANSWER",
+          "label_en": "Prefer not to answer",
+          "label_raw": null,
+          "label_repair": null,
+          "label_source": "CONTRACT_OPTION_BANK_DRAFT"
+        }
+      ],
+      "substantive_codes": [
+        "ZERO",
+        "ONE",
+        "TWO_THREE",
+        "FOUR_SEVEN",
+        "EIGHT_PLUS"
+      ],
+      "non_substantive_codes": [
+        "CANNOT_REMEMBER",
+        "PREFER_NOT_TO_ANSWER"
+      ],
+      "display_order": [
+        "ZERO",
+        "ONE",
+        "TWO_THREE",
+        "FOUR_SEVEN",
+        "EIGHT_PLUS",
+        "CANNOT_REMEMBER",
+        "PREFER_NOT_TO_ANSWER"
+      ],
+      "display_order_source": "CODE_ARRAY_FALLBACK_UNDECLARED",
+      "ordinal_meaning": null,
+      "ordinal_meaning_source": "UNDECLARED",
+      "ordinal_only_rationale": null,
+      "research_objective": "Describe respondents’ recalled frequency of buying food or drinks from existing cafés over the previous 30 days.",
+      "required_measurement": "Purchase occasion band in the prior 30 days.",
+      "analysis_plan": "Report ordinal response-band distribution; ZERO is a legitimate response and controls the past-occasion Q08 dependency.",
+      "ee01_measurement_rule": {
+        "rule_id": "Q04-NR-DEFAULT",
+        "basis": "STRUCTURAL_DEFAULT_NO_DECLARED_NUMERATOR",
+        "numerator": [
+          "each substantive code independently"
+        ],
+        "denominator": "V for this item, version and stimulus",
+        "formula": "100 * x[code] / V",
+        "applied_only_when": "V > 0",
+        "output_label": "count and share per response code",
+        "expressly_not": [
+          "any aggregate score",
+          "any ranking across items",
+          "any conversion to demand, revenue or visits"
+        ],
+        "authority": "NO_DECLARED_NUMERATOR — only per-code counts are permitted"
+      },
+      "permitted_claim": "30-day recall-band distribution with I/Q/S/A/V; no mean reconstructed from bands",
+      "prohibited_inference": "New-café conversion; sales forecast; exact purchase count; pooling with the original 7-day item",
+      "coverage_limitation": "The 30-day window is A10's; the 7-day item was the pre-registered one. Recall validity for 30 days is untested.",
+      "limitation": "Cannot infer an exact purchase mean, future conversion, or sales forecast.",
+      "templates": {
+        "withheld": {
+          "template_id": "FB-Q04-WITHHELD",
+          "text": "Existing-café purchase patterns are not reported because the proposed recall item is pending measurement validation or usable responses are unavailable.",
+          "placeholders": []
+        },
+        "valid": {
+          "template_id": "VD-Q04-APPROVED",
+          "text": "Among {V} valid Q04 respondents, {count} reported {category} existing-café purchase occasions in the past 30 days.",
+          "placeholders": [
+            "V",
+            "category",
+            "count"
+          ]
+        },
+        "limitation": {
+          "template_id": "LM-Q04-LIMIT",
+          "text": "Cannot infer an exact purchase mean, future conversion, or sales forecast.",
+          "placeholders": []
+        }
+      },
+      "report_sections": [
+        "R06"
+      ],
+      "report_admission": {
+        "sections": {
+          "R06": {
+            "state": "SPECIFICATION_ONLY",
+            "blocking_gates": [
+              "G03",
+              "G04",
+              "G05"
+            ],
+            "reason": null,
+            "scope_qualifier": null,
+            "may_render_measurement": false,
+            "administrative_only": false
+          }
+        },
+        "any_section_may_render_measurement": false,
+        "requirement": "Every assigned section is held: none may render a measurement until its blocking gates are closed and an adopted ReportAdmission contract issues ADMITTED.",
+        "suppression_controls": [
+          "COMPLEMENTARY_SUPPRESSION",
+          "CROSS_VIEW_DIFFERENCING_CHECK",
+          "RESIDUAL_BUCKET_REQUIRED"
+        ],
+        "suppression_floor": "NOT_APPROVED — SD-11 Owner decision outstanding"
+      },
+      "instrument_gate": "NOT_AUTHORIZED",
+      "routing_resolved": true,
+      "authorization": {
+        "instrument_status": "BLOCKED_MEASUREMENT",
+        "report_authorized": false,
+        "basis": "report_authorized requires an AUTHORIZED/APPROVED instrument and at least one section that may render a measurement; neither holds",
+        "scientific_approval": "UNVERIFIED / unresolved named decisions; no adoption inferred",
+        "owner_authorization": "LANGUAGE candidate formal review only; production not authorized",
+        "fielding": "PRODUCTION_FIELDING_HOLD",
+        "candidate_gate": "Q01_ELIGIBLE",
+        "authority_granted_by_this_registry": "NONE"
+      },
+      "template_usable_for_substantive_report": false,
+      "objective_proximity": [],
+      "covers_objective": false,
+      "conflict_ids": [
+        "CX-03",
+        "CX-15",
+        "CX-16",
+        "CX-17",
+        "CX-18",
+        "CX-19"
+      ],
+      "open_decisions": [
+        "declaration of the ordinal scale for Q02, Q04, Q07, Q13",
+        "none for presentation; measurement approval outstanding"
+      ]
+    },
+    {
+      "question_id": "Q05",
+      "group": "B",
+      "instrument_version": "P3-01C-VNEXT-0.6.1-CUST-REC",
+      "instrument_sha256": "ec2b5494ecf82447076e0d7a2bfb57599a24f049bbcc925a9ecbea6e833bce59",
+      "instrument_status": "BLOCKED_MEASUREMENT",
+      "source_fingerprint": "d97a954c418a8d65b57709de1680d424d3f5ef5b97435a27872622b115d59907",
+      "construct_id": "D01_CONCEPT_INTENT",
+      "construct_id_handoff": "D01_CONCEPT_INTENT",
+      "response_kind": "ORDINAL",
+      "instrument_type": "ordinal_single",
+      "max_selections": 1,
+      "exclusive_codes": [],
+      "codes": [
+        {
+          "code": "DEF_NO",
+          "label_en": "Definitely unlikely",
+          "label_raw": null,
+          "label_repair": null,
+          "label_source": "CONTRACT_OPTION_BANK_DRAFT"
+        },
+        {
+          "code": "PROB_NO",
+          "label_en": "Probably unlikely",
+          "label_raw": null,
+          "label_repair": null,
+          "label_source": "CONTRACT_OPTION_BANK_DRAFT"
+        },
+        {
+          "code": "UNSURE",
+          "label_en": "Unsure",
+          "label_raw": null,
+          "label_repair": null,
+          "label_source": "CONTRACT_OPTION_BANK_DRAFT"
+        },
+        {
+          "code": "PROB_YES",
+          "label_en": "Probably likely",
+          "label_raw": null,
+          "label_repair": null,
+          "label_source": "CONTRACT_OPTION_BANK_DRAFT"
+        },
+        {
+          "code": "DEF_YES",
+          "label_en": "Definitely likely",
+          "label_raw": null,
+          "label_repair": null,
+          "label_source": "CONTRACT_OPTION_BANK_DRAFT"
+        },
+        {
+          "code": "CANNOT_JUDGE",
+          "label_en": "Cannot judge from the description",
+          "label_raw": null,
+          "label_repair": null,
+          "label_source": "CONTRACT_OPTION_BANK_DRAFT"
+        },
+        {
+          "code": "PREFER_NOT_TO_ANSWER",
+          "label_en": "Prefer not to answer",
+          "label_raw": null,
+          "label_repair": null,
+          "label_source": "CONTRACT_OPTION_BANK_DRAFT"
+        }
+      ],
+      "substantive_codes": [
+        "DEF_NO",
+        "PROB_NO",
+        "UNSURE",
+        "PROB_YES",
+        "DEF_YES"
+      ],
+      "non_substantive_codes": [
+        "CANNOT_JUDGE",
+        "PREFER_NOT_TO_ANSWER"
+      ],
+      "display_order": [
+        "DEF_NO",
+        "PROB_NO",
+        "UNSURE",
+        "PROB_YES",
+        "DEF_YES",
+        "CANNOT_JUDGE",
+        "PREFER_NOT_TO_ANSWER"
+      ],
+      "display_order_source": "DECLARED_IN_CONTRACT",
+      "ordinal_meaning": {
+        "DEF_NO": 1,
+        "PROB_NO": 2,
+        "UNSURE": 3,
+        "PROB_YES": 4,
+        "DEF_YES": 5,
+        "note": "Display order is presentation. Ordinal meaning is the declared mapping. The two are separate fields so a display-order change cannot silently change the scale."
+      },
+      "ordinal_meaning_source": "DECLARED_IN_CONTRACT",
+      "ordinal_only_rationale": "Only a Juster-type 0-10 scale carries a validated probability interpretation (Juster 1966; Brennan & Esslemont, Marketing Bulletin 1994/95, on accuracy for fast-moving consumer goods). A five-point labelled intention scale does not, so every figure from Q05 is ordinal and sample-scoped.",
+      "research_objective": "Assess stated likelihood of visiting the described proposed café at least once in its first three months.",
+      "required_measurement": "Ordinal concept-visit intention under one versioned concept card and location.",
+      "analysis_plan": "Five-category ordinal distribution; if approved, predeclared PROB_YES + DEF_YES share with item-specific V denominator.",
+      "ee01_measurement_rule": {
+        "rule_id": "Q05-NR-1",
+        "basis": "PREDECLARED_IN_CONTRACT",
+        "numerator": [
+          "DEF_YES",
+          "PROB_YES"
+        ],
+        "denominator": "V for this item, version and stimulus",
+        "formula": "100 * (x[DEF_YES] + x[PROB_YES]) / V",
+        "applied_only_when": "V > 0",
+        "output_label": "stated first-three-month interest",
+        "expressly_not": [
+          "numeric chance of visiting",
+          "predicted visits",
+          "realised visits",
+          "sales",
+          "population-wide probability"
+        ],
+        "authority": "SCIENTIFIC_APPROVAL_PENDING — predeclared by the correction author, awaiting WS2 review of the first-visit horizon and event interpretation"
+      },
+      "permitted_claim": "Five-category ordinal distribution, plus the predeclared DEF_YES + PROB_YES share of the item-specific V, labelled as stated interest only",
+      "prohibited_inference": "Calibrated probability; predicted visits; customers; revenue; demand score; any conversion to a rate",
+      "coverage_limitation": "The stem compounds a time horizon with an at-least-once event; which clause drives the answer is untested. UNSURE is substantive per the applicable A10 worked example and is counted in V; CANNOT_JUDGE is not. Horizon and event interpretation are referred to WS2.",
+      "limitation": "Not actual purchasing, visits, market share, revenue or calibrated conversion probability.",
+      "templates": {
+        "withheld": {
+          "template_id": "FB-Q05-WITHHELD",
+          "text": "Concept-interest results cannot be estimated because the specific concept stimulus, item validation, or admissible answers are unavailable; the system does not infer customer demand.",
+          "placeholders": []
+        },
+        "valid": {
+          "template_id": "VD-Q05-APPROVED",
+          "text": "Among {V} valid respondents exposed to the approved concept, {yes_count} ({yes_percent}%) selected probably/definitely would visit. This is stated intention, not observed demand.",
+          "placeholders": [
+            "V",
+            "yes_count",
+            "yes_percent"
+          ]
+        },
+        "limitation": {
+          "template_id": "LM-Q05-LIMIT",
+          "text": "Not actual purchasing, visits, market share, revenue or calibrated conversion probability.",
+          "placeholders": []
+        }
+      },
+      "report_sections": [
+        "R03"
+      ],
+      "report_admission": {
+        "sections": {
+          "R03": {
+            "state": "SPECIFICATION_ONLY",
+            "blocking_gates": [
+              "G03",
+              "G04",
+              "G05",
+              "G06",
+              "G07",
+              "G08",
+              "G10"
+            ],
+            "reason": null,
+            "scope_qualifier": null,
+            "may_render_measurement": false,
+            "administrative_only": false
+          }
+        },
+        "any_section_may_render_measurement": false,
+        "requirement": "Every assigned section is held: none may render a measurement until its blocking gates are closed and an adopted ReportAdmission contract issues ADMITTED.",
+        "suppression_controls": [
+          "COMPLEMENTARY_SUPPRESSION",
+          "CROSS_VIEW_DIFFERENCING_CHECK",
+          "RESIDUAL_BUCKET_REQUIRED"
+        ],
+        "suppression_floor": "NOT_APPROVED — SD-11 Owner decision outstanding"
+      },
+      "instrument_gate": "MISSING_APPROVED_STIMULUS",
+      "routing_resolved": true,
+      "authorization": {
+        "instrument_status": "BLOCKED_MEASUREMENT",
+        "report_authorized": false,
+        "basis": "report_authorized requires an AUTHORIZED/APPROVED instrument and at least one section that may render a measurement; neither holds",
+        "scientific_approval": "UNVERIFIED / unresolved named decisions; no adoption inferred",
+        "owner_authorization": "LANGUAGE candidate formal review only; production not authorized",
+        "fielding": "PRODUCTION_FIELDING_HOLD",
+        "candidate_gate": "CONCEPT",
+        "authority_granted_by_this_registry": "NONE"
+      },
+      "template_usable_for_substantive_report": false,
+      "objective_proximity": [
+        "O1"
+      ],
+      "covers_objective": false,
+      "conflict_ids": [
+        "CX-04",
+        "CX-15",
+        "CX-16",
+        "CX-17",
+        "CX-18",
+        "CX-19"
+      ],
+      "open_decisions": [
+        "concept-card approval (G03–G06)",
+        "declaration of the ordinal scale for Q02, Q04, Q07, Q13"
+      ]
+    },
+    {
+      "question_id": "Q06",
+      "group": "B",
+      "instrument_version": "P3-01C-VNEXT-0.6.1-CUST-REC",
+      "instrument_sha256": "ec2b5494ecf82447076e0d7a2bfb57599a24f049bbcc925a9ecbea6e833bce59",
+      "instrument_status": "BLOCKED_MEASUREMENT",
+      "source_fingerprint": "0bb99c3660f5b6a5863e27384783c2367afb71b8fa6d44904fbec663e373491f",
+      "construct_id": "D02_PRODUCT_INTEREST",
+      "construct_id_handoff": "D02_PRODUCT_INTEREST",
+      "response_kind": "MULTI_SELECT",
+      "instrument_type": "multi_select",
+      "max_selections": 3,
+      "exclusive_codes": [
+        "NONE",
+        "NOT_SURE",
+        "PREFER_NOT_TO_ANSWER"
+      ],
+      "codes": [
+        {
+          "code": "COFFEE_ESPRESSO",
+          "label_en": "Coffee or espresso drinks",
+          "label_raw": null,
+          "label_repair": null,
+          "label_source": "CONTRACT_OPTION_BANK_DRAFT"
+        },
+        {
+          "code": "NON_COFFEE",
+          "label_en": "Non-coffee drinks",
+          "label_raw": null,
+          "label_repair": null,
+          "label_source": "CONTRACT_OPTION_BANK_DRAFT"
+        },
+        {
+          "code": "BAKED_PASTRY",
+          "label_en": "Baked goods and pastries",
+          "label_raw": null,
+          "label_repair": null,
+          "label_source": "CONTRACT_OPTION_BANK_DRAFT"
+        },
+        {
+          "code": "LIGHT_MEALS",
+          "label_en": "Light meals",
+          "label_raw": null,
+          "label_repair": null,
+          "label_source": "CONTRACT_OPTION_BANK_DRAFT"
+        },
+        {
+          "code": "DESSERTS",
+          "label_en": "Desserts",
+          "label_raw": null,
+          "label_repair": null,
+          "label_source": "CONTRACT_OPTION_BANK_DRAFT"
+        },
+        {
+          "code": "RETAIL",
+          "label_en": "Retail products",
+          "label_raw": null,
+          "label_repair": null,
+          "label_source": "CONTRACT_OPTION_BANK_DRAFT"
+        },
+        {
+          "code": "UNLISTED_CATEGORY_REPORTED",
+          "label_en": "Another category not listed",
+          "label_raw": null,
+          "label_repair": null,
+          "label_source": "CONTRACT_OPTION_BANK_DRAFT"
+        },
+        {
+          "code": "NONE",
+          "label_en": "None of these categories",
+          "label_raw": null,
+          "label_repair": null,
+          "label_source": "CONTRACT_OPTION_BANK_DRAFT"
+        },
+        {
+          "code": "NOT_SURE",
+          "label_en": "Not sure",
+          "label_raw": null,
+          "label_repair": null,
+          "label_source": "CONTRACT_OPTION_BANK_DRAFT"
+        },
+        {
+          "code": "PREFER_NOT_TO_ANSWER",
+          "label_en": "Prefer not to answer",
+          "label_raw": null,
+          "label_repair": null,
+          "label_source": "CONTRACT_OPTION_BANK_DRAFT"
+        }
+      ],
+      "substantive_codes": [
+        "COFFEE_ESPRESSO",
+        "NON_COFFEE",
+        "BAKED_PASTRY",
+        "LIGHT_MEALS",
+        "DESSERTS",
+        "RETAIL",
+        "UNLISTED_CATEGORY_REPORTED",
+        "NONE"
+      ],
+      "non_substantive_codes": [
+        "NOT_SURE",
+        "PREFER_NOT_TO_ANSWER"
+      ],
+      "display_order": [
+        "COFFEE_ESPRESSO",
+        "NON_COFFEE",
+        "BAKED_PASTRY",
+        "LIGHT_MEALS",
+        "DESSERTS",
+        "RETAIL",
+        "UNLISTED_CATEGORY_REPORTED",
+        "NONE",
+        "NOT_SURE",
+        "PREFER_NOT_TO_ANSWER"
+      ],
+      "display_order_source": "CODE_ARRAY_FALLBACK_UNDECLARED",
+      "ordinal_meaning": null,
+      "ordinal_meaning_source": "UNDECLARED",
+      "ordinal_only_rationale": null,
+      "research_objective": "Identify which proposed menu categories respondents say interest them.",
+      "required_measurement": "Up to three category-interest selections, not choice between competing products.",
+      "analysis_plan": "Count each product-category selection among item-valid respondents; multi-response percentages can sum above 100%.",
+      "ee01_measurement_rule": {
+        "rule_id": "Q06-NR-DEFAULT",
+        "basis": "STRUCTURAL_DEFAULT_NO_DECLARED_NUMERATOR",
+        "numerator": [
+          "each substantive code independently"
+        ],
+        "denominator": "V for this item, version and stimulus",
+        "formula": "100 * x[code] / V",
+        "applied_only_when": "V > 0",
+        "output_label": "count and share per response code",
+        "expressly_not": [
+          "any aggregate score",
+          "any ranking across items",
+          "any conversion to demand, revenue or visits"
+        ],
+        "authority": "NO_DECLARED_NUMERATOR — only per-code counts are permitted"
+      },
+      "permitted_claim": "Per-category selection counts over V; option shares may sum above 100%",
+      "prohibited_inference": "Sales mix; unit sales; category market share; demand",
+      "coverage_limitation": "M2-06 includes an 'Other' category that cannot be fielded as a closed content code. The content of unlisted interest is not captured; only its presence.",
+      "limitation": "Not observed product purchases, product preference ranking, category sales mix or demand.",
+      "templates": {
+        "withheld": {
+          "template_id": "FB-Q06-WITHHELD",
+          "text": "Product-category interest is withheld because the menu codebook/construct has not been approved or the applicable data are missing.",
+          "placeholders": []
+        },
+        "valid": {
+          "template_id": "VD-Q06-APPROVED",
+          "text": "Of {V} valid Q06 respondents, {count} ({percent}%) selected {category}. Multiple selections were permitted, so percentages may total above 100%.",
+          "placeholders": [
+            "V",
+            "category",
+            "count",
+            "percent"
+          ]
+        },
+        "limitation": {
+          "template_id": "LM-Q06-LIMIT",
+          "text": "Not observed product purchases, product preference ranking, category sales mix or demand.",
+          "placeholders": []
+        }
+      },
+      "report_sections": [
+        "R04"
+      ],
+      "report_admission": {
+        "sections": {
+          "R04": {
+            "state": "SPECIFICATION_ONLY",
+            "blocking_gates": [
+              "G01",
+              "G06",
+              "G08",
+              "G10"
+            ],
+            "reason": null,
+            "scope_qualifier": null,
+            "may_render_measurement": false,
+            "administrative_only": false
+          }
+        },
+        "any_section_may_render_measurement": false,
+        "requirement": "Every assigned section is held: none may render a measurement until its blocking gates are closed and an adopted ReportAdmission contract issues ADMITTED.",
+        "suppression_controls": [
+          "COMPLEMENTARY_SUPPRESSION",
+          "CROSS_VIEW_DIFFERENCING_CHECK",
+          "RESIDUAL_BUCKET_REQUIRED"
+        ],
+        "suppression_floor": "NOT_APPROVED — SD-11 Owner decision outstanding"
+      },
+      "instrument_gate": "MISSING_APPROVED_BANK",
+      "routing_resolved": true,
+      "authorization": {
+        "instrument_status": "BLOCKED_MEASUREMENT",
+        "report_authorized": false,
+        "basis": "report_authorized requires an AUTHORIZED/APPROVED instrument and at least one section that may render a measurement; neither holds",
+        "scientific_approval": "UNVERIFIED / unresolved named decisions; no adoption inferred",
+        "owner_authorization": "LANGUAGE candidate formal review only; production not authorized",
+        "fielding": "PRODUCTION_FIELDING_HOLD",
+        "candidate_gate": "MENU",
+        "authority_granted_by_this_registry": "NONE"
+      },
+      "template_usable_for_substantive_report": false,
+      "objective_proximity": [
+        "O2"
+      ],
+      "covers_objective": false,
+      "conflict_ids": [
+        "CX-05",
+        "CX-15",
+        "CX-16",
+        "CX-17",
+        "CX-18",
+        "CX-19"
+      ],
+      "open_decisions": [
+        "declaration of the ordinal scale for Q02, Q04, Q07, Q13",
+        "menu codebook approval"
+      ]
+    },
+    {
+      "question_id": "Q07",
+      "group": "B",
+      "instrument_version": "P3-01C-VNEXT-0.6.1-CUST-REC",
+      "instrument_sha256": "ec2b5494ecf82447076e0d7a2bfb57599a24f049bbcc925a9ecbea6e833bce59",
+      "instrument_status": "BLOCKED_MEASUREMENT",
+      "source_fingerprint": "955d09bcfc31bfea40ad8c685e344a0e03dc49e5f497256311eb92a024a29b74",
+      "construct_id": "D03A_PRICE_ACCEPT",
+      "construct_id_handoff": "D03A_PRICE_ACCEPT",
+      "response_kind": "ORDINAL",
+      "instrument_type": "ordinal_single",
+      "max_selections": 1,
+      "exclusive_codes": [],
+      "codes": [
+        {
+          "code": "VERY_UNACCEPTABLE",
+          "label_en": "Very unacceptable",
+          "label_raw": null,
+          "label_repair": null,
+          "label_source": "CONTRACT_OPTION_BANK_DRAFT"
+        },
+        {
+          "code": "SOMEWHAT_UNACCEPTABLE",
+          "label_en": "Somewhat unacceptable",
+          "label_raw": null,
+          "label_repair": null,
+          "label_source": "CONTRACT_OPTION_BANK_DRAFT"
+        },
+        {
+          "code": "NEITHER",
+          "label_en": "Neither acceptable nor unacceptable",
+          "label_raw": null,
+          "label_repair": null,
+          "label_source": "CONTRACT_OPTION_BANK_DRAFT"
+        },
+        {
+          "code": "SOMEWHAT_ACCEPTABLE",
+          "label_en": "Somewhat acceptable",
+          "label_raw": null,
+          "label_repair": null,
+          "label_source": "CONTRACT_OPTION_BANK_DRAFT"
+        },
+        {
+          "code": "VERY_ACCEPTABLE",
+          "label_en": "Very acceptable",
+          "label_raw": null,
+          "label_repair": null,
+          "label_source": "CONTRACT_OPTION_BANK_DRAFT"
+        },
+        {
+          "code": "CANNOT_JUDGE",
+          "label_en": "Cannot judge",
+          "label_raw": null,
+          "label_repair": null,
+          "label_source": "CONTRACT_OPTION_BANK_DRAFT"
+        },
+        {
+          "code": "PREFER_NOT_TO_ANSWER",
+          "label_en": "Prefer not to answer",
+          "label_raw": null,
+          "label_repair": null,
+          "label_source": "CONTRACT_OPTION_BANK_DRAFT"
+        }
+      ],
+      "substantive_codes": [
+        "VERY_UNACCEPTABLE",
+        "SOMEWHAT_UNACCEPTABLE",
+        "NEITHER",
+        "SOMEWHAT_ACCEPTABLE",
+        "VERY_ACCEPTABLE"
+      ],
+      "non_substantive_codes": [
+        "CANNOT_JUDGE",
+        "PREFER_NOT_TO_ANSWER"
+      ],
+      "display_order": [
+        "VERY_UNACCEPTABLE",
+        "SOMEWHAT_UNACCEPTABLE",
+        "NEITHER",
+        "SOMEWHAT_ACCEPTABLE",
+        "VERY_ACCEPTABLE",
+        "CANNOT_JUDGE",
+        "PREFER_NOT_TO_ANSWER"
+      ],
+      "display_order_source": "CODE_ARRAY_FALLBACK_UNDECLARED",
+      "ordinal_meaning": null,
+      "ordinal_meaning_source": "UNDECLARED",
+      "ordinal_only_rationale": null,
+      "research_objective": "Describe stated acceptability of one exactly specified product, quantity, size, fulfillment and price.",
+      "required_measurement": "Ordinal price acceptability under an approved versioned exact-offer stimulus.",
+      "analysis_plan": "Only after approved exact RM offer: ordinal acceptability bands, item-specific V; never use Q13 as substitute.",
+      "ee01_measurement_rule": {
+        "rule_id": "Q07-NR-DEFAULT",
+        "basis": "STRUCTURAL_DEFAULT_NO_DECLARED_NUMERATOR",
+        "numerator": [
+          "each substantive code independently"
+        ],
+        "denominator": "V for this item, version and stimulus",
+        "formula": "100 * x[code] / V",
+        "applied_only_when": "V > 0",
+        "output_label": "count and share per response code",
+        "expressly_not": [
+          "any aggregate score",
+          "any ranking across items",
+          "any conversion to demand, revenue or visits"
+        ],
+        "authority": "NO_DECLARED_NUMERATOR — only per-code counts are permitted"
+      },
+      "permitted_claim": "Acceptability distribution for one exact offer, if and only if that offer is approved",
+      "prohibited_inference": "WTP curve; price optimum; revenue; comparison to an incompatible M2 offer; any acceptability figure while the stimulus is absent",
+      "coverage_limitation": "No approved M2 offer exists. M2-10 admits 'latte/americano' (two products) while CS-07 fixes 'latte'.",
+      "limitation": "Not willingness-to-pay curve, optimal price, revenue, or acceptability of an unspecified product.",
+      "templates": {
+        "withheld": {
+          "template_id": "FB-Q07-WITHHELD",
+          "text": "Price acceptability is unavailable: no authorized exact-offer and price stimulus has been established. No price-optimum or willingness-to-pay conclusion is issued.",
+          "placeholders": []
+        },
+        "valid": {
+          "template_id": "VD-Q07-APPROVED",
+          "text": "For the exact approved offer {offer_and_price}, {count} of {V} valid respondents selected {category}. This measures perceived acceptability of that exact stimulus only.",
+          "placeholders": [
+            "V",
+            "category",
+            "count",
+            "offer_and_price"
+          ]
+        },
+        "limitation": {
+          "template_id": "LM-Q07-LIMIT",
+          "text": "Not willingness-to-pay curve, optimal price, revenue, or acceptability of an unspecified product.",
+          "placeholders": []
+        }
+      },
+      "report_sections": [
+        "R05"
+      ],
+      "report_admission": {
+        "sections": {
+          "R05": {
+            "state": "UNAVAILABLE_MISSING_APPROVED_STIMULUS",
+            "blocking_gates": [],
+            "reason": "D03A requires one exact product/size/quantity/fulfilment/charges/price stimulus. No approved M2 offer exists. A10 also rules the CS-07 expectation band NOT equivalent to D03A.",
+            "scope_qualifier": null,
+            "may_render_measurement": false,
+            "administrative_only": false
+          }
+        },
+        "any_section_may_render_measurement": false,
+        "requirement": "Every assigned section is held: none may render a measurement until its blocking gates are closed and an adopted ReportAdmission contract issues ADMITTED.",
+        "suppression_controls": [
+          "COMPLEMENTARY_SUPPRESSION",
+          "CROSS_VIEW_DIFFERENCING_CHECK",
+          "RESIDUAL_BUCKET_REQUIRED"
+        ],
+        "suppression_floor": "NOT_APPROVED — SD-11 Owner decision outstanding"
+      },
+      "instrument_gate": "MISSING_APPROVED_STIMULUS",
+      "routing_resolved": true,
+      "authorization": {
+        "instrument_status": "BLOCKED_MEASUREMENT",
+        "report_authorized": false,
+        "basis": "report_authorized requires an AUTHORIZED/APPROVED instrument and at least one section that may render a measurement; neither holds",
+        "scientific_approval": "UNVERIFIED / unresolved named decisions; no adoption inferred",
+        "owner_authorization": "LANGUAGE candidate formal review only; production not authorized",
+        "fielding": "PRODUCTION_FIELDING_HOLD",
+        "candidate_gate": "Q01_ELIGIBLE_AND_APPROVED_EXACT_OFFER_STIMULUS",
+        "authority_granted_by_this_registry": "NONE"
+      },
+      "template_usable_for_substantive_report": false,
+      "objective_proximity": [
+        "O3"
+      ],
+      "covers_objective": false,
+      "conflict_ids": [
+        "CX-06",
+        "CX-15",
+        "CX-16",
+        "CX-17",
+        "CX-18",
+        "CX-19"
+      ],
+      "open_decisions": [
+        "declaration of the ordinal scale for Q02, Q04, Q07, Q13",
+        "one exact approved offer and price"
+      ]
+    },
+    {
+      "question_id": "Q08",
+      "group": "C",
+      "instrument_version": "P3-01C-VNEXT-0.6.1-CUST-REC",
+      "instrument_sha256": "ec2b5494ecf82447076e0d7a2bfb57599a24f049bbcc925a9ecbea6e833bce59",
+      "instrument_status": "BLOCKED_SOURCE",
+      "source_fingerprint": "6e2a1bd220ae8227bc8f2df61d73514d84e3fb040321e30fbff46dddf4de18d3",
+      "construct_id": "D05A_PAST_OCCASION",
+      "construct_id_handoff": "D05A_PAST_OCCASION",
+      "response_kind": "MULTI_SELECT",
+      "instrument_type": "multi_select",
+      "max_selections": null,
+      "exclusive_codes": [
+        "CANNOT_REMEMBER"
+      ],
+      "codes": [
+        {
+          "code": "WORK_BREAK",
+          "label_en": "During a work break",
+          "label_raw": null,
+          "label_repair": null,
+          "label_source": "CONTRACT_OPTION_BANK_DRAFT"
+        },
+        {
+          "code": "STUDY",
+          "label_en": "While studying or taking a study break",
+          "label_raw": null,
+          "label_repair": null,
+          "label_source": "CONTRACT_OPTION_BANK_DRAFT"
+        },
+        {
+          "code": "SOCIAL",
+          "label_en": "To meet or spend time with others",
+          "label_raw": null,
+          "label_repair": null,
+          "label_source": "CONTRACT_OPTION_BANK_DRAFT"
+        },
+        {
+          "code": "ON_THE_GO",
+          "label_en": "While travelling or passing by",
+          "label_raw": null,
+          "label_repair": null,
+          "label_source": "CONTRACT_OPTION_BANK_DRAFT"
+        },
+        {
+          "code": "UNLISTED_OCCASION_REPORTED",
+          "label_en": "Another occasion not listed",
+          "label_raw": null,
+          "label_repair": null,
+          "label_source": "CONTRACT_OPTION_BANK_DRAFT"
+        },
+        {
+          "code": "CANNOT_REMEMBER",
+          "label_en": "Cannot remember",
+          "label_raw": null,
+          "label_repair": null,
+          "label_source": "CONTRACT_OPTION_BANK_DRAFT"
+        },
+        {
+          "code": "PREFER_NOT_TO_ANSWER",
+          "label_en": "Prefer not to answer",
+          "label_raw": null,
+          "label_repair": null,
+          "label_source": "CONTRACT_OPTION_BANK_DRAFT"
+        }
+      ],
+      "substantive_codes": [
+        "WORK_BREAK",
+        "STUDY",
+        "SOCIAL",
+        "ON_THE_GO",
+        "UNLISTED_OCCASION_REPORTED"
+      ],
+      "non_substantive_codes": [
+        "CANNOT_REMEMBER",
+        "PREFER_NOT_TO_ANSWER"
+      ],
+      "display_order": [
+        "WORK_BREAK",
+        "STUDY",
+        "SOCIAL",
+        "ON_THE_GO",
+        "UNLISTED_OCCASION_REPORTED",
+        "CANNOT_REMEMBER",
+        "PREFER_NOT_TO_ANSWER"
+      ],
+      "display_order_source": "CODE_ARRAY_FALLBACK_UNDECLARED",
+      "ordinal_meaning": null,
+      "ordinal_meaning_source": "UNDECLARED",
+      "ordinal_only_rationale": null,
+      "research_objective": "Describe the stated occasions associated with respondents’ past existing-café visits.",
+      "required_measurement": "Multi-response past occasions conditional on Q04 substantive nonzero.",
+      "analysis_plan": "Report occasion selections only among respondents for whom Q08 was actually applicable and valid.",
+      "ee01_measurement_rule": {
+        "rule_id": "Q08-NR-DEFAULT",
+        "basis": "STRUCTURAL_DEFAULT_NO_DECLARED_NUMERATOR",
+        "numerator": [
+          "each substantive code independently"
+        ],
+        "denominator": "V for this item, version and stimulus",
+        "formula": "100 * x[code] / V",
+        "applied_only_when": "V > 0",
+        "output_label": "count and share per response code",
+        "expressly_not": [
+          "any aggregate score",
+          "any ranking across items",
+          "any conversion to demand, revenue or visits"
+        ],
+        "authority": "NO_DECLARED_NUMERATOR — only per-code counts are permitted"
+      },
+      "permitted_claim": "Occasion counts among eligible past purchasers, with its own V",
+      "prohibited_inference": "Planned future visits; pooling with Q09; time-of-day demand",
+      "coverage_limitation": "The occasion bank is a provisional four-category list with no approved source. Unlisted occasion content is not captured.",
+      "limitation": "Not future visits or café time-of-day traffic; do not merge with Q09.",
+      "templates": {
+        "withheld": {
+          "template_id": "FB-Q08-WITHHELD",
+          "text": "Past visit-occasion findings are unavailable because the occasion bank is not approved, Q08 was not shown under a valid route, or no eligible responses were available.",
+          "placeholders": []
+        },
+        "valid": {
+          "template_id": "VD-Q08-APPROVED",
+          "text": "Among {V} valid Q08 respondents with nonzero past café purchases, {count} reported {category} as a past visit occasion.",
+          "placeholders": [
+            "V",
+            "category",
+            "count"
+          ]
+        },
+        "limitation": {
+          "template_id": "LM-Q08-LIMIT",
+          "text": "Not future visits or café time-of-day traffic; do not merge with Q09.",
+          "placeholders": []
+        }
+      },
+      "report_sections": [
+        "R07"
+      ],
+      "report_admission": {
+        "sections": {
+          "R07": {
+            "state": "SPECIFICATION_ONLY",
+            "blocking_gates": [
+              "G01",
+              "G06"
+            ],
+            "reason": null,
+            "scope_qualifier": null,
+            "may_render_measurement": false,
+            "administrative_only": false
+          }
+        },
+        "any_section_may_render_measurement": false,
+        "requirement": "Every assigned section is held: none may render a measurement until its blocking gates are closed and an adopted ReportAdmission contract issues ADMITTED.",
+        "suppression_controls": [
+          "COMPLEMENTARY_SUPPRESSION",
+          "CROSS_VIEW_DIFFERENCING_CHECK",
+          "RESIDUAL_BUCKET_REQUIRED"
+        ],
+        "suppression_floor": "NOT_APPROVED — SD-11 Owner decision outstanding"
+      },
+      "instrument_gate": "BLOCKED_SOURCE",
+      "routing_resolved": false,
+      "authorization": {
+        "instrument_status": "BLOCKED_SOURCE",
+        "report_authorized": false,
+        "basis": "report_authorized requires an AUTHORIZED/APPROVED instrument and at least one section that may render a measurement; neither holds",
+        "scientific_approval": "UNVERIFIED / unresolved named decisions; no adoption inferred",
+        "owner_authorization": "LANGUAGE candidate formal review only; production not authorized",
+        "fielding": "PRODUCTION_FIELDING_HOLD",
+        "candidate_gate": "Q01_ELIGIBLE_AND_Q04_SUBSTANTIVE_NONZERO",
+        "authority_granted_by_this_registry": "NONE"
+      },
+      "template_usable_for_substantive_report": false,
+      "objective_proximity": [],
+      "covers_objective": false,
+      "conflict_ids": [
+        "CX-07",
+        "CX-15",
+        "CX-16",
+        "CX-17",
+        "CX-18",
+        "CX-19"
+      ],
+      "open_decisions": [
+        "SD-09",
+        "declaration of the ordinal scale for Q02, Q04, Q07, Q13"
+      ]
+    },
+    {
+      "question_id": "Q09",
+      "group": "C",
+      "instrument_version": "P3-01C-VNEXT-0.6.1-CUST-REC",
+      "instrument_sha256": "ec2b5494ecf82447076e0d7a2bfb57599a24f049bbcc925a9ecbea6e833bce59",
+      "instrument_status": "BLOCKED_SOURCE",
+      "source_fingerprint": "dc7942c0f7dd1f432feed853ac87631f44eb45245e48971ac7fa93363af072e0",
+      "construct_id": "D05B_PLANNED_OCCASION",
+      "construct_id_handoff": "D05B_PLANNED_OCCASION",
+      "response_kind": "MULTI_SELECT",
+      "instrument_type": "multi_select",
+      "max_selections": null,
+      "exclusive_codes": [
+        "NONE",
+        "CANNOT_JUDGE"
+      ],
+      "codes": [
+        {
+          "code": "WORK_BREAK",
+          "label_en": "During a work break",
+          "label_raw": null,
+          "label_repair": null,
+          "label_source": "CONTRACT_OPTION_BANK_DRAFT"
+        },
+        {
+          "code": "STUDY",
+          "label_en": "While studying or taking a study break",
+          "label_raw": null,
+          "label_repair": null,
+          "label_source": "CONTRACT_OPTION_BANK_DRAFT"
+        },
+        {
+          "code": "SOCIAL",
+          "label_en": "To meet or spend time with others",
+          "label_raw": null,
+          "label_repair": null,
+          "label_source": "CONTRACT_OPTION_BANK_DRAFT"
+        },
+        {
+          "code": "ON_THE_GO",
+          "label_en": "While travelling or passing by",
+          "label_raw": null,
+          "label_repair": null,
+          "label_source": "CONTRACT_OPTION_BANK_DRAFT"
+        },
+        {
+          "code": "UNLISTED_OCCASION_REPORTED",
+          "label_en": "Another occasion not listed",
+          "label_raw": null,
+          "label_repair": null,
+          "label_source": "CONTRACT_OPTION_BANK_DRAFT"
+        },
+        {
+          "code": "NONE",
+          "label_en": "None of these occasions",
+          "label_raw": null,
+          "label_repair": null,
+          "label_source": "CONTRACT_OPTION_BANK_DRAFT"
+        },
+        {
+          "code": "CANNOT_JUDGE",
+          "label_en": "Cannot judge",
+          "label_raw": null,
+          "label_repair": null,
+          "label_source": "CONTRACT_OPTION_BANK_DRAFT"
+        },
+        {
+          "code": "PREFER_NOT_TO_ANSWER",
+          "label_en": "Prefer not to answer",
+          "label_raw": null,
+          "label_repair": null,
+          "label_source": "CONTRACT_OPTION_BANK_DRAFT"
+        }
+      ],
+      "substantive_codes": [
+        "WORK_BREAK",
+        "STUDY",
+        "SOCIAL",
+        "ON_THE_GO",
+        "UNLISTED_OCCASION_REPORTED",
+        "NONE"
+      ],
+      "non_substantive_codes": [
+        "CANNOT_JUDGE",
+        "PREFER_NOT_TO_ANSWER"
+      ],
+      "display_order": [
+        "WORK_BREAK",
+        "STUDY",
+        "SOCIAL",
+        "ON_THE_GO",
+        "UNLISTED_OCCASION_REPORTED",
+        "NONE",
+        "CANNOT_JUDGE",
+        "PREFER_NOT_TO_ANSWER"
+      ],
+      "display_order_source": "CODE_ARRAY_FALLBACK_UNDECLARED",
+      "ordinal_meaning": null,
+      "ordinal_meaning_source": "UNDECLARED",
+      "ordinal_only_rationale": null,
+      "research_objective": "Describe hypothetical occasions on which respondents might visit the proposed café.",
+      "required_measurement": "Multi-response potential use occasions; independent of actual past usage in question wording.",
+      "analysis_plan": "If a show predicate is approved, report hypothetical category selections with a separate valid denominator.",
+      "ee01_measurement_rule": {
+        "rule_id": "Q09-NR-DEFAULT",
+        "basis": "STRUCTURAL_DEFAULT_NO_DECLARED_NUMERATOR",
+        "numerator": [
+          "each substantive code independently"
+        ],
+        "denominator": "V for this item, version and stimulus",
+        "formula": "100 * x[code] / V",
+        "applied_only_when": "V > 0",
+        "output_label": "count and share per response code",
+        "expressly_not": [
+          "any aggregate score",
+          "any ranking across items",
+          "any conversion to demand, revenue or visits"
+        ],
+        "authority": "NO_DECLARED_NUMERATOR — only per-code counts are permitted"
+      },
+      "permitted_claim": "Hypothetical stated occasion counts among substantive responses",
+      "prohibited_inference": "Actual visit frequency; time-of-day demand; pooling with Q08",
+      "coverage_limitation": "Same provisional bank as Q08.",
+      "limitation": "Not actual visits, forecasted frequency or future time-of-day demand.",
+      "templates": {
+        "withheld": {
+          "template_id": "FB-Q09-WITHHELD",
+          "text": "Potential visit-occasion findings are withheld because Q09’s show rule and occasion bank remain unresolved.",
+          "placeholders": []
+        },
+        "valid": {
+          "template_id": "VD-Q09-APPROVED",
+          "text": "Among {V} valid Q09 respondents, {count} selected {category} as a possible occasion for a hypothetical visit.",
+          "placeholders": [
+            "V",
+            "category",
+            "count"
+          ]
+        },
+        "limitation": {
+          "template_id": "LM-Q09-LIMIT",
+          "text": "Not actual visits, forecasted frequency or future time-of-day demand.",
+          "placeholders": []
+        }
+      },
+      "report_sections": [
+        "R07"
+      ],
+      "report_admission": {
+        "sections": {
+          "R07": {
+            "state": "SPECIFICATION_ONLY",
+            "blocking_gates": [
+              "G01",
+              "G06"
+            ],
+            "reason": null,
+            "scope_qualifier": null,
+            "may_render_measurement": false,
+            "administrative_only": false
+          }
+        },
+        "any_section_may_render_measurement": false,
+        "requirement": "Every assigned section is held: none may render a measurement until its blocking gates are closed and an adopted ReportAdmission contract issues ADMITTED.",
+        "suppression_controls": [
+          "COMPLEMENTARY_SUPPRESSION",
+          "CROSS_VIEW_DIFFERENCING_CHECK",
+          "RESIDUAL_BUCKET_REQUIRED"
+        ],
+        "suppression_floor": "NOT_APPROVED — SD-11 Owner decision outstanding"
+      },
+      "instrument_gate": "BLOCKED_SOURCE",
+      "routing_resolved": false,
+      "authorization": {
+        "instrument_status": "BLOCKED_SOURCE",
+        "report_authorized": false,
+        "basis": "report_authorized requires an AUTHORIZED/APPROVED instrument and at least one section that may render a measurement; neither holds",
+        "scientific_approval": "UNVERIFIED / unresolved named decisions; no adoption inferred",
+        "owner_authorization": "LANGUAGE candidate formal review only; production not authorized",
+        "fielding": "PRODUCTION_FIELDING_HOLD",
+        "candidate_gate": "FUTURE_OCCASION",
+        "authority_granted_by_this_registry": "NONE"
+      },
+      "template_usable_for_substantive_report": false,
+      "objective_proximity": [],
+      "covers_objective": false,
+      "conflict_ids": [
+        "CX-08",
+        "CX-15",
+        "CX-16",
+        "CX-17",
+        "CX-18",
+        "CX-19"
+      ],
+      "open_decisions": [
+        "WS2 scientific + Owner ruling on ROUTING-01",
+        "declaration of the ordinal scale for Q02, Q04, Q07, Q13"
+      ]
+    },
+    {
+      "question_id": "Q10",
+      "group": "C",
+      "instrument_version": "P3-01C-VNEXT-0.6.1-CUST-REC",
+      "instrument_sha256": "ec2b5494ecf82447076e0d7a2bfb57599a24f049bbcc925a9ecbea6e833bce59",
+      "instrument_status": "G06_APPROVAL_PENDING",
+      "source_fingerprint": "e4386c26971140f355c372aa60d3bcff27f04d56cde4452ca45adb640b7981f0",
+      "construct_id": "D06_EXPERIENCE_PRIORITY",
+      "construct_id_handoff": "D06_EXPERIENCE_PRIORITY",
+      "response_kind": "MATRIX",
+      "instrument_type": "ordinal_matrix",
+      "max_selections": 1,
+      "exclusive_codes": [],
+      "codes": [
+        {
+          "code": "NOT_AT_ALL_IMPORTANT",
+          "label_en": "Not at all important",
+          "label_raw": null,
+          "label_repair": null,
+          "label_source": "CONTRACT_OPTION_BANK_DRAFT"
+        },
+        {
+          "code": "SLIGHTLY_IMPORTANT",
+          "label_en": "Slightly important",
+          "label_raw": null,
+          "label_repair": null,
+          "label_source": "CONTRACT_OPTION_BANK_DRAFT"
+        },
+        {
+          "code": "MODERATELY_IMPORTANT",
+          "label_en": "Moderately important",
+          "label_raw": null,
+          "label_repair": null,
+          "label_source": "CONTRACT_OPTION_BANK_DRAFT"
+        },
+        {
+          "code": "VERY_IMPORTANT",
+          "label_en": "Very important",
+          "label_raw": null,
+          "label_repair": null,
+          "label_source": "CONTRACT_OPTION_BANK_DRAFT"
+        },
+        {
+          "code": "EXTREMELY_IMPORTANT",
+          "label_en": "Extremely important",
+          "label_raw": null,
+          "label_repair": null,
+          "label_source": "CONTRACT_OPTION_BANK_DRAFT"
+        },
+        {
+          "code": "NOT_APPLICABLE",
+          "label_en": "Not applicable",
+          "label_raw": null,
+          "label_repair": null,
+          "label_source": "CONTRACT_OPTION_BANK_DRAFT"
+        },
+        {
+          "code": "CANNOT_JUDGE",
+          "label_en": "Cannot judge",
+          "label_raw": null,
+          "label_repair": null,
+          "label_source": "CONTRACT_OPTION_BANK_DRAFT"
+        },
+        {
+          "code": "PREFER_NOT_TO_ANSWER",
+          "label_en": "Prefer not to answer",
+          "label_raw": null,
+          "label_repair": null,
+          "label_source": "CONTRACT_OPTION_BANK_DRAFT"
+        }
+      ],
+      "substantive_codes": [
+        "NOT_AT_ALL_IMPORTANT",
+        "SLIGHTLY_IMPORTANT",
+        "MODERATELY_IMPORTANT",
+        "VERY_IMPORTANT",
+        "EXTREMELY_IMPORTANT"
+      ],
+      "non_substantive_codes": [
+        "NOT_APPLICABLE",
+        "CANNOT_JUDGE",
+        "PREFER_NOT_TO_ANSWER"
+      ],
+      "display_order": [
+        "NOT_AT_ALL_IMPORTANT",
+        "SLIGHTLY_IMPORTANT",
+        "MODERATELY_IMPORTANT",
+        "VERY_IMPORTANT",
+        "EXTREMELY_IMPORTANT",
+        "NOT_APPLICABLE",
+        "CANNOT_JUDGE",
+        "PREFER_NOT_TO_ANSWER"
+      ],
+      "display_order_source": "CODE_ARRAY_FALLBACK_UNDECLARED",
+      "ordinal_meaning": null,
+      "ordinal_meaning_source": "UNDECLARED",
+      "ordinal_only_rationale": null,
+      "research_objective": "Describe respondents’ importance ratings for each approved feature of the proposed café experience.",
+      "required_measurement": "Per-feature ordered importance rating using an approved feature bank.",
+      "analysis_plan": "Report per-feature distribution and, if predeclared, top-two importance share with feature-specific V.",
+      "ee01_measurement_rule": {
+        "rule_id": "Q10-NR-DEFAULT",
+        "basis": "STRUCTURAL_DEFAULT_NO_DECLARED_NUMERATOR",
+        "numerator": [
+          "PER_FEATURE_DENOMINATOR_UNSUPPORTED"
+        ],
+        "denominator": "V for this item, version and stimulus",
+        "formula": null,
+        "applied_only_when": "V > 0",
+        "output_label": "count and share per response code",
+        "expressly_not": [
+          "any aggregate score",
+          "any ranking across items",
+          "any conversion to demand, revenue or visits"
+        ],
+        "authority": "NO_DECLARED_NUMERATOR — only per-code counts are permitted"
+      },
+      "permitted_claim": "Per-feature ordered distribution with its own V_feature, plus the predeclared top-two share per feature",
+      "prohibited_inference": "Composite importance score; preference weights; forced ranking; causal satisfaction; revenue; treating format choice as importance",
+      "coverage_limitation": "Feature bank absent. The A10 v0.3:344 'Examples:' list is a drafted example set, not an approved ceiling; F<=6 is an author burden proposal. M2's product taxonomy is unapproved, so Q06 must not be treated as confirming it. Scale anchors reconciled to A10 v0.3 D06 here; any further relabel voids the predeclared top-two set.",
+      "limitation": "No composite score, preference weights, causal satisfaction claims or revenue effect.",
+      "templates": {
+        "withheld": {
+          "template_id": "FB-Q10-WITHHELD",
+          "text": "Experience-priority findings are withheld because the feature bank and item-level measurement rules have not been approved.",
+          "placeholders": []
+        },
+        "valid": {
+          "template_id": "VD-Q10-APPROVED",
+          "text": "For the approved feature {feature}, {count} of {V_feature} valid ratings were very/extremely important ({percent}%). This is a stated importance rating.",
+          "placeholders": [
+            "V_feature",
+            "count",
+            "feature",
+            "percent"
+          ]
+        },
+        "limitation": {
+          "template_id": "LM-Q10-LIMIT",
+          "text": "No composite score, preference weights, causal satisfaction claims or revenue effect.",
+          "placeholders": []
+        }
+      },
+      "report_sections": [
+        "R07"
+      ],
+      "report_admission": {
+        "sections": {
+          "R07": {
+            "state": "SPECIFICATION_ONLY",
+            "blocking_gates": [
+              "G01",
+              "G06"
+            ],
+            "reason": null,
+            "scope_qualifier": null,
+            "may_render_measurement": false,
+            "administrative_only": false
+          }
+        },
+        "any_section_may_render_measurement": false,
+        "requirement": "Every assigned section is held: none may render a measurement until its blocking gates are closed and an adopted ReportAdmission contract issues ADMITTED.",
+        "suppression_controls": [
+          "COMPLEMENTARY_SUPPRESSION",
+          "CROSS_VIEW_DIFFERENCING_CHECK",
+          "RESIDUAL_BUCKET_REQUIRED"
+        ],
+        "suppression_floor": "NOT_APPROVED — SD-11 Owner decision outstanding"
+      },
+      "instrument_gate": "MISSING_APPROVED_BANK",
+      "routing_resolved": false,
+      "authorization": {
+        "instrument_status": "G06_APPROVAL_PENDING",
+        "report_authorized": false,
+        "basis": "report_authorized requires an AUTHORIZED/APPROVED instrument and at least one section that may render a measurement; neither holds",
+        "scientific_approval": "UNVERIFIED / unresolved named decisions; no adoption inferred",
+        "owner_authorization": "LANGUAGE candidate formal review only; production not authorized",
+        "fielding": "PRODUCTION_FIELDING_HOLD",
+        "candidate_gate": "FEATURES",
+        "authority_granted_by_this_registry": "NONE"
+      },
+      "template_usable_for_substantive_report": false,
+      "objective_proximity": [
+        "O5"
+      ],
+      "covers_objective": false,
+      "conflict_ids": [
+        "CX-09",
+        "CX-10",
+        "CX-11",
+        "CX-15",
+        "CX-16",
+        "CX-17",
+        "CX-18",
+        "CX-19"
+      ],
+      "open_decisions": [
+        "G06 feature-bank approval",
+        "WS2 scientific + Owner ruling on ROUTING-02",
+        "a per-feature EE-01 measurement rule",
+        "declaration of the ordinal scale for Q02, Q04, Q07, Q13"
+      ]
+    },
+    {
+      "question_id": "Q11",
+      "group": "D",
+      "instrument_version": "P3-01C-VNEXT-0.6.1-CUST-REC",
+      "instrument_sha256": "ec2b5494ecf82447076e0d7a2bfb57599a24f049bbcc925a9ecbea6e833bce59",
+      "instrument_status": "BLOCKED_OWNER",
+      "source_fingerprint": "a5a68fd0d32ee9985fff55f6c6ab98f8ccf5ac7e3641e90c726c7b8e664d3ec7",
+      "construct_id": "FMT01_FORMAT_CHOICE",
+      "construct_id_handoff": "FMT01_FORMAT_CHOICE",
+      "response_kind": "SINGLE_SELECT",
+      "instrument_type": "nominal_single",
+      "max_selections": 1,
+      "exclusive_codes": [],
+      "codes": [
+        {
+          "code": "DINE_IN",
+          "label_en": "Dine-in",
+          "label_raw": null,
+          "label_repair": null,
+          "label_source": "CONTRACT_OPTION_BANK_DRAFT"
+        },
+        {
+          "code": "TAKEAWAY",
+          "label_en": "Takeaway",
+          "label_raw": null,
+          "label_repair": null,
+          "label_source": "CONTRACT_OPTION_BANK_DRAFT"
+        },
+        {
+          "code": "EITHER_EQUALLY",
+          "label_en": "Either equally",
+          "label_raw": null,
+          "label_repair": null,
+          "label_source": "CONTRACT_OPTION_BANK_DRAFT"
+        },
+        {
+          "code": "CANNOT_JUDGE",
+          "label_en": "Cannot judge",
+          "label_raw": null,
+          "label_repair": null,
+          "label_source": "CONTRACT_OPTION_BANK_DRAFT"
+        },
+        {
+          "code": "PREFER_NOT_TO_ANSWER",
+          "label_en": "Prefer not to answer",
+          "label_raw": null,
+          "label_repair": null,
+          "label_source": "CONTRACT_OPTION_BANK_DRAFT"
+        }
+      ],
+      "substantive_codes": [
+        "DINE_IN",
+        "TAKEAWAY",
+        "EITHER_EQUALLY"
+      ],
+      "non_substantive_codes": [
+        "CANNOT_JUDGE",
+        "PREFER_NOT_TO_ANSWER"
+      ],
+      "display_order": [
+        "DINE_IN",
+        "TAKEAWAY",
+        "EITHER_EQUALLY",
+        "CANNOT_JUDGE",
+        "PREFER_NOT_TO_ANSWER"
+      ],
+      "display_order_source": "CODE_ARRAY_FALLBACK_UNDECLARED",
+      "ordinal_meaning": null,
+      "ordinal_meaning_source": "UNDECLARED",
+      "ordinal_only_rationale": null,
+      "research_objective": "Describe respondents’ stated preference for dine-in, takeaway or either format for the defined café offer.",
+      "required_measurement": "Nominal service-format choice.",
+      "analysis_plan": "Only after owner registration/authorization: descriptive categorical format choice.",
+      "ee01_measurement_rule": {
+        "rule_id": "Q11-NR-DEFAULT",
+        "basis": "STRUCTURAL_DEFAULT_NO_DECLARED_NUMERATOR",
+        "numerator": [
+          "each substantive code independently"
+        ],
+        "denominator": "V for this item, version and stimulus",
+        "formula": "100 * x[code] / V",
+        "applied_only_when": "V > 0",
+        "output_label": "count and share per response code",
+        "expressly_not": [
+          "any aggregate score",
+          "any ranking across items",
+          "any conversion to demand, revenue or visits"
+        ],
+        "authority": "NO_DECLARED_NUMERATOR — only per-code counts are permitted"
+      },
+      "permitted_claim": "None in a report until the construct is registered and an Owner decision authorises a section",
+      "prohibited_inference": "Ordered D06 importance; spending; visit frequency",
+      "coverage_limitation": "No A10 construct. Rendering is suppressed, not annotated.",
+      "limitation": "No demand, spending or experience-importance inference; not yet approved as mandatory O4 evidence.",
+      "templates": {
+        "withheld": {
+          "template_id": "FB-Q11-WITHHELD",
+          "text": "Service-format preferences are omitted because Q11 is currently optional research context and does not have owner authorization for report claims.",
+          "placeholders": []
+        },
+        "valid": {
+          "template_id": "VD-Q11-APPROVED",
+          "text": "Among {V} valid Q11 respondents, {count} selected {category} as their main preferred service format for the described offer.",
+          "placeholders": [
+            "V",
+            "category",
+            "count"
+          ]
+        },
+        "limitation": {
+          "template_id": "LM-Q11-LIMIT",
+          "text": "No demand, spending or experience-importance inference; not yet approved as mandatory O4 evidence.",
+          "placeholders": []
+        }
+      },
+      "report_sections": [],
+      "report_admission": {
+        "sections": {},
+        "any_section_may_render_measurement": false,
+        "requirement": "No report section is assigned, so no section-level admission can be requested. The item is unrenderable by construction.",
+        "suppression_controls": [
+          "COMPLEMENTARY_SUPPRESSION",
+          "CROSS_VIEW_DIFFERENCING_CHECK",
+          "RESIDUAL_BUCKET_REQUIRED"
+        ],
+        "suppression_floor": "NOT_APPROVED — SD-11 Owner decision outstanding"
+      },
+      "instrument_gate": "NOT_AUTHORIZED",
+      "routing_resolved": true,
+      "authorization": {
+        "instrument_status": "BLOCKED_OWNER",
+        "report_authorized": false,
+        "basis": "report_authorized requires an AUTHORIZED/APPROVED instrument and at least one section that may render a measurement; neither holds",
+        "scientific_approval": "UNVERIFIED / unresolved named decisions; no adoption inferred",
+        "owner_authorization": "LANGUAGE candidate formal review only; production not authorized",
+        "fielding": "PRODUCTION_FIELDING_HOLD",
+        "candidate_gate": "Q01_ELIGIBLE_AND_OPTIONAL_CONTEXT_ENABLED",
+        "authority_granted_by_this_registry": "NONE"
+      },
+      "template_usable_for_substantive_report": false,
+      "objective_proximity": [
+        "O4"
+      ],
+      "covers_objective": false,
+      "conflict_ids": [
+        "CX-12",
+        "CX-15",
+        "CX-16",
+        "CX-17",
+        "CX-18",
+        "CX-19"
+      ],
+      "open_decisions": [
+        "Owner registration and section authorization",
+        "declaration of the ordinal scale for Q02, Q04, Q07, Q13"
+      ]
+    },
+    {
+      "question_id": "Q12",
+      "group": "D",
+      "instrument_version": "P3-01C-VNEXT-0.6.1-CUST-REC",
+      "instrument_sha256": "ec2b5494ecf82447076e0d7a2bfb57599a24f049bbcc925a9ecbea6e833bce59",
+      "instrument_status": "BLOCKED_MEASUREMENT",
+      "source_fingerprint": "5fde84fc41df45636671562cc9bf924af830fa82c204063330ab54903e280604",
+      "construct_id": "GEO_TRANSPORT_TO_AREA_01",
+      "construct_id_handoff": "GEO_TRANSPORT_TO_AREA_01",
+      "response_kind": "SINGLE_SELECT",
+      "instrument_type": "nominal_single",
+      "max_selections": 1,
+      "exclusive_codes": [],
+      "codes": [
+        {
+          "code": "WALK",
+          "label_en": "Walking",
+          "label_raw": null,
+          "label_repair": null,
+          "label_source": "CONTRACT_OPTION_BANK_DRAFT"
+        },
+        {
+          "code": "MOTORCYCLE",
+          "label_en": "Motorcycle",
+          "label_raw": null,
+          "label_repair": null,
+          "label_source": "CONTRACT_OPTION_BANK_DRAFT"
+        },
+        {
+          "code": "CAR",
+          "label_en": "Car",
+          "label_raw": null,
+          "label_repair": null,
+          "label_source": "CONTRACT_OPTION_BANK_DRAFT"
+        },
+        {
+          "code": "PUBLIC_TRANSPORT",
+          "label_en": "Public transport",
+          "label_raw": null,
+          "label_repair": null,
+          "label_source": "CONTRACT_OPTION_BANK_DRAFT"
+        },
+        {
+          "code": "OTHER",
+          "label_en": "Other",
+          "label_raw": null,
+          "label_repair": null,
+          "label_source": "CONTRACT_OPTION_BANK_DRAFT"
+        },
+        {
+          "code": "NOT_SURE",
+          "label_en": "Not sure",
+          "label_raw": null,
+          "label_repair": null,
+          "label_source": "CONTRACT_OPTION_BANK_DRAFT"
+        },
+        {
+          "code": "PREFER_NOT_TO_ANSWER",
+          "label_en": "Prefer not to answer",
+          "label_raw": null,
+          "label_repair": null,
+          "label_source": "CONTRACT_OPTION_BANK_DRAFT"
+        }
+      ],
+      "substantive_codes": [
+        "WALK",
+        "MOTORCYCLE",
+        "CAR",
+        "PUBLIC_TRANSPORT"
+      ],
+      "non_substantive_codes": [
+        "NOT_SURE",
+        "PREFER_NOT_TO_ANSWER",
+        "OTHER"
+      ],
+      "display_order": [
+        "WALK",
+        "MOTORCYCLE",
+        "CAR",
+        "PUBLIC_TRANSPORT",
+        "OTHER",
+        "NOT_SURE",
+        "PREFER_NOT_TO_ANSWER"
+      ],
+      "display_order_source": "CODE_ARRAY_FALLBACK_UNDECLARED",
+      "ordinal_meaning": null,
+      "ordinal_meaning_source": "UNDECLARED",
+      "ordinal_only_rationale": null,
+      "research_objective": "Describe respondents’ self-reported usual mode of travelling to the named study area.",
+      "required_measurement": "Nominal travel mode to area, not café-specific travel.",
+      "analysis_plan": "If approved, report descriptive mode distribution with explicit to-area qualifier.",
+      "ee01_measurement_rule": {
+        "rule_id": "Q12-NR-DEFAULT",
+        "basis": "STRUCTURAL_DEFAULT_NO_DECLARED_NUMERATOR",
+        "numerator": [
+          "each substantive code independently"
+        ],
+        "denominator": "V for this item, version and stimulus",
+        "formula": "100 * x[code] / V",
+        "applied_only_when": "V > 0",
+        "output_label": "count and share per response code",
+        "expressly_not": [
+          "any aggregate score",
+          "any ranking across items",
+          "any conversion to demand, revenue or visits"
+        ],
+        "authority": "NO_DECLARED_NUMERATOR — only per-code counts are permitted"
+      },
+      "permitted_claim": "Descriptive travel-to-area mode distribution with a limited-context qualifier",
+      "prohibited_inference": "Travel time; routing; precise origin; café-trip mode; distance",
+      "coverage_limitation": "Transport to the area is not transport to the café. OTHER has no coding scheme and is not treated as a category.",
+      "limitation": "Not route to café, trip time, distance or origin location.",
+      "templates": {
+        "withheld": {
+          "template_id": "FB-Q12-WITHHELD",
+          "text": "Travel-mode findings are unavailable because this optional contextual item is not scientifically approved or lacks admissible data.",
+          "placeholders": []
+        },
+        "valid": {
+          "template_id": "VD-Q12-APPROVED",
+          "text": "Among {V} valid Q12 respondents, {count} reported {category} as their usual travel mode to the study area.",
+          "placeholders": [
+            "V",
+            "category",
+            "count"
+          ]
+        },
+        "limitation": {
+          "template_id": "LM-Q12-LIMIT",
+          "text": "Not route to café, trip time, distance or origin location.",
+          "placeholders": []
+        }
+      },
+      "report_sections": [
+        "R08"
+      ],
+      "report_admission": {
+        "sections": {
+          "R08": {
+            "state": "SPECIFICATION_ONLY",
+            "blocking_gates": [
+              "G01",
+              "G07",
+              "G08"
+            ],
+            "reason": null,
+            "scope_qualifier": "LIMITED_CONTEXT",
+            "may_render_measurement": false,
+            "administrative_only": false
+          }
+        },
+        "any_section_may_render_measurement": false,
+        "requirement": "Every assigned section is held: none may render a measurement until its blocking gates are closed and an adopted ReportAdmission contract issues ADMITTED.",
+        "suppression_controls": [
+          "COMPLEMENTARY_SUPPRESSION",
+          "CROSS_VIEW_DIFFERENCING_CHECK",
+          "RESIDUAL_BUCKET_REQUIRED"
+        ],
+        "suppression_floor": "NOT_APPROVED — SD-11 Owner decision outstanding"
+      },
+      "instrument_gate": "NOT_AUTHORIZED",
+      "routing_resolved": true,
+      "authorization": {
+        "instrument_status": "BLOCKED_MEASUREMENT",
+        "report_authorized": false,
+        "basis": "report_authorized requires an AUTHORIZED/APPROVED instrument and at least one section that may render a measurement; neither holds",
+        "scientific_approval": "UNVERIFIED / unresolved named decisions; no adoption inferred",
+        "owner_authorization": "LANGUAGE candidate formal review only; production not authorized",
+        "fielding": "PRODUCTION_FIELDING_HOLD",
+        "candidate_gate": "Q01_ELIGIBLE_AND_OPTIONAL_CONTEXT_ENABLED",
+        "authority_granted_by_this_registry": "NONE"
+      },
+      "template_usable_for_substantive_report": false,
+      "objective_proximity": [],
+      "covers_objective": false,
+      "conflict_ids": [
+        "CX-13",
+        "CX-15",
+        "CX-16",
+        "CX-17",
+        "CX-18",
+        "CX-19"
+      ],
+      "open_decisions": [
+        "declaration of the ordinal scale for Q02, Q04, Q07, Q13",
+        "none for presentation"
+      ]
+    },
+    {
+      "question_id": "Q13",
+      "group": "D",
+      "instrument_version": "P3-01C-VNEXT-0.6.1-CUST-REC",
+      "instrument_sha256": "ec2b5494ecf82447076e0d7a2bfb57599a24f049bbcc925a9ecbea6e833bce59",
+      "instrument_status": "BLOCKED_OWNER",
+      "source_fingerprint": "e43c355fe9803237a990bc1173be185a5900aff8ef71955e86bec278ef9ce8c0",
+      "construct_id": "EXP01_PRICE_EXPECTATION",
+      "construct_id_handoff": "EXP01_PRICE_EXPECTATION",
+      "response_kind": "ORDINAL",
+      "instrument_type": "ordinal_single",
+      "max_selections": 1,
+      "exclusive_codes": [],
+      "codes": [
+        {
+          "code": "LT_RM8",
+          "label_en": "Below RM8",
+          "label_raw": null,
+          "label_repair": null,
+          "label_source": "CONTRACT_OPTION_BANK_DRAFT"
+        },
+        {
+          "code": "RM8_TO_1199",
+          "label_en": "RM8–RM11.99",
+          "label_raw": null,
+          "label_repair": null,
+          "label_source": "CONTRACT_OPTION_BANK_DRAFT"
+        },
+        {
+          "code": "RM12_TO_1499",
+          "label_en": "RM12–RM14.99",
+          "label_raw": null,
+          "label_repair": null,
+          "label_source": "CONTRACT_OPTION_BANK_DRAFT"
+        },
+        {
+          "code": "RM15_TO_1799",
+          "label_en": "RM15–RM17.99",
+          "label_raw": null,
+          "label_repair": null,
+          "label_source": "CONTRACT_OPTION_BANK_DRAFT"
+        },
+        {
+          "code": "GE_RM18",
+          "label_en": "RM18 or more",
+          "label_raw": null,
+          "label_repair": null,
+          "label_source": "CONTRACT_OPTION_BANK_DRAFT"
+        },
+        {
+          "code": "NOT_SURE",
+          "label_en": "Not sure",
+          "label_raw": null,
+          "label_repair": null,
+          "label_source": "CONTRACT_OPTION_BANK_DRAFT"
+        },
+        {
+          "code": "PREFER_NOT_TO_ANSWER",
+          "label_en": "Prefer not to answer",
+          "label_raw": null,
+          "label_repair": null,
+          "label_source": "CONTRACT_OPTION_BANK_DRAFT"
+        }
+      ],
+      "substantive_codes": [
+        "LT_RM8",
+        "RM8_TO_1199",
+        "RM12_TO_1499",
+        "RM15_TO_1799",
+        "GE_RM18"
+      ],
+      "non_substantive_codes": [
+        "NOT_SURE",
+        "PREFER_NOT_TO_ANSWER"
+      ],
+      "display_order": [
+        "LT_RM8",
+        "RM8_TO_1199",
+        "RM12_TO_1499",
+        "RM15_TO_1799",
+        "GE_RM18",
+        "NOT_SURE",
+        "PREFER_NOT_TO_ANSWER"
+      ],
+      "display_order_source": "CODE_ARRAY_FALLBACK_UNDECLARED",
+      "ordinal_meaning": null,
+      "ordinal_meaning_source": "UNDECLARED",
+      "ordinal_only_rationale": null,
+      "research_objective": "Describe respondents’ expected price band for one explicitly defined medium-latte dine-in offer.",
+      "required_measurement": "Banded hypothetical price expectation, not price acceptability.",
+      "analysis_plan": "If owner authorizes, report banded expectations including open-end bounds; no optimum-price model.",
+      "ee01_measurement_rule": {
+        "rule_id": "Q13-NR-DEFAULT",
+        "basis": "STRUCTURAL_DEFAULT_NO_DECLARED_NUMERATOR",
+        "numerator": [
+          "each substantive code independently"
+        ],
+        "denominator": "V for this item, version and stimulus",
+        "formula": "100 * x[code] / V",
+        "applied_only_when": "V > 0",
+        "output_label": "count and share per response code",
+        "expressly_not": [
+          "any aggregate score",
+          "any ranking across items",
+          "any conversion to demand, revenue or visits"
+        ],
+        "authority": "NO_DECLARED_NUMERATOR — only per-code counts are permitted"
+      },
+      "permitted_claim": "Banded price expectation, upper-bound language mandatory, only if an Owner decision authorises a section",
+      "prohibited_inference": "Any identification with D03A or R05; acceptability; WTP; price optimum",
+      "coverage_limitation": "Upper-bound language is mandatory. Hypothetical bias is unquantified.",
+      "limitation": "Not Q07 price acceptability, willingness-to-pay or revenue potential.",
+      "templates": {
+        "withheld": {
+          "template_id": "FB-Q13-WITHHELD",
+          "text": "Price-expectation results are withheld because Q13 is optional research-only context without owner authorization and/or a final exact item definition.",
+          "placeholders": []
+        },
+        "valid": {
+          "template_id": "VD-Q13-APPROVED",
+          "text": "Among {V} valid Q13 respondents, {count} selected {category} as the expected price band for the defined medium latte (dine-in).",
+          "placeholders": [
+            "V",
+            "category",
+            "count"
+          ]
+        },
+        "limitation": {
+          "template_id": "LM-Q13-LIMIT",
+          "text": "Not Q07 price acceptability, willingness-to-pay or revenue potential.",
+          "placeholders": []
+        }
+      },
+      "report_sections": [],
+      "report_admission": {
+        "sections": {},
+        "any_section_may_render_measurement": false,
+        "requirement": "No report section is assigned, so no section-level admission can be requested. The item is unrenderable by construction.",
+        "suppression_controls": [
+          "COMPLEMENTARY_SUPPRESSION",
+          "CROSS_VIEW_DIFFERENCING_CHECK",
+          "RESIDUAL_BUCKET_REQUIRED"
+        ],
+        "suppression_floor": "NOT_APPROVED — SD-11 Owner decision outstanding"
+      },
+      "instrument_gate": "NOT_AUTHORIZED",
+      "routing_resolved": true,
+      "authorization": {
+        "instrument_status": "BLOCKED_OWNER",
+        "report_authorized": false,
+        "basis": "report_authorized requires an AUTHORIZED/APPROVED instrument and at least one section that may render a measurement; neither holds",
+        "scientific_approval": "UNVERIFIED / unresolved named decisions; no adoption inferred",
+        "owner_authorization": "LANGUAGE candidate formal review only; production not authorized",
+        "fielding": "PRODUCTION_FIELDING_HOLD",
+        "candidate_gate": "Q01_ELIGIBLE_AND_OPTIONAL_CONTEXT_ENABLED",
+        "authority_granted_by_this_registry": "NONE"
+      },
+      "template_usable_for_substantive_report": false,
+      "objective_proximity": [],
+      "covers_objective": false,
+      "conflict_ids": [
+        "CX-14",
+        "CX-15",
+        "CX-16",
+        "CX-17",
+        "CX-18",
+        "CX-19"
+      ],
+      "open_decisions": [
+        "Owner decision and a final exact item definition",
+        "declaration of the ordinal scale for Q02, Q04, Q07, Q13"
+      ]
+    }
+  ]
+}

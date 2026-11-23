@@ -1,5 +1,5 @@
 import 'package:jaspr_test/jaspr_test.dart';
-import 'package:sitewise_jaspr_web/data/stage3_access.dart';
+import 'package:sitewise_jaspr_web/features/assessment/application/stage3_access.dart';
 
 void main() {
   test('reads the current link even when no local cache exists', () async {

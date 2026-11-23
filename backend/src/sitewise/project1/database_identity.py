@@ -10,7 +10,14 @@ def configured_target():
     port = settings.project1_isolated_database_port
     if not name and not port:
         return 'Dss', None
-    if (not name.startswith('project1_') or not name.endswith('_test') or
+    # The suffix rule identifies a dedicated disposable test database. The
+    # authorised checkpoint target is ``project1_workflow_tests`` (plural), so
+    # accepting only ``_test`` made the configured target unusable: every
+    # workflow request failed WORKFLOW_ISOLATED_TARGET_INVALID before reaching
+    # authentication. Both spellings are accepted; every other condition
+    # (project1_ prefix, non-default port, M2 database agreement) is unchanged.
+    if (not name.startswith('project1_') or
+            not (name.endswith('_test') or name.endswith('_tests')) or
             not 1024 <= port <= 65535 or port == 5432 or
             settings.m2_expected_database != name):
         raise WorkflowHeld('WORKFLOW_ISOLATED_TARGET_INVALID')

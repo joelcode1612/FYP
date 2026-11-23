@@ -1,0 +1,453 @@
+ M .gitignore
+ M .workbuddy-ai/memory/MEMORY.md
+D  backend/.env
+ M backend/.env.example
+ M backend/docs/cq_runtime/QUESTION_CONTRACT_MATRIX.json
+A  backend/migrations/project1_ai/20261121_90_m2_runtime_role_disposable.sql
+A  backend/migrations/project1_ai/20261121_91_bcb_table_grants_disposable.sql
+A  backend/migrations/sql/20261121_0100_m2_bdj_objective_proposals.sql
+A  backend/migrations/sql/20261121_0200_m2_bdj_objective_decisions.sql
+A  backend/project1_qj_qg_question_options_demo.py
+ M backend/scripts/ml/train_personalised_recommender.py
+ M backend/src/sitewise/api/v1/customer_questionnaire.py
+ M backend/src/sitewise/api/v1/m2.py
+ M backend/src/sitewise/api/v1/m2_business_context.py
+AM backend/src/sitewise/api/v1/project1_objective_proposals.py
+ M backend/src/sitewise/api/v1/project1_workflow.py
+ M backend/src/sitewise/core/config.py
+A  backend/src/sitewise/domain/objective_runtime.py
+ M backend/src/sitewise/modules/decision_engine/domain/m2_rules.py
+ M backend/src/sitewise/project1/bdj.py
+ M backend/src/sitewise/project1/database_identity.py
+ M backend/src/sitewise/project1/disclosure.py
+ M backend/src/sitewise/project1/explanation_contracts.py
+ M backend/src/sitewise/project1/ledger.py
+AM backend/src/sitewise/project1/objective_adapter.py
+A  backend/src/sitewise/project1/objective_proposal.py
+ M backend/src/sitewise/project1/projection.py
+ M backend/src/sitewise/project1/prompts.py
+ M backend/src/sitewise/project1/provider.py
+ M backend/src/sitewise/project1/qg_fixed_options.py
+ M backend/src/sitewise/project1/runs.py
+ M backend/src/sitewise/repositories/business_context_repository.py
+ M backend/src/sitewise/repositories/m2_context_bindings.py
+ M backend/src/sitewise/repositories/m2_repository.py
+ M backend/src/sitewise/services/assessment_service.py
+ M backend/src/sitewise/services/bdj_service.py
+ M backend/src/sitewise/services/business_context_v1.py
+ M backend/src/sitewise/services/confirmation_service.py
+ M backend/src/sitewise/services/customer_questionnaire_service.py
+ M backend/src/sitewise/services/ee01_explanation_service.py
+ M backend/src/sitewise/services/m2_service.py
+ M backend/src/sitewise/services/persisted_business_context_service.py
+ M backend/tests/api/test_layer2_reuse_and_gate.py
+ M backend/tests/conftest.py
+A  backend/tests/cq_runtime/test_objective_runtime.py
+ M backend/tests/cq_runtime/test_postgres_api.py
+AM backend/tests/project1/test_objective_proposal_route.py
+A  backend/tools/_build_handoff_zip_20261122.py
+A  backend/tools/bdj_llm_response_sample_20261121.py
+A  backend/tools/bdj_objective_proposal_demo_20261121.py
+A  backend/tools/bdj_objective_proposal_live_20261121.py
+A  backend/tools/bdj_objective_shadow_20261121.py
+A  backend/tools/bdj_prompt_validation_demo_20261121.py
+A  backend/tools/phase1_persistence_test_20261121.py
+A  backend/tools/phase2_compat_and_consumption_20261121.py
+A  backend/tools/phase2_create_assessment_20261121.py
+A  backend/tools/phase2_engine_test_20261121.py
+A  backend/tools/phase2_gate1_runtime_role_20261121.py
+A  backend/tools/phase2_gate1a_bcb_privileges_20261121.py
+A  backend/tools/phase2_gate2_config_20261121.py
+A  backend/tools/phase2_gate3_bcb_20261121.py
+A  backend/tools/phase2_gate4_bdj_20261121.py
+A  backend/tools/phase2_gate4_bdj_20261122.py
+A  backend/tools/phase2_prepare_scratch_schema_20261121.py
+A  backend/tools/phase2_register_instrument_20261121.py
+A  backend/tools/phase3_decision_test_20261121.py
+A  backend/tools/run-bdj-objective-live.cmd
+A  backend/var/verification-documents/075fc6330c164d65bbbc561cc01c547a.pdf
+A  backend/var/verification-documents/8ac354e2d066491bbad69c3e9de9d56d.pdf
+A  backend/var/verification-documents/9d57a528e49243579c0bd8dc97a42ad1.pdf
+A  backend/var/verification-documents/c524b31bbbd4431d8b79cc2f47ca5a85.pdf
+A  backend/var/verification-documents/e142f797a3f149f18e3bc7dd73b9e065.pdf
+A  backend/var/verification-documents/eb7795c62c2a4937ad782b4d924c317e.pdf
+A  backend/var/verification-documents/eba628e86a8b4ca0a4ffdee03506a0a6.pdf
+A  backend/var/verification-documents/fb70804479254fa381e590ff5c9ed7d4.pdf
+A  deliverables/BDJ_OBJECTIVE_CUTOVER_RUNBOOK_V0_1_20261121.md
+A  deliverables/BDJ_OBJECTIVE_MIGRATION_PLAN_V0_1_20261121.md
+A  deliverables/BDJ_OBJECTIVE_PROPOSAL_CONTRACT_V0_1_20261121.md
+A  deliverables/BDJ_SCREENSHOT_DEFECT_REGISTER_20261121.md
+A  deliverables/PROJECT1_SESSION_HANDOFF_20261122.md
+A  deliverables/gstack/adaptive-routing-v13-2026-11-21.md
+A  deliverables/phase0/BDJ_SHADOW_REPORT_20261121.json
+A  deliverables/phase1/BDJ_PHASE1_EVIDENCE_20261121.json
+A  deliverables/phase1/BDJ_PHASE1_REPORT_20261121.md
+A  deliverables/phase1/BDJ_RULESET_SHA_RECONCILIATION_20261121.md
+A  deliverables/phase2/BDJ_BCB_INTEGRATION_CHECKPOINTS_20261121.md
+A  deliverables/phase2/BDJ_DEFECT_REVIEW_20261121.md
+A  deliverables/phase2/BDJ_GATE1A_BCB_PRIVILEGES_20261121.json
+A  deliverables/phase2/BDJ_GATE1_RUNTIME_ROLE_20261121.json
+A  deliverables/phase2/BDJ_GATE2_CONFIG_20261121.json
+A  deliverables/phase2/BDJ_GATE2_SCHEMA_PREP_20261121.json
+A  deliverables/phase2/BDJ_GATE3_BCB_20261121.json
+A  deliverables/phase2/BDJ_GATE4_BINDING_20261121.json
+A  deliverables/phase2/BDJ_GATE4_BINDING_20261122.json
+A  deliverables/phase2/BDJ_INSTRUMENT_REGISTRATION_20261121.json
+A  deliverables/phase2/BDJ_M2_COMPAT_AND_CONSUMPTION_20261121.json
+A  deliverables/phase2/BDJ_PHASE2_ENGINE_EVIDENCE_20261121.json
+A  deliverables/phase2/BDJ_PHASE2_STATUS_20261121.md
+A  deliverables/phase2/BDJ_SYNTHETIC_ASSESSMENT_20261121.failed.json
+A  deliverables/phase2/BDJ_SYNTHETIC_ASSESSMENT_20261121.json
+A  deliverables/phase2/FRONTEND_API_INTEGRATION_INVENTORY_20261121.md
+A  deliverables/phase3/BDJ_PHASE3_DECISION_CONTRACT_V0_1_20261121.md
+A  deliverables/phase3/BDJ_PHASE3_DECISION_EVIDENCE_20261121.json
+ M fyp_jaspr_web/lib/app.dart
+R  fyp_jaspr_web/lib/data/stage3_access.dart -> fyp_jaspr_web/lib/features/assessment/application/stage3_access.dart
+R  fyp_jaspr_web/lib/data/activity_event_presentation.dart -> fyp_jaspr_web/lib/features/assessment/data/activity_event_presentation.dart
+R  fyp_jaspr_web/lib/data/ai_execution_status.dart -> fyp_jaspr_web/lib/features/assessment/data/ai_execution_status.dart
+ M fyp_jaspr_web/lib/features/assessment/data/assessment_api.dart
+R  fyp_jaspr_web/lib/data/assessment_report.dart -> fyp_jaspr_web/lib/features/assessment/data/assessment_report.dart
+ M fyp_jaspr_web/lib/features/assessment/presentation/components/assessment_journey_stepper.dart
+R  fyp_jaspr_web/lib/shared/presentation/components/assessment_list_component.dart -> fyp_jaspr_web/lib/features/assessment/presentation/components/assessment_list_component.dart
+RM fyp_jaspr_web/lib/shared/presentation/components/business_understanding_panel.dart -> fyp_jaspr_web/lib/features/assessment/presentation/components/business_understanding_panel.dart
+RM fyp_jaspr_web/lib/shared/presentation/components/customer_questionnaire_step5.dart -> fyp_jaspr_web/lib/features/assessment/presentation/components/customer_questionnaire_step5.dart
+RM fyp_jaspr_web/lib/shared/presentation/components/m2_activity_panel.dart -> fyp_jaspr_web/lib/features/assessment/presentation/components/m2_activity_panel.dart
+RM fyp_jaspr_web/lib/shared/presentation/components/m2_workflow_panel.dart -> fyp_jaspr_web/lib/features/assessment/presentation/components/m2_workflow_panel.dart
+RM fyp_jaspr_web/lib/shared/presentation/components/project1_read_panel.dart -> fyp_jaspr_web/lib/features/assessment/presentation/components/project1_read_panel.dart
+RM fyp_jaspr_web/lib/shared/presentation/components/project1_research_stage_panel.dart -> fyp_jaspr_web/lib/features/assessment/presentation/components/project1_research_stage_panel.dart
+RM fyp_jaspr_web/lib/shared/presentation/components/research_workflow_panel.dart -> fyp_jaspr_web/lib/features/assessment/presentation/components/research_workflow_panel.dart
+R  fyp_jaspr_web/lib/shared/presentation/components/saved_assessment_dropdown.dart -> fyp_jaspr_web/lib/features/assessment/presentation/components/saved_assessment_dropdown.dart
+RM fyp_jaspr_web/lib/features/property_management/presentation/pages/activity_history_page.dart -> fyp_jaspr_web/lib/features/assessment/presentation/pages/activity_history_page.dart
+R  fyp_jaspr_web/lib/features/property_management/presentation/pages/assessment_report_selector_page.dart -> fyp_jaspr_web/lib/features/assessment/presentation/pages/assessment_report_selector_page.dart
+R  fyp_jaspr_web/lib/features/property_management/presentation/pages/assessment_report_selector_view.dart -> fyp_jaspr_web/lib/features/assessment/presentation/pages/assessment_report_selector_view.dart
+RM fyp_jaspr_web/lib/features/property_management/presentation/pages/assessment_report_view.dart -> fyp_jaspr_web/lib/features/assessment/presentation/pages/assessment_report_view.dart
+ M fyp_jaspr_web/lib/features/assessment/presentation/pages/assessment_workspace_page.dart
+RM fyp_jaspr_web/lib/features/property_management/presentation/pages/report_activity_views.dart -> fyp_jaspr_web/lib/features/assessment/presentation/pages/report_activity_views.dart
+R  fyp_jaspr_web/lib/features/property_management/presentation/pages/report_template_sections.dart -> fyp_jaspr_web/lib/features/assessment/presentation/pages/report_template_sections.dart
+ M fyp_jaspr_web/lib/main.client.options.dart
+ M fyp_jaspr_web/lib/shared/presentation/components/topbar_controls.dart
+ M fyp_jaspr_web/test/activity_event_presentation_test.dart
+ M fyp_jaspr_web/test/activity_history_availability_test.dart
+ M fyp_jaspr_web/test/ai_execution_status_test.dart
+ M fyp_jaspr_web/test/assessment_api_envelope_test.dart
+ M fyp_jaspr_web/test/assessment_workflow_readiness_test.dart
+ M fyp_jaspr_web/test/m2_autosave_verification_test.dart
+ M fyp_jaspr_web/test/m2_confirmation_first_test.dart
+ M fyp_jaspr_web/test/m2_governed_stage_cleanup_test.dart
+ M fyp_jaspr_web/test/project1_read_panel_test.dart
+ M fyp_jaspr_web/test/questionnaire_preview_unavailable_test.dart
+ M fyp_jaspr_web/test/research_candidate_panel_test.dart
+ M fyp_jaspr_web/test/stage3_access_test.dart
+ M fyp_jaspr_web/tool/nav_labels.dart
+ M fyp_jaspr_web/web/styles.css
+ M fyp_mobile_app/lib/core/di/service_locator.dart
+ M fyp_mobile_app/lib/core/routing/app_routes.dart
+ M fyp_mobile_app/lib/core/routing/mobile_navigation.dart
+ D fyp_mobile_app/lib/features/assessment/data/datasources/demo_questionnaire_routing_service.dart
+ M fyp_mobile_app/lib/features/assessment/presentation/cq_invitations_page.dart
+ M fyp_mobile_app/lib/features/assessment/presentation/cq_session_page.dart
+ M fyp_mobile_app/lib/features/assessment/presentation/home_screen.dart
+ D fyp_mobile_app/lib/features/assessment/presentation/pages/entrepreneur_assess_mobile_page.dart
+ M fyp_mobile_app/lib/features/assessment/presentation/pages/entrepreneur_assessment_questions_mobile_page.dart
+ M fyp_mobile_app/lib/features/assessment/presentation/pages/entrepreneur_assessment_setup_mobile_page.dart
+ M fyp_mobile_app/lib/features/assessment/presentation/pages/entrepreneur_assessment_summary_mobile_page.dart
+ D fyp_mobile_app/lib/features/assessment/presentation/pages/entrepreneur_evidence_mobile_page.dart
+ D fyp_mobile_app/lib/features/assessment/presentation/pages/entrepreneur_report_mobile_page.dart
+ M fyp_mobile_app/lib/features/assessment/presentation/questionnaire_screen.dart
+ M fyp_mobile_app/lib/features/assessment/presentation/review_screen.dart
+ M fyp_mobile_app/lib/features/assessment/presentation/synthetic_inspection_page.dart
+ M fyp_mobile_app/lib/features/assessment/presentation/synthetic_session_host.dart
+ M fyp_mobile_app/lib/features/assessment/presentation/viewmodels/cq_view_model.dart
+ M fyp_mobile_app/lib/features/assessment/presentation/widgets/cq_ui_primitives.dart
+ M fyp_mobile_app/lib/features/dashboard/presentation/pages/entrepreneur_dashboard_mobile_page.dart
+ M fyp_mobile_app/lib/features/listing/presentation/pages/entrepreneur_property_detail_mobile_page.dart
+ M fyp_mobile_app/lib/presentation/mobile/entrepreneur/pages/research_question_mobile_page.dart
+ M fyp_mobile_app/lib/shared/presentation/layouts/entrepreneur_tab_host.dart
+ M fyp_mobile_app/lib/shared/presentation/layouts/entrepreneur_tab_scope.dart
+ M shared_logic/lib/src/data/repositories/api_customer_questionnaire_repository.dart
+ M shared_logic/lib/src/data/repositories/api_m2_repository.dart
+?? .workbuddy-ai/memory/2026-11-22.md
+?? artifacts/cq_blocker_resolution_v2/
+?? artifacts/cq_synthetic_50/
+?? artifacts/cq_ui_correction_v1/
+?? artifacts/v31/
+?? backend/migrations/m2/20261122_07_workflow_view_read_scope_compat.sql
+?? backend/migrations/m2/20261122_10_bcb_created_at_disposable.sql
+?? backend/migrations/project1_ai/20261122_01_explanation_stage.sql
+?? backend/migrations/project1_ai/20261122_01_explanation_stage_rollback.sql
+?? backend/migrations/sql/20261122_0300_m2_bdj_objective_rls_grants.sql
+?? backend/migrations/sql/20261122_0400_m2_bdj_objective_admissions.sql
+?? backend/migrations/sql/20261122_0500_m2_bdj_objective_review_state_reconcile.sql
+?? backend/migrations/sql/20261122_0600_measurement_and_qg_candidate.sql
+?? backend/migrations/sql/20261122_0600_measurement_and_qg_candidate_rollback.sql
+?? backend/migrations/sql/20261122_0700_admission_objective_binding.sql
+?? backend/migrations/sql/20261122_0700_admission_objective_binding_rollback.sql
+?? backend/scripts/build_a10_gate_matrix.py
+?? backend/scripts/build_a10_reconciliation.py
+?? backend/scripts/build_cloud_explanation_offline_results.py
+?? backend/scripts/build_cloud_explanation_prompt.py
+?? backend/scripts/build_explanation_registry.py
+?? backend/scripts/build_gate_artifacts.py
+?? backend/scripts/export_chart_spec_schema.py
+?? backend/scripts/p3_regression_junit.py
+?? backend/scripts/project1_ee01_explanation_live_test.py
+?? backend/scripts/render_q01_q13_reconciliation.py
+?? backend/scripts/repair_label_bank_encoding.py
+?? backend/src/sitewise/customer_contracts/candidate_geo_routing_v2_synthetic_only.json
+?? backend/src/sitewise/instruments/m2v2_20261122/
+?? backend/src/sitewise/project1/a10.py
+?? backend/src/sitewise/project1/a10_claims.py
+?? backend/src/sitewise/project1/a10_decisions.py
+?? backend/src/sitewise/project1/a10_gates.py
+?? backend/src/sitewise/project1/a10_synthetic.py
+?? backend/src/sitewise/project1/chart_question_source.py
+?? backend/src/sitewise/project1/chart_spec.py
+?? backend/src/sitewise/project1/data/
+?? backend/src/sitewise/project1/explanation_prompt.py
+?? backend/src/sitewise/project1/explanation_registry.py
+?? backend/src/sitewise/project1/issue_resolution.py
+?? backend/src/sitewise/project1/m2v2_projection.py
+?? backend/src/sitewise/project1/measurement_library.py
+?? backend/src/sitewise/project1/objective_admission.py
+?? backend/src/sitewise/project1/objective_registry.py
+?? backend/src/sitewise/project1/objective_simulation.py
+?? backend/src/sitewise/project1/qg_authorization.py
+?? backend/src/sitewise/project1/qg_candidate_adapter.py
+?? backend/src/sitewise/services/bcb_sections.py
+?? backend/src/sitewise/services/instrument_authorization.py
+?? backend/src/sitewise/services/m2_concept_preview.py
+?? backend/src/sitewise/services/stage3_completion.py
+?? backend/tests/cq_runtime/test_cq_invitations_contract.py
+?? backend/tests/project1/chart_fixtures.py
+?? backend/tests/project1/test_a10_admission.py
+?? backend/tests/project1/test_chart_extension.py
+?? backend/tests/project1/test_chart_spec.py
+?? backend/tests/project1/test_cloud_explanation_prompt.py
+?? backend/tests/project1/test_disclosure_explanation_stage.py
+?? backend/tests/project1/test_explanation_registry.py
+?? backend/tests/project1/test_issue_resolution.py
+?? backend/tests/project1/test_label_encoding_repair.py
+?? backend/tests/project1/test_measurement_library.py
+?? backend/tests/project1/test_objective_admission_policy.py
+?? backend/tests/project1/test_objective_registry.py
+?? backend/tests/project1/test_ordinal_provenance.py
+?? backend/tests/project1/test_q10_feature_measurement.py
+?? backend/tests/project1/test_qg_fixed_adapter.py
+?? backend/tests/project1/test_remaining_instrument_decisions.py
+?? backend/tests/project1/test_report_integration_cp5.py
+?? backend/tests/test_bcb_contract_lineage.py
+?? backend/tests/test_bcb_sections.py
+?? backend/tests/test_m2_concept_preview.py
+?? backend/tests/test_m2v2_instrument.py
+?? backend/tools/_scratch_archive_20261122/
+?? backend/tools/bdj_prompt_validation_cloud_demo_20261121.py
+?? backend/tools/cdp_20261122.py
+?? backend/tools/fixtures/
+?? backend/tools/gate5_browser_e2e.py
+?? backend/tools/gate5_browser_probe.js
+?? backend/tools/isolated_e2e_gate5.py
+?? backend/tools/isolated_identity_server.py
+?? backend/tools/m2v2_author_20261122.py
+?? backend/tools/m2v2_bcb_export_20261122.py
+?? backend/tools/m2v2_e2e_20261122.py
+?? backend/tools/m2v2_register_candidate_20261122.py
+?? backend/tools/m2v2_serve_20261122.py
+?? backend/tools/m2v2_traceability_20261122.py
+?? backend/tools/p1_config_confusion_guard_20261122.py
+?? backend/tools/p1_config_secret_audit_20261122.py
+?? backend/tools/p2_isolated_test_runner_20261122.py
+?? backend/tools/p3_migration_reconcile_test_20261122.py
+?? backend/tools/phase2_cloud_diagnostic_20261122.py
+?? backend/tools/phase2_d8_bcb_readback_20261122.py
+?? backend/tools/phase2_gateA_apply_grants_20261122.py
+?? backend/tools/phase2_gateA_rls_audit_20261122.py
+?? backend/tools/phase2_gateBC_http_e2e_20261122.py
+?? backend/tools/phase2_gateBC_regression_20261122.py
+?? backend/tools/phase2_prompt_ab_cloud_20261122.py
+?? backend/tools/phase2_prompt_comparison_20261122.py
+?? backend/tools/phase4_a1_workspace_state_20261122.py
+?? backend/tools/phase4_a1b_privilege_probe_20261122.py
+?? backend/tools/phase4_a2_apply_read_scope_20261122.py
+?? backend/tools/phase4_a3_research_workspace_20261122.py
+?? backend/tools/phase4_admission_transition_20261122.py
+?? backend/tools/phase4_apply_bcb_schema_20261122.py
+?? backend/tools/phase4_b1_bcb_construction_20261122.py
+?? backend/tools/phase4_b2_validity_20261122.py
+?? backend/tools/phase4_c3_impersonation_20261122.py
+?? backend/tools/phase4_d1_stage3_browser_20261122.py
+?? backend/tools/phase4_d2_stage2_browser_20261122.py
+?? backend/tools/phase4_d3_screenshot_20261122.py
+?? backend/tools/phase4_f2_bdj_provenance_20261122.py
+?? backend/tools/phase4_f_matrix_20261122.py
+?? backend/tools/phase4_gotrue_stub_20261122.py
+?? backend/tools/phase4_launch_browser_e2e_20261122.py
+?? backend/tools/phase4_local_auth_20261122.py
+?? backend/tools/phase4_owner_answers_20261122.py
+?? backend/tools/phase4_p1_answer_readback_20261122.py
+?? backend/tools/phase4_p2_confirm_advances_20261122.py
+?? backend/tools/phase4_p2_progress_sync_20261122.py
+?? backend/tools/phase4_pb_stage3_api_20261122.py
+?? backend/tools/phase4_serve_disposable_20261122.py
+?? backend/tools/phase4_stage3_journey_20261122.py
+?? backend/tools/phase4_stage3_reachability_20261122.py
+?? backend/tools/phase5_p0_baseline_bcb_20261122.py
+?? backend/tools/phase5_pA_stage3_contract_20261122.py
+?? backend/tools/phase5_pE_protected_identity_20261122.py
+?? backend/tools/phase5_pF_matrix_20261122.py
+?? backend/tools/project1_qj_qg_question_options_cloud_demo.py
+?? backend/var/e2e/
+?? backend/var/evidence/
+?? backend/var/test-auth/
+?? backend/var/verification-documents/200646e670e1425ca9e4693d2ec27fa2.pdf
+?? backend/var/verification-documents/2a6eeb5f54114ba592a46dcae6a92c5c.pdf
+?? backend/var/verification-documents/2c54cefb24b94cd1b069fd9b0bc757fd.pdf
+?? backend/var/verification-documents/37306bd9dae6415caabae686cf614def.pdf
+?? backend/var/verification-documents/54f69a7894884ef7ba02c944eca1895a.pdf
+?? backend/var/verification-documents/551933aed9a545d58bf4282c8d117400.pdf
+?? backend/var/verification-documents/5696c8d3f98e47b5b7ae1ee99adc3e5f.pdf
+?? backend/var/verification-documents/6f9e67df6f7c44e2b219ec0f4c13a0a4.pdf
+?? backend/var/verification-documents/a1780fe3101947cab7867c59004963f8.pdf
+?? backend/var/verification-documents/a5011537af114183b760ed77b272ac8a.pdf
+?? backend/var/verification-documents/b7a09128b1d044b9a5f52e7acd7909f3.pdf
+?? backend/var/verification-documents/bfb6e800cc9342c8ab0165d6d4b30da6.pdf
+?? backend/var/verification-documents/c05a9280ab8442d68d8834be28525d7c.pdf
+?? backend/var/verification-documents/c49c46ca993c4de8aff3f78100d43848.pdf
+?? backend/var/verification-documents/c5fe0e5ce815484398c3411c6a0410ab.pdf
+?? backend/var/verification-documents/ca275fdf1b534f1facfda174b1a3f39b.pdf
+?? backend/var/verification-documents/d08bf6d152614fb581d60c873a734922.pdf
+?? backend/var/verification-documents/d19058403194487da1b55e7e768d0e18.pdf
+?? backend/var/verification-documents/d2d3f786bd9a4c2092b26ad210f0dc16.pdf
+?? backend/var/verification-documents/d65dce3f82ec48818e260f66b78a5c74.pdf
+?? backend/var/verification-documents/d7cee88185c34c48a848fb91906d1f90.pdf
+?? backend/var/verification-documents/e321b3b8de394d4f9f72fc003d72906a.pdf
+?? backend/var/verification-documents/eb49dbdec474459f9e591c3027afee75.pdf
+?? backend/var/verification-documents/f6caa484f6a449989e16259cbf46c539.pdf
+?? deliverables/PROJECT1_A10_CLAIM_REPORT_MAPPING.json
+?? deliverables/PROJECT1_A10_DECISION_D01_D20_MATRIX.md
+?? deliverables/PROJECT1_A10_DECISION_RECOMMENDATIONS.md
+?? deliverables/PROJECT1_A10_EXPLANATION_REPORT_COMPLETION_CHECKPOINT.md
+?? deliverables/PROJECT1_A10_GATE_DEPENDENCY_MATRIX.json
+?? deliverables/PROJECT1_A10_GATE_RECONCILIATION.json
+?? deliverables/PROJECT1_A10_IMPLEMENTATION_READINESS.md
+?? deliverables/PROJECT1_A10_OPEN_DECISIONS.md
+?? deliverables/PROJECT1_A10_OWNER_APPROVAL_PACKAGE.md
+?? deliverables/PROJECT1_A10_OWNER_DECISION_MATRIX_V1.md
+?? deliverables/PROJECT1_A10_REPORT_ADMISSION_V1_PROPOSAL.md
+?? deliverables/PROJECT1_A10_SYNTHETIC_E2E_RESULTS.json
+?? deliverables/PROJECT1_A10_V1_REQUIREMENTS_FINAL_REVIEW.md
+?? deliverables/PROJECT1_AUTH_BROWSER_E2E_REVIEW.md
+?? deliverables/PROJECT1_CHARTSPEC_V1_SCHEMA.json
+?? deliverables/PROJECT1_CHART_BROWSER_E2E_REPORT.md
+?? deliverables/PROJECT1_CHART_EXTENSION_TEST_RESULTS.json
+?? deliverables/PROJECT1_CHART_FINAL_VERDICT.md
+?? deliverables/PROJECT1_CHART_IMPLEMENTATION_REPORT.md
+?? deliverables/PROJECT1_CHART_PRESENTATION_SPEC_V1.md
+?? deliverables/PROJECT1_CHART_SPEC_TRACEABILITY_20261122.md
+?? deliverables/PROJECT1_CHART_TEST_RESULTS.json
+?? deliverables/PROJECT1_CHART_TRACEABILITY_MATRIX.md
+?? deliverables/PROJECT1_CLOUD_EXPLANATION_ACCEPTANCE_REVIEW.md
+?? deliverables/PROJECT1_CLOUD_EXPLANATION_OFFLINE_RESULTS.json
+?? deliverables/PROJECT1_CLOUD_EXPLANATION_PROMPT_V1_CANDIDATE.md
+?? deliverables/PROJECT1_CLOUD_EXPLANATION_PROVIDER_PREFLIGHT.md
+?? deliverables/PROJECT1_CLOUD_EXPLANATION_REQUEST_CONTRACT.json
+?? deliverables/PROJECT1_CLOUD_EXPLANATION_TEST_MATRIX.json
+?? deliverables/PROJECT1_CX17_LABEL_ENCODING_PROVENANCE.json
+?? deliverables/PROJECT1_ENGINEERING_DEFECT_REGRESSION_RESULTS.json
+?? deliverables/PROJECT1_EXPLANATION_FALLBACK_INTEGRATION_REPORT.md
+?? deliverables/PROJECT1_EXPLANATION_INTEGRATION_REPORT.md
+?? deliverables/PROJECT1_EXPLANATION_OFFLINE_TEST_RESULTS.json
+?? deliverables/PROJECT1_EXPLANATION_TEST_INSTRUCTIONS.md
+?? deliverables/PROJECT1_FINAL_CHECKPOINT_CP1_CP5.md
+?? deliverables/PROJECT1_FINAL_CHECKPOINT_MATRIX.json
+?? deliverables/PROJECT1_FINAL_EXECUTION_REPORT_20261122.md
+?? deliverables/PROJECT1_ISOLATED_AUTH_AND_DATABASE_VERIFICATION.json
+?? deliverables/PROJECT1_ISOLATED_REPORT_E2E_PLAN.md
+?? deliverables/PROJECT1_LABEL_ENCODING_FIX_REPORT.md
+?? deliverables/PROJECT1_OBJECTIVE_COVERAGE_READINESS.json
+?? deliverables/PROJECT1_ORDINAL_AND_DISPLAY_ORDER_RESOLUTION.md
+?? deliverables/PROJECT1_ORDINAL_DEFINITION_REVIEW.md
+?? deliverables/PROJECT1_P1_P3_FINAL_EXECUTION_REPORT.md
+?? deliverables/PROJECT1_PRIVACY_SUPPRESSION_REVIEW.md
+?? deliverables/PROJECT1_PRIVACY_SUPPRESSION_V1_DECISION_PROPOSAL.md
+?? deliverables/PROJECT1_Q01_Q13_CONFLICT_RECEIPT.json
+?? deliverables/PROJECT1_Q01_Q13_EXPLANATION_REGISTRY.json
+?? deliverables/PROJECT1_Q01_Q13_RECONCILED_EXPLANATION_MATRIX.md
+?? deliverables/PROJECT1_Q01_Q13_RECONCILIATION_REPORT.md
+?? deliverables/PROJECT1_Q10_FEATURE_MEASUREMENT_REVIEW.md
+?? deliverables/PROJECT1_Q10_FEATURE_TEST_RESULTS.json
+?? deliverables/PROJECT1_Q10_IMPLEMENTATION_TEST_RESULTS.json
+?? deliverables/PROJECT1_REMAINING_DEFECTS.md
+?? deliverables/PROJECT1_REMAINING_INSTRUMENT_DECISIONS.md
+?? deliverables/PROJECT1_REPORT_ADMISSION_GAP_REPORT.md
+?? deliverables/PROJECT1_REPORT_BROWSER_E2E_RESULTS.json
+?? deliverables/PROJECT1_REPORT_BROWSER_E2E_RESULTS.md
+?? deliverables/PROJECT1_REPORT_INTEGRATION_TEST_RESULTS.json
+?? deliverables/PROJECT1_SIX_OBJECTIVE_MEASUREMENT_GAP_REPORT.md
+?? deliverables/PROJECT1_SOURCE_CHANGE_MANIFEST.md
+?? deliverables/PROJECT1_SQL_TEMPLATE_REVIEW.md
+?? deliverables/PROJECT1_SYNTHETIC_EXAMPLE_REPORT.json
+?? deliverables/PROJECT1_TEST_CLEANUP_RECEIPT.json
+?? deliverables/_chart_render_check/
+?? deliverables/_cp5_browser/
+?? deliverables/_cq13_handoff/
+?? deliverables/m2v2/
+?? deliverables/phase2/BDJ_BROWSER_E2E_BLOCKER_20261122.md
+?? deliverables/phase2/BDJ_CLOUD_DIAGNOSTIC_BDJ-LIVE_20261122.json
+?? deliverables/phase2/BDJ_CLOUD_DIAGNOSTIC_BDJ-PREVIEW_20261122.json
+?? deliverables/phase2/BDJ_CLOUD_DIAGNOSTIC_MODELS_20261122.json
+?? deliverables/phase2/BDJ_CLOUD_DIAGNOSTIC_OBJ-LIVE_20261122.json
+?? deliverables/phase2/BDJ_CLOUD_DIAGNOSTIC_OBJ-PREVIEW_20261122.json
+?? deliverables/phase2/BDJ_CLOUD_DIAGNOSTIC_QG-LIVE_20261122.json
+?? deliverables/phase2/BDJ_CLOUD_DIAGNOSTIC_QG-PREVIEW_20261122.json
+?? deliverables/phase2/BDJ_CLOUD_ORIGINAL_VS_ENHANCED.md
+?? deliverables/phase2/BDJ_D8_BCB_READBACK_20261122.json
+?? deliverables/phase2/BDJ_GATEA_RLS_AUDIT_20261122.json
+?? deliverables/phase2/BDJ_GATEA_RLS_GRANTS_20261122.json
+?? deliverables/phase2/BDJ_GATEBC_CHECKPOINT_REPORT_20261122.md
+?? deliverables/phase2/BDJ_GATEBC_HTTP_E2E_20261122.json
+?? deliverables/phase2/BDJ_GATEBC_HTTP_E2E_FRESH_20261122.json
+?? deliverables/phase2/BDJ_GATEBC_REGRESSION_20261122.json
+?? deliverables/phase2/BDJ_GATEBC_REGRESSION_SUITES_20261122.json
+?? deliverables/phase2/BDJ_OBJECTIVE_PANEL_PREVIEW_20261122.png
+?? deliverables/phase2/BDJ_QG_PROMPT_COMPARISON_20261122.md
+?? deliverables/phase2/BDJ_ROUTE_SURFACE_WORKTREE_20261122.json
+?? deliverables/phase2/CLOUD_AB_EVALUATION_RESULTS.json
+?? deliverables/phase2/JASPR_FILE_MIGRATION_MANIFEST.md
+?? deliverables/phase2/JASPR_STRUCTURE_BEFORE_AFTER.md
+?? deliverables/phase2/JASPR_STRUCTURE_REGRESSION.json
+?? deliverables/phase2/JASPR_UNUSED_FILE_AUDIT.md
+?? deliverables/phase2/PROMPT_ADOPTION_RECOMMENDATIONS.md
+?? deliverables/phase2/PROMPT_COMPARISON_EVIDENCE.json
+?? deliverables/phase2/QG_CLOUD_ORIGINAL_VS_ENHANCED.md
+?? deliverables/phase2/bdj_objective_panel_preview.html
+?? deliverables/phase3a3b4a/
+?? deliverables/phase4/
+?? deliverables/phase5/
+?? deliverables/phase_p1/
+?? deliverables/phase_p2/
+?? deliverables/phase_p3/
+?? fyp_jaspr_web/hlo.txt
+?? fyp_jaspr_web/lib/features/assessment/data/bdj_objective_proposal.dart
+?? fyp_jaspr_web/lib/features/assessment/data/bdj_objective_proposal_api.dart
+?? fyp_jaspr_web/lib/features/assessment/data/chart_spec.dart
+?? fyp_jaspr_web/lib/features/assessment/presentation/components/bdj_objective_proposal_panel.dart
+?? fyp_jaspr_web/lib/features/assessment/presentation/components/chart_spec_view.dart
+?? fyp_jaspr_web/test/assessment_report_chart_section_test.dart
+?? fyp_jaspr_web/test/bdj_objective_proposal_panel_test.dart
+?? fyp_jaspr_web/test/bdj_objective_proposal_test.dart
+?? fyp_jaspr_web/test/chart_spec_view_test.dart
+?? fyp_jaspr_web/test/fixtures/
+?? fyp_jaspr_web/tool/audit_structure_20261122.py
+?? fyp_jaspr_web/tool/probe_auth_e2e_p3.js
+?? fyp_jaspr_web/tool/screenshots/p3_auth_e2e/
+?? fyp_mobile_app/lib/features/assessment/presentation/cq_error_message.dart
+?? fyp_mobile_app/lib/features/assessment/presentation/fc4_c_diagnostics_page.dart
+?? fyp_mobile_app/tab3_after_fix.png
+?? fyp_mobile_app/tab3_plain_language.png
+?? fyp_mobile_app/tab3_pull_final.png
+?? fyp_mobile_app/tab3_pull_refresh.png
+?? fyp_mobile_app/tab3_questionnaire_verified.png
+?? fyp_mobile_app/tab3_surveys.png
+?? fyp_mobile_app/test/
+?? project1_bcb_v2_cloud_diagnostic.py
+?? var/

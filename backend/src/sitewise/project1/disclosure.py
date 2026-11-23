@@ -35,6 +35,23 @@ QG_PURPOSE = 'SYNTHETIC_QG_RESEARCH_EVALUATION'
 #: QG input. The schema check in `validate_synthetic` binds this value.
 QG_SCHEMA_VERSION = 'project1-qg-confirmed-facts/2-candidate'
 
+#: Research-only purpose for a synthetic Explanation evaluation. Distinct from
+#: both the BDJ diagnostic and the QG research purposes, so no authorization for
+#: one stage can be presented as authority for another. This matters more here
+#: than elsewhere: the Explanation stage sends a *narrative request* rather than
+#: a measurement packet, so an inherited BDJ grant would disclose a different
+#: class of input entirely.
+EXPLANATION_PURPOSE = 'SYNTHETIC_EXPLANATION_DIAGNOSTIC'
+#: The schema an Explanation packet must carry. It is the request contract the
+#: prompt module builds, so a BDJ projection or a QG facts packet cannot be
+#: relabelled into the Explanation stage.
+EXPLANATION_SCHEMA_VERSION = 'ee01-explanation-request/1'
+#: The prompt version an Explanation authorization may cover. Kept as a literal
+#: rather than imported from ``explanation_prompt`` so this module stays free of
+#: that dependency; ``test_disclosure_explanation_stage.py`` asserts it equals
+#: ``explanation_prompt.PROMPT_VERSION``, so the two cannot drift silently.
+EXPLANATION_PROMPT_VERSION = 'EE01-EXPLANATION-2-CAND'
+
 
 @dataclass(frozen=True)
 class SyntheticBdjAuthorization:
@@ -160,6 +177,67 @@ class RegisteredSyntheticBdjDisclosure:
             raise WorkflowHeld('DISCLOSURE_REQUEST_MISMATCH')
 
 
+@dataclass(frozen=True)
+class SyntheticExplanationAuthorization:
+    """Explicit research-only authorization for a synthetic Explanation call.
+
+    Separately identified from BDJ and QG by purpose, schema and stage. The
+    ``prompt_version`` field records which candidate prompt the authorization was
+    issued against, so an approval for one prompt version cannot silently cover
+    the next. It is carried on the authorization rather than consulted by
+    ``validate_synthetic``, which stays a pure predicate.
+    """
+
+    run_id: str
+    source_fingerprint: str
+    operator_receipt: str
+    prompt_version: str
+    purpose: str = EXPLANATION_PURPOSE
+    data_class: str = 'SYNTHETIC_NONHUMAN'
+    stage: str = 'EXPLANATION'
+    endpoint: str = ENDPOINT
+    model: str = MODEL
+    max_attempts: int = 1
+    real_authorization: object | None = None
+
+
+class SyntheticExplanationDisclosure:
+    """Explanation-side disclosure port.
+
+    Every disclosure decision is delegated to ``validate_synthetic`` with the
+    Explanation stage's own purpose, schema and attempt budget, so preflight and
+    dispatch cannot drift apart. A BDJ or QG authorization reaching this port is
+    refused on three independent checks (type, stage, purpose), not one.
+    """
+
+    def __init__(self, authorization: SyntheticExplanationAuthorization):
+        self.authorization = authorization
+
+    def require_current(self, stage, packet, endpoint, model):
+        a = self.authorization
+        if not isinstance(a, SyntheticExplanationAuthorization):
+            raise WorkflowHeld('DISCLOSURE_AUTHORIZATION_INVALID')
+        if not a.run_id:
+            # Same composition-error rule as the BDJ and QG ports.
+            raise WorkflowHeld('DISCLOSURE_AUTHORIZATION_INVALID')
+        if stage != 'EXPLANATION' or a.stage != stage:
+            raise WorkflowHeld('DISCLOSURE_STAGE_NOT_AUTHORIZED')
+        if a.prompt_version != EXPLANATION_PROMPT_VERSION:
+            # An authorization for an older prompt cannot authorize a call that
+            # would send a different system message.
+            raise WorkflowHeld('DISCLOSURE_PROMPT_VERSION_NOT_AUTHORIZED')
+        validate_synthetic(
+            data_class=a.data_class, purpose=a.purpose, stage=a.stage,
+            endpoint=a.endpoint, model=a.model, max_attempts=a.max_attempts,
+            operator_receipt=a.operator_receipt,
+            source_fingerprint=a.source_fingerprint, packet=packet,
+            expected_stage='EXPLANATION', expected_endpoint=endpoint,
+            expected_model=model,
+            expected_purpose=EXPLANATION_PURPOSE,
+            expected_schema=EXPLANATION_SCHEMA_VERSION,
+            allowed_max_attempts=(1,))
+
+
 class SyntheticQgDisclosure:
     """QG-side ModelRunner disclosure port.
 
@@ -250,3 +328,127 @@ def validate_synthetic(*, data_class, purpose, stage, endpoint, model, max_attem
         raise WorkflowHeld('DISCLOSURE_SOURCE_CLASS_INVALID')
     if source_fingerprint != packet.get('source_fingerprint'):
         raise WorkflowHeld('DISCLOSURE_SOURCE_MISMATCH')
+
+
+class RegisteredObjectiveDisclosure:
+    """Assessment-bound cloud-disclosure gate for the BDJ **objective** route.
+
+    ``ObjectiveSimulationDisclosure`` binds model, endpoint, schema version,
+    source fingerprint and context packet hash. That is a *source-binding*
+    check. It does not prove that an owner decision authorised **this** source
+    to leave the boundary, and a source-binding check alone must never be
+    treated as permission to disclose entrepreneur data externally.
+
+    This gate adds exactly that proof and nothing else. It reads an
+    operator-provisioned record from the same read-only registry the findings
+    trial uses and refuses unless every term of the execution matches it.
+
+    It binds only terms that genuinely exist for the objective contract. The
+    findings gate additionally binds ``rules_sha256`` and ``request_sha256``
+    because that path loads a rules artefact and hashes the outgoing body; the
+    objective route runs ``rules=None`` by design and builds its body from a
+    prompt plus packet, so requiring those hashes here would mean inventing a
+    binding. ``require_request`` therefore binds the prompt, which is the real
+    artefact this route sends.
+    """
+
+    STAGE = 'BDJ_OBJECTIVE'
+    DATA_CLASS = 'SYNTHETIC_NONHUMAN'
+
+    def __init__(self, *, registry, current_source, owner_id, assessment_id,
+                 revision, confirmation_id, source_fingerprint,
+                 context_packet_hash, prompt, endpoint, model, consent=None):
+        self.registry = registry
+        self.current_source = current_source
+        #: Optional derived authorization. When present it is the authority for
+        #: the terms, and any operator record must agree with it exactly. It
+        #: never removes this gate: the consent is still verified, still bound
+        #: to the same source, and still refuses without a grant.
+        self.consent = consent
+        self.expected = {
+            'stage': self.STAGE,
+            'data_class': self.DATA_CLASS,
+            'decision': 'APPROVED',
+            'max_attempts': 1,
+            'owner_id': str(owner_id),
+            'assessment_id': str(assessment_id),
+            'revision': revision,
+            'confirmation_id': str(confirmation_id),
+            'source_fingerprint': source_fingerprint,
+            'context_packet_hash': context_packet_hash,
+            'prompt_version': prompt.version,
+            'prompt_fingerprint': prompt.fingerprint,
+            'endpoint': endpoint,
+            'model': model,
+        }
+        self._binding = (str(assessment_id), revision, str(confirmation_id))
+
+    def require_current(self, stage, packet, endpoint, model):
+        if stage != 'BDJ':
+            raise WorkflowHeld('DISCLOSURE_STAGE_NOT_AUTHORIZED')
+        if self.consent is not None:
+            # Owner-recorded permission is the authority. Every term is still
+            # checked against this execution, so a grant for a different
+            # assessment, revision, source, context, prompt or model is useless.
+            derived = self.consent.derive()
+            for key, value in self.expected.items():
+                if derived.get(key) != value:
+                    raise WorkflowHeld('DISCLOSURE_REGISTERED_AUTHORIZATION_REQUIRED')
+            self._require_binding(packet, endpoint, model)
+            # An operator record is still honoured, but only as a *mirror*: if
+            # one exists and disagrees with the owner's recorded grant, the
+            # disagreement is a refusal rather than a silent override.
+            record = None
+            try:
+                record = self.registry.get_server_authorization(
+                    assessment_id=self.expected['assessment_id'],
+                    revision=self.expected['revision'],
+                    fingerprint=self.expected['source_fingerprint'])
+            except WorkflowHeld:
+                record = None
+            if isinstance(record, dict):
+                for key, value in derived.items():
+                    if key in record and record[key] != value:
+                        raise WorkflowHeld('DISCLOSURE_CONSENT_REGISTRY_CONFLICT')
+            current = self.current_source()
+            if not isinstance(current, dict) or any(
+                    current.get(k) != self.expected[k] for k in
+                    ('owner_id', 'assessment_id', 'revision', 'confirmation_id',
+                     'source_fingerprint')):
+                raise WorkflowHeld('DISCLOSURE_CURRENT_SOURCE_REQUIRED')
+            return
+        record = self.registry.get_server_authorization(
+            assessment_id=self.expected['assessment_id'],
+            revision=self.expected['revision'],
+            fingerprint=self.expected['source_fingerprint'])
+        if not isinstance(record, dict):
+            raise WorkflowHeld('DISCLOSURE_REGISTERED_AUTHORIZATION_REQUIRED')
+        # Every term must match. A partial match is a different authorisation.
+        for key, value in self.expected.items():
+            if record.get(key) != value:
+                raise WorkflowHeld('DISCLOSURE_REGISTERED_AUTHORIZATION_REQUIRED')
+        receipt = record.get('operator_receipt')
+        if not isinstance(receipt, str) or len(receipt) < 8:
+            raise WorkflowHeld('DISCLOSURE_RECEIPT_REQUIRED')
+        self._require_binding(packet, endpoint, model)
+        current = self.current_source()
+        if not isinstance(current, dict) or any(
+                current.get(k) != self.expected[k] for k in
+                ('owner_id', 'assessment_id', 'revision', 'confirmation_id',
+                 'source_fingerprint')):
+            raise WorkflowHeld('DISCLOSURE_CURRENT_SOURCE_REQUIRED')
+
+    def _require_binding(self, packet, endpoint, model):
+        """The packet/endpoint/model terms every authorization path must satisfy."""
+        if (str(packet.get('assessment_id')),
+                packet.get('assessment_revision'),
+                str(packet.get('confirmation', {}).get('confirmation_id'))) != self._binding:
+            raise WorkflowHeld('DISCLOSURE_ASSESSMENT_BINDING_MISMATCH')
+        if endpoint != self.expected['endpoint']:
+            raise WorkflowHeld('DISCLOSURE_ENDPOINT_MISMATCH')
+        if model != self.expected['model']:
+            raise WorkflowHeld('DISCLOSURE_MODEL_MISMATCH')
+
+    def require_request(self, provider, prompt, messages, output_type):
+        if prompt.fingerprint != self.expected['prompt_fingerprint']:
+            raise WorkflowHeld('DISCLOSURE_PROMPT_MISMATCH')

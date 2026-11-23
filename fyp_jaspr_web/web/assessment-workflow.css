@@ -224,3 +224,43 @@ a.sw-assessment-journey__control:hover
     transition: none;
   }
 }
+
+/* --- Standalone M2 page: Stage 2 / Stage 3 switch ----------------------
+   The standalone M2 route presents two governed stages. Stage 2 is the
+   declaration and its confirmation; Stage 3 is the research-objective review
+   the confirmation unlocks. Presentation only — no workflow state lives here. */
+.asw-stage-switch {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.asw-stage-switch .tab {
+  cursor: pointer;
+  border: 1px solid var(--border-strong, #cfd8e6);
+  border-radius: var(--radius-pill, 999px);
+  padding: 9px 16px;
+  background: var(--surface, #fff);
+  font-size: 12.5px;
+  font-weight: 800;
+  line-height: 1;
+  color: var(--text, #15233b);
+  transition: background .15s ease, border-color .15s ease, color .15s ease;
+}
+
+.asw-stage-switch .tab.is-active {
+  background: var(--action, #1d4ed8);
+  border-color: var(--action, #1d4ed8);
+  color: #fff;
+}
+
+.asw-stage-switch .tab.is-disabled,
+.asw-stage-switch .tab[disabled] {
+  cursor: not-allowed;
+  opacity: .55;
+}
+
+.asw-stage-switch .tab:focus-visible {
+  outline: 2px solid var(--action, #1d4ed8);
+  outline-offset: 2px;
+}

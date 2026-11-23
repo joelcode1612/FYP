@@ -6,9 +6,13 @@ assessment and its binding only when no link exists.
 
 What this service deliberately does **not** do
 ----------------------------------------------
-* It never adopts an existing unlinked M2 assessment. Not by owner, not by
+* It never *adopts* an existing unlinked M2 assessment. Not by owner, not by
   recency, not by instrument. An unlinked record is left untouched, because
-  ownership is not evidence that two records describe the same business decision.
+  ownership is not evidence that two records describe the same business
+  decision. The one exception is :meth:`AssessmentLinkService.associate`, which
+  is not adoption: the caller must name the exact M2 record, ownership and
+  instrument usability are verified first, and an existing link is never
+  reassigned. Nothing is backfilled behind the caller's back.
 * It never spans both databases in one transaction. `public.assessment` lives in
   `Final_Location_Analysis`; `m2_assessments` and `m2_assessment_links` live in
   `Dss`. PostgreSQL cannot make that atomic, so the service is written for
@@ -34,8 +38,20 @@ from sqlalchemy import text
 from sqlalchemy.engine import Engine
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
-#: The instrument the questionnaire is built from. Selected by code + approval
-#: state, never by "most recent instrument".
+from sitewise.services.instrument_authorization import (
+    authorization_reason, instrument_is_usable,
+)
+
+#: The **default** instrument code a marketplace assessment's M2 record is
+#: built on. Selected by code + the single audited usability gate, never by
+#: "most recent instrument".
+#:
+#: It remains ``M2V1`` so the production behaviour is byte-identical to before:
+#: an M2V1-bound link resolves exactly the one ``AUTHORIZED`` M2V1 row. The
+#: code is a *default*, not a hard pin — ``resolve`` accepts an explicit
+#: ``instrument_code`` so a marketplace assessment can be bound to its M2 V2
+#: record once that instrument is legitimately usable, while the refusal stays
+#: intact when it is not (see :meth:`AssessmentLinkService._instrument_id`).
 INSTRUMENT_CODE = "M2V1"
 
 
@@ -85,23 +101,33 @@ class AssessmentLinkService:
         user_id: UUID,
         verified_email: str | None = None,
         create_if_missing: bool = True,
+        instrument_code: str | None = None,
     ) -> LinkResult:
         """Return the M2 assessment linked to this marketplace assessment.
 
         Order of checks matters: ownership is proven *before* anything is read
         from `Dss`, so an unauthorised caller cannot learn whether a link exists.
+
+        ``instrument_code`` selects which instrument a **newly created** M2
+        record is built on, and defaults to :data:`INSTRUMENT_CODE` (M2V1), so
+        the production behaviour is unchanged. It is honoured only on creation;
+        an existing link reports the instrument its M2 record is actually bound
+        to, read from the row rather than assumed from the request.
         """
         self._require_marketplace_ownership(marketplace_assessment_id, user_id)
         self._require_m2_identity(user_id, verified_email)
 
         existing = self._read_link(marketplace_assessment_id, user_id)
         if existing is not None:
-            m2_id, revision = existing
+            m2_id, revision, instrument_id = existing
             return LinkResult(
                 marketplace_assessment_id=marketplace_assessment_id,
                 m2_assessment_id=m2_id,
                 revision=revision,
-                instrument_version_id=self._instrument_id(),
+                # The linked record's own instrument, not the requested one.
+                # Reporting the request here was a latent 503: reading a link
+                # must not depend on an instrument code still being resolvable.
+                instrument_version_id=instrument_id,
                 created=False,
                 identity_check=self.identity_check,
             )
@@ -112,7 +138,141 @@ class AssessmentLinkService:
                 "This assessment has no M2 research record yet.",
                 status_code=404,
             )
-        return self._create_and_link(marketplace_assessment_id, user_id)
+        return self._create_and_link(
+            marketplace_assessment_id, user_id, instrument_code=instrument_code)
+
+    def associate(
+        self,
+        *,
+        marketplace_assessment_id: UUID,
+        m2_assessment_id: UUID,
+        user_id: UUID,
+        verified_email: str | None = None,
+    ) -> LinkResult:
+        """Bind an **existing** M2 assessment to a marketplace assessment.
+
+        This is the authorised association path, and it exists for one narrow
+        purpose: an M2 assessment that was created outside the marketplace
+        lifecycle (for example a synthetic or workbench record) has no link, so
+        the assessment workspace cannot reach it. Rather than *silently*
+        backfill such records, this operation performs the association the
+        caller explicitly asks for, and refuses everything it cannot verify.
+
+        It is deliberately fail-closed:
+
+        * ownership of the marketplace assessment is proven first, exactly as
+          in :meth:`resolve`, before any ``Dss`` read;
+        * the M2 assessment must already be owned by the caller — the
+          ``owner_user_id`` is compared, so an unowned id (whether absent or
+          another account's) is refused rather than adopted;
+        * the M2 assessment's instrument must be usable under the **single
+          audited gate**. Against a production target a
+          ``PROPOSED_NOT_AUTHORIZED`` candidate is therefore refused; only a
+          genuinely ``AUTHORIZED`` instrument (or a candidate under an explicit
+          disposable-target synthetic scope) can be associated;
+        * an existing active link is never reassigned. Re-associating the same
+          M2 assessment is idempotent; pointing the marketplace assessment at a
+          *different* M2 record is refused rather than performed silently;
+        * no proposal, decision, confirmation, admission or answer row is read
+          for writing or touched. Only the binding is inserted.
+
+        Nothing here is a backfill: the caller must name the exact M2 record,
+        and every refusal leaves both databases exactly as they were.
+        """
+        self._require_marketplace_ownership(marketplace_assessment_id, user_id)
+        self._require_m2_identity(user_id, verified_email)
+
+        row = self._read_m2_owned(m2_assessment_id, user_id)
+        if row is None:
+            raise AssessmentLinkError(
+                "M2_ASSESSMENT_NOT_FOUND",
+                "No such M2 assessment is visible to this account.",
+                status_code=404,
+            )
+        if str(row["owner_user_id"]) != str(user_id):
+            raise AssessmentLinkError(
+                "ASSESSMENT_NOT_OWNED",
+                "That M2 assessment belongs to another account.",
+                status_code=403,
+            )
+        if not instrument_is_usable(dict(row)):
+            raise AssessmentLinkError(
+                "INSTRUMENT_NOT_USABLE",
+                f"The instrument behind that M2 assessment is not usable "
+                f"({authorization_reason(dict(row))}).",
+                status_code=409,
+            )
+
+        existing = self._read_link(marketplace_assessment_id, user_id)
+        if existing is not None:
+            current, revision, instrument_id = existing
+            if current == m2_assessment_id:
+                return LinkResult(
+                    marketplace_assessment_id=marketplace_assessment_id,
+                    m2_assessment_id=current,
+                    revision=revision,
+                    instrument_version_id=instrument_id,
+                    created=False,
+                    identity_check=self.identity_check,
+                )
+            raise AssessmentLinkError(
+                "LINK_ALREADY_EXISTS",
+                "This assessment is already linked to a different M2 record. "
+                "Re-association is not performed silently.",
+                status_code=409,
+            )
+
+        instrument_id = UUID(str(row["instrument_id"]))
+        try:
+            with self._m2.begin() as conn:
+                conn.execute(
+                    text("select set_config('project1.actor_id', :actor, true)"),
+                    {"actor": str(user_id)},
+                )
+                conn.execute(
+                    text(
+                        """
+                        insert into public.m2_assessment_links
+                            (m2_assessment_id, marketplace_assessment_id, user_id, created_by)
+                        values (:m2, :mp, :uid, :uid)
+                        """
+                    ),
+                    {"m2": str(m2_assessment_id), "mp": str(marketplace_assessment_id),
+                     "uid": str(user_id)},
+                )
+        except IntegrityError as exc:
+            orig = getattr(exc, "orig", None)
+            pgcode = getattr(orig, "pgcode", None)
+            constraint = getattr(getattr(orig, "diag", None), "constraint_name", None) or ""
+            if pgcode == "23503" and "owner_user" in constraint:
+                raise AssessmentLinkError(
+                    "M2_IDENTITY_MISSING",
+                    "This account has no M2 identity yet. Identity provisioning is a "
+                    "separately authorised step.",
+                    status_code=409,
+                ) from exc
+            # Lost a race to another writer; the winning link is the truth.
+            winner = self._read_link(marketplace_assessment_id, user_id)
+            if winner is None or winner[0] != m2_assessment_id:
+                raise AssessmentLinkError(
+                    "LINK_CONFLICT",
+                    "The association could not be stored. Retry the request.",
+                    status_code=409,
+                ) from exc
+            raise AssessmentLinkError(
+                "LINK_ALREADY_EXISTS",
+                "This assessment was linked concurrently. No second link was written.",
+                status_code=409,
+            ) from exc
+
+        return LinkResult(
+            marketplace_assessment_id=marketplace_assessment_id,
+            m2_assessment_id=m2_assessment_id,
+            revision=int(row["revision"]),
+            instrument_version_id=instrument_id,
+            created=True,
+            identity_check=self.identity_check,
+        )
 
     # ----------------------------------------------------------- marketplace
 
@@ -222,7 +382,9 @@ class AssessmentLinkService:
 
     # ------------------------------------------------------------------ read
 
-    def _read_link(self, assessment_id: UUID, user_id: UUID) -> tuple[UUID, int] | None:
+    def _read_link(
+        self, assessment_id: UUID, user_id: UUID
+    ) -> tuple[UUID, int, UUID] | None:
         with self._m2.connect() as conn:
             conn.execute(
                 text("select set_config('project1.actor_id', :actor, true)"),
@@ -231,7 +393,7 @@ class AssessmentLinkService:
             row = conn.execute(
                 text(
                     """
-                    select l.m2_assessment_id, a.revision
+                    select l.m2_assessment_id, a.revision, a.instrument_id
                     from public.m2_assessment_links l
                     join public.m2_assessments a on a.id = l.m2_assessment_id
                     where l.marketplace_assessment_id = :mp
@@ -243,34 +405,84 @@ class AssessmentLinkService:
             conn.rollback()
         if row is None:
             return None
-        return UUID(str(row["m2_assessment_id"])), int(row["revision"])
+        return (UUID(str(row["m2_assessment_id"])), int(row["revision"]),
+                UUID(str(row["instrument_id"])))
 
-    def _instrument_id(self) -> UUID:
+    def _read_m2_owned(self, m2_assessment_id: UUID, user_id: UUID) -> dict | None:
+        """Read one M2 assessment with its instrument state, actor-scoped.
+
+        ``project1.actor_id`` is set so the ``owner_scope`` RLS policy applies:
+        a row another account owns is *not* returned here. The caller still
+        compares ``owner_user_id`` explicitly, so ownership is proven twice
+        rather than resting on the policy alone.
+        """
+        with self._m2.connect() as conn:
+            conn.execute(
+                text("select set_config('project1.actor_id', :actor, true)"),
+                {"actor": str(user_id)},
+            )
+            row = conn.execute(
+                text(
+                    """
+                    select a.id, a.owner_user_id, a.revision, a.confirmed_revision,
+                           a.instrument_id, v.code as instrument_code,
+                           v.approval_state
+                    from public.m2_assessments a
+                    join public.m2_instrument_versions v on v.id = a.instrument_id
+                    where a.id = :id
+                    """
+                ),
+                {"id": str(m2_assessment_id)},
+            ).mappings().first()
+            conn.rollback()
+        return dict(row) if row is not None else None
+
+    def _instrument_id(self, code: str | None = None) -> UUID:
+        """Resolve the single **usable** instrument row for ``code``.
+
+        Usability is decided by the one audited gate
+        (``instrument_authorization.instrument_is_usable``), never by comparing
+        ``approval_state`` here. That preserves the production premise exactly —
+        an ``AUTHORIZED`` instrument is usable — while letting the same code
+        resolve a ``PROPOSED_NOT_AUTHORIZED`` candidate *only* while an explicit
+        disposable-target synthetic scope is active. Against ``Dss`` on 5432 the
+        scope can never activate, so a not-yet-authorized candidate stays
+        unusable and the refusal below fires.
+        """
+        instrument_code = code or INSTRUMENT_CODE
         with self._m2.connect() as conn:
             rows = conn.execute(
                 text(
                     """
-                    select id from public.m2_instrument_versions
-                    where code = :code and approval_state = 'AUTHORIZED'
+                    select id, code, approval_state
+                    from public.m2_instrument_versions
+                    where code = :code
                     """
                 ),
-                {"code": INSTRUMENT_CODE},
+                {"code": instrument_code},
             ).mappings().all()
             conn.rollback()
-        if len(rows) != 1:
-            # 0 => nothing authorised; >1 => ambiguous. Both must refuse rather
-            # than guess which instrument the entrepreneur is answering.
+        usable = [row for row in rows if instrument_is_usable(dict(row))]
+        if len(usable) != 1:
+            # 0 => nothing usable; >1 => ambiguous. Both must refuse rather than
+            # guess which instrument the entrepreneur is answering. The reason
+            # is reported so a diagnostics caller can tell "no such code" from
+            # "candidate present, synthetic scope inactive".
+            reasons = sorted(authorization_reason(dict(row)) for row in rows)
             raise AssessmentLinkError(
                 "INSTRUMENT_NOT_UNAMBIGUOUS",
-                f"Expected exactly one AUTHORIZED {INSTRUMENT_CODE} instrument, "
-                f"found {len(rows)}.",
+                f"Expected exactly one usable {instrument_code} instrument, "
+                f"found {len(usable)}."
+                + (f" States seen: {', '.join(reasons)}." if reasons else ""),
                 status_code=503,
             )
-        return UUID(str(rows[0]["id"]))
+        return UUID(str(usable[0]["id"]))
 
     # ---------------------------------------------------------------- create
 
-    def _create_and_link(self, assessment_id: UUID, user_id: UUID) -> LinkResult:
+    def _create_and_link(
+        self, assessment_id: UUID, user_id: UUID, *, instrument_code: str | None = None
+    ) -> LinkResult:
         """Create the M2 assessment and its binding in **one Dss transaction**.
 
         Concurrency: the link's partial unique index on
@@ -285,7 +497,7 @@ class AssessmentLinkService:
         deleted to "tidy up", because deleting an assessment would destroy the
         entrepreneur's work.
         """
-        instrument_id = self._instrument_id()
+        instrument_id = self._instrument_id(instrument_code)
         m2_id = uuid4()
 
         try:
@@ -339,12 +551,12 @@ class AssessmentLinkService:
                     "The assessment could not be linked. Retry the request.",
                     status_code=409,
                 )
-            m2_won, revision = winner
+            m2_won, revision, winner_instrument = winner
             return LinkResult(
                 marketplace_assessment_id=assessment_id,
                 m2_assessment_id=m2_won,
                 revision=revision,
-                instrument_version_id=instrument_id,
+                instrument_version_id=winner_instrument,
                 created=False,
                 identity_check=self.identity_check,
             )

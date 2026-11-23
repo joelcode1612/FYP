@@ -79,6 +79,12 @@ class Settings(BaseSettings):
 
     # Candidate AI workflow: explicit migrations and authority reconciliation only.
     project1_workflow_enabled: bool = False
+    # BDJ output contract selector. 'findings' is the historical behaviour and
+    # stays the default so nothing changes until a gate is explicitly passed.
+    # 'shadow' evaluates both without persisting; 'objective' serves the
+    # objective-proposal contract. Read through selected_bdj_contract(), which refuses
+    # an unknown value instead of falling back.
+    project1_bdj_contract: str = "findings"
     # Explicit private-lab opt-in. Neither field changes the default Dss target.
     project1_isolated_database_name: str = ""
     project1_isolated_database_port: int = 0
@@ -88,6 +94,11 @@ class Settings(BaseSettings):
     project1_rules_version: str = ""
     project1_rules_sha256: str = ""
     project1_rules_adoption_receipt: str = ""
+    #: Explicit synthetic instrument scope. Empty disables the mechanism.
+    #: Activation additionally requires a disposable, non-5432 database target;
+    #: see sitewise.services.instrument_authorization. It never changes a
+    #: stored approval_state.
+    m2_synthetic_instrument_scope: str = ""
     project1_runtime_database_url: SecretStr = SecretStr("")
     project1_audit_database_url: SecretStr = SecretStr("")
     tokenharbor_api_key: SecretStr = SecretStr("")
@@ -240,3 +251,19 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+
+
+BDJ_CONTRACTS = ("findings", "shadow", "objective")
+
+
+def selected_bdj_contract() -> str:
+    """The BDJ output contract, refused if the configured value is unknown.
+
+    Fail-closed on purpose: a typo must not silently fall back to the historical
+    behaviour or, worse, to the new one.
+    """
+    value = settings.project1_bdj_contract
+    if value not in BDJ_CONTRACTS:
+        raise ValueError(
+            "PROJECT1_BDJ_CONTRACT must be one of %s, got %r" % (BDJ_CONTRACTS, value))
+    return value

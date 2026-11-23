@@ -1,5 +1,5 @@
 import 'package:jaspr_test/jaspr_test.dart';
-import 'package:sitewise_jaspr_web/data/assessment_api.dart';
+import 'package:sitewise_jaspr_web/features/assessment/data/assessment_api.dart';
 
 /// Regression for CP-10 DEF-01.
 ///

@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:shared_logic/shared_logic.dart';
 
-import '../../../../application/services/service_locator.dart';
+import '../../../../core/di/service_locator.dart';
 import '../../../../core/theme/sitewise_m3.dart';
 import '../../../../core/theme/sitewise_theme.dart';
-import '../../shell/mobile_app_shell.dart';
-import '../../widgets/m3_kit.dart';
+import '../../../../shared/presentation/layouts/mobile_app_shell.dart';
+import '../../../../shared/presentation/components/m3_kit.dart';
 
 /// The confirmed research objective a candidate belongs to.
 ///

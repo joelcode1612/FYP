@@ -5,6 +5,7 @@ import 'package:shared_logic/shared_logic.dart';
 
 import 'package:fyp/features/assessment/application/assessment_session.dart';
 import 'package:fyp/core/di/service_locator.dart';
+import 'package:fyp/core/routing/app_routes.dart';
 import 'package:fyp/core/theme/sitewise_m3.dart';
 import 'package:fyp/core/theme/sitewise_theme.dart';
 import 'package:fyp/shared/presentation/layouts/mobile_app_shell.dart';
@@ -157,7 +158,9 @@ class _EntrepreneurAssessmentSetupMobilePageState
       audience: audience!,
       budgetRm: budget!,
     );
-    Navigator.of(context).pushNamed('/entrepreneur/assessment-evidence');
+    // The Evidence step has been removed, so a completed setup goes straight
+    // to the summary.
+    Navigator.of(context).pushNamed('/entrepreneur/assessment-summary');
   }
 
   @override
@@ -165,7 +168,7 @@ class _EntrepreneurAssessmentSetupMobilePageState
     final p = _property;
     return MobileAppShell(
       title: 'New assessment',
-      currentRoute: '/entrepreneur/assess',
+      currentRoute: AppRoutes.assessmentHome,
       body: ListView(
         padding: const EdgeInsets.fromLTRB(
           SitewiseM3.gutter,

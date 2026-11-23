@@ -7,6 +7,7 @@ from uuid import UUID
 from sitewise.core.exceptions import ConflictError, NotFoundError
 from sitewise.modules.decision_engine.domain.m2_rules import validate_m2_answer, resolve_m2_items, derived_m2_selections
 from sitewise.domain.m2_provenance import pins_match
+from sitewise.services.instrument_authorization import instrument_is_usable
 from sitewise.services.ports.m2_repository_port import M2RepositoryPort
 
 
@@ -54,13 +55,13 @@ class M2Service:
 
     def read_instrument(self, instrument_id: UUID) -> dict:
         instrument = self.repo.get_instrument(instrument_id)
-        if instrument is None or instrument["approval_state"] != "AUTHORIZED":
+        if not instrument_is_usable(instrument):
             raise NotFoundError("Authorized instrument version not found.")
         return {"instrument": instrument, "items": self.repo.list_items(instrument_id)}
 
     def create_assessment(self, instrument_id: UUID, actor_id: UUID) -> dict:
         instrument = self.repo.get_instrument(instrument_id)
-        if instrument is None or instrument["approval_state"] != "AUTHORIZED":
+        if not instrument_is_usable(instrument):
             raise ConflictError("No authorized M2 instrument version is available.")
         try:
             result = self.repo.create_assessment(instrument_id, actor_id)
@@ -110,7 +111,7 @@ class M2Service:
                     record["assessment_revision"] != expected_revision):
                 raise ConflictError("Confirmation source does not match the current owner and revision.")
             instrument = self.repo.get_instrument(assessment["instrument_id"])
-            if instrument is None or instrument["approval_state"] != "AUTHORIZED":
+            if not instrument_is_usable(instrument):
                 raise ConflictError("An authorized instrument version is required.")
             snapshot = record["snapshot_json"]
             if not isinstance(snapshot, dict):
@@ -169,7 +170,7 @@ class M2Service:
             if assessment["revision"] != expected_revision:
                 raise ConflictError("Assessment revision is stale; reload before saving.")
             instrument = self.repo.get_instrument(assessment['instrument_id'])
-            if instrument is None or instrument['approval_state'] != 'AUTHORIZED':
+            if not instrument_is_usable(instrument):
                 raise ConflictError('An authorized instrument version is required.')
             item = self.repo.get_item(assessment["instrument_id"], item_key)
             if item is None:

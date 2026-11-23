@@ -3,8 +3,8 @@ import 'dart:convert';
 import 'package:crypto/crypto.dart';
 import 'package:jaspr/dom.dart';
 import 'package:shared_logic/shared_logic.dart';
-import 'package:sitewise_jaspr_web/components/project1_research_stage_panel.dart';
-import 'package:sitewise_jaspr_web/data/app_locator.dart';
+import 'package:sitewise_jaspr_web/features/assessment/presentation/components/project1_research_stage_panel.dart';
+import 'package:sitewise_jaspr_web/core/di/app_locator.dart';
 import 'm2_autosave_verification_test.dart' as fixture;
 
 const confirmationId = '00000000-0000-4000-8000-000000000004';

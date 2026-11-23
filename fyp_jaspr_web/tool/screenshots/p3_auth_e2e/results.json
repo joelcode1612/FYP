@@ -1,0 +1,94 @@
+{
+  "artifact": "PROJECT1_P3_AUTH_BROWSER_E2E_RESULTS",
+  "origin": "http://127.0.0.1:8090",
+  "route": "/entrepreneur",
+  "identity": {
+    "email": "p3-e2e-probe-1795302839@sitewise-test.invalid",
+    "user_id": "593dd879-d284-4ae9-b54f-66623daff395",
+    "token_alg": "ES256",
+    "token_kid": "b4b6694b-02e6-4704-81bd-c8b299bcd398"
+  },
+  "controls": [
+    {
+      "name": "A_no_session",
+      "final_url": "http://127.0.0.1:8090/login?next=%2Fentrepreneur",
+      "redirected_to_login": true,
+      "body_text_length": 1015,
+      "body_excerpt": "SITEWISE F&B LOCATION INTELLIGENCE Problem & solution Explore Assessment Recommendations Sign in Sign up ↗ COMMERCIAL F&B LOCATION INTELLIGENCE Welcome back to SiteWise. Sign in to continue exploring commercial F&B prope",
+      "has_workspace_chrome": true,
+      "demo_bypass_visible": false,
+      "html_length": 12276,
+      "api_calls": [],
+      "console_errors": [
+        "console: Failed to load resource: the server responded with a status of 404 (Not Found)"
+      ],
+      "screenshot": "fyp_jaspr_web\\tool\\screenshots\\p3_auth_e2e\\A_no_session.png"
+    },
+    {
+      "name": "B_genuine_session",
+      "final_url": "http://127.0.0.1:8090/entrepreneur",
+      "redirected_to_login": false,
+      "body_text_length": 1348,
+      "body_excerpt": "Sitewise ENTREPRENEUR WORKSPACE Home Recommendations Assessment History Compare Saved Profile search notifications S keyboard_arrow_down ENTREPRENEUR WORKSPACE Welcome back Find, assess and choose the right commercial lo",
+      "has_workspace_chrome": true,
+      "demo_bypass_visible": false,
+      "html_length": 13340,
+      "api_calls": [
+        {
+          "url": "/api/v1/auth/me",
+          "status": 200
+        },
+        {
+          "url": "/api/v1/saved-properties/me",
+          "status": 200
+        },
+        {
+          "url": "/api/v1/auth/me",
+          "status": 200
+        },
+        {
+          "url": "/api/v1/assessments/me/current",
+          "status": 200
+        },
+        {
+          "url": "/api/v1/assessments/me?limit=4&offset=0",
+          "status": 200
+        },
+        {
+          "url": "/api/v1/catalog/properties?limit=1&offset=0",
+          "status": 200
+        }
+      ],
+      "console_errors": [
+        "console: Failed to load resource: the server responded with a status of 404 (Not Found)"
+      ],
+      "screenshot": "fyp_jaspr_web\\tool\\screenshots\\p3_auth_e2e\\B_genuine_session.png"
+    },
+    {
+      "name": "C_tampered_token",
+      "final_url": "http://127.0.0.1:8090/login?next=%2Fentrepreneur",
+      "redirected_to_login": true,
+      "body_text_length": 1015,
+      "body_excerpt": "SITEWISE F&B LOCATION INTELLIGENCE Problem & solution Explore Assessment Recommendations Sign in Sign up ↗ COMMERCIAL F&B LOCATION INTELLIGENCE Welcome back to SiteWise. Sign in to continue exploring commercial F&B prope",
+      "has_workspace_chrome": true,
+      "demo_bypass_visible": false,
+      "html_length": 12276,
+      "api_calls": [
+        {
+          "url": "/api/v1/auth/me",
+          "status": 401
+        },
+        {
+          "url": "/api/v1/auth/me",
+          "status": 401
+        }
+      ],
+      "console_errors": [
+        "console: Failed to load resource: the server responded with a status of 404 (Not Found)",
+        "console: Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+        "console: Failed to load resource: the server responded with a status of 401 (Unauthorized)"
+      ],
+      "screenshot": "fyp_jaspr_web\\tool\\screenshots\\p3_auth_e2e\\C_tampered_token.png"
+    }
+  ]
+}

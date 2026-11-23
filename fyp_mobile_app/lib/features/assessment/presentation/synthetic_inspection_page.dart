@@ -1,8 +1,8 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:shared_logic/shared_logic.dart';
-import '../../../application/services/service_locator.dart';
-import 'components/cq_ui_primitives.dart';
+import '../../../../core/di/service_locator.dart';
+import 'widgets/cq_ui_primitives.dart';
 import 'synthetic_session_host.dart';
 
 /// Reads the operator-granted import through the normal authenticated API.

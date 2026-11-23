@@ -1,6 +1,6 @@
 import 'package:jaspr_test/jaspr_test.dart';
-import 'package:sitewise_jaspr_web/components/assessment_journey_stepper.dart';
-import 'package:sitewise_jaspr_web/data/assessment_api.dart';
+import 'package:sitewise_jaspr_web/features/assessment/presentation/components/assessment_journey_stepper.dart';
+import 'package:sitewise_jaspr_web/features/assessment/data/assessment_api.dart';
 
 const capability = AssessmentCapability(available: false);
 const record = AssessmentRecord(

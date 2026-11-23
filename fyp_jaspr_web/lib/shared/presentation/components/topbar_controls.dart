@@ -438,6 +438,17 @@ class AvatarMenu extends StatefulComponent {
   State<AvatarMenu> createState() => AvatarMenuState();
 }
 
+/// Presentation-only avatar initial, never an account identifier.
+///
+/// Every other avatar in the app already guards the blank case (admin users,
+/// user detail, agent list, profile pages). This one did not, so an account with
+/// no display name crashed the shared topbar. Guarding here as well as at the
+/// profile lookup means a future placeholder cannot reintroduce the crash.
+String _avatarInitial(String name) {
+  final trimmed = name.trim();
+  return trimmed.isEmpty ? '?' : trimmed.substring(0, 1);
+}
+
 class AvatarMenuState extends State<AvatarMenu> {
   bool _open = false;
 
@@ -448,12 +459,20 @@ class AvatarMenuState extends State<AvatarMenu> {
     // `/auth/me` spells the name `full_name`; the SSR session cookie mirrors it
     // as `name`. Accept either and fall back to the role's placeholder rather
     // than casting a missing field to String.
+    //
+    // An account can exist with NO display name: a freshly provisioned identity
+    // comes back from `/auth/me` with `full_name: ""`, and `??` only falls back
+    // on null, so the empty string used to survive. It then reached
+    // `substring(0, 1)` below, which throws RangeError and takes the whole
+    // topbar down for every authenticated page. Treat blank as absent.
+    final rawName = (account?['full_name'] ?? account?['name']) as String?;
+    final resolvedName = (rawName == null || rawName.trim().isEmpty)
+        ? fallback.name
+        : rawName;
     final profile = account == null
         ? fallback
         : (
-            name:
-                (account['full_name'] ?? account['name'] ?? fallback.name)
-                    as String,
+            name: resolvedName,
             email: (account['email'] ?? fallback.email) as String,
           );
     return div(classes: 'avatar-menu', [
@@ -467,7 +486,7 @@ class AvatarMenuState extends State<AvatarMenu> {
         events: events(onClick: () => setState(() => _open = !_open)),
         [
           div(classes: 'avatar', [
-            Component.text(profile.name.substring(0, 1)),
+            Component.text(_avatarInitial(profile.name)),
           ]),
           span(classes: 'ms ms--sm muted', [
             Component.text('keyboard_arrow_down'),

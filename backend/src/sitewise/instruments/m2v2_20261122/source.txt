@@ -1,0 +1,125 @@
+M2 V2 CANDIDATE INSTRUMENT — SOURCE OF RECORD
+==============================================
+
+Status: PROPOSED_NOT_AUTHORIZED. Candidate only. Synthetic verification only.
+Owner direction received 2026-11-22. This document is the verbatim source of
+record for the M2 V2 item definitions. It does not authorize production
+migration, BDJ/QG cloud execution or customer fielding.
+
+SCOPE
+-----
+Phase 1 (M2 V2) and Phase 2 (BCB) only.
+
+Numbering: M2V2-01 through M2V2-19 are version-scoped candidate questionnaire
+identifiers. M2-20 (Review) and M2-21 (Confirm) remain the existing separate
+governance actions and their identifiers are NOT reused.
+
+M2V2-01 to M2V2-11 retain the intended business semantics of M2V1-01 to
+M2V1-11. The re-keying is version-scoped: it does not alter, delete or rewrite
+any M2 V1 definition, historical answer or confirmation record.
+
+SECTION 1 — RETAINED SEMANTICS (M2V2-01 .. M2V2-11)
+---------------------------------------------------
+M2V2-01  Intended Study Area                     (was M2V1-01) GEO, REQUIRED
+M2V2-02  Intended Service Format                 (was M2V1-02) SINGLE, REQUIRED
+M2V2-03  Planned Product Categories              (was M2V1-03) MULTI, REQUIRED
+M2V2-04  Intended Customer Groups                (was M2V1-04) MULTI, REQUIRED
+M2V2-05  Primary Intended Customer Group         (was M2V1-05) SINGLE, CONDITIONAL
+M2V2-06  Intended Concept Emphasis               (was M2V1-06) SINGLE, REQUIRED
+M2V2-07  Intended Customer Occasion              (was M2V1-07) SINGLE, OPTIONAL
+M2V2-08  Customer Information Already Available  (was M2V1-08) MULTI, REQUIRED
+M2V2-09  Customer Research Topics                (was M2V1-09) MULTI, REQUIRED
+M2V2-10  Primary Research Priority               (was M2V1-10) SINGLE, CONDITIONAL
+M2V2-11  Current Research Decision Status        (was M2V1-11) SINGLE, CONDITIONAL
+
+The option codes, labels and source rules of M2V1-01..11 carry over unchanged,
+with the item_key re-keyed and cross-references retargeted to M2V2-*.
+
+SECTION 2 — NEW ITEMS (M2V2-12 .. M2V2-19)
+------------------------------------------
+
+M2V2-12 — Café Concept Review.
+Required hybrid input: deterministic concept-card preview, optional entrepreneur
+title/details, and CONFIRMED | NEEDS_CORRECTION | NOT_READY.
+
+M2V2-13 — Specific Products and Menu.
+Required response with product categories, conditional product names, optional
+descriptions, and explicit undecided state.
+
+M2V2-14 — Exact Priced Offer.
+Required response state; conditional product reference, size/quantity, MYR
+amount and total-price details. Allow PRICE_NOT_DECIDED.
+
+M2V2-15 — Offered Service Formats.
+Required multiselect: DINE_IN | TAKEAWAY | DELIVERY, with exclusive NOT_DECIDED.
+
+M2V2-16 — Café Experience Features.
+Required response: governed feature selections, conditional other-feature text
+and explicit undecided state.
+
+M2V2-17 — Customer Segment Definitions.
+Required response linked to M2V2-04 customer groups; optional group
+descriptions and explicit undecided state.
+
+M2V2-18 — Customer Needs / Jobs / Problems.
+Optional hybrid input: HYPOTHESIS_IDENTIFIED | NOT_ESTABLISHED |
+NO_SPECIFIC_PROBLEM. Require hypothesis text only when HYPOTHESIS_IDENTIFIED.
+
+M2V2-19 — Business Stage and Research Decision.
+Required business-stage selection: IDEA | PLANNING | CONCEPT_TESTING |
+PRE_LAUNCH | OPERATING | UNSURE. Decision explanation is optional free text.
+
+SECTION 3 — IMPLEMENTATION CONSTRAINTS (VERBATIM)
+-------------------------------------------------
+1. Preserve the original M2 V1 questions and historical answers.
+2. Preserve M2-20 Review and M2-21 Confirm as separate governance actions. Do
+   not reuse their identifiers.
+3. Use M2V2-01 through M2V2-19 as version-scoped candidate questionnaire IDs,
+   subject to compatibility review.
+4. Inspect semantic overlap between M2V2-02/15 and M2V2-04/17. Preserve their
+   different meanings rather than automatically deleting questions.
+5. M2V2-12 must display a draft concept preview before confirmation; the
+   finalized BCB must be derived from the subsequently confirmed revision.
+   Avoid circular confirmation dependencies.
+6. Save structured selections and free-text values separately but with shared
+   answer-revision provenance.
+7. Preserve explicit unknown and not-applicable states. Do not require an exact
+   price to confirm M2.
+8. Update the deterministic BCB to retain every relevant source item, item
+   version, answer revision, confirmation reference and packet hash.
+9. Produce a versioned questionnaire definition and an M2-to-BCB mapping for
+   review before claiming the new instrument is authoritative.
+10. Use synthetic data and isolated test environments. No production migration,
+    BDJ/QG activation or customer fielding is authorized.
+
+SECTION 4 — DECLARED OVERLAP RESOLUTIONS
+----------------------------------------
+M2V2-02 vs M2V2-15
+  M2V2-02 asks for the single intended service format at concept level,
+  including HYBRID and UNDECIDED. M2V2-15 asks which formats will actually be
+  offered, as a multiselect, with NOT_DECIDED exclusive. They are distinct:
+  intent versus offered operation. Both retained.
+
+M2V2-04 vs M2V2-17
+  M2V2-04 asks which broad customer groups are intended. M2V2-17 asks for the
+  entrepreneur's own definition of each selected segment, plus optional
+  descriptions. They are distinct: group selection versus segment definition.
+  Both retained; M2V2-17 options are derived from M2V2-04.
+
+SECTION 5 — RESEARCH OBJECTIVE RECONCILIATION (M2V2-09 / M2V2-10)
+------------------------------------------------------------------
+The six substantive M2V2-09 options correspond one-to-one with the six
+mandatory research objectives O1..O6 recorded in the hash-pinned objective
+registry:
+
+  CONCEPT_INTEREST      -> O1 Concept Interest
+  PRODUCT_PREFERENCE    -> O2 Product Preference
+  PRICE_ACCEPTABILITY   -> O3 Price Acceptability
+  SERVICE_PREFERENCE    -> O4 Service Preference
+  EXPERIENCE_PREFERENCE -> O5 Experience Preference
+  SEGMENT_INTEREST      -> O6 Segment Interest
+
+M2V2-10 selects a primary priority for ordering only. It must never remove any
+of O1..O6 from the mandatory objective set. Declaring a priority is not evidence
+that any objective is covered; the objective registry currently records zero
+approved measures for all six objectives.

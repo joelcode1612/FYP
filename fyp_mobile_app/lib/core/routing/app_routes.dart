@@ -4,6 +4,7 @@ import 'package:fyp/core/routing/auth_route_guard.dart';
 import 'package:fyp/features/assessment/presentation/home_screen.dart';
 import 'package:fyp/features/assessment/presentation/questionnaire_screen.dart';
 import 'package:fyp/features/assessment/presentation/review_screen.dart';
+import 'package:fyp/features/assessment/presentation/fc4_c_diagnostics_page.dart';
 import 'package:fyp/features/authentication/presentation/pages/forgot_password_mobile_page.dart';
 import 'package:fyp/features/authentication/presentation/pages/mobile_auth_page.dart';
 import 'package:fyp/features/authentication/presentation/pages/signup_mobile_page.dart';
@@ -14,12 +15,10 @@ import 'package:fyp/shared/presentation/layouts/entrepreneur_tab_host.dart';
 import 'package:fyp/features/assessment/presentation/pages/entrepreneur_assessment_summary_mobile_page.dart';
 import 'package:fyp/features/recommendations/presentation/pages/entrepreneur_ai_recommendations_mobile_page.dart';
 import 'package:fyp/features/compare/presentation/pages/entrepreneur_compare_mobile_page.dart';
-import 'package:fyp/features/assessment/presentation/pages/entrepreneur_evidence_mobile_page.dart';
 import 'package:fyp/shared/presentation/components/landing_mobile_page.dart';
 import 'package:fyp/features/profile/presentation/pages/entrepreneur_preferences_mobile_page.dart';
 import 'package:fyp/features/listing/presentation/pages/entrepreneur_property_detail_mobile_page.dart';
 import 'package:fyp/features/listing/presentation/pages/entrepreneur_explore_mobile_page.dart';
-import 'package:fyp/features/assessment/presentation/pages/entrepreneur_report_mobile_page.dart';
 import 'package:fyp/features/profile/presentation/pages/entrepreneur_favourites_mobile_page.dart';
 import 'package:fyp/features/panorama_viewer/presentation/pages/entrepreneur_tour_mobile_page.dart';
 import 'package:fyp/features/panorama_viewer/presentation/pages/property_panorama_mobile_page.dart';
@@ -32,6 +31,7 @@ import 'package:fyp/shared/presentation/layouts/provider_tab_host.dart';
 import 'package:fyp/shared/presentation/components/not_found_mobile_page.dart';
 import 'package:fyp/features/capture_360/presentation/pages/ar_capture_mobile_page.dart';
 import 'package:fyp/features/panorama_viewer/presentation/pages/tour_preview_mobile_page.dart';
+import 'package:fyp/presentation/mobile/entrepreneur/pages/research_question_mobile_page.dart';
 
 /// Centralised route table for the Flutter app (mobile tree only).
 ///
@@ -75,15 +75,15 @@ String parentShellRoute(String route) {
     '/entrepreneur/property-detail': '/entrepreneur/recommendations',
     '/entrepreneur/tour': '/entrepreneur/recommendations',
     '/entrepreneur/panorama': '/entrepreneur/recommendations',
-    '/entrepreneur/report': '/entrepreneur/assess',
-    // The Option A assessment flow keeps the Assess tab highlighted.
-    '/entrepreneur/assessment-setup': '/entrepreneur/assess',
-    '/entrepreneur/assessment-evidence': '/entrepreneur/assess',
-    '/entrepreneur/assessment-summary': '/entrepreneur/assess',
-    '/entrepreneur/research-questions': '/entrepreneur/assess',
-    AppRoutes.assessmentHome: '/entrepreneur/assess',
-    AppRoutes.assessmentQuestionnaire: '/entrepreneur/assess',
-    AppRoutes.assessmentReview: '/entrepreneur/assess',
+    // The assessment routes keep the third tab highlighted. That tab is the
+    // questionnaire invitation list now, and every remaining assessment screen
+    // is reached from it, so each resolves to the same slot.
+    '/entrepreneur/assessment-setup': AppRoutes.assessmentHome,
+    '/entrepreneur/assessment-summary': AppRoutes.assessmentHome,
+    '/entrepreneur/research-questions': AppRoutes.assessmentHome,
+    AppRoutes.assessmentHome: AppRoutes.assessmentHome,
+    AppRoutes.assessmentQuestionnaire: AppRoutes.assessmentHome,
+    AppRoutes.assessmentReview: AppRoutes.assessmentHome,
     // The 360° preview flow is role-neutral shared work; it is entered from
     // a property tour, so it highlights the discovery tab.
     '/tour-preview': '/entrepreneur/recommendations',
@@ -110,6 +110,20 @@ abstract final class AppRoutes {
   /// the navigator, so every page and guard resolves the shared view models
   /// from the widget tree.
   static Route<dynamic>? onGenerateRoute(RouteSettings settings) {
+    // FC4-C development-only probe. The page itself refuses without explicit
+    // debug lab dart-defines, so this route cannot expose test data in release.
+    final fc4c = Uri.tryParse(settings.name ?? '');
+    if (fc4c != null && fc4c.path == '/developer/fc4-c') {
+      final sid = fc4c.queryParameters['session_id'] ?? '';
+      return MaterialPageRoute(
+        settings: settings,
+        builder: (_) => AuthGuard(
+          access: RouteAccess.public,
+          routeName: settings.name,
+          builder: (_) => Fc4CDiagnosticsPage(sessionId: sid),
+        ),
+      );
+    }
     final (RouteAccess access, Widget Function() page) entry = switch (settings
         .name) {
       // Startup decision point: verify session -> auth / onboarding / home.
@@ -235,11 +249,12 @@ abstract final class AppRoutes {
         RouteAccess.workspace,
         () => const EntrepreneurTabHost(initialRoute: '/entrepreneur'),
       ),
-      // Material 3 five-tab workspace: Assess and Favourites.
-      '/entrepreneur/assess' => (
-        RouteAccess.workspace,
-        () => const EntrepreneurTabHost(initialRoute: '/entrepreneur/assess'),
-      ),
+      // Material 3 five-tab workspace: Questionnaire and Favourites.
+      //
+      // The Option A local draft hub that used to live at
+      // `/entrepreneur/assess` has been removed. That tab now carries the
+      // published questionnaire invitation list, and the dashboard's
+      // assessment shortcut opens it directly.
       '/entrepreneur/favourites' => (
         RouteAccess.workspace,
         () =>
@@ -347,22 +362,14 @@ abstract final class AppRoutes {
         RouteAccess.workspace,
         () => const EntrepreneurFavouritesMobilePage(),
       ),
-      '/entrepreneur/report' => (
-        RouteAccess.workspace,
-        () => EntrepreneurReportMobilePage(
-          propertyId: settings.arguments as String? ?? '',
-        ),
-      ),
+      // The per-listing evaluation report page has been removed, so its route
+      // is gone too. Nothing navigates to `/entrepreneur/report` any more.
       // Legacy deep link kept resolvable. The old Option A setup page is gone;
       // the feature questionnaire home owns Start/Resume now, so an old link
       // (or a saved shortcut) lands there instead of on a not-found page.
       '/entrepreneur/assessment-setup' => (
         RouteAccess.workspace,
         () => const HomeScreen(),
-      ),
-      '/entrepreneur/assessment-evidence' => (
-        RouteAccess.workspace,
-        () => const EntrepreneurEvidenceMobilePage(),
       ),
       '/entrepreneur/assessment-summary' => (
         RouteAccess.workspace,

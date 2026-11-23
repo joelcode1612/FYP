@@ -32,6 +32,8 @@ import json
 from uuid import UUID
 
 from sitewise.modules.decision_engine.domain.m2_rules import missing_required_items, validate_m2_answer, resolve_m2_items, derived_m2_selections
+from sitewise.services.bcb_sections import build_sections
+from sitewise.services.instrument_authorization import instrument_is_usable
 from sitewise.services.ports.business_context_v1_port import (
     AuthorizationPort, ClockPort, ContextRequest, SnapshotPort,
 )
@@ -40,11 +42,32 @@ SCHEMA_VERSION = "business-context-package/1.0"
 CONTEXT_VERSION = "BCB-V1-1.0.0-SANDBOX"
 GEO_EXCLUDED_SCHEMA_VERSION = "business-context-package/1.1"
 GEO_EXCLUDED_CONTEXT_VERSION = "BCB-V1-1.1.0"
+#: Adds the three separable M2 V2 outputs (business description, research
+#: context, questionnaire stimuli). Opt-in: ``CURRENT_CONTEXT_VERSION`` stays at
+#: 1.1 so every existing 1.0/1.1 packet still rebuilds byte-identically.
+SECTIONS_SCHEMA_VERSION = "business-context-package/1.2"
+#: Frozen shape. Research-intention topics carry no per-topic ``ref`` here, so a
+#: packet persisted under this label must keep rebuilding byte-identically even
+#: though the current builder emits refs under a newer label. Never change the
+#: projection for this contract: that is what silently invalidated history.
+SECTIONS_CONTEXT_VERSION_V1_2_0 = "BCB-V1-1.2.0"
+#: Current sections contract. Identical to 1.2.0 except that each
+#: ``research_intentions.topics[*]`` carries the M2V2-09 trace reference.
+SECTIONS_CONTEXT_VERSION = "BCB-V1-1.2.1"
+#: Every sections contract, newest last. A builder-semantics change must add a
+#: new label here rather than alter an existing one; that is the whole point of
+#: versioning the projection.
+SECTIONS_CONTRACTS = (SECTIONS_CONTEXT_VERSION_V1_2_0, SECTIONS_CONTEXT_VERSION)
+#: Sections contracts that stay readable but are no longer produced for new
+#: packets. A packet recorded under one of these is historical, not current.
+HISTORICAL_SECTIONS_CONTRACTS = frozenset({SECTIONS_CONTEXT_VERSION_V1_2_0})
 CURRENT_CONTEXT_VERSION = GEO_EXCLUDED_CONTEXT_VERSION
 #: context_version -> (schema_version, requires an approved GEO catalogue binding)
 CONTRACTS = {
     CONTEXT_VERSION: (SCHEMA_VERSION, True),
     GEO_EXCLUDED_CONTEXT_VERSION: (GEO_EXCLUDED_SCHEMA_VERSION, False),
+    SECTIONS_CONTEXT_VERSION_V1_2_0: (SECTIONS_SCHEMA_VERSION, False),
+    SECTIONS_CONTEXT_VERSION: (SECTIONS_SCHEMA_VERSION, False),
 }
 PURPOSES = frozenset({"EXPLANATION", "QJ_CONTEXT", "EE01_CONTEXT"})
 JURISDICTIONS = {"1": "Johor", "7": "Pulau Pinang", "10": "Selangor", "14": "W.P. Kuala Lumpur"}
@@ -214,7 +237,7 @@ class BusinessContextBuilderV1:
         require(source_hash(s) == c["snapshot_digest"], "CONFIRMATION_DIGEST_INVALID")
         instrument = json_value(repo.get_instrument(UUID(a["instrument_id"])))
         require(instrument is not None and instrument["id"] == a["instrument_id"]
-                and instrument["approval_state"] == "AUTHORIZED", "INSTRUMENT_UNAUTHORIZED")
+                and instrument_is_usable(instrument), "INSTRUMENT_UNAUTHORIZED")
         text_fields(instrument, ("id", "version_tag", "schema_digest"), "INSTRUMENT_UNAUTHORIZED")
         require(all(s[k] == v for k, v in {
             "assessment_id": a["id"], "assessment_revision": rev,
@@ -236,7 +259,8 @@ class BusinessContextBuilderV1:
             item = item_map[key]
             require(answer["assessment_id"] == a["id"] and answer["item_version_id"] == item["id"]
                     and 0 <= answer["assessment_revision"] <= rev, "ANSWER_VERSION_INVALID")
-            validate_m2_answer(validation_items[key], answer["answer_state"], answer["value_json"])
+            validate_m2_answer(validation_items[key], answer["answer_state"],
+                               answer["value_json"], items)
             confirmed_answers.append({"item_key": key, "answer_revision_id": answer["id"],
                                       "item_version_id": answer["item_version_id"],
                                       "answer_state": answer["answer_state"], "value": answer["value_json"]})
@@ -256,10 +280,27 @@ class BusinessContextBuilderV1:
         for key, item in sorted(item_map.items()):
             if item["lifecycle"] == "ACTIVE" and item["answer_kind"] != "ACTION" and key not in answers:
                 unknowns.append({"code": "M2_ANSWER_ABSENT", "reference": key})
+        sections = None
         if instrument["version_tag"] == "M2V1-20261114-1":
             require(s.get("derived_selections") == derived_m2_selections(items, answers),
                     "M2_ANSWERS_CHANGED")
             description = current_business_description(items, answers)
+        elif instrument["version_tag"].startswith("M2V2-"):
+            # V2 carries the three separable outputs. The description view is
+            # projected from the same confirmed declarations, so the two can
+            # never disagree.
+            sections = build_sections(
+                declarations, item_map, c["id"],
+                # The frozen 1.2.0 shape has no per-topic ref; only the current
+                # sections contract emits it. This is what keeps a packet
+                # persisted under 1.2.0 readable after the projection grew.
+                include_topic_refs=(self.contract != SECTIONS_CONTEXT_VERSION_V1_2_0))
+            description = {"template_version": "V2", "source": "CONFIRMED_M2",
+                           "sections": sections["business_description"],
+                           "source_question_ids": sorted(
+                               v["ref"]["item_key"]
+                               for v in sections["business_description"].values()
+                               if isinstance(v, dict) and "ref" in v)}
         else:
             description = next((x for x in declarations if x["item_key"] == "M2-04" and x["answer_state"] == "ANSWERED"), None)
             if description is None:
@@ -377,12 +418,20 @@ class BusinessContextBuilderV1:
         require(len({x["id"] for x in sources}) == len(sources), "SOURCE_QUALIFICATION_INVALID")
         if not sources:
             unknowns.append({"code": "EXTERNAL_EVIDENCE_MISSING", "reference": a["id"]})
+        # The sections contract is only meaningful for an instrument that
+        # actually declares the V2 items; fail closed rather than emit an
+        # empty three-part block against a V1 codebook.
+        require(self.contract not in SECTIONS_CONTRACTS or sections is not None,
+                "SECTIONS_REQUIRE_M2V2")
         packet = {"schema_version": schema_version, "context_version": self.contract,
             "identity": {"assessment_id": a["id"], "tenant_id": r.tenant_id, "owner_id": a["owner_user_id"]},
             "access": {"scope": scope, "decision_id": decision["decision_id"], "policy_version": decision["policy_version"], "allowed": True},
             "confirmation": {"id": c["id"], "revision": rev, "digest": c["snapshot_digest"], "status": "CURRENT_CONFIRMED"},
             "instrument": {k: instrument[k] for k in ("id", "version_tag", "schema_digest", "approval_state")},
             "m2_answers": declarations, "business_description": description,
+            **({"sections": sections}
+               if sections is not None and self.contract in SECTIONS_CONTRACTS
+               else {}),
             "concept": concept, "findings": output_findings,
             "confirmed_uncertainty": uncertainty, "geography": geo, "supporting_sources": sources,
             "unknowns": unknowns, "contradictions": contradictions,
@@ -399,6 +448,11 @@ class BusinessContextBuilderV1:
                 "snapshot_id": b["snapshot_id"], "m2_confirmation_hash": source_hash(c),
                 "instrument_hash": source_hash(instrument), "item_definitions_hash": source_hash(sorted(items, key=lambda i: i["item_key"])),
                 "bindings_hash": source_hash(b), "access_decision_hash": source_hash(decision)}}
+        if sections is not None:
+            packet["limitations"].append(
+                "Business description, research context and questionnaire stimuli are "
+                "deterministic projections of confirmed answers; no value is inferred, "
+                "and no model is invoked.")
         packet["packet_hash"] = source_hash(packet)
         return json_value(packet)
 

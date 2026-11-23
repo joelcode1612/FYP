@@ -55,6 +55,28 @@ _QUANTITY_WORD_RE = re.compile(
     r'\b(?:one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|'
     r'several|many|few|hundreds?|thousands?|millions?)\b', re.IGNORECASE)
 
+# A currency-prefixed amount is a number, but the leading letter of "RM12.50" is
+# exactly the shape ``_NUMBER_RE``'s left edge excludes so that identifiers like
+# "A10" and "Q05" stay unparsed. Left alone, "RM12.50" therefore evaded the guard
+# entirely — a fabricated price was not counted as an unsourced number. This
+# second pattern captures the digits that follow a currency marker, and
+# ``extract_numbers`` unions both so the allow-list and the check agree.
+_CURRENCY_NUMBER_RE = re.compile(
+    r'(?:RM|MYR|USD|SGD|GBP|AUD|EUR|JPY|CNY|RMB|\$|€|£|¥)\s?'
+    r'(\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?'
+)
+
+
+def extract_numbers(text: str) -> set[str]:
+    """Every number a string carries, currency-prefixed amounts included.
+
+    One function for both the allow-list and the check: if these diverged, a
+    supplied price would be rejected as unsourced.
+    """
+    found = set(_NUMBER_RE.findall(text))
+    found |= set(_CURRENCY_NUMBER_RE.findall(text))
+    return found
+
 
 def normalise(text: str) -> str:
     """Unicode-normalised lowercase: defeats fullwidth/diacritic/homoglyph evasion."""
@@ -236,9 +258,49 @@ def authorized_finding_output(*, context_id: str, snapshot_id: str, task_mode: s
     )
 
 
+def question_evidence_output(*, context_id: str, snapshot_id: str, task_mode: str,
+                             rendered: dict, used_claim_ids: list[str],
+                             missing: list[str]) -> ExplanationOutput:
+    """Wrap a registry-rendered question explanation in the V1.0 contract.
+
+    The prose arrives already composed by
+    ``sitewise.project1.explanation_registry.render_question`` from hash-pinned
+    template text; this function adds only the envelope fields. It computes
+    nothing, so a caller cannot use it to introduce a figure.
+
+    ``origin`` stays at the template default: this is deterministic output even
+    when the item is fully authorised.
+    """
+    return ExplanationOutput(
+        schema_version=SCHEMA_VERSION,
+        task_mode=task_mode,
+        context_id=context_id,
+        snapshot_id=snapshot_id,
+        used_claim_ids=list(used_claim_ids),
+        headline=rendered['headline'],
+        observation_interpretation=rendered['observation_interpretation'],
+        research_interpretation=rendered['research_interpretation'],
+        planning_implication=rendered['planning_implication'],
+        limitations=rendered['limitations'],
+        summary=rendered['summary'],
+        insufficient_evidence=bool(rendered['insufficient_evidence']),
+        missing_evidence_references=list(missing),
+    )
+
+
 def validate_candidate(output: ExplanationOutput, *, packet: dict,
-                       allowed_claim_ids: set[str], allowed_numbers: set[str]) -> None:
-    """Fail closed on echo-back, claim authority, numbers and prohibited phrasing."""
+                       allowed_claim_ids: set[str], allowed_numbers: set[str],
+                       registry_literals: frozenset[str] | None = None) -> None:
+    """Fail closed on echo-back, claim authority, numbers and prohibited phrasing.
+
+    ``registry_literals`` is a narrow, deterministic-template-only allowance. The
+    owner-prepared prose legitimately contains numerals and quantity words that the
+    generic guard would reject (``30``, ``100``, ``344``, ``Four``, ``two``). Rather
+    than rewrite that prose, a template render may name a token only when it appears
+    verbatim in the pinned registry. The LLM path never passes this argument, so
+    model output is validated exactly as strictly as before — a property asserted by
+    ``tests/project1/test_explanation_registry.py``.
+    """
     if output.schema_version != SCHEMA_VERSION:
         raise WorkflowHeld('EXPLANATION_SCHEMA_VERSION_MISMATCH')
     if (output.task_mode != packet['task_mode'] or
@@ -265,7 +327,14 @@ def validate_candidate(output: ExplanationOutput, *, packet: dict,
     flat = normalise(narrative)
     if any(normalise(phrase) in flat for phrase in BANNED_PHRASES):
         raise WorkflowHeld('EXPLANATION_PROHIBITED_CLAIM')
-    if any(number not in allowed_numbers for number in _NUMBER_RE.findall(narrative)):
+    allowed = set(allowed_numbers)
+    if registry_literals:
+        allowed |= set(registry_literals)
+    if any(number not in allowed for number in extract_numbers(narrative)):
         raise WorkflowHeld('EXPLANATION_UNSOURCED_NUMBER')
-    if _QUANTITY_WORD_RE.search(narrative):
+    for word in _QUANTITY_WORD_RE.findall(narrative):
+        # Case-insensitive on both sides: the registry stores lowercased tokens,
+        # and "Four" at the head of a sentence is the same quantity word.
+        if registry_literals and word.lower() in registry_literals:
+            continue
         raise WorkflowHeld('EXPLANATION_UNSOURCED_QUANTITY')

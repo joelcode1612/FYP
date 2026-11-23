@@ -91,6 +91,13 @@ router.include_router(
 # Web Location Assessment Workspace (decision-support). Mobile data collection
 # keeps its own session store and does not use these routes.
 router.include_router(assessments.router, prefix="/assessments", tags=["assessments"])
+# RP-13: the confirmed business description the report's section 02 reads.
+# Additive and read-only; mounted beside the assessment router so the report
+# always gets an explicit state (including "the M2 stage is not enabled") rather
+# than a 404 it would have to guess about.
+from sitewise.api.v1 import report_business_description
+router.include_router(report_business_description.router, prefix="/assessments",
+                      tags=["report_business_description"])
 # Entrepreneur recommendation preferences. Shares the assessment's
 # business-requirements vocabulary and validation, so the workspace's stage 2
 # and the preferences page store the same shape rather than two systems.

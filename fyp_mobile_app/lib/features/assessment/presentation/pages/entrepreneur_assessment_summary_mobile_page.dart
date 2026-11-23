@@ -33,7 +33,7 @@ class EntrepreneurAssessmentSummaryMobilePage extends StatelessWidget {
     final draft = ServiceLocator.assessmentSession.draft;
     return MobileAppShell(
       title: 'Summary',
-      currentRoute: '/entrepreneur/assess',
+      currentRoute: AppRoutes.assessmentHome,
       body: draft == null ? _noDraft(context) : _summary(context, draft),
     );
   }
@@ -55,7 +55,7 @@ class EntrepreneurAssessmentSummaryMobilePage extends StatelessWidget {
               'to reach its summary.',
           actionLabel: 'Your assessments',
           onAction: () => Navigator.of(context).pushNamedAndRemoveUntil(
-            '/entrepreneur/assess',
+            AppRoutes.assessmentHome,
             (route) => route.isFirst,
           ),
         ),
@@ -77,7 +77,7 @@ class EntrepreneurAssessmentSummaryMobilePage extends StatelessWidget {
           alignment: Alignment.centerLeft,
           child: TextButton.icon(
             onPressed: () => Navigator.of(context).pushNamedAndRemoveUntil(
-              '/entrepreneur/assess',
+              AppRoutes.assessmentHome,
               (route) => route.isFirst,
             ),
             icon: const Icon(Icons.arrow_back_rounded, size: 16),
@@ -211,7 +211,7 @@ class EntrepreneurAssessmentSummaryMobilePage extends StatelessWidget {
               : Icons.bookmark_border_rounded,
           onTap: draft.saved
               ? () => Navigator.of(context).pushNamedAndRemoveUntil(
-                  '/entrepreneur/assess',
+                  AppRoutes.assessmentHome,
                   (route) => route.isFirst,
                 )
               : () => _save(context),
@@ -244,7 +244,7 @@ class EntrepreneurAssessmentSummaryMobilePage extends StatelessWidget {
     );
     Navigator.of(
       context,
-    ).pushNamedAndRemoveUntil('/entrepreneur/assess', (route) => route.isFirst);
+    ).pushNamedAndRemoveUntil(AppRoutes.assessmentHome, (route) => route.isFirst);
   }
 }
 

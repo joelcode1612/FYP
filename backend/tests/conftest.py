@@ -6,14 +6,21 @@ Strategy
   ``cryptography`` and the JWKS client's ``_fetch`` is monkeypatched to serve
   the public key. This exercises the full verification path (signature,
   alg allow-list, iss, aud, exp, kid handling) without network access.
-* The application database is the real local ``sitesense`` Postgres (it is a
-  development database); every test that writes rows cleans up after itself
-  via the ``cleanup_users`` fixture.
+* The application database is a DISPOSABLE local Postgres on port 5433
+  (``project1_workflow_tests`` or ``project1_disposable_app``). The
+  ``require_disposable_database`` fixture refuses to start the suite against
+  anything else, because these tests write rows and previously ran against the
+  protected ``Final_Location_Analysis`` database by accident.
+* Tests that write rows clean up after themselves via the ``cleanup_users``
+  fixture; subprocess outputs are redirected to a temporary directory via
+  ``SITEWISE_ML_EVAL_DIR`` so tracked reference artifacts are never rewritten.
 """
 
 from __future__ import annotations
 
+import os
 import uuid
+import warnings
 from datetime import datetime, timedelta, timezone
 
 import jwt
@@ -29,6 +36,16 @@ TEST_KID = "test-es256-key"
 TEST_ISSUER = "https://lzdpjwmcjbhtkzkqudyt.supabase.co/auth/v1"
 TEST_AUDIENCE = "authenticated"
 TEST_EMAIL_DOMAIN = "jwks-test.example"
+
+#: Port of the disposable Postgres cluster. The protected clusters listen on
+#: 5432 (``Final_Location_Analysis`` and ``Dss``) and must never receive test
+#: writes.
+DISPOSABLE_PORT = 5433
+DISPOSABLE_DATABASES = frozenset({"project1_workflow_tests", "project1_disposable_app"})
+NEVER_TEST_DATABASES = frozenset(
+    {"Final_Location_Analysis", "Dss", "dss", "sitesense", "postgres"}
+)
+ISOLATION_OVERRIDE_ENV = "SITEWISE_TEST_ISOLATION"
 
 _private_key = ec.generate_private_key(ec.SECP256R1())
 _pub_coords = jwt.algorithms.ECAlgorithm.to_jwk(_private_key.public_key(), as_dict=True)
@@ -80,6 +97,65 @@ def fake_supabase_admin_identity():
         app.dependency_overrides.pop(get_admin_service, None)
     else:
         app.dependency_overrides[get_admin_service] = previous
+
+
+@pytest.fixture(scope="session", autouse=True)
+def require_disposable_database(tmp_path_factory):
+    """Refuse to run this suite against a protected database.
+
+    The suite writes rows (users, preference snapshots, recommendation batches)
+    and shells out to ``scripts/ml/train_personalised_recommender.py``, which
+    overwrites a report file. Both must be confined to a disposable database and
+    a temporary directory.
+
+    The database identity is asked of the SERVER (``current_database()`` and
+    ``inet_server_port()``), not parsed out of ``DATABASE_URL``, so a pooled or
+    redirected connection cannot satisfy the check by accident.
+
+    Escape hatch: ``SITEWISE_TEST_ISOLATION=off`` downgrades the failure to a
+    warning. It exists only for a developer who consciously wants a read-only
+    smoke run; it is never used by CI or by the recorded evidence.
+    """
+    from sqlalchemy import text
+
+    from sitewise.db.session import engine
+
+    override = os.environ.get(ISOLATION_OVERRIDE_ENV, "").strip().lower()
+    with engine.connect() as conn:
+        db, port = conn.execute(
+            text("SELECT current_database(), inet_server_port()")
+        ).one()
+    identity = f"{db}@{port}"
+
+    problems = []
+    if db in NEVER_TEST_DATABASES:
+        problems.append(f"{db!r} is a protected database")
+    if db not in DISPOSABLE_DATABASES:
+        problems.append(f"{db!r} is not a recognised disposable database")
+    if int(port) != DISPOSABLE_PORT:
+        problems.append(f"port {port} is not the disposable cluster port {DISPOSABLE_PORT}")
+
+    if problems:
+        message = (
+            "TEST ISOLATION REFUSED: "
+            + "; ".join(problems)
+            + f" (connected to {identity}). Point DATABASE_URL at one of "
+            + ", ".join(sorted(DISPOSABLE_DATABASES))
+            + f" on 127.0.0.1:{DISPOSABLE_PORT}, or set "
+            + f"{ISOLATION_OVERRIDE_ENV}=off to acknowledge the risk explicitly."
+        )
+        if override == "off":
+            warnings.warn(message + " -- OVERRIDDEN, data will be written here.", stacklevel=1)
+        else:
+            # 97 is outside pytest's own 0-5 range so "isolation refused" can
+            # never be mistaken for "internal error" in CI.
+            pytest.exit(message, returncode=97)
+
+    # Keep the trainer's report out of the tracked reference directory.
+    os.environ.setdefault(
+        "SITEWISE_ML_EVAL_DIR", str(tmp_path_factory.mktemp("ml_reference_eval"))
+    )
+    return identity
 
 
 @pytest.fixture(scope="session", autouse=True)

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_logic/shared_logic.dart';
 
+import 'package:fyp/core/routing/app_routes.dart';
 import 'package:fyp/core/theme/sitewise_theme.dart';
 import 'package:fyp/shared/presentation/layouts/entrepreneur_tab_scope.dart';
 import 'package:fyp/shared/presentation/layouts/mobile_app_shell.dart';
@@ -182,7 +183,8 @@ class _EntrepreneurDashboardMobilePageState
               icon: Icons.assignment_outlined,
               title: 'Demand assessments',
               subtitle: 'Check progress and insights',
-              onTap: () => _open('/entrepreneur/assess'),
+              onTap: () =>
+                  EntrepreneurTabScope.open(context, AppRoutes.assessmentHome),
             ),
             // PROJECT1 research-question review. Home has no selected M2
             // assessment and no confirmed objective, so it cannot supply the

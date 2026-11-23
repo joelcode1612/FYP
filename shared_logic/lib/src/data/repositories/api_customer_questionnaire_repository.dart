@@ -18,7 +18,12 @@ class ApiCustomerQuestionnaireRepository {
   }) : allowIsolatedTesting = true,
        syntheticRunId = runId,
        basePath = '/api/v1/cq/developer-imports/${Uri.encodeComponent(runId)}';
-  Future<({String state, List<CqInvitation> invitations})> invitations() async {
+  /// [reason] is the additive discriminator the API added for the `held` state:
+  /// `CQ_RUNTIME_DISABLED` (feature switched off) versus `AUTHORIZATION_DENIED`
+  /// (runtime on, this respondent refused). It is null when absent, so an older
+  /// backend still parses.
+  Future<({String state, String? reason, List<CqInvitation> invitations})>
+  invitations() async {
     final d = await client.get('$basePath/invitations');
     if (d['contract_version'] != 'cq-invitations/1' ||
         !['ready', 'held', 'empty'].contains(d['state'])) {
@@ -34,7 +39,11 @@ class ApiCustomerQuestionnaireRepository {
         .toList(growable: false);
     if (d['state'] != 'ready' && invitations.isNotEmpty)
       throw const FormatException('Unapproved invitations.');
-    return (state: d['state'] as String, invitations: invitations);
+    return (
+      state: d['state'] as String,
+      reason: d['reason'] as String?,
+      invitations: invitations,
+    );
   }
 
   CqSession _parse(Map<String, dynamic> d, {String? sid, CqSession? previous}) {

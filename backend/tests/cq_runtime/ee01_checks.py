@@ -58,7 +58,7 @@ def test_EE01_persisted_cutoff_reference_security_and_held_report(lab):
                               'eligibility': 'ELIGIBLE' if index < 8 else 'INELIGIBLE',
                               'qualification_version': 'SYNTHETIC-INDEPENDENT-QUALIFICATION-1', 'receipt': 'TEST-ONLY-NOT-SCIENCE'}
         with lab['db'].begin() as c:
-            c.execute(User.__table__.insert().values(user_id=uid, email=f'{uid}@test.invalid', role='customer', account_status='active', email_verified=True))
+            c.execute(User.__table__.insert().values(user_id=uid, email=f'{uid}@test.invalid', role='entrepreneur', account_status='active', email_verified=True))
         lab['request']('POST', f'/campaigns/{cid}/participants', uid=lab['owner'], json={'respondent_id': str(uid)})
         s = lab['request']('POST', '/sessions', uid=uid, json={'campaign_id': str(cid), 'manifest_hash': digest(manifest), 'locale': 'EN'})
         s = action(s, uid, 'consent', {'request_id': str(uuid4()), 'consented': True, 'consent_version': manifest['consent_version']})
@@ -260,7 +260,7 @@ def test_EE03_multiselect_distinct_units_and_feature_denominators(lab):
         for index in range(2):
             uid=uuid4()
             with lab['db'].begin() as c:
-                c.execute(User.__table__.insert().values(user_id=uid,email=f'{uid}@test.invalid',role='customer',account_status='active',email_verified=True))
+                c.execute(User.__table__.insert().values(user_id=uid,email=f'{uid}@test.invalid',role='entrepreneur',account_status='active',email_verified=True))
             lab['request']('POST',f'/campaigns/{cid}/participants',uid=lab['owner'],json={'respondent_id':str(uid)})
             s=lab['request']('POST','/sessions',uid=uid,json={'campaign_id':str(cid),'manifest_hash':digest(m),'locale':'EN'})
             def act(s,name,data=None):

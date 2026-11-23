@@ -1569,7 +1569,12 @@ a.card:hover {
 }
 
 .app-pill__right {
-  margin-left: auto;
+  /* No `margin-left: auto` here. `.app-pill__nav` already carries
+     `margin: 0 auto`, and flexbox distributes free space across EVERY auto
+     margin — with a third one on this block the free space split three ways,
+     so the link row sat a third left of centre and a double-width gap opened
+     between "Profile" and the icon controls. Letting the nav own both auto
+     margins centres it and still pins this block to the right edge. */
   display: flex;
   align-items: center;
   gap: 6px;
@@ -17933,7 +17938,11 @@ input[type="range"] {
    ========================================================================== */
 
 .asw-page {
-  max-width: 1180px;
+  /* Reads the shared measure token, not a hardcoded 1180px. The Assessment
+     tab (and the History surface nested under it) rendered 180px narrower
+     than Compare and every other workspace page, so its cards fell off the
+     vertical grid lines the nav pill and `.app-content__inner` both use. */
+  max-width: var(--content-max, 1360px);
   margin: 0 auto;
   display: grid;
   gap: 20px;
@@ -19645,3 +19654,657 @@ input[type="range"] {
   color: #1e4aa8;
 }
 .m2q__endpoint { margin: 10px 0 0; }
+
+/* ---------------------------------------------------------------------------
+   chart-spec/1 horizontal bar chart (`ChartSpecView`).
+
+   Scoped to `.sw-chart` and appended at the end of the sheet so it cannot
+   change `.sw-viz__*`, which the property-detail visualisation owns. Colours
+   come from tokens so the dark theme applies without a second block.
+
+   Layout: label | track | count | percentage. The count and the percentage are
+   separate columns because a chart-spec may legitimately carry a count with no
+   percentage (V = 0, or findings withheld); collapsing them would let a missing
+   percentage read as a zero.
+   --------------------------------------------------------------------------- */
+.sw-chart {
+  margin: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  overflow: hidden;
+  min-width: 0;
+}
+.sw-chart__head { padding: 16px 18px 0; }
+.sw-chart__eyebrow { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 10px; }
+.sw-chart__head h3 { margin: 0 0 6px; font-size: 14.5px; line-height: 1.35; color: var(--ink); }
+.sw-chart__question { margin: 0; font-size: 12.5px; line-height: 1.6; color: var(--muted); max-width: 78ch; }
+
+.sw-chart__bars { display: grid; gap: 9px; padding: 18px; }
+.sw-chart__bar {
+  display: grid;
+  grid-template-columns: minmax(96px, 148px) minmax(0, 1fr) 52px 76px;
+  align-items: center;
+  gap: 10px;
+}
+.sw-chart__bar-label { font-size: 11.5px; font-weight: 700; color: var(--ink); overflow-wrap: anywhere; }
+.sw-chart__bar-track {
+  display: block;
+  height: 12px;
+  border-radius: 999px;
+  background: var(--paper);
+  overflow: hidden;
+}
+.sw-chart__bar-fill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--action);
+  opacity: .5;
+  transition: width 240ms ease;
+}
+/* The tied-highest options are marked, not ranked: a tie stays a tie. */
+.sw-chart__bar.is-top .sw-chart__bar-fill { opacity: 1; }
+.sw-chart__bar-count {
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--ink);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.sw-chart__bar-pct {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--muted);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.sw-chart__notice {
+  display: flex;
+  gap: 12px;
+  margin: 16px 18px 0;
+  padding: 14px 16px;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--paper);
+}
+.sw-chart__notice .ms { flex: none; color: var(--warning); }
+.sw-chart__notice-body { min-width: 0; }
+.sw-chart__notice-title { margin: 0 0 3px; font-size: 12.5px; font-weight: 800; color: var(--ink); }
+.sw-chart__notice-text { margin: 0; font-size: 11.5px; line-height: 1.6; color: var(--muted); }
+
+/* Development-only synthetic demonstration. Deliberately loud: a solid warning
+   edge, a tinted wash and heavy weight, so it reads before the bars do. Never
+   dismissible, never collapsible. */
+.sw-chart--synthetic { border-color: var(--warning); }
+.sw-chart__synthetic-banner {
+  display: flex;
+  gap: 12px;
+  margin: 16px 18px 0;
+  padding: 13px 16px;
+  border: 1px solid var(--warning);
+  border-left: 4px solid var(--warning);
+  border-radius: var(--radius-sm);
+  background: var(--warning-wash);
+}
+.sw-chart__synthetic-banner .ms { flex: none; color: var(--warning); }
+.sw-chart__synthetic-body { min-width: 0; }
+.sw-chart__synthetic-title {
+  margin: 0 0 4px;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--warning);
+}
+.sw-chart__synthetic-text { margin: 0; font-size: 11.5px; line-height: 1.6; color: var(--ink); }
+
+/* ---------------------------------------------------------------------------
+   Development-only synthetic preview page (/dev/q01-synthetic-preview).
+   Scoped under .dev-preview so nothing here can reach a product surface.
+   --------------------------------------------------------------------------- */
+.dev-preview__banner {
+  display: flex;
+  gap: 14px;
+  padding: 16px 18px;
+  border: 1px solid var(--warning);
+  border-left: 5px solid var(--warning);
+  border-radius: var(--radius-sm);
+  background: var(--warning-wash);
+}
+.dev-preview__banner .ms { flex: none; color: var(--warning); }
+.dev-preview__banner-body { min-width: 0; }
+.dev-preview__banner-title {
+  margin: 0 0 6px;
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--warning);
+}
+.dev-preview__banner-text { margin: 0; font-size: 12px; line-height: 1.65; color: var(--ink); }
+
+.dev-preview__chart { padding: 0; }
+.dev-preview__pills { display: flex; flex-wrap: wrap; gap: 6px; }
+/* `.st` is `white-space: nowrap`, which is right for the product's short status
+   chips but pushes a long enum label (e.g. the claim scope) past the viewport on
+   a narrow screen. Scoped here so the product pills keep their behaviour. */
+.dev-preview__pills .st,
+.dev-preview__section-row .st {
+  white-space: normal;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+.dev-preview__label {
+  margin: 0;
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.dev-preview__note { margin: 0; font-size: 11.5px; line-height: 1.6; color: var(--muted); }
+
+.dev-preview__kv { width: 100%; border-collapse: collapse; font-size: 11.5px; }
+.dev-preview__kv th {
+  width: 34%;
+  padding: 5px 10px 5px 0;
+  text-align: left;
+  font-weight: 600;
+  color: var(--muted);
+  vertical-align: top;
+  white-space: nowrap;
+}
+.dev-preview__kv td {
+  padding: 5px 0;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+  word-break: break-word;
+}
+
+.dev-preview__section-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  font-size: 11.5px;
+  color: var(--ink);
+}
+
+.dev-preview__sentences { margin: 0; padding-left: 20px; font-size: 11.5px; line-height: 1.7; color: var(--ink); }
+.dev-preview__sentences li { margin-bottom: 4px; }
+
+/* The accessible representation. Visible rather than visually hidden: a report
+   reader needs the exact counts, and a screen-reader user gets them once. */
+.sw-chart__table { width: 100%; margin: 16px 0 0; border-collapse: collapse; font-size: 11.5px; }
+.sw-chart__table caption {
+  padding: 0 18px 8px;
+  text-align: left;
+  font-size: 10px;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.sw-chart__table th,
+.sw-chart__table td { padding: 7px 12px; border-top: 1px solid var(--border); vertical-align: top; }
+.sw-chart__table thead th {
+  padding-top: 0;
+  border-top: none;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+  color: var(--muted);
+  text-align: left;
+}
+.sw-chart__table tbody th { font-weight: 700; color: var(--ink); text-align: left; }
+.sw-chart__table td { color: var(--muted); font-variant-numeric: tabular-nums; text-align: left; }
+.sw-chart__table th:not(:first-child),
+.sw-chart__table td:not(:first-child) { text-align: right; }
+.sw-chart__table tbody tr:last-child th,
+.sw-chart__table tbody tr:last-child td { padding-bottom: 12px; }
+
+.sw-chart__derived {
+  margin: 14px 18px 0;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--alt-surface);
+}
+.sw-chart__derived-head {
+  margin: 0 0 8px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.sw-chart__derived-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 3px 12px;
+  padding: 7px 0;
+  border-top: 1px solid var(--border);
+}
+.sw-chart__derived-row:first-of-type { border-top: none; padding-top: 0; }
+.sw-chart__derived-label { font-size: 12px; font-weight: 700; color: var(--ink); }
+.sw-chart__derived-value {
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+.sw-chart__derived-formula { grid-column: 1 / -1; font-size: 10.5px; line-height: 1.5; color: var(--muted); }
+
+.sw-chart__denominator { margin: 14px 18px 0; font-size: 11px; line-height: 1.6; color: var(--muted); }
+
+.sw-chart__limits {
+  margin: 14px 18px 0;
+  padding: 12px 14px;
+  border-left: 3px solid var(--warning);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  background: var(--warning-wash, var(--paper));
+}
+.sw-chart__limits-head {
+  margin: 0 0 6px;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+  color: var(--warning);
+}
+.sw-chart__limits ul { margin: 0; padding-left: 16px; }
+.sw-chart__limits li { font-size: 11px; line-height: 1.6; color: var(--ink); }
+.sw-chart__limits li + li { margin-top: 4px; }
+
+.sw-chart__foot {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+  margin-top: 16px;
+  padding: 14px 18px 16px;
+  border-top: 1px solid var(--border);
+  background: var(--alt-surface);
+}
+.sw-chart__foot-item { display: grid; gap: 1px; min-width: 0; }
+.sw-chart__foot-label {
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.sw-chart__foot-value { font-size: 11px; font-weight: 600; color: var(--ink); overflow-wrap: anywhere; }
+.sw-chart__note { flex-basis: 100%; margin: 4px 0 0; font-size: 10.5px; line-height: 1.55; color: var(--muted); }
+
+@media (max-width: 760px) {
+  .sw-chart__bar { grid-template-columns: minmax(80px, 112px) minmax(0, 1fr) 44px 64px; gap: 8px; }
+  .sw-chart__bar-label,
+  .sw-chart__bar-count,
+  .sw-chart__bar-pct { font-size: 11px; }
+  .sw-chart__table { font-size: 11px; }
+  .sw-chart__table th,
+  .sw-chart__table td { padding: 6px 9px; }
+}
+
+/* Narrow phones: the track moves under its own label so the label never
+   truncates and the count and share stay aligned on one line. */
+@media (max-width: 520px) {
+  .sw-chart__bar {
+    grid-template-columns: minmax(0, 1fr) minmax(26px, auto) minmax(38px, auto);
+    grid-template-areas: "label count pct" "track track track";
+    gap: 5px 10px;
+  }
+  .sw-chart__bar-label { grid-area: label; }
+  .sw-chart__bar-track { grid-area: track; }
+  .sw-chart__bar-count { grid-area: count; }
+  .sw-chart__bar-pct { grid-area: pct; }
+
+  /* Four columns at 12px padding exceed a 360px viewport, so the table used to
+     run off the right edge. Tighter padding plus wrapping headers keeps the
+     whole table inside the card; nothing is hidden to achieve it. */
+  .sw-chart__table { font-size: 10.5px; table-layout: fixed; }
+  .sw-chart__table th,
+  .sw-chart__table td { padding: 5px 4px; overflow-wrap: anywhere; }
+  .sw-chart__table caption { padding: 0 12px 8px; }
+  .sw-chart__head { padding: 14px 12px 0; }
+  .sw-chart__bars { padding: 14px 12px; }
+  .sw-chart__derived,
+  .sw-chart__limits { margin-left: 12px; margin-right: 12px; }
+  .sw-chart__denominator { margin-left: 12px; margin-right: 12px; }
+  .sw-chart__foot { padding: 12px 12px 14px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sw-chart__bar-fill { transition: none; }
+}
+
+/* ==========================================================================
+   Step 5 — Assessment report document  (RESTORED)
+   --------------------------------------------------------------------------
+   `AssessmentReportView` has always emitted `.asw-rpt*` class names, but this
+   stylesheet carried no rules for them: the block lived only in
+   artifacts/stage34_integration_20261119/.../web/styles.css and was never
+   merged. The report therefore rendered as unstyled semantic HTML. Restored
+   verbatim from that artifact so the report looks like the design it was built
+   from. No selector, token or value was changed.
+   ========================================================================== */
+/* ==========================================================================
+   Step 5 — Assessment report document
+   --------------------------------------------------------------------------
+   Layout ported from the supplied `SiteWise_Final_Report.html`: a numbered
+   section index, a sticky jump bar, a KPI strip and one card per section.
+   Only tokens declared above are used, so the document inherits the
+   workspace theme instead of importing the mockup's own palette.
+   ========================================================================== */
+.asw-rpt { display: grid; gap: 18px; }
+
+.asw-rpt__bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 12px 16px;
+  border: 1px solid #dfe7f2;
+  border-radius: 12px;
+  background: var(--surface);
+}
+.asw-rpt__barleft { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.asw-rpt__stamp { font-size: 12px; color: var(--muted); }
+.asw-rpt__barright { display: flex; gap: 8px; }
+
+/* Sticky jump bar: the sections all live on this page, so navigation never
+   leaves the assessment. */
+.asw-rpt__nav {
+  position: sticky;
+  top: 8px;
+  z-index: 12;
+  display: flex;
+  gap: 4px;
+  overflow-x: auto;
+  padding: 6px;
+  border: 1px solid #dfe7f2;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, .97);
+  box-shadow: 0 4px 18px rgba(18, 43, 82, .04);
+  scrollbar-width: thin;
+}
+.asw-rpt__navlink {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  min-height: 38px;
+  padding: 8px 12px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: #546783;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.asw-rpt__navlink:hover { background: #edf3fe; color: var(--action); }
+
+.asw-rpt__section { display: grid; gap: 14px; scroll-margin-top: 76px; }
+.asw-rpt__sechead { display: flex; align-items: flex-start; gap: 13px; }
+.asw-rpt__secindex {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border: 1px solid #bcd0f2;
+  border-radius: 11px;
+  background: #eaf1ff;
+  color: #1b51b5;
+  font-size: 12px;
+  font-weight: 850;
+}
+.asw-rpt__seccopy { min-width: 0; }
+.asw-rpt__sectitle {
+  margin: 0 0 4px;
+  font-size: 21px;
+  letter-spacing: -.5px;
+  color: var(--text);
+}
+.asw-rpt__secdesc { margin: 0; font-size: 13px; color: var(--muted); }
+
+/* --- KPI strip ----------------------------------------------------------- */
+.asw-rpt__kpis {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+.asw-rpt__kpi {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+  padding: 16px 17px;
+  border: 1px solid #dfe7f2;
+  border-radius: 12px;
+  background: var(--surface);
+}
+.asw-rpt__kpiicon {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  margin-bottom: 4px;
+  border-radius: 9px;
+  background: #eaf1ff;
+  color: var(--action);
+}
+.asw-rpt__kpi--teal .asw-rpt__kpiicon { background: #eaf7f4; color: #0f766e; }
+.asw-rpt__kpi--gray .asw-rpt__kpiicon { background: #f1f4f8; color: #5c6b7c; }
+.asw-rpt__kpilabel { font-size: 12px; font-weight: 680; color: #596b84; }
+.asw-rpt__kpivalue {
+  font-size: 26px;
+  font-weight: 840;
+  letter-spacing: -1px;
+  line-height: 1.2;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+.asw-rpt__kpi--teal .asw-rpt__kpivalue { color: #0f766e; }
+.asw-rpt__kpi--gray .asw-rpt__kpivalue { font-size: 18px; letter-spacing: -.3px; }
+.asw-rpt__kpifoot { font-size: 11px; line-height: 1.5; color: #6f7f92; }
+
+/* --- Cards --------------------------------------------------------------- */
+.asw-rpt__card {
+  padding: 18px 20px;
+  border: 1px solid #dfe7f2;
+  border-radius: 12px;
+  background: var(--surface);
+}
+.asw-rpt__cardhead {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-bottom: 12px;
+}
+.asw-rpt__cardicon { display: inline-flex; color: var(--action); }
+.asw-rpt__cardtitle {
+  margin: 0;
+  font-size: 15px;
+  letter-spacing: -.2px;
+  color: var(--text);
+}
+.asw-rpt__cardhead .st { margin-left: auto; }
+
+.asw-rpt__body { margin: 0; font-size: 13.5px; line-height: 1.8; color: #354b68; }
+
+.asw-rpt__defs { display: grid; margin: 0; }
+.asw-rpt__def {
+  display: grid;
+  grid-template-columns: 165px minmax(0, 1fr);
+  gap: 14px;
+  padding: 9px 0;
+  border-bottom: 1px solid #edf1f6;
+}
+.asw-rpt__def:last-child { border-bottom: 0; }
+.asw-rpt__def dt { font-size: 12px; color: #687b91; }
+.asw-rpt__def dd { margin: 0; font-size: 13px; font-weight: 700; color: #273b58; }
+
+.asw-rpt__legend {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 7px 0;
+  border-bottom: 1px solid #eef1f5;
+}
+.asw-rpt__legend:last-of-type { border-bottom: 0; }
+.asw-rpt__legend .st { flex: none; }
+.asw-rpt__legendtext { font-size: 12.5px; line-height: 1.6; color: #4a5c75; }
+
+.asw-rpt__note {
+  margin: 12px 0 0;
+  padding: 11px 13px;
+  border-radius: 10px;
+  background: #f4f7fc;
+  font-size: 12px;
+  line-height: 1.65;
+  color: #55687f;
+}
+.asw-rpt__note strong { color: #253c5d; }
+
+.asw-rpt__footnote {
+  margin: 0;
+  font-size: 11.5px;
+  line-height: 1.6;
+  color: var(--overline);
+}
+
+/* --- Tables -------------------------------------------------------------- */
+.asw-rpt__table { width: 100%; border-collapse: collapse; }
+.asw-rpt__table th {
+  padding: 10px 12px;
+  background: #f6f9fc;
+  font-size: 11.5px;
+  font-weight: 800;
+  letter-spacing: .2px;
+  text-align: left;
+  color: #4a5c73;
+}
+.asw-rpt__table td {
+  padding: 11px 12px;
+  border-bottom: 1px solid #edf1f5;
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: #344967;
+  vertical-align: top;
+}
+.asw-rpt__table tr:last-child td { border-bottom: 0; }
+.asw-rpt__who { font-weight: 780; color: #203e6b; }
+.asw-rpt__sub { color: #5c6d85; }
+.asw-rpt__id {
+  display: inline-block;
+  padding: 3px 7px;
+  border-radius: 6px;
+  background: #eaf1ff;
+  color: #194cac;
+  font-size: 11px;
+  font-weight: 810;
+}
+
+/* --- Honest-empty blocks ------------------------------------------------- */
+.asw-rpt__empty {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 18px;
+  border: 1px dashed #c7d4e4;
+  border-radius: 12px;
+  background: #fafbfd;
+}
+.asw-rpt__emptyicon { display: inline-flex; color: #687a92; margin-top: 1px; }
+.asw-rpt__emptycopy { min-width: 0; }
+.asw-rpt__emptycopy strong { font-size: 13.5px; color: #233a58; }
+.asw-rpt__emptycopy p { margin: 5px 0 0; font-size: 12.5px; line-height: 1.65; color: #526780; }
+.asw-rpt__emptyfoot { display: block; margin-top: 7px; font-size: 11.5px; color: #75849a; }
+
+.asw-rpt__emptyinline {
+  padding: 13px 15px;
+  border: 1px dashed #d5dfea;
+  border-radius: 10px;
+  background: #fafbfd;
+  font-size: 12.5px;
+  line-height: 1.65;
+  color: #55687f;
+}
+
+.asw-rpt__list { margin: 0; padding-left: 20px; font-size: 13px; line-height: 1.8; color: #465d7a; }
+.asw-rpt__list--warn { color: #765123; }
+
+/* --- Two-up, score, coverage --------------------------------------------- */
+.asw-rpt__two { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.asw-rpt__score {
+  font-size: 27px;
+  font-weight: 820;
+  letter-spacing: -.8px;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.asw-rpt__coverage {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+.asw-rpt__cov {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  min-width: 0;
+  padding: 12px 13px;
+  border: 1px solid #dde5f0;
+  border-radius: 11px;
+  background: var(--surface);
+}
+.asw-rpt__cov--off { background: #fafbfd; }
+.asw-rpt__covlabel { font-size: 12px; font-weight: 700; color: #2d4260; }
+.asw-rpt__covreason { font-size: 11px; line-height: 1.5; color: #75849a; }
+
+.asw-rpt__actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding-top: 4px;
+}
+.asw-rpt__actionright { display: flex; align-items: center; gap: 10px; }
+
+@media (max-width: 1150px) {
+  .asw-rpt__kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .asw-rpt__two { grid-template-columns: minmax(0, 1fr); }
+  .asw-rpt__coverage { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+@media (max-width: 900px) {
+  .asw-rpt__coverage { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .asw-rpt__nav { top: 4px; }
+}
+@media (max-width: 700px) {
+  .asw-rpt__bar { flex-direction: column; align-items: stretch; }
+  .asw-rpt__kpis { gap: 9px; }
+  .asw-rpt__kpivalue { font-size: 22px; }
+  .asw-rpt__def { grid-template-columns: minmax(0, 1fr); gap: 2px; }
+  .asw-rpt__actions { flex-direction: column; align-items: stretch; }
+  .asw-rpt__actionright { justify-content: space-between; }
+
+/* Nested card used by the Q01 demonstration sub-block inside a report card.
+   The parent card already draws the frame, so this only adds a divider. */
+.asw-rpt__card--sub {
+  border: 0;
+  border-top: 1px solid var(--border);
+  border-radius: 0;
+  padding: 12px 0 0;
+  margin-top: 14px;
+  background: transparent;
+  box-shadow: none;
+}

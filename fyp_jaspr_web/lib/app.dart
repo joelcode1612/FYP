@@ -47,10 +47,16 @@ import 'package:sitewise_jaspr_web/features/assessment/presentation/pages/report
     as e_report;
 import 'package:sitewise_jaspr_web/features/assessment/presentation/pages/reports_page.dart'
     as e_reports;
-import 'package:sitewise_jaspr_web/features/property_management/presentation/pages/assessment_report_selector_view.dart'
+import 'package:sitewise_jaspr_web/features/assessment/presentation/pages/assessment_report_selector_view.dart'
     as e_report_selector;
-import 'package:sitewise_jaspr_web/features/property_management/presentation/pages/report_activity_views.dart'
+import 'package:sitewise_jaspr_web/features/assessment/presentation/pages/report_activity_views.dart'
     as e_report_activity;
+import 'package:sitewise_jaspr_web/features/assessment/data/synthetic_preview_gate.dart'
+    show syntheticPreviewEnabled, syntheticPreviewPath;
+import 'package:sitewise_jaspr_web/features/assessment/presentation/pages/report_harness_page.dart'
+    as e_report_harness;
+import 'package:sitewise_jaspr_web/features/assessment/presentation/components/m2_workflow_panel.dart'
+    show M2WorkflowPanel;
 import 'package:sitewise_jaspr_web/features/listing/presentation/pages/saved_page.dart'
     as e_saved;
 import 'package:sitewise_jaspr_web/features/panorama_viewer/presentation/pages/tour_page.dart'
@@ -668,6 +674,23 @@ class SitewiseApp extends StatelessComponent {
               title: 'Activity history — Sitewise',
             ),
           ),
+          // --- Development-only --------------------------------------------
+          // Present only in a build that opted in AND is served from a local
+          // origin. In any other build the whole branch is compiled out, so the
+          // path falls through to the not-found page. This route mounts the
+          // real report component with synthetic inputs; it grants no report
+          // authority, and the Q01 chart it shows stays SYNTHETIC_PREVIEW_ONLY
+          // with a HELD admission block.
+          if (syntheticPreviewEnabled)
+            Route(
+              path: syntheticPreviewPath,
+              builder: (context, state) => _page(
+                const e_report_harness.ReportHarnessPage(),
+                title: 'Assessment report — Sitewise (development harness)',
+                description:
+                    'Development harness. Synthetic inputs, real report layout.',
+              ),
+            ),
           Route(
             path: '/entrepreneur/assessments/history',
             builder: (context, state) => _page(

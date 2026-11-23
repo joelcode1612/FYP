@@ -11,6 +11,7 @@ from sitewise.domain.bdj_candidate_rules import (
     RULE_VERSION, RULE_CATALOGUE, evaluate_candidate_issues,
     interpretation_notices,
 )
+from sitewise.services.instrument_authorization import instrument_is_usable
 from sitewise.services.ports.m2_repository_port import M2RepositoryPort
 from sitewise.core.config import settings
 
@@ -29,7 +30,7 @@ class BDJService:
             if rev != expected_revision:
                 raise ConflictError("Assessment changed; reload and submit the current saved revision for BDJ review.")
             instrument = self.repo.get_instrument(assessment["instrument_id"])
-            if instrument is None or instrument["approval_state"] != "AUTHORIZED":
+            if not instrument_is_usable(instrument):
                 raise ConflictError("No authorized instrument version may be submitted for BDJ review.")
             # Completion uses the same registered item states and requiredness as
             # confirmation. Optional/recommended omissions are not new blockers.

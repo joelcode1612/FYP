@@ -5,6 +5,7 @@ from uuid import UUID
 from sitewise.core.exceptions import ConflictError, NotFoundError
 from sitewise.modules.decision_engine.domain.m2_rules import resolve_m2_items, validate_m2_answer
 from sitewise.project1.contracts import digest
+from sitewise.project1.m2v2_projection import M2V2_VERSION
 
 EXCLUDED = frozenset({'M2-11', 'M2-15', 'M2-20', 'M2-21'})
 M2V1_ITEMS = frozenset(f'M2V1-{number:02d}' for number in range(1, 12))
@@ -23,6 +24,23 @@ class M2SourceProjection:
             if assessment['revision'] != expected_revision:
                 raise ConflictError('Your business details changed. Reload before reviewing.')
             instrument = self.repo.get_instrument(assessment['instrument_id'])
+            if instrument and instrument['version_tag'] == M2V2_VERSION:
+                # The M2 V2 instrument has nineteen registered items, no
+                # exclusions and a structured value per composite answer, so its
+                # packet is a different contract rather than a variant of this
+                # one. Dispatch here, after the same owner-scoped lock and the
+                # same revision check, so every caller keeps one entry point.
+                if include_inventory:
+                    # The versioned item inventory is an M2 V1 artefact bound to
+                    # the eleven M2V1-* keys; there is no V2 equivalent.
+                    raise ConflictError(
+                        'An M2 V2 source has no versioned item inventory.')
+                from sitewise.project1.m2v2_projection import build_packet
+                return build_packet(
+                    assessment=assessment, instrument=instrument,
+                    items=self.repo.list_items(assessment['instrument_id']),
+                    answers=self.repo.get_latest_answers(assessment_id, expected_revision),
+                    assessment_id=assessment_id, expected_revision=expected_revision)
             if not instrument or instrument['approval_state'] != 'AUTHORIZED':
                 raise ConflictError('An authorized M2 instrument version is required.')
             items = self.repo.list_items(assessment['instrument_id'])

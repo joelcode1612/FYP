@@ -11,12 +11,59 @@ from uuid import UUID
 from sitewise.core.exceptions import ConflictError, NotFoundError
 from sitewise.modules.decision_engine.domain.m2_rules import missing_required_items, validate_m2_answer, resolve_m2_items, derived_m2_selections
 from sitewise.domain.bdj_candidate_rules import RULE_VERSION
-from sitewise.domain.m2_provenance import declaration_pins, M2ConfirmationConflict, SNAPSHOT_VERSION
+from sitewise.domain.m2_provenance import (
+    declaration_pins, DECLARATION_SNAPSHOT_VERSIONS, M2ConfirmationConflict,
+    SNAPSHOT_VERSION,
+)
+from sitewise.project1.ai_processing_consent import not_granted as not_granted_consent
+from sitewise.services.instrument_authorization import instrument_is_usable
 from sitewise.services.ports.m2_repository_port import M2RepositoryPort
 
 
 # Candidate UI actions; these do not replace source-governed review states.
 CLARIFICATION_ACTIONS = frozenset({"KEEP_ORIGINAL", "REVIEW_LATER"})
+
+
+def admitted_objective_refusal(row, *, confirmation_id, assessment_id, revision):
+    """Why an admission may not become a research objective, or ``None``.
+
+    Pure: no I/O, no session, no clock. Every refusal carries its own code so a
+    caller can tell an unapproved proposal from a stale one from a foreign one —
+    a single "cannot admit" would hide which action is actually missing.
+
+    ``row`` is the admission joined to its proposal. ``None`` means the row was
+    not visible to this owner, which is deliberately the same answer as "does
+    not exist" so an id cannot be probed for existence.
+    """
+    if row is None:
+        return ('BDJ_ADMISSION_NOT_FOUND',
+                'Admission not found for this owner.')
+    if (str(row['confirmation_id']) != str(confirmation_id) or
+            int(row['confirmation_revision']) != int(revision) or
+            str(row['assessment_id']) != str(assessment_id)):
+        return ('BDJ_ADMISSION_CONFIRMATION_MISMATCH',
+                'The admission belongs to a different confirmation or revision.')
+    if row['admission_decision'] != 'ADMITTED':
+        return ('BDJ_ADMISSION_NOT_ADMITTED',
+                'The owner has not admitted this objective.')
+    if row['review_state'] != 'APPROVED':
+        return ('BDJ_PROPOSAL_NOT_APPROVED',
+                'The proposal is not approved, so no objective can be recorded.')
+    if row['objective_id'] is None:
+        return ('BDJ_ADMISSION_BINDS_NO_FIXED_OBJECTIVE',
+                'The admission binds no fixed objective, so it cannot become a '
+                'measurement target. Register the objective before admitting it.')
+    if row['policy_disposition'] == 'ENTREPRENEUR_CLARIFICATION':
+        return ('BDJ_ADMISSION_CLARIFICATION_PENDING',
+                'The policy still requires an entrepreneur clarification.')
+    from sitewise.project1.objective_admission import proposal_hash
+    if row['proposal_hash'] != proposal_hash(dict(row)):
+        return ('BDJ_ADMISSION_PROPOSAL_CHANGED',
+                'The proposal changed after it was admitted; reload and re-review.')
+    if not (row.get('research_objective') or '').strip():
+        return ('BDJ_ADMISSION_OBJECTIVE_EMPTY',
+                'The admitted proposal carries no research objective.')
+    return None
 
 
 class ConfirmationService:
@@ -26,7 +73,7 @@ class ConfirmationService:
     def _declarations(self, assessment):
         """The same saved, applicable declaration validation for review/confirm."""
         instrument = self.repo.get_instrument(assessment['instrument_id'])
-        if instrument is None or instrument['approval_state'] != 'AUTHORIZED':
+        if not instrument_is_usable(instrument):
             raise M2ConfirmationConflict('M2_INSTRUMENT_UNAUTHORIZED',
                 'An authorized instrument version is required before confirmation.')
         items = self.repo.list_items(assessment['instrument_id'])
@@ -111,7 +158,8 @@ class ConfirmationService:
             raise
 
     def confirm(self, assessment_id: UUID, actor_id: UUID, *, expected_revision: int,
-                acknowledged_issue_ids: list[str], marketplace_assessment_id: UUID | None = None) -> dict:
+                acknowledged_issue_ids: list[str], marketplace_assessment_id: UUID | None = None,
+                ai_processing: dict | None = None) -> dict:
         try:
             assessment = self.repo.get_assessment_for_update(assessment_id, actor_id)
             if assessment is None:
@@ -151,6 +199,11 @@ class ConfirmationService:
                 "finding_decision_event_refs": {},
                 "research_uncertainty_confirmed": False,
                 "qj_handoff_authorized": False,
+                # Explicit and always present. A confirmation that does not
+                # carry a grant records that absence, so no reader can mistake
+                # a v4 declaration confirmation for cloud permission, and no
+                # v3 row can be reinterpreted as one either.
+                "ai_processing": ai_processing or not_granted_consent(),
             }
             digest = hashlib.sha256(json.dumps(
                 snapshot, sort_keys=True, separators=(",", ":"), ensure_ascii=False
@@ -207,7 +260,7 @@ class ConfirmationService:
                     record['snapshot_digest'] != verified_digest):
                 raise ConflictError("Reload the current confirmation.")
             snapshot = record["snapshot_json"]
-            if snapshot.get('snapshot_contract_version') == SNAPSHOT_VERSION and origin == 'BDJ':
+            if snapshot.get('snapshot_contract_version') in DECLARATION_SNAPSHOT_VERSIONS and origin == 'BDJ':
                 # Declaration confirmation is not a confirmed BDJ uncertainty.
                 # No post-confirmation finding-authority adapter is adopted yet.
                 raise M2ConfirmationConflict('M2_UNCERTAINTY_LINK_REQUIRED',
@@ -250,6 +303,118 @@ class ConfirmationService:
             self.repo.save_objective_source(result["id"], source)
             self.repo.commit()
             return {**result, "source": source, "qj_execution_authorized": False}
+        except Exception:
+            self.repo.rollback()
+            raise
+
+    #: Provenance contract for an objective recorded from a BDJ admission.
+    #:
+    #: A new version rather than a change to ``entrepreneur-objective/1``: the
+    #: authority being consumed is different in kind. An entrepreneur objective
+    #: is confirmed from M2V1 declarations; this one is admitted from a proposal
+    #: review, so a reader must be able to tell them apart without inferring it.
+    ADMITTED_OBJECTIVE_CONTRACT = 'bdj-admitted-objective/1'
+
+    def confirm_admitted_objective(self, confirmation_id, actor_id, revision, *,
+                                   admission_id):
+        """Record a research objective from an ADMITTED BDJ objective.
+
+        The declaration path cannot confirm a BDJ objective. ``m2-confirmation/3``
+        and ``/4`` pin ``unresolved_candidate_findings = []`` and
+        ``finding_decision_event_refs = {}`` by contract, so there is no finding
+        link to verify — ``confirm_objective(origin='BDJ')`` refuses for exactly
+        that reason, and it is right to.
+
+        This adapter does not invent the missing link, and it does not
+        manufacture a legacy M2 V1 uncertainty. It consumes the authority the
+        workflow already records: an ``ADMITTED`` row in
+        ``public.m2_bdj_objective_admissions`` that binds a fixed objective.
+        Every identity the admission carries is re-checked against the
+        confirmation being written, and nothing here authorises QG, fielding or
+        publication.
+        """
+        from sqlalchemy import text
+
+        if not admission_id:
+            raise ValueError('Supply the admission that authorises this objective.')
+        try:
+            record = self.repo.get_confirmation(confirmation_id, actor_id)
+            if record is None:
+                raise NotFoundError("Current confirmation not found.")
+            from sitewise.services.m2_service import M2Service
+            with M2Service(self.repo).locked_confirmed_source(
+                    record['assessment_id'], actor_id,
+                    confirmation_id=confirmation_id, expected_revision=revision) as verified:
+                verified_digest = verified['snapshot_digest']
+            record = self.repo.get_confirmation(confirmation_id, actor_id)
+            if (record is None or record['assessment_revision'] != revision or
+                    record['snapshot_digest'] != verified_digest):
+                raise ConflictError("Reload the current confirmation.")
+
+            row = self.repo.session.execute(text("""
+                SELECT a.admission_id, a.decision AS admission_decision,
+                       a.proposal_id, a.assessment_id, a.confirmation_id,
+                       a.confirmation_revision, a.source_fingerprint,
+                       a.context_packet_hash, a.objective_id,
+                       a.policy_disposition, a.policy_version, a.proposal_hash,
+                       p.recommendation_status, p.problem_type, p.problem,
+                       p.research_objective, p.reason, p.source_refs,
+                       p.review_state, p.owner_user_id
+                FROM public.m2_bdj_objective_admissions a
+                JOIN public.m2_bdj_objective_proposals p USING (proposal_id)
+                WHERE a.admission_id = :aid AND a.actor_user_id = :uid
+            """), {'aid': str(admission_id), 'uid': str(actor_id)}).mappings().one_or_none()
+            if row is None:
+                # Absent or another owner's: the two are deliberately
+                # indistinguishable, so an id cannot be probed for existence.
+                raise NotFoundError("Admission not found for this owner.")
+
+            refusal = admitted_objective_refusal(
+                dict(row), confirmation_id=confirmation_id,
+                assessment_id=record['assessment_id'], revision=revision)
+            if refusal is not None:
+                raise M2ConfirmationConflict(refusal[0], refusal[1])
+
+            objective_text = row['research_objective'] or ''
+
+            refs = row['source_refs']
+            if isinstance(refs, (str, bytes)):
+                refs = json.loads(refs)
+
+            source = {
+                'origin': 'BDJ_ADMISSION',
+                'objective_contract': self.ADMITTED_OBJECTIVE_CONTRACT,
+                'confirmation_id': str(confirmation_id),
+                'assessment_id': str(record['assessment_id']),
+                'assessment_revision': int(revision),
+                'snapshot_digest': record['snapshot_digest'],
+                # The authority: an explicit owner admission, not a finding link.
+                'admission_id': str(row['admission_id']),
+                'proposal_id': str(row['proposal_id']),
+                'objective_id': row['objective_id'],
+                'policy_version': row['policy_version'],
+                'policy_disposition': row['policy_disposition'],
+                'source_fingerprint': row['source_fingerprint'],
+                'context_packet_hash': row['context_packet_hash'],
+                'source_refs': refs if refs is not None else [],
+                # Named explicitly so no reader mistakes this for a legacy link.
+                'finding_id': None,
+                'owner_user_id': str(actor_id),
+                'owner_decision': 'CONFIRMED',
+                'approval_status': 'CONFIRMED_BY_OWNER',
+                'objective_text_sha256':
+                    hashlib.sha256(objective_text.encode('utf-8')).hexdigest(),
+            }
+            result = self.repo.create_uncertainty(
+                confirmation_id, actor_id, objective_text)
+            source['objective_version'] = str(result['id'])
+            self.repo.save_objective_source(result['id'], source)
+            self.repo.commit()
+            return {**result, "source": source,
+                    "qj_execution_authorized": False,
+                    "qg_execution_authorized": False,
+                    "fielding_authorized": False,
+                    "publication_authorized": False}
         except Exception:
             self.repo.rollback()
             raise

@@ -50,6 +50,180 @@ PROMPTS = {
         'Do not flag an omitted optional field as a business defect.',
         (({'declarations': [], 'example_only': True},
           {'issues': [], 'overall_note': 'No declarations were available; no business judgment is possible.'}),)),
+    # Objective-proposal contract v1. Additive: bdj-output/1 stays for the
+    # finding path. Exactly two statuses; CLARIFY is not a recommendation
+    # category and is deliberately absent. QG owns questionnaire wording, so
+    # this prompt must never emit a question, options or a measurement design.
+    # v1 retired (live run 2026-11-21): the model returned MOST_SUGGESTED with
+    # `source_refs: []` and omitted the key entirely, because both `problem` and
+    # `source_refs` carried schema defaults and were therefore not `required`.
+    # v2 makes the fields required in the model AND states the rejection rule
+    # here; the examples are unchanged. Historical calls keep their own hash.
+    # v2 (2026-11-21): required keys + explicit rejection rule. Live runs then
+    # passed 6/7; the single failure was BDJ_OBJECTIVE_SOURCE_NOT_SUPPORTING —
+    # the model cited a definite answer as an information gap. v3 states which
+    # values may support a gap, so the validator does not have to catch it.
+    'BDJ_OBJECTIVE': Prompt('BDJ-OBJECTIVE-3-CAND',
+        'You are a bounded research-objective proposer for a cafe business plan.',
+        'Read the confirmed M2V1 declarations in source_data.declarations. '
+        'Identify at most one information gap per confirmed answer and propose a research '
+        'objective that could close it. Return only bdj-objective-proposal/1 JSON. '
+        'Use exactly two recommendation_status values. '
+        'MOST_SUGGESTED means a specific confirmed answer directly establishes an information '
+        'gap: set problem_type to SOURCE_CONFIRMED_INFORMATION_GAP, state the problem in one '
+        'sentence, and copy 1-8 source_refs from that answer. '
+        'Every recommendation MUST contain both keys problem and source_refs; they are required '
+        'even when empty. Emit problem as null and source_refs as [] for SUGGESTED, and never '
+        'omit either key. '
+        'A MOST_SUGGESTED recommendation with an empty source_refs array is invalid and the '
+        'entire response is rejected, so never emit one. '
+        'Copy answer_revision_id and item_version_id character for character from the chosen '
+        'declaration in source_data.declarations; never synthesise, shorten, reformat or reuse '
+        'an identifier from a different item. If you cannot copy them exactly, emit SUGGESTED '
+        'instead, or return no recommendations. '
+        'Only an answer whose value is UNDECIDED, UNSURE or UNKNOWN can support a MOST_SUGGESTED '
+        'recommendation. A definite value such as DINE_IN, TAKEAWAY, COFFEE or STUDENTS is a '
+        'decision, not a gap; never cite one as the source of an information gap. '
+        'SUGGESTED means the objective is exploratory and no confirmed answer establishes a '
+        'problem: set problem_type to EXPLORATORY_RESEARCH_NEED, set problem to null, leave '
+        'source_refs empty, and say in reason that no M2 finding establishes the need. '
+        'Write reason as one or two plain sentences; never use labels such as '
+        '"Counterargument:" or "Justification:". '
+        'Never use CLARIFY, CONFIRMED, APPROVED, REJECTED or any other status. '
+        'Never write a customer questionnaire question, response options, sample size, routing '
+        'or measurement design; QG does that later. '
+        'Write research_objective as a statement beginning "To investigate" or "To explore", '
+        'never as a question and never with a question mark. '
+        'Never claim demand, willingness to pay, profitability, market size or guaranteed '
+        'success. Do not approve, authorise fielding or assert viability: every recommendation '
+        'is candidate-only and requires entrepreneur review.',
+        (({'declarations': [{'item_key': 'M2V1-08', 'answer_state': 'ANSWERED',
+                             'value': 'UNKNOWN',
+                             'answer_revision_id': 'a1b2c3d4-0000-4000-8000-000000000000',
+                             'item_version_id': 'b1c2d3e4-0000-4000-8000-000000000000'}],
+           'example_only': True},
+          {'contract_version': 'bdj-objective-proposal/1',
+           'recommendations': [{
+               'recommendation_status': 'MOST_SUGGESTED',
+               'problem_type': 'SOURCE_CONFIRMED_INFORMATION_GAP',
+               'problem': 'Customer information availability is unknown.',
+               'research_objective': "To investigate prospective customers' stated preferences "
+                                     'relevant to the proposed cafe concept.',
+               'source_refs': [{'item_key': 'M2V1-08',
+                                'answer_revision_id': 'a1b2c3d4-0000-4000-8000-000000000000',
+                                'item_version_id': 'b1c2d3e4-0000-4000-8000-000000000000'}],
+               'reason': 'The declared evidence inventory is unknown, so no customer '
+                         'information is established as available.',
+               'authority': 'CANDIDATE_ONLY'}]}),
+         ({'declarations': [], 'example_only': True},
+          {'contract_version': 'bdj-objective-proposal/1',
+           'recommendations': [{
+               'recommendation_status': 'SUGGESTED',
+               'problem_type': 'EXPLORATORY_RESEARCH_NEED',
+               'problem': None,
+               'research_objective': 'To explore the factors that influence prospective '
+                                     "customers' cafe selection preferences.",
+               'source_refs': [],
+               'reason': 'Could provide supplementary context; no confirmed M2 answer '
+                         'establishes that this is an existing problem.',
+               'authority': 'CANDIDATE_ONLY'}]})),),
+    # -- M2 V2 adaptations ---------------------------------------------------
+    # Registered separately from the M2 V1 entries above so a V1 run and a V2
+    # run can never share a prompt hash. The V1 entries are untouched: their
+    # fingerprints still verify against every historical ledger row.
+    #
+    # These are ADAPTATIONS, not new governance. They state only what changed in
+    # the source: nineteen registered M2V2-* items instead of eleven M2V1-*
+    # items, structured (composite) values alongside scalars and lists, and
+    # response codes whose registered labels now travel inside the packet.
+    # No new inconsistency-admission rule, no new duplicate-objective rule and
+    # no new admission vocabulary is introduced; those remain owner decisions.
+    'BDJ_M2V2': Prompt('BDJ-SOURCE-3-M2V2-CAND',
+        'You are a bounded business declaration reviewer.',
+        'Identify candidate inconsistencies or explicit unsupported assertions. '
+        'The source is one confirmed M2 V2 revision containing all nineteen registered '
+        'M2V2-* items. Every finding needs exact answer/item version references. '
+        'For each source reference, `quote` must be an exact substring copied from that '
+        'declaration\'s `value` field, character for character: for a list value copy one '
+        'element verbatim, for a scalar copy the scalar verbatim, and for a structured value '
+        'copy an exact substring of one string field inside it. '
+        'Never quote the question text, never quote `answer_display`, and never quote a label '
+        'from `response_meanings`; those are readable renderings, not the declared value. '
+        'Never append the value to the question. '
+        'An item whose `answer_state` is NOT_ANSWERED holds no declared text, so nothing can be '
+        'quoted from it. '
+        'Every finding\'s `rule_id` must be copied exactly from `source_data.rule_catalogue`. '
+        'Never invent, abbreviate or renumber a rule identifier; if no catalogue rule fits, '
+        'return no findings. '
+        'Do not flag an omitted optional field as a business defect.',
+        (({'declarations': [], 'example_only': True},
+          {'issues': [], 'overall_note': 'No declarations were available; no business judgment is possible.'}),)),
+    'BDJ_OBJECTIVE_M2V2': Prompt('BDJ-OBJECTIVE-3-M2V2-CAND',
+        'You are a bounded research-objective proposer for a cafe business plan.',
+        'Read the confirmed M2 V2 declarations in source_data.declarations. '
+        'Identify at most one information gap per confirmed answer and propose a research '
+        'objective that could close it. Return only bdj-objective-proposal/1 JSON. '
+        'Use exactly two recommendation_status values. '
+        'MOST_SUGGESTED means a specific confirmed answer directly establishes an information '
+        'gap: set problem_type to SOURCE_CONFIRMED_INFORMATION_GAP, state the problem in one '
+        'sentence, and copy 1-8 source_refs from that answer. '
+        'Every recommendation MUST contain both keys problem and source_refs; they are required '
+        'even when empty. Emit problem as null and source_refs as [] for SUGGESTED, and never '
+        'omit either key. '
+        'A MOST_SUGGESTED recommendation with an empty source_refs array is invalid and the '
+        'entire response is rejected, so never emit one. '
+        'Copy answer_revision_id and item_version_id character for character from the chosen '
+        'declaration in source_data.declarations; never synthesise, shorten, reformat or reuse '
+        'an identifier from a different item. If you cannot copy them exactly, emit SUGGESTED '
+        'instead, or return no recommendations. '
+        'Only an answer whose value is exactly UNDECIDED, UNSURE or UNKNOWN can support a '
+        'MOST_SUGGESTED recommendation. A structured value is an object and a multi-select '
+        'value is a list, so neither is one of those literals even when it contains one; do '
+        'not cite them as the source of an information gap. A definite value such as DINE_IN, '
+        'TAKEAWAY, COFFEE or STUDENTS is a decision, not a gap. '
+        'SUGGESTED means the objective is exploratory and no confirmed answer establishes a '
+        'problem: set problem_type to EXPLORATORY_RESEARCH_NEED, set problem to null, leave '
+        'source_refs empty, and say in reason that no M2 finding establishes the need. '
+        'Write reason as one or two plain sentences; never use labels such as '
+        '"Counterargument:" or "Justification:". '
+        'Never use CLARIFY, CONFIRMED, APPROVED, REJECTED or any other status. '
+        'Never write a customer questionnaire question, response options, sample size, routing '
+        'or measurement design; QG does that later. '
+        'Write research_objective as a statement beginning "To investigate" or "To explore", '
+        'never as a question and never with a question mark. '
+        'Never claim demand, willingness to pay, profitability, market size or guaranteed '
+        'success. Do not approve, authorise fielding or assert viability: every recommendation '
+        'is candidate-only and requires entrepreneur review.',
+        (({'declarations': [{'item_key': 'M2V2-01', 'answer_state': 'ANSWERED',
+                             'value': 'UNDECIDED',
+                             'answer_revision_id': 'a1b2c3d4-0000-4000-8000-000000000000',
+                             'item_version_id': 'b1c2d3e4-0000-4000-8000-000000000000'}],
+           'example_only': True},
+          {'contract_version': 'bdj-objective-proposal/1',
+           'recommendations': [{
+               'recommendation_status': 'MOST_SUGGESTED',
+               'problem_type': 'SOURCE_CONFIRMED_INFORMATION_GAP',
+               'problem': 'The trading area for the proposed cafe is undecided.',
+               'research_objective': "To investigate prospective customers' stated preferences "
+                                     'relevant to the proposed cafe concept.',
+               'source_refs': [{'item_key': 'M2V2-01',
+                                'answer_revision_id': 'a1b2c3d4-0000-4000-8000-000000000000',
+                                'item_version_id': 'b1c2d3e4-0000-4000-8000-000000000000'}],
+               'reason': 'The declared trading area is explicitly undecided, so no location '
+                         'commitment is established.',
+               'authority': 'CANDIDATE_ONLY'}]}),
+         ({'declarations': [], 'example_only': True},
+          {'contract_version': 'bdj-objective-proposal/1',
+           'recommendations': [{
+               'recommendation_status': 'SUGGESTED',
+               'problem_type': 'EXPLORATORY_RESEARCH_NEED',
+               'problem': None,
+               'research_objective': 'To explore the factors that influence prospective '
+                                     "customers' cafe selection preferences.",
+               'source_refs': [],
+               'reason': 'Could provide supplementary context; no confirmed M2 answer '
+                         'establishes that this is an existing problem.',
+               'authority': 'CANDIDATE_ONLY'}]})),),
     # v1 retired (F-01): the instruction never named `uncertainty_version`, so the
     # model had to guess a uuid it was never shown and the survey branch was
     # unreachable by any compliant behaviour. v2 states the copy-verbatim rule and

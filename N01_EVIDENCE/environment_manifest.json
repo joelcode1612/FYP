@@ -1,0 +1,255 @@
+{
+  "contract_version": "n01-environment-manifest/1",
+  "directive": "PROJECT1-N01-NORMAL-APP-INTEGRATION-V1.1",
+  "generated_at": "2026-11-22T16:24:44.870712+00:00",
+  "repository": {
+    "path": "C:\\Users\\HP\\OneDrive\\Desktop\\sport-marketplace\\FYP",
+    "branch": "merge_main_jed",
+    "head": "33f20050c8d06282561c3d755d4b616574a88d79",
+    "dirty_paths": 459,
+    "baseline_head_expected": "33f20050c8d06282561c3d755d4b616574a88d79",
+    "head_matches_baseline": true
+  },
+  "entry_points": {
+    "backend_module": "sitewise.main:app",
+    "backend_file": "backend/src/sitewise/main.py",
+    "isolated_launcher": "backend/var/e2e/start_app.py",
+    "serve_tool": "backend/tools/phase4_serve_disposable_20261122.py",
+    "frontend_entry": "fyp_jaspr_web/lib/main.dart",
+    "frontend_source_css": "fyp_jaspr_web/web/styles.css",
+    "frontend_dist": "C:\\Users\\HP\\OneDrive\\Desktop\\sport-marketplace\\FYP\\backend\\var\\e2e\\frontend",
+    "frontend_dist_present": true
+  },
+  "database_identity": [
+    {
+      "label": "DATABASE_URL (sitewise_e2e)",
+      "target": {
+        "role": "sitewise_e2e",
+        "host": "127.0.0.1",
+        "port": 5433,
+        "database": "project1_workflow_tests",
+        "has_password": true,
+        "parseable": true
+      },
+      "reachable": true,
+      "connected_database": "project1_workflow_tests",
+      "session_user": "sitewise_e2e",
+      "server_port": 5433,
+      "server_version": "18.6",
+      "rls_actor_guc": ""
+    },
+    {
+      "label": "M2_DATABASE_URL (p1_m2_runtime)",
+      "target": {
+        "role": "p1_m2_runtime",
+        "host": "127.0.0.1",
+        "port": 5433,
+        "database": "project1_workflow_tests",
+        "has_password": true,
+        "parseable": true
+      },
+      "reachable": true,
+      "connected_database": "project1_workflow_tests",
+      "session_user": "p1_m2_runtime",
+      "server_port": 5433,
+      "server_version": "18.6",
+      "rls_actor_guc": ""
+    },
+    {
+      "label": "PROJECT1_RUNTIME_DATABASE_URL (p1ai_engine)",
+      "target": {
+        "role": "p1ai_engine",
+        "host": "127.0.0.1",
+        "port": 5433,
+        "database": "project1_workflow_tests",
+        "has_password": true,
+        "parseable": true
+      },
+      "reachable": true,
+      "connected_database": "project1_workflow_tests",
+      "session_user": "p1ai_engine",
+      "server_port": 5433,
+      "server_version": "18.6",
+      "rls_actor_guc": ""
+    }
+  ],
+  "database_isolation": {
+    "all_urls_target_5433": true,
+    "all_urls_same_database": true,
+    "connected_database": "project1_workflow_tests",
+    "distinct_roles": [
+      "p1_m2_runtime",
+      "p1ai_engine",
+      "sitewise_e2e"
+    ]
+  },
+  "protected_exclusion": {
+    "protected_port": 5432,
+    "network_evidence_source": "shell_snapshot",
+    "protected_port_listening": true,
+    "isolated_port_listening": true,
+    "listening_pids_5432": [
+      "7540"
+    ],
+    "listening_pids_5433": [
+      "7572"
+    ],
+    "app_listeners": [
+      "TCP    127.0.0.1:8091         0.0.0.0:0              LISTENING       15432",
+      "TCP    127.0.0.1:8092         0.0.0.0:0              LISTENING       16940"
+    ],
+    "established_connections_to_5432": 0,
+    "established_connections_to_5433": 16,
+    "pids_holding_5433": [
+      "16940",
+      "7572"
+    ],
+    "pids_holding_5432": [],
+    "evidence_lines_5432": [],
+    "evidence_lines_5433": [
+      "TCP    127.0.0.1:5433         127.0.0.1:50813        ESTABLISHED     7572",
+      "TCP    127.0.0.1:5433         127.0.0.1:50814        ESTABLISHED     7572",
+      "TCP    127.0.0.1:5433         127.0.0.1:50815        ESTABLISHED     7572",
+      "TCP    127.0.0.1:5433         127.0.0.1:50816        ESTABLISHED     7572",
+      "TCP    127.0.0.1:5433         127.0.0.1:50819        ESTABLISHED     7572",
+      "TCP    127.0.0.1:5433         127.0.0.1:55266        ESTABLISHED     7572",
+      "TCP    127.0.0.1:5433         127.0.0.1:57865        ESTABLISHED     7572",
+      "TCP    127.0.0.1:5433         127.0.0.1:57967        ESTABLISHED     7572",
+      "TCP    127.0.0.1:50813        127.0.0.1:5433         ESTABLISHED     16940",
+      "TCP    127.0.0.1:50814        127.0.0.1:5433         ESTABLISHED     16940",
+      "TCP    127.0.0.1:50815        127.0.0.1:5433         ESTABLISHED     16940",
+      "TCP    127.0.0.1:50816        127.0.0.1:5433         ESTABLISHED     16940",
+      "TCP    127.0.0.1:50819        127.0.0.1:5433         ESTABLISHED     16940",
+      "TCP    127.0.0.1:55266        127.0.0.1:5433         ESTABLISHED     16940",
+      "TCP    127.0.0.1:57865        127.0.0.1:5433         ESTABLISHED     16940",
+      "TCP    127.0.0.1:57967        127.0.0.1:5433         ESTABLISHED     16940"
+    ],
+    "historical_observations": [
+      {
+        "observed_at": "2026-11-22T15:36:00Z",
+        "observation": "one established connection [::1]:5432 <- pid 26876, a multiprocessing child of pid 23572 (the port-8090 uvicorn server)",
+        "meaning": "proves the 8090 server does reach the protected cluster; the connection is pooled and closed when idle, which is why the current snapshot shows none",
+        "source": "netstat -ano (shell)"
+      }
+    ]
+  },
+  "policy_baseline": {
+    "instrument_version": "M2V2-20261122-1",
+    "instrument_approval_state": "PROPOSED_NOT_AUTHORIZED",
+    "policy_adopted": false,
+    "approved_measurement_count": 0,
+    "coverage_claim": "0/6",
+    "qg_fielding_authorized": false,
+    "activation_gates": {
+      "A01": "BLOCKED_AUTHORIZATION",
+      "A02": "BLOCKED_AUTHORIZATION",
+      "A03": "BLOCKED_AUTHORIZATION",
+      "A04": "BLOCKED_AUTHORIZATION",
+      "A05": "BLOCKED_AUTHORIZATION",
+      "A06": "BLOCKED_AUTHORIZATION"
+    },
+    "engineering_gates": {
+      "E01": "PASS_VERIFIED",
+      "E02": "PASS_VERIFIED",
+      "E03": "PASS_VERIFIED",
+      "E04": "PASS_VERIFIED",
+      "E05": "PASS_VERIFIED",
+      "E06": "PASS_VERIFIED",
+      "E07": "PASS_VERIFIED",
+      "E08": "PASS_VERIFIED",
+      "E09": "PASS_VERIFIED",
+      "E10": "PASS_VERIFIED",
+      "E11": "PASS_VERIFIED",
+      "E12": "PASS_VERIFIED",
+      "E13": "PASS_VERIFIED",
+      "E14": "PASS_VERIFIED"
+    },
+    "cited_artifacts": [
+      "deliverables\\phase3a3b4a\\handoff\\objective_coverage_matrix.json",
+      "deliverables\\phase3a3b4a\\handoff\\handoff_evidence.json"
+    ]
+  },
+  "ui_controls": {
+    "bdj_objective_proposals": {
+      "present": true,
+      "widget": "BdjObjectiveProposalPanel",
+      "file": "fyp_jaspr_web/lib/features/assessment/presentation/components/bdj_objective_proposal_panel.dart",
+      "mounted_at": "fyp_jaspr_web/lib/features/assessment/presentation/pages/assessment_workspace_page.dart:2142",
+      "controls": [
+        "Propose research objectives",
+        "Re-run",
+        "Refresh",
+        "Approve",
+        "Reject",
+        "Re-read"
+      ],
+      "endpoints": [
+        "POST /assessments/{id}/objective-proposals/evaluate",
+        "POST /assessments/{id}/objective-proposals",
+        "GET  /assessments/{id}/objective-proposals",
+        "POST /assessments/{id}/objective-proposals/{pid}/decision"
+      ],
+      "browser_triggerable": true
+    },
+    "qg_candidate": {
+      "present": true,
+      "widget": "ResearchCandidatePanel",
+      "file": "fyp_jaspr_web/lib/features/assessment/presentation/components/research_workflow_panel.dart:631",
+      "mounted_at": "fyp_jaspr_web/lib/features/assessment/presentation/components/m2_workflow_panel.dart:2256",
+      "controls": [
+        "Generate revision"
+      ],
+      "route": "/entrepreneur/m2-workflow",
+      "browser_triggerable": true,
+      "caveat": "requires an objective the UI has already resolved; the panel is scoped to objectiveId + assessment revision"
+    }
+  },
+  "execution_mode": {
+    "provider": "SIMULATED",
+    "cloud_calls_expected": 0,
+    "network_model_calls": 0
+  },
+  "non_conformance": [],
+  "preflight_verdict": "PREFLIGHT_PASS",
+  "effective_configuration": {
+    "captured_at": "2026-11-22T16:25:05.989713+00:00",
+    "resolved_target": {
+      "database_name": "project1_workflow_tests",
+      "port": 5433,
+      "is_disposable_non_5432": true
+    },
+    "bdj_contract": {
+      "selected": "objective",
+      "objective_route_enabled": true,
+      "shipped_default_preserved": "app.env still pins PROJECT1_BDJ_CONTRACT=findings; the override is applied after load_env() by var/e2e/n01_start_app.py"
+    },
+    "synthetic_instrument_scope": {
+      "name": "m2v2-n01-normal-app",
+      "active_on_current_target": true,
+      "active_on_protected_target": false,
+      "cannot_activate_on_protected": true,
+      "fail_closed_reference": "src/sitewise/services/instrument_authorization.py:38-50"
+    },
+    "instrument": {
+      "id": "42ee86eb-3b5a-5f2c-be4d-be88e5f6f2f6",
+      "version_tag": "M2V2-20261122-1",
+      "approval_state": "PROPOSED_NOT_AUTHORIZED",
+      "usable_now": true,
+      "authorization_reason": "SYNTHETIC_SCOPE_ACTIVE",
+      "governance_state_rewritten": false,
+      "note": "approval_state is governance data and was NOT changed; the synthetic scope only relaxes the usability gate, and only on a disposable non-5432 target"
+    },
+    "no_secrets_recorded": true
+  },
+  "hazards_observed": [
+    {
+      "id": "N01-HZ-01",
+      "severity": "LOW",
+      "observed_at": "2026-11-22T16:25:05.989713+00:00",
+      "observation": "pids 22276/26360 (artifacts/cq_fc4d_50_real_service_replay_v1/tools/run_fc4d.py) held 5 established connections to 127.0.0.1:5432 during the capture window, then exited on their own.",
+      "assessment": "Not an N01 process and not started by N01. That harness pins project1_cq_synthetic_50_v1 and refuses protected names, so it did not touch Final_Location_Analysis. It is nonetheless a same-cluster neighbour on the protected port, so it is recorded rather than ignored.",
+      "effect_on_n01": "None: the N01 app (pid 16940) shows 0 connections to 5432 and 8 to 5433 both before and after the neighbour exited.",
+      "evidence": "var/e2e/n01_netstat_snapshot.txt"
+    }
+  ]
+}

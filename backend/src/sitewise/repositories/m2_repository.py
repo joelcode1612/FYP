@@ -13,6 +13,9 @@ from sitewise.db.models.m2_schema import (
     instruments, items, assessments, answers, findings, reviews,
     confirmations, uncertainties, evaluations, clarification_events,
 )
+from sitewise.services.instrument_authorization import (
+    SYNTHETIC_STATES, synthetic_scope_active,
+)
 
 
 def _one(session: Session, statement) -> dict | None:
@@ -250,7 +253,12 @@ class SqlModelM2Repository:
         return _one(self.session, select(instruments).where(instruments.c.id == instrument_id))
 
     def list_authorized_instruments(self, limit: int, offset: int) -> list[dict]:
-        return _all(self.session,select(instruments).where(instruments.c.approval_state=='AUTHORIZED',
+        # Synthetic candidate instruments are listed only inside an explicit
+        # disposable-target scope; the stored approval_state is never altered.
+        states = ['AUTHORIZED']
+        if synthetic_scope_active():
+            states.extend(sorted(SYNTHETIC_STATES))
+        return _all(self.session,select(instruments).where(instruments.c.approval_state.in_(states),
             select(items.c.id).where(items.c.instrument_id==instruments.c.id,items.c.lifecycle=='ACTIVE',
                 items.c.answer_kind!='ACTION').exists()).order_by(instruments.c.created_at.desc(),instruments.c.id).limit(limit).offset(offset))
 
@@ -475,6 +483,34 @@ class SqlModelM2Repository:
               AND s.provenance->>'assessment_revision' = CAST(a.revision AS text)
               AND NOT EXISTS (SELECT 1 FROM public.m2_research_revisions r WHERE r.parent_id = u.id)
         """), {"objective": objective_id, "actor": actor_id, "revision": expected_revision}).mappings().first()
+        return dict(row) if row else None
+
+    def read_objective_version(self, objective_id, actor_id):
+        """This objective version as it *is*, not as the current one.
+
+        ``read_current_objective`` deliberately returns None once a child
+        revision exists, which is right for binding a new context and useless
+        for explaining an old one: it collapses "superseded by version N+1"
+        and "never existed" into the same empty answer. This read keeps the
+        distinction, so a persisted context can say *which* version replaced
+        it instead of reporting the source as unverified. Owner-scoped and
+        read-only; it never mutates the version chain.
+        """
+        from sqlalchemy import text
+        row = self.session.execute(text("""
+            SELECT u.id, u.exact_text, u.confirmation_id,
+                   c.assessment_id, c.assessment_revision, c.snapshot_digest,
+                   s.provenance,
+                   r.child_id AS superseded_by, r.action AS supersession_action
+            FROM public.m2_confirmed_uncertainties u
+            JOIN public.m2_confirmation_snapshots c ON c.id = u.confirmation_id
+            JOIN public.m2_assessments a ON a.id = c.assessment_id
+            LEFT JOIN public.m2_research_objective_sources s ON s.objective_id = u.id
+            LEFT JOIN public.m2_research_revisions r ON r.parent_id = u.id
+            WHERE u.id = :objective AND a.owner_user_id = :actor
+              AND u.actor_user_id = a.owner_user_id
+              AND c.actor_user_id = a.owner_user_id
+        """), {"objective": objective_id, "actor": actor_id}).mappings().first()
         return dict(row) if row else None
 
     def objective_limitation(self, objective_id):
@@ -719,13 +755,31 @@ class SqlModelM2Repository:
         for row in rows:
             item = dict(row)
             source = item['provenance']
-            verified = (source.get('objective_contract') == 'entrepreneur-objective/1'
-                and source.get('origin') == 'ENTREPRENEUR'
-                and source.get('objective_version') == str(item['id'])
+            text_digest = sha256(item['exact_text'].encode('utf-8')).hexdigest()
+            # Two contracts, each verified against its own authority fields. An
+            # entrepreneur objective is confirmed from M2V1 declarations; an
+            # admitted objective is confirmed from an owner admission. Neither
+            # is allowed to verify using the other's evidence.
+            common = (
+                source.get('objective_version') == str(item['id'])
                 and source.get('owner_user_id') == str(actor_id)
                 and source.get('owner_decision') == 'CONFIRMED'
                 and source.get('approval_status') == 'CONFIRMED_BY_OWNER'
-                and source.get('objective_text_sha256') == sha256(item['exact_text'].encode('utf-8')).hexdigest())
+                and source.get('objective_text_sha256') == text_digest)
+            entrepreneur = (
+                common
+                and source.get('objective_contract') == 'entrepreneur-objective/1'
+                and source.get('origin') == 'ENTREPRENEUR')
+            admitted = (
+                common
+                and source.get('objective_contract') == 'bdj-admitted-objective/1'
+                and source.get('origin') == 'BDJ_ADMISSION'
+                # The admission is the authority, so it must be named, and the
+                # absence of a legacy finding link must be explicit.
+                and bool(source.get('admission_id'))
+                and bool(source.get('objective_id'))
+                and source.get('finding_id') is None)
+            verified = bool(entrepreneur or admitted)
             item['objective_version_id'] = str(item['id']) if verified else None
             item['owner_decision'] = 'CONFIRMED' if verified else None
             item['approval_status'] = ('SUPERSEDED' if verified and item['child_id'] is not None

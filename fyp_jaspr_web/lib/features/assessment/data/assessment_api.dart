@@ -26,7 +26,8 @@ library;
 import 'package:shared_logic/shared_logic.dart' hide ApiPropertyRepository;
 
 import 'package:sitewise_jaspr_web/features/listing/data/api_property_repository.dart';
-import 'package:sitewise_jaspr_web/data/assessment_report.dart';
+import 'package:sitewise_jaspr_web/features/assessment/data/assessment_report.dart';
+import 'package:sitewise_jaspr_web/features/assessment/data/business_description.dart';
 import 'package:sitewise_jaspr_web/features/authentication/data/auth_service.dart';
 
 /// Why a call failed, reduced to the states the workspace must render.
@@ -833,6 +834,19 @@ final class AssessmentApi {
         '/api/v1/assessments/$assessmentId/report',
         parse: AssessmentReportPayload.fromJson,
       );
+
+  /// RP-13: the confirmed business description bound to this assessment.
+  ///
+  /// Read-only and additive. The backend answers with an explicit state when
+  /// there is nothing confirmed (or when the M2 stage is switched off), so a
+  /// failure here is a real failure and is never treated as "no description" —
+  /// the report would otherwise quietly lose a section it should have shown.
+  Future<ApiResult<BusinessDescription>> businessDescription(
+    String assessmentId,
+  ) => _call(
+    '/api/v1/assessments/$assessmentId/business-description',
+    parse: BusinessDescription.fromJson,
+  );
 
   /// The catalogue's real `property_type` vocabulary.
   ///

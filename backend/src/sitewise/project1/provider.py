@@ -48,9 +48,14 @@ def strict_json(text: str):
 
 class TokenHarbor:
     def __init__(self, key: SecretStr, *, enabled=False, structured_mode='json_schema',
-                 timeout=30, transport=None, identity_exception=False, model=MODEL):
+                 timeout=30, transport=None, identity_exception=False, model=MODEL,
+                 endpoint=None):
         self._key = key
         self.enabled, self.mode = enabled, structured_mode
+        # Defaults to the adopted endpoint. An override exists for the standalone
+        # diagnostic script, which may point at an equivalent OpenAI-compatible
+        # host; it must be HTTPS, and the default keeps production identical.
+        self.endpoint = endpoint or ENDPOINT
         self.timeout, self.transport = timeout, transport
         # Defaults to the adopted model. An explicit override exists only for
         # the separately authorised availability fallback; identity checks below
@@ -120,7 +125,7 @@ class TokenHarbor:
             with httpx.Client(timeout=httpx.Timeout(budget, connect=min(5, budget)),
                               follow_redirects=False, transport=self.transport) as client:
                 self.last_execution.update(dispatch_attempted=True, dispatched=None)
-                with client.stream('POST', ENDPOINT, headers={
+                with client.stream('POST', self.endpoint, headers={
                         'Authorization': 'Bearer ' + self._key.get_secret_value(),
                         'Cache-Control': 'no-store', 'Content-Type': 'application/json',
                         # Request an uncompressed response from providers/proxies.
