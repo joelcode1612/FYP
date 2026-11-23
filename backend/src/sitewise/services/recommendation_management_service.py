@@ -82,7 +82,7 @@ SELECT c.catalogue_id, c.property_id, p.owner_user_id, p.owner_id, p.listing_id,
        u.full_name AS owner_name, u.account_status AS owner_status
 FROM candidate c
 JOIN fyp.rental_properties p ON p.id = c.property_id
-LEFT JOIN public.agent_listing_assignment a ON a.listing_id = p.id
+LEFT JOIN fyp.agent_listing_assignment a ON a.listing_id = p.id
 LEFT JOIN public.users u ON u.user_id = p.owner_user_id
 """
 

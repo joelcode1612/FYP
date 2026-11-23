@@ -125,6 +125,11 @@ class CaptureSession {
     this.backendSessionId,
     this.backendJobId,
     this.syncStatus = FrameSyncStatus.none,
+    this.panoramaSyncStatus = FrameSyncStatus.none,
+    this.backupSyncStatus = FrameSyncStatus.none,
+    this.backupUploaded = 0,
+    this.backupTotal = 0,
+    this.backendPanoramaId,
   });
 
   final String sessionId;
@@ -164,7 +169,26 @@ class CaptureSession {
   /// Where the backend handoff stands. Written by the coordinator only.
   final FrameSyncStatus syncStatus;
 
-  bool get isComplete => status == CaptureSessionStatus.complete ||
+  /// The device-generated panorama's cloud state, tracked independently from
+  /// the 38 original photographs' backup queue.
+  final FrameSyncStatus panoramaSyncStatus;
+
+  /// The 38 original photographs' backup state. A completed panorama upload
+  /// and a completed backup are different milestones.
+  final FrameSyncStatus backupSyncStatus;
+
+  /// How many originals the cloud backup has confirmed so far.
+  final int backupUploaded;
+
+  /// Total originals the backup queue expects.
+  final int backupTotal;
+
+  /// The canonical `fyp.panoramas` row id, once the device panorama is
+  /// confirmed by FastAPI.
+  final String? backendPanoramaId;
+
+  bool get isComplete =>
+      status == CaptureSessionStatus.complete ||
       status == CaptureSessionStatus.panoramaReady;
 
   bool get hasPanorama =>
@@ -187,6 +211,12 @@ class CaptureSession {
     String? backendJobId,
     bool clearBackendJobId = false,
     FrameSyncStatus? syncStatus,
+    FrameSyncStatus? panoramaSyncStatus,
+    FrameSyncStatus? backupSyncStatus,
+    int? backupUploaded,
+    int? backupTotal,
+    String? backendPanoramaId,
+    bool clearBackendPanoramaId = false,
   }) => CaptureSession(
     sessionId: sessionId,
     userId: userId ?? this.userId,
@@ -203,8 +233,17 @@ class CaptureSession {
     backendSessionId: clearBackendSessionId
         ? null
         : (backendSessionId ?? this.backendSessionId),
-    backendJobId: clearBackendJobId ? null : (backendJobId ?? this.backendJobId),
+    backendJobId: clearBackendJobId
+        ? null
+        : (backendJobId ?? this.backendJobId),
     syncStatus: syncStatus ?? this.syncStatus,
+    panoramaSyncStatus: panoramaSyncStatus ?? this.panoramaSyncStatus,
+    backupSyncStatus: backupSyncStatus ?? this.backupSyncStatus,
+    backupUploaded: backupUploaded ?? this.backupUploaded,
+    backupTotal: backupTotal ?? this.backupTotal,
+    backendPanoramaId: clearBackendPanoramaId
+        ? null
+        : (backendPanoramaId ?? this.backendPanoramaId),
   );
 
   Map<String, Object?> toRow() => <String, Object?>{
@@ -221,6 +260,11 @@ class CaptureSession {
     'backend_session_id': backendSessionId,
     'backend_job_id': backendJobId,
     'sync_status': syncStatus.name,
+    'panorama_sync_status': panoramaSyncStatus.name,
+    'backup_sync_status': backupSyncStatus.name,
+    'backup_uploaded': backupUploaded,
+    'backup_total': backupTotal,
+    'backend_panorama_id': backendPanoramaId,
   };
 
   static CaptureSession fromRow(Map<String, Object?> row) => CaptureSession(
@@ -240,6 +284,15 @@ class CaptureSession {
     backendSessionId: row['backend_session_id'] as String?,
     backendJobId: row['backend_job_id'] as String?,
     syncStatus: FrameSyncStatus.fromWire(row['sync_status'] as String?),
+    panoramaSyncStatus: FrameSyncStatus.fromWire(
+      row['panorama_sync_status'] as String?,
+    ),
+    backupSyncStatus: FrameSyncStatus.fromWire(
+      row['backup_sync_status'] as String?,
+    ),
+    backupUploaded: (row['backup_uploaded'] as num?)?.toInt() ?? 0,
+    backupTotal: (row['backup_total'] as num?)?.toInt() ?? 0,
+    backendPanoramaId: row['backend_panorama_id'] as String?,
   );
 }
 
@@ -267,6 +320,7 @@ class CapturedFrame {
     this.cropOffsetY = 0,
     this.toleranceDeg = 0,
     this.captureStatus = 'captured',
+    this.qualityJson,
   });
 
   final String sessionId;
@@ -302,6 +356,13 @@ class CapturedFrame {
   /// "superseded" state does not need a format change.
   final String captureStatus;
 
+  /// The device quality verification report for this photograph, JSON-encoded
+  /// [FrameQualityReport] (`domain/quality/`), or `null` when the frame was
+  /// captured before quality checking existed. The JPEG itself is never
+  /// influenced by this field: a warning keeps the photograph exactly as it
+  /// was saved, and only the user decides on a retake.
+  final String? qualityJson;
+
   /// Projects this row back into the record the stitcher consumes, so a
   /// restored session can regenerate its panorama without a second code path.
   CaptureRecord toCaptureRecord() => CaptureRecord(
@@ -325,6 +386,29 @@ class CapturedFrame {
     cropOffsetY: cropOffsetY,
     imageFormat: 'jpeg',
     toleranceDeg: toleranceDeg,
+  );
+
+  /// Re-attaches a quality report to this frame without touching any of the
+  /// capture evidence. Used by the controller after the analyzer finishes —
+  /// the JPEG and the capture metadata stay byte-for-byte identical.
+  CapturedFrame withQualityJson(String? qualityJson) => CapturedFrame(
+    sessionId: sessionId,
+    targetId: targetId,
+    imagePath: imagePath,
+    capturedAt: capturedAt,
+    targetYawDegrees: targetYawDegrees,
+    targetPitchDegrees: targetPitchDegrees,
+    cameraOrientation: cameraOrientation,
+    imageWidth: imageWidth,
+    imageHeight: imageHeight,
+    sourceImageWidth: sourceImageWidth,
+    sourceImageHeight: sourceImageHeight,
+    cropOffsetX: cropOffsetX,
+    cropOffsetY: cropOffsetY,
+    alignmentErrorDeg: alignmentErrorDeg,
+    toleranceDeg: toleranceDeg,
+    captureStatus: captureStatus,
+    qualityJson: qualityJson,
   );
 
   static CapturedFrame fromCaptureRecord(CaptureRecord record) => CapturedFrame(
@@ -365,6 +449,7 @@ class CapturedFrame {
     'alignment_error_deg': alignmentErrorDeg,
     'tolerance_deg': toleranceDeg,
     'capture_status': captureStatus,
+    'quality_json': qualityJson,
   };
 
   static CapturedFrame fromRow(Map<String, Object?> row) => CapturedFrame(
@@ -389,6 +474,7 @@ class CapturedFrame {
     alignmentErrorDeg: (row['alignment_error_deg'] as num?)?.toDouble() ?? 0,
     toleranceDeg: (row['tolerance_deg'] as num?)?.toDouble() ?? 0,
     captureStatus: row['capture_status'] as String? ?? 'captured',
+    qualityJson: row['quality_json'] as String?,
   );
 }
 
@@ -472,6 +558,12 @@ abstract class CaptureSessionStore {
     bool clearBackendJobId = false,
     String? error,
     bool clearLastError = false,
+    FrameSyncStatus? panoramaSyncStatus,
+    FrameSyncStatus? backupSyncStatus,
+    int? backupUploaded,
+    int? backupTotal,
+    String? backendPanoramaId,
+    bool clearBackendPanoramaId = false,
   });
 
   /// Removes the session and its metadata file. The JPEGs are untouched.

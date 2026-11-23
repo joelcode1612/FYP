@@ -3,13 +3,10 @@
 This is the read model behind the redesigned Property Detail page. It answers
 three questions for one catalogue property, and nothing more:
 
-1. **What is the location score?** The original variant uses the stored
-   `research_p_association_score` that drives legacy ranking and compares it
-   with live inference when the complete exact feature vector resolves. The
-   experimental variant uses live inference only. Either is a 0-100 research
-   association index, never a probability of business success.
+1. **What is the location score?** Live expanded64 inference supplies a
+   research association index on the 0-100 scale.
 2. **Which features moved that score, and in which direction?** Permutation
-   SHAP is computed over the same selected PU artifact and exact 47-feature
+   SHAP is computed over the expanded PU artifact and its exact feature
    vector as the displayed score, against a verified real background. Additivity
    and score identity are checked; an explanation that cannot reconstruct that
    score is withheld without hiding an otherwise valid score.
@@ -21,16 +18,12 @@ Design constraints enforced here
 * **No fabrication.** Every number is either resolved from the database,
   reproduced from the deployed artifact, or computed by SHAP. Missing inputs
   produce an explicit reason; they never create a live score or placeholder.
-  A separately valid stored legacy score remains visible when SHAP is unavailable.
 * **No raw column names reach the UI.** ``FEATURE_LABELS`` maps every model
   feature of every variant (the 47-feature baseline and the expanded
   64-feature contract) to plain English; the technical name is retained under
   ``technical`` for the optional explanation and for authorised consumers.
-* **One artifact, one explanation.** The service loads whichever artifact
-  ``SITEWISE_PU_MODEL_VARIANT`` selects and stamps its version and checksum into
-  the score/explanation payload. Cache keys include model version, artifact
-  SHA-256, property id and stored legacy score, so artifact or score changes
-  cannot surface stale explanations.
+* **One artifact, one explanation.** The application uses expanded64 and stamps
+  its version and checksum into the score and explanation payload.
 * **SHAP is cached, not recomputed per request.** The cache is keyed by
   ``(model_version, property_id)``. Measured latency is recorded separately in
   ``ml_reference/recommender_eval/shap_latency.json``; a single local measurement
@@ -55,13 +48,13 @@ from sitewise.ml import shap_explainer as _shap_module
 from sitewise.ml.feature_bridge import merge_bridge_features
 from sitewise.ml.pu_expanded import (
     EXPANDED_MODEL_NAME,
-    expanded_policy_split,
+    expanded_display_scores,
     merge_expanded_bridge_features,
 )
 from sitewise.ml.model_loader import ModelLoader
 from sitewise.ml.property_features import FeatureResolutionError, PropertyFeatureRepository
 from sitewise.ml.pu_learning import PULearning
-from sitewise.ml.pu_variant import LEGACY_MODEL_NAME, resolve_variant
+from sitewise.ml.pu_variant import resolve_variant
 from sitewise.ml.shap_explainer import ShapExplainer
 from sitewise.repositories.fyp_property_repository import FypPropertyRepository
 from sitewise.services import explanation_cache
@@ -351,7 +344,7 @@ def panoramas_by_catalogue_ids(
 
     ONE query resolves many catalogue ids. The authority chain is identical:
     ``fyp.property_subject_links`` with ``match_verified IS TRUE`` joined to
-    ``public.virtual_tour`` on the *numeric* property id — the catalogue text
+    ``fyp.virtual_tour`` on the *numeric* property id — the catalogue text
     id and the legacy integer key are never compared directly — and the most
     recently updated tour row per property wins (``updated_at DESC NULLS
     LAST``). The per-id payload has exactly the same shape and honesty rules
@@ -380,7 +373,7 @@ def panoramas_by_catalogue_ids(
                     JOIN fyp.property_subject_links AS l
                       ON l.sitewise_property_id = r.cid
                      AND l.match_verified IS TRUE
-                    JOIN public.virtual_tour AS vt
+                    JOIN fyp.virtual_tour AS vt
                       ON vt.property_id = l.property_id
                 )
                 SELECT cid, url, status FROM ranked WHERE rn = 1
@@ -716,10 +709,8 @@ def _layer_payloads(values: dict[str, float | None], measured: bool = True) -> l
             # Counts here depend on the radius the viewer selects and are
             # computed by the map from the catalogue itself, so the API does
             # not pretend to know them.
-            layer["note"] = (
-                "Reference properties with a known location. The map counts "
-                "those inside the radius you select."
-            )
+            # The map calculates reference-property marker counts for its
+            # selected radius; no redundant explanatory note is needed.
             layers.append(layer)
             continue
 
@@ -890,10 +881,14 @@ class PropertyInsightsService:
             return base, None, None
 
         stored = self._stored_legacy_score(property_id) if variant.get("key") == "legacy" else None
+        expanded_score = (
+            expanded_display_scores(self.analytics, [property_id]).get(property_id)
+            if variant.get("key") == "expanded64" else None
+        )
         artifact_digest = self._artifact_sha256(loaded.meta.get("artifact_filename")) or "unhashed"
         cache_version = (
             f"{variant.get('layer1_model') or variant['name']}:{variant.get('version') or 'unknown'}:"
-            f"{artifact_digest}:{stored['score'] if stored is not None else 'no-stored-score'}"
+            f"{artifact_digest}:{expanded_score}:{stored['score'] if stored is not None else 'no-stored-score'}"
         )
 
         repo = PropertyFeatureRepository(self.analytics)
@@ -953,19 +948,13 @@ class PropertyInsightsService:
                 return {**base, **cached}, cached, None
 
         live_prediction: dict[str, Any] | None = None
-        if coverage is not None:
-            if variant.get("key") == "expanded64":
-                # The saved preprocessing pipeline supports imputation ONLY for
-                # the residential measurements (the artifact's own contract).
-                imputable, required = expanded_policy_split(coverage.missing_features)
-                if not required:
-                    live_prediction = PULearning(model_name=variant["layer1_model"]).predict_or_report(
-                        property_id, features, allow_model_imputation=bool(imputable)
-                    )
-            elif not coverage.missing_features:
-                live_prediction = PULearning(model_name=variant["layer1_model"]).predict_or_report(
-                    property_id, features, allow_model_imputation=False
-                )
+        if variant.get("key") == "expanded64":
+            if expanded_score is not None:
+                live_prediction = {"available": True, "score": expanded_score / 100.0}
+        elif coverage is not None and not coverage.missing_features:
+            live_prediction = PULearning(model_name=variant["layer1_model"]).predict_or_report(
+                property_id, features, allow_model_imputation=False
+            )
 
         pu_score: float | None = None
         score_source = ""
@@ -1369,7 +1358,7 @@ class PropertyInsightsService:
         so the gallery can say so instead of showing a broken viewer.
 
         The query runs through the OPERATIONAL session (``self.session``):
-        ``fyp.property_subject_links`` and ``public.virtual_tour`` are
+        ``fyp.property_subject_links`` and ``fyp.virtual_tour`` are
         operational tables written by the panorama upload. Reading them through
         the analytics session pointed the gallery at the wrong database when
         the two URLs differ, silently reporting every panorama unavailable.
@@ -1384,7 +1373,7 @@ class PropertyInsightsService:
                     """
                     SELECT vt.url, vt.status
                     FROM fyp.property_subject_links AS l
-                    JOIN public.virtual_tour AS vt ON vt.property_id = l.property_id
+                    JOIN fyp.virtual_tour AS vt ON vt.property_id = l.property_id
                     WHERE l.sitewise_property_id = :pid
                       AND l.match_verified IS TRUE
                     ORDER BY vt.updated_at DESC NULLS LAST
@@ -1420,14 +1409,14 @@ class PropertyInsightsService:
         }
 
     def _variant(self) -> dict[str, Any]:
-        """The active Layer-1 variant, without ever failing the request."""
+        """The expanded Layer-1 model used by the application."""
         try:
-            return resolve_variant().as_dict()
+            return resolve_variant(variant_key="expanded64").as_dict()
         except Exception:  # noqa: BLE001 - the page must still render
             return {
-                "key": "unknown",
-                "layer1_model": LEGACY_MODEL_NAME,
-                "name": LEGACY_MODEL_NAME,
+                "key": "expanded64",
+                "layer1_model": EXPANDED_MODEL_NAME,
+                "name": EXPANDED_MODEL_NAME,
                 "version": None,
                 "feature_count": None,
                 "research_only": True,

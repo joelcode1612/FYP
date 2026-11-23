@@ -1,0 +1,76 @@
+﻿canonical_table,canonical_column,canonical_type,local_source,local_type,supabase_source,supabase_type,accounting_decision
+fyp.rental_properties,id,bigint identity,fyp.rental_properties.id,bigint NN PK,public.property.property_id,bigint NN PK,Rename on Supabase; PK/OID references follow
+fyp.rental_properties,owner_id,bigint,fyp.rental_properties.owner_id,bigint,(absent),-,"Retain local-only (legacy BIGINT owner FK to fyp.users, retired); provenance"
+fyp.rental_properties,listing_id,character varying(120),fyp.rental_properties.listing_id,bigint,(absent),-,"Retain; nullable"
+fyp.rental_properties,name,character varying(255),fyp.rental_properties.name,varchar NN,public.property.title,varchar NN,Rename on Supabase
+fyp.rental_properties,property_type,character varying,fyp.rental_properties.property_type,varchar NN,public.property.property_type_normalized,varchar,Rename on Supabase
+fyp.rental_properties,description,text,fyp.rental_properties.description,text,public.property.description,text,Retain both
+fyp.rental_properties,address,text,fyp.rental_properties.address,varchar NN,public.property.normalized_address,varchar NN,Rename on Supabase
+fyp.rental_properties,city,character varying,fyp.rental_properties.city,varchar,(absent),-,"Retain local-only; derivable from addresses"
+fyp.rental_properties,state,character varying,fyp.rental_properties.state,varchar,(absent),-,Retain local-only
+fyp.rental_properties,latitude,double precision,fyp.rental_properties.latitude,float8,public.property.latitude,double precision,Retain both
+fyp.rental_properties,longitude,double precision,fyp.rental_properties.longitude,float8,public.property.longitude,double precision,Retain both
+fyp.rental_properties,geom,geometry(Point,4326),fyp.rental_properties.geom,geometry (computed from lat/lng),(absent),-,"LOCAL-ONLY analytical field; Supabase column created only if PostGIS available, else documented local-only (task section 7)"
+fyp.rental_properties,rental_price,numeric(12,2),fyp.rental_properties.rental_price,numeric NN,public.property.price,numeric,Rename on Supabase; verify precision
+fyp.rental_properties,size_sqft,numeric,fyp.rental_properties.size_sqft,numeric,(absent),-,"Distinct semantics from built_up_sqft - kept independent per task instruction; Supabase-only equivalents absent, no merge"
+fyp.rental_properties,psf,numeric,fyp.rental_properties.psf,numeric,(absent),-,Retain local-only (computed)
+fyp.rental_properties,bathrooms,numeric(4,1),fyp.rental_properties.bathrooms,smallint,public.property.bathroom_count,int2/int4,Rename on Supabase; cast if int4
+fyp.rental_properties,floor_level,numeric(5,1),fyp.rental_properties.floor_level,varchar NN,public.property.floor_level,varchar,Retain both
+fyp.rental_properties,frontage_ft,numeric,fyp.rental_properties.frontage_ft,numeric,public.property.frontage_ft,numeric,Retain both
+fyp.rental_properties,depth_ft,numeric,fyp.rental_properties.depth_ft,numeric,public.property.depth_ft,numeric,Retain both
+fyp.rental_properties,land_area_sqft,numeric,fyp.rental_properties.land_area_sqft,numeric,public.property.land_area_sqft,numeric,Retain both
+fyp.rental_properties,built_up_sqft,numeric,fyp.rental_properties.built_up_sqft,numeric NN,public.property.built_up_area_sqft,numeric NN,Rename on Supabase
+fyp.rental_properties,tenure,character varying,fyp.rental_properties.tenure,varchar,public.property.tenure,varchar,Retain both
+fyp.rental_properties,furnishing,character varying,fyp.rental_properties.furnishing,varchar,(absent),-,Retain local-only
+fyp.rental_properties,availability,character varying,fyp.rental_properties.availability,varchar NN,(absent),-,Retain local-only (default from listing lifecycle)
+fyp.rental_properties,is_corner_lot,smallint (0/1),fyp.rental_properties.is_corner_lot,bool NN,(absent),-,Retain local-only
+fyp.rental_properties,has_parking,smallint (0/1),fyp.rental_properties.has_parking,smallint NN def 0,public.property.parking_spaces,int4,"Distinct semantics (flag vs count); both retained - no merge"
+fyp.rental_properties,is_freehold,smallint (0/1),fyp.rental_properties.is_freehold,bool NN,(absent),-,Retain local-only
+fyp.rental_properties,is_fnb_suitable,smallint (0/1),fyp.rental_properties.is_fnb_suitable,bool NN,(absent),-,Retain local-only
+fyp.rental_properties,verification_status,character varying,fyp.rental_properties.verification_status,varchar NN,public.property.verification_status,varchar NN,Retain both (workflow states preserved)
+fyp.rental_properties,rejection_reason,text,fyp.rental_properties.rejection_reason,text,public.property.rejection_reason,text,Retain both
+fyp.rental_properties,is_published,boolean,fyp.rental_properties.is_published,bool NN,public.property.is_published,bool NN,Retain both
+fyp.rental_properties,created_at,timestamptz,fyp.rental_properties.created_at,timestamptz NN,(absent),-,"SUPABASE: ADD with DEFAULT now(), backfill from published_at"
+fyp.rental_properties,updated_at,timestamptz,fyp.rental_properties.updated_at,timestamptz NN,(absent),-,"SUPABASE: ADD nullable, backfill from published_at"
+fyp.rental_properties,floor_description,character varying,fyp.rental_properties.floor_description,varchar,(absent),-,Retain local-only
+fyp.rental_properties,unit_position,text,fyp.rental_properties.unit_position,varchar,public.property.unit_position,varchar,Retain both
+fyp.rental_properties,facing_direction,text,fyp.rental_properties.facing_direction,varchar,public.property.facing_direction,varchar,Retain both
+fyp.rental_properties,availability_verified_at,timestamptz,fyp.rental_properties.availability_verified_at,timestamptz,(absent),-,Retain local-only
+fyp.rental_properties,published_at,timestamptz,fyp.rental_properties.published_at,timestamptz,public.property.published_at,timestamptz,Retain both
+fyp.rental_properties,owner_user_id,uuid,fyp.rental_properties.owner_user_id,uuid,public.property.user_id,uuid,"Rename on Supabase + ADD FK to public.users(user_id); Supabase data all NULL (verified) - rename is data-safe"
+fyp.rental_properties,postcode,character varying,fyp.rental_properties.postcode,varchar,(absent),-,Retain local-only
+fyp.rental_properties,address_validation_status,character varying,fyp.rental_properties.address_validation_status,varchar,(absent),-,Retain local-only
+fyp.rental_properties,address_formatted,character varying,fyp.rental_properties.address_formatted,varchar,(absent),-,Retain local-only
+fyp.rental_properties,address_validated_at,timestamptz,fyp.rental_properties.address_validated_at,timestamptz,(absent),-,Retain local-only
+fyp.rental_properties,catalogue_id,character varying,fyp.rental_properties.catalogue_id,varchar,(absent),-,Retain local-only (research linkage)
+fyp.rental_properties,catalogue_image_url,text,fyp.rental_properties.catalogue_image_url,text,(absent),-,Retain local-only
+fyp.rental_properties,catalogue_source_url,text,fyp.rental_properties.catalogue_source_url,text,(absent),-,Retain local-only
+fyp.rental_properties,catalogue_suitability_score,numeric,fyp.rental_properties.catalogue_suitability_score,numeric,(absent),-,Retain local-only (uncalibrated index)
+fyp.rental_properties,catalogue_dataset_validation,text,fyp.rental_properties.catalogue_dataset_validation,text,(absent),-,Retain local-only
+fyp.rental_properties,catalogue_source_workbook,text,fyp.rental_properties.catalogue_source_workbook,text,(absent),-,Retain local-only
+fyp.rental_properties,catalogue_source_sheet,text,fyp.rental_properties.catalogue_source_sheet,text,(absent),-,Retain local-only
+fyp.rental_properties,catalogue_source_row,int,fyp.rental_properties.catalogue_source_row,int,(absent),-,Retain local-only
+fyp.rental_properties,catalogue_source_data,jsonb,fyp.rental_properties.catalogue_source_data,jsonb,public.property.local_source_data,jsonb,"Rename on Supabase; full provenance preserved (task: inspect before mapping, no attribute loss)"
+fyp.rental_properties,catalogue_imported_at,timestamptz,fyp.rental_properties.catalogue_imported_at,timestamptz,(absent),-,Retain local-only
+fyp.rental_properties,address_id,uuid,(absent),-,public.property.address_id,uuid,"ADD both sides; FK fyp.addresses(address_uuid) where populated"
+fyp.rental_properties,district_id,character varying,(absent),-,public.property.district_id,varchar,ADD both sides (provenance)
+fyp.rental_properties,company_name,character varying,(absent),-,public.property.company_name,varchar,ADD both sides (provenance)
+fyp.rental_properties,parking_spaces,integer,(absent),-,public.property.parking_spaces,int4,ADD both sides (distinct from has_parking flag)
+fyp.rental_properties,bedrooms,smallint,(absent),-,public.property.bedrooms,int2/int4,ADD both sides (provenance)
+fyp.rental_properties,year_built,smallint,(absent),-,public.property.year_built,int2/int4,ADD both sides (provenance)
+fyp.rental_properties,status,character varying,(absent),-,public.property.status,varchar,ADD both sides (legacy mirror value; all 916 rows = approved; documented as non-authoritative)
+fyp.property_photos,id,bigint identity,fyp.property_photos.id,bigint NN PK,public.property_photo.photo_id,bigint,Rename on Supabase
+fyp.property_photos,property_id,bigint,fyp.property_photos.property_id,bigint NN FK,public.property_photo.property_id,bigint NN,Retain; FK follows table rename
+fyp.property_photos,url,text,fyp.property_photos.url,text NN,public.property_photo.url,text NN,Retain both
+fyp.property_photos,caption,character varying,fyp.property_photos.caption,varchar,public.property_photo.caption,varchar,Retain both
+fyp.property_photos,is_primary,boolean,fyp.property_photos.is_primary,bool NN,public.property_photo.is_primary,bool,Retain both
+fyp.property_photos,created_at,timestamptz,fyp.property_photos.created_at,timestamptz NN,public.property_photo.created_at,timestamptz NN,Retain both
+fyp.property_photos,local_source_photo_id,bigint,(absent),-,public.property_photo.local_source_photo_id,bigint,ADD local side as provenance (mirror traceability)
+fyp.addresses,id,bigint identity,(absent),-,public.addresses.id,bigint,Local: create table with Supabase contract (dev parity)
+fyp.addresses,address_uuid,uuid,(absent),-,public.addresses.address_uuid,uuid,Local: create
+fyp.addresses,source_property_id,bigint,(absent),-,public.addresses.source_property_id,bigint,Local: create; FK property
+fyp.addresses,address_line1/2,district,city,state,postcode,country_code,latitude,longitude,formatted_address,coordinate_status,review_required,source_url,created_at,updated_at,per Supabase contract,(absent),-,public.addresses.* (18 cols),Full contract adopted from Supabase (only side with data)
+fyp.verification_audit,actor_user_id,uuid,(absent),-,public.verification_audit.actor_user_id,uuid,ADD local side (Supabase already carries it)
+fyp.listing_change_request,changes,jsonb,public.listing_change_request.changes,json,public.listing_change_request.changes,jsonb,"Normalize to jsonb both sides (empty local table; lossless)"
+fyp.verification_document,storage_key,text,public.verification_document.storage_key,varchar,public.verification_document.storage_key,text,Normalize to text (lossless widening)
+fyp.favorite_property,property_id,text,public.favorite_property.property_id,text,public.favorite_property.property_id,int64,"Canonical = text (supports MD-/EP- catalogue refs); Supabase empty > ALTER to text"

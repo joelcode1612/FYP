@@ -8,6 +8,7 @@ import 'package:shared_logic/shared_logic.dart';
 
 import 'package:sitewise_jaspr_web/shared/presentation/components/ui.dart';
 import 'package:sitewise_jaspr_web/core/di/app_locator.dart';
+import 'package:sitewise_jaspr_web/features/authentication/data/auth_service.dart';
 import 'package:sitewise_jaspr_web/features/recommendations/data/recommendation_filter_store.dart';
 import 'package:sitewise_jaspr_web/shared/presentation/layouts/app_layout.dart';
 
@@ -52,7 +53,7 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
   String get _filterQuery {
     final applied =
         context.read(entrepreneurNotifierProvider).recommendationRequest;
-    return '&filters=${Uri.encodeQueryComponent(jsonEncode(applied.toJson()))}';
+    return '&filters=${Uri.encodeQueryComponent(jsonEncode(applied.copyWith(clearNearby: true).toJson()))}';
   }
   String _state = '';
   String _city = '';
@@ -71,6 +72,20 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
   String _rentKey = '';
   String _targetMarket = '';
   String _query = '';
+
+  // SiteWise web nearby location selector (map/address/coordinates).
+  // Text fields are only staged until Apply is clicked. Search and facets
+  // continue to be evaluated and paginated by the existing FastAPI endpoint.
+  String _nearbyAddress = '';
+  String _nearbyLatitudeText = '';
+  String _nearbyLongitudeText = '';
+  double? _nearbyLatitude;
+  double? _nearbyLongitude;
+  double _nearbyRadiusKm = 5;
+  bool _nearbyGeocoding = false;
+  String? _nearbyError;
+  String? _nearbyNotice;
+  bool _nearbyExpanded = false; // Default: compact location dropdown.
 
   /// Contextual choices for the DRAFT criteria. The applied choices remain in
   /// the session-scoped notifier state; the results list is never rebuilt
@@ -133,7 +148,8 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
       request.fnbCompetitionMax != null ||
       request.populationMin1000m != null ||
       request.populationMax1000m != null ||
-      request.layoutPreferences.isNotEmpty;
+      request.layoutPreferences.isNotEmpty ||
+      request.locationLatitude != null;
 
   EntrepreneurNotifier get _notifier =>
       context.read(entrepreneurNotifierProvider.notifier);
@@ -241,9 +257,9 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
     _advancedKeys
       ..clear()
       ..['floor_level'] = request.floorLevel ?? ''
-      ..['transit_walk_m'] = _rangeKey(request.transitMaxM, null)
+      ..['transit_walk_m'] = _rangeKey(null, request.transitMaxM)
       ..['nearby_parking_500m'] = _rangeKey(request.nearbyParkingMin, null)
-      ..['fnb_competition_500m'] = _rangeKey(request.fnbCompetitionMax, null)
+      ..['fnb_competition_500m'] = _rangeKey(null, request.fnbCompetitionMax)
       ..['surrounding_population_1000m'] = _rangeKey(
         request.populationMin1000m,
         request.populationMax1000m,
@@ -266,6 +282,11 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
           );
     _targetMarket = request.layoutPreferences.join(', ');
     _query = request.query ?? '';
+    _nearbyLatitude = request.locationLatitude;
+    _nearbyLongitude = request.locationLongitude;
+    _nearbyRadiusKm = request.nearbyRadiusKm ?? 5;
+    _nearbyLatitudeText = request.locationLatitude?.toStringAsFixed(6) ?? '';
+    _nearbyLongitudeText = request.locationLongitude?.toStringAsFixed(6) ?? '';
     _sort = request.sort ?? _sortBestMatch;
   }
 
@@ -305,7 +326,7 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
       minSizeSqft: size.min,
       maxSizeSqft: size.max,
       floorLevel: floor.isEmpty ? null : floor,
-      transitMaxM: transit.min,
+      transitMaxM: transit.max,
       nearbyParkingMin: parking.min,
       fnbCompetitionMax: competition.max,
       demandGenerator: demand.isEmpty ? null : demand,
@@ -313,6 +334,9 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
       populationMax1000m: population.max,
       layoutPreferences: _layoutPreferences,
       query: _query.trim().isEmpty ? null : _query.trim(),
+      locationLatitude: _nearbyLatitude,
+      locationLongitude: _nearbyLongitude,
+      nearbyRadiusKm: _nearbyLatitude == null ? null : _nearbyRadiusKm,
       sort: _sort,
       pageSize: 20,
     );
@@ -441,6 +465,8 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
 
   /// Saves/removes a property. A signed-in account persists server-side first
   /// and the shortlist only moves once the server accepted the change.
+  String? _saveError;
+
   Future<void> _toggleSaved(String id) async {
     final notifier = context.read(appNotifierProvider.notifier);
     if (!AppLocator.isSignedIn) {
@@ -448,12 +474,11 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
       return;
     }
     final savedNow = context.read(appNotifierProvider).saved.contains(id);
-    final failure = await AppLocator.persistToggleSaved(
+    final failure = await notifier.persistSaved(
       id,
       wantSaved: !savedNow,
     );
-    if (failure != null) return;
-    notifier.toggleSaved(id);
+    if (mounted) setState(() => _saveError = failure);
   }
 
   @override
@@ -492,8 +517,13 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
       subtitle: _hasSearched
           ? _subtitle(state)
           : 'Choose your preferences to find a suitable commercial property.',
+      actions: const [
+        ActionLink('AI recommendations', href: '/entrepreneur/ai-recommendations'),
+      ],
       child: div(classes: _hasSearched ? 'rec2' : 'rec2 rec2--presearch', [
         div(classes: 'rec2__main', [
+          if (_saveError case final error?)
+            div(attributes: {'role': 'alert'}, [_errorBanner(error)]),
           _filters(state),
           if (_hasSearched)
             _appliedFilters(state.recommendationRequest),
@@ -610,6 +640,11 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
   /// chip commits a new applied request immediately (it is not a draft edit).
   Component _appliedFilters(RecommendationSearchRequest request) {
     final chips = <({String label, RecommendationSearchRequest next})>[
+      if (request.locationLatitude != null && request.locationLongitude != null)
+        (
+          label: 'Within ${(request.nearbyRadiusKm ?? 5).toStringAsFixed(0)} km of selected point',
+          next: request.copyWith(clearNearby: true, clearCursor: true),
+        ),
       if (request.preferredState != null)
         (
           label: request.preferredState!,
@@ -756,6 +791,7 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
             ]),
           ]),
         ]),
+        _nearbyPicker(),
         // Row 1 — location and property class. Every option comes from the
         // catalogue; each dropdown is contextual to the other selections.
         div(classes: 'rec2__filters-grid', [
@@ -904,6 +940,281 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
 
   /// One group of the expanded "More filters" panel. A field the backend did
   /// not report is omitted entirely — no dummy or disabled placeholder.
+  // Map, address, or numeric coordinate entry all resolve to the same
+  // optional search center. Nothing is sent until Apply location is selected.
+  Component _nearbyPicker() => div(
+    classes: 'rec2-location',
+    attributes: const {'id': 'rec2-nearby-picker'},
+    [
+      // SITEWISE_LOCATION_DROPDOWN_V1: compact by default; the location filter
+      // remains applied even while the advanced entry fields are hidden.
+      button(
+        classes: 'rec2-location__toggle',
+        attributes: {
+          'type': 'button',
+          'aria-expanded': _nearbyExpanded ? 'true' : 'false',
+          'aria-controls': 'rec2-location-controls',
+          'aria-label': _nearbyExpanded
+              ? 'Collapse search around a point'
+              : 'Expand search around a point',
+        },
+        events: events(onClick: () => setState(() => _nearbyExpanded = !_nearbyExpanded)),
+        [
+          span(classes: 'rec2-location__toggle-left', [
+            Icon('place', size: 'sm'),
+            span(classes: 'rec2-location__toggle-label', [
+              Component.text('Search around a point'),
+            ]),
+          ]),
+          span(classes: 'rec2-location__toggle-right', [
+            span(classes: 'rec2-location__toggle-status', [
+              Component.text(_nearbyLatitude == null
+                  ? 'Optional location filter'
+                  : 'Within ${_nearbyRadiusKm.toStringAsFixed(0)} km'),
+            ]),
+            span(classes: 'rec2-location__toggle-icon', [
+              Icon(_nearbyExpanded ? 'expand_less' : 'expand_more', size: 'sm'),
+            ]),
+          ]),
+        ],
+      ),
+      if (_nearbyLatitude != null && !_nearbyExpanded)
+        p(classes: 'rec2-location__active', [
+          Component.text('Selected center: '
+              '${_nearbyLatitude!.toStringAsFixed(6)}, '
+              '${_nearbyLongitude!.toStringAsFixed(6)} '
+              '· ${_nearbyRadiusKm.toStringAsFixed(0)} km radius'),
+        ]),
+      if (_nearbyExpanded)
+        div(
+          classes: 'rec2-location__panel',
+          attributes: const {'id': 'rec2-location-controls'},
+          [
+      p(classes: 'rec2-location__intro', [
+        Component.text('Choose a point on the map, look up an address in Malaysia, '
+            'or enter latitude and longitude. Applying the point filters eligible '
+            'properties by straight-line distance.'),
+      ]),
+      div(classes: 'rec2-location__methods', [
+        div(classes: 'rec2-location__field rec2-location__field--full', [
+          span(classes: 'rec2-location__label', [Component.text('Pick on a map')]),
+          button(
+            classes: 'rec2-location__btn',
+            attributes: {
+              'type': 'button',
+              'data-sitewise-location-picker': 'true',
+              'data-lat': _nearbyLatitudeText,
+              'data-lon': _nearbyLongitudeText,
+              'aria-label': 'Open interactive map to pick a search location',
+            },
+            [Icon('map', size: 'sm'), Component.text(' Open map picker')],
+          ),
+          input(
+            attributes: const {'id': 'rec2-location-pick-value', 'type': 'hidden'},
+            events: events<String>(onInput: (value) {
+              final parts = value.split(',');
+              if (parts.length != 2) return;
+              setState(() {
+                _nearbyLatitudeText = parts.first.trim();
+                _nearbyLongitudeText = parts.last.trim();
+                _nearbyError = null;
+                _nearbyNotice = 'Point selected. Press Apply location to search.';
+              });
+            }),
+          ),
+        ]),
+        div(classes: 'rec2-location__field rec2-location__field--full', [
+          span(classes: 'rec2-location__label', [Component.text('Find by address')]),
+          div(classes: 'rec2-location__address', [
+            input(
+              attributes: {
+                'id': 'rec2-nearby-address',
+                'type': 'text',
+                'value': _nearbyAddress,
+                'placeholder': 'e.g. Taman Equine, Seri Kembangan, Selangor',
+                'aria-label': 'Search address in Malaysia',
+                'autocomplete': 'off',
+                'maxlength': '200',
+              },
+              events: events<String>(onInput: (value) => setState(() {
+                _nearbyAddress = value;
+                _nearbyError = null;
+              })),
+            ),
+            button(
+              classes: 'rec2-location__btn',
+              attributes: {'type': 'button', 'aria-label': 'Look up address'},
+              events: events(onClick: _nearbyGeocoding ? null : _lookupNearbyAddress),
+              [Component.text(_nearbyGeocoding ? 'Finding…' : 'Find address')],
+            ),
+          ]),
+        ]),
+        div(classes: 'rec2-location__field', [
+          span(classes: 'rec2-location__label', [Component.text('Latitude')]),
+          input(
+            attributes: {
+              'type': 'text',
+              'inputmode': 'decimal',
+              'id': 'rec2-nearby-latitude',
+              'value': _nearbyLatitudeText,
+              'placeholder': '3.139000',
+              'aria-label': 'Latitude, decimal degrees',
+            },
+            events: events<String>(onInput: (value) => setState(() {
+              _nearbyLatitudeText = value;
+              _nearbyError = null;
+            })),
+          ),
+        ]),
+        div(classes: 'rec2-location__field', [
+          span(classes: 'rec2-location__label', [Component.text('Longitude')]),
+          input(
+            attributes: {
+              'type': 'text',
+              'inputmode': 'decimal',
+              'id': 'rec2-nearby-longitude',
+              'value': _nearbyLongitudeText,
+              'placeholder': '101.686900',
+              'aria-label': 'Longitude, decimal degrees',
+            },
+            events: events<String>(onInput: (value) => setState(() {
+              _nearbyLongitudeText = value;
+              _nearbyError = null;
+            })),
+          ),
+        ]),
+        label(classes: 'rec2-location__field', [
+          span(classes: 'rec2-location__label', [Component.text('Search radius')]),
+          select(
+            attributes: const {'aria-label': 'Radius around selected point'},
+            events: events<List<String>>(onInput: (values) {
+              final n = double.tryParse(values.isEmpty ? '' : values.first);
+              if (n == null) return;
+              setState(() => _nearbyRadiusKm = n);
+              if (_nearbyLatitude != null) _onDraftChange();
+            }),
+            [
+              for (final radius in const [2, 5, 10, 20])
+                option(
+                  value: '$radius',
+                  attributes: _nearbyRadiusKm == radius
+                      ? {'selected': ''} : null,
+                  [Component.text('$radius km')],
+                ),
+            ],
+          ),
+        ]),
+      ]),
+      div(classes: 'rec2-location__actions', [
+        button(
+          classes: 'rec2-location__btn rec2-location__btn--primary',
+          attributes: const {'type': 'button'},
+          events: events(onClick: _applyNearbyLocation),
+          [Component.text('Apply location')],
+        ),
+        if (_nearbyLatitude != null)
+          button(
+            classes: 'rec2-location__btn',
+            attributes: const {'type': 'button'},
+            events: events(onClick: _clearNearbyLocation),
+            [Component.text('Search all areas')],
+          ),
+      ]),
+      if (_nearbyError != null)
+        p(classes: 'rec2-location__status rec2-location__status--error',
+          [Component.text(_nearbyError!)]),
+      if (_nearbyNotice != null)
+        p(classes: 'rec2-location__status', [Component.text(_nearbyNotice!)]),
+      if (_nearbyLatitude != null)
+        p(classes: 'rec2-location__status', [
+          Component.text('Active search center: '
+              '${_nearbyLatitude!.toStringAsFixed(6)}, '
+              '${_nearbyLongitude!.toStringAsFixed(6)} '
+              '· ${_nearbyRadiusKm.toStringAsFixed(0)} km radius'),
+        ]),
+      p(classes: 'rec2-location__hint', [
+        Component.text('Only the chosen point is sent with the search. '
+            'The 2–20 km circle is straight-line distance, not travel time. '
+            'Address lookup sends your typed text to OpenStreetMap; '
+            'confirm the approximate position. © OpenStreetMap contributors.'),
+      ]),
+          ],
+        ),
+    ],
+  );
+
+  void _applyNearbyLocation() {
+    final lat = double.tryParse(_nearbyLatitudeText.trim());
+    final lon = double.tryParse(_nearbyLongitudeText.trim());
+    if (lat == null || lon == null || !lat.isFinite || !lon.isFinite ||
+        lat.abs() > 90 || lon.abs() > 180 || (lat == 0 && lon == 0)) {
+      setState(() => _nearbyError =
+          'Enter valid latitude (-90 to 90) and longitude (-180 to 180).');
+      return;
+    }
+    setState(() {
+      _nearbyLatitude = lat;
+      _nearbyLongitude = lon;
+      _nearbyError = null;
+      _nearbyNotice = 'Location applied. Results use the selected radius.';
+      _nearbyExpanded = false;
+    });
+    _onDraftChange(debounce: Duration.zero);
+  }
+
+  void _clearNearbyLocation() {
+    setState(() {
+      _nearbyLatitude = null;
+      _nearbyLongitude = null;
+      _nearbyLatitudeText = '';
+      _nearbyLongitudeText = '';
+      _nearbyAddress = '';
+      _nearbyError = null;
+      _nearbyNotice = null;
+    });
+    _onDraftChange(debounce: Duration.zero);
+  }
+
+  Future<void> _lookupNearbyAddress() async {
+    if (_nearbyGeocoding) return;
+    final address = _nearbyAddress.trim();
+    if (address.length < 5 || address.length > 200) {
+      setState(() => _nearbyError = 'Enter an address between 5 and 200 characters.');
+      return;
+    }
+    setState(() {
+      _nearbyGeocoding = true;
+      _nearbyError = null;
+      _nearbyNotice = null;
+    });
+    try {
+      final result = await WebAuth.request(
+        '/api/v1/recommendations/geocode',
+        method: 'POST',
+        body: {'address': address},
+      );
+      if (!mounted) return;
+      final lat = (result['latitude'] as num?)?.toDouble();
+      final lon = (result['longitude'] as num?)?.toDouble();
+      if (lat == null || lon == null || !lat.isFinite || !lon.isFinite) {
+        throw StateError('The address did not return usable coordinates.');
+      }
+      setState(() {
+        _nearbyLatitudeText = lat.toStringAsFixed(6);
+        _nearbyLongitudeText = lon.toStringAsFixed(6);
+        _nearbyNotice = 'Approximate match: ${result['display_name'] ?? address}. '
+            'Confirm the point on the map if necessary, then press Apply location.';
+      });
+    } on Object {
+      if (!mounted) return;
+      setState(() => _nearbyError =
+          'Address could not be resolved. Try a fuller Malaysian address, '
+          'use the map, or enter coordinates.');
+    } finally {
+      if (mounted) setState(() => _nearbyGeocoding = false);
+    }
+  }
+
   Component _advancedGroup(
     String title,
     List<String> keys,
@@ -920,22 +1231,104 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
     ]);
   }
 
+  // SITEWISE_MOBILE_ALIGNED_ADVANCED_PRESETS_V1
+  // The same descriptive options used by entrepreneur mobile Preferences.
+  // Keys are still numeric bounds, so FastAPI ranking and filtering stay intact.
+  List<(String, String)>? _mobileAdvancedPresets(String key) => switch (key) {
+    'transit_walk_m' => [
+        (_rangeKey(null, 500.0), 'Easy — within 500 m walk'),
+        (_rangeKey(null, 1000.0), 'Nearby — within 1 km walk'),
+      ],
+    'nearby_parking_500m' => [
+        (_rangeKey(1.0, null), 'Preferred — 1+ nearby facility'),
+        (_rangeKey(3.0, null), 'More options — 3+ nearby facilities'),
+        (_rangeKey(5.0, null), 'Plenty — 5+ nearby facilities'),
+      ],
+    'fnb_competition_500m' => [
+        (_rangeKey(null, 5.0), 'Low — up to 5 F&B outlets'),
+        (_rangeKey(null, 10.0), 'Moderate — up to 10 F&B outlets'),
+        (_rangeKey(null, 20.0), 'Higher — up to 20 F&B outlets'),
+      ],
+    _ => null,
+  };
+
+  // The population bands are contextual to the actual measured records.
+  // Use relative labels only when the backend supplies exactly three bands;
+  // keep the actual resident ranges visible to avoid invented thresholds.
+  List<(String, String)> _friendlyPopulationRanges(
+    List<FacetRangeOption> ranges,
+  ) {
+    if (ranges.length != 3) return _rangePairs(ranges);
+    final ordered = [...ranges]..sort((a, b) => a.min.compareTo(b.min));
+    const levels = ['Lower', 'Moderate', 'Higher'];
+    return [
+      for (var i = 0; i < ordered.length; i++)
+        (ordered[i].key, '${levels[i]} — ${ordered[i].label}'),
+    ];
+  }
+
+  // Previously saved custom numeric limits must not disappear from the form.
+  // Keep their original values instead of silently rounding to a preset.
+  String _advancedSavedLabel(String key, String selected) {
+    final bounds = FacetRangeOption.boundsFromKey(selected);
+    String amount(double value) => value == value.roundToDouble()
+        ? value.toStringAsFixed(0)
+        : value.toString();
+    if (key == 'transit_walk_m' && bounds.max != null) {
+      return 'Saved choice — within ${amount(bounds.max!)} m walk';
+    }
+    if (key == 'nearby_parking_500m' && bounds.min != null) {
+      return 'Saved choice — ${amount(bounds.min!)}+ parking facilities';
+    }
+    if (key == 'fnb_competition_500m' && bounds.max != null) {
+      return 'Saved choice — up to ${amount(bounds.max!)} F&B outlets';
+    }
+    if (key == 'surrounding_population_1000m') {
+      if (bounds.min != null && bounds.max != null) {
+        return 'Saved choice — ${amount(bounds.min!)}–${amount(bounds.max!)} residents';
+      }
+      if (bounds.min != null) {
+        return 'Saved choice — at least ${amount(bounds.min!)} residents';
+      }
+    }
+    return 'Saved choice — $selected';
+  }
+
   Component _advancedControl(String key, RecommendationAdvancedFacet facet) {
     final selected = _advancedKeys[key] ?? '';
-    final options = facet.isRange
-        ? _rangePairs(facet.rangeOptions)
-        : [
-            for (final option in facet.valueOptions)
-              (option.value, _facetOptionLabel(option)),
-          ];
+    final presets = _mobileAdvancedPresets(key);
+    final options = <(String, String)>[
+      if (presets != null)
+        ...presets
+      else if (key == 'surrounding_population_1000m' && facet.isRange)
+        ..._friendlyPopulationRanges(facet.rangeOptions)
+      else if (facet.isRange)
+        ..._rangePairs(facet.rangeOptions)
+      else
+        for (final option in facet.valueOptions)
+          (option.value, _facetOptionLabel(option)),
+    ];
+
+    // A stored preference may use a custom numeric bound not in the mobile
+    // preset choices. Render it with its real meaning and preserve its value.
+    if (selected.isNotEmpty && !options.any((item) => item.$1 == selected)) {
+      options.insert(0, (selected, _advancedSavedLabel(key, selected)));
+    }
+
+    final caption = switch (key) {
+      'nearby_parking_500m' => 'Nearby public parking (500 m)',
+      'fnb_competition_500m' => 'Competition tolerance (500 m)',
+      'demand_generator' => 'Nearby places that attract visitors',
+      'surrounding_population_1000m' => 'Residents nearby (1 km)',
+      _ => facet.label,
+    };
     return _dropdownField(
-      caption: facet.label,
+      caption: caption,
       fieldId: 'rec2-adv-$key',
       value: selected,
-      emptyLabel: 'Any',
+      emptyLabel: 'No preference',
       options: options,
-      includeSelected: selected.isNotEmpty &&
-          !options.any((pair) => pair.$1 == selected),
+      includeSelected: false,
       onChanged: (value) {
         setState(() => _advancedKeys[key] = value);
         _onDraftChange();

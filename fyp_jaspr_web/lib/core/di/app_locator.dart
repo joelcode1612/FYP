@@ -300,26 +300,23 @@ abstract final class AppLocator {
     return '${(profile['user_id'] ?? profile['id'] ?? profile['sub'] ?? '')}';
   }
 
-  /// Unions the signed-in account's saved properties into [uiSeed], so the
+  /// Loads the signed-in account's saved properties into [uiSeed], so the
   /// first frame after boot already shows the account's shortlist.
   ///
   /// Called once from the browser entrypoint after the session is resolved.
   /// For a visitor with no session this is a no-op — their shortlist is the
-  /// cookie's. A failed or timed-out read keeps the cookie state and reports
-  /// nothing: the shortlist still works from the previous boot's selection.
-  /// Delisted refs (the server's `unresolved`) are excluded so dead entries
-  /// never re-enter the shortlist.
+  /// cookie's. A failed or timed-out read exposes a retryable error.
+  /// Delisted references remain available so their owner can remove them.
   static Future<void> mergeAccountSaved() async {
     // Demo Mode has no account shortlist; skip the (unauthenticated) read.
     if (!isSignedIn) return;
     try {
-      final refs = await savedPropertiesRepo.savedRefs().timeout(
+      final refs = await savedPropertiesRepo.savedWithUnresolved().timeout(
         const Duration(seconds: 3),
       );
-      if (refs.isEmpty) return;
-      uiSeed = uiSeed.copyWith(saved: {...uiSeed.saved, ...refs});
+      uiSeed = uiSeed.copyWith(saved: {...refs.resolved, ...refs.unresolved}, clearSavedError: true);
     } on Object {
-      // Boot must not stall on a dead API; the cookie selection stands.
+      uiSeed = uiSeed.copyWith(savedError: 'Your saved properties could not be loaded.');
     }
   }
 

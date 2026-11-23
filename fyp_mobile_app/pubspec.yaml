@@ -42,7 +42,7 @@ dependencies:
   path: ^1.9.1
   path_provider: ^2.1.6
   panorama_viewer: ^2.0.7
-  opencv_dart: ^2.2.2
+  opencv_dart: 2.2.2
 
   # Framework-free domain + application logic shared with the Jaspr app.
   # `any` is the idiomatic workspace constraint: pub binds it to the local
@@ -62,6 +62,7 @@ dependencies:
   # the direct import explicit without downloading a new package.
   url_launcher: ^6.3.3
   http: ^1.6.0
+  http_parser: ^4.1.2
   # SHA-256 frame checksums for the backend capture handoff (frame manifest
   # integrity, verified again by the stitching worker after download).
   crypto: ^3.0.3
@@ -72,28 +73,31 @@ dependencies:
   # Camera permission gate for the ARCore capture screen. The AR host owns the
   # camera device; this package is only used to ask for and check the grant.
   permission_handler: ^12.0.3
+  # Foreground-only location fix when the entrepreneur enables nearby recommendations.
+  geolocator: ^14.1.2
+  file_selector: ^1.1.0
   # TOTP enrolment QR for the staff authenticator flow. Already resolved in
   # the pub cache; renders from the otpauth:// URI Supabase returns.
   qr_flutter: ^4.1.0
 
-# Native asset build options for dartcv4 (opencv_dart). The stitching
-# module (plus its OpenCV dependencies) is required by the 360° panorama
-# pipeline; without it Stitcher has no native implementation.
+# NATIVE ASSET BUILD OPTIONS FOR dartcv4 (opencv_dart) LIVE IN THE WORKSPACE
+# ROOT PUBSPEC (C:\Users\Lenovo\AndroidStudioProjects\FYP\pubspec.yaml), under
+# `hooks.user_defines.dartcv4.include_modules`.
 #
-# `include_modules` REPLACES dartcv4's default module set — it does not add to
-# it, so imgproc and imgcodecs must be repeated here even though they are
-# defaults: a list missing them compiles `cv.cvtColor`/`cv.imread` out of the
-# shipped library and the stitcher fails at runtime with an undefined symbol.
-hooks:
-  user_defines:
-    dartcv4:
-      include_modules:
-        - imgproc
-        - imgcodecs
-        - stitching
-        - features2d
-        - flann
-        - calib3d
+# Why not here: native-assets user-defines are resolved from the ROOT package
+# of the pub workspace — defines declared in this member pubspec never reach
+# dartcv4's build hook. That defect shipped `libdartcv.so` with dartcv4's
+# DEFAULT module set ({imgcodecs, imgproc}) and failed stitching at the first
+# ORB call:
+#
+#     Couldn't resolve native function 'cv_ORB_create_1'
+#     in 'package:dartcv4/dartcv.dart'
+#
+# The module list must include every OpenCV module the panorama pipeline
+# calls — `include_modules` REPLACES dartcv4's defaults, so imgproc and
+# imgcodecs must be repeated even though they are defaults.
+# `integration_test/opencv_orb_native_test.dart` is the device-level
+# regression guard.
 
 dependency_overrides:
   permission_handler: ^12.0.3
@@ -113,6 +117,12 @@ dev_dependencies:
   # rules and activating additional ones.
   flutter_lints: ^6.0.0
   sqflite_common_ffi: ^2.4.5
+  # On-device verification that the bundled libdartcv.so actually exports the
+  # native ORB / registration symbols the panorama pipeline calls
+  # (integration_test/opencv_orb_native_test.dart drives the real probe on a
+  # connected Android device — a unit test cannot prove symbol availability).
+  integration_test:
+    sdk: flutter
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
@@ -130,6 +140,7 @@ flutter:
     - assets/sitewise-mark-64.png
     - assets/config/dev.json
     - assets/config/sitewise_dev.json
+    - assets/images/capture_guide/
 
   uses-material-design: true
 

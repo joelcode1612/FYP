@@ -8,6 +8,7 @@ import 'package:fyp/shared/presentation/components/m3_kit.dart';
 import 'package:fyp/features/property_management/domain/entities/provider_models.dart';
 import 'package:fyp/shared/presentation/components/provider_ui.dart';
 import 'package:fyp/features/property_management/data/provider_workspace_service.dart';
+import 'package:fyp/features/dashboard/presentation/widgets/owner_performance_compact.dart';
 
 /// Shared performance report for Property Owners and Agents.
 ///
@@ -82,6 +83,12 @@ class _ProviderPerformanceMobilePageState
             );
           }
           final report = snapshot.data!;
+          // Owner-only compact view; preserve the Agent report unchanged.
+          if (!report.isAgent) {
+            return providerContent(
+              children: [OwnerPerformanceCompact(report: report)],
+            );
+          }
           return providerContent(
             children: [
               const M3ScreenHeading(

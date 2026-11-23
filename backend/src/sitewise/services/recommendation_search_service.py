@@ -63,6 +63,7 @@ import math
 import threading
 from collections import OrderedDict
 from dataclasses import dataclass, field, replace
+from math import asin, cos, radians, sin, sqrt
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
@@ -85,25 +86,8 @@ MODEL_UNAVAILABLE_REASON = (
 # Layer-1 PU variant
 # ---------------------------------------------------------------------------
 #
-# The eligible SET depends on the active PU variant. ``legacy`` (default)
-# gates on the stored catalogue suitability score — the original PU model's
-# output. ``expanded64`` gates on LIVE inference with the 2026-11-15 expanded
-# 64-feature artifact: a property is eligible only when its complete 64-feature
-# vector resolves (DB + committed training bridge), its live association score
-# passes the same strictly-above-50 gate on the 0-100 scale, and every
-# candidate in the ranking used the SAME model version. Stored legacy scores
-# are never used, displayed or mixed into an expanded64 ranking, and live
-# expanded scores are never written back into the stored columns.
-
-
-def _pu_variant_key() -> str:
-    """The configured Layer-1 PU variant, or ``legacy`` if unresolvable."""
-    try:
-        from sitewise.core.config import Settings
-
-        return Settings().pu_model_variant
-    except Exception:  # noqa: BLE001 - an unresolvable setting keeps legacy
-        return "legacy"
+# Search applies the eligibility gate to live expanded64 inference. The feature
+# resolver applies the artifact's missing-data policy before scoring.
 
 
 @lru_cache(maxsize=12)
@@ -139,22 +123,8 @@ def _expanded_model_token() -> str:
 #: Strict PU eligibility threshold on the verified 0-100 scale. A property is
 #: eligible only when its PU score is STRICTLY greater than this value, so a
 #: score of exactly 50.0 is excluded.
-#:
-#: Scale verification (read-only audit of the live table, 2026-11-11):
-#: ``fyp.catalogue_properties.suitability_score`` (canonical column
-#: ``fyp.rental_properties.catalogue_suitability_score``) is the stored Layer 1
-#: PU research association score multiplied by 100 — exactly equal to
-#: ``source_data->>'research_p_association_score' * 100`` on every sampled row
-#: (955 rows, 0 nulls, observed range 0.25-98.0, 290 rows above 50). It is NOT
-#: a probability of business success; it is the same uncalibrated P-vs-U
-#: association index the generation pipeline consumes.
-#:
-#: The gate is applied in SQL for EVERY search (defaults included), so an
-#: ineligible property can never reach ranking or pagination. The threshold is
-#: never lowered to fill a result page.
 PU_ELIGIBILITY_THRESHOLD = 50.0
 PU_SCORE_SCALE = "0-100"
-PU_ELIGIBILITY_COLUMN = "fyp.catalogue_properties.suitability_score"
 
 # ---------------------------------------------------------------------------
 # Ordering
@@ -331,6 +301,9 @@ class SearchCriteria:
     # column is empty for every row, so the address is the authoritative
     # location source. Missing advanced measurements are never matched.
     city: str | None = None
+    location_latitude: float | None = None
+    location_longitude: float | None = None
+    nearby_radius_km: float | None = None
     floor_level: str | None = None
     transit_max_m: float | None = None
     nearby_parking_min: float | None = None
@@ -354,6 +327,12 @@ class SearchCriteria:
             "state": (self.preferred_state or "").strip(),
             "area": (self.preferred_area or "").strip(),
             "city": (self.city or "").strip(),
+            # Search-local consent data, never persisted in a user profile.
+            "nearby": {
+                "lat": self.location_latitude,
+                "lon": self.location_longitude,
+                "radius_km": self.nearby_radius_km,
+            },
             "advanced": {
                 key: advanced_fields.selected(self, key)
                 for key in advanced_fields.FIELDS
@@ -376,7 +355,7 @@ class SearchCriteria:
             # so they are part of the cache/cursor identity: a cursor issued
             # under one model can never serve a page of another model's
             # ranking, and replacing the artifact invalidates cached pages.
-            "pu_model": _expanded_model_token() if _pu_variant_key() == "expanded64" else "stored",
+            "pu_model": _expanded_model_token(),
         }
 
 
@@ -466,11 +445,7 @@ def _pu_eligibility() -> dict[str, Any]:
         "threshold": PU_ELIGIBILITY_THRESHOLD,
         "scale": PU_SCORE_SCALE,
         "comparison": "strictly_greater_than",
-        "column": (
-            "live_expanded64_inference"
-            if _pu_variant_key() == "expanded64"
-            else PU_ELIGIBILITY_COLUMN
-        ),
+        "column": "live_expanded64_inference",
         "score_meaning": (
             "Uncalibrated P-vs-U research association index, not a probability "
             "of commercial success."
@@ -503,6 +478,29 @@ def _has_selection(criteria: SearchCriteria, key: str) -> bool:
     return value is not None
 
 
+def _haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    """Great-circle distance between two points in km, not travel time."""
+    d_lat = radians(lat2 - lat1)
+    d_lon = radians(lon2 - lon1)
+    a = sin(d_lat / 2) ** 2 + cos(radians(lat1)) * cos(radians(lat2)) * sin(d_lon / 2) ** 2
+    return 6371.0088 * 2 * asin(min(1, sqrt(a)))
+
+
+def _within_nearby(row: _Row, criteria: SearchCriteria) -> bool:
+    """Exclude unmeasured/invalid property coordinates, never treat as zero."""
+    if criteria.location_latitude is None:
+        return True
+    lat, lon = row.latitude, row.longitude
+    if lat is None or lon is None or not (-90 <= lat <= 90 and -180 <= lon <= 180):
+        return False
+    if lat == 0 and lon == 0:
+        return False
+    assert criteria.location_longitude is not None
+    assert criteria.nearby_radius_km is not None
+    return _haversine_km(criteria.location_latitude, criteria.location_longitude,
+                         lat, lon) <= criteria.nearby_radius_km
+
+
 def _satisfies(row: _Row, criteria: SearchCriteria, *, excluding: str | None) -> bool:
     """The Python mirror of the hard filters :meth:`_query` pushes into SQL.
 
@@ -514,6 +512,8 @@ def _satisfies(row: _Row, criteria: SearchCriteria, *, excluding: str | None) ->
     over the live catalogue, so a drift between the two is a failing test, not a
     silently wrong count.
     """
+    if not _within_nearby(row, criteria):
+        return False
     if excluding != "rental_budget":
         max_rent, min_rent = criteria.max_rental_rm, criteria.min_rental_rm
         if max_rent is not None and row.rental_rm > max_rent:
@@ -724,6 +724,10 @@ def _span(rows: list[_Row], value_of: Any, *, lowest: bool) -> float | None:
     return min(present) if lowest else max(present)
 
 
+class StaleRankingCursor(ValueError):
+    """The current ranking no longer matches the requested page."""
+
+
 class RecommendationSearchService:
     """Read-only ranking over the catalogue. One instance per request."""
 
@@ -739,14 +743,6 @@ class RecommendationSearchService:
 
     def _model_metadata(self) -> dict[str, Any]:
         """The Layer-1 PU provenance block for one search response."""
-        if _pu_variant_key() != "expanded64":
-            return {
-                "available": False,
-                "version": None,
-                "score_type": SCORE_TYPE_REQUIREMENT_FIT,
-                "reason": MODEL_UNAVAILABLE_REASON,
-                "research_only": True,
-            }
         try:
             from sitewise.ml.model_loader import ModelLoader
             from sitewise.ml.pu_expanded import EXPANDED_MODEL_NAME
@@ -784,7 +780,10 @@ class RecommendationSearchService:
         ranked = [row for row in ranked if _satisfies(row, criteria, excluding=None)]
         total = len(ranked)
 
-        offset = self._decode_cursor(criteria)
+        ranking_revision = hashlib.sha256(
+            json.dumps([row.id for row in ranked], separators=(",", ":")).encode("utf-8")
+        ).hexdigest()
+        offset = self._decode_cursor(criteria, ranking_revision)
         page = ranked[offset : offset + criteria.page_size]
         next_offset = offset + len(page)
         has_more = next_offset < total
@@ -796,7 +795,7 @@ class RecommendationSearchService:
             ],
             "pagination": {
                 "next_cursor": (
-                    self._encode_cursor(criteria, next_offset) if has_more else None
+                    self._encode_cursor(criteria, next_offset, ranking_revision) if has_more else None
                 ),
                 "has_more": has_more,
                 "total": total,
@@ -818,11 +817,7 @@ class RecommendationSearchService:
                     "threshold": PU_ELIGIBILITY_THRESHOLD,
                     "scale": PU_SCORE_SCALE,
                     "comparison": "strictly_greater_than",
-                    "column": (
-                        "live_expanded64_inference"
-                        if _pu_variant_key() == "expanded64"
-                        else PU_ELIGIBILITY_COLUMN
-                    ),
+                    "column": "live_expanded64_inference",
                     "score_meaning": (
                         "Uncalibrated P-vs-U research association index, not a "
                         "probability of commercial success."
@@ -1043,29 +1038,15 @@ class RecommendationSearchService:
             sort=DEFAULT_SORT,
             cursor=None,
         )
-        return self._ranked_candidates(browse)
+        rows = self._ranked_candidates(browse)
+        # The facet universe must agree with the nearby results count.
+        if criteria.location_latitude is not None:
+            rows = [row for row in rows if _within_nearby(row, criteria)]
+        return rows
 
     # -- ranking ------------------------------------------------------------
 
     def _ranked_candidates(self, criteria: SearchCriteria) -> list[_Row]:
-        if _pu_variant_key() == "expanded64":
-            return self._ranked_candidates_expanded(criteria)
-        revision = self._catalogue_revision()
-        key = self._cache_key(criteria, revision)
-        cached = self._cache_get(key)
-        if cached is not None:
-            self._last_cache_hit = True
-            return cached
-
-        self._last_cache_hit = False
-        rows = self._query(criteria)
-        for row in rows:
-            row.matches = self._evaluate(row, criteria)
-        rows.sort(key=_sort_key(criteria.sort))
-        self._cache_put(key, rows)
-        return rows
-
-    def _ranked_candidates_expanded(self, criteria: SearchCriteria) -> list[_Row]:
         """Rank on LIVE expanded64 inference — the stored score is not used.
 
         Every candidate in one call is scored with the SAME artifact version
@@ -1075,9 +1056,6 @@ class RecommendationSearchService:
         ranking — it is never imputed, never borrowed, and never gated on the
         stored legacy score it does have.
         """
-        from sqlmodel import Session
-
-        from sitewise.db.analytics_session import analytics_engine
         from sitewise.ml.pu_expanded import EXPANDED_MODEL_NAME, expanded_scores_many
         from sitewise.ml.model_loader import ModelLoader
 
@@ -1089,12 +1067,11 @@ class RecommendationSearchService:
             return cached
 
         self._last_cache_hit = False
-        rows = self._query_expanded(criteria)
+        rows = self._query(criteria)
         if rows:
             loaded = ModelLoader().load_cached(EXPANDED_MODEL_NAME)
             version = str(loaded.meta.get("model_variant") or "unknown")
-            with Session(analytics_engine) as analytics:
-                scores = expanded_scores_many(analytics, [row.id for row in rows])
+            scores = expanded_scores_many(self.session, [row.id for row in rows])
             eligible: list[_Row] = []
             for row in rows:
                 row.matches = self._evaluate(row, criteria)
@@ -1172,68 +1149,12 @@ class RecommendationSearchService:
             row.advanced = values.get(row.id, {})
 
     def _query(self, criteria: SearchCriteria) -> list[_Row]:
-        where = [
-            "p.rental_rm IS NOT NULL",
-            "p.size_sqft IS NOT NULL",
-            # PU eligibility gate: STRICTLY above the threshold on the
-            # verified 0-100 scale. `NULL > 50` is NULL, so a property with no
-            # PU score is excluded rather than treated as zero or as eligible.
-            "p.suitability_score > CAST(:pu_threshold AS double precision)",
-        ]
-        params: dict[str, Any] = {"pu_threshold": PU_ELIGIBILITY_THRESHOLD}
-        if criteria.managed_only:
-            if not criteria.management_ids:
-                return []
-            where.append("p.id = ANY(:managed_ids)")
-            params["managed_ids"] = list(criteria.management_ids)
-
-        if criteria.max_rental_rm is not None:
-            where.append("p.rental_rm <= CAST(:max_rent AS double precision)")
-            params["max_rent"] = criteria.max_rental_rm
-        if criteria.min_rental_rm is not None:
-            where.append("p.rental_rm >= CAST(:min_rent AS double precision)")
-            params["min_rent"] = criteria.min_rental_rm
-        if criteria.min_size_sqft is not None:
-            where.append("p.size_sqft >= CAST(:min_size AS double precision)")
-            params["min_size"] = criteria.min_size_sqft
-        if criteria.max_size_sqft is not None:
-            where.append("p.size_sqft <= CAST(:max_size AS double precision)")
-            params["max_size"] = criteria.max_size_sqft
-        if criteria.preferred_state:
-            where.append("p.state = :state")
-            params["state"] = criteria.preferred_state
-        if criteria.property_type:
-            where.append("p.property_type = :ptype")
-            params["ptype"] = criteria.property_type
-        if criteria.preferred_area:
-            where.append("(p.city ILIKE :area OR p.address ILIKE :area)")
-            params["area"] = f"%{criteria.preferred_area}%"
-        if criteria.city:
-            # The research catalogue's city column is empty; its address
-            # prefix is the authoritative district (mirrored in _satisfies).
-            where.append("lower(split_part(p.address, ',', 1)) = lower(:city)")
-            params["city"] = criteria.city.strip()
-        if criteria.query:
-            where.append(
-                "(p.title ILIKE :q OR p.address ILIKE :q OR p.city ILIKE :q "
-                "OR p.property_type ILIKE :q OR p.id ILIKE :q)"
-            )
-            params["q"] = f"%{criteria.query}%"
-
-        sql = (
-            f"SELECT {', '.join(_CARD_COLUMNS)} FROM fyp.catalogue_properties p "
-            f"WHERE {' AND '.join(where)}"
-        )
-        rows = self.session.execute(text(sql), params).mappings().all()
-        return [_to_row(row) for row in rows]
-
-    def _query_expanded(self, criteria: SearchCriteria) -> list[_Row]:
         """Candidate query for the expanded64 path — NO stored-score gate.
 
         The stored ``suitability_score`` is the LEGACY model's output; gating
         on it here would mix two model versions in one ranking. Eligibility is
         applied after live expanded64 scoring in
-        :meth:`_ranked_candidates_expanded`.
+        :meth:`_ranked_candidates`.
         """
         where = [
             "p.rental_rm IS NOT NULL",
@@ -1425,14 +1346,14 @@ class RecommendationSearchService:
     # -- cursor -------------------------------------------------------------
 
     @staticmethod
-    def _encode_cursor(criteria: SearchCriteria, offset: int) -> str:
+    def _encode_cursor(criteria: SearchCriteria, offset: int, revision: str = "") -> str:
         raw = json.dumps(
-            {"o": offset, "k": _criteria_fingerprint(criteria)},
+            {"o": offset, "k": _criteria_fingerprint(criteria), "r": revision},
             separators=(",", ":"),
         ).encode("utf-8")
         return base64.urlsafe_b64encode(raw).decode("ascii").rstrip("=")
 
-    def _decode_cursor(self, criteria: SearchCriteria) -> int:
+    def _decode_cursor(self, criteria: SearchCriteria, revision: str = "") -> int:
         """Offset encoded in the cursor, or 0.
 
         A cursor from a *different* search is rejected instead of silently
@@ -1454,6 +1375,8 @@ class RecommendationSearchService:
                 "The pagination cursor belongs to a different search. "
                 "Restart the search from the first page."
             )
+        if payload.get("r", "") != revision:
+            raise StaleRankingCursor("The ranking changed. Restart the search from the first page.")
         if offset < 0:
             raise ValueError("The pagination cursor is not valid.")
         return offset

@@ -98,9 +98,7 @@ class IncrementalStitchService {
 
   IncrementalStitchStore? _store;
 
-  StitchResultsDocument _document = StitchResultsDocument(
-    stationId: '',
-  );
+  StitchResultsDocument _document = StitchResultsDocument(stationId: '');
   final Set<int> _queued = <int>{};
   Future<void> _chain = Future<void>.value();
   Future<void> _saveChain = Future<void>.value();
@@ -125,9 +123,7 @@ class IncrementalStitchService {
     _loaded = true;
     final store = await _storeOrNull();
     final persisted = store == null ? null : await store.load();
-    var doc =
-        persisted ??
-        StitchResultsDocument(stationId: stationId);
+    var doc = persisted ?? StitchResultsDocument(stationId: stationId);
     final records = await _loadRecordsSafe();
     final tokens = <int, String>{
       for (final CaptureRecord r in records) r.targetId: imageTokenOf(r),
@@ -143,14 +139,13 @@ class IncrementalStitchService {
       }
       final staleVersion = record.imageToken != token;
       final crashedJob = record.stitchStatus == StitchStatus.processing;
-      reconciled[id] =
-          (staleVersion || crashedJob)
-              ? ImageStitchRecord(
-                targetId: id,
-                imageToken: token,
-                updatedAt: _clock(),
-              )
-              : record;
+      reconciled[id] = (staleVersion || crashedJob)
+          ? ImageStitchRecord(
+              targetId: id,
+              imageToken: token,
+              updatedAt: _clock(),
+            )
+          : record;
     });
     // Records for captures made by an older app version (no document yet)
     // join as pending rather than being treated as verified.
@@ -213,7 +208,8 @@ class IncrementalStitchService {
       // flight (processing, queued) is never re-run; only a pending one is
       // re-evaluated cheaply, because a neighbour may have arrived.
       final status = existing.stitchStatus;
-      final settled = status == StitchStatus.pass ||
+      final settled =
+          status == StitchStatus.pass ||
           status == StitchStatus.fail ||
           status == StitchStatus.processing ||
           _queued.contains(record.targetId);
@@ -306,9 +302,7 @@ class IncrementalStitchService {
     String? errorReason,
   }) async {
     await load();
-    final failedTargets = success
-        ? const <int>[]
-        : _attribution();
+    final failedTargets = success ? const <int>[] : _attribution();
     _document = StitchResultsDocument(
       stationId: _document.stationId,
       records: _document.records,
@@ -418,9 +412,7 @@ class IncrementalStitchService {
     final candidates = <StitchCandidatePacket>[];
     for (final PlannedNeighbor n in planned) {
       final path = records
-          .firstWhere(
-            (CaptureRecord r) => r.targetId == n.targetId,
-          )
+          .firstWhere((CaptureRecord r) => r.targetId == n.targetId)
           .imagePath;
       if (File(path).existsSync()) {
         candidates.add(
@@ -438,12 +430,12 @@ class IncrementalStitchService {
                   updatedAt: _clock(),
                 ))
             .copyWith(
-          stitchStatus: StitchStatus.pending,
-          matchedTargetIds: const <int>[],
-          errorReason:
-              'Waiting for an overlapping neighbour to be captured.',
-          updatedAt: _clock(),
-        ),
+              stitchStatus: StitchStatus.pending,
+              matchedTargetIds: const <int>[],
+              errorReason:
+                  'Waiting for an overlapping neighbour to be captured.',
+              updatedAt: _clock(),
+            ),
       );
       await _save();
       _notify();
@@ -458,10 +450,10 @@ class IncrementalStitchService {
                 updatedAt: _clock(),
               ))
           .copyWith(
-        stitchStatus: StitchStatus.processing,
-        errorReason: null,
-        updatedAt: _clock(),
-      ),
+            stitchStatus: StitchStatus.processing,
+            errorReason: null,
+            updatedAt: _clock(),
+          ),
     );
     await _save();
     _notify();
@@ -584,9 +576,7 @@ class IncrementalStitchService {
     String? stitcherStatus;
     String? mergeError;
     var group = _document.group;
-    final intermediates = List<IntermediateStitch>.of(
-      _document.intermediates,
-    );
+    final intermediates = List<IntermediateStitch>.of(_document.intermediates);
 
     if (groupMerge != null && groupMerge.ok) {
       outputPath = groupMerge.outputPath;
@@ -624,8 +614,7 @@ class IncrementalStitchService {
             'The previous stitched output is unchanged.';
       }
     } else {
-      final attempted =
-          groupMerge?.stitcherStatus ?? pairMerge?.stitcherStatus;
+      final attempted = groupMerge?.stitcherStatus ?? pairMerge?.stitcherStatus;
       mergeError =
           'Registration verified, but the stitching merge did not produce an '
           'image'
@@ -690,7 +679,10 @@ class IncrementalStitchService {
     return match == null ? 1 : int.parse(match.group(1)!);
   }
 
-  Future<void> _invalidateTarget(int targetId, {required String newToken}) async {
+  Future<void> _invalidateTarget(
+    int targetId, {
+    required String newToken,
+  }) async {
     final existing = _document.recordFor(targetId);
     if (existing != null) {
       // The old version's results are void, wherever they were used.

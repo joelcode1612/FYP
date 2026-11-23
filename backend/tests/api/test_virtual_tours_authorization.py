@@ -59,7 +59,7 @@ def owner_listing(client, owner):
     # owns this cleanup order.
     with Session(engine) as session:
         session.execute(
-            text("DELETE FROM public.virtual_tour WHERE property_id = :pid"),
+            text("DELETE FROM fyp.virtual_tour WHERE property_id = :pid"),
             {"pid": property_id},
         )
         session.execute(
@@ -190,7 +190,7 @@ def test_unlinked_legacy_property_id_is_not_readable(client, owner_listing):
     finally:
         with Session(engine) as session:
             session.execute(
-                text("DELETE FROM public.virtual_tour WHERE tour_id = :tour_id"),
+                text("DELETE FROM fyp.virtual_tour WHERE tour_id = :tour_id"),
                 {"tour_id": tour_id},
             )
             session.commit()

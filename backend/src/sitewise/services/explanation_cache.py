@@ -198,7 +198,7 @@ def schedule(
     inserted = session.exec(
         sql_text(
             """
-            INSERT INTO ml_explanation_cache
+            INSERT INTO fyp.ml_explanation_cache
                 (cache_key, property_id, model_name, model_version, artifact_sha256,
                  background_sha256, method, status, reason, attempt_count, claimed_at,
                  created_at, updated_at)
@@ -228,7 +228,7 @@ def schedule(
     claimed = session.exec(
         sql_text(
             """
-            UPDATE ml_explanation_cache
+            UPDATE fyp.ml_explanation_cache
                SET claimed_at = :now,
                    attempt_count = attempt_count + 1,
                    updated_at = :now
@@ -254,7 +254,7 @@ def store_ready(
     session.exec(
         sql_text(
             """
-            INSERT INTO ml_explanation_cache
+            INSERT INTO fyp.ml_explanation_cache
                 (cache_key, property_id, model_name, model_version, artifact_sha256,
                  background_sha256, method, status, payload, reason, attempt_count,
                  claimed_at, created_at, updated_at)
@@ -288,7 +288,7 @@ def mark_failed(session: Session, cache_key: str, reason: str) -> None:
     session.exec(
         sql_text(
             """
-            UPDATE ml_explanation_cache
+            UPDATE fyp.ml_explanation_cache
                SET status = 'failed', reason = :reason, updated_at = :now
              WHERE cache_key = :cache_key AND status <> 'ready'
             """

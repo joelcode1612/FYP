@@ -5,7 +5,6 @@ import 'dart:typed_data';
 
 import 'package:path_provider/path_provider.dart';
 
-
 /// Local file storage for captured panorama frames and outputs.
 /// Layout: `<appDocs>/sitewise/tours/<tourId>/frames/frame_<index>.png`.
 
@@ -142,10 +141,9 @@ class CaptureFrameStore {
     try {
       final root = await tourRoot(record.tourId);
       await Directory(root).create(recursive: true);
-      await File('$root/panorama_upload.json').writeAsString(
-        jsonEncode(record.toJson()),
-        flush: true,
-      );
+      await File(
+        '$root/panorama_upload.json',
+      ).writeAsString(jsonEncode(record.toJson()), flush: true);
     } catch (_) {
       // The panorama and its frames are on disk already; losing only the
       // acknowledgement makes the next screen offer the upload again.
@@ -177,19 +175,17 @@ class PanoramaUploadRecord {
   });
 
   /// True when this record describes the panorama currently on disk.
-  bool covers(String path, int size) =>
-      panoramaPath == path && bytes == size;
+  bool covers(String path, int size) => panoramaPath == path && bytes == size;
 
   bool get accepted => uploadedAt != null;
 
-  PanoramaUploadRecord copyWith({DateTime? uploadedAt}) =>
-      PanoramaUploadRecord(
-        tourId: tourId,
-        propertyId: propertyId,
-        panoramaPath: panoramaPath,
-        bytes: bytes,
-        uploadedAt: uploadedAt ?? this.uploadedAt,
-      );
+  PanoramaUploadRecord copyWith({DateTime? uploadedAt}) => PanoramaUploadRecord(
+    tourId: tourId,
+    propertyId: propertyId,
+    panoramaPath: panoramaPath,
+    bytes: bytes,
+    uploadedAt: uploadedAt ?? this.uploadedAt,
+  );
 
   Map<String, dynamic> toJson() => {
     'tourId': tourId,

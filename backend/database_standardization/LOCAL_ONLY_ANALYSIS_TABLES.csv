@@ -1,0 +1,348 @@
+schema,table,kind,approx_rows,classification,policy
+demand_gen,dedup_audit,r,890,local_research_analytics,Preserve unchanged; never synchronized
+demand_gen,features,r,1849,local_research_analytics,Preserve unchanged; never synchronized
+demand_gen,pois_master,r,59928,local_research_analytics,Preserve unchanged; never synchronized
+demand_gen,pois_raw,r,60753,local_research_analytics,Preserve unchanged; never synchronized
+demand_gen,states,r,33,local_research_analytics,Preserve unchanged; never synchronized
+demand_gen,subject_poi_pairs,r,181482,local_research_analytics,Preserve unchanged; never synchronized
+demand_gen,subjects,r,1849,local_research_analytics,Preserve unchanged; never synchronized
+fnb_a,candidate_group,r,19538,local_research_analytics,Preserve unchanged; never synchronized
+fnb_a,candidates,r,19538,local_research_analytics,Preserve unchanged; never synchronized
+fnb_a,coord_check,r,19419,local_research_analytics,Preserve unchanged; never synchronized
+fnb_a,demand_pois,r,28118,local_research_analytics,Preserve unchanged; never synchronized
+fnb_a,district_income,r,160,local_research_analytics,Preserve unchanged; never synchronized
+fnb_a,district_population,r,144,local_research_analytics,Preserve unchanged; never synchronized
+fnb_a,district_stats,r,144,local_research_analytics,Preserve unchanged; never synchronized
+fnb_a,dup_pairs,r,110660,local_research_analytics,Preserve unchanged; never synchronized
+fnb_a,duplicate_review,r,-1,local_research_analytics,Preserve unchanged; never synchronized
+fnb_a,evidence,r,26088,local_research_analytics,Preserve unchanged; never synchronized
+fnb_a,extraction_batches,r,-1,local_research_analytics,Preserve unchanged; never synchronized
+fnb_a,f_competition_counts,r,19419,local_research_analytics,Preserve unchanged; never synchronized
+fnb_a,f_competition_scoped,r,19419,local_research_analytics,Preserve unchanged; never synchronized
+fnb_a,f_demand,r,19419,local_research_analytics,Preserve unchanged; never synchronized
+fnb_a,f_demand_extra,r,19419,local_research_analytics,Preserve unchanged; never synchronized
+fnb_a,f_population,r,19419,local_research_analytics,Preserve unchanged; never synchronized
+fnb_a,f_road_class,r,19419,local_research_analytics,Preserve unchanged; never synchronized
+fnb_a,f_roads,r,19419,local_research_analytics,Preserve unchanged; never synchronized
+fnb_a,f_socioeconomic,r,19419,local_research_analytics,Preserve unchanged; never synchronized
+fnb_a,f_transit,r,19419,local_research_analytics,Preserve unchanged; never synchronized
+fnb_a,fnb_outlet,r,19419,local_research_analytics,Preserve unchanged; never synchronized
+fnb_a,fnb_outlet_stage,r,-1,local_research_analytics,Preserve unchanged; never synchronized
+fnb_a,graph,r,2174834,local_research_analytics,Preserve unchanged; never synchronized
+fnb_a,graph_nodes,r,2867384,local_research_analytics,Preserve unchanged; never synchronized
+fnb_a,label_decision_log,r,19419,local_research_analytics,Preserve unchanged; never synchronized
+fnb_a,major_roads,r,217204,local_research_analytics,Preserve unchanged; never synchronized
+fnb_a,net_edges,r,106647,local_research_analytics,Preserve unchanged; never synchronized
+fnb_a,net_endpoints,r,213294,local_research_analytics,Preserve unchanged; never synchronized
+fnb_a,net_ends,r,213294,local_research_analytics,Preserve unchanged; never synchronized
+fnb_a,net_nodes,r,148256,local_research_analytics,Preserve unchanged; never synchronized
+fnb_a,osm_edit_times,r,19530,local_research_analytics,Preserve unchanged; never synchronized
+fnb_a,outlet_canonical,r,19419,local_research_analytics,Preserve unchanged; never synchronized
+fnb_a,outlet_geo,r,19419,local_research_analytics,Preserve unchanged; never synchronized
+fnb_a,outlet_labels,r,19419,local_research_analytics,Preserve unchanged; never synchronized
+fnb_a,outlet_labels_v2,r,19419,local_research_analytics,Preserve unchanged; never synchronized
+fnb_a,outlet_members,r,19538,local_research_analytics,Preserve unchanged; never synchronized
+fnb_a,outlet_names,r,19538,local_research_analytics,Preserve unchanged; never synchronized
+fnb_a,outlet_node,r,19419,local_research_analytics,Preserve unchanged; never synchronized
+fnb_a,outlet_positive_label,r,19419,local_research_analytics,Preserve unchanged; never synchronized
+fnb_a,outlet_scope,r,19419,local_research_analytics,Preserve unchanged; never synchronized
+fnb_a,outlet_source_ids,r,-1,local_research_analytics,Preserve unchanged; never synchronized
+fnb_a,outlet_verification,r,19419,local_research_analytics,Preserve unchanged; never synchronized
+fnb_a,outlets,r,19419,local_research_analytics,Preserve unchanged; never synchronized
+fnb_a,overture_match,r,358636,local_research_analytics,Preserve unchanged; never synchronized
+fnb_a,overture_places,r,163297,local_research_analytics,Preserve unchanged; never synchronized
+fnb_a,prohibited_source_quarantine,r,-1,local_research_analytics,Preserve unchanged; never synchronized
+fnb_a,property_geospatial_feature,r,0,local_research_analytics,Preserve unchanged; never synchronized
+fnb_a,pu_competitors,r,19419,local_research_analytics,Preserve unchanged; never synchronized
+fnb_a,pu_features,r,207,local_research_analytics,Preserve unchanged; never synchronized
+fnb_a,pu_points,r,207,local_research_analytics,Preserve unchanged; never synchronized
+fnb_a,refresh_run,r,-1,local_research_analytics,Preserve unchanged; never synchronized
+fnb_a,road_junctions,r,508129,local_research_analytics,Preserve unchanged; never synchronized
+fnb_a,source_absence,r,-1,local_research_analytics,Preserve unchanged; never synchronized
+fnb_a,source_snapshot,r,1,local_research_analytics,Preserve unchanged; never synchronized
+fnb_a,stage_runs,r,-1,local_research_analytics,Preserve unchanged; never synchronized
+fnb_a,study_area,r,1,local_research_analytics,Preserve unchanged; never synchronized
+fnb_a,study_area_states,r,-1,local_research_analytics,Preserve unchanged; never synchronized
+fnb_a,transit_poi_node,r,18470,local_research_analytics,Preserve unchanged; never synchronized
+fnb_a,transit_pois,r,18470,local_research_analytics,Preserve unchanged; never synchronized
+fnb_a,union_edges,r,129,local_research_analytics,Preserve unchanged; never synchronized
+fyp_features,_b50,r,-1,local_research_analytics,Preserve unchanged; never synchronized
+fyp_features,a_family,r,326,local_research_analytics,Preserve unchanged; never synchronized
+fyp_features,a_family2,r,326,local_research_analytics,Preserve unchanged; never synchronized
+fyp_features,a_family_v2,r,405,local_research_analytics,Preserve unchanged; never synchronized
+fyp_features,all_points,r,5455,local_research_analytics,Preserve unchanged; never synchronized
+fyp_features,b_family,r,326,local_research_analytics,Preserve unchanged; never synchronized
+fyp_features,b_family_v2,r,405,local_research_analytics,Preserve unchanged; never synchronized
+fyp_features,bufs,r,5455,local_research_analytics,Preserve unchanged; never synchronized
+fyp_features,building_support,r,5455,local_research_analytics,Preserve unchanged; never synchronized
+fyp_features,buildings_study,r,8255774,local_research_analytics,Preserve unchanged; never synchronized
+fyp_features,c_intersections,r,326,local_research_analytics,Preserve unchanged; never synchronized
+fyp_features,c_intersections_v2,r,416,local_research_analytics,Preserve unchanged; never synchronized
+fyp_features,comp_size,r,9600,local_research_analytics,Preserve unchanged; never synchronized
+fyp_features,e_ped_junctions,r,326,local_research_analytics,Preserve unchanged; never synchronized
+fyp_features,e_ped_v2,r,416,local_research_analytics,Preserve unchanged; never synchronized
+fyp_features,gtfs_active_services,r,-1,local_research_analytics,Preserve unchanged; never synchronized
+fyp_features,gtfs_active_trips,r,16531,local_research_analytics,Preserve unchanged; never synchronized
+fyp_features,gtfs_calendar,r,-1,local_research_analytics,Preserve unchanged; never synchronized
+fyp_features,gtfs_calendar_dates,r,-1,local_research_analytics,Preserve unchanged; never synchronized
+fyp_features,gtfs_dep,r,629154,local_research_analytics,Preserve unchanged; never synchronized
+fyp_features,gtfs_routes,r,317,local_research_analytics,Preserve unchanged; never synchronized
+fyp_features,gtfs_stop_modes,r,9489,local_research_analytics,Preserve unchanged; never synchronized
+fyp_features,gtfs_stop_routes,r,14631,local_research_analytics,Preserve unchanged; never synchronized
+fyp_features,gtfs_stop_times,r,736719,local_research_analytics,Preserve unchanged; never synchronized
+fyp_features,gtfs_stops,r,9489,local_research_analytics,Preserve unchanged; never synchronized
+fyp_features,gtfs_trips,r,19545,local_research_analytics,Preserve unchanged; never synchronized
+fyp_features,iso_edges,r,584953,local_research_analytics,Preserve unchanged; never synchronized
+fyp_features,iso_poly,r,326,local_research_analytics,Preserve unchanged; never synchronized
+fyp_features,iso_poly_v2,r,405,local_research_analytics,Preserve unchanged; never synchronized
+fyp_features,iso_pop,r,326,local_research_analytics,Preserve unchanged; never synchronized
+fyp_features,iso_pop_v2,r,405,local_research_analytics,Preserve unchanged; never synchronized
+fyp_features,landscan_fix_v2,r,405,local_research_analytics,Preserve unchanged; never synchronized
+fyp_features,nearest_ext_routes_v2,r,1593,local_research_analytics,Preserve unchanged; never synchronized
+fyp_features,node_cost,r,509944,local_research_analytics,Preserve unchanged; never synchronized
+fyp_features,osm_transit_density_v2,r,416,local_research_analytics,Preserve unchanged; never synchronized
+fyp_features,osm_transit_pts_v2,r,26003,local_research_analytics,Preserve unchanged; never synchronized
+fyp_features,ped_deg,r,244832,local_research_analytics,Preserve unchanged; never synchronized
+fyp_features,ped_junctions_v2,r,19513,local_research_analytics,Preserve unchanged; never synchronized
+fyp_features,pilot,r,-1,local_research_analytics,Preserve unchanged; never synchronized
+fyp_features,pilot2,r,-1,local_research_analytics,Preserve unchanged; never synchronized
+fyp_features,pilot3,r,-1,local_research_analytics,Preserve unchanged; never synchronized
+fyp_features,pilot3_reach,r,465,local_research_analytics,Preserve unchanged; never synchronized
+fyp_features,pilot4,r,-1,local_research_analytics,Preserve unchanged; never synchronized
+fyp_features,pilot4_reach,r,770,local_research_analytics,Preserve unchanged; never synchronized
+fyp_features,pilot_reach,r,595,local_research_analytics,Preserve unchanged; never synchronized
+fyp_features,points,r,4561,local_research_analytics,Preserve unchanged; never synchronized
+fyp_features,pos_building,r,894,local_research_analytics,Preserve unchanged; never synchronized
+fyp_features,positives,r,894,local_research_analytics,Preserve unchanged; never synchronized
+fyp_features,prop_comp,r,326,local_research_analytics,Preserve unchanged; never synchronized
+fyp_features,prop_input,r,326,local_research_analytics,Preserve unchanged; never synchronized
+fyp_features,prop_input_v2,r,416,local_research_analytics,Preserve unchanged; never synchronized
+fyp_features,prop_reach,r,446372,local_research_analytics,Preserve unchanged; never synchronized
+fyp_features,prop_reach2,r,506536,local_research_analytics,Preserve unchanged; never synchronized
+fyp_features,prop_reach_v2,r,272799,local_research_analytics,Preserve unchanged; never synchronized
+fyp_features,prop_snap,r,326,local_research_analytics,Preserve unchanged; never synchronized
+fyp_features,prop_snap2,r,326,local_research_analytics,Preserve unchanged; never synchronized
+fyp_features,prop_snap_v2,r,405,local_research_analytics,Preserve unchanged; never synchronized
+fyp_features,prop_stop,r,5835,local_research_analytics,Preserve unchanged; never synchronized
+fyp_features,property_population_spatial,r,6410,local_research_analytics,Preserve unchanged; never synchronized
+fyp_features,road_deg,r,590607,local_research_analytics,Preserve unchanged; never synchronized
+fyp_features,road_junctions_v2,r,131881,local_research_analytics,Preserve unchanged; never synchronized
+fyp_features,road_metrics,r,326,local_research_analytics,Preserve unchanged; never synchronized
+fyp_features,road_metrics_v2,r,416,local_research_analytics,Preserve unchanged; never synchronized
+fyp_features,roads_v2,r,1919125,local_research_analytics,Preserve unchanged; never synchronized
+fyp_features,stop_facility,r,5116,local_research_analytics,Preserve unchanged; never synchronized
+fyp_features,stop_facility2,r,5623,local_research_analytics,Preserve unchanged; never synchronized
+fyp_features,stop_snap,r,9489,local_research_analytics,Preserve unchanged; never synchronized
+fyp_features,study_area,r,1,local_research_analytics,Preserve unchanged; never synchronized
+fyp_features,transit_density,r,314,local_research_analytics,Preserve unchanged; never synchronized
+fyp_features,transit_density_v2,r,416,local_research_analytics,Preserve unchanged; never synchronized
+fyp_features,walk_deg,r,1708711,local_research_analytics,Preserve unchanged; never synchronized
+fyp_features,walk_edges,r,1148467,local_research_analytics,Preserve unchanged; never synchronized
+fyp_features,walk_nodes,r,1708711,local_research_analytics,Preserve unchanged; never synchronized
+fyp_features,walk_stop_pairs,r,5301,local_research_analytics,Preserve unchanged; never synchronized
+fyp_features,walk_stop_pairs2,r,5835,local_research_analytics,Preserve unchanged; never synchronized
+fyp_features,walk_stop_v2,r,3537,local_research_analytics,Preserve unchanged; never synchronized
+fyp_features,walk_vertices,r,11793054,local_research_analytics,Preserve unchanged; never synchronized
+fyp_features,we_components,r,815489,local_research_analytics,Preserve unchanged; never synchronized
+fyp_features,we_edges,r,880106,local_research_analytics,Preserve unchanged; never synchronized
+fyp_features,worldpop_fix_v2,r,405,local_research_analytics,Preserve unchanged; never synchronized
+mrf_2026_11_06,building_density,r,1849,unknown_requires_investigation,Preserve until classified
+mrf_2026_11_06,building_density_prior_comparison,r,1849,unknown_requires_investigation,Preserve until classified
+mrf_2026_11_06,gtfs_osm_reconciliation,r,9487,unknown_requires_investigation,Preserve until classified
+mrf_2026_11_06,gtfs_service_check,r,-1,unknown_requires_investigation,Preserve until classified
+mrf_2026_11_06,gtfs_stops_current,r,9487,unknown_requires_investigation,Preserve until classified
+mrf_2026_11_06,transportation_recovery,r,1732,unknown_requires_investigation,Preserve until classified
+mrf_2026_11_06,walk_reverification,r,-1,unknown_requires_investigation,Preserve until classified
+popfeat,agg,r,18499,local_research_analytics,Preserve unchanged; never synchronized
+popfeat,buf,r,4561,local_research_analytics,Preserve unchanged; never synchronized
+popfeat,district,r,4561,local_research_analytics,Preserve unchanged; never synchronized
+popfeat,feat,r,947249,local_research_analytics,Preserve unchanged; never synchronized
+popfeat,final,v,-1,local_research_analytics,Preserve unchanged; never synchronized
+popfeat,in_study,r,21382,local_research_analytics,Preserve unchanged; never synchronized
+popfeat,node_cands,r,21145,local_research_analytics,Preserve unchanged; never synchronized
+popfeat,node_dupes,r,13857,local_research_analytics,Preserve unchanged; never synchronized
+popfeat,node_src,r,42286,local_research_analytics,Preserve unchanged; never synchronized
+popfeat,pairs,r,42058512,local_research_analytics,Preserve unchanged; never synchronized
+popfeat,poly_cands,r,933859,local_research_analytics,Preserve unchanged; never synchronized
+popfeat,poly_src,r,1446708,local_research_analytics,Preserve unchanged; never synchronized
+popfeat,pop_disc,r,13683,local_research_analytics,Preserve unchanged; never synchronized
+popfeat,property_pass_locations,r,4561,local_research_analytics,Preserve unchanged; never synchronized
+popfeat,recheck_1000,r,4561,local_research_analytics,Preserve unchanged; never synchronized
+popfeat,recheck_3000,r,4400,local_research_analytics,Preserve unchanged; never synchronized
+popfeat,recheck_500,r,4561,local_research_analytics,Preserve unchanged; never synchronized
+popfeat,study_rings,r,4,local_research_analytics,Preserve unchanged; never synchronized
+popfeat,tiles,r,2677,local_research_analytics,Preserve unchanged; never synchronized
+popfeat,tiles2,r,2677,local_research_analytics,Preserve unchanged; never synchronized
+public,_fnb_pts,r,200,local_research_staging_public,Preserve unchanged; never synchronized
+public,_poi_bus,r,19842,local_research_staging_public,Preserve unchanged; never synchronized
+public,_wp_tiles,r,2677,local_research_staging_public,Preserve unchanged; never synchronized
+public,combined_roads,r,1934393,local_research_staging_public,Preserve unchanged; never synchronized
+public,dbg_comp,r,20337,local_research_staging_public,Preserve unchanged; never synchronized
+public,district_age_population,r,3150,local_research_staging_public,Preserve unchanged; never synchronized
+public,district_population,r,175,local_research_staging_public,Preserve unchanged; never synchronized
+public,district_road_metrics,r,144,local_research_staging_public,Preserve unchanged; never synchronized
+public,diva_roads,r,1300,local_research_staging_public,Preserve unchanged; never synchronized
+public,dun_income,r,456,local_research_staging_public,Preserve unchanged; never synchronized
+public,gadm_country,r,1,local_research_staging_public,Preserve unchanged; never synchronized
+public,gadm_districts,r,144,local_research_staging_public,Preserve unchanged; never synchronized
+public,gadm_states,r,16,local_research_staging_public,Preserve unchanged; never synchronized
+public,geography_columns,v,-1,local_research_staging_public,Preserve unchanged; never synchronized
+public,geometry_columns,v,-1,local_research_staging_public,Preserve unchanged; never synchronized
+public,hh_income_district,r,342,local_research_staging_public,Preserve unchanged; never synchronized
+public,hh_income_parlimen,r,666,local_research_staging_public,Preserve unchanged; never synchronized
+public,hies_malaysia_percentile,r,1200,local_research_staging_public,Preserve unchanged; never synchronized
+public,labor_force_statistics_district,r,1116,local_research_staging_public,Preserve unchanged; never synchronized
+public,landscan_2024,r,6539,local_research_staging_public,Preserve unchanged; never synchronized
+public,m2_answer_revisions,r,-1,local_research_staging_public,Preserve unchanged; never synchronized
+public,m2_assessments,r,-1,local_research_staging_public,Preserve unchanged; never synchronized
+public,m2_bdj_evaluations,r,-1,local_research_staging_public,Preserve unchanged; never synchronized
+public,m2_bdj_findings,r,-1,local_research_staging_public,Preserve unchanged; never synchronized
+public,m2_confirmation_snapshots,r,-1,local_research_staging_public,Preserve unchanged; never synchronized
+public,m2_confirmed_uncertainties,r,-1,local_research_staging_public,Preserve unchanged; never synchronized
+public,m2_instrument_versions,r,-1,local_research_staging_public,Preserve unchanged; never synchronized
+public,m2_item_versions,r,-1,local_research_staging_public,Preserve unchanged; never synchronized
+public,m2_review_events,r,-1,local_research_staging_public,Preserve unchanged; never synchronized
+public,malaysia_admin_hierarchy,r,144,local_research_staging_public,Preserve unchanged; never synchronized
+public,open_buildings,r,16212455,local_research_staging_public,Preserve unchanged; never synchronized
+public,osm2pgsql_properties,r,-1,local_research_staging_public,Preserve unchanged; never synchronized
+public,pf_gtfs,r,894,local_research_staging_public,Preserve unchanged; never synchronized
+public,pf_pop,r,894,local_research_staging_public,Preserve unchanged; never synchronized
+public,pf_road,r,894,local_research_staging_public,Preserve unchanged; never synchronized
+public,pf_transit,r,894,local_research_staging_public,Preserve unchanged; never synchronized
+public,planet_osm_line,r,2067758,local_research_staging_public,Preserve unchanged; never synchronized
+public,planet_osm_nodes,r,29554196,local_research_staging_public,Preserve unchanged; never synchronized
+public,planet_osm_point,r,500353,local_research_staging_public,Preserve unchanged; never synchronized
+public,planet_osm_polygon,r,1892841,local_research_staging_public,Preserve unchanged; never synchronized
+public,planet_osm_rels,r,195876,local_research_staging_public,Preserve unchanged; never synchronized
+public,planet_osm_roads,r,168082,local_research_staging_public,Preserve unchanged; never synchronized
+public,planet_osm_ways,r,4095339,local_research_staging_public,Preserve unchanged; never synchronized
+public,population_malaysia,r,17415,local_research_staging_public,Preserve unchanged; never synchronized
+public,pp_ls_drive10,r,894,local_research_staging_public,Preserve unchanged; never synchronized
+public,pp_ls_walk10,r,881,local_research_staging_public,Preserve unchanged; never synchronized
+public,pp_wp_drive10,r,894,local_research_staging_public,Preserve unchanged; never synchronized
+public,pp_wp_drive15,r,894,local_research_staging_public,Preserve unchanged; never synchronized
+public,pp_wp_walk10,r,881,local_research_staging_public,Preserve unchanged; never synchronized
+public,pp_wp_walk15,r,893,local_research_staging_public,Preserve unchanged; never synchronized
+public,pr_car_iso,r,886,local_research_staging_public,Preserve unchanged; never synchronized
+public,pr_done,r,886,local_research_staging_public,Preserve unchanged; never synchronized
+public,pr_hit,r,18483,local_research_staging_public,Preserve unchanged; never synchronized
+public,pr_props,r,894,local_research_staging_public,Preserve unchanged; never synchronized
+public,pr_snap,r,894,local_research_staging_public,Preserve unchanged; never synchronized
+public,pr_walk_iso,r,888,local_research_staging_public,Preserve unchanged; never synchronized
+public,pr_walk_poly,r,894,local_research_staging_public,Preserve unchanged; never synchronized
+public,pr_wd_hit,r,4012,local_research_staging_public,Preserve unchanged; never synchronized
+public,pr_wd_hit_x,r,18757,local_research_staging_public,Preserve unchanged; never synchronized
+public,pr_wt_reach,r,273504,local_research_staging_public,Preserve unchanged; never synchronized
+public,pr_xdone,r,733,local_research_staging_public,Preserve unchanged; never synchronized
+public,psense_assign,r,1592732,local_research_staging_public,Preserve unchanged; never synchronized
+public,psense_comp_strong,r,2317897,local_research_staging_public,Preserve unchanged; never synchronized
+public,psense_comp_und,r,2317897,local_research_staging_public,Preserve unchanged; never synchronized
+public,psense_comp_walk,r,2302648,local_research_staging_public,Preserve unchanged; never synchronized
+public,psense_edges,r,1921192,local_research_staging_public,Preserve unchanged; never synchronized
+public,psense_edges_undir,r,1592732,local_research_staging_public,Preserve unchanged; never synchronized
+public,psense_links,r,213433,local_research_staging_public,Preserve unchanged; never synchronized
+public,psense_links_pair,r,213176,local_research_staging_public,Preserve unchanged; never synchronized
+public,psense_nearest_station,r,894,local_research_staging_public,Preserve unchanged; never synchronized
+public,psense_oneway_rev,r,101,local_research_staging_public,Preserve unchanged; never synchronized
+public,psense_outlets,r,894,local_research_staging_public,Preserve unchanged; never synchronized
+public,psense_parking,r,24553,local_research_staging_public,Preserve unchanged; never synchronized
+public,psense_parking_features,r,1849,local_research_staging_public,Preserve unchanged; never synchronized
+public,psense_routes,r,2567,local_research_staging_public,Preserve unchanged; never synchronized
+public,psense_snap,r,2799,local_research_staging_public,Preserve unchanged; never synchronized
+public,psense_stations,r,471,local_research_staging_public,Preserve unchanged; never synchronized
+public,psense_street_parking,r,-1,local_research_staging_public,Preserve unchanged; never synchronized
+public,psense_verts,r,2317897,local_research_staging_public,Preserve unchanged; never synchronized
+public,psense_vin,r,1422983,local_research_staging_public,Preserve unchanged; never synchronized
+public,psense_vkey,r,2317897,local_research_staging_public,Preserve unchanged; never synchronized
+public,psense_vnet_car_dst,r,264589,local_research_staging_public,Preserve unchanged; never synchronized
+public,psense_vnet_car_out,r,256187,local_research_staging_public,Preserve unchanged; never synchronized
+public,psense_vnet_undir,r,345162,local_research_staging_public,Preserve unchanged; never synchronized
+public,psense_vnet_walk,r,326850,local_research_staging_public,Preserve unchanged; never synchronized
+public,psense_vout,r,1414158,local_research_staging_public,Preserve unchanged; never synchronized
+public,pz_coords,r,866,local_research_staging_public,Preserve unchanged; never synchronized
+public,pz_geo,r,894,local_research_staging_public,Preserve unchanged; never synchronized
+public,pz_landscan,r,866,local_research_staging_public,Preserve unchanged; never synchronized
+public,pz_pop,r,894,local_research_staging_public,Preserve unchanged; never synchronized
+public,pz_props,r,894,local_research_staging_public,Preserve unchanged; never synchronized
+public,pz_worldpop,r,866,local_research_staging_public,Preserve unchanged; never synchronized
+public,pzu_landscan,r,955,local_research_staging_public,Preserve unchanged; never synchronized
+public,pzu_points,r,955,local_research_staging_public,Preserve unchanged; never synchronized
+public,pzu_worldpop,r,955,local_research_staging_public,Preserve unchanged; never synchronized
+public,raster_columns,v,-1,local_research_staging_public,Preserve unchanged; never synchronized
+public,raster_overviews,v,-1,local_research_staging_public,Preserve unchanged; never synchronized
+public,spatial_ref_sys,r,8500,local_research_staging_public,Preserve unchanged; never synchronized
+public,state_hies,r,-1,local_research_staging_public,Preserve unchanged; never synchronized
+public,state_population,r,218,local_research_staging_public,Preserve unchanged; never synchronized
+public,sw_positive_fnb_population_features,r,894,local_research_staging_public,Preserve unchanged; never synchronized
+public,u955_landscan,r,955,local_research_staging_public,Preserve unchanged; never synchronized
+public,uf_gtfs,r,955,local_research_staging_public,Preserve unchanged; never synchronized
+public,uf_pop,r,955,local_research_staging_public,Preserve unchanged; never synchronized
+public,uf_road,r,955,local_research_staging_public,Preserve unchanged; never synchronized
+public,uf_transit,r,955,local_research_staging_public,Preserve unchanged; never synchronized
+public,ug_calendar,r,-1,local_research_staging_public,Preserve unchanged; never synchronized
+public,ug_calendar_date,r,-1,local_research_staging_public,Preserve unchanged; never synchronized
+public,ug_feed,r,-1,local_research_staging_public,Preserve unchanged; never synchronized
+public,ug_route,r,315,local_research_staging_public,Preserve unchanged; never synchronized
+public,ug_service_date,r,0,local_research_staging_public,Preserve unchanged; never synchronized
+public,ug_stop,r,9486,local_research_staging_public,Preserve unchanged; never synchronized
+public,ug_stop_ref,r,9486,local_research_staging_public,Preserve unchanged; never synchronized
+public,ug_stop_snap,r,9472,local_research_staging_public,Preserve unchanged; never synchronized
+public,ug_stop_time,r,656364,local_research_staging_public,Preserve unchanged; never synchronized
+public,ug_trip,r,16604,local_research_staging_public,Preserve unchanged; never synchronized
+public,up_ls_drive10,r,954,unknown_requires_investigation,Preserve until classified
+public,up_ls_walk10,r,921,unknown_requires_investigation,Preserve until classified
+public,up_wp_drive10,r,954,unknown_requires_investigation,Preserve until classified
+public,up_wp_drive15,r,954,unknown_requires_investigation,Preserve until classified
+public,up_wp_walk10,r,921,unknown_requires_investigation,Preserve until classified
+public,up_wp_walk15,r,943,unknown_requires_investigation,Preserve until classified
+public,ur_car_iso,r,941,local_research_staging_public,Preserve unchanged; never synchronized
+public,ur_carnode,r,285462,local_research_staging_public,Preserve unchanged; never synchronized
+public,ur_comp,r,1735814,local_research_staging_public,Preserve unchanged; never synchronized
+public,ur_done,r,941,local_research_staging_public,Preserve unchanged; never synchronized
+public,ur_fac_route,r,28708,local_research_staging_public,Preserve unchanged; never synchronized
+public,ur_fac_service,r,9096,local_research_staging_public,Preserve unchanged; never synchronized
+public,ur_facility,r,9096,local_research_staging_public,Preserve unchanged; never synchronized
+public,ur_hit,r,16382,local_research_staging_public,Preserve unchanged; never synchronized
+public,ur_road,r,1937486,local_research_staging_public,Preserve unchanged; never synchronized
+public,ur_routes,r,17982,local_research_staging_public,Preserve unchanged; never synchronized
+public,ur_snap,r,955,local_research_staging_public,Preserve unchanged; never synchronized
+public,ur_stop_dk,r,9486,local_research_staging_public,Preserve unchanged; never synchronized
+public,ur_vdeg,r,2315464,local_research_staging_public,Preserve unchanged; never synchronized
+public,ur_walk_iso,r,843,local_research_staging_public,Preserve unchanged; never synchronized
+public,ur_walk_poly,r,953,local_research_staging_public,Preserve unchanged; never synchronized
+public,ur_walknode,r,326850,local_research_staging_public,Preserve unchanged; never synchronized
+public,ur_wd_hit,r,3164,local_research_staging_public,Preserve unchanged; never synchronized
+public,ur_wd_hit_x,r,17490,local_research_staging_public,Preserve unchanged; never synchronized
+public,ur_wt_reach,r,174280,local_research_staging_public,Preserve unchanged; never synchronized
+public,ur_xdone,r,875,local_research_staging_public,Preserve unchanged; never synchronized
+public,usense_props,r,955,local_research_staging_public,Preserve unchanged; never synchronized
+public,vw_latest_district_statistics,v,-1,local_research_staging_public,Preserve unchanged; never synchronized
+public,worldpop_2025_constrained,r,2677,local_research_staging_public,Preserve unchanged; never synchronized
+rcv_2026_11_09,recovery_values,r,62866,unknown_requires_investigation,Preserve until classified
+rcv_2026_11_09,rx_availability_1849,r,1849,unknown_requires_investigation,Preserve until classified
+rcv_2026_11_09,rx_car_iso,r,53,unknown_requires_investigation,Preserve until classified
+rcv_2026_11_09,rx_characteristics_955,r,955,unknown_requires_investigation,Preserve until classified
+rcv_2026_11_09,rx_competitor_category_map,r,30,unknown_requires_investigation,Preserve until classified
+rcv_2026_11_09,rx_competitor_dedupe,r,183,unknown_requires_investigation,Preserve until classified
+rcv_2026_11_09,rx_competitor_features_1849,r,1849,unknown_requires_investigation,Preserve until classified
+rcv_2026_11_09,rx_competitor_outlets,r,19419,unknown_requires_investigation,Preserve until classified
+rcv_2026_11_09,rx_density_955,r,955,unknown_requires_investigation,Preserve until classified
+rcv_2026_11_09,rx_feature,r,1431,unknown_requires_investigation,Preserve until classified
+rcv_2026_11_09,rx_hit,r,82,unknown_requires_investigation,Preserve until classified
+rcv_2026_11_09,rx_matrix_1849_recovered,r,1849,unknown_requires_investigation,Preserve until classified
+rcv_2026_11_09,rx_parking_audit,r,37,unknown_requires_investigation,Preserve until classified
+rcv_2026_11_09,rx_parking_recovery_1849,r,1849,unknown_requires_investigation,Preserve until classified
+rcv_2026_11_09,rx_q1_q5_scores_955,r,955,unknown_requires_investigation,Preserve until classified
+rcv_2026_11_09,rx_walk_iso,r,53,unknown_requires_investigation,Preserve until classified
+rcv_2026_11_09,rx_walk_poly,r,53,unknown_requires_investigation,Preserve until classified
+rcv_2026_11_09,rx_wd_hit,r,-1,unknown_requires_investigation,Preserve until classified
+rcv_2026_11_09,rx_wd_hit_x,r,71,unknown_requires_investigation,Preserve until classified
+rcv_2026_11_09,rx_worldpop_status,r,62,unknown_requires_investigation,Preserve until classified
+rcv_2026_11_09,rx_wp_overlay,r,-1,unknown_requires_investigation,Preserve until classified
+rcv_2026_11_09,rx_wt_reach,r,851,unknown_requires_investigation,Preserve until classified
+rcv_2026_11_09,status_1849,r,62866,unknown_requires_investigation,Preserve until classified
+sitewise_analytics,subject_features,r,1849,unknown_requires_investigation,Preserve until classified
+sitewise_analytics,transit_stop_reconciliation,r,9487,unknown_requires_investigation,Preserve until classified
+sitewise_ml,pu_training_1796_20261115,r,1796,unknown_requires_investigation,Preserve until classified
+topology,layer,r,-1,unknown_requires_investigation,Preserve until classified
+topology,topology,r,-1,unknown_requires_investigation,Preserve until classified

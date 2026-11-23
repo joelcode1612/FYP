@@ -181,7 +181,7 @@ class LocationAnalysisService:
     def _ownership_documents_count(self, property_id: int) -> int:
         row = self.session.execute(
             text(
-                "SELECT count(*) FROM public.verification_document "
+                "SELECT count(*) FROM fyp.verification_document "
                 "WHERE property_id = :pid AND verification_type = 'ownership'"
             ),
             {"pid": property_id},

@@ -21,9 +21,8 @@ const double _maxBrightness = 235.0;
 /// detects, matches and stitches. Only the [StitchJobPacket] crosses the
 /// boundary, and only the [StitchWorkerOutcome] comes back — native `Mat`
 /// handles are created and disposed entirely inside.
-Future<StitchWorkerOutcome> runIncrementalStitchJob(
-  StitchJobPacket packet,
-) => Isolate.run(() => _runJob(packet));
+Future<StitchWorkerOutcome> runIncrementalStitchJob(StitchJobPacket packet) =>
+    Isolate.run(() => _runJob(packet));
 
 StitchWorkerOutcome _runJob(StitchJobPacket packet) {
   if (!File(packet.imagePath).existsSync()) {
@@ -339,7 +338,9 @@ StitchAttemptResult _matchCandidate({
     final meanReproj = reprojSum / inliers;
     final bboxArea = (maxX - minX) * (maxY - minY);
     final imageArea = (workWidth * workHeight).toDouble();
-    final overlap = imageArea <= 0 ? 0.0 : (bboxArea / imageArea).clamp(0.0, 1.0);
+    final overlap = imageArea <= 0
+        ? 0.0
+        : (bboxArea / imageArea).clamp(0.0, 1.0);
     return StitchAttemptResult(
       candidateTargetId: candidate.targetId,
       featureMatches: good.length,
@@ -404,7 +405,9 @@ StitchMergeResult _merge({
     }
     final written = cv.imwrite(tempPath, pano);
     pano.dispose();
-    if (!written || !File(tempPath).existsSync() || File(tempPath).lengthSync() == 0) {
+    if (!written ||
+        !File(tempPath).existsSync() ||
+        File(tempPath).lengthSync() == 0) {
       final temp = File(tempPath);
       if (temp.existsSync()) temp.deleteSync();
       return StitchMergeResult(

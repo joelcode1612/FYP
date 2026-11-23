@@ -1134,10 +1134,11 @@ class FypPropertyRepository:
         "FROM fyp.rental_properties"
     )
 
-    def owner_listing(self, property_id: int) -> dict | None:
+    def owner_listing(self, property_id: int, *, for_update: bool = False) -> dict | None:
         """One listing row (any status) — callers enforce ownership."""
+        lock = " FOR UPDATE" if for_update else ""
         row = self.session.execute(
-            text(f"{self._LISTING_SELECT} WHERE id = :pid"),
+            text(f"{self._LISTING_SELECT} WHERE id = :pid{lock}"),
             {"pid": property_id},
         ).mappings().first()
         return dict(row) if row else None
@@ -1237,6 +1238,10 @@ class FypPropertyRepository:
             if column not in fields:
                 continue
             value = fields[column]
+            # PostgreSQL stores these flags as SMALLINT (0/1), not BOOLEAN.
+            # Match the existing create_owner_draft/create_owner_listing paths.
+            if column in ("has_parking", "is_fnb_suitable") and value is not None:
+                value = int(value)
             params[column] = value
             if column in ("address", "city", "state", "postcode", "availability",
                           "property_type", "description", "name"):
@@ -1481,8 +1486,8 @@ class FypPropertyRepository:
     #: must be empty before the master row may be deleted, otherwise the
     #: database itself refuses (and the history is meant to be kept).
     _DELETE_BLOCKERS: tuple[tuple[str, str], ...] = (
-        ("public.property_verification", "property_id"),
-        ("public.verification_audit", "property_id"),
+        ("fyp.property_verification", "property_id"),
+        ("fyp.verification_audit", "property_id"),
         ("public.verification_document", "property_id"),
         ("public.listing_change_audit", "listing_id"),
         ("public.listing_change_request", "listing_id"),

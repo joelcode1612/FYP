@@ -101,12 +101,12 @@ def cleanup_assessments(cleanup_users):
         return
     with Session(engine) as session:
         session.execute(
-            text("DELETE FROM assessment WHERE user_id = ANY(:ids)"),
+            text("DELETE FROM fyp.assessment WHERE user_id = ANY(:ids)"),
             {"ids": list(cleanup_users)},
         )
         # Saved rows reference the same users and must go before them.
         session.execute(
-            text("DELETE FROM favorite_property WHERE user_id = ANY(:ids)"),
+            text("DELETE FROM fyp.favorite_property WHERE user_id = ANY(:ids)"),
             {"ids": list(cleanup_users)},
         )
         session.commit()

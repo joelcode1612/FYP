@@ -13,7 +13,7 @@ detail. Each step only applies when the previous step found no *valid*
 responsible party.
 
 1. ``AGENT_MANAGED``
-   A row exists in ``public.agent_listing_assignment`` for the operational
+   A row exists in ``fyp.agent_listing_assignment`` for the operational
    property **and** the assigned agent is an active identity with a Supabase
    agent profile. One agent may manage many properties; a property has at most
    one agent (``listing_id`` is the primary key of the assignment table).

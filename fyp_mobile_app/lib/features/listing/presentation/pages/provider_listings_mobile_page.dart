@@ -99,9 +99,7 @@ class _ProviderListingsMobilePageState
 
   void _openEditor(ProviderListing listing) {
     if (ref.read(authNotifierProvider).user?.role == AppRole.agent) {
-      // The agent editing workflow is the change-proposal sheet inside the
-      // existing Property Details page — never a second editor.
-      _openDetail(listing);
+      _open('/provider/inspection', arguments: listing.id);
       return;
     }
     // The owner editing workflow is the existing Add Property form resuming
@@ -331,8 +329,7 @@ class _HeaderBanner extends StatelessWidget {
                           ),
                         ),
                         const SizedBox(width: 8),
-                        if (!isAgent)
-                          _AddPropertyButton(onTap: onAddProperty),
+                        if (!isAgent) _AddPropertyButton(onTap: onAddProperty),
                       ],
                     ),
                     const SizedBox(height: 5),

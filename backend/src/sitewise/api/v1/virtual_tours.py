@@ -10,6 +10,7 @@ from sitewise.db.models.virtual_tour import VirtualTour
 from sitewise.db.session import get_db
 from sitewise.dependencies import AuthenticatedUser, require_property_owner
 from sitewise.services import provider_scope
+from sitewise.services.agent_inspection_policy import agent_assignment, require_owner_published_view
 from sitewise.services.virtual_tour_service import VirtualTourService
 
 router = APIRouter()
@@ -39,7 +40,7 @@ def _require_owned_listing(
 
     Access rule — the SAME one the panorama upload applies: the owner of the
     listing, an administrator, or the agent holding the
-    ``public.agent_listing_assignment`` row for this listing. The upload is
+    ``fyp.agent_listing_assignment`` row for this listing. The upload is
     part of the shared Add Property flow where an assigned agent maintains the
     record on the owner's behalf, so the agent can also read and update the
     tour rows it creates. An agent with no assignment manages nothing.
@@ -101,6 +102,8 @@ def _validated_update(data: dict) -> dict:
         )
     update: dict = {}
     if "status" in data:
+        if data["status"] == PANORAMA_READY_STATUS:
+            raise HTTPException(status_code=422, detail="Only the panorama upload can mark a tour ready.")
         if data["status"] not in _TOUR_STATUSES:
             statuses = ", ".join(sorted(_TOUR_STATUSES))
             raise HTTPException(
@@ -125,7 +128,7 @@ class TourCreate(BaseModel):
 
     property_id: int
     url: str = Field(min_length=1, max_length=2048)
-    status: Literal["pending", "processing", "ready", "failed"] = "pending"
+    status: Literal["pending", "processing"] = "pending"
 
     @field_validator("url")
     @classmethod
@@ -142,6 +145,7 @@ def list_tours_by_property(
     current: OwnerUser,
 ):
     _require_owned_listing(session, property_id, current)
+    require_owner_published_view(session, property_id, current)
     return VirtualTourService(session).get_by_property(property_id)
 
 
@@ -152,7 +156,9 @@ def get_tour(
     current: OwnerUser,
 ):
     service = VirtualTourService(session)
-    return _owned_tour_or_error(service, session, tour_id, current)
+    tour = _owned_tour_or_error(service, session, tour_id, current)
+    require_owner_published_view(session, tour.property_id, current)
+    return tour
 
 
 @router.post("/", status_code=201)
@@ -161,7 +167,7 @@ def create_tour(
     session: DbSession,
     current: OwnerUser,
 ):
-    _require_owned_listing(session, payload.property_id, current)
+    agent_assignment(session, payload.property_id, current, writable=True)
     tour = VirtualTour(
         property_id=payload.property_id,
         url=payload.url,
@@ -178,7 +184,8 @@ def update_tour(
     current: OwnerUser,
 ):
     service = VirtualTourService(session)
-    _owned_tour_or_error(service, session, tour_id, current)
+    tour = _owned_tour_or_error(service, session, tour_id, current)
+    agent_assignment(session, tour.property_id, current, writable=True)
     return service.update(tour_id, _validated_update(data))
 
 
@@ -192,7 +199,7 @@ def _panorama_upload_authorized(
     [_require_owned_listing] enforces for every tour read and mutation, so the
     upload delegates to it — one access rule, enforced everywhere.
     """
-    _require_owned_listing(session, property_id, current)
+    agent_assignment(session, property_id, current, writable=True)
 
 
 @router.post("/property/{property_id}/panorama", status_code=201)
@@ -247,6 +254,18 @@ async def upload_property_panorama(
         tour.url = url
         tour.status = PANORAMA_READY_STATUS
         session.add(tour)
+    session.flush()
+    # Server-attested evidence: this is set ONLY after an authorized
+    # Agent upload has produced a ready tour. Client JSON cannot forge it.
+    from sqlalchemy import text
+    changed = session.execute(text("""
+        UPDATE fyp.agent_listing_assignment
+           SET panorama_tour_id=:tid, panorama_uploaded_at=now(), updated_at=now()
+         WHERE listing_id=:pid AND workflow_status IN ('accepted','needs_correction')
+    """), {"tid": tour.tour_id, "pid": property_id})
+    if changed.rowcount != 1:
+        session.rollback()
+        raise HTTPException(status_code=409, detail="Agent assignment changed during upload; retry.")
     session.commit()
     session.refresh(tour)
     return {"data": {"tour_id": str(tour.tour_id), "url": tour.url, "status": tour.status}}
@@ -259,7 +278,8 @@ def delete_tour(
     current: OwnerUser,
 ):
     service = VirtualTourService(session)
-    _owned_tour_or_error(service, session, tour_id, current)
+    tour = _owned_tour_or_error(service, session, tour_id, current)
+    agent_assignment(session, tour.property_id, current, writable=True)
     # The authorized lookup above makes a second missing-row result a benign
     # race (for example a concurrent admin cleanup), not an authorization
     # bypass.

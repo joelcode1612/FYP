@@ -37,7 +37,7 @@ def cleanup_preferences(cleanup_users):
         return
     with Session(engine) as session:
         session.execute(
-            text("DELETE FROM entrepreneur_preferences WHERE user_id = ANY(:ids)"),
+            text("DELETE FROM fyp.entrepreneur_preferences WHERE user_id = ANY(:ids)"),
             {"ids": list(cleanup_users)},
         )
         session.commit()

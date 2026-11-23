@@ -7,6 +7,9 @@ from sqlmodel import Field, SQLModel
 
 class User(SQLModel, table=True):
     __tablename__ = "users"
+    # Identity tables remain in public (task policy 5A) — declared
+    # explicitly so schema-qualified FKs resolve.
+    __table_args__ = {"schema": "public"}
 
     user_id: uuid.UUID = Field(primary_key=True)
     full_name: Optional[str] = None

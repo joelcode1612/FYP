@@ -19,9 +19,14 @@ the precomputed ``property_geospatial_features`` columns; the live
 competitor/demand-generator lookups use the indexed PostGIS geometries.
 """
 
-from fastapi import APIRouter, HTTPException, Query
+from typing import Annotated
 
+from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlmodel import Session
+
+from sitewise.db.analytics_session import get_analytics_db
 from sitewise.dependencies import CurrentUser, ExploreServiceImpl
+from sitewise.ml.pu_expanded import expanded_display_scores
 
 router = APIRouter()
 
@@ -200,6 +205,7 @@ def explore_research_evidence(
 def explore_analysis(
     _user: CurrentUser,
     service: ExploreServiceImpl,
+    analytics: Annotated[Session, Depends(get_analytics_db)],
     ref: str = Query(max_length=120),
 ) -> dict:
     """Cross-universe location analysis for one property reference.
@@ -210,7 +216,11 @@ def explore_analysis(
     500 m / 1 km are computed live from the indexed research geometry.
     Scores are labelled research indexes — never verified probabilities.
     """
-    result = service.analysis(ref)
+    result = service.analysis(
+        ref, catalogue_score=lambda property_id: expanded_display_scores(
+            analytics, [property_id]
+        ).get(property_id),
+    )
     if result is None:
         raise HTTPException(
             status_code=404,

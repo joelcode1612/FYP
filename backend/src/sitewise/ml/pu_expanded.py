@@ -37,15 +37,18 @@ from __future__ import annotations
 
 import csv
 import threading
+from time import monotonic
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
 from sqlalchemy import text as sql_text
+from sqlalchemy.exc import SQLAlchemyError
 from sqlmodel import Session
 
 from sitewise.core.exceptions import ModelUnavailableError
+from sitewise.core.logging import logger
 from sitewise.ml.feature_bridge import FeatureCoverage, bridge_row_for, merge_bridge_features
 from sitewise.ml.model_loader import ModelLoader
 from sitewise.ml.property_features import (
@@ -222,7 +225,20 @@ def _expanded_policy_check(missing: list[str]) -> None:
 
 
 #: Cache of per-property expanded results, keyed by (model_version, property_id).
-_SCORE_CACHE: dict[tuple[str, str], dict[str, Any]] = {}
+_SCORE_CACHE: dict[tuple[str, str], tuple[float, dict[str, Any]]] = {}
+_SCORE_CACHE_TTL = 30.0
+
+
+def _cached_score(key: tuple[str, str]) -> dict[str, Any] | None:
+    """Read a score while holding the score-cache lock."""
+    entry = _SCORE_CACHE.get(key)
+    if entry is None:
+        return None
+    expires_at, score = entry
+    if monotonic() >= expires_at:
+        _SCORE_CACHE.pop(key, None)
+        return None
+    return score
 _SCORE_CACHE_LOCK = threading.Lock()
 
 #: The RESOLVED vector behind each cached score. Stage 2 needs it: a cached
@@ -282,7 +298,7 @@ def expanded_prediction(analytics_session: Session, property_id: str) -> dict[st
     model_version = str(loaded.meta.get("model_variant") or "unknown")
     cache_key = (model_version, str(property_id))
     with _SCORE_CACHE_LOCK:
-        cached = _SCORE_CACHE.get(cache_key)
+        cached = _cached_score(cache_key)
     if cached is not None:
         return cached
 
@@ -362,24 +378,27 @@ def expanded_prediction(analytics_session: Session, property_id: str) -> dict[st
         }
     if result.get("available"):
         with _SCORE_CACHE_LOCK:
-            _SCORE_CACHE[cache_key] = result
+            _SCORE_CACHE[cache_key] = (monotonic() + _SCORE_CACHE_TTL, result)
     return result
 
 
-def _verified_catalogue_subject_rows(
+def expanded_display_scores(
     analytics_session: Session, property_ids: list[str]
-) -> list[dict[str, Any]]:
-    """Resolve catalogue IDs through the verified rental-property bridge."""
-    return [dict(row) for row in analytics_session.execute(
-        sql_text("""
-            SELECT l.sitewise_property_id AS catalogue_id, l.subject_id
-            FROM fyp.property_subject_links l
-            JOIN fyp.rental_properties p ON p.id = l.property_id
-            WHERE l.sitewise_property_id = ANY(:ids)
-              AND l.match_verified IS TRUE
-        """),
-        {"ids": property_ids},
-    ).mappings().all()]
+) -> dict[str, float]:
+    """Return available expanded64 scores on the 0–100 display scale."""
+    if not property_ids:
+        return {}
+    try:
+        with analytics_session.begin_nested():
+            scores = expanded_scores_many(analytics_session, property_ids)
+    except (ModelUnavailableError, SQLAlchemyError):
+        logger.warning("Expanded64 property scores are unavailable", exc_info=True)
+        return {}
+    return {
+        property_id: float(result["score"]) * 100.0
+        for property_id, result in scores.items()
+        if result.get("available")
+    }
 
 
 def expanded_scores_many(
@@ -387,6 +406,7 @@ def expanded_scores_many(
     property_ids: list[str],
     *,
     coverage_sink: dict[str, dict[str, Any]] | None = None,
+    refresh: bool = False,
 ) -> dict[str, dict[str, Any]]:
     """Score MANY catalogue properties with the expanded model.
 
@@ -410,7 +430,37 @@ def expanded_scores_many(
     # category model must receive the same features as the PU model.
     # If a vector is missing, fall back to the original batch query.
     ids = [str(p) for p in property_ids]
-    rows = _verified_catalogue_subject_rows(analytics_session, ids)
+    model_version = str(loaded.meta.get("model_variant") or "unknown")
+    with _SCORE_CACHE_LOCK:
+        cached_scores = {pid: None if refresh else _cached_score((model_version, pid)) for pid in ids}
+    if all(result is not None for result in cached_scores.values()):
+        if coverage_sink is None:
+            return {pid: cached_scores[pid] for pid in ids}
+        with _COVERAGE_CACHE_LOCK:
+            cached_vectors = {
+                pid: _COVERAGE_CACHE.get((model_version, pid)) for pid in ids
+            }
+        if all(
+            not cached_scores[pid].get("available") or cached_vectors[pid] is not None
+            for pid in ids
+        ):
+            coverage_sink.update({
+                pid: vector for pid, vector in cached_vectors.items()
+                if vector is not None
+            })
+            return {pid: cached_scores[pid] for pid in ids}
+
+    # --- batched resolution (mirrors PropertyFeatureRepository._resolve/get) ---
+    rows = [dict(r) for r in analytics_session.execute(
+        sql_text("""
+            SELECT p.catalogue_id AS catalogue_id, l.subject_id
+            FROM fyp.rental_properties p
+            LEFT JOIN fyp.property_subject_links l
+              ON l.sitewise_property_id = p.catalogue_id AND l.match_verified IS TRUE
+            WHERE p.catalogue_id = ANY(:ids)
+        """),
+        {"ids": ids},
+    ).mappings().all()]
     subject_of: dict[str, str] = {}
     found: set[str] = set()
     for row in rows:
@@ -537,7 +587,7 @@ def expanded_scores_many(
     for catalogue_id in ids:
         cache_key = (model_version, catalogue_id)
         with _SCORE_CACHE_LOCK:
-            cached = _SCORE_CACHE.get(cache_key)
+            cached = None if refresh else _cached_score(cache_key)
         if cached is not None:
             results[catalogue_id] = cached
             # Refill the Stage-2 sink from the resolved vector that produced
@@ -695,6 +745,8 @@ def expanded_scores_many(
                     "gating": {"production_ready": False, "research_only": True, "expanded_bridge_only": True},
                 }
                 with _SCORE_CACHE_LOCK:
-                    _SCORE_CACHE[(model_version, catalogue_id)] = result
+                    _SCORE_CACHE[(model_version, catalogue_id)] = (
+                        monotonic() + _SCORE_CACHE_TTL, result
+                    )
                 results[catalogue_id] = result
     return results

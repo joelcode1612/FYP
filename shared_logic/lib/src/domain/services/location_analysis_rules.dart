@@ -50,9 +50,8 @@ abstract final class LocationAnalysisRules {
     final research = data['research_link'] as Map<String, dynamic>?;
     final population = data['population'] as Map<String, dynamic>?;
 
-    // Score provenance is explicit: a precomputed research location score
-    // first, then the workbook's imported suitability index. Never a
-    // success probability.
+    // Use the precomputed location score when available, then the expanded64
+    // catalogue research index.
     final double? locationScore = (geo?['overall_location_score'] as num?)
         ?.toDouble();
     final double? catalogScore = (data['catalog_suitability_score'] as num?)

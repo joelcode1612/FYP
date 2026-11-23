@@ -109,7 +109,7 @@ def listing_id():
     # revokes a live manager.
     with Session(engine) as session:
         prior_agent = session.execute(
-            text("SELECT agent_id FROM agent_listing_assignment WHERE listing_id = :lid"),
+            text("SELECT agent_id FROM fyp.agent_listing_assignment WHERE listing_id = :lid"),
             {"lid": int(row["id"])},
         ).scalar()
         # Clear it for the duration of the test: several cases assert the
@@ -117,7 +117,7 @@ def listing_id():
         # The teardown below puts the original relationship back.
         if prior_agent is not None:
             session.execute(
-                text("DELETE FROM agent_listing_assignment WHERE listing_id = :lid"),
+                text("DELETE FROM fyp.agent_listing_assignment WHERE listing_id = :lid"),
                 {"lid": int(row["id"])},
             )
             session.commit()
@@ -133,21 +133,21 @@ def listing_id():
             snapshot,
         )
         session.execute(
-            text("DELETE FROM listing_change_audit WHERE listing_id = :lid"),
+            text("DELETE FROM fyp.listing_change_audit WHERE listing_id = :lid"),
             {"lid": snapshot["id"]},
         )
         session.execute(
-            text("DELETE FROM listing_change_request WHERE listing_id = :lid"),
+            text("DELETE FROM fyp.listing_change_request WHERE listing_id = :lid"),
             {"lid": snapshot["id"]},
         )
         session.execute(
-            text("DELETE FROM agent_listing_assignment WHERE listing_id = :lid"),
+            text("DELETE FROM fyp.agent_listing_assignment WHERE listing_id = :lid"),
             {"lid": snapshot["id"]},
         )
         if prior_agent is not None:
             session.execute(
                 text(
-                    "INSERT INTO agent_listing_assignment (listing_id, agent_id) "
+                    "INSERT INTO fyp.agent_listing_assignment (listing_id, agent_id) "
                     "VALUES (:lid, :aid)"
                 ),
                 {"lid": int(snapshot["id"]), "aid": int(prior_agent)},
@@ -658,7 +658,8 @@ def test_projection_quotes_only_the_feedback_the_administrator_recorded():
 
 def test_projection_lists_the_fields_submission_actually_misses():
     incomplete = _projection_row(availability=None, rental_price=None)
-    assert incomplete["missing_required_fields"] == ["rental price", "availability"]
+    assert incomplete["missing_required_fields"] == ["rental price"]
+    assert _projection_row(availability=None)["missing_required_fields"] == []
     assert _projection_row()["missing_required_fields"] == []
     # A present-but-invalid price is reported, not silently passed.
     assert "a rental price greater than zero" in _projection_row(
@@ -671,7 +672,7 @@ def test_me_listings_exposes_the_projection(client, agents, listing_id):
     with Session(engine) as session:
         existing = session.execute(
             text(
-                "SELECT listing_status, ownership_status FROM property_verification "
+                "SELECT listing_status, ownership_status FROM fyp.property_verification "
                 "WHERE property_id = :lid"
             ),
             {"lid": listing_id},

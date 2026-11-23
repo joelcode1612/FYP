@@ -52,6 +52,12 @@ String? mobileWorkspaceForRoute(String route) {
 /// route instead, and the backend refusal stays as the second, authoritative
 /// line of defence.
 bool canEnterMobileRoute(AppRole role, String route) {
+  final path = Uri.parse(route).path;
+  // Capture is always an Agent-only action, never a shared route.
+  if (path == '/owner/capture') return role == AppRole.agent;
+  if (path == '/provider/add-property' || path == '/provider/requests') {
+    return role == AppRole.owner;
+  }
   final workspace = mobileWorkspaceForRoute(route);
   if (workspace == null) return true;
   return mobileHomeRouteFor(role) == workspace;

@@ -23,6 +23,7 @@ from sqlmodel import Session
 from sitewise.db.session import engine
 from sitewise.domain import recommendation_scoring as rs
 from sitewise.ml.model_loader import ModelLoader
+from sitewise.ml.pu_expanded import EXPANDED_MODEL_NAME
 from sitewise.ml.selected_pu_integration import SELECTED_MODEL_NAME
 from sitewise.repositories.generated_recommendation_store import (
     GeneratedRecommendationStore,
@@ -67,7 +68,7 @@ def cleanup_preferences(cleanup_users):
         return
     with Session(engine) as session:
         session.execute(
-            text("DELETE FROM entrepreneur_preferences WHERE user_id = ANY(:ids)"),
+            text("DELETE FROM fyp.entrepreneur_preferences WHERE user_id = ANY(:ids)"),
             {"ids": list(cleanup_users)},
         )
         session.commit()
@@ -323,7 +324,7 @@ def test_generate_returns_real_ranked_results(generated, identity):
     assert generated["status"] == "ok"
     assert generated["user_id"] == str(identity["user_id"])
     assert generated["scoring"]["version"] == rs.SCORING_CONFIG_VERSION
-    assert generated["model"]["name"] == "pu_model"
+    assert generated["model"]["name"] == EXPANDED_MODEL_NAME
     assert generated["model"]["research_only"] is True
     assert generated["model"]["used_for_ranking"] is True
     assert generated["model"]["selected_alternative"]["used_for_ranking"] is False
@@ -546,9 +547,9 @@ def test_shap_reconstruction_through_api_for_reference_property(client, identity
     shap = explanation["shap"]
     assert shap is not None, explanation["shap_status"]
     assert explanation["shap_status"]["available"] is True
-    assert shap["model_name"] == result["model"]["name"] == "pu_model"
+    assert shap["model_name"] == result["model"]["name"] == EXPANDED_MODEL_NAME
     assert shap["relation_to_recommendation"]["same_artifact_as_ranked_model"] is True
-    assert shap["artifact"] == "PU_model.joblib"
+    assert shap["artifact"] == "sitewise_pu_64_expanded.joblib"
     assert shap["artifact_sha256"] == "5c00c574cfe4cbcb76fe1fb21eb32e40cfea3a428ef1c70ea60c893c1e8c2f98"
     assert shap["explainer"] == "Permutation SHAP"
     assert shap["research_only"] is True

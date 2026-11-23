@@ -31,9 +31,10 @@ import uuid
 from pathlib import Path
 
 from sitewise.db.session import Session, engine
+from sitewise.panorama.quality.registration_verification import RegistrationFrame
 from sitewise.panorama.stitcher import stitch_equirectangular
 from sitewise.services import capture_session_service as svc
-from sitewise.services import capture_storage
+from sitewise.services import capture_storage, panorama_quality_service
 
 logger = logging.getLogger("sitewise.panorama_worker")
 
@@ -55,6 +56,8 @@ def _percent_for_stage(message: str) -> int:
         return 10
     if "Refining" in message and "orientations" in message:
         return 25
+    if "Verifying capture quality" in message:
+        return 33
     if "Checking overlap" in message or "Matching" in message:
         return 30
     if "Averaging orientations" in message:
@@ -147,7 +150,8 @@ def process_job(job_id: uuid.UUID, worker_id: str) -> None:
     _report_progress(job_id, f"Loading capture manifest: {len(frames)} frames…")
 
     confirmed = [f for f in frames if f.upload_status == "confirmed"]
-    if len(confirmed) < session_row.expected_frames:
+    expected = list(range(1, session_row.expected_frames + 1))
+    if sorted(frame.target_index for frame in confirmed) != expected:
         _fail(
             job_id,
             message=(
@@ -199,6 +203,41 @@ def process_job(job_id: uuid.UUID, worker_id: str) -> None:
             return
 
         panorama_bytes = (out_dir / "panorama.jpg").read_bytes()
+
+        # Capture-quality verification (registration + geometric
+        # consistency over the downloaded originals; coverage + seam checks
+        # over the fresh panorama). Evidence only: merged ADDITIVELY into
+        # the stored coverage report, never gating the job, never altering
+        # a byte. A verifier failure keeps the plain stitcher report.
+        stored_report = dict(outcome.report)
+        _report_progress(job_id, "Verifying capture quality…")
+        try:
+            audit_frames = [
+                RegistrationFrame(
+                    target_id=int(record["targetId"]),
+                    image_path=record["imagePath"],
+                )
+                for record in records
+            ]
+            registration = panorama_quality_service.run_registration_audit_for_files(
+                audit_frames,
+                on_stage=lambda message: _report_progress(job_id, message),
+            )
+            panorama_quality = panorama_quality_service.run_panorama_quality(
+                panorama_bytes
+            )
+            quality_block: dict[str, object] = {
+                "panorama": panorama_quality["panorama"],
+                **registration,
+            }
+            stored_report = panorama_quality_service.merge_quality_into_report(
+                stored_report, quality_block
+            )
+        except Exception:  # noqa: BLE001 - verification is evidence, not a gate
+            logger.exception(
+                "Capture-quality verification failed for job %s", job_id
+            )
+
         _report_progress(job_id, "Uploading panorama to storage…")
         storage_path = capture_storage.panorama_object_path(property_id, str(session_id))
         capture_storage.upload_bytes(storage_path, panorama_bytes)
@@ -212,7 +251,7 @@ def process_job(job_id: uuid.UUID, worker_id: str) -> None:
                 storage_path=storage_path,
                 width=outcome.report["panorama"]["width"],
                 height=outcome.report["panorama"]["height"],
-                coverage_report=outcome.report,
+                coverage_report=stored_report,
             )
             svc.complete_job(
                 db,

@@ -57,9 +57,31 @@ class _EntrepreneurTourMobilePageState
   }
 
   Future<_TourData> _load() async {
-    final tour = await ServiceLocator.tourRepo.getTourByProperty(
+    // The backend's published record is authoritative (spec §11 — the SAME
+    // canonical panorama the web viewer reads, never a mobile-only copy).
+    // It is approved + published by construction: unpublished and rejected
+    // panoramas answer 404, which is the honest "no tour yet" state here.
+    // The raw reference goes through the backend's verified resolution, so
+    // numeric listing ids and research catalogue refs (MD-/EP-) both work.
+    VirtualTour? tour;
+    final published = await ServiceLocator.panoramaViews.publishedByProperty(
       widget.propertyId,
     );
+    if (published != null) {
+      tour = VirtualTour(
+        id: published.panoramaId,
+        propertyId: widget.propertyId,
+        title: '360° photo',
+        sceneCount: 1,
+        capturedAt: DateTime.now().toUtc(),
+        published: true,
+        status: VirtualTourStatus.approved,
+        // A fresh signed URL; the viewer fetches it over https and the
+        // page's Reload action mints a new one when it expires.
+        panoramaPath: published.viewUrl,
+        frameCount: 1,
+      );
+    }
     CommercialProperty? property;
     String? propertyError;
     if (tour != null) {

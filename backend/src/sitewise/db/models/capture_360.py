@@ -22,7 +22,7 @@ from typing import Any
 
 from sqlmodel import JSON, Column, Field, SQLModel
 
-_FYP_SCHEMA = {"schema": "fyp"}
+_FYP_SCHEMA = {"schema": "fyp", "info": {"externally_managed": True}}
 
 
 def _utcnow() -> datetime:
@@ -103,6 +103,12 @@ class Panorama(SQLModel, table=True):
     height: int = Field()
     verification_status: str = Field(default="pending")
     published_at: datetime | None = Field(default=None)
+    # Administrative review evidence (revision 0013_panorama_review): who
+    # decided, when, and the rejection reason. Publication remains
+    # ``published_at``; review metadata never implies publication.
+    reviewed_by: uuid.UUID | None = Field(default=None)
+    reviewed_at: datetime | None = Field(default=None)
+    review_reason: str | None = Field(default=None)
     coverage_report: dict[str, Any] | None = Field(
         default=None, sa_column=Column(JSON)
     )

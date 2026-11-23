@@ -166,109 +166,76 @@ class _ProviderProfileMobilePageState
   // Property Owner layout
   // ---------------------------------------------------------------------------
 
+  // SITEWISE_COMPACT_OWNER_PROFILE_20261123: owner-only, action-first screen.
+  // Technical account metadata and the e-KYC explanation live in the Account
+  // details sheet. All pre-existing routes and server-backed status are kept.
   List<Widget> _ownerBody(SitewiseUser? user) => [
-    M3ScreenHeading(
-      eyebrow: 'Account & profile',
-      title: 'Your profile.',
-      lead: 'Your details, property records and verification.',
+    const Padding(
+      padding: EdgeInsets.fromLTRB(2, 0, 2, 12),
+      child: Text(
+        'My profile',
+        style: TextStyle(
+          fontFamily: kFontFamily,
+          fontSize: 23,
+          fontWeight: FontWeight.w800,
+          letterSpacing: -0.5,
+          color: SitewiseM3.ink,
+        ),
+      ),
     ),
-    const SizedBox(height: 18),
-    _ProfileHero(
+    _OwnerCompactHero(
       user: user,
       me: _me,
-      roleChipLabel: user?.role.label ?? 'Property Owner',
-      statValueBuilder: _ownerStats,
-      onEdit: () => _editProfileFuture(),
+      workspace: _workspace,
+      onEdit: _editProfileFuture,
     ),
-    const SizedBox(height: 8),
-    _SectionHead(title: 'Account overview', hint: 'Your account'),
-    _SummaryCard(
-      rows: [
-        _SummaryRow('Account type', user?.role.label ?? 'Property Owner'),
-        FutureBuilder<Map<String, dynamic>>(
-          future: _me,
-          builder: (context, snapshot) {
-            return _SummaryRow(
-              'Email verification',
-              null,
-              badge: _emailVerifiedBadge(snapshot.data),
-            );
-          },
-        ),
-        FutureBuilder<Map<String, dynamic>>(
-          future: _me,
-          builder: (context, snapshot) {
-            final status = snapshot.data?['account_status']?.toString();
-            return _SummaryRow(
-              'Account status',
-              (status == null || status.isEmpty) ? 'Unavailable' : status,
-            );
-          },
-        ),
-      ],
-    ),
-    const _IdentityVerificationCard(),
-    const SizedBox(height: 8),
-    FutureBuilder<ProviderVerification>(
-      future: _verification,
-      builder: (context, snapshot) {
-        return _AccountVerificationCard(
-          verification: snapshot.data,
-          loading: snapshot.connectionState == ConnectionState.waiting,
-          error: snapshot.error,
-          onOpen: () => _open('/provider/verification'),
-        );
-      },
-    ),
-    const SizedBox(height: 8),
-    _SectionHead(title: 'My properties', hint: 'Listings & approvals'),
+    const _SectionHead(title: 'Properties', hint: 'Your workspace'),
     _ActionList(
       rows: [
         _ActionRow(
           icon: Icons.storefront_outlined,
-          title: 'My listings',
-          subtitle: 'View and manage properties you have added',
+          title: 'My properties',
+          subtitle: 'Manage listings, documents and review progress',
           onTap: () => _open('/provider/listings'),
         ),
-        _ActionRow(
-          icon: Icons.description_outlined,
-          title: 'Ownership documents',
-          subtitle: 'Proof of ownership, reviewed for each listing',
-          onTap: () => _open('/provider/listings'),
-        ),
-        _ActionRow(
-          icon: Icons.fact_check_outlined,
-          title: 'Review progress',
-          subtitle: 'See which listings need action or approval',
-          onTap: () => _open('/provider/listings'),
+        FutureBuilder<ProviderVerification>(
+          future: _verification,
+          builder: (context, snapshot) {
+            final status = snapshot.connectionState == ConnectionState.waiting
+                ? 'Loading'
+                : snapshot.hasError || snapshot.data == null
+                ? 'Status unavailable'
+                : _verificationPresentation(snapshot.data!.status).$1;
+            return _ActionRow(
+              icon: Icons.verified_user_outlined,
+              title: 'Account verification',
+              subtitle: 'SiteWise provider status: $status',
+              onTap: () => _open('/provider/verification'),
+            );
+          },
         ),
       ],
     ),
-    const SizedBox(height: 8),
-    _SectionHead(title: 'Account & settings', hint: 'Preferences'),
+    const _SectionHead(title: 'Account', hint: 'Personal settings'),
     _ActionList(
       rows: [
         _ActionRow(
+          icon: Icons.manage_accounts_outlined,
+          title: 'Account details',
+          subtitle: 'Your role, email and identity information',
+          greyIcon: true,
+          onTap: _openOwnerAccountSheet,
+        ),
+        _ActionRow(
           icon: Icons.lock_outline_rounded,
           title: 'Security & sign-in',
-          subtitle: 'How you access your account',
+          subtitle: 'Sign-in protection and authentication',
           greyIcon: true,
           onTap: _openSecuritySheet,
         ),
-        _ActionRow(
-          icon: Icons.shield_outlined,
-          title: 'Privacy & terms',
-          subtitle: 'Your information and how it is used',
-          greyIcon: true,
-          onTap: () => _soon('Privacy & terms'),
-        ),
       ],
     ),
-    const SizedBox(height: 12),
-    const _ProfileNote(
-      'Identity, listing and verification statuses come from your SiteWise '
-      'records. SiteWise does not verify identity documents yet.',
-    ),
+    const SizedBox(height: 10),
     _SignOutButton(onSignOut: _signOut),
   ];
 
@@ -359,6 +326,8 @@ class _ProviderProfileMobilePageState
   /// The two hero stats for the OWNER layout: total listings and the count
   /// awaiting review. Both are arithmetic over the authorized listing rows —
   /// `—` while loading or when the read fails, never a fabricated zero.
+  // Legacy owner statistics presentation, currently not mounted.
+  // ignore: unused_element
   Widget _ownerStats(BuildContext context) {
     return FutureBuilder<ProviderWorkspace>(
       future: _workspace,
@@ -419,6 +388,118 @@ class _ProviderProfileMobilePageState
   // ---------------------------------------------------------------------------
   // Sheets
   // ---------------------------------------------------------------------------
+
+  /// Detailed information is intentionally not expanded on the main owner
+  /// screen. Keeping it in a scrollable sheet also preserves the identity
+  /// disclaimer and the previously available Privacy & terms action.
+  void _openOwnerAccountSheet() {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: SitewiseM3.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (sheetContext) => FractionallySizedBox(
+        heightFactor: 0.78,
+        child: SafeArea(
+          top: false,
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+            children: [
+              Row(
+                children: [
+                  const Expanded(
+                    child: Text(
+                      'Account details',
+                      style: TextStyle(
+                        fontFamily: kFontFamily,
+                        fontSize: 20,
+                        fontWeight: FontWeight.w800,
+                        color: SitewiseM3.ink,
+                      ),
+                    ),
+                  ),
+                  IconButton(
+                    tooltip: 'Close account details',
+                    onPressed: () => Navigator.of(sheetContext).pop(),
+                    icon: const Icon(Icons.close_rounded),
+                    constraints: const BoxConstraints(
+                      minWidth: 48,
+                      minHeight: 48,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 6),
+              const Text(
+                'Information about your SiteWise account.',
+                style: TextStyle(
+                  fontFamily: kFontFamily,
+                  fontSize: 14,
+                  color: SitewiseM3.muted,
+                ),
+              ),
+              const SizedBox(height: 18),
+              FutureBuilder<Map<String, dynamic>>(
+                future: _me,
+                builder: (context, snapshot) {
+                  final me = snapshot.data;
+                  final status = me?['account_status']?.toString().trim();
+                  return _SummaryCard(
+                    rows: [
+                      _SummaryRow(
+                        'Account type',
+                        ref.read(authNotifierProvider).user?.role.label ??
+                            'Property Owner',
+                      ),
+                      _SummaryRow(
+                        'Email verification',
+                        null,
+                        badge: _emailVerifiedBadge(me),
+                      ),
+                      _SummaryRow(
+                        'Account status',
+                        status == null || status.isEmpty
+                            ? 'Unavailable'
+                            : status,
+                      ),
+                    ],
+                  );
+                },
+              ),
+              const SizedBox(height: 18),
+              const Text(
+                'Identity information',
+                style: TextStyle(
+                  fontFamily: kFontFamily,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                  color: SitewiseM3.ink,
+                ),
+              ),
+              const _IdentityVerificationCard(),
+              const SizedBox(height: 16),
+              _ActionList(
+                rows: [
+                  _ActionRow(
+                    icon: Icons.shield_outlined,
+                    title: 'Privacy & terms',
+                    subtitle: 'How your account information is used',
+                    greyIcon: true,
+                    onTap: () {
+                      Navigator.of(sheetContext).pop();
+                      _soon('Privacy & terms');
+                    },
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 
   void _openSecuritySheet() {
     showModalBottomSheet<void>(
@@ -632,6 +713,126 @@ class _AgentDetailsCard extends StatelessWidget {
 // ---------------------------------------------------------------------------
 // Hero
 // ---------------------------------------------------------------------------
+
+/// Compact owner-only profile summary. Agent presentation continues to use
+/// _ProfileHero unchanged. No profile values are guessed when APIs fail.
+class _OwnerCompactHero extends StatelessWidget {
+  const _OwnerCompactHero({
+    required this.user,
+    required this.me,
+    required this.workspace,
+    required this.onEdit,
+  });
+
+  final SitewiseUser? user;
+  final Future<Map<String, dynamic>>? me;
+  final Future<ProviderWorkspace>? workspace;
+  final VoidCallback onEdit;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    width: double.infinity,
+    padding: const EdgeInsets.all(16),
+    decoration: BoxDecoration(
+      color: SitewiseM3.surface,
+      borderRadius: BorderRadius.circular(19),
+      border: Border.all(color: SitewiseM3.line),
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        FutureBuilder<Map<String, dynamic>>(
+          future: me,
+          builder: (context, snapshot) {
+            final profile = snapshot.data;
+            final fullName = '${profile?['full_name'] ?? ''}'.trim();
+            final email = '${profile?['email'] ?? ''}'.trim();
+            final displayName = fullName.isNotEmpty
+                ? fullName
+                : (user?.name ?? 'Not available');
+            final displayEmail = email.isNotEmpty
+                ? email
+                : (user?.email ?? 'Not signed in');
+            return Row(
+              children: [
+                _Avatar(
+                  initials: _ProfileHero._initialsFrom(displayName),
+                  imageUrl: '${profile?['profile_picture_url'] ?? ''}'.trim(),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        displayName,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontFamily: kFontFamily,
+                          fontSize: 18,
+                          fontWeight: FontWeight.w700,
+                          color: SitewiseM3.ink,
+                        ),
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        displayEmail,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontFamily: kFontFamily,
+                          fontSize: 14,
+                          color: SitewiseM3.muted,
+                        ),
+                      ),
+                      const SizedBox(height: 7),
+                      const _RoleChip('Property Owner'),
+                    ],
+                  ),
+                ),
+                IconButton(
+                  tooltip: 'Edit profile',
+                  onPressed: onEdit,
+                  icon: const Icon(Icons.edit_outlined),
+                  color: SitewiseColors.action,
+                  constraints: const BoxConstraints(
+                    minWidth: 48,
+                    minHeight: 48,
+                  ),
+                ),
+              ],
+            );
+          },
+        ),
+        const SizedBox(height: 14),
+        const Divider(height: 1, color: SitewiseM3.line),
+        const SizedBox(height: 12),
+        FutureBuilder<ProviderWorkspace>(
+          future: workspace,
+          builder: (context, snapshot) {
+            final value = snapshot.data;
+            return Row(
+              children: [
+                _Stat(
+                  value: value == null ? '—' : '${value.listings.length}',
+                  label: 'My properties',
+                ),
+                const _StatDivider(),
+                _Stat(
+                  value: value == null
+                      ? '—'
+                      : '${value.count(ProviderStage.pending)}',
+                  label: 'Awaiting review',
+                ),
+              ],
+            );
+          },
+        ),
+      ],
+    ),
+  );
+}
 
 class _ProfileHero extends StatelessWidget {
   const _ProfileHero({
@@ -1431,6 +1632,8 @@ class _IdentityVerificationCardState extends State<_IdentityVerificationCard> {
 // Account verification (real backend state, both roles)
 // ---------------------------------------------------------------------------
 
+// Legacy account verification card, currently not mounted.
+// ignore: unused_element
 class _AccountVerificationCard extends StatelessWidget {
   const _AccountVerificationCard({
     required this.verification,

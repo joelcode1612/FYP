@@ -13,8 +13,7 @@ abstract final class CatalogPropertyMapper {
   ///  * dataset quality checks are NOT administrator verification, so every
   ///    catalogue row maps to [VerificationStatus.pending] — the catalogue
   ///    table has no status column to read;
-  ///  * `suitability_score` is the workbook's imported index (a ranking
-  ///    input), never a success probability;
+  ///  * `suitability_score` is the expanded64 research index, when available;
   ///  * `ownerId` is genuinely unknown for imported rows and stays ''.
   /// Photo URLs from the detail endpoint's `photos` list.
   ///

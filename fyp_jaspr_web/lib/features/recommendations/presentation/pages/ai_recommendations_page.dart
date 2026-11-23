@@ -39,6 +39,7 @@ class AiRecommendationsPage extends StatefulComponent {
 class _AiRecommendationsPageState extends State<AiRecommendationsPage> {
   late Future<GeneratedBatch?> _latest;
   bool _generating = false;
+  bool _showingSavedBatch = true;
   String? _error;
   bool _reused = false;
 
@@ -75,18 +76,23 @@ class _AiRecommendationsPageState extends State<AiRecommendationsPage> {
   }
 
   Future<GeneratedBatch?> _loadLatest() async {
-    setState(() => _error = null);
+    setState(() {
+      _error = null;
+      _showingSavedBatch = true;
+    });
     return AppLocator.personalisedRecommendations.latest();
   }
 
   Future<void> _generate() async {
+    if (_generating) return;
     setState(() {
       _generating = true;
       _error = null;
     });
     try {
       final response =
-          await AppLocator.personalisedRecommendations.generate(limit: 20);
+          await AppLocator.personalisedRecommendations.generate(limit: 20, refresh: true);
+      if (!mounted) return;
       final results = (response['results'] as List?) ?? const [];
       final batch = GeneratedBatch.fromJson({
         'batch_id': response['batch_id'] ?? '',
@@ -101,9 +107,11 @@ class _AiRecommendationsPageState extends State<AiRecommendationsPage> {
         _modelInfo = Map<String, dynamic>.from(
           (response['model'] as Map?) ?? const {},
         );
+        _showingSavedBatch = false;
         _latest = Future.value(batch);
       });
     } catch (err) {
+      if (!mounted) return;
       setState(() {
         _generating = false;
         _error = err.toString();
@@ -144,9 +152,7 @@ class _AiRecommendationsPageState extends State<AiRecommendationsPage> {
           if (_error != null)
             div(classes: 'notice notice-warn', styles: Styles(raw: {'margin-bottom': '0'}), [
               Component.text('Could not load AI recommendations: $_error'),
-              ActionButton('Try again', onClick: () => setState(() {
-                _latest = _loadLatest();
-              })),
+              ActionButton('Try again', onClick: _generating ? null : _generate),
             ]),
           FutureBuilder<GeneratedBatch?>(
             future: _latest,
@@ -172,14 +178,13 @@ class _AiRecommendationsPageState extends State<AiRecommendationsPage> {
               final batch = snap.data;
               if (batch == null || batch.results.isEmpty) {
                 return EmptyState(
-                  title: 'No personalised matches yet',
-                  body:
-                      'Generate a ranked batch from your saved requirements. '
-                      'Results are stored for your account and remain '
-                      'available after a restart.',
+                  title: batch == null ? 'No personalised matches yet' : 'No properties matched this run',
+                  body: batch == null
+                      ? 'Generate a ranked batch from your saved requirements.'
+                      : 'Review your saved requirements and try again.',
                   action: ActionButton(
                     'Generate recommendations',
-                    onClick: _generate,
+                    onClick: _generating ? null : _generate,
                     variant: 'primary',
                   ),
                 );
@@ -215,6 +220,8 @@ class _AiRecommendationsPageState extends State<AiRecommendationsPage> {
                     span([Component.text('Page ${pageIndex + 1} of $pageCount')]),
                   ],
                 ),
+                if (_showingSavedBatch)
+                  p([Component.text('Last saved matches${batch.generatedAt == null ? '' : ' · ${batch.generatedAt}'}')]),
                 for (final item in visibleResults)
                   _AiRecommendationCard(
                     item: item,

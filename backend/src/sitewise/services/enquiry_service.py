@@ -43,7 +43,7 @@ REPLY_MAX = 2000
 
 _DDL_STATEMENTS: tuple[str, ...] = (
     """
-    CREATE TABLE IF NOT EXISTS public.property_enquiry (
+    CREATE TABLE IF NOT EXISTS fyp.property_enquiry (
         enquiry_id BIGSERIAL PRIMARY KEY,
         property_id BIGINT NOT NULL
             REFERENCES fyp.rental_properties(id) ON DELETE CASCADE,
@@ -64,15 +64,15 @@ _DDL_STATEMENTS: tuple[str, ...] = (
     """,
     """
     CREATE INDEX IF NOT EXISTS idx_property_enquiry_property
-        ON public.property_enquiry (property_id)
+        ON fyp.property_enquiry (property_id)
     """,
     """
     CREATE INDEX IF NOT EXISTS idx_property_enquiry_status
-        ON public.property_enquiry (status)
+        ON fyp.property_enquiry (status)
     """,
     """
     CREATE INDEX IF NOT EXISTS idx_property_enquiry_created
-        ON public.property_enquiry (created_at DESC)
+        ON fyp.property_enquiry (created_at DESC)
     """,
 )
 
@@ -83,7 +83,7 @@ SELECT e.enquiry_id, e.property_id, e.enquirer_name, e.enquirer_email,
        e.replied_at,
        p.name AS property_name, p.address, p.city, p.state,
        p.verification_status, p.is_published
-FROM public.property_enquiry e
+FROM fyp.property_enquiry e
 JOIN fyp.rental_properties p ON p.id = e.property_id
 """
 
@@ -188,7 +188,7 @@ class EnquiryService:
         row = self.session.execute(
             text(
                 """
-                INSERT INTO public.property_enquiry (
+                INSERT INTO fyp.property_enquiry (
                     property_id, enquirer_user_id, enquirer_name,
                     enquirer_email, message
                 ) VALUES (
@@ -324,7 +324,7 @@ class EnquiryService:
         self.session.execute(
             text(
                 """
-                UPDATE public.property_enquiry
+                UPDATE fyp.property_enquiry
                    SET status = :status,
                        provider_reply = CASE
                            WHEN :reply IS NULL THEN provider_reply
@@ -377,7 +377,7 @@ class EnquiryService:
             )
         rows = self.session.execute(
             text(
-                "SELECT status, count(*)::int AS n FROM public.property_enquiry"
+                "SELECT status, count(*)::int AS n FROM fyp.property_enquiry"
                 + where
                 + " GROUP BY status"
             ),
@@ -389,7 +389,7 @@ class EnquiryService:
                 by_status[row["status"]] = int(row["n"])
         latest = self.session.execute(
             text(
-                "SELECT max(created_at) AS last FROM public.property_enquiry" + where
+                "SELECT max(created_at) AS last FROM fyp.property_enquiry" + where
             ),
             params,
         ).mappings().first()

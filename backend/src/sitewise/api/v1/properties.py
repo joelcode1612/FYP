@@ -247,6 +247,8 @@ def create_owner_listing(
     standalone ``/validate-address`` endpoint remains available for callers
     that want an explicit check.
     """
+    _owner_write_only(current)
+    raise HTTPException(status_code=410, detail="Use /properties/listings/drafts, then request an Agent. Direct publication submission is retired.")
     body = payload.model_dump()
 
     repo = FypPropertyRepository(session)
@@ -322,6 +324,31 @@ def list_own_listings(
 # ---------------------------------------------------------------------------
 
 
+def _owner_write_only(current: AuthenticatedUser) -> None:
+    """Only a property owner registers or modifies original listing facts."""
+    if rbac.canonical_role(current.role) != rbac.ROLE_OWNER:
+        raise ForbiddenError("Only a Property Owner may register or edit property details.")
+
+
+# SITEWISE_PRESERVE_AGENT_EVIDENCE_V1
+# Compare the effective write, not the mere presence of a field in a payload.
+# Decimal-normalise numeric properties so 22.0 and Decimal('22.00') agree.
+def _owner_field_changed(existing: object, new: object, column: str) -> bool:
+    from decimal import Decimal, InvalidOperation
+
+    if column in ('rental_price', 'size_sqft', 'floor_level', 'frontage_ft',
+                  'latitude', 'longitude', 'has_parking', 'is_fnb_suitable'):
+        def number(value: object):
+            if value is None or value == '':
+                return None
+            try:
+                return Decimal(str(value))
+            except (InvalidOperation, TypeError, ValueError):
+                return str(value)
+        return number(existing) != number(new)
+    return str(existing or '').strip() != str(new or '').strip()
+
+
 class OwnerDraftRequest(BaseModel):
     """Partial Add-Property payload. Drafts may omit everything except a
     name (draft creation); updates may omit any field. Final submission
@@ -343,6 +370,20 @@ class OwnerDraftRequest(BaseModel):
     frontage_ft: float | None = Field(default=None, ge=0, le=10_000)
     has_parking: bool = False
     is_fnb_suitable: bool = False
+
+    @field_validator('floor_level')
+    @classmethod
+    def _valid_floor_level(cls, value: str | None) -> str | None:
+        from math import isfinite
+        if value is None or not value.strip():
+            return None
+        try:
+            floor = float(value)
+        except ValueError as exc:
+            raise ValueError('Floor level must be a number.') from exc
+        if not isfinite(floor) or floor < 0 or floor > 10000:
+            raise ValueError('Floor level must be between 0 and 10,000.')
+        return value.strip()
 
 
 def _agent_id_for(session: Session, user_id) -> int | None:
@@ -393,9 +434,10 @@ def _provider_agent_id(session: Session, current: AuthenticatedUser) -> int | No
 
 
 def _owned_listing_or_error(
-    repo: FypPropertyRepository, property_id: int, current: AuthenticatedUser
+    repo: FypPropertyRepository, property_id: int, current: AuthenticatedUser,
+    *, for_update: bool = False,
 ) -> dict:
-    listing = repo.owner_listing(property_id)
+    listing = repo.owner_listing(property_id, for_update=for_update)
     if listing is None:
         raise HTTPException(status_code=404, detail="Property not found.")
     if rbac.can_administer_users(current.role):
@@ -421,6 +463,7 @@ def create_owner_draft(
     """Persist a NEW draft. The owner identity comes from the verified token;
     the database assigns the persistent id; the draft stays unpublished and
     outside the admin queue."""
+    _owner_write_only(current)
     if not (payload.name or "").strip():
         raise HTTPException(
             status_code=422, detail="A draft property needs at least a name."
@@ -481,10 +524,17 @@ def update_own_listing(
     cannot be invalidated; draft, rejected and corrections-requested states
     remain editable, and a repeat save updates the SAME row."""
     from sitewise.db.models.property_verification import can_resubmit
-    from sitewise.services.property_verification_service import verification_row
+    from sitewise.services.property_verification_service import (
+        listing_completeness_errors,
+        verification_row,
+    )
 
+    _owner_write_only(current)
     repo = FypPropertyRepository(session)
     _owned_listing_or_error(repo, property_id, current)
+    listing = _owned_listing_or_error(repo, property_id, current, for_update=True)
+    if listing.get("is_published") or listing.get("verification_status") not in ("draft", "rejected"):
+        raise HTTPException(status_code=409, detail="The property is locked for review or published.")
     verification = verification_row(session, property_id)
     editable = verification is None or can_resubmit(
         verification.listing_status, verification.ownership_status
@@ -500,6 +550,44 @@ def update_own_listing(
         # A null name must not null out the NOT NULL column: keep the
         # existing draft name.
         fields.pop("name", None)
+    if fields:
+        missing = listing_completeness_errors(listing | fields, require_availability=False)
+        if missing and session.execute(text("""
+            SELECT EXISTS (
+                SELECT 1 FROM fyp.agent_listing_assignment
+                 WHERE listing_id=:pid
+                   AND workflow_status IN ('requested','accepted','needs_correction')
+            )
+        """), {"pid": property_id}).scalar():
+            raise HTTPException(
+                status_code=409,
+                detail="Complete these property details for the active Agent request: "
+                + ", ".join(missing) + ".",
+            )
+        # An editable property draft can still have an active Agent.
+        # A routine save must NEVER silently delete that Agent's checklist,
+        # uploaded panorama or audit timestamps. If factual values change,
+        # require an explicit correction workflow instead of discarding data.
+        active_agent = session.execute(text("""
+            SELECT workflow_status FROM fyp.agent_listing_assignment
+             WHERE listing_id=:pid
+               AND workflow_status IN ('accepted','needs_correction')
+             FOR UPDATE
+        """), {"pid": property_id}).scalar_one_or_none()
+        if active_agent is not None:
+            changed = [
+                key for key, value in fields.items()
+                if key in FypPropertyRepository._OWNER_WRITABLE
+                and _owner_field_changed(listing.get(key), value, key)
+            ]
+            if changed:
+                raise HTTPException(
+                    status_code=409,
+                    detail=("An Agent inspection is active. These property details "
+                            "must be corrected through the Agent workflow to "
+                            "preserve the saved checklist and 360° tour: "
+                            + ", ".join(changed)),
+                )
     row = repo.update_owner_listing(property_id, fields)
     if row is None:
         raise HTTPException(status_code=404, detail="Property not found.")
@@ -532,8 +620,11 @@ async def upload_listing_photo(
     )
     from sitewise.services.property_verification_service import verification_row
 
+    _owner_write_only(current)
     repo = FypPropertyRepository(session)
-    _owned_listing_or_error(repo, property_id, current)
+    listing = _owned_listing_or_error(repo, property_id, current)
+    if listing.get("is_published") or listing.get("verification_status") not in ("draft", "rejected"):
+        raise HTTPException(status_code=409, detail="Photos are locked for review or publication.")
     verification = verification_row(session, property_id)
     editable = verification is None or can_resubmit(
         verification.listing_status, verification.ownership_status
@@ -585,6 +676,10 @@ def delete_listing_photo(
 
     repo = FypPropertyRepository(session)
     _owned_listing_or_error(repo, property_id, current)
+    _owner_write_only(current)
+    listing = _owned_listing_or_error(repo, property_id, current)
+    if listing.get("is_published") or listing.get("verification_status") not in ("draft", "rejected"):
+        raise HTTPException(status_code=409, detail="Photos are locked for review or publication.")
     deleted = repo.delete_listing_photo(property_id, photo_id)
     if deleted is None:
         raise HTTPException(status_code=404, detail="Photo not found.")
@@ -601,6 +696,10 @@ def set_primary_listing_photo(
 ):
     repo = FypPropertyRepository(session)
     _owned_listing_or_error(repo, property_id, current)
+    _owner_write_only(current)
+    listing = _owned_listing_or_error(repo, property_id, current)
+    if listing.get("is_published") or listing.get("verification_status") not in ("draft", "rejected"):
+        raise HTTPException(status_code=409, detail="Photos are locked for review or publication.")
     if not repo.set_primary_listing_photo(property_id, photo_id):
         raise HTTPException(status_code=404, detail="Photo not found.")
     return {"data": repo.listing_photos(property_id)}

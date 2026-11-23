@@ -65,7 +65,7 @@ class AppNotifier extends Notifier<AppState> {
   /// the tab showed an in-memory set that started empty on every launch, so a
   /// saved property vanished after a restart even though the server had it.
   /// A failure is reported on the state — never turned into an empty list.
-  Future<void> loadSaved() async {
+  Future<void> loadSaved({bool includeUnresolved = false}) async {
     final repo = ref.read(savedPropertiesRepositoryProvider);
     if (repo == null) {
       // Demo build: the local set is the only truth, and saying otherwise
@@ -76,7 +76,13 @@ class AppNotifier extends Notifier<AppState> {
     _controller.setSavedLoading(true);
     _controller.setSavedError(null);
     try {
-      final refs = await repo.savedRefs();
+      final Set<String> refs;
+      if (includeUnresolved) {
+        final result = await repo.savedWithUnresolved();
+        refs = {...result.resolved, ...result.unresolved};
+      } else {
+        refs = await repo.savedRefs();
+      }
       if (!ref.mounted) return;
       _controller.setSaved(refs);
     } on Object catch (error) {
@@ -96,6 +102,8 @@ class AppNotifier extends Notifier<AppState> {
   /// Returns the failure message, or null on success. The optimistic local
   /// toggle is deliberately not used here: the tab must never show a saved
   /// state the backend did not accept.
+  final _savedInFlight = <String>{};
+
   Future<String?> persistSaved(String propertyRef, {required bool wantSaved}) async {
     final repo = ref.read(savedPropertiesRepositoryProvider);
     if (repo == null) {
@@ -103,12 +111,16 @@ class AppNotifier extends Notifier<AppState> {
       _controller.toggleSaved(propertyRef);
       return null;
     }
+    if (!_savedInFlight.add(propertyRef)) {
+      return 'An update for this property is in progress.';
+    }
     try {
       if (wantSaved) {
         await repo.save(propertyRef);
       } else {
         await repo.unsave(propertyRef);
       }
+      if (!ref.mounted) return null;
       final next = {...state.saved};
       if (wantSaved) {
         next.add(propertyRef);
@@ -121,6 +133,8 @@ class AppNotifier extends Notifier<AppState> {
       return error is AppFailure
           ? error.userMessage
           : 'The saved list could not be updated. Please try again.';
+    } finally {
+      _savedInFlight.remove(propertyRef);
     }
   }
 

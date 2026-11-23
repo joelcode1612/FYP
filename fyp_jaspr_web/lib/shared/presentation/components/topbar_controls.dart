@@ -242,11 +242,10 @@ class _SearchResults extends StatelessComponent {
                       ),
                     ]),
                   ]),
-                  div(classes: 'metric text-action', [
-                    Component.text(
-                      property.suitabilityScore.toStringAsFixed(0),
-                    ),
-                  ]),
+                  if (property.hasSuitabilityScore)
+                    div(classes: 'metric text-action', [
+                      Component.text(property.suitabilityScore.toStringAsFixed(0)),
+                    ]),
                 ],
               ),
             ]),

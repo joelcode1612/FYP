@@ -66,7 +66,7 @@ def _clear_cache():
     svc.clear_insights_cache()
 
 
-def _service(monkeypatch, *, features, background_rows, missing=None):
+def _service(monkeypatch, *, features, background_rows, missing=None, variant="legacy"):
     """An insights service whose repository returns the supplied vectors."""
 
     class _Bundle:
@@ -93,7 +93,10 @@ def _service(monkeypatch, *, features, background_rows, missing=None):
         "_reference_background",
         staticmethod(lambda feature_names, path=None: background_rows),
     )
-    return svc.PropertyInsightsService(session=object(), analytics_session=object())
+    service = svc.PropertyInsightsService(session=object(), analytics_session=object())
+    # These fixtures hold the 47-feature research vectors and background.
+    monkeypatch.setattr(service, "_variant", lambda: svc.resolve_variant(variant_key=variant).as_dict())
+    return service
 
 
 # -- registry ---------------------------------------------------------------
@@ -312,8 +315,10 @@ def test_missing_features_keep_a_valid_stored_score(monkeypatch, reference_featu
 def test_experimental_score_is_not_explained_with_unverified_background(
     monkeypatch, reference_features, background
 ):
-    monkeypatch.setenv("SITEWISE_PU_MODEL_VARIANT", "experimental47")
-    service = _service(monkeypatch, features=reference_features, background_rows=background)
+    service = _service(
+        monkeypatch, features=reference_features, background_rows=background,
+        variant="experimental47",
+    )
 
     out = service.insights(REFERENCE_PROPERTY_ID)
 
@@ -362,7 +367,7 @@ def test_explanation_is_cached_per_model_version(monkeypatch, reference_features
     assert first["explanation"]["factors"] == second["explanation"]["factors"]
 
     # Cache identity includes model version + artifact checksum + stored score.
-    version = str(resolve_version())
+    version = str(service._variant()["version"])
     keys = list(svc._EXPLANATION_CACHE)
     assert len(keys) == 1
     assert keys[0][1] == REFERENCE_PROPERTY_ID
@@ -385,11 +390,6 @@ def test_explanation_is_cached_per_model_version(monkeypatch, reference_features
     assert len(svc._EXPLANATION_CACHE) == 2
 
 
-def resolve_version() -> str:
-    variant = svc.PropertyInsightsService(session=None, analytics_session=None)._variant()
-    return str(variant.get("version") or variant["layer1_model"])
-
-
 def test_model_is_the_deployed_legacy_artifact():
     loaded = ModelLoader().load("pu_model")
     assert len(loaded.feature_names) == 47
@@ -401,6 +401,25 @@ def test_model_is_the_deployed_legacy_artifact():
     assert meta.get("score_meaning") == (
         "research_positive_label_association_NOT_business_success_probability"
     )
+
+
+def test_web_property_detail_uses_expanded64_even_when_legacy_is_configured(monkeypatch):
+    monkeypatch.setenv("SITEWISE_PU_MODEL_VARIANT", "legacy")
+    service = svc.PropertyInsightsService(session=None, analytics_session=None)
+    variant = service._variant()
+    assert variant["key"] == "expanded64"
+    assert variant["feature_count"] == 64
+
+
+def test_expanded_property_detail_uses_the_shared_score(monkeypatch, reference_features):
+    service = _service(
+        monkeypatch, features=reference_features, background_rows=[], variant="expanded64",
+    )
+    monkeypatch.setattr(svc, "expanded_display_scores", lambda _session, ids: {ids[0]: 64.2})
+    out = service.insights(REFERENCE_PROPERTY_ID)
+
+    assert out["score"]["available"] is True
+    assert out["score"]["raw"] == pytest.approx(0.642)
 
 
 # -- map layers -------------------------------------------------------------

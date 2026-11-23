@@ -37,9 +37,11 @@ class SavedPropertyService:
         self,
         favourites: FavouriteRepositoryPort,
         catalogue_exists: Callable[[str], bool],
+        catalogue_by_ids: Callable[[list[str]], dict],
     ):
         self.favourites = favourites
         self.catalogue_exists = catalogue_exists
+        self.catalogue_by_ids = catalogue_by_ids
 
     def exists_in_catalogue(self, property_ref: str) -> bool:
         return self.catalogue_exists(property_ref)
@@ -49,24 +51,18 @@ class SavedPropertyService:
 
     def unresolved_refs(self, rows: list[Any]) -> list[str]:
         """Saved ids with no current catalogue row, in the stored order."""
-        return [
-            row.property_id for row in rows if not self.catalogue_exists(row.property_id)
-        ]
+        refs = [row.property_id for row in rows]
+        resolved = self.catalogue_by_ids(refs) if refs else {}
+        return [ref for ref in refs if ref not in resolved]
 
     def save(self, user_id: uuid.UUID, property_ref: str) -> tuple[Any, bool]:
         """Return ``(row, created)`` - ``created`` is False for a repeat save."""
-        existing = self.favourites.get_by_user_and_property(user_id, property_ref)
-        if existing is not None:
-            return existing, False
-        return (
-            self.favourites.create(
-                FavouriteProperty(
-                    user_id=user_id,
-                    property_id=property_ref,
-                    created_at=datetime.now(UTC),
-                )
-            ),
-            True,
+        return self.favourites.create_or_get(
+            FavouriteProperty(
+                user_id=user_id,
+                property_id=property_ref,
+                created_at=datetime.now(UTC),
+            )
         )
 
     def find(self, favorite_id: uuid.UUID) -> Any | None:

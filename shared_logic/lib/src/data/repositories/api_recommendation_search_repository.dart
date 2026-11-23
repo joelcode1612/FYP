@@ -51,6 +51,9 @@ class ApiRecommendationSearchRepository implements RecommendationSearchRepositor
       if (c.maxSizeSqft != null) query['max_size_sqft'] = '${c.maxSizeSqft}';
       if (c.propertyType != null) query['property_type'] = c.propertyType!;
       if (c.city != null) query['city'] = c.city!;
+      if (c.locationLatitude != null) query['location_latitude'] = '${c.locationLatitude}';
+      if (c.locationLongitude != null) query['location_longitude'] = '${c.locationLongitude}';
+      if (c.nearbyRadiusKm != null) query['nearby_radius_km'] = '${c.nearbyRadiusKm}';
       if (c.floorLevel != null) query['floor_level'] = c.floorLevel!;
       if (c.transitMaxM != null) query['transit_max_m'] = '${c.transitMaxM}';
       if (c.nearbyParkingMin != null) {

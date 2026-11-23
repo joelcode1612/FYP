@@ -138,7 +138,7 @@ def _neighbour_owned_by(
     if width <= 0 or height <= 0:
         return result
     padded = np.full((height + 12, width + 12), -1, dtype=np.int16)
-    padded[6 : 6 + height, 6 : 6 + width] = owner.reshape(height, width)
+    padded[6 : 6 + height] = np.pad(owner.reshape(height, width), ((0, 0), (6, 6)), mode="wrap")
     for distance in range(1, 7):
         for dy in (-distance, 0, distance):
             for dx in (-distance, 0, distance):
@@ -170,12 +170,9 @@ def _write_best_only(
 
 
 def _output_delta(output: np.ndarray, a: np.ndarray, b: np.ndarray) -> np.ndarray:
-    oa = output[a * 3].astype(np.int32)
-    ob = output[b * 3].astype(np.int32)
-    return (
-        np.abs(oa - ob) + np.abs(output[a * 3 + 1] - output[b * 3 + 1]) +
-        np.abs(output[a * 3 + 2] - output[b * 3 + 2])
-    ) / 3.0
+    rgb = output.reshape(-1, 3)
+    return np.abs(rgb[a].astype(np.int16) - rgb[b].astype(np.int16)).mean(axis=1)
+
 
 
 def composite_seams(
@@ -292,22 +289,14 @@ def composite_seams(
     use_second = overlap_mask & (label == 1)
     owner[covered] = np.where(use_second[covered], sf[covered], bf[covered]).astype(np.int16)
 
-    edge = np.zeros(n, dtype=np.uint8)
-    if width > 1 or height > 1:
-        grid = owner.reshape(height, width)
-        same_left = np.ones((height, width), dtype=bool)
-        same_right = np.ones((height, width), dtype=bool)
-        same_up = np.ones((height, width), dtype=bool)
-        same_down = np.ones((height, width), dtype=bool)
-        valid = grid >= 0
-        if width > 1:
-            same_left[:, 1:] = ~(grid[:, 1:] == grid[:, :-1]) | (grid[:, :-1] < 0)
-            same_right[:, :-1] = ~(grid[:, :-1] == grid[:, 1:]) | (grid[:, 1:] < 0)
-        if height > 1:
-            same_up[1:, :] = ~(grid[1:, :] == grid[:-1, :]) | (grid[:-1, :] < 0)
-            same_down[:-1, :] = ~(grid[:-1, :] == grid[1:, :]) | (grid[1:, :] < 0)
-        is_edge = valid & (~same_left | ~same_right | ~same_up | ~same_down)
-        edge = is_edge.astype(np.uint8).reshape(-1)
+    grid = owner.reshape(height, width)
+    right = np.roll(grid, -1, axis=1)
+    horizontal = (grid >= 0) & (right >= 0) & (grid != right)
+    edge_grid = horizontal | np.roll(horizontal, 1, axis=1)
+    vertical = (grid[1:] >= 0) & (grid[:-1] >= 0) & (grid[1:] != grid[:-1])
+    edge_grid[1:] |= vertical
+    edge_grid[:-1] |= vertical
+    edge = edge_grid.astype(np.uint8).reshape(-1)
     seam_pixels = int(edge.sum())
 
     seam_distance = _distance_to_edge(edge, width, height)
