@@ -100,8 +100,11 @@ backend/backups/
 # was created during CP-04A and matched none of it, so `git add -A` would have
 # staged SECRET_KEY, SUPABASE_SECRET_KEY and four database URLs. Ignore the whole
 # `.env*` family instead of enumerating suffixes, and re-permit only the examples.
-# NOTE: `backend/.env` is already TRACKED. Ignoring it does not untrack it and
-# does not protect its contents; only rotation does.
+# NOTE (2026-11-22, P1/P0-R2): `backend/.env` and `test/.env` were TRACKED and
+# have now been untracked with `git rm --cached`; the files themselves are
+# untouched on disk. Ignoring a path never removes it from history, so the
+# credentials they carried are still exposed in past commits and must be
+# rotated at the provider. Rotation is the only real remediation.
 **/.env
 **/.env.*
 !**/.env.example
@@ -109,4 +112,9 @@ backend/backups/
 # CP-03F browser/backend journey harness output: contains declared M2 answer
 # text. Untracked and previously unignored, so `git add -A` would have staged it.
 backend/var/cp03f_*/
+
+# Runtime E2E / browser scratch output (regenerated; holds Chrome profiles,
+# test keys and app.env copies). Zero tracked files in these paths.
+backend/var/e2e/
+var/backup_build/
 
