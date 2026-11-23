@@ -40,14 +40,48 @@ def agent_assignment(session: Session, property_id: int, user, *, writable: bool
         raise HTTPException(status_code=404, detail="Assigned property not found.")
     result = dict(row)
     if writable:
-        if result["workflow_status"] not in ("accepted", "needs_correction"):
-            raise HTTPException(status_code=409, detail="Accept the Agent request before inspecting or capturing.")
-        if result["is_published"] or result["verification_status"] in ("approved", "pending", "under_review"):
-            raise HTTPException(status_code=409, detail="Property is locked for Admin review or publication.")
+        _require_writable_assignment(result)
     return result
 
 
-def completed_agent_panorama(session: Session, property_id: int, user) -> str | None:
+def _require_writable_assignment(assignment: dict) -> None:
+    if assignment["workflow_status"] not in ("accepted", "needs_correction"):
+        raise HTTPException(status_code=409, detail="Accept the Agent request before inspecting or capturing.")
+    if assignment["is_published"] or assignment["verification_status"] in ("approved", "pending", "under_review"):
+        raise HTTPException(status_code=409, detail="Property is locked for Admin review or publication.")
+
+
+def require_frame_backup(session: Session, capture, user) -> bool:
+    """Return whether this is append-only backup for the submitted panorama."""
+    assignment = agent_assignment(session, int(capture.property_id), user)
+    if str(capture.owner_id) != str(user.user_id):
+        raise HTTPException(status_code=403, detail="Capture session belongs to a different Agent.")
+    if capture.status == "cancelled":
+        raise HTTPException(status_code=409, detail="This capture session was cancelled.")
+    if assignment["workflow_status"] != "submitted":
+        _require_writable_assignment(assignment)
+        return False
+    pinned = assignment["panorama_id"]
+    if pinned is not None and capture.capture_mode == "device_38_panorama" and capture.status == "completed":
+        matches = session.execute(text("""
+            SELECT EXISTS (
+                SELECT 1 FROM fyp.panoramas
+                WHERE panorama_id = :panorama_id AND session_id = :session_id
+                  AND property_id = :property_id
+            )
+        """), {
+            "panorama_id": str(pinned),
+            "session_id": str(capture.id),
+            "property_id": str(capture.property_id),
+        }).scalar()
+        if matches:
+            return True
+    raise HTTPException(status_code=409, detail="Only originals for the submitted panorama can be backed up.")
+
+
+def completed_agent_panorama(
+    session: Session, property_id: int, user, panorama_id: str | None = None,
+) -> str | None:
     """Only a genuinely completed pipeline panorama produced by this Agent.
 
     A client cannot claim its file or flip a 'ready' flag: the canonical
@@ -56,6 +90,8 @@ def completed_agent_panorama(session: Session, property_id: int, user) -> str | 
     geometry first. Legacy sessions additionally carry a 'done' panorama job;
     device-stitched sessions (capture_plan_version 2) have no job row at all,
     so the job is no longer the proof — the verified canonical row is.
+
+    Capture and checklist completion may happen in either order.
     """
     record = session.execute(text("""
         SELECT p.panorama_id
@@ -67,20 +103,21 @@ def completed_agent_panorama(session: Session, property_id: int, user) -> str | 
            AND cs.owner_id = :uid
            AND cs.status = 'completed'
            AND a.workflow_status IN ('accepted', 'needs_correction')
-           AND a.inspection_updated_at IS NOT NULL
-           AND p.created_at >= a.inspection_updated_at
+           AND (CAST(:panorama_id AS text) IS NULL OR CAST(p.panorama_id AS text) = :panorama_id)
            AND p.storage_path IS NOT NULL AND btrim(p.storage_path) <> ''
          ORDER BY p.created_at DESC LIMIT 1
-    """), {"pid": int(property_id), "uid": str(user.user_id)}).scalar()
+    """), {"pid": int(property_id), "uid": str(user.user_id), "panorama_id": panorama_id}).scalar()
     return str(record) if record else None
 
 
-def require_ready_for_admin(session: Session, property_id: int, user) -> dict:
+def require_ready_for_admin(
+    session: Session, property_id: int, user, panorama_id: str | None = None
+) -> dict:
     row = agent_assignment(session, property_id, user, writable=True)
     data = row["inspection_data"] or {}
     if not row.get("inspection_updated_at") or any(data.get(key) is not True for key in REQUIRED_INSPECTION):
         raise HTTPException(status_code=409, detail="Save the four on-site verification checks before submitting.")
-    panorama_id = completed_agent_panorama(session, property_id, user)
+    panorama_id = completed_agent_panorama(session, property_id, user, panorama_id)
     if not panorama_id:
         raise HTTPException(status_code=409, detail="Complete and upload a 360° tour through the Agent capture pipeline before submitting.")
     return {**row, "completed_panorama_id": panorama_id}

@@ -22,27 +22,52 @@ class _OwnerRequestsState extends ConsumerState<ProviderOwnerRequestsMobilePage>
   String? error;
   final Map<int, String> statuses = {};
   final Map<int, String> agentNames = {};
+  final Map<int, List<String>> missingDetails = {};
+  int _refreshRevision = 0;
 
   @override
-  void initState() { super.initState(); refresh(); }
+  void initState() {
+    super.initState();
+    ServiceLocator.listingsRevision.addListener(_reloadListings);
+    refresh();
+  }
+
+  @override
+  void dispose() {
+    ServiceLocator.listingsRevision.removeListener(_reloadListings);
+    super.dispose();
+  }
+
+  void _reloadListings() {
+    ref.invalidate(providerDashboardProvider);
+    refresh();
+  }
 
   Future<void> refresh() async {
+    final revision = ++_refreshRevision;
     if (mounted) setState(() => error = null);
     try {
       final rows = await ref.read(providerDashboardProvider.future);
       for (final property in rows.listings) {
+        if (!mounted || revision != _refreshRevision) return;
         final r = await ServiceLocator.apiClient.get(
           '/api/v1/provider-flow/properties/${property.id}/assignment');
-        if (!mounted) return;
+        if (!mounted || revision != _refreshRevision) return;
         final data = r['data'];
+        final missing = r['missing_required_fields'];
+        missingDetails[property.id] =
+            missing is List ? missing.whereType<String>().toList() : [];
         if (data is Map) {
           statuses[property.id] = '${data['workflow_status'] ?? ''}';
           agentNames[property.id] = '${data['agent_name'] ?? 'Assigned Agent'}';
+        } else {
+          statuses.remove(property.id);
+          agentNames.remove(property.id);
         }
       }
-      if (mounted) setState(() {});
+      if (mounted && revision == _refreshRevision) setState(() {});
     } catch (e) {
-      if (mounted) setState(() => error = '$e');
+      if (mounted && revision == _refreshRevision) setState(() => error = '$e');
     }
   }
 
@@ -67,7 +92,7 @@ class _OwnerRequestsState extends ConsumerState<ProviderOwnerRequestsMobilePage>
   }
 
   Future<void> requestAgent(ProviderListing property) async {
-    if (busy) return;
+    if (busy || missingDetails[property.id]?.isEmpty != true) return;
     final selected = await showModalBottomSheet<String>(
       context: context,
       useSafeArea: true,
@@ -96,8 +121,23 @@ class _OwnerRequestsState extends ConsumerState<ProviderOwnerRequestsMobilePage>
           content: Text('Agent request sent. The Agent must accept it first.'),
         ));
       }
-    } catch (e) { if (mounted) setState(() => error = '$e'); }
+    } catch (e) {
+      await refresh();
+      if (mounted) {
+        setState(() => error = readableFailure(
+          e,
+          fallback: 'The Agent request could not be sent.',
+        ));
+      }
+    }
     finally { if (mounted) setState(() => busy = false); }
+  }
+
+  void _editProperty(ProviderListing property) {
+    Navigator.of(context).pushNamed(
+      '/provider/add-property',
+      arguments: property.id.toString(),
+    );
   }
 
   Future<void> uploadOwnershipProof(ProviderListing property) async {
@@ -169,69 +209,396 @@ class _OwnerRequestsState extends ConsumerState<ProviderOwnerRequestsMobilePage>
     }
   }
 
+  // SITEWISE_OWNER_REQUESTS_COMPACT_V2
+  // Compact presentation only. The backend still owns property/Agent statuses.
+  int _selectedFilter = 0;
+
+  bool _matchesStatus(ProviderListing property) => switch (_selectedFilter) {
+    1 => property.stage == ProviderStage.draft,
+    2 => property.stage == ProviderStage.pending,
+    3 => property.isActive,
+    _ => true,
+  };
+
+  Widget _statusFilters(List<ProviderListing> listings) {
+    final options = <(String, int)>[
+      ('All', listings.length),
+      ('Draft', listings.where((p) => p.stage == ProviderStage.draft).length),
+      ('In review', listings.where((p) => p.stage == ProviderStage.pending).length),
+      ('Completed', listings.where((p) => p.isActive).length),
+    ];
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(children: [
+        for (var index = 0; index < options.length; index++) ...[
+          if (index > 0) const SizedBox(width: 7),
+          ChoiceChip(
+            label: Text('${options[index].$1} (${options[index].$2})'),
+            selected: _selectedFilter == index,
+            showCheckmark: false,
+            onSelected: (_) => setState(() => _selectedFilter = index),
+            selectedColor: SitewiseColors.infoWash,
+            backgroundColor: SitewiseColors.surface,
+            side: BorderSide(
+              color: _selectedFilter == index
+                  ? SitewiseColors.action
+                  : SitewiseColors.border,
+            ),
+            labelStyle: TextStyle(
+              fontFamily: kFontFamily,
+              fontWeight: FontWeight.w600,
+              fontSize: 13,
+              color: _selectedFilter == index
+                  ? SitewiseColors.action
+                  : SitewiseColors.text,
+            ),
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+            visualDensity: VisualDensity.compact,
+            materialTapTargetSize: MaterialTapTargetSize.padded,
+          ),
+        ],
+      ]),
+    );
+  }
+
+  Widget _thumbnailFallback() => Container(
+    color: SitewiseColors.infoWash,
+    alignment: Alignment.center,
+    child: const Icon(
+      Icons.storefront_outlined,
+      size: 28,
+      color: SitewiseColors.action,
+    ),
+  );
+
+  Widget _propertyThumbnail(ProviderListing property) {
+    final url = property.imageUrl?.trim() ?? '';
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(SitewiseSpacing.radius),
+      child: SizedBox(
+        width: 74,
+        height: 74,
+        child: url.isEmpty
+            ? _thumbnailFallback()
+            : Image.network(
+                url,
+                fit: BoxFit.cover,
+                errorBuilder: (context, error, stackTrace) =>
+                    _thumbnailFallback(),
+              ),
+      ),
+    );
+  }
+
+  Widget _propertyOverview(ProviderListing property) => Row(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      _propertyThumbnail(property),
+      const SizedBox(width: 12),
+      Expanded(child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(children: [
+            Expanded(child: Text(
+              '#${property.id}',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                fontFamily: kFontFamily,
+                color: SitewiseColors.action,
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+              ),
+            )),
+            ProviderStatusPill(stage: property.stage, compact: true),
+          ]),
+          const SizedBox(height: 4),
+          Text(
+            property.displayTitle,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              fontFamily: kFontFamily,
+              color: SitewiseColors.ink,
+              fontSize: 16,
+              height: 1.18,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          if (property.address.trim().isNotEmpty) ...[
+            const SizedBox(height: 4),
+            Text(
+              property.address,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                fontFamily: kFontFamily,
+                fontSize: 13,
+                height: 1.35,
+                color: SitewiseColors.muted,
+              ),
+            ),
+          ],
+          if (property.propertyType?.trim().isNotEmpty == true) ...[
+            const SizedBox(height: 3),
+            Text(
+              property.propertyType!.trim(),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                fontFamily: kFontFamily,
+                fontSize: 13,
+                color: SitewiseColors.muted,
+              ),
+            ),
+          ],
+        ],
+      )),
+    ],
+  );
+
+  Widget _assignmentStatus(ProviderListing property) {
+    final raw = statuses[property.id]?.trim().toLowerCase() ?? '';
+    final agent = agentNames[property.id]?.trim();
+    final (String label, Color foreground, Color background) = switch (raw) {
+      'accepted' => ('Accepted', SitewiseColors.success,
+          SitewiseColors.successWash),
+      'submitted' => ('Submitted', SitewiseColors.success,
+          SitewiseColors.successWash),
+      'requested' => ('Awaiting Agent', SitewiseColors.warning,
+          SitewiseColors.warningWash),
+      '' => ('Not requested', SitewiseColors.muted,
+          SitewiseColors.infoWash),
+      _ => (raw.replaceAll('_', ' '), SitewiseColors.muted,
+          SitewiseColors.infoWash),
+    };
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(children: [
+          const Icon(Icons.assignment_ind_outlined,
+              color: SitewiseColors.action, size: 19),
+          const SizedBox(width: 7),
+          const Expanded(child: Text(
+            'Agent request',
+            style: TextStyle(
+              fontFamily: kFontFamily,
+              fontSize: 14,
+              fontWeight: FontWeight.w700,
+              color: SitewiseColors.ink,
+            ),
+          )),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+            decoration: BoxDecoration(
+              color: background,
+              borderRadius: BorderRadius.circular(SitewiseSpacing.radiusXl),
+            ),
+            child: Text(
+              label,
+              maxLines: 1,
+              style: TextStyle(
+                fontFamily: kFontFamily,
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                color: foreground,
+              ),
+            ),
+          ),
+        ]),
+        if (agent != null && agent.isNotEmpty) ...[
+          const SizedBox(height: 4),
+          Text(
+            'Assigned Agent: $agent',
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              fontFamily: kFontFamily,
+              fontSize: 13,
+              height: 1.35,
+              color: SitewiseColors.muted,
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
+  String? _nextStep(ProviderListing property) {
+    if (property.isActive) return null;
+    if (property.stage == ProviderStage.pending) {
+      return 'Administrator review is in progress.';
+    }
+    final missing = missingDetails[property.id];
+    if (missing != null && missing.isNotEmpty) {
+      return 'Complete and save these property details: ${missing.join(', ')}.';
+    }
+    final raw = statuses[property.id]?.trim().toLowerCase() ?? '';
+    if (raw == 'accepted' || raw == 'submitted') return null;
+    if (raw == 'requested') {
+      return 'Your Agent must accept the request first.';
+    }
+    if (property.stage == ProviderStage.rejected) {
+      return 'Review the feedback and update ownership proof if needed.';
+    }
+    return 'Upload proof if needed, then request an inspection.';
+  }
+
+  Widget _nextStepHint(String text) => Container(
+    width: double.infinity,
+    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+    decoration: BoxDecoration(
+      color: SitewiseColors.infoWash.withValues(alpha: .55),
+      borderRadius: BorderRadius.circular(SitewiseSpacing.radiusSm),
+    ),
+    child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      const Icon(Icons.info_outline_rounded,
+          size: 18, color: SitewiseColors.action),
+      const SizedBox(width: 7),
+      Expanded(child: Text(
+        text,
+        style: const TextStyle(
+          fontFamily: kFontFamily,
+          fontSize: 13,
+          height: 1.35,
+          color: SitewiseColors.text,
+        ),
+      )),
+    ]),
+  );
+
+  Widget _requestButtons(ProviderListing property) {
+    final raw = statuses[property.id]?.trim().toLowerCase() ?? '';
+    final outstanding = const <String>{
+      'requested', 'accepted', 'submitted',
+    }.contains(raw);
+    final uploadButton = OutlinedButton.icon(
+      onPressed: busy ? null : () => uploadOwnershipProof(property),
+      icon: const Icon(Icons.upload_file_outlined, size: 18),
+      label: const Text('Upload proof', maxLines: 1),
+      style: OutlinedButton.styleFrom(
+        minimumSize: const Size.fromHeight(48),
+        foregroundColor: SitewiseColors.action,
+        side: const BorderSide(color: SitewiseColors.action),
+        padding: const EdgeInsets.symmetric(horizontal: 10),
+      ),
+    );
+    final missing = missingDetails[property.id];
+    final needsDetails = missing?.isNotEmpty == true;
+    if (outstanding && !needsDetails) return uploadButton;
+    final requestButton = FilledButton.icon(
+      onPressed: busy || missing == null
+          ? null
+          : () => needsDetails ? _editProperty(property) : requestAgent(property),
+      icon: Icon(needsDetails ? Icons.edit_outlined : Icons.assignment_ind_outlined, size: 18),
+      label: Text(needsDetails ? 'Edit property' : 'Request Agent', maxLines: 1),
+      style: FilledButton.styleFrom(
+        minimumSize: const Size.fromHeight(48),
+        backgroundColor: SitewiseColors.action,
+        padding: const EdgeInsets.symmetric(horizontal: 10),
+      ),
+    );
+    return LayoutBuilder(builder: (context, constraints) {
+      if (constraints.maxWidth < 325) {
+        return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          uploadButton,
+          const SizedBox(height: 8),
+          requestButton,
+        ]);
+      }
+      return Row(children: [
+        Expanded(child: uploadButton),
+        const SizedBox(width: 8),
+        Expanded(child: requestButton),
+      ]);
+    });
+  }
+
+  Widget _requestCard(ProviderListing property) {
+    final editable = property.stage == ProviderStage.draft ||
+        property.stage == ProviderStage.rejected;
+    final next = _nextStep(property);
+    return ProviderCard(child: Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _propertyOverview(property),
+        const SizedBox(height: 12),
+        const Divider(height: 1, color: SitewiseColors.border),
+        const SizedBox(height: 11),
+        _assignmentStatus(property),
+        if (next != null) ...[
+          const SizedBox(height: 10),
+          _nextStepHint(next),
+        ],
+        if (editable) ...[
+          const SizedBox(height: 12),
+          _requestButtons(property),
+        ],
+      ],
+    ));
+  }
+
   @override
   Widget build(BuildContext context) {
     final data = ref.watch(providerDashboardProvider);
     return RefreshIndicator(
-      onRefresh: () async { ref.invalidate(providerDashboardProvider); await refresh(); },
+      onRefresh: () async {
+        ref.invalidate(providerDashboardProvider);
+        await refresh();
+      },
       child: data.when(
         loading: providerLoadingView,
         error: (e, _) => providerContent(children: [
-          ProviderMessage(title: 'Owned properties unavailable', body: '$e',
-              onRetry: () => ref.invalidate(providerDashboardProvider)),
-        ]),
-        data: (workspace) => providerContent(children: [
-          const Text('Agent requests', style: SitewiseM3Type.h1),
-          const SizedBox(height: 8),
-          const Text('Upload ownership proof, choose an authorized Agent and follow the verification progress.',
-            style: TextStyle(fontSize: 14, height: 1.5, color: SitewiseColors.muted)),
-          if (error != null) ...[
-            const SizedBox(height: 10),
-            Text(error!, style: const TextStyle(color: SitewiseColors.danger)),
-            TextButton(onPressed: refresh, child: const Text('Retry')),
-          ],
-          const SizedBox(height: 18),
-          if (workspace.listings.isEmpty) const ProviderMessage(
-            title: 'No registered properties',
-            body: 'Register a commercial property before requesting an Agent.',
+          ProviderMessage(
+            title: 'Owned properties unavailable',
+            body: '$e',
+            onRetry: () => ref.invalidate(providerDashboardProvider),
           ),
-          for (final property in workspace.listings) ...[
-            ProviderCard(title: property.displayTitle, child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-                Text(property.address.isEmpty ? 'Address not set' : property.address,
-                  style: const TextStyle(fontSize: 14, color: SitewiseColors.muted)),
-                const SizedBox(height: 6),
-                ProviderStatusPill(stage: property.stage),
-                const SizedBox(height: 8),
-                Text('Agent request: ${statuses[property.id]?.replaceAll('_', ' ') ?? 'Not requested'}',
-                  style: const TextStyle(fontSize: 14, color: SitewiseM3.ink)),
-                if (agentNames[property.id] != null)
-                  Text('Assigned Agent: ${agentNames[property.id]}',
-                    style: const TextStyle(fontSize: 13, color: SitewiseColors.muted)),
-                if (property.stage == ProviderStage.draft ||
-                    property.stage == ProviderStage.rejected) ...[
-                  const SizedBox(height: 12),
-                  OutlinedButton.icon(
-                    onPressed: busy ? null : () => uploadOwnershipProof(property),
-                    icon: const Icon(Icons.upload_file_outlined),
-                    label: const Text('Upload ownership proof')),
-                  const SizedBox(height: 8),
-                  FilledButton.icon(
-                    onPressed: busy ||
-                        ['requested','accepted','submitted'].contains(statuses[property.id])
-                        ? null : () => requestAgent(property),
-                    icon: const Icon(Icons.assignment_ind_outlined),
-                    label: const Text('Request Agent inspection')),
-                ],
-                if (property.isActive)
-                  const Text('Published: property and approved 360° tour are read-only.'),
-                if (property.stage == ProviderStage.pending)
-                  const Text('Submitted by Agent; awaiting Admin decision.'),
-              ],
-            )),
-            const SizedBox(height: 12),
-          ],
         ]),
+        data: (workspace) {
+          final visible = workspace.listings.where(_matchesStatus).toList();
+          return providerContent(children: [
+            const Text('Agent requests', style: SitewiseM3Type.h1),
+            const SizedBox(height: 5),
+            const Text(
+              'Manage Agent assignments and inspection progress.',
+              style: TextStyle(
+                fontFamily: kFontFamily,
+                fontSize: 14,
+                height: 1.4,
+                color: SitewiseColors.muted,
+              ),
+            ),
+            const SizedBox(height: 12),
+            _statusFilters(workspace.listings),
+            if (error != null) ...[
+              const SizedBox(height: 10),
+              ProviderMessage(
+                title: 'Agent request status unavailable',
+                body: error!,
+                onRetry: refresh,
+                icon: Icons.warning_amber_rounded,
+              ),
+            ],
+            const SizedBox(height: 12),
+            if (workspace.listings.isEmpty)
+              const ProviderMessage(
+                title: 'No registered properties',
+                body: 'Register a commercial property before requesting an Agent.',
+              )
+            else if (visible.isEmpty)
+              const ProviderMessage(
+                title: 'No matching properties',
+                body: 'Choose a different filter to see your properties.',
+                icon: Icons.filter_list_off_rounded,
+              )
+            else
+              for (final property in visible) ...[
+                _requestCard(property),
+                const SizedBox(height: 10),
+              ],
+          ]);
+        },
       ),
     );
   }

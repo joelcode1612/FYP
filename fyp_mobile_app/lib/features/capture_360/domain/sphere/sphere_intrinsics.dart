@@ -141,10 +141,7 @@ DecodedProjection? decodedProjection({
   final effSavedH = savedHeight > 0 ? savedHeight : decodedHeight;
 
   // The lens focal, expressed in full-resolution source pixels.
-  final focalSource = focalFromHeight(
-    effSourceH.toDouble(),
-    verticalFovDeg,
-  );
+  final focalSource = focalFromHeight(effSourceH.toDouble(), verticalFovDeg);
   // Reduced decoding is a pure resize of the saved image.
   final scale = decodedHeight / effSavedH;
   final focal = focalSource * scale;
@@ -158,10 +155,7 @@ DecodedProjection? decodedProjection({
     cy: cy,
     width: decodedWidth,
     height: decodedHeight,
-    horizontalFovDeg: horizontalFovFromPixels(
-      decodedWidth.toDouble(),
-      focal,
-    ),
+    horizontalFovDeg: horizontalFovFromPixels(decodedWidth.toDouble(), focal),
     verticalFovDegDeg: verticalFovFromPixels(decodedHeight.toDouble(), focal),
     decodeScale: scale,
   );

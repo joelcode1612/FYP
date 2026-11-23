@@ -138,6 +138,15 @@ class Settings(BaseSettings):
     # "experimental47" remain selectable for comparison and audit.
     sitewise_pu_model_variant: str = "expanded64"
 
+    # --- Optional device-panorama enhancement (default OFF) ----------------
+    # When explicitly enabled, an administrator may run a CONSERVATIVE tonal
+    # pass (bounded white balance + exposure normalization) over a completed
+    # device panorama. It never re-stitches, never touches the canonical
+    # panorama.jpg, and writes a separate panorama_enhanced.jpg whose status
+    # is recorded in the panorama's coverage_report metadata. Enhancement
+    # failure never destroys, blocks or replaces the valid original.
+    sitewise_panorama_enhancement_enabled: bool = False
+
     @property
     def pu_model_variant(self) -> str:
         variant = (self.sitewise_pu_model_variant or "legacy").strip().lower()

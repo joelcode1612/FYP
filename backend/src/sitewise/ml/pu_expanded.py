@@ -37,6 +37,7 @@ from __future__ import annotations
 
 import csv
 import threading
+from time import monotonic
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
@@ -224,7 +225,20 @@ def _expanded_policy_check(missing: list[str]) -> None:
 
 
 #: Cache of per-property expanded results, keyed by (model_version, property_id).
-_SCORE_CACHE: dict[tuple[str, str], dict[str, Any]] = {}
+_SCORE_CACHE: dict[tuple[str, str], tuple[float, dict[str, Any]]] = {}
+_SCORE_CACHE_TTL = 30.0
+
+
+def _cached_score(key: tuple[str, str]) -> dict[str, Any] | None:
+    """Read a score while holding the score-cache lock."""
+    entry = _SCORE_CACHE.get(key)
+    if entry is None:
+        return None
+    expires_at, score = entry
+    if monotonic() >= expires_at:
+        _SCORE_CACHE.pop(key, None)
+        return None
+    return score
 _SCORE_CACHE_LOCK = threading.Lock()
 
 #: The RESOLVED vector behind each cached score. Stage 2 needs it: a cached
@@ -284,7 +298,7 @@ def expanded_prediction(analytics_session: Session, property_id: str) -> dict[st
     model_version = str(loaded.meta.get("model_variant") or "unknown")
     cache_key = (model_version, str(property_id))
     with _SCORE_CACHE_LOCK:
-        cached = _SCORE_CACHE.get(cache_key)
+        cached = _cached_score(cache_key)
     if cached is not None:
         return cached
 
@@ -364,7 +378,7 @@ def expanded_prediction(analytics_session: Session, property_id: str) -> dict[st
         }
     if result.get("available"):
         with _SCORE_CACHE_LOCK:
-            _SCORE_CACHE[cache_key] = result
+            _SCORE_CACHE[cache_key] = (monotonic() + _SCORE_CACHE_TTL, result)
     return result
 
 
@@ -418,7 +432,7 @@ def expanded_scores_many(
     ids = [str(p) for p in property_ids]
     model_version = str(loaded.meta.get("model_variant") or "unknown")
     with _SCORE_CACHE_LOCK:
-        cached_scores = {pid: None if refresh else _SCORE_CACHE.get((model_version, pid)) for pid in ids}
+        cached_scores = {pid: None if refresh else _cached_score((model_version, pid)) for pid in ids}
     if all(result is not None for result in cached_scores.values()):
         if coverage_sink is None:
             return {pid: cached_scores[pid] for pid in ids}
@@ -573,7 +587,7 @@ def expanded_scores_many(
     for catalogue_id in ids:
         cache_key = (model_version, catalogue_id)
         with _SCORE_CACHE_LOCK:
-            cached = None if refresh else _SCORE_CACHE.get(cache_key)
+            cached = None if refresh else _cached_score(cache_key)
         if cached is not None:
             results[catalogue_id] = cached
             # Refill the Stage-2 sink from the resolved vector that produced
@@ -731,6 +745,8 @@ def expanded_scores_many(
                     "gating": {"production_ready": False, "research_only": True, "expanded_bridge_only": True},
                 }
                 with _SCORE_CACHE_LOCK:
-                    _SCORE_CACHE[(model_version, catalogue_id)] = result
+                    _SCORE_CACHE[(model_version, catalogue_id)] = (
+                        monotonic() + _SCORE_CACHE_TTL, result
+                    )
                 results[catalogue_id] = result
     return results

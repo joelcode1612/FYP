@@ -401,9 +401,10 @@ def _provider_agent_id(session: Session, current: AuthenticatedUser) -> int | No
 
 
 def _owned_listing_or_error(
-    repo: FypPropertyRepository, property_id: int, current: AuthenticatedUser
+    repo: FypPropertyRepository, property_id: int, current: AuthenticatedUser,
+    *, for_update: bool = False,
 ) -> dict:
-    listing = repo.owner_listing(property_id)
+    listing = repo.owner_listing(property_id, for_update=for_update)
     if listing is None:
         raise HTTPException(status_code=404, detail="Property not found.")
     if rbac.can_administer_users(current.role):
@@ -490,11 +491,15 @@ def update_own_listing(
     cannot be invalidated; draft, rejected and corrections-requested states
     remain editable, and a repeat save updates the SAME row."""
     from sitewise.db.models.property_verification import can_resubmit
-    from sitewise.services.property_verification_service import verification_row
+    from sitewise.services.property_verification_service import (
+        listing_completeness_errors,
+        verification_row,
+    )
 
     _owner_write_only(current)
     repo = FypPropertyRepository(session)
-    listing = _owned_listing_or_error(repo, property_id, current)
+    _owned_listing_or_error(repo, property_id, current)
+    listing = _owned_listing_or_error(repo, property_id, current, for_update=True)
     if listing.get("is_published") or listing.get("verification_status") not in ("draft", "rejected"):
         raise HTTPException(status_code=409, detail="The property is locked for review or published.")
     verification = verification_row(session, property_id)
@@ -513,6 +518,19 @@ def update_own_listing(
         # existing draft name.
         fields.pop("name", None)
     if fields:
+        missing = listing_completeness_errors(listing | fields, require_availability=False)
+        if missing and session.execute(text("""
+            SELECT EXISTS (
+                SELECT 1 FROM fyp.agent_listing_assignment
+                 WHERE listing_id=:pid
+                   AND workflow_status IN ('requested','accepted','needs_correction')
+            )
+        """), {"pid": property_id}).scalar():
+            raise HTTPException(
+                status_code=409,
+                detail="Complete these property details for the active Agent request: "
+                + ", ".join(missing) + ".",
+            )
         session.execute(text("""
             UPDATE fyp.agent_listing_assignment
                SET inspection_data='{}'::jsonb, inspection_updated_at=NULL,

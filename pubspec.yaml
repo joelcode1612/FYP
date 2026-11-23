@@ -26,3 +26,34 @@ workspace:
   - fyp_mobile_app
   - fyp_jaspr_web
   - shared_logic
+
+# Native asset build options for dartcv4 (opencv_dart), consumed by the
+# Flutter app's 38-target panorama pipeline.
+#
+# WHY THIS LIVES IN THE WORKSPACE ROOT: native-assets `hooks.user_defines`
+# are resolved from the ROOT package of the resolution. A pub workspace has
+# ONE resolution whose root is THIS pubspec, so defines declared only inside
+# a member (fyp_mobile_app) never reach the hooked package's build hook —
+# the app builds fine but ships dartcv4's DEFAULT module set
+# (`{imgcodecs, imgproc}`), which compiles features2d/calib3d/stitching OUT
+# of `libdartcv.so`. The runtime then fails at the first ORB call:
+#
+#     Couldn't resolve native function 'cv_ORB_create_1'
+#     in 'package:dartcv4/dartcv.dart'
+#
+# That exact defect was reproduced and fixed from this block (2026-11-23);
+# `integration_test/opencv_orb_native_test.dart` is the device-level
+# regression guard. The module list must be the union of every OpenCV entry
+# point the pipeline calls — `include_modules` REPLACES dartcv4's defaults,
+# so imgproc and imgcodecs are repeated here even though they are defaults.
+hooks:
+  user_defines:
+    dartcv4:
+      parallel_jobs: 4
+      include_modules:
+        - imgproc
+        - imgcodecs
+        - stitching
+        - features2d
+        - flann
+        - calib3d

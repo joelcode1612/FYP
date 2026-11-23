@@ -3,12 +3,15 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:crypto/crypto.dart';
+import 'package:path/path.dart' as p;
 // shared_logic also declares a `CapturedFrame` entity; this coordinator works
 // with the 38-target capture domain one.
 import 'package:shared_logic/shared_logic.dart' hide CapturedFrame;
 
 import 'package:fyp/core/utils/capture_log.dart';
 import 'package:fyp/features/capture_360/domain/sphere/sphere_capture_session.dart';
+import 'package:fyp/features/capture_360/domain/sphere/sphere_target.dart'
+    show kSphereCapturePlanVersion;
 
 /// One successful cloud synchronization.
 class BackendHandoffResult {
@@ -52,7 +55,7 @@ enum BackendHandoffStage {
   framesBackingUp,
 
   /// The canonical panorama exists and has a viewing URL.
-  ready;
+  ready,
 }
 
 /// Honest, bounded progress for the capture UI. [processed]/[total] describe
@@ -102,10 +105,7 @@ enum _PutOutcome { stored, expired, retryable, fatal }
 /// endpoint, not by a worker, and the local panorama/frames are never deleted
 /// by any failure here.
 class BackendCaptureCoordinator {
-  BackendCaptureCoordinator({
-    required this._client,
-    required this._store,
-  });
+  BackendCaptureCoordinator({required this._client, required this._store});
 
   static const _api = '/api/v1/360';
   static const _uploadConcurrency = 2;
@@ -122,6 +122,11 @@ class BackendCaptureCoordinator {
     required List<CapturedFrame> frames,
     required int expectedFrames,
     String? panoramaPath,
+
+    /// The stable per-attempt key the session identity is derived from.
+    /// Supplied by the upload queue document; when absent (a caller that
+    /// never persisted one) the coordinator keeps the legacy checksum key.
+    String? attemptKey,
     void Function(String stage)? onStage,
     void Function(int processed, int total)? onFrameProcessed,
     void Function(BackendHandoffProgress progress)? onProgress,
@@ -133,6 +138,7 @@ class BackendCaptureCoordinator {
         frames: frames,
         expectedFrames: expectedFrames,
         panoramaPath: panoramaPath,
+        attemptKey: attemptKey,
         onStage: onStage,
         onFrameProcessed: onFrameProcessed,
         onProgress: onProgress,
@@ -141,7 +147,9 @@ class BackendCaptureCoordinator {
       await _record(
         stationId,
         FrameSyncStatus.failed,
-        panoramaSyncStatus: panoramaPath == null ? null : FrameSyncStatus.failed,
+        panoramaSyncStatus: panoramaPath == null
+            ? null
+            : FrameSyncStatus.failed,
         backupSyncStatus: FrameSyncStatus.failed,
         error: error is BackendHandoffFailure
             ? error.message
@@ -157,6 +165,7 @@ class BackendCaptureCoordinator {
     required List<CapturedFrame> frames,
     required int expectedFrames,
     required String? panoramaPath,
+    required String? attemptKey,
     void Function(String stage)? onStage,
     void Function(int processed, int total)? onFrameProcessed,
     void Function(BackendHandoffProgress progress)? onProgress,
@@ -181,10 +190,11 @@ class BackendCaptureCoordinator {
         : await _checksum(panoramaPath);
 
     onStage?.call('Preparing the Sitewise session...');
-    final backendSessionId = await _ensureOrCreateSession(
-      stationId,
-      propertyId,
-      checksums,
+    final backendSessionId = await ensureSession(
+      stationId: stationId,
+      propertyId: propertyId,
+      attemptKey:
+          attemptKey ?? _legacyChecksumKey(stationId, propertyId, checksums),
     );
     await _record(
       stationId,
@@ -200,7 +210,9 @@ class BackendCaptureCoordinator {
     int panoramaHeight = 0;
     if (panoramaPath != null && panoramaChecksum != null) {
       onProgress?.call(
-        const BackendHandoffProgress(stage: BackendHandoffStage.panoramaUploading),
+        const BackendHandoffProgress(
+          stage: BackendHandoffStage.panoramaUploading,
+        ),
       );
       onStage?.call('Uploading your 360° panorama...');
       await _record(
@@ -261,17 +273,18 @@ class BackendCaptureCoordinator {
 
     await _record(
       stationId,
-      panoramaId == null ? FrameSyncStatus.uploadPending : FrameSyncStatus.ready,
+      panoramaId == null
+          ? FrameSyncStatus.uploadPending
+          : FrameSyncStatus.ready,
       clearLastError: true,
       panoramaSyncStatus: panoramaPath == null
           ? null
           : (panoramaId == null
-              ? FrameSyncStatus.uploading
-              : FrameSyncStatus.ready),
-      backupSyncStatus:
-          backup.processed >= ordered.length
-              ? FrameSyncStatus.ready
-              : FrameSyncStatus.uploading,
+                ? FrameSyncStatus.uploading
+                : FrameSyncStatus.ready),
+      backupSyncStatus: backup.processed >= ordered.length
+          ? FrameSyncStatus.ready
+          : FrameSyncStatus.uploading,
       backupUploaded: backup.processed,
       backupTotal: ordered.length,
       backendPanoramaId: panoramaId,
@@ -301,11 +314,26 @@ class BackendCaptureCoordinator {
     );
   }
 
-  /// A hex idempotency key derived from the local station, property and the
-  /// exact frame checksum set. A retry with unchanged photographs resolves to
-  /// the same backend session; a retake changes the key and therefore gets a
-  /// fresh session with empty deterministic Storage paths.
-  String _idempotencyKey(
+  /// A hex key derived from the local station, the property and the capture
+  /// ATTEMPT key — never from the photograph checksums. A per-frame upload
+  /// must be able to open the session after the first photograph exists,
+  /// when no full manifest to hash yet. The attempt key is one stable random
+  /// id per capture attempt, persisted in the local queue document, so a
+  /// retry after a lost create response (or an app restart) resolves the
+  /// SAME backend session; a replacement capture generates a fresh attempt
+  /// key and therefore gets a fresh session with empty deterministic paths.
+  String _idempotencyKey(int propertyId, String stationId, String attemptKey) {
+    final digest = sha256.convert(
+      utf8.encode('sitewise.capture.v2/$propertyId/$stationId/$attemptKey'),
+    );
+    return 'cap-${digest.toString().substring(0, 40)}';
+  }
+
+  /// The pre-attempt fallback: a key derived from the full checksum manifest,
+  /// used only by a caller that never persisted an attempt key. Kept so an
+  /// older capture still resolves to ITS session rather than forking a new
+  /// one mid-life.
+  String _legacyChecksumKey(
     String stationId,
     int propertyId,
     Map<int, String> checksums,
@@ -319,28 +347,27 @@ class BackendCaptureCoordinator {
     return 'cap-${digest.toString().substring(0, 40)}';
   }
 
-  Future<String> _ensureOrCreateSession(
-    String stationId,
-    int propertyId,
-    Map<int, String> checksums,
-  ) async {
-    final local = await _store.getSession(stationId);
-    final existing = local?.backendSessionId;
-    if (existing != null) {
-      try {
-        await _client.get('$_api/sessions/$existing');
-        return existing;
-      } on NotFoundFailure {
-        CaptureLog.log('Backend session $existing no longer exists; recreating');
-      }
-    }
+  /// Creates the authorized backend session for this capture attempt, or
+  /// returns the one an earlier launch already created and persisted.
+  ///
+  /// The returned id is written back into the local session store BEFORE any
+  /// frame is uploaded, so an app restart always knows which session to
+  /// resume. A server-side 404 (expired backend data) recreates the session
+  /// under the same attempt key — the frames re-confirm idempotently.
+  Future<String> ensureSession({
+    required String stationId,
+    required int propertyId,
+    required String attemptKey,
+  }) async {
+    // The attempt key resolves the same session on retry. A replacement
+    // panorama has a different key even when it shares the local station.
     final created = await _client.post('$_api/sessions', <String, dynamic>{
       'property_id': propertyId,
       // Identifies the new Flutter-stitched workflow without changing the
       // expected frame count or breaking legacy `device_38` sessions.
       'capture_mode': 'device_38_panorama',
-      'capture_plan_version': '2',
-      'idempotency_key': _idempotencyKey(stationId, propertyId, checksums),
+      'capture_plan_version': '$kSphereCapturePlanVersion',
+      'idempotency_key': _idempotencyKey(propertyId, stationId, attemptKey),
     });
     final id = created['sessionId'] as String?;
     if (id == null || id.isEmpty) {
@@ -349,10 +376,70 @@ class BackendCaptureCoordinator {
         'session id.',
       );
     }
+    // Persist BEFORE the first upload: recovery reads this value.
+    await _record(
+      stationId,
+      FrameSyncStatus.uploadPending,
+      backendSessionId: id,
+      backupSyncStatus: FrameSyncStatus.uploadPending,
+    );
     return id;
   }
 
-  Future<List<CapturedFrame>> _validated(List<CapturedFrame> frames, int total) async {
+  /// Uploads and confirms ONE original photograph against its session —
+  /// the unit the durable per-capture upload queue drains. Byte-for-byte
+  /// idempotent with the batched backup: the same signed-URL transport, the
+  /// same confirmation endpoint, and a repeat PUT of identical bytes is the
+  /// stored success case. Returns the confirmed storage path.
+  Future<String> uploadFrame({
+    required String sessionId,
+    required CapturedFrame frame,
+    required String checksum,
+  }) async {
+    final permission = await _issueUploadUrls(sessionId, <int>[frame.targetId]);
+    await _uploadOne(
+      sessionId: sessionId,
+      frame: frame,
+      checksum: checksum,
+      permission: permission[frame.targetId],
+      onProgress: () {},
+    );
+    return permission[frame.targetId]!['storagePath'] as String;
+  }
+
+  /// Uploads and confirms the device-stitched panorama — the cloud draft
+  /// (Layer B). Verifiable server-side before any canonical row exists.
+  /// Returns the confirmation payload (`panoramaId`, `storagePath`,
+  /// `width`, `height`). Safe to call again: the same verified object
+  /// returns the existing row untouched.
+  Future<Map<String, dynamic>> syncPanoramaDraft({
+    required String sessionId,
+    required int propertyId,
+    required String panoramaPath,
+    required String checksum,
+  }) async {
+    return _uploadAndConfirmPanorama(
+      sessionId: sessionId,
+      propertyId: propertyId,
+      panoramaPath: panoramaPath,
+      checksum: checksum,
+    );
+  }
+
+  /// The canonical panorama metadata for a property, when the backend has
+  /// one. `null` on a 404 — the honest "not uploaded yet" state.
+  Future<Map<String, dynamic>?> latestPropertyPanorama(int propertyId) async {
+    try {
+      return await _client.get('$_api/properties/$propertyId/panorama');
+    } on NotFoundFailure {
+      return null;
+    }
+  }
+
+  Future<List<CapturedFrame>> _validated(
+    List<CapturedFrame> frames,
+    int total,
+  ) async {
     final ordered = List<CapturedFrame>.of(frames)
       ..sort((a, b) => a.targetId.compareTo(b.targetId));
     final seen = <int>{};
@@ -563,7 +650,9 @@ class BackendCaptureCoordinator {
     final byTarget = <int, Map<String, dynamic>>{
       for (final entry in uploads)
         if (entry is Map && entry['targetIndex'] is num)
-          (entry['targetIndex'] as num).toInt(): Map<String, dynamic>.from(entry),
+          (entry['targetIndex'] as num).toInt(): Map<String, dynamic>.from(
+            entry,
+          ),
     };
     for (final target in targets) {
       if (!byTarget.containsKey(target)) {
@@ -601,6 +690,7 @@ class BackendCaptureCoordinator {
     required String panoramaPath,
     required String checksum,
   }) async {
+    final coverage = await _coverageFor(panoramaPath, checksum);
     var permission = await _issuePanoramaUploadUrl(sessionId);
     var expiredRefreshes = 0;
     var networkAttempts = 0;
@@ -649,10 +739,36 @@ class BackendCaptureCoordinator {
         'coverage_report': <String, Object?>{
           'source': 'device_capture_v2',
           'stitched_on': 'flutter',
+          'photo_coverage': ?coverage,
         },
       },
     );
     return confirmed;
+  }
+
+  Future<Map<String, Object?>?> _coverageFor(
+    String panoramaPath,
+    String checksum,
+  ) async {
+    final file = File(p.join(p.dirname(panoramaPath), 'coverage_report.json'));
+    if (!await file.exists()) return null;
+    try {
+      final report = jsonDecode(await file.readAsString());
+      if (report is! Map || report['panoramaSha256'] != checksum) return null;
+      final percentages = report['coveragePercent'];
+      return {
+        'panorama_sha256': checksum,
+        'photo_coverage_percent': percentages is Map
+            ? percentages['single']
+            : null,
+        'worst_viewport_gap_percent': report['worstViewportGapPercent'],
+        'gap_filled_pixels': report['gapFilledPixels'],
+      };
+    } on FormatException {
+      return null;
+    } on FileSystemException {
+      return null;
+    }
   }
 
   Future<void> _uploadOne({
@@ -787,9 +903,7 @@ class BackendCaptureCoordinator {
     } on HttpException {
       return _PutOutcome.retryable;
     } on Object catch (error) {
-      CaptureLog.log(
-        'Upload of target $target failed locally: $error',
-      );
+      CaptureLog.log('Upload of target $target failed locally: $error');
       return _PutOutcome.fatal;
     }
   }

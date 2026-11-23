@@ -4,16 +4,12 @@
 // ignore_for_file: prefer_initializing_formals
 import 'dart:async';
 import 'dart:math' as math;
-import 'dart:convert';
 import 'dart:io';
 import 'dart:ui' show AppLifecycleState;
 
 import 'package:camera/camera.dart' show CameraException;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart' show HapticFeedback;
-import 'package:path/path.dart' as p;
-
-import 'package:path_provider/path_provider.dart';
 
 import 'package:fyp/core/errors/failures.dart';
 import 'package:fyp/core/permissions/permission_service.dart';
@@ -109,7 +105,6 @@ class SphereCaptureController extends ChangeNotifier {
     PermissionService? permissions,
     Future<void> Function()? haptic,
     DateTime Function()? clock,
-    SphereExporter? export,
     GallerySaver? gallerySaver,
     CaptureSessionStore? sessions,
     String? userId,
@@ -118,6 +113,7 @@ class SphereCaptureController extends ChangeNotifier {
     this.toleranceDeg = kSphereAlignmentToleranceDeg,
     this.exitToleranceDeg = kSphereAlignmentExitDeg,
     this.holdDuration = const Duration(milliseconds: 600),
+    this.onFrameSaved,
   }) : _rotation = rotation,
        _camera = camera,
        _repository = repository,
@@ -129,7 +125,6 @@ class SphereCaptureController extends ChangeNotifier {
        _haptic = haptic ?? HapticFeedback.mediumImpact,
        _clock = clock ?? DateTime.now,
        _normalize = normalize,
-       _export = export ?? _defaultExport,
        _gallery = gallerySaver ?? const GallerySaver(),
        _sessions = sessions,
        _userId = userId,
@@ -152,7 +147,6 @@ class SphereCaptureController extends ChangeNotifier {
   final Future<void> Function() _haptic;
   final DateTime Function() _clock;
   final Future<NormalizedJpeg> Function(Uint8List bytes) _normalize;
-  final SphereExporter _export;
   final GallerySaver _gallery;
 
   /// The local-first metadata store, when one is attached.
@@ -173,6 +167,13 @@ class SphereCaptureController extends ChangeNotifier {
 
   /// How long the target must stay inside [toleranceDeg] before the shutter.
   final Duration holdDuration;
+
+  /// Fired after a photograph is safely on disk AND recorded in the session
+  /// store — the hook the capture host uses to queue the image for Supabase
+  /// upload without blocking the camera. The controller performs no network
+  /// work itself; a callback failure must never cost a photograph, so it is
+  /// invoked fire-and-forget by the caller.
+  final void Function(CapturedFrame frame)? onFrameSaved;
 
   final MotionDetector _motionDetector = MotionDetector();
 
@@ -222,14 +223,12 @@ class SphereCaptureController extends ChangeNotifier {
   bool _moving = false;
   bool _capturing = false;
   bool _stitching = false;
-  bool _exporting = false;
   bool _disposed = false;
   bool _loggedFirstSample = false;
   String? _banner;
   String? _stitchStage;
   String? _stitchError;
   String? _panoramaPath;
-  String? _exportPath;
   String? _galleryPath;
 
   StreamSubscription<Quat>? _rotationSubscription;
@@ -283,10 +282,6 @@ class SphereCaptureController extends ChangeNotifier {
 
   /// `Pictures/SiteWise360/<stationId>`, the folder the Gallery copy lives in.
   String get galleryFolder => 'Pictures/SiteWise360/$_stationId';
-
-  String? get exportPath => _exportPath;
-
-  bool get exporting => _exporting;
 
   /// The session id, which is also the station directory name.
   ///
@@ -572,8 +567,7 @@ class SphereCaptureController extends ChangeNotifier {
           now.difference(readyAt) >= const Duration(milliseconds: 250);
       final continuous =
           previousArrival != null &&
-          now.difference(previousArrival) <=
-              const Duration(milliseconds: 150);
+          now.difference(previousArrival) <= const Duration(milliseconds: 150);
       if (!settled || !continuous) {
         return;
       }
@@ -874,9 +868,10 @@ class SphereCaptureController extends ChangeNotifier {
 
   /// Starts a stitch, or joins the one already running.
   ///
-  /// Joining matters for Save & Finish: tapping it while the completion modal
-  /// is still stitching must export the panorama that is about to exist, not
-  /// silently omit it.
+  /// Joining matters because completion callbacks (the host page's
+  /// `onPanoramaReady` and a Retry press) can arrive while the completion
+  /// overlay is still stitching: they must observe the panorama that is about
+  /// to exist, not silently omit it.
   Future<void> _stitch() {
     final inFlight = _stitchFuture;
     if (inFlight != null) return inFlight;
@@ -927,46 +922,6 @@ class SphereCaptureController extends ChangeNotifier {
     } finally {
       _stitching = false;
       _stitchStage = null;
-      _notify();
-    }
-  }
-
-  /// Copies the 38 JPEGs, the panorama and a manifest into a user-reachable
-  /// export folder, and returns its path.
-  Future<String?> saveAndFinish() async {
-    if (_exporting) return null;
-    _exporting = true;
-    _notify();
-    try {
-      // Wait for a stitch already in flight, then start one if the panorama is
-      // still missing. A second stitch is never started over a first.
-      final inFlight = _stitchFuture;
-      if (inFlight != null) await inFlight;
-      if (!backendProcessing && _panoramaPath == null) await _stitch();
-      // A station stitched before this build may already have a panorama but
-      // no Gallery copy; saving here makes Save & Finish consistent.
-      if (_galleryPath == null && _panoramaPath != null) {
-        try {
-          _galleryPath = await _gallery.savePanorama(
-            sourcePath: _panoramaPath!,
-            stationId: _stationId,
-          );
-        } catch (error) {
-          debugPrint('GALLERY_SAVE: $error');
-        }
-      }
-      final path = await _export(
-        stationId: _stationId,
-        targets: _targets,
-        panoramaPath: _panoramaPath,
-      );
-      _exportPath = path;
-      return path;
-    } catch (error) {
-      _message = 'The export failed: $error';
-      return null;
-    } finally {
-      _exporting = false;
       _notify();
     }
   }
@@ -1043,8 +998,7 @@ class SphereCaptureController extends ChangeNotifier {
       _activeErrorDeg = reticleErrorDeg(direction);
       _guideErrorDeg = _activeErrorDeg;
       _guideTurnDeg = math.atan2(direction.x, -direction.z) * radToDeg;
-      _guidePitchDeg =
-          math.asin(clampDouble(direction.y, -1, 1)) * radToDeg;
+      _guidePitchDeg = math.asin(clampDouble(direction.y, -1, 1)) * radToDeg;
       _guideBehind = direction.z > 0;
     }
     // The new target has not been held yet. Clearing the bookkeeping rather
@@ -1160,13 +1114,18 @@ class SphereCaptureController extends ChangeNotifier {
     final store = _sessions;
     if (store == null) return;
     try {
-      await store.saveFrame(CapturedFrame.fromCaptureRecord(record));
+      final stored = CapturedFrame.fromCaptureRecord(record);
+      await store.saveFrame(stored);
       if (capturedCount >= kSphereTargetCount) {
         await store.markSessionStatus(
           sessionId: _stationId,
           status: CaptureSessionStatus.complete,
         );
       }
+      // The durable upload queue learns about the photograph only after the
+      // session store accepted it — the queue's record is bookkeeping on top
+      // of an already-persisted JPEG, never a prerequisite for the next shot.
+      onFrameSaved?.call(stored);
     } catch (error) {
       debugPrint(
         'SPHERE_SESSION: target ${record.targetId} could not be recorded in '
@@ -1248,58 +1207,4 @@ class SphereCaptureController extends ChangeNotifier {
     unawaited(_camera.close());
     super.dispose();
   }
-}
-
-/// Writes the finished station to a folder the user can find.
-typedef SphereExporter =
-    Future<String> Function({
-      required String stationId,
-      required List<SphereTargetState> targets,
-      required String? panoramaPath,
-    });
-
-Future<String> _defaultExport({
-  required String stationId,
-  required List<SphereTargetState> targets,
-  required String? panoramaPath,
-}) async {
-  final base =
-      await getExternalStorageDirectory() ??
-      await getApplicationDocumentsDirectory();
-  final directory = Directory(p.join(base.path, 'SiteWise360', stationId));
-  final frames = Directory(p.join(directory.path, 'frames'));
-  await frames.create(recursive: true);
-
-  final manifest = <Map<String, Object?>>[];
-  for (final target in targets) {
-    final source = target.imagePath;
-    if (!target.captured || source == null) continue;
-    final name = 't${target.spec.targetId.toString().padLeft(2, '0')}.jpg';
-    await File(source).copy(p.join(frames.path, name));
-    manifest.add(<String, Object?>{
-      'targetId': target.spec.targetId,
-      'ring': target.spec.ringName,
-      'yawDeg': target.spec.yawDeg,
-      'pitchDeg': target.spec.pitchDeg,
-      'file': 'frames/$name',
-    });
-  }
-  String? panoramaName;
-  if (panoramaPath != null && await File(panoramaPath).exists()) {
-    panoramaName = 'panorama.jpg';
-    await File(panoramaPath).copy(p.join(directory.path, panoramaName));
-  }
-  await File(p.join(directory.path, 'capture.json')).writeAsString(
-    const JsonEncoder.withIndent('  ').convert(<String, Object?>{
-      'stationId': stationId,
-      'architecture': '3DoF sphere-follows-phone',
-      'targetCount': kSphereTargetCount,
-      'capturedCount': manifest.length,
-      'panorama': panoramaName,
-      'targets': manifest,
-      'exportedAt': DateTime.now().toIso8601String(),
-    }),
-    flush: true,
-  );
-  return directory.path;
 }

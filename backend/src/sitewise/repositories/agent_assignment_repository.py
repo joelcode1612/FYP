@@ -117,7 +117,8 @@ def _task_projection(data: dict[str, Any]) -> dict[str, Any]:
     ownership_status = data.get("verification_ownership_status")
 
     data["missing_required_fields"] = (
-        listing_completeness_errors(data) if data.get("property_exists") else []
+        listing_completeness_errors(data, require_availability=False)
+        if data.get("property_exists") else []
     )
     note_bearing = listing_status in _NOTE_BEARING
     # Administrator feedback travels with the state that asked for it: the

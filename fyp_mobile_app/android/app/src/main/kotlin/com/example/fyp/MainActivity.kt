@@ -1,5 +1,6 @@
 package com.example.fyp
 
+import android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON
 import com.example.fyp.ar.ArCoreCapturePlugin
 import com.example.fyp.media.MediaStoreChannel
 import com.example.fyp.sensors.RotationSensorChannel
@@ -11,6 +12,7 @@ import io.flutter.plugin.common.MethodChannel
 class MainActivity : FlutterActivity() {
     private var rotationChannel: EventChannel? = null
     private var mediaChannel: MethodChannel? = null
+    private var screenChannel: MethodChannel? = null
 
     /**
      * Registers the ARCore host (other features still use it) and the 3DoF
@@ -37,6 +39,26 @@ class MainActivity : FlutterActivity() {
         )
         media.setMethodCallHandler(MediaStoreChannel(applicationContext))
         mediaChannel = media
+
+        screenChannel = MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            "adaptive360/screen",
+        ).also { screen ->
+            screen.setMethodCallHandler { call, result ->
+                if (call.method != "setKeepScreenOn") {
+                    result.notImplemented()
+                    return@setMethodCallHandler
+                }
+                val enabled = call.arguments as? Boolean
+                if (enabled == null) {
+                    result.error("invalid_argument", "Expected a boolean", null)
+                    return@setMethodCallHandler
+                }
+                if (enabled) window.addFlags(FLAG_KEEP_SCREEN_ON)
+                else window.clearFlags(FLAG_KEEP_SCREEN_ON)
+                result.success(null)
+            }
+        }
     }
 
     override fun cleanUpFlutterEngine(flutterEngine: FlutterEngine) {
@@ -44,6 +66,9 @@ class MainActivity : FlutterActivity() {
         rotationChannel = null
         mediaChannel?.setMethodCallHandler(null)
         mediaChannel = null
+        screenChannel?.setMethodCallHandler(null)
+        screenChannel = null
+        window.clearFlags(FLAG_KEEP_SCREEN_ON)
         super.cleanUpFlutterEngine(flutterEngine)
     }
 }

@@ -44,11 +44,7 @@ class SpherePlanPainter extends CustomPainter {
     final center = Offset(size.width / 2, size.height / 2);
     final radius = size.width * (91 / 224);
 
-    canvas.drawCircle(
-      center,
-      radius,
-      Paint()..color = const Color(0xFFEFF6FF),
-    );
+    canvas.drawCircle(center, radius, Paint()..color = const Color(0xFFEFF6FF));
     canvas.drawCircle(
       center,
       radius,

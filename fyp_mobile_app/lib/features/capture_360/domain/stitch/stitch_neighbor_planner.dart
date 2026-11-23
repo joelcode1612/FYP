@@ -102,7 +102,8 @@ class StitchNeighborPlanner {
   /// product is the cosine directly — no yaw wrap-around to handle, and the
   /// poles are correct by construction.
   static double _geodesicDeg(CaptureTargetSpec a, CaptureTargetSpec b) {
-    final d = a.direction.x * b.direction.x +
+    final d =
+        a.direction.x * b.direction.x +
         a.direction.y * b.direction.y +
         a.direction.z * b.direction.z;
     final c = d.clamp(-1.0, 1.0);
@@ -139,7 +140,9 @@ class StitchNeighborPlanner {
   static (Vec3, Vec3) _orthonormalBasis(Vec3 forward) {
     // A reference not parallel to `forward`: world up unless the target is a
     // pole, in which case world forward.
-    final ref = forward.z.abs() > 0.99 ? const Vec3(0, 0, -1) : const Vec3(0, 1, 0);
+    final ref = forward.z.abs() > 0.99
+        ? const Vec3(0, 0, -1)
+        : const Vec3(0, 1, 0);
     // right = normalize(cross(ref, forward)) — sign does not matter for a
     // magnitude-only extent, but the basis must stay orthogonal.
     var rx = ref.y * forward.z - ref.z * forward.y;

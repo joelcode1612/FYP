@@ -5,6 +5,8 @@ import 'package:shared_logic/shared_logic.dart';
 
 import 'package:sitewise_jaspr_web/features/compare/presentation/components/compare_shortlist.dart';
 import 'package:sitewise_jaspr_web/features/listing/presentation/components/property_card.dart';
+import 'package:sitewise_jaspr_web/features/listing/data/api_property_repository.dart'
+    as web_catalogue;
 import 'package:sitewise_jaspr_web/shared/presentation/components/ui.dart';
 import 'package:sitewise_jaspr_web/core/di/app_locator.dart';
 import 'package:sitewise_jaspr_web/shared/presentation/layouts/app_layout.dart';
@@ -23,32 +25,43 @@ import 'package:sitewise_jaspr_web/shared/presentation/layouts/app_layout.dart';
 /// address is invented for it: the source's snapshot fields are not stored in
 /// this build.
 @client
-class SavedPage extends StatelessComponent {
+class SavedPage extends StatefulComponent {
   const SavedPage({super.key});
 
-  /// Saves/removes a shortlist property. A signed-in account persists to the
-  /// server first and the shortlist only moves once the server accepted the
-  /// change; a visitor keeps the cookie-backed selection. On a failed request
-  /// nothing changes. The notifier is read before the await so a rebuild
-  /// while the request is in flight cannot strand the call.
+  @override
+  State<SavedPage> createState() => _SavedPageState();
+}
+
+class _SavedPageState extends State<SavedPage> {
+  String? _saveError;
+  Set<String>? _requestedIds;
+  Future<List<CommercialProperty>>? _listings;
+
+  Future<List<CommercialProperty>> _loadListings(Set<String> ids) {
+    if (_listings == null || _requestedIds!.length != ids.length ||
+        !_requestedIds!.containsAll(ids)) {
+      _requestedIds = Set.of(ids);
+      _listings = AppLocator.isSignedIn
+          ? web_catalogue.ApiPropertyRepository.listingsByIds(ids)
+          : AppLocator.properties.listings();
+    }
+    return _listings!;
+  }
+
   Future<void> _toggleSaved(BuildContext context, String id) async {
     final notifier = context.read(appNotifierProvider.notifier);
     if (!AppLocator.isSignedIn) {
       notifier.toggleSaved(id);
       return;
     }
-    final savedNow = context.read(appNotifierProvider).saved.contains(id);
-    final failure = await AppLocator.persistToggleSaved(
-      id,
-      wantSaved: !savedNow,
-    );
-    if (failure != null) return;
-    notifier.toggleSaved(id);
+    final failure = await notifier.persistSaved(id, wantSaved: false);
+    if (mounted) setState(() => _saveError = failure);
   }
 
   @override
   Component build(BuildContext context) {
-    final saved = context.watch(appNotifierProvider.select((app) => app.saved));
+    final savedState = context.watch(appNotifierProvider);
+    final saved = savedState.saved;
     final compared = context.watch(
       appNotifierProvider.select((app) => app.compared),
     );
@@ -62,7 +75,20 @@ class SavedPage extends StatelessComponent {
           'Your shortlist. Bookmark any listing to keep it here while you '
           'weigh it against the others.',
       child: div(classes: 'stack stack--sections', [
-        if (saved.isEmpty)
+        if (_saveError case final error?)
+          div(attributes: {'role': 'alert'}, [Component.text(error)]),
+        if (savedState.savedLoading)
+          const Skeleton(variant: 'block', count: 3)
+        else if (savedState.savedError case final error?)
+          EmptyState(
+            title: 'Saved properties unavailable',
+            body: error,
+            action: ActionButton('Try again', onClick: () {
+              setState(() => _listings = null);
+              context.read(appNotifierProvider.notifier).loadSaved(includeUnresolved: true);
+            }),
+          )
+        else if (saved.isEmpty)
           EmptyState(
             title: 'No favourites yet',
             body:
@@ -78,12 +104,21 @@ class SavedPage extends StatelessComponent {
           )
         else
           FutureBuilder<List<CommercialProperty>>(
-            future: AppLocator.properties.listings(),
+            future: _loadListings(saved),
             builder: (c, snap) {
               if (snap.connectionState != ConnectionState.done) {
                 return div(classes: 'pgrid', [
                   const Skeleton(variant: 'block', count: 6),
                 ]);
+              }
+              if (snap.hasError) {
+                return EmptyState(
+                  title: 'Property details unavailable',
+                  body: 'Your saved list could not be matched to the catalogue.',
+                  action: ActionButton('Try again', onClick: () {
+                    setState(() => _listings = null);
+                  }),
+                );
               }
               final all = snap.data ?? const <CommercialProperty>[];
               final live = all

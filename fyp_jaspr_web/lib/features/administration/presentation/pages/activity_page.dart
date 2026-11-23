@@ -255,6 +255,9 @@ class _ActivityState extends State<AdminActivityPage> {
     _ => 'admin_panel_settings',
   };
 
+  // SITEWISE_ADMIN_ACTIVITY_REDESIGN_V2: verified audit-source states, with optional expanded diagnostics.
+  // Keep the reason from the API available without letting verbose backend
+  // messages overwhelm the source-coverage cards.
   Component _coverageCard(
     String title,
     String subtitle,
@@ -263,22 +266,54 @@ class _ActivityState extends State<AdminActivityPage> {
   ) {
     final ready = source?.available == true;
     final known = source != null;
-    return div(classes: 'sa-coverage-card', [
+    final tone = !known ? 'loading' : ready ? 'ready' : 'off';
+    return div(classes: 'sa-coverage-card sa-coverage-card--$tone', [
       div(classes: 'sa-coverage-top', [
         span(classes: 'sa-coverage-icon', [Icon(icon)]),
-        span(classes: 'sa-source-status ${!known ? 'sa-source-status--loading' : ready ? 'sa-source-status--ready' : 'sa-source-status--off'}', [
+        span(classes: 'sa-source-status sa-source-status--$tone', [
           Component.text(!known ? 'Checking' : ready ? 'Available' : 'Unavailable'),
         ]),
       ]),
       strong(classes: 'sa-coverage-title', [Component.text(title)]),
       p(classes: 'sa-coverage-subtitle', [Component.text(subtitle)]),
-      p(classes: 'sa-coverage-detail', [
-        Component.text(source?.detail.isNotEmpty == true
-            ? source!.detail
-            : known ? 'No additional source details returned.' : 'Checking audit-source access…'),
-      ]),
+      if (!known)
+        p(classes: 'sa-coverage-summary', [
+          const Component.text('Checking whether this audit source is accessible.'),
+        ])
+      else if (!ready)
+        p(classes: 'sa-coverage-summary', [
+          const Component.text('This source cannot be read. Events may still exist.'),
+        ])
+      else
+        p(classes: 'sa-coverage-summary', [
+          const Component.text('This source is accessible to the audit API.'),
+        ]),
+      if (source?.detail.isNotEmpty == true)
+        details(classes: 'sa-coverage-expand', [
+          summary([
+            Component.text(ready ? 'View source information' : 'Why unavailable?'),
+            const Icon('expand_more', size: 'sm'),
+          ]),
+          p(classes: 'sa-coverage-detail', [
+            Component.text(source!.detail),
+          ]),
+        ]),
     ]);
   }
+
+  Component _overviewMetric(
+    String icon,
+    String label,
+    String value,
+    String note,
+  ) => div(classes: 'sa-overview-metric', [
+    span(classes: 'sa-overview-icon', [Icon(icon, size: 'sm')]),
+    div(classes: 'sa-overview-copy', [
+      span(classes: 'sa-overview-label', [Component.text(label)]),
+      strong(classes: 'sa-overview-value', [Component.text(value)]),
+      span(classes: 'sa-overview-note', [Component.text(note)]),
+    ]),
+  ]);
 
   Component _filters() => div(classes: 'sa-filter-area', [
     div(classes: 'sa-filter-grid', [
@@ -515,6 +550,14 @@ class _ActivityState extends State<AdminActivityPage> {
   @override
   Component build(BuildContext context) {
     final data = _data;
+    final sources = <AuditSourceStatus?>[
+      data?.administrative,
+      data?.authentication,
+      data?.mfa,
+    ];
+    final checkedSources = sources.where((source) => source != null).length;
+    final availableSources = sources.where((source) => source?.available == true).length;
+    final unavailableSources = sources.where((source) => source?.available == false).length;
     return AppLayout(
       role: AppRole.admin,
       currentRoute: '/admin/activity',
@@ -533,11 +576,45 @@ class _ActivityState extends State<AdminActivityPage> {
             p([const Component.text('Source status comes from the backend. An unavailable source does not mean there were no events.')]),
           ]),
         ]),
+        // All figures are derived from the authorized audit response.
+        // This is source coverage and filtered event count, NOT invented KPIs.
+        div(classes: 'sa-overview', [
+          _overviewMetric(
+            'verified_user',
+            'Accessible sources',
+            data == null ? '—' : '$availableSources / $checkedSources',
+            'Sources the backend can currently read',
+          ),
+          _overviewMetric(
+            'list_alt',
+            'Matching events',
+            data == null ? '—' : '${data.total}',
+            'Recorded events for the selected filters',
+          ),
+          _overviewMetric(
+            'shield',
+            'Unavailable sources',
+            data == null ? '—' : '$unavailableSources',
+            'Does not imply that no events occurred',
+          ),
+        ]),
         div(classes: 'sa-coverage-grid', [
           _coverageCard('Administrative actions', 'Staff and management changes', 'manage_accounts', data?.administrative),
           _coverageCard('Authentication', 'Account sign-in and registration', 'passkey', data?.authentication),
           _coverageCard('Multi-factor authentication', 'Authenticator and MFA records', 'shield_lock', data?.mfa),
         ]),
+        if (unavailableSources > 0)
+          div(classes: 'sa-coverage-notice', [
+            const Icon('info', size: 'sm'),
+            div(classes: 'sa-coverage-notice-copy', [
+              strong([const Component.text('Some audit sources are unavailable')]),
+              p([const Component.text(
+                'The event history below includes only accessible sources. '
+                'Expand a source card to read its backend diagnostics. '
+                'Do not interpret missing authentication records as zero activity.'
+              )]),
+            ]),
+          ]),
         if (_exportMessage != null)
           Callout(_exportMessage!, tone: _exportFailed ? 'danger' : 'success', icon: _exportFailed ? 'error' : 'download_done'),
         if (_error != null && data != null)

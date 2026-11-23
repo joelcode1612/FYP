@@ -19,8 +19,17 @@ from sitewise.core.supabase_admin import SupabaseAdminService
 from sitewise.db.session import get_db
 from sitewise.dependencies import AuthenticatedUser, require_agent_mfa, require_property_owner
 from sitewise.domain import rbac
-from sitewise.services.agent_inspection_policy import agent_assignment, require_ready_for_admin, completed_agent_panorama
-from sitewise.services.property_verification_service import PropertyVerificationService
+from sitewise.repositories.fyp_property_repository import FypPropertyRepository
+from sitewise.services.agent_inspection_policy import (
+    agent_assignment,
+    require_ready_for_admin,
+    completed_agent_panorama,
+)
+from sitewise.services.property_verification_service import (
+    PropertyVerificationService,
+    listing_completeness_errors,
+    rental_listing,
+)
 
 router = APIRouter()
 Db = Annotated[Session, Depends(get_db)]
@@ -36,6 +45,11 @@ class AgentDecline(BaseModel):
     reason: str = Field(min_length=2, max_length=500)
 
 
+class AgentInspectionSubmission(BaseModel):
+    panorama_id: uuid.UUID | None = None
+    acknowledge_unavailable_population: bool = False
+
+
 class InspectionInput(BaseModel):
     floor_area_verified: bool = False
     condition_verified: bool = False
@@ -47,17 +61,20 @@ class InspectionInput(BaseModel):
     accessibility_notes: str = Field(default="", max_length=2000)
 
 
-def _owner_property(session: Session, property_id: int, user: AuthenticatedUser) -> dict:
+def _owner_property(
+    session: Session, property_id: int, user: AuthenticatedUser, *, for_update: bool = False,
+) -> dict:
     if rbac.canonical_role(user.role) != rbac.ROLE_OWNER:
         raise HTTPException(status_code=403, detail="Only Property Owners may request an Agent.")
-    row = session.execute(text("""
-        SELECT id, verification_status, is_published
-          FROM fyp.rental_properties
-         WHERE id=:pid AND owner_user_id=:uid
-    """), {"pid": int(property_id), "uid": str(user.user_id)}).mappings().first()
-    if row is None:
+    repo = FypPropertyRepository(session)
+    row = repo.owner_listing(property_id)
+    if row is None or str(row["owner_user_id"]) != str(user.user_id):
         raise HTTPException(status_code=404, detail="Owned property not found.")
-    return dict(row)
+    if for_update:
+        row = repo.owner_listing(property_id, for_update=True)
+        if row is None or str(row["owner_user_id"]) != str(user.user_id):
+            raise HTTPException(status_code=404, detail="Owned property not found.")
+    return row
 
 
 def _agent_profile(session: Session, user_id: uuid.UUID) -> dict:
@@ -105,14 +122,15 @@ def available_agents(session: Db, user: Provider) -> dict:
 
 @router.get('/properties/{property_id}/assignment')
 def owner_assignment(property_id: int, session: Db, user: Provider) -> dict:
-    _owner_property(session, property_id, user)
+    listing = _owner_property(session, property_id, user)
+    missing = listing_completeness_errors(listing, require_availability=False)
     row = session.execute(text("""
         SELECT agent_id, workflow_status, requested_at, responded_at, submitted_at,
                panorama_uploaded_at, inspection_updated_at, decline_reason
           FROM fyp.agent_listing_assignment WHERE listing_id=:pid
     """), {'pid': property_id}).mappings().first()
     if row is None:
-        return {'data': None}
+        return {'data': None, 'missing_required_fields': missing}
     data = dict(row)
     for key in ('requested_at','responded_at','submitted_at',
                 'panorama_uploaded_at','inspection_updated_at'):
@@ -123,15 +141,26 @@ def owner_assignment(property_id: int, session: Db, user: Provider) -> dict:
         data['agent_name'] = (profile or {}).get('agent_name')
     except Exception:
         data['agent_name'] = None
-    return {'data': data}
+    return {'data': data, 'missing_required_fields': missing}
+
+
+def _require_requestable_listing(prop: dict) -> None:
+    if prop['is_published'] or prop['verification_status'] not in ('draft','rejected'):
+        raise HTTPException(status_code=409, detail="This property cannot be reassigned while in review or published.")
+    missing = listing_completeness_errors(prop, require_availability=False)
+    if missing:
+        raise HTTPException(
+            status_code=409,
+            detail="Edit and save these property details before requesting an Agent: " + ", ".join(missing) + ".",
+        )
 
 
 @router.post('/properties/{property_id}/request-agent')
 def request_agent(property_id: int, payload: AgentRequest, session: Db, user: Provider) -> dict:
-    prop = _owner_property(session, property_id, user)
-    if prop['is_published'] or prop['verification_status'] not in ('draft','rejected'):
-        raise HTTPException(status_code=409, detail="This property cannot be reassigned while in review or published.")
+    _require_requestable_listing(_owner_property(session, property_id, user))
     agent = _agent_profile(session, payload.agent_user_id)
+    # Lock the listing before checking the assignment, matching the owner edit path.
+    _require_requestable_listing(_owner_property(session, property_id, user, for_update=True))
     current = session.execute(text("""
         SELECT workflow_status FROM fyp.agent_listing_assignment
          WHERE listing_id=:pid FOR UPDATE
@@ -189,10 +218,22 @@ def decline_request(property_id: int, payload: AgentDecline, session: Db, agent:
 @router.get('/properties/{property_id}/inspection')
 def inspection_status(property_id: int, session: Db, agent: Agent) -> dict:
     row = agent_assignment(session, property_id, agent)
+    listing = rental_listing(session, property_id)
+    if listing is None:
+        raise HTTPException(status_code=404, detail="Assigned property not found.")
+    panorama_id = completed_agent_panorama(session, property_id, agent)
+    population = session.execute(text(
+        "SELECT status FROM fyp.property_enrichment_category "
+        "WHERE property_id=:pid AND category='population'"
+    ), {"pid": property_id}).scalar()
     return {'data': {
       'assignment_status': row['workflow_status'],
       'checklist': row['inspection_data'] or {},
-      'panorama_uploaded': bool(completed_agent_panorama(session, property_id, agent)),
+      'missing_required_fields': listing_completeness_errors(listing, require_availability=False),
+      'panorama_uploaded': panorama_id is not None,
+      'panorama_id': panorama_id,
+      'panorama_requires_recapture': False,
+      'population_requires_acknowledgement': population in ('unavailable', 'failed', 'stale'),
       'can_capture': row['workflow_status'] in ('accepted','needs_correction')
                      and not row['is_published'] and row['verification_status'] not in ('pending','approved','under_review'),
     }}
@@ -214,14 +255,19 @@ def save_inspection(property_id: int, payload: InspectionInput, session: Db, age
 
 
 @router.post('/properties/{property_id}/submit')
-def submit_verified_property(property_id: int, session: Db, agent: Agent) -> dict:
-    # Both checks are server-side. A crafted or outdated Flutter request cannot
-    # submit without the assigned Agent's accepted request, checklist, and real
-    # completed panorama from the upload endpoint.
-    require_ready_for_admin(session, property_id, agent)
+def submit_verified_property(
+    property_id: int, session: Db, agent: Agent, payload: AgentInspectionSubmission | None = None
+) -> dict:
+    payload = payload or AgentInspectionSubmission()
+    evidence = require_ready_for_admin(
+        session, property_id, agent, str(payload.panorama_id) if payload.panorama_id else None
+    )
     from sitewise.api.v1.property_verification import _guard_enrichment_before_submit
-    _guard_enrichment_before_submit(session, property_id, acknowledged=False)
+    _guard_enrichment_before_submit(
+        session, property_id, acknowledged=payload.acknowledge_unavailable_population
+    )
     result = PropertyVerificationService(session).submit(
-        property_id, agent.user_id, scope='full', role=agent.role
+        property_id, agent.user_id, scope='full', role=agent.role,
+        panorama_id=evidence['completed_panorama_id'],
     )
     return {'data': result, 'stage': 'pending_admin_review'}

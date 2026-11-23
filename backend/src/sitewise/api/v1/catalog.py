@@ -79,6 +79,24 @@ def list_catalog_properties(
     }
 
 
+@router.get("/properties/count")
+def catalogue_count(session: AnalyticsSession, _user: CurrentUser) -> dict:
+    total = session.execute(text("SELECT count(*) FROM fyp.catalogue_properties")).scalar_one()
+    return {"meta": {"total": int(total)}}
+
+
+@router.get("/properties/by-ids")
+def catalogue_by_ids(
+    session: AnalyticsSession, _user: CurrentUser,
+    ids: Annotated[list[str], Query(min_length=1, max_length=200)],
+) -> dict:
+    rows = CatalogRepository(session).get_properties(list(dict.fromkeys(ids)))
+    scores = expanded_display_scores(session, list(rows))
+    return {
+        "data": [{**row, "suitability_score": scores.get(ref)} for ref, row in rows.items()]
+    }
+
+
 @router.get("/property-types")
 def list_catalog_property_types(session: AnalyticsSession, _user: CurrentUser) -> dict:
     """The distinct ``property_type`` values the eligibility filter can match.

@@ -16,4 +16,3 @@ class OpenCvPanoramaStitcher implements PanoramaStitcher {
     );
   }
 }
-

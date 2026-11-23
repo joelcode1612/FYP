@@ -106,6 +106,14 @@ const double kSphereRadiusM = 1.0;
 /// three-ring-plus-poles geometry.
 const double kSphereRingPitchDeg = 40;
 
+/// The capture-plan version recorded with every session and frame.
+///
+/// **2** is the ±40° three-ring-plus-poles layout above. Version 1 sessions
+/// (the earlier ±35° rings) remain readable: every frame persists its own
+/// intended yaw/pitch, so recovery and stitching never depend on the current
+/// constant matching the layout the older photographs were taken with.
+const int kSphereCapturePlanVersion = 2;
+
 /// The alignment cone that turns a target green and starts the hold ring.
 ///
 /// **2.0°.** At the previous 5° the shutter fired while the marker was still
@@ -404,10 +412,7 @@ bool hasStableHeading(
 /// Positive is tilted **up**. Used for the "tilt up to reach the horizon" hint
 /// at Start and for the vertical half of the turn guidance; it is not part of
 /// any capture decision, which stays a true 3-D angle.
-double cameraElevationDeg(
-  Quat deviceToWorld, {
-  Vec3 worldUp = Vec3.unitY,
-}) {
+double cameraElevationDeg(Quat deviceToWorld, {Vec3 worldUp = Vec3.unitY}) {
   final up = worldUp.normalized;
   if (up.length < 0.5) return 0;
   final forward = deviceToWorld.rotate(const Vec3(0, 0, -1));

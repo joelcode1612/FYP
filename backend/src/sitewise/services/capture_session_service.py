@@ -33,6 +33,7 @@ from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session
 
+from sitewise.core.config import settings
 from sitewise.core.exceptions import (
     ConflictError,
     ForbiddenError,
@@ -45,6 +46,7 @@ from sitewise.db.models.capture_360 import (
     Panorama,
     PanoramaJob,
 )
+from sitewise.services import capture_storage
 from sitewise.services import provider_scope
 
 logger = logging.getLogger("sitewise.capture_session")
@@ -95,7 +97,7 @@ def ensure_property_access(
         )
 
 
-def _idempotent_session_id(key: str) -> uuid.UUID:
+def capture_session_id_for_key(key: str) -> uuid.UUID:
     """Derive a stable row id from the client's capture idempotency key.
 
     UUIDv5 lives entirely in application code: the canonical schema keeps its
@@ -139,7 +141,7 @@ def create_capture_session(
         modes = ", ".join(sorted(CAPTURE_MODES))
         raise ValidationError(f"capture_mode must be one of: {modes}.")
     fixed_id = (
-        _idempotent_session_id(idempotency_key) if idempotency_key else None
+        capture_session_id_for_key(idempotency_key) if idempotency_key else None
     )
     if fixed_id is not None:
         existing = session.get(CaptureSession, fixed_id)
@@ -235,6 +237,7 @@ def confirm_frame(
     image_height: int | None,
     capture_pose: dict[str, Any] | list[Any] | None,
     captured_at: datetime | None,
+    append_only: bool = False,
 ) -> tuple[CaptureFrame, bool]:
     """Register one confirmed frame; re-registration updates in place.
 
@@ -242,7 +245,9 @@ def confirm_frame(
     session's capture plan — a frame outside the plan can never participate
     in stitching, so accepting it would silently corrupt the manifest.
     """
-    record_session = session.get(CaptureSession, session_id)
+    record_session = session.get(
+        CaptureSession, session_id, populate_existing=True, with_for_update=True
+    )
     if record_session is None:
         raise NotFoundError("Capture session not found.")
     if target_index < 1 or target_index > record_session.expected_frames:
@@ -266,6 +271,10 @@ def confirm_frame(
     else:
         record = session.get(CaptureFrame, frame[0])
         assert record is not None
+        if append_only:
+            if record.storage_path != storage_path or record.checksum_sha256 != checksum_sha256:
+                raise ConflictError("A backed-up original cannot be replaced after submission.")
+            return record, False
     record.storage_path = storage_path
     record.checksum_sha256 = checksum_sha256
     record.image_width = image_width
@@ -594,7 +603,9 @@ def confirm_device_panorama(
     panorama exists — the original frames are a backup, not a prerequisite
     for the deliverable.
     """
-    record_session = session.get(CaptureSession, session_id)
+    record_session = session.get(
+        CaptureSession, session_id, populate_existing=True, with_for_update=True
+    )
     if record_session is None:
         raise NotFoundError("Capture session not found.")
     if record_session.status == "cancelled":
@@ -688,6 +699,98 @@ def confirm_device_panorama(
 # --------------------------------------------------------------------------
 
 _REVIEW_DECISIONS = frozenset({"approved", "rejected"})
+
+
+def enhance_panorama(session: Session, *, panorama_id: uuid.UUID) -> Panorama:
+    """Optional (default-off) tonal enhancement of a device panorama.
+
+    Section-12 contract: a conservative tonal pass — bounded gray-world white
+    balance plus gentle exposure normalization — over the completed canonical
+    device panorama. It is NEVER a second stitch, never changes geometry, and
+    never invents content. The result is written to a SEPARATE
+    ``panorama_enhanced.jpg`` Storage object; the canonical ``panorama.jpg``,
+    its path, geometry and review state are untouched. Enhancement status is
+    recorded in the existing ``coverage_report`` JSON column, so no schema
+    extension is needed. Failure raises before anything is written, leaving
+    the valid original fully intact.
+    """
+    if not settings.sitewise_panorama_enhancement_enabled:
+        raise ValidationError(
+            "Panorama enhancement is disabled on this deployment "
+            "(SITEWISE_PANORAMA_ENHANCEMENT_ENABLED is not enabled)."
+        )
+    record = get_panorama(session, panorama_id)
+    if record is None:
+        raise NotFoundError("Panorama not found.")
+    enhanced_path = capture_storage.enhanced_panorama_object_path(
+        record.property_id, str(record.session_id)
+    )
+    try:
+        original = capture_storage.download(record.storage_path)
+    except capture_storage.ObjectMissing as exc:
+        raise ConflictError(
+            "The canonical panorama object is missing from storage; nothing "
+            "to enhance."
+        ) from exc
+    except capture_storage.CaptureStorageUnavailable as exc:
+        raise ConflictError(f"Panorama storage is unavailable: {exc}") from exc
+
+    # Deferred heavy imports keep API startup unchanged when enhancement
+    # stays disabled (the default).
+    import cv2
+    import numpy as np
+
+    image = cv2.imdecode(
+        np.frombuffer(original, dtype=np.uint8), cv2.IMREAD_COLOR
+    )
+    if image is None:
+        raise ConflictError("The stored panorama is not a readable JPEG.")
+
+    result = image.astype(np.float32)
+    means = result.reshape(-1, 3).mean(axis=0)
+    grey = float(means.mean())
+    if grey > 1e-3:
+        gains = grey / np.maximum(means, 1e-3)
+        np.clip(gains, 0.85, 1.18, out=gains)
+        result *= gains
+    luma = result @ np.array([0.114, 0.587, 0.299], dtype=np.float32)
+    mean_luma = float(luma.mean())
+    if mean_luma > 1e-3:
+        gain = float(np.clip((255.0 * 0.45) / mean_luma, 0.9, 1.25))
+        result *= gain
+    enhanced = np.clip(result, 0, 255).astype(np.uint8)
+    ok, encoded = cv2.imencode(
+        ".jpg", enhanced, [int(cv2.IMWRITE_JPEG_QUALITY), 92]
+    )
+    if not ok:
+        raise ConflictError("The enhanced panorama could not be encoded.")
+    data = encoded.tobytes()
+    if len(data) > capture_storage.PANORAMA_MAX_BYTES:
+        raise ConflictError(
+            "The enhanced panorama exceeds the 32 MB storage limit."
+        )
+
+    try:
+        capture_storage.upload_bytes(enhanced_path, data)
+    except capture_storage.CaptureStorageUnavailable as exc:
+        raise ConflictError(f"Enhanced panorama upload failed: {exc}") from exc
+
+    report = dict(record.coverage_report or {})
+    report["enhancement"] = {
+        "status": "completed",
+        "storage_path": enhanced_path,
+        "sha256": capture_storage.sha256_hex(data),
+        "bytes": len(data),
+        "width": int(enhanced.shape[1]),
+        "height": int(enhanced.shape[0]),
+        "enhanced_at": _now().isoformat(),
+    }
+    record.coverage_report = report
+    record.updated_at = _now()
+    session.add(record)
+    session.commit()
+    session.refresh(record)
+    return record
 
 
 def list_panoramas(

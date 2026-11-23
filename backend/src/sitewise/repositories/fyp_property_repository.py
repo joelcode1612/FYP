@@ -1135,10 +1135,11 @@ class FypPropertyRepository:
         "FROM fyp.rental_properties"
     )
 
-    def owner_listing(self, property_id: int) -> dict | None:
+    def owner_listing(self, property_id: int, *, for_update: bool = False) -> dict | None:
         """One listing row (any status) — callers enforce ownership."""
+        lock = " FOR UPDATE" if for_update else ""
         row = self.session.execute(
-            text(f"{self._LISTING_SELECT} WHERE id = :pid"),
+            text(f"{self._LISTING_SELECT} WHERE id = :pid{lock}"),
             {"pid": property_id},
         ).mappings().first()
         return dict(row) if row else None

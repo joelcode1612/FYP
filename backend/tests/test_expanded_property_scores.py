@@ -88,3 +88,14 @@ def test_display_scores_keep_zero_and_omit_unavailable(monkeypatch):
     assert pu_expanded.expanded_display_scores(session, ["zero", "scored", "missing"]) == pytest.approx({
         "zero": 0.0, "scored": 64.2,
     })
+
+
+def test_cached_pu_score_expires_for_same_model_and_property(monkeypatch):
+    key = ("model", "property")
+    monkeypatch.setattr(pu_expanded, "_SCORE_CACHE", {key: (30.0, {"score": 0.64})})
+    monkeypatch.setattr(pu_expanded, "monotonic", lambda: 29.0)
+    assert pu_expanded._cached_score(key) == {"score": 0.64}
+
+    monkeypatch.setattr(pu_expanded, "monotonic", lambda: 30.0)
+    assert pu_expanded._cached_score(key) is None
+    assert key not in pu_expanded._SCORE_CACHE

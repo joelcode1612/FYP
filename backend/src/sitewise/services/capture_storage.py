@@ -55,6 +55,11 @@ def panorama_object_path(property_id: int | str, session_id: str) -> str:
     return f"properties/{property_id}/sessions/{session_id}/panorama.jpg"
 
 
+def enhanced_panorama_object_path(property_id: int | str, session_id: str) -> str:
+    """The SEPARATE derived enhancement object; never the canonical path."""
+    return f"properties/{property_id}/sessions/{session_id}/panorama_enhanced.jpg"
+
+
 def sha256_hex(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 

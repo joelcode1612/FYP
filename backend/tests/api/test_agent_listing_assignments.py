@@ -658,7 +658,8 @@ def test_projection_quotes_only_the_feedback_the_administrator_recorded():
 
 def test_projection_lists_the_fields_submission_actually_misses():
     incomplete = _projection_row(availability=None, rental_price=None)
-    assert incomplete["missing_required_fields"] == ["rental price", "availability"]
+    assert incomplete["missing_required_fields"] == ["rental price"]
+    assert _projection_row(availability=None)["missing_required_fields"] == []
     assert _projection_row()["missing_required_fields"] == []
     # A present-but-invalid price is reported, not silently passed.
     assert "a rental price greater than zero" in _projection_row(

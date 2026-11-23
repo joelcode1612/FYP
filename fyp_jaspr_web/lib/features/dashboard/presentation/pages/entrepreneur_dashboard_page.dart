@@ -60,7 +60,7 @@ class _DashboardPageState extends State<DashboardPage> {
   Future<int?> _loadCatalogueCount() async {
     try {
       final response = await WebAuth.request(
-        '/api/v1/catalog/properties?limit=1&offset=0',
+        '/api/v1/catalog/properties/count',
       );
       return ((response['meta'] as Map?)?['total'] as num?)?.toInt();
     } on Object {
@@ -88,6 +88,9 @@ class _DashboardPageState extends State<DashboardPage> {
     final saved = context.watch(
       appNotifierProvider.select((state) => state.saved),
     );
+    final savedUnavailable = context.watch(appNotifierProvider.select(
+      (state) => state.savedLoading || state.savedError != null,
+    ));
     final name = _welcomeName;
     return AppLayout(
       role: AppRole.entrepreneur,
@@ -106,12 +109,12 @@ class _DashboardPageState extends State<DashboardPage> {
           _head(name),
           // KPI row: each counter degrades to an em dash when its own read
           // fails; the other cards keep their real values.
-          _kpis(saved),
+          _kpis(saved, savedUnavailable),
           // Compact overview of the most recently updated saved assessment.
           // It loads on its own so a slow or failed read never holds up the
           // rest of the dashboard.
           const _CurrentAssessment(),
-          _quickActions(saved),
+          _quickActions(savedUnavailable ? null : saved),
           _recent(),
           // DESIGN.md §17: a concise, visible disclaimer near decision-support
           // output. Progress percentages here are server-derived stage counts,
@@ -131,7 +134,7 @@ class _DashboardPageState extends State<DashboardPage> {
 
   // -------------------------------------------------------------------- KPIs
 
-  Component _kpis(Set<String> saved) {
+  Component _kpis(Set<String> saved, bool savedUnavailable) {
     return div(classes: 'sw-kpi-grid', [
       _kpi(
         'place',
@@ -145,8 +148,8 @@ class _DashboardPageState extends State<DashboardPage> {
         'bookmark',
         '#7c3aed',
         'Saved Properties',
-        Component.text('${saved.length}'),
-        Component.text(saved.length == 1
+        Component.text(savedUnavailable ? '—' : '${saved.length}'),
+        Component.text(savedUnavailable ? 'Saved list unavailable' : saved.length == 1
             ? 'Property shortlisted'
             : 'Properties shortlisted'),
         '/entrepreneur/saved',
@@ -165,7 +168,7 @@ class _DashboardPageState extends State<DashboardPage> {
         'Reports',
         _historyKpiValue((history) => '${history.reportsTotal}'),
         _reportsKpiNote(),
-        '/entrepreneur/assessments',
+        '/entrepreneur/reports',
       ),
     ]);
   }
@@ -264,7 +267,7 @@ class _DashboardPageState extends State<DashboardPage> {
 
   // ------------------------------------------------------------ quick actions
 
-  Component _quickActions(Set<String> saved) {
+  Component _quickActions(Set<String>? saved) {
     return section(classes: 'sw-dash-section', styles: Styles(raw: {'margin-top': '0'}), [
       div(classes: 'sw-dash-section-head', [
         h2([Component.text('Quick Actions')]),
@@ -285,7 +288,9 @@ class _DashboardPageState extends State<DashboardPage> {
         _quick(
           'bookmark',
           'Saved Properties',
-          saved.isEmpty
+          saved == null
+              ? 'Check your saved properties'
+              : saved.isEmpty
               ? 'Review your shortlisted properties.'
               : 'Review your ${saved.length} shortlisted '
                     '${saved.length == 1 ? 'property' : 'properties'}.',

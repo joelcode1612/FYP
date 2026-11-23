@@ -133,10 +133,7 @@ class SitewiseSphereSessionStore implements CaptureSessionStore {
           );
       // Create-or-restore in one call: an existing session keeps its own
       // association, so a double tap on Start cannot fork it.
-      document.session = session.copyWith(
-        userId: userId,
-        updatedAt: now,
-      );
+      document.session = session.copyWith(userId: userId, updatedAt: now);
       await _write(document);
       return document.session!;
     });

@@ -133,10 +133,14 @@ def listing_payload(listing: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def listing_completeness_errors(listing: dict[str, Any]) -> list[str]:
+def listing_completeness_errors(
+    listing: dict[str, Any], *, require_availability: bool = True,
+) -> list[str]:
     """Human-readable list of missing required fields for final submission."""
     errors: list[str] = []
     for field in REQUIRED_FOR_SUBMISSION:
+        if field == "availability" and not require_availability:
+            continue
         value = listing.get(field)
         if value is None or (isinstance(value, str) and not value.strip()):
             errors.append(field.replace("_", " "))
@@ -320,6 +324,7 @@ class PropertyVerificationService:
         submitter_id: uuid.UUID,
         scope: str = "full",
         role: str | None = None,
+        panorama_id: str | None = None,
     ) -> dict[str, Any]:
         """Submit (or resubmit) the property for review.
 
@@ -346,7 +351,11 @@ class PropertyVerificationService:
 
         # An incomplete draft can be SAVED but never SUBMITTED: every field
         # the admin review needs must exist before the queue is entered.
-        missing = listing_completeness_errors(listing)
+        # Agent inspections concern physical evidence; rental availability
+        # can remain unreported on the listing sent to Admin for review.
+        missing = listing_completeness_errors(
+            listing, require_availability=not provider_scope.is_agent_role(role),
+        )
         if missing:
             raise ConflictError(
                 "Complete these fields before submitting for verification: "
@@ -429,14 +438,35 @@ class PropertyVerificationService:
         )
         # Agent assignment state changes in this SAME transaction as
         # the property verification submission. No partial handoff.
+        #
+        # The linked panorama is the verified CANONICAL row itself — the
+        # same evidence `completed_agent_panorama` accepted one moment ago.
+        # A `panorama_jobs` join here would NULL the link for every
+        # device-stitched session (capture_plan_version 2 has no job row:
+        # Flutter stitched on the phone and the confirmation endpoint wrote
+        # the canonical row), so the job is no longer the proof. Legacy
+        # sessions keep the same semantics: their panorama row only exists
+        # after the worker completed the stitch.
         if provider_scope.is_agent_role(role):
-            changed = self.session.execute(text("""
-                UPDATE fyp.agent_listing_assignment
+            linked_panorama = self.session.execute(text("""
+                UPDATE fyp.agent_listing_assignment a
                    SET workflow_status='submitted', submitted_at=now(), updated_at=now(),
-                       panorama_id=(SELECT p.panorama_id FROM fyp.panoramas p JOIN fyp.capture_sessions c ON c.id=p.session_id JOIN fyp.panorama_jobs j ON j.session_id=c.id WHERE p.property_id=CAST(:pid AS text) AND c.owner_id=:uid AND c.status='completed' AND j.status='done' ORDER BY p.created_at DESC LIMIT 1)
-                 WHERE listing_id=:pid AND workflow_status IN ('accepted','needs_correction')
-            """), {"pid":property_id, "uid":str(submitter_id)})
-            if changed.rowcount != 1:
+                       panorama_id=(SELECT p.panorama_id
+                              FROM fyp.panoramas p
+                              JOIN fyp.capture_sessions c ON c.id = p.session_id
+                             WHERE p.property_id = CAST(:pid AS text)
+                               AND c.property_id = CAST(:pid AS text)
+                               AND c.owner_id = :uid
+                               AND c.status = 'completed'
+                               AND p.storage_path IS NOT NULL AND btrim(p.storage_path) <> ''
+                               AND (CAST(:panorama_id AS text) IS NULL OR CAST(p.panorama_id AS text) = :panorama_id)
+                             ORDER BY p.created_at DESC LIMIT 1)
+                 WHERE a.listing_id=:pid AND a.workflow_status IN ('accepted','needs_correction')
+                   AND a.inspection_data @> '{"floor_area_verified":true,"condition_verified":true,
+                                                "parking_verified":true,"accessibility_verified":true}'::jsonb
+                RETURNING a.panorama_id
+            """), {"pid": property_id, "uid": str(submitter_id), "panorama_id": panorama_id}).scalar()
+            if linked_panorama is None:
                 raise ConflictError("Agent assignment changed during submission.")
         self.session.commit()
         self.session.refresh(verification)

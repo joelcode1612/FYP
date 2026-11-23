@@ -21,6 +21,7 @@ from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field, field_validator
+from sqlalchemy import text
 from sqlmodel import Session
 
 from sitewise.core.exceptions import (
@@ -36,7 +37,11 @@ from sitewise.dependencies import (
 )
 from sitewise.services import capture_session_service as svc
 from sitewise.services import capture_storage
-from sitewise.services.agent_inspection_policy import agent_assignment, require_owner_published_view
+from sitewise.services.agent_inspection_policy import (
+    agent_assignment,
+    require_frame_backup,
+    require_owner_published_view,
+)
 
 router = APIRouter()
 
@@ -111,6 +116,9 @@ def _panorama_json(record) -> dict[str, Any]:
             record.reviewed_at.isoformat() if record.reviewed_at else None
         ),
         "reviewReason": record.review_reason,
+        # Optional derived enhancement (default-off feature). Admin review
+        # sees exactly which image versions exist for this record.
+        "enhancement": (record.coverage_report or {}).get("enhancement"),
         "createdAt": record.created_at.isoformat(),
     }
 
@@ -209,7 +217,31 @@ def create_session(
     db: DbSession,
     current: ProviderUser,
 ) -> dict[str, Any]:
-    agent_assignment(db, body.property_id, current, writable=True)
+    try:
+        agent_assignment(db, body.property_id, current, writable=True)
+    except HTTPException as exc:
+        # Queue recovery replays the original create request after a restart.
+        # During review it may resolve the pinned session without creating one.
+        if exc.status_code != 409 or body.idempotency_key is None:
+            raise
+        session_id = svc.capture_session_id_for_key(body.idempotency_key)
+        existing = svc.get_capture_session(db, session_id)
+        if (
+            existing is None
+            or str(existing.property_id) != str(body.property_id)
+            or existing.capture_mode != body.capture_mode
+            or (
+                body.capture_plan_version is not None
+                and existing.capture_plan_version != body.capture_plan_version
+            )
+        ):
+            raise
+        if not require_frame_backup(db, existing, current):
+            raise
+        svc.ensure_property_access(
+            db, property_id=body.property_id, user_id=current.user_id, role=current.role
+        )
+        return _session_json(existing, svc.confirmed_frame_count(db, session_id))
     svc.ensure_property_access(
         db,
         property_id=body.property_id,
@@ -249,10 +281,15 @@ def confirm_frame(
     record = svc.require_capture_session(
         db, session_id=session_id, user_id=current.user_id, role=current.role
     )
-    agent_assignment(db, int(record.property_id), current, writable=True)
-    if str(record.owner_id) != str(current.user_id):
-        raise HTTPException(status_code=403, detail="Capture session belongs to a different Agent.")
+    append_only = require_frame_backup(db, record, current)
+    if body.target_index > record.expected_frames:
+        raise ValidationError(f"target_index must be between 1 and {record.expected_frames}.")
     path = _validated_frame_path(record, session_id, body.storage_path)
+    if append_only and (
+        body.checksum_sha256 is None
+        or path != capture_storage.frame_object_path(record.property_id, str(session_id), body.target_index)
+    ):
+        raise ValidationError("A backup must identify its original target and checksum.")
     try:
         uploaded = capture_storage.object_exists(path)
     except capture_storage.CaptureStorageUnavailable as exc:
@@ -274,13 +311,15 @@ def confirm_frame(
             ),
             None,
         )
-        if (
+        if append_only or (
             previous is not None
             and previous.checksum_sha256
             and previous.checksum_sha256.lower() != body.checksum_sha256.lower()
         ):
             try:
                 stored = capture_storage.download(path)
+            except capture_storage.ObjectMissing as exc:
+                raise ConflictError("The original photograph has not reached storage.") from exc
             except capture_storage.CaptureStorageUnavailable as exc:
                 raise _storage_unavailable(exc) from exc
             if not capture_storage.verify_checksum(stored, body.checksum_sha256):
@@ -298,6 +337,7 @@ def confirm_frame(
         image_height=body.image_height,
         capture_pose=body.capture_pose,
         captured_at=body.captured_at,
+        append_only=append_only,
     )
     return _frame_json(frame, created)
 
@@ -353,9 +393,7 @@ def issue_upload_urls(
     record = svc.require_capture_session(
         db, session_id=session_id, user_id=current.user_id, role=current.role
     )
-    agent_assignment(db, int(record.property_id), current, writable=True)
-    if str(record.owner_id) != str(current.user_id):
-        raise HTTPException(status_code=403, detail="Capture session belongs to a different Agent.")
+    require_frame_backup(db, record, current)
     out_of_plan = [t for t in body.targets if t < 1 or t > record.expected_frames]
     if out_of_plan:
         raise ValidationError(
@@ -485,6 +523,9 @@ def _decode_panorama(data: bytes) -> tuple[int, int]:
     lazily: the router is imported at startup and the vision stack must not
     pay for that.
     """
+    if not data.startswith(b"\xff\xd8\xff"):
+        raise ValidationError("The stored panorama must be a JPEG image.")
+
     import cv2
     import numpy as np
 
@@ -495,6 +536,28 @@ def _decode_panorama(data: bytes) -> tuple[int, int]:
         )
     height, width = decoded.shape[:2]
     return int(width), int(height)
+
+
+def _validate_reported_photo_coverage(report: dict[str, Any] | None, checksum: str) -> None:
+    # Older captures have no coverage sidecar. Current captures can provide
+    # device measurements tied to the exact JPEG, for review and validation.
+    if report is None or "photo_coverage" not in report:
+        return
+    coverage = report["photo_coverage"]
+    if not isinstance(coverage, dict) or coverage.get("panorama_sha256") != checksum:
+        raise ValidationError("The coverage report does not match the uploaded panorama.")
+    photo_percent = coverage.get("photo_coverage_percent")
+    viewport_gap = coverage.get("worst_viewport_gap_percent")
+    filled = coverage.get("gap_filled_pixels")
+    if (
+        type(photo_percent) not in (int, float)
+        or not 99.5 <= photo_percent <= 100
+        or type(viewport_gap) not in (int, float)
+        or not 0 <= viewport_gap <= 25
+        or type(filled) is not int
+        or filled < 0
+    ):
+        raise ValidationError("The panorama coverage report requires retakes or a fresh stitch.")
 
 
 @router.post("/sessions/{session_id}/panorama")
@@ -555,6 +618,7 @@ def confirm_panorama(
         raise ValidationError(
             "The panorama width must be between 512 and 8192 pixels."
         )
+    _validate_reported_photo_coverage(body.coverage_report, body.checksum_sha256)
     panorama = svc.confirm_device_panorama(
         db,
         session_id=session_id,
@@ -571,8 +635,14 @@ def view_panorama(
     panorama_id: uuid.UUID,
     db: DbSession,
     current: ProviderUser,
+    version: str = "original",
 ) -> dict[str, Any]:
-    """An authorized temporary viewing URL for one stored panorama."""
+    """An authorized temporary viewing URL for one stored panorama.
+
+    ``version=enhanced`` serves the optional derived enhancement only when
+    the record actually carries a completed one; the canonical original is
+    always available. Neither version ever becomes a public URL.
+    """
     panorama = svc.get_panorama(db, panorama_id)
     if panorama is None:
         raise NotFoundError("Panorama not found.")
@@ -583,12 +653,25 @@ def view_panorama(
         user_id=current.user_id,
         role=current.role,
     )
+    storage_path = panorama.storage_path
+    if version == "enhanced":
+        enhancement = (panorama.coverage_report or {}).get("enhancement") or {}
+        enhanced_path = enhancement.get("storage_path")
+        if enhancement.get("status") != "completed" or not enhanced_path:
+            raise NotFoundError(
+                "No enhanced panorama exists for this record; request the "
+                "original version."
+            )
+        storage_path = enhanced_path
+    elif version != "original":
+        raise ValidationError("version must be 'original' or 'enhanced'.")
     try:
-        url = capture_storage.signed_view_url(panorama.storage_path)
+        url = capture_storage.signed_view_url(storage_path)
     except capture_storage.CaptureStorageUnavailable as exc:
         raise _storage_unavailable(exc) from exc
     return {
         "panoramaId": str(panorama.panorama_id),
+        "version": version,
         "viewUrl": url,
         "expiresInSeconds": capture_storage.VIEW_URL_TTL_SECONDS,
     }
@@ -663,7 +746,19 @@ def property_panorama(
         role=current.role,
     )
     require_owner_published_view(db, property_id, current)
-    panorama = svc.latest_property_panorama(db, property_id)
+    submitted_id = db.execute(
+        text(
+            "SELECT panorama_id FROM fyp.agent_listing_assignment "
+            "WHERE listing_id = :pid AND workflow_status = 'submitted'"
+        ),
+        {"pid": property_id},
+    ).scalar()
+    if submitted_id is not None:
+        panorama = svc.get_panorama(db, submitted_id)
+        if panorama is None or str(panorama.property_id) != str(property_id):
+            raise NotFoundError("The submitted panorama is unavailable.")
+    else:
+        panorama = svc.latest_property_panorama(db, property_id)
     if panorama is None:
         raise NotFoundError("No panorama exists for this property yet.")
     return _panorama_json(panorama)
@@ -719,6 +814,24 @@ def review_admin_panorama(
         decision=body.decision,
         reason=body.reason,
     )
+    return _panorama_json(record)
+
+
+@router.post("/admin/panoramas/{panorama_id}/enhance")
+def enhance_admin_panorama(
+    panorama_id: uuid.UUID,
+    db: DbSession,
+    admin: AdminUser,
+) -> dict[str, Any]:
+    """Optional (default-off) enhancement producing a SEPARATE derived image.
+
+    Never a second stitch and never a replacement: the canonical
+    ``panorama.jpg`` stays untouched, the derived object is recorded in the
+    panorama's metadata, and an enhancement failure leaves the valid original
+    fully intact. Reviewers choose which version to view through the
+    ``version`` query parameter on the panorama view endpoint.
+    """
+    record = svc.enhance_panorama(db, panorama_id=panorama_id)
     return _panorama_json(record)
 
 

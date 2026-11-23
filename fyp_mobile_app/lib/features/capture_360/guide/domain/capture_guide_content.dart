@@ -40,9 +40,7 @@ class CaptureGuidePlan {
   CaptureGuidePlan._(List<SphereTargetSpec> targets)
     : total = kSphereTargetCount,
       ringPitchDeg = kSphereRingPitchDeg,
-      middleCount = targets
-          .where((t) => t.pitchDeg.abs() < 1e-9)
-          .length,
+      middleCount = targets.where((t) => t.pitchDeg.abs() < 1e-9).length,
       upperCount = targets
           .where((t) => t.pitchDeg > 1e-9 && !t.isZenith)
           .length,
@@ -57,14 +55,10 @@ class CaptureGuidePlan {
       ),
       exampleUpperTarget = targets
           .where((t) => t.pitchDeg > 1e-9 && !t.isZenith)
-          .reduce(
-            (a, b) => a.targetId > b.targetId ? a : b,
-          ),
+          .reduce((a, b) => a.targetId > b.targetId ? a : b),
       exampleLowerTarget = targets
           .where((t) => t.pitchDeg < -1e-9 && !t.isNadir)
-          .reduce(
-            (a, b) => a.targetId < b.targetId ? a : b,
-          ),
+          .reduce((a, b) => a.targetId < b.targetId ? a : b),
       exampleZenithTarget = targets.firstWhere((t) => t.isZenith),
       exampleNadirTarget = targets.firstWhere((t) => t.isNadir);
 
@@ -302,9 +296,8 @@ class CaptureGuideDirection {
 }
 
 /// The 12 ring directions, labelled exactly as the reference does.
-final List<CaptureGuideDirection> captureGuideDirections = List<
-  CaptureGuideDirection
->.generate(12, (i) {
+final List<CaptureGuideDirection>
+captureGuideDirections = List<CaptureGuideDirection>.generate(12, (i) {
   final yaw = i * 30.0;
   final label = yaw == 0
       ? 'Forward'
@@ -351,8 +344,14 @@ List<(String, String)> captureGuidePlanRows() {
   final plan = CaptureGuidePlan.instance;
   return [
     ('Middle ring · 0°', '${plan.middleCount} targets'),
-    ('Upper ring · +${plan.ringPitchDeg.round()}°', '${plan.upperCount} targets'),
-    ('Lower ring · −${plan.ringPitchDeg.round()}°', '${plan.lowerCount} targets'),
+    (
+      'Upper ring · +${plan.ringPitchDeg.round()}°',
+      '${plan.upperCount} targets',
+    ),
+    (
+      'Lower ring · −${plan.ringPitchDeg.round()}°',
+      '${plan.lowerCount} targets',
+    ),
     ('Zenith · +90°', 'Ceiling · 1'),
     ('Nadir · −90°', 'Floor · 1'),
   ];

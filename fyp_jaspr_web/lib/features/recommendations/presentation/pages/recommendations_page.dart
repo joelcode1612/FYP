@@ -85,6 +85,7 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
   bool _nearbyGeocoding = false;
   String? _nearbyError;
   String? _nearbyNotice;
+  bool _nearbyExpanded = false; // Default: compact location dropdown.
 
   /// Contextual choices for the DRAFT criteria. The applied choices remain in
   /// the session-scoped notifier state; the results list is never rebuilt
@@ -464,6 +465,8 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
 
   /// Saves/removes a property. A signed-in account persists server-side first
   /// and the shortlist only moves once the server accepted the change.
+  String? _saveError;
+
   Future<void> _toggleSaved(String id) async {
     final notifier = context.read(appNotifierProvider.notifier);
     if (!AppLocator.isSignedIn) {
@@ -471,12 +474,11 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
       return;
     }
     final savedNow = context.read(appNotifierProvider).saved.contains(id);
-    final failure = await AppLocator.persistToggleSaved(
+    final failure = await notifier.persistSaved(
       id,
       wantSaved: !savedNow,
     );
-    if (failure != null) return;
-    notifier.toggleSaved(id);
+    if (mounted) setState(() => _saveError = failure);
   }
 
   @override
@@ -520,6 +522,8 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
       ],
       child: div(classes: _hasSearched ? 'rec2' : 'rec2 rec2--presearch', [
         div(classes: 'rec2__main', [
+          if (_saveError case final error?)
+            div(attributes: {'role': 'alert'}, [_errorBanner(error)]),
           _filters(state),
           if (_hasSearched)
             _appliedFilters(state.recommendationRequest),
@@ -942,10 +946,50 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
     classes: 'rec2-location',
     attributes: const {'id': 'rec2-nearby-picker'},
     [
-      h3(classes: 'rec2-location__title', [
-        Icon('place', size: 'sm'),
-        Component.text('Search around a point'),
-      ]),
+      // SITEWISE_LOCATION_DROPDOWN_V1: compact by default; the location filter
+      // remains applied even while the advanced entry fields are hidden.
+      button(
+        classes: 'rec2-location__toggle',
+        attributes: {
+          'type': 'button',
+          'aria-expanded': _nearbyExpanded ? 'true' : 'false',
+          'aria-controls': 'rec2-location-controls',
+          'aria-label': _nearbyExpanded
+              ? 'Collapse search around a point'
+              : 'Expand search around a point',
+        },
+        events: events(onClick: () => setState(() => _nearbyExpanded = !_nearbyExpanded)),
+        [
+          span(classes: 'rec2-location__toggle-left', [
+            Icon('place', size: 'sm'),
+            span(classes: 'rec2-location__toggle-label', [
+              Component.text('Search around a point'),
+            ]),
+          ]),
+          span(classes: 'rec2-location__toggle-right', [
+            span(classes: 'rec2-location__toggle-status', [
+              Component.text(_nearbyLatitude == null
+                  ? 'Optional location filter'
+                  : 'Within ${_nearbyRadiusKm.toStringAsFixed(0)} km'),
+            ]),
+            span(classes: 'rec2-location__toggle-icon', [
+              Icon(_nearbyExpanded ? 'expand_less' : 'expand_more', size: 'sm'),
+            ]),
+          ]),
+        ],
+      ),
+      if (_nearbyLatitude != null && !_nearbyExpanded)
+        p(classes: 'rec2-location__active', [
+          Component.text('Selected center: '
+              '${_nearbyLatitude!.toStringAsFixed(6)}, '
+              '${_nearbyLongitude!.toStringAsFixed(6)} '
+              '· ${_nearbyRadiusKm.toStringAsFixed(0)} km radius'),
+        ]),
+      if (_nearbyExpanded)
+        div(
+          classes: 'rec2-location__panel',
+          attributes: const {'id': 'rec2-location-controls'},
+          [
       p(classes: 'rec2-location__intro', [
         Component.text('Choose a point on the map, look up an address in Malaysia, '
             'or enter latitude and longitude. Applying the point filters eligible '
@@ -1094,6 +1138,8 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
             'Address lookup sends your typed text to OpenStreetMap; '
             'confirm the approximate position. © OpenStreetMap contributors.'),
       ]),
+          ],
+        ),
     ],
   );
 
@@ -1111,6 +1157,7 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
       _nearbyLongitude = lon;
       _nearbyError = null;
       _nearbyNotice = 'Location applied. Results use the selected radius.';
+      _nearbyExpanded = false;
     });
     _onDraftChange(debounce: Duration.zero);
   }
@@ -1184,28 +1231,104 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
     ]);
   }
 
+  // SITEWISE_MOBILE_ALIGNED_ADVANCED_PRESETS_V1
+  // The same descriptive options used by entrepreneur mobile Preferences.
+  // Keys are still numeric bounds, so FastAPI ranking and filtering stay intact.
+  List<(String, String)>? _mobileAdvancedPresets(String key) => switch (key) {
+    'transit_walk_m' => [
+        (_rangeKey(null, 500.0), 'Easy — within 500 m walk'),
+        (_rangeKey(null, 1000.0), 'Nearby — within 1 km walk'),
+      ],
+    'nearby_parking_500m' => [
+        (_rangeKey(1.0, null), 'Preferred — 1+ nearby facility'),
+        (_rangeKey(3.0, null), 'More options — 3+ nearby facilities'),
+        (_rangeKey(5.0, null), 'Plenty — 5+ nearby facilities'),
+      ],
+    'fnb_competition_500m' => [
+        (_rangeKey(null, 5.0), 'Low — up to 5 F&B outlets'),
+        (_rangeKey(null, 10.0), 'Moderate — up to 10 F&B outlets'),
+        (_rangeKey(null, 20.0), 'Higher — up to 20 F&B outlets'),
+      ],
+    _ => null,
+  };
+
+  // The population bands are contextual to the actual measured records.
+  // Use relative labels only when the backend supplies exactly three bands;
+  // keep the actual resident ranges visible to avoid invented thresholds.
+  List<(String, String)> _friendlyPopulationRanges(
+    List<FacetRangeOption> ranges,
+  ) {
+    if (ranges.length != 3) return _rangePairs(ranges);
+    final ordered = [...ranges]..sort((a, b) => a.min.compareTo(b.min));
+    const levels = ['Lower', 'Moderate', 'Higher'];
+    return [
+      for (var i = 0; i < ordered.length; i++)
+        (ordered[i].key, '${levels[i]} — ${ordered[i].label}'),
+    ];
+  }
+
+  // Previously saved custom numeric limits must not disappear from the form.
+  // Keep their original values instead of silently rounding to a preset.
+  String _advancedSavedLabel(String key, String selected) {
+    final bounds = FacetRangeOption.boundsFromKey(selected);
+    String amount(double value) => value == value.roundToDouble()
+        ? value.toStringAsFixed(0)
+        : value.toString();
+    if (key == 'transit_walk_m' && bounds.max != null) {
+      return 'Saved choice — within ${amount(bounds.max!)} m walk';
+    }
+    if (key == 'nearby_parking_500m' && bounds.min != null) {
+      return 'Saved choice — ${amount(bounds.min!)}+ parking facilities';
+    }
+    if (key == 'fnb_competition_500m' && bounds.max != null) {
+      return 'Saved choice — up to ${amount(bounds.max!)} F&B outlets';
+    }
+    if (key == 'surrounding_population_1000m') {
+      if (bounds.min != null && bounds.max != null) {
+        return 'Saved choice — ${amount(bounds.min!)}–${amount(bounds.max!)} residents';
+      }
+      if (bounds.min != null) {
+        return 'Saved choice — at least ${amount(bounds.min!)} residents';
+      }
+    }
+    return 'Saved choice — $selected';
+  }
+
   Component _advancedControl(String key, RecommendationAdvancedFacet facet) {
     final selected = _advancedKeys[key] ?? '';
-    final upperLimit = key == 'transit_walk_m' || key == 'fnb_competition_500m';
-    final options = facet.isRange
-        ? upperLimit
-            ? [
-                for (final max in facet.rangeOptions.map((range) => range.max).toSet())
-                  (_rangeKey(null, max), 'Up to ${max.round()} ${key == 'transit_walk_m' ? 'm' : 'outlets'}'),
-              ]
-            : _rangePairs(facet.rangeOptions)
-        : [
-            for (final option in facet.valueOptions)
-              (option.value, _facetOptionLabel(option)),
-          ];
+    final presets = _mobileAdvancedPresets(key);
+    final options = <(String, String)>[
+      if (presets != null)
+        ...presets
+      else if (key == 'surrounding_population_1000m' && facet.isRange)
+        ..._friendlyPopulationRanges(facet.rangeOptions)
+      else if (facet.isRange)
+        ..._rangePairs(facet.rangeOptions)
+      else
+        for (final option in facet.valueOptions)
+          (option.value, _facetOptionLabel(option)),
+    ];
+
+    // A stored preference may use a custom numeric bound not in the mobile
+    // preset choices. Render it with its real meaning and preserve its value.
+    if (selected.isNotEmpty && !options.any((item) => item.$1 == selected)) {
+      options.insert(0, (selected, _advancedSavedLabel(key, selected)));
+    }
+
+    final caption = switch (key) {
+      'nearby_parking_500m' => 'Nearby public parking (500 m)',
+      'fnb_competition_500m' => 'Competition tolerance (500 m)',
+      'demand_generator' => 'Nearby places that attract visitors',
+      'surrounding_population_1000m' => 'Residents nearby (1 km)',
+      _ => facet.label,
+    };
     return _dropdownField(
-      caption: facet.label,
+      caption: caption,
       fieldId: 'rec2-adv-$key',
       value: selected,
-      emptyLabel: 'Any',
+      emptyLabel: 'No preference',
       options: options,
-      includeSelected: selected.isNotEmpty &&
-          !options.any((pair) => pair.$1 == selected),
+      includeSelected: false,
       onChanged: (value) {
         setState(() => _advancedKeys[key] = value);
         _onDraftChange();

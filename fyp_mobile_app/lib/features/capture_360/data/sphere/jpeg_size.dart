@@ -113,10 +113,7 @@ int? _tiffOrientation(Uint8List b, int base, int end) {
       littleEndian ? (b[o] | (b[o + 1] << 8)) : ((b[o] << 8) | b[o + 1]);
   int u32(int o) => littleEndian
       ? (b[o] | (b[o + 1] << 8) | (b[o + 2] << 16) | (b[o + 3] << 24))
-      : ((b[o] << 24) |
-            (b[o + 1] << 16) |
-            (b[o + 2] << 8) |
-            b[o + 3]);
+      : ((b[o] << 24) | (b[o + 1] << 16) | (b[o + 2] << 8) | b[o + 3]);
   if (u16(base + 2) != 42) return null;
   final ifd = base + u32(base + 4);
   if (ifd + 2 > end) return null;

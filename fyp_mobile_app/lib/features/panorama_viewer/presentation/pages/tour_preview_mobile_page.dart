@@ -1,3 +1,4 @@
+import 'package:fyp/features/property_management/presentation/widgets/provider_agent_inspection_panel.dart';
 import 'package:shared_logic/shared_logic.dart';
 import 'dart:typed_data';
 
@@ -5,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:http/http.dart' as http;
 import 'package:fyp/features/panorama_viewer/presentation/widgets/mobile_swipe_panorama.dart';
+import 'package:fyp/features/panorama_viewer/presentation/pages/panorama_fullscreen_page.dart';
 
 import 'package:fyp/core/di/service_locator.dart';
 import 'package:fyp/core/theme/sitewise_theme.dart';
@@ -30,12 +32,16 @@ class TourPreviewMobilePage extends ConsumerStatefulWidget {
   const TourPreviewMobilePage({super.key, required this.tourId});
 
   @override
-  ConsumerState<TourPreviewMobilePage> createState() => _TourPreviewMobilePageState();
+  ConsumerState<TourPreviewMobilePage> createState() =>
+      _TourPreviewMobilePageState();
 }
 
 class _TourPreviewMobilePageState extends ConsumerState<TourPreviewMobilePage> {
-  bool get _canCapture => ref.read(authNotifierProvider).user?.role == AppRole.agent;
+  bool get _canCapture =>
+      ref.read(authNotifierProvider).user?.role == AppRole.agent;
   late final TourPreviewViewModel vm;
+  bool _continued = false;
+  bool _checklistEdited = false;
 
   /// Cached file reads, one future per path. Without this, every rebuild of
   /// the preview (regeneration stages, button state changes) re-read every
@@ -45,10 +51,9 @@ class _TourPreviewMobilePageState extends ConsumerState<TourPreviewMobilePage> {
 
   Future<Uint8List?> _bytesFor(String path) => _bytesCache.putIfAbsent(
     path,
-    () => readImageBytes(path).timeout(
-      const Duration(seconds: 8),
-      onTimeout: () => null,
-    ),
+    () => readImageBytes(
+      path,
+    ).timeout(const Duration(seconds: 8), onTimeout: () => null),
   );
 
   /// A retake or regeneration overwrites the files in place; dropping the
@@ -73,7 +78,9 @@ class _TourPreviewMobilePageState extends ConsumerState<TourPreviewMobilePage> {
     return AnimatedBuilder(
       animation: vm,
       builder: (ctx, _) => MobileAppShell(
-        title: 'Tour preview',
+        title: vm.liveBackend && _continued
+            ? 'Review inspection'
+            : 'Tour preview',
         // Matches parentShellRoute('/tour-preview') so the Listing tab stays
         // highlighted while the tour is open.
         currentRoute: '/entrepreneur/recommendations',
@@ -86,110 +93,292 @@ class _TourPreviewMobilePageState extends ConsumerState<TourPreviewMobilePage> {
               )
             : SingleChildScrollView(
                 padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _header(vm.tour!),
-                    const SizedBox(height: 12),
-                    _completenessCard(),
-                    const SizedBox(height: 12),
-                    _panorama(vm.tour!),
-                    const SizedBox(height: 12),
-                    if (vm.generating)
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 8),
-                        child: Row(
-                          children: [
-                            const SizedBox(
-                              width: 20,
-                              height: 20,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(child: Text(vm.stage ?? 'Processing…')),
-                          ],
-                        ),
-                      ),
-                    if (vm.error != null)
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 8),
-                        child: Text(
-                          vm.error!,
-                          style: const TextStyle(color: SitewiseColors.danger),
-                        ),
-                      ),
-                    if (_canCapture) _uploadCard(),
-                    if (_canCapture) SitewiseSecondaryButton(
-                      label: vm.hasPanorama
-                          ? 'Regenerate panorama'
-                          : 'Generate panorama',
-                      icon: Icons.auto_awesome,
-                      onPressed: vm.generating
-                          ? null
-                          : () {
-                              _invalidateImageCaches();
-                              vm.regenerate();
-                            },
-                    ),
-                    const SizedBox(height: 12),
-                    if (_canCapture && vm.stitchService != null) ...[
-                      _stitchingSection(),
-                      const SizedBox(height: 12),
-                    ],
-                    Text(
-                      'Photographs (${vm.frames.length}/${vm.specs.length})',
-                      style: const TextStyle(fontWeight: FontWeight.w700),
-                    ),
-                    const SizedBox(height: 8),
-                    _frameGrid(),
-                    const SizedBox(height: 12),
-                    if (_canCapture && (vm.tour!.status == VirtualTourStatus.ready ||
-                        vm.tour!.status == VirtualTourStatus.draft))
-                      SitewiseButton(
-                        label: 'Submit for verification',
-                        icon: Icons.send,
-                        onPressed: () async {
-                          final ok = await vm.submit();
-                          if (context.mounted && ok) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text('Submitted for verification.'),
+                child: vm.liveBackend
+                    ? Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _header(vm.tour!),
+                          const SizedBox(height: 12),
+                          _captureStatusCard(),
+                          const SizedBox(height: 12),
+                          _panorama(vm.tour!),
+                          const SizedBox(height: 8),
+                          _draftSavedLine(),
+                          if (vm.generating)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 8),
+                              child: Row(
+                                children: [
+                                  const SizedBox(
+                                    width: 20,
+                                    height: 20,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Text(vm.stage ?? 'Processing…'),
+                                  ),
+                                ],
                               ),
-                            );
-                          }
-                        },
+                            ),
+                          if (vm.error != null)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 8),
+                              child: Text(
+                                vm.error!,
+                                style: const TextStyle(
+                                  color: SitewiseColors.danger,
+                                ),
+                              ),
+                            ),
+                          const SizedBox(height: 12),
+                          if (_continued) ...[
+                            if (int.tryParse(vm.propertyId)
+                                case final propertyId?)
+                              ProviderAgentInspectionPanel(
+                                propertyId: propertyId,
+                                onEdited: () =>
+                                    setState(() => _checklistEdited = true),
+                                onSaved: () async {
+                                  await vm.refreshServerState();
+                                  if (mounted) {
+                                    setState(() => _checklistEdited = false);
+                                  }
+                                },
+                              ),
+                            _reviewCard(),
+                          ],
+                          if (_canCapture &&
+                              !_continued &&
+                              vm.inspectionError != null)
+                            SitewiseSecondaryButton(
+                              label: 'Refresh inspection',
+                              icon: Icons.refresh,
+                              onPressed: vm.refreshServerState,
+                            ),
+                          if (_canCapture && !_continued && vm.assignmentReady)
+                            SitewiseButton(
+                              label: 'Continue',
+                              icon: Icons.arrow_forward,
+                              onPressed:
+                                  vm.generating ||
+                                      (!vm.hasPanorama &&
+                                          vm.previewPanoramaId == null)
+                                  ? null
+                                  : () => setState(() => _continued = true),
+                            ),
+                          const SizedBox(height: 16),
+                          if (_canCapture && _continued)
+                            SitewiseButton(
+                              label: vm.submitting
+                                  ? 'Submitting to Admin…'
+                                  : 'Submit to Admin',
+                              icon: Icons.verified_user_outlined,
+                              onPressed:
+                                  vm.submissionEligible &&
+                                      !_checklistEdited &&
+                                      !vm.submitting &&
+                                      !vm.generating
+                                  ? _submitToAdmin
+                                  : null,
+                            ),
+                          const SizedBox(height: 12),
+                          SitewiseSecondaryButton(
+                            label: 'Recapture',
+                            icon: Icons.replay_rounded,
+                            onPressed:
+                                vm.generating ||
+                                    vm.submitting ||
+                                    vm.tour?.status ==
+                                        VirtualTourStatus.pendingVerification
+                                ? null
+                                : _recapture,
+                          ),
+                          const SizedBox(height: 16),
+                          Text(
+                            'Photographs (${vm.frames.length}/${vm.specs.length})',
+                            style: const TextStyle(fontWeight: FontWeight.w700),
+                          ),
+                          const SizedBox(height: 8),
+                          _frameGrid(),
+                          const SizedBox(height: 12),
+                          if (vm.tour!.status ==
+                              VirtualTourStatus.pendingVerification)
+                            const Card(
+                              child: Padding(
+                                padding: EdgeInsets.all(16),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      'Submitted for Admin Review',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                    ),
+                                    SizedBox(height: 4),
+                                    Text(
+                                      'Your property verification is awaiting '
+                                      'review.',
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          const SizedBox(height: 8),
+                          SitewiseSecondaryButton(
+                            label: 'Delete tour',
+                            icon: Icons.delete_outline,
+                            onPressed: () async {
+                              final ok = await showSitewiseConfirmDialog(
+                                context,
+                                title: 'Delete this tour?',
+                                message:
+                                    'The panorama and all captured frames will '
+                                    'be permanently removed.',
+                                confirmLabel: 'Delete',
+                                destructive: true,
+                              );
+                              if (ok) {
+                                final done = await vm.remove();
+                                if (context.mounted && done) {
+                                  Navigator.of(context).pop();
+                                }
+                              }
+                            },
+                          ),
+                        ],
+                      )
+                    : Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _header(vm.tour!),
+                          const SizedBox(height: 12),
+                          _completenessCard(),
+                          const SizedBox(height: 12),
+                          _panorama(vm.tour!),
+                          const SizedBox(height: 12),
+                          if (vm.generating)
+                            Padding(
+                              padding: const EdgeInsets.only(bottom: 8),
+                              child: Row(
+                                children: [
+                                  const SizedBox(
+                                    width: 20,
+                                    height: 20,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Text(vm.stage ?? 'Processing…'),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          if (vm.error != null)
+                            Padding(
+                              padding: const EdgeInsets.only(bottom: 8),
+                              child: Text(
+                                vm.error!,
+                                style: const TextStyle(
+                                  color: SitewiseColors.danger,
+                                ),
+                              ),
+                            ),
+                          if (_canCapture) _uploadCard(),
+                          if (_canCapture && vm.hasPanorama)
+                            SitewiseSecondaryButton(
+                              label: 'View Full Screen',
+                              icon: Icons.fullscreen_rounded,
+                              onPressed: vm.generating ? null : _openFullscreen,
+                            ),
+                          const SizedBox(height: 12),
+                          if (_canCapture && vm.frames.isNotEmpty)
+                            SitewiseSecondaryButton(
+                              label: 'Retake Photos',
+                              icon: Icons.photo_camera_back_outlined,
+                              onPressed: vm.generating ? null : _resumeCapture,
+                            ),
+                          if (_canCapture)
+                            SitewiseSecondaryButton(
+                              label: vm.hasPanorama
+                                  ? 'Regenerate panorama'
+                                  : 'Generate panorama',
+                              icon: Icons.auto_awesome,
+                              onPressed: vm.generating
+                                  ? null
+                                  : () {
+                                      _invalidateImageCaches();
+                                      vm.regenerate();
+                                    },
+                            ),
+                          const SizedBox(height: 12),
+                          if (_canCapture && vm.liveBackend) ...[
+                            _reviewCard(),
+                            const SizedBox(height: 12),
+                          ],
+                          if (_canCapture && vm.stitchService != null) ...[
+                            _stitchingSection(),
+                            const SizedBox(height: 12),
+                          ],
+                          Text(
+                            'Photographs (${vm.frames.length}/${vm.specs.length})',
+                            style: const TextStyle(fontWeight: FontWeight.w700),
+                          ),
+                          const SizedBox(height: 8),
+                          _frameGrid(),
+                          const SizedBox(height: 12),
+                          if (vm.tour!.status ==
+                              VirtualTourStatus.pendingVerification)
+                            const Card(
+                              child: Padding(
+                                padding: EdgeInsets.all(16),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      'Submitted for Admin Review',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                    ),
+                                    SizedBox(height: 4),
+                                    Text(
+                                      'Your property verification is awaiting '
+                                      'review.',
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          const SizedBox(height: 8),
+                          if (_canCapture)
+                            SitewiseSecondaryButton(
+                              label: 'Delete tour',
+                              icon: Icons.delete_outline,
+                              onPressed: () async {
+                                final ok = await showSitewiseConfirmDialog(
+                                  context,
+                                  title: 'Delete this tour?',
+                                  message:
+                                      'The panorama and all captured frames will be permanently removed.',
+                                  confirmLabel: 'Delete',
+                                  destructive: true,
+                                );
+                                if (ok) {
+                                  final done = await vm.remove();
+                                  if (context.mounted && done) {
+                                    Navigator.of(context).pop();
+                                  }
+                                }
+                              },
+                            ),
+                        ],
                       ),
-                    if (vm.tour!.status ==
-                        VirtualTourStatus.pendingVerification)
-                      const Card(
-                        child: Padding(
-                          padding: EdgeInsets.all(16),
-                          child: Text('Pending administrator verification.'),
-                        ),
-                      ),
-                    const SizedBox(height: 8),
-                    if (_canCapture) SitewiseSecondaryButton(
-                      label: 'Delete tour',
-                      icon: Icons.delete_outline,
-                      onPressed: () async {
-                        final ok = await showSitewiseConfirmDialog(
-                          context,
-                          title: 'Delete this tour?',
-                          message:
-                              'The panorama and all captured frames will be permanently removed.',
-                          confirmLabel: 'Delete',
-                          destructive: true,
-                        );
-                        if (ok) {
-                          final done = await vm.remove();
-                          if (context.mounted && done) {
-                            Navigator.of(context).pop();
-                          }
-                        }
-                      },
-                    ),
-                  ],
-                ),
               ),
       ),
     );
@@ -253,17 +442,29 @@ class _TourPreviewMobilePageState extends ConsumerState<TourPreviewMobilePage> {
   };
 
   Widget _panorama(VirtualTour tour) {
-    // A live 38-point tour shows the backend's canonical panorama — the
-    // result buyers' publication chain will eventually carry — not the
-    // device-local stitch, which stays the offline fallback only.
-    final canonical = vm.canonical;
-    if (vm.canonicalReady && canonical != null) {
-      return ClipRRect(
-        borderRadius: BorderRadius.circular(16),
-        child: SizedBox(
-          height: 300,
-          child: _CanonicalPanoramaBox(panoramaId: canonical.panoramaId),
-        ),
+    final panoramaId = vm.previewPanoramaId;
+    if (vm.liveBackend && panoramaId != null && !vm.hasPanorama) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const Padding(
+            padding: EdgeInsets.only(bottom: 8),
+            child: Text(
+              'Panorama generated successfully',
+              style: TextStyle(fontWeight: FontWeight.w700),
+            ),
+          ),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(16),
+            child: SizedBox(
+              height: 300,
+              child: _CanonicalPanoramaBox(
+                key: ValueKey(panoramaId),
+                panoramaId: panoramaId,
+              ),
+            ),
+          ),
+        ],
       );
     }
     final path = tour.panoramaPath;
@@ -275,29 +476,52 @@ class _TourPreviewMobilePageState extends ConsumerState<TourPreviewMobilePage> {
         ),
       );
     }
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(16),
-      child: SizedBox(
-        height: 300,
-        child: FutureBuilder<Uint8List?>(
-          future: _bytesFor(path),
-          builder: (c, snap) {
-            if (snap.connectionState != ConnectionState.done) {
-              return const Center(child: CircularProgressIndicator());
-            }
-            final bytes = snap.data;
-            if (bytes == null) {
-              return const Center(
-                child: Text(
-                  'Panorama file unavailable. Try regenerating it.',
-                  style: TextStyle(color: SitewiseColors.muted, fontSize: 12),
-                ),
-              );
-            }
-            return MobileSwipePanorama(bytes: bytes);
-          },
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const Padding(
+          padding: EdgeInsets.only(bottom: 8),
+          child: Text(
+            'Panorama generated successfully',
+            style: TextStyle(fontWeight: FontWeight.w700),
+          ),
         ),
-      ),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(16),
+          child: SizedBox(
+            height: 300,
+            child: FutureBuilder<Uint8List?>(
+              future: _bytesFor(path),
+              builder: (c, snap) {
+                if (snap.connectionState != ConnectionState.done) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+                final bytes = snap.data;
+                if (bytes == null) {
+                  return const Center(
+                    child: Text(
+                      'Panorama file unavailable. Try regenerating it.',
+                      style: TextStyle(
+                        color: SitewiseColors.muted,
+                        fontSize: 12,
+                      ),
+                    ),
+                  );
+                }
+                return MobileSwipePanorama(bytes: bytes);
+              },
+            ),
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.only(top: 6),
+          child: TextButton.icon(
+            onPressed: vm.generating ? null : _openFullscreen,
+            icon: const Icon(Icons.fullscreen_rounded, size: 16),
+            label: const Text('View Full Screen'),
+          ),
+        ),
+      ],
     );
   }
 
@@ -365,7 +589,9 @@ class _TourPreviewMobilePageState extends ConsumerState<TourPreviewMobilePage> {
                 Padding(
                   padding: const EdgeInsets.only(bottom: 4),
                   child: TextButton.icon(
-                    onPressed: vm.generating ? null : () => _retake(spec.targetId),
+                    onPressed: vm.generating
+                        ? null
+                        : () => _retake(spec.targetId),
                     icon: const Icon(Icons.replay_rounded, size: 14),
                     label: const Text('Retake', style: TextStyle(fontSize: 11)),
                     style: TextButton.styleFrom(
@@ -397,13 +623,7 @@ class _TourPreviewMobilePageState extends ConsumerState<TourPreviewMobilePage> {
     await vm.retakeTarget(targetId);
     _invalidateImageCaches();
     if (!mounted) return;
-    Navigator.of(context).pushNamed(
-      '/owner/capture',
-      arguments: ArCaptureRequest(
-        propertyId: tour.propertyId,
-        title: tour.title,
-      ),
-    );
+    await _openCapture(tour);
   }
 
   /// Reopens the session without deleting anything — the panel's way out when
@@ -412,10 +632,162 @@ class _TourPreviewMobilePageState extends ConsumerState<TourPreviewMobilePage> {
     if (!_canCapture) return;
     final tour = vm.tour;
     if (tour == null || vm.generating) return;
-    await Navigator.of(context).pushNamed(
+    await _openCapture(tour);
+  }
+
+  Future<void> _openCapture(VirtualTour tour) async {
+    final navigator = Navigator.of(context);
+    final completed = await navigator.pushNamed(
       '/owner/capture',
-      arguments: ArCaptureRequest(propertyId: tour.propertyId, title: tour.title),
+      arguments: ArCaptureRequest(
+        propertyId: tour.propertyId,
+        title: tour.title,
+      ),
     );
+    if (!mounted ||
+        completed != true ||
+        ModalRoute.of(context)?.isCurrent != true) {
+      return;
+    }
+    if (navigator.canPop()) {
+      navigator.pop();
+    } else {
+      navigator.pushReplacementNamed(
+        '/provider/inspection',
+        arguments: tour.propertyId,
+      );
+    }
+  }
+
+  /// The ✓-row status card (§6): the two facts the Agent needs before the
+  /// preview — the capture count and whether the panorama exists.
+  Widget _captureStatusCard() {
+    final complete = vm.frames.length == vm.specs.length && vm.specs.isNotEmpty;
+    final hasPanorama = vm.hasPanorama || vm.canonicalReady;
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(
+                  complete
+                      ? Icons.check_circle_outline
+                      : Icons.radio_button_unchecked,
+                  size: 18,
+                  color: complete
+                      ? SitewiseColors.success
+                      : SitewiseColors.warning,
+                ),
+                const SizedBox(width: 10),
+                Text(
+                  '${vm.frames.length} / ${vm.specs.length} photos captured',
+                  style: const TextStyle(fontSize: 15),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Icon(
+                  hasPanorama
+                      ? Icons.check_circle_outline
+                      : Icons.radio_button_unchecked,
+                  size: 18,
+                  color: hasPanorama
+                      ? SitewiseColors.success
+                      : SitewiseColors.warning,
+                ),
+                const SizedBox(width: 10),
+                Text(
+                  hasPanorama
+                      ? 'Panorama generated'
+                      : 'Panorama not generated yet',
+                  style: const TextStyle(fontSize: 15),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _draftSavedLine() => const Padding(
+    padding: EdgeInsets.symmetric(horizontal: 4),
+    child: Row(
+      children: [
+        Icon(Icons.save_outlined, size: 16, color: SitewiseColors.muted),
+        SizedBox(width: 8),
+        Text('Draft saved automatically', style: TextStyle(fontSize: 13)),
+      ],
+    ),
+  );
+
+  /// The Recapture choice (§8): retake the targets that need improving, or
+  /// start a whole new 38-photo attempt. The previous draft survives both —
+  /// the new-attempt path archives the old station instead of deleting it.
+  Future<void> _recapture() async {
+    if (!_canCapture) return;
+    final tour = vm.tour;
+    if (tour == null) return;
+    final choice = await showDialog<_RecaptureChoice>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Recapture 360° photographs?'),
+        content: const Text(
+          'You can improve the panorama by replacing captured photographs. '
+          'The current draft and its Sitewise copy are kept until a new '
+          'panorama has been generated.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(
+              context,
+              rootNavigator: true,
+            ).pop(_RecaptureChoice.retakeTargets),
+            child: const Text('Retake selected targets'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(
+              context,
+              rootNavigator: true,
+            ).pop(_RecaptureChoice.newAttempt),
+            child: const Text('Start a new 38-photo capture'),
+          ),
+        ],
+      ),
+    );
+    if (!mounted || choice == null) return;
+    setState(() {
+      _continued = false;
+      _checklistEdited = false;
+    });
+    if (choice == _RecaptureChoice.retakeTargets) {
+      await _resumeCapture();
+      return;
+    }
+    final ok = await vm.startNewCaptureAttempt();
+    if (!mounted) return;
+    if (ok) {
+      _invalidateImageCaches();
+      await _openCapture(tour);
+      if (mounted && ModalRoute.of(context)?.isCurrent == true) {
+        await vm.refreshServerState();
+      }
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(vm.error ?? 'The new capture could not be started.'),
+        ),
+      );
+    }
   }
 
   /// Says how much of the sphere exists on this device and which directions
@@ -446,9 +818,7 @@ class _TourPreviewMobilePageState extends ConsumerState<TourPreviewMobilePage> {
                         '${missing.length > 10 ? ' (+${missing.length - 10} more)' : ''}. '
                         'Resume the capture to shoot them — saved frames are kept.',
               style: TextStyle(
-                color: complete
-                    ? SitewiseColors.muted
-                    : SitewiseColors.warning,
+                color: complete ? SitewiseColors.muted : SitewiseColors.warning,
                 fontSize: 12,
                 height: 1.4,
               ),
@@ -463,9 +833,7 @@ class _TourPreviewMobilePageState extends ConsumerState<TourPreviewMobilePage> {
   /// panorama, but buyers see nothing until the upload is accepted, so a
   /// pending upload gets its own action instead of a silent success.
   Widget _uploadCard() {
-    // 38-point live tours: the backend handoff state decides, per spec §14.
-    if (vm.liveBackend) return _handoffCard();
-    if (vm.uploadPending) {
+    if (vm.uploadPending && vm.queueState?.panorama?.lastError != null) {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -476,7 +844,7 @@ class _TourPreviewMobilePageState extends ConsumerState<TourPreviewMobilePage> {
           ),
           const SizedBox(height: 8),
           SitewiseButton(
-            label: 'Upload panorama to Sitewise',
+            label: 'Retry panorama upload',
             icon: Icons.cloud_upload_outlined,
             onPressed: vm.generating ? null : _upload,
           ),
@@ -503,92 +871,212 @@ class _TourPreviewMobilePageState extends ConsumerState<TourPreviewMobilePage> {
     }
   }
 
-  /// The backend-handoff card for a 38-point live tour. Every state maps onto
-  /// the real lifecycle: the canonical metadata (ready), the coordinator's
-  /// recorded sync status (working / failed), or no handoff yet (start).
-  Widget _handoffCard() {
-    switch (vm.handoffUiState) {
-      case BackendHandoffUiState.ready:
-        return Padding(
-          padding: const EdgeInsets.only(bottom: 12),
-          child: Text(
-            'Stitched on Sitewise — the preview above is the backend '
-            'panorama.',
-            style: Theme.of(context).textTheme.bodySmall,
-          ),
-        );
-      case BackendHandoffUiState.working:
-        return Padding(
-          padding: const EdgeInsets.only(bottom: 12),
-          child: Row(
-            children: [
-              const SizedBox(
-                width: 16,
-                height: 16,
-                child: CircularProgressIndicator(strokeWidth: 2),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Text(
-                  'The original frames are with Sitewise and the canonical '
-                  'panorama is on its way. The frames stay on this device '
-                  'until it exists.',
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
-              ),
-            ],
-          ),
-        );
-      case BackendHandoffUiState.failedRetryable:
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              vm.handoffError ??
-                  'The last Sitewise handoff did not finish. The frames are '
-                  'kept on this device.',
-              style: const TextStyle(color: SitewiseColors.danger, fontSize: 12),
-            ),
-            const SizedBox(height: 8),
-            SitewiseButton(
-              label: 'Retry the Sitewise handoff',
-              icon: Icons.cloud_upload_outlined,
-              onPressed: vm.generating ? null : vm.retryHandoff,
-            ),
-            const SizedBox(height: 8),
-          ],
-        );
-      case BackendHandoffUiState.canStart:
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            if (vm.canonicalError != null)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 8),
-                child: Text(
-                  vm.canonicalError!,
-                  style: const TextStyle(
-                    color: SitewiseColors.warning,
-                    fontSize: 12,
-                  ),
-                ),
-              ),
-            Text(
-              'The saved frames have not been handed to Sitewise yet. The '
-              'handoff uploads the originals and lets the backend stitch the '
-              'canonical panorama; nothing on this device changes.',
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
-            const SizedBox(height: 8),
-            SitewiseButton(
-              label: 'Hand off to Sitewise',
-              icon: Icons.cloud_upload_outlined,
-              onPressed: vm.generating ? null : vm.retryHandoff,
-            ),
-            const SizedBox(height: 8),
-          ],
-        );
+  /// Explicit confirmation before the one-way Admin submission. The backend
+  /// re-checks every precondition server-side; a refusal message names the
+  /// missing requirement (assignment state, the four on-site checks, or a
+  /// verified panorama) instead of a raw error trace.
+  Future<void> _submitToAdmin() async {
+    final acknowledge = vm.populationRequiresAcknowledgement;
+    final ok = await showSitewiseConfirmDialog(
+      context,
+      title: 'Submit Property for Admin Verification?',
+      message:
+          "The property's inspection, 360° panorama, and supporting "
+          'information will be sent to the Administrator for review. You '
+          'will not be able to edit the submission while it is under '
+          'review.'
+          '${acknowledge ? '\n\nPopulation data is unavailable. Submit without a population figure?' : ''}',
+      confirmLabel: 'Confirm Submission',
+    );
+    if (!ok || !mounted) return;
+    final done = await vm.submit(acknowledgeUnavailablePopulation: acknowledge);
+    if (!mounted) return;
+    if (done) {
+      // Backend confirmed — the dedicated confirmation screen carries the
+      // backend's stage, never a local assumption of success.
+      await Navigator.of(context).pushNamed(
+        '/provider/submission-success',
+        arguments: int.tryParse(vm.tour?.propertyId ?? '') ?? 0,
+      );
+      return;
     }
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(vm.error ?? 'The submission was refused.')),
+    );
+  }
+
+  /// Fullscreen inspection of the stitched result. The local panorama file
+  /// is read once (cached like every other preview read); the canonical
+  /// viewer offers its own fullscreen action after its signed fetch.
+  Future<void> _openFullscreen() async {
+    final path = vm.tour?.panoramaPath;
+    if (path == null || vm.generating) return;
+    final bytes = await _bytesFor(path);
+    if (!mounted || bytes == null) return;
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => PanoramaFullscreenPage(bytes: bytes),
+      ),
+    );
+  }
+
+  /// The Final Verification Review (§9): every row is a real, server- or
+  /// disk-verified fact. A row without evidence shows its missing-item
+  /// action instead of a checkmark — nothing is faked, and the submit button
+  /// enables only when the backend-verifiable set is complete.
+  Widget _reviewCard() {
+    final propertyId = int.tryParse(vm.tour?.propertyId ?? '');
+    final rows = <_ReviewRow>[
+      _ReviewRow(
+        label: 'Property information',
+        state: propertyId != null && vm.assignmentStatus.isNotEmpty
+            ? _RowState.pass
+            : _RowState.pending,
+        actionLabel: 'Review Property Details',
+        onAction: propertyId == null || vm.submitting
+            ? null
+            : () async {
+                await Navigator.of(
+                  context,
+                ).pushNamed('/provider/property-detail', arguments: propertyId);
+                if (mounted) await vm.refreshServerState();
+              },
+      ),
+      _ReviewRow(
+        label: _checklistEdited
+            ? 'Checklist has unsaved changes'
+            : vm.inspectionError != null
+            ? 'Could not confirm the saved checklist'
+            : vm.checksComplete
+            ? 'Checklist saved · 4 of 4 confirmed'
+            : 'Checklist needs attention',
+        state:
+            !_checklistEdited && vm.inspectionError == null && vm.checksComplete
+            ? _RowState.pass
+            : _RowState.pending,
+        actionLabel: vm.inspectionError != null
+            ? 'Refresh'
+            : 'Complete Inspection',
+        onAction: propertyId == null || vm.submitting
+            ? null
+            : () async {
+                if (vm.inspectionError != null) {
+                  await vm.refreshServerState();
+                  return;
+                }
+                await Navigator.of(
+                  context,
+                ).pushNamed('/provider/property-detail', arguments: propertyId);
+                if (mounted) await vm.refreshServerState();
+              },
+      ),
+      _ReviewRow(
+        label: '38 photographs captured',
+        state: vm.frames.length == vm.specs.length
+            ? _RowState.pass
+            : _RowState.pending,
+        actionLabel: 'Retake Photos',
+        onAction: vm.generating ? null : _resumeCapture,
+      ),
+      _ReviewRow(
+        label: vm.panoramaReviewStatus,
+        state: vm.panoramaUploaded ? _RowState.pass : _RowState.pending,
+      ),
+      _ReviewRow(
+        label: 'Ownership / authorisation',
+        state: vm.assignmentReady ? _RowState.pass : _RowState.info,
+        info: vm.assignmentStatus.isEmpty
+            ? 'Verified by Sitewise when you submit'
+            : 'Assignment status: '
+                  '${vm.assignmentStatus.replaceAll('_', ' ')}',
+      ),
+      const _ReviewRow(
+        label: 'Other required property evidence',
+        state: _RowState.info,
+        info: 'Checked by Sitewise when you submit',
+      ),
+    ];
+
+    final eligible =
+        !_checklistEdited && vm.submissionEligible && vm.panoramaUploaded;
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              eligible ? 'Ready for Admin Review' : 'Verification review',
+              style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
+            ),
+            const SizedBox(height: 10),
+            for (final row in rows) ...[
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(
+                    switch (row.state) {
+                      _RowState.pass => Icons.check_circle_outline,
+                      _RowState.pending => Icons.radio_button_unchecked,
+                      _RowState.info => Icons.info_outline,
+                    },
+                    size: 18,
+                    color: switch (row.state) {
+                      _RowState.pass => SitewiseColors.success,
+                      _RowState.pending => SitewiseColors.warning,
+                      _RowState.info => SitewiseColors.muted,
+                    },
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(row.label, style: const TextStyle(fontSize: 15)),
+                        if (row.state == _RowState.info && row.info != null)
+                          Text(
+                            row.info!,
+                            style: const TextStyle(
+                              color: SitewiseColors.muted,
+                              fontSize: 12,
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                  if (row.state == _RowState.pending && row.actionLabel != null)
+                    TextButton.icon(
+                      onPressed: row.onAction,
+                      icon: const Icon(Icons.arrow_forward_rounded, size: 14),
+                      label: Text(
+                        row.actionLabel!,
+                        style: const TextStyle(fontSize: 12),
+                      ),
+                      style: TextButton.styleFrom(
+                        foregroundColor: SitewiseColors.action,
+                        minimumSize: const Size(48, 48),
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 6),
+            ],
+            const SizedBox(height: 6),
+            // The Submit to Admin button is a MAIN preview action rendered
+            // below this card (§6) — the card only explains what is missing.
+            if (!eligible)
+              const Padding(
+                padding: EdgeInsets.only(top: 4),
+                child: Text(
+                  'Submit to Admin will sync the panorama if needed.',
+                  style: TextStyle(color: SitewiseColors.muted, fontSize: 12),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
   }
 
   /// The per-frame stitching evidence: which neighbour each frame registered
@@ -615,6 +1103,38 @@ class _TourPreviewMobilePageState extends ConsumerState<TourPreviewMobilePage> {
   }
 }
 
+/// What the Recapture dialog returned (§8).
+enum _RecaptureChoice { retakeTargets, newAttempt }
+
+/// One row of the Final Verification Review.
+class _ReviewRow {
+  const _ReviewRow({
+    required this.label,
+    required this.state,
+    this.actionLabel,
+    this.onAction,
+    this.info,
+  });
+
+  final String label;
+  final _RowState state;
+  final String? actionLabel;
+  final VoidCallback? onAction;
+  final String? info;
+}
+
+enum _RowState {
+  /// Verified by real saved data or a backend confirmation.
+  pass,
+
+  /// Not yet verified — the row shows its missing-item action.
+  pending,
+
+  /// Determined only at submission time by the backend; shown as neutral
+  /// information, never as a checkmark.
+  info,
+}
+
 /// Renders the canonical panorama for one backend panorama id.
 ///
 /// The viewing URL is minted fresh on every load and expires, so a 401/403
@@ -622,7 +1142,7 @@ class _TourPreviewMobilePageState extends ConsumerState<TourPreviewMobilePage> {
 /// retrying the stale link — before the honest failure is shown. A network
 /// problem is a retry, never a fabricated image.
 class _CanonicalPanoramaBox extends StatefulWidget {
-  const _CanonicalPanoramaBox({required this.panoramaId});
+  const _CanonicalPanoramaBox({super.key, required this.panoramaId});
 
   final String panoramaId;
 
@@ -650,12 +1170,8 @@ class _CanonicalPanoramaBoxState extends State<_CanonicalPanoramaBox> {
       _failure = null;
     });
     try {
-      final url = await ServiceLocator.panoramaViews.viewUrl(
-        widget.panoramaId,
-      );
-      final response = await http
-          .get(Uri.parse(url))
-          .timeout(_timeout);
+      final url = await ServiceLocator.panoramaViews.viewUrl(widget.panoramaId);
+      final response = await http.get(Uri.parse(url)).timeout(_timeout);
       if (!mounted) return;
       final status = response.statusCode;
       if (status == 200 && response.bodyBytes.isNotEmpty) {
@@ -680,7 +1196,8 @@ class _CanonicalPanoramaBoxState extends State<_CanonicalPanoramaBox> {
       }
       setState(() {
         _loading = false;
-        _failure = 'The Sitewise panorama could not be reached '
+        _failure =
+            'The Sitewise panorama could not be reached '
             '(server said $status).';
       });
     } on Object catch (error) {
@@ -731,6 +1248,30 @@ class _CanonicalPanoramaBoxState extends State<_CanonicalPanoramaBox> {
         ),
       );
     }
-    return MobileSwipePanorama(bytes: bytes);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Expanded(child: MobileSwipePanorama(bytes: bytes)),
+        Padding(
+          padding: const EdgeInsets.only(top: 6),
+          child: TextButton.icon(
+            onPressed: () {
+              Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => PanoramaFullscreenPage(bytes: bytes),
+                ),
+              );
+            },
+            icon: const Icon(Icons.fullscreen_rounded, size: 16),
+            label: const Text('View Full Screen'),
+            style: TextButton.styleFrom(
+              foregroundColor: Colors.white70,
+              minimumSize: const Size(48, 48),
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
+          ),
+        ),
+      ],
+    );
   }
 }

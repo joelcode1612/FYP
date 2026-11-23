@@ -211,7 +211,8 @@ class _SitewiseAddPropertyMobilePageState
     );
     // Existing drafts are not rewritten automatically. If an older
     // type is no longer offered, require the user to choose one.
-    _propertyType = normalizedType != null &&
+    _propertyType =
+        normalizedType != null &&
             _supportedPropertyTypes.contains(normalizedType)
         ? normalizedType
         : '';
@@ -250,30 +251,36 @@ class _SitewiseAddPropertyMobilePageState
 
   Map<String, dynamic> _draftFields() =>
       OwnerListing(
-        id: _draftId ?? '',
-        name: '',
-        verificationStatus: _serverStatus,
-      ).toDraftJson(
-        name: _propertyName.isEmpty ? null : _propertyName,
-        propertyType: _propertyType,
-        description: _descriptionController.text.trim().isEmpty
-            ? null
-            : _descriptionController.text.trim(),
-        address: _address.isEmpty ? null : _address,
-        city: _district.isEmpty ? null : _district,
-        state: _stateName.isEmpty ? null : _stateName,
-        postcode: _postcode.isEmpty ? null : _postcode,
-        rentalPrice: double.tryParse(_monthlyRent),
-        sizeSqft: double.tryParse(_builtUpArea),
-        availability: _serverStatus == 'draft' ? null : 'Immediate',
-        hasParking: false,
-        isFnbSuitable: false,
-      );
+          id: _draftId ?? '',
+          name: '',
+          verificationStatus: _serverStatus,
+        ).toDraftJson(
+          name: _propertyName.isEmpty ? null : _propertyName,
+          propertyType: _propertyType,
+          description: _descriptionController.text.trim().isEmpty
+              ? null
+              : _descriptionController.text.trim(),
+          address: _address.isEmpty ? null : _address,
+          city: _district.isEmpty ? null : _district,
+          state: _stateName.isEmpty ? null : _stateName,
+          postcode: _postcode.isEmpty ? null : _postcode,
+          rentalPrice: double.tryParse(_monthlyRent),
+          sizeSqft: double.tryParse(_builtUpArea),
+        )
+        ..removeWhere(
+          (key, _) => const {
+            'availability',
+            'floor_level',
+            'frontage_ft',
+            'has_parking',
+            'is_fnb_suitable',
+          }.contains(key),
+        );
 
   /// Save Draft: create the row once, then update the SAME row. The backend
   /// stamps the owner from the verified token and assigns the persistent id.
   Future<void> _saveDraft() async {
-    if (_saving) return; // double-tap guard
+    if (_saving || _submitting) return;
     if (!_live) {
       setState(() {
         _serverError =
@@ -317,11 +324,9 @@ class _SitewiseAddPropertyMobilePageState
     }
   }
 
-  /// Submit for Verification: a distinct action from Save Draft. The backend
-  /// validates completeness, requires ownership evidence, moves the record
-  /// into the admin queue atomically and returns the pending status.
-  Future<void> _submitForVerification() async {
-    if (_submitting) return; // repeated taps cannot create multiple submissions
+  /// Save a complete set of property details for the Agent request.
+  Future<void> _saveForAgentRequest() async {
+    if (_saving || _submitting || !_editable) return;
     if (!_live) {
       setState(() {
         _serverError =
@@ -330,36 +335,35 @@ class _SitewiseAddPropertyMobilePageState
       });
       return;
     }
+    _fieldErrors.clear();
+    _collectDetailsErrors();
+    final detailsInvalid = _fieldErrors.isNotEmpty;
+    _collectLocationErrors();
+    if (_fieldErrors.isNotEmpty) {
+      setState(() {
+        _step = detailsInvalid ? 1 : 2;
+        _validationMessage = 'Please correct the highlighted information.';
+      });
+      return;
+    }
     setState(() {
       _submitting = true;
+      _validationMessage = null;
       _serverError = null;
       _serverMessage = null;
     });
     try {
       // The record must exist before evidence can attach to it.
-      String id = _draftId ?? '';
-      if (id.isEmpty) {
-        final saved = await ServiceLocator.ownerListings.createDraft(
-          _draftFields(),
-        );
-        if (!mounted) return;
-        id = saved.id;
-        _draftId = id;
-        _serverStatus = saved.verificationStatus;
-      } else {
-        await ServiceLocator.ownerListings.updateDraft(id, _draftFields());
-      }
-      // Owner saves the property only; an accepted Agent handles
-      // inspection, panorama capture and the Admin submission.
+      final repository = ServiceLocator.ownerListings;
+      final saved = _draftId == null
+          ? await repository.createDraft(_draftFields())
+          : await repository.updateDraft(_draftId!, _draftFields());
       if (!mounted) return;
-      // The verification status changed on the server. The draft update above
-      // already bumped the listings revision, but that happened BEFORE this
-      // call returned — bump again so My listings refetches the record with
-      // its new "pending review" status instead of the "draft" it just read.
-      ServiceLocator.listingsRevision.value++;
       setState(() {
-        _serverStatus = 'draft';
-        _serverMessage = 'Property #$id saved. Open Requests to assign an '
+        _draftId = saved.id;
+        _serverStatus = saved.verificationStatus;
+        _serverMessage =
+            'Property #${saved.id} saved. Open Requests to assign an '
             'authorized Agent. The Agent submits to Admin after inspection '
             'and uploading the 360° panorama.';
         _step = 5;
@@ -369,7 +373,7 @@ class _SitewiseAddPropertyMobilePageState
       setState(() {
         _serverError = _readableError(
           error,
-          fallback: 'Submission could not proceed. Your draft is saved.',
+          fallback: 'Could not save the property details.',
         );
       });
     } finally {
@@ -564,51 +568,44 @@ class _SitewiseAddPropertyMobilePageState
             // way back to the other tabs.
             showBack: false,
             body: SafeArea(
-              child: LayoutBuilder(
-                builder: (context, constraints) {
-                  return SingleChildScrollView(
-                    // Let the user drag to dismiss the keyboard without forcing
-                    // the entire provider wizard through extra input rebuilds.
-                    keyboardDismissBehavior:
-                        ScrollViewKeyboardDismissBehavior.onDrag,
-                    padding: const EdgeInsets.fromLTRB(12, 10, 12, 28),
-                    child: Center(
-                      child: ConstrainedBox(
-                        constraints: const BoxConstraints(maxWidth: 620),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: <Widget>[
-                            const SizedBox(height: 8),
-                            _buildPageHeading(),
-                            const SizedBox(height: 18),
-                            _buildStepper(),
-                            const SizedBox(height: 18),
-                            _buildMainCard(),
-                            if (_serverMessage != null) ...<Widget>[
-                              const SizedBox(height: 14),
-                              _buildServerBanner(
-                                _serverMessage!,
-                                success: true,
-                              ),
-                            ],
-                            if (_serverError != null) ...<Widget>[
-                              const SizedBox(height: 14),
-                              _buildServerBanner(_serverError!, success: false),
-                            ],
-                            if (_rejectionReason != null &&
-                                _serverStatus == 'rejected') ...<Widget>[
-                              const SizedBox(height: 14),
-                              _buildServerBanner(
-                                'Administrator requested corrections: $_rejectionReason',
-                                success: false,
-                              ),
-                            ],
-                          ],
-                        ),
-                      ),
+              child: SingleChildScrollView(
+                // Let the user drag to dismiss the keyboard without forcing
+                // the entire provider wizard through extra input rebuilds.
+                keyboardDismissBehavior:
+                    ScrollViewKeyboardDismissBehavior.onDrag,
+                padding: const EdgeInsets.fromLTRB(12, 10, 12, 28),
+                child: Center(
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 620),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: <Widget>[
+                        const SizedBox(height: 8),
+                        _buildPageHeading(),
+                        const SizedBox(height: 18),
+                        _buildStepper(),
+                        const SizedBox(height: 18),
+                        _buildMainCard(),
+                        if (_serverMessage != null) ...<Widget>[
+                          const SizedBox(height: 14),
+                          _buildServerBanner(_serverMessage!, success: true),
+                        ],
+                        if (_serverError != null) ...<Widget>[
+                          const SizedBox(height: 14),
+                          _buildServerBanner(_serverError!, success: false),
+                        ],
+                        if (_rejectionReason != null &&
+                            _serverStatus == 'rejected') ...<Widget>[
+                          const SizedBox(height: 14),
+                          _buildServerBanner(
+                            'Administrator requested corrections: $_rejectionReason',
+                            success: false,
+                          ),
+                        ],
+                      ],
                     ),
-                  );
-                },
+                  ),
+                ),
               ),
             ),
           );
@@ -1152,15 +1149,22 @@ class _SitewiseAddPropertyMobilePageState
   Widget _buildAgentHandoff() => Column(
     crossAxisAlignment: CrossAxisAlignment.stretch,
     children: [
-      const Icon(Icons.verified_user_outlined,
-          color: SitewiseColors.action, size: 36),
+      const Icon(
+        Icons.verified_user_outlined,
+        color: SitewiseColors.action,
+        size: 36,
+      ),
       const SizedBox(height: 12),
-      const Text('Independent Agent inspection',
-          style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+      const Text(
+        'Independent Agent inspection',
+        style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
+      ),
       const SizedBox(height: 8),
-      const Text('Save this property, attach ownership evidence, then open Requests '
-          'to select an authorized Property Agent. Only that Agent can verify '
-          'physical details and capture or upload a 360° panorama.'),
+      const Text(
+        'Save this property, attach ownership evidence, then open Requests '
+        'to select an authorized Property Agent. Only that Agent can verify '
+        'physical details and capture or upload a 360° panorama.',
+      ),
     ],
   );
 
@@ -1344,7 +1348,7 @@ class _SitewiseAddPropertyMobilePageState
             SizedBox(
               width: double.infinity,
               child: FilledButton.icon(
-                onPressed: _submitting ? null : _submitForVerification,
+                onPressed: _saving || _submitting ? null : _saveForAgentRequest,
                 icon: _submitting
                     ? const SizedBox(
                         width: 16,
@@ -1356,7 +1360,7 @@ class _SitewiseAddPropertyMobilePageState
                       )
                     : const Icon(Icons.verified_outlined, size: 19),
                 label: Text(
-                  _submitting ? 'Saving…' : 'Save and choose Agent',
+                  _submitting ? 'Saving…' : 'Save property details',
                   style: const TextStyle(fontWeight: FontWeight.w800),
                 ),
                 style: FilledButton.styleFrom(
@@ -1374,7 +1378,7 @@ class _SitewiseAddPropertyMobilePageState
           SizedBox(
             width: double.infinity,
             child: OutlinedButton(
-              onPressed: _saving
+              onPressed: _saving || _submitting
                   ? null
                   : () {
                       _saveDraft();
@@ -1476,8 +1480,8 @@ class _SitewiseAddPropertyMobilePageState
           controller: controller,
           keyboardType: keyboardType,
           maxLines: maxLines,
-          // Keep the active input above the keyboard and the floating dock.
-          scrollPadding: const EdgeInsets.fromLTRB(16, 16, 16, 104),
+          // The scaffold already keeps the scroll viewport above the keyboard.
+          scrollPadding: const EdgeInsets.all(20),
           enabled: _editable,
           onChanged: onChanged ?? _onTextChanged,
           style: const TextStyle(color: _ink, fontSize: 13),

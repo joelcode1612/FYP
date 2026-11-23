@@ -11,7 +11,10 @@ class StitchCandidatePacket {
   final int targetId;
   final String imagePath;
 
-  const StitchCandidatePacket({required this.targetId, required this.imagePath});
+  const StitchCandidatePacket({
+    required this.targetId,
+    required this.imagePath,
+  });
 }
 
 /// The work order for one saved photograph.

@@ -81,9 +81,12 @@ class MobileAppShell extends ConsumerWidget {
 
     final showTopBar = useM3 || !embeddedHeader;
 
-    // Detect the software keyboard.
-    final keyboardIsVisible =
-        hideBottomNavOnKeyboard && MediaQuery.viewInsetsOf(context).bottom > 0;
+    final dock = MobileBottomNav(
+      destinations: navDestinations,
+      currentRoute: currentRoute,
+      onGo: go,
+      m3: useM3,
+    );
 
     return Scaffold(
       backgroundColor: useM3 ? SitewiseM3.paper : null,
@@ -106,16 +109,29 @@ class MobileAppShell extends ConsumerWidget {
 
       floatingActionButton: floatingActionButton,
 
-      // Hide bottom navigation when the keyboard is open,
-      // only on pages that explicitly enable this behavior.
-      bottomNavigationBar: keyboardIsVisible
-          ? null
-          : MobileBottomNav(
-              destinations: navDestinations,
-              currentRoute: currentRoute,
-              onGo: go,
-              m3: useM3,
-            ),
+      bottomNavigationBar: hideBottomNavOnKeyboard
+          ? Builder(
+              builder: (context) {
+                final media = MediaQuery.of(context);
+                // Keep the dock slot and its safe-area height stable while
+                // Scaffold tracks the keyboard inset for the scroll viewport.
+                return Visibility(
+                  visible: media.viewInsets.bottom == 0,
+                  maintainState: true,
+                  maintainAnimation: true,
+                  maintainSize: true,
+                  child: MediaQuery(
+                    data: media.copyWith(
+                      padding: media.padding.copyWith(
+                        bottom: media.viewPadding.bottom,
+                      ),
+                    ),
+                    child: dock,
+                  ),
+                );
+              },
+            )
+          : dock,
     );
   }
 }

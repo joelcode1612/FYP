@@ -187,7 +187,8 @@ class CaptureSession {
   /// confirmed by FastAPI.
   final String? backendPanoramaId;
 
-  bool get isComplete => status == CaptureSessionStatus.complete ||
+  bool get isComplete =>
+      status == CaptureSessionStatus.complete ||
       status == CaptureSessionStatus.panoramaReady;
 
   bool get hasPanorama =>
@@ -232,7 +233,9 @@ class CaptureSession {
     backendSessionId: clearBackendSessionId
         ? null
         : (backendSessionId ?? this.backendSessionId),
-    backendJobId: clearBackendJobId ? null : (backendJobId ?? this.backendJobId),
+    backendJobId: clearBackendJobId
+        ? null
+        : (backendJobId ?? this.backendJobId),
     syncStatus: syncStatus ?? this.syncStatus,
     panoramaSyncStatus: panoramaSyncStatus ?? this.panoramaSyncStatus,
     backupSyncStatus: backupSyncStatus ?? this.backupSyncStatus,

@@ -45,10 +45,7 @@ class CameraHudPainter extends CustomPainter {
     double w(double nominalW) => nominalW * scale;
 
     // Stage.
-    canvas.drawRect(
-      Offset.zero & size,
-      Paint()..color = _stage,
-    );
+    canvas.drawRect(Offset.zero & size, Paint()..color = _stage);
 
     // Wall sketch and reference grid.
     final wall = Paint()
@@ -98,10 +95,7 @@ class CameraHudPainter extends CustomPainter {
     );
 
     // Pending-marker pair: an unfilled marker and a saved one with a check.
-    final pendingWhite = Offset(
-      x(large ? 67 : 62),
-      y(large ? 94 : 61),
-    );
+    final pendingWhite = Offset(x(large ? 67 : 62), y(large ? 94 : 61));
     canvas.drawCircle(
       pendingWhite,
       w(13),
@@ -116,7 +110,11 @@ class CameraHudPainter extends CustomPainter {
         ..strokeWidth = w(1.8),
     );
     final pendingSaved = Offset(x(267), y(large ? 133 : 64));
-    canvas.drawCircle(pendingSaved, w(11), Paint()..color = const Color(0xFF0D9488));
+    canvas.drawCircle(
+      pendingSaved,
+      w(11),
+      Paint()..color = const Color(0xFF0D9488),
+    );
     canvas.drawCircle(
       pendingSaved,
       w(11),

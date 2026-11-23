@@ -183,7 +183,7 @@ class _PropertyDetailPageState extends State<PropertyDetailPage> {
       return;
     }
     final savedNow = context.read(appNotifierProvider).saved.contains(id);
-    final failure = await AppLocator.persistToggleSaved(
+    final failure = await notifier.persistSaved(
       id,
       wantSaved: !savedNow,
     );
@@ -191,12 +191,11 @@ class _PropertyDetailPageState extends State<PropertyDetailPage> {
     if (failure != null) {
       setState(() {
         _saveMessage =
-            'Could not ${savedNow ? 'remove' : 'save'} — ${failure.message} '
+            'Could not ${savedNow ? 'remove' : 'save'} — $failure '
             'Your shortlist was not changed.';
       });
       return;
     }
-    notifier.toggleSaved(id);
     setState(() {
       _saveMessage = savedNow
           ? 'Removed from your saved properties.'

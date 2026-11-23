@@ -21,7 +21,7 @@ read. A missing or invalid authoritative profile fails closed.
 """
 
 from __future__ import annotations
-
+from sitewise.db.analytics_session import get_analytics_db
 import uuid
 from dataclasses import dataclass
 from typing import Annotated, Any, Protocol
@@ -174,17 +174,16 @@ def get_explore_service(
 
 
 def get_saved_property_service(
-    session: Annotated[Session, Depends(get_db)],
+        session: Annotated[Session, Depends(get_db)],
+        analytics_session: Annotated[Session, Depends(get_analytics_db)],
 ) -> SavedPropertyService:
-    """Bind the saved-property commands to the favourites and catalogue adapters.
-
-    The catalogue check is passed as a callable, the way Explore's management
-    resolver is, so the service holds no second repository and never a session.
-    """
     return SavedPropertyService(
         FavouriteRepository(session),
-        lambda property_ref: CatalogRepository(session).get_property(property_ref)
-        is not None,
+        lambda property_ref: (
+                CatalogRepository(analytics_session).get_property(property_ref)
+                is not None
+        ),
+        CatalogRepository(analytics_session).get_properties,
     )
 
 

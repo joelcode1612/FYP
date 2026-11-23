@@ -152,9 +152,7 @@ class _AiRecommendationsPageState extends State<AiRecommendationsPage> {
           if (_error != null)
             div(classes: 'notice notice-warn', styles: Styles(raw: {'margin-bottom': '0'}), [
               Component.text('Could not load AI recommendations: $_error'),
-              ActionButton('Try again', onClick: () => setState(() {
-                _latest = _loadLatest();
-              })),
+              ActionButton('Try again', onClick: _generating ? null : _generate),
             ]),
           FutureBuilder<GeneratedBatch?>(
             future: _latest,

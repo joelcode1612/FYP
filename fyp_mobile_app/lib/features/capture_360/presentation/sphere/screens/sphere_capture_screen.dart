@@ -1,7 +1,9 @@
 import 'dart:async';
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:sensors_plus/sensors_plus.dart';
 
 import 'package:fyp/features/capture_360/domain/sphere/sphere_capture_session.dart';
@@ -11,6 +13,7 @@ import 'package:fyp/features/capture_360/application/sphere/sphere_capture_contr
 import 'package:fyp/features/capture_360/domain/sphere/sphere_projection.dart';
 import 'package:fyp/features/capture_360/domain/sphere/sphere_target.dart';
 import 'package:fyp/features/capture_360/data/repositories/capture_repository_impl.dart';
+import 'package:fyp/features/capture_360/data/sphere/opencv_native_probe.dart';
 import 'package:fyp/features/capture_360/capture_composition.dart';
 import 'package:fyp/features/capture_360/presentation/sphere/screens/sphere_panorama_screen.dart';
 import 'package:fyp/features/capture_360/presentation/sphere/widgets/sphere_overlay_painter.dart';
@@ -44,6 +47,7 @@ class SphereCaptureScreen extends StatefulWidget {
     this.backendProcessing = false,
     this.onCaptureComplete,
     this.onPanoramaReady,
+    this.onFrameSaved,
   });
 
   /// True only when entered after completing the SiteWise guide.
@@ -87,12 +91,19 @@ class SphereCaptureScreen extends StatefulWidget {
   /// open the existing tour preview.
   final void Function(String panoramaPath)? onPanoramaReady;
 
+  /// Fired after each photograph is safely on disk, so the host page can
+  /// queue it for Supabase upload immediately — the per-frame upload queue
+  /// starts during capture, never after stitching.
+  final void Function(CapturedFrame frame)? onFrameSaved;
+
   @override
   State<SphereCaptureScreen> createState() => _SphereCaptureScreenState();
 }
 
 class _SphereCaptureScreenState extends State<SphereCaptureScreen>
     with WidgetsBindingObserver {
+  static const _screenChannel = MethodChannel('adaptive360/screen');
+
   SphereCaptureController? _controller;
   SphereCamera? _camera;
   bool _starting = false;
@@ -103,6 +114,13 @@ class _SphereCaptureScreenState extends State<SphereCaptureScreen>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    final lifecycle = WidgetsBinding.instance.lifecycleState;
+    if (defaultTargetPlatform != TargetPlatform.iOS ||
+        lifecycle == null ||
+        lifecycle == AppLifecycleState.resumed ||
+        lifecycle == AppLifecycleState.inactive) {
+      _setKeepScreenOn(true);
+    }
     if (widget.autoStart) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) unawaited(_start());
@@ -110,8 +128,41 @@ class _SphereCaptureScreenState extends State<SphereCaptureScreen>
     }
   }
 
+  void _setKeepScreenOn(bool enabled) {
+    if (kIsWeb) return;
+    if (defaultTargetPlatform != TargetPlatform.android &&
+        defaultTargetPlatform != TargetPlatform.iOS) {
+      return;
+    }
+    unawaited(_updateScreenTimeout(enabled));
+  }
+
+  Future<void> _updateScreenTimeout(bool enabled) async {
+    try {
+      await _screenChannel.invokeMethod<void>('setKeepScreenOn', enabled);
+    } on MissingPluginException {
+      if (enabled) {
+        debugPrint(
+          '360 capture requires a rebuilt app to keep the screen awake.',
+        );
+      }
+    } on PlatformException catch (error) {
+      debugPrint('360 capture screen timeout: ${error.code}');
+    }
+  }
+
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
+    // Android keeps the flag with the capture window. Losing focus briefly
+    // must not turn it off, and Android handles timeout when hidden.
+    if (state == AppLifecycleState.resumed) {
+      _setKeepScreenOn(true);
+    } else if (defaultTargetPlatform == TargetPlatform.iOS &&
+        (state == AppLifecycleState.hidden ||
+            state == AppLifecycleState.paused ||
+            state == AppLifecycleState.detached)) {
+      _setKeepScreenOn(false);
+    }
     // Android revokes the camera when the app goes to the background. Without
     // forwarding this, the preview is black on return with no message.
     final controller = _controller;
@@ -150,6 +201,24 @@ class _SphereCaptureScreenState extends State<SphereCaptureScreen>
       _startError = null;
     });
     try {
+      // SPHERE_ORB_PRECAPTURE: fail early if this APK omitted ORB symbols.
+      // Keep existing saved frames untouched; fixing the native build is
+      // preferable to capturing 38 photos before discovering a missing symbol.
+      if (!widget.backendProcessing) {
+        final capabilities = OpenCvNativeProbe.run();
+        final message = OpenCvNativeProbe.failureMessage(capabilities);
+        if (message != null) {
+          if (mounted) {
+            setState(() {
+              _starting = false;
+              _startError =
+                  'Android panorama stitching is unavailable in '
+                  'this installation. $message';
+            });
+          }
+          return;
+        }
+      }
       final defaults = createSphereDefaults();
       final camera = widget.camera ?? defaults.camera;
       final rotation = widget.rotation ?? defaults.rotation;
@@ -184,6 +253,7 @@ class _SphereCaptureScreenState extends State<SphereCaptureScreen>
         sessions: store,
         userId: widget.userId,
         propertyId: widget.propertyId,
+        onFrameSaved: widget.onFrameSaved,
         motion:
             widget.motionStream ??
             accelerometerEventStream(
@@ -222,6 +292,7 @@ class _SphereCaptureScreenState extends State<SphereCaptureScreen>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _setKeepScreenOn(false);
     _controller?.removeListener(_onControllerChanged);
     _controller?.dispose();
     super.dispose();
@@ -707,8 +778,7 @@ class _ProjectionDiagnosticsState extends State<_ProjectionDiagnostics> {
       // below the reticle.
       final relative = (start.conjugate * device).normalized;
       final forward = relative.rotate(const Vec3(0, 0, -1));
-      elevationDeg =
-          math.asin(forward.y.clamp(-1.0, 1.0)) * 180 / math.pi;
+      elevationDeg = math.asin(forward.y.clamp(-1.0, 1.0)) * 180 / math.pi;
       final reference = start.rotate(const Vec3(0, 0, -1));
       referenceHeadingDeg =
           math.atan2(reference.x, -reference.z) * 180 / math.pi;
@@ -775,7 +845,9 @@ class _ProjectionDiagnosticsState extends State<_ProjectionDiagnostics> {
                 '${widget.projection.height.round()} '
                 'f${widget.projection.focalLengthY.round()}',
               ),
-              Text('elev $elevation  err ${c.activeErrorDeg.toStringAsFixed(1)}°'),
+              Text(
+                'elev $elevation  err ${c.activeErrorDeg.toStringAsFixed(1)}°',
+              ),
               Text(
                 'T${target?.spec.targetId ?? '-'} '
                 'y${target?.spec.yawDeg.toStringAsFixed(0) ?? '-'} '
@@ -1092,65 +1164,12 @@ class _CompletionOverlay extends StatelessWidget {
                   minimumSize: const Size.fromHeight(46),
                 ),
               ),
-              const SizedBox(height: 10),
-              OutlinedButton.icon(
-                onPressed: controller.exporting
-                    ? null
-                    : () => _saveAndFinish(context),
-                icon: controller.exporting
-                    ? const SizedBox(
-                        width: 14,
-                        height: 14,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Icon(Icons.save_alt, size: 18),
-                label: const Text('Save & Finish'),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: Colors.white,
-                  minimumSize: const Size.fromHeight(46),
-                  side: const BorderSide(color: CaptureColors.hairlineOnDark),
-                ),
-              ),
-              if (controller.exportPath != null) ...[
-                const SizedBox(height: 10),
-                Text(
-                  'Exported to ${controller.exportPath}',
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    color: CaptureColors.mutedOnDark,
-                    fontSize: 10.5,
-                    height: 1.4,
-                  ),
-                ),
-              ],
             ],
           ),
         ),
       ),
     ),
   );
-
-  Future<void> _saveAndFinish(BuildContext context) async {
-    final messenger = ScaffoldMessenger.of(context);
-    final navigator = Navigator.of(context);
-    final path = await controller.saveAndFinish();
-    if (!context.mounted) return;
-    // Save & Finish after a failed stitch still exports the photographs — that
-    // is deliberate, they are the user's work — but it must not claim a
-    // panorama was produced. `panoramaPath` is only set when the stitcher
-    // returned success *and* the JPEG exists and is non-empty, so it is the
-    // honest test here.
-    final hasPanorama = controller.panoramaPath != null;
-    final message = path == null
-        ? controller.message ?? 'The export failed.'
-        : hasPanorama
-        ? 'Exported $kSphereTargetCount photographs and the panorama to $path'
-        : 'Exported $kSphereTargetCount photographs to $path. No panorama was '
-              'generated — the photographs are kept, so you can retry stitching '
-              'from the review screen without recapturing.';
-    messenger.showSnackBar(SnackBar(content: Text(message)));
-    if (path != null) navigator.pop();
-  }
 }
 
 class _PanoramaStatus extends StatelessWidget {

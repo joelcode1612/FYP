@@ -10,9 +10,9 @@ import 'package:fyp/core/config/mobile_config.dart';
 import 'package:fyp/core/utils/capture_log.dart';
 import 'package:fyp/features/capture_360/data/capture_frame_store.dart';
 import 'package:fyp/features/capture_360/application/capture_panorama_generation_service.dart';
+import 'package:fyp/features/capture_360/application/frame_upload_queue.dart';
 import 'package:fyp/features/capture_360/data/repositories/sitewise_capture_repository.dart';
 import 'package:fyp/features/capture_360/data/api_panorama_viewer_repository.dart';
-import 'package:fyp/features/capture_360/application/backend_capture_coordinator.dart';
 import 'package:fyp/features/capture_360/data/stitch/incremental_stitch_service.dart';
 import 'package:fyp/features/capture_360/data/stitch/incremental_stitch_worker.dart';
 import 'package:fyp/features/capture_360/domain/models/capture_record.dart';
@@ -21,7 +21,8 @@ import 'package:fyp/features/capture_360/data/sphere/equirectangular_stitcher.da
 import 'package:fyp/features/capture_360/data/sphere/sitewise_sphere_session_store.dart';
 // Session/enum types only; `CapturedFrame` stays shared_logic's — the
 // manifest mirror this view model reads is written in that shape.
-import 'package:fyp/features/capture_360/domain/sphere/sphere_capture_session.dart' hide CapturedFrame;
+import 'package:fyp/features/capture_360/domain/sphere/sphere_capture_session.dart'
+    hide CapturedFrame;
 import 'package:fyp/features/capture_360/domain/sphere/sphere_target.dart';
 
 /// Preview/edit state for a captured tour. Loads the persisted frame
@@ -97,19 +98,17 @@ class TourPreviewViewModel extends ChangeNotifier {
   /// The tour record carries the real number of confirmed frames, so clearing
   /// one for a retake cannot leave the header claiming a complete sphere.
   void _syncFrameCount(int count) {
-    unawaited(
-      () async {
-        try {
-          final saved = await ServiceLocator.tourRepo.tourById(tourId);
-          if (saved == null || saved.frameCount == count) return;
-          await ServiceLocator.tourRepo.updateTour(
-            saved.copyWith(frameCount: count, sceneCount: count),
-          );
-        } catch (error) {
-          CaptureLog.log('Frame count could not be recorded: $error');
-        }
-      }(),
-    );
+    unawaited(() async {
+      try {
+        final saved = await ServiceLocator.tourRepo.tourById(tourId);
+        if (saved == null || saved.frameCount == count) return;
+        await ServiceLocator.tourRepo.updateTour(
+          saved.copyWith(frameCount: count, sceneCount: count),
+        );
+      } catch (error) {
+        CaptureLog.log('Frame count could not be recorded: $error');
+      }
+    }());
   }
 
   Future<void> load() async {
@@ -140,13 +139,21 @@ class TourPreviewViewModel extends ChangeNotifier {
           frameStore: ServiceLocator.frameStore,
           tourId: tourId,
         );
+        await _queueSavedPanorama();
         await _refreshBackendState();
+        // The durable upload queue's persisted state: what the cloud line
+        // reports is what the document says, never an optimistic guess.
+        queueState = await FrameUploadQueue.readState(
+          ServiceLocator.frameStore,
+          tourId,
+        );
       }
     } catch (e) {
       error = e.toString();
     }
     loading = false;
-    notifyListeners();
+    _watchUploadStatus();
+    if (!_disposed) notifyListeners();
   }
 
   /// The 38-direction layout mapped onto the preview's chip model. Ids,
@@ -247,10 +254,9 @@ class TourPreviewViewModel extends ChangeNotifier {
       FrameSyncStatus.failed => BackendHandoffUiState.failedRetryable,
       FrameSyncStatus.uploadPending ||
       FrameSyncStatus.uploading ||
-      FrameSyncStatus.processing =>
-        BackendHandoffUiState.working,
-      FrameSyncStatus.none || FrameSyncStatus.ready =>
-        BackendHandoffUiState.canStart,
+      FrameSyncStatus.processing => BackendHandoffUiState.working,
+      FrameSyncStatus.none ||
+      FrameSyncStatus.ready => BackendHandoffUiState.canStart,
     };
   }
 
@@ -274,10 +280,7 @@ class TourPreviewViewModel extends ChangeNotifier {
   /// True when the current panorama is the copy Sitewise accepted, so the
   /// review screen can say so instead of offering a second upload.
   bool get panoramaPublished =>
-      !liveBackend &&
-      MobileConfig.usesLiveApi &&
-      hasPanorama &&
-      !uploadPending;
+      !liveBackend && MobileConfig.usesLiveApi && hasPanorama && !uploadPending;
 
   String get propertyId => tour?.propertyId ?? '';
 
@@ -288,19 +291,7 @@ class TourPreviewViewModel extends ChangeNotifier {
     error = null;
     notifyListeners();
     try {
-      if (_sphereEngine) {
-        // The device panorama is canonical for every 38-point tour: stitch
-        // it locally FIRST. A live tour then synchronizes that file —
-        // panorama upload and confirmation, then the original backups —
-        // while a demo tour is already finished at this point. FastAPI is
-        // never asked to stitch.
-        final stitched = await _regenerateSphere();
-        if (!stitched || !liveBackend) return stitched;
-        final sessions = _sphereSessions;
-        if (sessions == null) return stitched;
-        final panorama = await _devicePanoramaPath(sessions);
-        return await _handoff(panorama ?? tour?.panoramaPath);
-      }
+      if (_sphereEngine) return await _regenerateSphere();
       final service = stitchService;
       unawaited(service?.beginFinalPanorama());
       final manifest = await ServiceLocator.frameStore.loadManifest(tourId);
@@ -346,16 +337,17 @@ class TourPreviewViewModel extends ChangeNotifier {
   Future<bool> _regenerateSphere() async {
     try {
       final records = await _repository().loadRecords(tourId);
-      final result = await const PanoramaGenerationService(
-        EquirectangularStitcher(),
-      ).generate(
-        records: records,
-        total: kSphereTargetCount,
-        onStage: (s) {
-          stage = s;
-          notifyListeners();
-        },
-      );
+      final result =
+          await const PanoramaGenerationService(
+            EquirectangularStitcher(),
+          ).generate(
+            records: records,
+            total: kSphereTargetCount,
+            onStage: (s) {
+              stage = s;
+              notifyListeners();
+            },
+          );
       if (!result.success || result.panoramaPath == null) {
         // The photographs stay exactly as they are: a failed stitch is a
         // stitching problem, never a reason to recapture.
@@ -363,6 +355,12 @@ class TourPreviewViewModel extends ChangeNotifier {
         return false;
       }
       final saved = await ServiceLocator.tourRepo.tourById(tourId);
+      await _sphereSessions?.savePanorama(
+        sessionId: tourId,
+        localPanoramaPath: result.panoramaPath,
+        status: PanoramaGenerationStatus.ready,
+        error: null,
+      );
       if (saved != null) {
         await ServiceLocator.tourRepo.updateTour(
           saved.copyWith(
@@ -376,6 +374,21 @@ class TourPreviewViewModel extends ChangeNotifier {
     } catch (e) {
       error = 'Generation error: $e';
       return false;
+    }
+  }
+
+  Future<void> _queueSavedPanorama() async {
+    final sessions = _sphereSessions;
+    final property = int.tryParse(propertyId);
+    if (sessions == null || property == null) return;
+    try {
+      final path = await _devicePanoramaPath(sessions);
+      if (path == null) return;
+      final queue = _uploadQueue;
+      await queue.enqueuePanorama(path, propertyId: property);
+      queue.resumeInBackground();
+    } on Object catch (error) {
+      CaptureLog.log('Saved panorama could not be queued: $error');
     }
   }
 
@@ -446,9 +459,134 @@ class TourPreviewViewModel extends ChangeNotifier {
     }
   }
 
-  /// Re-reads the handoff record and the canonical panorama metadata. Both
-  /// reads are allowed to fail independently: a metadata outage must not
-  /// erase the recorded handoff state, and vice versa.
+  /// The server-side inspection/assignment status for a live 38-point tour,
+  /// read from the provider-flow inspection endpoint. `null` when the user
+  /// is not the assigned Agent, the property has no assignment yet, or the
+  /// read failed — every consumer must treat null as "not verified", never
+  /// as "satisfied".
+  Map<String, dynamic>? inspectionStatus;
+  String? inspectionError;
+  Timer? _uploadStatusTimer;
+  bool _refreshingUploadStatus = false;
+
+  bool get populationRequiresAcknowledgement =>
+      inspectionStatus?['population_requires_acknowledgement'] == true;
+
+  String? get inspectionPanoramaId =>
+      inspectionStatus?['panorama_id'] as String?;
+
+  String? get previewPanoramaId {
+    final record = queueState?.panorama;
+    if (record != null) return record.confirmed ? record.panoramaId : null;
+    return hasPanorama ? null : inspectionPanoramaId;
+  }
+
+  String get panoramaReviewStatus {
+    if (panoramaUploaded) return '360° panorama ready';
+    if (queueState?.panoramaInFlight ?? false) return '360° panorama syncing';
+    if (queueState?.panorama?.lastError != null) {
+      return '360° upload needs a retry';
+    }
+    if (previewPanoramaId != null) return '360° panorama needs verification';
+    if (hasPanorama) return '360° panorama saved on this device';
+    return '360° panorama still needed';
+  }
+
+  void _watchUploadStatus() {
+    _uploadStatusTimer?.cancel();
+    if (_disposed || !liveBackend || !cloudSyncing) return;
+    _uploadStatusTimer = Timer.periodic(const Duration(seconds: 2), (_) async {
+      if (_refreshingUploadStatus || submitting || generating || loading) {
+        return;
+      }
+      _refreshingUploadStatus = true;
+      try {
+        final previousId = previewPanoramaId;
+        queueState = await FrameUploadQueue.readState(
+          ServiceLocator.frameStore,
+          tourId,
+        );
+        if (_disposed) return;
+        if (previousId != previewPanoramaId) await _refreshBackendState();
+        if (!cloudSyncing) _uploadStatusTimer?.cancel();
+        if (!_disposed) notifyListeners();
+      } on Object {
+        // The next refresh or submit can retry a transient queue read error.
+      } finally {
+        _refreshingUploadStatus = false;
+      }
+    });
+  }
+
+  /// The durable upload queue's persisted state for this tour: per-frame
+  /// records and the panorama draft record. Read from disk on every load and
+  /// server refresh, so the cloud line always mirrors what is actually
+  /// persisted, not an in-memory assumption.
+  FrameUploadQueueState? queueState;
+
+  /// Public re-read of the server-side state (canonical panorama, inspection
+  /// status, handoff record, queue state) without touching any local file.
+  /// The review card calls this after an upload or an inspection change.
+  Future<void> refreshServerState() async {
+    await _refreshBackendState();
+    queueState = await FrameUploadQueue.readState(
+      ServiceLocator.frameStore,
+      tourId,
+    );
+    notifyListeners();
+  }
+
+  // ------------------------------------------------------------------
+  // Cloud draft status (§5): three honest lines only.
+  // ------------------------------------------------------------------
+
+  /// True when Sitewise has confirmed every unit the queue knows about —
+  /// the panorama AND all backed-up originals. A tour with no queue
+  /// document (captured before the queue existed) falls back to the
+  /// backend's own canonical state, never to a local assumption.
+  bool get cloudSynced {
+    final state = queueState;
+    if (state == null || state.frames.isEmpty) {
+      return canonicalReady || inspectionStatus?['panorama_uploaded'] == true;
+    }
+    return state.fullySynced ||
+        (state.panoramaConfirmed && state.frames.isEmpty);
+  }
+
+  /// True while the queue still has pending or in-flight units.
+  bool get cloudSyncing {
+    final state = queueState;
+    if (state == null) return false;
+    return state.anyPending && !state.fullySynced;
+  }
+
+  /// The one line the preview's cloud status shows. "Saved to SiteWise"
+  /// appears ONLY after FastAPI has confirmed the uploads.
+  String get cloudStatusLine {
+    if (cloudSynced) return 'Saved to SiteWise';
+    final state = queueState;
+    if (state?.panoramaInFlight ?? false) {
+      return 'Syncing to SiteWise…';
+    }
+    if ((state?.failedFrames ?? 0) > 0) {
+      return 'Some photographs still need to sync — Sitewise will retry.';
+    }
+    if (cloudSyncing) return 'Syncing to SiteWise…';
+    return 'Draft saved on this device';
+  }
+
+  /// The upload-queue singleton for this tour. The same instance the capture
+  /// host used, so a drain here can never double-run against the capture's
+  /// drain.
+  FrameUploadQueue get _uploadQueue => FrameUploadQueue.forTour(
+    frameStore: ServiceLocator.frameStore,
+    tourId: tourId,
+  );
+
+  /// Re-reads the handoff record, the canonical panorama metadata and the
+  /// server-side inspection status. All three reads are allowed to fail
+  /// independently: a metadata outage must not erase the recorded handoff
+  /// state, and vice versa.
   Future<void> _refreshBackendState() async {
     final sessions = _sphereSessions;
     if (sessions == null) return;
@@ -461,10 +599,13 @@ class TourPreviewViewModel extends ChangeNotifier {
     if (property == null) {
       canonical = null;
       canonicalError = null;
+      inspectionStatus = null;
       return;
     }
     try {
-      canonical = await ServiceLocator.panoramaViews.latestForProperty(property);
+      canonical = await ServiceLocator.panoramaViews.latestForProperty(
+        property,
+      );
       canonicalError = null;
     } on Object catch (e) {
       canonical = null;
@@ -473,37 +614,186 @@ class TourPreviewViewModel extends ChangeNotifier {
         fallback: 'The Sitewise panorama state could not be read.',
       );
     }
+    try {
+      final response = await ServiceLocator.apiClient.get(
+        '/api/v1/provider-flow/properties/$property/inspection',
+      );
+      inspectionStatus = response['data'] as Map<String, dynamic>?;
+      inspectionError = null;
+    } on Object catch (failure) {
+      inspectionError = readableFailure(
+        failure,
+        fallback: 'Could not refresh the saved inspection.',
+      );
+    }
   }
 
-  /// Runs (or re-runs) the device-panorama cloud synchronization from the
-  /// preview — the same coordinator the capture banner uses, against the
-  /// same saved frames. The device panorama is canonical: if it is missing
-  /// on disk it is stitched here first, never worked around, and nothing on
-  /// this device is deleted by the handoff. The backend is never asked to
-  /// stitch and no processing job is created.
+  /// The server-side assignment state for this property, when readable.
+  /// Empty when no assignment/status could be read — never null.
+  String get assignmentStatus =>
+      '${inspectionStatus?['assignment_status'] ?? ''}';
+
+  /// Whether the assignment is in a state that allows inspection and
+  /// capture work (or correction after a rejection).
+  bool get assignmentReady =>
+      assignmentStatus == 'accepted' || assignmentStatus == 'needs_correction';
+
+  /// The four on-site verification checks, as the SERVER recorded them.
+  bool get checksComplete {
+    final form = inspectionStatus?['checklist'];
+    if (form is! Map) return false;
+    const keys = <String>[
+      'floor_area_verified',
+      'condition_verified',
+      'parking_verified',
+      'accessibility_verified',
+    ];
+    return keys.every((key) => form[key] == true);
+  }
+
+  /// Whether Sitewise holds a verified canonical panorama for this property:
+  /// the canonical metadata (which only exists after the confirmation
+  /// endpoint verified the stored object) or the server's own
+  /// `panorama_uploaded` flag.
+  bool get panoramaUploaded =>
+      inspectionError == null &&
+      previewPanoramaId != null &&
+      previewPanoramaId == inspectionPanoramaId;
+
+  /// A complete local capture can be synced by the submission action.
+  bool get submissionEligible =>
+      liveBackend &&
+      inspectionError == null &&
+      assignmentReady &&
+      checksComplete &&
+      (hasPanorama || inspectionStatus?['panorama_uploaded'] == true) &&
+      specs.length == kSphereTargetCount &&
+      frames.length == specs.length;
+
+  /// Re-arms the durable upload queue and drains it — the ONLY retry path a
+  /// live 38-point tour needs. Every pending frame and the panorama draft
+  /// resume without recapturing; confirmed units are skipped byte-for-byte.
+  /// Returns true when the panorama draft reached Sitewise.
   Future<bool> retryHandoff() async {
     if (generating || !liveBackend) return false;
-    final sessions = _sphereSessions;
-    if (sessions == null) return false;
     generating = true;
     error = null;
     notifyListeners();
     try {
-      var panorama = await _devicePanoramaPath(sessions);
-      if (panorama == null) {
-        // No device panorama yet: generate it on this device before any
-        // cloud step — the upload must carry the Flutter result.
-        final ok = await _regenerateSphere();
-        if (!ok) return false;
-        panorama = await _devicePanoramaPath(sessions);
-        if (panorama == null) {
+      final sessions = _sphereSessions;
+      if (sessions == null) return false;
+      final property = int.tryParse(tour?.propertyId ?? '');
+      await _uploadQueue.reconcileFrames(
+        await sessions.loadFrames(tourId),
+        propertyId: property,
+      );
+      final queue = _uploadQueue;
+      if (queueState?.panorama == null &&
+          inspectionStatus?['panorama_uploaded'] != true) {
+        final path = await _devicePanoramaPath(sessions);
+        if (path != null) {
+          await queue.enqueuePanorama(path, propertyId: property);
+        }
+      }
+      await queue.resume();
+      await refreshServerState();
+      return queueState?.panoramaConfirmed ?? false;
+    } on Object catch (e) {
+      error =
+          'The Sitewise synchronization could not resume: '
+          '${readableFailure(e, fallback: 'sync error')} '
+          'The frames and the panorama are kept on this device — you can '
+          'retry.';
+      return false;
+    } finally {
+      generating = false;
+      stage = null;
+      notifyListeners();
+    }
+  }
+
+  /// Starts a NEW capture attempt (the preview's "Recapture → start a new
+  /// 38-photo capture" choice).
+  ///
+  /// The previous attempt's evidence is preserved on every layer before the
+  /// station is archived: the queue drains any pending upload first (best
+  /// effort), the canonical `fyp.panoramas` row in SiteWise is untouched,
+  /// and the local station directory is RENAMED — never deleted — so the
+  /// previous draft stays recoverable even if the replacement capture fails.
+  /// A fresh queue document gets a fresh attempt key, which gives the
+  /// replacement capture its own backend session instead of overwriting the
+  /// confirmed one.
+  Future<bool> startNewCaptureAttempt() async {
+    if (generating) return false;
+    generating = true;
+    stage = 'Preparing a new capture…';
+    error = null;
+    notifyListeners();
+    try {
+      // 1. Best-effort flush so the previous draft is safely in SiteWise.
+      try {
+        final sessions = _sphereSessions;
+        if (sessions != null) {
+          final property = int.tryParse(tour?.propertyId ?? '');
+          await _uploadQueue.reconcileFrames(
+            await sessions.loadFrames(tourId),
+            propertyId: property,
+          );
+        }
+        await _uploadQueue.resume();
+      } on Object {
+        // The archive below keeps everything anyway.
+      }
+      // 2. Archive the station directory (frames, session, queue document,
+      //    panorama). The rename keeps every previous byte on disk.
+      final root = await ServiceLocator.frameStore.tourRoot(tourId);
+      final stationDir = Directory(p.join(root, 'ar_capture', tourId));
+      if (await stationDir.exists()) {
+        final archiveName =
+            '${tourId}_prev_'
+            '${DateTime.now().millisecondsSinceEpoch}';
+        try {
+          await stationDir.rename(p.join(root, 'ar_capture', archiveName));
+        } on Object {
+          // A rename across filesystem boundaries can fail; fall back to
+          // copying is overkill — a failed archive keeps the capture as-is
+          // and the caller shows the error instead of destroying anything.
           error =
-              'The panorama was stitched, but its file could not be found '
-              'on this device. The photographs are kept.';
+              'The previous capture could not be archived, so a new capture '
+              'was not started. Nothing was deleted.';
           return false;
         }
       }
-      return await _handoff(panorama);
+      // 3. Clear the manifest mirror so the capture host starts fresh.
+      await ServiceLocator.frameStore.saveManifest(
+        tourId,
+        const <int, CapturedFrame>{},
+      );
+      // 4. Detach the archived panorama from the tour record: the property
+      //    detail reads the CANONICAL row from SiteWise (which still holds
+      //    the previous draft), and the replacement stitch will attach the
+      //    new file here.
+      final saved = await ServiceLocator.tourRepo.tourById(tourId);
+      if (saved != null) {
+        await ServiceLocator.tourRepo.updateTour(
+          VirtualTour(
+            id: saved.id,
+            propertyId: saved.propertyId,
+            title: saved.title,
+            sceneCount: 0,
+            capturedAt: saved.capturedAt,
+            published: saved.published,
+            status: VirtualTourStatus.draft,
+            frameCount: 0,
+          ),
+        );
+      }
+      queueState = null;
+      await load();
+      return true;
+    } catch (e) {
+      error = 'A new capture attempt could not be prepared: $e';
+      return false;
     } finally {
       generating = false;
       stage = null;
@@ -527,81 +817,79 @@ class TourPreviewViewModel extends ChangeNotifier {
     return null;
   }
 
-  /// The cloud synchronization itself: create or resume the authorized
-  /// session, upload and confirm the device panorama FIRST, then back the
-  /// originals up through the resumable queue. Never calls a stitching job.
-  Future<bool> _handoff(String? panoramaPath) async {
-    final sessions = _sphereSessions;
-    if (sessions == null) return false;
+  /// Whether the Admin submission is in flight. Disables the submit button
+  /// while the request runs, so a double tap cannot send a second workflow.
+  bool submitting = false;
+
+  /// Explicit Agent action: submit this property to Admin review through the
+  /// existing provider-flow verification endpoint. The backend re-checks
+  /// every precondition server-side — the accepted Agent assignment, the four
+  /// saved on-site verification checks, and a verified canonical panorama
+  /// created after the inspection was saved — so a refusal carries the exact
+  /// precondition that is missing. The old generic `submitTour()` call is not
+  /// used: it bypassed those business rules.
+  Future<bool> submit({required bool acknowledgeUnavailablePopulation}) async {
+    if (submitting || generating || !submissionEligible) return false;
     final property = int.tryParse(tour?.propertyId ?? '');
     if (property == null) {
       error =
-          'The property draft must be saved before a Sitewise capture '
-          'session can start. The photographs are kept on this device.';
+          'The property draft must be saved before this tour can be '
+          'submitted for review.';
       notifyListeners();
       return false;
     }
-    stage = 'Preparing the Sitewise handoff…';
+    submitting = true;
+    error = null;
     notifyListeners();
+    var submitted = false;
     try {
-      final frames = await sessions.loadFrames(tourId);
-      await BackendCaptureCoordinator(
-        client: ServiceLocator.apiClient,
-        store: sessions,
-      ).handOff(
-        stationId: tourId,
-        propertyId: property,
-        frames: frames,
-        expectedFrames: kSphereTargetCount,
-        panoramaPath: panoramaPath,
-        onStage: (s) {
-          if (_disposed) return;
-          stage = s;
-          notifyListeners();
-        },
-        onProgress: (progress) {
-          if (_disposed) return;
-          stage = _handoffStageLabel(progress);
-          notifyListeners();
+      await refreshServerState();
+      if (inspectionError != null) {
+        error = inspectionError;
+        return false;
+      }
+      if (!assignmentReady || !checksComplete) {
+        error = 'Review the assignment and save all four inspection checks.';
+        return false;
+      }
+      final sessions = _sphereSessions;
+      if (sessions != null) {
+        final localPath = await _devicePanoramaPath(sessions);
+        if (localPath != null) {
+          await _uploadQueue.enqueuePanorama(localPath, propertyId: property);
+          queueState = await FrameUploadQueue.readState(
+            ServiceLocator.frameStore,
+            tourId,
+          );
+        }
+      }
+      if (previewPanoramaId == null) await retryHandoff();
+      if (inspectionError != null) {
+        error = inspectionError;
+        return false;
+      }
+      final panoramaId = previewPanoramaId;
+      if (panoramaId == null) {
+        error ??= 'The panorama could not sync. Tap Submit to Admin to retry.';
+        return false;
+      }
+      await ServiceLocator.apiClient.post(
+        '/api/v1/provider-flow/properties/$property/submit',
+        <String, dynamic>{
+          'panorama_id': panoramaId,
+          'acknowledge_unavailable_population':
+              acknowledgeUnavailablePopulation,
         },
       );
-      await _refreshBackendState();
-      return true;
+      submitted = true;
     } on Object catch (e) {
-      error =
-          'The Sitewise handoff failed: '
-          '${readableFailure(e, fallback: 'handoff error')} '
-          'The frames and the panorama are kept on this device — you can '
-          'retry.';
-      return false;
-    }
-  }
-
-  /// One honest line per synchronization stage for the preview banner.
-  String _handoffStageLabel(BackendHandoffProgress progress) =>
-      switch (progress.stage) {
-        BackendHandoffStage.captured =>
-          '${progress.total} of ${progress.total} photos captured',
-        BackendHandoffStage.processing =>
-          'Creating your 360° panorama on this device',
-        BackendHandoffStage.panoramaUploading =>
-          'Uploading your 360° panorama…',
-        BackendHandoffStage.framesBackingUp =>
-          'Backing up photographs '
-              '(${progress.processed}/${progress.total})',
-        BackendHandoffStage.ready => 'Your 360° panorama is ready',
-      };
-
-  Future<bool> submit() async {
-    try {
-      await ServiceLocator.tourService.submitTour(tourId);
-      await load();
-      return true;
-    } catch (e) {
-      error = e.toString();
+      error = readableFailure(e, fallback: 'The submission was refused.');
+    } finally {
+      submitting = false;
       notifyListeners();
-      return false;
     }
+    if (submitted) await load();
+    return submitted;
   }
 
   Future<bool> remove() async {
@@ -635,6 +923,7 @@ class TourPreviewViewModel extends ChangeNotifier {
   @override
   void dispose() {
     _disposed = true;
+    _uploadStatusTimer?.cancel();
     stitchService?.dispose();
     super.dispose();
   }

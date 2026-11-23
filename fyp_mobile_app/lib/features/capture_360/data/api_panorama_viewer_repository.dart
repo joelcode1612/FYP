@@ -32,17 +32,24 @@ class CanonicalPanorama {
   final DateTime createdAt;
 
   factory CanonicalPanorama.fromJson(Map<String, dynamic> json) {
+    final propertyId = int.tryParse('${json['propertyId']}');
+    if (propertyId == null || propertyId <= 0) {
+      throw const ResponseFormatFailure(
+        'The panorama response has an invalid property ID.',
+      );
+    }
     return CanonicalPanorama(
       panoramaId: json['panoramaId'] as String? ?? '',
       sessionId: json['sessionId'] as String? ?? '',
-      propertyId: (json['propertyId'] as num?)?.toInt() ?? 0,
+      propertyId: propertyId,
       storagePath: json['storagePath'] as String? ?? '',
       format: json['format'] as String? ?? '',
       width: (json['width'] as num?)?.toInt() ?? 0,
       height: (json['height'] as num?)?.toInt() ?? 0,
       verificationStatus: json['verificationStatus'] as String? ?? '',
       publishedAt: _date(json['publishedAt']),
-      createdAt: _date(json['createdAt']) ?? DateTime.fromMillisecondsSinceEpoch(0),
+      createdAt:
+          _date(json['createdAt']) ?? DateTime.fromMillisecondsSinceEpoch(0),
     );
   }
 
@@ -94,7 +101,13 @@ class ApiPanoramaViewerRepository {
       final payload = await _client.get(
         '/api/v1/360/properties/$propertyId/panorama',
       );
-      return CanonicalPanorama.fromJson(payload);
+      final panorama = CanonicalPanorama.fromJson(payload);
+      if (panorama.propertyId != propertyId || panorama.panoramaId.isEmpty) {
+        throw const ResponseFormatFailure(
+          'The panorama response does not identify a tour for this property.',
+        );
+      }
+      return panorama;
     } on NotFoundFailure {
       return null;
     }
