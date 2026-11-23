@@ -148,7 +148,7 @@ def test_user_deletion_cascades_generated_results(user_id):
     with Session(engine) as session:
         count = session.execute(
             text(
-                "SELECT count(*) FROM recommendation_result WHERE user_id = :u"
+                "SELECT count(*) FROM fyp.recommendation_result WHERE user_id = :u"
             ),
             {"u": user_id},
         ).scalar_one()
@@ -162,7 +162,7 @@ def test_user_deletion_cascades_generated_results(user_id):
     with Session(engine) as session:
         remaining = session.execute(
             text(
-                "SELECT count(*) FROM recommendation_result WHERE user_id = :u"
+                "SELECT count(*) FROM fyp.recommendation_result WHERE user_id = :u"
             ),
             {"u": user_id},
         ).scalar_one()

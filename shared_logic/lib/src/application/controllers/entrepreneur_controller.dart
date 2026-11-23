@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import '../../core/errors/app_failure.dart';
 import '../../domain/entities/commercial_property.dart';
 import '../../domain/entities/explore.dart';
@@ -353,7 +355,7 @@ class EntrepreneurController extends StateController<EntrepreneurState> {
       // disagree with the eligible set behind the cards.
       if (state.recommendationFacets == null) {
         try {
-          final facets = await repo.facets(criteria: criteria);
+          final facets = await fetchRecommendationFacets(criteria);
           if (seq == _recommendationSeq && !isDisposed) {
             setState(state.copyWith(recommendationFacets: facets));
           }
@@ -384,12 +386,31 @@ class EntrepreneurController extends StateController<EntrepreneurState> {
   /// available choices without changing the results on screen. Stale-response
   /// ordering and error presentation belong to the caller, which owns the
   /// draft; the backend returns the same PU-gated counts the search uses.
+  final _facetRequests = <String, Future<RecommendationFacets>>{};
+  ({String key, RecommendationFacets data, DateTime loadedAt})? _recentFacets;
+
   Future<RecommendationFacets?> fetchRecommendationFacets(
     RecommendationSearchRequest criteria,
   ) async {
     final repo = _recommendationSearchRepository;
     if (repo == null || isDisposed) return null;
-    return repo.facets(criteria: criteria);
+    final key = jsonEncode(criteria.toJson());
+    final recent = _recentFacets;
+    if (recent != null &&
+        recent.key == key &&
+        DateTime.now().difference(recent.loadedAt) < const Duration(seconds: 1)) {
+      return recent.data;
+    }
+    final request = _facetRequests.putIfAbsent(key, () => repo.facets(criteria: criteria));
+    try {
+      final data = await request;
+      if (identical(_facetRequests[key], request)) {
+        _recentFacets = (key: key, data: data, loadedAt: DateTime.now());
+      }
+      return data;
+    } finally {
+      if (identical(_facetRequests[key], request)) _facetRequests.remove(key);
+    }
   }
 
   /// Appends the next page of the CURRENT ranking.
@@ -434,6 +455,10 @@ class EntrepreneurController extends StateController<EntrepreneurState> {
       );
     } catch (e) {
       if (seq != _recommendationSeq || isDisposed) return;
+      if (e is ConflictFailure) {
+        await searchRecommendations(request: state.recommendationRequest);
+        return;
+      }
       setState(
         state.copyWith(
           recommendationError: readableFailure(

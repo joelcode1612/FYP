@@ -6,6 +6,7 @@ from sqlmodel import Field, SQLModel
 
 class DistrictDemographic(SQLModel, table=True):
     __tablename__ = "district_demographic"
+    __table_args__ = {"schema": "fyp", "info": {"externally_managed": True}}
 
     district_id: str = Field(primary_key=True, max_length=50)
     district_name: str = Field(max_length=255)

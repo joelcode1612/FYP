@@ -62,6 +62,20 @@ class ApiPropertyRepository implements PropertyRepository {
   /// Shared mapping lives in `shared_logic` ([CatalogPropertyMapper]); this
   /// static forwarder stays for the assessment workspace, which decodes
   /// catalogue rows through the same mapper.
+  static Future<List<CommercialProperty>> listingsByIds(Set<String> ids) async {
+    final refs = ids.toList();
+    final properties = <CommercialProperty>[];
+    const batchSize = 200;
+    for (var start = 0; start < refs.length; start += batchSize) {
+      final query = refs.skip(start).take(batchSize)
+          .map((ref) => 'ids=${Uri.encodeQueryComponent(ref)}').join('&');
+      final response = await WebAuth.request('/api/v1/catalog/properties/by-ids?$query');
+      final rows = (response['data'] as List).cast<Map<String, dynamic>>();
+      properties.addAll(rows.map(fromJson));
+    }
+    return properties;
+  }
+
   static CommercialProperty fromJson(Map<String, dynamic> row) =>
       CatalogPropertyMapper.fromJson(row);
 

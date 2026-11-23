@@ -120,10 +120,11 @@ class _TourBody extends StatelessComponent {
                   'Verification: ${prop.verification.label.toLowerCase()}',
                   tone: toneForVerification(prop.verification),
                 ),
-                StatusBadge(
-                  'Suitability: ${prop.suitabilityScore.toStringAsFixed(0)}/100',
-                  tone: 'action',
-                ),
+                if (prop.hasSuitabilityScore)
+                  StatusBadge(
+                    'Suitability: ${prop.suitabilityScore.toStringAsFixed(0)}/100',
+                    tone: 'action',
+                  ),
               ]),
             div(classes: 'actions-row', [
               ActionLink(

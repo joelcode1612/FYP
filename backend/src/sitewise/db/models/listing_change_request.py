@@ -59,6 +59,7 @@ class ListingChangeRequest(SQLModel, table=True):
             "'changes_requested')",
             name="ck_listing_change_request_status",
         ),
+        {"schema": "fyp", "info": {"externally_managed": True}},
     )
 
     change_request_id: uuid.UUID = Field(
@@ -71,7 +72,7 @@ class ListingChangeRequest(SQLModel, table=True):
         foreign_key="fyp.rental_properties.id", nullable=False, index=True
     )
     proposed_by: uuid.UUID = Field(
-        foreign_key="users.user_id", nullable=False, index=True
+        foreign_key="public.users.user_id", nullable=False, index=True
     )
     # {field: {"from": <current value>, "to": <proposed value>}} — captured
     # server-side from the live row at save time, never trusted from the
@@ -82,7 +83,7 @@ class ListingChangeRequest(SQLModel, table=True):
     status: str = Field(default="draft", max_length=24, nullable=False, index=True)
     # Required (>= 12 chars) when the request is submitted for review.
     reason: str | None = Field(default=None, max_length=2000)
-    reviewed_by: uuid.UUID | None = Field(default=None, foreign_key="users.user_id")
+    reviewed_by: uuid.UUID | None = Field(default=None, foreign_key="public.users.user_id")
     review_note: str | None = Field(default=None, max_length=2000)
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(UTC), nullable=False
@@ -101,13 +102,14 @@ class ListingChangeAudit(SQLModel, table=True):
     """
 
     __tablename__ = "listing_change_audit"
+    __table_args__ = {"schema": "fyp", "info": {"externally_managed": True}}
 
     audit_id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     # NULL for listing-level events (agent notes) that belong to no single
     # request; set for every request-scoped event.
     change_request_id: uuid.UUID | None = Field(
         default=None,
-        foreign_key="listing_change_request.change_request_id",
+        foreign_key="fyp.listing_change_request.change_request_id",
         index=True,
     )
     listing_id: int = Field(
@@ -117,7 +119,7 @@ class ListingChangeAudit(SQLModel, table=True):
     # changes_requested | note_added
     action: str = Field(max_length=40, nullable=False)
     actor_user_id: uuid.UUID = Field(
-        foreign_key="users.user_id", nullable=False, index=True
+        foreign_key="public.users.user_id", nullable=False, index=True
     )
     note: str | None = Field(default=None, max_length=2000)
     created_at: datetime = Field(

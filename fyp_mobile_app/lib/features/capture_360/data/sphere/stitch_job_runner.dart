@@ -19,6 +19,7 @@ typedef StitchWorkerArgs = ({
   String stationDir,
   String outPath,
   int width,
+
   /// Whether to refine each frame's recorded orientation against its
   /// neighbours before projecting. Off is a legitimate setting: it makes a
   /// re-stitch of an already-finished station fast, and it is the fallback when
@@ -54,8 +55,7 @@ class StitchJobRunner {
   static final Set<String> _activeStations = <String>{};
 
   /// Whether a projection is running for [stationDir].
-  static bool isBusy(String stationDir) =>
-      _activeStations.contains(stationDir);
+  static bool isBusy(String stationDir) => _activeStations.contains(stationDir);
 
   /// Runs [worker] for one station on a background isolate.
   ///

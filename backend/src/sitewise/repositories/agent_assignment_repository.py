@@ -80,7 +80,7 @@ SELECT
     correction.reason AS correction_reason,
     correction.created_at AS correction_at,
     (p.id IS NOT NULL) AS property_exists
-FROM public.agent_listing_assignment a
+FROM fyp.agent_listing_assignment a
 LEFT JOIN fyp.rental_properties p ON p.id = a.listing_id
 LEFT JOIN LATERAL (
     SELECT url FROM fyp.property_photos ph
@@ -89,10 +89,10 @@ LEFT JOIN LATERAL (
     ORDER BY ph.is_primary DESC NULLS LAST, ph.id ASC
     LIMIT 1
 ) photo ON TRUE
-LEFT JOIN public.property_verification pv ON pv.property_id = p.id
+LEFT JOIN fyp.property_verification pv ON pv.property_id = p.id
 LEFT JOIN LATERAL (
     SELECT va.action, va.reason, va.created_at
-    FROM public.verification_audit va
+    FROM fyp.verification_audit va
     WHERE va.property_id = p.id
       AND va.action IN ('listing_rejected', 'listing_information_requested')
       AND btrim(coalesce(va.reason, '')) <> ''
@@ -117,7 +117,8 @@ def _task_projection(data: dict[str, Any]) -> dict[str, Any]:
     ownership_status = data.get("verification_ownership_status")
 
     data["missing_required_fields"] = (
-        listing_completeness_errors(data) if data.get("property_exists") else []
+        listing_completeness_errors(data, require_availability=False)
+        if data.get("property_exists") else []
     )
     note_bearing = listing_status in _NOTE_BEARING
     # Administrator feedback travels with the state that asked for it: the
@@ -221,13 +222,18 @@ class AgentAssignmentRepository:
         self.session.execute(
             text(
                 """
-                INSERT INTO public.agent_listing_assignment
-                    (listing_id, agent_id, assigned_by_user_id, created_at, updated_at)
-                VALUES (:lid, :aid, :by, :now, :now)
+                INSERT INTO fyp.agent_listing_assignment
+                    (listing_id, agent_id, assigned_by_user_id, created_at, updated_at, workflow_status, requested_at)
+                VALUES (:lid, :aid, :by, :now, :now, 'requested', :now)
                 ON CONFLICT (listing_id) DO UPDATE
                     SET agent_id = EXCLUDED.agent_id,
                         assigned_by_user_id = EXCLUDED.assigned_by_user_id,
-                        updated_at = EXCLUDED.updated_at
+                        updated_at = EXCLUDED.updated_at,
+                        workflow_status = 'requested',
+                        requested_at = now(), responded_at = NULL,
+                        inspection_data = '{}'::jsonb, inspection_updated_at = NULL,
+                        panorama_id = NULL, panorama_tour_id = NULL, panorama_uploaded_at = NULL,
+                        submitted_at = NULL, decline_reason = NULL
                 """
             ),
             {
@@ -244,7 +250,7 @@ class AgentAssignmentRepository:
 
     def unassign(self, listing_id: int) -> bool:
         result = self.session.execute(
-            text("DELETE FROM public.agent_listing_assignment WHERE listing_id = :lid"),
+            text("DELETE FROM fyp.agent_listing_assignment WHERE listing_id = :lid"),
             {"lid": int(listing_id)},
         )
         self.session.commit()
@@ -253,7 +259,7 @@ class AgentAssignmentRepository:
     def agent_id_for(self, listing_id: int) -> int | None:
         value = self.session.execute(
             text(
-                "SELECT agent_id FROM public.agent_listing_assignment "
+                "SELECT agent_id FROM fyp.agent_listing_assignment "
                 "WHERE listing_id = :lid"
             ),
             {"lid": int(listing_id)},

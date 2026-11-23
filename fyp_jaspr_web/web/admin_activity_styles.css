@@ -403,3 +403,196 @@
 @media (prefers-reduced-motion: reduce) {
   .app-shell.app-shell--admin .sa-tab { transition: none; }
 }
+
+/* === SITEWISE_ADMIN_ACTIVITY_REDESIGN_V2 ===
+   Existing SiteWise Admin Blue Edition palette only. No demo audit metrics.
+   The base /admin_activity_styles.css above owns table, filters and dialogs. */
+.app-shell.app-shell--admin .sa-page {
+  gap: 20px;
+  min-width: 0;
+}
+.app-shell.app-shell--admin .sa-overview {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+.app-shell.app-shell--admin .sa-overview-metric {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+  min-width: 0;
+  padding: 18px 20px;
+  background: var(--sa-card);
+  border: 1px solid var(--sa-border);
+  border-radius: 16px;
+}
+.app-shell.app-shell--admin .sa-overview-icon {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  flex: 0 0 42px;
+  border-radius: 12px;
+  background: rgba(77, 163, 255, .12);
+  color: var(--sa-blue);
+}
+.app-shell.app-shell--admin .sa-overview-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+}
+.app-shell.app-shell--admin .sa-overview-label {
+  color: var(--sa-muted);
+  font-size: 13px;
+  line-height: 1.35;
+  font-weight: 700;
+}
+.app-shell.app-shell--admin .sa-overview-value {
+  color: var(--sa-text);
+  font-size: clamp(24px, 2.5vw, 32px);
+  line-height: 1.12;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+.app-shell.app-shell--admin .sa-overview-note {
+  color: var(--sa-muted);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+.app-shell.app-shell--admin .sa-coverage-card {
+  min-height: 0;
+  padding: 19px;
+  gap: 9px;
+  border-radius: 16px;
+}
+.app-shell.app-shell--admin .sa-coverage-card--ready {
+  border-color: rgba(77, 163, 255, .32);
+}
+.app-shell.app-shell--admin .sa-coverage-card--off {
+  border-color: rgba(255, 179, 92, .26);
+}
+.app-shell.app-shell--admin .sa-coverage-icon {
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+}
+.app-shell.app-shell--admin .sa-coverage-title {
+  font-size: 16px;
+  line-height: 1.3;
+}
+.app-shell.app-shell--admin .sa-coverage-subtitle {
+  font-size: 13px;
+  line-height: 1.45;
+  margin: 0;
+}
+.app-shell.app-shell--admin .sa-coverage-summary {
+  color: var(--sa-muted);
+  font-size: 13px;
+  line-height: 1.55;
+  margin: 0;
+}
+.app-shell.app-shell--admin .sa-coverage-expand {
+  border-top: 1px solid var(--sa-border);
+  margin-top: 7px;
+  padding-top: 11px;
+  min-width: 0;
+}
+.app-shell.app-shell--admin .sa-coverage-expand > summary {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  cursor: pointer;
+  list-style: none;
+  color: var(--sa-blue);
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.5;
+  padding: 2px 0;
+}
+.app-shell.app-shell--admin .sa-coverage-expand > summary::-webkit-details-marker { display: none; }
+.app-shell.app-shell--admin .sa-coverage-expand > summary:focus-visible {
+  outline: 2px solid var(--sa-blue);
+  outline-offset: 4px;
+  border-radius: 4px;
+}
+.app-shell.app-shell--admin .sa-coverage-expand[open] > summary .ms {
+  transform: rotate(180deg);
+}
+.app-shell.app-shell--admin .sa-coverage-expand .sa-coverage-detail {
+  background: var(--sa-raised);
+  border: 1px solid var(--sa-border);
+  border-radius: 10px;
+  color: var(--sa-muted);
+  font-size: 13px;
+  line-height: 1.6;
+  padding: 13px;
+  margin: 10px 0 0;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+.app-shell.app-shell--admin .sa-coverage-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  border: 1px solid rgba(255, 179, 92, .27);
+  border-radius: 14px;
+  background: rgba(255, 179, 92, .055);
+  padding: 14px 17px;
+  color: var(--sa-warning);
+}
+.app-shell.app-shell--admin .sa-coverage-notice > .ms { flex: 0 0 auto; }
+.app-shell.app-shell--admin .sa-coverage-notice-copy { min-width: 0; }
+.app-shell.app-shell--admin .sa-coverage-notice-copy strong {
+  display: block;
+  font-size: 13.5px;
+  color: var(--sa-text);
+  margin-bottom: 4px;
+}
+.app-shell.app-shell--admin .sa-coverage-notice-copy p {
+  color: var(--sa-muted);
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.55;
+}
+.app-shell.app-shell--admin .sa-section-heading {
+  align-items: center;
+}
+.app-shell.app-shell--admin .sa-heading-copy h2 {
+  font-size: clamp(20px, 2vw, 26px);
+  letter-spacing: -.025em;
+}
+.app-shell.app-shell--admin .sa-heading-copy p {
+  font-size: 14px;
+  line-height: 1.55;
+  max-width: 70ch;
+}
+.app-shell.app-shell--admin .sa-panel-head { padding: 22px 24px; }
+.app-shell.app-shell--admin .sa-filter-grid input,
+.app-shell.app-shell--admin .sa-filter-grid select { min-height: 48px; }
+.app-shell.app-shell--admin .sa-tab { min-height: 43px; font-size: 13px; }
+.app-shell.app-shell--admin .sa-table th { font-size: 11.5px; }
+.app-shell.app-shell--admin .sa-table td { font-size: 13.5px; line-height: 1.5; }
+.app-shell.app-shell--admin .sa-event-title,
+.app-shell.app-shell--admin .sa-person-primary { font-size: 13.5px; }
+.app-shell.app-shell--admin .sa-event-meta,
+.app-shell.app-shell--admin .sa-person-muted { font-size: 12px; }
+.app-shell.app-shell--admin .sa-pager-actions .btn { min-height: 44px; }
+@media (max-width: 1080px) {
+  .app-shell.app-shell--admin .sa-overview { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .app-shell.app-shell--admin .sa-coverage-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 700px) {
+  .app-shell.app-shell--admin .sa-overview,
+  .app-shell.app-shell--admin .sa-coverage-grid { grid-template-columns: minmax(0, 1fr); }
+  .app-shell.app-shell--admin .sa-overview-metric { padding: 16px; }
+  .app-shell.app-shell--admin .sa-coverage-card { padding: 16px; }
+  .app-shell.app-shell--admin .sa-page { gap: 17px; }
+  .app-shell.app-shell--admin .sa-panel-head { padding: 16px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .app-shell.app-shell--admin .sa-coverage-expand > summary .ms { transition: none; }
+}
+/* === END SITEWISE_ADMIN_ACTIVITY_REDESIGN_V2 === */

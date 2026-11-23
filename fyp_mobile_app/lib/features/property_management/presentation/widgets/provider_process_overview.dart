@@ -155,8 +155,8 @@ const _ownerSteps = <_ProcessStepData>[
   ),
   _ProcessStepData(
     'Inspection and 360° evidence',
-    'An authorized Agent may handle an assigned inspection; you can also '
-        'capture the tour yourself where allowed.',
+    'Only your assigned Agent performs the independent inspection and '
+        'captures the virtual tour.',
   ),
   _ProcessStepData(
     'Administrator review',
@@ -178,7 +178,7 @@ const _agentSteps = <_ProcessStepData>[
     'Open the property and use its existing 360° capture action.',
   ),
   _ProcessStepData(
-    'Submit proposed corrections',
-    'Send changes for Administrator review; Agents do not publish listings.',
+    'Submit inspection to Admin',
+    'After checks and a completed 360° panorama, confirm and send the property for Admin review.',
   ),
 ];

@@ -89,85 +89,95 @@ abstract final class OpenCvNativeProbe {
     final capabilities = <OpenCvCapability>[];
 
     // ── imgproc ──────────────────────────────────────────────────────────
-    capabilities.add(_check('imgproc', 'cvtColor', () {
-      final src = cv.Mat.zeros(8, 8, cv.MatType.CV_8UC3);
-      try {
-        final gray = cv.cvtColor(src, cv.COLOR_BGR2GRAY);
+    capabilities.add(
+      _check('imgproc', 'cvtColor', () {
+        final src = cv.Mat.zeros(8, 8, cv.MatType.CV_8UC3);
         try {
-          if (gray.rows != 8 || gray.cols != 8 || gray.channels != 1) {
-            throw StateError(
-              'cvtColor returned ${gray.cols}x${gray.rows} with '
-              '${gray.channels} channel(s)',
-            );
+          final gray = cv.cvtColor(src, cv.COLOR_BGR2GRAY);
+          try {
+            if (gray.rows != 8 || gray.cols != 8 || gray.channels != 1) {
+              throw StateError(
+                'cvtColor returned ${gray.cols}x${gray.rows} with '
+                '${gray.channels} channel(s)',
+              );
+            }
+          } finally {
+            gray.dispose();
           }
         } finally {
-          gray.dispose();
+          src.dispose();
         }
-      } finally {
-        src.dispose();
-      }
-    }));
+      }),
+    );
 
     // ── imgcodecs ────────────────────────────────────────────────────────
     // Encode *and* decode: the stitcher does both, and the two live in the same
     // module but are separate entry points.
-    capabilities.add(_check('imgcodecs', 'imencode+imdecode', () {
-      final src = cv.Mat.zeros(8, 8, cv.MatType.CV_8UC3);
-      try {
-        final (ok, bytes) = cv.imencode('.png', src);
-        if (!ok || bytes.isEmpty) {
-          throw StateError('imencode produced no bytes');
-        }
-        final decoded = cv.imdecode(bytes, cv.IMREAD_COLOR);
+    capabilities.add(
+      _check('imgcodecs', 'imencode+imdecode', () {
+        final src = cv.Mat.zeros(8, 8, cv.MatType.CV_8UC3);
         try {
-          if (decoded.isEmpty) {
-            throw StateError('imdecode produced an empty Mat');
+          final (ok, bytes) = cv.imencode('.png', src);
+          if (!ok || bytes.isEmpty) {
+            throw StateError('imencode produced no bytes');
+          }
+          final decoded = cv.imdecode(bytes, cv.IMREAD_COLOR);
+          try {
+            if (decoded.isEmpty) {
+              throw StateError('imdecode produced an empty Mat');
+            }
+          } finally {
+            decoded.dispose();
           }
         } finally {
-          decoded.dispose();
+          src.dispose();
         }
-      } finally {
-        src.dispose();
-      }
-    }));
+      }),
+    );
 
     // ── features2d ───────────────────────────────────────────────────────
-    capabilities.add(_check('features2d', 'ORB.create+detect', () {
-      final orb = cv.ORB.create(nFeatures: 50);
-      final src = cv.Mat.zeros(32, 32, cv.MatType.CV_8UC1);
-      try {
-        // Zeros yield no corners; the point is that the call returns rather
-        // than failing to resolve cv_ORB_create / cv_ORB_detect.
-        orb.detect(src);
-      } finally {
-        src.dispose();
-        orb.dispose();
-      }
-    }));
+    capabilities.add(
+      _check('features2d', 'ORB.create+detect', () {
+        final orb = cv.ORB.create(nFeatures: 50);
+        final src = cv.Mat.zeros(32, 32, cv.MatType.CV_8UC1);
+        try {
+          // Zeros yield no corners; the point is that the call returns rather
+          // than failing to resolve cv_ORB_create / cv_ORB_detect.
+          orb.detect(src);
+        } finally {
+          src.dispose();
+          orb.dispose();
+        }
+      }),
+    );
 
     // ── calib3d ──────────────────────────────────────────────────────────
-    capabilities.add(_check('calib3d', 'findHomography', () {
-      final src = cv.VecPoint2f.fromList(<cv.Point2f>[
-        cv.Point2f(0, 0),
-        cv.Point2f(1, 0),
-        cv.Point2f(1, 1),
-        cv.Point2f(0, 1),
-      ]);
-      final dst = cv.VecPoint2f.fromList(<cv.Point2f>[
-        cv.Point2f(2, 2),
-        cv.Point2f(4, 2),
-        cv.Point2f(4, 4),
-        cv.Point2f(2, 4),
-      ]);
-      final h = cv.findHomography(cv.Mat.fromVec(src), cv.Mat.fromVec(dst));
-      h.dispose();
-    }));
+    capabilities.add(
+      _check('calib3d', 'findHomography', () {
+        final src = cv.VecPoint2f.fromList(<cv.Point2f>[
+          cv.Point2f(0, 0),
+          cv.Point2f(1, 0),
+          cv.Point2f(1, 1),
+          cv.Point2f(0, 1),
+        ]);
+        final dst = cv.VecPoint2f.fromList(<cv.Point2f>[
+          cv.Point2f(2, 2),
+          cv.Point2f(4, 2),
+          cv.Point2f(4, 4),
+          cv.Point2f(2, 4),
+        ]);
+        final h = cv.findHomography(cv.Mat.fromVec(src), cv.Mat.fromVec(dst));
+        h.dispose();
+      }),
+    );
 
     // ── stitching ────────────────────────────────────────────────────────
-    capabilities.add(_check('stitching', 'Stitcher.create', () {
-      final stitcher = cv.Stitcher.create(mode: cv.StitcherMode.PANORAMA);
-      stitcher.dispose();
-    }));
+    capabilities.add(
+      _check('stitching', 'Stitcher.create', () {
+        final stitcher = cv.Stitcher.create(mode: cv.StitcherMode.PANORAMA);
+        stitcher.dispose();
+      }),
+    );
 
     return capabilities;
   }
@@ -202,7 +212,10 @@ abstract final class OpenCvNativeProbe {
 
   /// Logs one line per capability. Used by the debug startup diagnostic and by
   /// the stitcher before it spawns the projection isolate.
-  static void log(List<OpenCvCapability> capabilities, {String tag = 'SPHERE_NATIVE'}) {
+  static void log(
+    List<OpenCvCapability> capabilities, {
+    String tag = 'SPHERE_NATIVE',
+  }) {
     for (final capability in capabilities) {
       debugPrint('$tag: $capability');
     }

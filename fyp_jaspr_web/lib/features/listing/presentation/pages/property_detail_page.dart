@@ -6,7 +6,9 @@ import 'package:jaspr/jaspr.dart';
 import 'package:jaspr_riverpod/jaspr_riverpod.dart';
 import 'package:shared_logic/shared_logic.dart';
 
+import 'package:sitewise_jaspr_web/features/authentication/data/auth_browser.dart';
 import 'package:sitewise_jaspr_web/features/listing/presentation/components/property_detail/business_match_panel.dart';
+import 'package:sitewise_jaspr_web/features/listing/presentation/components/property_detail/business_concept_panel.dart';
 import 'package:sitewise_jaspr_web/features/listing/presentation/components/property_detail/combined_media_gallery.dart';
 import 'package:sitewise_jaspr_web/features/listing/presentation/components/property_detail/compact_location_explanation.dart';
 import 'package:sitewise_jaspr_web/features/listing/presentation/components/property_detail/district_demographics_panel.dart';
@@ -182,7 +184,7 @@ class _PropertyDetailPageState extends State<PropertyDetailPage> {
       return;
     }
     final savedNow = context.read(appNotifierProvider).saved.contains(id);
-    final failure = await AppLocator.persistToggleSaved(
+    final failure = await notifier.persistSaved(
       id,
       wantSaved: !savedNow,
     );
@@ -190,12 +192,11 @@ class _PropertyDetailPageState extends State<PropertyDetailPage> {
     if (failure != null) {
       setState(() {
         _saveMessage =
-            'Could not ${savedNow ? 'remove' : 'save'} — ${failure.message} '
+            'Could not ${savedNow ? 'remove' : 'save'} — $failure '
             'Your shortlist was not changed.';
       });
       return;
     }
-    notifier.toggleSaved(id);
     setState(() {
       _saveMessage = savedNow
           ? 'Removed from your saved properties.'
@@ -416,6 +417,27 @@ class _DetailState extends State<_Detail> {
   /// (layer counts, scored coordinate) can use it. They must not issue a second
   /// request, and they must describe the same payload the score shows.
   PropertyInsights? _insights;
+  String? _publishedPanoramaUrl;
+
+  /// Fresh private Storage URL for an administrator-approved public capture.
+  /// Does not assume public.property.property_id equals FYP listing id.
+  Future<void> _loadPublishedPanorama() async {
+    try {
+      final ref = Uri.encodeComponent(property.id);
+      final result = await WebAuth.requestDetailed(
+        '/api/v1/360/published/properties/$ref',
+      );
+      if (!mounted || result['ok'] != true) return;
+      final body = result['body'];
+      final url = body is Map ? body['viewUrl'] : null;
+      if (url is String && url.startsWith('https://')) {
+        setState(() => _publishedPanoramaUrl = url);
+      }
+    } on Object {
+      // The regular listing and legacy panorama must keep working.
+      // Re-selecting the 360° tab retries this independent request.
+    }
+  }
 
   /// Individual verified nearby locations for the map's markers, fetched once
   /// at the legacy mode's widest radius and sliced per selected radius inside
@@ -426,6 +448,7 @@ class _DetailState extends State<_Detail> {
   @override
   void initState() {
     super.initState();
+    unawaited(_loadPublishedPanorama());
     // The score sections read the future directly so they can show a skeleton;
     // this mirror only feeds the gallery and the map.
     component.insightsFuture?.then<void>(
@@ -572,13 +595,15 @@ class _DetailState extends State<_Detail> {
           panorama: _panorama(),
           view: _gallery,
           height: 430,
-          onTab: (tab) => setState(
-            () => _gallery = _gallery.copyWith(
+          onTab: (tab) {
+            setState(() => _gallery = _gallery.copyWith(
               tab: tab,
               full: false,
               photoFailed: false,
-            ),
-          ),
+            ));
+            // A signed Storage URL may have expired while browsing photos.
+            if (tab == 1) unawaited(_loadPublishedPanorama());
+          },
           onIndex: (index) => setState(
             () =>
                 _gallery = _gallery.copyWith(index: index, photoFailed: false),
@@ -606,6 +631,7 @@ class _DetailState extends State<_Detail> {
       // is presented outside the map and the tabs.
       _detailsPanel(),
       _mapPanel(),
+      BusinessConceptPanel(propertyId: property.id),
       _insightTabs(),
       _notShownPanel(),
     ]);
@@ -901,7 +927,7 @@ class _DetailState extends State<_Detail> {
   /// as a tour.
   PanoramaMedia _panorama() {
     final info = _insights?.panorama;
-    final ready = info?.readyUrl;
+    final ready = _publishedPanoramaUrl ?? info?.readyUrl;
     if (ready != null) return PanoramaMedia.ready(ready);
 
     if (info != null && info.status == 'processing') {
@@ -1279,13 +1305,6 @@ class _DetailState extends State<_Detail> {
           strong([Component.text(layer.label)]),
           Component.text(_legendCounts(layer)),
         ]),
-      p(classes: 'sw-pd__legend-note', [
-        Component.text(
-          'Toggle the same categories on the map. A category marked "counts '
-          'only" has a recorded total but no stored locations, so the map draws '
-          'no pins for it.',
-        ),
-      ]),
     ]);
   }
 
@@ -1298,6 +1317,9 @@ class _DetailState extends State<_Detail> {
     // The properties layer is counted by the map itself, per the radius the
     // visitor picks, so the payload legitimately carries no total for it.
     if (parts.isNotEmpty) return ' — ${parts.join(' · ')}';
+    // The reference-property source note is not a count. Keep the map's
+    // real radius-dependent marker totals but do not repeat the explanation.
+    if (layer.label.trim().toLowerCase() == 'properties') return '';
     return layer.note == null || layer.note!.trim().isEmpty
         ? ' — counted on the map'
         : ' — ${layer.note!.trim()}';

@@ -93,7 +93,10 @@ class IncrementalStitchStore {
       }
     }
     if (!await dir.exists()) await dir.create(recursive: true);
-    return p.join(outputsDir, 'stitch_${(highest + 1).toString().padLeft(3, '0')}.jpg');
+    return p.join(
+      outputsDir,
+      'stitch_${(highest + 1).toString().padLeft(3, '0')}.jpg',
+    );
   }
 
   /// Every intermediate output that still exists on disk, oldest first.

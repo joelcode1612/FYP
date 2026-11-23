@@ -133,10 +133,7 @@ class SitewiseSphereSessionStore implements CaptureSessionStore {
           );
       // Create-or-restore in one call: an existing session keeps its own
       // association, so a double tap on Start cannot fork it.
-      document.session = session.copyWith(
-        userId: userId,
-        updatedAt: now,
-      );
+      document.session = session.copyWith(userId: userId, updatedAt: now);
       await _write(document);
       return document.session!;
     });
@@ -251,6 +248,12 @@ class SitewiseSphereSessionStore implements CaptureSessionStore {
     bool clearBackendJobId = false,
     String? error,
     bool clearLastError = false,
+    FrameSyncStatus? panoramaSyncStatus,
+    FrameSyncStatus? backupSyncStatus,
+    int? backupUploaded,
+    int? backupTotal,
+    String? backendPanoramaId,
+    bool clearBackendPanoramaId = false,
   }) {
     return _enqueue(() async {
       final document = await _read();
@@ -263,6 +266,12 @@ class SitewiseSphereSessionStore implements CaptureSessionStore {
         syncStatus: syncStatus,
         lastError: error,
         clearLastError: clearLastError,
+        panoramaSyncStatus: panoramaSyncStatus,
+        backupSyncStatus: backupSyncStatus,
+        backupUploaded: backupUploaded,
+        backupTotal: backupTotal,
+        backendPanoramaId: backendPanoramaId,
+        clearBackendPanoramaId: clearBackendPanoramaId,
       );
       await _write(document);
     });

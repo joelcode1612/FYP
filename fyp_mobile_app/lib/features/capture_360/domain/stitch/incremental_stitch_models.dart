@@ -41,9 +41,10 @@ enum StitchStatus {
     StitchStatus.fail => 'Fail',
   };
 
-  static StitchStatus fromName(String? name) => StitchStatus.values
-      .firstWhere((StitchStatus s) => s.name == name,
-          orElse: () => StitchStatus.pending);
+  static StitchStatus fromName(String? name) => StitchStatus.values.firstWhere(
+    (StitchStatus s) => s.name == name,
+    orElse: () => StitchStatus.pending,
+  );
 }
 
 /// The final panorama's own status — independent of every per-image result.
@@ -60,9 +61,11 @@ enum FinalStitchStatus {
     FinalStitchStatus.fail => 'Failed',
   };
 
-  static FinalStitchStatus fromName(String? name) => FinalStitchStatus.values
-      .firstWhere((FinalStitchStatus s) => s.name == name,
-          orElse: () => FinalStitchStatus.pending);
+  static FinalStitchStatus fromName(String? name) =>
+      FinalStitchStatus.values.firstWhere(
+        (FinalStitchStatus s) => s.name == name,
+        orElse: () => FinalStitchStatus.pending,
+      );
 }
 
 /// The stitching verdict for one saved photograph.
@@ -207,8 +210,7 @@ class ImageStitchRecord {
     if (laplacianVariance != null) 'laplacian_variance': laplacianVariance,
     if (brightness != null) 'brightness': brightness,
     if (stitcherStatus != null) 'stitcher_status': stitcherStatus,
-    if (stitchedOutputPath != null)
-      'stitched_output_path': stitchedOutputPath,
+    if (stitchedOutputPath != null) 'stitched_output_path': stitchedOutputPath,
     if (errorReason != null) 'error_reason': errorReason,
     if (mergeError != null) 'merge_error': mergeError,
     'image_token': imageToken,
@@ -288,10 +290,7 @@ class StitchGroupState {
   /// contains exactly these members. `null` until a merge succeeds.
   final String? outputPath;
 
-  const StitchGroupState({
-    this.targetIds = const <int>[],
-    this.outputPath,
-  });
+  const StitchGroupState({this.targetIds = const <int>[], this.outputPath});
 
   bool contains(int targetId) => targetIds.contains(targetId);
 
@@ -318,10 +317,9 @@ class StitchGroupState {
 
   static StitchGroupState fromJson(Map<String, dynamic> json) =>
       StitchGroupState(
-        targetIds:
-            ((json['target_ids'] as List<dynamic>?) ?? const [])
-                .map((dynamic e) => (e as num).toInt())
-                .toList(growable: false),
+        targetIds: ((json['target_ids'] as List<dynamic>?) ?? const [])
+            .map((dynamic e) => (e as num).toInt())
+            .toList(growable: false),
         outputPath: json['output_path'] as String?,
       );
 }
@@ -417,7 +415,9 @@ class StitchResultsDocument {
        intermediates = intermediates ?? const <IntermediateStitch>[],
        finalPanorama =
            finalPanorama ??
-           FinalPanoramaRecord(updatedAt: DateTime.fromMillisecondsSinceEpoch(0)),
+           FinalPanoramaRecord(
+             updatedAt: DateTime.fromMillisecondsSinceEpoch(0),
+           ),
        updatedAt = updatedAt ?? DateTime.now();
 
   ImageStitchRecord? recordFor(int targetId) => records[targetId];
@@ -482,13 +482,12 @@ class StitchResultsDocument {
       group: StitchGroupState.fromJson(
         json['group'] as Map<String, dynamic>? ?? const {},
       ),
-      intermediates:
-          ((json['intermediates'] as List<dynamic>?) ?? const [])
-              .map(
-                (dynamic e) =>
-                    IntermediateStitch.fromJson(e as Map<String, dynamic>),
-              )
-              .toList(growable: false),
+      intermediates: ((json['intermediates'] as List<dynamic>?) ?? const [])
+          .map(
+            (dynamic e) =>
+                IntermediateStitch.fromJson(e as Map<String, dynamic>),
+          )
+          .toList(growable: false),
       finalPanorama: FinalPanoramaRecord.fromJson(
         json['final'] as Map<String, dynamic>? ?? const {},
       ),

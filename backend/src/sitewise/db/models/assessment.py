@@ -26,10 +26,11 @@ class Assessment(SQLModel, table=True):
     __tablename__ = "assessment"
     __table_args__ = (
         UniqueConstraint("user_id", "property_id", name="uq_assessment_user_property"),
+        {"schema": "fyp", "info": {"externally_managed": True}},
     )
 
     assessment_id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
-    user_id: uuid.UUID = Field(foreign_key="users.user_id", index=True)
+    user_id: uuid.UUID = Field(foreign_key="public.users.user_id", index=True)
     # Catalogue ids are text, and the catalogue lives in the analytics schema
     # which SQLModel does not manage - so this is a validated reference, not a
     # foreign key. Existence is checked against the catalogue before insert.

@@ -1,28 +1,10 @@
-"""PU eligibility gate for the recommendation search endpoint.
-
-Verification matrix for the strict ``PU score > 50`` rule (0-100 scale):
-
-* default searches return only PU-eligible properties, and at least three
-  exist in the live catalogue;
-* a score of exactly 50.0 is excluded; 50.0001 is included (fixture rows in a
-  transaction that is ALWAYS rolled back — no catalogue row is modified);
-* no live catalogue row has a NULL score (the importer refuses scoreless
-  workbook rows) and a NULL would fail the gate anyway (``NULL > 50`` is NULL,
-  not TRUE);
-* ordering prefers the higher PU score among equally-fitting properties,
-  while requirement fit stays the primary key;
-* serialization reports the real PU score under both ``pu_score`` (explicit,
-  with ``pu_score_scale``) and the legacy ``catalog_suitability_score`` name;
-* filters compose with the gate and totals count only eligible rows.
-"""
+"""Expanded64 eligibility and deterministic recommendation search ordering."""
 from __future__ import annotations
 
 import uuid
 
 import pytest
-from sqlalchemy import text
-
-from sitewise.db.analytics_session import analytics_engine
+from sitewise.ml import pu_expanded
 from sitewise.services.recommendation_search_service import (
     PU_ELIGIBILITY_THRESHOLD,
     RecommendationSearchService,
@@ -32,9 +14,6 @@ from sitewise.services.recommendation_search_service import (
 )
 
 from ..conftest import TEST_EMAIL_DOMAIN, make_token, register_user_id
-
-FIXTURE_TITLE = "PU GATE FIXTURE"
-
 
 def auth(token: str) -> dict:
     return {"Authorization": f"Bearer {token}"}
@@ -50,43 +29,6 @@ def user_token(client, cleanup_users) -> str:
     assert client.get("/api/v1/auth/me", headers=auth(token)).status_code == 200
     register_user_id(cleanup_users, sub)
     return token
-
-
-def _fixture_row(property_id: str, score: float) -> dict:
-    return {
-        "id": property_id,
-        "title": f"{FIXTURE_TITLE} {property_id}",
-        "address": "1 Fixture Street",
-        "state": "Selangor",
-        "rental_rm": 5000,
-        "size_sqft": 1200,
-        "latitude": 3.07,
-        "longitude": 101.6,
-        "property_type": "Shoplot",
-        "suitability_score": score,
-        "dataset_validation": "test",
-        "source_workbook": "test",
-        "source_sheet": "test",
-        "source_row": 1,
-        "source_data": "{}",
-    }
-
-
-INSERT_SQL = text(
-    """
-    INSERT INTO fyp.rental_properties (
-        listing_id, catalogue_id, name, address, state, rental_price,
-        size_sqft, latitude, longitude, property_type,
-        catalogue_suitability_score, catalogue_dataset_validation,
-        catalogue_source_workbook, catalogue_source_sheet,
-        catalogue_source_row, catalogue_source_data
-    ) VALUES (
-        :id, :id, :title, :address, :state, :rental_rm, :size_sqft, :latitude,
-        :longitude, :property_type, :suitability_score, :dataset_validation,
-        :source_workbook, :source_sheet, :source_row, CAST(:source_data AS jsonb)
-    )
-    """
-)
 
 
 def test_default_search_returns_only_pu_eligible_properties(client, user_token):
@@ -111,80 +53,42 @@ def test_default_search_returns_only_pu_eligible_properties(client, user_token):
         assert research["pu_score"] is not None
         assert research["pu_score"] > PU_ELIGIBILITY_THRESHOLD
         assert research["pu_score_scale"] == "0-100"
-        # Both names must report the same stored score.
-        assert research["pu_score"] == research["catalog_suitability_score"]
+        assert research["catalog_suitability_score"] is None
+        assert research["pu_score_source"] == "expanded64_live_inference"
+        assert research["pu_model_version"]
 
     meta = body["meta"]["pu_eligibility"]
     assert meta["threshold"] == PU_ELIGIBILITY_THRESHOLD
     assert meta["comparison"] == "strictly_greater_than"
 
-    with analytics_engine.connect() as conn:
-        eligible = conn.execute(
-            text(
-                "SELECT count(*) FROM fyp.catalogue_properties "
-                "WHERE rental_rm IS NOT NULL AND size_sqft IS NOT NULL "
-                "AND suitability_score > :t"
-            ),
-            {"t": PU_ELIGIBILITY_THRESHOLD},
-        ).scalar()
-    assert body["pagination"]["total"] == eligible
 
+def test_expanded_scores_gate_search_without_using_stored_scores(monkeypatch):
+    predictions = {
+        "exact": {"available": True, "score": 0.5},
+        "above": {"available": True, "score": 0.500001},
+        "below": {"available": True, "score": 0.499999},
+        "high": {"available": True, "score": 0.8},
+        "unavailable": {"available": False, "score": None},
+    }
+    rows = [
+        _Row(
+            id=pid, title=pid, address="", city="", state="Selangor", postcode="",
+            rental_rm=3000, size_sqft=1000, latitude=None, longitude=None,
+            property_type="Shoplot", image_url=None, suitability_score=99, matches=[],
+        )
+        for pid in predictions
+    ]
+    service = RecommendationSearchService(None)
+    monkeypatch.setattr(service, "_query", lambda _: rows)
+    monkeypatch.setattr(service, "_catalogue_revision", lambda: "expanded64-gate-test")
+    monkeypatch.setattr(service, "_cache_get", lambda _: None)
+    monkeypatch.setattr(service, "_cache_put", lambda *_: None)
+    monkeypatch.setattr(pu_expanded, "expanded_scores_many", lambda *_: predictions)
 
-def test_boundary_50_excluded_50_plus_included():
-    """Strictness at the boundary, plus PU-desc ordering, on fixture rows.
-
-    The transaction is rolled back unconditionally — the live catalogue is
-    never modified.
-    """
-    with analytics_engine.connect() as conn:
-        transaction = conn.begin()
-        try:
-            for property_id, score in (
-                ("TEST-PU-0500", 50.0),      # exactly at threshold -> excluded
-                ("TEST-PU-0501", 50.0001),   # just above -> included
-                ("TEST-PU-0499", 49.9999),   # just below -> excluded
-                ("TEST-PU-0800", 80.0),      # included, should rank first
-            ):
-                conn.execute(INSERT_SQL, _fixture_row(property_id, score))
-
-            service = RecommendationSearchService(conn)
-            result = service.search(
-                SearchCriteria(query=FIXTURE_TITLE, page_size=20)
-            )
-            ids = [item["property_id"] for item in result["data"]]
-
-            assert ids == ["TEST-PU-0800", "TEST-PU-0501"], ids
-            assert result["pagination"]["total"] == 2
-            scores = [item["research"]["pu_score"] for item in result["data"]]
-            assert scores == [80.0, 50.0001]
-        finally:
-            transaction.rollback()
-
-
-def test_pu_column_gate_excludes_nulls():
-    """No live catalogue row has a NULL score; a NULL would fail the gate.
-
-    The importer refuses workbook rows without a research score
-    (``assert_workbook``), so the catalogue view must hold zero NULL
-    ``suitability_score`` values today; the SQL gate excludes them anyway
-    because ``NULL > 50`` is NULL, not TRUE.
-    """
-    with analytics_engine.connect() as conn:
-        null_scores = conn.execute(
-            text(
-                "SELECT count(*) FROM fyp.catalogue_properties "
-                "WHERE suitability_score IS NULL"
-            )
-        ).scalar()
-    assert null_scores == 0
-    # NULL > 50 evaluates to NULL (not TRUE): a null score can never pass the
-    # WHERE clause. Assert the SQL semantics explicitly.
-    with analytics_engine.connect() as conn:
-        passes = conn.execute(
-            text("SELECT CAST(NULL AS double precision) > :t"),
-            {"t": PU_ELIGIBILITY_THRESHOLD},
-        ).scalar()
-    assert passes is None
+    ranked = service._ranked_candidates(SearchCriteria())
+    assert [row.id for row in ranked] == ["high", "above"]
+    assert [row.pu_score for row in ranked] == pytest.approx([80, 50.0001])
+    assert all(row.suitability_score is None for row in ranked)
 
 
 def test_ordering_prefers_higher_pu_on_equal_requirement_fit():

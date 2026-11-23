@@ -69,6 +69,7 @@ class SitewiseApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       theme: sitewiseTheme(),
       initialRoute: '/',
+      navigatorObservers: [AppRoutes.pageObserver],
       onGenerateRoute: AppRoutes.onGenerateRoute,
       onGenerateInitialRoutes:
       AppRoutes.generateInitialRoutes,

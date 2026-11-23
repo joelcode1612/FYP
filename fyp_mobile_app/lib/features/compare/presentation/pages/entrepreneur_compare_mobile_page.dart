@@ -28,6 +28,7 @@ class _EntrepreneurCompareMobilePageState
   /// Signature of the selection we last sent, so an ordinary rebuild never
   /// queues a duplicate request.
   String _requestedIds = '';
+  bool _detailsExpanded = false;
 
   List<String> _ids() =>
       ref.read(appNotifierProvider).compared.toList();
@@ -83,11 +84,11 @@ class _EntrepreneurCompareMobilePageState
           children: [
             const MobileSectionHeader(
               title: 'Compare your shortlisted properties',
-              subtitle: 'Observable differences, not another ranking.',
+              subtitle: 'See the most important differences at a glance.',
             ),
             const SizedBox(height: 8),
             Text(
-              '${compared.length} of ${AppState.maxCompare} selected',
+              '${compared.length} properties selected',
               style: const TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.w700,
@@ -130,122 +131,143 @@ class _EntrepreneurCompareMobilePageState
   Widget _body(BuildContext context, PropertyCompareResult data) {
     final properties = data.properties;
     if (properties.isEmpty) {
-      // A selection that resolves to nothing is a state with the backend's
-      // reasons and a way out — never a blank screen.
       return _Notice(
         text: [
           'None of your selected properties could be loaded.',
           for (final id in data.unresolvedIds)
             data.reasonFor(id) ?? '$id could not be resolved.',
         ].join(' '),
-        retry: () => ref
-            .read(propertyCompareProvider.notifier)
-            .load(
+        retry: () => ref.read(propertyCompareProvider.notifier).load(
               ref.read(appNotifierProvider).compared.toList(),
               refresh: true,
             ),
       );
     }
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        if (data.unresolvedIds.isNotEmpty)
+        if (data.unresolvedIds.isNotEmpty) ...[
           _Notice(
             text: [
               for (final id in data.unresolvedIds)
                 data.reasonFor(id) ??
-                    'One selected property could not be resolved and was left out.',
+                    'A selected property could not be loaded and was left out.',
             ].join(' '),
           ),
-        const SizedBox(height: 14),
+          const SizedBox(height: 12),
+        ],
         _selector(context, properties),
-        const SizedBox(height: 18),
-        _KeyDifferences(data: data),
-        const SizedBox(height: 18),
-        _PreferenceFit(data: data),
-        const SizedBox(height: 18),
-        _Category(
-          title: 'Cost & space',
-          properties: properties,
-          keys: const [
-            'monthly_rent_rm',
-            'size_sqft',
-            'rent_per_sqft',
-            'floor_level_text',
-            'has_parking',
-          ],
-        ),
-        const SizedBox(height: 18),
-        _Category(
-          title: 'Location & accessibility',
-          properties: properties,
-          keys: const [
-            'population_500m',
-            'population_1000m',
-            'nearest_transit_walk_m',
-            'bus_stops_500m_walk',
-            'walk_isochrone_area_10min_km2',
-            'parking_facilities_500m',
-            'office_pois_500m',
-            'universities_count_500m',
-            'malls_count_500m',
-          ],
-        ),
-        const SizedBox(height: 18),
-        _Category(
-          title: 'Nearby F&B competition',
-          properties: properties,
-          keys: const [
-            'fnb_competitors_500m',
-            'fnb_competitors_1000m',
-            'cafe_count_500m',
-            'restaurant_count_500m',
-            'nearest_competitor_distance_m',
-          ],
-          hint:
-              'Counts use the same source and radius for every property. '
-              'Fewer recorded competitors does not prove stronger demand.',
-        ),
-        const SizedBox(height: 18),
-        _Tradeoffs(tradeoffs: data.tradeoffs),
-        const SizedBox(height: 18),
-        _ResearchContext(properties: properties),
+        const SizedBox(height: 22),
+        _CompareHighlights(properties: properties),
+        const SizedBox(height: 22),
+        _CompareAtAGlance(properties: properties),
         const SizedBox(height: 12),
-        for (final note in data.notes)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 6),
-            child: Text(
-              note,
-              style: const TextStyle(
-                fontSize: 12,
-                height: 1.5,
-                color: SitewiseColors.muted,
+        const Padding(
+          padding: EdgeInsets.symmetric(horizontal: 4),
+          child: Text(
+            'Highlighted numbers show measurable differences, not an '
+            'overall ranking or a prediction of business success. '
+            'Only equally available measurements are highlighted.',
+            style: TextStyle(
+              color: SitewiseColors.muted,
+              fontSize: 13,
+              height: 1.45,
+            ),
+          ),
+        ),
+        const SizedBox(height: 20),
+        SizedBox(
+          width: double.infinity,
+          child: FilledButton.icon(
+            onPressed: () => setState(() => _detailsExpanded = !_detailsExpanded),
+            icon: Icon(_detailsExpanded
+                ? Icons.expand_less_rounded
+                : Icons.format_list_bulleted_rounded),
+            label: Text(_detailsExpanded ? 'Hide full details' : 'View full details'),
+            style: FilledButton.styleFrom(
+              backgroundColor: SitewiseColors.action,
+              foregroundColor: Colors.white,
+              minimumSize: const Size.fromHeight(52),
+              textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(14),
               ),
             ),
           ),
-        const SizedBox(height: 10),
+        ),
+        if (_detailsExpanded) ...[
+          const SizedBox(height: 22),
+          _KeyDifferences(data: data),
+          const SizedBox(height: 18),
+          _PreferenceFit(data: data),
+          const SizedBox(height: 18),
+          _Category(
+            title: 'Cost & space',
+            properties: properties,
+            keys: const [
+              'monthly_rent_rm', 'size_sqft', 'rent_per_sqft',
+              'floor_level_text', 'has_parking',
+            ],
+          ),
+          const SizedBox(height: 18),
+          _Category(
+            title: 'Location & accessibility',
+            properties: properties,
+            keys: const [
+              'population_500m', 'population_1000m',
+              'nearest_transit_walk_m', 'bus_stops_500m_walk',
+              'walk_isochrone_area_10min_km2', 'parking_facilities_500m',
+              'office_pois_500m', 'universities_count_500m',
+              'malls_count_500m',
+            ],
+          ),
+          const SizedBox(height: 18),
+          _Category(
+            title: 'Nearby F&B competition',
+            properties: properties,
+            keys: const [
+              'fnb_competitors_500m', 'fnb_competitors_1000m',
+              'cafe_count_500m', 'restaurant_count_500m',
+              'nearest_competitor_distance_m',
+            ],
+            hint: 'Counts use recorded F&B outlets. Fewer competitors '
+                'does not necessarily mean stronger demand.',
+          ),
+          const SizedBox(height: 18),
+          _Tradeoffs(tradeoffs: data.tradeoffs),
+          const SizedBox(height: 18),
+          _ResearchContext(properties: properties),
+          for (final note in data.notes)
+            Padding(
+              padding: const EdgeInsets.only(top: 6),
+              child: Text(note,
+                  style: const TextStyle(
+                    fontSize: 13, height: 1.45, color: SitewiseColors.muted,
+                  )),
+            ),
+        ],
+        const SizedBox(height: 12),
         Center(
           child: TextButton.icon(
             onPressed: () {
               ref.read(appNotifierProvider.notifier).clearCompared();
               ref.read(propertyCompareProvider.notifier).reset();
+              if (mounted) setState(() => _detailsExpanded = false);
             },
-            icon: const Icon(Icons.close_rounded, size: 17),
+            icon: const Icon(Icons.close_rounded, size: 18),
             label: const Text('Clear comparison'),
-            style: TextButton.styleFrom(
-              foregroundColor: SitewiseColors.action,
-            ),
           ),
         ),
       ],
     );
   }
 
-  /// Horizontal selector keeps all selected properties visible on small
-  /// screens while remaining one simple scroll gesture.
+  /// Keep the existing property-detail navigation, source images, and selected
+  /// property order. Numeric chips identify cards, NOT recommendation ranks.
   Widget _selector(BuildContext context, List<CompareProperty> properties) =>
       SizedBox(
-        height: 128,
+        height: 205,
         child: ListView.separated(
           scrollDirection: Axis.horizontal,
           itemCount: properties.length,
@@ -253,69 +275,89 @@ class _EntrepreneurCompareMobilePageState
           itemBuilder: (context, index) {
             final property = properties[index];
             return SizedBox(
-              width: 176,
-              child: InkWell(
-                onTap: () => Navigator.of(context).pushNamed(
-                  '/entrepreneur/property-detail',
-                  arguments: property.id,
+              width: 184,
+              child: Material(
+                color: SitewiseColors.surface,
+                shape: RoundedRectangleBorder(
+                  side: const BorderSide(color: SitewiseColors.border),
+                  borderRadius: BorderRadius.circular(16),
                 ),
-                borderRadius: BorderRadius.circular(14),
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: SitewiseColors.surface,
-                    borderRadius: BorderRadius.circular(14),
-                    border: Border.all(color: SitewiseColors.border),
+                clipBehavior: Clip.antiAlias,
+                child: InkWell(
+                  onTap: () => Navigator.of(context).pushNamed(
+                    '/entrepreneur/property-detail',
+                    arguments: property.id,
                   ),
-                  clipBehavior: Clip.antiAlias,
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      MobilePropertyImage(
-                        property: CommercialProperty(
-                          id: property.id,
-                          title: property.title,
-                          address: property.address,
-                          city: property.city,
-                          state: property.state,
-                          postcode: property.postcode,
-                          rentalRm: property.metric('monthly_rent_rm').value?.toDouble() ?? 0,
-                          sizeSqft: property.metric('size_sqft').value?.toDouble() ?? 0,
-                          latitude: 0,
-                          longitude: 0,
-                          propertyType: property.propertyType,
-                          verification: VerificationStatus.pending,
-                          suitabilityScore: 0,
-                          hasSuitabilityScore: false,
-                          hasTour: property.panoramaAvailable,
-                          ownerId: '',
-                          imageUrl: property.imageUrl,
-                        ),
-                        height: 58,
+                      Stack(
+                        children: [
+                          MobilePropertyImage(
+                            property: CommercialProperty(
+                              id: property.id,
+                              title: property.title,
+                              address: property.address,
+                              city: property.city,
+                              state: property.state,
+                              postcode: property.postcode,
+                              rentalRm: property.metric('monthly_rent_rm').value
+                                      ?.toDouble() ?? 0,
+                              sizeSqft: property.metric('size_sqft').value
+                                      ?.toDouble() ?? 0,
+                              latitude: 0,
+                              longitude: 0,
+                              propertyType: property.propertyType,
+                              verification: VerificationStatus.pending,
+                              suitabilityScore: 0,
+                              hasSuitabilityScore: false,
+                              hasTour: property.panoramaAvailable,
+                              ownerId: '',
+                              imageUrl: property.imageUrl,
+                            ),
+                            height: 92,
+                            width: double.infinity,
+                            borderRadius: BorderRadius.zero,
+                          ),
+                          Positioned(
+                            top: 8,
+                            left: 8,
+                            child: CircleAvatar(
+                              radius: 17,
+                              backgroundColor: SitewiseColors.action,
+                              child: Text('${index + 1}',
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: 15,
+                                  )),
+                            ),
+                          ),
+                        ],
                       ),
                       Padding(
-                        padding: const EdgeInsets.fromLTRB(8, 6, 8, 6),
+                        padding: const EdgeInsets.fromLTRB(12, 8, 10, 6),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(
-                              property.title,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w800,
-                                color: SitewiseColors.ink,
-                              ),
+                            Text(property.title,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  color: SitewiseColors.ink,
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w700,
+                                )),
+                            const SizedBox(height: 6),
+                            _CompareCardMetric(
+                              icon: Icons.payments_outlined,
+                              text: property.metric('monthly_rent_rm').display,
+                              emphasized: true,
                             ),
-                            Text(
-                              '${property.metric('monthly_rent_rm').display} · '
-                              '${property.metric('size_sqft').display}',
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                fontSize: 11,
-                                color: SitewiseColors.muted,
-                              ),
+                            const SizedBox(height: 4),
+                            _CompareCardMetric(
+                              icon: Icons.square_foot_outlined,
+                              text: property.metric('size_sqft').display,
                             ),
                           ],
                         ),
@@ -327,6 +369,326 @@ class _EntrepreneurCompareMobilePageState
             );
           },
         ),
+      );
+}
+
+/// Numeric comparisons are drawn only from measurements returned by the API.
+/// An extreme is highlighted only when ALL displayed properties have the
+/// measurement and exactly one property has that value (ties are not winners).
+class _CompareFacts {
+  static const specs = <(String, String, String, bool)>[
+    ('monthly_rent_rm', 'Monthly rent', 'Lowest monthly rent', true),
+    ('size_sqft', 'Floor area', 'Largest floor area', false),
+    ('rent_per_sqft', 'Rent per sq ft', 'Lowest rent per sq ft', true),
+    ('fnb_competitors_500m', 'Competitors (500 m)',
+        'Fewest recorded competitors', true),
+    ('nearest_transit_walk_m', 'Public transport distance',
+        'Closest recorded public transport', true),
+    ('population_1000m', 'Population (1 km)',
+        'Largest recorded nearby population', false),
+  ];
+
+  static int? uniqueExtreme(List<CompareProperty> properties,
+      String key, bool lowest) {
+    if (properties.length < 2) return null;
+    final values = <double>[];
+    for (final property in properties) {
+      final metric = property.metric(key);
+      final n = metric.value?.toDouble();
+      if (!metric.available || n == null || !n.isFinite) return null;
+      values.add(n);
+    }
+    var extreme = values.first;
+    for (final v in values.skip(1)) {
+      if (lowest ? v < extreme : v > extreme) extreme = v;
+    }
+    final indices = <int>[];
+    for (var i = 0; i < values.length; i++) {
+      if (values[i] == extreme) indices.add(i);
+    }
+    return indices.length == 1 ? indices.single : null;
+  }
+}
+
+class _CompareCardMetric extends StatelessWidget {
+  final IconData icon;
+  final String text;
+  final bool emphasized;
+  const _CompareCardMetric({
+    required this.icon,
+    required this.text,
+    this.emphasized = false,
+  });
+
+  @override
+  Widget build(BuildContext context) => Row(
+        children: [
+          Icon(icon, size: 16,
+              color: emphasized ? SitewiseColors.action : SitewiseColors.muted),
+          const SizedBox(width: 5),
+          Expanded(
+            child: Text(text,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: emphasized ? SitewiseColors.action : SitewiseColors.text,
+                  fontSize: 13,
+                  fontWeight: emphasized ? FontWeight.w700 : FontWeight.w500,
+                )),
+          ),
+        ],
+      );
+}
+
+class _CompareHighlights extends StatelessWidget {
+  final List<CompareProperty> properties;
+  const _CompareHighlights({required this.properties});
+
+  @override
+  Widget build(BuildContext context) {
+    final highlights = <int, List<String>>{
+      for (var i = 0; i < properties.length; i++) i: <String>[],
+    };
+    for (final spec in _CompareFacts.specs) {
+      final index = _CompareFacts.uniqueExtreme(properties, spec.$1, spec.$4);
+      if (index != null) highlights[index]!.add(spec.$3);
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text('Quick highlights',
+            style: TextStyle(
+              fontSize: 19, fontWeight: FontWeight.w700,
+              color: SitewiseColors.ink,
+            )),
+        const SizedBox(height: 10),
+        SizedBox(
+          height: 167,
+          child: ListView.separated(
+            scrollDirection: Axis.horizontal,
+            itemCount: properties.length,
+            separatorBuilder: (_, _) => const SizedBox(width: 10),
+            itemBuilder: (context, index) {
+              final highlightsForProperty = highlights[index]!;
+              return Container(
+                width: 184,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: SitewiseColors.surface,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: SitewiseColors.border),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        CircleAvatar(
+                          radius: 14,
+                          backgroundColor: SitewiseColors.action,
+                          child: Text('${index + 1}',
+                              style: const TextStyle(
+                                color: Colors.white, fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                              )),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(properties[index].title,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                color: SitewiseColors.ink,
+                                fontSize: 13, fontWeight: FontWeight.w700,
+                              )),
+                        ),
+                      ],
+                    ),
+                    const Divider(height: 18),
+                    if (highlightsForProperty.isEmpty)
+                      const Text('No unique difference in the main measures.',
+                          maxLines: 3,
+                          style: TextStyle(
+                            color: SitewiseColors.muted,
+                            fontSize: 13, height: 1.35,
+                          ))
+                    else
+                      for (final text in highlightsForProperty.take(3))
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 6),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Icon(Icons.check_rounded,
+                                  color: SitewiseColors.action, size: 16),
+                              const SizedBox(width: 6),
+                              Expanded(
+                                child: Text(text,
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                      fontSize: 12.5, height: 1.25,
+                                      color: SitewiseColors.text,
+                                    )),
+                              ),
+                            ],
+                          ),
+                        ),
+                  ],
+                ),
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _CompareAtAGlance extends StatelessWidget {
+  final List<CompareProperty> properties;
+  const _CompareAtAGlance({required this.properties});
+
+  @override
+  Widget build(BuildContext context) => Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('At a glance',
+              style: TextStyle(
+                fontSize: 19, fontWeight: FontWeight.w700,
+                color: SitewiseColors.ink,
+              )),
+          const SizedBox(height: 10),
+          Container(
+            clipBehavior: Clip.antiAlias,
+            decoration: BoxDecoration(
+              color: SitewiseColors.surface,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: SitewiseColors.border),
+            ),
+            child: Scrollbar(
+              thumbVisibility: false,
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      color: SitewiseColors.infoWash.withValues(alpha: 0.45),
+                      child: Row(
+                        children: [
+                          const SizedBox(
+                            width: 146,
+                            child: Padding(
+                              padding: EdgeInsets.all(12),
+                              child: Text('Metric',
+                                  style: TextStyle(
+                                    fontSize: 13, fontWeight: FontWeight.w700,
+                                    color: SitewiseColors.muted,
+                                  )),
+                            ),
+                          ),
+                          for (var i = 0; i < properties.length; i++)
+                            SizedBox(
+                              width: 150,
+                              child: Padding(
+                                padding: const EdgeInsets.all(8),
+                                child: Row(
+                                  children: [
+                                    CircleAvatar(
+                                      radius: 12,
+                                      backgroundColor: SitewiseColors.action,
+                                      child: Text('${i + 1}',
+                                          style: const TextStyle(
+                                            fontSize: 11,
+                                            color: Colors.white,
+                                            fontWeight: FontWeight.w700,
+                                          )),
+                                    ),
+                                    const SizedBox(width: 5),
+                                    Expanded(
+                                      child: Text(properties[i].title,
+                                          maxLines: 2,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: const TextStyle(
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.w700,
+                                            color: SitewiseColors.ink,
+                                          )),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                    for (final spec in _CompareFacts.specs) ...[
+                      const Divider(height: 1, color: SitewiseColors.border),
+                      Builder(builder: (context) {
+                        final highlight = _CompareFacts.uniqueExtreme(
+                            properties, spec.$1, spec.$4);
+                        return Row(
+                          children: [
+                            SizedBox(
+                              width: 146,
+                              child: Padding(
+                                padding: const EdgeInsets.all(12),
+                                child: Text(spec.$2,
+                                    style: const TextStyle(
+                                      color: SitewiseColors.text,
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w600,
+                                    )),
+                              ),
+                            ),
+                            for (var i = 0; i < properties.length; i++)
+                              SizedBox(
+                                width: 150,
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 6, vertical: 8),
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 5, vertical: 8),
+                                    decoration: BoxDecoration(
+                                      color: highlight == i
+                                          ? SitewiseColors.infoWash
+                                          : Colors.transparent,
+                                      borderRadius: BorderRadius.circular(10),
+                                    ),
+                                    child: Text(
+                                      properties[i].metric(spec.$1).available
+                                          ? properties[i].metric(spec.$1).display
+                                          : 'Not available',
+                                      textAlign: TextAlign.center,
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
+                                        color: highlight == i
+                                            ? SitewiseColors.action
+                                            : SitewiseColors.text,
+                                        fontSize: 13,
+                                        fontWeight: highlight == i
+                                            ? FontWeight.w700 : FontWeight.w500,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                          ],
+                        );
+                      }),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 6),
+          const Text('Swipe the table sideways to view all selected properties.',
+              style: TextStyle(color: SitewiseColors.muted, fontSize: 12)),
+        ],
       );
 }
 

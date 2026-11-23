@@ -13,9 +13,12 @@ Responsibilities
   identity database (role / account status), kept in step with the local
   ``sitesense`` mirror through the calling services.
 * ``staff_invitations`` + ``role_change_audit`` bookkeeping (PostgREST).
-* Agent profile / listing assignment / verification records, all through the
-  EXISTING Supabase ``public`` tables (``agent``, ``listing``,
-  ``listing_verification``, ``company``) - no duplicated application tables.
+* Agent profiles through the EXISTING Supabase ``public`` tables (``agent``,
+  ``company``). The legacy ``public.listing`` and ``public.listing_verification``
+  sources are retired guards: assignments live in local
+  ``fyp.agent_listing_assignment`` (AgentAssignmentRepository) and agent
+  verification findings in local ``fyp.property_listing_verification``
+  (ListingVerificationRepository) - no duplicated application tables.
 * MFA factor recovery via the documented GoTrue admin REST endpoints. Note:
   supabase-py 2.34.0 does not wrap the admin factor endpoints, so those two
   calls use httpx against the documented API (the same endpoints supabase-js
@@ -775,7 +778,7 @@ class SupabaseAdminService:
     def list_assigned_listings(self, agent_id: int) -> list[dict[str, Any]]:
         """Retired legacy Supabase ``public.listing`` reader.
 
-        Operational assignments live in local ``public.agent_listing_assignment``
+        Operational assignments live in local ``fyp.agent_listing_assignment``
         and are served by ``AgentAssignmentRepository``. This method remains as
         an explicit guard so a restored backup cannot silently revive a second
         operational property source.
@@ -810,34 +813,27 @@ class SupabaseAdminService:
         verification_reason: str,
         evidence_url: str | None = None,
     ) -> dict[str, Any]:
-        payload: dict[str, Any] = {
-            "listing_id": listing_id,
-            "verified_by_user_id": str(verified_by_user_id),
-            "property_authenticity_status": property_authenticity_status,
-            "commercial_classification_status": commercial_classification_status,
-            "verification_reason": verification_reason,
-        }
-        if evidence_url:
-            payload["evidence_url"] = evidence_url
-        try:
-            result = (
-                self.client.table("listing_verification")
-                .insert(payload)
-                .execute()
-            )
-        except Exception as exc:
-            raise SupabaseAdminError(f"Verification write failed: {exc}") from exc
-        return (result.data or [{}])[0]
+        """Retired legacy Supabase ``public.listing_verification`` writer.
+
+        The table was never provisioned in the live project (absent from the
+        REST inventory before and after schema migration 03), so every call
+        failed at runtime. Agent verification findings persist to the
+        canonical local ``fyp.property_listing_verification`` through
+        ``ListingVerificationRepository``.
+        """
+        raise NotImplementedError(
+            "Legacy Supabase public.listing_verification is retired; record "
+            "agent findings with ListingVerificationRepository on "
+            "fyp.property_listing_verification."
+        )
 
     def list_listing_verifications(self, listing_id: int) -> list[dict[str, Any]]:
-        try:
-            result = (
-                self.client.table("listing_verification")
-                .select("*")
-                .eq("listing_id", listing_id)
-                .order("created_at", desc=True)
-                .execute()
-            )
-        except Exception as exc:
-            raise SupabaseAdminError(f"Verification query failed: {exc}") from exc
-        return list(result.data or [])
+        """Retired legacy Supabase ``public.listing_verification`` reader.
+
+        See :meth:`insert_listing_verification`; reads are served by
+        ``ListingVerificationRepository``.
+        """
+        raise NotImplementedError(
+            "Legacy Supabase public.listing_verification is retired; read "
+            "agent findings with ListingVerificationRepository."
+        )

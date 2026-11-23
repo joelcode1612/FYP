@@ -6,6 +6,9 @@
     <!-- Guided 360° capture only. Not required, so the app still installs on
          devices without a camera; the capture screen reports the absence. -->
     <uses-permission android:name="android.permission.CAMERA"/>
+    <!-- Nearby discovery only: foreground location, no background access. -->
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
     <!-- 38-target flow's Gallery save on Android 9 and below (MediaStore is
          permission-free on 10+). Scoped to the retired pre-Q path. -->
     <uses-permission

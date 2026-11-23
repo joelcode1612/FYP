@@ -258,7 +258,7 @@ def test_admin_assigns_listing_and_records_audit(client, cleanup_users, fake_adm
         # This is a real operational listing; remember whether an Agent already
         # manages it so the finally-block can restore that relationship.
         prior_agent = session.execute(
-            text("SELECT agent_id FROM agent_listing_assignment WHERE listing_id = :l"),
+            text("SELECT agent_id FROM fyp.agent_listing_assignment WHERE listing_id = :l"),
             {"l": listing_id},
         ).scalar()
     try:
@@ -269,7 +269,7 @@ def test_admin_assigns_listing_and_records_audit(client, cleanup_users, fake_adm
         assert assigned_agent_id is not None
         with Session(engine) as session:
             row = session.execute(
-                text("SELECT agent_id FROM agent_listing_assignment WHERE listing_id = :l"),
+                text("SELECT agent_id FROM fyp.agent_listing_assignment WHERE listing_id = :l"),
                 {"l": listing_id},
             ).scalar_one()
         assert int(row) == int(assigned_agent_id)
@@ -283,13 +283,13 @@ def test_admin_assigns_listing_and_records_audit(client, cleanup_users, fake_adm
     finally:
         with Session(engine) as session:
             session.execute(
-                text("DELETE FROM agent_listing_assignment WHERE listing_id = :l"),
+                text("DELETE FROM fyp.agent_listing_assignment WHERE listing_id = :l"),
                 {"l": listing_id},
             )
             if prior_agent is not None:
                 session.execute(
                     text(
-                        "INSERT INTO agent_listing_assignment (listing_id, agent_id) "
+                        "INSERT INTO fyp.agent_listing_assignment (listing_id, agent_id) "
                         "VALUES (:l, :a)"
                     ),
                     {"l": listing_id, "a": int(prior_agent)},

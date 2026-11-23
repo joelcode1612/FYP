@@ -1,3 +1,5 @@
+import 'dart:async';
+import 'package:fyp/features/capture_360/application/frame_upload_queue.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_logic/shared_logic.dart';
@@ -122,6 +124,10 @@ class _ProviderTabHostState extends ConsumerState<ProviderTabHost> {
   @override
   void initState() {
     super.initState();
+    final user = ref.read(authNotifierProvider).user;
+    if (user != null && user.role == AppRole.agent) {
+      unawaited(FrameUploadQueue.restorePanoramaUploads(user.id));
+    }
     _pageIndex = _indexFor(widget.initialRoute, _roleNow());
     _previousPageIndex = _pageIndex == ProviderTabHost.addTabIndex
         ? ProviderTabHost.homeIndex
@@ -146,6 +152,9 @@ class _ProviderTabHostState extends ConsumerState<ProviderTabHost> {
   int _indexFor(String route, AppRole role) {
     final index = ProviderTabHost.indexForRoute(route);
     if (index == ProviderTabHost.tasksIndex && role != AppRole.agent) {
+      return ProviderTabHost.homeIndex;
+    }
+    if (index == ProviderTabHost.addTabIndex && role != AppRole.owner) {
       return ProviderTabHost.homeIndex;
     }
     if (index == ProviderTabHost.requestsIndex && role != AppRole.owner) {
@@ -248,6 +257,9 @@ class _ProviderTabHostState extends ConsumerState<ProviderTabHost> {
           if (!didPop) _handleBack();
         },
         child: Scaffold(
+          // The form has its own Scaffold. Keep the tab stack at full height
+          // and let the form alone consume the keyboard inset.
+          resizeToAvoidBottomInset: !addPageSelected,
           backgroundColor: SitewiseM3.paper,
           appBar: addPageSelected
               ? null
@@ -294,7 +306,9 @@ class _ProviderTabHostState extends ConsumerState<ProviderTabHost> {
       ),
       ProviderTabHost.profileIndex => ProviderProfileMobilePage(key: key),
       ProviderTabHost.addTabIndex => SitewiseAddPropertyMobilePage(key: key),
-      ProviderTabHost.requestsIndex => ProviderOwnerRequestsMobilePage(key: key),
+      ProviderTabHost.requestsIndex => ProviderOwnerRequestsMobilePage(
+        key: key,
+      ),
       _ => const SizedBox.shrink(),
     };
   }

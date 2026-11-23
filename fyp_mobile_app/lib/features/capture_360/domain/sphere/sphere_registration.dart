@@ -75,11 +75,7 @@ const double kSphereRegistrationNeighbourDeg = 60;
 ///
 /// The exact algebraic inverse of [projectCameraRay], rather than a `K⁻¹`
 /// matrix, so the two cannot drift apart.
-Vec3 unprojectPixel(
-  double u,
-  double v,
-  DecodedProjection projection,
-) => Vec3(
+Vec3 unprojectPixel(double u, double v, DecodedProjection projection) => Vec3(
   (u - projection.cx) / projection.focalPx,
   -(v - projection.cy) / projection.focalPx,
   -1,
@@ -510,16 +506,14 @@ double _meanResidual(
       1 => Vec3.unitY,
       _ => Vec3.unitZ,
     };
-    final plus = (Quat.axisAngle(h * 180 / math.pi, unit) * rotation).normalized;
-    final minus = (Quat.axisAngle(-h * 180 / math.pi, unit) * rotation)
-        .normalized;
+    final plus =
+        (Quat.axisAngle(h * 180 / math.pi, unit) * rotation).normalized;
+    final minus =
+        (Quat.axisAngle(-h * 180 / math.pi, unit) * rotation).normalized;
     final plusToCamera = plus.conjugate;
     final minusToCamera = minus.conjugate;
     for (var i = 0; i < count; i++) {
-      final p = projectCameraRay(
-        plusToCamera.rotate(worldRays[i]),
-        projection,
-      );
+      final p = projectCameraRay(plusToCamera.rotate(worldRays[i]), projection);
       final m = projectCameraRay(
         minusToCamera.rotate(worldRays[i]),
         projection,
@@ -576,30 +570,54 @@ List<double>? _solve3x3(List<double> m, List<double> rhs) {
   ) => a * (e * i - f * h) - b * (d * i - f * g) + c * (d * h - e * g);
 
   final det = det3(
-    m[0], m[1], m[2], //
-    m[3], m[4], m[5], //
-    m[6], m[7], m[8], //
+    m[0],
+    m[1],
+    m[2], //
+    m[3],
+    m[4],
+    m[5], //
+    m[6],
+    m[7],
+    m[8], //
   );
   if (det.abs() < 1e-12) return null;
   final x =
       det3(
-        rhs[0], m[1], m[2], //
-        rhs[1], m[4], m[5], //
-        rhs[2], m[7], m[8], //
+        rhs[0],
+        m[1],
+        m[2], //
+        rhs[1],
+        m[4],
+        m[5], //
+        rhs[2],
+        m[7],
+        m[8], //
       ) /
       det;
   final y =
       det3(
-        m[0], rhs[0], m[2], //
-        m[3], rhs[1], m[5], //
-        m[6], rhs[2], m[8], //
+        m[0],
+        rhs[0],
+        m[2], //
+        m[3],
+        rhs[1],
+        m[5], //
+        m[6],
+        rhs[2],
+        m[8], //
       ) /
       det;
   final z =
       det3(
-        m[0], m[1], rhs[0], //
-        m[3], m[4], rhs[1], //
-        m[6], m[7], rhs[2], //
+        m[0],
+        m[1],
+        rhs[0], //
+        m[3],
+        m[4],
+        rhs[1], //
+        m[6],
+        m[7],
+        rhs[2], //
       ) /
       det;
   return <double>[x, y, z];

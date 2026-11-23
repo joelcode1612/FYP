@@ -19,7 +19,7 @@ from sqlmodel import SQLModel
 from sitewise.db import session as db_session
 from sitewise.db.base import Base
 from sitewise.db.models import (
-    FypRecommendationResult, FypRentalProperty, RecommendationResult, User,
+    FypRentalProperty, RecommendationResult, User,
 )
 
 
@@ -32,18 +32,15 @@ def test_all_registered_metadata_and_foreign_keys_resolve():
         for fk in table.foreign_keys:
             assert fk.column.table in tables
     assert "fyp.users" not in Base.metadata.tables
-    assert "public.users" not in Base.metadata.tables
+    # Identity is explicitly public since standardization 0014.
+    assert Base.metadata.tables["public.users"].schema == "public"
 
 
 def test_legacy_identity_columns_do_not_reference_uuid_profiles():
-    for column in (
-        FypRentalProperty.__table__.c.owner_id,
-        FypRecommendationResult.__table__.c.user_id,
-    ):
+    for column in (FypRentalProperty.__table__.c.owner_id,):
         assert isinstance(column.type, BigInteger)
         assert not column.foreign_keys
     assert FypRentalProperty.__table__.c.owner_id.nullable
-    assert not FypRecommendationResult.__table__.c.user_id.nullable
     assert User.__table__.c.user_id.type.python_type is uuid.UUID
     fk = next(iter(RecommendationResult.__table__.c.user_id.foreign_keys))
     assert fk.column is User.__table__.c.user_id
@@ -64,7 +61,7 @@ def test_startup_never_creates_external_mirrors(monkeypatch):
     db_session.create_db_and_tables()
     assert emitted
     assert not any("CREATE TABLE fyp." in sql for sql in emitted)
-    assert any("CREATE TABLE users" in sql for sql in emitted)
+    assert any("CREATE TABLE public.users" in sql for sql in emitted)
     checked = {call.args[0] for call in has_table.call_args_list}
     assert checked == {
         table.name for table in Base.metadata.tables.values() if table.schema == "fyp"

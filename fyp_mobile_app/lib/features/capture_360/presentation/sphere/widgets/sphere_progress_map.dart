@@ -145,7 +145,11 @@ class _SphereProgressPainter extends CustomPainter {
       ..style = PaintingStyle.stroke
       ..strokeWidth = 0.7
       ..color = Colors.white.withValues(alpha: 0.13);
-    for (final pitch in <double>[0, kSphereRingPitchDeg, -kSphereRingPitchDeg]) {
+    for (final pitch in <double>[
+      0,
+      kSphereRingPitchDeg,
+      -kSphereRingPitchDeg,
+    ]) {
       final path = Path();
       for (var i = 0; i <= 36; i++) {
         final p = project(sphereDirection(i * 10.0, pitch));
@@ -212,11 +216,7 @@ class _SphereProgressPainter extends CustomPainter {
       }
 
       if (isGuide) {
-        canvas.drawCircle(
-          point,
-          1.7,
-          Paint()..color = Colors.white,
-        );
+        canvas.drawCircle(point, 1.7, Paint()..color = Colors.white);
       }
     }
 

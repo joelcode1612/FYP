@@ -27,9 +27,11 @@ class ApiPersonalisedRecommendationRepository
     int limit = 20,
     String? state,
     List<String>? propertyIds,
+    bool refresh = false,
   }) async {
     return _client.post('/api/v1/recommendations/generate', {
       'limit': limit,
+      if (refresh) 'refresh': true,
       if (state != null && state.isNotEmpty) 'state': state,
       if (propertyIds != null) 'property_ids': propertyIds,
     });

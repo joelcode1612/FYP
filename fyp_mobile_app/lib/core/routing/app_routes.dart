@@ -26,6 +26,7 @@ import 'package:fyp/features/panorama_viewer/presentation/pages/property_panoram
 import 'package:fyp/features/property_management/presentation/pages/sitewise_add_property_mobile_page.dart';
 import 'package:fyp/features/authentication/presentation/pages/provider_mfa_mobile_page.dart';
 import 'package:fyp/features/property_management/presentation/pages/provider_property_detail_mobile_page.dart';
+import 'package:fyp/features/property_management/presentation/pages/provider_submission_success_page.dart';
 import 'package:fyp/features/property_verification/presentation/pages/provider_verification_mobile_page.dart';
 import 'package:fyp/features/property_management/presentation/pages/property_management_moved_page.dart';
 import 'package:fyp/shared/presentation/layouts/provider_tab_host.dart';
@@ -52,6 +53,7 @@ String parentShellRoute(String route) {
     // Performance is a Dashboard shortcut, not a tab, so Home stays selected.
     '/provider/add-property': '/provider/add-property',
     '/provider/property-detail': '/provider/listings',
+    '/provider/inspection': '/provider/listings',
     '/provider/requests': '/provider/requests',
     '/provider/performance': '/provider',
     // Verification is reached from Profile, and MFA is a step of whichever
@@ -97,6 +99,7 @@ String parentShellRoute(String route) {
 }
 
 abstract final class AppRoutes {
+  static final pageObserver = RouteObserver<PageRoute<dynamic>>();
   static const assessmentHome = '/entrepreneur/customer-assessments';
   static const assessmentQuestionnaire = '$assessmentHome/questionnaire';
   static const assessmentReview = '$assessmentHome/review';
@@ -223,10 +226,21 @@ abstract final class AppRoutes {
           initialDraftId: settings.arguments as String?,
         ),
       ),
-      '/provider/property-detail' => (
+      '/provider/property-detail' || '/provider/inspection' => (
         RouteAccess.workspace,
         () => ProviderPropertyDetailMobilePage(
+          inspectionFirst: settings.name == '/provider/inspection',
           listingId: int.tryParse('${settings.arguments ?? ''}') ?? 0,
+        ),
+      ),
+      // Post-submission confirmation for the Agent's Admin verification.
+      // Arguments = fyp.rental_properties id. Reached ONLY after the backend
+      // has confirmed a submission; the status line is the backend's stage.
+      '/provider/submission-success' => (
+        RouteAccess.workspace,
+        () => ProviderSubmissionSuccessPage(
+          propertyId: int.tryParse('${settings.arguments ?? ''}') ?? 0,
+          stage: 'pending_admin_review',
         ),
       ),
       // Entrepreneur
@@ -286,7 +300,12 @@ abstract final class AppRoutes {
       '/entrepreneur/property-detail' => (
         RouteAccess.workspace,
         () => EntrepreneurPropertyDetailMobilePage(
-          propertyId: settings.arguments as String? ?? '',
+          propertyId: settings.arguments is Map
+              ? '${(settings.arguments as Map)['propertyId'] ?? ''}'
+              : (settings.arguments as String? ?? ''),
+          resultId: settings.arguments is Map
+              ? (settings.arguments as Map)['resultId']?.toString()
+              : null,
         ),
       ),
       '/entrepreneur/tour' => (
@@ -301,9 +320,7 @@ abstract final class AppRoutes {
         RouteAccess.workspace,
         () {
           final args = settings.arguments;
-          final url = args is Map
-              ? '${args['url'] ?? ''}'
-              : '${args ?? ''}';
+          final url = args is Map ? '${args['url'] ?? ''}' : '${args ?? ''}';
           final title = args is Map ? '${args['title'] ?? ''}' : '';
           return PropertyPanoramaMobilePage(
             panoramaUrl: url,

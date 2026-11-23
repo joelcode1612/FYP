@@ -8,6 +8,7 @@ from sqlmodel import Field, SQLModel
 
 class NearbyCompetitor(SQLModel, table=True):
     __tablename__ = "nearby_competitor"
+    __table_args__ = {"schema": "fyp", "info": {"externally_managed": True}}
 
     competitor_id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     property_id: int = Field()  # legacy FK to public.property retired by migration 0005

@@ -52,6 +52,8 @@ import 'package:sitewise_jaspr_web/features/compare/presentation/pages/compare_p
     deferred as _compare_page;
 import 'package:sitewise_jaspr_web/features/dashboard/presentation/pages/entrepreneur_dashboard_page.dart'
     deferred as _entrepreneur_dashboard_page;
+import 'package:sitewise_jaspr_web/features/listing/presentation/components/property_detail/business_concept_panel.dart'
+    deferred as _business_concept_panel;
 import 'package:sitewise_jaspr_web/features/listing/presentation/pages/commercial_listing_page.dart'
     deferred as _commercial_listing_page;
 import 'package:sitewise_jaspr_web/features/listing/presentation/pages/explore_page.dart'
@@ -204,6 +206,12 @@ ClientOptions get defaultClientOptions => ClientOptions(
     'entrepreneur_dashboard_page': ClientLoader(
       (p) => _entrepreneur_dashboard_page.DashboardPage(),
       loader: _entrepreneur_dashboard_page.loadLibrary,
+    ),
+    'business_concept_panel': ClientLoader(
+      (p) => _business_concept_panel.BusinessConceptPanel(
+        propertyId: p['propertyId'] as String,
+      ),
+      loader: _business_concept_panel.loadLibrary,
     ),
     'commercial_listing_page': ClientLoader(
       (p) =>

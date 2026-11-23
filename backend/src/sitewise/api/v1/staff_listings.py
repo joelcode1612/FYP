@@ -177,7 +177,7 @@ def _open_request(
     """
     rows = session.execute(
         text(
-            "SELECT * FROM listing_change_request "
+            "SELECT * FROM fyp.listing_change_request "
             "WHERE listing_id = :lid AND status IN ('draft','pending') "
             "ORDER BY created_at DESC LIMIT 1"
         ),
@@ -343,14 +343,14 @@ def change_request_history(
     _require_listing_access(session, service, user, listing_id)
     requests = session.execute(
         text(
-            "SELECT change_request_id FROM listing_change_request "
+            "SELECT change_request_id FROM fyp.listing_change_request "
             "WHERE listing_id = :lid ORDER BY created_at DESC LIMIT 100"
         ),
         {"lid": listing_id},
     ).mappings().all()
     audit_ids = session.execute(
         text(
-            "SELECT audit_id FROM listing_change_audit "
+            "SELECT audit_id FROM fyp.listing_change_audit "
             "WHERE listing_id = :lid ORDER BY created_at DESC LIMIT 200"
         ),
         {"lid": listing_id},
@@ -481,7 +481,7 @@ def request_admin_review(
     _require_listing_access(session, service, user, listing_id)
     pending = session.execute(
         text(
-            "SELECT change_request_id FROM listing_change_request "
+            "SELECT change_request_id FROM fyp.listing_change_request "
             "WHERE listing_id = :lid AND status = 'pending' LIMIT 1"
         ),
         {"lid": listing_id},
@@ -800,7 +800,7 @@ def admin_change_requests(
         )
     params: dict = {}
     sql = (
-        "SELECT change_request_id FROM listing_change_request "
+        "SELECT change_request_id FROM fyp.listing_change_request "
         + ("" if status == "all" else "WHERE status = :status ")
         + "ORDER BY created_at DESC LIMIT 200"
     )
@@ -830,7 +830,7 @@ def admin_change_requests(
         listing_ids = sorted({row.listing_id for row in rows})
         audit_ids = session.execute(
             text(
-                "SELECT audit_id, listing_id FROM listing_change_audit "
+                "SELECT audit_id, listing_id FROM fyp.listing_change_audit "
                 "WHERE listing_id = ANY(:ids) "
                 "ORDER BY created_at DESC LIMIT 400"
             ),

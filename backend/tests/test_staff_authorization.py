@@ -48,7 +48,7 @@ def real_listings():
             int(row["listing_id"]): int(row["agent_id"])
             for row in session.execute(
                 text(
-                    "SELECT listing_id, agent_id FROM agent_listing_assignment "
+                    "SELECT listing_id, agent_id FROM fyp.agent_listing_assignment "
                     "WHERE listing_id = ANY(:ids)"
                 ),
                 {"ids": list(ids)},
@@ -59,7 +59,7 @@ def real_listings():
         if prior:
             session.execute(
                 text(
-                    "DELETE FROM agent_listing_assignment WHERE listing_id = ANY(:ids)"
+                    "DELETE FROM fyp.agent_listing_assignment WHERE listing_id = ANY(:ids)"
                 ),
                 {"ids": list(prior)},
             )
@@ -74,14 +74,14 @@ def real_listings():
         if touched:
             session.execute(
                 text(
-                    "DELETE FROM agent_listing_assignment WHERE listing_id = ANY(:ids)"
+                    "DELETE FROM fyp.agent_listing_assignment WHERE listing_id = ANY(:ids)"
                 ),
                 {"ids": sorted(touched)},
             )
         for listing_id, agent_id in prior.items():
             session.execute(
                 text(
-                    "INSERT INTO agent_listing_assignment (listing_id, agent_id) "
+                    "INSERT INTO fyp.agent_listing_assignment (listing_id, agent_id) "
                     "VALUES (:lid, :aid)"
                 ),
                 {"lid": listing_id, "aid": agent_id},
@@ -98,7 +98,7 @@ def _assign(listing_id: int, agent_id: int, created: list[int]) -> None:
     with Session(engine) as session:
         session.execute(
             text(
-                "INSERT INTO agent_listing_assignment (listing_id, agent_id) "
+                "INSERT INTO fyp.agent_listing_assignment (listing_id, agent_id) "
                 "VALUES (:lid, :aid) ON CONFLICT (listing_id) DO UPDATE "
                 "SET agent_id = EXCLUDED.agent_id"
             ),

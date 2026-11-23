@@ -39,15 +39,15 @@ def cleanup_listings(cleanup_users):
     with Session(engine) as session:
         if props:
             for table in (
-                "verification_audit",
-                "verification_document",
-                "property_verification",
+                "fyp.verification_audit",
+                "fyp.verification_document",
+                "fyp.property_verification",
             ):
                 session.execute(
                     text(f"DELETE FROM {table} WHERE property_id = ANY(:ids)"),
                     {"ids": props},
                 )
-            for table in ("listing_change_audit", "listing_change_request"):
+            for table in ("fyp.listing_change_audit", "fyp.listing_change_request"):
                 session.execute(
                     text(f"DELETE FROM {table} WHERE listing_id = ANY(:ids)"),
                     {"ids": props},

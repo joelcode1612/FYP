@@ -120,8 +120,14 @@ class PluginSphereCamera implements SphereCamera {
     final controller = _controller;
     if (controller == null || !controller.value.isInitialized) return;
     try {
-      await controller.setExposureMode(ExposureMode.locked);
-      debugPrint('SPHERE_CAMERA: exposure locked');
+      // Select the comparison policy independently of focus for backlit sweeps.
+      const lockExposure = bool.fromEnvironment(
+        'sphere_lock_exposure',
+        defaultValue: true,
+      );
+      final mode = lockExposure ? ExposureMode.locked : ExposureMode.auto;
+      await controller.setExposureMode(mode);
+      debugPrint('SPHERE_CAMERA: exposure mode ${mode.name}');
     } on CameraException catch (error) {
       debugPrint('SPHERE_CAMERA: exposure lock refused (${error.code})');
     }

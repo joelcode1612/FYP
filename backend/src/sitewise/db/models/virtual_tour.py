@@ -6,6 +6,7 @@ from sqlmodel import Field, SQLModel
 
 class VirtualTour(SQLModel, table=True):
     __tablename__ = "virtual_tour"
+    __table_args__ = {"schema": "fyp", "info": {"externally_managed": True}}
 
     tour_id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     # The database constraint is added separately from this model because the

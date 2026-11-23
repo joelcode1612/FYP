@@ -49,8 +49,7 @@ class StitchingResultsPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final doc = service.document;
-    final savedIds =
-        doc.records.keys.toList()..sort();
+    final savedIds = doc.records.keys.toList()..sort();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -126,10 +125,7 @@ class StitchingResultsPanel extends StatelessWidget {
       color: background,
       borderRadius: BorderRadius.circular(999),
     ),
-    child: Text(
-      label,
-      style: TextStyle(color: foreground, fontSize: 12),
-    ),
+    child: Text(label, style: TextStyle(color: foreground, fontSize: 12)),
   );
 
   /// The most recent output — final panorama when it exists, otherwise the
@@ -225,8 +221,7 @@ class StitchingResultsPanel extends StatelessWidget {
             itemBuilder: (BuildContext context, int index) {
               final item = items[index];
               return GestureDetector(
-                onTap: () =>
-                    _openPreview(context, item.path, isFinal: false),
+                onTap: () => _openPreview(context, item.path, isFinal: false),
                 child: Container(
                   width: 150,
                   clipBehavior: Clip.antiAlias,
@@ -288,12 +283,7 @@ class StitchingResultsPanel extends StatelessWidget {
       child: Column(
         children: [
           for (final int id in savedIds)
-            _resultRow(
-              context,
-              doc,
-              doc.records[id]!,
-              spec: _specFor(id),
-            ),
+            _resultRow(context, doc, doc.records[id]!, spec: _specFor(id)),
         ],
       ),
     );
@@ -331,8 +321,7 @@ class StitchingResultsPanel extends StatelessWidget {
                 height: 40,
                 child: ColoredBox(
                   color: Colors.black26,
-                  child:
-                      thumbnailPath == null || thumbnailPath.isEmpty
+                  child: thumbnailPath == null || thumbnailPath.isEmpty
                       ? const Icon(
                           Icons.image_outlined,
                           color: CaptureColors.mutedOnDark,
@@ -432,11 +421,11 @@ class StitchingResultsPanel extends StatelessWidget {
 
   Widget _stitchChip(StitchStatus status) {
     final (Color bg, Color fg) = switch (status) {
-      StitchStatus.pass => (
-        Colors.green.withValues(alpha: 0.35),
+      StitchStatus.pass => (Colors.green.withValues(alpha: 0.35), Colors.white),
+      StitchStatus.fail => (
+        CaptureColors.danger.withValues(alpha: 0.5),
         Colors.white,
       ),
-      StitchStatus.fail => (CaptureColors.danger.withValues(alpha: 0.5), Colors.white),
       StitchStatus.processing => (
         CaptureColors.accent.withValues(alpha: 0.5),
         Colors.white,
@@ -452,10 +441,7 @@ class StitchingResultsPanel extends StatelessWidget {
         color: bg,
         borderRadius: BorderRadius.circular(999),
       ),
-      child: Text(
-        status.label,
-        style: TextStyle(color: fg, fontSize: 10.5),
-      ),
+      child: Text(status.label, style: TextStyle(color: fg, fontSize: 10.5)),
     );
   }
 
@@ -523,7 +509,9 @@ class StitchingResultsPanel extends StatelessWidget {
               const SizedBox(height: 8),
               _metricRow(
                 'Capture',
-                record.captureStatus == 'saved' ? 'Saved' : record.captureStatus,
+                record.captureStatus == 'saved'
+                    ? 'Saved'
+                    : record.captureStatus,
               ),
               _metricRow('Stitching', record.stitchStatus.label),
               if (record.matchedTargetIds.isNotEmpty)
@@ -626,7 +614,10 @@ class StitchingResultsPanel extends StatelessWidget {
           width: 150,
           child: Text(
             label,
-            style: const TextStyle(color: CaptureColors.mutedOnDark, fontSize: 12),
+            style: const TextStyle(
+              color: CaptureColors.mutedOnDark,
+              fontSize: 12,
+            ),
           ),
         ),
         Expanded(

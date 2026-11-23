@@ -5,9 +5,8 @@ import 'package:shared_logic/shared_logic.dart';
 import 'package:fyp/core/di/service_locator.dart';
 import 'package:fyp/core/theme/sitewise_m3.dart';
 import 'package:fyp/core/theme/sitewise_theme.dart';
-import 'package:fyp/features/capture_360/presentation/pages/ar_capture_mobile_page.dart';
-import 'package:fyp/shared/presentation/components/m3_kit.dart';
 import 'package:fyp/features/property_management/domain/entities/provider_models.dart';
+import 'package:fyp/features/property_management/presentation/widgets/provider_agent_inspection_panel.dart';
 import 'package:fyp/shared/presentation/components/provider_ui.dart';
 import 'package:fyp/features/property_management/data/provider_workspace_service.dart';
 import 'package:fyp/features/property_management/application/provider_listings_service.dart';
@@ -20,9 +19,14 @@ import 'package:fyp/features/property_management/application/provider_listings_s
 /// request an administrator reviews — never a direct mutation of someone
 /// else's listing.
 class ProviderPropertyDetailMobilePage extends ConsumerStatefulWidget {
-  const ProviderPropertyDetailMobilePage({super.key, required this.listingId});
+  const ProviderPropertyDetailMobilePage({
+    super.key,
+    required this.listingId,
+    this.inspectionFirst = false,
+  });
 
   final int listingId;
+  final bool inspectionFirst;
 
   @override
   ConsumerState<ProviderPropertyDetailMobilePage> createState() =>
@@ -83,44 +87,6 @@ class _ProviderPropertyDetailMobilePageState
       '${widget.listingId}',
     );
     return _DetailData(listing: found, owner: owner, management: management);
-  }
-
-  Future<void> _capture() async {
-    await Navigator.of(context).pushNamed(
-      '/owner/capture',
-      arguments: ArCaptureRequest(
-        propertyId: '${widget.listingId}',
-        title: (_future == null) ? null : null,
-      ),
-    );
-    if (mounted) _load();
-  }
-
-  Future<void> _submit() async {
-    setState(() => _busy = true);
-    try {
-      final result = await ServiceLocator.propertyVerification.submit(
-        '${widget.listingId}',
-      );
-      ServiceLocator.listingsRevision.value++;
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Submitted for verification. Current state: '
-            '${result.listingStatus.wire}.',
-          ),
-        ),
-      );
-      _load();
-    } catch (error) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Could not submit: $error')));
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
   }
 
   Future<void> _requestChange() async {
@@ -212,250 +178,346 @@ class _ProviderPropertyDetailMobilePageState
 
   @override
   Widget build(BuildContext context) {
+    if (widget.inspectionFirst) {
+      return FutureBuilder<_DetailData>(
+        future: _future,
+        builder: (context, snapshot) {
+          final data = snapshot.data;
+          final agent = data?.agent;
+          if (agent != null && data != null) {
+            return ProviderAgentInspectionPanel(
+              propertyId: data.listing.id,
+              listing: data.listing,
+              inspectionDetail: agent,
+            );
+          }
+          final error = snapshot.error;
+          return Scaffold(
+            appBar: const ProviderPageAppBar(
+              title: 'Property inspection',
+              eyebrow: 'MANAGED LISTING',
+            ),
+            body: snapshot.connectionState != ConnectionState.done
+                ? providerLoadingView()
+                : error != null && isMfaRequired(error)
+                ? ProviderMfaGate(onReload: _load)
+                : ProviderMessage(
+                    title: 'Inspection unavailable',
+                    body:
+                        error?.toString() ??
+                        'Open an assigned property as its agent.',
+                    onRetry: _load,
+                  ),
+          );
+        },
+      );
+    }
     return Scaffold(
       backgroundColor: providerCanvas,
       appBar: const ProviderPageAppBar(
-        title: 'Property',
-        eyebrow: 'LISTING DETAIL',
+        title: 'Property details',
+        eyebrow: 'MANAGED LISTING',
       ),
       body: RefreshIndicator(
         color: SitewiseColors.action,
         onRefresh: _load,
         child: FutureBuilder<_DetailData>(
-        future: _future,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return providerLoadingView();
-          }
-          if (snapshot.hasError) {
-            final error = snapshot.error!;
+          future: _future,
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return providerLoadingView();
+            }
+            if (snapshot.hasError) {
+              final error = snapshot.error!;
+              return providerContent(
+                children: [
+                  if (isMfaRequired(error))
+                    ProviderMfaGate(onReload: _load)
+                  else
+                    ProviderMessage(
+                      title: 'This listing could not be opened',
+                      body: '$error',
+                      onRetry: _load,
+                    ),
+                ],
+              );
+            }
+            final data = snapshot.data!;
+            final listing = data.listing;
             return providerContent(
               children: [
-                if (isMfaRequired(error))
-                  ProviderMfaGate(onReload: _load)
-                else
-                  ProviderMessage(
-                    title: 'This listing could not be opened',
-                    body: '$error',
-                    onRetry: _load,
+                // SiteWise property-details-first design (2026-11-21).
+                _propertyHero(listing),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _metricTile(
+                        'MONTHLY RENT',
+                        listing.rentDisplay,
+                        Icons.payments_outlined,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: _metricTile(
+                        'BUILT-UP AREA',
+                        listing.sizeDisplay,
+                        Icons.square_foot_outlined,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                _section('Property information', [
+                  _factRow(
+                    'Property type',
+                    listing.propertyType ?? 'Not provided',
+                  ),
+                  if (listing.psfDisplay.isNotEmpty)
+                    _factRow('Rental rate', listing.psfDisplay),
+                  _factRow(
+                    'Publication',
+                    listing.isPublished ? 'Published' : 'Not published',
+                  ),
+                  _factRow('Management', data.management.display),
+                  if (data.agent?.owner != null)
+                    _factRow(
+                      'Property owner',
+                      data.agent!.owner!.displayName.isEmpty
+                          ? 'Not recorded'
+                          : data.agent!.owner!.displayName,
+                    ),
+                  if (data.agent?.photos.isNotEmpty ?? false)
+                    _factRow(
+                      'Photographs',
+                      '${data.agent!.photos.length} available',
+                    ),
+                ]),
+                if ((data.owner?.description ?? '').trim().isNotEmpty) ...[
+                  const SizedBox(height: 16),
+                  _section('Description', [
+                    Text(
+                      data.owner!.description!,
+                      style: const TextStyle(
+                        fontFamily: kFontFamily,
+                        fontSize: 14,
+                        height: 1.55,
+                        color: SitewiseM3.ink,
+                      ),
+                    ),
+                  ]),
+                ],
+                if ((listing.imageUrl ?? '').trim().isNotEmpty) ...[
+                  const SizedBox(height: 16),
+                  _propertyPhoto(listing.imageUrl!),
+                ],
+                const SizedBox(height: 20),
+                if (data.agent case final agent?) ...[
+                  FilledButton.icon(
+                    onPressed: () async {
+                      await Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (_) => ProviderAgentInspectionPanel(
+                            propertyId: listing.id,
+                            listing: listing,
+                            inspectionDetail: agent,
+                          ),
+                        ),
+                      );
+                      if (mounted) await _load();
+                    },
+                    icon: const Icon(Icons.fact_check_outlined),
+                    label: const Text('Inspect property'),
+                  ),
+                  const SizedBox(height: 12),
+                  OutlinedButton.icon(
+                    onPressed: _busy ? null : _requestChange,
+                    icon: const Icon(Icons.edit_note_rounded),
+                    label: const Text('Propose a change'),
+                  ),
+                ] else
+                  FilledButton.icon(
+                    onPressed: _busy || !listing.canEdit || listing.isPublished
+                        ? null
+                        : () => Navigator.of(context)
+                              .pushNamed(
+                                '/provider/add-property',
+                                arguments: '${widget.listingId}',
+                              )
+                              .then((_) {
+                                if (mounted) _load();
+                              }),
+                    icon: const Icon(Icons.edit_outlined),
+                    label: const Text('Edit listing'),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: SitewiseColors.action,
+                      foregroundColor: Colors.white,
+                      minimumSize: const Size.fromHeight(52),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(13),
+                      ),
+                    ),
                   ),
               ],
             );
-          }
-          final data = snapshot.data!;
-          final listing = data.listing;
-          return providerContent(
-            children: [
-              const M3ScreenHeading(
-                eyebrow: 'Managed listing',
-                title: 'Property details.',
-                lead:
-                    'Facts and workflow steps for one record in your '
-                    'authorized scope.',
-              ),
-              const SizedBox(height: 18),
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      listing.displayTitle,
-                      style: const TextStyle(
-                        fontFamily: kFontFamily,
-                        fontSize: 17,
-                        fontWeight: FontWeight.w800,
-                        color: SitewiseM3.ink,
-                      ),
-                    ),
-                  ),
-                  ProviderStatusPill(stage: listing.stage),
-                ],
-              ),
-              const SizedBox(height: 5),
-              Text(
-                listing.address.isEmpty ? 'Address not set' : listing.address,
-                style: const TextStyle(
-                  fontFamily: kFontFamily,
-                  fontSize: 12,
-                  color: SitewiseM3.muted,
-                ),
-              ),
-              const SizedBox(height: 18),
-              _section('Listing facts', [
-                // Management first: it answers "whose listing is this", which
-                // is the question an owner/agent screen has to settle before
-                // any other fact.
-                _factRow('Managed by', data.management.display),
-                _factRow('Monthly rent', listing.rentDisplay),
-                _factRow('Built-up area', listing.sizeDisplay),
-                if (listing.psfDisplay.isNotEmpty)
-                  _factRow('Rate', listing.psfDisplay),
-                _factRow('Type', listing.propertyType ?? 'Not provided'),
-                _factRow(
-                  'Publication',
-                  listing.isPublished ? 'Published' : 'Not published',
-                ),
-                if (data.agent?.owner != null)
-                  _factRow(
-                    'Instructing party',
-                    data.agent!.owner!.displayName.isEmpty
-                        ? 'Not recorded'
-                        : data.agent!.owner!.displayName,
-                  ),
-                if (data.agent?.openRequest != null)
-                  _factRow(
-                    'Open change request',
-                    data.agent!.openRequest!.status,
-                  ),
-              ]),
-              if (data.owner != null &&
-                  (data.owner!.description ?? '').isNotEmpty) ...[
-                const SizedBox(height: 16),
-                _section('Description', [
-                  Text(
-                    data.owner!.description!,
-                    style: const TextStyle(
-                      fontFamily: kFontFamily,
-                      fontSize: 12.5,
-                      height: 1.55,
-                      color: SitewiseM3.ink,
-                    ),
-                  ),
-                ]),
-              ],
-              if (data.agent != null) ...[
-                const SizedBox(height: 16),
-                _section('Activity', [
-                  if (data.agent!.photos.isNotEmpty)
-                    Text(
-                      '${data.agent!.photos.length} photograph(s) on the listing',
-                      style: const TextStyle(
-                        fontFamily: kFontFamily,
-                        fontSize: 12.5,
-                        color: SitewiseM3.ink,
-                      ),
-                    )
-                  else
-                    const Text(
-                      'No photographs stored for this listing yet.',
-                      style: TextStyle(
-                        fontFamily: kFontFamily,
-                        fontSize: 12.5,
-                        color: SitewiseM3.muted,
-                      ),
-                    ),
-                ]),
-              ],
-              const SizedBox(height: 18),
-              ProviderCard(
-                title: data.agent != null
-                    ? 'On-site physical verification'
-                    : 'Owner preparation',
-                child: Text(
-                  data.agent != null
-                      ? 'Compare the recorded floor area, condition, parking '
-                            'and access with what you observe on site. Use '
-                            'Propose a change for discrepancies; this does '
-                            'not overwrite the Owner record. Capture the '
-                            '360° tour below.'
-                      : 'Keep your ownership evidence, property details and '
-                            'photos ready. You can capture a 360° tour yourself. '
-                            'The Administrator makes the publication decision.',
-                  style: const TextStyle(
-                    fontFamily: kFontFamily,
-                    fontSize: 14,
-                    height: 1.5,
-                    color: SitewiseM3.muted,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 18),
-              FilledButton.icon(
-                onPressed: _busy ? null : _capture,
-                icon: const Icon(Icons.threesixty_rounded),
-                label: const Text('Capture 360° panorama'),
-                style: FilledButton.styleFrom(
-                  backgroundColor: SitewiseColors.action,
-                  foregroundColor: SitewiseM3.surface,
-                  minimumSize: const Size.fromHeight(48),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(SitewiseM3.radiusPill),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 10),
-              if (data.agent != null)
-                OutlinedButton.icon(
-                  onPressed: _busy ? null : _requestChange,
-                  icon: const Icon(Icons.edit_note_rounded),
-                  label: const Text('Propose a change'),
-                  style: OutlinedButton.styleFrom(
-                    minimumSize: const Size.fromHeight(48),
-                  ),
-                )
-              else ...[
-                OutlinedButton.icon(
-                  onPressed: _busy
-                      ? null
-                      : () => Navigator.of(context)
-                            .pushNamed(
-                              '/provider/add-property',
-                              arguments: '${widget.listingId}',
-                            )
-                            .then((_) {
-                              if (mounted) _load();
-                            }),
-                  icon: const Icon(Icons.edit_outlined),
-                  label: const Text('Edit listing'),
-                  style: OutlinedButton.styleFrom(
-                    minimumSize: const Size.fromHeight(48),
-                  ),
-                ),
-                const SizedBox(height: 10),
-                FilledButton.icon(
-                  onPressed: _busy || listing.stage == ProviderStage.pending
-                      ? null
-                      : _submit,
-                  icon: const Icon(Icons.verified_outlined),
-                  label: Text(
-                    listing.stage == ProviderStage.pending
-                        ? 'Awaiting administrator review'
-                        : 'Submit for verification',
-                  ),
-                style: FilledButton.styleFrom(
-                  backgroundColor: SitewiseColors.action,
-                  foregroundColor: SitewiseM3.surface,
-                  minimumSize: const Size.fromHeight(48),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(SitewiseM3.radiusPill),
-                  ),
-                ),
-                ),
-              ],
-            ],
-          );
-        },
+          },
         ),
       ),
     );
   }
 
+  Widget _propertyHero(ProviderListing listing) => Container(
+    width: double.infinity,
+    padding: const EdgeInsets.all(18),
+    decoration: BoxDecoration(
+      color: SitewiseM3.surface,
+      borderRadius: BorderRadius.circular(18),
+      border: Border.all(color: SitewiseM3.line),
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'PROPERTY OVERVIEW',
+          style: TextStyle(
+            fontFamily: kFontFamily,
+            color: SitewiseColors.action,
+            fontSize: 11,
+            fontWeight: FontWeight.w800,
+            letterSpacing: 1.1,
+          ),
+        ),
+        const SizedBox(height: 12),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: Text(
+                listing.displayTitle,
+                style: const TextStyle(
+                  fontFamily: kFontFamily,
+                  color: SitewiseM3.ink,
+                  fontSize: 25,
+                  fontWeight: FontWeight.w800,
+                  height: 1.18,
+                ),
+              ),
+            ),
+            const SizedBox(width: 10),
+            ProviderStatusPill(stage: listing.stage),
+          ],
+        ),
+        const SizedBox(height: 10),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Icon(
+              Icons.location_on_outlined,
+              size: 18,
+              color: SitewiseM3.muted,
+            ),
+            const SizedBox(width: 6),
+            Expanded(
+              child: Text(
+                listing.address.isEmpty
+                    ? 'Address not provided'
+                    : listing.address,
+                style: const TextStyle(
+                  fontFamily: kFontFamily,
+                  fontSize: 14,
+                  color: SitewiseM3.muted,
+                  height: 1.45,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ],
+    ),
+  );
+
+  Widget _metricTile(String label, String value, IconData icon) => Container(
+    constraints: const BoxConstraints(minHeight: 132),
+    padding: const EdgeInsets.all(15),
+    decoration: BoxDecoration(
+      color: SitewiseM3.surface,
+      borderRadius: BorderRadius.circular(16),
+      border: Border.all(color: SitewiseM3.line),
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(icon, size: 21, color: SitewiseColors.action),
+        const SizedBox(height: 12),
+        Text(
+          label,
+          style: const TextStyle(
+            fontFamily: kFontFamily,
+            fontSize: 10,
+            letterSpacing: 0.5,
+            fontWeight: FontWeight.w700,
+            color: SitewiseM3.muted,
+          ),
+        ),
+        const SizedBox(height: 6),
+        Text(
+          value,
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(
+            fontFamily: kFontFamily,
+            fontSize: 17,
+            fontWeight: FontWeight.w800,
+            color: SitewiseM3.ink,
+          ),
+        ),
+      ],
+    ),
+  );
+
+  Widget _propertyPhoto(String imageUrl) => ProviderCard(
+    title: 'Property photo',
+    child: ClipRRect(
+      borderRadius: BorderRadius.circular(12),
+      child: Image.network(
+        imageUrl,
+        width: double.infinity,
+        height: 186,
+        fit: BoxFit.cover,
+        errorBuilder: (_, _, _) => Container(
+          height: 140,
+          alignment: Alignment.center,
+          color: SitewiseM3.quiet,
+          child: const Text(
+            'Photo unavailable',
+            style: TextStyle(color: SitewiseM3.muted),
+          ),
+        ),
+      ),
+    ),
+  );
+
   Widget _section(String title, List<Widget> children) => ProviderCard(
     title: title,
-    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: children),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: children,
+    ),
   );
 
   Widget _factRow(String label, String value) => Padding(
-    padding: const EdgeInsets.only(bottom: 9),
+    padding: const EdgeInsets.only(bottom: 14),
     child: Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         SizedBox(
-          width: 125,
+          width: 116,
           child: Text(
             label,
             style: const TextStyle(
               fontFamily: kFontFamily,
-              fontSize: 12,
+              fontSize: 13,
               color: SitewiseM3.muted,
             ),
           ),
@@ -465,7 +527,7 @@ class _ProviderPropertyDetailMobilePageState
             value,
             style: const TextStyle(
               fontFamily: kFontFamily,
-              fontSize: 12.5,
+              fontSize: 14,
               fontWeight: FontWeight.w600,
               color: SitewiseM3.ink,
             ),

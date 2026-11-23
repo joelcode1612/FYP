@@ -1,0 +1,207 @@
+{
+  "generated_at": "2026-11-22T09:16:13.189340+00:00",
+  "tool": "verify_database_consistency",
+  "local": {
+    "tables": {
+      "rental_properties": {
+        "exists_in_fyp": true,
+        "exists_in_public": false,
+        "rows": 1006
+      },
+      "property_photos": {
+        "exists_in_fyp": true,
+        "exists_in_public": false,
+        "rows": 5711
+      },
+      "addresses": {
+        "exists_in_fyp": true,
+        "exists_in_public": false,
+        "rows": 0
+      },
+      "verification_audit": {
+        "exists_in_fyp": true,
+        "exists_in_public": false,
+        "rows": 0
+      },
+      "property_features": {
+        "exists_in_fyp": true,
+        "exists_in_public": false,
+        "rows": 0
+      },
+      "favorite_property": {
+        "exists_in_fyp": true,
+        "exists_in_public": false,
+        "rows": 4
+      },
+      "entrepreneur_preferences": {
+        "exists_in_fyp": true,
+        "exists_in_public": false,
+        "rows": 1
+      },
+      "recommendation_result": {
+        "exists_in_fyp": true,
+        "exists_in_public": false,
+        "rows": 20
+      },
+      "ai_explanation": {
+        "exists_in_fyp": true,
+        "exists_in_public": false,
+        "rows": 0
+      },
+      "virtual_tour": {
+        "exists_in_fyp": true,
+        "exists_in_public": false,
+        "rows": 0
+      },
+      "property_verification": {
+        "exists_in_fyp": true,
+        "exists_in_public": false,
+        "rows": 0
+      },
+      "verification_document": {
+        "exists_in_fyp": true,
+        "exists_in_public": false,
+        "rows": 0
+      },
+      "listing_change_request": {
+        "exists_in_fyp": true,
+        "exists_in_public": false,
+        "rows": 0
+      },
+      "listing_change_audit": {
+        "exists_in_fyp": true,
+        "exists_in_public": false,
+        "rows": 0
+      },
+      "agent_listing_assignment": {
+        "exists_in_fyp": true,
+        "exists_in_public": false,
+        "rows": 2
+      },
+      "district_demographic": {
+        "exists_in_fyp": true,
+        "exists_in_public": false,
+        "rows": 0
+      },
+      "ml_explanation_cache": {
+        "exists_in_fyp": true,
+        "exists_in_public": false,
+        "rows": 862
+      }
+    },
+    "alembic": "0014_canonical_fyp_schema",
+    "legacy_remaining": [],
+    "rental_columns": 60,
+    "outbox_seeded": 2
+  },
+  "supabase": {
+    "profile": "public",
+    "tables": {
+      "rental_properties": {
+        "rows": null,
+        "note": "REST GET rental_properties -> 404: {\"code\":\"PGRST205\",\"details\":null,\"hint\":null,\"message\":\"Could not find the table 'pu"
+      },
+      "property_photos": {
+        "rows": null,
+        "note": "REST GET property_photos -> 404: {\"code\":\"PGRST205\",\"details\":null,\"hint\":\"Perhaps you meant the table 'public.property_"
+      },
+      "addresses": {
+        "rows": 916
+      },
+      "verification_audit": {
+        "rows": 916
+      },
+      "property_features": {
+        "rows": 0
+      },
+      "favorite_property": {
+        "rows": 0
+      },
+      "entrepreneur_preferences": {
+        "rows": null,
+        "note": "REST GET entrepreneur_preferences -> 404: {\"code\":\"PGRST205\",\"details\":null,\"hint\":null,\"message\":\"Could not find the ta"
+      },
+      "recommendation_result": {
+        "rows": null,
+        "note": "REST GET recommendation_result -> 404: {\"code\":\"PGRST205\",\"details\":null,\"hint\":null,\"message\":\"Could not find the table"
+      },
+      "ai_explanation": {
+        "rows": null,
+        "note": "REST GET ai_explanation -> 404: {\"code\":\"PGRST205\",\"details\":null,\"hint\":null,\"message\":\"Could not find the table 'publi"
+      },
+      "virtual_tour": {
+        "rows": null,
+        "note": "REST GET virtual_tour -> 404: {\"code\":\"PGRST205\",\"details\":null,\"hint\":null,\"message\":\"Could not find the table 'public."
+      },
+      "property_verification": {
+        "rows": 0
+      },
+      "verification_document": {
+        "rows": 0
+      },
+      "listing_change_request": {
+        "rows": 0
+      },
+      "listing_change_audit": {
+        "rows": 0
+      },
+      "agent_listing_assignment": {
+        "rows": 0
+      },
+      "district_demographic": {
+        "rows": null,
+        "note": "REST GET district_demographic -> 404: {\"code\":\"PGRST205\",\"details\":null,\"hint\":null,\"message\":\"Could not find the table "
+      },
+      "ml_explanation_cache": {
+        "rows": null,
+        "note": "REST GET ml_explanation_cache -> 404: {\"code\":\"PGRST205\",\"details\":null,\"hint\":null,\"message\":\"Could not find the table "
+      }
+    },
+    "rental_note": "REST GET rental_properties -> 404: {\"code\":\"PGRST205\",\"details\":null,\"hint\":null,\"message\":\"Could not find the table 'public.rental_properties' in the schema cache\"}"
+  },
+  "data_parity": {
+    "status": "VERIFIED",
+    "local_published_ids": 916,
+    "remote_ids": 916,
+    "missing_on_remote": [],
+    "extra_on_remote": [],
+    "value_mismatch_count": 0,
+    "value_mismatches_sample": []
+  },
+  "intentional_differences": [
+    {
+      "item": "local research schemas (fnb_a, demand_gen, fyp_features, popfeat, public geo staging)",
+      "reason": "Local-only research/analytics per policy 5C \u2014 never synchronized."
+    },
+    {
+      "item": "fyp.capture_sessions / capture_frames / panorama_jobs / panoramas",
+      "reason": "Local-operational capture pipeline; Supabase copies are created only at a verified cutover (alembic)."
+    },
+    {
+      "item": "fyp.property_enrichment_category, property_feature_freshness, property_listing_sources, property_listing_verification, property_subject_links, property_geospatial_features, catalogue_properties, v_property_analysis",
+      "reason": "Research/catalogue infrastructure and enrichment state \u2014 local-only."
+    },
+    {
+      "item": "public.pano_capture_sessions / pano_capture_frames / pano_jobs",
+      "reason": "Legacy AR-source pipeline; read-only through PublicPanoramaBridge."
+    },
+    {
+      "item": "public.agent, public.company, public.staff_invitations, public.role_change_audit (Supabase only)",
+      "reason": "Supabase-side staff identity managed by backend/supabase/migrations; not replicated locally."
+    },
+    {
+      "item": "public.users row sets differ",
+      "reason": "Dev/test profiles exist only where created; auth.users is the origin of truth for Supabase profiles."
+    }
+  ],
+  "checks": {
+    "canonical_tables_in_fyp_local": true,
+    "no_legacy_duplicates_local": true,
+    "rental_contract_60_columns": true,
+    "outbox_installed": true,
+    "remote_property_parity": true,
+    "supabase_fyp_schema_migrated": false
+  },
+  "verdict": "PARTIAL (Supabase-side steps blocked pending migration 03)",
+  "verdict_note": "Local canonical migration verified. Supabase-side migration (03) requires the Supabase SQL editor / a direct DSN \u2014 apply it, then re-run this tool for full parity confirmation."
+}

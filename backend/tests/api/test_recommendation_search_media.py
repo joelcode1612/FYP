@@ -9,13 +9,13 @@ Two resolvers run ONCE per page beside the existing management enrichment:
   dropped);
 * ``panoramas_by_catalogue_ids`` — same authority and honesty rules as the
   insights endpoint's ``_panorama``: only a ``match_verified`` link joins to
-  ``public.virtual_tour`` (never a numeric guess against the text catalogue
+  ``fyp.virtual_tour`` (never a numeric guess against the text catalogue
   id), only a completed status *with* a URL is ``ready``, and a linked-but-
   unfinished job is ``processing``.
 
 Fixture rows live in a transaction that is ALWAYS rolled back — no live
 catalogue, link, photo or tour row is modified. The HTTP test only checks
-payload shape against live data (``public.virtual_tour`` is empty today, so
+payload shape against live data (``fyp.virtual_tour`` is empty today, so
 every card must honestly report no panorama).
 """
 from __future__ import annotations
@@ -130,7 +130,7 @@ def _add_tour(conn, property_id: int, url: str | None, status: str) -> None:
     conn.execute(
         text(
             """
-            INSERT INTO public.virtual_tour (
+            INSERT INTO fyp.virtual_tour (
                 tour_id, property_id, url, status, created_at, updated_at
             ) VALUES (
                 gen_random_uuid(), :pid, :url, :status, now(), now()
@@ -232,7 +232,7 @@ def test_latest_tour_row_wins_per_property():
             conn.execute(
                 text(
                     """
-                    INSERT INTO public.virtual_tour (
+                    INSERT INTO fyp.virtual_tour (
                         tour_id, property_id, url, status, created_at, updated_at
                     ) VALUES
                       (gen_random_uuid(), :pid, 'https://example.com/old.jpg',
@@ -281,7 +281,7 @@ def test_media_matches_the_live_tour_table(client, user_token):
     """With zero tour rows live, no card may claim a panorama."""
     with analytics_engine.connect() as conn:
         tour_rows = conn.execute(
-            text("SELECT count(*) FROM public.virtual_tour")
+            text("SELECT count(*) FROM fyp.virtual_tour")
         ).scalar()
     response = client.post(
         "/api/v1/recommendations/search",

@@ -432,27 +432,16 @@ def can_manage_property(
     )
 
 
-def can_capture_panorama(
-    role: str, relationship: PropertyRelationship
-) -> AccessDecision:
-    """Capture follows the property rules exactly."""
-    return can_manage_property(role, relationship)
+def can_capture_panorama(role: str, relationship: PropertyRelationship) -> AccessDecision:
+    """Only an independently assigned Property Agent may capture interiors."""
+    if canonical_role(role) == ROLE_AGENT and relationship is PropertyRelationship.assigned_agent:
+        return AccessDecision.allow("Assigned Agent may capture the property panorama.")
+    return AccessDecision.deny("360° capture is exclusively for the assigned Property Agent.")
 
 
-def can_upload_panorama(
-    role: str, relationship: PropertyRelationship
-) -> AccessDecision:
-    """Upload is the strictest of the three.
-
-    It is the operation the Storage policy enforces, and the one that puts bytes
-    into a folder. An unassociated panorama is never uploaded: there is no folder
-    that is legitimately its own.
-    """
-    if relationship is PropertyRelationship.none:
-        return AccessDecision.deny(
-            "This capture is not linked to a property you may write to."
-        )
-    return can_manage_property(role, relationship)
+def can_upload_panorama(role: str, relationship: PropertyRelationship) -> AccessDecision:
+    """Keep the same strict agent-only upload rule."""
+    return can_capture_panorama(role, relationship)
 
 
 class PermissionDenied(PermissionError):

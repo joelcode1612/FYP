@@ -1,16 +1,21 @@
 import 'dart:async';
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:sensors_plus/sensors_plus.dart';
 
 import 'package:fyp/features/capture_360/domain/sphere/sphere_capture_session.dart';
 import 'package:fyp/features/capture_360/domain/services/panorama_stitcher.dart';
 import 'package:fyp/features/capture_360/application/sphere/sphere_platform_ports.dart';
 import 'package:fyp/features/capture_360/application/sphere/sphere_capture_controller.dart';
+import 'package:fyp/features/capture_360/domain/quality/capture_quality_models.dart';
+import 'package:fyp/features/capture_360/domain/quality/frame_quality_analyzer.dart';
 import 'package:fyp/features/capture_360/domain/sphere/sphere_projection.dart';
 import 'package:fyp/features/capture_360/domain/sphere/sphere_target.dart';
 import 'package:fyp/features/capture_360/data/repositories/capture_repository_impl.dart';
+import 'package:fyp/features/capture_360/data/sphere/opencv_native_probe.dart';
 import 'package:fyp/features/capture_360/capture_composition.dart';
 import 'package:fyp/features/capture_360/presentation/sphere/screens/sphere_panorama_screen.dart';
 import 'package:fyp/features/capture_360/presentation/sphere/widgets/sphere_overlay_painter.dart';
@@ -30,6 +35,7 @@ import 'package:fyp/features/capture_360/presentation/widgets/capture_theme.dart
 class SphereCaptureScreen extends StatefulWidget {
   const SphereCaptureScreen({
     super.key,
+    this.autoStart = false,
     this.camera,
     this.rotation,
     this.repository,
@@ -40,8 +46,16 @@ class SphereCaptureScreen extends StatefulWidget {
     this.sessionId,
     this.userId,
     this.propertyId,
+    this.backendProcessing = false,
+    this.onCaptureComplete,
     this.onPanoramaReady,
+    this.onFrameSaved,
+    this.qualityAnalyzer,
   });
+
+  /// True only when entered after completing the SiteWise guide.
+  /// The camera starts after the first frame, using the same _start() flow.
+  final bool autoStart;
 
   /// Injection points for tests and for callers that already hold a station.
   final SphereCamera? camera;
@@ -69,10 +83,25 @@ class SphereCaptureScreen extends StatefulWidget {
   /// SiteWise host leaves this `null`.
   final int? propertyId;
 
+  /// When true, completion sends saved frames to FastAPI without local stitching.
+  final bool backendProcessing;
+
+  /// Fired once when all 38 original photographs have been saved.
+  final VoidCallback? onCaptureComplete;
+
   /// Fired once when the stitched panorama exists on disk, so the host page
   /// can attach it to the SiteWise tour, upload it through its own API and
   /// open the existing tour preview.
   final void Function(String panoramaPath)? onPanoramaReady;
+
+  /// Fired after each photograph is safely on disk, so the host page can
+  /// queue it for Supabase upload immediately — the per-frame upload queue
+  /// starts during capture, never after stitching.
+  final void Function(CapturedFrame frame)? onFrameSaved;
+
+  /// The per-photograph quality verifier. Warnings surface in the capture
+  /// UI only — nothing is ever deleted, re-shot, or auto-retaken.
+  final FrameQualityAnalyzer? qualityAnalyzer;
 
   @override
   State<SphereCaptureScreen> createState() => _SphereCaptureScreenState();
@@ -80,20 +109,75 @@ class SphereCaptureScreen extends StatefulWidget {
 
 class _SphereCaptureScreenState extends State<SphereCaptureScreen>
     with WidgetsBindingObserver {
+  static const _screenChannel = MethodChannel('adaptive360/screen');
+
   SphereCaptureController? _controller;
   SphereCamera? _camera;
   bool _starting = false;
   String? _startError;
-  bool _panoramaNotified = false;
+
+  /// The panorama revision the host has already been notified about. A
+  /// retake that re-stitches produces a NEW panorama; the revision counter
+  /// is what fires a second notification for it (a one-shot bool could not).
+  int _notifiedPanoramaRevision = 0;
+
+  /// One-shot guard for the backend-processing completion callback, which
+  /// has no local panorama (and therefore no revision) behind it.
+  bool _captureCompleteNotified = false;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    final lifecycle = WidgetsBinding.instance.lifecycleState;
+    if (defaultTargetPlatform != TargetPlatform.iOS ||
+        lifecycle == null ||
+        lifecycle == AppLifecycleState.resumed ||
+        lifecycle == AppLifecycleState.inactive) {
+      _setKeepScreenOn(true);
+    }
+    if (widget.autoStart) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) unawaited(_start());
+      });
+    }
+  }
+
+  void _setKeepScreenOn(bool enabled) {
+    if (kIsWeb) return;
+    if (defaultTargetPlatform != TargetPlatform.android &&
+        defaultTargetPlatform != TargetPlatform.iOS) {
+      return;
+    }
+    unawaited(_updateScreenTimeout(enabled));
+  }
+
+  Future<void> _updateScreenTimeout(bool enabled) async {
+    try {
+      await _screenChannel.invokeMethod<void>('setKeepScreenOn', enabled);
+    } on MissingPluginException {
+      if (enabled) {
+        debugPrint(
+          '360 capture requires a rebuilt app to keep the screen awake.',
+        );
+      }
+    } on PlatformException catch (error) {
+      debugPrint('360 capture screen timeout: ${error.code}');
+    }
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
+    // Android keeps the flag with the capture window. Losing focus briefly
+    // must not turn it off, and Android handles timeout when hidden.
+    if (state == AppLifecycleState.resumed) {
+      _setKeepScreenOn(true);
+    } else if (defaultTargetPlatform == TargetPlatform.iOS &&
+        (state == AppLifecycleState.hidden ||
+            state == AppLifecycleState.paused ||
+            state == AppLifecycleState.detached)) {
+      _setKeepScreenOn(false);
+    }
     // Android revokes the camera when the app goes to the background. Without
     // forwarding this, the preview is black on return with no message.
     final controller = _controller;
@@ -107,11 +191,24 @@ class _SphereCaptureScreenState extends State<SphereCaptureScreen>
   }
 
   void _onControllerChanged() {
-    if (_panoramaNotified) return;
     final controller = _controller;
-    final path = controller?.panoramaPath;
-    if (controller == null || controller.stitching || path == null) return;
-    _panoramaNotified = true;
+    if (controller == null) return;
+    if (widget.backendProcessing) {
+      if (controller.phase != SphereCapturePhase.complete ||
+          controller.capturedCount < kSphereTargetCount) {
+        return;
+      }
+      if (_captureCompleteNotified) return;
+      _captureCompleteNotified = true;
+      widget.onCaptureComplete?.call();
+      return;
+    }
+    final path = controller.panoramaPath;
+    if (controller.stitching || path == null) return;
+    // Notify the host once per NEW panorama: the first stitch, and every
+    // replacement produced after a manual retake re-stitches the sphere.
+    if (controller.panoramaRevision == _notifiedPanoramaRevision) return;
+    _notifiedPanoramaRevision = controller.panoramaRevision;
     widget.onPanoramaReady?.call(path);
   }
 
@@ -122,6 +219,24 @@ class _SphereCaptureScreenState extends State<SphereCaptureScreen>
       _startError = null;
     });
     try {
+      // SPHERE_ORB_PRECAPTURE: fail early if this APK omitted ORB symbols.
+      // Keep existing saved frames untouched; fixing the native build is
+      // preferable to capturing 38 photos before discovering a missing symbol.
+      if (!widget.backendProcessing) {
+        final capabilities = OpenCvNativeProbe.run();
+        final message = OpenCvNativeProbe.failureMessage(capabilities);
+        if (message != null) {
+          if (mounted) {
+            setState(() {
+              _starting = false;
+              _startError =
+                  'Android panorama stitching is unavailable in '
+                  'this installation. $message';
+            });
+          }
+          return;
+        }
+      }
       final defaults = createSphereDefaults();
       final camera = widget.camera ?? defaults.camera;
       final rotation = widget.rotation ?? defaults.rotation;
@@ -147,6 +262,7 @@ class _SphereCaptureScreenState extends State<SphereCaptureScreen>
         camera: camera,
         repository: repository,
         stitcher: widget.stitcher ?? defaults.stitcher,
+        backendProcessing: widget.backendProcessing,
         stationId: stationId,
         // The 4:3 normaliser links OpenCV, so it is supplied here rather than
         // defaulted inside the controller: that keeps the controller — and its
@@ -155,6 +271,8 @@ class _SphereCaptureScreenState extends State<SphereCaptureScreen>
         sessions: store,
         userId: widget.userId,
         propertyId: widget.propertyId,
+        onFrameSaved: widget.onFrameSaved,
+        qualityAnalyzer: widget.qualityAnalyzer,
         motion:
             widget.motionStream ??
             accelerometerEventStream(
@@ -193,6 +311,7 @@ class _SphereCaptureScreenState extends State<SphereCaptureScreen>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _setKeepScreenOn(false);
     _controller?.removeListener(_onControllerChanged);
     _controller?.dispose();
     super.dispose();
@@ -209,7 +328,11 @@ class _SphereCaptureScreenState extends State<SphereCaptureScreen>
         error: _startError,
       );
     }
-    return _LiveCapture(controller: controller, camera: camera);
+    return _LiveCapture(
+      controller: controller,
+      camera: camera,
+      backendProcessing: widget.backendProcessing,
+    );
   }
 }
 
@@ -450,10 +573,15 @@ class _SphereDiagramPainter extends CustomPainter {
 // ── live capture ───────────────────────────────────────────────────────────
 
 class _LiveCapture extends StatelessWidget {
-  const _LiveCapture({required this.controller, required this.camera});
+  const _LiveCapture({
+    required this.controller,
+    required this.camera,
+    required this.backendProcessing,
+  });
 
   final SphereCaptureController controller;
   final SphereCamera camera;
+  final bool backendProcessing;
 
   @override
   Widget build(BuildContext context) => Scaffold(
@@ -508,7 +636,9 @@ class _LiveCapture extends StatelessWidget {
           animation: controller,
           builder: (BuildContext context, Widget? child) {
             if (controller.phase == SphereCapturePhase.complete) {
-              return _CompletionOverlay(controller: controller);
+              return backendProcessing
+                  ? _BackendCompletionOverlay(controller: controller)
+                  : _CompletionOverlay(controller: controller);
             }
             if (controller.phase == SphereCapturePhase.failed) {
               return _FailureOverlay(controller: controller);
@@ -598,11 +728,22 @@ class _Viewfinder extends StatelessWidget {
             top: 10,
             left: 16,
             right: 16,
-            child: Center(
-              child: AnimatedBuilder(
-                animation: controller,
-                builder: (BuildContext context, Widget? child) =>
-                    _CapturedBanner(visible: controller.banner != null),
+            child: AnimatedBuilder(
+              animation: controller,
+              builder: (BuildContext context, Widget? child) => Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Center(
+                    child: _CapturedBanner(visible: controller.banner != null),
+                  ),
+                  const SizedBox(height: 6),
+                  Center(
+                    child: _QualityNotice(
+                      report: controller.lastQualityReport,
+                      onOpen: () => _showQualitySheet(context, controller),
+                    ),
+                  ),
+                ],
               ),
             ),
           ),
@@ -667,8 +808,7 @@ class _ProjectionDiagnosticsState extends State<_ProjectionDiagnostics> {
       // below the reticle.
       final relative = (start.conjugate * device).normalized;
       final forward = relative.rotate(const Vec3(0, 0, -1));
-      elevationDeg =
-          math.asin(forward.y.clamp(-1.0, 1.0)) * 180 / math.pi;
+      elevationDeg = math.asin(forward.y.clamp(-1.0, 1.0)) * 180 / math.pi;
       final reference = start.rotate(const Vec3(0, 0, -1));
       referenceHeadingDeg =
           math.atan2(reference.x, -reference.z) * 180 / math.pi;
@@ -735,7 +875,9 @@ class _ProjectionDiagnosticsState extends State<_ProjectionDiagnostics> {
                 '${widget.projection.height.round()} '
                 'f${widget.projection.focalLengthY.round()}',
               ),
-              Text('elev $elevation  err ${c.activeErrorDeg.toStringAsFixed(1)}°'),
+              Text(
+                'elev $elevation  err ${c.activeErrorDeg.toStringAsFixed(1)}°',
+              ),
               Text(
                 'T${target?.spec.targetId ?? '-'} '
                 'y${target?.spec.yawDeg.toStringAsFixed(0) ?? '-'} '
@@ -846,6 +988,8 @@ class _BottomPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final aligned = controller.activeErrorDeg <= controller.toleranceDeg;
+    final warnings = controller.qualityWarningCount;
+    final invalid = controller.qualityInvalidCount;
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 14),
       decoration: BoxDecoration(
@@ -889,10 +1033,260 @@ class _BottomPanel extends StatelessWidget {
               valueColor: const AlwaysStoppedAnimation<Color>(CaptureColors.ok),
             ),
           ),
+          // Quality summary — informational only. The photographs are all
+          // still saved; nothing here offers or performs an automatic retake.
+          if (warnings > 0 || invalid > 0) ...[
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Icon(
+                  invalid > 0 ? Icons.error_outline : Icons.info_outline,
+                  size: 13,
+                  color: invalid > 0
+                      ? Colors.redAccent
+                      : Colors.orangeAccent,
+                ),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    invalid > 0
+                        ? '$warnings photo(s) with quality warnings, '
+                            '$invalid unreadable — review before submitting.'
+                        : '$warnings photo(s) with quality warnings — '
+                            'review before submitting.',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Colors.white70,
+                      fontSize: 11.5,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
         ],
       ),
     );
   }
+}
+
+/// The quality notice under the "Captured!" banner: appears only when the
+/// most recent photograph carries a warning or is invalid, and tapping it
+/// opens the review sheet. An accepted photograph shows nothing here.
+class _QualityNotice extends StatelessWidget {
+  const _QualityNotice({required this.report, required this.onOpen});
+
+  final FrameQualityReport? report;
+  final VoidCallback onOpen;
+
+  @override
+  Widget build(BuildContext context) {
+    final report = this.report;
+    if (report == null || report.verdict == QualityVerdict.accepted) {
+      return const SizedBox.shrink();
+    }
+    final invalid = report.verdict == QualityVerdict.invalid;
+    final headline = report.headline;
+    return GestureDetector(
+      onTap: onOpen,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+        decoration: BoxDecoration(
+          color: (invalid ? Colors.redAccent : Colors.orangeAccent)
+              .withValues(alpha: 0.94),
+          borderRadius: BorderRadius.circular(24),
+          boxShadow: const [
+            BoxShadow(
+              color: Color(0x55000000),
+              blurRadius: 12,
+              offset: Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              invalid ? Icons.error_outline : Icons.warning_amber_rounded,
+              color: Colors.white,
+              size: 16,
+            ),
+            const SizedBox(width: 6),
+            Flexible(
+              child: Text(
+                headline?.message ??
+                    (invalid
+                        ? 'This photo could not be checked properly.'
+                        : 'Saved with a quality warning.'),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// The per-photograph quality review sheet: the findings, the evidence, and
+/// the two manual choices — retake this one photograph, or keep it. Nothing
+/// in this sheet happens without a tap: keeping the photograph is always the
+/// safe default, and the previous capture is never deleted either way (a
+/// retake replaces it only when the new photograph actually saves).
+Future<void> _showQualitySheet(
+  BuildContext context,
+  SphereCaptureController controller,
+) async {
+  final report = controller.lastQualityReport;
+  if (report == null) return;
+  await showModalBottomSheet<void>(
+    context: context,
+    backgroundColor: const Color(0xF2121212),
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+    ),
+    builder: (BuildContext sheetContext) => SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                Icon(
+                  report.verdict == QualityVerdict.invalid
+                      ? Icons.error_outline
+                      : report.verdict == QualityVerdict.warning
+                      ? Icons.warning_amber_rounded
+                      : Icons.check_circle_outline,
+                  size: 20,
+                  color: report.verdict == QualityVerdict.invalid
+                      ? Colors.redAccent
+                      : report.verdict == QualityVerdict.warning
+                      ? Colors.orangeAccent
+                      : CaptureColors.ok,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    'Photo check — target ${report.targetId}',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            Text(
+              report.verdict == QualityVerdict.invalid
+                  ? 'This photograph is unreadable and needs a retake. It is '
+                      'kept on the device either way.'
+                  : report.verdict == QualityVerdict.warning
+                  ? 'The photograph is saved and usable. You can retake it or '
+                      'keep it — nothing is changed automatically.'
+                  : 'All checks passed for this photograph.',
+              style: const TextStyle(color: Colors.white70, fontSize: 12.5),
+            ),
+            const SizedBox(height: 12),
+            for (final finding in report.findings)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(
+                      switch (finding.severity) {
+                        QualitySeverity.critical => Icons.error_outline,
+                        QualitySeverity.warning => Icons.warning_amber_rounded,
+                        QualitySeverity.info => Icons.info_outline,
+                      },
+                      size: 15,
+                      color: switch (finding.severity) {
+                        QualitySeverity.critical => Colors.redAccent,
+                        QualitySeverity.warning => Colors.orangeAccent,
+                        QualitySeverity.info => Colors.white54,
+                      },
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            finding.message,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 12.5,
+                              height: 1.35,
+                            ),
+                          ),
+                          if (finding.evidence.isNotEmpty)
+                            Text(
+                              finding.evidence.entries
+                                  .map(
+                                    (entry) =>
+                                        '${entry.key}: ${entry.value.toStringAsFixed(2)}',
+                                  )
+                                  .join(' · '),
+                              style: const TextStyle(
+                                color: Colors.white38,
+                                fontSize: 10.5,
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            const SizedBox(height: 4),
+            if (report.verdict != QualityVerdict.accepted) ...[
+              FilledButton.icon(
+                style: FilledButton.styleFrom(
+                  backgroundColor: Colors.orangeAccent,
+                  foregroundColor: Colors.black,
+                ),
+                icon: const Icon(Icons.refresh, size: 18),
+                label: const Text('Retake this photo'),
+                onPressed: () {
+                  Navigator.of(sheetContext).pop();
+                  controller.retakeTarget(report.targetId);
+                },
+              ),
+              const SizedBox(height: 8),
+              OutlinedButton(
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: Colors.white,
+                  side: const BorderSide(color: Colors.white24),
+                ),
+                onPressed: () => Navigator.of(sheetContext).pop(),
+                child: const Text('Keep it'),
+              ),
+            ] else
+              OutlinedButton(
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: Colors.white,
+                  side: const BorderSide(color: Colors.white24),
+                ),
+                onPressed: () => Navigator.of(sheetContext).pop(),
+                child: const Text('Close'),
+              ),
+          ],
+        ),
+      ),
+    ),
+  );
 }
 
 class _MotionChip extends StatelessWidget {
@@ -926,6 +1320,68 @@ class _MotionChip extends StatelessWidget {
           ),
         ),
       ],
+    ),
+  );
+}
+
+class _BackendCompletionOverlay extends StatelessWidget {
+  const _BackendCompletionOverlay({required this.controller});
+
+  final SphereCaptureController controller;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    color: Colors.black.withValues(alpha: 0.72),
+    child: Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Container(
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            color: CaptureColors.sheet,
+            borderRadius: BorderRadius.circular(22),
+            border: Border.all(color: CaptureColors.hairlineOnDark),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(
+                Icons.cloud_upload_outlined,
+                color: CaptureColors.ok,
+                size: 48,
+              ),
+              const SizedBox(height: 12),
+              const Text(
+                'Capture complete',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 22,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                '${controller.capturedCount} / $kSphereTargetCount photos saved',
+                style: const TextStyle(
+                  color: CaptureColors.mutedOnDark,
+                  fontSize: 14,
+                ),
+              ),
+              const SizedBox(height: 12),
+              const Text(
+                'SiteWise processes the panorama on the server. Your original '
+                'photos stay on this device if an upload needs to be retried.',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: CaptureColors.mutedOnDark,
+                  fontSize: 13,
+                  height: 1.5,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     ),
   );
 }
@@ -990,65 +1446,12 @@ class _CompletionOverlay extends StatelessWidget {
                   minimumSize: const Size.fromHeight(46),
                 ),
               ),
-              const SizedBox(height: 10),
-              OutlinedButton.icon(
-                onPressed: controller.exporting
-                    ? null
-                    : () => _saveAndFinish(context),
-                icon: controller.exporting
-                    ? const SizedBox(
-                        width: 14,
-                        height: 14,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Icon(Icons.save_alt, size: 18),
-                label: const Text('Save & Finish'),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: Colors.white,
-                  minimumSize: const Size.fromHeight(46),
-                  side: const BorderSide(color: CaptureColors.hairlineOnDark),
-                ),
-              ),
-              if (controller.exportPath != null) ...[
-                const SizedBox(height: 10),
-                Text(
-                  'Exported to ${controller.exportPath}',
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    color: CaptureColors.mutedOnDark,
-                    fontSize: 10.5,
-                    height: 1.4,
-                  ),
-                ),
-              ],
             ],
           ),
         ),
       ),
     ),
   );
-
-  Future<void> _saveAndFinish(BuildContext context) async {
-    final messenger = ScaffoldMessenger.of(context);
-    final navigator = Navigator.of(context);
-    final path = await controller.saveAndFinish();
-    if (!context.mounted) return;
-    // Save & Finish after a failed stitch still exports the photographs — that
-    // is deliberate, they are the user's work — but it must not claim a
-    // panorama was produced. `panoramaPath` is only set when the stitcher
-    // returned success *and* the JPEG exists and is non-empty, so it is the
-    // honest test here.
-    final hasPanorama = controller.panoramaPath != null;
-    final message = path == null
-        ? controller.message ?? 'The export failed.'
-        : hasPanorama
-        ? 'Exported $kSphereTargetCount photographs and the panorama to $path'
-        : 'Exported $kSphereTargetCount photographs to $path. No panorama was '
-              'generated — the photographs are kept, so you can retry stitching '
-              'from the review screen without recapturing.';
-    messenger.showSnackBar(SnackBar(content: Text(message)));
-    if (path != null) navigator.pop();
-  }
 }
 
 class _PanoramaStatus extends StatelessWidget {

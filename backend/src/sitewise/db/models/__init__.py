@@ -9,7 +9,6 @@ from .fyp_research import (
     FypPropertyGeospatialFeature,
     FypPropertyPhoto,
     FypPropertySubjectLink,
-    FypRecommendationResult,
     FypRentalProperty,
 )
 from .listing_change_request import ListingChangeAudit, ListingChangeRequest
@@ -37,7 +36,6 @@ __all__ = [
     "FypPropertyGeospatialFeature",
     "FypPropertyPhoto",
     "FypPropertySubjectLink",
-    "FypRecommendationResult",
     "FypRentalProperty",
     "ListingChangeAudit",
     "ListingChangeRequest",

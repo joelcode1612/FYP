@@ -7,6 +7,7 @@ from sqlmodel import Field, SQLModel
 
 class PropertyFootTraffic(SQLModel, table=True):
     __tablename__ = "property_foot_traffic"
+    __table_args__ = {"schema": "fyp", "info": {"externally_managed": True}}
 
     traffic_id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     property_id: int = Field()  # legacy FK to public.property retired by migration 0005

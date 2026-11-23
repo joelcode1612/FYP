@@ -42,7 +42,7 @@ class BusinessMatchDetail extends StatelessComponent {
   @override
   Component build(BuildContext context) {
     return section(
-      classes: 'sw-matchdetail',
+      classes: 'sw-matchdetail sw-matchdetail--refined',
       attributes: const {'aria-labelledby': 'sw-matchdetail-title'},
       [
         div(classes: 'sw-info__intro', [

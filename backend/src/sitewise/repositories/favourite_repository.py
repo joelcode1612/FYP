@@ -1,5 +1,6 @@
 import uuid
 
+from sqlalchemy.dialects.postgresql import insert
 from sqlmodel import Session, select
 
 from sitewise.db.models.favourite_property import FavouriteProperty
@@ -14,6 +15,24 @@ class FavouriteRepository:
         self.session.commit()
         self.session.refresh(fav)
         return fav
+
+    def create_or_get(self, fav: FavouriteProperty) -> tuple[FavouriteProperty, bool]:
+        statement = (
+            insert(FavouriteProperty)
+            .values(**fav.model_dump())
+            .on_conflict_do_nothing(index_elements=["user_id", "property_id"])
+            .returning(FavouriteProperty)
+        )
+        while True:
+            created = self.session.execute(statement).scalar_one_or_none()
+            if created is not None:
+                self.session.commit()
+                self.session.refresh(created)
+                return created, True
+            existing = self.get_by_user_and_property(fav.user_id, fav.property_id)
+            if existing is not None:
+                return existing, False
+            # A concurrent unsave removed the conflicting row before our read.
 
     def get_by_id(self, favorite_id: uuid.UUID) -> FavouriteProperty | None:
         return self.session.get(FavouriteProperty, favorite_id)

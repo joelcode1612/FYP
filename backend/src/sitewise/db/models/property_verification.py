@@ -52,6 +52,7 @@ class PropertyVerification(SQLModel, table=True):
             "'verified','rejected','information_requested')",
             name="ck_property_verification_ownership_status",
         ),
+        {"schema": "fyp", "info": {"externally_managed": True}},
     )
 
     verification_id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
@@ -60,8 +61,8 @@ class PropertyVerification(SQLModel, table=True):
     property_id: int = Field(foreign_key="fyp.rental_properties.id", nullable=False)
     listing_status: str = Field(default="not_submitted", max_length=32, nullable=False)
     ownership_status: str = Field(default="not_submitted", max_length=32, nullable=False)
-    submitted_by: uuid.UUID = Field(foreign_key="users.user_id", nullable=False, index=True)
-    reviewed_by: uuid.UUID | None = Field(default=None, foreign_key="users.user_id")
+    submitted_by: uuid.UUID = Field(foreign_key="public.users.user_id", nullable=False, index=True)
+    reviewed_by: uuid.UUID | None = Field(default=None, foreign_key="public.users.user_id")
     publication_eligible: bool = Field(default=False, nullable=False)
     latest_note: str | None = Field(default=None, max_length=2000)
     version: int = Field(default=1, nullable=False)
@@ -76,11 +77,12 @@ class VerificationDocument(SQLModel, table=True):
             "verification_type IN ('listing','ownership')",
             name="ck_verification_document_type",
         ),
+        {"schema": "fyp", "info": {"externally_managed": True}},
     )
 
     document_id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     verification_id: uuid.UUID = Field(
-        foreign_key="property_verification.verification_id", nullable=False, index=True
+        foreign_key="fyp.property_verification.verification_id", nullable=False, index=True
     )
     property_id: int = Field(foreign_key="fyp.rental_properties.id", nullable=False, index=True)
     verification_type: str = Field(max_length=16, nullable=False)
@@ -89,18 +91,19 @@ class VerificationDocument(SQLModel, table=True):
     storage_key: str = Field(max_length=120, nullable=False, unique=True)
     mime_type: str = Field(max_length=100, nullable=False)
     file_size: int = Field(nullable=False)
-    uploaded_by: uuid.UUID = Field(foreign_key="users.user_id", nullable=False)
+    uploaded_by: uuid.UUID = Field(foreign_key="public.users.user_id", nullable=False)
     uploaded_at: datetime = Field(default_factory=lambda: datetime.now(UTC), nullable=False)
     status: str = Field(default="active", max_length=20, nullable=False)
 
 
 class VerificationAudit(SQLModel, table=True):
     __tablename__ = "verification_audit"
+    __table_args__ = {"schema": "fyp", "info": {"externally_managed": True}}
 
     audit_id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     property_id: int = Field(foreign_key="fyp.rental_properties.id", nullable=False, index=True)
     verification_id: uuid.UUID | None = Field(
-        default=None, foreign_key="property_verification.verification_id", index=True
+        default=None, foreign_key="fyp.property_verification.verification_id", index=True
     )
     verification_type: str | None = Field(default=None, max_length=16)
     previous_status: str | None = Field(default=None, max_length=32)
@@ -108,7 +111,7 @@ class VerificationAudit(SQLModel, table=True):
     action: str = Field(max_length=60, nullable=False)
     # The acting administrator for decision rows; NULL for submitter-side rows
     # (submission / evidence upload), which carry the actor in ``note`` context.
-    admin_user_id: uuid.UUID | None = Field(default=None, foreign_key="users.user_id")
+    admin_user_id: uuid.UUID | None = Field(default=None, foreign_key="public.users.user_id")
     reason: str | None = Field(default=None, max_length=2000)
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(UTC), nullable=False, index=True

@@ -4,9 +4,9 @@ Pipeline
 ========
 1. Read the AUTHENTICATED entrepreneur's saved preferences (never a request id).
 2. Read eligible research-catalogue candidates with verified field mappings.
-3. Use the stored Layer 1 PU *research association* score as the PU input.
+3. Resolve and score the Layer 1 PU input with the expanded 64-feature model.
 4. Apply eligibility filters, then the versioned rule-based Layer 2 scoring.
-5. Rank deterministically and persist the batch in the process-local store.
+5. Rank deterministically and persist the batch in PostgreSQL.
 6. On demand, produce two SEPARATED explanations:
      A. a SHAP explanation of the research PU model only, and
      B. the Layer 2 rule engine's own reasons / cautions.
@@ -25,12 +25,12 @@ import math
 import threading
 import uuid
 from collections import Counter
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
 from sqlmodel import Session
 
-from sitewise.core.config import Settings
 from sitewise.core.logging import logger
 from sitewise.domain.recommendation_scoring import (
     SCORE_MEANING,
@@ -46,8 +46,8 @@ from sitewise.ml.feature_bridge import merge_bridge_features
 from sitewise.ml import shap_explainer as shap_explainer_module
 from sitewise.ml.model_loader import ModelLoader
 from sitewise.ml.property_features import PropertyFeatureRepository
-from sitewise.ml.pu_variant import EXPERIMENTAL_MODEL_NAME, experimental_prediction, resolve_variant
-from sitewise.ml.pu_expanded import EXPANDED_MODEL_NAME, merge_expanded_bridge_features
+from sitewise.ml.pu_variant import EXPERIMENTAL_MODEL_NAME, resolve_variant
+from sitewise.ml.pu_expanded import EXPANDED_MODEL_NAME, expanded_scores_many, merge_expanded_bridge_features
 from sitewise.ml.selected_pu_integration import (
 
     SELECTED_MODEL_NAME,
@@ -181,6 +181,7 @@ class RecommendationGenerationService:
         layer1_key: str,
         layer1_version: str | None,
         engine_version: str,
+        artifact_digest: str | None = None,
     ) -> str:
         """Stable hash of every input that can change the ranked output.
 
@@ -200,6 +201,7 @@ class RecommendationGenerationService:
                 "scoring_version": engine_version,
                 "layer1_variant": layer1_key,
                 "layer1_version": layer1_version,
+                "layer1_artifact_sha256": artifact_digest,
             },
             sort_keys=True,
             separators=(",", ":"),
@@ -213,6 +215,7 @@ class RecommendationGenerationService:
         limit: int = 20,
         state: str | None = None,
         property_ids: list[str] | None = None,
+        refresh: bool = False,
     ) -> dict[str, Any]:
         """Score and rank the eligible catalogue for one entrepreneur.
 
@@ -226,8 +229,7 @@ class RecommendationGenerationService:
         batch is returned without recomputing (``reused_existing_batch``).
         """
         limit = max(1, min(int(limit), 100))
-        settings = Settings()
-        variant = resolve_variant(settings)
+        variant = resolve_variant(variant_key="expanded64")
         artifact_digest = _artifact_sha256(variant.artifact)
         payload = self.preferences.payload(user_id)
         stored = payload.get("preferences")
@@ -250,13 +252,16 @@ class RecommendationGenerationService:
             layer1_key=variant.key,
             layer1_version=variant.version,
             engine_version=engine_version,
+            artifact_digest=artifact_digest,
         )
 
-        existing = self.store.latest(user_id)
-        if existing and existing.get("results"):
+        existing = None if refresh else self.store.latest(user_id)
+        if existing and existing.get("results") and all(
+            self._has_expanded_score(row) for row in existing["results"]
+        ):
             first = existing["results"][0]
             if first.get("generation_inputs_hash") == inputs_hash:
-                return self._reused_response(user_id, existing, profile, stored, payload)
+                return self._reused_response(user_id, existing, profile, stored, payload, variant)
 
         rows = self.candidates.list_candidates(
             max_rent=profile.max_rent_myr,
@@ -270,51 +275,38 @@ class RecommendationGenerationService:
 
         rejections: Counter[str] = Counter()
         scored: list[Any] = []
-        experimental_unavailable: list[dict[str, Any]] = []
-        experimental_scored = 0
+        unavailable: list[dict[str, Any]] = []
+        scores = expanded_scores_many(
+            self.analytics_session, [str(row["property_id"]) for row in rows],
+            **({"refresh": True} if refresh else {}),
+        )
+        inferred_count = 0
         for row in rows:
             candidate = PropertyCandidate.from_row(row)
+            prediction = scores.get(str(candidate.property_id), {})
+            if not prediction.get("available"):
+                rejections["expanded64_inference_unavailable"] += 1
+                if len(unavailable) < 10:
+                    coverage = prediction.get("feature_coverage") or {}
+                    unavailable.append({
+                        "property_id": candidate.property_id,
+                        "missing_features": coverage.get("missing_features", []),
+                        "inference_state": prediction.get("inference_state"),
+                    })
+                continue
+            candidate = replace(
+                candidate,
+                pu_association_score=float(prediction["score"]),
+                pu_score_source=variant.score_source,
+                pu_feature_set="expanded64",
+                pu_model_method="live_inference",
+            )
+            inferred_count += 1
             failures = eligibility_failures(candidate, profile)
-            if variant.key == "experimental47":
-                # The stored legacy score is irrelevant for the experimental
-                # variant: eligibility re-checks the LIVE score instead, so a
-                # row without a stored score can still be scored - and a row
-                # WITH a stored score never leaks it into this batch.
-                failures = [
-                    f for f in failures
-                    if f != "pu_association_score_missing_or_invalid"
-                ]
             if failures:
                 for reason in failures:
                     rejections[reason] += 1
                 continue
-            if variant.key == "experimental47":
-                prediction = experimental_prediction(
-                    self.analytics_session, str(candidate.property_id)
-                )
-                if not prediction.get("available"):
-                    rejections["experimental47_47_feature_inference_unavailable"] += 1
-                    if len(experimental_unavailable) < 10:
-                        experimental_unavailable.append(
-                            {
-                                "property_id": candidate.property_id,
-                                "missing_features": (
-                                    prediction.get("feature_coverage") or {}
-                                ).get("missing_features", []),
-                                "inference_state": prediction.get("inference_state"),
-                            }
-                        )
-                    continue
-                from dataclasses import replace as _replace
-
-                candidate = _replace(
-                    candidate,
-                    pu_association_score=float(prediction["score"]),
-                    pu_score_source=variant.score_source,
-                    pu_feature_set="experimental_47_landscan_update",
-                    pu_model_method="live_inference",
-                )
-                experimental_scored += 1
             try:
                 if recommender is not None:
                     scored.append(
@@ -328,8 +320,6 @@ class RecommendationGenerationService:
                 else:
                     item = score_candidate(candidate, profile, config=SCORING_CONFIG)
                     if item.layer1_model != variant.layer1_model:
-                        from dataclasses import replace
-
                         item = replace(item, layer1_model=variant.layer1_model)
                     scored.append(item)
             except ValueError as exc:
@@ -358,12 +348,10 @@ class RecommendationGenerationService:
             "layer1_variant": variant.key,
             "layer1_model": variant.layer1_model,
             "layer2_engine_version": engine_version,
-            "experimental_coverage": {
-                "scored_live_inference": experimental_scored,
-                "unavailable_examples": experimental_unavailable,
-            }
-            if variant.key == "experimental47"
-            else None,
+            "expanded64_coverage": {
+                "scored_live_inference": inferred_count,
+                "unavailable_examples": unavailable,
+            },
             "ranking": "final_score desc, preference_match_score desc, "
                        "pu_association_score desc, property_id asc",
         }
@@ -376,9 +364,7 @@ class RecommendationGenerationService:
             item_dict["model"]["artifact"] = variant.artifact
             item_dict["model"]["feature_count"] = variant.feature_count
             item_dict["model"]["artifact_sha256"] = artifact_digest
-            item_dict["model"]["score_source_mode"] = (
-                "live_inference" if variant.key == "experimental47" else "stored_prediction"
-            )
+            item_dict["model"]["score_source_mode"] = "live_inference"
             item_dict["model"]["production_ready"] = variant.production_ready
             # Batch-level provenance travels on every stored row so an
             # unchanged-input reuse can reconstruct the full response.
@@ -506,6 +492,7 @@ class RecommendationGenerationService:
         profile: Any,
         stored: dict[str, Any] | None,
         payload: dict[str, Any],
+        variant: Any,
     ) -> dict[str, Any]:
         """Return the stored batch unchanged when no input hash changed.
 
@@ -513,7 +500,6 @@ class RecommendationGenerationService:
         ``reused_existing_batch`` is True and no catalogue scan or scoring
         pass runs.
         """
-        variant = resolve_variant(Settings())
         recommender = load_snapshot() if profile.preferences_version == 3 else None
         results = existing["results"]
         first = results[0]
@@ -546,8 +532,19 @@ class RecommendationGenerationService:
             "limitations": list(LIMITATIONS),
         }
 
+    @staticmethod
+    def _has_expanded_score(row: dict[str, Any]) -> bool:
+        model = row.get("model") or {}
+        return (
+            model.get("name") == EXPANDED_MODEL_NAME
+            and model.get("feature_count") == 64
+            and model.get("score_source_mode") == "live_inference"
+        )
+
     def latest(self, user_id: uuid.UUID) -> dict[str, Any]:
         batch = self.store.latest(user_id)
+        if batch and not all(self._has_expanded_score(row) for row in batch["results"]):
+            batch = None
         return {
             "user_id": str(user_id),
             "available": batch is not None,
@@ -564,7 +561,7 @@ class RecommendationGenerationService:
     def explain(self, result_id: uuid.UUID, user_id: uuid.UUID) -> dict[str, Any] | None:
         """Two separated explanation sections; SHAP is optional."""
         record = self.store.get(result_id, user_id)
-        if record is None:
+        if record is None or not self._has_expanded_score(record):
             return None
 
         base_explanation = record.get("explanation") or {}
@@ -601,6 +598,16 @@ class RecommendationGenerationService:
                 model_name=model_name,
                 model_version=model_version,
             )
+            if shap_payload is not None and (
+                not expected_artifact_sha256
+                or shap_payload.get("artifact_sha256") != expected_artifact_sha256
+                or (shap_payload.get("relation_to_recommendation") or {}).get("scores_agree") is not True
+            ):
+                shap_payload = None
+                shap_status = {
+                    "available": False,
+                    "reason": "The explanation does not match the saved PU score and artifact.",
+                }
             if shap_payload is not None:
                 self.store.attach_shap(result_id, user_id, shap_payload, shap_status)
         else:

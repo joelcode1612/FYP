@@ -76,7 +76,7 @@ def cleanup_rows(cleanup_users):
     if not cleanup_users:
         return
     with Session(engine) as session:
-        for table in ("ai_explanation", "assessment", "favorite_property"):
+        for table in ("fyp.ai_explanation", "fyp.assessment", "fyp.favorite_property"):
             session.execute(
                 text(f"DELETE FROM {table} WHERE user_id = ANY(:ids)"),
                 {"ids": list(cleanup_users)},

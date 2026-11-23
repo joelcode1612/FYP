@@ -32,7 +32,7 @@ SELECT p.id, p.owner_user_id, p.owner_id, p.listing_id, p.verification_status,
        a.agent_id
 FROM fyp.rental_properties p
 LEFT JOIN public.users u ON u.user_id = p.owner_user_id
-LEFT JOIN public.agent_listing_assignment a ON a.listing_id = p.id
+LEFT JOIN fyp.agent_listing_assignment a ON a.listing_id = p.id
 """
 
 
@@ -115,7 +115,7 @@ def _assignment_table_missing(session: Session) -> bool:
     # Do not claim "unassigned" if the assignment migration was never applied.
     return (
         session.execute(
-            text("SELECT to_regclass('public.agent_listing_assignment')")
+            text("SELECT to_regclass('fyp.agent_listing_assignment')")
         ).scalar()
         is None
     )

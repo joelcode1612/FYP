@@ -52,7 +52,7 @@ from sitewise.services.property_insights_service import (
 )
 
 REFERENCE_PROPERTY = "MD-00510"
-_CACHE_TABLE = "ml_explanation_cache"
+_CACHE_TABLE = "fyp.ml_explanation_cache"
 
 
 def _identity(**overrides) -> ExplanationIdentity:

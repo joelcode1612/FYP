@@ -2,6 +2,9 @@ import 'dart:io';
 import 'dart:math' as math;
 import 'dart:typed_data';
 
+// SITEWISE_QUALITY_MESH_V1: conservative overlap mesh.
+import 'package:fyp/features/capture_360/domain/sphere/sphere_local_mesh_warp.dart';
+
 import 'package:opencv_dart/opencv_dart.dart' as cv;
 
 import 'package:fyp/features/capture_360/domain/sphere/sphere_intrinsics.dart';
@@ -41,6 +44,197 @@ class SphereRegistrationFrame {
   final int cropOffsetY;
 }
 
+/// SITEWISE_OBJECT_INTEGRITY_V1: bounded image-space affine residual from
+/// geometrically checked ORB matches after quaternion registration. All
+/// coefficients are fractions of the decoded width/height, so a correction
+/// estimated at quarter resolution scales correctly during final composition.
+/// The source JPEGs are NEVER rewritten or replaced.
+class SphereResidualAffine {
+  const SphereResidualAffine({
+    this.du0 = 0,
+    this.duX = 0,
+    this.duY = 0,
+    this.dv0 = 0,
+    this.dvX = 0,
+    this.dvY = 0,
+  });
+
+  static const SphereResidualAffine identity = SphereResidualAffine();
+  final double du0, duX, duY, dv0, dvX, dvY;
+
+  /// The warp is strongest in the overlap/periphery and fades towards image
+  /// centre, where altering pixels would only bend already-aligned objects.
+  /// Maximum displacement per axis is 35 pixels in the composition decode.
+  ({double du, double dv}) shiftAt({
+    required double u,
+    required double v,
+    required int width,
+    required int height,
+    double maxPx = 35.0,
+  }) {
+    if (width < 1 || height < 1) return (du: 0.0, dv: 0.0);
+    final nx = 2.0 * u / width - 1.0;
+    final ny = 2.0 * v / height - 1.0;
+    final radius = math.max(nx.abs(), ny.abs());
+    final t = ((radius - 0.15) / 0.75).clamp(0.0, 1.0).toDouble();
+    final peripheral = t * t * (3.0 - 2.0 * t);
+    final du = (du0 + duX * nx + duY * ny) * width * peripheral;
+    final dv = (dv0 + dvX * nx + dvY * ny) * height * peripheral;
+    return (
+      du: du.clamp(-maxPx, maxPx).toDouble(),
+      dv: dv.clamp(-maxPx, maxPx).toDouble(),
+    );
+  }
+}
+
+class _ResidualPoint {
+  const _ResidualPoint(this.x, this.y, this.du, this.dv);
+  final double x, y, du, dv; // x/y normalized, du/dv in registration pixels
+}
+
+/// Robust pairwise affine fit. Only an already-aligned, earlier neighbour
+/// may provide correspondences. Large or inconsistent parallax is rejected,
+/// rather than blindly forcing an affine model onto objects at different depths.
+SphereResidualAffine _fitResidualAffine(
+  List<_ResidualPoint> points,
+  DecodedProjection projection,
+) {
+  if (points.length < 24) return SphereResidualAffine.identity;
+  final us = <double>[for (final p in points) p.du]..sort();
+  final vs = <double>[for (final p in points) p.dv]..sort();
+  final medianU = us[us.length ~/ 2];
+  final medianV = vs[vs.length ~/ 2];
+  // At this stage the rotation should have resolved gross alignment. Accept
+  // only spatially coherent residuals; close-object parallax can exceed this.
+  final coherent = <_ResidualPoint>[
+    for (final p in points)
+      if ((p.du - medianU).abs() <= 6.0 && (p.dv - medianV).abs() <= 6.0) p,
+  ];
+  if (coherent.length < 24 || coherent.length < points.length * 0.60) {
+    return SphereResidualAffine.identity;
+  }
+
+  // Coordinates are normalized to prevent 4x decode reduction from changing
+  // fitted rotation/shear. Regularize slope terms to avoid overfitting a
+  // tiny cluster of ORB points on one nearby chair/door.
+  final normal = List<double>.filled(9, 0);
+  final rhsU = List<double>.filled(3, 0);
+  final rhsV = List<double>.filled(3, 0);
+  for (final p in coherent) {
+    final a = <double>[1.0, p.x, p.y];
+    for (var r = 0; r < 3; r++) {
+      rhsU[r] += a[r] * p.du / projection.width;
+      rhsV[r] += a[r] * p.dv / projection.height;
+      for (var c = 0; c < 3; c++) {
+        normal[r * 3 + c] += a[r] * a[c];
+      }
+    }
+  }
+  normal[0] += 0.01;
+  normal[4] += 8.0;
+  normal[8] += 8.0;
+  final u = _solveAffine3(normal, rhsU);
+  final v = _solveAffine3(normal, rhsV);
+  if (u == null || v == null) return SphereResidualAffine.identity;
+  final fitted = SphereResidualAffine(
+    du0: u[0],
+    duX: u[1],
+    duY: u[2],
+    dv0: v[0],
+    dvX: v[1],
+    dvY: v[2],
+  );
+  var before = 0.0;
+  var after = 0.0;
+  for (final p in coherent) {
+    final targetDu = (u[0] + u[1] * p.x + u[2] * p.y) * projection.width;
+    final targetDv = (v[0] + v[1] * p.x + v[2] * p.y) * projection.height;
+    before += math.sqrt(p.du * p.du + p.dv * p.dv);
+    after += math.sqrt(
+      math.pow(p.du - targetDu, 2) + math.pow(p.dv - targetDv, 2),
+    );
+  }
+  // Discard insignificant or contradictory adjustments. A 35px clamp is an
+  // emergency bound, NOT a licence to accept arbitrary projective distortion.
+  if (before < 0.5 * coherent.length || after >= 0.85 * before) {
+    return SphereResidualAffine.identity;
+  }
+  if ((u[0] * projection.width).abs() > 25 ||
+      (v[0] * projection.height).abs() > 25 ||
+      u[1].abs() > 0.018 ||
+      u[2].abs() > 0.018 ||
+      v[1].abs() > 0.018 ||
+      v[2].abs() > 0.018) {
+    return SphereResidualAffine.identity;
+  }
+  return fitted;
+}
+
+/// Minimal, pivoted Gaussian elimination for the two 3x3 affine fits.
+List<double>? _solveAffine3(List<double> coefficients, List<double> rhs) {
+  final a = List<double>.of(coefficients);
+  final b = List<double>.of(rhs);
+  for (var k = 0; k < 3; k++) {
+    var pivot = k;
+    for (var row = k + 1; row < 3; row++) {
+      if (a[row * 3 + k].abs() > a[pivot * 3 + k].abs()) pivot = row;
+    }
+    if (a[pivot * 3 + k].abs() < 1e-10) return null;
+    if (pivot != k) {
+      for (var col = 0; col < 3; col++) {
+        final temp = a[k * 3 + col];
+        a[k * 3 + col] = a[pivot * 3 + col];
+        a[pivot * 3 + col] = temp;
+      }
+      final temp = b[k];
+      b[k] = b[pivot];
+      b[pivot] = temp;
+    }
+    for (var row = k + 1; row < 3; row++) {
+      final ratio = a[row * 3 + k] / a[k * 3 + k];
+      for (var col = k; col < 3; col++) {
+        a[row * 3 + col] -= ratio * a[k * 3 + col];
+      }
+      b[row] -= ratio * b[k];
+    }
+  }
+  final solution = List<double>.filled(3, 0);
+  for (var row = 2; row >= 0; row--) {
+    var total = b[row];
+    for (var col = row + 1; col < 3; col++) {
+      total -= a[row * 3 + col] * solution[col];
+    }
+    solution[row] = total / a[row * 3 + row];
+    if (!solution[row].isFinite) return null;
+  }
+  return solution;
+}
+
+// SITEWISE_QUALITY_MESH_V1: lightweight sampled focus/blur diagnostic.
+double _sampledLaplacianVariance(Uint8List pixels, int width, int height) {
+  if (width < 3 || height < 3 || pixels.length < width * height) return 0.0;
+  var sum = 0.0;
+  var sumSquares = 0.0;
+  var count = 0;
+  for (var y = 2; y < height - 2; y += 4) {
+    for (var x = 2; x < width - 2; x += 4) {
+      final i = y * width + x;
+      final lap =
+          4 * pixels[i] -
+          pixels[i - 1] -
+          pixels[i + 1] -
+          pixels[i - width] -
+          pixels[i + width];
+      sum += lap;
+      sumSquares += lap * lap;
+      count++;
+    }
+  }
+  if (count == 0) return 0.0;
+  final mean = sum / count;
+  return math.max(0.0, sumSquares / count - mean * mean);
+}
+
 /// What the registration produced.
 ///
 /// [rotations] is index-aligned with the input list. A frame with no trustworthy
@@ -60,9 +254,22 @@ class SphereRegistrationOutcome {
     this.meanResidualAfterPx = 0,
     this.maxResidualAfterPx = 0,
     this.residualSamples = 0,
+    this.residualAffines = const <SphereResidualAffine>[],
+    this.localMeshWarps = const <SphereLocalMeshWarp>[],
+    this.perFrameSharpness = const <double>[],
   });
 
   final List<Quat> rotations;
+
+  /// Conservative image-space residual corrections after ORB/RANSAC rotation.
+  final List<SphereResidualAffine> residualAffines;
+
+  /// Sparse, validated overlap corrections. Identity when untrusted.
+  final List<SphereLocalMeshWarp> localMeshWarps;
+
+  /// Sampled Laplacian variance of each quarter-size JPEG. Low values
+  /// can also mean a blank wall: diagnostics only, not an automatic reject.
+  final List<double> perFrameSharpness;
 
   /// How far each frame ended up rotated from its recorded orientation, degrees.
   final List<double> correctionDeg;
@@ -120,9 +327,11 @@ class SphereRegistrationOutcome {
 /// is not decided here: this only decides *where* each frame points.
 const int kSphereRegistrationDecodeReduction = cv.IMREAD_REDUCED_COLOR_4;
 
-/// Features per frame. Enough for a texture-poor wall, few enough that 38 frames
-/// of descriptors stay under a couple of megabytes.
-const int kSphereRegistrationFeatures = 1200;
+/// Features per frame. 2000 (raised from 1200) gives low-texture indoor walls
+/// enough surviving matches after the ratio test for the rotation solve to
+/// bite — the fallback when the feature-based Stitcher refuses a station.
+/// 38 frames of descriptors stay under ~4 MB.
+const int kSphereRegistrationFeatures = 2500;
 
 /// Lowe's ratio. Above this the match is ambiguous and is dropped rather than
 /// left for RANSAC to sort out — RANSAC is good at rejecting outliers, not at
@@ -156,10 +365,7 @@ const int kSphereRegistrationAveragingPasses = 2;
 /// re-matching each time would multiply the station's cost by that count for
 /// exactly the same answer.
 class _PairMatches {
-  const _PairMatches({
-    required this.points,
-    required this.featureMatches,
-  });
+  const _PairMatches({required this.points, required this.featureMatches});
 
   /// Coordinates as `(first, second)` — the pair's lower index first.
   final List<SphereCorrespondence> points;
@@ -208,6 +414,7 @@ class _PairMatches {
 SphereRegistrationOutcome registerSphereFrames({
   required List<SphereRegistrationFrame> frames,
   required double verticalFovDeg,
+  bool enableLocalMesh = true,
   void Function(String stage)? onStage,
 }) {
   if (frames.length < 2) {
@@ -223,6 +430,7 @@ SphereRegistrationOutcome registerSphereFrames({
   final keypoints = List<Float32List?>.filled(frames.length, null);
   final projections = List<DecodedProjection?>.filled(frames.length, null);
   final usable = List<bool>.filled(frames.length, false);
+  final sharpness = List<double>.filled(frames.length, 0);
   var featureTotal = 0;
 
   cv.ORB? orb;
@@ -241,6 +449,11 @@ SphereRegistrationOutcome registerSphereFrames({
         );
         if (colour.isEmpty) continue;
         gray = cv.cvtColor(colour, cv.COLOR_BGR2GRAY);
+        sharpness[i] = _sampledLaplacianVariance(
+          gray.data,
+          gray.cols,
+          gray.rows,
+        );
         // Intrinsics for exactly this decode, from the same transform the
         // projection uses — so a correspondence's pixels and its focal length
         // are always in the same coordinate system.
@@ -348,6 +561,7 @@ SphereRegistrationOutcome registerSphereFrames({
       residualCount++;
       if (value > residualMax) residualMax = value;
     }
+
     final notes = <String>[];
     final rotations = <Quat>[for (final f in frames) f.rotation];
     final settled = List<bool>.filled(frames.length, false);
@@ -363,7 +577,9 @@ SphereRegistrationOutcome registerSphereFrames({
       final cached = matches[pairIndex];
       if (cached == null) return SphereEdgeRefinement.none;
       final firstIsSubject = pairs[pairIndex].$1 == subject;
-      final reference = firstIsSubject ? pairs[pairIndex].$2 : pairs[pairIndex].$1;
+      final reference = firstIsSubject
+          ? pairs[pairIndex].$2
+          : pairs[pairIndex].$1;
       final subjectProjection = projections[subject];
       final referenceProjection = projections[reference];
       if (subjectProjection == null || referenceProjection == null) {
@@ -451,6 +667,165 @@ SphereRegistrationOutcome registerSphereFrames({
       );
     }
 
+    // SITEWISE_OBJECT_INTEGRITY_V1: residual affine alignment AFTER rotation.
+    // Estimate a small warp from already-RANSAC-checked ORB correspondences.
+    // Every frame is referenced against an earlier trusted neighbour, not
+    // a continually changing composited image. Inconsistent close parallax
+    // is deliberately left to the edge-avoiding seam, not warped aggressively.
+    final residualAffines = List<SphereResidualAffine>.filled(
+      frames.length,
+      SphereResidualAffine.identity,
+    );
+    final localMeshWarps = List<SphereLocalMeshWarp>.filled(
+      frames.length,
+      SphereLocalMeshWarp.identity,
+    );
+    for (var i = 1; i < frames.length; i++) {
+      if (!usable[i] || projections[i] == null) continue;
+      var chosen = -1;
+      var reference = -1;
+      var largestInliers = 0;
+      for (final p in neighbours[i]) {
+        final other = pairs[p].$1 == i ? pairs[p].$2 : pairs[p].$1;
+        final candidate = matches[p];
+        if (other >= i ||
+            projections[other] == null ||
+            candidate == null ||
+            candidate.points.length < 24) {
+          continue;
+        }
+        if (candidate.points.length > largestInliers && refine(i, p).accepted) {
+          largestInliers = candidate.points.length;
+          chosen = p;
+          reference = other;
+        }
+      }
+      if (chosen < 0) continue;
+      final subjectProjection = projections[i]!;
+      final neighbourProjection = projections[reference]!;
+      final cached = matches[chosen]!;
+      final subjectFirst = pairs[chosen].$1 == i;
+      final correspondences = subjectFirst ? cached.points : cached.reversed();
+      final observations = <_ResidualPoint>[];
+      final validation = <_ResidualPoint>[];
+      var sampleIndex = 0;
+      for (final c in correspondences) {
+        // Include the earlier frame's accepted residual displacement when
+        // constructing the reference world ray. A match still points to the
+        // exact original image pixel, so compensate for the previous warp.
+        final referenceShift = residualAffines[reference].shiftAt(
+          u: c.neighbourU,
+          v: c.neighbourV,
+          width: neighbourProjection.width,
+          height: neighbourProjection.height,
+        );
+        final meshShift = localMeshWarps[reference].shiftAt(
+          u: c.neighbourU,
+          v: c.neighbourV,
+          width: neighbourProjection.width,
+          height: neighbourProjection.height,
+        );
+        final world = rotations[reference].rotate(
+          unprojectPixel(
+            c.neighbourU - referenceShift.du - meshShift.du,
+            c.neighbourV - referenceShift.dv - meshShift.dv,
+            neighbourProjection,
+          ),
+        );
+        final predicted = projectCameraRay(
+          rotations[i].conjugate.rotate(world),
+          subjectProjection,
+        );
+        if (predicted == null) continue;
+        final du = c.frameU - predicted.u;
+        final dv = c.frameV - predicted.v;
+        if (!du.isFinite || !dv.isFinite || du.abs() > 40 || dv.abs() > 40) {
+          continue;
+        }
+        final samples = sampleIndex++ % 5 == 0 ? validation : observations;
+        samples.add(
+          _ResidualPoint(
+            2 * predicted.u / subjectProjection.width - 1,
+            2 * predicted.v / subjectProjection.height - 1,
+            du,
+            dv,
+          ),
+        );
+      }
+      residualAffines[i] = _fitResidualAffine(observations, subjectProjection);
+      // SITEWISE_QUALITY_MESH_V1: only fit the *remaining* residual
+      // after rotation and affine. Reject inconsistent local parallax.
+      final remaining = <SphereWarpObservation>[
+        for (final point in observations)
+          SphereWarpObservation(
+            x: point.x,
+            y: point.y,
+            du:
+                point.du -
+                residualAffines[i]
+                    .shiftAt(
+                      u: (point.x + 1) * subjectProjection.width / 2,
+                      v: (point.y + 1) * subjectProjection.height / 2,
+                      width: subjectProjection.width,
+                      height: subjectProjection.height,
+                    )
+                    .du,
+            dv:
+                point.dv -
+                residualAffines[i]
+                    .shiftAt(
+                      u: (point.x + 1) * subjectProjection.width / 2,
+                      v: (point.y + 1) * subjectProjection.height / 2,
+                      width: subjectProjection.width,
+                      height: subjectProjection.height,
+                    )
+                    .dv,
+          ),
+      ];
+      if (enableLocalMesh) {
+        localMeshWarps[i] = SphereLocalMeshWarp.fit(
+          observations: remaining,
+          registrationWidth: subjectProjection.width,
+          registrationHeight: subjectProjection.height,
+        );
+      }
+      // Evaluate the proposed sampling offsets on matches excluded from the fit.
+      var baseline = 0.0;
+      var affineError = 0.0;
+      var corrected = 0.0;
+      for (final point in validation) {
+        final u = (point.x + 1) * subjectProjection.width / 2;
+        final v = (point.y + 1) * subjectProjection.height / 2;
+        final affine = residualAffines[i].shiftAt(
+          u: u,
+          v: v,
+          width: subjectProjection.width,
+          height: subjectProjection.height,
+        );
+        final mesh = localMeshWarps[i].shiftAt(
+          u: u,
+          v: v,
+          width: subjectProjection.width,
+          height: subjectProjection.height,
+        );
+        final dx = point.du - affine.du - mesh.du;
+        final dy = point.dv - affine.dv - mesh.dv;
+        final ax = point.du - affine.du;
+        final ay = point.dv - affine.dv;
+        affineError += ax * ax + ay * ay;
+        baseline += point.du * point.du + point.dv * point.dv;
+        corrected += dx * dx + dy * dy;
+      }
+      if (corrected >= affineError) {
+        localMeshWarps[i] = SphereLocalMeshWarp.identity;
+        corrected = affineError;
+      }
+      if (validation.length < 6 || corrected >= baseline) {
+        residualAffines[i] = SphereResidualAffine.identity;
+        localMeshWarps[i] = SphereLocalMeshWarp.identity;
+      }
+    }
+
     // ── 4. Report, keeping the prior wherever nothing was proven ───────
     final correctionDeg = List<double>.filled(frames.length, 0);
     var refinedFrames = 0;
@@ -470,6 +845,9 @@ SphereRegistrationOutcome registerSphereFrames({
 
     return SphereRegistrationOutcome(
       rotations: rotations,
+      residualAffines: residualAffines,
+      localMeshWarps: localMeshWarps,
+      perFrameSharpness: sharpness,
       correctionDeg: correctionDeg,
       pairsConsidered: pairs.length,
       acceptedEdges: accepted,
@@ -552,12 +930,18 @@ _PairMatches? _matchPair({
   cv.Mat? mask;
   try {
     final knn = matcher.knnMatch(firstDescriptors, secondDescriptors, 2);
+    final reverse = matcher.knnMatch(secondDescriptors, firstDescriptors, 1);
+    final reverseBest = <int, int>{
+      for (final row in reverse)
+        if (row.isNotEmpty) row[0].queryIdx: row[0].trainIdx,
+    };
     final kept = <(int, int)>[];
     for (final row in knn) {
       if (row.length < 2) continue;
       final best = row[0];
       final runnerUp = row[1];
-      if (best.distance < kSphereRegistrationRatio * runnerUp.distance) {
+      if (best.distance < kSphereRegistrationRatio * runnerUp.distance &&
+          reverseBest[best.trainIdx] == best.queryIdx) {
         kept.add((best.queryIdx, best.trainIdx));
       }
     }

@@ -22,6 +22,7 @@ from sitewise.domain.recommendation_scoring import (
     PreferenceProfile,
     preference_profile_from,
 )
+from sitewise.ml.pu_expanded import expanded_display_scores
 from sitewise.repositories.catalog_repository import CatalogRepository
 from sitewise.repositories.recommendation_candidate_repository import (
     _EXPLICITLY_UNAVAILABLE,
@@ -448,6 +449,9 @@ class PropertyCompareService:
         panoramas = panoramas_by_catalogue_ids(
             self.operational, [ref for ref in catalogue_refs if ref]
         )
+        scores = expanded_display_scores(
+            self.analytics, list(dict.fromkeys(ref for ref in catalogue_refs if ref))
+        )
 
         properties: list[dict[str, Any]] = []
         for candidate in resolved:
@@ -462,7 +466,7 @@ class PropertyCompareService:
                 panorama_ref = pid
             panorama = panoramas.get(panorama_ref) or dict(PANORAMA_UNAVAILABLE)
             properties.append(
-                self._property(candidate, row, details, panorama)
+                self._property(candidate, row, details, panorama, scores.get(panorama_ref))
             )
 
         differences = self._differences(properties)
@@ -540,6 +544,7 @@ class PropertyCompareService:
         row: dict[str, Any],
         details: dict[str, Any],
         panorama: dict[str, Any],
+        expanded_score: float | None = None,
     ) -> dict[str, Any]:
         pid = candidate["property_id"]
         rent = _num(candidate.get("monthly_rental_myr"))
@@ -646,7 +651,6 @@ class PropertyCompareService:
             "CONFIRMED",
         }
         research_status = _text(candidate.get("availability_status"))
-        pu_raw = _num(candidate.get("pu_association_score"))
         if research_status.upper() in _EXPLICITLY_UNAVAILABLE:
             unavailable_notice = (
                 f"Recorded research status: {research_status.upper()} — this "
@@ -682,10 +686,10 @@ class PropertyCompareService:
                 "provenance": details.get("provenance", "research_unverified"),
             },
             "research_index": {
-                "value": pu_raw * 100 if pu_raw is not None else None,
-                "available": pu_raw is not None,
+                "value": expanded_score,
+                "available": expanded_score is not None,
                 "meaning": (
-                    "Uncalibrated P-vs-U research association index (0–100), "
+                    "Expanded64 uncalibrated P-vs-U research association index (0-100), "
                     "supporting context only — not used to rank this comparison."
                 ),
             },

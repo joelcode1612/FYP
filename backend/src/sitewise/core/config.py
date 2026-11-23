@@ -10,13 +10,16 @@ class Settings(BaseSettings):
     # Startup `create_all` runs through this URL, so it is the only database
     # the ORM ever writes to.
     database_url: str = (
-        "postgresql+psycopg2://postgres:123456@localhost:5432/Dss"
+        "postgresql+psycopg2://postgres:123456@localhost:5432/Final_Location_Analysis"
     )
     # Analytics database (DOSM statistics, geospatial features). Read-only by
     # convention; the ORM never runs create_all or migrations against it.
     analytics_database_url: str = (
         "postgresql+psycopg2://postgres:123456@localhost:5432/Final_Location_Analysis"
     )
+
+    # Agent assignments: local DB is authoritative; remote mirror is opt-in.
+    assignment_sync_enabled: bool = False
 
     # --- Application -------------------------------------------------------
     log_level: str = "INFO"
@@ -81,6 +84,8 @@ class Settings(BaseSettings):
     # Server-only secret key. NEVER sent to a client, never used to sign JWTs.
     # Optional for this integration (only needed for admin API operations).
     supabase_secret_key: str = ""
+    # Same Supabase Storage bucket as the standalone AR capture backend.
+    sitewise_public_panorama_bucket: str = "property-panoramas"
     # JWKS endpoint of the asymmetric signing keys (ES256 on current projects).
     supabase_jwks_url: str = ""
     # Accepted `aud` claim values (Supabase issues "authenticated" for users).
@@ -159,6 +164,15 @@ class Settings(BaseSettings):
     # 351 pass the unchanged strictly-greater-than-50 gate. "legacy" and
     # "experimental47" remain selectable for comparison and audit.
     sitewise_pu_model_variant: str = "expanded64"
+
+    # --- Optional device-panorama enhancement (default OFF) ----------------
+    # When explicitly enabled, an administrator may run a CONSERVATIVE tonal
+    # pass (bounded white balance + exposure normalization) over a completed
+    # device panorama. It never re-stitches, never touches the canonical
+    # panorama.jpg, and writes a separate panorama_enhanced.jpg whose status
+    # is recorded in the panorama's coverage_report metadata. Enhancement
+    # failure never destroys, blocks or replaces the valid original.
+    sitewise_panorama_enhancement_enabled: bool = False
 
     @property
     def pu_model_variant(self) -> str:

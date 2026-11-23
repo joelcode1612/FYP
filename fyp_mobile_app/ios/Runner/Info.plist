@@ -60,6 +60,8 @@
 		<key>NSAllowsLocalNetworkLoads</key>
 		<true/>
 	</dict>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>SiteWise uses your location, only when you enable nearby recommendations, to show commercial properties within your selected area.</string>
 	<key>NSCameraUsageDescription</key>
 	<string>Sitewise uses the camera for AR-guided 360° property capture.</string>
 	<key>UIMainStoryboardFile</key>

@@ -85,7 +85,9 @@ class ExploreService:
         data = self.repo.get_research_evidence(property_id)
         return {"data": data, "meta": {"available": data is not None}}
 
-    def analysis(self, ref: str) -> dict | None:
+    def analysis(
+        self, ref: str, *, catalogue_score: Callable[[str], float | None] | None = None
+    ) -> dict | None:
         """Cross-universe location analysis for one property reference.
 
         ``ref`` is either a ``fyp.rental_properties`` numeric id or a workbook
@@ -100,12 +102,15 @@ class ExploreService:
         geo = None
         research = None
         population = None
+        pu_score = None
         fyp_id: int | None = None
         if resolved["source_schema"] == "fyp":
             fyp_id = int(resolved["property_id"])
             geo = self.repo.get_geo_features(fyp_id)
             research = self.repo.get_research_evidence(fyp_id)
             population = self.repo.get_population(fyp_id)
+        elif catalogue_score is not None:
+            pu_score = catalogue_score(str(resolved["property_id"]))
 
         counts: dict = {}
         lat = resolved.get("latitude")
@@ -136,9 +141,7 @@ class ExploreService:
                     if resolved.get("size_sqft") is not None
                     else None
                 ),
-                # Workbook/catalogue suitability index (research ranking input —
-                # NOT a verified success probability).
-                "catalog_suitability_score": resolved.get("suitability_score"),
+                "catalog_suitability_score": pu_score,
                 "geospatial_features": geo,
                 "competitor_counts": counts,
                 "research_link": research,
@@ -150,7 +153,7 @@ class ExploreService:
             },
             "meta": {
                 "available": bool(
-                    geo or counts or research or resolved.get("suitability_score")
+                    geo or counts or research or pu_score is not None
                 ),
             },
         }

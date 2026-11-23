@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_logic/shared_logic.dart';
 
 import 'package:fyp/core/di/service_locator.dart';
+import 'package:fyp/core/di/account_preferences_provider.dart';
+import 'package:fyp/features/profile/application/account_discovery_preferences.dart';
 import 'package:fyp/core/config/mobile_config.dart';
 import 'package:fyp/core/theme/sitewise_theme.dart';
 import 'package:fyp/shared/presentation/layouts/mobile_app_shell.dart';
@@ -20,16 +22,6 @@ class EntrepreneurPreferencesMobilePage extends ConsumerStatefulWidget {
 
 class _EntrepreneurPreferencesMobilePageState
     extends ConsumerState<EntrepreneurPreferencesMobilePage> {
-  static const _categories = <String>[
-    'Cafe / Coffee Shop',
-    'Restaurant',
-    'Bakery / Dessert Shop',
-    'Fast Food / Quick Service',
-    'Beverage Shop / Kiosk',
-    'Other F&B',
-  ];
-
-  /// Constructed by the composition root; the page never builds a repository.
   /// Constructed by the composition root; the page never builds a repository.
   late final _repository = ServiceLocator.userPreferences;
   final _minRent = TextEditingController();
@@ -38,7 +30,6 @@ class _EntrepreneurPreferencesMobilePageState
   final _maxSize = TextEditingController();
   final _targetMarket = TextEditingController();
 
-  String _businessType = '';
   String _propertyType = 'Any';
   List<String>? _catalogueTypes;
   String? _catalogueError;
@@ -51,6 +42,78 @@ class _EntrepreneurPreferencesMobilePageState
   Map<String, String> _errors = {};
   Map<String, String> _baseline = {};
   int _formVersion = 0;
+
+  // sitewise-expanded-user-preferences-v1
+  Map<String, dynamic> _settings = {};
+  Map<String, dynamic> _settingsBaseline = {};
+  Map<String, dynamic>? _loadedPreferences;
+
+  List<String> _savedRequirements(String target) {
+    final previousTarget = _loadedPreferences?['target_market']?.toString().trim() ?? '';
+    final previous = _loadedPreferences?['requirements'];
+    return <String>{
+      if (previous is List)
+        for (final item in previous.whereType<String>())
+          if (item.trim().isNotEmpty && item.trim() != previousTarget) item.trim(),
+      if (target.isNotEmpty) target,
+    }.toList();
+  }
+
+  String _settingText(String key) => _settings[key]?.toString() ?? '';
+
+  void _setSetting(String key, dynamic value) {
+    setState(() {
+      _settings[key] = value;
+      if (key == 'preferred_state') _settings['preferred_city'] = '';
+      _saveError = null;
+      _savedMessage = null;
+    });
+  }
+
+  Widget _settingChoice(String key, String label, Map<String, String> choices,
+      {String fallback = '', String? helper, bool numeric = false}) {
+    final current = _settingText(key);
+    final selected = choices.containsKey(current) ? current : fallback;
+    return DropdownButtonFormField<String>(
+      key: ValueKey('setting-$key-$_formVersion-$selected'),
+      initialValue: selected,
+      isExpanded: true,
+      decoration: _decoration(label, helper: helper),
+      items: [for (final entry in choices.entries)
+        DropdownMenuItem(value: entry.key, child: Text(entry.value))],
+      onChanged: _saving ? null : (value) {
+        if (value == null) return;
+        _setSetting(key, numeric ? int.tryParse(value) : value);
+      },
+    );
+  }
+
+  Map<String, String> _stateChoices() => {
+    '': 'Any state',
+    for (final state in MalaysiaLocations.states) state.name: state.name,
+    if (_settingText('preferred_state').isNotEmpty)
+      _settingText('preferred_state'): _settingText('preferred_state'),
+  };
+
+  Map<String, String> _cityChoices() => {
+    '': 'Any city / area',
+    for (final state in MalaysiaLocations.states)
+      if (state.name == _settingText('preferred_state'))
+        for (final city in state.cities) city.name: city.name,
+    if (_settingText('preferred_city').isNotEmpty)
+      _settingText('preferred_city'): _settingText('preferred_city'),
+  };
+
+  Widget _settingSwitch(String key, String label, String explanation) =>
+      SwitchListTile.adaptive(
+        contentPadding: EdgeInsets.zero,
+        title: Text(label, style: const TextStyle(
+          fontSize: 16, fontWeight: FontWeight.w600, color: SitewiseColors.ink)),
+        subtitle: Text(explanation, style: const TextStyle(
+          fontSize: 13, height: 1.4, color: SitewiseColors.muted)),
+        value: _settings[key] == true,
+        onChanged: _saving ? null : (value) => _setSetting(key, value),
+      );
 
   @override
   void initState() {
@@ -92,7 +155,7 @@ class _EntrepreneurPreferencesMobilePageState
     return BusinessPreferences(
       businessType: raw['business_type'] as String? ?? before.businessType,
       propertyType: raw['property_type'] as String? ?? before.propertyType,
-      preferredLocation: before.preferredLocation,
+      preferredLocation: AccountDiscoveryPreferences(raw).state,
       minBudgetRm: _storedNumber(raw, 'min_budget_rm', before.minBudgetRm),
       maxBudgetRm: _storedNumber(raw, 'max_budget_rm', before.maxBudgetRm),
       minSizeSqft: _storedNumber(raw, 'min_size_sqft', before.minSizeSqft),
@@ -109,7 +172,6 @@ class _EntrepreneurPreferencesMobilePageState
   /// Populate the controls from server values (or cached draft defaults).
   void _seed(Map<String, dynamic>? raw) {
     final fallback = ServiceLocator.preferences;
-    _businessType = raw?['business_type'] as String? ?? fallback.businessType;
     final type = raw?['property_type'] as String? ?? fallback.propertyType;
     _propertyType = type.trim().isEmpty ? 'Any' : type;
     _minRent.text = _numberText(
@@ -133,17 +195,30 @@ class _EntrepreneurPreferencesMobilePageState
             : _storedRequirements(raw).join(', '));
     _errors = {};
     _formVersion++;
+    _loadedPreferences = raw == null ? null : Map<String, dynamic>.of(raw);
+    final settings = AccountDiscoveryPreferences(raw).settings;
+    _settings = {
+      'preferred_state': '', 'preferred_city': '', 'search_radius_m': 500,
+      'default_sort': 'best_match', 'use_current_location': false,
+      'notification_updates': false, 'transit_max_m': null,
+      'nearby_parking_min': null, 'fnb_competition_max': null,
+      for (final key in const ['preferred_state', 'preferred_city', 'search_radius_m', 'default_sort',
+        'use_current_location', 'notification_updates', 'transit_max_m', 'nearby_parking_min', 'fnb_competition_max'])
+        if (settings.containsKey(key)) key: settings[key],
+    };
+    _settingsBaseline = Map.of(_settings);
+    _expandedPreference = null;
     _baseline = _snapshot();
   }
 
   Map<String, String> _snapshot() => {
-        'business_type': _businessType,
         'property_type': _propertyType,
         'min_budget_rm': _minRent.text,
         'max_budget_rm': _maxRent.text,
         'min_size_sqft': _minSize.text,
         'max_size_sqft': _maxSize.text,
         'target_market': _targetMarket.text,
+        for (final entry in _settings.entries) 'setting.${entry.key}': '${entry.value}',
       };
 
   bool get _dirty {
@@ -187,7 +262,8 @@ class _EntrepreneurPreferencesMobilePageState
       // Only real saved legacy criteria should update the local ranking
       // profile. A v2/v3 assessment record must not be fabricated as v1.
       final raw = record.preferences;
-      if (raw != null && raw.containsKey('business_type')) {
+      if (raw != null && raw.containsKey('property_type') &&
+          raw.containsKey('max_budget_rm')) {
         ref.read(entrepreneurNotifierProvider.notifier)
             .updatePreferences(_modelFromStored(raw));
       }
@@ -233,15 +309,9 @@ class _EntrepreneurPreferencesMobilePageState
 
   Map<String, dynamic>? _payload() {
     final errors = <String, String>{};
-    final category = _businessType.trim();
     final type = _propertyType.trim();
     final target = _targetMarket.text.trim();
 
-    if (category.isEmpty) {
-      errors['business_type'] = 'Select a business category.';
-    } else if (category.length > 120) {
-      errors['business_type'] = 'Use 120 characters or fewer.';
-    }
     if (type.isEmpty) {
       errors['property_type'] = 'Choose a property type, or Any.';
     } else if (type.length > 60) {
@@ -263,21 +333,21 @@ class _EntrepreneurPreferencesMobilePageState
     if (minSize != null && maxSize != null && minSize > maxSize) {
       errors['min_size_sqft'] = 'Minimum area cannot exceed maximum area.';
     }
-    setState(() => _errors = errors);
+    _showPreferenceErrors(errors);
     if (errors.isNotEmpty || minRent == null || maxRent == null ||
         minSize == null || maxSize == null) {
       return null;
     }
 
     return {
-      'business_type': category,
       'property_type': type,
       'target_market': target,
       'min_budget_rm': minRent,
       'max_budget_rm': maxRent,
       'min_size_sqft': minSize,
       'max_size_sqft': maxSize,
-      'requirements': target.isEmpty ? <String>[] : <String>[target],
+      'requirements': _savedRequirements(target),
+      'user_settings': Map<String, dynamic>.of(_settings),
     };
   }
 
@@ -300,6 +370,7 @@ class _EntrepreneurPreferencesMobilePageState
         }
         ref.read(entrepreneurNotifierProvider.notifier)
             .updatePreferences(_modelFromStored(raw));
+        ref.invalidate(accountDiscoveryPreferencesProvider);
         setState(() {
           _savedAt = stored.updatedAt;
           _seed(raw);
@@ -311,7 +382,7 @@ class _EntrepreneurPreferencesMobilePageState
             .updatePreferences(_modelFromStored(values));
         setState(() {
           _seed(values);
-          _savedMessage = 'Preferences saved on this device (demo mode).';
+          _savedMessage = 'Preferences updated for this session (demo mode).';
         });
       }
     } on Object catch (error) {
@@ -330,7 +401,8 @@ class _EntrepreneurPreferencesMobilePageState
   void _discard() {
     if (_saving || !_dirty) return;
     setState(() {
-      _businessType = _baseline['business_type'] ?? '';
+      _settings = Map.of(_settingsBaseline);
+      _expandedPreference = null;
       _propertyType = _baseline['property_type'] ?? 'Any';
       _minRent.text = _baseline['min_budget_rm'] ?? '';
       _maxRent.text = _baseline['max_budget_rm'] ?? '';
@@ -359,7 +431,7 @@ class _EntrepreneurPreferencesMobilePageState
         hintText: hint,
         errorText: error,
         helperText: helper,
-        helperMaxLines: 2,
+        helperMaxLines: 4,
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
         contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
       );
@@ -372,33 +444,6 @@ class _EntrepreneurPreferencesMobilePageState
         decoration: _decoration(label,
             error: _errors[key], hint: 'e.g. 2000', helper: helper),
       );
-
-  Widget _categoryInput() {
-    final values = <String>[
-      if (_businessType.isNotEmpty && !_categories.contains(_businessType))
-        _businessType,
-      ..._categories,
-    ];
-    return DropdownButtonFormField<String>(
-      key: ValueKey('category-$_businessType'),
-      initialValue: _businessType.isEmpty ? '' : _businessType,
-      isExpanded: true,
-      decoration: _decoration('Business category',
-          error: _errors['business_type']),
-      items: [
-        const DropdownMenuItem<String>(
-          value: '', child: Text('Select business category'),
-        ),
-        for (final category in values)
-          DropdownMenuItem<String>(value: category, child: Text(category)),
-      ],
-      onChanged: (value) {
-        if (value == null) return;
-        setState(() => _businessType = value);
-        _changed('business_type');
-      },
-    );
-  }
 
   Widget _propertyInput() {
     final types = _catalogueTypes;
@@ -437,35 +482,156 @@ class _EntrepreneurPreferencesMobilePageState
     );
   }
 
-  Widget _inputSection(String title, String note, List<Widget> inputs) =>
-      Padding(
-        padding: const EdgeInsets.only(bottom: 22),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(title, style: const TextStyle(
-              fontSize: 16, fontWeight: FontWeight.w800,
-              color: SitewiseColors.ink,
-            )),
-            const SizedBox(height: 4),
-            Text(note, style: const TextStyle(
-              fontSize: 12, height: 1.45, color: SitewiseColors.muted,
-            )),
-            const SizedBox(height: 14),
-            ...[
-              for (final input in inputs) ...[
-                input,
-                const SizedBox(height: 14),
-              ],
-            ],
-          ],
+  // sitewise-compact-preferences-v2
+  String? _expandedPreference;
+
+  static const _accessChoices = <String, String>{
+    '': 'No preference',
+    '500': 'Easy public transport access',
+    '1000': 'Public transport nearby',
+  };
+  static const _parkingChoices = <String, String>{
+    '': 'No preference', '1': 'Preferred',
+    '3': 'More parking options', '5': 'Plenty of nearby parking',
+  };
+  static const _competitionChoices = <String, String>{
+    '': 'No preference', '5': 'Low', '10': 'Moderate', '20': 'Higher',
+  };
+
+  String _choiceSummary(String key, Map<String, String> labels,
+      {String fallback = 'No preference'}) =>
+      labels[_settingText(key)] ?? fallback;
+
+  String _formatAmount(String text) {
+    final number = double.tryParse(text.trim());
+    if (number == null || !number.isFinite) return text.trim();
+    if (number != number.roundToDouble()) return number.toString();
+    return number.toStringAsFixed(0).replaceAllMapped(
+      RegExp(r'\B(?=(\d{3})+(?!\d))'), (_) => ',');
+  }
+
+  String _rangeSummary(TextEditingController min, TextEditingController max,
+      {String prefix = '', String suffix = ''}) {
+    final lower = double.tryParse(min.text.trim());
+    final upper = double.tryParse(max.text.trim());
+    if (upper == null || !upper.isFinite || upper <= 0) return 'Not set';
+    final high = '$prefix${_formatAmount(max.text)}$suffix';
+    if (lower == null || lower <= 0) return 'Up to $high';
+    return '$prefix${_formatAmount(min.text)} – $high';
+  }
+
+  String get _locationSummary {
+    final parts = [
+      if (_settingText('preferred_state').isNotEmpty) _settingText('preferred_state'),
+      if (_settingText('preferred_city').isNotEmpty) _settingText('preferred_city'),
+    ];
+    return parts.isEmpty ? 'Any location' : parts.join(' · ');
+  }
+
+  // If validation fails while an editor is collapsed, open the first invalid
+  // editor. All other values remain in their existing controllers.
+  void _showPreferenceErrors(Map<String, String> errors) {
+    setState(() {
+      _errors = errors;
+      if (errors.containsKey('min_budget_rm') || errors.containsKey('max_budget_rm')) {
+        _expandedPreference = 'rental';
+      } else if (errors.containsKey('min_size_sqft') || errors.containsKey('max_size_sqft')) {
+        _expandedPreference = 'floor';
+      } else if (errors.containsKey('property_type')) {
+        _expandedPreference = 'property';
+      } else if (errors.containsKey('target_market')) {
+        _expandedPreference = 'market';
+      }
+    });
+  }
+
+  Widget _preferenceGroup(String title, List<Widget> rows) => Padding(
+    padding: const EdgeInsets.only(bottom: 22),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(bottom: 10),
+          child: Text(title, style: const TextStyle(fontSize: 17,
+            fontWeight: FontWeight.w700, color: SitewiseColors.ink)),
         ),
-      );
+        Material(
+          // Material, not an opaque decorated box: ListTile draws its ink
+          // splashes on the nearest Material ancestor; a DecoratedBox here
+          // hides them and trips the framework assertion.
+          color: SitewiseColors.surface,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+            side: BorderSide(color: SitewiseColors.border),
+          ),
+          clipBehavior: Clip.antiAlias,
+          child: Column(children: [
+            for (var i = 0; i < rows.length; i++) ...[
+              if (i > 0) Divider(height: 1, indent: 14, endIndent: 14,
+                color: SitewiseColors.border),
+              rows[i],
+            ],
+          ]),
+        ),
+      ],
+    ),
+  );
+
+  Widget _preferenceRow(String id, String title, String summary,
+      List<Widget> fields, {IconData? icon}) {
+    final expanded = _expandedPreference == id;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Semantics(
+          hint: expanded ? 'Collapse editor' : 'Expand editor',
+          child: ListTile(
+            contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+            leading: icon == null ? null : Container(
+              width: 40, height: 40,
+              decoration: BoxDecoration(
+                color: SitewiseColors.action.withValues(alpha: .09),
+                borderRadius: BorderRadius.circular(10)),
+              child: Icon(icon, color: SitewiseColors.action, size: 21)),
+            title: Text(title, style: const TextStyle(fontSize: 16,
+              fontWeight: FontWeight.w600, color: SitewiseColors.ink)),
+            subtitle: Text(summary, style: const TextStyle(fontSize: 14,
+              height: 1.4, color: SitewiseColors.muted)),
+            trailing: Icon(expanded ? Icons.expand_less : Icons.chevron_right,
+              color: SitewiseColors.action, size: 22),
+            onTap: _saving ? null : () {
+              FocusScope.of(context).unfocus();
+              setState(() => _expandedPreference = expanded ? null : id);
+            },
+          ),
+        ),
+        if (expanded) Padding(
+          padding: const EdgeInsets.fromLTRB(14, 4, 14, 14),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              for (var i = 0; i < fields.length; i++) ...[
+                if (i > 0) const SizedBox(height: 14),
+                fields[i],
+              ],
+              const SizedBox(height: 8),
+            ]),
+        ),
+      ],
+    );
+  }
+
+  Widget _compactSwitch(String key, String title, String summary) => Padding(
+    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+    child: _settingSwitch(key, title, summary),
+  );
 
   @override
   Widget build(BuildContext context) {
     return MobileAppShell(
-      title: 'User Preferences',
+      title: 'User preferences',
+      simpleTopBar: true,
+      showBack: true,
+      hideBottomNavOnKeyboard: true,
       currentRoute: '/entrepreneur/preferences',
       body: _loading
           ? const Center(child: CircularProgressIndicator())
@@ -493,45 +659,88 @@ class _EntrepreneurPreferencesMobilePageState
                       constraints: const BoxConstraints(maxWidth: 620),
                       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          const Text('Your property requirements',
-                            style: TextStyle(fontSize: 22,
-                              fontWeight: FontWeight.w800,
-                              color: SitewiseColors.ink)),
-                          const SizedBox(height: 6),
-                          const Text('Set the rental, size, property type and '
-                            'business details used when comparing locations.',
-                            style: TextStyle(fontSize: 13, height: 1.5,
-                                color: SitewiseColors.muted)),
+                          const Text('Personalise your SiteWise experience and property recommendations.',
+                            style: TextStyle(fontSize: 15, height: 1.5,
+                              color: SitewiseColors.muted)),
                           const SizedBox(height: 22),
-                          _inputSection('Monthly rental',
-                            'Specify the price range you are comfortable with.', [
-                            _numberInput('min_budget_rm', 'Min monthly rent (RM)',
+                          _preferenceGroup('Property requirements', [
+                            _preferenceRow('rental', 'Monthly rental',
+                              _rangeSummary(_minRent, _maxRent, prefix: 'RM '), [
+                              _numberInput('min_budget_rm', 'Minimum rent (RM)',
                                 _minRent, helper: 'Enter 0 for no minimum.'),
-                            _numberInput('max_budget_rm', 'Max monthly rent (RM)',
-                                _maxRent, helper: 'Required; greater than 0.'),
-                          ]),
-                          _inputSection('Floor area',
-                            'Choose the amount of space your business needs.', [
-                            _numberInput('min_size_sqft', 'Min floor area (sq ft)',
+                              _numberInput('max_budget_rm', 'Maximum rent (RM)',
+                                _maxRent, helper: 'Enter your maximum monthly rent.'),
+                            ], icon: Icons.account_balance_wallet_outlined),
+                            _preferenceRow('floor', 'Floor area',
+                              _rangeSummary(_minSize, _maxSize, suffix: ' sq ft'), [
+                              _numberInput('min_size_sqft', 'Minimum size (sq ft)',
                                 _minSize, helper: 'Enter 0 for no minimum.'),
-                            _numberInput('max_size_sqft', 'Max floor area (sq ft)',
-                                _maxSize, helper: 'Required; greater than 0.'),
+                              _numberInput('max_size_sqft', 'Maximum size (sq ft)',
+                                _maxSize, helper: 'Enter your maximum floor area.'),
+                            ], icon: Icons.aspect_ratio_outlined),
+                            _preferenceRow('property', 'Property type',
+                              _propertyType == 'Any' ? 'Any property type' : _propertyType,
+                              [_propertyInput()], icon: Icons.storefront_outlined),
                           ]),
-                          _inputSection('Your business',
-                            'The commercial unit and your F&B concept are '
-                            'different types of information.', [
-                            _propertyInput(),
-                            _categoryInput(),
-                            TextField(
-                              controller: _targetMarket,
-                              onChanged: (_) => _changed('target_market'),
-                              decoration: _decoration('Target market',
+                          _preferenceGroup('Location preferences', [
+                            _preferenceRow('location', 'Preferred location', _locationSummary, [
+                              _settingChoice('preferred_state', 'State', _stateChoices()),
+                              _settingChoice('preferred_city', 'City / area', _cityChoices(),
+                                helper: 'Choose a state first.'),
+                            ], icon: Icons.location_on_outlined),
+                            _compactSwitch('use_current_location', 'Use current location',
+                              'Save your preference. Location access is not connected yet.'),
+                            _preferenceRow('radius', 'Default search radius',
+                              _settingText('search_radius_m') == '1000' ? '1 km' : '500 m', [
+                              _settingChoice('search_radius_m', 'Nearby search distance',
+                                const {'500': '500 m', '1000': '1 km'},
+                                fallback: '500', numeric: true,
+                                helper: 'Used when finding nearby properties in Listing.'),
+                            ]),
+                          ]),
+                          _preferenceGroup('Business location preferences', [
+                            _preferenceRow('market', 'Target market',
+                              _targetMarket.text.trim().isEmpty ? 'No preference' : _targetMarket.text.trim(), [
+                              TextField(controller: _targetMarket,
+                                onChanged: (_) => _changed('target_market'),
+                                decoration: _decoration('Target customers',
                                   hint: 'e.g. Office workers, students',
                                   error: _errors['target_market'],
-                                  helper: 'Optional. Can contain multiple '
-                                      'customer groups.'),
-                            ),
+                                  helper: 'Optional. Enter one or more customer groups.')),
+                            ]),
+                            _preferenceRow('access', 'Customer accessibility',
+                              _choiceSummary('transit_max_m', _accessChoices), [
+                              _settingChoice('transit_max_m', 'Public transport access',
+                                _accessChoices, numeric: true,
+                                helper: 'Easy: up to 500 m walking distance. Nearby: up to 1 km.'),
+                            ]),
+                            _preferenceRow('parking', 'Parking preference',
+                              _choiceSummary('nearby_parking_min', _parkingChoices), [
+                              _settingChoice('nearby_parking_min', 'Nearby parking',
+                                _parkingChoices, numeric: true,
+                                helper: 'Preferred: 1+ facilities; more: 3+; plenty: 5+ within 500 m. Not onsite parking.'),
+                            ]),
+                            _preferenceRow('competition', 'Competition tolerance',
+                              _choiceSummary('fnb_competition_max', _competitionChoices), [
+                              _settingChoice('fnb_competition_max', 'Nearby competition',
+                                _competitionChoices, numeric: true,
+                                helper: 'Low: up to 5; moderate: up to 10; higher: up to 20 recorded F&B outlets within 500 m.'),
+                            ]),
                           ]),
+                          _preferenceGroup('Application preferences', [
+                            _preferenceRow('sort', 'Default sorting',
+                              _choiceSummary('default_sort', AccountDiscoveryPreferences.sorts,
+                                fallback: 'Recommended properties first'), [
+                              _settingChoice('default_sort', 'Show properties by',
+                                AccountDiscoveryPreferences.sorts, fallback: 'best_match'),
+                            ]),
+                            _compactSwitch('notification_updates', 'Notifications',
+                              'Save your update preference. Delivery is not connected yet.'),
+                          ]),
+                          if (_errors.isNotEmpty) Padding(
+                            padding: const EdgeInsets.only(bottom: 14),
+                            child: Text(_errors.values.join('\n'), style: const TextStyle(
+                              fontSize: 14, color: SitewiseColors.danger))),
                           if (_catalogueError != null)
                             Padding(padding: const EdgeInsets.only(bottom: 14),
                               child: Text('Property-type options are unavailable: '
