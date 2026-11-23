@@ -118,3 +118,9 @@ backend/var/cp03f_*/
 backend/var/e2e/
 var/backup_build/
 
+# More runtime output: hash-named verification PDFs, test JUNIT/evidence
+# dumps and a throwaway ES256 test key. Tracked files remain tracked.
+backend/var/verification-documents/
+backend/var/evidence/
+backend/var/test-auth/
+
